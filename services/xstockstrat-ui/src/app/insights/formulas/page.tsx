@@ -14,14 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import type { ColumnDef } from '@tanstack/react-table';
+import { DataTable } from '@/components/ui/data-table';
 import { useFormulas } from '@/hooks/useFormulas';
 import type { FormulaDefinition } from '@xstockstrat/proto/indicators/v1/indicators_pb';
 
@@ -54,6 +48,49 @@ export default function FormulasPage() {
       );
     });
   }, [formulas, query, visibility]);
+
+  const columns = useMemo<ColumnDef<FormulaDefinition>[]>(
+    () => [
+      {
+        accessorKey: 'name',
+        header: 'Name',
+        cell: ({ row }) => {
+          const f = row.original;
+          return (
+            <>
+              <p className="font-medium text-foreground">{f.name}</p>
+              {f.description && (
+                <p className="mt-0.5 line-clamp-1 text-muted-foreground">{f.description}</p>
+              )}
+            </>
+          );
+        },
+      },
+      {
+        id: 'visibility',
+        header: 'Visibility',
+        accessorFn: (f) => (f.isPublic ? 'Public' : 'Private'),
+        cell: ({ row }) => (
+          <Badge variant={row.original.isPublic ? 'info' : 'warning'}>
+            {row.original.isPublic ? 'Public' : 'Private'}
+          </Badge>
+        ),
+      },
+      {
+        accessorKey: 'author',
+        header: 'Author',
+        meta: { className: 'text-muted-foreground' },
+      },
+      {
+        id: 'created',
+        header: 'Created',
+        accessorFn: (f) => f.createdAt?.seconds ?? BigInt(0),
+        meta: { className: 'text-right tabular-nums text-muted-foreground' },
+        cell: ({ row }) => formatDate(row.original.createdAt?.seconds),
+      },
+    ],
+    [],
+  );
 
   return (
     <AppShell>
@@ -101,60 +138,20 @@ export default function FormulasPage() {
         {data && (
           <Card>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Visibility</TableHead>
-                    <TableHead>Author</TableHead>
-                    <TableHead className="text-right">Created</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.map((f: FormulaDefinition) => (
-                    <TableRow
-                      key={f.formulaId}
-                      className="cursor-pointer"
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => router.push(`/insights/formulas/${f.formulaId}`)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          router.push(`/insights/formulas/${f.formulaId}`);
-                        }
-                      }}
-                    >
-                      <TableCell>
-                        <p className="font-medium text-foreground">{f.name}</p>
-                        {f.description && (
-                          <p className="mt-0.5 line-clamp-1 text-muted-foreground">
-                            {f.description}
-                          </p>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={f.isPublic ? 'info' : 'warning'}>
-                          {f.isPublic ? 'Public' : 'Private'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{f.author}</TableCell>
-                      <TableCell className="text-right tabular-nums text-muted-foreground">
-                        {formatDate(f.createdAt?.seconds)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {filtered.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                        {formulas.length === 0
-                          ? 'No formulas yet. Click New Formula to create one.'
-                          : 'No formulas match your search.'}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+              <DataTable
+                columns={columns}
+                data={filtered}
+                getRowId={(f) => f.formulaId}
+                onRowClick={(f) => router.push(`/insights/formulas/${f.formulaId}`)}
+                rowClassName={() => 'cursor-pointer'}
+                enablePagination
+                pageSize={50}
+                emptyMessage={
+                  formulas.length === 0
+                    ? 'No formulas yet. Click New Formula to create one.'
+                    : 'No formulas match your search.'
+                }
+              />
             </CardContent>
           </Card>
         )}

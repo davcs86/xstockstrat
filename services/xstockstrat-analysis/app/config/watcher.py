@@ -129,6 +129,19 @@ class ConfigWatcher:
             return default
         return v.float_val or default
 
+    def get_float_present(self, key: str, default: float) -> float:
+        """Presence-aware float read (feature 022): returns the stored ``float_val`` whenever the
+        field is set — **including a legitimate 0.0** — else the default. Mirrors
+        ``get_int_present``; use this (never ``get_float``) for keys where 0 is a meaningful
+        value, e.g. ``analysis.scoring.signal_decay_half_life_hours`` (0 disables decay, FR-3)
+        which the ``get_float`` zero-trap would otherwise swallow into the default."""
+        if self._snapshot is None:
+            return default
+        v = self._snapshot.values.get(key)
+        if v is None:
+            return default
+        return v.float_val if v.HasField("float_val") else default
+
     # Sandbox config helpers — indicators.sandbox.*
     @property
     def sandbox_timeout_ms(self) -> int:

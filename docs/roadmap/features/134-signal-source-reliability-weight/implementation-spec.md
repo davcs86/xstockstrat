@@ -1,6 +1,6 @@
 # Implementation Spec: signal-source-reliability-weight
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-08-14
 **Feature**: `docs/roadmap/features/134-signal-source-reliability-weight/feature.md`
 **Total Steps**: 11
@@ -53,7 +53,7 @@ config key's registered description, and Step 11 fixes the two doc-drift sites t
 
 ### Step 1 — proto: Add `reliability_weight` field to `ingest.SignalSource`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/ingest/v1/ingest.proto` — modify
@@ -90,7 +90,7 @@ Both pass (additive field is non-breaking). `grep -n "reliability_weight" packag
 
 ### Step 2 — proto-gen: Regenerate stubs and re-verify Python lockfiles
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/**` — modify (generated; do not hand-edit)
@@ -128,7 +128,7 @@ for s in ingest analysis indicators; do (cd services/xstockstrat-$s && uv lock -
 
 ### Step 3 — migration: Add `reliability_weight` column to `ingest.signal_sources`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/migrations/010_add_signal_source_reliability_weight.up.sql` — create
@@ -173,7 +173,7 @@ Read both: the `.up` `ADD COLUMN` is reversed by the `.down` `DROP COLUMN`. The 
 
 ### Step 4 — service: Persist and return `reliability_weight` in the ingest write/read paths
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -249,7 +249,7 @@ No new outbound gRPC call is added in this step (header propagation N/A). Behavi
 
 ### Step 5 — test: ingest write-path + zero-weight persistence coverage
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_signal_sources.py` — modify (repo-layer tests)
@@ -294,7 +294,7 @@ Coverage ≥ 40%; the two zero-weight tests and the out-of-range test are green 
 
 ### Step 6 — service: Apply `reliability_weight` in the analysis read paths (genuine FR-4 replace)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -357,7 +357,7 @@ The new `ListSignalSources` call carries `metadata=propagation_meta` (header pro
 
 ### Step 7 — test: analysis weighting + repoint coverage
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/` — modify/add servicer tests
@@ -398,7 +398,7 @@ Coverage ≥ 40%; AC-2 half-weight test and the repoint test are green (and were
 
 ### Step 8 — service: `/config-ui` Sources page weight column becomes read/write against `reliability_weight`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/hooks/useSignalSources.ts` — modify
@@ -454,7 +454,7 @@ Behavioral proof runs in Step 9 (Playwright).
 
 ### Step 9 — test: `/config-ui` Sources weight inline-edit e2e + fixture centralization (C-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/config-ui/sources.spec.ts` — modify (add inline-edit-weight test)
@@ -506,7 +506,7 @@ The new test is green after Step 8 and red before it; `INVENTORY.md` points at t
 
 ### Step 10 — migration: Mark `analysis.signals.source_weights` description as superseded (config service)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/016_deprecate_analysis_signal_source_weights_desc.up.sql` — create
@@ -549,7 +549,7 @@ Read both: the `.up` UPDATE is reversed by the `.down` UPDATE (original descript
 
 ### Step 11 — docs: Fix the two doc-drift sites the FR-4 replace falsifies
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` / `xstockstrat-analysis`
 **Files**:
 - `docs/patterns/config-governance.md` — modify

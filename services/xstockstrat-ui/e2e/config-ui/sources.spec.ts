@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { addAuthCookie, BASE_URL } from '../helpers/auth';
+import { SIGNAL_SOURCE_WEIGHTED } from '../fixtures';
 
 /**
  * E2E tests for the signal sources BFF and Sources page.
@@ -156,8 +157,9 @@ test.describe('/sources page — UI contract', () => {
     await page.goto(SOURCES_PAGE);
     await expect(page.getByText('example_simple_email')).toBeVisible({ timeout: 8000 });
     // health LIVE → "Live" badge; signals_fed 128 (in the Fed column cell — the stat row also
-    // sums fed counts, so scope to the table cell).
-    await expect(page.getByText('Live', { exact: true })).toBeVisible();
+    // sums fed counts, so scope to the table cell). feature 134 added a second LIVE source, so
+    // scope the Live badge to the first (both are LIVE); the 128 fed cell is still unique.
+    await expect(page.getByText('Live', { exact: true }).first()).toBeVisible();
     await expect(page.getByRole('cell', { name: '128', exact: true })).toBeVisible();
   });
 
@@ -241,5 +243,66 @@ test.describe('Feature 088 — honest signal-source verbs (form → mask)', () =
     await page.getByRole('menuitem', { name: 'Enable' }).click();
     const body = (await reqPromise).postData() ?? '';
     expect(body).toContain('reactivate');
+  });
+});
+
+test.describe('Feature 134 — inline reliability-weight edit', () => {
+  test('the weight cell edits inline and Save sends a masked reliability_weight update', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto(SOURCES_PAGE);
+    await expect(page.getByRole('heading', { name: 'Signal Sources' })).toBeVisible({
+      timeout: 15000,
+    });
+
+    const slug = SIGNAL_SOURCE_WEIGHTED.slug;
+    // The cell renders the source's reliabilityWeight (0.5), not the removed config-blob map.
+    const weightCell = page.getByTestId(`weight-${slug}`);
+    await expect(weightCell).toHaveText(String(SIGNAL_SOURCE_WEIGHTED.reliabilityWeight));
+
+    // Click to edit → the inline number input appears; change the value.
+    await weightCell.click();
+    const input = page.getByLabel(`Weight for ${slug}`);
+    await expect(input).toBeVisible();
+    await input.fill('0.8');
+
+    const reqPromise = page.waitForRequest(
+      (r) => r.url().includes('/ManageSignalSource') && r.method() === 'POST',
+    );
+    await page.getByRole('button', { name: 'Save' }).click();
+    const body = (await reqPromise).postData() ?? '';
+    // update verb + a FieldMask + the new value. Note: proto3-JSON serializes the FieldMask path
+    // `reliability_weight` in its canonical camelCase form (`"updateMask":"reliabilityWeight"`);
+    // the Python server converts it back to the snake_case proto field name. Assert the wire form.
+    expect(body).toContain('update');
+    expect(body).toContain('updateMask');
+    expect(body).toContain('reliabilityWeight');
+    expect(body).toContain('0.8');
+
+    // The inline editor closes on success (the read-only cell button returns).
+    await expect(page.getByTestId(`weight-${slug}`)).toBeVisible();
+  });
+
+  test('a weight outside [0,1] is rejected client-side (no ManageSignalSource call)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto(SOURCES_PAGE);
+    await expect(page.getByRole('heading', { name: 'Signal Sources' })).toBeVisible({
+      timeout: 15000,
+    });
+    const slug = SIGNAL_SOURCE_WEIGHTED.slug;
+    await page.getByTestId(`weight-${slug}`).click();
+    const input = page.getByLabel(`Weight for ${slug}`);
+    await input.fill('1.5');
+
+    let sawManage = false;
+    page.on('request', (r) => {
+      if (r.url().includes('/ManageSignalSource') && r.method() === 'POST') sawManage = true;
+    });
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByText('Weight must be a number in [0, 1]')).toBeVisible();
+    expect(sawManage).toBe(false);
   });
 });

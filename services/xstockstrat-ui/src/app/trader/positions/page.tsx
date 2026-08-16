@@ -1,8 +1,9 @@
 'use client';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import type { JsonObject } from '@bufbuild/protobuf';
+import type { ColumnDef } from '@tanstack/react-table';
 import { AppShell } from '@/components/trader/AppShell';
 import { useAccountContext } from '@/context/AccountContext';
 import { usePositions } from '@/hooks/usePortfolio';
@@ -32,14 +33,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from '@/components/ui/table';
+import { DataTable } from '@/components/ui/data-table';
 
 type TradingMode = 'paper' | 'live';
 type PnlFilter = 'all' | 'winners' | 'losers';
@@ -78,12 +72,19 @@ export default function PositionsPage() {
 
   const rawPositions = data?.positions ?? [];
   // Winners/losers P&L-sign filter is applied client-side over the enriched unrealizedPnl.
-  const positions = rawPositions.filter((p) => {
-    const pnl = Number(p.unrealizedPnl ?? 0);
-    if (pnlFilter === 'winners') return pnl > 0;
-    if (pnlFilter === 'losers') return pnl < 0;
-    return true;
-  });
+  // Wrapped in useMemo — TanStack Table requires a referentially-stable `data` array (ledger
+  // fails.md 2026-08-08); `.filter()` on every render would otherwise produce a fresh array
+  // reference even when the underlying positions/filter are unchanged.
+  const positions = useMemo(
+    () =>
+      rawPositions.filter((p) => {
+        const pnl = Number(p.unrealizedPnl ?? 0);
+        if (pnlFilter === 'winners') return pnl > 0;
+        if (pnlFilter === 'losers') return pnl < 0;
+        return true;
+      }),
+    [rawPositions, pnlFilter],
+  );
   const nextPageToken = data?.page?.nextPageToken ?? '';
 
   // Exposure risk aggregates (all from the loaded Position risk fields; weight is share of the
@@ -136,6 +137,213 @@ export default function PositionsPage() {
   });
   const platformRestricted =
     platformTradingState.data === 'REDUCE_ONLY' || platformTradingState.data === 'HALTED';
+
+  // Exposure table columns. Every `meta.className` below carries the pre-migration column's
+  // static Tailwind classes (breakpoint-disclosure + alignment) unchanged. The 5 P&L/Open-R
+  // columns had a *dynamic* per-row className (`pnlClass(...)`, sign-dependent) — `meta.className`
+  // is a static per-column string, so those dynamic color classes are applied to an inner `<span>`
+  // inside the cell instead of the `<TableCell>` itself; the static alignment/weight classes stay
+  // on `meta.className`. Visually identical to the pre-migration markup.
+  const columns = useMemo<ColumnDef<Position>[]>(
+    () => [
+      {
+        id: 'symbol',
+        header: 'Asset',
+        meta: { className: 'font-mono font-semibold' },
+        cell: ({ row }) => (
+          // Symbol links to the dedicated full-page Position view (feature 096); the rest of
+          // the row still opens the quick-peek Sheet. stopPropagation preserved verbatim — the
+          // composite's isInteractiveTarget guard is a belt-and-suspenders addition on top, not
+          // a replacement.
+          <Link
+            href={`/trader/positions/${encodeURIComponent(row.original.symbol)}`}
+            className="hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {row.original.symbol}
+          </Link>
+        ),
+      },
+      {
+        id: 'side',
+        header: 'Side',
+        meta: { className: 'text-muted-foreground' },
+        cell: ({ row }) => sideLabel(row.original.qty),
+      },
+      {
+        accessorKey: 'qty',
+        header: 'Qty',
+        meta: { className: 'text-right tabular-nums' },
+      },
+      {
+        id: 'price',
+        header: 'Price',
+        accessorFn: (p) => p.currentPrice,
+        meta: { className: 'text-right tabular-nums' },
+        cell: ({ row }) => fmtUsd(row.original.currentPrice),
+      },
+      {
+        id: 'avgEntry',
+        header: 'Avg Entry',
+        accessorFn: (p) => p.avgEntryPrice,
+        meta: { className: 'text-right tabular-nums hidden sm:table-cell' },
+        cell: ({ row }) => fmtUsd(row.original.avgEntryPrice),
+      },
+      {
+        id: 'costBasis',
+        header: 'Cost Basis',
+        accessorFn: (p) => p.costBasis,
+        meta: { className: 'text-right tabular-nums hidden lg:table-cell' },
+        cell: ({ row }) => fmtUsd(row.original.costBasis),
+      },
+      {
+        id: 'marketValue',
+        header: 'Market Value',
+        accessorFn: (p) => p.marketValue,
+        meta: { className: 'text-right tabular-nums hidden md:table-cell' },
+        cell: ({ row }) => fmtUsd(row.original.marketValue),
+      },
+      {
+        id: 'dayPnlUsd',
+        header: "Today's P/L ($)",
+        accessorFn: (p) => p.dayPnl,
+        meta: { className: 'text-right tabular-nums font-semibold' },
+        cell: ({ row }) => (
+          <span className={pnlClass(row.original.dayPnl)}>{fmtSignedUsd(row.original.dayPnl)}</span>
+        ),
+      },
+      {
+        id: 'dayPnlPct',
+        header: "Today's P/L (%)",
+        accessorFn: (p) => p.dayPnlPct,
+        meta: { className: 'text-right tabular-nums hidden sm:table-cell' },
+        cell: ({ row }) => (
+          <span className={pnlClass(row.original.dayPnl)}>{fmtPct(row.original.dayPnlPct)}</span>
+        ),
+      },
+      {
+        id: 'totalPnlUsd',
+        header: 'Total P/L ($)',
+        accessorFn: (p) => p.unrealizedPnl,
+        meta: { className: 'text-right tabular-nums font-semibold' },
+        cell: ({ row }) => (
+          <span className={pnlClass(row.original.unrealizedPnl)}>
+            {fmtSignedUsd(row.original.unrealizedPnl)}
+          </span>
+        ),
+      },
+      {
+        id: 'totalPnlPct',
+        header: 'Total P/L (%)',
+        accessorFn: (p) => p.unrealizedPnlPct,
+        meta: { className: 'text-right tabular-nums' },
+        cell: ({ row }) => (
+          <span className={pnlClass(row.original.unrealizedPnl)}>
+            {fmtPct(row.original.unrealizedPnlPct)}
+          </span>
+        ),
+      },
+      // feature 083 — Exposure risk reframe (risk, not P&L).
+      {
+        id: 'weight',
+        header: 'Weight',
+        accessorFn: (p) => weight(p),
+        meta: { className: 'text-right tabular-nums hidden sm:table-cell text-muted-foreground' },
+        cell: ({ row }) => `${(weight(row.original) * 100).toFixed(1)}%`,
+      },
+      {
+        id: 'openR',
+        header: 'Open R',
+        accessorFn: (p) => openR(p) ?? Number.NEGATIVE_INFINITY,
+        meta: { className: 'text-right tabular-nums' },
+        cell: ({ row }) => {
+          const r = openR(row.original);
+          return <span className={r === null ? '' : pnlClass(r)}>{fmtR(r)}</span>;
+        },
+      },
+      {
+        id: 'riskAtStop',
+        header: 'Risk at stop',
+        accessorFn: (p) => p.riskAtStop,
+        meta: { className: 'text-right tabular-nums text-destructive hidden md:table-cell' },
+        cell: ({ row }) => (row.original.riskAtStop ? `-${fmtUsd(row.original.riskAtStop)}` : '—'),
+      },
+      {
+        id: 'exitRule',
+        header: 'Exit rule',
+        meta: { className: 'text-muted-foreground hidden lg:table-cell font-mono text-xs' },
+        cell: ({ row }) => row.original.exitRule || '—',
+      },
+      {
+        id: 'factor',
+        header: 'Factor',
+        meta: { className: 'text-right text-muted-foreground hidden lg:table-cell' },
+        cell: ({ row }) => row.original.factor || 'Unclassified',
+      },
+      {
+        id: 'stopDist',
+        header: 'Stop dist',
+        accessorFn: (p) => p.stopDistancePct,
+        meta: { className: 'text-right tabular-nums hidden md:table-cell' },
+        cell: ({ row }) => (row.original.stopPrice ? fmtPct(row.original.stopDistancePct) : '—'),
+      },
+      {
+        id: 'flag',
+        header: 'Flag',
+        meta: { className: 'text-right hidden md:table-cell' },
+        cell: ({ row }) =>
+          row.original.flag ? <EnumBadge render={POSITION_RISK_FLAG[row.original.flag]} /> : '—',
+      },
+      {
+        id: 'trade',
+        header: () => <span className="sr-only">Trade</span>,
+        enableSorting: false,
+        meta: { className: 'text-right' },
+        cell: ({ row }) => (
+          // Quick-trade shortcut: opens the order ticket pre-filled with this symbol.
+          // stopPropagation preserved verbatim so the row's detail Sheet doesn't also open.
+          <Button
+            asChild
+            size="sm"
+            variant="outline"
+            className="h-7"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Link href={`/trader?symbol=${encodeURIComponent(row.original.symbol)}`}>Trade</Link>
+          </Button>
+        ),
+      },
+    ],
+    [weight],
+  );
+
+  // Fill-lineage table columns (design exception — a bare sort baseline, no pagination/filter/
+  // column-visibility; see design.md's "disproportionate for a single-position drill-down list
+  // inside an already-narrow Sheet" disposition).
+  const lineageColumns = useMemo<ColumnDef<NonNullable<typeof lineage.data>[number]>[]>(
+    () => [
+      {
+        id: 'order',
+        header: 'Order',
+        meta: { className: 'font-mono text-xs' },
+        cell: ({ row }) => String(((row.original.payload ?? {}) as JsonObject).order_id ?? '—'),
+      },
+      {
+        id: 'qty',
+        header: 'Qty',
+        meta: { className: 'text-right tabular-nums text-xs' },
+        cell: ({ row }) => String(((row.original.payload ?? {}) as JsonObject).qty ?? '—'),
+      },
+      {
+        id: 'fillPrice',
+        header: 'Fill price',
+        meta: { className: 'text-right tabular-nums text-xs' },
+        cell: ({ row }) =>
+          fmtUsd(Number(((row.original.payload ?? {}) as JsonObject).fill_price ?? 0)),
+      },
+    ],
+    [],
+  );
 
   return (
     <AppShell>
@@ -301,125 +509,13 @@ export default function PositionsPage() {
               />
             )}
             {positions.length > 0 && (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Asset</TableHead>
-                    <TableHead>Side</TableHead>
-                    <TableHead className="text-right">Qty</TableHead>
-                    <TableHead className="text-right">Price</TableHead>
-                    <TableHead className="text-right hidden sm:table-cell">Avg Entry</TableHead>
-                    <TableHead className="text-right hidden lg:table-cell">Cost Basis</TableHead>
-                    <TableHead className="text-right hidden md:table-cell">Market Value</TableHead>
-                    <TableHead className="text-right">Today&apos;s P/L ($)</TableHead>
-                    <TableHead className="text-right hidden sm:table-cell">
-                      Today&apos;s P/L (%)
-                    </TableHead>
-                    <TableHead className="text-right">Total P/L ($)</TableHead>
-                    <TableHead className="text-right">Total P/L (%)</TableHead>
-                    {/* feature 083 — Exposure risk reframe (risk, not P&L). */}
-                    <TableHead className="text-right hidden sm:table-cell">Weight</TableHead>
-                    <TableHead className="text-right">Open R</TableHead>
-                    <TableHead className="text-right hidden md:table-cell">Risk at stop</TableHead>
-                    <TableHead className="hidden lg:table-cell">Exit rule</TableHead>
-                    <TableHead className="text-right hidden lg:table-cell">Factor</TableHead>
-                    <TableHead className="text-right hidden md:table-cell">Stop dist</TableHead>
-                    <TableHead className="text-right hidden md:table-cell">Flag</TableHead>
-                    <TableHead className="text-right sr-only">Trade</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {positions.map((p) => (
-                    <TableRow
-                      key={`${p.accountId ?? ''}-${p.symbol}`}
-                      onClick={() => setSelected(p)}
-                      className="cursor-pointer"
-                    >
-                      <TableCell className="font-mono font-semibold">
-                        {/* Symbol links to the dedicated full-page Position view (feature 096);
-                            the rest of the row still opens the quick-peek Sheet. */}
-                        <Link
-                          href={`/trader/positions/${encodeURIComponent(p.symbol)}`}
-                          className="hover:underline"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {p.symbol}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{sideLabel(p.qty)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{p.qty}</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {fmtUsd(p.currentPrice)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums hidden sm:table-cell">
-                        {fmtUsd(p.avgEntryPrice)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums hidden lg:table-cell">
-                        {fmtUsd(p.costBasis)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums hidden md:table-cell">
-                        {fmtUsd(p.marketValue)}
-                      </TableCell>
-                      <TableCell
-                        className={`text-right tabular-nums font-semibold ${pnlClass(p.dayPnl)}`}
-                      >
-                        {fmtSignedUsd(p.dayPnl)}
-                      </TableCell>
-                      <TableCell
-                        className={`text-right tabular-nums hidden sm:table-cell ${pnlClass(p.dayPnl)}`}
-                      >
-                        {fmtPct(p.dayPnlPct)}
-                      </TableCell>
-                      <TableCell
-                        className={`text-right tabular-nums font-semibold ${pnlClass(p.unrealizedPnl)}`}
-                      >
-                        {fmtSignedUsd(p.unrealizedPnl)}
-                      </TableCell>
-                      <TableCell className={`text-right tabular-nums ${pnlClass(p.unrealizedPnl)}`}>
-                        {fmtPct(p.unrealizedPnlPct)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums hidden sm:table-cell text-muted-foreground">
-                        {`${(weight(p) * 100).toFixed(1)}%`}
-                      </TableCell>
-                      <TableCell
-                        className={`text-right tabular-nums ${
-                          openR(p) === null ? '' : pnlClass(openR(p))
-                        }`}
-                      >
-                        {fmtR(openR(p))}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums text-destructive hidden md:table-cell">
-                        {p.riskAtStop ? `-${fmtUsd(p.riskAtStop)}` : '—'}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground hidden lg:table-cell font-mono text-xs">
-                        {p.exitRule || '—'}
-                      </TableCell>
-                      <TableCell className="text-right text-muted-foreground hidden lg:table-cell">
-                        {p.factor || 'Unclassified'}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums hidden md:table-cell">
-                        {p.stopPrice ? fmtPct(p.stopDistancePct) : '—'}
-                      </TableCell>
-                      <TableCell className="text-right hidden md:table-cell">
-                        {p.flag ? <EnumBadge render={POSITION_RISK_FLAG[p.flag]} /> : '—'}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {/* Quick-trade shortcut: opens the order ticket pre-filled with this
-                            symbol. stopPropagation so the row's detail Sheet doesn't also open. */}
-                        <Button
-                          asChild
-                          size="sm"
-                          variant="outline"
-                          className="h-7"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Link href={`/trader?symbol=${encodeURIComponent(p.symbol)}`}>Trade</Link>
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <DataTable
+                columns={columns}
+                data={positions}
+                getRowId={(p) => `${p.accountId ?? ''}-${p.symbol}`}
+                onRowClick={(p) => setSelected(p)}
+                rowClassName={() => 'cursor-pointer'}
+              />
             )}
 
             <div className="flex items-center justify-between pt-3">
@@ -575,33 +671,14 @@ export default function PositionsPage() {
                   </p>
                 )}
                 {(lineage.data?.length ?? 0) > 0 && (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-xs">Order</TableHead>
-                        <TableHead className="text-right text-xs">Qty</TableHead>
-                        <TableHead className="text-right text-xs">Fill price</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(lineage.data ?? []).map((e, i) => {
-                        const p = (e.payload ?? {}) as JsonObject;
-                        return (
-                          <TableRow key={`${String(p.order_id ?? '')}-${i}`}>
-                            <TableCell className="font-mono text-xs">
-                              {String(p.order_id ?? '—')}
-                            </TableCell>
-                            <TableCell className="text-right tabular-nums text-xs">
-                              {String(p.qty ?? '—')}
-                            </TableCell>
-                            <TableCell className="text-right tabular-nums text-xs">
-                              {fmtUsd(Number(p.fill_price ?? 0))}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
+                  <DataTable
+                    columns={lineageColumns}
+                    data={lineage.data ?? []}
+                    getRowId={(e, i) =>
+                      `${String(((e.payload ?? {}) as JsonObject).order_id ?? '')}-${i}`
+                    }
+                    enablePagination={false}
+                  />
                 )}
               </div>
             </div>

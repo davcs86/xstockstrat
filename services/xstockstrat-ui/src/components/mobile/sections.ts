@@ -16,6 +16,7 @@ export type Section =
       conviction?: number;
       caption?: string;
       href?: string;
+      muted?: boolean; // feature 132 — deny-listed row: a "Muted" marker in place of the action badge
     }
   | { kind: 'chart'; label: string; render: ReactNode }
   | { kind: 'row'; label: string; value: ReactNode }

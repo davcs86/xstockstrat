@@ -321,3 +321,41 @@
 - Hard: 022's integration PR must land after 134 and 131 (landing order 134 → 131 → 022). At execute
   time, re-grep `_compute_opportunities` and rebase Step 5's expression/loop shape onto whatever
   134/131 actually left — adding `× source_weight` only against a real landed symbol (F-04).
+
+---
+
+## Session — 2026-08-15 (/sdd-execute, stacked on landed 134/131)
+
+Executed all 7 steps directly on `feature/signal-time-decay` (branched off `main-dev` after
+133/134/131 landed; 134=#953 and 131=#954 are ancestors of this branch).
+
+### Steps
+- **Steps 1–4 (prior commits `3d8e79b`, `10e0b9a`)** — proto `ExternalSignal.ingested_at = 10`,
+  regenerated stubs, ingest `QuerySignals` SELECT + `FromDatetime` population, ingest test. Statuses
+  flipped to `done` this session (prior commits omitted the status edits).
+- **Step 5 — decay in `_compute_opportunities`** (`watcher.py` + `servicer.py`):
+  `get_float_present` added to the watcher (presence-aware `float_val`, no zero-trap). In the
+  servicer: `now_utc`/`half_life`/counters captured once right after the `_drain_active_signals`
+  await; the §3 signals-merge loop rewritten with a per-signal `sig_contribs` hoist above the
+  `targets` loop. **Rebased onto landed 134 (D-1):** the write site already carried
+  `source_weights.get(sig.source, 1.0)`, so `effective_conviction = raw × source_weight ×
+  decay_multiplier` and the DEBUG log gained `source_weight`. 131's two-level nesting confirmed
+  intact. Aggregated WARNING (one per compute pass) emitted before the `max_universe` read.
+- **Step 6 — tests** (`test_analysis_servicer.py` only; **D-2**): `get_float_present` cases added to
+  `TestConfigWatcherGetters` (reusing `_StubWatcher`) — spec's `test_config_watcher.py` evidence was
+  stale (that file has only resolve_* cases; the getter tests live in `test_analysis_servicer.py`).
+  9 decay cases added beside the source-reliability test (`_sig` extended with `ingested_at`;
+  `make_servicer` gained a `get_float_present` default stub): t=0/1/2/3 half-lives, disabled by 0 and
+  by negative, missing-`ingested_at`-treated-as-fresh, exactly-one aggregated WARNING, and silent when
+  fully stamped.
+- **Step 7 — config doc**: `analysis.scoring.signal_decay_half_life_hours` (float, `24.0`) row added
+  to analysis `CLAUDE.md` § Config Keys Consumed.
+
+### Verification
+- Analysis: `ruff check` clean, `ruff format` applied, `pytest --cov` → **487 passed, 82.7%**.
+- Ingest: `ruff` clean, `pytest --cov` → **191 passed, 79.2%**.
+
+### Deviations
+- **D-1** — Step 5 `× source_weight` factor added against the real landed 134 symbol (planned rebase).
+- **D-2** — Step 6 `get_float_present` tests placed in `test_analysis_servicer.py`, not
+  `test_config_watcher.py` (spec evidence drift; DRY reuse of `_StubWatcher`).

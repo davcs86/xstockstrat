@@ -1,20 +1,72 @@
 'use client';
+import { useMemo } from 'react';
 import Link from 'next/link';
+import type { ColumnDef } from '@tanstack/react-table';
+import type { Order } from '@xstockstrat/proto/trading/v1/trading_pb';
 import type { TradingMode } from '@/app/trader/page';
 import { useAccountContext } from '@/context/AccountContext';
 import { useOrders } from '@/hooks/useOrders';
 import { usePortfolio } from '@/hooks/usePortfolio';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/table';
+import { DataTable } from '../ui/data-table';
 import { Stat } from '../shared/Stat';
 import { CardNotice } from '../shared/CardNotice';
 import { QueryStateMessages } from '../shared/QueryStateMessages';
-import { OrderSymbolCell, OrderSideCell, OrderStatusCell, formatUsd } from './orderShared';
+import { OrderSideBadge, OrderStatusBadge, formatUsd } from './orderShared';
 
 // ── OrderBook ──────────────────────────────────────────────────────────────
 export function OrderBook({ mode }: { mode: TradingMode }) {
   const { selectedAccountId } = useAccountContext();
   const { data, error, isLoading } = useOrders(mode, selectedAccountId);
+
+  // Referentially-stable `data`/`columns` per TanStack Table's requirement (ledger fails.md
+  // 2026-08-08); no other consumer mutates `data.orders` in place, but `useOrders` returns a
+  // fresh object on every poll, so the columns array is memoized independently.
+  const columns = useMemo<ColumnDef<Order>[]>(
+    () => [
+      {
+        id: 'symbol',
+        header: 'Symbol',
+        meta: { className: 'font-mono font-semibold' },
+        cell: ({ row }) => (
+          <Link href={`/trader/orders/${row.original.orderId}`} className="hover:underline">
+            {row.original.symbol}
+          </Link>
+        ),
+      },
+      {
+        id: 'side',
+        header: 'Side',
+        cell: ({ row }) => <OrderSideBadge side={row.original.side} />,
+      },
+      {
+        accessorKey: 'qty',
+        header: 'Qty',
+        meta: { className: 'text-right' },
+      },
+      {
+        id: 'filled',
+        header: 'Filled',
+        accessorFn: (o) => o.filledQty ?? 0,
+        meta: { className: 'text-right text-muted-foreground' },
+      },
+      {
+        id: 'avgPrice',
+        header: 'Avg Price',
+        accessorFn: (o) => o.filledAvgPrice,
+        meta: { className: 'text-right hidden sm:table-cell' },
+        cell: ({ row }) => formatUsd(row.original.filledAvgPrice),
+      },
+      {
+        id: 'status',
+        header: 'Status',
+        cell: ({ row }) => (
+          <OrderStatusBadge status={row.original.status} intentState={row.original.intentState} />
+        ),
+      },
+    ],
+    [],
+  );
 
   return (
     <Card>
@@ -25,34 +77,13 @@ export function OrderBook({ mode }: { mode: TradingMode }) {
         <QueryStateMessages isLoading={isLoading} error={error} errorText="Failed to load orders" />
         {data?.orders && (
           <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Symbol</TableHead>
-                  <TableHead>Side</TableHead>
-                  <TableHead className="text-right">Qty</TableHead>
-                  <TableHead className="text-right">Filled</TableHead>
-                  <TableHead className="text-right hidden sm:table-cell">Avg Price</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.orders.map((order) => (
-                  <TableRow key={order.orderId} className="cursor-pointer hover:bg-accent/40">
-                    <OrderSymbolCell order={order} />
-                    <OrderSideCell side={order.side} />
-                    <TableCell className="text-right">{order.qty}</TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      {order.filledQty ?? 0}
-                    </TableCell>
-                    <TableCell className="text-right hidden sm:table-cell">
-                      {formatUsd(order.filledAvgPrice)}
-                    </TableCell>
-                    <OrderStatusCell status={order.status} intentState={order.intentState} />
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <DataTable
+              columns={columns}
+              data={data.orders}
+              getRowId={(order) => order.orderId}
+              rowClassName={() => 'cursor-pointer hover:bg-accent/40'}
+              tableTestId="order-book-table"
+            />
             {data.orders.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-6">No {mode} orders</p>
             )}

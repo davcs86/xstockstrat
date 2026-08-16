@@ -11,7 +11,8 @@ test.use({ viewport: { width: 390, height: 844 } });
 
 const ROUTES: { path: string; admin?: boolean }[] = [
   { path: '/insights/opportunities' },
-  { path: '/insights/market/AAPL' },
+  // feature 125: the former /insights/market/[symbol] entry was dropped — that page now redirects to
+  // the unified symbol page, already covered by the /trader/positions/AAPL entry below.
   { path: '/insights/watchlists' },
   { path: '/insights/screener' },
   { path: '/insights/strategies' },
@@ -31,6 +32,9 @@ const ROUTES: { path: string; admin?: boolean }[] = [
   { path: '/config-ui/audit' },
   { path: '/config-ui/platform' },
   { path: '/trader/positions/AAPL' },
+  // feature 135: the bare /trader dashboard route (LiveStrategiesPanel + OrderBook) was never in
+  // this sweep — a genuine ROUTES gap, not a redundant addition.
+  { path: '/trader' },
 ];
 
 async function horizontalOverflow(page: Page): Promise<number> {

@@ -148,6 +148,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         self._backtests: dict[str, analysis_pb2.BacktestResult] = {}
         self._strategies: dict[str, analysis_pb2.StrategyScore] = {}
         self._strategies_repo = StrategiesRepository(db_pool) if db_pool else None
+        # feature 125 (FR-6): process-lifetime singleton semaphore bounding cross-request
+        # concurrency of per-component indicator/formula compute driven by GetIndicatorSeries, so a
+        # routinely-visited Symbol page can't starve the live loop. Mirrors ScreenerEngine's own
+        # semaphore. `max(1, …)` guards a negative config value from reaching asyncio.Semaphore.
+        self._component_series_sem = asyncio.Semaphore(
+            max(1, self._cfg.get_int("analysis.series.max_concurrent_components", 4))
+        )
         # Durable backup for the in-memory _strategies dict (feature 064). Reads stay
         # in-memory; this persists on score and hydrates it at boot. None in the no-DB
         # test path so make_servicer()-based tests are unaffected.
@@ -200,6 +207,18 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         except (TypeError, ValueError):
             access_scope = 0
         return bool(access_scope & 0x04)
+
+    @staticmethod
+    def _caller_user_id(context) -> str:
+        """The owning user resolved from the propagated ``x-user-id`` header (feature 133).
+
+        The external edge (UI BFF via JWT, MCP agent via its OAuth layer) injects this header
+        after authenticating; internal services trust it. Ownership-scoped strategy RPCs resolve
+        the target row against this id and answer a miss (nonexistent or other-owner) with a
+        uniform ``PERMISSION_DENIED`` — so a caller can never learn from the response whether a
+        ``strategy_id`` exists under someone else's ownership. An empty caller id owns nothing.
+        """
+        return dict(context.invocation_metadata()).get("x-user-id", "")
 
     async def _fetch_formula_outputs(self, definition, propagation_meta) -> dict:
         """Map each custom-formula component's formula_id to the set of series it exposes.
@@ -298,6 +317,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             for k, v in context.invocation_metadata()
             if k in ("x-user-id", "x-access-scope", "x-trace-id")
         ]
+        # Feature 133: the caller owns any registered strategy this run touches (ref branch below)
+        # and any headline recompute afterward.
+        caller_user_id = self._caller_user_id(context)
 
         # Emit start event
         from google.protobuf.struct_pb2 import Struct
@@ -338,14 +360,22 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             active_definition = request.inline_definition
         elif request.strategy_id_ref:
             if self._strategies_repo:
-                row = await self._strategies_repo.get_by_id(request.strategy_id_ref)
+                # Feature 133: a backtest against a REGISTERED strategy is owner-scoped — a caller
+                # can only run their own. Inline/legacy runs (no strategy_id_ref) are unaffected.
+                row = (
+                    await self._strategies_repo.get_by_owner_and_id(
+                        caller_user_id, request.strategy_id_ref
+                    )
+                    if caller_user_id
+                    else None
+                )
                 if row:
                     active_definition = _row_to_strategy_definition(row)
                     executed_row = row
                 else:
                     await context.abort(
-                        grpc.StatusCode.NOT_FOUND,
-                        f"strategy '{request.strategy_id_ref}' not found",
+                        grpc.StatusCode.PERMISSION_DENIED,
+                        f"strategy '{request.strategy_id_ref}' not found or not owned",
                     )
                     return
 
@@ -608,7 +638,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # the grade on completion sees the post-run value.
         if result.status == analysis_pb2.BACKTEST_STATUS_OK:
             try:
-                await self._recompute_headline(request.strategy_id)
+                await self._recompute_headline(caller_user_id, request.strategy_id)
             except Exception as e:
                 log.warning("failed to recompute headline score: %s", e)
 
@@ -1247,9 +1277,17 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         if self._strategies_repo is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "strategy store unavailable")
             return
-        row = await self._strategies_repo.get_by_id(request.strategy_id)
+        # Feature 133: owner-scoped — uniform PERMISSION_DENIED on a non-owned/missing strategy.
+        caller_user_id = self._caller_user_id(context)
+        row = (
+            await self._strategies_repo.get_by_owner_and_id(caller_user_id, request.strategy_id)
+            if caller_user_id
+            else None
+        )
         if row is None:
-            await context.abort(grpc.StatusCode.NOT_FOUND, "strategy not registered")
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED, "strategy not found or not owned"
+            )
             return
 
         async with self._lock_for(request.strategy_id):
@@ -1387,16 +1425,19 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return None
         return self._derive_score_from_cells(strategy_id, strategy_row, cells)
 
-    async def _recompute_headline(self, strategy_id: str):
+    async def _recompute_headline(self, user_id: str, strategy_id: str):
         """Derive + persist a strategy's headline grade from its full evidence base.
 
         Resolves the strategy row BEFORE taking the lock (no lock leak from ad-hoc/unregistered
         ids → returns None). Best-effort trigger path (RunBacktest / ManageStrategy UPDATE);
         callers wrap it in try/except. Returns the new StrategyScore or None.
+
+        Feature 133: owner-scoped — an empty/wrong owner resolves to None (no-op), so a shared
+        strategy_id never recomputes the wrong owner's grade.
         """
         if self._strategies_repo is None:
             return None
-        row = await self._strategies_repo.get_by_id(strategy_id)
+        row = await self._strategies_repo.get_by_owner_and_id(user_id, strategy_id)
         if row is None:
             return None
         async with self._lock_for(strategy_id):
@@ -1530,10 +1571,34 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             self._strategies[r["strategy_id"]] = _row_to_score(r)
 
     async def ListStrategies(self, request, context):
-        strategies = list(self._strategies.values())
+        # Feature 133: owner-scoped — return only the caller's own strategy scores. The in-memory
+        # _strategies cache is keyed by bare strategy_id, so cross-check ownership against the repo
+        # (no strategy_scores re-key; a shared strategy_id's grade value is an accepted limitation).
+        if self._strategies_repo is not None:
+            caller_user_id = self._caller_user_id(context)
+            owned, _ = await self._strategies_repo.list(caller_user_id, include_inactive=True)
+            owned_ids = {r["strategy_id"] for r in owned}
+            strategies = [v for k, v in self._strategies.items() if k in owned_ids]
+        else:
+            strategies = list(self._strategies.values())
         return analysis_pb2.ListStrategiesResponse(strategies=strategies)
 
     async def GetStrategyReport(self, request, context):
+        # Feature 133: owner-scoped — uniform PERMISSION_DENIED for a non-owned/missing strategy
+        # (the in-memory score/backtest caches are keyed by bare strategy_id).
+        if self._strategies_repo is not None:
+            caller_user_id = self._caller_user_id(context)
+            owned = (
+                await self._strategies_repo.get_by_owner_and_id(caller_user_id, request.strategy_id)
+                if caller_user_id
+                else None
+            )
+            if owned is None:
+                await context.abort(
+                    grpc.StatusCode.PERMISSION_DENIED,
+                    f"strategy '{request.strategy_id}' not found or not owned",
+                )
+                return
         score = self._strategies.get(request.strategy_id)
         if score is None:
             await context.abort(
@@ -1557,6 +1622,20 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         """
         if self._backtest_runs_repo is None:
             return analysis_pb2.ListBacktestsResponse()
+        # Feature 133: owner-scoped — resolve ownership before returning another user's run history.
+        if self._strategies_repo is not None:
+            caller_user_id = self._caller_user_id(context)
+            owned = (
+                await self._strategies_repo.get_by_owner_and_id(caller_user_id, request.strategy_id)
+                if caller_user_id
+                else None
+            )
+            if owned is None:
+                await context.abort(
+                    grpc.StatusCode.PERMISSION_DENIED,
+                    f"strategy '{request.strategy_id}' not found or not owned",
+                )
+                return
         limit = request.limit if request.limit > 0 else 20
         try:
             rows = await self._backtest_runs_repo.list_by_strategy(request.strategy_id, limit=limit)
@@ -1593,9 +1672,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return result
 
     async def ManageStrategy(self, request, context):
-        # Role check only — authn/authz is owned by the entry points (UI BFF / MCP agent).
-        if not self._has_admin_scope(context):
-            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "admin scope required")
+        # Feature 133: ownership-gated (the admin gate was removed — see design decision 4).
+        # REGISTER opens to any authenticated caller under their own header-derived user_id;
+        # UPDATE/DEACTIVATE/REACTIVATE require ownership. An unauthenticated caller (no x-user-id)
+        # can never own a row.
+        caller_user_id = self._caller_user_id(context)
+        if not caller_user_id:
+            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "authenticated caller required")
             return
         if self._strategies_repo is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "strategy store unavailable")
@@ -1606,9 +1689,18 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         if op == analysis_pb2.STRATEGY_OPERATION_REGISTER:
             await self._validate_definition_proto(definition, context)
+            # Feature 133: the owner is server-authoritative — set from the header, never trusted
+            # from the request body. Two different users may register the same strategy_id
+            # (composite (user_id, strategy_id) PK), so the duplicate check is owner-scoped.
+            definition.user_id = caller_user_id
             # Feature 089: strict register. An existing id (active OR deactivated) is a conflict —
             # route the caller to reactivate rather than silently overwrite or crash on the PK.
-            if await self._strategies_repo.get_by_id(definition.strategy_id) is not None:
+            if (
+                await self._strategies_repo.get_by_owner_and_id(
+                    caller_user_id, definition.strategy_id
+                )
+                is not None
+            ):
                 await context.abort(
                     grpc.StatusCode.ALREADY_EXISTS,
                     f"strategy '{definition.strategy_id}' already exists; use the reactivate "
@@ -1620,7 +1712,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             )
             try:
                 row = await self._strategies_repo.create(
-                    definition.strategy_id, definition.display_name, definition_json
+                    caller_user_id,
+                    definition.strategy_id,
+                    definition.display_name,
+                    definition_json,
                 )
             except asyncpg.UniqueViolationError:
                 # Atomic backstop for a concurrent duplicate that raced the get_by_id check.
@@ -1659,11 +1754,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             # row locked and must not do I/O. Fetch for the union of the request's components and
             # the stored ones, so any merge outcome is covered. A component that somehow escapes
             # the union fails closed: `_validate_definition` treats a missing entry as {"value"}.
-            pre = await self._strategies_repo.get_by_id(definition.strategy_id)
+            pre = await self._strategies_repo.get_by_owner_and_id(
+                caller_user_id, definition.strategy_id
+            )
             if pre is None:
+                # Uniform PERMISSION_DENIED (feature 133): never reveal whether the id exists
+                # under another owner.
                 await context.abort(
-                    grpc.StatusCode.NOT_FOUND,
-                    f"strategy '{definition.strategy_id}' not found",
+                    grpc.StatusCode.PERMISSION_DENIED,
+                    f"strategy '{definition.strategy_id}' not found or not owned",
                 )
                 return
             # Feature 086: refuse a new binding to a soft-deleted formula. Checks the request's own
@@ -1708,7 +1807,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 return new_name, new_json
 
             try:
-                row = await self._strategies_repo.update_locked(definition.strategy_id, _apply)
+                row = await self._strategies_repo.update_locked(
+                    caller_user_id, definition.strategy_id, _apply
+                )
             except _MergeRejected as e:
                 await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
                 return
@@ -1733,11 +1834,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     log.warning("failed to recompute headline after update: %s", e)
             return _row_to_strategy_definition(row)
         if op == analysis_pb2.STRATEGY_OPERATION_DEACTIVATE:
-            row = await self._strategies_repo.deactivate(definition.strategy_id)
+            row = await self._strategies_repo.deactivate(caller_user_id, definition.strategy_id)
             if row is None:
                 await context.abort(
-                    grpc.StatusCode.NOT_FOUND,
-                    f"strategy '{definition.strategy_id}' not found",
+                    grpc.StatusCode.PERMISSION_DENIED,
+                    f"strategy '{definition.strategy_id}' not found or not owned",
                 )
                 return
             return _row_to_strategy_definition(row)
@@ -1745,19 +1846,21 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             # Feature 089: reactivation decoupled from update. Re-validate the STORED definition
             # first (a referenced formula may have gone missing while it was deactivated) so a
             # reactivated strategy satisfies the firing contract, rather than erroring each cycle.
-            existing = await self._strategies_repo.get_by_id(definition.strategy_id)
+            existing = await self._strategies_repo.get_by_owner_and_id(
+                caller_user_id, definition.strategy_id
+            )
             if existing is None:
                 await context.abort(
-                    grpc.StatusCode.NOT_FOUND,
-                    f"strategy '{definition.strategy_id}' not found",
+                    grpc.StatusCode.PERMISSION_DENIED,
+                    f"strategy '{definition.strategy_id}' not found or not owned",
                 )
                 return
             await self._validate_definition_proto(_row_to_strategy_definition(existing), context)
-            row = await self._strategies_repo.reactivate(definition.strategy_id)
+            row = await self._strategies_repo.reactivate(caller_user_id, definition.strategy_id)
             if row is None:
                 await context.abort(
-                    grpc.StatusCode.NOT_FOUND,
-                    f"strategy '{definition.strategy_id}' not found",
+                    grpc.StatusCode.PERMISSION_DENIED,
+                    f"strategy '{definition.strategy_id}' not found or not owned",
                 )
                 return
             return _row_to_strategy_definition(row)
@@ -1767,10 +1870,18 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         if self._strategies_repo is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "strategy store unavailable")
             return
-        row = await self._strategies_repo.get_by_id(request.strategy_id)
+        # Feature 133: owner-scoped read. A non-owner (or unauthenticated caller) gets a uniform
+        # PERMISSION_DENIED, never NOT_FOUND — no existence probing via response code.
+        caller_user_id = self._caller_user_id(context)
+        row = (
+            await self._strategies_repo.get_by_owner_and_id(caller_user_id, request.strategy_id)
+            if caller_user_id
+            else None
+        )
         if row is None:
             await context.abort(
-                grpc.StatusCode.NOT_FOUND, f"strategy '{request.strategy_id}' not found"
+                grpc.StatusCode.PERMISSION_DENIED,
+                f"strategy '{request.strategy_id}' not found or not owned",
             )
             return
         definition = _row_to_strategy_definition(row)
@@ -1790,7 +1901,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
     async def ListStrategyDefinitions(self, request, context):
         if self._strategies_repo is None:
             return analysis_pb2.ListStrategyDefinitionsResponse()
+        # Feature 133: header-derived owner filter (never read ListStrategiesRequest.user_id from
+        # the wire). An empty caller id lists nothing.
+        caller_user_id = self._caller_user_id(context)
         rows, total = await self._strategies_repo.list(
+            caller_user_id,
             include_inactive=request.include_inactive,
             page_size=request.page_size,
             page_offset=request.page_offset,
@@ -1801,9 +1916,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         )
 
     async def SetStrategyLive(self, request, context):
-        # Role check only — same gate as ManageStrategy (shared _has_admin_scope helper).
-        if not self._has_admin_scope(context):
-            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "admin scope required")
+        # Feature 133: ownership-gated (the admin gate was removed — design decision 4). Any
+        # authenticated caller may toggle live on their OWN strategy; a non-owner (or empty caller)
+        # gets a uniform PERMISSION_DENIED.
+        caller_user_id = self._caller_user_id(context)
+        if not caller_user_id:
+            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "authenticated caller required")
             return
 
         if self._strategies_repo is None:
@@ -1816,17 +1934,21 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if k in ("x-user-id", "x-access-scope", "x-trace-id")
         ]
 
-        # Feature 089 (F-7): enabling live on an inert config stores a flag that never fires. The
-        # live loop selects `live_enabled AND active` and skips a strategy with no
-        # signal_params.symbols, so reject both at enable time (FAILED_PRECONDITION). Disabling is
-        # ALWAYS allowed — even on an inert config — so an operator can always turn live off.
+        # Feature 089 (F-7): enabling live on an inactive strategy stores a flag that never fires,
+        # so reject that at enable time (FAILED_PRECONDITION). Disabling is ALWAYS allowed — even on
+        # an inert config — so an operator can always turn live off.
+        # Feature 132: the empty-signal_params.symbols reject was REMOVED. Under the deny model, an
+        # empty allowlist no longer means "never fires" — the strategy fires its whole owner union
+        # (watchlist ∪ held ∪ signals-iff-eligible, minus the deny list), so the feature-089
+        # precondition would now wrongly block a valid allowlist-free config (AC-1).
         if request.live_enabled:
-            from app.engine.live_loop import strategy_symbols  # noqa: PLC0415 (avoids import cycle)
-
-            existing = await self._strategies_repo.get_by_id(request.strategy_id)
+            existing = await self._strategies_repo.get_by_owner_and_id(
+                caller_user_id, request.strategy_id
+            )
             if existing is None:
                 await context.abort(
-                    grpc.StatusCode.NOT_FOUND, f"strategy '{request.strategy_id}' not found"
+                    grpc.StatusCode.PERMISSION_DENIED,
+                    f"strategy '{request.strategy_id}' not found or not owned",
                 )
                 return
             if not existing["active"]:
@@ -1835,19 +1957,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     "cannot enable live evaluation on an inactive strategy; reactivate it first",
                 )
                 return
-            if not strategy_symbols(_row_to_strategy_definition(existing)):
-                await context.abort(
-                    grpc.StatusCode.FAILED_PRECONDITION,
-                    "strategy has no signal_params.symbols; live evaluation would never fire",
-                )
-                return
 
         row = await self._strategies_repo.set_live_enabled(
-            request.strategy_id, request.live_enabled
+            caller_user_id, request.strategy_id, request.live_enabled
         )
         if row is None:
             await context.abort(
-                grpc.StatusCode.NOT_FOUND, f"strategy '{request.strategy_id}' not found"
+                grpc.StatusCode.PERMISSION_DENIED,
+                f"strategy '{request.strategy_id}' not found or not owned",
             )
             return
 
@@ -1887,15 +2004,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if k in ("x-user-id", "x-access-scope", "x-trace-id")
         ]
 
-        _weights_raw = self._cfg.get_str("analysis.signals.source_weights", default="{}")
-        try:
-            source_weights = (
-                {k: max(0.0, min(1.0, float(v))) for k, v in json.loads(_weights_raw).items()}
-                if _weights_raw
-                else {}
-            )
-        except (ValueError, TypeError):
-            source_weights = {}
+        # feature 134 (FR-4 genuine replace): source weights now come from
+        # ingest.SignalSource.reliability_weight (reject-at-write in [0,1]), not the
+        # retained-but-inert analysis.signals.source_weights config key. Both analysis read paths
+        # (this + the Opportunities queue) share the one _drain_source_weights helper.
+        source_weights = await self._drain_source_weights(propagation_meta)
 
         engine = ScreenerEngine(
             self._marketdata, self._indicators, self._ingest, self._cfg, source_weights
@@ -1923,7 +2036,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         user_id = dict(context.invocation_metadata()).get("x-user-id", "")
         held = await self._drain_held_symbols(user_id, propagation_meta)
         for r in resp.results:
-            if r.symbol in held:
+            # feature 131: _drain_held_symbols now keys by normalized symbol, so normalize the
+            # membership test (no-op for already-uppercase broker tickers; correct for mixed case).
+            if _normalize_symbol(r.symbol) in held:
                 r.held = True
         return resp
 
@@ -1957,9 +2072,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
     # ── Opportunity queue + readiness (feature 083) ─────────────────────────────
 
     async def EvaluateReadiness(self, request, context):
-        """Trace a strategy's entry-rule conditions against recent bars for each requested
+        """Trace a strategy's entry- or exit-rule conditions against recent bars for each requested
         symbol (feature 083). Returns per-symbol PASS/SOFT/FAIL leaves + a deterministic
-        conviction ordinal. Propagates the C-03 header tuple on every outbound call."""
+        conviction ordinal. Propagates the C-03 header tuple on every outbound call.
+
+        feature 138: ``request.rule`` selects which rule tree to trace — ``READINESS_RULE_EXIT``
+        traces the ``exit_rule`` (so a held REDUCE/ADD opportunity's readiness panel explains the
+        exit rule that actually fired, matching the queue's exit-derived conviction); UNSPECIFIED
+        and ENTRY trace the ``entry_rule`` (the back-compat default — watchlist readiness relies on
+        it)."""
         propagation_meta = [
             (k, v)
             for k, v in context.invocation_metadata()
@@ -1968,13 +2089,23 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         if self._strategies_repo is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "strategy store unavailable")
             return
-        row = await self._strategies_repo.get_by_id(request.strategy_id)
+        # Feature 133: owner-scoped — uniform PERMISSION_DENIED on a non-owned/missing strategy.
+        caller_user_id = self._caller_user_id(context)
+        row = (
+            await self._strategies_repo.get_by_owner_and_id(caller_user_id, request.strategy_id)
+            if caller_user_id
+            else None
+        )
         if row is None:
             await context.abort(
-                grpc.StatusCode.NOT_FOUND, f"strategy '{request.strategy_id}' not found"
+                grpc.StatusCode.PERMISSION_DENIED,
+                f"strategy '{request.strategy_id}' not found or not owned",
             )
             return
         definition = _row_to_strategy_definition(row)
+        # feature 138 — trace the exit rule only when explicitly requested (held REDUCE/ADD panel);
+        # UNSPECIFIED/ENTRY keep the entry-rule default so watchlist readiness is unchanged.
+        rule = "exit" if request.rule == analysis_pb2.READINESS_RULE_EXIT else "entry"
         evaluator = StrategyEvaluator(self._indicators, propagation_meta)
         range_msg = _recent_range(_READINESS_LOOKBACK_DAYS)
         readiness = []
@@ -1984,9 +2115,79 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             except Exception as e:  # bar fetch is best-effort per symbol
                 log.warning("EvaluateReadiness: bars fetch failed for %s: %s", symbol, e)
                 bars = []
-            trace = await evaluator.evaluate_conditions_traced(definition, bars, symbol)
+            trace = await evaluator.evaluate_conditions_traced(definition, bars, symbol, rule=rule)
             readiness.append(_readiness_to_proto(trace))
         return analysis_pb2.EvaluateReadinessResponse(readiness=readiness)
+
+    async def GetIndicatorSeries(self, request, context):
+        """Per-component historical indicator series for a strategy over the caller's own bar window
+        (feature 125, FR-6). Reuses ``StrategyEvaluator._compute_component`` per declared component
+        in this handler's OWN loop — never the shared ``evaluate_conditions_traced`` that
+        ``ListOpportunities`` depends on — under a process-lifetime semaphore, with per-component
+        fault isolation: a component that fails to compute populates ``ComponentSeries.error`` and
+        never fails the whole RPC. ``None`` points (warm-up head / NaN / gap) round-trip as an unset
+        ``DoubleValue``, never a fabricated ``0.0`` (AC-4a / P-03). Owner-scoped like
+        ``EvaluateReadiness`` (feature 133)."""
+        propagation_meta = [
+            (k, v)
+            for k, v in context.invocation_metadata()
+            if k in ("x-user-id", "x-access-scope", "x-trace-id")
+        ]
+        if self._strategies_repo is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "strategy store unavailable")
+            return
+        caller_user_id = self._caller_user_id(context)
+        row = (
+            await self._strategies_repo.get_by_owner_and_id(caller_user_id, request.strategy_id)
+            if caller_user_id
+            else None
+        )
+        if row is None:
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED,
+                f"strategy '{request.strategy_id}' not found or not owned",
+            )
+            return
+        definition = _row_to_strategy_definition(row)
+        evaluator = StrategyEvaluator(self._indicators, propagation_meta)
+        closes = list(request.closes)
+        component_series = []
+        # Sequential loop (no gather) so the singleton semaphore bounds cross-request total
+        # in-flight compute, not intra-request.
+        for comp in definition.components:
+            try:
+                async with self._component_series_sem:
+                    series_map = await evaluator._compute_component(comp, closes)
+                named = [
+                    analysis_pb2.NamedSeries(
+                        name=name,
+                        # A None point (warm-up head / NaN / gap) → an IndicatorValue with `value`
+                        # UNSET (proto3 explicit presence), never a fabricated 0.0 (AC-4a / P-03).
+                        values=[
+                            analysis_pb2.IndicatorValue(value=v)
+                            if v is not None
+                            else analysis_pb2.IndicatorValue()
+                            for v in series
+                        ],
+                    )
+                    for name, series in series_map.items()
+                ]
+                component_series.append(
+                    analysis_pb2.ComponentSeries(
+                        ref_name=comp.ref_name, kind=comp.kind, series=named
+                    )
+                )
+            # Per-component fault isolation: catches FormulaExecutionError + any sandbox/RPC error
+            # (broad by design — one bad component must not fail the whole RPC).
+            except Exception as e:  # noqa: BLE001
+                component_series.append(
+                    analysis_pb2.ComponentSeries(
+                        ref_name=comp.ref_name, kind=comp.kind, error=str(e)
+                    )
+                )
+        return analysis_pb2.GetIndicatorSeriesResponse(
+            times=request.times, components=component_series
+        )
 
     async def ListOpportunities(self, request, context):
         """Pure read of the materialized per-user opportunity queue (feature 097). The Universe
@@ -2096,8 +2297,19 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         a single row whose ``provenance`` lists them all (FR-4/AC-2).
         """
         signals = await self._drain_active_signals(propagation_meta)
-        held = await self._drain_held_symbols(user_id, propagation_meta)
+        # feature 022 — one reference instant per compute pass, captured immediately after the
+        # signals await resolves (FR-5): a signal ingested concurrently with the drain could
+        # otherwise carry ingested_at > a now taken earlier, yielding a spurious negative age.
+        now_utc = datetime.now(UTC)
+        half_life = self._cfg.get_float_present(
+            "analysis.scoring.signal_decay_half_life_hours", 24.0
+        )
+        missing_ingested_at_count = 0
+        total_signal_count = len(signals)
+        held_value_by_symbol = await self._drain_held_symbols(user_id, propagation_meta)
         bindings = await self._drain_watchlist_bindings(propagation_meta)
+        # feature 134 — per-source reliability weight scales the signal ranking axis below.
+        source_weights = await self._drain_source_weights(propagation_meta)
 
         # Index the origins by normalized symbol.
         watchlist_by_symbol: dict[str, set[str]] = {}
@@ -2106,7 +2318,54 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         signals_by_symbol: dict[str, list] = {}
         for sig in signals:
             signals_by_symbol.setdefault(_normalize_symbol(sig.symbol), []).append(sig)
-        held_norm = {_normalize_symbol(s) for s in held}
+        held_norm = set(held_value_by_symbol)  # keys already normalized (feature 131)
+
+        # feature 131 — live-strategy symbol coverage: a held/signal symbol covered by a
+        # live-enabled strategy's universe surfaces that strategy's readiness trace instead of
+        # falling through to unattributed. list_live_enabled is owner-scoped (feature-131 D-1) so
+        # this per-user compute never attributes another user's live strategy to this user's
+        # symbols (the other origins — watchlist/held/signals — are already owner-scoped).
+        live_by_symbol: dict[str, set[str]] = {}
+        created_at_by_strategy: dict[str, object] = {}
+        # feature 132: (sym, strat) pairs where sym is on strat's deny list AND within its pre-deny
+        # coverage — these become muted rows below (held+denied keeps its exit; non-held gets a 0/0
+        # placeholder), never conviction=0.
+        denied_covered: list[tuple[str, str]] = []
+        if self._strategies_repo is not None:
+            from app.engine.live_loop import (  # noqa: PLC0415 (avoids import cycle)
+                resolve_universe,
+            )
+
+            # feature 132: resolve_universe.union is the strategy's pre-deny coverage (a non-empty
+            # signal_params.symbols allowlist is an explicit override, else watchlist ∪ held ∪
+            # signals-iff-eligible) — the source of "which symbols this live strategy covers", and
+            # already normalized. Supersedes 131's allowlist-only strategy_symbols source.
+            wl_set = set(watchlist_by_symbol)
+            sig_set = set(signals_by_symbol)
+            for row in await self._strategies_repo.list_live_enabled(user_id):
+                definition = _row_to_strategy_definition(row)
+                resolved = resolve_universe(definition, wl_set, held_norm, sig_set)
+                for sym in resolved.union:
+                    live_by_symbol.setdefault(sym, set()).add(row["strategy_id"])
+                created_at_by_strategy[row["strategy_id"]] = row["created_at"]
+                for sym in resolved.denied & resolved.union:
+                    denied_covered.append((sym, row["strategy_id"]))
+
+        # feature 131 — per-symbol live-attribution fan-out cap (read once, F-07). Applies ONLY at
+        # candidate-CREATION sites (the held loop's live_new delta and the live-only step below);
+        # tagging an already-existing curated row is uncapped. The exclude-before-slice order is
+        # LOAD-BEARING for the held loop's _capped_live(sym, exclude=watch) composition: excluding
+        # already-tagged watchlist strategies before the [:cap] slice lets the budget go to
+        # genuinely-new live strategies rather than being consumed by ones already attributed.
+        max_live_strats = self._cfg.get_int(
+            "analysis.opportunity.max_live_strategies_per_symbol", 5
+        )
+
+        def _capped_live(sym: str, exclude=frozenset()) -> list[str]:
+            return sorted(
+                live_by_symbol.get(sym, set()) - exclude,
+                key=lambda s: created_at_by_strategy[s],
+            )[:max_live_strats]
 
         candidates: dict[tuple[str, str], dict] = {}
 
@@ -2122,6 +2381,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     "thesis": "",
                     "is_watchlist": False,
                     "is_held": False,
+                    "is_live": False,
+                    "muted": False,  # feature 132 — on the strategy's deny list
                     "best_direction": "",
                     "_best_sig_conv": -1.0,
                 }
@@ -2138,16 +2399,65 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 c = _candidate(sym, strat)
                 c["is_watchlist"] = True
                 _add_provenance(c, "watchlist")
+                # feature 131 — tag (never cap) a watchlist strategy that is also live-covered.
+                if strat in live_by_symbol.get(sym, set()):
+                    c["is_live"] = True
+                    _add_provenance(c, "live_strategy")
 
-        # 2. Held positions — attribute to each watchlist strategy for the symbol if any,
-        #    else an unattributed (symbol, "") candidate (no fabricated strategy).
+        # 2. Held positions — attribute to each watchlist strategy for the symbol if any, plus
+        #    live-covered strategies (bounded, feature 131); else an unattributed (symbol, "")
+        #    candidate (no fabricated strategy). Every held symbol still yields ≥1 row — the cap
+        #    governs only the extra live-attribution fan-out, never the base held row.
+        max_live_held = self._cfg.get_int(
+            "analysis.opportunity.max_live_held_symbols_per_compute", 20
+        )
+        live_eligible_held = [
+            sym
+            for sym in held_norm
+            if _capped_live(sym, exclude=watchlist_by_symbol.get(sym, set()))
+        ]
+        ranked_held = sorted(
+            live_eligible_held,
+            key=lambda sym: (-held_value_by_symbol.get(sym, 0.0), sym),
+        )
+        held_live_budget = set(ranked_held[:max_live_held])
         for sym in held_norm:
-            strats = watchlist_by_symbol.get(sym)
-            targets = list(strats) if strats else [""]
+            watch = watchlist_by_symbol.get(sym, set())
+            live_all = live_by_symbol.get(sym, set())
+            live_new = _capped_live(sym, exclude=watch) if sym in held_live_budget else []
+            targets = list(watch | set(live_new)) if (watch or live_new) else [""]
             for strat in targets:
                 c = _candidate(sym, strat)
                 c["is_held"] = True
                 _add_provenance(c, "position")
+                if strat in live_all:
+                    c["is_live"] = True
+                    _add_provenance(c, "live_strategy")
+
+        # 2b. Live-only symbols (feature 131, design step 6) — distinct NON-held symbols carrying
+        #     both an active signal and live coverage get a new live-attributed row, bounded per
+        #     compute. Pre-seeds the (symbol, strategy) row so the signals-merge loop below finds
+        #     it and folds in signal provenance + signal_axis.
+        def _new_live_strats(sym: str) -> list[str]:
+            # _capped_live with no exclude — exclude-before-slice would breach the per-symbol cap.
+            return [s for s in _capped_live(sym) if (sym, s) not in candidates]
+
+        # The − held_norm exclusion is load-bearing: a held symbol here would produce a wrongly
+        # entry-traced duplicate (held symbols already got their exit-traced rows above).
+        live_signal_symbols = (signals_by_symbol.keys() & live_by_symbol.keys()) - held_norm
+        competitive_pool = [sym for sym in live_signal_symbols if _new_live_strats(sym)]
+        max_live_only = self._cfg.get_int(
+            "analysis.opportunity.max_live_only_symbols_per_compute", 20
+        )
+        ranked_live_only = sorted(
+            competitive_pool,
+            key=lambda sym: (-max(sig.conviction for sig in signals_by_symbol[sym]), sym),
+        )[:max_live_only]
+        for sym in ranked_live_only:
+            for strat in _new_live_strats(sym):
+                c = _candidate(sym, strat)
+                c["is_live"] = True
+                _add_provenance(c, "live_strategy")
 
         # 3. Signals — merge into every existing candidate for the symbol (collapse); if none
         #    exists, stand alone as an unattributed (symbol, "") candidate.
@@ -2156,25 +2466,102 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if not targets:
                 _candidate(sym, "")
                 targets = [(sym, "")]
+
+            # feature 022 — decay + feature-134 source weighting computed ONCE per signal, hoisted
+            # above the targets loop into sig_contribs so a symbol bound to multiple watchlist
+            # strategies (len(targets) > 1) does not re-decay/re-log/re-count the same signal.
+            sig_contribs = []
+            for sig in sigs:
+                raw_conviction = sig.conviction
+                # feature 134 — per-source reliability weight (neutral 1.0 for an unknown/unweighted
+                # source, mirroring scoring.compute_signal_score).
+                source_weight = source_weights.get(sig.source, 1.0)
+                if sig.HasField("ingested_at"):
+                    ingested_dt = sig.ingested_at.ToDatetime(tzinfo=UTC)
+                    raw_age_hours = (now_utc - ingested_dt).total_seconds() / 3600
+                    age_hours = max(0.0, raw_age_hours)  # defensive clamp (race / clock skew)
+                    age_clamped = raw_age_hours < 0.0
+                    age_known = True
+                else:
+                    age_hours = None
+                    age_clamped = False
+                    age_known = False
+                    missing_ingested_at_count += 1
+                # Age-derivation branches ONLY on HasField(ingested_at); decay-application branches
+                # ONLY on half_life. Neither gates the other, so all log-referenced names are bound
+                # in every combination (closes the UnboundLocalError on FR-3's disable path).
+                decay_multiplier = (
+                    math.exp(-math.log(2) / half_life * age_hours)
+                    if (half_life > 0 and age_known)
+                    else 1.0
+                )
+                effective_conviction = raw_conviction * source_weight * decay_multiplier
+                if not math.isfinite(effective_conviction):
+                    effective_conviction = 0.0  # explicit guard (future-refactor insurance)
+                log.debug(
+                    "signal_axis decay: symbol=%s source=%s raw_conviction=%s source_weight=%s "
+                    "age_hours=%s age_known=%s age_clamped=%s decay_multiplier=%s "
+                    "effective_conviction=%s",
+                    sym,
+                    sig.source,
+                    raw_conviction,
+                    source_weight,
+                    age_hours,
+                    age_known,
+                    age_clamped,
+                    decay_multiplier,
+                    effective_conviction,
+                )
+                sig_contribs.append((sig, effective_conviction))
+
             for key in targets:
                 c = candidates[key]
-                for sig in sigs:
+                for sig, effective_conviction in sig_contribs:
                     _add_provenance(c, sig.source)
-                    c["signal_axis"] = max(c["signal_axis"], sig.conviction)
-                    if sig.conviction > c["_best_sig_conv"]:
+                    c["signal_axis"] = max(c["signal_axis"], effective_conviction)  # decayed
+                    if sig.conviction > c["_best_sig_conv"]:  # thesis/direction on RAW conviction
                         c["_best_sig_conv"] = sig.conviction
                         c["best_direction"] = sig.direction
                         if not c["thesis"]:
                             c["thesis"] = sig.headline
 
-        # FR-1: rank watchlist/held (curated) ABOVE the max_universe_size cut so a curated
-        # candidate is never truncated; drop only the speculative signal-only tail.
+        # feature 022 — one aggregated WARNING per compute pass (never one-per-signal: this runs
+        # per-user, so per-signal warnings would scale as active-signals × active-users during an
+        # ingest/analysis deploy-ordering race). Signals missing ingested_at are treated as fresh.
+        if missing_ingested_at_count > 0:
+            log.warning(
+                "%d of %d signals missing ingested_at this compute pass; treated as fresh "
+                "(decay_multiplier=1.0)",
+                missing_ingested_at_count,
+                total_signal_count,
+            )
+
+        # feature 132 — muted (deny-listed) rows: exactly one row per denied (sym, strat) covered by
+        # the strategy. Held+denied flags the existing exit-traced row (deny is entry-only, exit
+        # still shows); non-held denied gets a 0/0 placeholder. muted is a bool carried by the
+        # "denied" provenance marker (the persistence carrier) — never conviction=0 (fails.md 023).
+        for sym, strat in denied_covered:
+            c = _candidate(sym, strat)
+            if sym in held_norm:
+                c["is_held"] = True  # keep the exit trace on the held+denied row
+                _add_provenance(c, "position")
+            _add_provenance(c, "denied")
+            c["muted"] = "denied" in c["provenance"]
+
+        # FR-1: rank watchlist/held/live (curated) ABOVE the max_universe_size cut so a curated
+        # candidate is never truncated; feature 132 adds a muted_only bucket ranked above the
+        # speculative tail too, so a deny-listed row is never dropped for a higher signal.
         max_universe = self._cfg.get_int("analysis.opportunity.max_universe_size", 100)
-        curated = [c for c in candidates.values() if c["is_watchlist"] or c["is_held"]]
-        speculative = [c for c in candidates.values() if not (c["is_watchlist"] or c["is_held"])]
+
+        def _sel(c: dict) -> bool:
+            return c["is_watchlist"] or c["is_held"] or c["is_live"]
+
+        curated = [c for c in candidates.values() if _sel(c)]
+        muted_only = [c for c in candidates.values() if c["muted"] and not _sel(c)]
+        speculative = [c for c in candidates.values() if not (_sel(c) or c["muted"])]
         speculative.sort(key=lambda c: c["signal_axis"], reverse=True)
-        budget = max(0, max_universe - len(curated))
-        selected = curated + speculative[:budget]
+        budget = max(0, max_universe - len(curated) - len(muted_only))
+        selected = curated + muted_only + speculative[:budget]
 
         # Readiness + row assembly. Attributed candidates fetch bars once each and trace; the
         # session date (for valid_until) is the newest bar seen across the whole compute.
@@ -2191,8 +2578,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             readiness = _empty_readiness(sym)
             exit_fires = False
 
-            if strat:
-                definition = await self._load_strategy_definition(strat, strategy_defs)
+            # feature 132: a muted NON-held row is a deny-listed placeholder — skip the bars-fetch/
+            # trace and emit a 0/0 (a held+denied row still traces its exit, since deny is
+            # entry-only).
+            if strat and not (c["muted"] and not c["is_held"]):
+                definition = await self._load_strategy_definition(user_id, strat, strategy_defs)
                 if definition is not None:
                     try:
                         bars = await self._fetch_bars_paged(sym, range_msg, propagation_meta)
@@ -2212,8 +2602,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         exit_fires = total > 0 and readiness["passing_conditions"] == total
 
             action = _resolve_action_tag(c, exit_fires)
-            if action is None:  # speculative sell-with-no-position → not actionable, drop
-                continue
+            if action is None:
+                if c["muted"]:
+                    # feature 132: a muted, otherwise-non-actionable row is informational — keep it
+                    # (UNSPECIFIED tag), never drop it. The mute is the signal (fails.md 023).
+                    action = analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED
+                else:
+                    continue  # speculative sell-with-no-position → not actionable, drop
 
             rows.append(
                 {
@@ -2241,7 +2636,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             r["valid_until"] = valid_until
         return rows
 
-    async def _load_strategy_definition(self, strategy_id: str, cache: dict):
+    async def _load_strategy_definition(self, user_id: str, strategy_id: str, cache: dict):
         """Load + cache a StrategyDefinition for the compute (one DB read per distinct strategy).
         Returns None (cached) when the strategy is missing, deactivated, or not live-enabled — a
         dangling or disabled binding stays a candidate but traces to 0/0 rather than fabricating
@@ -2251,7 +2646,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return cache[strategy_id]
         definition = None
         if self._strategies_repo is not None:
-            row = await self._strategies_repo.get_by_id(strategy_id)
+            # Feature 133: resolve the binding under the computing user's ownership. A watchlist
+            # binding to a legacy strategy_id now owned by a different user resolves to None → the
+            # candidate falls back to unattributed (strategy_id="", 0/0), never cross-attributing
+            # (design decision 10 — an accepted migration-time trade-off).
+            row = await self._strategies_repo.get_by_owner_and_id(user_id, strategy_id)
             if row is not None and row.get("active") and row.get("live_enabled"):
                 definition = _row_to_strategy_definition(row)
         cache[strategy_id] = definition
@@ -2381,13 +2780,33 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 break
         return out
 
-    async def _drain_held_symbols(self, user_id, propagation_meta) -> set:
-        """Drain the set of symbols the user holds across all accounts/modes (paginated).
+    async def _drain_source_weights(self, propagation_meta) -> dict[str, float]:
+        """Drain per-source reliability weights from ingest (feature 134). Single unpaginated
+        ListSignalSources call, best-effort (an ingest failure yields an empty map so the caller
+        falls back to the neutral 1.0 multiplier), mirroring ``_drain_active_signals``. Returns
+        ``{slug: reliability_weight}`` — the shape ``scoring.compute_signal_score`` consumes."""
+        try:
+            resp = await self._ingest.ListSignalSources(
+                ingest_pb2.ListSignalSourcesRequest(include_inactive=True),
+                metadata=propagation_meta,
+            )
+        except grpc.RpcError as e:
+            log.warning("_drain_source_weights: ListSignalSources failed: %s", e)
+            return {}
+        return {src.slug: src.reliability_weight for src in resp.sources}
+
+    async def _drain_held_symbols(self, user_id, propagation_meta) -> "dict[str, float]":
+        """Drain the user's held symbols across all accounts/modes (paginated), keyed by
+        **normalized** symbol and valued by summed ``abs(Position.market_value)``.
         ``ListPositions(user_id)`` with ``account_id`` unset + ``TradingMode UNSPECIFIED``
-        already returns every held position — no new global-positions RPC needed."""
+        already returns every held position — no new global-positions RPC needed.
+
+        Feature 131: normalized at construction (not the read site) — the opportunity ranking reads
+        ``held_value_by_symbol.get(sym, 0.0)`` where ``sym`` iterates the already-normalized
+        ``held_norm``, so a raw key would silently rank a real held symbol at 0.0."""
         if self._portfolio is None:
-            return set()
-        held: set = set()
+            return {}
+        held: dict[str, float] = {}
         page_token = ""
         for _ in range(_MAX_DRAIN_PAGES):
             try:
@@ -2403,7 +2822,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             except grpc.RpcError as e:
                 log.warning("ListOpportunities: ListPositions failed: %s", e)
                 return held
-            held.update(p.symbol for p in resp.positions)
+            for p in resp.positions:
+                norm = _normalize_symbol(p.symbol)
+                held[norm] = held.get(norm, 0.0) + abs(p.market_value)
             page_token = resp.page.next_page_token
             if not page_token:
                 break
@@ -2425,6 +2846,22 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         ]
         user_id = dict(context.invocation_metadata()).get("x-user-id", "")
         strategy_id = request.strategy_id
+
+        # Feature 133: owner-scoped analytics. When the strategy store is available, a caller may
+        # only read analytics for their OWN strategy — uniform PERMISSION_DENIED otherwise (the
+        # no-DB test path, repo is None, is unaffected).
+        if self._strategies_repo is not None:
+            owned = (
+                await self._strategies_repo.get_by_owner_and_id(user_id, strategy_id)
+                if user_id
+                else None
+            )
+            if owned is None:
+                await context.abort(
+                    grpc.StatusCode.PERMISSION_DENIED,
+                    f"strategy '{strategy_id}' not found or not owned",
+                )
+                return
 
         expectancy = 0.0
         blended_hit_rate = 0.0
@@ -2456,7 +2893,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         if self._trading is not None:
             try:
                 orders_resp = await self._trading.ListOrders(
-                    trading_pb2.ListOrdersRequest(strategy_id=strategy_id),
+                    trading_pb2.ListOrdersRequest(strategy_id=strategy_id, user_id=user_id),
                     metadata=propagation_meta,
                 )
                 taken = len(orders_resp.orders)
@@ -2582,7 +3019,7 @@ def _primary_source(provenance: list[str]) -> str:
     origin in ``provenance``, skipping the ``"watchlist"``/``"position"`` structural markers.
     ``provenance`` carries the full origin list."""
     for origin in provenance:
-        if origin not in ("watchlist", "position"):
+        if origin not in ("watchlist", "position", "denied"):
             return origin
     return ""
 
@@ -2605,6 +3042,9 @@ def _row_to_opportunity(row: dict) -> "analysis_pb2.Opportunity":
         source=_primary_source(provenance),
         opportunity_key=row["opportunity_key"],
         provenance=provenance,
+        # feature 132 — muted is derived from the "denied" provenance marker (the persistence
+        # carrier; analysis.opportunities has no muted column), so it survives the DB round-trip.
+        muted=("denied" in provenance),
     )
     valid_until = row.get("valid_until")
     if valid_until is not None:
@@ -2879,6 +3319,8 @@ _MASKABLE_PATHS = frozenset(
         "signal_params",
         "cooldown_days",
         "exit_cooldown_days",
+        "denied_symbols",  # feature 132 — entry-only deny list (rides definition_json)
+        "signal_eligible",  # feature 132 — gates the platform-wide active-signal universe term
     }
 )
 
@@ -2999,6 +3441,10 @@ def _row_to_strategy_definition(row: dict) -> "analysis_pb2.StrategyDefinition":
     definition.active = row["active"]
     # live_enabled column added by feature 048 (absent on rows predating that migration).
     definition.live_enabled = bool(row.get("live_enabled", False))
+    # feature 133: the user_id column is authoritative — a migrated row carries its owner only on
+    # the column, not in the embedded definition_json, and the live loop keys its state by this
+    # value (so it must match the cooldown rows hydrated by the same column).
+    definition.user_id = row.get("user_id", "") or ""
     return definition
 
 

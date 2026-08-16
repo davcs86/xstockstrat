@@ -427,6 +427,12 @@ class ScreenerEngine:
             return result
 
         criterion_scores = {}
+        # feature 125 (FR-8): raw per-criterion readings + pass/fail for single-symbol screening,
+        # where the universe-relative `criterion_scores` collapse to a content-free 0.5. Built from
+        # the same per-symbol `raws`/`passes` dicts every other field here already reads — no new
+        # computation. Same "present only for evaluated criteria" contract as `criterion_scores`.
+        criterion_raw_values = {}
+        criterion_passed = {}
         weighted_sum = 0.0
         weight_total = 0.0
         passed = True
@@ -442,6 +448,8 @@ class ScreenerEngine:
                 continue
             sub = norm.get(c.ref_name, {}).get(row["symbol"], 0.5)
             criterion_scores[c.ref_name] = sub
+            criterion_raw_values[c.ref_name] = row["raws"][c.ref_name]
+            criterion_passed[c.ref_name] = row["passes"].get(c.ref_name, False)
             w = c.weight if c.weight > 0 else 1.0
             weighted_sum += w * sub
             weight_total += w
@@ -465,6 +473,8 @@ class ScreenerEngine:
             symbol=row["symbol"],
             score=score,
             criterion_scores=criterion_scores,
+            criterion_raw_values=criterion_raw_values,
+            criterion_passed=criterion_passed,
             passed=passed,
             status=analysis_pb2.SCREEN_RESULT_STATUS_OK,
             # feature 083 raw display columns (FR-8); held is set by the servicer cross-ref.

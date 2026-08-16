@@ -35,6 +35,7 @@ const (
 	AnalysisService_EvaluateReadiness_FullMethodName       = "/xstockstrat.analysis.v1.AnalysisService/EvaluateReadiness"
 	AnalysisService_SetOpportunityAction_FullMethodName    = "/xstockstrat.analysis.v1.AnalysisService/SetOpportunityAction"
 	AnalysisService_GetStrategyAnalytics_FullMethodName    = "/xstockstrat.analysis.v1.AnalysisService/GetStrategyAnalytics"
+	AnalysisService_GetIndicatorSeries_FullMethodName      = "/xstockstrat.analysis.v1.AnalysisService/GetIndicatorSeries"
 )
 
 // AnalysisServiceClient is the client API for AnalysisService service.
@@ -70,6 +71,11 @@ type AnalysisServiceClient interface {
 	SetOpportunityAction(ctx context.Context, in *SetOpportunityActionRequest, opts ...grpc.CallOption) (*SetOpportunityActionResponse, error)
 	// Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share).
 	GetStrategyAnalytics(ctx context.Context, in *GetStrategyAnalyticsRequest, opts ...grpc.CallOption) (*StrategyAnalytics, error)
+	// Per-component historical indicator series for a strategy over a caller-supplied bar window,
+	// for the unified Symbol page's overlay panels (feature 125, FR-6). Reuses the analysis
+	// evaluator's own _compute_component per declared component in a dedicated handler loop — never
+	// the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
+	GetIndicatorSeries(ctx context.Context, in *GetIndicatorSeriesRequest, opts ...grpc.CallOption) (*GetIndicatorSeriesResponse, error)
 }
 
 type analysisServiceClient struct {
@@ -240,6 +246,16 @@ func (c *analysisServiceClient) GetStrategyAnalytics(ctx context.Context, in *Ge
 	return out, nil
 }
 
+func (c *analysisServiceClient) GetIndicatorSeries(ctx context.Context, in *GetIndicatorSeriesRequest, opts ...grpc.CallOption) (*GetIndicatorSeriesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetIndicatorSeriesResponse)
+	err := c.cc.Invoke(ctx, AnalysisService_GetIndicatorSeries_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AnalysisServiceServer is the server API for AnalysisService service.
 // All implementations should embed UnimplementedAnalysisServiceServer
 // for forward compatibility.
@@ -273,6 +289,11 @@ type AnalysisServiceServer interface {
 	SetOpportunityAction(context.Context, *SetOpportunityActionRequest) (*SetOpportunityActionResponse, error)
 	// Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share).
 	GetStrategyAnalytics(context.Context, *GetStrategyAnalyticsRequest) (*StrategyAnalytics, error)
+	// Per-component historical indicator series for a strategy over a caller-supplied bar window,
+	// for the unified Symbol page's overlay panels (feature 125, FR-6). Reuses the analysis
+	// evaluator's own _compute_component per declared component in a dedicated handler loop — never
+	// the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
+	GetIndicatorSeries(context.Context, *GetIndicatorSeriesRequest) (*GetIndicatorSeriesResponse, error)
 }
 
 // UnimplementedAnalysisServiceServer should be embedded to have
@@ -329,6 +350,9 @@ func (UnimplementedAnalysisServiceServer) SetOpportunityAction(context.Context, 
 }
 func (UnimplementedAnalysisServiceServer) GetStrategyAnalytics(context.Context, *GetStrategyAnalyticsRequest) (*StrategyAnalytics, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetStrategyAnalytics not implemented")
+}
+func (UnimplementedAnalysisServiceServer) GetIndicatorSeries(context.Context, *GetIndicatorSeriesRequest) (*GetIndicatorSeriesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetIndicatorSeries not implemented")
 }
 func (UnimplementedAnalysisServiceServer) testEmbeddedByValue() {}
 
@@ -638,6 +662,24 @@ func _AnalysisService_GetStrategyAnalytics_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AnalysisService_GetIndicatorSeries_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetIndicatorSeriesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalysisServiceServer).GetIndicatorSeries(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalysisService_GetIndicatorSeries_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalysisServiceServer).GetIndicatorSeries(ctx, req.(*GetIndicatorSeriesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AnalysisService_ServiceDesc is the grpc.ServiceDesc for AnalysisService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -708,6 +750,10 @@ var AnalysisService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetStrategyAnalytics",
 			Handler:    _AnalysisService_GetStrategyAnalytics_Handler,
+		},
+		{
+			MethodName: "GetIndicatorSeries",
+			Handler:    _AnalysisService_GetIndicatorSeries_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

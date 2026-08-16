@@ -22,9 +22,17 @@ test.describe('AC-8 valuation parity', () => {
     await expect(portfolioRow).toContainText('+$100.00');
 
     // Exposure (positions) — the AAPL row's Total P/L ($) reads the same source.
+    // Row role is 'button', not 'row', here: the Exposure table is onRowClick-enabled
+    // (DataTable migration, feature 135) — the composite sets role="button" on a clickable
+    // row for a11y, which overrides the native <tr> row role.
     await page.goto('/trader/positions');
-    const exposureRow = page.getByRole('row', { name: /AAPL/ });
+    const exposureRow = page.getByRole('button', { name: /AAPL/ });
     await expect(exposureRow).toBeVisible({ timeout: 10000 });
     await expect(exposureRow).toContainText('+$100.00');
+
+    // Third read path (feature 125, FR-14): the unified single-symbol page (GetPosition) reports the
+    // same broker-authoritative +$100.00 — no fourth re-derivation.
+    await page.goto('/trader/positions/AAPL');
+    await expect(page.getByText('+$100.00').first()).toBeVisible({ timeout: 30000 });
   });
 });

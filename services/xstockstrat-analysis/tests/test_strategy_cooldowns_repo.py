@@ -20,12 +20,12 @@ async def test_upsert_exit_uses_on_conflict_and_targets_last_exit_at():
     repo = StrategyCooldownsRepository(db_pool)
 
     ts = datetime(2026, 8, 1, tzinfo=UTC)
-    await repo.upsert_exit("s1", "AAPL", ts)
+    await repo.upsert_exit("u1", "s1", "AAPL", ts)
 
     sql = db_pool.execute.call_args.args[0]
-    assert "ON CONFLICT (strategy_id, symbol) DO UPDATE SET" in sql
+    assert "ON CONFLICT (user_id, strategy_id, symbol) DO UPDATE SET" in sql
     assert "last_exit_at = EXCLUDED.last_exit_at" in sql
-    assert db_pool.execute.call_args.args[1:] == ("s1", "AAPL", ts)
+    assert db_pool.execute.call_args.args[1:] == ("u1", "s1", "AAPL", ts)
 
 
 @pytest.mark.asyncio
@@ -35,12 +35,12 @@ async def test_upsert_entry_uses_on_conflict_and_targets_last_entry_at():
     repo = StrategyCooldownsRepository(db_pool)
 
     ts = datetime(2026, 8, 1, tzinfo=UTC)
-    await repo.upsert_entry("s1", "AAPL", ts)
+    await repo.upsert_entry("u1", "s1", "AAPL", ts)
 
     sql = db_pool.execute.call_args.args[0]
-    assert "ON CONFLICT (strategy_id, symbol) DO UPDATE SET" in sql
+    assert "ON CONFLICT (user_id, strategy_id, symbol) DO UPDATE SET" in sql
     assert "last_entry_at = EXCLUDED.last_entry_at" in sql
-    assert db_pool.execute.call_args.args[1:] == ("s1", "AAPL", ts)
+    assert db_pool.execute.call_args.args[1:] == ("u1", "s1", "AAPL", ts)
 
 
 @pytest.mark.asyncio

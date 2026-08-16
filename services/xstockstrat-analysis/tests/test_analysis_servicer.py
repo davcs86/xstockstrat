@@ -9,7 +9,7 @@ import asyncio
 import inspect
 import json
 import math
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -27,6 +27,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import AnalysisServicer, _InsufficientData
 from app.services import warmup as warmup_sizing
+from app.services.evaluator import FormulaExecutionError, StrategyEvaluator
 
 
 def make_servicer() -> AnalysisServicer:
@@ -39,6 +40,10 @@ def make_servicer() -> AnalysisServicer:
     # feature 116: get_int_present (not get_int) is used for exit_cooldown_days' platform
     # default, since a configured 0 is meaningful and must not be zero-trapped.
     cfg.get_int_present = MagicMock(side_effect=lambda key, default: default)
+    # feature 022: get_float_present backs the signal-decay half-life (a configured 0 disables
+    # decay and must not be zero-trapped). Default → no override, so existing signal fixtures
+    # (no ingested_at → age unknown → decay_multiplier 1.0) are unaffected.
+    cfg.get_float_present = MagicMock(side_effect=lambda key, default: default)
     return AnalysisServicer(
         cfg,
         marketdata_channel=MagicMock(),
@@ -46,6 +51,16 @@ def make_servicer() -> AnalysisServicer:
         ingest_channel=MagicMock(),
         ledger_channel=MagicMock(),
     )
+
+
+def _owned_ctx():
+    """A gRPC context carrying x-user-id (feature 133) so ownership-gated RPCs resolve a caller."""
+    ctx = MagicMock()
+    ctx.invocation_metadata = MagicMock(
+        return_value=[("x-user-id", "u1"), ("x-access-scope", "7"), ("x-trace-id", "t1")]
+    )
+    ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+    return ctx
 
 
 def _make_backtest(
@@ -86,15 +101,18 @@ def _derivation_svc(cells, definition_json=None, strategy_id="s1"):
     svc._ledger = MagicMock()
     svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
     svc._strategies_repo = AsyncMock()
-    svc._strategies_repo.get_by_id = AsyncMock(
-        return_value={
-            "strategy_id": strategy_id,
-            "display_name": "S1",
-            "active": True,
-            "live_enabled": False,
-            "definition_json": definition_json or {"entry_rule": "x"},
-        }
-    )
+    _drow = {
+        "strategy_id": strategy_id,
+        "user_id": "u1",
+        "display_name": "S1",
+        "active": True,
+        "live_enabled": False,
+        "definition_json": definition_json or {"entry_rule": "x"},
+    }
+    svc._strategies_repo.get_by_id = AsyncMock(return_value=_drow)
+    svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_drow)
+    # feature 133: ListStrategies owner-filters against repo.list(user_id); return this strategy.
+    svc._strategies_repo.list = AsyncMock(return_value=([{"strategy_id": strategy_id}], 1))
     svc._backtest_run_symbols_repo = AsyncMock()
     svc._backtest_run_symbols_repo.fetch_eligible = AsyncMock(return_value=cells)
     svc._scores_repo = AsyncMock()
@@ -170,7 +188,7 @@ class TestRunBacktest:
         req.HasField = MagicMock(return_value=False)
         req.range = common_pb2.TimeRange()
 
-        result = await svc.RunBacktest(req, context=MagicMock())
+        result = await svc.RunBacktest(req, context=_owned_ctx())
         assert result.strategy_id == "s1"
         assert "s1" in svc._backtests
 
@@ -197,7 +215,7 @@ class TestRunBacktest:
         svc._marketdata = MagicMock()
         svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
 
-        result = await svc.RunBacktest(self._legacy_req(["AAPL"]), context=MagicMock())
+        result = await svc.RunBacktest(self._legacy_req(["AAPL"]), context=_owned_ctx())
 
         assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
         assert result.total_trades == 0
@@ -219,7 +237,7 @@ class TestRunBacktest:
         svc._marketdata = MagicMock()
         svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
 
-        await svc.RunBacktest(self._legacy_req(["AAPL"]), context=MagicMock())
+        await svc.RunBacktest(self._legacy_req(["AAPL"]), context=_owned_ctx())
 
         called_req = svc._marketdata.GetBars.await_args.args[0]
         assert called_req.timeframe == "1d"
@@ -236,7 +254,7 @@ class TestListStrategies:
     async def test_returns_empty_when_no_strategies(self):
         svc = make_servicer()
         req = MagicMock()
-        resp = await svc.ListStrategies(req, context=MagicMock())
+        resp = await svc.ListStrategies(req, context=_owned_ctx())
         assert len(resp.strategies) == 0
 
     @pytest.mark.asyncio
@@ -246,7 +264,7 @@ class TestListStrategies:
         svc._strategies["s2"] = analysis_pb2.StrategyScore(strategy_id="s2", overall_score=0.5)
 
         req = MagicMock()
-        resp = await svc.ListStrategies(req, context=MagicMock())
+        resp = await svc.ListStrategies(req, context=_owned_ctx())
         assert len(resp.strategies) == 2
 
 
@@ -277,7 +295,7 @@ class TestGetStrategyReport:
 
         req = MagicMock()
         req.strategy_id = "s1"
-        report = await svc.GetStrategyReport(req, context=MagicMock())
+        report = await svc.GetStrategyReport(req, context=_owned_ctx())
         assert report.strategy_id == "s1"
 
 
@@ -307,7 +325,7 @@ class TestRunBacktestPersistence:
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         svc._scores_repo = AsyncMock()
 
-        result = await svc.RunBacktest(self._empty_req("s1"), context=MagicMock())
+        result = await svc.RunBacktest(self._empty_req("s1"), context=_owned_ctx())
 
         assert result.status == analysis_pb2.BACKTEST_STATUS_OK
         # No per-run headline upsert — the run's own aggregate never becomes the grade.
@@ -321,7 +339,7 @@ class TestRunBacktestPersistence:
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         svc._backtest_runs_repo = AsyncMock()
 
-        result = await svc.RunBacktest(self._empty_req("s1", ["AAPL"]), context=MagicMock())
+        result = await svc.RunBacktest(self._empty_req("s1", ["AAPL"]), context=_owned_ctx())
 
         svc._backtest_runs_repo.insert.assert_awaited_once()
         kwargs = svc._backtest_runs_repo.insert.await_args.kwargs
@@ -347,7 +365,7 @@ class TestRunBacktestPersistence:
         svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
 
         req = self._empty_req("s1", ["AAPL"])
-        result = await svc.RunBacktest(req, context=MagicMock())
+        result = await svc.RunBacktest(req, context=_owned_ctx())
 
         assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
         svc._scores_repo.upsert.assert_not_awaited()  # no score for an unusable run
@@ -368,7 +386,7 @@ class TestRunBacktestPersistence:
         svc._backtest_runs_repo = AsyncMock()
         svc._backtest_runs_repo.insert = AsyncMock(side_effect=Exception("db down"))
 
-        result = await svc.RunBacktest(self._empty_req("s1"), context=MagicMock())
+        result = await svc.RunBacktest(self._empty_req("s1"), context=_owned_ctx())
         assert result.strategy_id == "s1"
 
 
@@ -401,7 +419,7 @@ class TestListBacktests:
         req = MagicMock()
         req.strategy_id = "s1"
         req.limit = 0  # → server default
-        resp = await svc.ListBacktests(req, context=MagicMock())
+        resp = await svc.ListBacktests(req, context=_owned_ctx())
 
         assert [r.backtest_id for r in resp.runs] == ["bt-2", "bt-1"]
         assert resp.runs[0].status == analysis_pb2.BACKTEST_STATUS_OK
@@ -418,7 +436,7 @@ class TestListBacktests:
         req = MagicMock()
         req.strategy_id = "s1"
         req.limit = 5
-        await svc.ListBacktests(req, context=MagicMock())
+        await svc.ListBacktests(req, context=_owned_ctx())
         assert svc._backtest_runs_repo.list_by_strategy.await_args.kwargs["limit"] == 5
 
     @pytest.mark.asyncio
@@ -433,7 +451,7 @@ class TestListBacktests:
         req = MagicMock()
         req.strategy_id = "s1"
         req.limit = 0
-        resp = await svc.ListBacktests(req, context=MagicMock())
+        resp = await svc.ListBacktests(req, context=_owned_ctx())
         assert resp.runs[0].status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
         assert resp.runs[0].overall_score == 0.0
         assert resp.runs[0].rating == ""
@@ -444,7 +462,7 @@ class TestListBacktests:
         req = MagicMock()
         req.strategy_id = "s1"
         req.limit = 0
-        resp = await svc.ListBacktests(req, context=MagicMock())
+        resp = await svc.ListBacktests(req, context=_owned_ctx())
         assert list(resp.runs) == []
 
 
@@ -526,6 +544,33 @@ class TestConfigWatcherGetters:
         w._snapshot = snap
         assert w.get_float("k") == 0.75
 
+    # feature 022 — get_float_present: presence-aware read that does NOT collapse a stored 0.0.
+    def test_get_float_present_no_snapshot(self):
+        w = _StubWatcher()
+        assert w.get_float_present("k", 24.0) == 24.0
+
+    def test_get_float_present_missing_key_returns_default(self):
+        w = _StubWatcher()
+        w._snapshot = config_pb2.ConfigSnapshot()
+        assert w.get_float_present("k", 24.0) == 24.0
+
+    def test_get_float_present_positive_value(self):
+        w = _StubWatcher()
+        snap = config_pb2.ConfigSnapshot()
+        snap.values["k"].CopyFrom(config_pb2.ConfigValue(float_val=12.5))
+        w._snapshot = snap
+        assert w.get_float_present("k", 24.0) == 12.5
+
+    def test_get_float_present_explicit_zero_is_not_trapped(self):
+        # FR-3 rollback contract: a configured 0.0 disables decay and must survive the read;
+        # get_float would collapse it to the default 24.0 (the zero-trap this method fixes).
+        w = _StubWatcher()
+        snap = config_pb2.ConfigSnapshot()
+        snap.values["k"].CopyFrom(config_pb2.ConfigValue(float_val=0.0))
+        w._snapshot = snap
+        assert w.get_float_present("k", 24.0) == 0.0
+        assert w.get_float("k", 24.0) == 24.0  # contrast: the old zero-trap
+
     def test_sandbox_timeout_default(self):
         w = _StubWatcher()
         assert w.sandbox_timeout_ms == 5000
@@ -587,7 +632,7 @@ def _row_for(definition):
 def _admin_ctx():
     """A gRPC context carrying the admin x-access-scope bit (7 = READ|WRITE|ADMIN)."""
     ctx = MagicMock()
-    ctx.invocation_metadata = MagicMock(return_value=[("x-access-scope", "7")])
+    ctx.invocation_metadata = MagicMock(return_value=[("x-user-id", "u1"), ("x-access-scope", "7")])
     ctx.abort = AsyncMock(side_effect=Exception("aborted"))
     return ctx
 
@@ -601,7 +646,9 @@ class TestManageStrategy:
             definition=_valid_definition(),
         )
         context = MagicMock()
-        context.invocation_metadata = MagicMock(return_value=[("x-access-scope", "1")])  # READ only
+        context.invocation_metadata = MagicMock(
+            return_value=[("x-user-id", "u1"), ("x-access-scope", "1")]
+        )  # READ only
         context.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception, match="aborted"):
             await svc.ManageStrategy(req, context)
@@ -613,6 +660,7 @@ class TestManageStrategy:
         definition = _valid_definition()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=None)  # feature 089: not existing
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=None)
         svc._strategies_repo.create = AsyncMock(return_value=_row_for(definition))
         req = analysis_pb2.ManageStrategyRequest(
             operation=analysis_pb2.STRATEGY_OPERATION_REGISTER, definition=definition
@@ -654,6 +702,7 @@ class TestGetStrategy:
         svc = make_servicer()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=None)
         req = analysis_pb2.GetStrategyRequest(strategy_id="missing")
         context = MagicMock()
         context.abort = AsyncMock(side_effect=Exception("not found"))
@@ -666,8 +715,9 @@ class TestGetStrategy:
         definition = _valid_definition()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=_row_for(definition))
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_row_for(definition))
         req = analysis_pb2.GetStrategyRequest(strategy_id="sma_x")
-        result = await svc.GetStrategy(req, context=MagicMock())
+        result = await svc.GetStrategy(req, context=_owned_ctx())
         assert result.strategy_id == "sma_x"
 
 
@@ -677,7 +727,7 @@ class TestListStrategyDefinitions:
         svc = make_servicer()
         svc._strategies_repo = None
         req = analysis_pb2.ListStrategyDefinitionsRequest()
-        resp = await svc.ListStrategyDefinitions(req, context=MagicMock())
+        resp = await svc.ListStrategyDefinitions(req, context=_owned_ctx())
         assert list(resp.definitions) == []
         assert resp.total_count == 0
 
@@ -688,7 +738,7 @@ class TestListStrategyDefinitions:
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.list = AsyncMock(return_value=([_row_for(definition)], 1))
         req = analysis_pb2.ListStrategyDefinitionsRequest(include_inactive=False)
-        resp = await svc.ListStrategyDefinitions(req, context=MagicMock())
+        resp = await svc.ListStrategyDefinitions(req, context=_owned_ctx())
         assert resp.total_count == 1
         assert resp.definitions[0].strategy_id == "sma_x"
 
@@ -710,7 +760,7 @@ class TestRunBacktestBackwardCompat:
         req.HasField = MagicMock(return_value=False)  # no inline_definition, no strategy_params
         req.range = common_pb2.TimeRange()
 
-        result = await svc.RunBacktest(req, context=MagicMock())
+        result = await svc.RunBacktest(req, context=_owned_ctx())
         assert result.strategy_id == "legacy"
         assert result.backtest_id
         assert "legacy" in svc._backtests
@@ -807,18 +857,20 @@ class TestBacktestTechnicalOnly:
 
 class TestSetStrategyLive:
     @pytest.mark.asyncio
-    async def test_requires_admin_scope(self):
+    async def test_unauthenticated_caller_denied(self):
+        # feature 133: admin scope no longer gates SetStrategyLive — but an unauthenticated caller
+        # (no x-user-id) can never own a strategy, so the live toggle is PERMISSION_DENIED.
         svc = make_servicer()
         svc._strategies_repo = AsyncMock()
         req = MagicMock()
         req.strategy_id = "s1"
         req.live_enabled = True
         ctx = MagicMock()
-        ctx.invocation_metadata.return_value = [("x-access-scope", "1")]  # READ only
+        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]  # no x-user-id
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception, match="aborted"):
             await svc.SetStrategyLive(req, ctx)
-        ctx.abort.assert_called_once()
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
 
     @pytest.mark.asyncio
     async def test_permits_admin_scope(self):
@@ -833,6 +885,7 @@ class TestSetStrategyLive:
             "definition_json": {"strategy_id": "s1", "signal_params": {"symbols": ["AAPL"]}},
         }
         svc._strategies_repo.get_by_id = AsyncMock(return_value=live_row)
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=live_row)
         svc._strategies_repo.set_live_enabled = AsyncMock(return_value=live_row)
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
@@ -840,7 +893,10 @@ class TestSetStrategyLive:
         req.strategy_id = "s1"
         req.live_enabled = True
         ctx = MagicMock()
-        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]  # ADMIN|WRITE|READ
+        ctx.invocation_metadata.return_value = [
+            ("x-user-id", "u1"),
+            ("x-access-scope", "7"),
+        ]  # ADMIN|WRITE|READ
         resp = await svc.SetStrategyLive(req, ctx)
         assert resp.definition.strategy_id == "s1"
         assert resp.definition.live_enabled is True
@@ -851,12 +907,13 @@ class TestSetStrategyLive:
         svc._strategies_repo = AsyncMock()
         # Feature 089: on enable the NOT_FOUND now comes from the get_by_id precondition fetch.
         svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=None)
         svc._strategies_repo.set_live_enabled = AsyncMock(return_value=None)
         req = MagicMock()
         req.strategy_id = "missing"
         req.live_enabled = True
         ctx = MagicMock()
-        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]
+        ctx.invocation_metadata.return_value = [("x-user-id", "u1"), ("x-access-scope", "7")]
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception, match="aborted"):
             await svc.SetStrategyLive(req, ctx)
@@ -891,6 +948,10 @@ class TestScreenSymbols:
         svc._indicators.ComputeIndicator = AsyncMock(
             return_value=SimpleNamespace(result=[SimpleNamespace(value=1.0)])
         )
+        # feature 134 — ScreenSymbols now sources weights from ingest ListSignalSources (FR-4
+        # repoint off the analysis.signals.source_weights config key). Empty → neutral 1.0.
+        svc._ingest = MagicMock()
+        svc._ingest.ListSignalSources = AsyncMock(return_value=SimpleNamespace(sources=[]))
         return svc
 
     @staticmethod
@@ -910,6 +971,38 @@ class TestScreenSymbols:
         out = Struct()
         out.update({"value": value})
         return SimpleNamespace(success=True, output=out, error="")
+
+    @pytest.mark.asyncio
+    async def test_repoints_off_config_to_ingest_reliability_weights(self):
+        """feature 134 FR-4 (genuine replace): ScreenSymbols no longer reads
+        analysis.signals.source_weights from config — it sources the weight map from ingest
+        ListSignalSources and passes it into ScreenerEngine unchanged."""
+        from unittest.mock import patch
+
+        svc = self._svc()
+        svc._portfolio = None  # skip the held cross-ref
+        svc._ingest.ListSignalSources = AsyncMock(
+            return_value=SimpleNamespace(
+                sources=[SimpleNamespace(slug="uw", reliability_weight=0.5)]
+            )
+        )
+        captured = {}
+
+        class _FakeEngine:
+            def __init__(self, _md, _ind, _ing, _cfg, source_weights):
+                captured["weights"] = source_weights
+
+            async def screen(self, _request, _meta):
+                return SimpleNamespace(results=[])
+
+        req = analysis_pb2.ScreenSymbolsRequest(symbols=["AAA"])
+        with patch("app.handlers.servicer.ScreenerEngine", _FakeEngine):
+            await svc.ScreenSymbols(req, self._ctx())
+        # The ingest-derived weight map reached the engine.
+        assert captured["weights"] == {"uw": 0.5}
+        # The now-inert config key is never consulted (the repoint, not a fallback).
+        called_keys = [c.args[0] for c in svc._cfg.get_str.call_args_list if c.args]
+        assert "analysis.signals.source_weights" not in called_keys
 
     @pytest.mark.asyncio
     async def test_ranks_universe_and_forwards_headers(self):
@@ -1052,7 +1145,10 @@ class TestRunFundamentalsScan:
         svc = make_servicer()
         svc._fundsignal_loop = AsyncMock()
         ctx = MagicMock()
-        ctx.invocation_metadata.return_value = [("x-access-scope", "1")]  # READ only
+        ctx.invocation_metadata.return_value = [
+            ("x-user-id", "u1"),
+            ("x-access-scope", "1"),
+        ]  # READ only
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception, match="aborted"):
             await svc.RunFundamentalsScan(_scan_req(), ctx)
@@ -1064,7 +1160,10 @@ class TestRunFundamentalsScan:
         svc = make_servicer()
         svc._fundsignal_loop = None
         ctx = MagicMock()
-        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]  # admin
+        ctx.invocation_metadata.return_value = [
+            ("x-user-id", "u1"),
+            ("x-access-scope", "7"),
+        ]  # admin
         ctx.abort = AsyncMock(side_effect=Exception("unavailable"))
         with pytest.raises(Exception, match="unavailable"):
             await svc.RunFundamentalsScan(_scan_req(), ctx)
@@ -1109,7 +1208,7 @@ class TestRunFundamentalsScan:
             return_value=analysis_pb2.FundamentalsScanSummary(status="completed")
         )
         ctx = MagicMock()
-        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]
+        ctx.invocation_metadata.return_value = [("x-user-id", "u1"), ("x-access-scope", "7")]
         await svc.RunFundamentalsScan(_scan_req(dry_run=True), ctx)
         assert svc._fundsignal_loop.run_once.call_args.kwargs["dry_run"] is True
         # No explicit symbols → override_symbols is None (use computed universe).
@@ -1174,7 +1273,7 @@ class TestBacktestDiagnostics:
         slow = [11, 11, 11, 11]  # 4 points → bars 2..5
         svc = self._svc_with(bars, fast, slow)
 
-        result = await svc.RunBacktest(self._legacy_req(), context=MagicMock())
+        result = await svc.RunBacktest(self._legacy_req(), context=_owned_ctx())
 
         assert result.status == analysis_pb2.BACKTEST_STATUS_OK
         assert len(result.diagnostics) == 1
@@ -1211,7 +1310,7 @@ class TestBacktestDiagnostics:
         fast = [8, 8, 8, 8]
         slow = [11, 11, 11]
         svc = self._svc_with(bars, fast, slow)
-        result = await svc.RunBacktest(self._legacy_req(), context=MagicMock())
+        result = await svc.RunBacktest(self._legacy_req(), context=_owned_ctx())
         assert result.total_trades == 0
         sd = result.diagnostics[0]
         assert sd.warmup_bars < sd.bars_total
@@ -1222,7 +1321,7 @@ class TestBacktestDiagnostics:
         # AC-5: the completion ledger payload carries only summary metrics, never diagnostics.
         bars = [_bar(3000 + i, c) for i, c in enumerate([10, 11, 12, 13, 14, 9])]
         svc = self._svc_with(bars, [9, 10, 12, 13, 9], [11, 11, 11, 11])
-        await svc.RunBacktest(self._legacy_req(), context=MagicMock())
+        await svc.RunBacktest(self._legacy_req(), context=_owned_ctx())
         completed = svc._ledger.AppendEvent.await_args_list[-1].args[0]
         assert completed.event_type == "analysis.backtest.completed"
         assert "diagnostics" not in dict(completed.payload.fields)
@@ -1233,10 +1332,10 @@ class TestBacktestDiagnostics:
         # or extends beyond it.
         full = [_bar(4000 + i, c) for i, c in enumerate([10, 11, 12, 13, 14, 9])]
         svc_full = self._svc_with(full, [9, 10, 12, 13, 9], [11, 11, 11, 11])
-        r_full = await svc_full.RunBacktest(self._legacy_req(), context=MagicMock())
+        r_full = await svc_full.RunBacktest(self._legacy_req(), context=_owned_ctx())
         trunc = full[:5]
         svc_tr = self._svc_with(trunc, [9, 10, 12, 13], [11, 11, 11])
-        r_tr = await svc_tr.RunBacktest(self._legacy_req(), context=MagicMock())
+        r_tr = await svc_tr.RunBacktest(self._legacy_req(), context=_owned_ctx())
         for i in range(5):
             a, b = r_full.diagnostics[0].bars[i], r_tr.diagnostics[0].bars[i]
             assert a.warmup == b.warmup
@@ -1254,7 +1353,7 @@ class TestBacktestDiagnostics:
                 page=_EOF_PAGE, bars=[_bar(1, 10), _bar(2, 11), _bar(3, 12)]
             )
         )
-        result = await svc.RunBacktest(self._legacy_req(), context=MagicMock())
+        result = await svc.RunBacktest(self._legacy_req(), context=_owned_ctx())
         assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
         assert len(result.coverage_gaps) == 1
         assert len(result.diagnostics) == 0  # never entered the bar loop
@@ -1296,7 +1395,7 @@ class TestBacktestDiagnostics:
                 ]
             )
         )
-        result = await svc.RunBacktest(self._def_req(definition), context=MagicMock())
+        result = await svc.RunBacktest(self._def_req(definition), context=_owned_ctx())
         keys = set(dict(result.diagnostics[0].bars[2].indicators))
         assert "bb" in keys and "bb.upper" in keys and "bb.lower" in keys
         assert "bb.value" not in keys  # redundant alias dropped
@@ -1336,7 +1435,7 @@ class TestBacktestDiagnostics:
         svc._indicators.GetFormula = AsyncMock(
             return_value=indicators_pb2.FormulaDefinition(formula_id="f-1", warmup_period=3)
         )
-        result = await svc.RunBacktest(self._def_req(definition), context=MagicMock())
+        result = await svc.RunBacktest(self._def_req(definition), context=_owned_ctx())
         sd = result.diagnostics[0]
         assert sd.warmup_bars == 3  # declared, not len(bars)=6
         assert result.total_trades == 0
@@ -1528,7 +1627,7 @@ class TestScorePersistence:
 
         req = MagicMock()
         req.strategy_id = "s1"
-        score = await svc.ScoreStrategy(req, context=MagicMock())
+        score = await svc.ScoreStrategy(req, context=_owned_ctx())
 
         svc._scores_repo.upsert.assert_awaited_once()
         args = svc._scores_repo.upsert.await_args.args
@@ -1545,12 +1644,12 @@ class TestScorePersistence:
 
         req = MagicMock()
         req.strategy_id = "s1"
-        score = await svc.ScoreStrategy(req, context=MagicMock())
+        score = await svc.ScoreStrategy(req, context=_owned_ctx())
 
         # No abort/raise — the score is returned despite the write failure.
         assert score.strategy_id == "s1"
         # Reads serve from memory, so the caller reads its own write back.
-        resp = await svc.ListStrategies(MagicMock(), context=MagicMock())
+        resp = await svc.ListStrategies(MagicMock(), context=_owned_ctx())
         assert any(s.strategy_id == "s1" for s in resp.strategies)
 
     @pytest.mark.asyncio
@@ -1678,7 +1777,7 @@ class TestRunBacktestCells:
         self._wire(svc)
         svc._backtest_symbol = AsyncMock(side_effect=self._fake_sma())
 
-        result = await svc.RunBacktest(self._req(), context=MagicMock())
+        result = await svc.RunBacktest(self._req(), context=_owned_ctx())
 
         assert result.status == analysis_pb2.BACKTEST_STATUS_OK
         svc._backtest_run_symbols_repo.insert_many.assert_awaited_once()
@@ -1710,6 +1809,7 @@ class TestRunBacktestCells:
                 "definition_json": definition_json,
             }
         )
+        svc._strategies_repo.get_by_owner_and_id = svc._strategies_repo.get_by_id
         diag = analysis_pb2.SymbolDiagnostics()
         curve = [100_000.0, 100_100.0, 100_200.0]
         svc._backtest_symbol_evaluated = AsyncMock(
@@ -1717,7 +1817,7 @@ class TestRunBacktestCells:
         )
 
         req = self._req(strategy_id="s1", strategy_id_ref="s1", symbols=("AAPL",))
-        await svc.RunBacktest(req, context=MagicMock())
+        await svc.RunBacktest(req, context=_owned_ctx())
 
         cells = svc._backtest_run_symbols_repo.insert_many.await_args.args[0]
         expected = _definition_fingerprint(definition_json)
@@ -1737,13 +1837,14 @@ class TestRunBacktestCells:
                 "definition_json": {"entry_rule": "x"},
             }
         )
+        svc._strategies_repo.get_by_owner_and_id = svc._strategies_repo.get_by_id
         diag = analysis_pb2.SymbolDiagnostics()
         svc._backtest_symbol_evaluated = AsyncMock(
             side_effect=lambda symbol=None, **kw: ([], 100_000.0, [100_000.0, 100_100.0], diag)
         )
         # strategy_id "s1" differs from strategy_id_ref "other" → cells carry no fingerprint.
         req = self._req(strategy_id="s1", strategy_id_ref="other", symbols=("AAPL",))
-        await svc.RunBacktest(req, context=MagicMock())
+        await svc.RunBacktest(req, context=_owned_ctx())
 
         cells = svc._backtest_run_symbols_repo.insert_many.await_args.args[0]
         assert cells and all(c["definition_fingerprint"] is None for c in cells)
@@ -1758,7 +1859,7 @@ class TestRunBacktestCells:
         svc._marketdata = MagicMock()
         svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
 
-        result = await svc.RunBacktest(self._req(symbols=("AAPL",)), context=MagicMock())
+        result = await svc.RunBacktest(self._req(symbols=("AAPL",)), context=_owned_ctx())
 
         assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
         svc._backtest_run_symbols_repo.insert_many.assert_not_awaited()
@@ -1770,7 +1871,7 @@ class TestRunBacktestCells:
         svc._backtest_run_symbols_repo.insert_many = AsyncMock(side_effect=Exception("db down"))
         svc._backtest_symbol = AsyncMock(side_effect=self._fake_sma())
 
-        result = await svc.RunBacktest(self._req(), context=MagicMock())
+        result = await svc.RunBacktest(self._req(), context=_owned_ctx())
         assert result.status == analysis_pb2.BACKTEST_STATUS_OK  # swallowed
 
     @pytest.mark.asyncio
@@ -1783,7 +1884,7 @@ class TestRunBacktestCells:
         req.range.start.seconds = 1_600_000_000
         req.range.end.seconds = 1_600_864_000  # 10 days, within cap
 
-        await svc.RunBacktest(req, context=MagicMock())
+        await svc.RunBacktest(req, context=_owned_ctx())
 
         kwargs = svc._backtest_runs_repo.insert.await_args.kwargs
         assert kwargs["range_start"] is not None
@@ -1900,8 +2001,9 @@ def _stub_update_repo(svc, current_row):
     """
     repo = AsyncMock()
     repo.get_by_id = AsyncMock(return_value=current_row)
+    repo.get_by_owner_and_id = AsyncMock(return_value=current_row)
 
-    async def _locked(strategy_id, apply_fn):
+    async def _locked(user_id, strategy_id, apply_fn):
         name, new_json = await apply_fn(current_row)
         return {**current_row, "display_name": name, "definition_json": new_json}
 
@@ -1949,7 +2051,7 @@ class TestHeadlineTriggers:
         req.HasField = MagicMock(return_value=False)
         req.range = common_pb2.TimeRange()
 
-        await svc.RunBacktest(req, context=MagicMock())
+        await svc.RunBacktest(req, context=_owned_ctx())
 
         svc._scores_repo.upsert.assert_awaited()
         kwargs = svc._scores_repo.upsert.await_args.kwargs
@@ -1968,7 +2070,7 @@ class TestHeadlineTriggers:
         svc._scores_repo.delete = AsyncMock(side_effect=Exception("db down"))
         svc._has_admin_scope = lambda ctx: True
 
-        await svc.ManageStrategy(_update_req(), context=MagicMock())
+        await svc.ManageStrategy(_update_req(), context=_owned_ctx())
 
         # Unconditional pop FIRST — the stale grade is gone even though recompute/delete failed.
         assert "s1" not in svc._strategies
@@ -1980,13 +2082,16 @@ class TestHeadlineTriggers:
         _stub_update_repo(svc, _updated_row())
         svc._has_admin_scope = lambda ctx: True
 
-        await asyncio.wait_for(svc.ManageStrategy(_update_req(), context=MagicMock()), timeout=2.0)
+        await asyncio.wait_for(svc.ManageStrategy(_update_req(), context=_owned_ctx()), timeout=2.0)
 
         svc._scores_repo.upsert.assert_awaited_once()  # recompute ran under the same lock
 
 
 def _abort_ctx():
     context = MagicMock()
+    context.invocation_metadata = MagicMock(
+        return_value=[("x-user-id", "u1"), ("x-access-scope", "7"), ("x-trace-id", "t1")]
+    )
     context.abort = AsyncMock(side_effect=Exception("aborted"))
     return context
 
@@ -2006,12 +2111,13 @@ class TestScoreStrategyRecompute:
     async def test_unregistered_not_found(self):
         svc = _derivation_svc([])
         svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=None)
         req = MagicMock()
         req.strategy_id = "nope"
         ctx = _abort_ctx()
         with pytest.raises(Exception, match="aborted"):
             await svc.ScoreStrategy(req, ctx)
-        assert ctx.abort.await_args.args[0] == grpc.StatusCode.NOT_FOUND
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
 
     @pytest.mark.asyncio
     async def test_zero_eligible_clears_and_not_found(self):
@@ -2054,7 +2160,7 @@ class TestScoreStrategyRecompute:
         req = MagicMock()
         req.strategy_id = "s1"
 
-        score = await svc.ScoreStrategy(req, context=MagicMock())
+        score = await svc.ScoreStrategy(req, context=_owned_ctx())
 
         assert score.strategy_id == "s1"
         assert score.evidence_symbols == 3
@@ -2073,7 +2179,7 @@ class TestScoreStrategyRecompute:
         req.range = common_pb2.TimeRange(
             start=Timestamp(seconds=1_600_000_000), end=Timestamp(seconds=1_600_864_000)
         )
-        score = await svc.ScoreStrategy(req, context=MagicMock())
+        score = await svc.ScoreStrategy(req, context=_owned_ctx())
         assert score.evidence_days == 1800  # whole eligible base, not a windowed subset
 
 
@@ -2128,7 +2234,7 @@ class TestTradedFirstDedupContract:
         svc = _derivation_svc([traded])
         req = MagicMock()
         req.strategy_id = "s1"
-        score = await svc.ScoreStrategy(req, context=MagicMock())
+        score = await svc.ScoreStrategy(req, context=_owned_ctx())
         assert score.evidence_days == 100  # the traded cell's window, per fetch_eligible
 
 
@@ -2163,7 +2269,7 @@ class TestEquityCapture:
         svc = TestBacktestDiagnostics()._svc_with(bars, fast, slow)
         req = TestBacktestDiagnostics()._legacy_req()
 
-        result = await svc.RunBacktest(req, context=MagicMock())
+        result = await svc.RunBacktest(req, context=_owned_ctx())
 
         assert result.status == analysis_pb2.BACKTEST_STATUS_OK
         assert result.initial_capital == 100_000.0
@@ -2188,7 +2294,7 @@ class TestEquityCapture:
         req.HasField = MagicMock(return_value=False)
         req.range = common_pb2.TimeRange()
 
-        result = await svc.RunBacktest(req, context=MagicMock())
+        result = await svc.RunBacktest(req, context=_owned_ctx())
         assert result.initial_capital == 100_000.0
 
     @pytest.mark.asyncio
@@ -2205,7 +2311,7 @@ class TestEquityCapture:
         req.HasField = MagicMock(return_value=False)
         req.range = common_pb2.TimeRange()
 
-        result = await svc.RunBacktest(req, context=MagicMock())
+        result = await svc.RunBacktest(req, context=_owned_ctx())
         assert result.initial_capital == 25_000.0
 
 
@@ -2233,7 +2339,7 @@ class TestBacktestDetailPersistence:
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         svc._backtest_details_repo = AsyncMock()
 
-        result = await svc.RunBacktest(self._empty_req("s1"), context=MagicMock())
+        result = await svc.RunBacktest(self._empty_req("s1"), context=_owned_ctx())
 
         assert result.status == analysis_pb2.BACKTEST_STATUS_OK
         svc._backtest_details_repo.insert.assert_awaited_once()
@@ -2257,7 +2363,7 @@ class TestBacktestDetailPersistence:
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         svc._backtest_details_repo = AsyncMock()
 
-        await svc.RunBacktest(self._empty_req("s1"), context=MagicMock())
+        await svc.RunBacktest(self._empty_req("s1"), context=_owned_ctx())
 
         assert svc._backtest_details_repo.insert.await_args.kwargs["retention"] == 1
 
@@ -2274,7 +2380,7 @@ class TestBacktestDetailPersistence:
         svc._marketdata = MagicMock()
         svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
 
-        result = await svc.RunBacktest(self._empty_req("s1", ["AAPL"]), context=MagicMock())
+        result = await svc.RunBacktest(self._empty_req("s1", ["AAPL"]), context=_owned_ctx())
 
         assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
         svc._backtest_details_repo.insert.assert_not_awaited()
@@ -2288,7 +2394,7 @@ class TestBacktestDetailPersistence:
         svc._backtest_details_repo = AsyncMock()
         svc._backtest_details_repo.insert = AsyncMock(side_effect=RuntimeError("db down"))
 
-        result = await svc.RunBacktest(self._empty_req("s1"), context=MagicMock())
+        result = await svc.RunBacktest(self._empty_req("s1"), context=_owned_ctx())
         assert result.status == analysis_pb2.BACKTEST_STATUS_OK  # run still returned
 
     @pytest.mark.asyncio
@@ -2300,7 +2406,7 @@ class TestBacktestDetailPersistence:
         svc._backtest_runs_repo = AsyncMock()
         svc._backtest_details_repo = AsyncMock()
 
-        await svc.RunBacktest(self._empty_req("s1"), context=MagicMock())
+        await svc.RunBacktest(self._empty_req("s1"), context=_owned_ctx())
 
         history = svc._backtest_runs_repo.insert.await_args.kwargs
         detail = analysis_pb2.BacktestResult()
@@ -2332,7 +2438,7 @@ class TestGetBacktest:
 
         req = MagicMock()
         req.backtest_id = "bt-1"
-        result = await svc.GetBacktest(req, context=MagicMock())
+        result = await svc.GetBacktest(req, context=_owned_ctx())
 
         assert result == stored  # byte-exact round trip
         svc._backtest_details_repo.get.assert_awaited_once_with("bt-1")
@@ -2528,6 +2634,7 @@ class TestBacktestCooldown:
         definition.cooldown_days = 0
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=None)  # feature 089: not existing
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=None)
         svc._strategies_repo.create = AsyncMock(return_value=_row_for(definition))
         req = analysis_pb2.ManageStrategyRequest(
             operation=analysis_pb2.STRATEGY_OPERATION_REGISTER, definition=definition
@@ -2604,6 +2711,7 @@ class TestBacktestCooldown:
         definition.exit_cooldown_days = 0
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=None)
         svc._strategies_repo.create = AsyncMock(return_value=_row_for(definition))
         req = analysis_pb2.ManageStrategyRequest(
             operation=analysis_pb2.STRATEGY_OPERATION_REGISTER, definition=definition
@@ -2651,6 +2759,160 @@ def _masked_req(strategy_id="s1", paths=(), **fields):
     )
     req.update_mask.paths.extend(paths)
     return req
+
+
+def _deny_def(symbols=None, denied=None, signal_eligible=False):
+    """A StrategyDefinition carrying feature-132 fields (for resolve_universe/reject tests)."""
+    from google.protobuf.struct_pb2 import Struct
+
+    kwargs = {}
+    if symbols is not None:
+        sp = Struct()
+        sp.update({"symbols": list(symbols)})
+        kwargs["signal_params"] = sp
+    return analysis_pb2.StrategyDefinition(
+        denied_symbols=list(denied or []), signal_eligible=signal_eligible, **kwargs
+    )
+
+
+class TestResolveUniverse:
+    """feature 132 — resolve_universe() 4-branch coverage (design decision 2). Pure function."""
+
+    def test_allowlist_present_is_universe_minus_denied(self):
+        from app.engine.live_loop import resolve_universe
+
+        # (a) allowlist override applied verbatim (normalized), minus denied.
+        d = _deny_def(symbols=["AAPL", "tsla"], denied=["TSLA"])
+        r = resolve_universe(d, watchlist={"MSFT"}, held={"NVDA"}, signals={"GOOG"})
+        assert r.union == {"AAPL", "TSLA"}  # allowlist wins, watchlist/held/signals ignored
+        assert r.universe == {"AAPL"}  # TSLA denied and not held
+        assert r.deny_entry == set()
+
+    def test_no_allowlist_signal_ineligible_excludes_signals(self):
+        from app.engine.live_loop import resolve_universe
+
+        # (b) no allowlist, signal_eligible=false → watchlist ∪ held − denied (signals excluded).
+        d = _deny_def(denied=["ZZZ"], signal_eligible=False)
+        r = resolve_universe(d, watchlist={"MSFT"}, held={"NVDA"}, signals={"GOOG"})
+        assert r.union == {"MSFT", "NVDA"}
+        assert r.universe == {"MSFT", "NVDA"}
+        assert "GOOG" not in r.universe
+
+    def test_no_allowlist_signal_eligible_includes_signals(self):
+        from app.engine.live_loop import resolve_universe
+
+        # (c) no allowlist, signal_eligible=true → watchlist ∪ held ∪ signals − denied.
+        d = _deny_def(signal_eligible=True)
+        r = resolve_universe(d, watchlist={"MSFT"}, held={"NVDA"}, signals={"GOOG"})
+        assert r.union == {"MSFT", "NVDA", "GOOG"}
+        assert r.universe == {"MSFT", "NVDA", "GOOG"}
+
+    def test_held_denied_retained_for_exit(self):
+        from app.engine.live_loop import resolve_universe
+
+        # (d) held ∩ denied → deny_entry non-empty; the held-denied symbol stays in universe (exit).
+        d = _deny_def(denied=["NVDA"], signal_eligible=True)
+        r = resolve_universe(d, watchlist=set(), held={"NVDA"}, signals={"NVDA"})
+        assert r.deny_entry == {"NVDA"}
+        assert "NVDA" in r.universe  # retained so exit still traces (entry-only deny)
+        assert r.denied == {"NVDA"}
+
+
+class TestDenyListMaskingAndValidation:
+    """feature 132 — denied_symbols/signal_eligible masking + allowlist×eligible reject."""
+
+    @pytest.mark.asyncio
+    async def test_denied_symbols_masked_set_and_clear(self):
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row())
+        # set
+        result = await svc.ManageStrategy(
+            _masked_req(paths=["denied_symbols"], denied_symbols=["TSLA", "NVDA"]),
+            context=_admin_ctx(),
+        )
+        assert list(result.denied_symbols) == ["TSLA", "NVDA"]
+        assert [c.ref_name for c in result.components] == ["z"]  # definition preserved
+        # masked-clear (no value supplied → AIP-161 erase)
+        _stub_update_repo(svc, _stored_row())
+        cleared = await svc.ManageStrategy(
+            _masked_req(paths=["denied_symbols"]), context=_admin_ctx()
+        )
+        assert list(cleared.denied_symbols) == []
+
+    @pytest.mark.asyncio
+    async def test_signal_eligible_masked_set_and_clear(self):
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row())
+        result = await svc.ManageStrategy(
+            _masked_req(paths=["signal_eligible"], signal_eligible=True), context=_admin_ctx()
+        )
+        assert result.signal_eligible is True
+        assert json.loads(result.entry_rule)["lhs"] == "z"  # untouched
+        _stub_update_repo(svc, _stored_row())
+        cleared = await svc.ManageStrategy(
+            _masked_req(paths=["signal_eligible"]), context=_admin_ctx()
+        )
+        assert cleared.signal_eligible is False
+
+    @pytest.mark.asyncio
+    async def test_register_rejects_allowlist_plus_signal_eligible(self):
+        """A REGISTER with both a non-empty signal_params.symbols allowlist and signal_eligible=true
+        is rejected INVALID_ARGUMENT (design decision 4)."""
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=None)
+        definition = _valid_definition()
+        from google.protobuf.struct_pb2 import Struct
+
+        sp = Struct()
+        sp.update({"symbols": ["AAPL"]})
+        definition.signal_params.CopyFrom(sp)
+        definition.signal_eligible = True
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_REGISTER, definition=definition
+        )
+        ctx = _admin_ctx()
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(req, ctx)
+        code, _ = ctx.abort.await_args.args
+        assert code == grpc.StatusCode.INVALID_ARGUMENT
+
+    @pytest.mark.asyncio
+    async def test_two_step_masked_flip_onto_stored_allowlist_is_rejected(self):
+        """The merged-definition validator catches the two-step evasion: a stored strategy that
+        already carries an allowlist, then a masked update flipping signal_eligible=true → the
+        MERGED definition has both → INVALID_ARGUMENT (proves validation runs on to_write)."""
+        svc = make_servicer()
+        stored = _stored_row()
+        # stored row already carries an allowlist
+        stored["definition_json"]["signal_params"] = {"symbols": ["AAPL"]}
+        _stub_update_repo(svc, stored)
+        ctx = _admin_ctx()
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(
+                _masked_req(paths=["signal_eligible"], signal_eligible=True), ctx
+            )
+        code, _ = ctx.abort.await_args.args
+        assert code == grpc.StatusCode.INVALID_ARGUMENT
+
+    def test_definition_json_round_trip_needs_no_mapper_change(self):
+        """decision 13: denied_symbols/signal_eligible ride definition_json — a MessageToDict →
+        _row_to_strategy_definition round-trip preserves them with no column mapper line."""
+        from app.handlers.servicer import _row_to_strategy_definition
+
+        d = _deny_def(denied=["TSLA"], signal_eligible=True)
+        d.strategy_id = "s1"
+        row = {
+            "strategy_id": "s1",
+            "display_name": "s1",
+            "active": True,
+            "live_enabled": False,
+            "definition_json": json_format.MessageToDict(d, preserving_proto_field_name=True),
+        }
+        back = _row_to_strategy_definition(row)
+        assert list(back.denied_symbols) == ["TSLA"]
+        assert back.signal_eligible is True
 
 
 class TestPartialStrategyUpdate:
@@ -2880,6 +3142,7 @@ class TestPartialStrategyUpdate:
         svc = make_servicer()
         repo = AsyncMock()
         repo.get_by_id = AsyncMock(return_value=None)
+        repo.get_by_owner_and_id = AsyncMock(return_value=None)
         svc._strategies_repo = repo
         ctx = _abort_ctx()
         svc._has_admin_scope = lambda c: True
@@ -2887,7 +3150,7 @@ class TestPartialStrategyUpdate:
         with pytest.raises(Exception, match="aborted"):
             await svc.ManageStrategy(_masked_req(paths=["display_name"]), context=ctx)
 
-        assert ctx.abort.await_args.args[0] == grpc.StatusCode.NOT_FOUND
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
         repo.update_locked.assert_not_awaited()  # no write attempted
 
 
@@ -3109,7 +3372,7 @@ class TestWindowDeterminism:
         async def _run(now_seconds):
             svc = _wire_evaluated(make_servicer(), bars)
             with self._freeze(now_seconds):
-                return await svc.RunBacktest(_windowed_req(_sma_def()), context=MagicMock())
+                return await svc.RunBacktest(_windowed_req(_sma_def()), context=_owned_ctx())
 
         # "today" a full year apart
         day_one = await _run(_W_END + _DAY)
@@ -3130,7 +3393,7 @@ class TestWindowDeterminism:
             req.inline_definition.CopyFrom(_sma_def())
             req.range.CopyFrom(common_pb2.TimeRange())  # no bounds → rolling default
             with self._freeze(now_seconds):
-                await svc.RunBacktest(req, context=MagicMock())
+                await svc.RunBacktest(req, context=_owned_ctx())
             captured.append((req.range.start.seconds, req.range.end.seconds))
 
         await _effective_window(_W_END + _DAY)
@@ -3141,7 +3404,7 @@ class TestWindowDeterminism:
     async def test_no_trade_opens_before_the_requested_start(self):
         """FR-3 at the RPC level: the prefix seeds indicators only."""
         svc = _wire_evaluated(make_servicer(), _series_bars(6, 12))
-        result = await svc.RunBacktest(_windowed_req(_sma_def()), context=MagicMock())
+        result = await svc.RunBacktest(_windowed_req(_sma_def()), context=_owned_ctx())
         assert result.trades  # the assertion below is vacuous on an empty list
         assert all(t.entry_time.seconds >= _W_START for t in result.trades)
         assert all(b.timestamp.seconds >= _W_START for b in result.diagnostics[0].bars)
@@ -3159,7 +3422,7 @@ class TestPrefixSizingIsNotSemantic:
 
         async def _run():
             svc = _wire_evaluated(make_servicer(), bars)
-            return await svc.RunBacktest(_windowed_req(_sma_def()), context=MagicMock())
+            return await svc.RunBacktest(_windowed_req(_sma_def()), context=_owned_ctx())
 
         baseline = await _run()
         with patch.object(
@@ -3176,7 +3439,7 @@ class TestPrefixSizingIsNotSemantic:
 
         async def _run(n_prefix):
             svc = _wire_evaluated(make_servicer(), _series_bars(n_prefix, 12))
-            return await svc.RunBacktest(_windowed_req(_sma_def()), context=MagicMock())
+            return await svc.RunBacktest(_windowed_req(_sma_def()), context=_owned_ctx())
 
         assert _canonical(await _run(6)) == _canonical(await _run(40))
 
@@ -3233,7 +3496,7 @@ class TestVwapAnchorMovesWithPrefix:
         cumulative mean starts 50 bars earlier than the caller's window."""
         capture = []
         svc = _wire_evaluated(make_servicer(), _series_bars(50, 12), capture=capture)
-        await svc.RunBacktest(_windowed_req(self._def()), context=MagicMock())
+        await svc.RunBacktest(_windowed_req(self._def()), context=_owned_ctx())
         by_indicator = dict(capture)
         assert by_indicator["VWAP"] == 62  # 50 prefix + 12 window, not 12
         assert by_indicator["SMA"] == 62
@@ -3313,7 +3576,7 @@ class TestPrefixFormulaCost:
                 formula_id="f-1", warmup_period=declared_warmup
             )
         )
-        await svc.RunBacktest(_windowed_req(self._def()), context=MagicMock())
+        await svc.RunBacktest(_windowed_req(self._def()), context=_owned_ctx())
         return sizes
 
     @pytest.mark.asyncio
@@ -3367,7 +3630,7 @@ class TestPrefixFormulaCost:
             return_value=indicators_pb2.FormulaDefinition(formula_id="f-1", warmup_period=10)
         )
         await svc.RunBacktest(
-            _windowed_req(self._def(), symbols=("AAPL", "MSFT")), context=MagicMock()
+            _windowed_req(self._def(), symbols=("AAPL", "MSFT")), context=_owned_ctx()
         )
         assert sizes == [23, 23]
         # ...and the declaration is fetched once for the whole run, not once per symbol.
@@ -3429,11 +3692,39 @@ def _strategy_row_single_gt(threshold=100.0):
     }
 
 
+def _strategy_row_entry_exit():
+    """A strategy row whose entry_rule (`sma > 100`) and exit_rule (`sma > 200`) differ, so a trace
+    of one is distinguishable from the other (feature 138). With SMA≈close bars ~150: entry → 1/1
+    PASS, exit → 0/1 FAIL."""
+    definition = analysis_pb2.StrategyDefinition(
+        strategy_id="s1",
+        display_name="S1",
+        components=[
+            analysis_pb2.StrategyComponent(
+                ref_name="sma",
+                kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                indicator="SMA",
+                params={"period": 3.0},
+            )
+        ],
+        entry_rule=json.dumps({"fn": ">", "lhs": "sma", "rhs": 100.0}),
+        exit_rule=json.dumps({"fn": ">", "lhs": "sma", "rhs": 200.0}),
+    )
+    return {
+        "strategy_id": "s1",
+        "display_name": "S1",
+        "active": True,
+        "live_enabled": True,
+        "definition_json": json_format.MessageToDict(definition),
+    }
+
+
 class TestEvaluateReadiness:
     def _svc(self, bars_by_symbol):
         svc = make_servicer()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=_strategy_row_single_gt())
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_strategy_row_single_gt())
         svc._marketdata = MagicMock()
         svc._marketdata.GetBars = AsyncMock(
             side_effect=lambda req, metadata=None: _bars_resp(bars_by_symbol[req.symbol])
@@ -3459,6 +3750,44 @@ class TestEvaluateReadiness:
         assert r.passing_conditions == 1 and r.total_conditions == 1
         assert r.conviction == 1.0
         assert r.conditions[0].state == analysis_pb2.CONDITION_STATE_PASS
+
+    @pytest.mark.asyncio
+    async def test_default_rule_traces_entry(self):
+        """feature 138: an unset `rule` (READINESS_RULE_UNSPECIFIED) traces the entry rule —
+        back-compat, so watchlist readiness is unchanged. Entry `sma > 100` fires at ~150 → 1/1."""
+        svc = self._svc({"AAPL": [120.0, 130.0, 150.0]})
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(
+            return_value=_strategy_row_entry_exit()
+        )
+        resp = await svc.EvaluateReadiness(
+            analysis_pb2.EvaluateReadinessRequest(strategy_id="s1", symbols=["AAPL"]),
+            _ctx(_HEADERS),
+        )
+        r = resp.readiness[0]
+        assert r.passing_conditions == 1 and r.total_conditions == 1
+        assert r.conditions[0].threshold == 100.0  # the ENTRY leaf
+        assert r.conditions[0].state == analysis_pb2.CONDITION_STATE_PASS
+
+    @pytest.mark.asyncio
+    async def test_exit_rule_traced_when_requested(self):
+        """feature 138: READINESS_RULE_EXIT traces the exit rule instead — so a held REDUCE
+        opportunity's panel explains the exit rule that fired. Exit `sma > 200` fails at ~150 →
+        0/1, tracing the EXIT leaf (threshold 200), not the entry leaf (100)."""
+        svc = self._svc({"AAPL": [120.0, 130.0, 150.0]})
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(
+            return_value=_strategy_row_entry_exit()
+        )
+        resp = await svc.EvaluateReadiness(
+            analysis_pb2.EvaluateReadinessRequest(
+                strategy_id="s1", symbols=["AAPL"], rule=analysis_pb2.READINESS_RULE_EXIT
+            ),
+            _ctx(_HEADERS),
+        )
+        r = resp.readiness[0]
+        assert r.total_conditions == 1
+        assert r.passing_conditions == 0
+        assert r.conditions[0].threshold == 200.0  # the EXIT leaf, not the entry leaf
+        assert r.conditions[0].state == analysis_pb2.CONDITION_STATE_FAIL
 
     @pytest.mark.asyncio
     async def test_near_symbol_soft_with_distance(self):
@@ -3493,21 +3822,26 @@ class TestEvaluateReadiness:
         svc = make_servicer()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=None)
         ctx = _ctx(_HEADERS)
         await svc.EvaluateReadiness(
             analysis_pb2.EvaluateReadinessRequest(strategy_id="nope", symbols=["AAPL"]), ctx
         )
-        assert ctx.abort.await_args.args[0] == grpc.StatusCode.NOT_FOUND
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
 
 
-def _sig(symbol, direction, conviction, source="src"):
-    return ingest_pb2.ExternalSignal(
+def _sig(symbol, direction, conviction, source="src", ingested_at=None):
+    sig = ingest_pb2.ExternalSignal(
         symbol=symbol,
         direction=direction,
         conviction=conviction,
         source=source,
         headline=f"{direction} {symbol}",
     )
+    # feature 022 — optional platform ingestion time; when set, drives signal_axis age decay.
+    if ingested_at is not None:
+        sig.ingested_at.FromDatetime(ingested_at)
+    return sig
 
 
 # ── Materialized opportunity Universe (feature 097) ─────────────────────────────
@@ -3540,7 +3874,9 @@ class _FakeOppRepo:
         for r in self.rows.get(user_id, []):
             if not include_expired and r["valid_until"] <= now:
                 continue
-            if r["conviction"] < min_conviction:
+            # feature 132: muted (deny-listed) rows are exempt from the conviction floor — they
+            # carry conviction 0 by design (mirrors the SQL `OR provenance ? 'denied'`).
+            if r["conviction"] < min_conviction and "denied" not in (r.get("provenance") or []):
                 continue
             act = self.actions.get((user_id, r["opportunity_key"]))
             if act:
@@ -3605,9 +3941,25 @@ def _wl(bindings=None, symbols=None):
     )
 
 
-def _strat_row(strategy_id, entry=None, exit_=None, active=True, live_enabled=True):
-    """A strategy row (SMA≈close via the ComputeIndicator stub) with optional entry/exit rules."""
-    definition = analysis_pb2.StrategyDefinition(
+def _strat_row(
+    strategy_id,
+    entry=None,
+    exit_=None,
+    active=True,
+    live_enabled=True,
+    symbols=None,
+    created_at=None,
+    denied=None,
+    signal_eligible=False,
+):
+    """A strategy row (SMA≈close via the ComputeIndicator stub) with optional entry/exit rules.
+
+    feature 131: pass ``symbols`` to give the row a live-firing universe
+    (``signal_params.symbols``, read by ``strategy_symbols`` to build ``live_by_symbol``), and
+    ``created_at`` (the ``_capped_live`` tiebreak key). Both default off so existing callers are
+    unchanged (C-13: no speculative centralization); a row destined for ``list_live_enabled`` needs
+    them, so passing ``symbols`` defaults ``created_at`` to a deterministic 2024-01-01."""
+    kwargs = dict(
         strategy_id=strategy_id,
         display_name=strategy_id.upper(),
         components=[
@@ -3621,21 +3973,48 @@ def _strat_row(strategy_id, entry=None, exit_=None, active=True, live_enabled=Tr
         entry_rule=json.dumps(entry) if entry else "",
         exit_rule=json.dumps(exit_) if exit_ else "",
     )
-    return {
+    if symbols is not None:
+        from google.protobuf.struct_pb2 import Struct
+
+        sp = Struct()
+        sp.update({"symbols": list(symbols)})
+        kwargs["signal_params"] = sp
+    if denied is not None:  # feature 132 — entry-only deny list
+        kwargs["denied_symbols"] = list(denied)
+    if signal_eligible:  # feature 132 — join platform-wide signals
+        kwargs["signal_eligible"] = True
+    definition = analysis_pb2.StrategyDefinition(**kwargs)
+    row = {
         "strategy_id": strategy_id,
         "display_name": strategy_id.upper(),
         "active": active,
         "live_enabled": live_enabled,
         "definition_json": json_format.MessageToDict(definition),
     }
+    if created_at is None and symbols is not None:
+        created_at = datetime(2024, 1, 1, tzinfo=UTC)
+    if created_at is not None:
+        row["created_at"] = created_at
+    return row
 
 
 _GT_100 = {"fn": ">", "lhs": "sma", "rhs": 100.0}  # fires when last close > 100
 _FIRING_BARS = [120.0, 130.0, 150.0]  # SMA≈close, last 150 > 100 → PASS
 
 
-def _materialized_svc(signals=(), held=(), watchlists=(), strategies=None, bars=None):
-    """A no-DB servicer wired with a _FakeOppRepo + all Universe-compute edges mocked."""
+def _materialized_svc(
+    signals=(),
+    held=(),
+    watchlists=(),
+    strategies=None,
+    bars=None,
+    source_weights=None,
+    live_strategies=None,
+):
+    """A no-DB servicer wired with a _FakeOppRepo + all Universe-compute edges mocked.
+
+    feature 131: ``held`` accepts a plain symbol (default market value) or a ``(symbol, value)``
+    tuple; ``live_strategies`` seeds ``list_live_enabled`` (default ``[]``)."""
     strategies = strategies or {}
     bars = bars or {}
     svc = make_servicer()
@@ -3646,10 +4025,25 @@ def _materialized_svc(signals=(), held=(), watchlists=(), strategies=None, bars=
             signals=list(signals), page=SimpleNamespace(next_page_token="")
         )
     )
+    # feature 134: _compute_opportunities drains per-source reliability weights via
+    # ListSignalSources. Empty → every source resolves to the neutral 1.0 multiplier (no change).
+    _sw = source_weights or {}
+    svc._ingest.ListSignalSources = AsyncMock(
+        return_value=SimpleNamespace(
+            sources=[SimpleNamespace(slug=slug, reliability_weight=w) for slug, w in _sw.items()]
+        )
+    )
     svc._portfolio = MagicMock()
+
+    def _held_pos(h):
+        # feature 131: _drain_held_symbols reads abs(market_value); accept a plain symbol
+        # (default value) or a (symbol, market_value) tuple for value-ranked live-budget tests.
+        sym, mv = h if isinstance(h, tuple) else (h, 1000.0)
+        return SimpleNamespace(symbol=sym, market_value=mv)
+
     svc._portfolio.ListPositions = AsyncMock(
         return_value=SimpleNamespace(
-            positions=[SimpleNamespace(symbol=s) for s in held],
+            positions=[_held_pos(h) for h in held],
             page=SimpleNamespace(next_page_token=""),
         )
     )
@@ -3660,6 +4054,15 @@ def _materialized_svc(signals=(), held=(), watchlists=(), strategies=None, bars=
     )
     svc._strategies_repo = AsyncMock()
     svc._strategies_repo.get_by_id = AsyncMock(side_effect=lambda sid: strategies.get(sid))
+    # feature 133: _load_strategy_definition resolves owner-scoped now; the test fixtures are all
+    # under a single owner (_HEADERS x-user-id="u1"), so mirror get_by_id (owner-agnostic here).
+    svc._strategies_repo.get_by_owner_and_id = AsyncMock(
+        side_effect=lambda uid, sid: strategies.get(sid)
+    )
+    # feature 131: _compute_opportunities builds live_by_symbol from list_live_enabled(user_id).
+    # Default [] keeps every non-live test green — a bare AsyncMock would return a MagicMock and
+    # the "for row in ..." build would raise TypeError.
+    svc._strategies_repo.list_live_enabled = AsyncMock(return_value=list(live_strategies or []))
     svc._marketdata = MagicMock()
     svc._marketdata.GetBars = AsyncMock(
         side_effect=lambda req, metadata=None: _recent_bars_resp(bars.get(req.symbol, []))
@@ -3787,6 +4190,128 @@ class TestListOpportunitiesMaterialized:
         assert svc_sig._opportunities_repo.rows["u1"][0]["signal_axis"] == 0.9
 
     @pytest.mark.asyncio
+    async def test_signal_axis_weighted_by_source_reliability(self):
+        """feature 134 AC-2: a source weighted 0.5 contributes half the signal_axis of an
+        otherwise-identical 1.0-weighted source. signal_axis = conviction * reliability_weight."""
+        common = dict(
+            signals=[_sig("AAPL", "buy", 0.9, source="uw")],
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS},
+        )
+        svc_full = _materialized_svc(source_weights={"uw": 1.0}, **common)
+        svc_half = _materialized_svc(source_weights={"uw": 0.5}, **common)
+        await _list_opps(svc_full)
+        await _list_opps(svc_half)
+        full_axis = svc_full._opportunities_repo.rows["u1"][0]["signal_axis"]
+        half_axis = svc_half._opportunities_repo.rows["u1"][0]["signal_axis"]
+        assert full_axis == pytest.approx(0.9)
+        assert half_axis == pytest.approx(0.45)  # 0.9 * 0.5
+        assert half_axis == pytest.approx(full_axis * 0.5)
+
+    # ── feature 022 — signal_axis age decay ──────────────────────────────────
+    async def _axis_for_age(self, age_hours, half_life=24.0, conviction=0.8, *, set_ingested=True):
+        """Compute a single AAPL signal's stored signal_axis under `half_life`, where the signal
+        was ingested `age_hours` ago (or with ingested_at unset when set_ingested=False). Uses a
+        curated watchlist+firing row so the candidate survives; reads the raw stored axis."""
+        ingested_at = datetime.now(UTC) - timedelta(hours=age_hours) if set_ingested else None
+        svc = _materialized_svc(
+            signals=[_sig("AAPL", "buy", conviction, source="uw", ingested_at=ingested_at)],
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS},
+        )
+        svc._cfg.get_float_present = MagicMock(
+            side_effect=lambda key, default: (
+                half_life if key == "analysis.scoring.signal_decay_half_life_hours" else default
+            )
+        )
+        await _list_opps(svc)
+        return svc._opportunities_repo.rows["u1"][0]["signal_axis"]
+
+    @pytest.mark.asyncio
+    async def test_decay_fresh_signal_undamped(self):
+        """AC (t=0): a signal ingested ~now with half-life 24 → multiplier ≈ 1.0."""
+        assert await self._axis_for_age(0.0) == pytest.approx(0.8, rel=1e-3)
+
+    @pytest.mark.asyncio
+    async def test_decay_one_half_life_halves(self):
+        """AC-5 (t=half_life): ingested 24h ago, half-life 24 → half the raw conviction."""
+        assert await self._axis_for_age(24.0) == pytest.approx(0.4, rel=1e-2)
+
+    @pytest.mark.asyncio
+    async def test_decay_two_half_lives_quarters(self):
+        """AC-1 (t=2×half_life): ingested 48h ago, half-life 24 → a quarter of raw."""
+        assert await self._axis_for_age(48.0) == pytest.approx(0.2, rel=1e-2)
+
+    @pytest.mark.asyncio
+    async def test_decay_three_half_lives_eighths(self):
+        """AC-5 (t=3×half_life): ingested 72h ago, half-life 24 → an eighth of raw."""
+        assert await self._axis_for_age(72.0) == pytest.approx(0.1, rel=1e-2)
+
+    @pytest.mark.asyncio
+    async def test_decay_disabled_by_zero_half_life(self):
+        """AC-2/FR-3: half-life 0 disables decay → undamped regardless of age (rollback path)."""
+        assert await self._axis_for_age(72.0, half_life=0.0) == pytest.approx(0.8, rel=1e-6)
+
+    @pytest.mark.asyncio
+    async def test_decay_disabled_by_negative_half_life(self):
+        """AC-2/FR-3: a negative half-life is also treated as disabled (undamped)."""
+        assert await self._axis_for_age(72.0, half_life=-5.0) == pytest.approx(0.8, rel=1e-6)
+
+    @pytest.mark.asyncio
+    async def test_missing_ingested_at_treated_as_fresh(self):
+        """AC-5 (deploy-ordering race): a signal with ingested_at unset → age unknown →
+        multiplier 1.0 regardless of half-life; must NOT underflow to 0.0."""
+        assert await self._axis_for_age(0.0, set_ingested=False) == pytest.approx(0.8, rel=1e-6)
+
+    @pytest.mark.asyncio
+    async def test_missing_ingested_at_emits_exactly_one_aggregated_warning(self):
+        """AC-7: N signals missing ingested_at → EXACTLY ONE aggregated log.warning per compute
+        pass (never one-per-signal), reporting the count."""
+        svc = _materialized_svc(
+            signals=[
+                _sig("GOOG", "buy", 0.9, source="uw"),  # both ingested_at unset
+                _sig("NFLX", "buy", 0.8, source="uw"),
+            ],
+        )
+        with patch("app.handlers.servicer.log.warning") as warn:
+            await _list_opps(svc)
+        assert warn.call_count == 1
+        # The single call reports the missing count (2) and the total (2).
+        args = warn.call_args.args
+        assert args[1] == 2 and args[2] == 2
+
+    @pytest.mark.asyncio
+    async def test_no_warning_when_all_signals_carry_ingested_at(self):
+        """The aggregated warning fires only when something is missing — a fully-stamped pass is
+        silent."""
+        svc = _materialized_svc(
+            signals=[_sig("GOOG", "buy", 0.9, source="uw", ingested_at=datetime.now(UTC))],
+        )
+        with patch("app.handlers.servicer.log.warning") as warn:
+            await _list_opps(svc)
+        assert warn.call_count == 0
+
+    @pytest.mark.asyncio
+    async def test_drain_source_weights_maps_and_is_best_effort(self):
+        """feature 134: _drain_source_weights returns {slug: reliability_weight} from one
+        ListSignalSources call, and {} on grpc.RpcError (best-effort)."""
+        svc = make_servicer()
+        svc._ingest = MagicMock()
+        svc._ingest.ListSignalSources = AsyncMock(
+            return_value=SimpleNamespace(
+                sources=[
+                    SimpleNamespace(slug="uw", reliability_weight=0.5),
+                    SimpleNamespace(slug="tw", reliability_weight=1.0),
+                ]
+            )
+        )
+        assert await svc._drain_source_weights([]) == {"uw": 0.5, "tw": 1.0}
+        svc._ingest.ListSignalSources = AsyncMock(side_effect=grpc.RpcError("boom"))
+        assert await svc._drain_source_weights([]) == {}
+
+    @pytest.mark.asyncio
     async def test_ranked_by_conviction_and_signal_axis(self):
         """Rank = (1-w)·conviction + w·signal_axis. With default w=0.3, a firing watchlist row
         (conviction 1.0) outranks a pure signal row (conviction 0, signal_axis 0.9)."""
@@ -3875,6 +4400,180 @@ class TestListOpportunitiesMaterialized:
             await asyncio.sleep(0)
         assert svc._ingest.QuerySignals.await_count >= 1
         assert "u1" not in svc._opportunity_recomputing  # guard cleared after it ran
+
+    # ── feature 131 — live-strategy symbol-coverage attribution ──────────────────
+    # Scope waiver (design.md Open Risk "Test-helper incompatibility — CLOSED, explicit user
+    # decision 2026-08-14): no dedicated multi-strategy-per-same-symbol test is added — _list_opps'
+    # by-symbol grouping can't express it and the user chose not to require the harness extension.
+    # FR-4's distinct-(symbol, strategy) rows still hold via _candidate's dict-key mechanism.
+
+    @pytest.mark.asyncio
+    async def test_held_symbol_in_live_universe_gets_real_exit_trace(self):
+        """AC-1: a held symbol covered by a live strategy's signal_params.symbols (no watchlist
+        binding) is attributed to that strategy with a REAL exit-rule trace + live_strategy
+        provenance, instead of falling through to unattributed (0/0)."""
+        row = _strat_row("sx", entry=_GT_100, exit_=_GT_100, symbols=["AAPL"])
+        svc = _materialized_svc(
+            held=["AAPL"],
+            strategies={"sx": row},
+            live_strategies=[row],
+            bars={"AAPL": _FIRING_BARS},
+        )
+        by_symbol, _ = await _list_opps(svc)
+        r = by_symbol["AAPL"]
+        assert r.strategy_id == "sx"
+        assert r.total_conditions == 1 and r.passing_conditions == 1  # real exit trace, not 0/0
+        assert set(r.provenance) >= {"position", "live_strategy"}
+        assert r.action == analysis_pb2.OPPORTUNITY_ACTION_TAG_REDUCE  # exit fired
+
+    @pytest.mark.asyncio
+    async def test_live_only_signal_symbol_gets_real_entry_trace_and_is_curated(self):
+        """AC-2/FR-6: an active signal on a symbol with no watchlist/held but covered by a live
+        strategy is attributed with a REAL entry-rule trace + live_strategy provenance, and is
+        curated — this is the case the feature actually changes (held was already curated)."""
+        row = _strat_row("sx", entry=_GT_100, symbols=["AAPL"])
+        svc = _materialized_svc(
+            signals=[_sig("AAPL", "buy", 0.9, source="uw")],
+            strategies={"sx": row},
+            live_strategies=[row],
+            bars={"AAPL": _FIRING_BARS},
+        )
+        by_symbol, _ = await _list_opps(svc)
+        r = by_symbol["AAPL"]
+        assert r.strategy_id == "sx"
+        assert r.total_conditions == 1 and r.passing_conditions == 1  # real entry trace
+        assert set(r.provenance) >= {"uw", "live_strategy"}
+        stored = svc._opportunities_repo.rows["u1"]
+        assert any(x["symbol"] == "AAPL" and x["strategy_id"] == "sx" for x in stored)
+
+    @pytest.mark.asyncio
+    async def test_watchlist_and_live_same_strategy_collapse_to_one_row(self):
+        """AC-3: a symbol bound in the watchlist to strategy sx that is ALSO live-covered by sx
+        yields exactly one (symbol, sx) row whose provenance carries both origins."""
+        row = _strat_row("sx", entry=_GT_100, symbols=["AAPL"])
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": row},
+            live_strategies=[row],
+            bars={"AAPL": _FIRING_BARS},
+        )
+        by_symbol, opps = await _list_opps(svc)
+        assert len(opps) == 1
+        r = by_symbol["AAPL"]
+        assert r.strategy_id == "sx"
+        assert set(r.provenance) >= {"watchlist", "live_strategy"}
+
+    @pytest.mark.asyncio
+    async def test_non_live_strategy_never_attributes_live_candidate(self):
+        """AC-5: an active but live_enabled=False strategy is absent from list_live_enabled (the
+        repo predicate excludes it), so a signal on its symbol stays unattributed — no
+        live_strategy provenance and no fabricated attribution."""
+        off = _strat_row("sx", entry=_GT_100, symbols=["AAPL"], live_enabled=False)
+        svc = _materialized_svc(
+            signals=[_sig("AAPL", "buy", 0.9, source="uw")],
+            strategies={"sx": off},
+            live_strategies=[],  # predicate (live_enabled=TRUE AND active=TRUE) excludes it
+            bars={"AAPL": _FIRING_BARS},
+        )
+        by_symbol, _ = await _list_opps(svc)
+        r = by_symbol["AAPL"]
+        assert "live_strategy" not in r.provenance
+        assert r.strategy_id == ""  # unattributed signal-only row
+
+    @pytest.mark.asyncio
+    async def test_live_only_candidate_survives_tiny_universe_cap(self):
+        """AC-4: a live-only (signal-covered, no watchlist/held) attributed candidate is curated —
+        not dropped even when max_universe_size is smaller than the higher-axis speculative tail."""
+        live = _strat_row("sx", entry=_GT_100, symbols=["AAPL"])
+        svc = _materialized_svc(
+            signals=[
+                _sig("AAPL", "buy", 0.5, source="uw"),  # live-covered → curated
+                _sig("ZZZ", "buy", 0.99, source="uw"),  # speculative, higher axis
+                _sig("YYY", "buy", 0.98, source="uw"),  # speculative, higher axis
+            ],
+            strategies={"sx": live},
+            live_strategies=[live],
+            bars={"AAPL": _FIRING_BARS},
+        )
+        # Cap the universe at 1 (all other get_int keys keep their defaults, incl. the 3 caps).
+        svc._cfg.get_int = MagicMock(
+            side_effect=lambda key, default=0: (
+                1 if key == "analysis.opportunity.max_universe_size" else default
+            )
+        )
+        by_symbol, _ = await _list_opps(svc)
+        assert "AAPL" in by_symbol  # curated live row survives the cut
+        assert by_symbol["AAPL"].strategy_id == "sx"
+        assert "live_strategy" in by_symbol["AAPL"].provenance
+
+    # ── feature 132 — muted (deny-listed) rows ───────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_held_denied_is_one_muted_row_with_exit_trace(self):
+        """AC (132): a held+denied (sym, strat) is exactly ONE row, muted=True, with its exit trace
+        preserved (deny is entry-only) — not a second standalone row, never conviction=0."""
+        row = _strat_row("sx", entry=_GT_100, exit_=_GT_100, symbols=["AAPL"], denied=["AAPL"])
+        svc = _materialized_svc(
+            held=["AAPL"],
+            strategies={"sx": row},
+            live_strategies=[row],
+            bars={"AAPL": _FIRING_BARS},
+        )
+        by_symbol, opps = await _list_opps(svc)
+        assert sum(1 for o in opps if o.symbol == "AAPL") == 1  # one row, not two
+        r = by_symbol["AAPL"]
+        assert r.muted is True
+        assert "denied" in r.provenance
+        assert r.total_conditions == 1  # exit rule still traced (entry-only deny)
+        assert r.action == analysis_pb2.OPPORTUNITY_ACTION_TAG_REDUCE
+
+    @pytest.mark.asyncio
+    async def test_pure_denied_symbol_is_muted_unspecified_placeholder(self):
+        """AC (132): a denied symbol in the strategy's coverage but not held/watchlisted/signalled
+        is a 0/0 muted placeholder — kept (UNSPECIFIED action), never dropped by the action guard,
+        never conviction=0-as-classifier."""
+        row = _strat_row("sx", entry=_GT_100, symbols=["XYZ"], denied=["XYZ"])
+        svc = _materialized_svc(strategies={"sx": row}, live_strategies=[row], bars={})
+        by_symbol, _ = await _list_opps(svc)
+        assert "XYZ" in by_symbol  # not dropped by the action-is-None guard
+        r = by_symbol["XYZ"]
+        assert r.muted is True
+        assert "denied" in r.provenance
+        assert r.total_conditions == 0  # trace skipped for a non-held muted row
+        assert r.action == analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED
+
+    @pytest.mark.asyncio
+    async def test_muted_row_survives_tiny_universe_cut(self):
+        """AC (132): the muted_only bucket ranks above the speculative tail — a muted row is not
+        dropped for a higher-conviction speculative signal when max_universe is tiny."""
+        row = _strat_row("sx", entry=_GT_100, symbols=["XYZ"], denied=["XYZ"])
+        svc = _materialized_svc(
+            signals=[
+                _sig("ZZZ", "buy", 0.99, source="uw"),
+                _sig("YYY", "buy", 0.98, source="uw"),
+            ],
+            strategies={"sx": row},
+            live_strategies=[row],
+            bars={},
+        )
+        svc._cfg.get_int = MagicMock(
+            side_effect=lambda key, default=0: (
+                1 if key == "analysis.opportunity.max_universe_size" else default
+            )
+        )
+        by_symbol, _ = await _list_opps(svc)
+        assert "XYZ" in by_symbol  # muted row survives despite the higher-axis speculative pair
+        assert by_symbol["XYZ"].muted is True
+
+    @pytest.mark.asyncio
+    async def test_muted_row_returned_despite_min_conviction_floor(self):
+        """AC (132): a min_conviction>0 read still returns a muted (conviction-0) row (the
+        `provenance ? 'denied'` OR-branch of the read query)."""
+        row = _strat_row("sx", entry=_GT_100, symbols=["XYZ"], denied=["XYZ"])
+        svc = _materialized_svc(strategies={"sx": row}, live_strategies=[row], bars={})
+        by_symbol, _ = await _list_opps(svc, min_conviction=0.5)
+        assert "XYZ" in by_symbol  # exempt from the floor
+        assert by_symbol["XYZ"].muted is True
 
 
 class TestGetStrategyAnalytics:
@@ -4010,6 +4709,7 @@ class TestOpportunityRowParity:
         "valid_until",
         "opportunity_key",
         "provenance",
+        "muted",  # feature 132
     }
     _INTENTIONALLY_UNSET: set[str] = set()  # the mapper populates every field
 
@@ -4051,6 +4751,29 @@ class TestOpportunityRowParity:
         assert opp.opportunity_key == "u1|AAPL|sx"
         assert list(opp.provenance) == ["watchlist", "position", "uw"]
         assert opp.valid_until.ToDatetime(tzinfo=UTC) == valid
+        assert opp.muted is False  # feature 132 — no "denied" marker → not muted
+
+    def test_muted_derived_from_denied_provenance(self):
+        """feature 132: the mapper sets Opportunity.muted from the "denied" provenance marker (the
+        persistence carrier), and _primary_source never leaks "denied" into Opportunity.source."""
+        from app.handlers.servicer import _primary_source, _row_to_opportunity
+
+        row = {
+            "opportunity_key": "u1|XYZ|sx",
+            "symbol": "XYZ",
+            "strategy_id": "sx",
+            "action": int(analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED),
+            "conviction": 0.0,
+            "readiness_json": {"passing_conditions": 0, "total_conditions": 0},
+            "signal_axis": 0.0,
+            "provenance": ["position", "denied"],
+            "thesis": "",
+            "valid_until": datetime(2999, 1, 1, tzinfo=UTC),
+        }
+        opp = _row_to_opportunity(row)
+        assert opp.muted is True
+        assert opp.source == ""  # "denied" (like "watchlist"/"position") is a structural marker
+        assert _primary_source(["denied"]) == ""
 
 
 class TestScreenSymbolsHeld:
@@ -4069,6 +4792,8 @@ class TestScreenSymbolsHeld:
             return_value=SimpleNamespace(result=[SimpleNamespace(value=50.0)])
         )
         svc._ingest = MagicMock()
+        # feature 134 — ScreenSymbols drains reliability weights via ListSignalSources (empty→1.0).
+        svc._ingest.ListSignalSources = AsyncMock(return_value=SimpleNamespace(sources=[]))
         # portfolio holds AAPL (single page).
         pos_resp = MagicMock()
         pos_resp.positions = [MagicMock(symbol="AAPL")]
@@ -4106,6 +4831,7 @@ class TestStrategyLifecycle089:
         definition = _valid_definition()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=_row_for(definition))
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_row_for(definition))
         ctx = _admin_ctx()
         with pytest.raises(Exception, match="aborted"):
             await svc.ManageStrategy(
@@ -4123,6 +4849,7 @@ class TestStrategyLifecycle089:
         definition = _valid_definition()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=None)
         svc._strategies_repo.create = AsyncMock(side_effect=asyncpg.UniqueViolationError("dup"))
         ctx = _admin_ctx()
         with pytest.raises(Exception, match="aborted"):
@@ -4140,6 +4867,7 @@ class TestStrategyLifecycle089:
         definition = _valid_definition()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=_row_for(definition))
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_row_for(definition))
         reactivated = {**_row_for(definition), "active": True}
         svc._strategies_repo.reactivate = AsyncMock(return_value=reactivated)
         resp = await svc.ManageStrategy(
@@ -4156,6 +4884,7 @@ class TestStrategyLifecycle089:
         svc = make_servicer()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=None)
         ctx = _admin_ctx()
         with pytest.raises(Exception, match="aborted"):
             await svc.ManageStrategy(
@@ -4165,31 +4894,45 @@ class TestStrategyLifecycle089:
                 ),
                 ctx,
             )
-        assert ctx.abort.await_args.args[0] == grpc.StatusCode.NOT_FOUND
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
 
     @pytest.mark.asyncio
     async def test_enable_live_on_inactive_rejected(self):
         svc = make_servicer()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=_live_row(active=False))
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_live_row(active=False))
         req = MagicMock(strategy_id="s1", live_enabled=True)
         ctx = _admin_ctx()
-        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]
+        ctx.invocation_metadata.return_value = [("x-user-id", "u1"), ("x-access-scope", "7")]
         with pytest.raises(Exception, match="aborted"):
             await svc.SetStrategyLive(req, ctx)
         assert ctx.abort.await_args.args[0] == grpc.StatusCode.FAILED_PRECONDITION
 
     @pytest.mark.asyncio
-    async def test_enable_live_without_symbols_rejected(self):
+    async def test_enable_live_without_symbols_now_succeeds(self):
+        """feature 132 (AC-1): the feature-089 empty-symbol precondition was REMOVED. An empty
+        signal_params.symbols allowlist no longer blocks enabling live — the strategy fires its
+        whole owner union (watchlist ∪ held ∪ signals-iff-eligible) minus the deny list."""
         svc = make_servicer()
         svc._strategies_repo = AsyncMock()
-        svc._strategies_repo.get_by_id = AsyncMock(return_value=_live_row(symbols=()))
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_live_row(symbols=()))
+        enabled = {
+            "strategy_id": "s1",
+            "display_name": "S1",
+            "active": True,
+            "live_enabled": True,
+            "definition_json": {"strategy_id": "s1"},  # no signal_params.symbols
+        }
+        svc._strategies_repo.set_live_enabled = AsyncMock(return_value=enabled)
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         req = MagicMock(strategy_id="s1", live_enabled=True)
         ctx = _admin_ctx()
-        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]
-        with pytest.raises(Exception, match="aborted"):
-            await svc.SetStrategyLive(req, ctx)
-        assert ctx.abort.await_args.args[0] == grpc.StatusCode.FAILED_PRECONDITION
+        ctx.invocation_metadata.return_value = [("x-user-id", "u1"), ("x-access-scope", "7")]
+        resp = await svc.SetStrategyLive(req, ctx)
+        ctx.abort.assert_not_called()
+        assert resp.definition.live_enabled is True
 
     @pytest.mark.asyncio
     async def test_disable_live_always_allowed_even_when_inert(self):
@@ -4203,7 +4946,7 @@ class TestStrategyLifecycle089:
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         req = MagicMock(strategy_id="s1", live_enabled=False)
         ctx = MagicMock()
-        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]
+        ctx.invocation_metadata.return_value = [("x-user-id", "u1"), ("x-access-scope", "7")]
         resp = await svc.SetStrategyLive(req, ctx)
         assert resp.definition.strategy_id == "s1"
         svc._strategies_repo.get_by_id.assert_not_awaited()  # no precondition fetch on disable
@@ -4279,6 +5022,7 @@ class TestDeletedFormulaFlag:
         definition = _custom_formula_definition()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=_row_for(definition))
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_row_for(definition))
         svc._indicators = MagicMock()
         svc._indicators.GetFormula = AsyncMock(
             return_value=indicators_pb2.FormulaDefinition(
@@ -4286,7 +5030,7 @@ class TestDeletedFormulaFlag:
             )
         )
         ctx = MagicMock()
-        ctx.invocation_metadata = MagicMock(return_value=[])
+        ctx.invocation_metadata = MagicMock(return_value=[("x-user-id", "u1")])
         req = analysis_pb2.GetStrategyRequest(strategy_id="s-cf")
         result = await svc.GetStrategy(req, ctx)
         assert len(result.warnings) == 1
@@ -4298,12 +5042,13 @@ class TestDeletedFormulaFlag:
         definition = _custom_formula_definition()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=_row_for(definition))
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_row_for(definition))
         svc._indicators = MagicMock()
         svc._indicators.GetFormula = AsyncMock(
             return_value=indicators_pb2.FormulaDefinition(formula_id="fid", deleted=False)
         )
         ctx = MagicMock()
-        ctx.invocation_metadata = MagicMock(return_value=[])
+        ctx.invocation_metadata = MagicMock(return_value=[("x-user-id", "u1")])
         req = analysis_pb2.GetStrategyRequest(strategy_id="s-cf")
         result = await svc.GetStrategy(req, ctx)
         assert list(result.warnings) == []
@@ -4345,7 +5090,7 @@ class TestBacktestDeletedFormulaWarning:
             ],
             entry_rule=json.dumps({"fn": ">", "lhs": "ff", "rhs": 0}),
         )
-        result = await svc.RunBacktest(_windowed_req(definition), context=MagicMock())
+        result = await svc.RunBacktest(_windowed_req(definition), context=_owned_ctx())
         assert any("f-1" in w for w in result.warnings)
         # The deletion was captured on the warm-up prefetch's single fetch — no extra GetFormula.
         assert svc._indicators.GetFormula.await_count == 1
@@ -4446,3 +5191,264 @@ async def test_set_opportunity_action_dismiss_take_persist_enum():
         kw = svc._opportunity_actions_repo.upsert.await_args.kwargs
         assert kw["action"] == action
         assert kw["snooze_until"] is None  # only SNOOZE sets a timestamp
+
+
+class TestFeature133Ownership:
+    """Cross-user ownership isolation (feature 133) — AC-1/AC-2/AC-3 with an owner-aware repo."""
+
+    @staticmethod
+    def _owner_repo(rows):
+        """rows: dict[(user_id, strategy_id)] -> row dict. Owner-aware fake strategies repo."""
+        repo = AsyncMock()
+
+        async def _goai(user_id, strategy_id):
+            return rows.get((user_id, strategy_id))
+
+        async def _list(user_id, include_inactive=False, page_size=0, page_offset=0):
+            owned = [r for (u, _s), r in rows.items() if u == user_id]
+            return owned, len(owned)
+
+        repo.get_by_owner_and_id = AsyncMock(side_effect=_goai)
+        repo.list = AsyncMock(side_effect=_list)
+        return repo
+
+    @staticmethod
+    def _row(user_id, strategy_id):
+        return {
+            "strategy_id": strategy_id,
+            "user_id": user_id,
+            "display_name": strategy_id.upper(),
+            "active": True,
+            "live_enabled": False,
+            "definition_json": {},
+        }
+
+    @pytest.mark.asyncio
+    async def test_ac2_get_strategy_owner_mismatch_is_permission_denied(self):
+        svc = make_servicer()
+        svc._strategies_repo = self._owner_repo({("ua", "s1"): self._row("ua", "s1")})
+        ctx = _ctx({"x-user-id": "ub", "x-access-scope": "7", "x-trace-id": "t"})
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception, match="aborted"):
+            await svc.GetStrategy(analysis_pb2.GetStrategyRequest(strategy_id="s1"), ctx)
+        # uniform PERMISSION_DENIED — user B can't tell whether s1 exists under user A
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
+
+    @pytest.mark.asyncio
+    async def test_ac3_list_definitions_excludes_other_users(self):
+        svc = make_servicer()
+        svc._strategies_repo = self._owner_repo(
+            {("ua", "s1"): self._row("ua", "s1"), ("ub", "s2"): self._row("ub", "s2")}
+        )
+        ctx = _ctx({"x-user-id": "ub", "x-access-scope": "7", "x-trace-id": "t"})
+        resp = await svc.ListStrategyDefinitions(analysis_pb2.ListStrategyDefinitionsRequest(), ctx)
+        assert {d.strategy_id for d in resp.definitions} == {"s2"}  # never user A's s1
+
+    @pytest.mark.asyncio
+    async def test_ac1_two_users_register_same_strategy_id_without_collision(self):
+        svc = make_servicer()
+        created = {}
+
+        async def _goai(user_id, strategy_id):
+            return created.get((user_id, strategy_id))
+
+        async def _create(user_id, strategy_id, display_name, definition_json):
+            row = {
+                "strategy_id": strategy_id,
+                "user_id": user_id,
+                "display_name": display_name,
+                "active": True,
+                "live_enabled": False,
+                "definition_json": definition_json,
+            }
+            created[(user_id, strategy_id)] = row
+            return row
+
+        repo = AsyncMock()
+        repo.get_by_owner_and_id = AsyncMock(side_effect=_goai)
+        repo.create = AsyncMock(side_effect=_create)
+        svc._strategies_repo = repo
+        svc._validate_definition_proto = AsyncMock()  # bypass formula validation
+
+        for user in ("ua", "ub"):
+            ctx = _ctx({"x-user-id": user, "x-access-scope": "7", "x-trace-id": "t"})
+            req = analysis_pb2.ManageStrategyRequest(
+                operation=analysis_pb2.STRATEGY_OPERATION_REGISTER,
+                definition=analysis_pb2.StrategyDefinition(strategy_id="s1", display_name="X"),
+            )
+            resp = await svc.ManageStrategy(req, ctx)
+            assert resp.user_id == user  # owner is server-set from the header
+        assert set(created) == {("ua", "s1"), ("ub", "s1")}  # composite PK, no collision
+
+
+class TestListLiveEnabled:
+    """feature 131 — StrategiesRepository.list_live_enabled() + the shared predicate constant.
+
+    C-13 verdict: the strategy-row literals here are single-consumer (this class) → inline
+    compliant.
+    """
+
+    @pytest.mark.asyncio
+    async def test_list_live_enabled_uses_shared_predicate_and_decodes(self):
+        from app.repositories.strategies import LIVE_ENABLED_PREDICATE_SQL, StrategiesRepository
+
+        db = MagicMock()
+        db.fetch = AsyncMock(
+            return_value=[
+                {
+                    "strategy_id": "s1",
+                    "user_id": "u1",
+                    "active": True,
+                    "live_enabled": True,
+                    "created_at": None,
+                    "definition_json": '{"display_name": "S1"}',
+                },
+                {
+                    "strategy_id": "s2",
+                    "user_id": "u2",
+                    "active": True,
+                    "live_enabled": True,
+                    "created_at": None,
+                    "definition_json": {"display_name": "S2"},
+                },
+            ]
+        )
+        repo = StrategiesRepository(db)
+        rows = await repo.list_live_enabled()
+        sql = db.fetch.call_args[0][0]
+        assert LIVE_ENABLED_PREDICATE_SQL in sql
+        assert "live_enabled = TRUE AND active = TRUE" in sql
+        # _to_dict decodes the JSONB definition_json (string → dict) on every row.
+        assert rows[0]["definition_json"] == {"display_name": "S1"}
+        assert isinstance(rows[1]["definition_json"], dict)
+        # Global (no owner filter) when called with no user_id — the live loop needs every owner.
+        assert "user_id" not in sql
+
+    @pytest.mark.asyncio
+    async def test_list_live_enabled_owner_scoped_when_user_id_given(self):
+        # feature 131 deviation (post-133 ownership): the per-user opportunity compute must not
+        # attribute another user's live strategy, so passing user_id owner-scopes the query.
+        from app.repositories.strategies import StrategiesRepository
+
+        db = MagicMock()
+        db.fetch = AsyncMock(return_value=[])
+        repo = StrategiesRepository(db)
+        await repo.list_live_enabled("u1")
+        sql = db.fetch.call_args[0][0]
+        assert "user_id = $1" in sql
+        assert db.fetch.call_args[0][1] == "u1"
+
+
+class TestGetIndicatorSeries:
+    """feature 125 (FR-6) — the indicator-overlay-panel RPC. Per-component fault isolation and the
+    None→unset-IndicatorValue (no fabricated 0.0) guarantee; owner-scoped like EvaluateReadiness."""
+
+    def _definition(self, components):
+        return analysis_pb2.StrategyDefinition(
+            strategy_id="s1",
+            display_name="S",
+            components=components,
+            entry_rule=json.dumps({"fn": ">", "lhs": components[0].ref_name, "rhs": 1}),
+        )
+
+    @pytest.mark.asyncio
+    async def test_per_component_fault_isolation(self):
+        """One component raising FormulaExecutionError never fails the whole RPC — its
+        ComponentSeries carries the error and empty series; the healthy one is populated."""
+        svc = make_servicer()
+        definition = self._definition(
+            [
+                analysis_pb2.StrategyComponent(
+                    ref_name="good",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="SMA",
+                    params={"period": 3.0},
+                ),
+                analysis_pb2.StrategyComponent(
+                    ref_name="bad",
+                    kind=analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
+                    formula_id="f-bad",
+                ),
+            ]
+        )
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_row_for(definition))
+
+        def fake_compute(comp, closes):
+            if comp.ref_name == "bad":
+                raise FormulaExecutionError("f-bad", "boom")
+            return {"value": [None, 1.0, 2.0]}
+
+        with patch.object(
+            StrategyEvaluator, "_compute_component", new=AsyncMock(side_effect=fake_compute)
+        ):
+            req = analysis_pb2.GetIndicatorSeriesRequest(
+                strategy_id="s1", symbol="AAPL", closes=[1.0, 2.0, 3.0]
+            )
+            resp = await svc.GetIndicatorSeries(req, _owned_ctx())
+
+        by_ref = {c.ref_name: c for c in resp.components}
+        assert set(by_ref) == {"good", "bad"}
+        # Healthy component: no error, one "value" series with all points.
+        assert by_ref["good"].error == ""
+        assert len(by_ref["good"].series) == 1
+        assert by_ref["good"].series[0].name == "value"
+        assert len(by_ref["good"].series[0].values) == 3
+        # Failed component: error populated, series empty — the RPC still succeeded.
+        assert "boom" in by_ref["bad"].error
+        assert len(by_ref["bad"].series) == 0
+
+    @pytest.mark.asyncio
+    async def test_none_maps_to_unset_indicator_value_not_zero(self):
+        """A warm-up/gap None round-trips as an UNSET IndicatorValue (no presence), distinct from a
+        real 0.0 (present) — the AC-4a no-fabricated-0.0 guarantee. This is the test that could not
+        pass under the earlier `repeated DoubleValue` encoding (an empty DoubleValue is byte- and
+        JSON-identical to 0.0)."""
+        svc = make_servicer()
+        definition = self._definition(
+            [
+                analysis_pb2.StrategyComponent(
+                    ref_name="sma",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="SMA",
+                    params={"period": 2.0},
+                )
+            ]
+        )
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_row_for(definition))
+
+        def fake_compute(comp, closes):
+            # leading warm-up None · a genuine 0.0 reading · a finite value
+            return {"value": [None, 0.0, 5.0]}
+
+        with patch.object(
+            StrategyEvaluator, "_compute_component", new=AsyncMock(side_effect=fake_compute)
+        ):
+            req = analysis_pb2.GetIndicatorSeriesRequest(
+                strategy_id="s1", symbol="AAPL", closes=[1.0, 2.0, 3.0]
+            )
+            resp = await svc.GetIndicatorSeries(req, _owned_ctx())
+
+        vals = resp.components[0].series[0].values
+        assert len(vals) == 3
+        # warm-up None → UNSET, never a fabricated 0.0
+        assert vals[0].HasField("value") is False
+        # a genuine 0.0 → SET (present) with value 0.0 — distinct from the gap above
+        assert vals[1].HasField("value") is True
+        assert vals[1].value == 0.0
+        # a finite value → SET
+        assert vals[2].HasField("value") is True
+        assert vals[2].value == 5.0
+
+    @pytest.mark.asyncio
+    async def test_owner_scoped_permission_denied(self):
+        """A non-owned/missing strategy aborts PERMISSION_DENIED, like EvaluateReadiness (133)."""
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=None)
+        req = analysis_pb2.GetIndicatorSeriesRequest(
+            strategy_id="nope", symbol="AAPL", closes=[1.0]
+        )
+        with pytest.raises(Exception, match="aborted"):
+            await svc.GetIndicatorSeries(req, _owned_ctx())

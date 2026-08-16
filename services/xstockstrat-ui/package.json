@@ -36,6 +36,7 @@
     "@shadcn/react": "0.3.0",
     "@tabler/icons-react": "^3.46.0",
     "@tanstack/react-query": "^5.62.0",
+    "@tanstack/react-table": "^8",
     "@tanstack/react-virtual": "^3.10.0",
     "@xstockstrat/proto": "workspace:*",
     "class-variance-authority": "^0.7.1",

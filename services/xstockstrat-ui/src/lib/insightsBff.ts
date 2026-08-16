@@ -1,4 +1,4 @@
-import { AnalysisService, StrategyOperation } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { IndicatorsService } from '@xstockstrat/proto/indicators/v1/indicators_pb';
 import { IngestService } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
@@ -17,7 +17,6 @@ import {
   createDispatch,
   requireSession,
   backendHeaders,
-  requireAdminScope,
   forward,
   forwardAdmin,
 } from '@/lib/bffShared';
@@ -26,11 +25,11 @@ const router = createBffRouter();
 
 router.service(AnalysisService, {
   async listStrategies(req, ctx) {
+    // feature 133: send req as-is — analysis filters to the caller's own strategies from the
+    // propagated x-user-id header (backendHeaders), so the request body carries no user_id
+    // (design.md decision 3 removed the dead wire field).
     const claims = await requireSession(ctx);
-    return analysisClient.listStrategies(
-      { ...req, userId: claims.user_id },
-      { headers: backendHeaders(claims, ctx) },
-    );
+    return analysisClient.listStrategies(req, { headers: backendHeaders(claims, ctx) });
   },
   scoreStrategy: forward((req, opts) => analysisClient.scoreStrategy(req, opts)),
   runBacktest: forward((req, opts) => analysisClient.runBacktest(req, opts)),
@@ -39,30 +38,23 @@ router.service(AnalysisService, {
   listBacktests: forward((req, opts) => analysisClient.listBacktests(req, opts)),
   // feature 068: persisted full result of a past run; NOT_FOUND for legacy/evicted runs.
   getBacktest: forward((req, opts) => analysisClient.getBacktest(req, opts)),
-  async manageStrategy(req, ctx) {
-    const claims = await requireSession(ctx);
-    // Mutations (register/update/deactivate) are admin-only per FR-8 — enforced
-    // server-side before forwarding to the gRPC service.
-    const mutating =
-      req.operation === StrategyOperation.REGISTER ||
-      req.operation === StrategyOperation.UPDATE ||
-      req.operation === StrategyOperation.DEACTIVATE;
-    if (mutating) {
-      requireAdminScope(claims);
-    }
-    return analysisClient.manageStrategy(req, { headers: backendHeaders(claims, ctx) });
-  },
+  // feature 133: no admin gate. Strategy ownership is per-user now — analysis resolves the caller
+  // from the propagated x-user-id header and returns PERMISSION_DENIED for a non-owner (design.md
+  // decision 4). The old admin-only mutation gate (FR-8) is removed.
+  manageStrategy: forward((req, opts) => analysisClient.manageStrategy(req, opts)),
   getStrategy: forward((req, opts) => analysisClient.getStrategy(req, opts)),
   listStrategyDefinitions: forward((req, opts) =>
     analysisClient.listStrategyDefinitions(req, opts),
   ),
-  // Admin scope gate — enforced server-side before forwarding to the gRPC service.
-  setStrategyLive: forwardAdmin((req, opts) => analysisClient.setStrategyLive(req, opts)),
+  // feature 133: no admin gate — owner-scoped server-side (design.md decision 4, C-10(a)).
+  setStrategyLive: forward((req, opts) => analysisClient.setStrategyLive(req, opts)),
   // feature 083 — opportunity queue + readiness + per-strategy analytics. All read-only;
   // ListOpportunities takes its user from the propagated x-user-id header (forward → backendHeaders).
   listOpportunities: forward((req, opts) => analysisClient.listOpportunities(req, opts)),
   evaluateReadiness: forward((req, opts) => analysisClient.evaluateReadiness(req, opts)),
   getStrategyAnalytics: forward((req, opts) => analysisClient.getStrategyAnalytics(req, opts)),
+  // feature 125 (FR-6): per-component indicator series for the Symbol page's overlay panels.
+  getIndicatorSeries: forward((req, opts) => analysisClient.getIndicatorSeries(req, opts)),
 });
 
 router.service(IngestService, {

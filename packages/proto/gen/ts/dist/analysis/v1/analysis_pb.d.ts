@@ -706,6 +706,34 @@ export type StrategyDefinition = Message<"xstockstrat.analysis.v1.StrategyDefini
      * @generated from field: optional int32 exit_cooldown_days = 11;
      */
     exitCooldownDays?: number | undefined;
+    /**
+     * Normalized-uppercase symbols this strategy must never evaluate FOR ENTRY (feature 132 —
+     * entry-only deny). A held position on a denied symbol keeps exit tracing (the deny suppresses
+     * only the entry edge, so an operator can always exit a position they already hold). Rides
+     * definition_json (no column); maskable via ManageStrategyRequest.update_mask.
+     *
+     * @generated from field: repeated string denied_symbols = 12;
+     */
+    deniedSymbols: string[];
+    /**
+     * Owning user (feature 133). Server-authoritative: populated from the propagated
+     * x-user-id header on ManageStrategy REGISTER, never accepted from the request body
+     * (mirrors ListOpportunitiesRequest / portfolio ownership convention).
+     *
+     * @generated from field: string user_id = 13;
+     */
+    userId: string;
+    /**
+     * Gates whether the platform-wide active-signal term joins this strategy's evaluation universe
+     * (feature 132). Plain bool (no optional) is intentional: absent ≡ false ≡ explicit-false resolve
+     * identically. A strategy that sets BOTH a non-empty signal_params.symbols allowlist AND
+     * signal_eligible=true is rejected INVALID_ARGUMENT at write time (the allowlist is already an
+     * explicit universe override; signals would be redundant/contradictory). Rides definition_json;
+     * maskable.
+     *
+     * @generated from field: bool signal_eligible = 14;
+     */
+    signalEligible: boolean;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.StrategyDefinition.
@@ -737,7 +765,7 @@ export type ManageStrategyRequest = Message<"xstockstrat.analysis.v1.ManageStrat
      *              StrategyWizard, which always sends a complete definition) are unaffected.
      *
      * Allowed paths: display_name, components, entry_rule, exit_rule, signal_params, cooldown_days,
-     * exit_cooldown_days.
+     * exit_cooldown_days, denied_symbols, signal_eligible.
      * strategy_id/active/live_enabled are column-authoritative and rejected with INVALID_ARGUMENT.
      *
      * @generated from field: google.protobuf.FieldMask update_mask = 3;
@@ -950,6 +978,23 @@ export type ScreenResult = Message<"xstockstrat.analysis.v1.ScreenResult"> & {
      * @generated from field: bool held = 11;
      */
     held: boolean;
+    /**
+     * Per-criterion raw readings + pass/fail, for single-symbol screening where the universe-relative
+     * `score`/`criterion_scores` collapse to a content-free 0.5 (feature 125, FR-8). Populated from the
+     * same engine-internal values `criterion_scores` already draws from, exposed directly instead of
+     * normalized.
+     *
+     * @generated from field: map<string, double> criterion_raw_values = 12;
+     */
+    criterionRawValues: {
+        [key: string]: number;
+    };
+    /**
+     * @generated from field: map<string, bool> criterion_passed = 13;
+     */
+    criterionPassed: {
+        [key: string]: boolean;
+    };
 };
 /**
  * Describes the message xstockstrat.analysis.v1.ScreenResult.
@@ -1144,6 +1189,12 @@ export type Opportunity = Message<"xstockstrat.analysis.v1.Opportunity"> & {
      * @generated from field: repeated string provenance = 11;
      */
     provenance: string[];
+    /**
+     * feature 132 — the (symbol, strategy) pair is on the strategy's deny list; surfaced as an explicit muted row (never conviction=0)
+     *
+     * @generated from field: bool muted = 12;
+     */
+    muted: boolean;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.Opportunity.
@@ -1316,6 +1367,15 @@ export type EvaluateReadinessRequest = Message<"xstockstrat.analysis.v1.Evaluate
      * @generated from field: repeated string symbols = 2;
      */
     symbols: string[];
+    /**
+     * feature 138 — which rule tree to trace. UNSPECIFIED == ENTRY (back-compat). The Signal-detail
+     * "Why this fired" panel requests EXIT for a held (REDUCE/ADD) opportunity so it explains the
+     * exit rule that actually fired, reconciling with the queue's exit-derived conviction; every
+     * other caller (watchlist readiness) leaves it unset and keeps entry-rule tracing.
+     *
+     * @generated from field: xstockstrat.analysis.v1.ReadinessRule rule = 3;
+     */
+    rule: ReadinessRule;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.EvaluateReadinessRequest.
@@ -1388,6 +1448,130 @@ export type GetStrategyAnalyticsRequest = Message<"xstockstrat.analysis.v1.GetSt
  * Use `create(GetStrategyAnalyticsRequestSchema)` to create a new message.
  */
 export declare const GetStrategyAnalyticsRequestSchema: GenMessage<GetStrategyAnalyticsRequest>;
+/**
+ * @generated from message xstockstrat.analysis.v1.GetIndicatorSeriesRequest
+ */
+export type GetIndicatorSeriesRequest = Message<"xstockstrat.analysis.v1.GetIndicatorSeriesRequest"> & {
+    /**
+     * @generated from field: string strategy_id = 1;
+     */
+    strategyId: string;
+    /**
+     * @generated from field: string symbol = 2;
+     */
+    symbol: string;
+    /**
+     * The caller's own already-fetched candlestick closes + their timestamps (the page passes the
+     * exact bars it drew, so the x-axis is parity-aligned and no server re-fetch happens). closes
+     * and times are index-aligned and equal length.
+     *
+     * @generated from field: repeated double closes = 3;
+     */
+    closes: number[];
+    /**
+     * @generated from field: repeated google.protobuf.Timestamp times = 4;
+     */
+    times: Timestamp[];
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.GetIndicatorSeriesRequest.
+ * Use `create(GetIndicatorSeriesRequestSchema)` to create a new message.
+ */
+export declare const GetIndicatorSeriesRequestSchema: GenMessage<GetIndicatorSeriesRequest>;
+/**
+ * @generated from message xstockstrat.analysis.v1.GetIndicatorSeriesResponse
+ */
+export type GetIndicatorSeriesResponse = Message<"xstockstrat.analysis.v1.GetIndicatorSeriesResponse"> & {
+    /**
+     * Echoes the request times, index-aligned across every series in every component.
+     *
+     * @generated from field: repeated google.protobuf.Timestamp times = 1;
+     */
+    times: Timestamp[];
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.ComponentSeries components = 2;
+     */
+    components: ComponentSeries[];
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.GetIndicatorSeriesResponse.
+ * Use `create(GetIndicatorSeriesResponseSchema)` to create a new message.
+ */
+export declare const GetIndicatorSeriesResponseSchema: GenMessage<GetIndicatorSeriesResponse>;
+/**
+ * @generated from message xstockstrat.analysis.v1.ComponentSeries
+ */
+export type ComponentSeries = Message<"xstockstrat.analysis.v1.ComponentSeries"> & {
+    /**
+     * @generated from field: string ref_name = 1;
+     */
+    refName: string;
+    /**
+     * @generated from field: xstockstrat.analysis.v1.ComponentKind kind = 2;
+     */
+    kind: ComponentKind;
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.NamedSeries series = 3;
+     */
+    series: NamedSeries[];
+    /**
+     * Non-empty when this component failed to compute (soft-deleted formula, sandbox timeout, NaN
+     * output); series is then empty and the UI renders a per-panel error state. Per-component fault
+     * isolation — one bad component never fails the whole RPC.
+     *
+     * @generated from field: string error = 4;
+     */
+    error: string;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.ComponentSeries.
+ * Use `create(ComponentSeriesSchema)` to create a new message.
+ */
+export declare const ComponentSeriesSchema: GenMessage<ComponentSeries>;
+/**
+ * @generated from message xstockstrat.analysis.v1.NamedSeries
+ */
+export type NamedSeries = Message<"xstockstrat.analysis.v1.NamedSeries"> & {
+    /**
+     * "value" (primary) plus each secondary the component emits (bb.upper/bb.lower,
+     * macd.signal/macd.histogram, stoch.d, or custom-formula output keys).
+     *
+     * @generated from field: string name = 1;
+     */
+    name: string;
+    /**
+     * Index-aligned with the response times. Each point is an IndicatorValue whose `value` is UNSET
+     * for a warm-up-head or mid-series None, so a gap never round-trips as a fabricated 0.0 (feature
+     * 125, AC-4a/P-03). A bare `google.protobuf.DoubleValue` element cannot do this — in a repeated
+     * field an empty DoubleValue is byte-identical to DoubleValue(0.0) and serializes to JSON `0`, so
+     * the wrapper is a message with a proto3 `optional double` (explicit presence: HasField works and
+     * JSON omits an unset value) instead.
+     *
+     * @generated from field: repeated xstockstrat.analysis.v1.IndicatorValue values = 2;
+     */
+    values: IndicatorValue[];
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.NamedSeries.
+ * Use `create(NamedSeriesSchema)` to create a new message.
+ */
+export declare const NamedSeriesSchema: GenMessage<NamedSeries>;
+/**
+ * One point of an indicator series. `value` unset == a gap (warm-up head / NaN / None), never 0.0.
+ *
+ * @generated from message xstockstrat.analysis.v1.IndicatorValue
+ */
+export type IndicatorValue = Message<"xstockstrat.analysis.v1.IndicatorValue"> & {
+    /**
+     * @generated from field: optional double value = 1;
+     */
+    value?: number | undefined;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.IndicatorValue.
+ * Use `create(IndicatorValueSchema)` to create a new message.
+ */
+export declare const IndicatorValueSchema: GenMessage<IndicatorValue>;
 /**
  * @generated from enum xstockstrat.analysis.v1.BacktestStatus
  */
@@ -1714,6 +1898,35 @@ export declare enum ConditionState {
  */
 export declare const ConditionStateSchema: GenEnum<ConditionState>;
 /**
+ * Which rule tree EvaluateReadiness traces (feature 138). Closed set → enum (C-04).
+ *
+ * @generated from enum xstockstrat.analysis.v1.ReadinessRule
+ */
+export declare enum ReadinessRule {
+    /**
+     * server treats as ENTRY (back-compat default)
+     *
+     * @generated from enum value: READINESS_RULE_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * trace the entry_rule (ENTER candidates, watchlist readiness)
+     *
+     * @generated from enum value: READINESS_RULE_ENTRY = 1;
+     */
+    ENTRY = 1,
+    /**
+     * trace the exit_rule (held REDUCE/ADD opportunities)
+     *
+     * @generated from enum value: READINESS_RULE_EXIT = 2;
+     */
+    EXIT = 2
+}
+/**
+ * Describes the enum xstockstrat.analysis.v1.ReadinessRule.
+ */
+export declare const ReadinessRuleSchema: GenEnum<ReadinessRule>;
+/**
  * The persisted per-user disposition of a queued opportunity (feature 097). Closed set → enum (C-04).
  *
  * @generated from enum xstockstrat.analysis.v1.OpportunityAction
@@ -1898,5 +2111,18 @@ export declare const AnalysisService: GenService<{
         methodKind: "unary";
         input: typeof GetStrategyAnalyticsRequestSchema;
         output: typeof StrategyAnalyticsSchema;
+    };
+    /**
+     * Per-component historical indicator series for a strategy over a caller-supplied bar window,
+     * for the unified Symbol page's overlay panels (feature 125, FR-6). Reuses the analysis
+     * evaluator's own _compute_component per declared component in a dedicated handler loop — never
+     * the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.GetIndicatorSeries
+     */
+    getIndicatorSeries: {
+        methodKind: "unary";
+        input: typeof GetIndicatorSeriesRequestSchema;
+        output: typeof GetIndicatorSeriesResponseSchema;
     };
 }>;

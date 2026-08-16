@@ -14,7 +14,7 @@
 import * as http2 from 'node:http2';
 import { ConnectError, Code } from '@connectrpc/connect';
 import { connectNodeAdapter } from '@connectrpc/connect-node';
-import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import { AnalysisService, ReadinessRule } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
 import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
 import { IngestService } from '@xstockstrat/proto/ingest/v1/ingest_pb';
@@ -25,6 +25,7 @@ import { NotifyService, type Alert } from '@xstockstrat/proto/notify/v1/notify_p
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { signTestJwt } from './helpers/auth';
+import { HEADER_USER_ID } from '../src/lib/headers';
 import {
   TEST_USER_ID,
   TEST_USER_EMAIL,
@@ -39,12 +40,20 @@ import {
   insufficientDataResult,
   OPPORTUNITIES,
   symbolReadiness,
+  exitReadiness,
   POSITIONS,
   positionForSymbol,
   ORDERS,
   orderForId,
   CONFIG_KEY_FIXTURES,
+  SIGNAL_SOURCES,
+  SIGNAL_SOURCE_WEIGHTED,
+  FUNDAMENTALS_AAPL,
 } from './fixtures';
+import { criterionDetailRow } from './fixtures/screenResults';
+import { backfillJob } from './fixtures/backfillJobs';
+import { INDICATOR_SERIES_AAPL } from './fixtures/indicatorSeries';
+import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 
 export const TRADER_MOCK_PORT = 9091;
 export const INSIGHTS_MOCK_PORT = 9092;
@@ -63,6 +72,33 @@ const READINESS_BUCKET_OVERRIDE: Record<
   QUIET1: { passingConditions: 0, totalConditions: 3 }, // quiet
   NODATA1: { passingConditions: 0, totalConditions: 0 }, // no-data (un-evaluable)
 };
+
+// feature 133 — strategy ownership. Every pre-seeded fixture strategy is owned by user A
+// (`TEST_USER_ID`); the composite `(user_id, strategy_id)` PK means a second user (`TEST_USER_B_ID`)
+// may hold the same id without collision. The handlers below resolve the caller from the propagated
+// `x-user-id` header (never the request body) and mirror the analysis backend's uniform
+// PERMISSION_DENIED for a non-owner, so the cross-user isolation e2e proves the BFF forwards
+// identity and the backend gates on it.
+const A_OWNED_STRATEGY_IDS = new Set<string>([
+  ...STRATEGY_DEFINITIONS.map((d) => d.strategyId),
+  'strat-owned-by-a', // dedicated ownership-spec fixture
+]);
+
+function callerUserId(ctx: { requestHeader: Headers }): string {
+  return ctx.requestHeader.get(HEADER_USER_ID) ?? '';
+}
+
+function assertStrategyOwner(
+  ctx: { requestHeader: Headers },
+  strategyId: string | undefined,
+): void {
+  // A caller who is not the owner of a pre-seeded (user-A) strategy is denied uniformly — no
+  // NOT_FOUND vs PERMISSION_DENIED distinction (anti-IDOR, design decision 3). A brand-new id the
+  // caller is registering is not in the owned set, so it passes (the caller owns what they create).
+  if (strategyId && A_OWNED_STRATEGY_IDS.has(strategyId) && callerUserId(ctx) !== TEST_USER_ID) {
+    throw new ConnectError('strategy not found or not owned by caller', Code.PermissionDenied);
+  }
+}
 
 let traderServer: http2.Http2Server | null = null;
 let insightsServer: http2.Http2Server | null = null;
@@ -231,7 +267,20 @@ export async function startMockBackend(): Promise<void> {
         async getPosition(req) {
           // Single-position read for the dedicated Position page (feature 096); same authoritative
           // fixture as listPositions so the page's unrealized P&L ties to the Exposure list.
-          return positionForSymbol(req.symbol);
+          // A symbol not in the fixture set is genuinely unheld → NotFound, mirroring the real
+          // PortfolioService.GetPosition (feature 125: the unified page renders its research
+          // sections for such symbols instead of a position).
+          const held = POSITIONS.find((p) => p.symbol === (req.symbol ?? '').toUpperCase());
+          if (!held) {
+            throw new ConnectError(`no position for ${req.symbol}`, Code.NotFound);
+          }
+          return held;
+        },
+        async listWatchlists() {
+          // Default: no watchlists (feature 125 — the unified page's FR-11 gate then renders the
+          // Screening branch). Specs needing a watchlisted symbol override this per-test via
+          // page.route (see position-detail.spec.ts).
+          return { watchlists: [] };
         },
       });
 
@@ -382,6 +431,9 @@ export async function startMockBackend(): Promise<void> {
             bars: [
               {
                 symbol: 'AAPL',
+                // Bar.time (feature 125 FR-6): the Symbol page reads these to build the
+                // GetIndicatorSeries request's parity-aligned x-axis.
+                time: { seconds: BigInt(1704067200), nanos: 0 }, // 2024-01-01
                 open: 188.0,
                 high: 190.5,
                 low: 187.2,
@@ -395,6 +447,7 @@ export async function startMockBackend(): Promise<void> {
               },
               {
                 symbol: 'AAPL',
+                time: { seconds: BigInt(1704153600), nanos: 0 }, // 2024-01-02
                 open: 189.8,
                 high: 192.0,
                 low: 188.5,
@@ -417,6 +470,15 @@ export async function startMockBackend(): Promise<void> {
               { symbol: 'TSLA', exchange: 'NASDAQ', assetClass: 'us_equity' },
             ],
           };
+        },
+        async getFundamentals(req) {
+          // feature 125 (FR-7): AAPL has data; any other symbol has none — the real backend
+          // surfaces a no-data miss as UNAVAILABLE (not NotFound), which the UI treats as the
+          // explicit no-data state.
+          if ((req.symbol ?? '').toUpperCase() === 'AAPL') {
+            return { fundamentals: FUNDAMENTALS_AAPL };
+          }
+          throw new ConnectError(`fmp: no fundamentals for ${req.symbol}`, Code.Unavailable);
         },
       });
 
@@ -540,13 +602,20 @@ export async function startMockBackend(): Promise<void> {
   const insightsHandler = connectNodeAdapter({
     routes(router) {
       router.service(AnalysisService, {
-        async listStrategies() {
+        async listStrategies(_req, ctx) {
+          // feature 133: only the owner (user A) sees the seeded strategies; a different caller
+          // gets an empty list (cross-user isolation, AC-3).
+          if (callerUserId(ctx) !== TEST_USER_ID) return { strategies: [] };
           return { strategies: STRATEGY_SCORES };
         },
         // feature 083 — ranked opportunity queue; honors the min_conviction filter.
         async listOpportunities(req) {
           const min = req.minConviction ?? 0;
-          return { opportunities: OPPORTUNITIES.filter((o) => o.conviction >= min) };
+          // feature 132: muted (deny-listed) rows are exempt from the conviction floor (they carry
+          // conviction 0 by design) — mirrors the backend `OR provenance ? 'denied'` read exemption.
+          return {
+            opportunities: OPPORTUNITIES.filter((o) => o.muted || o.conviction >= min),
+          };
         },
         // feature 097 — the persisted-disposition RPC exists on the server so a call resolves.
         // Stateful snooze/dismiss *persistence* is proven per-test via page.route isolation
@@ -561,7 +630,18 @@ export async function startMockBackend(): Promise<void> {
         // is an arrow, not point-free, so the array index is never passed as a second argument);
         // overrides are spread at this call site so the shared AAPL default is unchanged.
         async evaluateReadiness(req) {
+          // feature 125 — a stale/deleted `?strategy=` param threads a strategyId the analysis
+          // service no longer knows; the real EvaluateReadiness aborts NOT_FOUND, and
+          // SignalReadiness renders a distinct "no longer exists" message (not the generic error).
+          if (req.strategyId === 'strat-notfound-readiness-01') {
+            throw new ConnectError(`strategy '${req.strategyId}' not found`, Code.NotFound);
+          }
           const syms = req.symbols.length ? req.symbols : ['AAPL'];
+          // feature 138 — a held (REDUCE/ADD) opportunity's panel requests the EXIT rule; return
+          // the distinct exit trace so the e2e can prove the exit rule was traced (not entry).
+          if (req.rule === ReadinessRule.EXIT) {
+            return { readiness: syms.map((s) => exitReadiness(s)) };
+          }
           return {
             readiness: syms.map((s) => ({
               ...symbolReadiness(s),
@@ -708,6 +788,15 @@ export async function startMockBackend(): Promise<void> {
         // Feature 060: deterministic ranked screen result — 3 results, score-ordered,
         // one with INSUFFICIENT_DATA + a coverage gap.
         async screenSymbols(req) {
+          // feature 125: a single-symbol scan (the Symbol page's Screening section) returns the
+          // per-criterion criterionRawValues/criterionPassed maps, never the universe-collapsed
+          // composite score. ref_name 'c1' matches SymbolScreening's default first criterion.
+          if (req.symbols.length === 1) {
+            return {
+              results: [criterionDetailRow(req.symbols[0], 42.5, true)],
+              coverageGaps: [],
+            };
+          }
           const symbols = req.symbols.length ? req.symbols : ['AAA', 'BBB', 'CCC'];
           return {
             results: [
@@ -754,13 +843,18 @@ export async function startMockBackend(): Promise<void> {
         },
         // Feature 048: trader BFF analysisClient dials ANALYSIS_ENDPOINT (9092 in e2e),
         // so the live-strategy methods are mocked here.
-        async listStrategyDefinitions() {
+        async listStrategyDefinitions(_req, ctx) {
+          // feature 133: definitions are owner-scoped — a non-owner sees none (AC-3).
+          if (callerUserId(ctx) !== TEST_USER_ID) {
+            return { definitions: [], totalCount: 0 };
+          }
           return {
             definitions: STRATEGY_DEFINITIONS,
             totalCount: STRATEGY_DEFINITIONS.length,
           };
         },
-        async setStrategyLive(req) {
+        async setStrategyLive(req, ctx) {
+          assertStrategyOwner(ctx, req.strategyId); // feature 133 — owner-gated (AC-2)
           return {
             definition: {
               ...STRATEGY_DEF_LIVE,
@@ -770,7 +864,10 @@ export async function startMockBackend(): Promise<void> {
           };
         },
         // Feature 050: strategy-authoring RPCs proxied by the insights BFF.
-        async manageStrategy(req) {
+        async manageStrategy(req, ctx) {
+          // feature 133 — a mutation on another user's strategy is denied (AC-2); a brand-new id is
+          // owned by the caller and passes.
+          assertStrategyOwner(ctx, req.definition?.strategyId);
           // Sentinel id used by the wizard server-error test (AC-13).
           if (req.definition?.strategyId === 'invalid_ref') {
             throw new ConnectError(
@@ -780,7 +877,8 @@ export async function startMockBackend(): Promise<void> {
           }
           return req.definition ?? {};
         },
-        async getStrategy(req) {
+        async getStrategy(req, ctx) {
+          assertStrategyOwner(ctx, req.strategyId); // feature 133 — owner-gated read (AC-2)
           return {
             strategyId: req.strategyId,
             displayName: 'Editable Strategy',
@@ -800,6 +898,10 @@ export async function startMockBackend(): Promise<void> {
             // Feature 069: only this id carries a non-default cooldown (edit-prepopulation e2e);
             // every other id leaves cooldownDays unset so the "edit unset strategy" case stays honest.
             ...(req.strategyId === 'strat-cooldown-14' ? { cooldownDays: 14 } : {}),
+            // feature 132: this id carries a deny list + signal_eligible (deny-list edit round-trip).
+            ...(req.strategyId === 'strat-001'
+              ? { deniedSymbols: ['TSLA'], signalEligible: true }
+              : {}),
             // Feature 116: only this id carries a non-default exit cooldown (edit-prepopulation e2e);
             // every other id leaves exitCooldownDays unset so the "edit unset strategy" case stays honest.
             ...(req.strategyId === 'strat-exit-cooldown-7' ? { exitCooldownDays: 7 } : {}),
@@ -810,6 +912,15 @@ export async function startMockBackend(): Promise<void> {
               ? { signalParams: { symbols: ['AAPL', 'MSFT'] } }
               : {}),
           };
+        },
+        // feature 125 (FR-6): per-component indicator series for the Symbol page's overlay panels.
+        // AAPL → the canonical fixture (a multi-series MACD component with a warm-up gap + a failed
+        // component); any other symbol → no components.
+        async getIndicatorSeries(req) {
+          if (req.symbol === 'AAPL') {
+            return INDICATOR_SERIES_AAPL;
+          }
+          return { times: req.times, components: [] };
         },
       });
 
@@ -880,26 +991,8 @@ export async function startMockBackend(): Promise<void> {
 
       router.service(IngestService, {
         async listSignalSources() {
-          return {
-            sources: [
-              {
-                slug: 'example_simple_email',
-                displayName: 'Example Simple Email',
-                sourceType: 'simple_email',
-                active: true,
-                hasCredentials: true,
-                configJson: {
-                  sender_patterns: ['noreply@example.com'],
-                  subject_patterns: ['Signal:'],
-                },
-                extractorModule: 'app.extractors.example_simple_email',
-                // feature 083 source-health fields.
-                health: 1, // SOURCE_HEALTH_STATUS_LIVE
-                signalsFed: BigInt(128),
-                lastError: '',
-              },
-            ],
-          };
+          // feature 134 (C-12): fixtures centralized in e2e/fixtures/signalSources.ts.
+          return { sources: SIGNAL_SOURCES };
         },
         // Feature 053: the insights backtest "backfill this range" action dials the insights
         // BFF ingestClient, which (in e2e) points at INGEST_ENDPOINT=9093. Return a deterministic
@@ -907,16 +1000,43 @@ export async function startMockBackend(): Promise<void> {
         async triggerBackfill() {
           return { jobId: 'job-e2e-1', status: 1 /* BACKFILL_STATUS_QUEUED */ };
         },
-        async manageSignalSource() {
+        // feature 125: the Symbol-page Backfill coverage section lists jobs for one symbol. AAPL has
+        // one COMPLETED job carrying a covered range (2024-01-01 → 2024-06-01); any other symbol has
+        // no ingested coverage.
+        async listBackfillJobs(req) {
+          if (req.symbol === 'AAPL') {
+            return {
+              jobs: [
+                {
+                  // Spread the shared fixture, then override the two int64 fields to bigint (the
+                  // Connect-server message-init shape) and add the covered range — the fixture's
+                  // string int64s are the page.route/Connect-JSON shape backfills.spec.ts needs.
+                  ...backfillJob({
+                    jobId: 'job-aapl-1',
+                    symbols: ['AAPL'],
+                    status: BackfillStatus.COMPLETED,
+                  }),
+                  barsProcessed: BigInt(500),
+                  barsTotal: BigInt(500),
+                  range: {
+                    start: { seconds: BigInt(1704067200), nanos: 0 }, // 2024-01-01
+                    end: { seconds: BigInt(1717200000), nanos: 0 }, // 2024-06-01
+                  },
+                },
+              ],
+              page: { nextPageToken: '', totalCount: 1 },
+            };
+          }
+          return { jobs: [], page: { nextPageToken: '', totalCount: 0 } };
+        },
+        async manageSignalSource(req) {
+          // feature 134: echo the saved reliabilityWeight back so the inline-edit round-trip is
+          // observable (the cell re-reads the mutated value after invalidation).
           return {
             source: {
-              slug: 'example_simple_email',
-              displayName: 'Example Simple Email',
-              sourceType: 'simple_email',
-              extractorModule: 'app.extractors.example_simple_email',
-              active: true,
-              hasCredentials: true,
-              configJson: {},
+              ...SIGNAL_SOURCE_WEIGHTED,
+              reliabilityWeight:
+                req.source?.reliabilityWeight ?? SIGNAL_SOURCE_WEIGHTED.reliabilityWeight,
             },
           };
         },

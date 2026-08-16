@@ -235,3 +235,111 @@ the open forks:
    `positions/[symbol]/page.tsx:390`, `orderShared.tsx:94`, `opportunities/page.tsx:129-130`) + e2e
    coverage (new fixtures for fundamentals/backfills, parity test extending 096's existing
    Exposure↔Portfolio↔this-page check to the new route).
+
+---
+
+## Recon Addendum — FR-6 Indicator Overlay Panels (2026-08-15)
+
+**From**: product-spec.md FR-6 amendment (user decision, 2026-08-15 — see context.md). **Affected
+services for this addendum**: `xstockstrat-indicators`, `xstockstrat-analysis` (already listed
+above), `xstockstrat-ui`.
+
+### Codebase Map
+
+- **`xstockstrat-indicators`** — `ComputeIndicator`/`ExecuteFormula` are **stateless, whole-series
+  compute functions**: the caller supplies the full series up front, one call returns the full
+  aligned result. Neither fetches bars itself.
+  - `ComputeIndicator` handler: `services/xstockstrat-indicators/app/handlers/servicer.py:50-77` —
+    reads only `.indicator`/`.values`/`.params`; **`request.range`/`.symbol`/`.timeframe` are dead
+    fields, never read**. Response never sets `IndicatorPoint.time` either (`:66-71`).
+  - Real supported indicators — `indicators_engine.py:24-33,136-145`: `SMA, EMA, RSI, MACD, BB, ATR,
+    VWAP, STOCH` (not the 7-item list in the product-spec's FR-6 prose — `STOCH` also exists).
+    `IndicatorPoint.extra` per indicator: MACD → `{signal, histogram}` (`:75-82`); BB →
+    `{upper, lower}` (`:93-100`); STOCH → `{d}` (`:127-133`); SMA/EMA/RSI/ATR/VWAP → none.
+  - `ExecuteFormula` handler: `servicer.py:79-191` — `input_data` shape is caller-defined, not
+    servicer-enforced; the sandbox (`sandbox.py:105-169`) imposes no scalar-vs-series constraint.
+    `docs/runbooks/indicator-builder.md:72-96` documents the authoring convention as a **series**
+    (`data["close"]` full array in, `result["value"]` full list out).
+  - Sandbox limits: `indicators.sandbox.timeout_ms` (default 5000), `.memory_bytes` (default 128
+    MiB) — `services/xstockstrat-indicators/app/config/watcher.py:120-133`.
+    `indicators.sandbox.max_concurrent` (default 4) is **documented but NOT enforced** — no
+    `Semaphore` reads it (`services/xstockstrat-indicators/CLAUDE.md:64`). A page issuing N
+    concurrent `ExecuteFormula` calls (one per custom-formula component) hits zero server-side
+    throttling.
+- **`xstockstrat-analysis`** — owns the *only* proven `StrategyComponent → time series` resolution
+  path today, and it is not exposed as a lightweight standalone read:
+  - `StrategyEvaluator._compute_component(comp, closes)` —
+    `services/xstockstrat-analysis/app/services/evaluator.py:215-292`. One `ComputeIndicator` call
+    (builtin) or one `ExecuteFormula` call (custom formula) **per component, over the whole `closes`
+    array** — not per-bar. Builtin results tail-aligned via `align_indicator_points` (`:295-317`);
+    formula outputs length/list-validated per-key (`:268-291`).
+  - Exposed two ways today, **neither is a lightweight per-symbol series read**:
+    (a) `evaluate_with_series` (`evaluator.py:118-169`) → full `component_series` dict, but reachable
+    only via `RunBacktest`'s heavyweight full-simulation path (`servicer.py:284` →
+    `_backtest_symbol_evaluated:969-1030`, attached to `BacktestResult.diagnostics` — `analysis.proto`
+    `BarDiagnostic.indicators`, a `map<string,double>` **per bar**, `analysis.proto:133-157`).
+    (b) `evaluate_conditions_traced` (`evaluator.py:171-213`) → `ConditionEval.lhs_value`, a
+    **scalar, last-bar-only** reading, and only for rule-leaf operands (not every declared
+    component) — this is what `SignalReadiness.tsx:93` already renders. **Cannot serve as a
+    historical series.**
+  - **No standalone RPC returns a per-bar indicator series for a symbol outside a full
+    `RunBacktest` call** — confirmed by grepping every caller of `_compute_component`/
+    `evaluate_with_series` (single call site each).
+  - `GetStrategy` (`analysis.proto:24`, handler `servicer.py:1766`) returns the full
+    `StrategyDefinition` including `components` — already called client-side by `useGetStrategy`
+    (`services/xstockstrat-ui/src/hooks/useStrategyDefinitions.ts:25-31`, **not**
+    `useStrategies.ts`, which has only summary/report/backtest hooks), but only from the strategy
+    **authoring wizard** (`insights/strategies/[id]/edit/page.tsx`), never from a Symbol page today.
+- **`xstockstrat-ui`** charting — `useCandlestickChart.ts` (single `createChart` + one
+  `addCandlestickSeries`, no second series ref, no `priceScaleId`/pane concept —
+  `services/xstockstrat-ui/src/hooks/useCandlestickChart.ts:15,23,34,58`). Repo-wide grep for
+  `addLineSeries`/`priceScaleId`/`scaleMargins`/`addHistogramSeries` — **zero hits**; the only
+  existing overlay usage is `createPriceLine` (same-pane horizontal reference lines,
+  `trader/positions/[symbol]/page.tsx:102,113`). `lightweight-charts@^4.2.0` (`package.json:45`) does
+  support a second `addLineSeries` on a distinct `priceScaleId` for a separate visual pane, but
+  nothing in this repo exercises that API — the hook's current shape has no parameter for it.
+  - Real multi-chart-in-one-card precedent exists, but not on `lightweight-charts`:
+    `components/insights/FormulaRunResult.tsx` stacks one independent `recharts`
+    `ChartContainer`+`LineChart` per output series, each with its own axis domain (`:43-88`) — the
+    closest working analog to "N stacked indicator panels," built on the shadcn `ui/chart.tsx`
+    wrapper, not the candlestick hook.
+  - BFF/client wiring: `IndicatorsService` (`computeIndicator`/`executeFormula`) is already
+    registered in `insightsBff.ts:110-139`, with a browser client bound to `/insights/api`
+    (`src/lib/browserClients/indicatorsClient.ts:5-6`) — **not** registered in `traderBff.ts`
+    (confirmed absent, full-file read). `analysisClient` (used by `useGetStrategy`) is also bound to
+    `/insights/api` (`src/lib/browserClients/analysisClient.ts:5`) — same segment as every other
+    cross-segment-reused client this feature's approved design (§ BFF wiring) already covers under
+    the sanctioned exception in `services/xstockstrat-ui/CLAUDE.md`. So **both** `indicatorsClient`
+    and `analysisClient` (`getStrategy`) can be reused directly from `/trader/positions/[symbol]`
+    under the *already-approved* sanctioned exception — no new BFF registration needed for either,
+    regardless of which architecture Phase 1 picks below.
+  - Bars-fetch state: `insights/market/[symbol]/page.tsx` holds fetched bars in `Bar[]` state
+    (`:49,69` — reusable as `ComputeIndicator.values` without a second fetch);
+    `trader/positions/[symbol]/page.tsx` does **not** hold bars in state today (`:96` applies
+    directly to the chart series and discards) — adding indicator overlays there needs new state to
+    capture the closes.
+
+### Risks
+
+- **The obvious approach (UI directly orchestrates `ComputeIndicator`/`ExecuteFormula` per
+  component) duplicates `_compute_component`/`align_indicator_points` logic in TypeScript** — the
+  exact "two paths drift apart" shape `fails.md` (2026-07-01, 056) and its C-10(b) promotion warn
+  about, this time for computation logic rather than a displayed value. It also inherits the
+  unenforced `indicators.sandbox.max_concurrent` gap directly into a browser-triggered page-load
+  path, with no server-side throttle at all (today's only throttled caller, screener, uses its own
+  `analysis.screener.max_concurrent_formula_evals` semaphore — a pattern with no equivalent on the
+  indicators side).
+- **The alternative (a new lightweight `xstockstrat-analysis` RPC reusing `_compute_component`)**
+  avoids both problems (DRY reuse of proven, already-tested alignment logic; can adopt the same
+  semaphore-bounded pattern `screener.py` already established) but is a **real, additive proto
+  change** — new RPC + message(s), a backend step, a hard predecessor to the UI step, same shape as
+  FR-8's `ScreenResult` additive fields already in this feature's approved design.
+- This is a genuine architecture fork Phase 0 recon does not resolve — **left to Phase 1.**
+
+### Not Found
+
+- No per-bar/single-point call pattern to `ComputeIndicator`/`ExecuteFormula` anywhere in the repo —
+  every caller passes/expects the full series in one call.
+- No lightweight-charts multi-pane/sub-panel precedent anywhere in `xstockstrat-ui`.
+- No stacked second-`createChart`-instance precedent anywhere in the repo (structurally possible,
+  not proven to exist).

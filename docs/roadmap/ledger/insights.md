@@ -1521,3 +1521,31 @@ reusing.
 - **Pattern**: When a Node.js backend service needs to read `x-user-id` from gRPC metadata for caller-scoped RPCs, replicate `xstockstrat-config`'s `authz.ts` pattern: a small module exporting `first(md, key)` + `userIdFrom(md)` with a runtime guard on `call.metadata?.get` (the first use of gRPC metadata in identity). Similarly, when a Next.js `/accounts` REST route needs to forward auth headers to a backend, extract a `restBackendHeaders(req)` shared helper rather than inlining the cookie→header plumbing per route — this also DRY-fixes existing routes (authorized-apps) in the same commit.
 - **Evidence**: `services/xstockstrat-identity/src/grpc/authz.ts` (Step 4), `services/xstockstrat-ui/src/lib/restBackendHeaders.ts` (Step 7), design.md §R3 decisions.
 - **Rule it implies**: when adding self-management RPCs to a backend service, prefer replicating an existing service's `authz.ts` module over inventing a new pattern; for REST routes, extract shared header helpers on first use rather than waiting for the third copy.
+
+- **Superseding (not deleting) a config key** — when a value moves from a config key to a first-class proto/DB field, "genuine replace" beats leaving both live: retain the key, reword its registered description via a *new* migration (never edit the seed migration — F-01), repoint **every** reader onto the new source in the same PR (share one drain/read helper across all read paths), and fix the doc-drift the same PR. The key stays editable-but-inert; a future feature can drop it. (feature 134 — `analysis.signals.source_weights` → `ingest.SignalSource.reliability_weight`.)
+
+- **A shared owner-scoped `resolve_universe(definition, watchlist, held, signals)` helper unifies the live loop, the opportunity compute, and the boot backfill** — when a feature generalizes "which symbols does this strategy cover" (allowlist → watchlist∪held∪signals, minus a deny list), put it in ONE pure NamedTuple-returning helper and have every consumer call it. It kept live/compute/backfill parity structural (not test-asserted), let the entry-only deny live in exactly one place (`universe` vs `deny_entry`), and let the backfill reuse the live loop's own best-effort drains instead of new plumbing. (feature 132 — `live_loop.resolve_universe`; the allowlist-as-override branch made it a drop-in for 131's allowlist-only `strategy_symbols` with no 131-test churn.)
+
+### 2026-08-15 — shadcn-datatable-migration — design
+- **Pattern**: A generic `onRowClick` prop on a shared table composite needs exactly one row-level
+  guard, not per-cell `stopPropagation()` calls scattered across every interactive cell. The guard —
+  `isInteractiveTarget(target)`, walking `.closest('a, button, [role="button"],
+  [data-row-click-ignore]')` — must run in **both** the row's `onClick` and `onKeyDown` handlers, not
+  just `onClick`: a keyboard user pressing Enter/Space on a nested `<button>` fires a `keydown` that
+  bubbles to the row *before* the button's own synthesized click, so a click-only guard still
+  double-fires on keyboard activation even when the button's own `onClick` already calls
+  `e.stopPropagation()` (that only stops the click event's bubbling, not the keydown's). Typing the
+  guard's parameter as a minimal duck-typed interface (`{ closest(selectors: string): Element | null
+  }` instead of the full DOM `Element`/`EventTarget`) lets it — and a unit test asserting all its
+  branches — run under a node-environment test config with zero new test dependency (no `jsdom`
+  needed just to construct a fake DOM element).
+- **Evidence**: `docs/roadmap/features/135-shadcn-datatable-migration/design.md` § Chosen Approach
+  (Row-click interaction safety) and § Rejected Alternatives; `context.md` § sdd-design Phase 1,
+  rounds 3-4 (the click-only guard was caught only on the second adversarial pass, by concretely
+  walking through a real component's Enter-key path, not by reasoning about the mechanism
+  abstractly).
+- **Rule it implies**: any future shared table/list composite that adds a row-click affordance over
+  cells that may contain native interactive elements must guard both `click` and `keydown` with the
+  same interactive-target predicate — verify by concretely tracing at least one real
+  keyboard-activation path through the actual DOM structure, not just reasoning about event bubbling
+  in the abstract.

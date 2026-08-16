@@ -26,23 +26,37 @@ def _order(side, filled_qty, updated_at, status=trading_pb2.ORDER_STATUS_FILLED)
     return o
 
 
-def _strategy_row(strategy_id="s1", symbols=("AAPL",)):
+def _strategy_row(
+    strategy_id="s1", symbols=("AAPL",), user_id="u1", denied=None, signal_eligible=False
+):
+    dj = {}
+    if symbols is not None:
+        dj["signal_params"] = {"symbols": list(symbols)}
+    if denied is not None:  # feature 132 — entry-only deny
+        dj["denied_symbols"] = list(denied)
+    if signal_eligible:
+        dj["signal_eligible"] = True
     return {
+        "user_id": user_id,
         "strategy_id": strategy_id,
         "display_name": strategy_id,
         "active": True,
         "live_enabled": True,
-        "definition_json": {"signal_params": {"symbols": list(symbols)}},
+        "definition_json": dj,
     }
 
 
-def _fake_live_loop():
-    """A lightweight stand-in for LiveEvaluationLoop — run_once only touches _last_state,
-    _last_entry_at, and _write_entry_cooldown (per Step 13's own suggested shape)."""
+def _fake_live_loop(held=(), watchlist=(), signals=()):
+    """A lightweight stand-in for LiveEvaluationLoop — run_once touches _last_state,
+    _last_entry_at, _write_entry_cooldown, and (feature 132) the owner-scoped drains that source
+    resolve_universe's union. The drains default to empty sets (a cold-boot portfolio outage)."""
     return SimpleNamespace(
         _last_state={},
         _last_entry_at={},
         _write_entry_cooldown=AsyncMock(),
+        _drain_signals=AsyncMock(return_value=set(signals)),
+        _drain_held=AsyncMock(return_value=set(held)),
+        _drain_watchlist=AsyncMock(return_value=set(watchlist)),
     )
 
 
@@ -109,14 +123,14 @@ class TestRunOnce:
 
         await run_once(live_loop, db_pool, trading_stub, _cfg())
 
-        key = ("s1", "AAPL")
+        key = ("u1", "s1", "AAPL")
         assert live_loop._last_state[key] is True
         assert live_loop._last_entry_at[key] == _T0
         live_loop._write_entry_cooldown.assert_awaited_once_with(key, _T0)
 
     async def test_run_once_skips_pairs_with_known_entry_time(self):
         live_loop = _fake_live_loop()
-        key = ("s1", "AAPL")
+        key = ("u1", "s1", "AAPL")
         live_loop._last_entry_at[key] = _T0  # already known — no RPC needed
         db_pool = AsyncMock()
         db_pool.fetch = AsyncMock(return_value=[_strategy_row()])
@@ -144,8 +158,8 @@ class TestRunOnce:
 
         await run_once(live_loop, db_pool, trading_stub, _cfg())  # must not raise
 
-        assert ("s1", "AAPL") not in live_loop._last_entry_at
-        assert live_loop._last_entry_at[("s2", "MSFT")] == _T0
+        assert ("u1", "s1", "AAPL") not in live_loop._last_entry_at
+        assert live_loop._last_entry_at[("u1", "s2", "MSFT")] == _T0
 
     async def test_run_once_noop_without_trading_stub(self):
         live_loop = _fake_live_loop()
@@ -154,3 +168,43 @@ class TestRunOnce:
         await run_once(live_loop, db_pool, None, _cfg())
 
         db_pool.fetch.assert_not_awaited()
+
+    async def test_union_includes_held_denied_symbol(self):
+        """feature 132: the backfill sources resolve_universe(...).union (NOT .universe), so a
+        held-denied position still gets its entry anchor seeded (deny is entry-only and never
+        applied on this hydration path)."""
+        live_loop = _fake_live_loop(held=["AAPL"])  # owner holds AAPL
+        db_pool = AsyncMock()
+        # no allowlist, AAPL denied → union still = held = {AAPL}
+        db_pool.fetch = AsyncMock(return_value=[_strategy_row("s1", symbols=None, denied=["AAPL"])])
+        trading_stub = AsyncMock()
+        trading_stub.ListOrders = AsyncMock(
+            return_value=SimpleNamespace(orders=[_order(trading_pb2.ORDER_SIDE_BUY, 10.0, _T0)])
+        )
+
+        await run_once(live_loop, db_pool, trading_stub, _cfg())
+
+        assert live_loop._last_entry_at[("u1", "s1", "AAPL")] == _T0
+
+    async def test_allowlist_free_pair_missed_on_portfolio_outage_allowlist_proceeds(self):
+        """feature 132 accepted residual: with an empty (cold-boot outage) drain, an allowlist-free
+        strategy's union is empty → its held pairs are missed this boot (self-heals next boot); an
+        allowlist-bearing strategy in the same pass still proceeds (union ignores the drains)."""
+        live_loop = _fake_live_loop(held=(), watchlist=(), signals=())  # outage → all empty
+        db_pool = AsyncMock()
+        db_pool.fetch = AsyncMock(
+            return_value=[
+                _strategy_row("free", symbols=None),  # allowlist-free → empty union under outage
+                _strategy_row("bound", symbols=("MSFT",)),  # allowlist → proceeds regardless
+            ]
+        )
+        trading_stub = AsyncMock()
+        trading_stub.ListOrders = AsyncMock(
+            return_value=SimpleNamespace(orders=[_order(trading_pb2.ORDER_SIDE_BUY, 10.0, _T0)])
+        )
+
+        await run_once(live_loop, db_pool, trading_stub, _cfg())
+
+        # allowlist-bearing pair anchored; allowlist-free strategy contributed no pairs
+        assert live_loop._last_entry_at[("u1", "bound", "MSFT")] == _T0
+        assert not any(k[1] == "free" for k in live_loop._last_entry_at)

@@ -11,9 +11,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { ReadinessRule } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { CONDITION_STATE, EnumBadge } from '@/lib/opportunityShared';
 import { useStrategyDefinitions } from '@/hooks/useStrategyDefinitions';
-import { useReadiness, useStrategyAnalytics } from '@/hooks/useOpportunities';
+import { useOpportunities, useReadiness, useStrategyAnalytics } from '@/hooks/useOpportunities';
 
 /**
  * Signal-detail readiness (feature 083, FR-6). EvaluateReadiness is strategy-scoped, so the
@@ -32,13 +33,34 @@ export function SignalReadiness({ symbol }: { symbol: string }) {
   // Strategy threaded from the opportunity row (?strategy=), else chosen from the picker.
   const [strategyId, setStrategyId] = useState(searchParams?.get('strategy') ?? '');
 
-  const { data, isLoading, error } = useReadiness(strategyId, symbol ? [symbol] : []);
+  // feature 138 — trace the EXIT rule when this (symbol, strategy) is a HELD opportunity, so the
+  // panel explains the exit rule that actually fired (matching the header's exit-derived
+  // conviction) instead of the entry rule. "position" in the queue row's provenance is exactly the
+  // `is_held` marker _compute_opportunities used to pick rule="exit", so the two always agree; a
+  // non-held / picked-elsewhere strategy has no such row → entry rule (unchanged).
+  const { data: opps } = useOpportunities();
+  const isHeld = useMemo(
+    () =>
+      (opps?.opportunities ?? []).some(
+        (o) =>
+          o.symbol === symbol && o.strategyId === strategyId && o.provenance.includes('position'),
+      ),
+    [opps, symbol, strategyId],
+  );
+  const rule = isHeld ? ReadinessRule.EXIT : ReadinessRule.ENTRY;
+  const ruleWord = isHeld ? 'exit' : 'entry';
+
+  const { data, isLoading, error, isNotFound } = useReadiness(
+    strategyId,
+    symbol ? [symbol] : [],
+    rule,
+  );
   const readiness = data?.readiness?.[0];
   // Strategy track record (feature 083 — the handoff's Signal-detail track-record block).
   const { data: analytics } = useStrategyAnalytics(strategyId || undefined);
 
   return (
-    <Card>
+    <Card data-testid="signal-readiness">
       <CardHeader>
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <CardTitle className="text-base">Why this fired</CardTitle>
@@ -59,15 +81,19 @@ export function SignalReadiness({ symbol }: { symbol: string }) {
       <CardContent>
         {!strategyId ? (
           <p className="text-sm text-muted-foreground">
-            Select a strategy to evaluate its entry conditions against {symbol}.
+            Select a strategy to evaluate its conditions against {symbol}.
           </p>
         ) : isLoading ? (
           <p className="text-sm text-muted-foreground">Evaluating conditions…</p>
+        ) : isNotFound ? (
+          <p className="text-sm text-muted-foreground">
+            This strategy no longer exists — pick another.
+          </p>
         ) : error ? (
           <p className="text-sm text-sell">Failed to evaluate readiness.</p>
         ) : !readiness || readiness.conditions.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            This strategy has no entry conditions to evaluate.
+            This strategy has no {ruleWord} conditions to evaluate.
           </p>
         ) : (
           <div className="space-y-3">
@@ -80,6 +106,14 @@ export function SignalReadiness({ symbol }: { symbol: string }) {
               <span className="font-mono tabular-nums text-sm">
                 {readiness.passingConditions}/{readiness.totalConditions} conditions
               </span>
+              {isHeld && (
+                <span
+                  data-testid="readiness-exit-rule"
+                  className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground"
+                >
+                  exit rule
+                </span>
+              )}
             </div>
             <ul className="divide-y divide-border rounded-md border border-border">
               {readiness.conditions.map((c, i) => (

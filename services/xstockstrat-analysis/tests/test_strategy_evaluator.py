@@ -616,3 +616,29 @@ class TestFormulaComponentDecode:
         evaluator = StrategyEvaluator(_formula_stub(value=1.0), propagation_meta=())
         with pytest.raises(FormulaExecutionError):
             await evaluator._compute_component(_formula(), closes)
+
+
+class TestComputeComponentSeriesParity:
+    """feature 125 (FR-6) — the C-10(b) invariant the GetIndicatorSeries handler relies on: the same
+    `closes` fed through `_compute_component` yields the same series deterministically, with the
+    warm-up head preserved as None (never a fabricated 0.0). The handler is a faithful pass-through
+    of exactly this output, so proving it here discharges the parity invariant at the evaluator
+    layer."""
+
+    @pytest.mark.asyncio
+    async def test_same_closes_same_series_warmup_none(self):
+        closes = [10.0, 20.0, 30.0, 40.0, 50.0]
+        # SMA(3)-like: the indicators servicer omits the 2-row warm-up head → 3 tail points.
+        result_points = [SimpleNamespace(value=v) for v in [20.0, 30.0, 40.0]]
+        stub = AsyncMock()
+        stub.ComputeIndicator = AsyncMock(return_value=SimpleNamespace(result=result_points))
+        evaluator = StrategyEvaluator(stub, propagation_meta=())
+        comp = _builtin(ref_name="sma", indicator="SMA", period=3.0)
+
+        s1 = await evaluator._compute_component(comp, closes)
+        s2 = await evaluator._compute_component(comp, closes)
+
+        # Deterministic: same closes → same series.
+        assert s1 == s2
+        # The primary "value" series: warm-up head is None (not 0.0), tail carries the real values.
+        assert s1["value"] == [None, None, 20.0, 30.0, 40.0]

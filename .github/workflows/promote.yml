@@ -79,32 +79,13 @@ jobs:
           TODAY=$(date +%Y-%m-%d)
           echo "today=$TODAY" >> "$GITHUB_OUTPUT"
 
-          TOTAL_COMMITS=$(git log origin/main..origin/main-dev --oneline | wc -l | tr -d ' ')
-          TOTAL_MERGES=$(git log origin/main..origin/main-dev --merges --oneline | wc -l | tr -d ' ')
-
-          # If an entry for today already exists, extract the previous counts
-          # and report only the delta (commits added since the previous entry)
-          if grep -q "^## ${TODAY}$" CHANGELOG.md; then
-            # Extract the first "X commits, Y merges" from today's entries
-            PREV_COUNTS=$(awk '/^## '${TODAY}'$/,/^---$/' CHANGELOG.md | \
-              grep -oP '\d+(?= commits)' | head -1)
-            if [ -n "$PREV_COUNTS" ]; then
-              COMMIT_COUNT=$((TOTAL_COMMITS - PREV_COUNTS))
-            else
-              COMMIT_COUNT=$TOTAL_COMMITS
-            fi
-
-            PREV_MERGES=$(awk '/^## '${TODAY}'$/,/^---$/' CHANGELOG.md | \
-              grep -oP '\d+(?= feature merges)' | head -1)
-            if [ -n "$PREV_MERGES" ]; then
-              MERGE_COUNT=$((TOTAL_MERGES - PREV_MERGES))
-            else
-              MERGE_COUNT=$TOTAL_MERGES
-            fi
-          else
-            COMMIT_COUNT=$TOTAL_COMMITS
-            MERGE_COUNT=$TOTAL_MERGES
-          fi
+          # origin/main..origin/main-dev is already the delta since the last promotion —
+          # main only moves forward via a merged promotion PR, so a same-day re-run
+          # naturally yields just the commits added since the prior run. Subtracting a
+          # previous same-day entry's count on top of that double-counts and can go
+          # negative (e.g. a stale "-4 commits" entry).
+          COMMIT_COUNT=$(git log origin/main..origin/main-dev --oneline | wc -l | tr -d ' ')
+          MERGE_COUNT=$(git log origin/main..origin/main-dev --merges --oneline | wc -l | tr -d ' ')
 
           echo "commit_count=$COMMIT_COUNT" >> "$GITHUB_OUTPUT"
           echo "merge_count=$MERGE_COUNT" >> "$GITHUB_OUTPUT"
@@ -129,7 +110,16 @@ jobs:
             SLUG=$(echo "$feature_md" | sed 's|docs/roadmap/features/[0-9][0-9][0-9]-\([^/]*\)/feature.md|\1|')
             STATUS=$(sed -n 's/.*\*\*Lifecycle Status\*\*[^`]*`\([^`]*\)`.*/\1/p' "$feature_md" | head -1)
             if [ "$STATUS" = "code-completed" ]; then
-              SUMMARY=$(awk '/^## Summary/{found=1; next} found && NF{print; exit}' "$feature_md")
+              # feature.md summaries are hand-wrapped prose spanning multiple source
+              # lines — join the whole paragraph before extracting the first sentence,
+              # so a mid-paragraph line break doesn't truncate the changelog entry.
+              JOINED=$(awk '
+                /^## Summary/ { insummary=1; next }
+                insummary && /^[[:space:]]*$/ { if (started) exit; next }
+                insummary { started=1; print }
+              ' "$feature_md" | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')
+              SUMMARY=$(printf '%s' "$JOINED" | grep -oP '^.*?[.!?](?=\s|$)' | head -1)
+              [ -z "$SUMMARY" ] && SUMMARY="$JOINED"
               echo "${SLUG}: ${SUMMARY}" >> /tmp/code_completed.txt
             fi
           done
@@ -168,20 +158,28 @@ jobs:
 
       - name: Update CHANGELOG.md
         run: |
-          # Always insert a new entry at the top (after initial ---)
-          # Don't replace existing same-day entries — each promote run gets its own entry
+          # Always insert a new entry at the very top, immediately before the first
+          # dated (## ) entry heading — not after "the first --- line found anywhere
+          # in the file". The header itself has no leading ---, so that anchor was
+          # actually the closing separator of whichever entry happened to be first,
+          # letting new entries land mid-file in whatever order that entry drifted to.
+          # Don't replace existing same-day entries — each promote run gets its own entry.
           awk '
-          /^---$/ && !inserted {
-            print
-            print ""
+          /^## / && !inserted {
             while ((getline line < "/tmp/changelog_entry.txt") > 0) { print line }
             close("/tmp/changelog_entry.txt")
             print ""
             print "---"
+            print ""
             inserted=1
-            next
           }
-          1' CHANGELOG.md > /tmp/CHANGELOG.new
+          1
+          END {
+            if (!inserted) {
+              while ((getline line < "/tmp/changelog_entry.txt") > 0) print line
+              close("/tmp/changelog_entry.txt")
+            }
+          }' CHANGELOG.md > /tmp/CHANGELOG.new
           mv /tmp/CHANGELOG.new CHANGELOG.md
 
       - name: Commit and push changelog

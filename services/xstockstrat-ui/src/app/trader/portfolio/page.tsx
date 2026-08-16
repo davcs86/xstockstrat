@@ -1,5 +1,7 @@
 'use client';
+import { useMemo } from 'react';
 import Link from 'next/link';
+import type { ColumnDef } from '@tanstack/react-table';
 import { AppShell } from '@/components/trader/AppShell';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -7,14 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { StatTile } from '@/components/shared/StatTile';
 import { CardNotice } from '@/components/shared/CardNotice';
 import { Eyebrow } from '@/components/shared/Eyebrow';
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from '@/components/ui/table';
+import { DataTable } from '@/components/ui/data-table';
 import { useAccountContext } from '@/context/AccountContext';
 import { usePortfolios, usePositions } from '@/hooks/usePortfolio';
 import { brokerLabel } from '@/lib/brokers';
@@ -50,6 +45,68 @@ export default function PortfolioPage() {
     { equity: 0, cash: 0, buyingPower: 0, dayPnl: 0, totalPnl: 0 },
   );
   const cashPct = combined.equity ? combined.cash / combined.equity : 0;
+
+  type PositionRow = (typeof positions)[number];
+
+  const columns = useMemo<ColumnDef<PositionRow>[]>(
+    () => [
+      {
+        accessorKey: 'symbol',
+        header: 'Symbol',
+        meta: { className: 'font-mono font-semibold' },
+        cell: ({ row }) => (
+          <Link
+            href={`/trader/positions/${encodeURIComponent(row.original.symbol)}`}
+            className="hover:underline"
+          >
+            {row.original.symbol}
+          </Link>
+        ),
+      },
+      {
+        id: 'account',
+        header: 'Account',
+        accessorFn: (p) => accountName(p.accountId),
+        meta: { className: 'hidden sm:table-cell text-muted-foreground' },
+      },
+      {
+        accessorKey: 'qty',
+        header: 'Qty',
+        meta: { className: 'text-right tabular-nums' },
+      },
+      {
+        accessorKey: 'avgEntryPrice',
+        header: 'Avg cost',
+        meta: { className: 'text-right tabular-nums hidden md:table-cell' },
+        cell: ({ row }) => fmtUsd(row.original.avgEntryPrice),
+      },
+      {
+        accessorKey: 'marketValue',
+        header: 'Mkt value',
+        meta: { className: 'text-right tabular-nums' },
+        cell: ({ row }) => fmtUsd(row.original.marketValue),
+      },
+      {
+        accessorKey: 'unrealizedPnl',
+        header: 'Unrealized',
+        meta: { className: 'text-right tabular-nums' },
+        cell: ({ row }) => (
+          <span className={pnlClass(row.original.unrealizedPnl)}>
+            {fmtSignedUsd(row.original.unrealizedPnl)}
+          </span>
+        ),
+      },
+      {
+        accessorKey: 'dayPnl',
+        header: 'Day P&L',
+        meta: { className: 'text-right tabular-nums hidden sm:table-cell' },
+        cell: ({ row }) => (
+          <span className={pnlClass(row.original.dayPnl)}>{fmtSignedUsd(row.original.dayPnl)}</span>
+        ),
+      },
+    ],
+    [accountName],
+  );
 
   return (
     <AppShell>
@@ -152,54 +209,11 @@ export default function PortfolioPage() {
               {positions.length === 0 ? (
                 <CardNotice>No open positions in the selected account.</CardNotice>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Symbol</TableHead>
-                      <TableHead className="hidden sm:table-cell">Account</TableHead>
-                      <TableHead className="text-right">Qty</TableHead>
-                      <TableHead className="text-right hidden md:table-cell">Avg cost</TableHead>
-                      <TableHead className="text-right">Mkt value</TableHead>
-                      <TableHead className="text-right">Unrealized</TableHead>
-                      <TableHead className="text-right hidden sm:table-cell">Day P&L</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {positions.map((p) => (
-                      <TableRow key={`${p.accountId}-${p.symbol}`}>
-                        <TableCell className="font-mono font-semibold">
-                          {/* Links to the dedicated single-Position page (feature 096). */}
-                          <Link
-                            href={`/trader/positions/${encodeURIComponent(p.symbol)}`}
-                            className="hover:underline"
-                          >
-                            {p.symbol}
-                          </Link>
-                        </TableCell>
-                        <TableCell className="hidden sm:table-cell text-muted-foreground">
-                          {accountName(p.accountId)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">{p.qty}</TableCell>
-                        <TableCell className="text-right tabular-nums hidden md:table-cell">
-                          {fmtUsd(p.avgEntryPrice)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {fmtUsd(p.marketValue)}
-                        </TableCell>
-                        <TableCell
-                          className={`text-right tabular-nums ${pnlClass(p.unrealizedPnl)}`}
-                        >
-                          {fmtSignedUsd(p.unrealizedPnl)}
-                        </TableCell>
-                        <TableCell
-                          className={`text-right tabular-nums hidden sm:table-cell ${pnlClass(p.dayPnl)}`}
-                        >
-                          {fmtSignedUsd(p.dayPnl)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <DataTable
+                  columns={columns}
+                  data={positions}
+                  getRowId={(p) => `${p.accountId}-${p.symbol}`}
+                />
               )}
             </div>
           </>

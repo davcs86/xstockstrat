@@ -105,8 +105,6 @@ function resolveActive(pathname: string | null): { group: NavGroup; item?: SubNa
     const item = group.items.find((i) => isItemActive(pathname, i));
     if (item) return { group, item };
   }
-  // Dynamic Decide routes (e.g. /insights/market/[symbol]) resolve to the Decide group.
-  if (pathname?.startsWith('/insights/market')) return { group: NAV_GROUPS[0] };
   return { group: NAV_GROUPS[0] };
 }
 

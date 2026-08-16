@@ -21,9 +21,11 @@ from app import client
 
 # StrategyDefinition: the agent never authors the server-authoritative fields — `active`/
 # `live_enabled` are column-authoritative (overlaid at read time) and `warnings` is populated by
-# GetStrategy only. Every other field is sent. A new StrategyDefinition field fails this test until
-# the builder carries it or it is justified here.
-_STRATEGY_INTENTIONALLY_UNSET = {"active", "live_enabled", "warnings"}
+# GetStrategy only. `user_id` (feature 133) is ownership-authoritative: it is resolved server-side
+# from the propagated `x-user-id` header, never the request body, so the builder deliberately never
+# authors it. Every other field is sent. A new StrategyDefinition field fails this test until the
+# builder carries it or it is justified here.
+_STRATEGY_INTENTIONALLY_UNSET = {"active", "live_enabled", "warnings", "user_id"}
 # ScreenSymbolsRequest: `evaluation_window` (historical as-of) is deferred (OQ-060-e) — latest bar
 # is the default — so the builder does not author it. Every other field is sent.
 _SCREEN_INTENTIONALLY_UNSET = {"evaluation_window"}
@@ -49,6 +51,7 @@ async def _capture_manage_strategy_request():
         mock_grpc.aio.insecure_channel.return_value = _channel_cm()
         with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
             await client.manage_strategy(
+                user_id="u-1",
                 operation="register",
                 definition={
                     "strategy_id": "s1",
@@ -67,6 +70,11 @@ async def _capture_manage_strategy_request():
                     "cooldown_days": 5,
                     "exit_cooldown_days": 3,
                     "signal_params": {"symbols": ["AAPL"]},
+                    # feature 132 — set both so they appear in ListFields for the parity check (the
+                    # allowlist×signal_eligible conflict is a backend concern; this mock only
+                    # captures the built request, it does not validate).
+                    "denied_symbols": ["TSLA"],
+                    "signal_eligible": True,
                 },
             )
     return mock_stub.ManageStrategy.call_args[0][0]

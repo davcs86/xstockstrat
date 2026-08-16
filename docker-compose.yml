@@ -93,6 +93,10 @@ services:
     container_name: xstockstrat-db-migrator
     environment:
       <<: *db-url
+      # Feature 133: seed owner for migration 013's strategy-ownership backfill. Concrete
+      # default keeps `docker compose up` working out of the box (design decision 2); override
+      # in .env if your local DB has strategies owned by a different user.
+      SEED_USER_ID: "${SEED_USER_ID:-80880990-2b79-4d85-8761-d8d9102c2efb}"
     volumes:
       - .:/repo
     networks:
