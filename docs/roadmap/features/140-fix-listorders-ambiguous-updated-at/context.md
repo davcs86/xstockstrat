@@ -43,3 +43,46 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - `scanOrder`'s exact 21-column positional scan order (`trading_repo.go:247-256`) is the fixture shape each of the 3 new pgxmock tests must supply; the regression guard for the bug itself is a `mock.ExpectQuery` regex requiring the literal substring `intent_updated_at` in the emitted SQL (pgxmock never parses real SQL, so this text-match is what actually proves the alias survives — not the scanned values, since `scanOrder` never selects `li.updated_at`/`intent_updated_at` at all).
   - New code lands entirely in `internal/repository/`, a package this service's CI `COVERPKGS` excludes from the 40% threshold — no coverage-percentage gate applies to the new lines; `go vet`/`golangci-lint`/full-suite `go test` still gate the step.
   - `internal/testdata/` does not exist yet for this service (confirmed via `find`) — Step 2 defers the C-13 materialize-on-second-consumer decision to execute time, once the 3 test bodies are actually written, per design.md's own open item.
+
+## Session 2026-08-16 — sdd-spec
+
+- Generated implementation-spec.md, 2 steps (service + test), both scoped to xstockstrat-trading. Grounded in design.md's single-site AS-alias rename + dbQuerier seam. Consumed recon.md/design.md directly; re-verified all evidence live against trading_repo.go (no drift found).
+- Status: design-approved → implementation-ready.
+
+## Session 2026-08-16 — sdd-execute (sequential)
+
+- Tooling confirmed: Go 1.25.0, golangci-lint present — matches root CLAUDE.md's pinned version.
+- Discovery (Phase 1): trading_repo.go matched implementation-spec.md's Codebase Evidence exactly — no drift.
+
+### Step 1 — service: qualify the LATERAL join's own updated_at and add a mockable query seam [done]
+- Added `"github.com/jackc/pgx/v5"` import, `dbQuerier` interface (QueryRow+Query), `db dbQuerier` field on `TradingRepo` (alongside unchanged `pool`), `NewTradingRepo` sets `db: pool`. Retargeted `GetOrder`/`ListOrders`/`ListSubmittedOrders` onto `r.db`. Renamed `intentLateralJoinSQL`'s `SELECT state, updated_at` → `SELECT state, updated_at AS intent_updated_at`.
+- Verification: `GOWORK=off go build ./...` — clean.
+- Files modified: `services/xstockstrat-trading/internal/repository/trading_repo.go`
+- Deviations: none.
+
+### Step 2 — test: pgxmock regression tests for GetOrder/ListOrders/ListSubmittedOrders [done]
+- Added `github.com/pashagolub/pgxmock/v4 v4.9.0` via `go get` (go.mod/go.sum diff matched the cited xstockstrat-portfolio precedent exactly).
+- Wrote 3 tests in new `trading_repo_test.go`. C-13: all 3 shared the identical fixture shape — extracted `NewOrderRow`/`OrderRowColumns` into new `internal/testdata/order_rows.go` package (first for this service), per the spec's own instructed branch for this case.
+- One implementation fix beyond the spec's literal text: `pgxmock` requires the mocked `state` column value to be `*int16` (a pointer), not a bare `int16`, to satisfy `scanOrder`'s `&intentState` (`*int16`) scan target — `pgxmock.NewRows(...).AddRow(...)` failed with "destination kind 'ptr' not supported for value kind 'int16'" until `NewOrderRow` passed `&intentState` instead of `intentState`. Mechanical pgxmock API detail, not a design change.
+- **Red-before-green (P-06), actually executed, not assumed**:
+  - GREEN (post-Step-1 rename): all 3 tests pass — `go test ./internal/repository/... -race -count=1 -v -run '...'` → `PASS` (all 3), `ok`.
+  - RED (temporarily reverted Step 1's rename back to bare `updated_at`, re-ran the identical tests): all 3 fail with `could not match actual sql: "...LEFT JOIN LATERAL ( SELECT state, updated_at FROM trading.order_intents ...) li ON true..." with expected regexp "(?s)LEFT JOIN LATERAL.*intent_updated_at..."` — confirms the tests genuinely require the fix, not vacuously passing.
+  - Re-applied the rename; re-ran green — passed again. Confirms Step 1 + Step 2 together, not just independently.
+- `go vet ./...` — clean. `golangci-lint run --modules-download-mode=mod` — 0 issues. Full suite (`go test ./... -race -count=1 -coverprofile=...`) — all packages `ok`, including `internal/repository`. Total coverage 62.9% (repository package excluded from COVERPKGS per spec, as expected).
+- Live-DB smoke test (instruction 7): unavailable — `docker ps` failed, no Docker daemon running in this execute environment. Fallback used: go vet + golangci-lint + the pgxmock red/green proof above, per the product spec's own explicit fallback clause. Recorded as a Deviation Log entry; a live-DB smoke test remains recommended before production per design.md Open Risk 1.
+- Files modified: `services/xstockstrat-trading/internal/repository/trading_repo_test.go` (new), `services/xstockstrat-trading/internal/testdata/order_rows.go` (new), `services/xstockstrat-trading/go.mod`, `services/xstockstrat-trading/go.sum`.
+- Deviations: pgxmock pointer-scan requirement (mechanical, documented above); C-13 fixture centralization (per spec's own instructed branch); live-DB smoke test unavailable (environment constraint).
+
+**Both steps done. Feature status: implementation-ready → in-progress → code-completed.**
+
+## Session 2026-08-16 — sdd-execute (sequential) — session summary
+
+**Steps this session**: 1, 2
+**Progress**: 2 done / 2 total
+**Stopped at**: all complete
+**Next**: merge-order.md check, then open the integration PR (claude/commit-135-opportunities-strategies-0xjnxk → main-dev)
+
+Accountability:
+- Out-of-scope changes: none
+- Open questions / items: pgxmock never parses real SQL (Open Risk 1, design.md) — a live-DB smoke test against local docker-compose Postgres remains recommended before this fix is considered fully verified in a real environment; C-13 fixture-centralization question was resolved (see Step 2 above), not left open.
+- Unaddressed review warnings: none (this feature never went through /sdd-review — Track C bug fix, per docs/runbooks/bug-triage.md).

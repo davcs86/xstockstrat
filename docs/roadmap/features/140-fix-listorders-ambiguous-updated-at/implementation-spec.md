@@ -1,6 +1,6 @@
 # Implementation Spec: fix-listorders-ambiguous-updated-at
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-08-16
 **Feature**: `docs/roadmap/features/140-fix-listorders-ambiguous-updated-at/feature.md`
 **Total Steps**: 2
@@ -37,7 +37,7 @@ observable behavior change (Constitution **C-14** n/a, per design.md).
 
 ### Step 1 — service: qualify the LATERAL join's own `updated_at` and add a mockable query seam
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/trading_repo.go` — modify
@@ -147,7 +147,7 @@ alias, before Step 2's tests are added. Full behavioral proof is Step 2's paired
 
 ### Step 2 — test: pgxmock regression tests for GetOrder/ListOrders/ListSubmittedOrders
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/trading_repo_test.go` — create (first
@@ -277,4 +277,24 @@ cd services/xstockstrat-trading && GOWORK=off COVERPKGS=$(go list ./... | grep -
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 2 — C-13 fixture centralization
+
+**Spec said**: "If ≥2 of the 3 [tests] share substantially the same fixture... extract a shared
+fixture-row constructor into a new `services/xstockstrat-trading/internal/testdata/` package."
+**Actual**: All 3 tests shared the identical fixture shape (differing only in `orderID`/
+`updatedAt`/`intentState` args) — extracted `NewOrderRow`/`OrderRowColumns` into
+`internal/testdata/order_rows.go` exactly as instructed.
+**Reason**: N/A — this is the spec's own instructed path, not a deviation from it; recorded here
+for traceability since it was a conditional branch in the spec.
+
+### Deviation: Step 2 — live-DB smoke test unavailable
+
+**Spec said**: instruction 7 — best-effort: bring up local `docker-compose` TimescaleDB if
+reachable, seed a row, confirm `ListOrders` runs clean against real Postgres.
+**Actual**: Docker daemon is not running in this execute environment (`docker ps` →
+"failed to connect to the docker API... dial unix /var/run/docker.sock: connect: no such file or
+directory"). Per the spec's own explicit fallback, satisfied instead by: `go vet ./...` (clean),
+`golangci-lint run` (0 issues), and the 3 pgxmock regression tests' documented red-before-green
+run (see context.md).
+**Reason**: Environment constraint, not a scope or design change. A live-DB smoke test remains
+recommended before this fix reaches production, per design.md's Open Risk 1.
