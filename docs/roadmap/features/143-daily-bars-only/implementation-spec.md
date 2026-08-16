@@ -596,7 +596,7 @@ Confirm all four targeted tests pass and full-suite coverage stays ≥ 40%.
 
 ### Step 7 — service: `xstockstrat-agent` narrows `trigger_backfill`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -687,7 +687,7 @@ Plus the paired Step 8 coverage command.
 
 ### Step 8 — test: `xstockstrat-agent` `trigger_backfill` narrowing coverage
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_client.py` — modify
@@ -992,3 +992,15 @@ first with `PERMISSION_DENIED`, and the test's `INVALID_ARGUMENT` assertion woul
 **Disposition**: use the repo's centralized `_ctx("4")` builder (conftest, C-13) — admin scope set +
 `abort` raising — so the reject check (not the admin gate) is what fires. Test-only; confined to
 `test_ingest_servicer.py`.
+
+### D-5 (Step 8) — strengthened the agent validation test to a real red-before-green
+**What**: The spec's Step 8 changed only the `pytest.raises(match=...)` string from
+`"15m/15Min/1h/1Hour/1d/1Day"` to `"1d/1Day"` on a `timeframe="1w"` call. That produces **no RED**:
+`pytest.raises`' `match` is `re.search`, so `"1d/1Day"` is a substring of the *old* error message
+too, and `"1w"` is invalid under both the old and new alias sets — so the assertion passes before
+*and* after Step 7, testing nothing about the actual narrowing.
+**Disposition**: replaced the `"1w"` probe with `timeframe="15m"` **and** `timeframe="1h"` probes —
+values that were *accepted* before Step 7 (and would reach a live gRPC call, raising `AioRpcError`,
+not `ValueError`) and are *rejected* after it. This gives a genuine red→green that exercises the
+feature's behavior (P-06/C-08). Confined to Step 8's file (`tests/test_client.py`); strictly
+stronger coverage than the specced change.

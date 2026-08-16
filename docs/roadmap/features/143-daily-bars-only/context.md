@@ -352,3 +352,26 @@ no feature code. Part of an operator-requested sequential run of 143 then 139, o
   **D-4** (used `_ctx("4")` so the admin gate passes and the reject check is what fires). Both
   test-only, confined to Step 6's files. Full detail in Deviation Log.
 - Files modified: `tests/test_ingest_servicer.py`, `tests/test_backfill_chunks.py`.
+
+### Step 7 — agent narrows trigger_backfill [done]
+- `client.py`: `_TF_ALIASES`→`{"1d","1Day"}`, `_TF_TO_ENUM`→`{"1d":4}`, mirror comment updated, error
+  string → "expected 1d/1Day". `tools.py`: docstring narrowed. Updated `docs/runbooks/mcp-tools.md`
+  (timeframe row) + `docs/runbooks/historical-backfill.md` (code comment, Timeframe Guide table +
+  callouts, chunk-density line, "choose timeframe per job" line removed, Canonical-vocabulary block).
+- Strat-lab governance: confirmed vacuously satisfied — `grep -rniE "15m|1hour|15min|timeframe"
+  plugins/` returns zero hits; `plugins/strat-lab/skills/backtest/reference/backfill.md` exists but
+  documents only the trigger→poll workflow, never a `timeframe` value → no plugin edit needed.
+- TDD: red → green (see Step 8 / D-5).
+- Verification: `ruff check`/`format --check` clean; no live "15m/1h accepted" claim remains
+  (only deliberate deprecation-context mentions of historical rows).
+- Files modified: `app/tools.py`, `app/client.py`, `docs/runbooks/mcp-tools.md`,
+  `docs/runbooks/historical-backfill.md`.
+
+### Step 8 — agent trigger_backfill narrowing coverage [done]
+- Strengthened `test_trigger_validation_valueerrors` per **D-5**: probes `timeframe="15m"`/`"1h"`
+  (now-rejected) instead of the always-invalid `"1w"`, so the assertion is a real red→green
+  (RED: 15m accepted → reached a live gRPC call raising AioRpcError, not ValueError; GREEN: rejected
+  with "expected 1d/1Day").
+- Verification: full agent suite 222 passed, 75.77% coverage (≥40%).
+- Files modified: `tests/test_client.py`.
+- Deviations: D-5. Full detail in Deviation Log.

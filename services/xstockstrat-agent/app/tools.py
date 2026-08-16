@@ -865,7 +865,7 @@ def register_tools(server: MCPServer) -> None:
     ) -> dict:
         """Trigger a historical OHLCV backfill in xstockstrat-ingest (admin-scoped write).
         symbols: explicit ticker list, e.g. ["AAPL", "MSFT"]; max 50 per call.
-        timeframe: one of 15m/15Min/1h/1Hour/1d/1Day (canonicalized; default '1d').
+        timeframe: '1d' or '1Day' (canonicalized; default '1d'). Only daily bars are supported.
         start / end: optional ISO 8601 datetimes bounding the range; one-sided allowed; both
             omitted = the service default, a 365-day lookback ending now (range_end − 365d).
         overwrite: true re-fetches bars that already exist.
