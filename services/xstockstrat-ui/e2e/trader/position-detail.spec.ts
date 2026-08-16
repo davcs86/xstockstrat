@@ -107,7 +107,11 @@ test.describe('Single Position page', () => {
     await page.goto('/trader/positions/AAPL');
 
     await expect(page.getByText('Opportunity').first()).toBeVisible({ timeout: 30000 });
-    await expect(page.getByText('Why this fired')).toBeVisible({ timeout: 10000 });
+    // Scoped to the stable data-testid, not a bare page-level getByText: SignalReadiness's
+    // CardTitle briefly resolves to 2 DOM elements on first paint (SSR/hydration timing), which
+    // trips Playwright strict mode intermittently — the same root cause already fixed once for
+    // ChartPanel's container div (see e2e/trader/chart-panel.spec.ts).
+    await expect(readinessCard(page).getByText('Why this fired')).toBeVisible({ timeout: 10000 });
   });
 
   test('a non-watchlisted symbol hides the Opportunity + Readiness sections (FR-11 gate)', async ({
@@ -250,7 +254,12 @@ test.describe('Single Position page', () => {
     await watchlist(page, 'AAPL', 'strat-live-001');
     await page.goto('/trader/positions/AAPL?strategy=strat-live-001');
 
-    await expect(page.getByText('Why this fired')).toBeVisible({ timeout: 30000 });
+    // Scoped to the stable data-testid, not a bare page-level getByText: SignalReadiness's
+    // CardTitle briefly resolves to 2 DOM elements on first paint (SSR/hydration timing), which
+    // trips Playwright strict mode intermittently — the same root cause already fixed once for
+    // ChartPanel's container div (see e2e/trader/chart-panel.spec.ts). This was the confirmed
+    // cause of 4 CI flakes on the retired predecessor signal-detail.spec.ts (feature 083/125).
+    await expect(readinessCard(page).getByText('Why this fired')).toBeVisible({ timeout: 30000 });
     // Opportunity header grammar (relocated from the Signal-detail header): Conviction + Edge (BT).
     await expect(page.getByText('Conviction')).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('Edge (BT)')).toBeVisible();
@@ -278,7 +287,11 @@ test.describe('Single Position page', () => {
     await addAuthCookie(page);
     await watchlist(page, 'AAPL', 'strat-live-001');
     await page.goto('/trader/positions/AAPL');
-    await expect(page.getByText(/Select a strategy to evaluate/)).toBeVisible({ timeout: 30000 });
+    // Scoped for the same strict-mode reason as 'Why this fired' above — this empty-state
+    // paragraph is the other half of SignalReadiness's first-paint content.
+    await expect(readinessCard(page).getByText(/Select a strategy to evaluate/)).toBeVisible({
+      timeout: 30000,
+    });
   });
 
   test('the readiness strategy picker excludes non-live strategies (feature 083/125)', async ({
@@ -287,7 +300,9 @@ test.describe('Single Position page', () => {
     await addAuthCookie(page);
     await watchlist(page, 'AAPL', 'strat-live-001');
     await page.goto('/trader/positions/AAPL');
-    await expect(page.getByText(/Select a strategy to evaluate/)).toBeVisible({ timeout: 30000 });
+    await expect(readinessCard(page).getByText(/Select a strategy to evaluate/)).toBeVisible({
+      timeout: 30000,
+    });
     // Exact label — the readiness picker is "Strategy"; the Mute card's trigger is "Mute strategy".
     await page.getByLabel('Strategy', { exact: true }).click();
     await expect(page.getByRole('option', { name: 'Live Test Strategy' })).toBeVisible();
@@ -332,7 +347,8 @@ test.describe('Single Position page', () => {
     await watchlist(page, 'MSFT', 'strat-001'); // watchlisted → SignalReadiness renders
     // MSFT is a held opportunity (ADD, provenance includes "position") under strat-001.
     await page.goto('/trader/positions/MSFT?strategy=strat-001');
-    await expect(page.getByText('Why this fired')).toBeVisible({ timeout: 30000 });
+    // Scoped for the same strict-mode reason as the tests above.
+    await expect(readinessCard(page).getByText('Why this fired')).toBeVisible({ timeout: 30000 });
     await expect(page.getByTestId('readiness-exit-rule')).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('exit_z', { exact: false })).toBeVisible();
     await expect(page.getByText('1/1 conditions')).toBeVisible();
@@ -348,7 +364,8 @@ test.describe('Single Position page', () => {
     // strat-notfound-readiness-01 is a reserved sentinel the mock's evaluateReadiness aborts NOT_FOUND
     // for — a stale/bookmarkable ?strategy= threading a strategy the service no longer has.
     await page.goto('/trader/positions/AAPL?strategy=strat-notfound-readiness-01');
-    await expect(page.getByText('Why this fired')).toBeVisible({ timeout: 30000 });
+    // Scoped for the same strict-mode reason as the tests above.
+    await expect(readinessCard(page).getByText('Why this fired')).toBeVisible({ timeout: 30000 });
     await expect(page.getByText('This strategy no longer exists — pick another.')).toBeVisible({
       timeout: 10000,
     });
@@ -416,4 +433,15 @@ async function watchlist(
       }),
     });
   });
+}
+
+/** Scopes SignalReadiness's stable `data-testid` (mirrors chart-panel.spec.ts's
+ *  `getByTestId('chart-container')` fix for the same class of bug): the card's first-paint
+ *  content (the "Why this fired" title and the "Select a strategy…" empty state) briefly
+ *  resolves to 2 DOM elements under SSR/hydration timing, tripping Playwright strict mode
+ *  intermittently — confirmed root cause of 4 CI flakes on the retired predecessor
+ *  signal-detail.spec.ts (feature 083/125). A bare page-level getByText races that timing;
+ *  this doesn't, since the testid attaches to exactly one element regardless. */
+function readinessCard(page: import('@playwright/test').Page) {
+  return page.getByTestId('signal-readiness');
 }
