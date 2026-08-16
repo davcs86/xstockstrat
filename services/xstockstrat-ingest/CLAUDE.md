@@ -32,7 +32,11 @@ ingests signals via the `IngestSignal` gRPC RPC. The former HTTP/Connect-RPC ser
 `ManageSignalSource` are **admin-gated** — they abort `PERMISSION_DENIED` ("admin scope required")
 unless the propagated `x-access-scope` carries the ADMIN bit (`0x04`), via the shared
 `IngestServicer._has_admin_scope`. (`TriggerBackfill`'s gate was added by feature 092 — F-11; before
-that it queued paid jobs for any caller.)
+that it queued paid jobs for any caller.) **Feature 143**: `TriggerBackfill` also rejects any
+timeframe other than `1d` (`INVALID_ARGUMENT`), independent of the admin gate — only daily bars are
+servable platform-wide, so a `15m`/`1h` job is refused before it is persisted or spends provider
+quota. Its chunk-runner retry loop also treats a permanent `INVALID_ARGUMENT` from marketdata's
+own `1d`-only gate as non-retryable (no 2s/4s/8s backoff on a request that can never succeed).
 
 ## Dependencies
 

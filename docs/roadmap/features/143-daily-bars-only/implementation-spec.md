@@ -338,7 +338,7 @@ Confirm ≥ 40% and both new tests pass.
 
 ### Step 5 — service: `xstockstrat-ingest` rejects non-`1d` `TriggerBackfill`, stops retrying permanent rejections
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -454,7 +454,7 @@ Plus the paired Step 6 coverage command.
 
 ### Step 6 — test: `xstockstrat-ingest` rejection + retry-fix + chunk-density coverage
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_ingest_servicer.py` — modify
@@ -972,3 +972,23 @@ the default *constant*, not a timeframe alias).
 **Disposition**: updated both subtests' expected value to `["1d"]` (warn counts unchanged). In
 scope for the Step 3/4 pair — the test file is in Step 4's `**Files**` list and the assertion
 directly verifies the constant Step 3 changed.
+
+### D-3 (Step 6) — `grpc.aio.AioRpcError` constructor requires metadata args positionally in the installed grpcio
+**What**: The spec's Step 6 test 3 code constructs
+`grpc.aio.AioRpcError(grpc.StatusCode.INVALID_ARGUMENT, details="…")`, relying on the signature the
+spec verified (`initial_metadata=None, trailing_metadata=None` optional). The grpcio version actually
+installed (per `uv.lock`) makes `initial_metadata`/`trailing_metadata` **required positional** args —
+the 2-arg form raises `TypeError: … missing 2 required positional arguments`.
+**Disposition**: construct it as
+`grpc.aio.AioRpcError(grpc.StatusCode.INVALID_ARGUMENT, grpc.aio.Metadata(), grpc.aio.Metadata(), details="…")`.
+Test-only, no production impact; the reject/retry logic under test is unchanged. Confined to
+`test_ingest_servicer.py` (already in Step 6's `**Files**`).
+
+### D-4 (Step 6) — used `_ctx("4")` for the rejection test's context, not a bare MagicMock
+**What**: The spec's Step 6 test 2 built a bare `MagicMock()` context. But `TriggerBackfill`'s
+admin gate (`_has_admin_scope`, feature 092) runs **before** the new feature-143 reject check, and a
+bare MagicMock's `invocation_metadata()` does not carry the ADMIN bit — so the admin gate would fire
+first with `PERMISSION_DENIED`, and the test's `INVALID_ARGUMENT` assertion would fail.
+**Disposition**: use the repo's centralized `_ctx("4")` builder (conftest, C-13) — admin scope set +
+`abort` raising — so the reject check (not the admin gate) is what fires. Test-only; confined to
+`test_ingest_servicer.py`.

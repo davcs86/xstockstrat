@@ -326,3 +326,29 @@ no feature code. Part of an operator-requested sequential run of 143 then 139, o
   `internal/timeframe/timeframe_test.go`, `internal/alpaca/client_test.go` (last two = D-1 scope
   expansion).
 - Deviations: D-1, D-2.
+
+### Step 5 — ingest rejects non-1d TriggerBackfill, stops retrying permanent rejections [done]
+- `TriggerBackfill`: added `INVALID_ARGUMENT` reject after `_canonical_timeframe` and before
+  `insert_job` (after the admin gate). Narrowed `_TF_ALIASES` → `{"1d","1Day"}` (kept "1Day" for the
+  dual-purpose read path; dropped "15Min"/"1Hour" — no stored row uses them). Left `_STR_TO_ENUM`/
+  `_ENUM_TO_STR` unchanged (read-path dual purpose). Narrowed `backfill_chunks._BARS_PER_DAY` →
+  `{"1d":1}`. Retry loop: added `except grpc.aio.AioRpcError` BEFORE the broad `except Exception`,
+  forcing `attempt = max_attempts` on `INVALID_ARGUMENT` (no backoff on a permanent rejection).
+  Updated ingest CLAUDE.md (Authorization) + context-constitution.md (`_STR_TO_ENUM`/`_BARS_PER_DAY`
+  no-longer-aligned gotcha).
+- TDD: red → green. RED: `test_rejects_non_1d_timeframe` queued instead of aborting;
+  `test_invalid_argument_stops_retrying_immediately` retried 3× (await_count=3). GREEN: both pass.
+- Verification: `ruff check`/`ruff format --check` clean; full suite 192 passed, 79.26% coverage.
+- Files modified: `app/handlers/servicer.py`, `app/repositories/backfill_chunks.py`, `CLAUDE.md`,
+  `docs/context-constitution.md`.
+- Deviations: none for Step 5 itself (D-3/D-4 are Step-6 test-construction).
+
+### Step 6 — ingest rejection + retry-fix + chunk-density coverage [done]
+- Rewrote `test_enum_only_request_persists_canonical_string` (enum 5→4, "15m"→"1d"). Added
+  `test_rejects_non_1d_timeframe` and `test_invalid_argument_stops_retrying_immediately`. Deleted
+  `test_density_yields_more_chunks_for_15m_than_1d`; rewrote `test_no_chunk_exceeds_bar_cap` to "1d"
+  with cap=200 (forces a real 3+1 symbol split).
+- Deviations: **D-3** (AioRpcError needs metadata args positionally in the installed grpcio),
+  **D-4** (used `_ctx("4")` so the admin gate passes and the reject check is what fires). Both
+  test-only, confined to Step 6's files. Full detail in Deviation Log.
+- Files modified: `tests/test_ingest_servicer.py`, `tests/test_backfill_chunks.py`.
