@@ -1,6 +1,5 @@
 # Feature: watchlist-live-quotes
 
-**Lifecycle Status**: `idea`
 **Development Branch**: `feature/watchlist-live-quotes`
 **Created**: 2026-08-02
 **Last Updated**: 2026-08-02

@@ -1,6 +1,5 @@
 # Feature: screener-watchlist-fidelity
 
-**Lifecycle Status**: `launched`
 **Committed to main**: 9713cb61c9b866d6420e142ac1cf20cf6059bf94
 **Launched date**: 2026-08-04
 **Development Branch**: `feature/screener-watchlist-fidelity`

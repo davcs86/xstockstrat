@@ -1,6 +1,5 @@
 # Feature: market-data-freshness-and-quality-gate
 
-**Lifecycle Status**: `demoted/canceled`
 **Development Branch**: `feature/market-data-freshness-and-quality-gate`
 **Created**: 2026-08-04
 **Last Updated**: 2026-08-04

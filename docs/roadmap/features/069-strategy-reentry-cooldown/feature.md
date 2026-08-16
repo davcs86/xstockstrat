@@ -1,6 +1,5 @@
 # Feature: strategy-reentry-cooldown
 
-**Lifecycle Status**: `launched`
 **Committed to main**: 5a7904abd8a7dd3935757a00a699c2f46cae4c88
 **Launched date**: 2026-07-24
 **Development Branch**: `feature/strategy-reentry-cooldown`

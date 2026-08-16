@@ -1,6 +1,5 @@
 # Feature: signal-source-weighting
 
-**Lifecycle Status**: `launched`
 **Committed to main**: 75c8866a31dc4cce892192f7e4ce469add7345e1
 **Launched date**: 2026-05-24
 **Development Branch**: `feature/signal-source-weighting`

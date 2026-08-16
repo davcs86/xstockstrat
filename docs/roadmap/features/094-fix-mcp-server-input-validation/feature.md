@@ -1,7 +1,6 @@
 # Feature: fix-mcp-server-input-validation
 
 **Type**: bug
-**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/fix-mcp-server-input-validation`
 **Source Report**: docs/reports/2026-08-01-mcp-tools-alignment-triage.md (F-9 (code), F-10 (notify field validation))
 **Severity**: SEV-3

@@ -1,6 +1,5 @@
 # Feature: premarket-aftermarket-session-toggle
 
-**Lifecycle Status**: `idea`
 **Development Branch**: `feature/premarket-aftermarket-session-toggle`
 **Created**: 2026-05-24
 **Last Updated**: 2026-05-24

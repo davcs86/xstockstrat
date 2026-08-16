@@ -1,76 +1,26 @@
-# Context Log: position-and-order-detail-pages
+# Context: position-and-order-detail-pages  (archived 2026-08-16)
 
-Append-only session log. **Read this before touching any feature file.**
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-08-16 — /sdd-archiver
 
-## Live State (header)
+**What**: Completed the two dedicated high-fidelity detail pages the Nocturne handoff specified that feature 083 left as a row-click Sheet and a read-only card: a new `/trader/positions/[symbol]` page (risk-framed header, stat grid, candlestick with avg-cost/stop overlays, per-symbol orders table, risk sidebar) and an upgraded `/trader/orders/[id]` ticket page (ticket-grammar layout, functional Replace/Cancel for working orders). Every rendered value was sourced from data the platform already returned; handoff fields with no backend source (thesis, target, R:R, realized-P&L) were deliberately omitted and deferred to feature 095. All six steps were written and shipped in a single session via one integration PR (#855 to `main-dev`).
 
-- **Feature**: 096-position-and-order-detail-pages
-- **Status**: implementation-ready → in-progress
-- **Branch**: `feature/position-and-order-detail-pages` (off `main-dev` @ f8b7197)
-- **Scope**: frontend-only (`xstockstrat-ui`); additive; no proto/migration/config.
-- **Two deliverables**: dedicated `/trader/positions/[symbol]` page + upgraded `/trader/orders/[id]`
-  ticket page.
+**Why (irrecoverable rationale)**: `GetPosition` was wired through the trader BFF (additive handler) rather than filtering `listPositions` client-side for two reasons: `listPositions` returns a paged response with edge cases, and reading a different RPC than the parity source would muddy C-10(b) valuation parity (both surfaces must read the same authoritative RPC). The Exposure row-click Sheet was kept as a quick peek alongside the new page because it serves a fundamentally different interaction pattern — the Sheet can't be linked, bookmarked, or accommodate the Manage/chart layout at fidelity. The owning strategy field was derived from the most-frequent `strategyId` across the position's orders because `Position` carries no `strategy_id` field, degrading to "—" gracefully.
 
-## Open Threads
+**Rejected alternatives**: Filter `listPositions` client-side by symbol (paging edge cases; different RPC muddies C-10(b) parity). Keep Position as a Sheet only (can't be linked or bookmarked). Second mobile `SectionRenderer` tree (DRY violation). Fabricate thesis/target/R:R to match mockup 1:1 (rejected on P-03; deferred to feature 095).
 
-- [ ] Exposure Sheet vs. full page — keeping the Sheet as a quick peek AND adding the full-page link
-  (design.md Open Risks). Revisit if redundant.
-- [ ] `getPosition` e2e mock must land with the page (Step 6) or the page 404s in e2e.
+**Scars & gotchas**: Implementing all steps and shipping a single integration PR in the same session that authored the spec bypassed the per-step status-flip flow. CI's `ci-validate-feature-status.yml` auto-promote skipped this feature silently. Fix: flip step statuses to `done` and `status.md` to `code-completed` BEFORE pushing any integration PR. `GetPosition` existed in `portfolio.proto:11` but had no handler in `traderBff.ts` and no mock in `e2e/mock-backend.ts` — every new BFF RPC needs a mock added in the same step. Chart overlays (avg-cost line, stop-price line) use `Position.avg_cost` and `Position.stop_price` — fields from the authoritative `GetPosition` RPC, NOT derived from the marketdata quote path. Feature 095's "no real-time price source for the chart" risk applies to the live price tick overlay, NOT to the avg-cost/stop overlays. A future developer must not conflate these two distinct overlay types.
 
----
+**Permanent deviations**: design implied per-step PRs → shipped as single-session integration PR #855. No code diverged; only process/tracking docs deviated.
 
-## Session — 2026-08-02 (design + spec authoring)
+**Cross-feature signal**: A follow-up feature was explicitly spawned on 2026-08-10 to consolidate the two 096 pages (`/trader/positions/[symbol]` and `/trader/orders/[id]`) into a unified per-symbol page. Feature 096's code shipped under the narrower two-page scope per user decision — the consolidation is a named planned follow-on, not a missed AC.
 
-- Origin: Claude Design handoff (`design-handoff/xstockstrat UI.dc.html` — POSITION DETAIL +
-  ORDER EDITOR screens). User asked for the single Position page + single Order page at high
-  fidelity (desktop + mobile), Copilot excluded, via the SDD process.
-- **Prior art discovered**: #853 (on main-dev) raised the single-Position **Sheet** + Signal-detail
-  fidelity and **reserved feature 095** (`opportunity-live-market-enrichment`) for the un-faked
-  Decide-surface live-data extras. 096 is therefore the *pages* (Book surface) — numbered 096
-  because 095 is taken.
-- **Overlap review vs 095: CLEAN.** 095 owns live price/change, sparkline, per-condition live value
-  chips, target/stop overlays + R:R/sizing **on the Decide surface**. 096 reuses only fields that
-  already exist (`Position` risk fields, `Order`, `getBars`); its chart avg-cost/stop overlays use
-  `avgEntryPrice`/`stopPrice`, which are already-authoritative, not the 095 marketdata-quote gap.
-- **No-fake decision (P-03)**: the prototype's prose thesis, price target, reward:risk, and
-  realized-P&L have no backend source → **omitted**, deferred to 095. "Why it's held" becomes a
-  factual Risk & exit block. Owning strategy **derived** from the symbol's orders' `strategyId`.
-- **GetPosition**: the RPC exists (`portfolio.proto:12`) but is not wired through the trader BFF;
-  096 adds the BFF method + `usePosition` hook (additive) so the page reads one authoritative
-  position (cleaner C-10(b) parity than filtering `listPositions`).
-- Artifacts written: feature.md, product-spec.md, recon.md, design.md, implementation-spec.md (6
-  steps), this context.md.
-- Delivery: implemented directly in this session (frontend-only, additive) rather than as separate
-  per-step PRs, then one integration PR to `main-dev`. Recorded as a sequential-mode consolidation.
+**Deferred follow-ons**: Thesis/target/R:R/realized-P&L fields (require feature 095 backend sources). Consolidation of the two detail pages into a unified per-symbol page (spawned 2026-08-10).
 
----
+**Ledger entries written**: insights.md (3), fails.md (2) — see the 2026-08-16 entries.
 
-## Session — 2026-08-10 (status correction, discovered while starting a follow-up feature)
+**Runtime-invariant recommendations (→ /context-constitution)**: none beyond what was already captured in prior features.
 
-- A user asked to reshape this feature into one unified per-symbol page. Before writing a new
-  product spec, checked out `feature/position-and-order-detail-pages` to continue from it and
-  found it 95 commits behind `main-dev`; merging surfaced conflicts because **the same files this
-  branch's own commit `4a10ceb` touches were already shipped to `main-dev` via PR #855
-  (`7f6f65e`)** on 2026-08-02 — the same day this spec was written. `feature.md`/
-  `implementation-spec.md` were never updated past `implementation-ready`/all-`pending`, so this
-  feature has actually been **live in production since PR #875 promoted it to `main` on
-  2026-08-06** (commit `c1d1882`) while its tracking docs said otherwise for over a week.
-- Root cause: the delivery note above ("implemented directly in this session... one integration
-  PR to main-dev") never flipped the implementation-spec.md step statuses to `done` or feature.md
-  to `code-completed` before the integration PR merged, so CI's `ci-validate-feature-status.yml`
-  — which only auto-promotes features already at `code-completed` when a promotion PR merges —
-  silently skipped this feature at promotion time (2026-08-06).
-- **Fix (user-approved)**: corrected `feature.md` to `launched` (`Committed to main: c1d1882`,
-  `Launched date: 2026-08-06`) and all 6 `implementation-spec.md` steps to `done`, using the exact
-  fields/format CI's automation would have written, with an explicit deviation-log entry
-  documenting this was a retroactive doc fix, not new work. No code changed by this correction.
-- **Consequence for the follow-up feature**: it is not building two new pages from scratch — it
-  consolidates two already-live production pages (`/trader/positions/[symbol]`,
-  `/trader/orders/[id]`) plus new scope into one unified per-symbol page. Per user decision, it
-  gets its **own new feature number** rather than reusing this slug (096's code already shipped
-  under its original narrower scope, so repurposing this directory would misrepresent what
-  actually happened). See `docs/roadmap/features/` for the new feature's directory.
-- This `feature/position-and-order-detail-pages` branch is now superseded by `main-dev` and not
-  used further; no more commits are planned against it.
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at e91d40029e7d114e5d52c8c6d2ebdf9ea357a9fc.

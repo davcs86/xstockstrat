@@ -43,7 +43,8 @@ Capture as `FEATURE_DIR`.
 **Step B1.** Read `$FEATURE_DIR/product-spec.md`. If absent → stop: "No product spec found. Run
 /sdd-story $ARGUMENTS[0] first."
 
-**Step B2.** Read `$FEATURE_DIR/feature.md` and check `**Lifecycle Status**`:
+**Step B2.** Read `$FEATURE_DIR/status.md` — its content is the current lifecycle status (a plain
+string). Check it:
 - `spec-ready` → OK, proceed.
 - `draft` → warn: "Product spec has not been AI-reviewed. Run `/sdd-review $ARGUMENTS[0]
   product-spec` first. Proceed anyway? (yes / no)" — continue only on `yes`.
@@ -128,17 +129,18 @@ Read **`reference/grilling-protocol.md`** and run the loop. Pass it the mode res
 
 After `design.md` is written and user-approved:
 
-1. Edit `$FEATURE_DIR/feature.md`:
-   - Set `**Lifecycle Status**` to `**Lifecycle Status**: \`design-approved\``. The prior value is
-     normally `spec-ready`; for a **Track C bug** that skipped `/sdd-review` it may be `draft` — use the
-     actual prior value `<prev>` in the history row below (do not assume `spec-ready`).
+1. Overwrite `$FEATURE_DIR/status.md` with `design-approved` (plain string). The prior value —
+   read at B2 — is normally `spec-ready`; for a **Track C bug** that skipped `/sdd-review` it may
+   be `draft` — use the actual prior value `<prev>` in the history row below (do not assume
+   `spec-ready`).
+2. Edit `$FEATURE_DIR/feature.md`:
    - Append a Status History row:
      `| <ISO date> | \`<prev>\` → \`design-approved\` | /sdd-design | Design debated (N rounds, <quick|full>) and approved; recon.md + design.md written |`
    - Update `## Next Action` to: `` `/sdd-spec <slug>` — generate implementation spec from the approved design ``.
    - Update the Artifacts list to link `recon.md` and `design.md`.
    (If status was already `design-approved` or later via the B2 re-run path, append an
-   `(unchanged)` history row instead of changing the status value.)
-2. Append to `$FEATURE_DIR/context.md` (Constitution **P-05** — write as it happens):
+   `(unchanged)` history row instead of overwriting `status.md`.)
+3. Append to `$FEATURE_DIR/context.md` (Constitution **P-05** — write as it happens):
    ```markdown
    ## Session <ISO timestamp> — sdd-design
 
@@ -149,9 +151,9 @@ After `design.md` is written and user-approved:
    ```
    If the feature uses the structured-header `context.md` schema, also fold the chosen approach into
    `## Decisions` and each open risk into `## Open Threads` (with a target step).
-3. If the debate surfaced a reusable pattern or a recurring trap that future features should know
+4. If the debate surfaced a reusable pattern or a recurring trap that future features should know
    about, append a one-line entry to `docs/roadmap/ledger/insights.md` or `fails.md` (their schema).
-4. Print:
+5. Print:
    ```
    Design approved for <slug>. Status: design-approved.
    Artifacts: recon.md, design.md
@@ -167,7 +169,7 @@ After `design.md` is written and user-approved:
   output — only the state you synthesize and pass.
 - **Never invent (F-04, P-03).** Anything discovery didn't find stays in `## Not found`; ambiguity
   is surfaced to the user, never guessed.
-- **Never write `feature.md` lifecycle before the debate is user-approved.** `recon.md` and
+- **Never write `status.md` before the debate is user-approved.** `recon.md` and
   `design.md` are written during the phases; the status flip happens only at COMPLETION.
 - **A Floor (`F-*`) breach blocks approval (F-11)** in **both** modes. No "proceed anyway" past a Floor
   item — `quick` shortens the debate, it never relaxes the Floor.

@@ -48,7 +48,8 @@ ls $FEATURE_DIR/implementation-spec.md 2>/dev/null
 If the file is not found: stop — "No implementation spec found. Run /sdd-spec $ARGUMENTS[0] first."
 Do not read the file contents yet — authoritative content will be loaded in B3.
 
-**Step B2.** Read `$FEATURE_DIR/feature.md`.
+**Step B2.** Read `$FEATURE_DIR/feature.md` and `$FEATURE_DIR/status.md` (the latter's content is
+the current lifecycle status — a plain string).
 Check lifecycle status. If status is `launched`, `rolled-back`, or `demoted/canceled`:
 warn the user — "Feature is marked `<status>`. Proceed anyway? (yes / no)"
 
@@ -67,6 +68,7 @@ If the `ls-remote` command returns output (branch exists on origin):
   ```bash
   git show origin/<dev-branch>:$FEATURE_DIR/implementation-spec.md
   git show origin/<dev-branch>:$FEATURE_DIR/feature.md
+  git show origin/<dev-branch>:$FEATURE_DIR/status.md
   git show origin/<dev-branch>:$FEATURE_DIR/context.md
   ```
 - If the `git show` for `context.md` returns an error (file not yet on this branch), fall back to the local working tree: Read `$FEATURE_DIR/context.md`. If the local file also does not exist, treat context.md as empty and note: "No prior session history found (context.md not yet on remote)."
@@ -78,6 +80,7 @@ If the `ls-remote` command returns no output (branch not yet created on origin):
   git fetch origin main-dev
   git show origin/main-dev:$FEATURE_DIR/implementation-spec.md
   git show origin/main-dev:$FEATURE_DIR/feature.md
+  git show origin/main-dev:$FEATURE_DIR/status.md
   git show origin/main-dev:$FEATURE_DIR/context.md
   ```
 - If the `git show` for `context.md` returns an error (file not yet on main-dev), fall back to the local working tree: Read `$FEATURE_DIR/context.md`. If the local file also does not exist, treat context.md as empty and note: "No prior session history found (context.md not yet pushed)."
@@ -279,8 +282,10 @@ red), then implement, then confirm it **passes** (capture green). Record both in
 4. If verification **passes**:
    - Update **only** the step's `**Status**` field in implementation-spec.md: `**Status**: \`pending\`` → `**Status**: \`done\``
    - **Do NOT modify any other part of the step** — `**Instructions**`, `**Codebase Evidence**`, `**Verification**`, `**Files**`, and `**Reviewers**` are immutable records of the original plan. Deviations go in the `## Deviation Log` only.
-   - If this is the **first step completed** in the feature: update `feature.md` status to `in-progress`, append status history row.
-   - If **all steps are now done**: update `feature.md` status to `code-completed`, append status history row.
+   - If this is the **first step completed** in the feature: overwrite `status.md` with
+     `in-progress` and append a `feature.md` status history row.
+   - If **all steps are now done**: overwrite `status.md` with `code-completed` and append a
+     `feature.md` status history row.
      Then, if the feature surfaced a **reusable pattern** worth carrying to future features (a clean
      abstraction, an ordering that paid off, a perf win), append a one-line entry to
      `docs/roadmap/ledger/insights.md` using its schema. Skip if nothing generalizes — do not invent a
@@ -300,6 +305,7 @@ Substitute all `<placeholders>` before use.
    git add <file1> <file2> ...
    git add $FEATURE_DIR/implementation-spec.md
    git add $FEATURE_DIR/feature.md
+   git add $FEATURE_DIR/status.md
    git add $FEATURE_DIR/context.md
    ```
 2. Commit:
@@ -446,7 +452,7 @@ below are **non-overridable** — no "proceed anyway" or sequential-mode carve-o
 - **Never guess a file path or symbol name.** If not found in Phase 1 discovery, block the step.
 - **Never commit before Phase 3 verification passes.** All commits happen in STEP COMMIT + PR, after verification.
 - **Never target `main-dev` or `main` in a step PR.** Always target the `**Development Branch**` from `feature.md`.
-- **Never stage files outside the step's `**Files**` section plus `implementation-spec.md`, `feature.md`, and `context.md`** (and, when a ledger write is due, `docs/roadmap/ledger/insights.md` or `fails.md`) — Constitution **F-08**.
+- **Never stage files outside the step's `**Files**` section plus `implementation-spec.md`, `feature.md`, `status.md`, and `context.md`** (and, when a ledger write is due, `docs/roadmap/ledger/insights.md` or `fails.md`) — Constitution **F-08**.
 - **Never edit a `.up.sql` migration that has been committed to `main-dev`.** Add a new numbered migration instead.
 - **Never start a database or other long-running service container to verify a step.** Migration
   reversibility is proven **offline** (up/down parity + correct `NNN`); the live apply is CI's job.
