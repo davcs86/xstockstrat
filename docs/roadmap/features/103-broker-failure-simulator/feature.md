@@ -1,6 +1,5 @@
 # Feature: broker-failure-simulator
 
-**Lifecycle Status**: `demoted/canceled`
 **Development Branch**: `feature/broker-failure-simulator`
 **Created**: 2026-08-04
 **Last Updated**: 2026-08-04

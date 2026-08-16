@@ -1,6 +1,5 @@
 # Feature: ui-revamp-opportunities-first
 
-**Lifecycle Status**: `launched`
 **Committed to main**: 37a7f5269454eadb810c4303d5100063e4f35eed
 **Launched date**: 2026-08-01
 **Development Branch**: `feature/ui-revamp-opportunities-first`

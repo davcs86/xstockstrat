@@ -1,6 +1,5 @@
 # Feature: agent-scheduler
 
-**Lifecycle Status**: `draft`
 **Development Branch**: `feature/agent-scheduler`
 **Created**: 2026-05-16
 **Last Updated**: 2026-05-16

@@ -1,6 +1,5 @@
 # Feature: walk-forward-backtesting
 
-**Lifecycle Status**: `draft`
 **Development Branch**: `feature/walk-forward-backtesting`
 **Created**: 2026-05-26
 **Last Updated**: 2026-05-26

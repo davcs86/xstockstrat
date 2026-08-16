@@ -1,6 +1,5 @@
 # Feature: auth2-authorized-apps-ui
 
-**Lifecycle Status**: `launched`
 **Committed to main**: 1fb6f613ead4b2ed4316d24c9af680dc88c7d4e8
 **Launched date**: 2026-06-09
 **Development Branch**: `feature/auth2-authorized-apps-ui`

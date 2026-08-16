@@ -2,7 +2,7 @@
 name: promote
 description: Create the production promotion PR from main-dev to main. Usage — /promote. Detects whether the GitHub Action already opened one, validates branch state, runs buf breaking against main to prove proto compatibility, generates the dated CHANGELOG.md entry (features, bug fixes, proto changes, DB migrations), and serves as the manual fallback for flipping code-completed features to launched. Use this whenever the user asks to promote, release, ship, cut a production deploy, push main-dev to main, write release notes or a changelog entry, or check whether promoting would break proto consumers — even phrased as "let's go live" or "is main-dev safe to ship". Feature branch → main-dev PRs are not promotions; those belong to sdd-execute.
 argument-hint: (no arguments)
-allowed-tools: Read Write Edit Bash(git fetch *) Bash(git log *) Bash(git diff *) Bash(git show *) Bash(git ls-remote *) Bash(git status *) Bash(git add *) Bash(git commit *) Bash(git push *) Bash(git checkout *) Bash(buf *) Bash(find *) Bash(grep *) Bash(gh pr list *) Bash(gh run list *) Bash(gh workflow run *)
+allowed-tools: Read Write Edit Bash(git fetch *) Bash(git log *) Bash(git diff *) Bash(git show *) Bash(git ls-remote *) Bash(git status *) Bash(git add *) Bash(git commit *) Bash(git push *) Bash(git checkout *) Bash(buf *) Bash(find *) Bash(grep *) Bash(egrep *) Bash(gh pr list *) Bash(gh run list *) Bash(gh workflow run *)
 effort: medium
 ---
 
@@ -103,11 +103,12 @@ Filter to only `*.proto` files (not generated stubs).
 
 **Features at `code-completed`:**
 ```bash
-find docs/roadmap/features -name feature.md
+egrep -l '^code-completed$' docs/roadmap/features/*/status.md
 ```
-Read each `feature.md` and collect:
-- Entries where `**Lifecycle Status**` is `code-completed` AND `**Type**` is `feature` (or `**Type**` is absent — default is `feature`). Extract slug and **Summary** first sentence.
-- Entries where `**Lifecycle Status**` is `code-completed` AND `**Type**` is `bug`. Extract slug, **Summary** first sentence, and `**Severity**`.
+Single shell call across all features — see `docs/roadmap/features/CLAUDE.md` § Bulk Status
+Reads, Case 1. Then, for only the matching directories, read each `feature.md` and collect:
+- Entries where `**Type**` is `feature` (or `**Type**` is absent — default is `feature`). Extract slug and **Summary** first sentence.
+- Entries where `**Type**` is `bug`. Extract slug, **Summary** first sentence, and `**Severity**`.
 
 For each result, capture the full feature directory path as `FEATURE_DIR` (e.g.
 `docs/roadmap/features/001-add-ikbr-account-support`). Derive the display slug by stripping the
@@ -258,6 +259,8 @@ Print the PR URL.
 
 For each feature **or bug** found at `code-completed` in P2:
 
+Overwrite `$FEATURE_DIR/status.md` with `launched` (plain string).
+
 Read its `$FEATURE_DIR/feature.md` (using the `FEATURE_DIR` captured in P2). Add a new row to the **Status History** table:
 
 ```markdown
@@ -301,7 +304,8 @@ Bug fixes included (code-completed):
 Next steps:
   1. Complete the Promotion Checklist in the PR description.
   2. Get at least 1 reviewer approval (branch protection enforced).
-  3. After merging, update each feature.md status from 'launched (pending merge)' to 'launched'.
+  3. After merging, confirm each feature's status.md reads 'launched' (CI does this automatically;
+     this is the fallback check).
   4. The sync-main-to-maindev workflow runs automatically after the PR merges —
      it merges the resulting main commit back into main-dev so the branches
      stay in sync. No manual action needed unless the workflow reports a conflict.

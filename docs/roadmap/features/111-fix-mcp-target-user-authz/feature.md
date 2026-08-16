@@ -1,7 +1,6 @@
 # Feature: fix-mcp-target-user-authz
 
 **Type**: bug
-**Lifecycle Status**: `launched`
 **Committed to main**: 856ad5a3a2ebc431c108cc7f508deb26885545c6
 **Launched date**: 2026-08-07
 **Development Branch**: `feature/fix-mcp-target-user-authz` (implemented on harness-pinned `claude/remove-target-user-mcp-g4tfqm` — see context.md)

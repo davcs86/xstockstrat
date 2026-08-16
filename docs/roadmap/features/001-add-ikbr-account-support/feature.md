@@ -1,6 +1,5 @@
 # Feature: add-ikbr-account-support
 
-**Lifecycle Status**: `launched`
 **Development Branch**: `feature/add-ikbr-account-support`
 **Created**: 2026-05-02
 **Last Updated**: 2026-05-12

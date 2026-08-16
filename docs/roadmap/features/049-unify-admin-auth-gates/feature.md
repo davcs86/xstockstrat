@@ -1,6 +1,5 @@
 # Feature: unify-admin-auth-gates
 
-**Lifecycle Status**: `launched`
 **Committed to main**: edc530f9dbc08bb9f523f556bd2d243a6ea20ace
 **Launched date**: 2026-06-07
 **Development Branch**: `feature/unify-admin-auth-gates`

@@ -1,6 +1,5 @@
 # Feature: agent-mcp-oauth
 
-**Lifecycle Status**: `demoted/canceled`
 **Development Branch**: `feature/agent-mcp-oauth`
 **Created**: 2026-05-25
 **Last Updated**: 2026-06-06

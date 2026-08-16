@@ -1,6 +1,5 @@
 # Feature: unified-symbol-page
 
-**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/unified-symbol-page`
 **Created**: 2026-08-10
 **Last Updated**: 2026-08-15 (sequential execution started)

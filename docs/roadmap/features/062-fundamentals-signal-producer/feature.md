@@ -1,6 +1,5 @@
 # Feature: fundamentals-signal-producer
 
-**Lifecycle Status**: `launched`
 **Committed to main**: e8742e4e4f4dd88cbbc6ed85151784c4434d4885
 **Launched date**: 2026-06-29
 **Development Branch**: `feature/fundamentals-signal-producer`

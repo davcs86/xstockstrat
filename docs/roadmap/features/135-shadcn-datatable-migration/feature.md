@@ -1,6 +1,5 @@
 # Feature: shadcn-datatable-migration
 
-**Lifecycle Status**: `launched`
 **Committed to main**: 94e4e24fa6ac41eb20bd16e1e9af15c8388e885a
 **Launched date**: 2026-08-16
 **Development Branch**: `claude/shadcn-datatable-migration-6f307n`

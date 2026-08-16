@@ -1,6 +1,5 @@
 # Feature: remove-mcp-sse-transport
 
-**Lifecycle Status**: `launched`
 **Committed to main**: 0eae638104744992c61c8a1ac4bd8cbaac10862b
 **Launched date**: 2026-07-29
 **Development Branch**: `feature/remove-mcp-sse-transport`

@@ -1,6 +1,5 @@
 # Feature: symbol-page-section-nav
 
-**Lifecycle Status**: `draft`
 **Development Branch**: `feature/symbol-page-section-nav`
 **Created**: 2026-08-15
 **Last Updated**: 2026-08-15

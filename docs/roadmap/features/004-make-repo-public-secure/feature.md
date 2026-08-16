@@ -1,6 +1,5 @@
 # Feature: make-repo-public-secure
 
-**Lifecycle Status**: `launched`
 **Development Branch**: `feature/make-repo-public-secure`
 **Created**: 2026-05-10
 **Last Updated**: 2026-05-12

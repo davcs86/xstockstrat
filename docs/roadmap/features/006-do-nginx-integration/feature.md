@@ -1,6 +1,5 @@
 # Feature: do-nginx-integration
 
-**Lifecycle Status**: `launched`
 **Development Branch**: `feature/do-nginx-integration`
 **Created**: 2026-05-12
 **Last Updated**: 2026-05-18
