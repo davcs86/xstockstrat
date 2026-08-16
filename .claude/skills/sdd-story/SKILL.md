@@ -82,14 +82,25 @@ relevant `fails.md` entry exists, note it in the product spec's `## Open Questio
 side of the cross-feature memory (Constitution **P-05**); the binding rules it may cite live in
 `docs/sdd/constitution.md`.
 
-### 6. Write feature.md
+### 6. Write status.md
+
+Write `docs/roadmap/features/${FEATURE_DIRNAME}/status.md` — a single line, plain string, nothing
+else:
+
+```
+draft
+```
+
+This is the canonical current lifecycle status (see `docs/roadmap/features/CLAUDE.md` §
+Bulk Status Reads). `feature.md` never repeats it.
+
+### 7. Write feature.md
 
 Write `docs/roadmap/features/${FEATURE_DIRNAME}/feature.md` using this exact template:
 
 ```markdown
 # Feature: <slug>
 
-**Lifecycle Status**: `draft`
 **Development Branch**: `feature/<slug>`
 **Created**: <ISO date>
 **Last Updated**: <ISO date>
@@ -131,7 +142,7 @@ re-run /sdd-spec if the registry changes.)_
 `/sdd-review <slug> product-spec` — AI review of product spec before running /sdd-spec
 ```
 
-### 7. Write product-spec.md
+### 8. Write product-spec.md
 
 Write `docs/roadmap/features/${FEATURE_DIRNAME}/product-spec.md` using this exact template:
 
@@ -217,7 +228,7 @@ view or an agent action, name that segment/tool — do not leave every box unche
 default to "None" just because the story is phrased in backend terms. If it is genuinely unclear
 which surface, raise it in `## Open Questions` (behavior #1 — surface the fork, never guess).
 
-### 8. Write context.md
+### 9. Write context.md
 
 Write `docs/roadmap/features/${FEATURE_DIRNAME}/context.md`:
 
@@ -235,7 +246,7 @@ Write `docs/roadmap/features/${FEATURE_DIRNAME}/context.md`:
 - Created feature.md (status: draft), product-spec.md, context.md from user story.
 ```
 
-### 9. Report to user
+### 10. Report to user
 
 Print:
 ```

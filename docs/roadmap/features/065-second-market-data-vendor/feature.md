@@ -1,6 +1,5 @@
 # Feature: second-market-data-vendor
 
-**Lifecycle Status**: `idea`
 **Development Branch**: _none yet — assigned when spec work begins_
 **Created**: 2026-07-20
 **Last Updated**: 2026-07-20

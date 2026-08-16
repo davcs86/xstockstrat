@@ -1,6 +1,5 @@
 # Feature: frontend-reverse-proxy
 
-**Lifecycle Status**: `launched`
 **Development Branch**: `feature/frontend-reverse-proxy`
 **Created**: 2026-05-11
 **Last Updated**: 2026-05-12

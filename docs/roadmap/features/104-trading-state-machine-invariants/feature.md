@@ -1,6 +1,5 @@
 # Feature: trading-state-machine-invariants
 
-**Lifecycle Status**: `demoted/canceled`
 **Development Branch**: `feature/trading-state-machine-invariants`
 **Created**: 2026-08-04
 **Last Updated**: 2026-08-04

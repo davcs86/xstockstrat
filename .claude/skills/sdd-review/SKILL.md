@@ -2,7 +2,7 @@
 name: sdd-review
 description: AI review gate for SDD product specs and implementation specs. Usage — /sdd-review <feature-slug> [product-spec|impl-spec]. Applies structured criteria via the spec-reviewer subagent and scans every other feature directory for collisions (config keys, proto field numbers, migration NNN prefixes, shared service dirs) via feature-overlap; product-spec gates draft → spec-ready, impl-spec is advisory. Use this whenever the user asks whether a spec is ready, complete, or approvable, to review / critique / find gaps in a product or implementation spec, to check acceptance criteria and governance gates, or to see whether a feature conflicts or overlaps with other in-flight work. This reviews specs, not code — pull-request and working-diff review belongs to /review or /code-review.
 argument-hint: <feature-slug> [product-spec|impl-spec]
-allowed-tools: Read Write Edit Bash(find *) Bash(grep *) Bash(git fetch *) Bash(git show *) Bash(git ls-remote *) Task
+allowed-tools: Read Write Edit Bash(find *) Bash(grep *) Bash(egrep *) Bash(git fetch *) Bash(git show *) Bash(git ls-remote *) Task
 effort: medium
 ---
 
@@ -34,10 +34,12 @@ files that the subagents read — do not load them here.
    ```
    No output → stop: "No feature found for slug `$ARGUMENTS[0]`. Run /sdd-story first."
    Capture as `FEATURE_DIR`. Set `FEATURE_MD`=`$FEATURE_DIR/feature.md`,
-   `PRODUCT_SPEC`=`$FEATURE_DIR/product-spec.md`, `IMPL_SPEC`=`$FEATURE_DIR/implementation-spec.md`,
-   `CONTEXT_MD`=`$FEATURE_DIR/context.md`.
+   `STATUS_MD`=`$FEATURE_DIR/status.md`, `PRODUCT_SPEC`=`$FEATURE_DIR/product-spec.md`,
+   `IMPL_SPEC`=`$FEATURE_DIR/implementation-spec.md`, `CONTEXT_MD`=`$FEATURE_DIR/context.md`.
 
 3. Read `FEATURE_MD`. If absent: stop — "No feature found for this slug. Run /sdd-story first."
+   Read `STATUS_MD` — its content is the current lifecycle status (a plain string, e.g.
+   `spec-ready`).
 
 ---
 
@@ -46,16 +48,16 @@ files that the subagents read — do not load them here.
 Gates the `draft` → `spec-ready` transition.
 
 ### A1. Guard: already reviewed
-If `**Lifecycle Status**` is `spec-ready` or later:
+If `STATUS_MD`'s content is `spec-ready` or later:
 > "Product spec is already approved (status: `<status>`). Re-run review anyway? (yes / no)"
 Continue only on `yes`.
 
 ### A1b. Demoted-duplicate detection
 ```bash
-find docs/roadmap/features -mindepth 2 -maxdepth 2 -name "feature.md" \
-  | xargs grep -El '`(demoted|canceled)`' 2>/dev/null
+egrep -l 'demoted/canceled' docs/roadmap/features/*/status.md 2>/dev/null
 ```
-Exclude `$FEATURE_DIR/feature.md`; derive each slug from its directory name (no file read).
+One shell call across all features — do not loop reading `status.md` files individually.
+Exclude `$STATUS_MD`; derive each slug from its directory name (no file read).
 If any found:
 > "Previously demoted or canceled features: `<slug1>`, … Is this feature a re-attempt of any
 > of them? Reply with the slug, or `no`."
@@ -96,10 +98,11 @@ files.
 `reference/overlap-check.md` (§"Merge-order write") — this is the router's job, not the agent's.
 
 **PASS** (no ✗ in criteria or overlap):
-1. Edit `feature.md`: set `**Lifecycle Status**` `draft` → `spec-ready`; append Status History
-   row `| <ISO date> | \`draft\` → \`spec-ready\` | /sdd-review | Product spec approved (N warnings) |`;
+1. Overwrite `status.md` with `spec-ready` (plain string, replaces the old content).
+2. Edit `feature.md`: append Status History row
+   `| <ISO date> | \`draft\` → \`spec-ready\` | /sdd-review | Product spec approved (N warnings) |`;
    update `## Next Action` to `` `/sdd-spec <slug>` — generate implementation spec ``.
-2. Append to `context.md`:
+3. Append to `context.md`:
    ```markdown
    ## Session <ISO timestamp> — sdd-review product-spec
 
@@ -107,7 +110,7 @@ files.
    - Warnings: <list or "none">
    - Overlap findings: <list or "none">
    ```
-3. Print: `Product spec approved. Status: spec-ready. Next: /sdd-spec <slug>`
+4. Print: `Product spec approved. Status: spec-ready. Next: /sdd-spec <slug>`
 
 **FAIL** (any ✗): do NOT modify `feature.md` or `context.md`. Print all failing criteria with
 fix instructions, then: `Product spec review failed. Fix the items above, then re-run

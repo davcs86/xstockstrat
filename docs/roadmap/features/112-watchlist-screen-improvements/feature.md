@@ -1,6 +1,5 @@
 # Feature: watchlist-screen-improvements
 
-**Lifecycle Status**: `launched`
 **Committed to main**: e9d8d9144fb228568b3d71d088ad0d4e26bd0c24
 **Launched date**: 2026-08-07
 **Development Branch**: `claude/watchlist-screen-improvements-9qf5vq` (harness-assigned session
@@ -9,6 +8,7 @@ this branch bases on and integrates directly into `main-dev`, same as `sdd-execu
 mode's own integration-PR target)
 **Created**: 2026-08-07
 **Last Updated**: 2026-08-07
+**Archived**: 2026-08-16
 
 ---
 
@@ -26,6 +26,7 @@ mode's own integration-PR target)
 | 2026-08-07 | `in-progress` → `code-completed` | /sdd-execute (Steps 2-9) | All 9 steps done: relocated controls (1/2), add-time picker (3/4), key-remount + inline rename (5/6), two-layer concurrency guard (7/8/9). Final e2e run: 10/10 `watchlists.spec.ts` tests pass (57.0s). `pnpm run lint` + `pnpm exec tsc --noEmit` clean throughout. No `merge-order.md` entry for this feature — proceeding to the integration PR. |
 
 | 2026-08-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #896; committed e9d8d9144fb228568b3d71d088ad0d4e26bd0c24 |
+| 2026-08-16 | launched (unchanged) | /sdd-archiver | Archived: synthesis written to context.md + Ledger, specs pruned. |
 ---
 
 ## Artifacts

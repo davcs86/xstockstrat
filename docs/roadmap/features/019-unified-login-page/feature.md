@@ -1,6 +1,5 @@
 # Feature: unified-login-page
 
-**Lifecycle Status**: `launched`
 **Committed to main**: 88268b2e90af291f3326d918d35f0c4986f92dcf
 **Launched date**: 2026-06-04
 **Development Branch**: `feature/unified-login-page`

@@ -1549,3 +1549,138 @@ reusing.
   same interactive-target predicate — verify by concretely tracing at least one real
   keyboard-activation path through the actual DOM structure, not just reasoning about event bubbling
   in the abstract.
+
+### 2026-08-14 — signal-time-decay — design
+- **Pattern**: Any new `google.protobuf.Timestamp` field used in downstream arithmetic must carry a `HasField()` guard + neutral fallback against the zero-value at the consumer. When absent (proto zero-value = epoch 1970), computing an age from it produces ~55 years; a decay or weight multiplier based on that age underflows to 0.0 for every item — a platform-wide blackout, not per-item degradation. `HasField()` + `decay_multiplier = 1.0` (fresh/neutral) is the correct fallback.
+- **Evidence**: `docs/roadmap/features/022-signal-time-decay/design.md` § Chosen Approach — finalized decision #2; context.md 2026-08-14T00:30:00Z round 2
+- **Rule it implies**: Any new `google.protobuf.Timestamp` field used in cross-service arithmetic must carry a `HasField()` guard + neutral fallback against the proto zero-value at the consumer.
+
+### 2026-08-14 — signal-time-decay — design
+- **Pattern**: `ConfigWatcher.get_float` in `xstockstrat-analysis` uses `v.float_val or default` — a stored `0.0` is falsy in Python and silently returns the default. `get_float_present` (mirrors `get_int_present`) uses `HasField("float_val")` to safely read legitimate zeros. Every analysis config key where `0` is a meaningful operator-set value must use `get_float_present`, never `get_float`.
+- **Evidence**: `services/xstockstrat-analysis/app/watcher.py:124-130` vs `:103-114`; `docs/roadmap/features/022-signal-time-decay/design.md` § Chosen Approach — Config; `docs/roadmap/features/022-signal-time-decay/recon.md` § Risks — Critical
+- **Rule it implies**: `ANALYSIS` config keys where `0` is a meaningful operator-set value use `get_float_present`; never `get_float` for such keys. Propose as `ANALYSIS-WATCHER-1`.
+
+### 2026-08-14 — signal-time-decay — perf
+- **Pattern**: `_compute_opportunities`'s signals-merge section is a three-level nested loop (symbol → targets/strategies → signals). Per-signal work placed inside the `targets` loop runs once per (target × signal) — multiplied by the number of watchlist strategies a symbol is bound to. Decay computation, debug logging, and missing-field counting must be hoisted above the `targets` loop into a `sig_contribs` list.
+- **Evidence**: `services/xstockstrat-analysis/app/servicer.py:2154-2168`; `docs/roadmap/features/022-signal-time-decay/design.md` § Chosen Approach — nested-loop finding; context.md 2026-08-14T00:30:00Z round 4
+- **Rule it implies**: Any new per-signal logic added to `_compute_opportunities` §3 signals-merge must be placed above the `targets` loop, not inside it. Propose as `ANALYSIS-LOOP-1`.
+
+### 2026-08-15 — signal-time-decay — ordering
+- **Pattern**: Inter-feature dependency specs must split the behavioral contract (durable across landing-order rebases) from literal code anchors (volatile until sibling features land). Carry an explicit execute-time re-grep instruction in `## Step Dependencies` — the behavioral contract survives intact while literal symbols resolve to the real landed ones. Feature 022's D-1 rebase: behavioral contract survived; `weight_for` resolved to the real `source_weights.get()`.
+- **Evidence**: `docs/roadmap/features/022-signal-time-decay/implementation-spec.md` § Step Dependencies — MERGE-ORDER / REBASE CONSTRAINT; context.md 2026-08-15 D-1
+- **Rule it implies**: Inter-feature dependency specs must carry an execute-time re-grep instruction and split the behavioral contract from literal code citations.
+
+### 2026-08-05 — position-sizing-engine — design
+- **Pattern**: Authoritative-quantity generators (sole source of a computed value for an automated decision) must be fail-closed on missing/insufficient data; advisory-only (warn-log) checks running alongside them can remain fail-open without compromising safety. Mixing the two in the same request handler is valid but the asymmetry must be named explicitly in code (`// warn-only, non-blocking` vs `// fail-closed`) — the decisive test: would a "fail" here mean returning nothing (advisory) or fabricating a value the caller treats as authoritative?
+- **Evidence**: `docs/roadmap/features/023-position-sizing-engine/design.md` § Rejected Alternatives ("Fail-open on missing portfolio/price/ATR data — rejected: `ComputePositionSize` is the sole source of quantity"); context.md 2026-08-05 sdd-design session
+- **Rule it implies**: When a handler has both advisory and authoritative sub-checks, label each explicitly in code and test them independently — a future feature that changes one must not silently change the other.
+
+### 2026-08-07 — stop-loss-bracket-orders — reuse
+- **Pattern**: When only one or two `config.Watcher` booleans/floats make a method untestable in `xstockstrat-trading`, hoist the config-resolved value as an explicit call parameter (`s.cfgW.GetBool("key", default)` at the call site; the resolved value flows as a typed param). This is lighter-weight than the full interface-seam approach and three features in this codebase independently converged on it (100's `checkTradingStateForPlace`, 101's `computeStaleThreshold`, 023's `needSizing`, 030's `bracketOrdersEnabled`).
+- **Evidence**: `docs/roadmap/features/030-stop-loss-bracket-orders/implementation-spec.md` Deviation Log Step 9/10; context.md 2026-08-07 execute session ("Three recurring instances of the same testability constraint")
+- **Rule it implies**: When a single config read blocks unit-testing a function in `xstockstrat-trading`, prefer hoisting as a named parameter over introducing an interface — reserve the interface-seam approach for cases with multiple config reads or a richer dependency needing injection.
+
+### 2026-08-06 — stop-loss-bracket-orders — design
+- **Pattern**: IBKR Client Portal Web API uses linked-array bracket submission, not a client-settable `OCAGroup` string. Submit stop+take-profit together as a JSON array to `POST /iserver/account/{accountId}/orders`, each leg with `isSingleGroup: true`; child leg's `parentId` = parent's client-set `cOID`. The parent's `cOID` must be set explicitly — `ibkr.go`'s `SubmitOrder` did not send one prior to this feature. `OCAGroup` as a client-settable string field does not exist in IBKR's real Client Portal Web API.
+- **Evidence**: `docs/roadmap/features/030-stop-loss-bracket-orders/implementation-spec.md` Deviation Log Step 7; context.md 2026-08-06 sdd-spec session ("Key finding — corrects a `design.md` assumption")
+- **Rule it implies**: Any future feature touching IBKR bracket or OCA semantics must verify against IBKR's published Client Portal Web API reference (`isSingleGroup`/`parentId`/`cOID` array submission), not assume a field named `OCAGroup` exists.
+
+### 2026-08-06 — stop-loss-bracket-orders — design
+- **Pattern**: When a new per-account circuit-breaker (030's `broker_accounts.halted`) and an existing platform-wide gate (100's `platform.maintenance_mode`) coexist in the same gating chain, they are orthogonal: the per-account gate catches a single account's automated failure; the platform-wide gate is operator-driven and manual. Both must persist independently and gate `PlaceOrder`/`ReplaceOrder` in sequence. A future feature must not attempt to unify them.
+- **Evidence**: `docs/roadmap/features/030-stop-loss-bracket-orders/design.md` § "Coexistence with feature 100"; context.md 2026-08-06 design session (round 5 final approval)
+- **Rule it implies**: Feature 100's `/sdd-design` must record 030's `broker_accounts.halted` as prior art and not reinvent a per-account auto-halt via 100's own schema.
+
+### 2026-08-02 — position-and-order-detail-pages — design
+- **Pattern**: When a single-record RPC exists in proto but is not wired through the BFF, add it as an additive BFF handler rather than filtering the equivalent list RPC client-side. Avoids paging edge cases and keeps C-10(b) parity honest (both surfaces read the same authoritative RPC).
+- **Evidence**: `docs/roadmap/features/096-position-and-order-detail-pages/design.md` § Rejected Alternatives; `docs/roadmap/features/096-position-and-order-detail-pages/recon.md:63-65`; implementation-spec.md Step 2
+- **Rule it implies**: New per-entity pages requiring a single-record RPC must wire through an additive BFF handler, not client-side filtering of the list RPC.
+
+### 2026-08-02 — position-and-order-detail-pages — design
+- **Pattern**: A Sheet (quick peek) and a full page serve distinct interaction goals for the same entity and can coexist: Sheet for fast in-list scan, page for bookmarkable deep view. Keep existing Sheets as quick peeks when adding a full page; add an "Open full view →" link rather than removing the Sheet.
+- **Evidence**: `docs/roadmap/features/096-position-and-order-detail-pages/design.md` § Open Risks and § Rejected Alternatives
+- **Rule it implies**: Adding a full detail page for an entity does not require removing the existing Sheet; both serve distinct interaction patterns and can coexist.
+
+### 2026-08-02 — position-and-order-detail-pages — reuse
+- **Pattern**: Second-consumer rule — extract local page helpers to `lib/` the moment a second page needs them, not after.
+- **Evidence**: `docs/roadmap/features/096-position-and-order-detail-pages/recon.md` § Patterns to REUSE; implementation-spec.md Step 1
+- **Rule it implies**: Extract shared page helpers to `lib/` on the second consumer, not after.
+
+### 2026-08-07 — account-trading-halt-and-kill-switch — reuse
+- **Pattern**: When `config.Watcher` has no exported snapshot setter, its zero-value's `GetString`/`GetBool` always returns the `def` argument (nil-map read returns Go zero value). Test live-config-gated logic by testing pure state-parsing helpers independently, then prove fail-closed wiring via the zero-value watcher's `GetString` default (a `&config.Watcher{}` struct literal suffices).
+- **Evidence**: `services/xstockstrat-trading/internal/config/config.go:142-150`; context.md 2026-08-07 execute Step 8; `services/xstockstrat-trading/internal/service/trading_state_gate_test.go`
+- **Rule it implies**: In `xstockstrat-trading`, test config-gated logic by extracting pure state-parsing helpers and testing them directly; the zero-value `&config.Watcher{}` proves fail-closed wiring.
+
+### 2026-08-07 — account-trading-halt-and-kill-switch — design
+- **Pattern**: Config keys that carry safety-critical halt states should be seeded with per-`trading_mode` rows (independent paper/live), not a single `trading_mode='all'` row — halting live trading should not freeze paper testing during an incident.
+- **Evidence**: `services/xstockstrat-config/migrations/002_config_environment.up.sql:65-66`; `services/xstockstrat-config/migrations/011_platform_trading_state.up.sql`; context.md 2026-08-05 sdd-review round 1
+- **Rule it implies**: Safety-critical halt config keys must seed per-`trading_mode` rows; never a single `trading_mode='all'` row.
+
+### 2026-08-06 — account-trading-halt-and-kill-switch — reuse
+- **Pattern**: Before designing a new cross-service audit dependency for config mutations, check the existing `config.config_audit` table written by `010_config_audit_insert_trigger.up.sql` — it already captures every `SetConfig` write with actor, reason, and timestamp synchronously in the same DB transaction.
+- **Evidence**: `services/xstockstrat-config/migrations/001_config_tables.up.sql:26-51`; `services/xstockstrat-config/migrations/010_config_audit_insert_trigger.up.sql`; context.md 2026-08-06 round 2
+- **Rule it implies**: Config-mutation audit must route to the existing `config.config_audit` table; check it before designing any new cross-service audit dependency.
+
+### 2026-08-06 — exactly-once-order-intent — design
+- **Pattern**: `INSERT ... ON CONFLICT (intent_id) DO NOTHING RETURNING *` + staleness-gated optimistic CAS (`UPDATE ... WHERE state=$pending AND updated_at < $threshold RETURNING`) gives correct insert-or-return-existing idempotency at any instance count. Under READ COMMITTED isolation, `EvalPlanQual` means a second concurrent `UPDATE` sees 0 rows without an application mutex. Every `order_intents` operation must remain a single autocommit statement — holding a connection across a synchronous broker HTTP call against a 2-connection pool cap starves all other RPC handlers.
+- **Evidence**: `services/xstockstrat-trading/internal/repository/order_intent_repo.go` (`insertIntentSQL`, `reclaimOrphanIntentSQL`, `finalizeIntentSQL`); `docs/roadmap/features/101-exactly-once-order-intent/design.md` § Concurrency — pure DB-only; context.md 2026-08-06 sdd-design round 2
+- **Rule it implies**: When a service needs at-most-once semantics for an external side-effect call, prefer a DB-constraint-based insert-or-return-existing over any process-local mutex — the mutex's "single instance" premise is false during a rolling redeploy.
+
+### 2026-08-07 — exactly-once-order-intent — ordering
+- **Pattern**: When two features have a `merge-order.md` same-function-overlap dependency, branch feature/B off the unmerged feature/A branch. The integration PR for B targets A's branch; A's code is present via the stack, resolving the manual-merge risk without waiting for A to merge. Step line-numbers must be re-verified against the post-stack function body, not the spec's citations, before each step.
+- **Evidence**: context.md 2026-08-07 sdd-execute — "stacked-branch PR strategy" directive; feature.md Status History ("PR #880 targeting `feature/account-trading-halt-and-kill-switch`"); `docs/roadmap/features/merge-order.md` (101 blocked on 100, same-function overlap)
+- **Rule it implies**: A `merge-order.md` same-function overlap entry is a trigger for a stacked-branch strategy (feature/B off feature/A), not for blocking execute until A merges.
+
+### 2026-08-07 — exactly-once-order-intent — design
+- **Pattern**: When a config-gated computation includes a floor clamp and `config.Watcher` has no exported snapshot setter for tests, factor the pure math into a zero-dependency function (`computeStaleThreshold(floorMs, multiplier)`) and test the clamp/no-clamp cases against it directly. The config-aware wrapper is tested only for "uses the live config defaults correctly." Repeating pattern in `xstockstrat-trading` (features 100 and 101 both).
+- **Evidence**: `services/xstockstrat-trading/internal/service/order_intent.go` (`computeStaleThreshold`); context.md 2026-08-07 Step 9+10 deviation note; `docs/roadmap/features/101-exactly-once-order-intent/design.md` § Sweep
+- **Rule it implies**: In `xstockstrat-trading`, any new config-gated computation with clamping/floor logic should use the pure-function extraction pattern immediately rather than discovering the `config.Watcher` test limitation at the TDD step.
+
+### 2026-08-06 — exactly-once-order-intent — design
+- **Pattern**: When a service's repo layer has zero test files and no DB-mocking library, route behavioral proof of a complex DB idiom through a pure classifier function (`classifyIntentLookup`) with zero DB dependency. The pure function covers all branching logic with full unit tests; the integration script covers real SQL execution. Avoids introducing a DB-mocking library the service does not otherwise use.
+- **Evidence**: `services/xstockstrat-trading/internal/service/order_intent.go` (`classifyIntentLookup`); `services/xstockstrat-trading/internal/service/order_intent_test.go`; context.md 2026-08-06 sdd-spec ("zero *_test.go in internal/repository")
+- **Rule it implies**: Before routing behavioral proof through a repository unit test in a Go service, grep `internal/repository` for `*_test.go`; if none exist, prefer the pure-function + integration-script proof pattern.
+
+### 2026-08-04 — broker-state-reconciliation — ordering
+- **Pattern**: When an initial feasibility check finds a feature depends on a nonexistent automated path, try a lightweight rescoped version (reusing existing clients/infra, no new service) before demoting outright — the cheap version of a safety control can be worth building now even when the expensive version should wait.
+- **Evidence**: context.md 2026-08-04T02:00:00Z ("Re-scope before demoting, not just demote"); feature.md Status History (demoted then revived in same session)
+- **Rule it implies**: At the demotion gate, always ask "is there a version ≤1 service / no new DB table that is still genuinely useful?" before writing `demoted/canceled`.
+
+### 2026-08-07 — broker-state-reconciliation — ordering
+- **Pattern**: In a 5-feature stacked-branch squash-merge chain, after each upstream squash lands on `main-dev`, downstream feature PRs require manual retarget + `git merge origin/main-dev` (not rebase) — rebase rewrites already-integrated content as new commits because the squash creates a synthetic commit with no ancestry to the pre-squash history. Conflicts in shared files resolved by "ours" (verified byte-identical to pre-merge state).
+- **Evidence**: context.md 2026-08-07 post-code deviation bullet (stacked chain 100→101→023→030→102, PRs #879→#883)
+- **Rule it implies**: For cross-feature stacked chains larger than 2, use `git merge --no-edit origin/main-dev` with "ours" for shared-file conflicts at each retarget step — not `git rebase`.
+
+### 2026-08-07 — fix-mcp-target-user-authz — design
+- **Pattern**: When removing a caller-suppliable identity/routing parameter from an API surface, replace it with a **required parameter with no default** (not a flipped default). Fails loudly at schema level, avoids silently re-shipping old default behavior, avoids silent narrowing.
+- **Evidence**: `docs/roadmap/features/111-fix-mcp-target-user-authz/design.md` § Rejected Alternatives; context.md 2026-08-07 /sdd-design round 2
+- **Rule it implies**: When removing a caller-suppliable identity param, use a required parameter with no default — not a flipped default value.
+
+### 2026-08-07 — fix-mcp-target-user-authz — design
+- **Pattern**: Shared claims-primitive helpers should be thin single-purpose wrappers, not a combined tuple return. Deciding test: do any callers actually need both values from a single call? If not, the tuple optimizes for coupling that does not exist.
+- **Evidence**: `docs/roadmap/features/111-fix-mcp-target-user-authz/design.md` § Chosen Approach #1; § Rejected Alternatives (merge-into-tuple rejected)
+- **Rule it implies**: Design shared auth helper primitives as thin single-purpose wrappers; merge into a tuple only if multiple callers demonstrably need both values in one call.
+
+### 2026-08-07 — fix-mcp-target-user-authz — reuse
+- **Pattern**: Test shared security primitives directly (one test class for the helper), not only transitively through one consumer. This covers all N consumers' raise path without touching unrelated test files.
+- **Evidence**: `docs/roadmap/features/111-fix-mcp-target-user-authz/implementation-spec.md` Step 2 (TestCallerIdentityHelpers)
+- **Rule it implies**: New shared auth primitives get their own test class testing all raise paths directly.
+
+### 2026-08-07 — ingest-signal-dedup — design
+- **Pattern**: Sentinel-exception rollback for asyncpg transactions — raise a private sentinel inside `async with conn.transaction():`, catch it before the generic `except Exception` to guarantee rollback. Pin with mock-call-count assertion, not a live-DB row count (when a service has no DB fixtures).
+- **Evidence**: `docs/roadmap/features/111-ingest-signal-dedup/design.md:277-312`; context.md 2026-08-07 sdd-design round 2 synthesis
+- **Rule it implies**: asyncpg transaction rollback-on-condition must use a private sentinel exception caught before the generic `except Exception` — not a conditional `ROLLBACK` or return-without-commit.
+
+### 2026-08-07 — ingest-signal-dedup — reuse
+- **Pattern**: Async-context-manager mock for `self._db.acquire()` / `conn.transaction()` — house in `tests/_helpers.py` when a service introduces its first explicit transaction so all test classes share the construct.
+- **Evidence**: `docs/roadmap/features/111-ingest-signal-dedup/design.md:303-318`; context.md:107-115; implementation-spec.md:363-366
+- **Rule it implies**: When a Python service introduces its first asyncpg transaction, place the mock async-context-manager helper in `tests/_helpers.py` immediately — not per-class.
+
+### 2026-08-07 — watchlist-screen-improvements — design
+- **Pattern**: For a detail component with multiple local state variables, apply `key={itemId}` to the whole component to reset all state on a switch, then verify remount is cheap by checking the app's actual `staleTime`. A `useEffect`-based reset produces a one-paint stale-frame flicker; per-piece keyed subcomponents reproduce the same leak for every new state variable added. Deciding test: if queries cache long enough that a switch within the stale window costs zero refetches, keying the whole component is free and closes the entire local-state leak class.
+- **Evidence**: context.md 2026-08-07T00:20:00Z rounds R1-R5; `docs/roadmap/features/112-watchlist-screen-improvements/design.md` §4; `services/xstockstrat-ui/src/lib/queryClient.ts:14`
+- **Rule it implies**: Key the whole detail component and verify cheapness via staleTime; do not key subcomponents piecemeal.
+
+### 2026-08-07 — watchlist-screen-improvements — design
+- **Pattern**: A `key`-remounted detail component discards its own `writeInFlight` boolean on switch-away. Close the residual cross-instance race with a two-layer guard: (1) local `writeInFlight` boolean for intra-pane races; (2) shared `mutationKey` on relevant mutation hooks + `useIsMutating` at the ancestor that owns the switch control, additionally gated on `isFetching` because `invalidateQueries` in `onSuccess` is not awaited and a mutation can report "done" before its refetch settles.
+- **Evidence**: context.md 2026-08-07T00:20:00Z R5-R6; `docs/roadmap/features/112-watchlist-screen-improvements/design.md` §5; `services/xstockstrat-ui/src/hooks/useInvalidatingMutation.ts`
+- **Rule it implies**: A key-remounted component requires a two-layer concurrency guard: local `writeInFlight` + ancestor `useIsMutating` || `isFetching`.

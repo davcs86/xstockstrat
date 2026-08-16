@@ -1,11 +1,11 @@
 # Feature: position-and-order-detail-pages
 
-**Lifecycle Status**: `launched`
 **Committed to main**: c1d1882
 **Launched date**: 2026-08-06
 **Development Branch**: `feature/position-and-order-detail-pages`
 **Created**: 2026-08-02
 **Last Updated**: 2026-08-10
+**Archived**: 2026-08-16
 
 ---
 
@@ -19,6 +19,7 @@
 | 2026-08-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps (frontend-only; no proto/migration). Grep-resolved: `GetPosition` RPC exists on `PortfolioService` but is **not** wired through the trader BFF — 096 adds the BFF method + browser hook (additive) rather than reusing `listPositions` client-side, so the page reads exactly one authoritative position. |
 | 2026-08-10 | `implementation-ready` → `code-completed` | /sdd-story (retroactive correction) | **Doc-drift fix, not new work.** All 6 steps were actually implemented and merged directly to `main-dev` via PR #855 (`feat(096): dedicated single-Position page + single-Order ticket page`, commit `7f6f65e`) on 2026-08-02 — the same session that wrote this implementation spec (see context.md "Delivery: implemented directly in this session"). `feature.md`/`implementation-spec.md` were never updated to reflect that, so the feature sat at `implementation-ready` for over a week after shipping. Caught while starting a follow-up feature that builds on these pages. |
 | 2026-08-06 | `code-completed` → `launched` | CI workflow (retroactive) | Promoted via PR #875 (`release: promote main-dev to main (2026-08-06)`); committed `c1d1882`. CI's `ci-validate-feature-status.yml` only auto-flips features that are already `code-completed` at promotion time — since this feature was still (incorrectly) `implementation-ready`, the automation silently skipped it. Backfilled here using the same fields/format CI would have written. |
+| 2026-08-16 | launched (unchanged) | /sdd-archiver | Archived: synthesis written to context.md + Ledger, specs pruned. |
 
 ---
 

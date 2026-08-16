@@ -1,7 +1,6 @@
 # Feature: fix-fmp-config-boot-only
 
 **Type**: bug
-**Lifecycle Status**: `launched`
 **Committed to main**: 3b437fd2dce0e243249bdb4b64edd8ad9a029562
 **Launched date**: 2026-07-30
 **Development Branch**: `feature/fix-fmp-config-boot-only`

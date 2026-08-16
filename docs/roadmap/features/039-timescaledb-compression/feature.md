@@ -1,6 +1,5 @@
 # Feature: timescaledb-compression
 
-**Lifecycle Status**: `idea`
 **Development Branch**: `feature/timescaledb-compression`
 **Created**: 2026-05-27
 **Last Updated**: 2026-05-27

@@ -1,6 +1,5 @@
 # Feature: align-frontend-e2e-bff-mocks
 
-**Lifecycle Status**: `launched`
 **Committed to main**: edf803cb8942cee14abc604d1ed95c11b79d8445
 **Launched date**: 2026-06-04
 **Development Branch**: `feature/align-frontend-e2e-bff-mocks`

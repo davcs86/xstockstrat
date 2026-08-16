@@ -315,7 +315,7 @@ The 20 features in `draft`, `idea`, and `implementation-ready` group into a hand
 
 ### How to read the backlog
 
-Run `/sdd-status` for a live tabular view. Or browse the directory directly: every `feature.md` opens with a Lifecycle Status line, a status history table, and a one-paragraph Summary. The full implementation plan lives in `implementation-spec.md` once `/sdd-spec` has been run.
+Run `/sdd-status` for a live tabular view. Or browse the directory directly: every feature directory has a `status.md` (one-line current status), and `feature.md` opens with a status history table and a one-paragraph Summary. The full implementation plan lives in `implementation-spec.md` once `/sdd-spec` has been run.
 
 For the mechanics of how a `draft` becomes a `launched` → see `sdd-lifecycle.pdf`. For the narrative version of the same loop → see `sdd-flow.pdf`.
 

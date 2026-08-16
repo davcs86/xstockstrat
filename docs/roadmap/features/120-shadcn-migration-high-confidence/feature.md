@@ -1,6 +1,5 @@
 # Feature: shadcn-migration-high-confidence
 
-**Lifecycle Status**: `launched`
 **Committed to main**: d5763e05e9750931610d809c6b4edd7fd810525e
 **Launched date**: 2026-08-09
 **Development Branch**: `feature/shadcn-migration-high-confidence`

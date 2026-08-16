@@ -1,6 +1,5 @@
 # Feature: opportunity-live-market-enrichment
 
-**Lifecycle Status**: `draft`
 **Development Branch**: `feature/opportunity-live-market-enrichment`
 **Created**: 2026-08-02
 **Last Updated**: 2026-08-02
