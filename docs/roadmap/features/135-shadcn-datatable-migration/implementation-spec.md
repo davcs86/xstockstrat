@@ -658,7 +658,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 
 ### Step 13 — service: migrate `/insights/strategies/[id]` Past Runs table (row 10) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx` — modify
@@ -710,7 +710,7 @@ grep -n "DataTable\|onRowClick" src/app/insights/strategies/\[id\]/page.tsx
 
 ### Step 14 — test: verify `/insights/strategies/[id]` Past Runs migration preserves row-select
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/backtest-coverage.spec.ts` — modify (if locators break)
@@ -1724,3 +1724,32 @@ attributes — the actual rendered DOM still carries both attributes (confirmed 
 `e2e/insights/screener.spec.ts`'s `getByTestId('screen-results'|'result-row')` assertions, all passing).
 **Disposition**: composite extension, staged under Step 9 (`data-table.tsx` added to its effective file
 set) with this Deviation Log entry as the F-08 exception record.
+
+### Deviation: Step 13 — migrate Past Runs table to `DataTable` (composite `onRowClick` bug)
+**Spec said**: Step 1's Instructions specified the row-click guard as "the row gets `role="button"`...
+an `onClick` handler that calls `isInteractiveTarget(...)` and only invokes `onRowClick(row.original)`
+when it returns `false`."
+**Actual**: Step 13 is the composite's **first `onRowClick` consumer** (Steps 1–12 never used it).
+`e2e/insights/backtest-coverage.spec.ts` caught a genuine functional bug on first use: the guard's
+selector, `'a, button, [role="button"], [data-row-click-ignore]'`, also matches the row's own
+`role="button"` attribute (added by the composite itself when `onRowClick` is set) — `.closest()`
+called from *any* click target inside the row, including plain non-interactive cell text, walks up
+and matches the row itself as the nearest `[role="button"]` ancestor-or-self. This made
+`isInteractiveTarget` return `true` unconditionally for every click in an `onRowClick` row, so
+`onRowClick` never fired at all. 5 of 10 `backtest-coverage.spec.ts` tests failed reproducibly
+(confirmed via stash/pop against the pre-fix composite, not cold-start flake — isolated re-runs with
+`--retries=2` still failed on the same assertion). Fixed `data-table.tsx`: the row now also carries a
+`data-datatable-row` marker, and the guard's selector became
+`'a, button, [role="button"]:not([data-datatable-row]), [data-row-click-ignore]'` — excludes the row's
+own marked `role="button"` while still catching a genuinely nested `[role="button"]` element. Added a
+regression-guard unit test to `data-table.test.ts` (red-before-green: failed against the pre-fix
+selector, passed after).
+**Reason**: A correctness bug in shared infrastructure, caught by the first consumer that exercises the
+affected code path — fixing it here (rather than working around it per-call-site) benefits every
+subsequent `onRowClick` step (15, 21, 25, 27, 29) without them needing to re-discover or re-fix it.
+**Disposition**: composite bug fix, staged under Step 13 (`data-table.tsx` + `data-table.test.ts` added
+to its effective file set) with this Deviation Log entry as the F-08 exception record. Steps 1–12 never
+pass `onRowClick`, so the fix (an added `data-datatable-row` marker + a `:not()` clause scoped to that
+marker) cannot change their behavior — the marker/exclusion only exist on rows where `onRowClick` is
+set. Spot-checked one unaffected step's suite (`sources.spec.ts`, Step 3/4) after the fix to confirm
+no incidental regression; see context.md.

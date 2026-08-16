@@ -522,6 +522,48 @@ clears it lands, rather than letting the warning go stale.
 - Files modified: none (no locator changes needed)
 - Deviations: none
 
+### Step 13 — service: migrate `/insights/strategies/[id]` Past Runs table (row 10) to `DataTable` [done]
+- **Real composite bug found and fixed** (Step 13 is the composite's first `onRowClick` consumer —
+  Steps 1–12 never set it). The guard's `[role="button"]` selector clause also matched the row's own
+  `role="button"` (set by the composite itself for a11y), so `.closest()` from *any* click target
+  inside an `onRowClick` row matched the row itself first, and `onRowClick` never fired — a
+  correctness bug shipped since Step 1, invisible until first exercised. Caught by
+  `e2e/insights/backtest-coverage.spec.ts`: 5/10 tests failed, confirmed genuinely (not cold-start
+  flake) via `git stash`/`pop` isolating the pre-fix composite and re-running in isolation with
+  `--retries=2` — same assertion failure every time. Fixed `data-table.tsx`: added a
+  `data-datatable-row` marker to the row and changed the guard selector to
+  `[role="button"]:not([data-datatable-row])`. Added a red-before-green regression-guard unit test to
+  `data-table.test.ts` (stashed the fix to confirm the new test fails against the pre-fix selector,
+  then restored — 97/97 pass). Full detail + reasoning in the Deviation Log. Spot-checked
+  `sources.spec.ts` (an unaffected, non-`onRowClick` step) post-fix — no incidental regression, same
+  cold-start-flake pattern as before.
+- Defined `pastRunsColumns: ColumnDef<BacktestRun>[]` for the 7 columns, preserving `timestampToDate`
+  formatting and the legacy `rangeStart`/`rangeEnd` `'—'` fallback. Replaced the manual
+  `role="button"`/`onClick`/`onKeyDown` row wiring with the composite's `onRowClick`, preserving
+  `aria-selected` and the `bg-secondary` selected-row styling via `rowClassName`. Preserved
+  `data-testid="past-run-row"` per-row via `getRowProps` (the composite extension from Step 9) —
+  `data-testid="past-runs"` stays on the outer `<Card>`, untouched (not part of the migrated block).
+  Replaced `<Table className="w-full text-sm">` (confirmed exact-line) with `<DataTable
+  columns={pastRunsColumns} data={pastRuns} getRowId={(run) => run.backtestId} tableClassName="w-full
+  text-sm" onRowClick={...} rowClassName={...} getRowProps={...} />`.
+- TDD: the migration itself is a refactor (red N/A); the composite bug fix got its own genuine
+  red-green cycle (above).
+- Verification: `tsc --noEmit` clean; `pnpm run lint` clean (no closures, no warnings); grep confirms
+  `DataTable`/`onRowClick`.
+- Files modified: `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx`,
+  `services/xstockstrat-ui/src/components/ui/data-table.tsx` (deviation),
+  `services/xstockstrat-ui/src/components/ui/data-table.test.ts` (deviation)
+- Deviations: composite `onRowClick` bug fix — see Deviation Log entry above.
+
+### Step 14 — test: verify `/insights/strategies/[id]` Past Runs migration preserves row-select [done]
+- Re-ran `e2e/insights/backtest-coverage.spec.ts` after the composite fix: 8 clean, 2 cold-start-
+  flaky-then-pass (both on the unrelated insufficient-data/backfill gap-panel feature, not the Past
+  Runs table). The row-select-opens-diagnostics behavior and keyboard activation (Enter/Space via the
+  composite's built-in guard, replacing the removed manual `onKeyDown`) both work correctly now.
+- `mobile-overflow.spec.ts -g "strat-high-001"` — flaky-then-pass, green.
+- Files modified: none (no locator changes needed)
+- Deviations: none
+
 ## Session 2026-08-15 — sdd-execute boot (branch-topology correction)
 
 - Boot Step B3 (`git ls-remote --heads origin feature/shadcn-datatable-migration`) found the

@@ -36,9 +36,17 @@ interface ClosestTarget {
  * `[role="button"]`) or an explicit `[data-row-click-ignore]` escape hatch. Used to guard
  * `DataTable`'s `onRowClick` so a click/keydown on a nested interactive element never also
  * fires the row handler.
+ *
+ * `[role="button"]:not([data-datatable-row])` deliberately excludes the row's own `role="button"`
+ * (set below, for a11y, on every `onRowClick`-enabled row) — without the exclusion, `.closest()`
+ * would always find the row itself as the nearest `[role="button"]` ancestor-or-self for *any*
+ * click inside it, permanently short-circuiting `onRowClick`. The exclusion still catches a
+ * genuinely nested `role="button"` element (e.g. an icon-button that isn't a native `<button>`).
  */
 export function isInteractiveTarget(target: ClosestTarget): boolean {
-  return !!target.closest('a, button, [role="button"], [data-row-click-ignore]');
+  return !!target.closest(
+    'a, button, [role="button"]:not([data-datatable-row]), [data-row-click-ignore]',
+  );
 }
 
 export interface DataTableProps<TData, TValue> {
@@ -159,6 +167,7 @@ export function DataTable<TData, TValue>({
                   ? {
                       role: 'button',
                       tabIndex: 0,
+                      'data-datatable-row': '',
                       onClick: handleRowClick(row.original),
                       onKeyDown: handleRowKeyDown(row.original),
                     }

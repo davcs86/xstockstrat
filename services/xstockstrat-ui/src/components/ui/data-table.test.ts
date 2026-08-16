@@ -31,4 +31,18 @@ describe('isInteractiveTarget', () => {
     const target = { closest: () => null };
     expect(isInteractiveTarget(target)).toBe(false);
   });
+
+  // Regression guard: an onRowClick-enabled row gets its own role="button" (composite's own
+  // marker: data-datatable-row) for a11y. Without the `:not([data-datatable-row])` exclusion in
+  // the guard's selector, .closest('[role="button"]') would match the row itself for *any* click
+  // inside it (not just a genuinely nested interactive element) — permanently short-circuiting
+  // onRowClick. This stub simulates a target whose only [role="button"] ancestor-or-self is the
+  // row itself, marked data-datatable-row.
+  it('does not treat the row\'s own role="button" (data-datatable-row) as an interactive target', () => {
+    const target = {
+      closest: (selectors: string) =>
+        selectors.includes('[role="button"]:not([data-datatable-row])') ? null : ({} as Element),
+    };
+    expect(isInteractiveTarget(target)).toBe(false);
+  });
 });
