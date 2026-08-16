@@ -1,7 +1,6 @@
 # Feature: fix-listorders-ambiguous-updated-at
 
 **Type**: bug
-**Lifecycle Status**: `code-completed`
 **Development Branch**: `claude/commit-135-opportunities-strategies-0xjnxk`
 **GitHub Issue**: n/a — GitHub Issues are disabled on `davcs86/xstockstrat`; bug captured directly via `/sdd-triage` (Track C) from `docs/reports/2026-08-16-trading-listorders-ambiguous-updated-at-defect.md`
 **Severity**: SEV-2
