@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-15 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS, 0 blockers, no Floor breach). Warnings: 4 Open Questions are legitimate /sdd-design deferrals; stale `PLATFORM_SUBNAV` term (live model is `NAV_GROUPS`). Overlap: soft/dependency only (deps 125 + 143 both already merged to main-dev); no FAIL-class collision. Spec assumptions verified accurate post-143. |
 
 ---
 
@@ -41,4 +42,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review symbol-page-section-nav product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design symbol-page-section-nav` — recon + design debate (resolve the nav-pattern fork) before /sdd-spec
