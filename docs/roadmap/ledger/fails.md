@@ -1390,3 +1390,45 @@ ambiguity is logged here).
 - **Mistake**: During `/sdd-design`'s round-2 grilling, the design-proposer subagent proposed shrinking `xstockstrat-ingest`'s and `xstockstrat-agent`'s timeframe alias/lookup tables (`_TF_ALIASES`, `_STR_TO_ENUM`, `_BARS_PER_DAY`) to a literal single entry (`{"1d": "1d"}`) as a DRY fix, framed as "self-evident" and plausible on its face. The round-2 design-adversary caught, by actually grepping the tables and their consumers, that this was concretely wrong: the surviving `"1d"` timeframe has *two* legitimate spellings (`"1d"`, `"1Day"`) that a single-entry table would silently drop, and one of the tables (`_STR_TO_ENUM`) is dual-purposed — it also re-derives `timeframe_enum` for historical/resumed jobs on a read path, not just new-request validation — so shrinking it would have broken 4 existing tests and made every historical `15m`/`1h` job display `timeframe_enum=UNSPECIFIED`. This is the exact same absence/scope-reduction-claim pattern `080-fix-backfill-timeframe-enum` already named in this file (2026-07-29/07-30 entries) — but recurring one layer earlier: inside the design *debate* (an LLM subagent's proposal), not execution or a human-authored spec. The adversarial round caught it before it reached `implementation-spec.md`, which is exactly what the grilling phase exists for — but it demonstrates the trap applies to AI-proposed refactors just as much as human ones.
 - **Evidence**: `docs/roadmap/features/143-daily-bars-only/context.md` § Session 2026-08-16 — sdd-design Phase 1; `docs/roadmap/features/143-daily-bars-only/design.md` § Rejected Alternatives ("Shrinking ingest/agent's alias tables to a literal single entry").
 - **Rule it implies**: A design-phase claim that narrows or drops entries from an existing lookup table/list must be grep-verified against every consumer of that table (including read/display paths, not just the validation path it's ostensibly about) before being accepted into `design.md` — "single entry" / "just drop X" is exactly the shape of claim `docs/sdd/constitution.md` **C-01**/**P-03** already require evidence for, and the design-adversary role should treat any such claim as guilty until grep-proven innocent, the same way `/sdd-spec` already must.
+
+### 2026-08-16 — fix-config-ui-env — assumptions
+
+- **Mistake**: `APPLICATION_ENV` on the DigitalOcean app platform is set to `"development"` (`.do/app.dev.yaml:26`) while the Config UI's `env` query param and the `xstockstrat-config` DB `environment` CHECK constraint use `"dev"` (`migrations/002_config_environment.up.sql:8`). A naive `APPLICATION_ENV === env` comparison never matches on a dev deployment, silently treating it as non-native.
+- **Evidence**: `docs/roadmap/features/115-fix-config-ui-env/context.md` sdd-design session (Open design nuance: "`'development'` → `'dev'` normalization required, mirrors Go hotfix"); `.do/app.dev.yaml:26`; `services/xstockstrat-config/migrations/002_config_environment.up.sql:8`
+- **Rule it implies**: When comparing DO `APPLICATION_ENV` against config-schema environment strings, normalize `"development"` → `"dev"` before the comparison — the DO platform vocabulary differs from the DB CHECK constraint vocabulary.
+
+### 2026-08-16 — fix-config-ui-env — assumptions
+
+- **Mistake**: `APPLICATION_ENV` is not a `NEXT_PUBLIC_*` variable and is therefore absent from the client bundle; reading it inside a Client Component returns `undefined` at runtime with no build-time error.
+- **Evidence**: `docs/roadmap/features/115-fix-config-ui-env/context.md` Steps 7-8 design rationale (Server Component wrapper required to safely read the variable); `services/xstockstrat-ui/src/app/config-ui/[namespace]/page.tsx`
+- **Rule it implies**: Before reading `process.env.X` in a Next.js component, check whether `X` is `NEXT_PUBLIC_*`; non-public variables read in Client Components are `undefined` at runtime — use a Server Component wrapper to pass the value as a prop.
+
+### 2026-08-16 — exit-cooldown — test-coverage
+
+- **Mistake**: The test-helper factory for `xstockstrat-analysis` service tests did not include a stub for `get_int_present` (the config accessor for `exit_cooldown_days`). Tests that exercised the exit-cooldown gate path failed with a missing-stub error, not a logical failure — the gap was not caught at spec time because the factory was audited against the more common `get_string`/`get_float` accessors, not the integer-present variant.
+- **Evidence**: `docs/roadmap/features/116-exit-cooldown/context.md` sdd-execute session (get_int_present factory gap discovery); `services/xstockstrat-analysis/tests/` helper factories
+- **Rule it implies**: When writing a test-helper factory that stubs a service's config client, enumerate all accessor-method variants the service uses (`get_string`, `get_float`, `get_int`, `get_int_present`, `get_bool`) — omitting a less-common variant surfaces only at runtime, not at spec time.
+
+### 2026-08-16 — screener-fundamental-metric-selector — assumptions
+
+- **Mistake**: `_validate_fundamental_metrics` in `screener.py` was read as validating only the 11-field `_FUNDAMENTAL_FIELDS` constant set. It actually accepts `_FUNDAMENTAL_FIELDS` **union** any keys present in `extra_metrics` observed in the fetched batch. A UI select built from only the 11 constants would reject valid server-observed `extra_metrics` keys at validation time.
+- **Evidence**: `docs/roadmap/features/117-screener-fundamental-metric-selector/context.md` sdd-review session (FR-5 wording corrected); `services/xstockstrat-analysis/app/services/screener.py:31-44` (`_validate_fundamental_metrics`)
+- **Rule it implies**: When building a UI select from a backend validation function, read the function body, not just its name — a function named `_validate_*` may accept a superset of the named constant set.
+
+### 2026-08-16 — shadcn-migration-low-confidence — scope-creep
+
+- **Mistake**: `ui/alert.tsx` as installed by shadcn ships only two variants (`default` and `destructive`). When `OrderForm.tsx`/`EditOrderDialog.tsx` were migrated to use `Alert` for success messages, the absence of a `success` variant was discovered at execute time — requiring a custom `className` workaround rather than a standard variant call. This gap was not caught at spec time because the spec assumed the installed component covered the needed variants.
+- **Evidence**: `docs/roadmap/features/122-shadcn-migration-low-confidence/context.md` sdd-execute Steps 9-12; `services/xstockstrat-ui/src/components/ui/alert.tsx`
+- **Rule it implies**: Before migrating a success/error message to `ui/alert.tsx`, verify which variants the installed file exports — the default shadcn Alert has only `default` and `destructive`; a `success` variant requires a manual addition or a custom class workaround.
+
+### 2026-08-16 — shadcn-sidebar-visual-rewrite — assumptions
+
+- **Mistake**: `data-active={isActive}` always renders the `data-active` attribute in the DOM (with value `"false"` when the prop is falsy). Tailwind's bare `data-active:bg-sidebar-accent` variant matches on attribute **presence**, not value — so every nav item was permanently painted with the accent background regardless of state. The fix is `data-active={isActive || undefined}`; `undefined` suppresses attribute rendering. This pattern generalises to any bare `data-*:` Tailwind variant.
+- **Evidence**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/context.md` post-checkpoint correction; `services/xstockstrat-ui/src/components/ui/sidebar.tsx` (data-active fix)
+- **Rule it implies**: For any bare `data-*:` Tailwind variant, use `data-x={value || undefined}` — `{false}` still renders the attribute and activates presence-based variants. Applies to all vendored shadcn primitives using this pattern.
+
+### 2026-08-16 — shadcn-sidebar-visual-rewrite — assumptions
+
+- **Mistake**: Playwright's `fullPage: true` screenshot option extends the capture to the full scroll height of the page; for fixed-position overlays (mobile sidebar, drawers, modals), this makes the overlay appear at the top of a taller-than-viewport image, which visually reads as "not filling the screen" even when it correctly fills the viewport.
+- **Evidence**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/context.md` post-checkpoint correction investigation (`fullPage: true` artifact, confirmed non-bug via `boundingBox()` measurement); `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/design.md` ADDENDUM
+- **Rule it implies**: For visual verification of fixed-position overlays, use `fullPage: false` (the default) — `fullPage: true` extends to scroll-content below the fold and can misrepresent overlay dimensions relative to the viewport.

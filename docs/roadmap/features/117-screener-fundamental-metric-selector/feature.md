@@ -2,6 +2,7 @@
 
 **Committed to main**: fb8a987e22cd4cd242fcc9077e0a1d312a89bb1f
 **Launched date**: 2026-08-09
+**Archived**: 2026-08-16
 **Development Branch**: `feature/screener-fundamental-metric-selector`
 **Created**: 2026-08-07
 **Last Updated**: 2026-08-07
@@ -19,6 +20,7 @@
 | 2026-08-07 | `implementation-ready` → `code-completed` | manual execute | All 3 steps done on the harness branch `claude/fundamentals-selector-audit-egeez2` (single-branch mandate, no per-step PRs). TDD red→green verified literally via `git stash`. `tsc --noEmit`/`pnpm run lint` clean; 12/12 `screener.spec.ts` e2e tests pass. No spec deviations. |
 
 | 2026-08-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #908; committed fb8a987e22cd4cd242fcc9077e0a1d312a89bb1f |
+| 2026-08-16 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(3)/fails(1); pruned 4 specs |
 ---
 
 ## Artifacts
