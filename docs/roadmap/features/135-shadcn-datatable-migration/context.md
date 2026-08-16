@@ -458,6 +458,41 @@ clears it lands, rather than letting the warning go stale.
 - Files modified: `services/xstockstrat-ui/e2e/config-ui/audit.spec.ts` (new)
 - Deviations: none
 
+### Step 9 — service: migrate `/insights/screener` results table (row 8) to `DataTable` [done]
+- **Blocker resolved before implementing**: Step 9 needs `data-testid="screen-results"` (root) and
+  `"result-row"` (per row), which Step 1's shipped composite doesn't support. This is the exact gap
+  the `/sdd-review impl-spec` warning flagged for Steps 9/13/23. Raised via `AskUserQuestion`
+  (sequential-mode §5.7 blocker) with Option A ("fix now") recommended; user selected it (confirmed
+  again explicitly with "fix it now" after the first answer came back "[No preference]"). Extended
+  `data-table.tsx` with `tableTestId` + `getRowProps` (full detail + rationale in the Deviation Log).
+  This is a one-time composite fix that also resolves the identical Steps 13 and 23 gaps in advance —
+  they will not need to re-raise this blocker.
+- Defined `columns: ColumnDef<ScreenResultRow>[]` for the 10 columns, preserving the index-based Rank
+  cell (`row.index + 1`, `enableSorting: false`), the colored-dot Score cell, the ATR header tooltip
+  (moved into a custom `header` render function), the Held Badge, Passed glyph, and the
+  `INSUFFICIENT_DATA`/gap conditional Status cell verbatim. Replaced `<Table
+  className="min-w-[640px]" data-testid="screen-results">` with `<DataTable columns={columns}
+  data={results} getRowId={(r) => r.symbol} tableClassName="min-w-[640px]"
+  tableTestId="screen-results" getRowProps={() => ({ 'data-testid': 'result-row', className:
+  'border-b' })} />`.
+- TDD: refactor, no new assertable behavior for this step (sorting is additive, not asserted) — red
+  N/A; green captured jointly with Step 10.
+- Verification: `tsc --noEmit` clean; `pnpm run lint` clean (no closures, no exhaustive-deps warning).
+  The spec's own grep Verification no longer matches (testids indirected through composite props) —
+  see Deviation Log; substituted the e2e spec's `getByTestId` assertions as the real proof.
+- Files modified: `services/xstockstrat-ui/src/app/insights/screener/page.tsx`,
+  `services/xstockstrat-ui/src/components/ui/data-table.tsx` (deviation, see Deviation Log)
+- Deviations: composite extension (`tableTestId`, `getRowProps`) — see Deviation Log entry above.
+
+### Step 10 — test: verify `/insights/screener` migration preserves the known-trap fix + behavior [done]
+- Ran `e2e/insights/screener.spec.ts` (19 tests): 17 clean, 2 cold-start-flaky-then-pass (same pattern
+  as every prior step — confirmed in isolation with `--retries=2`, both pass on retry). All
+  `data-testid="screen-results"`/`"result-row"` and polling-status assertions unchanged.
+- `mobile-overflow.spec.ts -g "insights/screener"` — flaky-then-pass, green: `overflow <= 1` at 390px,
+  the direct regression-guard proof for the product-spec's Known Trap (2026-08-06).
+- Files modified: none (no locator changes needed)
+- Deviations: none
+
 ## Session 2026-08-15 — sdd-execute boot (branch-topology correction)
 
 - Boot Step B3 (`git ls-remote --heads origin feature/shadcn-datatable-migration`) found the

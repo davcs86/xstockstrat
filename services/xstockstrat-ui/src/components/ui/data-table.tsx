@@ -56,6 +56,10 @@ export interface DataTableProps<TData, TValue> {
   getRowId?: (row: TData, index: number) => string;
   rowClassName?: (row: TData) => string | undefined;
   tableClassName?: string;
+  /** Root `<table>` `data-testid`, for call sites migrating an existing testid-bearing table. */
+  tableTestId?: string;
+  /** Extra attributes (e.g. `data-testid`) merged onto each row's `<tr>`. */
+  getRowProps?: (row: TData) => React.HTMLAttributes<HTMLTableRowElement>;
 }
 
 export function DataTable<TData, TValue>({
@@ -68,6 +72,8 @@ export function DataTable<TData, TValue>({
   getRowId,
   rowClassName,
   tableClassName,
+  tableTestId,
+  getRowProps,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
 
@@ -103,7 +109,7 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className="space-y-2">
-      <Table className={tableClassName}>
+      <Table className={tableClassName} data-testid={tableTestId}>
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
@@ -148,6 +154,7 @@ export function DataTable<TData, TValue>({
               <TableRow
                 key={row.id}
                 className={rowClassName?.(row.original)}
+                {...getRowProps?.(row.original)}
                 {...(onRowClick
                   ? {
                       role: 'button',

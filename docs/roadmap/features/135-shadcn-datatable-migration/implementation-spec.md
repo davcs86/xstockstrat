@@ -470,7 +470,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/config-ui/audit.spec
 
 ### Step 9 — service: migrate `/insights/screener` results table (row 8) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/screener/page.tsx` — modify
@@ -527,7 +527,7 @@ grep -n 'data-testid="screen-results"\|data-testid="result-row"' src/app/insight
 
 ### Step 10 — test: verify `/insights/screener` migration preserves the known-trap fix + behavior
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/screener.spec.ts` — modify (if locators break)
@@ -1699,3 +1699,28 @@ Full agent findings recorded in `context.md` § Session 2026-08-16.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 9 — migrate `/insights/screener` results table to `DataTable`
+**Spec said**: "pass through a `rowClassName`/row-props mechanism, or extend `DataTableProps` with an
+optional `getRowProps?: (row: TData) => React.HTMLAttributes<HTMLTableRowElement>` if the composite
+doesn't already support per-row `data-testid` — confirm against Step 1's actual shipped API and note
+any composite extension needed here."
+**Actual**: Step 1's shipped composite did not support per-row or root-table `data-testid` passthrough.
+Per the `/sdd-review impl-spec` unresolved warning (Steps 9/13/23 all anticipated this same gap) and a
+sequential-mode blocker (`AskUserQuestion`, user selected the recommended "fix now" option), extended
+`services/xstockstrat-ui/src/components/ui/data-table.tsx` (outside Step 9's original `**Files**`
+section) with two new optional `DataTableProps` fields: `tableTestId?: string` (rendered as
+`data-testid` on the root `<Table>`) and `getRowProps?: (row: TData) =>
+React.HTMLAttributes<HTMLTableRowElement>` (spread onto each `<TableRow>`, merged after
+`rowClassName`). Used both in Step 9 (`tableTestId="screen-results"`,
+`getRowProps={() => ({ 'data-testid': 'result-row', className: 'border-b' })}`).
+**Reason**: A composite extension needed by 3 separate steps (9, 13, 23) is a one-time, narrow,
+mechanical addition — not a design fork — so fixing it once now (rather than deferring or dropping the
+testids) avoids re-deciding the same gap twice more and avoids rewriting existing e2e locators that
+depend on these testids. **Side effect**: Step 9's own `**Verification**` grep
+(`grep -n 'data-testid="screen-results"\|data-testid="result-row"'`) no longer matches literal source
+text, since both testids are now indirected through composite props rather than hardcoded JSX
+attributes — the actual rendered DOM still carries both attributes (confirmed via
+`e2e/insights/screener.spec.ts`'s `getByTestId('screen-results'|'result-row')` assertions, all passing).
+**Disposition**: composite extension, staged under Step 9 (`data-table.tsx` added to its effective file
+set) with this Deviation Log entry as the F-08 exception record.
