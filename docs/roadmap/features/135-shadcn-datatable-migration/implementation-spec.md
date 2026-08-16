@@ -378,7 +378,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 
 ### Step 7 — service: migrate `/config-ui/audit` (row 14) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/audit/page.tsx` — modify
@@ -423,7 +423,7 @@ grep -n "DataTable" src/app/config-ui/audit/page.tsx
 
 ### Step 8 — test: add coverage for `/config-ui/audit` table content and sorting
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/config-ui/audit.spec.ts` — create

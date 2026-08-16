@@ -431,6 +431,33 @@ clears it lands, rather than letting the warning go stale.
 - Files modified: none (no locator changes needed)
 - Deviations: none
 
+### Step 7 — service: migrate `/config-ui/audit` (row 14) to `DataTable` [done]
+- Defined `columns: ColumnDef<AuditEntry>[]` (module-level `useMemo`, no closures — read-only table)
+  for the 7 columns, carrying every `meta.className` breakpoint/width class through unchanged. Added
+  a local `AuditEntry` interface mirroring the hook's unexported one (no cross-file edit to
+  `useAuditLog.ts`, which is outside this step's Files). Replaced `<Table>` (confirmed exact-line by
+  recon) with `<DataTable columns={columns} data={entries} getRowId={(e) => e.id} emptyMessage="No
+  audit entries yet" />`.
+- TDD: refactor, no new behavior for this step itself (Step 8 adds the new sort assertion) — red N/A;
+  green captured jointly with Step 8 below.
+- Verification: `tsc --noEmit` clean; `pnpm run lint` clean (no exhaustive-deps warning — no closures
+  in this column set); grep confirms `DataTable`.
+- Files modified: `services/xstockstrat-ui/src/app/config-ui/audit/page.tsx`
+- Deviations: none
+
+### Step 8 — test: add coverage for `/config-ui/audit` table content and sorting [done]
+- Created `e2e/config-ui/audit.spec.ts` (genuinely new coverage — no prior spec asserted this table's
+  content): 2 inline fixture rows (C-12, first consumer), asserts all 7 header labels + every row's 6
+  field values, plus a new sort-header-click test.
+- TDD (real red-green, not the refactor escape): stashed Step 7's uncommitted edit to get the true
+  pre-migration tree, ran the sort test — **RED**: `locator.click: Test timeout ... waiting for
+  getByRole('columnheader', { name: 'By' }).getByRole('button')` (no sort button exists on the plain
+  `Table`, failing for the right reason). Restored Step 7's edit — **GREEN**: both tests pass (exit 0;
+  Playwright's "2 flaky" label reflects the same cold-server-first-hit pattern as every prior step,
+  not a real failure — confirmed via explicit exit-code check).
+- Files modified: `services/xstockstrat-ui/e2e/config-ui/audit.spec.ts` (new)
+- Deviations: none
+
 ## Session 2026-08-15 — sdd-execute boot (branch-topology correction)
 
 - Boot Step B3 (`git ls-remote --heads origin feature/shadcn-datatable-migration`) found the
