@@ -139,7 +139,7 @@ grep -n "export function isInteractiveTarget\|export function DataTable" src/com
 
 ### Step 2 — test: unit-test the `DataTable` composite's `isInteractiveTarget` guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/data-table.test.ts` — create

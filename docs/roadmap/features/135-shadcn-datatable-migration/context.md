@@ -361,6 +361,15 @@ clears it lands, rather than letting the warning go stale.
   `services/xstockstrat-ui/package.json`, `pnpm-lock.yaml`
 - Deviations: none
 
+### Step 2 — test: unit-test the `DataTable` composite's `isInteractiveTarget` guard [done]
+- Test written and its red→green cycle already captured under Step 1 (see above, per
+  `reference/tdd-gate.md`'s "run the paired cycle regardless of step order"). This step commits the
+  already-passing `data-table.test.ts` (5/5 assertions: `<a>`, `<button>`, `[role="button"]`,
+  `[data-row-click-ignore]` → true; no match → false) as its own tracked file.
+- Verification: `pnpm run test:unit -- data-table.test.ts` — 5/5 pass, 96/96 suite-wide.
+- Files modified: `services/xstockstrat-ui/src/components/ui/data-table.test.ts` (new)
+- Deviations: none
+
 ## Session 2026-08-15 — sdd-execute boot (branch-topology correction)
 
 - Boot Step B3 (`git ls-remote --heads origin feature/shadcn-datatable-migration`) found the
