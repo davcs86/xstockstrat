@@ -1,6 +1,8 @@
 # Feature: signal-time-decay
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 94e4e24fa6ac41eb20bd16e1e9af15c8388e885a
+**Launched date**: 2026-08-16
 **Development Branch**: `feature/signal-time-decay`
 **Created**: 2026-05-26
 **Last Updated**: 2026-08-15
@@ -18,6 +20,7 @@
 | 2026-08-14 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 7 steps. Re-verified current trunk per design instruction: **134 and 131 have NOT landed** (both `implementation-ready`), so the write site is still `c["signal_axis"] = max(c["signal_axis"], sig.conviction)` (`servicer.py:2163`) with no `source_weight` term and `weight_for` absent — Step 5 cites real current code (F-04) and carries an explicit execute-time re-grep/rebase constraint (land after 134 → 131). Config key runtime-registered (no seed migration, sibling `analysis.scoring.*` precedent); no UI/Agent step (C-14 existing surface). |
 | 2026-08-15 | `implementation-ready` → `code-completed` | /sdd-execute | All 7 steps executed (stacked on landed 134/131). Step 5 rebased onto the real landed `source_weights` term (D-1): `effective_conviction = raw × source_weight × decay_multiplier`. Step 6 `get_float_present` tests placed beside their getter siblings in `test_analysis_servicer.py` (D-2). Analysis suite 487 passed (82.7% cov); ingest 191 passed (79.2% cov). |
 
+| 2026-08-16 | `code-completed` → `launched` | CI workflow | Promoted via PR #963; committed 94e4e24fa6ac41eb20bd16e1e9af15c8388e885a |
 ---
 
 ## Artifacts

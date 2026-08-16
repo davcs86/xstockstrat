@@ -1012,3 +1012,10 @@ than silently absorbed into the step count.
   for the remainder of this session — sequential mode commits steps directly to it, and the
   integration PR (already open as #960) targets `main-dev` from it, same as every other artifact
   PR this session has pushed.
+
+## Session 2026-08-16 (CI: feature status automation)
+
+- Promotion PR #963 merged to main
+- Feature promoted and committed: 94e4e24fa6ac41eb20bd16e1e9af15c8388e885a
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-16

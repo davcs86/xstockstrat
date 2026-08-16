@@ -300,3 +300,10 @@ service+tests (6-7, 467 green), config-ui service+e2e (8-9, 16/16 green), config
   (`test_signal_source_projection.py`) fails when a new field is unprojected. Added
   `"reliability_weight": src.reliability_weight` to the projection (`app/client.py`). Agent suite green
   (219 passed). Not a new capability — a projection-parity fix for the proto field added in Step 1.
+
+## Session 2026-08-16 (CI: feature status automation)
+
+- Promotion PR #963 merged to main
+- Feature promoted and committed: 94e4e24fa6ac41eb20bd16e1e9af15c8388e885a
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-16

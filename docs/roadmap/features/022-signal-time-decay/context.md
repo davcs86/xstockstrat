@@ -359,3 +359,10 @@ Executed all 7 steps directly on `feature/signal-time-decay` (branched off `main
 - **D-1** — Step 5 `× source_weight` factor added against the real landed 134 symbol (planned rebase).
 - **D-2** — Step 6 `get_float_present` tests placed in `test_analysis_servicer.py`, not
   `test_config_watcher.py` (spec evidence drift; DRY reuse of `_StubWatcher`).
+
+## Session 2026-08-16 (CI: feature status automation)
+
+- Promotion PR #963 merged to main
+- Feature promoted and committed: 94e4e24fa6ac41eb20bd16e1e9af15c8388e885a
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-16

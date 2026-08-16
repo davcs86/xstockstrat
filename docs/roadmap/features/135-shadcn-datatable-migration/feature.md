@@ -1,6 +1,8 @@
 # Feature: shadcn-datatable-migration
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 94e4e24fa6ac41eb20bd16e1e9af15c8388e885a
+**Launched date**: 2026-08-16
 **Development Branch**: `claude/shadcn-datatable-migration-6f307n`
 **Created**: 2026-08-15
 **Last Updated**: 2026-08-16
@@ -21,6 +23,7 @@
 | 2026-08-16 | `implementation-ready` → `in-progress` | /sdd-execute (sequential) | Step 1 (`DataTable` composite) done — first step completed. |
 | 2026-08-16 | `in-progress` → `code-completed` | /sdd-execute (sequential) | All 35 steps done (33 planned + Steps 34-35 added mid-execution — Step 33's own AC-1 sweep found a 16th table, `SymbolScreening.tsx`, added by sibling feature 125 and missed by recon; migrated and closed rather than deferred, see `implementation-spec.md` § Re-spec Log and ledger `fails.md` 2026-08-16). `merge-order.md` checked — no blocking entry for this feature. Opening the final integration PR to `main-dev`. |
 
+| 2026-08-16 | `code-completed` → `launched` | CI workflow | Promoted via PR #963; committed 94e4e24fa6ac41eb20bd16e1e9af15c8388e885a |
 ---
 
 ## Artifacts
