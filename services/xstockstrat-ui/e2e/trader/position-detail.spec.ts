@@ -408,6 +408,46 @@ test.describe('Single Position page', () => {
     // No panels rendered (the RPC was never called with an empty strategy).
     await expect(page.getByTestId('indicator-panel')).toHaveCount(0);
   });
+
+  // ── Section nav (feature 139) — a sticky segmented anchor-nav groups the stacked sections.
+  // All sections stay mounted (that is why the 20 assertions above keep passing), so these cases
+  // add only the nav interaction, not any change to section content.
+
+  test('feature 139: the section nav lets you jump to a group, and reflects the active one', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/trader/positions/AAPL');
+
+    // Collision-safe landmark: aria-label "Symbol navigation" (deliberately NOT "Section", which the
+    // header's own sub-nav claims). A ToggleGroup type="single" renders a radiogroup of radios (one
+    // active) — not role="tab", so no collision with tab-role locators.
+    const nav = page.getByRole('navigation', { name: 'Symbol navigation' });
+    await expect(nav).toBeVisible({ timeout: 30000 });
+
+    // The six chips exist for a held symbol (Position is appended because AAPL is held).
+    for (const label of ['Overview', 'Trade', 'Research', 'Backtests', 'Coverage', 'Position']) {
+      await expect(nav.getByRole('radio', { name: label, exact: true })).toBeVisible();
+    }
+
+    // Clicking Backtests scrolls that section into view and marks the chip active — its content
+    // (the backfill/backtests area) stays mounted the whole time (nothing unmounts).
+    await nav.getByRole('radio', { name: 'Backtests', exact: true }).click();
+    await expect(nav.getByRole('radio', { name: 'Backtests', exact: true })).toBeChecked();
+    await expect(page.getByTestId('backfill-coverage')).toBeVisible();
+  });
+
+  test('feature 139: the Position chip is absent for an unheld symbol', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/trader/positions/ZZZZ');
+
+    const nav = page.getByRole('navigation', { name: 'Symbol navigation' });
+    await expect(nav).toBeVisible({ timeout: 30000 });
+    // ZZZZ is unheld → no PositionBody → the Position group/chip is not rendered.
+    await expect(nav.getByRole('radio', { name: 'Position', exact: true })).toHaveCount(0);
+    // But the always-on groups are still there.
+    await expect(nav.getByRole('radio', { name: 'Overview', exact: true })).toBeVisible();
+  });
 });
 
 /** Route the browser's ListWatchlists to a single watchlist containing `symbol` (bound to
