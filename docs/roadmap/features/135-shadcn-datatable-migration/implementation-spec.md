@@ -1513,7 +1513,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 
 ### Step 31 — service: migrate the nested-Sheet fill-lineage table (row 3) to `DataTable` (design exception)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/page.tsx` — modify
@@ -1564,7 +1564,7 @@ grep -n "DataTable" src/app/trader/positions/page.tsx
 
 ### Step 32 — test: bespoke Sheet-interaction overflow test for the fill-lineage table (row 3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/positions.spec.ts` — modify (add a Sheet-open-then-measure
@@ -1880,3 +1880,21 @@ This is the anticipated, spec-called-out class of locator breakage, not a surpri
 **Disposition**: `services/xstockstrat-ui/e2e/trader/positions.spec.ts`,
 `services/xstockstrat-ui/e2e/trader/valuation-parity.spec.ts` — both already in this step's Files
 (`positions.spec.ts` explicitly; `valuation-parity.spec.ts` under its "if locators break" clause).
+
+### Deviation: Step 31 — fill-lineage table stacked-layout question resolved by measurement (Instruction 3)
+**Spec said**: apply a stacked (definition-list-like) `meta.className` presentation below a
+breakpoint *if* the 3 columns don't already fit the `Sheet`'s narrowest width without truncation —
+"verify visually... Record whichever outcome is actually verified, not assumed."
+**Actual**: verified via Step 32's overflow test (390px viewport, `Sheet` open, a *stress-test*
+fixture with a 65-character `order_id` — not the default mock's short `mock-order-001`, which would
+have passed vacuously): `document.documentElement.scrollWidth - clientWidth <= 1` held with no
+stacked-layout CSS applied. The 3 short/numeric columns (Order/Qty/Fill price, `text-xs`) fit the
+`Sheet`'s narrowest width without truncation even under a deliberately-long order id, because the
+`Table`/`DataTable`'s own `overflow-x-auto` wrapper (`ui/table.tsx`'s `data-slot="table-container"`)
+absorbs any residual width pressure inside the Sheet's own scroll container rather than the page body.
+**Disposition**: no stacked-layout CSS added — matches the spec's own "not needed in practice"
+outcome branch. Also removed the now-fully-unused `Table`/`TableHeader`/`TableBody`/`TableRow`/
+`TableHead`/`TableCell` import from `positions/page.tsx` (this was the last of the file's three
+former `Table` consumers — Exposure (Step 29) and fill-lineage (this step) were both migrated; grep
+confirmed zero remaining `<Table`/`<TableHeader`/etc. JSX in the file before removing the import).
+**Disposition**: `services/xstockstrat-ui/src/app/trader/positions/page.tsx` only.

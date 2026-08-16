@@ -113,3 +113,75 @@ test.describe('Positions — Exposure risk', () => {
     await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 });
+
+// Step 32: bespoke Sheet-interaction overflow test for the fill-lineage table (row 3, design
+// exception). mobile-overflow.spec.ts's generic sweep never clicks anything, so it structurally
+// cannot open the position-detail Sheet this table lives inside — this test lives here instead.
+// No existing spec asserted the fill-lineage table's content before this (new coverage).
+test.describe('Positions — fill-lineage table overflow at 390px (FR-4c, design exception)', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('the fill-lineage table does not overflow the Sheet, even with a long order id', async ({
+    page,
+  }) => {
+    // Stress the 3-column table with a long order_id — the default mock fixture's short
+    // 'mock-order-001' would pass vacuously even if the stacked-layout question were answered
+    // wrong. Only intercepts the lineage query (no streamKey) — the reconciliation query (which
+    // sets streamKey: 'account:...') passes through to the default mock-backend handler
+    // unchanged, so the rest of the page renders normally.
+    await page.route('**/xstockstrat.ledger.v1.LedgerService/QueryEvents', async (route) => {
+      const body = route.request().postDataJSON() as { streamKey?: string };
+      if (body.streamKey) {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          events: [
+            {
+              eventId: 'evt-lineage-long-001',
+              eventType: 'order.filled',
+              streamKey: 'order:mock-order-with-a-very-long-broker-generated-identifier-001',
+              sourceService: 'trading',
+              payload: {
+                order_id: 'mock-order-with-a-very-long-broker-generated-identifier-0000001',
+                symbol: 'AAPL',
+                qty: 10,
+                fill_price: 180.0,
+                account_id: 'alpaca-default',
+                trading_mode: 'TRADING_MODE_PAPER',
+                user_id: 'test-user-001',
+              },
+              sequence: '1',
+            },
+          ],
+          page: { nextPageToken: '' },
+        }),
+      });
+    });
+
+    await addAuthCookie(page);
+    await page.goto('/trader/positions');
+
+    const aapl = page.getByRole('button', { name: /AAPL/ });
+    await expect(aapl).toBeVisible({ timeout: 10000 });
+    await aapl.click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText('Fill lineage')).toBeVisible();
+    await expect(
+      dialog.getByText('mock-order-with-a-very-long-broker-generated-identifier'),
+    ).toBeVisible();
+
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(
+      overflow,
+      `page body scrolls horizontally by ${overflow}px with the Sheet open`,
+    ).toBeLessThanOrEqual(1);
+  });
+});

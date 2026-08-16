@@ -835,6 +835,48 @@ clears it lands, rather than letting the warning go stale.
 - Deviations: `getByRole('row', ...)` → `getByRole('button', ...)` locator fix — see Deviation Log
   entry above.
 
+### Step 31 — service: migrate the nested-Sheet fill-lineage table (row 3) to `DataTable` (design exception) [done]
+- Defined `lineageColumns: ColumnDef<...>[]` for Order/Qty/Fill price (`meta.className: 'text-xs'`/
+  `'text-right tabular-nums text-xs'`), typed via `NonNullable<typeof lineage.data>[number]`
+  (inferred from the `usePositionLineage` hook's own return type, no new type needed). Replaced
+  the `<Table>...</Table>` JSX with `<DataTable columns={lineageColumns} data={lineage.data ?? []}
+  getRowId={...} enablePagination={false} />` — sort baseline only, per the design exception (no
+  pagination/filter/column-visibility for a single-position drill-down list).
+- **Stacked-layout question resolved by measurement, not assumption** (Instruction 3): Step 32's
+  overflow test — with a deliberately long 65-char `order_id` fixture, not the default mock's short
+  one — confirmed the 3 short columns already fit the `Sheet`'s narrowest tested width (390px)
+  without overflow. No stacked-layout CSS added; recorded as the spec's own "not needed in
+  practice" outcome branch, not skipped.
+- Removed the now-fully-unused `Table`/`TableHeader`/`TableBody`/`TableRow`/`TableHead`/`TableCell`
+  import — confirmed via grep this was the file's last remaining `Table` primitive consumer (both
+  the Exposure table, Step 29, and this table were the only two; both now migrated).
+- Verification: `tsc --noEmit` clean; `pnpm run lint` — unchanged from Step 29-30 (same 2 accepted
+  warnings, no new ones).
+- Files modified: `services/xstockstrat-ui/src/app/trader/positions/page.tsx`
+- Deviations: stacked-layout disposition (verified not needed) + unused-import cleanup — see
+  Deviation Log entry above.
+
+### Step 32 — test: bespoke Sheet-interaction overflow test for the fill-lineage table (row 3) [done]
+- Added a new `test.describe` block in `positions.spec.ts` at the 390px phone-frame viewport,
+  matching `mobile-overflow.spec.ts`'s convention. Overrides `LedgerService/QueryEvents` via
+  `page.route()`, conditionally on `postDataJSON().streamKey` being unset (the lineage query has no
+  `streamKey`; the reconciliation query does and is `route.continue()`-passed-through unchanged, so
+  the rest of the page — halt badges, recency line — still renders normally from the real mock).
+- **Constructed a stress-test fixture with a 65-character `order_id`** (Instruction 2's "real teeth"
+  requirement) rather than reusing the default mock's short `mock-order-001` — a short-content test
+  would have passed vacuously regardless of whether Step 31's stacked-layout decision was correct.
+- Opens the Sheet by clicking the AAPL row, asserts the Fill lineage section and the long order id
+  are visible, then measures `scrollWidth - clientWidth <= 1` — same assertion shape as
+  `mobile-overflow.spec.ts`'s generic sweep, applied after the interaction it structurally cannot
+  perform.
+- Verification: ran in isolation (2/2 passed after a first cold-start-flaky-then-pass, then a clean
+  2/2 re-run with zero retries needed) and as part of the full `positions.spec.ts` file (7/7 passed,
+  2 flaky-then-pass on unrelated pre-existing tests under concurrent-worker cold start — same
+  established pattern, no interference from the new test).
+- Files modified: `services/xstockstrat-ui/e2e/trader/positions.spec.ts`
+- Deviations: none beyond Step 31's own (this step is the verification step that resolved Step 31's
+  Instruction 3 outcome).
+
 ## Session 2026-08-15 — sdd-execute boot (branch-topology correction)
 
 - Boot Step B3 (`git ls-remote --heads origin feature/shadcn-datatable-migration`) found the

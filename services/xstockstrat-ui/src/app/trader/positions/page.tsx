@@ -33,14 +33,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from '@/components/ui/table';
 import { DataTable } from '@/components/ui/data-table';
 
 type TradingMode = 'paper' | 'live';
@@ -323,6 +315,34 @@ export default function PositionsPage() {
       },
     ],
     [weight],
+  );
+
+  // Fill-lineage table columns (design exception — a bare sort baseline, no pagination/filter/
+  // column-visibility; see design.md's "disproportionate for a single-position drill-down list
+  // inside an already-narrow Sheet" disposition).
+  const lineageColumns = useMemo<ColumnDef<NonNullable<typeof lineage.data>[number]>[]>(
+    () => [
+      {
+        id: 'order',
+        header: 'Order',
+        meta: { className: 'font-mono text-xs' },
+        cell: ({ row }) => String(((row.original.payload ?? {}) as JsonObject).order_id ?? '—'),
+      },
+      {
+        id: 'qty',
+        header: 'Qty',
+        meta: { className: 'text-right tabular-nums text-xs' },
+        cell: ({ row }) => String(((row.original.payload ?? {}) as JsonObject).qty ?? '—'),
+      },
+      {
+        id: 'fillPrice',
+        header: 'Fill price',
+        meta: { className: 'text-right tabular-nums text-xs' },
+        cell: ({ row }) =>
+          fmtUsd(Number(((row.original.payload ?? {}) as JsonObject).fill_price ?? 0)),
+      },
+    ],
+    [],
   );
 
   return (
@@ -651,33 +671,14 @@ export default function PositionsPage() {
                   </p>
                 )}
                 {(lineage.data?.length ?? 0) > 0 && (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-xs">Order</TableHead>
-                        <TableHead className="text-right text-xs">Qty</TableHead>
-                        <TableHead className="text-right text-xs">Fill price</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(lineage.data ?? []).map((e, i) => {
-                        const p = (e.payload ?? {}) as JsonObject;
-                        return (
-                          <TableRow key={`${String(p.order_id ?? '')}-${i}`}>
-                            <TableCell className="font-mono text-xs">
-                              {String(p.order_id ?? '—')}
-                            </TableCell>
-                            <TableCell className="text-right tabular-nums text-xs">
-                              {String(p.qty ?? '—')}
-                            </TableCell>
-                            <TableCell className="text-right tabular-nums text-xs">
-                              {fmtUsd(Number(p.fill_price ?? 0))}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
+                  <DataTable
+                    columns={lineageColumns}
+                    data={lineage.data ?? []}
+                    getRowId={(e, i) =>
+                      `${String(((e.payload ?? {}) as JsonObject).order_id ?? '')}-${i}`
+                    }
+                    enablePagination={false}
+                  />
                 )}
               </div>
             </div>
