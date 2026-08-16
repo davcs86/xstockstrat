@@ -90,12 +90,26 @@ func TestBuildDeleteBarsQuery(t *testing.T) {
 	}
 }
 
-// TestUpsertFundamentals_CastsExtraMetricsToJSONB is a SQL-text pin, not a live-Postgres
-// proof — pgxmock never runs pgx's real extended-protocol encoder or talks to real
-// Postgres, so it structurally cannot catch the OID-inference bug class this feature
-// fixes (see the feature's context.md for the live-DB repro that actually proved the
-// fix — feature 142). This test only guards against someone deleting the ::jsonb cast
-// later.
+// isStringArg matches a bind argument only if it's a Go string — the type pgx's
+// QueryExecModeExec must see to encode a parameter as `text` (not `bytea`). A []byte
+// argument here is bytea-typed on the wire; bytea::jsonb casts through bytea's hex-escaped
+// text representation, which is never valid JSON. This is the actual regression this test
+// guards: `::jsonb` in the SQL text alone (pinned before) was NOT sufficient — the deployed
+// fix based on that alone still failed with SQLSTATE 22P02 in production (see the feature's
+// context.md) until the bind argument was also changed from []byte to string.
+type isStringArg struct{}
+
+func (isStringArg) Match(v any) bool {
+	_, ok := v.(string)
+	return ok
+}
+
+// TestUpsertFundamentals_CastsExtraMetricsToJSONB is a SQL-text + arg-type pin, not a
+// live-Postgres proof — pgxmock never runs pgx's real extended-protocol encoder or talks
+// to real Postgres, so it structurally cannot catch every shape of the OID-inference bug
+// class this feature fixes (see the feature's context.md for the live-DB repro that
+// actually proves the fix — feature 142). This test guards against both known regressions:
+// deleting the ::jsonb cast, and reverting extra_metrics' bind argument back to []byte.
 func TestUpsertFundamentals_CastsExtraMetricsToJSONB(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	if err != nil {
@@ -109,6 +123,7 @@ func TestUpsertFundamentals_CastsExtraMetricsToJSONB(t *testing.T) {
 	for i := range anyArgs {
 		anyArgs[i] = pgxmock.AnyArg()
 	}
+	anyArgs[13] = isStringArg{} // extra_metrics ($14, 0-indexed 13) — must be string, not []byte
 	mock.ExpectExec(`\$14::jsonb`).
 		WithArgs(anyArgs...).
 		WillReturnResult(pgxmock.NewResult("INSERT", 1))

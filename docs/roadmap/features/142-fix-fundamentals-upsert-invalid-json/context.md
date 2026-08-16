@@ -124,3 +124,58 @@ Accountability:
 - Out-of-scope changes: none
 - Open questions / items: **the fix is unverified against the actual reported production error** — it rests on a well-evidenced but explicitly-unconfirmed hypothesis (recon.md, design.md). This is the single most important open item in this whole session's work and must not be lost track of before this fix is treated as done.
 - Unaddressed review warnings: none (Track C bug fix, never went through /sdd-review).
+
+## Session 2026-08-16 — sdd-execute (follow-up: the shipped fix did NOT resolve the bug)
+
+- PR #967 (Steps 2 + 4 only — the `::jsonb` cast, `extraJSON` still `[]byte`) merged into
+  `main-dev` at commit `57d3424` and deployed to `xstockstrat-staging`. User reported the bug was
+  "not fixed" after deploy.
+- Verified via DigitalOcean deployment status + fresh log pull: the deployed image tag
+  (`57d3424`) is confirmed to be the merge commit (matches the GitHub Actions `deploy-dev.yml` run
+  for that exact SHA, `conclusion: success`, completed 10:18:34Z). `xstockstrat-marketdata`
+  restarted cleanly (fresh boot log 10:17:53-56Z) and then logged, at 10:20:02Z — **after** the
+  fix was live — the **identical** error: `GetFundamentalsMulti: cache upsert failed symbol=UPRO
+  error="upsert fundamentals UPRO: ERROR: invalid input syntax for type json (SQLSTATE 22P02)"`.
+  This is real, first-party evidence that the merged fix did not work — not a caching/propagation
+  artifact.
+- **Root cause, corrected**: `extraJSON` was bound as `[]byte`. Inspected the vendored
+  `github.com/jackc/pgx/v5@v5.9.2` source directly (`conn.go` `QueryExecMode` doc comments) rather
+  than continuing to guess. `QueryExecModeExec`'s doc comment says it "uses the extended protocol
+  with text formatted parameters" and explicitly cross-references `QueryExecModeSimpleProtocol`'s
+  fuller warning: "`[]byte` values are encoded as PostgreSQL bytea. `string` must be used instead
+  for text type values including json and jsonb" — and states `QueryExecModeSimpleProtocol`
+  "should have the user application visible behavior as `QueryExecModeExec`." This is pgx's own
+  documented confirmation of the exact bug class: a `[]byte` argument is wire-encoded as `bytea`
+  regardless of any `::jsonb` cast in the SQL text, because Postgres's `bytea::jsonb` cast path
+  goes through `bytea`'s hex-escaped text representation (`bytea_output = hex` is Postgres's
+  default), which is never valid JSON syntax — producing this exact SQLSTATE 22P02.
+- **Corrected fix**: `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go` —
+  added `extraJSONText := string(extraJSON)` and bind that (not `extraJSON`) as the `$14`
+  argument to `UpsertFundamentals`'s `Exec` call. The `::jsonb` cast from the original fix stays
+  (correct, matches repo convention) — it was necessary but not sufficient on its own.
+- **Test strengthened**: `TestUpsertFundamentals_CastsExtraMetricsToJSONB` (marketdata_repo_test.go)
+  now uses a custom `pgxmock.Argument` matcher (`isStringArg`) on the `extra_metrics` bind
+  position specifically, asserting it's a Go `string`. Verified this actually catches the
+  regression: reverted the bind back to `extraJSON` ([]byte), confirmed the test fails with
+  `matcher repository.isStringArg could not match 13 argument []uint8 - [123 125]` (RED),
+  re-applied `extraJSONText`, confirmed green. The prior version of this test (SQL-text-only pin)
+  would have passed either way — a real, now-closed coverage gap.
+- Full verification: `go build ./...` clean, `golangci-lint run` — 0 issues, full suite
+  `go test ./... -race -coverprofile=...` — all packages `ok`, 63.3% total coverage (repository
+  package excluded from `COVERPKGS` as before).
+- Branch handling: PR #967 had already squash-merged, so per the harness's merged-PR convention,
+  reset `claude/commit-135-opportunities-strategies-0xjnxk` to `origin/main-dev` (`git checkout -B
+  ... origin/main-dev`) before applying this follow-up fix, rather than stacking on the old
+  pre-squash branch history.
+- Migrated this feature's lifecycle-status storage to the new `status.md` convention (merged via
+  PR #965 into `main-dev` while this feature was in flight, so it predates this feature's
+  creation and was never applied to it) — created `status.md` (`in-progress`), removed the
+  now-duplicate `**Lifecycle Status**` field from `feature.md` per the updated
+  `docs/roadmap/features/CLAUDE.md` convention.
+- **Steps 1 & 3 (the mandatory live-DB repro) are STILL blocked** — no Docker daemon in this
+  session either. This real-world miss (a fix that passed all available tests but failed in
+  production) is exactly the failure mode design.md's mandatory gate was created to prevent — it
+  still has not run. The next staging deployment of this corrected fix, and its logs, are the
+  closest available substitute for now; a genuine Docker-accessible session should still run the
+  actual repro per Step 1/3's instructions when one becomes available.
+- Status: in-progress (unchanged) — still 2 of 4 steps done (2, 4, now corrected), 2 blocked (1, 3).
