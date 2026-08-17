@@ -27,6 +27,9 @@ import { timestampToDate } from '@/lib/protoTime';
 import { SignalReadiness } from '@/components/insights/SignalReadiness';
 import { SymbolScreening } from '@/components/trader/SymbolScreening';
 import { IndicatorPanels } from '@/components/trader/IndicatorPanels';
+import { SymbolSectionNav, SECTION_SCROLL_MT } from '@/components/trader/SymbolSectionNav';
+import { SymbolPanelGroup, type SymbolPanel } from '@/components/trader/SymbolPanelGroup';
+import { cn } from '@/components/ui/utils';
 import { ConnectError } from '@connectrpc/connect';
 import type { Opportunity } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import {
@@ -210,6 +213,98 @@ export default function PositionDetailPage() {
   const genuineError = Boolean(error) && !isNotFoundError(error);
   const positionNotFound = !isLoading && !genuineError && !position?.symbol;
 
+  // Section-nav groups (feature 139), in DOM order. Related panels within a section are clustered
+  // into responsive SymbolPanelGroups (desktop columns / mobile tabbed panel — every panel stays
+  // mounted), so the top-level nav is a stable four-section spine regardless of what's held.
+  const sectionGroups = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'trade', label: 'Trade' },
+    { id: 'research', label: 'Research' },
+    { id: 'analysis', label: 'Analysis' },
+  ];
+
+  // Trade section (feature 139 amendment): the held-Position stats fold in here as the first panel
+  // (only when a position is held), beside Orders & fills and the order ticket.
+  const tradePanels: SymbolPanel[] = [
+    ...(position && position.symbol
+      ? [
+          {
+            id: 'position-stats',
+            label: 'Position',
+            node: (
+              <PositionBody
+                position={position}
+                equity={Number(portfolio?.equity ?? 0)}
+                owningStrategy={owningStrategy}
+              />
+            ),
+          },
+        ]
+      : []),
+    {
+      id: 'orders',
+      label: 'Orders & fills',
+      node: <SymbolOrdersCard symbol={symbol} orders={orders} working={working} />,
+    },
+    {
+      id: 'place-order',
+      label: 'Place order',
+      node: (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <Eyebrow as="span">Trade {symbol}</Eyebrow>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <OrderForm mode={mode} initialSymbol={symbol} />
+          </CardContent>
+        </Card>
+      ),
+    },
+  ];
+
+  // Research section, watchlisted branch (FR-11): the four watchlist panels cluster together; the
+  // non-watchlisted branch stays a single standalone Screener card (no group).
+  const researchPanels: SymbolPanel[] = [
+    {
+      id: 'opportunity',
+      label: 'Opportunity',
+      node: <OpportunitySection opportunity={opportunity} symbol={symbol} />,
+    },
+    {
+      id: 'readiness',
+      label: 'Why this fired',
+      node: (
+        <Suspense fallback={<div className="h-24" />}>
+          <SignalReadiness symbol={symbol} />
+        </Suspense>
+      ),
+    },
+    {
+      id: 'fundamentals',
+      label: 'Fundamentals',
+      node: <FundamentalsSection symbol={symbol} />,
+    },
+    // feature 132 mute control, relocated here from the retired Signal-detail page.
+    { id: 'mute', label: 'Mute', node: <MuteForStrategy symbol={symbol} /> },
+  ];
+
+  // Analysis section (feature 139 amendment): merges the former Backtests (FR-9) and Coverage
+  // (FR-10) sections into one clustered pair.
+  const analysisPanels: SymbolPanel[] = [
+    {
+      id: 'backtests',
+      label: 'Backtests',
+      node: <BacktestsSection symbol={symbol} strategyId={boundStrategyId || owningStrategy} />,
+    },
+    {
+      id: 'coverage',
+      label: 'Backfill coverage',
+      node: <BackfillSection symbol={symbol} />,
+    },
+  ];
+
   return (
     <AppShell>
       <div className="p-4 sm:p-6 space-y-4">
@@ -225,6 +320,10 @@ export default function PositionDetailPage() {
             renders below it too. */}
         <h1 className="font-mono text-2xl font-semibold tracking-tight">{symbol}</h1>
 
+        {/* Section nav (feature 139) — sticky segmented anchor-nav; gated so it never points at
+            absent anchors (loading/error render no sections). */}
+        {!isLoading && !genuineError && <SymbolSectionNav groups={sectionGroups} />}
+
         {isLoading && (
           <div className="space-y-3" data-testid="position-loading">
             <Skeleton className="h-16 w-full" />
@@ -236,80 +335,64 @@ export default function PositionDetailPage() {
         )}
 
         {/* Sections below render independent of whether a position is held (feature 125): the price
-            chart, orders & fills, and the trade widget serve research and entry for any symbol. */}
-        <SymbolPriceChart
-          symbol={symbol}
-          chartRef={containerRef}
-          barsError={barsError}
-          avg={avg}
-          stop={stop}
-          last={last}
-          hasStop={hasStop}
-        />
-
-        {/* FR-6 indicator overlay panels beneath the price chart — the resolved strategy's declared
-            components charted over the exact bars above. Strategy resolves like Backtests/Readiness. */}
-        <IndicatorSection
-          symbol={symbol}
-          strategyId={boundStrategyId || owningStrategy}
-          closes={barSeries.closes}
-          times={barSeries.times}
-        />
-
-        <SymbolOrdersCard symbol={symbol} orders={orders} working={working} />
-
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              <Eyebrow as="span">Trade {symbol}</Eyebrow>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <OrderForm mode={mode} initialSymbol={symbol} />
-          </CardContent>
-        </Card>
-
-        {/* FR-11 watchlist-conditional split: exactly one side — Opportunity + Readiness (+ Fundamentals,
-            Step 14) for a watchlisted symbol, or Screening (Step 16) otherwise. Render neither while
-            watchlist membership is still loading (no flash of the wrong side). */}
-        {watchlistsLoading ? (
-          <Skeleton className="h-24 w-full" />
-        ) : isSymbolWatchlisted ? (
-          <>
-            <OpportunitySection opportunity={opportunity} symbol={symbol} />
-            <Suspense fallback={<div className="h-24" />}>
-              <SignalReadiness symbol={symbol} />
-            </Suspense>
-            <FundamentalsSection symbol={symbol} />
-            {/* feature 132 mute control, relocated here from the retired Signal-detail page. */}
-            <MuteForStrategy symbol={symbol} />
-          </>
-        ) : (
-          <SymbolScreening symbol={symbol} />
-        )}
-
-        {/* Backtests (FR-9) — always-on, keyed on the resolved strategy: the watchlist-binding's
-            strategyId (Step 12), else the orders-derived owning strategy (Step 8). */}
-        <BacktestsSection symbol={symbol} strategyId={boundStrategyId || owningStrategy} />
-
-        {/* Backfill coverage (FR-10) — always-on (any symbol): the ingested date span, dates only. */}
-        <BackfillSection symbol={symbol} />
-
-        {position && position.symbol ? (
-          <PositionBody
-            position={position}
-            equity={Number(portfolio?.equity ?? 0)}
-            owningStrategy={owningStrategy}
+            chart, orders & fills, and the trade widget serve research and entry for any symbol.
+            Feature 139 wraps each run in an anchored <section> (no reorder, gating unchanged). */}
+        <section id="overview" className={cn('space-y-4', SECTION_SCROLL_MT)}>
+          <SymbolPriceChart
+            symbol={symbol}
+            chartRef={containerRef}
+            barsError={barsError}
+            avg={avg}
+            stop={stop}
+            last={last}
+            hasStop={hasStop}
           />
-        ) : (
-          positionNotFound && (
-            <CardNotice>
-              No {mode} position in {symbol || 'this symbol'}.{' '}
-              {selectedAccountId
-                ? 'You do not hold this symbol in the selected account.'
-                : 'Select an account in the header to load the position.'}
-            </CardNotice>
-          )
+
+          {/* FR-6 indicator overlay panels beneath the price chart — the resolved strategy's declared
+              components charted over the exact bars above. Strategy resolves like Backtests/Readiness. */}
+          <IndicatorSection
+            symbol={symbol}
+            strategyId={boundStrategyId || owningStrategy}
+            closes={barSeries.closes}
+            times={barSeries.times}
+          />
+        </section>
+
+        {/* Trade (feature 139): Position stats (if held) · Orders & fills · Place order — clustered
+            as desktop columns / a mobile tabbed panel, all mounted. The held-Position stats folded
+            in here from the former standalone #position section (no panel dropped). */}
+        <section id="trade" className={cn('space-y-4', SECTION_SCROLL_MT)}>
+          <SymbolPanelGroup panels={tradePanels} ariaLabel="Trade panels" />
+        </section>
+
+        {/* FR-11 watchlist-conditional split: exactly one side — the four watchlist panels
+            (Opportunity · Why this fired · Fundamentals · Mute) clustered for a watchlisted symbol,
+            or the standalone Screener otherwise. Render neither while watchlist membership is still
+            loading (no flash of the wrong side). Feature 139 wraps the WHOLE split in one #research
+            section so the branch logic is untouched (FR-3). */}
+        <section id="research" className={cn('space-y-4', SECTION_SCROLL_MT)}>
+          {watchlistsLoading ? (
+            <Skeleton className="h-24 w-full" />
+          ) : isSymbolWatchlisted ? (
+            <SymbolPanelGroup panels={researchPanels} ariaLabel="Research panels" />
+          ) : (
+            <SymbolScreening symbol={symbol} />
+          )}
+        </section>
+
+        {/* Analysis (feature 139): merges Backtests (FR-9) + Backfill coverage (FR-10) into one
+            clustered pair — always-on for any symbol, keyed on the resolved strategy. */}
+        <section id="analysis" className={cn('space-y-4', SECTION_SCROLL_MT)}>
+          <SymbolPanelGroup panels={analysisPanels} ariaLabel="Analysis panels" />
+        </section>
+
+        {positionNotFound && (
+          <CardNotice>
+            No {mode} position in {symbol || 'this symbol'}.{' '}
+            {selectedAccountId
+              ? 'You do not hold this symbol in the selected account.'
+              : 'Select an account in the header to load the position.'}
+          </CardNotice>
         )}
       </div>
     </AppShell>
