@@ -82,6 +82,18 @@ function buildRange(start: string, end: string) {
   };
 }
 
+// Local date for a protobuf-es Timestamp ({ seconds: bigint }); "…" for an open bound.
+function fmtDay(ts: { seconds: bigint } | undefined): string {
+  if (!ts?.seconds) return '…';
+  return new Date(Number(ts.seconds) * 1000).toLocaleDateString();
+}
+
+// Human date range a job covers; an unbounded request backfills the full available history.
+function rangeLabel(range: BackfillJob['range']): string {
+  if (!range || (!range.start?.seconds && !range.end?.seconds)) return 'full history';
+  return `${fmtDay(range.start)} → ${fmtDay(range.end)}`;
+}
+
 export default function BackfillsPage() {
   const { data: isAdmin } = useIsAdmin();
 
@@ -312,6 +324,9 @@ export default function BackfillsPage() {
                               · failed: {job.failedSymbols.join(', ')}
                             </span>
                           )}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-0.5 tabular-nums">
+                          range {rangeLabel(job.range)}
                         </div>
                         {job.error && <p className="text-xs text-destructive mt-1">{job.error}</p>}
                         <p className="text-[11px] text-muted-foreground/70 font-mono mt-1">

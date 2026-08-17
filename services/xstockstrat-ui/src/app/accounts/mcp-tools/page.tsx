@@ -4,6 +4,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { Wrench } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+} from '@/components/ui/accordion';
 import { useAgentUrl } from '../AgentUrlContext';
 
 interface JsonSchemaProperty {
@@ -102,21 +108,23 @@ export default function McpToolsPage() {
                 : 'No tools are currently registered.'}
             </p>
           ) : (
-            <div className="space-y-3">
+            <Accordion type="multiple">
               {tools.map((tool) => (
-                <details key={tool.name} className="rounded-md border border-border p-3">
-                  <summary className="cursor-pointer list-none">
-                    <div className="flex flex-wrap items-baseline gap-2">
+                <AccordionItem key={tool.name} value={tool.name}>
+                  <AccordionTrigger>
+                    <div className="flex flex-wrap items-baseline gap-2 pr-2 text-left">
                       <span className="font-mono text-sm font-medium">{tool.name}</span>
-                      <span className="text-sm text-muted-foreground">{tool.description}</span>
+                      <span className="text-sm font-normal text-muted-foreground">
+                        {tool.description}
+                      </span>
                     </div>
-                  </summary>
-                  <div className="mt-3 border-t border-border pt-3">
+                  </AccordionTrigger>
+                  <AccordionContent>
                     <ToolParameters schema={tool.inputSchema} />
-                  </div>
-                </details>
+                  </AccordionContent>
+                </AccordionItem>
               ))}
-            </div>
+            </Accordion>
           )}
         </CardContent>
       </Card>
