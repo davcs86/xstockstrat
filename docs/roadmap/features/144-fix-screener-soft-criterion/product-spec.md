@@ -62,23 +62,32 @@ neutral score that competes on equal footing with real results.
 
 ## Fix Scope
 
-- [ ] No proto changes anticipated — **likely needed**: `ScreenResult` has no "data-less fallback"
-      marker today; whether to add one (vs. an alternative fix like sorting the candidate last or
-      excluding it) is exactly what `/sdd-design` should resolve.
+- [x] Proto change made — additive-only: `ScreenResult.score_unavailable` (field 14, `bool`),
+      non-breaking (`buf breaking` verified clean). Chosen over reusing
+      `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA` — see design decision in `context.md`.
 - [x] No database migrations anticipated
 - [x] No config key changes anticipated
 
 ## Acceptance Criteria
 
-- [ ] A candidate whose every configured soft criterion has no usable data no longer receives a
+- [x] A candidate whose every configured soft criterion has no usable data no longer receives a
       `score`/`technical_score` indistinguishable from a genuinely-computed result (e.g. QQQ's
-      P/E-only scan no longer shows `0.500` looking like a real mid-range score).
-- [ ] The hard-filter fail-closed behavior from PR #971 (unaffected by this bug) continues to pass
-      unchanged — this fix must not regress `passed`/hard-filter semantics.
-- [ ] Existing tests pass; new test(s) reproduce the exact QQQ-style scenario (a candidate with a
-      configured soft criterion and zero usable data for it) and assert the fixed behavior.
+      P/E-only scan no longer shows `0.500` looking like a real mid-range score). Flagged via
+      `score_unavailable=true`, rendered as "No criteria data" + a dashed score in the UI, and
+      server-side sorted after every genuinely-scored candidate regardless of its own numeric
+      score (`screener.py`'s `results.sort`).
+- [x] The hard-filter fail-closed behavior from PR #971 (unaffected by this bug) continues to pass
+      unchanged — this fix must not regress `passed`/hard-filter semantics. Verified: the two
+      existing hard-filter tests (`test_fundamental_hard_filter_missing_for_one_symbol_fails_closed`,
+      `test_fundamental_hard_filter_missing_field_fails_closed_not_lte_zero`) pass unmodified in
+      their `status`/`passed` assertions; only new `score_unavailable` assertions were added.
+- [x] Existing tests pass (524/524 `xstockstrat-analysis` suite; 97/97 UI vitest suite); new
+      test `test_soft_criterion_missing_data_flags_score_unavailable_and_ranks_last` reproduces the
+      exact QQQ-style scenario (GOOG/MSFT real data, QQQ missing) and asserts the fixed ranking
+      order. New e2e test in `screener.spec.ts` covers the UI badge/dash rendering.
 - [ ] Affected service(s) smoke-tested on dev environment (`xstockstrat-staging`) with the exact
-      reproduction from this spec.
+      reproduction from this spec — pending deploy; not yet run against the live dev environment
+      from this session.
 
 ## Out of Scope
 
@@ -86,13 +95,17 @@ neutral score that competes on equal footing with real results.
 - Changing hard-filter behavior (already correct per PR #971).
 - Performance improvements unrelated to the fix.
 
-## Open Questions
+## Open Questions — Resolved
 
-- What should the corrected behavior actually be — exclude the candidate from `results` entirely,
-  rank it last regardless of numeric score, or add an explicit `ScreenResult` field (e.g.
-  `insufficient_data: bool`) the UI renders distinctly? Each has different proto/UI blast radius —
-  left for `/sdd-design` to resolve rather than assumed here.
-- Does this same "all criteria skipped → neutral fallback" pattern also affect any other
-  weighted/ranking computation outside the screener (e.g. `analysis.opportunity` ranking, the
-  fundamentals signal producer's cross-sectional quantile)? Worth a grep sweep during
-  `/sdd-design`'s recon phase before assuming the fix is screener-local.
+- **What should the corrected behavior be?** An additive `score_unavailable: bool` marker
+  (**not** reusing `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`, and **not** excluding the candidate
+  outright) + a server-side rank-last sort. Full rationale in `context.md`.
+- **Does the same pattern exist elsewhere?** Yes — grep swept during this session:
+  `app/engine/fundsignal_loop.py:294` (`_builtin_score`) has the identical shape (`sum(parts) /
+  len(parts) if parts else 0.5`), feeding the fundamentals signal producer's cross-sectional
+  buy/sell/hold quantile. **Left unfixed here** — different subsystem (background producer, not a
+  user-facing ranked list), different blast radius (buy/sell/hold classification drift, not a
+  visibly-ranked score), and outside this spec's reproduction/acceptance criteria. Flagged as a
+  candidate follow-up bug, not filed as a formal defect report in this session (surfaced here per
+  the "don't silently fix or silently ignore" project convention — a human should decide whether
+  it warrants its own SEV rating and track).

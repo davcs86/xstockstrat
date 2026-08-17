@@ -216,10 +216,14 @@ async def test_fundamental_hard_filter_missing_for_one_symbol_fails_closed():
     resp = await engine.screen(req)
     by_symbol = {r.symbol: r for r in resp.results}
     assert by_symbol["AAA"].passed is True  # evaluated normally: 15 < 20
+    assert by_symbol["AAA"].score_unavailable is False
     assert "cheap" not in by_symbol["BBB"].criterion_scores  # skipped for BBB specifically
     # Not a whole-batch outage — BBB still reports OK, just fails the filter it couldn't verify.
     assert by_symbol["BBB"].status == analysis_pb2.SCREEN_RESULT_STATUS_OK
     assert by_symbol["BBB"].passed is False
+    # Bug fix (feature 144): BBB's only configured criterion was skipped, so its score is the
+    # same neutral placeholder as before — now flagged rather than silently indistinguishable.
+    assert by_symbol["BBB"].score_unavailable is True
 
 
 async def test_fundamental_hard_filter_missing_field_fails_closed_not_lte_zero():
@@ -263,9 +267,66 @@ async def test_fundamental_hard_filter_missing_field_fails_closed_not_lte_zero()
     assert "cheap" not in by_symbol["AAA"].criterion_scores
     assert by_symbol["AAA"].status == analysis_pb2.SCREEN_RESULT_STATUS_OK  # not a batch outage
     assert by_symbol["AAA"].passed is False
+    assert by_symbol["AAA"].score_unavailable is True  # feature 144: no usable criterion data
     # BBB's pe_ratio is a genuine 0.0 (present) — must still evaluate and pass normally.
     assert "cheap" in by_symbol["BBB"].criterion_scores
     assert by_symbol["BBB"].passed is True
+    assert by_symbol["BBB"].score_unavailable is False
+
+
+# ── Bug fix (feature 144): soft-criterion neutral-fallback score must not outrank real data ────
+# (the hard-filter cases above already fail closed on `passed`; this is the sibling gap in the
+# *ranking* `score` a soft/weighted criterion feeds — a candidate with zero usable data for every
+# configured criterion previously scored a plausible-looking 0.500, indistinguishable from a
+# genuinely-computed mid-range result, and could outrank candidates with real, worse-looking data.)
+
+
+async def test_soft_criterion_missing_data_flags_score_unavailable_and_ranks_last():
+    """Reproduces the exact QQQ defect: a soft (non-hard-filter) `pe_ratio < 20` criterion, one
+    candidate (QQQ) has no P/E data at all. Pre-fix, QQQ's neutral 0.5 ranked it above MSFT's
+    genuinely-computed, worse-looking score; post-fix it must be flagged and sorted last."""
+    md = AsyncMock()
+    md.GetBars = AsyncMock(return_value=bars([1.0, 2.0, 3.0]))
+    md.GetFundamentalsMulti = AsyncMock(
+        return_value=SimpleNamespace(
+            fundamentals=[
+                marketdata_pb2.Fundamentals(symbol="GOOG", pe_ratio=17.3),
+                marketdata_pb2.Fundamentals(symbol="MSFT", pe_ratio=27.7),
+                # QQQ: an ETF with no P/E ratio ever reported — genuinely missing, not a real 0.0.
+                marketdata_pb2.Fundamentals(symbol="QQQ", missing_metrics=["pe_ratio"]),
+            ]
+        )
+    )
+    ind = AsyncMock()
+    engine = make_engine(md, ind)
+
+    req = analysis_pb2.ScreenSymbolsRequest(
+        symbols=["GOOG", "MSFT", "QQQ"],
+        criteria=[
+            analysis_pb2.ScreenCriterion(
+                ref_name="cheap",
+                kind=analysis_pb2.SCREEN_KIND_FUNDAMENTAL,
+                metric_name="pe_ratio",
+                op=analysis_pb2.COMPARATOR_LT,
+                threshold=20.0,
+                weight=1.0,
+                hard_filter=False,
+            )
+        ],
+    )
+    resp = await engine.screen(req)
+    by_symbol = {r.symbol: r for r in resp.results}
+
+    assert by_symbol["GOOG"].score_unavailable is False
+    assert by_symbol["MSFT"].score_unavailable is False
+    assert by_symbol["QQQ"].score_unavailable is True
+    # Not a whole-batch outage or a bars gap — QQQ still reports OK, just an unscorable candidate.
+    assert by_symbol["QQQ"].status == analysis_pb2.SCREEN_RESULT_STATUS_OK
+    assert "cheap" not in by_symbol["QQQ"].criterion_scores
+
+    # The fix: QQQ never outranks a genuinely-scored candidate, regardless of its own numeric
+    # score — GOOG (cheapest, real data) and MSFT (real, worse-looking data) both rank above it.
+    assert [r.symbol for r in resp.results] == ["GOOG", "MSFT", "QQQ"]
 
 
 # ── FR-6: universe min-max normalization ──────────────────────────────────────

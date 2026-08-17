@@ -5,6 +5,7 @@ import {
   fundamentalsPendingRow,
   barsInsufficientRow,
   resolvedRow,
+  noCriteriaDataRow,
 } from '../fixtures/screenResults';
 
 // A controlled ScreenSymbols response (connect-JSON, camelCase) + capture of the sent request, so
@@ -83,6 +84,40 @@ test.describe('Screener', () => {
     await expect(page.getByTestId('fundamentals-pending-banner')).toContainText(
       "isn't available right now for any symbol",
     );
+  });
+
+  test('shows "No criteria data" and a dashed score for a scoreUnavailable OK-status row (bug fix, feature 144)', async ({
+    page,
+  }) => {
+    // status: 1 (OK), not INSUFFICIENT_DATA — must not be confused with the retry-eligible
+    // pending badges, and must never render its neutral placeholder score as a real number.
+    await addAuthCookie(page);
+    await page.route('**/xstockstrat.analysis.v1.AnalysisService/ScreenSymbols', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          results: [resolvedRow('MSFT', 0.4), noCriteriaDataRow('QQQ')],
+          coverageGaps: [],
+        }),
+      }),
+    );
+    await page.goto('/insights/screener');
+    await page.getByTestId('run-screen').click();
+    await expect(page.getByTestId('screen-results')).toBeVisible({ timeout: 10000 });
+
+    await expect(page.getByTestId('no-criteria-data')).toBeVisible();
+    await expect(page.getByTestId('insufficient-data')).toHaveCount(0);
+    await expect(page.getByTestId('fundamentals-pending')).toHaveCount(0);
+
+    // QQQ ranks after MSFT (a genuinely-scored, worse-looking result) despite its unchanged
+    // internal 0.5 — server-side sort already deprioritizes it (screener.py); the Score cell
+    // also renders a dash, never the misleading 0.500.
+    const rows = page.getByTestId('result-row');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.first()).toContainText('MSFT');
+    await expect(rows.last()).toContainText('QQQ');
+    await expect(rows.last()).toContainText('—');
   });
 
   test('renders the feature-083 raw columns (pe / rsi / atr / rev-growth / held)', async ({
