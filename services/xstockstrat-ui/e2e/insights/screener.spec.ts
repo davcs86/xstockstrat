@@ -277,7 +277,9 @@ test.describe('Screener', () => {
       },
     );
     await page.goto('/insights/watchlists');
-    // Pre-create a target list so the screener's target-list picker has an option.
+    // Pre-create a target list so the screener's target-list picker has an option. Creation now
+    // happens in a modal opened from the header "New watchlist" button.
+    await page.getByRole('button', { name: 'New watchlist' }).click();
     await page.getByPlaceholder('e.g. Tech Large-Cap').fill('Target List');
     await page.getByRole('button', { name: 'Create' }).click();
     await expect(page.getByRole('heading', { name: 'Target List' })).toBeVisible({ timeout: 5000 });

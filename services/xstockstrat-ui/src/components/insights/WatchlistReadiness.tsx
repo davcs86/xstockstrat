@@ -186,80 +186,84 @@ export function WatchlistReadiness({
         </span>
       </div>
 
-      <ul className="divide-y divide-border rounded-md border border-border">
-        {/* Bound symbols, ranked by conviction. */}
-        {[...evaluatedRows]
-          .sort((a, b) => b.r.conviction - a.r.conviction)
-          .map(({ binding, r }) => {
-            const queued = inQueue?.has(r.symbol.toUpperCase()) ?? false;
-            return (
-              <li
-                key={binding.symbol}
-                className="flex items-center gap-3 px-3 py-2 text-xs"
-                data-testid={`readiness-row-${binding.symbol}`}
-              >
-                <span className="w-14 font-mono font-semibold">{r.symbol}</span>
-                <div className="flex items-center gap-2">
-                  <Progress
-                    value={Math.round(r.conviction * 100)}
-                    className="h-1.5 w-20"
-                    variant={barVariant(r)}
-                  />
-                  <span
-                    className={cn(
-                      'w-16 font-mono tabular-nums',
-                      isFiring(r)
-                        ? 'text-buy'
-                        : hasData(r)
-                          ? 'text-muted-foreground'
-                          : 'text-muted-foreground/60',
-                    )}
-                  >
-                    {stateLabel(r)}
+      {/* Rows carry several fixed-width controls; let them scroll within the card on a narrow
+          pane instead of forcing the whole page to scroll horizontally. */}
+      <div className="overflow-x-auto">
+        <ul className="min-w-[22rem] divide-y divide-border rounded-md border border-border">
+          {/* Bound symbols, ranked by conviction. */}
+          {[...evaluatedRows]
+            .sort((a, b) => b.r.conviction - a.r.conviction)
+            .map(({ binding, r }) => {
+              const queued = inQueue?.has(r.symbol.toUpperCase()) ?? false;
+              return (
+                <li
+                  key={binding.symbol}
+                  className="flex items-center gap-3 px-3 py-2 text-xs"
+                  data-testid={`readiness-row-${binding.symbol}`}
+                >
+                  <span className="w-14 font-mono font-semibold">{r.symbol}</span>
+                  <div className="flex items-center gap-2">
+                    <Progress
+                      value={Math.round(r.conviction * 100)}
+                      className="h-1.5 w-20"
+                      variant={barVariant(r)}
+                    />
+                    <span
+                      className={cn(
+                        'w-16 font-mono tabular-nums',
+                        isFiring(r)
+                          ? 'text-buy'
+                          : hasData(r)
+                            ? 'text-muted-foreground'
+                            : 'text-muted-foreground/60',
+                      )}
+                    >
+                      {stateLabel(r)}
+                    </span>
+                  </div>
+                  {queued && (
+                    <Badge variant="info" data-testid="in-queue">
+                      in queue
+                    </Badge>
+                  )}
+                  <span className="ml-auto truncate font-mono text-muted-foreground">
+                    {blockingCondition(r)}
                   </span>
-                </div>
-                {queued && (
-                  <Badge variant="info" data-testid="in-queue">
-                    in queue
-                  </Badge>
-                )}
-                <span className="ml-auto truncate font-mono text-muted-foreground">
-                  {blockingCondition(r)}
-                </span>
-                <BindingRowControls
-                  symbol={binding.symbol}
-                  strategyId={binding.strategyId}
-                  strategies={strategies}
-                  onRebind={onRebindSymbol}
-                  onRemove={onRemoveSymbol}
-                  disabled={disabled}
-                />
-              </li>
-            );
-          })}
+                  <BindingRowControls
+                    symbol={binding.symbol}
+                    strategyId={binding.strategyId}
+                    strategies={strategies}
+                    onRebind={onRebindSymbol}
+                    onRemove={onRemoveSymbol}
+                    disabled={disabled}
+                  />
+                </li>
+              );
+            })}
 
-        {/* Unbound symbols — shown as not-evaluated, never given a fabricated binding (P-03). */}
-        {unbound.map((b) => (
-          <li
-            key={b.symbol}
-            className="flex items-center gap-3 px-3 py-2 text-xs"
-            data-testid={`readiness-row-${b.symbol}`}
-          >
-            <span className="w-14 font-mono font-semibold">{b.symbol}</span>
-            <span className="text-muted-foreground/60" data-testid={`unbound-${b.symbol}`}>
-              not evaluated — bind a strategy
-            </span>
-            <BindingRowControls
-              symbol={b.symbol}
-              strategyId={b.strategyId}
-              strategies={strategies}
-              onRebind={onRebindSymbol}
-              onRemove={onRemoveSymbol}
-              disabled={disabled}
-            />
-          </li>
-        ))}
-      </ul>
+          {/* Unbound symbols — shown as not-evaluated, never given a fabricated binding (P-03). */}
+          {unbound.map((b) => (
+            <li
+              key={b.symbol}
+              className="flex items-center gap-3 px-3 py-2 text-xs"
+              data-testid={`readiness-row-${b.symbol}`}
+            >
+              <span className="w-14 font-mono font-semibold">{b.symbol}</span>
+              <span className="text-muted-foreground/60" data-testid={`unbound-${b.symbol}`}>
+                not evaluated — bind a strategy
+              </span>
+              <BindingRowControls
+                symbol={b.symbol}
+                strategyId={b.strategyId}
+                strategies={strategies}
+                onRebind={onRebindSymbol}
+                onRemove={onRemoveSymbol}
+                disabled={disabled}
+              />
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }

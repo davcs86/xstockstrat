@@ -143,10 +143,15 @@ export default function PositionDetailPage() {
   // Opportunity for this symbol (watchlisted branch) — replicate the former Signal-detail tie-break:
   // prefer the watchlist-bound strategy's opportunity, else the highest-conviction match.
   const { data: oppData } = useOpportunities(0);
-  const opportunity = useMemo(() => {
-    const matches = (oppData?.opportunities ?? []).filter((o) => o.symbol === symbol);
-    return matches.find((o) => o.strategyId === boundStrategyId) ?? matches[0];
-  }, [oppData, symbol, boundStrategyId]);
+  const symbolOpportunities = useMemo(
+    () => (oppData?.opportunities ?? []).filter((o) => o.symbol === symbol),
+    [oppData, symbol],
+  );
+  const opportunity = useMemo(
+    () =>
+      symbolOpportunities.find((o) => o.strategyId === boundStrategyId) ?? symbolOpportunities[0],
+    [symbolOpportunities, boundStrategyId],
+  );
 
   useEffect(() => {
     if (!symbol) return;
@@ -365,18 +370,25 @@ export default function PositionDetailPage() {
           <SymbolPanelGroup panels={tradePanels} ariaLabel="Trade panels" />
         </section>
 
-        {/* FR-11 watchlist-conditional split: exactly one side — the four watchlist panels
-            (Opportunity · Why this fired · Fundamentals · Mute) clustered for a watchlisted symbol,
-            or the standalone Screener otherwise. Render neither while watchlist membership is still
-            loading (no flash of the wrong side). Feature 139 wraps the WHOLE split in one #research
-            section so the branch logic is untouched (FR-3). */}
+        {/* FR-11 watchlist-conditional split: a watchlisted symbol clusters the four watchlist
+            panels (Opportunity · Why this fired · Fundamentals · Mute); otherwise the standalone
+            Screener. The live Opportunity card is NOT gated by watchlist membership, though — a
+            symbol surfaced by a live strategy/signal (e.g. UPRO) is an opportunity whether or not
+            it's watchlisted, so it renders above the Screener in the non-watchlisted branch too.
+            Render neither side while watchlist membership is still loading (no flash of the wrong
+            side). Feature 139 wraps the whole split in one #research section. */}
         <section id="research" className={cn('space-y-4', SECTION_SCROLL_MT)}>
           {watchlistsLoading ? (
             <Skeleton className="h-24 w-full" />
           ) : isSymbolWatchlisted ? (
             <SymbolPanelGroup panels={researchPanels} ariaLabel="Research panels" />
           ) : (
-            <SymbolScreening symbol={symbol} />
+            <div className="space-y-4">
+              {symbolOpportunities.map((o) => (
+                <OpportunitySection key={o.opportunityKey} opportunity={o} symbol={symbol} />
+              ))}
+              <SymbolScreening symbol={symbol} />
+            </div>
           )}
         </section>
 

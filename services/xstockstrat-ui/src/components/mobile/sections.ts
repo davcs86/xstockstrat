@@ -14,6 +14,9 @@ export type Section =
       symbol: string;
       badge?: EnumRender;
       conviction?: number;
+      // Strategy readiness (passing/total conditions) — rendered as a labeled meter alongside
+      // conviction so the phone view isn't missing the desktop's readiness signal.
+      readiness?: { passing: number; total: number };
       caption?: string;
       href?: string;
       muted?: boolean; // feature 132 — deny-listed row: a "Muted" marker in place of the action badge

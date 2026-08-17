@@ -1,19 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { KeyRound, Copy, Check } from 'lucide-react';
+import { KeyRound, Copy, Check, Plus } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/ui/data-table';
-import {
-  AlertDialog,
-  AlertDialogTrigger,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogAction,
-  AlertDialogCancel,
-} from '@/components/ui/alert-dialog';
+import { RowActionsMenu } from '@/components/shared/RowActionsMenu';
+import { FormDialog } from '@/components/shared/FormDialog';
 import { useAgentUrl } from '../AgentUrlContext';
 
 interface AuthorizedApp {
@@ -38,6 +32,7 @@ export default function AuthorizedAppsPage() {
   const [revoking, setRevoking] = useState<string | null>(null);
   const [reachable, setReachable] = useState<boolean | null>(null);
   const [copied, setCopied] = useState(false);
+  const [connectOpen, setConnectOpen] = useState(false);
 
   const loadApps = useCallback(async () => {
     setLoading(true);
@@ -120,29 +115,26 @@ export default function AuthorizedAppsPage() {
         cell: ({ row }) => {
           const app = row.original;
           return (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="destructive" size="sm" disabled={revoking === app.clientId}>
-                  {revoking === app.clientId ? 'Disconnecting…' : 'Disconnect'}
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogDescription>
-                  Disconnect &quot;{app.clientName}&quot;? It will lose access until you
-                  re-authorize it.
-                </AlertDialogDescription>
-                <AlertDialogCancel disabled={revoking === app.clientId}>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  disabled={revoking === app.clientId}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleDisconnect(app);
-                  }}
-                >
-                  Confirm
-                </AlertDialogAction>
-              </AlertDialogContent>
-            </AlertDialog>
+            <RowActionsMenu
+              triggerLabel={`Actions for ${app.clientName}`}
+              actions={[
+                {
+                  label: 'Disconnect',
+                  destructive: true,
+                  disabled: revoking === app.clientId,
+                  onSelect: () => handleDisconnect(app),
+                  confirm: {
+                    title: 'Disconnect app',
+                    description: (
+                      <>
+                        Disconnect &quot;{app.clientName}&quot;? It will lose access until you
+                        re-authorize it.
+                      </>
+                    ),
+                  },
+                },
+              ]}
+            />
           );
         },
       },
@@ -160,12 +152,81 @@ export default function AuthorizedAppsPage() {
     }
   }
 
+  const agentStatus = (
+    <div className="flex items-center gap-2 text-sm">
+      <span className="text-muted-foreground">Agent status:</span>
+      {reachable === null ? (
+        <span className="text-muted-foreground">Checking…</span>
+      ) : reachable ? (
+        <span className="inline-flex items-center gap-1 text-buy">
+          <span className="h-2 w-2 rounded-full bg-buy" /> Reachable
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1 text-destructive">
+          <span className="h-2 w-2 rounded-full bg-destructive" /> Unreachable
+        </span>
+      )}
+    </div>
+  );
+
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex items-center gap-2">
-        <KeyRound className="h-5 w-5 text-primary" />
-        <h1 className="text-xl font-semibold">My Authorized Apps</h1>
+    <div className="mx-auto max-w-4xl space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <KeyRound className="h-5 w-5 text-primary" />
+          <h1 className="text-xl font-semibold">My Authorized Apps</h1>
+        </div>
+        <FormDialog
+          open={connectOpen}
+          onOpenChange={setConnectOpen}
+          trigger={
+            <Button className="shrink-0">
+              <Plus className="mr-1.5 h-4 w-4" />
+              Connect a new app
+            </Button>
+          }
+          title="Connect a new app"
+          description="Add xstockstrat as a custom connector in your OAuth client. The agent handles authorization, discovery, and token exchange."
+          className="sm:max-w-lg"
+        >
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium">MCP connector URL</label>
+              <div className="flex items-center gap-2">
+                <input
+                  readOnly
+                  value={agentUrl}
+                  aria-label="MCP connector URL"
+                  className="flex-1 rounded-md border border-input bg-muted px-3 py-2 font-mono text-xs"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={copyAgentUrl}
+                  disabled={!agentUrl}
+                >
+                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  <span className="ml-1">{copied ? 'Copied' : 'Copy'}</span>
+                </Button>
+              </div>
+            </div>
+            <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+              <li>Open Claude.ai → Settings → Connectors → Add custom connector.</li>
+              <li>Paste the MCP connector URL above.</li>
+              <li>Complete the OAuth sign-in; the app will then appear in your authorized list.</li>
+            </ol>
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => setConnectOpen(false)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </FormDialog>
       </div>
+
+      {/* Agent status lives in the page body under the header (not buried in the modal). */}
+      {agentStatus}
 
       <Card>
         <CardHeader>
@@ -182,65 +243,12 @@ export default function AuthorizedAppsPage() {
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : apps.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              You haven&apos;t authorized any apps yet. Use the section below to connect one.
+              You haven&apos;t authorized any apps yet. Use “Connect a new app” above to connect
+              one.
             </p>
           ) : (
             <DataTable columns={columns} data={apps} getRowId={(app) => app.clientId} />
           )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Connect a new app</CardTitle>
-          <CardDescription>
-            Add xstockstrat as a custom connector in your OAuth client. The agent handles
-            authorization, discovery, and token exchange.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Agent status:</span>
-            {reachable === null ? (
-              <span className="text-sm text-muted-foreground">Checking…</span>
-            ) : reachable ? (
-              <span className="inline-flex items-center gap-1 text-sm text-buy">
-                <span className="h-2 w-2 rounded-full bg-buy" /> Reachable
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 text-sm text-destructive">
-                <span className="h-2 w-2 rounded-full bg-destructive" /> Unreachable
-              </span>
-            )}
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium">MCP connector URL</label>
-            <div className="flex items-center gap-2">
-              <input
-                readOnly
-                value={agentUrl}
-                aria-label="MCP connector URL"
-                className="flex-1 rounded-md border border-input bg-muted px-3 py-2 font-mono text-xs"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={copyAgentUrl}
-                disabled={!agentUrl}
-              >
-                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                <span className="ml-1">{copied ? 'Copied' : 'Copy'}</span>
-              </Button>
-            </div>
-          </div>
-
-          <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
-            <li>Open Claude.ai → Settings → Connectors → Add custom connector.</li>
-            <li>Paste the MCP connector URL above.</li>
-            <li>Complete the OAuth sign-in; the app will then appear in your authorized list.</li>
-          </ol>
         </CardContent>
       </Card>
     </div>
