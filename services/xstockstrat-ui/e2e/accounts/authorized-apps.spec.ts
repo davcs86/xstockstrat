@@ -43,7 +43,10 @@ test.describe('Accounts — My Authorized Apps', () => {
     await expect(page.getByText('oauthc_e2e')).toBeVisible();
     // The "Last refreshed" column is labeled per Step 4/7 semantics (not "Last used").
     await expect(page.getByRole('columnheader', { name: 'Last refreshed' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Disconnect' })).toBeVisible();
+    // Row actions now live behind a three-dots menu (UI refinement).
+    await expect(
+      page.getByRole('button', { name: 'Actions for Claude.ai (E2E)' }),
+    ).toBeVisible();
   });
 
   test('Disconnect → confirm → row disappears after revoke', async ({ page }) => {
@@ -84,9 +87,10 @@ test.describe('Accounts — My Authorized Apps', () => {
     await page.goto('/accounts/authorized-apps');
     await expect(page.getByText('Claude.ai (E2E)')).toBeVisible();
 
-    // Disconnect now opens an AlertDialog (feature 121, FR-4) rather than a native
-    // window.confirm — click the trigger, then the dialog's own Confirm action.
-    await page.getByRole('button', { name: 'Disconnect' }).click();
+    // Disconnect lives in the row's three-dots menu and opens an AlertDialog rather than a
+    // native window.confirm — open the menu, choose Disconnect, then the dialog's Confirm action.
+    await page.getByRole('button', { name: 'Actions for Claude.ai (E2E)' }).click();
+    await page.getByRole('menuitem', { name: 'Disconnect' }).click();
     await page.getByRole('button', { name: 'Confirm' }).click();
     await expect(page.getByText('Claude.ai (E2E)')).toHaveCount(0);
     await expect(page.getByText("haven't authorized any apps")).toBeVisible();

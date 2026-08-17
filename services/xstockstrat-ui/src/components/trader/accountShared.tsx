@@ -18,15 +18,8 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Field, FieldError } from '../ui/field';
-import {
-  AlertDialog,
-  AlertDialogTrigger,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogAction,
-  AlertDialogCancel,
-} from '../ui/alert-dialog';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../ui/collapsible';
+import { Collapsible, CollapsibleContent } from '../ui/collapsible';
+import { RowActionsMenu } from '../shared/RowActionsMenu';
 import { CredentialStatusBadge } from './CredentialStatusBadge';
 import { brokerLabel } from '@/lib/brokers';
 
@@ -258,9 +251,12 @@ export function EditCredentialsForm({
 export function AccountRow({
   account,
   className = 'p-3',
+  showId = false,
 }: {
   account: BrokerAccount;
   className?: string;
+  /** Show the account's UUID under its name (the full accounts page; off on the compact panel). */
+  showId?: boolean;
 }) {
   const { accounts, selectedAccountId, setSelectedAccountId, refreshAccounts } =
     useAccountContext();
@@ -289,44 +285,41 @@ export function AccountRow({
       className={`rounded-md border ${className}${!account.isActive ? ' opacity-50' : ''}`}
     >
       <div className="flex items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-          <span className="text-sm font-medium truncate">{account.displayName}</span>
-          <Badge variant="secondary">{brokerLabel(account.brokerType)}</Badge>
-          <Badge variant={account.isPaper ? 'paper' : 'live'}>
-            {account.isPaper ? 'Paper' : 'Live'}
-          </Badge>
-          <CredentialStatusBadge status={account.credentialStatus} />
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-sm font-medium truncate">{account.displayName}</span>
+            <Badge variant="secondary">{brokerLabel(account.brokerType)}</Badge>
+            <CredentialStatusBadge status={account.credentialStatus} />
+          </div>
+          {showId && (
+            <p className="mt-0.5 font-mono text-[11px] text-muted-foreground truncate">
+              {account.id}
+            </p>
+          )}
         </div>
         {account.isActive && (
-          <div className="flex gap-1 shrink-0">
-            <CollapsibleTrigger asChild>
-              <Button size="sm" variant="ghost">
-                Edit keys
-              </Button>
-            </CollapsibleTrigger>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button size="sm" variant="ghost">
-                  Remove
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogDescription>
-                  Deregister {account.displayName}? In-flight orders will complete but no new orders
-                  can be placed.
-                </AlertDialogDescription>
-                <AlertDialogCancel disabled={removing}>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  disabled={removing}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleRemove();
-                  }}
-                >
-                  Confirm
-                </AlertDialogAction>
-              </AlertDialogContent>
-            </AlertDialog>
+          <div className="shrink-0">
+            <RowActionsMenu
+              triggerLabel={`Actions for ${account.displayName}`}
+              actions={[
+                { label: editing ? 'Hide keys' : 'Edit keys', onSelect: () => setEditing((v) => !v) },
+                {
+                  label: 'Remove',
+                  destructive: true,
+                  disabled: removing,
+                  onSelect: handleRemove,
+                  confirm: {
+                    title: 'Deregister account',
+                    description: (
+                      <>
+                        Deregister {account.displayName}? In-flight orders will complete but no new
+                        orders can be placed.
+                      </>
+                    ),
+                  },
+                },
+              ]}
+            />
           </div>
         )}
       </div>

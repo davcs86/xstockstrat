@@ -112,14 +112,20 @@ test.describe('AccountSelector', () => {
     // standalone "Add Account" form with its own "API Key" field, so an unscoped
     // getByPlaceholder('API Key') would be ambiguous once the row's own credential form expands.
     const row = page.getByTestId(`account-row-${BROKER_ACCOUNT_ALPACA.id}`);
-    const editKeysBtn = row.getByRole('button', { name: 'Edit keys' });
-    await expect(editKeysBtn).toBeVisible({ timeout: 5000 });
+    // Row actions now live behind a three-dots menu — "Edit keys" is a menu item that toggles to
+    // "Hide keys" while the credential form is open (UI refinement).
+    const actions = row.getByRole('button', {
+      name: `Actions for ${BROKER_ACCOUNT_ALPACA.displayName}`,
+    });
+    await expect(actions).toBeVisible({ timeout: 5000 });
     await expect(row.getByPlaceholder('API Key')).not.toBeVisible();
 
-    await editKeysBtn.click();
+    await actions.click();
+    await page.getByRole('menuitem', { name: 'Edit keys' }).click();
     await expect(row.getByPlaceholder('API Key')).toBeVisible();
 
-    await editKeysBtn.click();
+    await actions.click();
+    await page.getByRole('menuitem', { name: 'Hide keys' }).click();
     await expect(row.getByPlaceholder('API Key')).not.toBeVisible();
   });
 
@@ -144,15 +150,20 @@ test.describe('AccountSelector', () => {
     // so an unscoped getByPlaceholder would be ambiguous once the row's own credential form
     // expands.
     const row = page.getByTestId(`account-row-${BROKER_ACCOUNT_ALPACA.id}`);
-    await row.getByRole('button', { name: 'Edit keys' }).click();
+    const actions = row.getByRole('button', {
+      name: `Actions for ${BROKER_ACCOUNT_ALPACA.displayName}`,
+    });
+    await actions.click();
+    await page.getByRole('menuitem', { name: 'Edit keys' }).click();
     await row.getByPlaceholder('API Key').fill('test-key-123');
     await row.getByPlaceholder('API Secret').fill('test-secret-456');
     await row.getByRole('button', { name: 'Save keys' }).click();
 
     // EditCredentialsForm's onDone callback unmounts the form (AccountRow's `editing` state
     // collapses) rather than resetting-in-place like AddAccountForm — so the parity assertion is
-    // the row collapsing back to its default "Edit keys" state, not a cleared-but-mounted field.
-    await expect(row.getByRole('button', { name: 'Edit keys' })).toBeVisible({ timeout: 5000 });
+    // the row collapsing back to its default state (the actions menu), not a cleared-but-mounted
+    // field.
+    await expect(actions).toBeVisible({ timeout: 5000 });
     await expect(row.getByPlaceholder('API Key')).not.toBeVisible();
   });
 });

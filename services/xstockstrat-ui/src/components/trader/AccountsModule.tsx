@@ -149,7 +149,7 @@ export function AccountsModule() {
           ) : (
             <div className="space-y-2">
               {filteredAccounts.map((account) => (
-                <AccountRow key={account.id} account={account} />
+                <AccountRow key={account.id} account={account} showId />
               ))}
             </div>
           )}

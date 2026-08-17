@@ -6,14 +6,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/ui/data-table';
-import {
-  AlertDialog,
-  AlertDialogTrigger,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogAction,
-  AlertDialogCancel,
-} from '@/components/ui/alert-dialog';
+import { RowActionsMenu } from '@/components/shared/RowActionsMenu';
 import { useAgentUrl } from '../AgentUrlContext';
 
 interface AuthorizedApp {
@@ -120,29 +113,26 @@ export default function AuthorizedAppsPage() {
         cell: ({ row }) => {
           const app = row.original;
           return (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="destructive" size="sm" disabled={revoking === app.clientId}>
-                  {revoking === app.clientId ? 'Disconnecting…' : 'Disconnect'}
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogDescription>
-                  Disconnect &quot;{app.clientName}&quot;? It will lose access until you
-                  re-authorize it.
-                </AlertDialogDescription>
-                <AlertDialogCancel disabled={revoking === app.clientId}>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  disabled={revoking === app.clientId}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleDisconnect(app);
-                  }}
-                >
-                  Confirm
-                </AlertDialogAction>
-              </AlertDialogContent>
-            </AlertDialog>
+            <RowActionsMenu
+              triggerLabel={`Actions for ${app.clientName}`}
+              actions={[
+                {
+                  label: 'Disconnect',
+                  destructive: true,
+                  disabled: revoking === app.clientId,
+                  onSelect: () => handleDisconnect(app),
+                  confirm: {
+                    title: 'Disconnect app',
+                    description: (
+                      <>
+                        Disconnect &quot;{app.clientName}&quot;? It will lose access until you
+                        re-authorize it.
+                      </>
+                    ),
+                  },
+                },
+              ]}
+            />
           );
         },
       },
