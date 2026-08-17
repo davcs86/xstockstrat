@@ -106,7 +106,13 @@ test.describe('Single Position page', () => {
     await watchlist(page, 'AAPL');
     await page.goto('/trader/positions/AAPL');
 
-    await expect(page.getByText('Opportunity').first()).toBeVisible({ timeout: 30000 });
+    // Scope to the CardTitle heading, not a bare getByText('Opportunity'): the Research panel group
+    // (feature 139 amendment) now also renders an "Opportunity" mobile tab (a role="radio", hidden
+    // md:hidden at this desktop viewport) — a bare getByText.first() would resolve that hidden tab
+    // (first in DOM) and fail toBeVisible. The heading role addresses the visible section title.
+    await expect(page.getByRole('heading', { name: 'Opportunity' })).toBeVisible({
+      timeout: 30000,
+    });
     // Scoped to the stable data-testid, not a bare page-level getByText: SignalReadiness's
     // CardTitle briefly resolves to 2 DOM elements on first paint (SSR/hydration timing), which
     // trips Playwright strict mode intermittently — the same root cause already fixed once for
@@ -425,28 +431,62 @@ test.describe('Single Position page', () => {
     const nav = page.getByRole('navigation', { name: 'Symbol navigation' });
     await expect(nav).toBeVisible({ timeout: 30000 });
 
-    // The six chips exist for a held symbol (Position is appended because AAPL is held).
-    for (const label of ['Overview', 'Trade', 'Research', 'Backtests', 'Coverage', 'Position']) {
+    // A stable four-section spine (feature 139 amendment): related panels are clustered inside each
+    // section (desktop columns / mobile tabbed panel), so the top-level nav no longer grows/shrinks
+    // with what's held — it is always these four.
+    for (const label of ['Overview', 'Trade', 'Research', 'Analysis']) {
       await expect(nav.getByRole('radio', { name: label, exact: true })).toBeVisible();
     }
+    // The former standalone Backtests/Coverage/Position chips are gone (merged/folded into the
+    // Analysis and Trade sections) — no top-level chip for them.
+    for (const label of ['Backtests', 'Coverage', 'Position']) {
+      await expect(nav.getByRole('radio', { name: label, exact: true })).toHaveCount(0);
+    }
 
-    // Clicking Backtests scrolls that section into view and marks the chip active — its content
-    // (the backfill/backtests area) stays mounted the whole time (nothing unmounts).
-    await nav.getByRole('radio', { name: 'Backtests', exact: true }).click();
-    await expect(nav.getByRole('radio', { name: 'Backtests', exact: true })).toBeChecked();
+    // Clicking Analysis scrolls that section into view and marks the chip active — the Backtests +
+    // Backfill-coverage pair it clusters stays mounted the whole time (nothing unmounts). At the
+    // default desktop viewport the panel group renders both as columns, so backfill-coverage shows.
+    await nav.getByRole('radio', { name: 'Analysis', exact: true }).click();
+    await expect(nav.getByRole('radio', { name: 'Analysis', exact: true })).toBeChecked();
     await expect(page.getByTestId('backfill-coverage')).toBeVisible();
   });
 
-  test('feature 139: the Position chip is absent for an unheld symbol', async ({ page }) => {
+  test('feature 139: the nav is a stable four-section spine for an unheld symbol', async ({
+    page,
+  }) => {
     await addAuthCookie(page);
     await page.goto('/trader/positions/ZZZZ');
 
     const nav = page.getByRole('navigation', { name: 'Symbol navigation' });
     await expect(nav).toBeVisible({ timeout: 30000 });
-    // ZZZZ is unheld → no PositionBody → the Position group/chip is not rendered.
-    await expect(nav.getByRole('radio', { name: 'Position', exact: true })).toHaveCount(0);
-    // But the always-on groups are still there.
-    await expect(nav.getByRole('radio', { name: 'Overview', exact: true })).toBeVisible();
+    // The four sections are always present — held or not (the held-Position stats fold into the
+    // Trade section's panel group as a tab, not into a top-level chip).
+    for (const label of ['Overview', 'Trade', 'Research', 'Analysis']) {
+      await expect(nav.getByRole('radio', { name: label, exact: true })).toBeVisible();
+    }
+  });
+
+  test('feature 139: the Trade section clusters its panels into a mobile tabbed panel (all mounted)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.setViewportSize({ width: 390, height: 844 }); // mobile → tabbed panels, not columns
+    await page.goto('/trader/positions/AAPL');
+
+    // AAPL is held → the Trade panel group carries Position · Orders & fills · Place order. On
+    // mobile it renders a ToggleGroup tab bar (radios); Orders & fills is the default-active panel.
+    const tradeTabs = page.getByRole('radiogroup', { name: 'Trade panels' });
+    await expect(tradeTabs).toBeVisible({ timeout: 30000 });
+    for (const label of ['Position', 'Orders & fills', 'Place order']) {
+      await expect(tradeTabs.getByRole('radio', { name: label, exact: true })).toBeVisible();
+    }
+
+    // Switching to Place order reveals the order ticket; every panel stays MOUNTED (the inactive
+    // ones are hidden via CSS), so the Orders & fills card is still in the DOM, just not visible.
+    await tradeTabs.getByRole('radio', { name: 'Place order', exact: true }).click();
+    await expect(page.getByText('Trade AAPL')).toBeVisible();
+    await expect(page.getByText('Orders & fills · AAPL')).toBeAttached();
+    await expect(page.getByText('Orders & fills · AAPL')).not.toBeVisible();
   });
 });
 

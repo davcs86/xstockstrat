@@ -152,10 +152,13 @@ test.describe('FR-20 order parity', () => {
     // the describe's beforeEach.
     await page.goto('/trader/positions/AAPL');
 
-    await expect(page.getByText('Place Order').first()).toBeVisible({ timeout: 30000 });
     // Scope to the OrderForm <form> so the type Select isn't confused with any other combobox
-    // (e.g. the Screening criteria selects) on the same page.
+    // (e.g. the Screening criteria selects) on the same page. Gate on the form's own field, not a
+    // bare getByText('Place Order') — the Trade panel group (feature 139 amendment) now also renders
+    // a "Place order" mobile tab (case-insensitively matching, hidden md:hidden at this desktop
+    // viewport), which a .first() getByText would resolve and fail toBeVisible on.
     const form = page.locator('form').filter({ has: page.getByPlaceholder('Symbol (e.g. AAPL)') });
+    await expect(form.getByPlaceholder('Symbol (e.g. AAPL)')).toBeVisible({ timeout: 30000 });
     // The symbol field is pre-filled from the route param (FR-6) and locked: the chart,
     // conviction, and edge stats above the ticket are all keyed to this symbol, so the field
     // must not be editable away from it (previously a plain editable input — inconsistent with

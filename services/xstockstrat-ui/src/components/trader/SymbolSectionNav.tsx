@@ -46,38 +46,54 @@ export function SymbolSectionNav({ groups }: { groups: SymbolGroup[] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Scroll-spy: highlight the topmost section clearing the sticky chrome. Re-subscribed when the
-  // group set changes OR the `sm` breakpoint crosses, so the top inset stays correct on resize.
+  // Scroll-spy (feature 139; algorithm revised by the 139 amendment): highlight the section the
+  // reader is on. A prior `IntersectionObserver` "topmost intersecting a thin band" heuristic was
+  // replaced by a deterministic scroll-position read because the amendment's column-grouped panels
+  // shortened the page — the last section can no longer scroll under the sticky offset line, so a
+  // band-based observer could never highlight it (and would steal `active` back from a deep-link to
+  // it). This computes, on a rAF-throttled scroll, the **last section whose top has passed the
+  // offset line** (the one you're reading), with an explicit **bottom-of-page** rule so the final
+  // section highlights once you reach the end even if it never reaches the offset line.
   useEffect(() => {
     const ids = groupKey.split(',').filter(Boolean);
+    if (ids.length === 0) return;
     const mql = window.matchMedia('(min-width: 640px)');
-    let io: IntersectionObserver | null = null;
+    let raf = 0;
 
-    const connect = () => {
-      io?.disconnect();
-      const top = mql.matches ? OFFSET_SM : OFFSET_BASE;
-      io = new IntersectionObserver(
-        (entries) => {
-          const vis = entries
-            .filter((e) => e.isIntersecting)
-            .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-          if (vis[0]) setActive(vis[0].target.id);
-        },
-        // Bottom inset (-55%) is empirically tuned so a short/empty section (e.g. an unfilled
-        // Coverage) still wins the band as it reaches the top; adjust if a group is skipped.
-        { rootMargin: `-${top}px 0px -55% 0px`, threshold: 0 },
-      );
-      ids.forEach((id) => {
+    const compute = () => {
+      raf = 0;
+      const offset = mql.matches ? OFFSET_SM : OFFSET_BASE;
+      // At (within 2px of) the bottom, the last section is the one in view even if it is too short
+      // to scroll under the offset line — highlight it explicitly.
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) {
+        setActive(ids[ids.length - 1]);
+        return;
+      }
+      // Otherwise: the last section whose top has scrolled to/above the offset line. Sections are in
+      // DOM/visual order, so once one is still below the line, every later one is too → stop.
+      let current = ids[0];
+      for (const id of ids) {
         const el = document.getElementById(id);
-        if (el) io!.observe(el);
-      });
+        if (!el) continue;
+        if (el.getBoundingClientRect().top - offset <= 1) current = id;
+        else break;
+      }
+      setActive(current);
     };
 
-    connect();
-    mql.addEventListener('change', connect);
+    const onScroll = () => {
+      if (!raf) raf = window.requestAnimationFrame(compute);
+    };
+
+    compute(); // initial paint
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    mql.addEventListener('change', onScroll);
     return () => {
-      io?.disconnect();
-      mql.removeEventListener('change', connect);
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+      mql.removeEventListener('change', onScroll);
+      if (raf) cancelAnimationFrame(raf);
     };
   }, [groupKey]);
 

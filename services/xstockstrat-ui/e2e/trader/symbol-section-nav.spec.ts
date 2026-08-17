@@ -13,13 +13,13 @@ import { addAuthCookie } from '../helpers/auth';
 test.describe('Symbol section nav', () => {
   test('an inbound #hash deep-links to that group on load', async ({ page }) => {
     await addAuthCookie(page);
-    await page.goto('/trader/positions/AAPL#backtests');
+    await page.goto('/trader/positions/AAPL#analysis');
 
     const nav = page.getByRole('navigation', { name: 'Symbol navigation' });
     await expect(nav).toBeVisible({ timeout: 30000 });
     // The mount effect reads window.location.hash and activates that group (a ToggleGroup
     // type="single" renders radios — the active one is checked).
-    await expect(nav.getByRole('radio', { name: 'Backtests', exact: true })).toBeChecked({
+    await expect(nav.getByRole('radio', { name: 'Analysis', exact: true })).toBeChecked({
       timeout: 10000,
     });
   });
@@ -40,7 +40,7 @@ test.describe('Symbol section nav', () => {
     // ?strategy= query must survive in the URL.
     await page
       .getByRole('navigation', { name: 'Symbol navigation' })
-      .getByRole('radio', { name: 'Coverage', exact: true })
+      .getByRole('radio', { name: 'Analysis', exact: true })
       .click();
     await expect
       .poll(() => new URL(page.url()).searchParams.get('strategy'), { timeout: 10000 })
@@ -60,15 +60,17 @@ test.describe('Symbol section nav', () => {
     // Overview is active (checked) at the top of the page.
     await expect(nav.getByRole('radio', { name: 'Overview', exact: true })).toBeChecked();
 
-    // Scroll a lower section into view WITHOUT clicking a chip — the IntersectionObserver must flip
-    // the active chip to that group on its own (that is what makes FR-2 true under free scroll).
-    // Target Backtests (a reliably-tall section with a rendered table) so the observer band lands on
-    // it deterministically; a radiogroup is single-select, so this checked assertion also proves
-    // Overview is no longer active.
-    await page.evaluate(() =>
-      document.getElementById('backtests')?.scrollIntoView({ block: 'start' }),
-    );
-    await expect(nav.getByRole('radio', { name: 'Backtests', exact: true })).toBeChecked({
+    // Scroll a lower section into view WITHOUT clicking a chip — the scroll-spy must flip the active
+    // chip to that group on its own (that is what makes FR-2 true under free scroll). Target Trade
+    // (the second section): with Research + Analysis below it, the page always has room to scroll its
+    // top clearly ABOVE the offset line (60px above, past both the 93/129px breakpoint insets) so the
+    // "scrolled-past" read is unambiguous, never a knife-edge on the offset line. A radiogroup is
+    // single-select, so this checked assertion also proves Overview is no longer active.
+    await page.evaluate(() => {
+      const el = document.getElementById('trade');
+      if (el) window.scrollTo(0, window.scrollY + el.getBoundingClientRect().top - 60);
+    });
+    await expect(nav.getByRole('radio', { name: 'Trade', exact: true })).toBeChecked({
       timeout: 10000,
     });
   });

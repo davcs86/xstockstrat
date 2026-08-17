@@ -128,3 +128,73 @@ role/label collisions surface on a sibling spec, not the wiring step's own narro
   absent `scroll-area.tsx` is explicitly avoided — native `scrollIntoView`, no `ScrollArea`).
 - **Floor breaches: none** (UI-only — no migration/proto/config/branch/DB surface; the 93/129px layout
   constants are not `WatchConfig` business config, so F-07 is not implicated).
+
+---
+
+## Amendment (2026-08-17) — Responsive grouped panels within sections
+
+**Trigger**: user request to "group related panels into a tabbed panel", clarified to **"tabbed panel
+in mobile / columns in the same row in desktop"** with every panel **staying mounted**. Landed as an
+amendment on the same feature branch / PR (not a new feature) because it refines the already-approved
+sticky-anchor-nav layout without changing its contract (all sections mounted, no fetch-lifecycle
+change, `?strategy=` preserved).
+
+**New component** `src/components/trader/SymbolPanelGroup.tsx` — clusters a section's related panels:
+- **desktop (`md`+)**: all panels rendered as equal-width **columns in one row**
+  (`grid md:grid-flow-col md:auto-cols-fr md:items-start`);
+- **mobile (`< md`)**: a **tabbed panel** — a `md:hidden` `ToggleGroup type="single"` segmented bar
+  (its own `overflow-x-auto` container) selects one panel at a time;
+- **every panel stays mounted in both layouts** — inactive mobile panels are `hidden` via CSS, never
+  unmounted, so in-flight queries / a running backtest never tear down (FR-7 preserved) and
+  `position-detail.spec.ts`'s content assertions (run at the default desktop viewport, where every
+  panel is a visible column) stay green byte-for-byte.
+- `ToggleGroup` items are `role="radio"` (not `role="tab"`) — the same collision-avoidance the
+  top-level nav relies on; each group takes a distinct `aria-label` (`"Trade panels"` etc.).
+- 0 panels → renders nothing; 1 panel → renders it bare (no tab bar, no grid).
+
+**Revised group → section mapping** (the top-level nav is now a **stable four-section spine** — no
+group appears/disappears with what's held; the held-Position stats fold into a Trade *panel*, not a
+top-level chip):
+- **Overview** `#overview` — `SymbolPriceChart` + `IndicatorSection` (unchanged, not a panel group).
+- **Trade** `#trade` — `SymbolPanelGroup`: **Position stats** (only when `position?.symbol`) ·
+  **Orders & fills** (`SymbolOrdersCard`) · **Place order** (the `OrderForm` card). Folds in the
+  former standalone `#position` section.
+- **Research** `#research` — watchlisted branch → `SymbolPanelGroup`: **Opportunity** · **Why this
+  fired** (`SignalReadiness`) · **Fundamentals** · **Mute** (`MuteForStrategy`); non-watchlisted
+  branch → `SymbolScreening` standalone (1 element, no group). FR-11 mutual exclusion unchanged.
+- **Analysis** `#analysis` — `SymbolPanelGroup`: **Backtests** (`BacktestsSection`) · **Backfill
+  coverage** (`BackfillSection`). Merges the former `#backtests` + `#coverage` sections.
+- The `positionNotFound` `CardNotice` stays unwrapped at the bottom (no id, no nav item), unchanged.
+
+**No panel dropped**: all 13 original render targets are preserved — Overview keeps its 2; Trade holds
+3 (incl. folded PositionBody); Research holds 4 (watchlisted) / 1 (Screener); Analysis holds 2; the
+not-found notice is untouched. The only structural moves are *grouping* (Trade absorbs Position;
+Analysis merges Backtests+Coverage), never deletion.
+
+**Corrected grouping decision** (the user's proposal included a "Screener / Fundamentals" group):
+that pairing is **rejected** as incorrect — Screener and Fundamentals live on **mutually exclusive**
+sides of the FR-11 watchlist split (Fundamentals renders only for a watchlisted symbol, Screener only
+for a non-watchlisted one), so they can never co-render and cannot form a single panel group.
+Fundamentals is grouped with the other watchlist panels instead; Screener stays standalone.
+
+**Why not shadcn `Tabs` for the mobile grouping**: identical to the top-level rejection — `Tabs`
+unmounts inactive content, breaking FR-7 and the desktop content assertions. The CSS-`hidden`
+approach keeps all panels mounted while presenting one-at-a-time on mobile.
+
+**Scroll-spy rewrite (consequence of the shorter page)**: grouping panels into columns shortens the
+page enough that the last section can no longer scroll under the sticky offset line, which broke the
+original `IntersectionObserver` "topmost intersecting a thin band" heuristic (it could never highlight
+the last section and stole `active` back from a deep-link to it — the original design.md Open Risk #1
+made real). The scroll-spy was therefore rewritten to a deterministic, rAF-throttled scroll-position
+read — active = the **last section whose top has passed the header+nav offset line**, plus an explicit
+**bottom-of-page** rule for the final section. This resolves the three original scroll-spy Open Risks
+(the empirical `rootMargin`/`threshold`/resize tuning) by removing the observer entirely; the offset
+still switches at the `sm` breakpoint. See implementation-spec § Amendment D-5.
+
+**Test plan delta**: the two nav-interaction cases update to the four-section spine (`#analysis`
+deep-link/scroll-spy; the merged/folded Backtests/Coverage/Position chips assert `toHaveCount(0)` at
+the top level); a new case at a 390px viewport asserts the Trade `SymbolPanelGroup` renders its
+mobile tab bar (`role="radiogroup"` name `"Trade panels"`), that switching tabs reveals the target
+panel, and that an inactive panel stays **attached but not visible** (the mounted-not-unmounted
+guarantee). `mobile-overflow.spec.ts` (390px, `scrollWidth-clientWidth<=1`) stays green — the mobile
+layout is single-column with the tab bar scrolling inside its own `overflow-x-auto` box.

@@ -153,3 +153,55 @@ Executed all 3 steps on `feature/symbol-page-section-nav` (off latest main-dev, 
 **Accountability**: out-of-scope changes: none (D-1/D-2 are Step-1 component internals; D-3 is
 Step-3 test-only). Open items: none. Unaddressed review warnings: none (the impl-spec advisory
 line-anchor drift was cosmetic; the coverage-threshold NOTE was N/A). Next: integration PR → main-dev.
+
+---
+
+## Session 2026-08-17 — Amendment: responsive grouped panels (mobile tabs / desktop columns)
+
+**Trigger**: user asked to group related panels into a "tabbed panel", clarified to **tabbed panel in
+mobile / columns in the same row in desktop**, panels **staying mounted**, landed as an amendment on
+PR #974 (not a new feature).
+
+### Decisions
+- New component `SymbolPanelGroup.tsx` — desktop `md:grid-flow-col md:auto-cols-fr` columns / mobile
+  `md:hidden` `ToggleGroup type="single"` tab bar; inactive mobile panels `hidden` via CSS (mounted,
+  not unmounted → FR-7 preserved, desktop content assertions stay green). 0→null, 1→bare.
+- Top-level nav reduced 6→4 stable sections: **Overview / Trade / Research / Analysis**. The held-
+  Position stats fold into a Trade *panel* (not a top-level chip); Backtests + Coverage merge into
+  **Analysis**. `SymbolSectionNav` was already generic over `groups` — no change beyond a stale
+  "Coverage" comment fix.
+- **Grouping correction (D-4)**: the user's proposed "Screener / Fundamentals" group is incorrect —
+  they sit on mutually exclusive FR-11 branches (Fundamentals=watchlisted, Screener=not) and can
+  never co-render. Surfaced to the user (C-11), then grouped Fundamentals with the watchlist panels;
+  Screener stays standalone. The other three proposed groups were correct.
+- **No panel dropped** (per explicit user instruction): all 13 original render targets preserved —
+  grouping/merging only, never deletion. Mapping table in design.md § Amendment.
+
+### Files
+- `src/components/trader/SymbolPanelGroup.tsx` — create
+- `src/app/trader/positions/[symbol]/page.tsx` — 6 sections → 4; panel arrays for Trade/Research/
+  Analysis; folded #position into Trade, merged #backtests+#coverage into #analysis
+- `src/components/trader/SymbolSectionNav.tsx` — stale "Coverage" comment → generic
+- `e2e/trader/symbol-section-nav.spec.ts` — anchors/chips → `#analysis` / `Analysis`
+- `e2e/trader/position-detail.spec.ts` — four-chip spine; merged chips `toHaveCount(0)`; new 390px
+  mobile panel-group case (tab switch + attached-but-not-visible mounted guarantee)
+- design.md § Amendment, implementation-spec.md § Amendment (Steps 4–6 + D-4), feature.md history
+
+### Verification (2026-08-17 amendment)
+- **Red→green (real prebuilt harness)**: iterated the prebuilt build + e2e. First amendment run
+  surfaced 3 real issues → fixed → converged: (1) `min-w-0` on `SymbolPanelGroup` grid items (grid
+  items default `min-width:auto` → 59px horizontal overflow at 390px, caught by `mobile-overflow`);
+  (2) `getByText('Opportunity').first()` / `getByText('Place Order').first()` collided with the new
+  mobile tab labels (case-insensitive, hidden md:hidden, first in DOM) → scoped to `heading` role /
+  the `<form>` field (`position-detail.spec.ts:109`, `order-parity.spec.ts:155`); (3) scroll-spy
+  rewrite (D-5) — the shorter column layout broke the IntersectionObserver band heuristic for the
+  last section (both the `#analysis` deep-link and the FR-2 scroll-spy failed) → deterministic
+  scroll-position read + bottom-of-page rule.
+- **Final**: `e2e/trader e2e/insights e2e/mobile-overflow.spec.ts` → **230 passed, 0 failed, 0 flaky**.
+  Targeted nav+mobile set at `--retries=0` → 51 passed deterministically; scroll-spy confirmed stable
+  under `--repeat-each=3 --retries=0`. tsc `--noEmit` clean; `next build` clean (pre-existing
+  exhaustive-deps warnings only, none in touched files).
+- **Accountability**: out-of-scope changes: the scroll-spy algorithm swap (D-5) touches the original
+  feature-139 component, justified by the amendment's layout change breaking its precondition — not a
+  drive-by. Two sibling-spec test edits (D-6) are collision fixes, not behavior changes. No panel
+  dropped (explicit user constraint honored). Open items: none.

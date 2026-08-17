@@ -3,7 +3,7 @@
 **Status**: `complete`
 **Created**: 2026-08-16
 **Feature**: `docs/roadmap/features/139-symbol-page-section-nav/feature.md`
-**Total Steps**: 3
+**Total Steps**: 3 + 3 (2026-08-17 amendment — see § Amendment)
 **Feature Branch**: `feature/symbol-page-section-nav`
 
 ---
@@ -393,3 +393,119 @@ page's other radiogroup (OrderForm's BUY/SELL). This is exactly the class of ass
 exists to catch — the red-green cycle (RED: nav absent; GREEN: correct role) surfaced it before merge.
 **Note**: the scroll-spy FR-2 e2e is mildly flaky (retry-passes) — the empirical `rootMargin` timing
 called out in design.md Open Risks / D-1; CI retries cover it.
+
+---
+
+## Amendment (2026-08-17) — Responsive grouped panels within sections
+
+Refines the already-executed layout per a user request (design.md § Amendment). Related panels within
+a section are clustered into a **responsive panel group** — desktop columns / mobile tabbed panel,
+all panels staying mounted — and the top-level nav becomes a stable **four-section** spine
+(Overview / Trade / Research / Analysis). Landed on the same feature branch / PR, not a new feature.
+
+### Step 4 — service: Create the `SymbolPanelGroup` responsive panel-cluster component
+
+**Status**: `done`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/components/trader/SymbolPanelGroup.tsx` — create
+
+**Instructions**: A `'use client'` component `SymbolPanelGroup({ panels, ariaLabel })` where
+`panels: { id; label; node }[]`. Desktop (`md`+): `grid md:grid-flow-col md:auto-cols-fr
+md:items-start` — equal-width columns in one row. Mobile (`< md`): a `md:hidden` `ToggleGroup
+type="single"` segmented bar (in its own `overflow-x-auto` box) selecting one panel; inactive panels
+`hidden` via CSS, **never unmounted** (FR-7). `ToggleGroup` items are `role="radio"` (reuse the same
+collision-avoidance the nav relies on); `aria-label` is passed through to the radiogroup root. 0
+panels → `null`; 1 panel → bare node (no bar, no grid). Active id is clamped to a still-present panel
+so a stale id never hides every panel on mobile.
+
+**TDD**: `red-green required` — behavior exercised by the Step 6 e2e (mobile tabbed-panel case).
+
+### Step 5 — service: Rewire `page.tsx` to four sections using `SymbolPanelGroup`
+
+**Status**: `done`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
+
+**Instructions**: Add `import { SymbolPanelGroup, type SymbolPanel } from
+'@/components/trader/SymbolPanelGroup';`. Reduce `sectionGroups` to the four stable ids
+`overview / trade / research / analysis` (no conditional Position entry — it folds into a Trade
+*panel*). Build three panel arrays and render each inside its `<section id=…>`:
+- **Trade** `#trade` — `SymbolPanelGroup` `[Position (only when position?.symbol) · Orders & fills ·
+  Place order]`; **folds in** the former standalone `#position` section (no panel dropped).
+- **Research** `#research` — watchlisted branch → `SymbolPanelGroup` `[Opportunity · Why this fired ·
+  Fundamentals · Mute]`; else branch → `SymbolScreening` standalone. FR-11 mutual exclusion intact.
+- **Analysis** `#analysis` — `SymbolPanelGroup` `[Backtests · Backfill coverage]`; **merges** the
+  former `#backtests` + `#coverage` sections.
+- Overview `#overview` (Chart + Indicators) and the unwrapped `positionNotFound` `CardNotice` are
+  unchanged. **No panel dropped** — all 13 original render targets preserved (grouping/merging only).
+
+**Grouping correction**: the user's proposed "Screener / Fundamentals" group is **not** implemented —
+Screener and Fundamentals are on mutually exclusive sides of the FR-11 watchlist split and can never
+co-render. Fundamentals groups with the watchlist panels; Screener stays standalone.
+
+**TDD**: `red-green required` — verified together with Steps 4/6.
+
+### Step 6 — test: update e2e for the four-section spine + mobile panel-group
+
+**Status**: `done`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/e2e/trader/symbol-section-nav.spec.ts` — modify (anchors → `#analysis`,
+  chip `Coverage`/`Backtests` → `Analysis`)
+- `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify (four-chip spine; merged
+  Backtests/Coverage/Position chips assert `toHaveCount(0)` at top level; **new** 390px case asserts
+  the Trade `SymbolPanelGroup` mobile tab bar `role="radiogroup"` name `"Trade panels"`, tab switch
+  reveals the target panel, and an inactive panel stays **attached but not visible** — the
+  mounted-not-unmounted guarantee)
+
+**Instructions**: keep every existing content assertion unchanged (they run at the default desktop
+viewport, where all panels are visible columns). Update only the nav locators to the four-section
+spine and add the mobile panel-group case. `mobile-overflow.spec.ts` stays green (mobile layout is
+single-column; the tab bar scrolls inside its own `overflow-x-auto` box).
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui
+pnpm run lint
+pnpm test:e2e -- e2e/trader e2e/insights e2e/mobile-overflow.spec.ts
+```
+
+### D-4 (Steps 4–6) — corrected the user's proposed panel grouping against the FR-11 split
+**What**: the amendment request proposed four groups, one of which paired **Screener** with
+**Fundamentals**. Those two components render on mutually exclusive branches of the FR-11
+watchlist-conditional (`isSymbolWatchlisted`): Fundamentals only for a watchlisted symbol, Screener
+only for a non-watchlisted one. A single panel group implies co-rendered, tab-switchable siblings,
+which is impossible here. **Disposition**: surfaced the conflict to the user (Constitution C-11 — do
+not silently reconcile a spec contradiction), then grouped Fundamentals with the other three
+watchlist panels and left Screener standalone (a 1-panel `SymbolPanelGroup` collapses to a bare node
+anyway). The other three proposed groups were correct and implemented as given.
+
+### D-5 (Step 4/6) — scroll-spy rewritten from IntersectionObserver to a scroll-position read
+**What**: grouping panels into desktop columns shortened the page enough that the **last** section
+(`#analysis`) can no longer scroll under the sticky offset line. The original `IntersectionObserver`
+"topmost section intersecting a thin band" heuristic (feature 139 D-1, already flagged as an
+empirical Open Risk) then (a) could never highlight the last section, and (b) stole `active` back
+from a deep-link/scroll to it — both the `#analysis` deep-link and the scroll-spy e2e failed, and the
+scroll-spy was flaky even when it passed. **Disposition**: replaced the observer with a deterministic,
+rAF-throttled scroll-position computation in `SymbolSectionNav.tsx` — active = the **last section
+whose top has passed the header+nav offset line**, plus an explicit **bottom-of-page** rule so the
+final section highlights once the reader reaches the end even if it never reaches the offset line.
+This is a correctness improvement (the prior heuristic could skip/lag short sections by design), scoped
+to the existing component. The scroll-spy e2e targets the **second** section (`#trade`, scrolled a
+clear 60px past the offset line) so the read is never a knife-edge on the line; verified deterministic
+(`--repeat-each`, `--retries=0`).
+
+### D-6 (Step 6) — mobile tab labels collide with case-insensitive `getByText` in sibling specs
+**What**: the new mobile tab labels (`Opportunity`, `Place order`) case-insensitively substring-match
+existing bare `getByText('Opportunity').first()` / `getByText('Place Order').first()` gates in
+`position-detail.spec.ts:109` and `order-parity.spec.ts:155`. Because the `md:hidden` tab bar renders
+**before** the panel columns in DOM, `.first()` resolved the hidden tab and failed `toBeVisible` at
+the desktop viewport. This is the same class of sibling-spec collision `fails.md` 2026-08-09 warns of,
+which is exactly why the amendment re-ran the **broad** trader+insights scope. **Disposition**: scoped
+both gates to the visible target (the `heading` role for Opportunity; the `<form>`'s own field for the
+order ticket) — test-only, no component change. Also surfaced the `min-w-0` grid-item fix (D-nil):
+grid items default to `min-width:auto`, so a wide panel forced 59px of horizontal overflow at 390px
+until each item got `min-w-0` (matching the pre-grouping block layout); caught by
+`mobile-overflow.spec.ts` on the first amendment e2e run.
