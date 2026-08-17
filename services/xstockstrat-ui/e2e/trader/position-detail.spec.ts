@@ -120,18 +120,20 @@ test.describe('Single Position page', () => {
     await expect(readinessCard(page).getByText('Why this fired')).toBeVisible({ timeout: 10000 });
   });
 
-  test('a non-watchlisted symbol hides the Opportunity + Readiness sections (FR-11 gate)', async ({
+  test('a non-watchlisted live-opportunity symbol surfaces the Opportunity card but still hides Readiness', async ({
     page,
   }) => {
     await addAuthCookie(page);
-    // Default mock returns no watchlists → AAPL is not watchlisted → the watchlisted branch's
-    // Opportunity/Readiness must be absent (the Screening branch arrives in Step 16).
+    // Default mock returns no watchlists → AAPL is not watchlisted, but it IS a live opportunity in
+    // the queue. The Opportunity card is no longer gated by watchlist membership, so it surfaces
+    // (UI refinement); the watchlist-only Readiness ("Why this fired") stays absent.
     await page.goto('/trader/positions/AAPL');
 
-    // Wait for the page to render (the position header), then assert the gated sections are absent.
     await expect(page.getByText('Risk & exit')).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole('heading', { name: 'Opportunity' })).toBeVisible({
+      timeout: 10000,
+    });
     await expect(page.getByText('Why this fired')).toHaveCount(0);
-    await expect(page.getByText('Opportunity', { exact: true })).toHaveCount(0);
   });
 
   test('the Fundamentals section renders metrics for a watchlisted symbol with data (FR-7)', async ({
