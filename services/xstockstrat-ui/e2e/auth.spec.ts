@@ -9,7 +9,9 @@ import { test, expect } from '@playwright/test';
  */
 
 test.describe('Unified auth — POST /api/auth/login', () => {
-  test('returns 200 and sets access_token + refresh_token cookies with valid credentials', async ({ page }) => {
+  test('returns 200 and sets access_token + refresh_token cookies with valid credentials', async ({
+    page,
+  }) => {
     const res = await page.request.post('/api/auth/login', {
       data: { email: 'test@example.com', password: 'test-password' },
     });
@@ -17,7 +19,9 @@ test.describe('Unified auth — POST /api/auth/login', () => {
     const body = await res.json();
     expect(body).toHaveProperty('ok', true);
 
-    const setCookieHeaders = res.headersArray().filter((h) => h.name.toLowerCase() === 'set-cookie');
+    const setCookieHeaders = res
+      .headersArray()
+      .filter((h) => h.name.toLowerCase() === 'set-cookie');
     const cookieNames = setCookieHeaders.map((h) => h.value);
     expect(cookieNames.some((v) => v.startsWith('access_token='))).toBe(true);
     expect(cookieNames.some((v) => v.startsWith('refresh_token='))).toBe(true);
@@ -33,8 +37,32 @@ test.describe('Unified auth — POST /api/auth/login', () => {
   });
 });
 
+test.describe('Unified auth — login pages are not edge-cacheable', () => {
+  // Regression guard: the login pages must render dynamically (Cache-Control: no-store),
+  // NOT be statically prerendered with `s-maxage=31536000`. When they were static, the
+  // production edge (Cloudflare — honors only `Vary: Accept-Encoding`, ignores `Vary: RSC`)
+  // cached the router's `text/x-component` RSC/Flight prefetch payload under the plain URL
+  // key and served it to real document navigations, so the browser rendered raw Flight text
+  // (including Next's built-in "404: This page could not be found." string) instead of the
+  // login form. `src/app/auth/layout.tsx`'s `export const dynamic = 'force-dynamic'` keeps
+  // both `/auth/*` pages uncacheable so the edge can never cross-serve the two variants.
+  for (const path of ['/auth/login', '/auth/oauth-login']) {
+    test(`GET ${path} is served no-store, not with a long s-maxage`, async ({ page }) => {
+      const res = await page.request.get(path);
+      expect(res.status()).toBe(200);
+      const cacheControl = (res.headers()['cache-control'] ?? '').toLowerCase();
+      expect(cacheControl).toContain('no-store');
+      expect(cacheControl).not.toContain('s-maxage=31536000');
+    });
+  }
+});
+
 test.describe('Unified auth — protected routes redirect to /auth/login', () => {
-  for (const path of ['/trader/api/orders?trading_mode=paper', '/insights/strategies', '/config-ui']) {
+  for (const path of [
+    '/trader/api/orders?trading_mode=paper',
+    '/insights/strategies',
+    '/config-ui',
+  ]) {
     test(`GET ${path} without a session redirects to /auth/login`, async ({ page }) => {
       const res = await page.request.get(path, { maxRedirects: 0 });
       expect([302, 307]).toContain(res.status());
@@ -72,6 +100,8 @@ test.describe('Unified auth — POST /api/auth/logout', () => {
       .headersArray()
       .filter((h) => h.name.toLowerCase() === 'set-cookie');
     const cookieValues = setCookieHeaders.map((h) => h.value);
-    expect(cookieValues.some((v) => v.includes('access_token=;') || v.includes('Max-Age=0'))).toBe(true);
+    expect(cookieValues.some((v) => v.includes('access_token=;') || v.includes('Max-Age=0'))).toBe(
+      true,
+    );
   });
 });
