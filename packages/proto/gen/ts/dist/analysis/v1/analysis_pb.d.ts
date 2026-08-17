@@ -995,6 +995,17 @@ export type ScreenResult = Message<"xstockstrat.analysis.v1.ScreenResult"> & {
     criterionPassed: {
         [key: string]: boolean;
     };
+    /**
+     * True when every criterion configured for this scan was skipped for this candidate (no
+     * usable data for any of them, e.g. an ETF with no P/E ratio scanned against a `pe_ratio`
+     * criterion) — `score`/`criterion_scores` still carry the same neutral-abstention values the
+     * engine already used to keep the signal blend well-defined (`status` stays OK; this is the
+     * soft-criterion sibling of the hard-filter null-as-zero fix, feature 144), but they are not a
+     * real computed result and must not be treated as one (e.g. ranked/sorted as if genuine).
+     *
+     * @generated from field: bool score_unavailable = 14;
+     */
+    scoreUnavailable: boolean;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.ScreenResult.

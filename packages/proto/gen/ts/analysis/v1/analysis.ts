@@ -1195,6 +1195,15 @@ export interface ScreenResult {
    */
   criterionRawValues: { [key: string]: number };
   criterionPassed: { [key: string]: boolean };
+  /**
+   * True when every criterion configured for this scan was skipped for this candidate (no
+   * usable data for any of them, e.g. an ETF with no P/E ratio scanned against a `pe_ratio`
+   * criterion) — `score`/`criterion_scores` still carry the same neutral-abstention values the
+   * engine already used to keep the signal blend well-defined (`status` stays OK; this is the
+   * soft-criterion sibling of the hard-filter null-as-zero fix, feature 144), but they are not a
+   * real computed result and must not be treated as one (e.g. ranked/sorted as if genuine).
+   */
+  scoreUnavailable: boolean;
 }
 
 export interface ScreenResult_CriterionScoresEntry {
@@ -5474,6 +5483,7 @@ function createBaseScreenResult(): ScreenResult {
     held: false,
     criterionRawValues: {},
     criterionPassed: {},
+    scoreUnavailable: false,
   };
 }
 
@@ -5518,6 +5528,9 @@ export const ScreenResult: MessageFns<ScreenResult> = {
     globalThis.Object.entries(message.criterionPassed).forEach(([key, value]: [string, boolean]) => {
       ScreenResult_CriterionPassedEntry.encode({ key: key as any, value }, writer.uint32(106).fork()).join();
     });
+    if (message.scoreUnavailable !== false) {
+      writer.uint32(112).bool(message.scoreUnavailable);
+    }
     return writer;
   },
 
@@ -5641,6 +5654,14 @@ export const ScreenResult: MessageFns<ScreenResult> = {
           }
           continue;
         }
+        case 14: {
+          if (tag !== 112) {
+            break;
+          }
+
+          message.scoreUnavailable = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -5719,6 +5740,11 @@ export const ScreenResult: MessageFns<ScreenResult> = {
           {},
         )
         : {},
+      scoreUnavailable: isSet(object.scoreUnavailable)
+        ? globalThis.Boolean(object.scoreUnavailable)
+        : isSet(object.score_unavailable)
+        ? globalThis.Boolean(object.score_unavailable)
+        : false,
     };
   },
 
@@ -5781,6 +5807,9 @@ export const ScreenResult: MessageFns<ScreenResult> = {
         });
       }
     }
+    if (message.scoreUnavailable !== false) {
+      obj.scoreUnavailable = message.scoreUnavailable;
+    }
     return obj;
   },
 
@@ -5824,6 +5853,7 @@ export const ScreenResult: MessageFns<ScreenResult> = {
       },
       {},
     );
+    message.scoreUnavailable = object.scoreUnavailable ?? false;
     return message;
   },
 };

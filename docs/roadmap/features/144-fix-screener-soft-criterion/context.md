@@ -34,3 +34,77 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   though scope is single-service and no proto/migration change is yet confirmed necessary (which
   would otherwise push toward `full`).
 - Development branch: `feature/fix-screener-soft-criterion`.
+
+## Session 2026-08-17 (implementation)
+
+- **Branch note (deviation):** this session was harness-assigned `claude/bug-144-zzhvpv` (a
+  `claude/*` session branch per root CLAUDE.md § Branch Strategy), not `feature/fix-screener-soft-
+  criterion`. The branch started stale (10 commits behind `main-dev`, predating this feature's own
+  PR #975 triage scaffold) and was fast-forwarded to `origin/main-dev` before any edits — zero
+  divergent commits existed, so this was a plain fast-forward, not a rebase/merge. PR opens from
+  `claude/bug-144-zzhvpv` → `main-dev`, matching this repo's established precedent for
+  harness-driven bug-fix sessions (PRs #971/#973/#975 all did the same).
+- Did not run the interactive `/sdd-design quick` skill (no human present to grill/approve a
+  proposer-vs-adversary debate in this harness session). Performed the equivalent grounded design
+  reasoning inline instead — documented below for audit, per the Constitution's design-gate intent
+  even though the skill itself didn't run.
+- **Design decision — resolves the product-spec's Open Question:**
+  - Read `_build_result` and the existing `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA` handling
+    end-to-end first. Found an **existing, pinned test**
+    (`test_fundamental_hard_filter_missing_for_one_symbol_fails_closed`) that explicitly asserts
+    `status == SCREEN_RESULT_STATUS_OK` for a candidate whose only configured (hard-filter)
+    criterion has no data — i.e. the exact `weight_total == 0` condition this bug also hits, just
+    via the hard-filter path. Reusing `INSUFFICIENT_DATA` for the new bug would have flipped that
+    pinned assertion.
+  - Also read the UI's polling mechanism (`useScreenSymbolsPoll`, `pendingRows` filtered on
+    `status === INSUFFICIENT_DATA`): that status drives an active background re-check loop,
+    correct for its two existing causes (bars catching up, fundamentals source recovering — both
+    genuinely transient). QQQ's missing P/E is very likely **permanent** (an ETF has no P/E ratio,
+    full stop) — reusing `INSUFFICIENT_DATA` would have silently mis-signaled it as retry-eligible
+    and could have shown "Fundamentals pending" (implying it'll resolve) forever, or driven
+    pointless repeat polling. That would be a new, self-inflicted bug (surfaced as a tradeoff
+    rather than picked silently).
+  - **Chosen fix:** an additive `ScreenResult.score_unavailable: bool` field (proto field 14,
+    non-breaking — `buf breaking` verified clean against `main-dev`). Set true in `_build_result`
+    exactly when `weight_total <= 0 and len(criteria) > 0` (criteria were configured, but every
+    one of them was skipped for this candidate specifically — distinct from a scan configured with
+    zero criteria at all, which stays a harmless no-op, unchanged). `status` stays `OK`
+    (preserves the pinned hard-filter test unmodified); `technical_score`'s internal `0.5`
+    fallback is **left in place** (still feeds `combine_score` unchanged, so a real independent
+    signal-weighted blend for the same candidate is untouched — out of scope per the spec's "no
+    refactoring the scoring math beyond the missing-data fallback"). Ranking is fixed at the
+    `screen()` sort step: `results.sort(key=lambda r: (r.score_unavailable, -r.score))` — a
+    flagged candidate can never outrank a genuinely-scored one, regardless of its own internal
+    number, without excluding it from the response entirely (still visible/actionable to the
+    caller, per the product-spec's least-destructive framing of the three original options).
+  - Rejected alternatives: (a) reuse `INSUFFICIENT_DATA` — rejected per the two points above; (b)
+    exclude the candidate from `results` entirely — rejected as more destructive than necessary
+    (discards visibility the caller may still want, e.g. manually watchlisting QQQ anyway); (c)
+    just change the fallback constant (e.g. `0.5` → `0.0`) — rejected because a real candidate can
+    also legitimately score `0.000` (AAPL did, in the original repro), so it would still be
+    indistinguishable from genuine data, just at the other end of the range.
+  - Swept for the same pattern elsewhere in `xstockstrat-analysis` (per the spec's Open Question):
+    found `app/engine/fundsignal_loop.py:294`'s `_builtin_score` has the identical shape. Left
+    unfixed — different subsystem/blast radius, outside this spec's acceptance criteria — and
+    flagged in `product-spec.md`'s Open Questions as a candidate follow-up rather than silently
+    fixed or silently dropped.
+- **Files changed:** `packages/proto/analysis/v1/analysis.proto` (+ regenerated Go/Python/TS
+  stubs via a host-provisioned codegen toolchain — Docker daemon unavailable in this sandbox, so
+  followed `docs/runbooks/codegen-toolchain-host-setup.md`, validated an empty stub diff first);
+  `services/xstockstrat-analysis/app/services/screener.py` (`score_unavailable` computation +
+  sort); `services/xstockstrat-analysis/tests/test_screener.py` (new QQQ-repro test + strengthened
+  the two existing hard-filter tests with `score_unavailable` assertions);
+  `services/xstockstrat-ui/src/app/insights/screener/page.tsx` (Score cell → dash, Status cell →
+  new "No criteria data" badge, both gated on `scoreUnavailable`); `e2e/fixtures/screenResults.ts`
+  + `INVENTORY.md` (new `noCriteriaDataRow` fixture) + `e2e/insights/screener.spec.ts` (new e2e
+  case).
+- **Verification:** `xstockstrat-analysis` — 524/524 pytest pass, ruff clean. `xstockstrat-ui` —
+  `tsc --noEmit` clean, `next lint` clean (pre-existing unrelated warnings only), 97/97 vitest
+  pass, Playwright `screener.spec.ts` 18/21 pass; the 3 failures (global-mock-backend-dependent
+  tests unrelated to this change: "runs a scan and renders a ranked results table", "renders the
+  feature-083 raw columns", "the 10-column results table does not overflow the phone frame")
+  reproduce identically on the pristine pre-fix baseline (verified via `git stash` + re-run) —
+  a pre-existing sandbox/mock-backend timing issue, not a regression from this fix. Go: the
+  regenerated `packages/proto/gen/go` package builds clean; no Go service imports
+  `analysis/v1` today, so no further Go-side verification applies.
+- Status: `code-completed`.
