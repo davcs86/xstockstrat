@@ -58,3 +58,13 @@ export function resolvedRow(
     criterionScores: criterionScores ?? { c1: score },
   };
 }
+
+/**
+ * Bug fix (feature 144): an OK-status row where every configured criterion had no usable data
+ * for this candidate (e.g. an ETF with no P/E ratio) — `scoreUnavailable: true` flags its `score`
+ * as the engine's neutral placeholder, not a real result. Distinct from `fundamentalsPendingRow`
+ * (status 2, retry-eligible): this row is `status: 1` and is not polled for a later re-check.
+ */
+export function noCriteriaDataRow(symbol: string) {
+  return { symbol, score: 0.5, passed: false, status: 1, scoreUnavailable: true };
+}

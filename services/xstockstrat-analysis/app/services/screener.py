@@ -135,8 +135,10 @@ class ScreenerEngine:
         for row in per_symbol:
             results.append(self._build_result(row, criteria, request, norm))
 
-        # Rank descending by score.
-        results.sort(key=lambda r: r.score, reverse=True)
+        # Rank descending by score. A `score_unavailable` result's `score` is a neutral
+        # placeholder, not real evidence (bug fix, feature 144) — sort it after every genuinely-
+        # scored result regardless of its numeric value, so it can never outrank real data.
+        results.sort(key=lambda r: (r.score_unavailable, -r.score))
 
         # feature 090 (AC-4): coverage_gaps come from the FULL sorted list, BEFORE min_conviction
         # and rank_limit truncation — an INSUFFICIENT_DATA symbol ranked below the cut must still
@@ -471,6 +473,16 @@ class ScreenerEngine:
             if c.hard_filter and not row["passes"].get(c.ref_name, False):
                 passed = False
 
+        # Bug fix (feature 144): `weight_total` stays 0 whenever every criterion configured for
+        # this scan was skipped for this candidate specifically (e.g. an ETF with no P/E ratio
+        # scanned against a `pe_ratio` criterion) — distinct from a scan configured with zero
+        # criteria at all (`criteria` empty), which is a harmless no-op left as-is. The `else 0.5`
+        # fallback below is kept (it's still what feeds `tech_signal`/`combine_score`, unchanged,
+        # so a real independent signal-weighted score can still blend normally) but is flagged via
+        # `score_unavailable` so callers stop treating it as a genuinely-computed mid-range result
+        # indistinguishable from real evidence (soft-criterion sibling of the hard-filter
+        # null-as-zero fix above — that one covers `passed`, this one covers `score`).
+        score_unavailable = weight_total <= 0 and len(criteria) > 0
         technical_score = weighted_sum / weight_total if weight_total > 0 else 0.5
 
         # Blend technical + signal exactly as a backtest does (FR-4). Map the technical
@@ -492,6 +504,7 @@ class ScreenerEngine:
             criterion_passed=criterion_passed,
             passed=passed,
             status=analysis_pb2.SCREEN_RESULT_STATUS_OK,
+            score_unavailable=score_unavailable,
             # feature 083 raw display columns (FR-8); held is set by the servicer cross-ref.
             pe=row.get("pe", 0.0),
             rsi=row.get("rsi", 0.0),

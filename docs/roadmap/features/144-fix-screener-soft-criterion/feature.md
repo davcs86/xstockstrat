@@ -14,14 +14,14 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-17 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-08-17-screener-missing-data-neutral-score-defect.md` (GitHub Issues disabled on this repo) |
+| 2026-08-17 | `draft` → `code-completed` | implementation session | Fix implemented directly (no interactive `/sdd-design`/`/sdd-spec` run — harness bug-fix session; grounded design reasoning performed and logged inline in `context.md` instead). See `context.md` for the full design decision and verification. |
 
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-screener-soft-criterion`_
-- [Context Log](context.md) — session history, decisions, deviations
+- [Product Spec](product-spec.md) — bug description, fix scope, and resolved acceptance criteria
+- [Context Log](context.md) — session history, decisions, deviations (design decision + verification logged here in lieu of a separate `implementation-spec.md`)
 
 ---
 
@@ -37,5 +37,5 @@ already fixed in PR #971 (which only covers the `passed` boolean, not the rankin
 
 ## Next Action
 
-`/sdd-design fix-screener-soft-criterion quick` — recommended design depth (skip / quick / full)
-from triage; see context.md.
+None — code-completed. Rides the next `/promote` cycle to production; see `context.md` for the
+design decision and full verification record.
