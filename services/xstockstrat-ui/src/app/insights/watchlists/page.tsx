@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useIsMutating } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { Plus, ChevronLeft } from 'lucide-react';
 import { AppShell } from '@/components/insights/AppShell';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,9 @@ export default function WatchlistsPage() {
 
   const [newName, setNewName] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Email-inbox navigation on mobile: the list and the detail are two panes side-by-side on md+,
+  // but on a phone only one shows at a time — tap a list to open its detail, "back" to the list.
+  const [mobileView, setMobileView] = useState<'list' | 'detail'>('list');
   // A just-created list id we want to select as soon as it lands in the refetched list. Setting
   // selectedId directly in create's onSuccess would race the ListWatchlists refetch — the reconcile
   // effect would see an id "not in the list yet" and clobber it back to the first list.
@@ -120,16 +123,20 @@ export default function WatchlistsPage() {
         )}
 
         {watchlists.length > 0 && (
-          <div className="grid gap-4 md:grid-cols-[minmax(0,16rem)_1fr]">
-            {/* Master column — select a list to see its detail. */}
-            <Card>
+          <div className="grid gap-4 md:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
+            {/* Master column (inbox) — select a list to see its detail. Hidden on mobile while a
+                detail is open. */}
+            <Card className={cn(mobileView === 'detail' && 'hidden md:block')}>
               <CardContent className="p-2" data-testid="watchlist-master">
                 <ul className="space-y-1">
                   {watchlists.map((wl) => (
                     <li key={wl.watchlistId}>
                       <button
                         type="button"
-                        onClick={() => setSelectedId(wl.watchlistId)}
+                        onClick={() => {
+                          setSelectedId(wl.watchlistId);
+                          setMobileView('detail');
+                        }}
                         aria-current={wl.watchlistId === selectedId}
                         disabled={anyWatchlistWriteInFlight}
                         className={cn(
@@ -151,9 +158,18 @@ export default function WatchlistsPage() {
               </CardContent>
             </Card>
 
-            {/* Detail column — the selected list. */}
-            <Card>
+            {/* Detail column (reading pane) — the selected list. Hidden on mobile until a list is
+                opened from the inbox. */}
+            <Card className={cn('min-w-0', mobileView === 'list' && 'hidden md:block')}>
               <CardContent className="p-0">
+                <button
+                  type="button"
+                  onClick={() => setMobileView('list')}
+                  className="flex items-center gap-1 px-4 pt-3 text-sm text-muted-foreground hover:text-foreground md:hidden"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  All watchlists
+                </button>
                 {selected ? (
                   <WatchlistDetail
                     watchlist={selected}
