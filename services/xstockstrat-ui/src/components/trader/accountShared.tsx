@@ -478,9 +478,20 @@ export function AddAccountForm({
 
       {error && <p className="text-xs text-destructive">{error}</p>}
 
-      <Button type="submit" className="w-full" disabled={isSubmitting}>
-        {isSubmitting ? 'Adding...' : 'Add Account'}
-      </Button>
+      {onDone ? (
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onDone} disabled={isSubmitting}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? 'Adding...' : 'Add Account'}
+          </Button>
+        </div>
+      ) : (
+        <Button type="submit" className="w-full" disabled={isSubmitting}>
+          {isSubmitting ? 'Adding...' : 'Add Account'}
+        </Button>
+      )}
     </form>
   );
 }
