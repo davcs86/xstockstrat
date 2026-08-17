@@ -657,6 +657,13 @@ jobs:
   secret-scan:
     name: Secret scan (trufflehog + gitleaks)
     runs-on: ubuntu-latest
+    # gitleaks-action's PR mode calls GET /pulls/{n}/commits, which needs
+    # pull-requests:read — the workflow-level default (contents:read only) 404s it.
+    # Grant it here (same pattern as the `changes` job above) and let gitleaks use
+    # the built-in GITHUB_TOKEN rather than a PAT for that API call.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v6
         with:
@@ -683,4 +690,6 @@ jobs:
       - name: Gitleaks — scan working tree
         uses: gitleaks/gitleaks-action@v3
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT_SCAN }}
+          # Built-in token + the job's pull-requests:read grant above — no PAT needed
+          # for gitleaks' PR-commits API call (the previous GH_PAT_SCAN 404'd it).
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
