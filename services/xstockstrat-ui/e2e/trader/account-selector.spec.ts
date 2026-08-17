@@ -57,10 +57,13 @@ test.describe('AccountSelector', () => {
     await page.goto('/trader');
     // Gear icon is a link that navigates to the accounts submodule page.
     await page.getByRole('link', { name: /manage accounts/i }).click();
-    await expect(page.getByRole('heading', { name: 'Add Account' })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('heading', { name: 'Broker Accounts' })).toBeVisible({
+      timeout: 5000,
+    });
+    await expect(page.getByRole('button', { name: 'Add account' })).toBeVisible();
   });
 
-  test('Add Account form clears credential fields on success', async ({ page }) => {
+  test('Add Account modal closes on success', async ({ page }) => {
     await page.route(
       '**/xstockstrat.trading.v1.TradingService/ListBrokerAccounts',
       async (route) => {
@@ -82,17 +85,20 @@ test.describe('AccountSelector', () => {
       },
     );
     await addAuthCookie(page);
-    // Navigate directly to the accounts submodule page.
+    // Navigate directly to the accounts submodule page. Add now happens in a modal opened from the
+    // "Add account" button in the Registered Accounts header.
     await page.goto('/trader/accounts');
-    await page.getByPlaceholder('Display name').fill('Test Account');
-    await page.getByPlaceholder('API Key').fill('test-key-123');
-    await page.getByPlaceholder('API Secret').fill('test-secret-456');
-    await page.getByRole('button', { name: /add account/i }).click();
-    // Credential fields should be cleared after successful registration
-    await expect(page.getByPlaceholder('API Key')).toHaveValue('', { timeout: 5000 });
+    await page.getByRole('button', { name: 'Add account' }).click();
+    const dialog = page.getByRole('alertdialog');
+    await dialog.getByPlaceholder('Display name').fill('Test Account');
+    await dialog.getByPlaceholder('API Key').fill('test-key-123');
+    await dialog.getByPlaceholder('API Secret').fill('test-secret-456');
+    await dialog.getByRole('button', { name: 'Add Account' }).click();
+    // The modal closes on successful registration.
+    await expect(page.getByRole('alertdialog')).toHaveCount(0, { timeout: 5000 });
   });
 
-  test('Edit keys expands and collapses the credential form (feature 121, FR-3)', async ({
+  test('Edit keys opens a credential modal; Cancel closes it (feature 121, FR-3)', async ({
     page,
   }) => {
     await page.route(
@@ -108,28 +114,24 @@ test.describe('AccountSelector', () => {
     await addAuthCookie(page);
     await page.goto('/trader/accounts');
 
-    // Scope to this account's row (data-testid, feature 121 FR-3) — the page also renders a
-    // standalone "Add Account" form with its own "API Key" field, so an unscoped
-    // getByPlaceholder('API Key') would be ambiguous once the row's own credential form expands.
+    // Edit keys now opens a modal (UI refinement) — no credential form is rendered until it opens.
     const row = page.getByTestId(`account-row-${BROKER_ACCOUNT_ALPACA.id}`);
-    // Row actions now live behind a three-dots menu — "Edit keys" is a menu item that toggles to
-    // "Hide keys" while the credential form is open (UI refinement).
     const actions = row.getByRole('button', {
       name: `Actions for ${BROKER_ACCOUNT_ALPACA.displayName}`,
     });
     await expect(actions).toBeVisible({ timeout: 5000 });
-    await expect(row.getByPlaceholder('API Key')).not.toBeVisible();
+    await expect(page.getByPlaceholder('API Key')).toHaveCount(0);
 
     await actions.click();
     await page.getByRole('menuitem', { name: 'Edit keys' }).click();
-    await expect(row.getByPlaceholder('API Key')).toBeVisible();
+    const dialog = page.getByRole('alertdialog');
+    await expect(dialog.getByPlaceholder('API Key')).toBeVisible();
 
-    await actions.click();
-    await page.getByRole('menuitem', { name: 'Hide keys' }).click();
-    await expect(row.getByPlaceholder('API Key')).not.toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.getByRole('alertdialog')).toHaveCount(0);
   });
 
-  test('Edit Credentials form closes on successful save (feature 122, FR-3 characterization)', async ({
+  test('Edit Credentials modal closes on successful save (feature 122, FR-3 characterization)', async ({
     page,
   }) => {
     await page.route(
@@ -145,25 +147,19 @@ test.describe('AccountSelector', () => {
     await addAuthCookie(page);
     await page.goto('/trader/accounts');
 
-    // Scope to this account's row (data-testid, feature 121 FR-3) — the page also renders a
-    // standalone "Add Account" form with its own identical "API Key"/"API Secret" placeholders,
-    // so an unscoped getByPlaceholder would be ambiguous once the row's own credential form
-    // expands.
     const row = page.getByTestId(`account-row-${BROKER_ACCOUNT_ALPACA.id}`);
-    const actions = row.getByRole('button', {
-      name: `Actions for ${BROKER_ACCOUNT_ALPACA.displayName}`,
-    });
-    await actions.click();
+    await row
+      .getByRole('button', { name: `Actions for ${BROKER_ACCOUNT_ALPACA.displayName}` })
+      .click();
     await page.getByRole('menuitem', { name: 'Edit keys' }).click();
-    await row.getByPlaceholder('API Key').fill('test-key-123');
-    await row.getByPlaceholder('API Secret').fill('test-secret-456');
-    await row.getByRole('button', { name: 'Save keys' }).click();
+    const dialog = page.getByRole('alertdialog');
+    await dialog.getByPlaceholder('API Key').fill('test-key-123');
+    await dialog.getByPlaceholder('API Secret').fill('test-secret-456');
+    await dialog.getByRole('button', { name: 'Save keys' }).click();
 
-    // EditCredentialsForm's onDone callback unmounts the form (AccountRow's `editing` state
-    // collapses) rather than resetting-in-place like AddAccountForm — so the parity assertion is
-    // the row collapsing back to its default state (the actions menu), not a cleared-but-mounted
-    // field.
-    await expect(actions).toBeVisible({ timeout: 5000 });
-    await expect(row.getByPlaceholder('API Key')).not.toBeVisible();
+    // EditCredentialsForm's onDone callback closes the modal on success, so the parity assertion
+    // is the dialog unmounting — not a cleared-but-mounted field.
+    await expect(page.getByRole('alertdialog')).toHaveCount(0, { timeout: 5000 });
+    await expect(page.getByPlaceholder('API Key')).toHaveCount(0);
   });
 });

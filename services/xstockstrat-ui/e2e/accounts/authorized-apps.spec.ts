@@ -44,9 +44,7 @@ test.describe('Accounts — My Authorized Apps', () => {
     // The "Last refreshed" column is labeled per Step 4/7 semantics (not "Last used").
     await expect(page.getByRole('columnheader', { name: 'Last refreshed' })).toBeVisible();
     // Row actions now live behind a three-dots menu (UI refinement).
-    await expect(
-      page.getByRole('button', { name: 'Actions for Claude.ai (E2E)' }),
-    ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Actions for Claude.ai (E2E)' })).toBeVisible();
   });
 
   test('Disconnect → confirm → row disappears after revoke', async ({ page }) => {
@@ -103,10 +101,13 @@ test.describe('Accounts — My Authorized Apps', () => {
     await stubAgentHealth(page, true);
     await page.goto('/accounts/authorized-apps');
 
+    // The reachable indicator now lives in the page body under the header.
+    await expect(page.getByText('Reachable')).toBeVisible();
+    // The connector URL + copy control moved into the "Connect a new app" modal.
+    await page.getByRole('button', { name: 'Connect a new app' }).click();
     const urlField = page.getByLabel('MCP connector URL');
     await expect(urlField).toHaveValue('http://127.0.0.1:9099');
     await expect(page.getByRole('button', { name: /Copy/ })).toBeVisible();
-    await expect(page.getByText('Reachable')).toBeVisible();
   });
 
   test('no token/secret strings appear in the rendered page', async ({ page }) => {

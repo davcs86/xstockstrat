@@ -18,8 +18,8 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Field, FieldError } from '../ui/field';
-import { Collapsible, CollapsibleContent } from '../ui/collapsible';
 import { RowActionsMenu } from '../shared/RowActionsMenu';
+import { FormDialog } from '../shared/FormDialog';
 import { CredentialStatusBadge } from './CredentialStatusBadge';
 import { brokerLabel } from '@/lib/brokers';
 
@@ -210,10 +210,7 @@ export function EditCredentialsForm({
   }
 
   return (
-    <form
-      onSubmit={handleSubmit(onSubmit)}
-      className="mt-2 space-y-2 rounded-md border border-dashed p-2"
-    >
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
       <p className="text-xs text-muted-foreground">
         Enter new {brokerLabel(account.brokerType)} secrets to replace the stored ones. They are
         validated against the broker on save.
@@ -278,31 +275,30 @@ export function AccountRow({
   }
 
   return (
-    <Collapsible
-      open={editing}
-      onOpenChange={setEditing}
+    <div
       data-testid={`account-row-${account.id}`}
       className={`rounded-md border ${className}${!account.isActive ? ' opacity-50' : ''}`}
     >
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-sm font-medium truncate">{account.displayName}</span>
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+            <span className="text-sm font-medium">{account.displayName}</span>
             <Badge variant="secondary">{brokerLabel(account.brokerType)}</Badge>
             <CredentialStatusBadge status={account.credentialStatus} />
+            {/* The account's internal UUID, inline beside the name. */}
+            {showId && (
+              <span className="font-mono text-[11px] break-all text-muted-foreground">
+                {account.id}
+              </span>
+            )}
           </div>
-          {showId && (
-            <p className="mt-0.5 font-mono text-[11px] text-muted-foreground truncate">
-              {account.id}
-            </p>
-          )}
         </div>
         {account.isActive && (
           <div className="shrink-0">
             <RowActionsMenu
               triggerLabel={`Actions for ${account.displayName}`}
               actions={[
-                { label: editing ? 'Hide keys' : 'Edit keys', onSelect: () => setEditing((v) => !v) },
+                { label: 'Edit keys', onSelect: () => setEditing(true) },
                 {
                   label: 'Remove',
                   destructive: true,
@@ -324,12 +320,17 @@ export function AccountRow({
         )}
       </div>
 
-      <CollapsibleContent>
-        {account.isActive && (
+      {/* Edit-credentials modal, opened from the row's actions menu. */}
+      {account.isActive && (
+        <FormDialog
+          open={editing}
+          onOpenChange={setEditing}
+          title={`Edit ${account.displayName} keys`}
+        >
           <EditCredentialsForm account={account} onDone={() => setEditing(false)} />
-        )}
-      </CollapsibleContent>
-    </Collapsible>
+        </FormDialog>
+      )}
+    </div>
   );
 }
 
@@ -349,7 +350,14 @@ function addAccountSchema(brokerType: BrokerType) {
     .merge(credentialSchema(brokerType));
 }
 
-export function AddAccountForm({ className = 'space-y-3' }: { className?: string }) {
+export function AddAccountForm({
+  className = 'space-y-3',
+  onDone,
+}: {
+  className?: string;
+  /** Called after a successful registration (e.g. to close the containing modal). */
+  onDone?: () => void;
+}) {
   const { setSelectedAccountId, refreshAccounts } = useAccountContext();
   const [error, setError] = React.useState<string | null>(null);
   // The broker select determines which credential fields are required, so the resolver schema is
@@ -414,6 +422,7 @@ export function AddAccountForm({ className = 'space-y-3' }: { className?: string
         setSelectedAccountId(account.id);
       }
       reset({ displayName: '', brokerType: '1', ...EMPTY_CREDENTIALS });
+      onDone?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add account');
     }
