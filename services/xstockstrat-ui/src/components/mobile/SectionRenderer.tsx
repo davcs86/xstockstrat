@@ -83,8 +83,10 @@ function SectionItem({ section: s }: { section: Section }) {
             {s.href && <CaretRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
           </div>
           {s.caption && <p className="truncate text-xs text-muted-foreground">{s.caption}</p>}
-          {/* Conviction + strategy-readiness meters (feature: mobile parity with the desktop card). */}
-          {(typeof s.conviction === 'number' || hasReadiness) && (
+          {/* Conviction + strategy-readiness meters (mobile parity with the desktop card). The
+              readiness slot renders whenever the row carries readiness data — with a "—" when there
+              are no traced conditions — so both meters stay aligned across rows (matches the spec). */}
+          {(typeof s.conviction === 'number' || s.readiness) && (
             <div className="flex items-center gap-4">
               {typeof s.conviction === 'number' && (
                 <div className="flex min-w-0 flex-1 items-center gap-1.5">
@@ -101,15 +103,21 @@ function SectionItem({ section: s }: { section: Section }) {
                   </span>
                 </div>
               )}
-              {hasReadiness && (
+              {s.readiness && (
                 <div className="flex min-w-0 flex-1 items-center gap-1.5">
                   <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
                     ready
                   </span>
-                  <Progress value={readyPct} className="h-1.5 flex-1" variant={readyVariant} />
-                  <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
-                    {s.readiness!.passing}/{s.readiness!.total}
-                  </span>
+                  {hasReadiness ? (
+                    <>
+                      <Progress value={readyPct} className="h-1.5 flex-1" variant={readyVariant} />
+                      <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                        {s.readiness.passing}/{s.readiness.total}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="flex-1 text-[11px] text-muted-foreground/70">—</span>
+                  )}
                 </div>
               )}
             </div>
