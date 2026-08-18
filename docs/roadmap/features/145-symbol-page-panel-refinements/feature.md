@@ -13,6 +13,7 @@
 | 2026-08-18 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-18 | `draft` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written |
 | 2026-08-18 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 3 steps |
+| 2026-08-18 | `implementation-ready` → `code-completed` | direct implementation | All 3 steps implemented on `claude/symbol-page-ui-refinements-t2xp26`; tsc + lint + build (R2) clean, trader e2e green (R1 broad pass) |
 
 ---
 

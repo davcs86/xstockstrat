@@ -70,3 +70,24 @@
   - `SymbolPanelGroup` gives each panel `label` a `role="radio"` mobile tab once ≥2 panels — so making "Risk & exit" its own Trade panel (Step 3) creates a 2nd "Risk & exit" DOM occurrence that breaks unscoped `getByText('Risk & exit')` at spec `:29,66,132`; Step 3 rescopes them. Trade-panels membership assert at `:482-483` also updated.
   - Watchlist-binding pre-selection flips the premise of readiness tests `:292-303,305-319` (they bind AAPL then assert the empty prompt) — Step 1 rebinds them to an empty strategy so the prompt still asserts; `:315` accessible name → "Strategy for Why this fired".
 - Open Threads mapped to steps: **R1** (full-suite `getByLabel`/`getByRole('combobox')` collision grep + broad `pnpm test:e2e`) and **R2** (page-level `useSearchParams` inside a `Suspense` boundary; verify `pnpm build` has no CSR-bailout) both discharge in **Step 1**; **R3** (`owningStrategy` display uses not stranded) is enforced in **Steps 1 and 3** via `grep -n "owningStrategy"`. Details in the `## Open Threads` block above.
+
+## Session 2026-08-18 — implementation (direct on harness branch)
+
+- Implemented all 3 steps on `claude/symbol-page-ui-refinements-t2xp26` (single-PR harness flow).
+- **New**: `src/components/insights/StrategyPicker.tsx` (shared liveEnabled picker).
+- **page.tsx**: `PositionDetailInner` under a `Suspense` boundary (R2); page-level `pickedStrategyId`
+  + derived `effectiveStrategyId = picked ?? url ?? bound ?? ''` + `handleStrategyChange` (state +
+  `?strategy=` URL mirror); pickers wired into Indicators/Backtests/(controlled)SignalReadiness
+  headers with distinct aria-labels; opportunities → one `SymbolPanelGroup`; Fundamentals always-on;
+  `PositionBody` split into `PositionPanel`/`RiskExitPanel`/`WhyHeldPanel`; Manage + Broker + 2-col
+  grid removed; `owningStrategy` kept display-only (subtitle + Why-it's-held).
+- **SignalReadiness.tsx**: now controlled (`strategyId`/`onStrategyChange` props); internal
+  `useSearchParams`/`useState` picker removed; renders shared `StrategyPicker`.
+- **Tests**: AMZN multi-opportunity fixture + INVENTORY row (C-12); e2e updates — Risk & exit →
+  `getByRole('heading')` (panel-tab collision), readiness prompt tests rebind empty strategy, picker
+  label → "Strategy for Why this fired", Trade-panels membership → 5 panels; new AC-1/AC-4/AC-5/AC-6.
+- **Verification**: `tsc --noEmit` clean; `pnpm lint` clean (pre-existing warnings only); `pnpm build`
+  clean — no `useSearchParams` CSR-bailout (R2 discharged); `pnpm exec playwright test e2e/trader`
+  → 102 passed (2 pre-existing timing flakes passed on retry, both in untouched specs). R1 sweep:
+  no unscoped `getByLabel('Strategy')`/`getByRole('combobox')` collision on the symbol page.
+- Status: implementation-ready → code-completed.

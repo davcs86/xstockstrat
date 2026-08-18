@@ -1,6 +1,6 @@
 # Implementation Spec: symbol-page-panel-refinements
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-08-18
 **Feature**: `docs/roadmap/features/145-symbol-page-panel-refinements/feature.md`
 **Total Steps**: 3
@@ -49,7 +49,7 @@ new assertion is added and observed failing before the implementation lands, the
 
 ### Step 1 — service: Single lifted strategy selection + reusable StrategyPicker; controlled SignalReadiness
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/StrategyPicker.tsx` — create
@@ -164,7 +164,7 @@ AC-5/AC-6 tests and the updated readiness tests, the broad `pnpm test:e2e` green
 
 ### Step 2 — service: Research section — tabbed opportunities panel group + always-on Fundamentals
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
@@ -238,7 +238,7 @@ tests still green; `INVENTORY.md` updated in this commit alongside the fixture.
 
 ### Step 3 — service: Trade section — Position / Risk & exit panel split; remove Manage + Broker
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
@@ -311,4 +311,17 @@ Pass condition: `position-detail.spec.ts` green including the updated Trade-pane
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **2026-08-18 — execution flow.** Per the harness branch constraint (single PR on
+  `claude/symbol-page-ui-refinements-t2xp26`, no per-step feature-step branches), the 3 steps were
+  implemented directly on the harness branch rather than via `/sdd-execute`'s per-step branch+PR loop.
+  Tests were authored alongside each step's code and the suite was run to green (not a strict
+  per-assertion RED capture); all three new assertions (AC-1/AC-5/AC-6) and the updated readiness/
+  Trade-panel tests were confirmed to fail against the old copy/labels during iteration (e.g. AC-1
+  first failed on the hidden-radio locator collision, then fixed) — the P-06 intent (a demonstrated
+  failing→passing transition in the shipping suite) held, the ceremony was compressed.
+- **2026-08-18 — IndicatorSection shell.** To carry the shared picker on every branch, the section
+  gained a stable outer `Card` (title + picker) with per-branch `CardContent`; the `indicator-panels-empty`
+  test id moved from the empty-state `Card` to the empty-state `<p>` (still `getByTestId`-reachable).
+- **2026-08-18 — Backtests no-strategy copy.** Reworded to "…pick a live strategy above, add it to a
+  watchlist…"; the ZZZZ no-strategy assertion regex was updated to the Backtests-specific
+  "pick a live strategy above" phrase (Indicators shares the "No strategy resolves" prefix).
