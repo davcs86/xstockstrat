@@ -168,3 +168,15 @@
   - [x] Step 8 (C-01 note): two off-by-one evidence citations fixed (`:432`→`:433`, `:440`→`:439`);
         the load-bearing `.recharts-line` `:444` citation was already exact.
 - Spec is stable at 9 steps, implementation-ready. Next: /sdd-execute unify-symbol-chart-libraries.
+
+## Session 2026-08-18 — sdd-review impl-spec (advisory, third round)
+
+- Result: **PASS — 0 blockers, 0 warnings, 2 notes** (both explicitly "not a warning"). No Floor risk.
+- Confirmed the three prior fixes landed correctly against source: (1) crosshair split into Step 6
+  (Total Steps 9, deps backward-only); (2) Step 8 e2e coverage note present and sound; (3) Step 8
+  citations `:433` (indicator-panels visibility assertion) and `:439` (sandbox-timeout text) verified
+  line-by-line in position-detail.spec.ts. Every code citation across all 9 steps re-checked exact.
+- Notes (no action): (i) Step 6 lists 3 files with "if owned by hook / if owned at page level" —
+  acceptable execution latitude, F-08-safe (over-list not under-list). (ii) Step 8 has no
+  `--cov-fail-under` by design for a Playwright e2e step — documented, not omitted.
+- Spec is clean and stable at 9 steps. No further spec edits. Next: /sdd-execute unify-symbol-chart-libraries.
