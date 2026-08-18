@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-18 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-18 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings addressed: AC-2 token backstop, feature-123 decision dependency; rebase note recorded) |
 
 ---
 
@@ -41,4 +42,5 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review unify-symbol-chart-libraries product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design unify-symbol-chart-libraries` — recon + adversarial design debate (must resolve the
+charting-library fork at the human gate) before running /sdd-spec

@@ -87,6 +87,19 @@ _Constitution **C-14**._
 ## Feature Workflow Notes
 
 Branch to create: `feature/unify-symbol-chart-libraries` (branch from `main-dev`)
+
+**Rebase note (overlap scan, /sdd-review product-spec):** 146 is last in the pipeline behind four
+`code-completed` features that edit the same files — 125 (`unified-symbol-page`) and 145
+(`symbol-page-panel-refinements`) both edit `positions/[symbol]/page.tsx` **and**
+`IndicatorPanels.tsx` (125 *creates* `IndicatorPanels.tsx`; 145 wraps it in a Card), and 139
+(`symbol-page-section-nav`) edits `page.tsx`. All are soft/rebase textual overlaps (no
+proto-field / migration-NNN / config-key collision), so **no hard `merge-order.md` row is
+required**; 146 naturally rebases onto their landed structure. `/sdd-spec` MUST re-verify every
+`page.tsx` / `IndicatorPanels.tsx` line citation against the post-125/145/139 file state before
+executing (mirrors the existing `daily-bars-only (143) → unified-symbol-page (125)` same-region
+note in `merge-order.md`). No collision on `useCandlestickChart.ts` — no other in-flight feature
+edits that hook.
+
 Approval gates required (per docs/runbooks/feature-workflow.md):
 - [ ] 1 service owner approval (`xstockstrat-ui`) — no proto/config/schema change; UI-only
 - [ ] 2 service owners + platform lead (breaking proto change) — N/A
@@ -99,6 +112,10 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
    date D lines up vertically across the price chart and every indicator panel.
 2. The price chart and indicator panels use a consistent visual language (gridlines, axis tick
    typography, crosshair/tooltip, `--chart-*`/theme color tokens, height rhythm) — no two-systems look.
+   **Objective backstop (so "consistent" is verifiable, not reviewer-judged):** both surfaces read
+   their series/axis/grid colors from the same `--chart-*` / theme CSS tokens — no chart-surface uses a
+   hardcoded hex or an off-token color — asserted in `/sdd-design`/`/sdd-spec` via a token-source check
+   (e.g. a shared-token assertion or a light+dark snapshot), in addition to AC-1's vertical-alignment test.
 3. Indicator correctness is unchanged: one panel per component, all named sub-series drawn, a failed
    component shows its error (no chart), warm-up/gap values render as gaps (no fabricated 0s).
 4. No second bars fetch is introduced — indicator series are still charted over the page's single
@@ -119,6 +136,12 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
       previously self-decided by a subagent debate and later overridden by the human gate — resolve
       this in `/sdd-design` with a real proposer/adversary round and an explicit user decision, and
       record whether it upholds or revisits the CLAUDE.md sanctioned `lightweight-charts` exception.
+- [ ] **Decision dependency on feature 123 (`shadcn-migration-custom-composites`, `code-completed`).**
+      Feature 123 bumps `recharts` v2→v3 repo-wide and its **FR-5 already records a keep-vs-replace
+      verdict on the `lightweight-charts` OHLCV chart** — the same sanctioned exception 146's FR-6
+      revisits. Before deciding 146's charting-library fork, `/sdd-design` MUST read 123's `design.md`
+      FR-5 outcome and treat the v3 `recharts` / `ui/chart.tsx` baseline 123 lands as the starting
+      point (do not re-litigate what 123 already settled; build on it or explicitly supersede it).
 - [ ] **`chart-panel.spec.ts` readiness dependency (ledger fails.md, ~L232-234).**
       `e2e/trader/chart-panel.spec.ts` uses `lightweight-charts`' injected `.tv-lightweight-charts`
       DOM class as an async-readiness signal. If the price chart changes, that signal must be
