@@ -153,3 +153,18 @@
         service's testing convention; no action.
 - Re-review after the split: /sdd-review impl-spec re-run 2026-08-18 (see next session block).
 - Next: /sdd-execute unify-symbol-chart-libraries.
+
+## Session 2026-08-18 — sdd-review impl-spec (advisory, re-review after Step-5 split)
+
+- Result: 0 blockers, 1 warning, 2 notes (advisory). No Floor breach. The 8→9 split verified clean:
+  (a) all "Step N" cross-references consistent after renumber; (b) new Step 6 (crosshair/tooltip)
+  well-formed with real files + red-green gate deferred to Step 8; (c) no old-Step-5 concern dropped
+  or duplicated (panes/fault-isolation/readiness-seam/overlay-tokens/recharts-removal stay in Step 5).
+  Overlap unchanged (split touches only files already covered) → still CLEAN, no merge-order row.
+- Findings — addressed this session:
+  - [x] Step 8 (C-08 coverage-threshold warning): added a verification note that this is a Playwright
+        e2e step with no `--cov-fail-under` gate; the src/lib ≥40% node-coverage threshold is carried
+        by Steps 2-3. (False-positive of the B2 literal FAIL trigger; clarified rather than forced.)
+  - [x] Step 8 (C-01 note): two off-by-one evidence citations fixed (`:432`→`:433`, `:440`→`:439`);
+        the load-bearing `.recharts-line` `:444` citation was already exact.
+- Spec is stable at 9 steps, implementation-ready. Next: /sdd-execute unify-symbol-chart-libraries.

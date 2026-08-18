@@ -469,8 +469,8 @@ grep -n "addCandlestickSeries" src/components/trader/ChartPanel.tsx   # expect N
 - The assertion that must change: `position-detail.spec.ts:444` —
   `page.getByTestId('indicator-panel').locator('.recharts-line')).toHaveCount(3)` — asserts recharts
   internals that no longer exist after Step 5. Surrounding test (`:423-462`): `indicator-panels`
-  visible (`:432`), one `indicator-panel` + one `indicator-panel-error` (`:435-436`), `macd` label
-  (`:437`), `sandbox timeout` error text (`:440`), and the no-strategy empty state
+  visible (`:433`), one `indicator-panel` + one `indicator-panel-error` (`:435-436`), `macd` label
+  (`:437`), `sandbox timeout` error text (`:439`), and the no-strategy empty state
   (`indicator-panels-empty`, `:457-461`).
 - Readiness signal to preserve: `.tv-lightweight-charts` inside `chart-container`
   (`chart-panel.spec.ts:146-151, 194`) — do not break it; the shared chart still injects it (Step 4).
@@ -499,7 +499,7 @@ static + one diagnosed run.
    `setData`-invoked-N-times (route-intercept or in-page) or a snapshot seam so the *drawn* geometry —
    not just the prop — is proven (`design.md:87-90`). Keep the DOM-text assertions unchanged: one
    `indicator-panel`, one `indicator-panel-error` (`:435-436`), `macd` (`:437`), `sandbox timeout`
-   (`:440`), and the `indicator-panels-empty` no-strategy state (`:457-461`).
+   (`:439`), and the `indicator-panels-empty` no-strategy state (`:457-461`).
 2. Gate readiness on the shared chart's `.tv-lightweight-charts` canvas (same signal `chart-panel.spec.ts`
    uses) rather than a recharts selector, so the assertions wait for the v5 draw deterministically.
 3. **Shared crosshair/tooltip (Step 6):** add an assertion that hovering a bar shows the single
@@ -522,6 +522,9 @@ pnpm exec playwright test --list e2e/trader/position-detail.spec.ts e2e/trader/c
 # One diagnosed run locally (proves the oklch→rgb probe colors + panes draw); full green deferred to CI:
 pnpm exec playwright test e2e/trader/position-detail.spec.ts --project=chromium --reporter=line
 grep -n "recharts" e2e/trader/position-detail.spec.ts     # expect NO match
+# Coverage note: this is a Playwright e2e step — it has no `--cov-fail-under` gate. The xstockstrat-ui
+# `src/lib` ≥40% node-coverage threshold is carried by Steps 2-3 (`pnpm run test:coverage`); this step
+# adds behavioral e2e coverage, not unit coverage.
 ```
 
 ---
