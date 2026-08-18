@@ -57,3 +57,16 @@
   broad run before closing the strategy-picker step (fails.md 2026-08-09).
 - **R2** — verify no CSR-bailout warning from the page-level `useSearchParams` (Suspense placement) in `pnpm build`.
 - **R3** — confirm every `owningStrategy` ref disposition when dropping it as a resolution source (Trade-section step).
+
+## Session 2026-08-18 — sdd-spec
+
+- Generated implementation-spec.md with 3 steps (aligned to design's advisory step boundaries). Status → implementation-ready.
+- UI-only (`xstockstrat-ui` `/trader`): no proto/config/DB/backend step; C-14 surface = existing `/trader/positions/[symbol]` (no new route, no `PLATFORM_SUBNAV`). Next.js has no CI coverage threshold, so no separate coverage `test` step — each `service` step carries RED-first Playwright e2e (P-06).
+- Key codebase findings verified against the tree:
+  - Strategy-list source to reuse is `SignalReadiness.tsx:28,32` (`useStrategyDefinitions()` default `includeInactive=false` per `useStrategyDefinitions.ts:17`, then `.definitions.filter(liveEnabled)`); `Select`+`aria-label` pattern at `SignalReadiness.tsx:67-78`. New `StrategyPicker.tsx` co-located in `components/insights/`.
+  - `owningStrategy` resolution passes are `page.tsx:304` (Backtests) and `:360` (Indicators); display uses to keep are subtitle `:612` + "Why it's held" `:729-748` (both inside `PositionBody`, refactored in Step 3).
+  - `CardTitle` renders `<h3>` (`ui/card.tsx:36`), so `getByRole('heading')` targets card titles (already used at spec `:113,133,146`).
+  - Multi-opportunity FR-1 is untestable on the current mock (one opp row per symbol, `opportunities.ts` + `mock-backend.ts:617`): Step 2 adds AMZN rows (two liveEnabled strategies `strat-live-001`/`strat-001`) + INVENTORY row (C-12).
+  - `SymbolPanelGroup` gives each panel `label` a `role="radio"` mobile tab once ≥2 panels — so making "Risk & exit" its own Trade panel (Step 3) creates a 2nd "Risk & exit" DOM occurrence that breaks unscoped `getByText('Risk & exit')` at spec `:29,66,132`; Step 3 rescopes them. Trade-panels membership assert at `:482-483` also updated.
+  - Watchlist-binding pre-selection flips the premise of readiness tests `:292-303,305-319` (they bind AAPL then assert the empty prompt) — Step 1 rebinds them to an empty strategy so the prompt still asserts; `:315` accessible name → "Strategy for Why this fired".
+- Open Threads mapped to steps: **R1** (full-suite `getByLabel`/`getByRole('combobox')` collision grep + broad `pnpm test:e2e`) and **R2** (page-level `useSearchParams` inside a `Suspense` boundary; verify `pnpm build` has no CSR-bailout) both discharge in **Step 1**; **R3** (`owningStrategy` display uses not stranded) is enforced in **Steps 1 and 3** via `grep -n "owningStrategy"`. Details in the `## Open Threads` block above.
