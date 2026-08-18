@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"log/slog"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -810,6 +811,124 @@ func (h *countingWarnHandler) Handle(_ context.Context, r slog.Record) error {
 }
 func (h *countingWarnHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
 func (h *countingWarnHandler) WithGroup(string) slog.Handler      { return h }
+
+// TestStaleCheckDue covers feature 140 FR-3's per-(symbol,tf) cooldown: the first check for a key is
+// due (and marks it), an immediate repeat within one interval is suppressed, and after one interval
+// it is due again. This is the guard that stops a weekend/holiday — where the newest real bar is
+// legitimately older than one interval — from refetching from Alpaca on every chart poll.
+func TestStaleCheckDue(t *testing.T) {
+	s := &MarketDataService{lastStaleCheck: make(map[string]time.Time)}
+	interval := 24 * time.Hour
+	t0 := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
+
+	if !s.staleCheckDue("AAPL", "1d", interval, t0) {
+		t.Fatal("first check for AAPL|1d should be due")
+	}
+	if s.staleCheckDue("AAPL", "1d", interval, t0.Add(time.Hour)) {
+		t.Error("repeat within one interval should be suppressed")
+	}
+	if s.staleCheckDue("AAPL", "1d", interval, t0.Add(interval-time.Second)) {
+		t.Error("just under one interval should still be suppressed")
+	}
+	if !s.staleCheckDue("AAPL", "1d", interval, t0.Add(interval+time.Second)) {
+		t.Error("after one interval the check should be due again")
+	}
+	// A different (symbol,tf) key is tracked independently.
+	if !s.staleCheckDue("MSFT", "1d", interval, t0.Add(time.Hour)) {
+		t.Error("first check for a different symbol should be due")
+	}
+	if !s.staleCheckDue("AAPL", "1h", interval, t0.Add(time.Hour)) {
+		t.Error("first check for a different timeframe on the same symbol should be due")
+	}
+}
+
+// TestTruncateBars covers feature 140 FR-7's cache-write-failure fallback slice: when serving
+// freshly-fetched (ascending) live bars without a DB re-read, the recent path must return the NEWEST
+// pageSize bars, the non-recent path the first page, and a short slice passes through untouched.
+func TestTruncateBars(t *testing.T) {
+	mk := func(n int) []*marketdatav1.Bar {
+		out := make([]*marketdatav1.Bar, n)
+		for i := range out {
+			out[i] = &marketdatav1.Bar{Time: timestamppb.New(time.Unix(int64(i), 0))}
+		}
+		return out
+	}
+	live := mk(5)
+
+	recent := truncateBars(live, 2, true)
+	if len(recent) != 2 || recent[0].GetTime().AsTime().Unix() != 3 || recent[1].GetTime().AsTime().Unix() != 4 {
+		t.Errorf("recent=true should return the newest 2 bars [3,4], got %v", barsSeconds(recent))
+	}
+	oldest := truncateBars(live, 2, false)
+	if len(oldest) != 2 || oldest[0].GetTime().AsTime().Unix() != 0 || oldest[1].GetTime().AsTime().Unix() != 1 {
+		t.Errorf("recent=false should return the first 2 bars [0,1], got %v", barsSeconds(oldest))
+	}
+	if got := truncateBars(mk(2), 5, true); len(got) != 2 {
+		t.Errorf("a slice shorter than pageSize should pass through, got len %d", len(got))
+	}
+}
+
+func barsSeconds(bars []*marketdatav1.Bar) []int64 {
+	out := make([]int64, len(bars))
+	for i, b := range bars {
+		out[i] = b.GetTime().AsTime().Unix()
+	}
+	return out
+}
+
+// TestMarkWarmFeedsIngestSet is a feature-140 regression guard on the autonomous-freshness contract:
+// the set markWarm populates is exactly the set the always-on bar ingester consumes (warmSnapshot).
+// If these ever diverge, a symbol could be queried yet never get its bars refreshed by the ingester
+// — the failure mode the user asked to be protected against.
+func TestMarkWarmFeedsIngestSet(t *testing.T) {
+	s := &MarketDataService{warmSymbols: make(map[string]struct{})}
+	if got := s.warmSnapshot(); len(got) != 0 {
+		t.Fatalf("fresh service should have no warm symbols, got %v", got)
+	}
+	s.markWarm("AAPL")
+	s.markWarm("MSFT")
+	s.markWarm("AAPL") // idempotent
+	s.markWarm("")     // ignored
+
+	got := map[string]bool{}
+	for _, sym := range s.warmSnapshot() {
+		got[sym] = true
+	}
+	if len(got) != 2 || !got["AAPL"] || !got["MSFT"] {
+		t.Errorf("warmSnapshot should be exactly {AAPL, MSFT}, got %v", got)
+	}
+}
+
+// TestGetBarsMarksSymbolWarm guards the other half of the feature-140 autonomous-freshness contract:
+// GetBars must warm the queried symbol, so that the analysis live loop / opportunities refresh —
+// which query GetBars for every symbol they evaluate — thereby register those symbols for the
+// always-on ingester WITHOUT any chart view. A structural (source) check because GetBars needs a live
+// DB pool to invoke; removing the markWarm call would silently break autonomous bar freshness.
+func TestGetBarsMarksSymbolWarm(t *testing.T) {
+	src, err := os.ReadFile("marketdata_service.go")
+	if err != nil {
+		t.Fatalf("read source: %v", err)
+	}
+	body := funcBody(t, string(src), "func (s *MarketDataService) GetBars(")
+	if !strings.Contains(body, "s.markWarm(req.Symbol)") {
+		t.Error("GetBars must call s.markWarm(req.Symbol) — the query path feeds the always-on " +
+			"ingester's warm set (feature 140 autonomous-freshness contract)")
+	}
+}
+
+// funcBody returns the source text from the given func signature up to the next top-level `func (`.
+func funcBody(t *testing.T, src, signature string) string {
+	t.Helper()
+	start := strings.Index(src, signature)
+	if start < 0 {
+		t.Fatalf("signature %q not found in source", signature)
+	}
+	rest := src[start+len(signature):]
+	if end := strings.Index(rest, "\nfunc ("); end >= 0 {
+		return rest[:end]
+	}
+	return rest
+}
 
 // TestResolveIngestTimeframes covers AC-10's three cases plus the list-parsing bug fix
 // (a single configured timeframe used to leave every OTHER continuously-consumed

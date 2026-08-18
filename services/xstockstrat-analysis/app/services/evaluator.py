@@ -195,6 +195,11 @@ class StrategyEvaluator:
         ``{symbol, conviction, passing_conditions, total_conditions, conditions:[…]}``.
         """
         if not bars:
+            # feature 140 FR-6: empty-bars logging is the CALLER's responsibility, not this
+            # shared function's. It is also called from _compute_opportunities' background
+            # per-user compute (up to analysis.opportunity.max_universe_size symbols), where a
+            # per-call WARN here would flood the logs; the in-scope callers that need visibility
+            # (live loop, EvaluateReadiness, screener) log the gap at their own call site.
             return _empty_readiness(symbol)
         _validate_definition(definition)
         closes = [b.close for b in bars]

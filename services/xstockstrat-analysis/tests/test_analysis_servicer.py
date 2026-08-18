@@ -8,6 +8,7 @@ populating _backtests/_strategies directly, same pattern as ingest.
 import asyncio
 import inspect
 import json
+import logging
 import math
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -3750,6 +3751,21 @@ class TestEvaluateReadiness:
         assert r.passing_conditions == 1 and r.total_conditions == 1
         assert r.conviction == 1.0
         assert r.conditions[0].state == analysis_pb2.CONDITION_STATE_PASS
+
+    @pytest.mark.asyncio
+    async def test_empty_bars_logs_warning(self, caplog):
+        # feature 140 FR-6: a successful-but-empty GetBars is no longer silent — it logs a WARN
+        # naming the symbol + strategy. The response still returns an (empty) readiness row, so
+        # the RPC shape is unchanged.
+        svc = self._svc({"AAPL": []})
+        with caplog.at_level(logging.WARNING, logger="app.handlers.servicer"):
+            resp = await svc.EvaluateReadiness(
+                analysis_pb2.EvaluateReadinessRequest(strategy_id="s1", symbols=["AAPL"]),
+                _ctx(_HEADERS),
+            )
+        assert len(resp.readiness) == 1  # empty readiness still returned
+        warns = [r for r in caplog.records if "no 1d bars for AAPL" in r.getMessage()]
+        assert len(warns) == 1
 
     @pytest.mark.asyncio
     async def test_default_rule_traces_entry(self):

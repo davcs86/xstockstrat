@@ -18,6 +18,10 @@ import { useCandlestickChart } from '@/hooks/useCandlestickChart';
 
 type BarCount = 50 | 100 | 200;
 
+// feature 140: poll interval for the daily chart auto-refresh (ms). Since feature 143 fixed the
+// view at 1d, a single interval suffices — no per-timeframe map.
+const DAILY_POLL_MS = 300_000;
+
 export function ChartPanel() {
   const { containerRef, seriesRef } = useCandlestickChart(320);
 
@@ -65,6 +69,15 @@ export function ChartPanel() {
   useEffect(() => {
     if (symbol) fetchBars(symbol, timeframe, barCount);
   }, [symbol, timeframe, barCount]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // feature 140: auto-refresh the daily chart on a bounded interval so new bars appear without a
+  // manual reload. The backend serves the newest page (feature 140 FR-7), so a re-fetch reflects
+  // any bar the always-on ingester has added since the last poll.
+  useEffect(() => {
+    if (!symbol) return;
+    const id = setInterval(() => fetchBars(symbol, timeframe, barCount), DAILY_POLL_MS);
+    return () => clearInterval(id);
+  }, [symbol, barCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <Card>

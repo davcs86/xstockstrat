@@ -1,5 +1,6 @@
 """Engine unit tests for the screener (feature 060)."""
 
+import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -120,6 +121,53 @@ async def test_insufficient_bars_returns_gap():
     assert r.status == analysis_pb2.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA
     assert r.gap.symbol == "AAA"
     assert len(resp.coverage_gaps) == 1
+
+
+async def test_insufficient_bars_logs_summarized_warning(caplog):
+    # feature 140 FR-6: bars gaps, previously carried only in the response (INSUFFICIENT_DATA +
+    # coverage_gaps), now also surface in the runtime logs as one summarized WARN per scan.
+    md = AsyncMock()
+    md.GetBars = AsyncMock(return_value=bars([]))  # every symbol short on bars
+    ind = AsyncMock()
+    ind.ExecuteFormula = AsyncMock(return_value=formula_resp([0.5]))
+    engine = make_engine(md, ind)
+
+    req = analysis_pb2.ScreenSymbolsRequest(
+        symbols=["AAA", "BBB"],
+        criteria=[formula_criterion("f1", "fid", analysis_pb2.COMPARATOR_GT, 0.0)],
+    )
+    with caplog.at_level(logging.WARNING, logger="app.services.screener"):
+        await engine.screen(req)
+
+    summaries = [
+        r for r in caplog.records if "insufficient 1d bars for technical criteria" in r.getMessage()
+    ]
+    assert len(summaries) == 1  # one summary for the whole scan, not one per symbol
+    msg = summaries[0].getMessage()
+    assert "2/2" in msg and "AAA" in msg and "BBB" in msg
+
+
+async def test_rpc_error_bars_not_double_counted_in_summary(caplog):
+    # feature 140 FR-6: a symbol whose GetBars RAISES is already logged per-symbol; it must be
+    # excluded from the summarized-gap WARN so an RPC failure is not double-reported.
+    md = AsyncMock()
+    md.GetBars = AsyncMock(side_effect=grpc.RpcError("boom"))
+    ind = AsyncMock()
+    ind.ExecuteFormula = AsyncMock(return_value=formula_resp([0.5]))
+    engine = make_engine(md, ind)
+
+    req = analysis_pb2.ScreenSymbolsRequest(
+        symbols=["AAA"],
+        criteria=[formula_criterion("f1", "fid", analysis_pb2.COMPARATOR_GT, 0.0)],
+    )
+    with caplog.at_level(logging.WARNING, logger="app.services.screener"):
+        await engine.screen(req)
+
+    # The per-symbol RpcError WARN fires; the FR-6 summary does NOT (the only gap was an RPC error).
+    assert [r for r in caplog.records if "GetBars failed for AAA" in r.getMessage()]
+    assert not [
+        r for r in caplog.records if "insufficient 1d bars for technical criteria" in r.getMessage()
+    ]
 
 
 # ── Bug fix: fundamentals unavailable must never report OK/passed=true ─────────
