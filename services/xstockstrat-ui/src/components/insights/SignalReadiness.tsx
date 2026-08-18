@@ -1,38 +1,31 @@
 'use client';
-import { useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Eyebrow } from '@/components/shared/Eyebrow';
 import { Progress } from '@/components/ui/progress';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { ReadinessRule } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { CONDITION_STATE, EnumBadge } from '@/lib/opportunityShared';
-import { useStrategyDefinitions } from '@/hooks/useStrategyDefinitions';
+import { StrategyPicker } from '@/components/insights/StrategyPicker';
 import { useOpportunities, useReadiness, useStrategyAnalytics } from '@/hooks/useOpportunities';
 
 /**
  * Signal-detail readiness (feature 083, FR-6). EvaluateReadiness is strategy-scoped, so the
- * strategy is an EXPLICIT input — threaded from the opportunity row (`?strategy=`) when present,
- * otherwise chosen from a picker. No fabricated signal→strategy binding: with no strategy
- * selected the panel prompts instead of guessing. Renders the traced PASS/SOFT/FAIL leaves +
- * distance-to-threshold and the deterministic "N/M conditions" conviction.
+ * strategy is an EXPLICIT input — CONTROLLED by the page (feature 145): the shared page-level
+ * strategy selection (seeded `?strategy=` → watchlist binding → picker) flows in via `strategyId`,
+ * and the panel's own picker calls `onStrategyChange` so all three strategy-scoped panels stay
+ * synced. No fabricated signal→strategy binding: with no strategy selected the panel prompts
+ * instead of guessing. Renders the traced PASS/SOFT/FAIL leaves + distance-to-threshold and the
+ * deterministic "N/M conditions" conviction.
  */
-export function SignalReadiness({ symbol }: { symbol: string }) {
-  const searchParams = useSearchParams();
-  const { data: defs } = useStrategyDefinitions();
-  // Only strategies actually eligible to trade live are selectable here — `active` alone (the
-  // fetch default) also admits paused/never-enabled strategies, which would be misleading to
-  // evaluate readiness against.
-  const strategies = useMemo(() => (defs?.definitions ?? []).filter((s) => s.liveEnabled), [defs]);
-  // Strategy threaded from the opportunity row (?strategy=), else chosen from the picker.
-  const [strategyId, setStrategyId] = useState(searchParams?.get('strategy') ?? '');
-
+export function SignalReadiness({
+  symbol,
+  strategyId,
+  onStrategyChange,
+}: {
+  symbol: string;
+  strategyId: string;
+  onStrategyChange: (id: string) => void;
+}) {
   // feature 138 — trace the EXIT rule when this (symbol, strategy) is a HELD opportunity, so the
   // panel explains the exit rule that actually fired (matching the header's exit-derived
   // conviction) instead of the entry rule. "position" in the queue row's provenance is exactly the
@@ -64,18 +57,11 @@ export function SignalReadiness({ symbol }: { symbol: string }) {
       <CardHeader>
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <CardTitle className="text-base">Why this fired</CardTitle>
-          <Select value={strategyId} onValueChange={setStrategyId}>
-            <SelectTrigger className="h-8 w-56" aria-label="Strategy">
-              <SelectValue placeholder="Select a strategy…" />
-            </SelectTrigger>
-            <SelectContent>
-              {strategies.map((s) => (
-                <SelectItem key={s.strategyId} value={s.strategyId}>
-                  {s.displayName || s.strategyId}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <StrategyPicker
+            value={strategyId}
+            onChange={onStrategyChange}
+            ariaLabel="Strategy for Why this fired"
+          />
         </div>
       </CardHeader>
       <CardContent>
