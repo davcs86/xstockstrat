@@ -145,9 +145,7 @@ class TestLiveEvaluationLoopMissingDataLogging:
         loop._evaluator.evaluate = AsyncMock(return_value=[_decision(False, False)])
         with caplog.at_level(logging.WARNING, logger="app.engine.live_loop"):
             await loop._run_cycle()
-        assert not [
-            r for r in caplog.records if "had no 1d bars this cycle" in r.getMessage()
-        ]
+        assert not [r for r in caplog.records if "had no 1d bars this cycle" in r.getMessage()]
 
 
 class TestLiveEvaluationLoopRequestShape:

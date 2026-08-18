@@ -140,9 +140,7 @@ async def test_insufficient_bars_logs_summarized_warning(caplog):
         await engine.screen(req)
 
     summaries = [
-        r
-        for r in caplog.records
-        if "insufficient 1d bars for technical criteria" in r.getMessage()
+        r for r in caplog.records if "insufficient 1d bars for technical criteria" in r.getMessage()
     ]
     assert len(summaries) == 1  # one summary for the whole scan, not one per symbol
     msg = summaries[0].getMessage()
@@ -168,9 +166,7 @@ async def test_rpc_error_bars_not_double_counted_in_summary(caplog):
     # The per-symbol RpcError WARN fires; the FR-6 summary does NOT (the only gap was an RPC error).
     assert [r for r in caplog.records if "GetBars failed for AAA" in r.getMessage()]
     assert not [
-        r
-        for r in caplog.records
-        if "insufficient 1d bars for technical criteria" in r.getMessage()
+        r for r in caplog.records if "insufficient 1d bars for technical criteria" in r.getMessage()
     ]
 
 
