@@ -3,7 +3,7 @@
 **Status**: `pending`
 **Created**: 2026-08-18
 **Feature**: `docs/roadmap/features/146-unify-symbol-chart-libraries/feature.md`
-**Total Steps**: 8
+**Total Steps**: 9
 **Feature Branch**: `feature/unify-symbol-chart-libraries`
 
 ---
@@ -17,17 +17,18 @@ verify-before-build: **Step 1** pins lightweight-charts v5 and confirms its pane
 API against the *installed* typings (the feature-014 trap — a spec written against a newer API than
 the version that ships; `insights.md:659-663`). **Steps 2–3** land the two pure `src/lib` helpers the
 design makes the correctness backbone (the unset→whitespace point mapper with strictly-ascending-time
-normalization, and the oklch→rgb token resolver) with vitest coverage. **Steps 4–6** migrate the
-shared `useCandlestickChart` hook to v5 panes, build the indicator panes on that same instance
-(replacing recharts), and migrate the hook's other consumer `ChartPanel.tsx` in lock-step. **Step 7**
-rewrites the e2e that asserted recharts internals. **Step 8** rewrites the CLAUDE.md sanctioned
-exception and fixes the stale doc-drift.
+normalization, and the oklch→rgb token resolver) with vitest coverage. **Steps 4–7** migrate the
+shared `useCandlestickChart` hook to v5 panes (4), build the indicator panes on that same instance
+replacing recharts (5), wire the shared crosshair + unified tooltip across all panes (6), and migrate
+the hook's other consumer `ChartPanel.tsx` in lock-step (7). **Step 8** rewrites the e2e that asserted
+recharts internals. **Step 9** rewrites the CLAUDE.md sanctioned exception and fixes the stale
+doc-drift.
 
 **Consumer surface (C-14):** the only surface is the UI `/trader` segment symbol page
 (`/trader/positions/[symbol]`) `#overview` section — an **existing, already-registered** route
 (`page.tsx:381-401`). It is not a new page, so **no `PLATFORM_SUBNAV` nav registration** is required
-(the C-10(a) nav-reachability rule applies only to new routes). The change is delivered by Steps 4–6
-(the chart surface) plus Step 7 (its e2e). No Agent surface; no backend/proto/config/DB surface
+(the C-10(a) nav-reachability rule applies only to new routes). The change is delivered by Steps 4–7
+(the chart surface) plus Step 8 (its e2e). No Agent surface; no backend/proto/config/DB surface
 (`recon.md:76-83`).
 
 **No proto / config / DB steps.** The `GetIndicatorSeries` / `ComponentSeries` / `IndicatorValue`
@@ -41,11 +42,13 @@ proven at the wire layer by `services/xstockstrat-analysis/tests/test_analysis_s
   hook's hard-coded hex moves onto resolved tokens).
 - **Step 5** requires **Step 4** (the shared v5 chart + pane coordinator it draws panes into) and
   **Step 2** (the unset→whitespace point mapper it feeds each line series).
-- **Step 6** requires **Step 4** (the migrated v5 hook API).
-- **Step 7** [test] covers **Steps 4–6** [service] via Playwright e2e; it is authored **red-first**
-  (asserts the v5-pane behavior, which fails against the current recharts tree) and passes after
-  Steps 4–6 land. Steps 2 and 3 carry their own vitest tests inline (also red-first).
-- **Step 8** [docs] follows **Step 5** (the sanctioned exception is only superseded once both surfaces
+- **Step 6** requires **Step 5** (the indicator panes must exist before a shared crosshair/tooltip can
+  read every pane's series at the hovered time).
+- **Step 7** requires **Step 4** (the migrated v5 hook API).
+- **Step 8** [test] covers **Steps 4–7** [service] via Playwright e2e; it is authored **red-first**
+  (asserts the v5-pane + shared-crosshair behavior, which fails against the current recharts tree) and
+  passes after Steps 4–7 land. Steps 2 and 3 carry their own vitest tests inline (also red-first).
+- **Step 9** [docs] follows **Step 5** (the sanctioned exception is only superseded once both surfaces
   live on one engine).
 - **Soft rebase (design Open Risk):** every `page.tsx` / `IndicatorPanels.tsx` citation below was
   re-verified against the post-125/145/139 working tree on 2026-08-18 (git log confirms #979 (145) and
@@ -70,7 +73,7 @@ proven at the wire layer by `services/xstockstrat-analysis/tests/test_analysis_s
   with an inline comment flagging the v5 rename `addSeries(CandlestickSeries)`.
 - Root `CLAUDE.md` version table does **not** track `lightweight-charts` (confirmed via
   `grep -n "lightweight-charts" CLAUDE.md` → no match) — so **no root version-table edit** is due; the
-  only doc surface naming it is `services/xstockstrat-ui/CLAUDE.md` § Styling, handled in Step 8.
+  only doc surface naming it is `services/xstockstrat-ui/CLAUDE.md` § Styling, handled in Step 9.
 - Lockfile is the repo-root workspace `pnpm-lock.yaml` (confirmed `pnpm-workspace.yaml` present).
 - Ledger trap: `insights.md:659-663` (feature-014) — a spec written against v5 `addSeries` while
   v4.2.3 `addCandlestickSeries` actually shipped. Rule: pin the version and verify its API before
@@ -204,7 +207,7 @@ pnpm run lint
 **Instructions**:
 1. Add one purpose-named, actually-visible chart-grid token to `globals.css` `:root` (dark block,
    near `:103-111`) — e.g. `--chart-grid: oklch(...)` at an opacity that reads on the card background
-   (not the 10%-alpha `--border`); eyeball it against the rendered chart in the Step 7 diagnosed run.
+   (not the 10%-alpha `--border`); eyeball it against the rendered chart in the Step 8 diagnosed run.
    Expose it through the `@theme inline` block if the codebase's token-exposure convention requires it
    (mirror `--color-chart-1..5` at `globals.css:27-31`).
 2. Create `src/lib/chartColors.ts`: a resolver that, given a CSS custom-property name (`--chart-1`,
@@ -218,7 +221,7 @@ pnpm run lint
    returns the value unchanged; the gridline-token selection returns `--chart-grid` (not `--border`);
    the resolver's public token list matches the palette the charts consume; the SSR/no-`document`
    fallback returns the documented default rather than throwing. (The live oklch probe itself is not
-   node-testable — its correctness is asserted in Step 7's diagnosed chromium run; state this in the
+   node-testable — its correctness is asserted in Step 8's diagnosed chromium run; state this in the
    test file's header comment.)
 
 **Verification**:
@@ -245,17 +248,17 @@ pnpm run lint
 - The hook today (`useCandlestickChart.ts:12-59`): dynamic `import('lightweight-charts')` → `createChart`
   (`:21-23`); v4 `addCandlestickSeries` (`:34-40`) with hard-coded hex (`:26-40`); `ResizeObserver` +
   `chart.remove()` teardown (`:43-52`); returns `{ containerRef, seriesRef }` (`:58`).
-- Two consumers only (confirmed `grep -rln useCandlestickChart src/`): `ChartPanel.tsx` (Step 6) and
+- Two consumers only (confirmed `grep -rln useCandlestickChart src/`): `ChartPanel.tsx` (Step 7) and
   `page.tsx:116` (the symbol page). `insights/market/[symbol]` renders **no** chart (confirmed
   `grep -rln "lightweight|createChart|recharts" src/app/insights/market/` → 0) — the stale CLAUDE.md
-  claim fixed in Step 8.
+  claim fixed in Step 9.
 - `.tv-lightweight-charts` DOM class is the e2e readiness signal that MUST survive
   (`chart-panel.spec.ts:146-151, 194`; `position-detail.spec.ts` chart readiness). It is injected by
   lightweight-charts itself into the container, so it persists across the v4→v5 bump — re-verify.
 - v5 API names: confirmed in Step 1 (`addSeries(CandlestickSeries,...)`, pane API).
 - Token resolver + tokens: Step 3 (`src/lib/chartColors.ts`, `--chart-grid`).
 
-**TDD**: `red-green required` (behavior covered by Step 7 e2e, authored red-first; the `.tv-lightweight-charts` readiness assertion in `chart-panel.spec.ts` guards this hook)
+**TDD**: `red-green required` (behavior covered by Step 8 e2e, authored red-first; the `.tv-lightweight-charts` readiness assertion in `chart-panel.spec.ts` guards this hook)
 
 **Instructions**:
 1. Replace the v4 `createChart` options' hard-coded hex (`:26-30`) with values from
@@ -295,7 +298,7 @@ pnpm exec tsc --noEmit                                                     # typ
 - `services/xstockstrat-ui/src/components/trader/IndicatorPanels.tsx` — modify (recharts → lightweight-charts panes)
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify (overview wiring, avg/stop overlay hex→tokens)
 
-**Reviewers**: `xstockstrat-ui` service owner — Trading UI correctness / analytics display accuracy (one pane per component, all sub-series drawn, per-component fault isolation, gaps-not-0, shared crosshair; card→panes layout change — owner review flagged by `design.md:114-119`)
+**Reviewers**: `xstockstrat-ui` service owner — Trading UI correctness / analytics display accuracy (one pane per component, all sub-series drawn, per-component fault isolation, gaps-not-0; card→panes layout change — owner review flagged by `design.md:114-119`). The shared crosshair/tooltip is its own Step 6.
 
 **Codebase Evidence**:
 - Current recharts panels (`IndicatorPanels.tsx:1-95`): one `IndicatorPanel` per `comp`
@@ -317,7 +320,7 @@ pnpm exec tsc --noEmit                                                     # typ
   via `priceLinesRef` (`:127, 213-214`); held/unheld-safe locals `avg`/`stop` (`page.tsx:132-133`).
 - Mapper (Step 2) + shared chart/pane coordinator (Step 4) are the inputs this step draws from.
 
-**TDD**: `red-green required` (Step 7 e2e, authored red-first)
+**TDD**: `red-green required` (Step 8 e2e, authored red-first)
 
 **Instructions**:
 1. Rewrite `IndicatorPanels.tsx` to render the chartable components as **panes on the shared v5 chart
@@ -334,20 +337,20 @@ pnpm exec tsc --noEmit                                                     # typ
    `data-series-count` (and/or `data-series`) attribute to each `indicator-panel` host reflecting how
    many named series were handed to `setData` — a **readiness helper only** (it proves the prop, not
    the drawn geometry; `design.md:87-90`). The "all series actually drawn" proof is the
-   `setData`-invoked-N-times / snapshot seam asserted in Step 7, plus the Step 2 mapper test.
-4. Deliver the **shared crosshair + unified tooltip** across all panes (in scope, `design.md:53-55`):
-   the single v5 instance gives one native crosshair; render one combined readout of price + each
-   indicator at the hovered time.
-5. In `page.tsx`, move the avg-cost / stop `createPriceLine` colors (`:219` `#94a3b8`, `:231`
+   `setData`-invoked-N-times / snapshot seam asserted in Step 8, plus the Step 2 mapper test.
+4. In `page.tsx`, move the avg-cost / stop `createPriceLine` colors (`:219` `#94a3b8`, `:231`
    `#e0787a`) onto resolved tokens (Step 3) — keep `lineStyle: DASHED` (`:72`), the replace-not-stack
    `priceLinesRef` logic (`:213-238`), and the held/unheld-safe `avg`/`stop` locals (`:132-133`)
    unchanged (FR-5). Ensure the overview section composes `SymbolPriceChart` (pane 0) and the indicator
    panes as one instrument; **disposal-safe teardown** on strategy switch (`IndicatorSection`
    re-resolve, `page.tsx:1105-1163`) — no call into a disposed chart.
-6. Remove the now-unused `recharts` imports from `IndicatorPanels.tsx:1-2` and the `ui/chart` imports
+5. Remove the now-unused `recharts` imports from `IndicatorPanels.tsx:1-2` and the `ui/chart` imports
    (`:5-10`) **from the symbol page only**. Do **not** remove `recharts` from `package.json` or delete
    `ui/chart.tsx` — 3 other live consumers remain (`EquityCurveChart.tsx`, `FormulaRunResult.tsx`,
    `insights/page.tsx`; `design.md:80-82`).
+
+The single native crosshair + unified tooltip across the panes is **Step 6** — this step establishes
+the panes it reads from but leaves each pane's default `crosshair` untouched.
 
 **Verification**:
 ```bash
@@ -361,7 +364,59 @@ pnpm exec tsc --noEmit
 
 ---
 
-### Step 6 — service: Migrate `ChartPanel.tsx` (dashboard) to the v5 hook in lock-step
+### Step 6 — service: Shared crosshair + unified tooltip across price and all indicator panes
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/components/trader/IndicatorPanels.tsx` — modify (tooltip readout across panes)
+- `services/xstockstrat-ui/src/hooks/useCandlestickChart.ts` — modify (crosshair-move subscription surface, if the shared readout is owned by the hook/coordinator)
+- `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify (compose the combined price+indicator readout over the `#overview` section, if owned at page level)
+
+**Reviewers**: `xstockstrat-ui` service owner — Trading UI correctness / analytics display accuracy (one crosshair across all panes, tooltip reads every pane's series at the hovered bar, no fabricated value at a gap)
+
+**Codebase Evidence**:
+- In scope this feature (design `design.md:53-55`, product-spec FR-2 "consistent … crosshair/tooltip
+  behavior" + AC-2): the single v5 chart instance gives ONE native crosshair across all panes — no
+  cross-instance `subscribeCrosshairMove` wiring (that was the rejected v4 N-instances path).
+- The panes + the shared chart/coordinator this step reads from are built in **Step 5** (panes) and
+  **Step 4** (the shared chart instance + coordinator surface).
+- Gap semantics to honor in the tooltip: a whitespace `{ time }` point (Step 2 mapper) has **no**
+  value at that bar — the combined readout must show that indicator as blank/"—" at a gap, never `0`
+  (`IndicatorPanels.tsx:63-67` today's `?? null`; `design.md:39-45`).
+- Today there is no cross-pane tooltip — the recharts panels each had their own `ChartTooltip`
+  (`IndicatorPanels.tsx:5-10, 73, 78`); this step replaces that with one readout for the whole
+  instrument.
+
+**TDD**: `red-green required` (asserted by the Step 8 e2e: hovering a bar shows a single combined
+readout of price + each indicator at that bar; a warm-up/gap bar shows the indicator blank, not `0`)
+
+**Instructions**:
+1. Wire a **single crosshair** across the whole instrument: with the one v5 chart instance (Step 4),
+   the native crosshair already spans all panes — keep `crosshair.mode: 1` and ensure it is not
+   re-declared per-pane in a way that fragments it. Do **not** add `subscribeCrosshairMove` sync
+   between separate instances (there is only one instance).
+2. Render **one unified tooltip/readout** for the hovered bar: read the price (pane 0) and each
+   indicator series' value at the crosshair time and show them together (e.g. via the chart's
+   crosshair-move callback feeding a single React readout element). A series at a **whitespace/gap**
+   bar shows blank/"—", never a fabricated `0` (reuse the Step 2 mapper's unset semantics — do not
+   re-derive gap logic here, C-13/DRY).
+3. Keep the readout scoped to this feature (no speculative multi-symbol/compare infra — operating
+   default #2, `design.md:74-75`). Add a stable testid (e.g. `chart-crosshair-readout`) so Step 8 can
+   assert it deterministically.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui
+pnpm run lint
+pnpm exec tsc --noEmit
+grep -rn "subscribeCrosshairMove\|chart-crosshair-readout" src/components/trader src/hooks "src/app/trader/positions/[symbol]/page.tsx"   # one readout wired; no cross-instance sync
+# Drawn/hover behavior is proven by the Step 8 e2e (single readout, gap shows blank not 0); full green deferred to CI.
+```
+
+---
+
+### Step 7 — service: Migrate `ChartPanel.tsx` (dashboard) to the v5 hook in lock-step
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -381,7 +436,7 @@ pnpm exec tsc --noEmit
   returned `{ containerRef, seriesRef }` contract — confirm nothing in `ChartPanel.tsx` calls the v4
   `addCandlestickSeries` directly (it does not; series creation is entirely inside the hook).
 
-**TDD**: `red-green required` (covered by `chart-panel.spec.ts`, run in Step 7)
+**TDD**: `red-green required` (covered by `chart-panel.spec.ts`, run in Step 8)
 
 **Instructions**:
 1. Confirm `ChartPanel.tsx` consumes only the hook's returned `containerRef`/`seriesRef` (it does —
@@ -401,7 +456,7 @@ grep -n "addCandlestickSeries" src/components/trader/ChartPanel.tsx   # expect N
 
 ---
 
-### Step 7 — test: Rewrite the symbol-page indicator e2e for v5 panes; preserve chart readiness signals
+### Step 8 — test: Rewrite the symbol-page indicator e2e for v5 panes + shared crosshair; preserve chart readiness signals
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -432,9 +487,10 @@ grep -n "addCandlestickSeries" src/components/trader/ChartPanel.tsx   # expect N
 - Cold-compile trap: `fails.md` (chart-heavy new-page e2e 10s/test timeout) — verify statically +
   defer full green to CI (`design.md:92-94`).
 
-**TDD**: `red-green required` — authored to assert v5-pane behavior, so it **fails against the current
-recharts tree** (red) and passes after Steps 4–6 (green). Per the chart-heavy cold-compile trap, the
-full green run is deferred to CI's prebuilt server; local verification is static + one diagnosed run.
+**TDD**: `red-green required` — authored to assert v5-pane + shared-crosshair behavior, so it **fails
+against the current recharts tree** (red) and passes after Steps 4–7 (green). Per the chart-heavy
+cold-compile trap, the full green run is deferred to CI's prebuilt server; local verification is
+static + one diagnosed run.
 
 **Instructions**:
 1. Replace the `.recharts-line` count assertion (`:444`) with a v5-pane readiness + drawn-series proof:
@@ -446,7 +502,12 @@ full green run is deferred to CI's prebuilt server; local verification is static
    (`:440`), and the `indicator-panels-empty` no-strategy state (`:457-461`).
 2. Gate readiness on the shared chart's `.tv-lightweight-charts` canvas (same signal `chart-panel.spec.ts`
    uses) rather than a recharts selector, so the assertions wait for the v5 draw deterministically.
-3. Reuse `INDICATOR_SERIES_AAPL` + `addAuthCookie` (imports already present in the spec); add no inline
+3. **Shared crosshair/tooltip (Step 6):** add an assertion that hovering a bar shows the single
+   combined readout (`chart-crosshair-readout` testid) with the price + each indicator's value at that
+   bar, and that a warm-up/gap bar shows the indicator blank/"—", **never `0`**. (If a deterministic
+   canvas-hover proves flaky under the cold-compile trap, assert the readout element's presence +
+   wiring and defer the pixel-hover to the CI run — record which was used.)
+4. Reuse `INDICATOR_SERIES_AAPL` + `addAuthCookie` (imports already present in the spec); add no inline
    domain literal (C-12). Confirm `mock-backend.ts` and `playwright.config.ts` need no new wiring and
    record that verdict (do not edit them).
 
@@ -465,7 +526,7 @@ grep -n "recharts" e2e/trader/position-detail.spec.ts     # expect NO match
 
 ---
 
-### Step 8 — docs: Rewrite the CLAUDE.md sanctioned-exception; fix the stale `insights/market` claim
+### Step 9 — docs: Rewrite the CLAUDE.md sanctioned-exception; fix the stale `insights/market` claim
 
 **Status**: `pending`
 **Service**: `docs` (`services/xstockstrat-ui/CLAUDE.md`)

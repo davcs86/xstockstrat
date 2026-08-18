@@ -13,7 +13,7 @@
 | 2026-08-18 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-18 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings addressed: AC-2 token backstop, feature-123 decision dependency; rebase note recorded) |
 | 2026-08-18 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. Fork (a) at live gate: indicators onto lightweight-charts **v5 native panes**, drop recharts from symbol page, shared crosshair in-scope |
-| 2026-08-18 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps |
+| 2026-08-18 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (8 steps; split to 9 after /sdd-review impl-spec — shared crosshair/tooltip is its own step) |
 
 ---
 
@@ -44,8 +44,8 @@ re-run /sdd-spec if the registry changes.)_
 |---|---|
 | `xstockstrat-ui` service owner | Trading UI correctness, analytics display accuracy, Connect-RPC call safety, environment scope correctness — chart rendering + e2e stability (v5 migration, one pane per component / all sub-series drawn / gaps-not-0, disposal-safe teardown, `.tv-lightweight-charts` readiness preserved, card→panes layout change) |
 
-_All 8 steps are `service`/`test`/`docs` in `xstockstrat-ui`; the single distinct reviewer above is
-the `xstockstrat-ui` service owner (the `docs` step, Step 8, carries no reviewer per the registry
+_All 9 steps are `service`/`test`/`docs` in `xstockstrat-ui`; the single distinct reviewer above is
+the `xstockstrat-ui` service owner (the `docs` step, Step 9, carries no reviewer per the registry
 matrix)._
 
 ## Next Action

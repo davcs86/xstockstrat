@@ -144,11 +144,12 @@
         TWICE in services/xstockstrat-ui/CLAUDE.md (§ Styling sanctioned-exception AND § Opportunities-first
         "Decide screens"). Step 8 now targets BOTH and greps `insights/market` to confirm none survive.
   - [x] Step 6 (C-01, cosmetic): off-by-one citations fixed (setData `:57`→`:56`; div `:129-134`→`:127-133`).
-- Findings — accepted / carried (not spec-edited):
-  - [ ] Step 5 (B2 step breadth): bundles 6 concerns (panes, fault isolation, DOM/readiness seam,
-        shared crosshair+tooltip, overlay hex→token, recharts removal). Reviewer judged it "cohesive
-        enough to proceed"; /sdd-execute MAY split the shared-crosshair/tooltip sub-task into its own
-        commit if it grows. — unaddressed by design (accepted).
+- Findings — addressed by splitting Step 5 (spec now 9 steps):
+  - [x] Step 5 (B2 step breadth): bundled 6 concerns → split. Shared crosshair + unified tooltip is
+        now its own **Step 6** (with its own red-green: hover shows one combined readout; a gap bar
+        shows the indicator blank, never 0). Old Steps 6/7/8 (ChartPanel / e2e / docs) renumbered to
+        7/8/9; all cross-references updated; e2e Step 8 now also asserts the shared readout.
   - [note] Steps 2/3 use vitest-config-driven coverage thresholds (not a CLI flag) — matches this
         service's testing convention; no action.
+- Re-review after the split: /sdd-review impl-spec re-run 2026-08-18 (see next session block).
 - Next: /sdd-execute unify-symbol-chart-libraries.
