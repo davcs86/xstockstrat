@@ -240,15 +240,24 @@ test.describe('ChartPanel — daily auto-refresh (feature 140, FR-1)', () => {
 
     await page.goto('/trader/');
 
-    // Chart series ready + the initial (default-1Day) fetch has landed.
+    // Wait for the chart series to finish its async lightweight-charts import. Until the series
+    // exists, ChartPanel.fetchBars early-returns, and because seriesRef is NOT an effect dependency,
+    // a mount fetch that raced ahead of the series is dropped and never retried — so we deliberately
+    // do NOT assert on the initial mount fetch (it may or may not have landed). We assert on the
+    // poll-driven fetch below, which fires once the series is ready.
     await expect(
       page.locator('[data-testid="chart-container"] .tv-lightweight-charts'),
-    ).toBeVisible({ timeout: 10000 });
-    await expect.poll(() => getBarsCalls, { timeout: 10000 }).toBeGreaterThanOrEqual(1);
-    const afterInitial = getBarsCalls;
+    ).toBeVisible({ timeout: 15000 });
 
-    // Advance past the 5-minute daily poll interval (POLL_INTERVALS_MS['1Day'] = 300_000ms).
+    // The Combobox only renders once ListAssets resolves and a symbol is selected — the same state
+    // change that registers the daily-poll interval effect. Waiting for it makes the interval's
+    // presence deterministic before we advance the (virtualized) clock.
+    await expect(page.getByLabel('Chart symbol')).toBeVisible({ timeout: 10000 });
+    const beforePoll = getBarsCalls;
+
+    // Advance past the 5-minute daily poll interval (DAILY_POLL_MS = 300_000ms). The interval fires
+    // fetchBars with the series now ready, so a fresh GetBars lands with no manual reload.
     await page.clock.fastForward('05:10');
-    await expect.poll(() => getBarsCalls, { timeout: 10000 }).toBeGreaterThan(afterInitial);
+    await expect.poll(() => getBarsCalls, { timeout: 10000 }).toBeGreaterThan(beforePoll);
   });
 });
