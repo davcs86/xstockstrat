@@ -26,7 +26,7 @@ test.describe('Single Position page', () => {
     await expect(page.getByText('Open R')).toBeVisible();
 
     // Risk & exit sidebar — factor, flag, exit rule from the enriched Position.
-    await expect(page.getByText('Risk & exit')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Risk & exit' })).toBeVisible();
     await expect(page.getByText('Tech', { exact: true })).toBeVisible();
     await expect(page.getByText('Stop near')).toBeVisible();
 
@@ -63,7 +63,9 @@ test.describe('Single Position page', () => {
     // The Exposure table's AAPL symbol links to the dedicated page.
     await page.getByRole('link', { name: 'AAPL', exact: true }).click();
     await expect(page).toHaveURL(/\/trader\/positions\/AAPL/);
-    await expect(page.getByText('Risk & exit')).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole('heading', { name: 'Risk & exit' })).toBeVisible({
+      timeout: 30000,
+    });
   });
 
   test('an unheld symbol still renders the chart, orders and trade sections (feature 125)', async ({
@@ -83,7 +85,7 @@ test.describe('Single Position page', () => {
     await expect(page.getByText('Trade ZZZZ')).toBeVisible();
 
     // The position-specific sidebar (Risk & exit) is absent for an unheld symbol.
-    await expect(page.getByText('Risk & exit')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Risk & exit' })).toHaveCount(0);
   });
 
   test('a NotFound position shows the notice, not the generic error paragraph (render-order fix)', async ({
@@ -129,7 +131,9 @@ test.describe('Single Position page', () => {
     // (UI refinement); the watchlist-only Readiness ("Why this fired") stays absent.
     await page.goto('/trader/positions/AAPL');
 
-    await expect(page.getByText('Risk & exit')).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole('heading', { name: 'Risk & exit' })).toBeVisible({
+      timeout: 30000,
+    });
     await expect(page.getByRole('heading', { name: 'Opportunity' })).toBeVisible({
       timeout: 10000,
     });
@@ -225,7 +229,7 @@ test.describe('Single Position page', () => {
     await page.goto('/trader/positions/ZZZZ');
     // Backtests-specific phrasing (the Indicators section also shows a "No strategy resolves" note).
     await expect(
-      page.getByText(/No strategy resolves for ZZZZ — add it to a watchlist/),
+      page.getByText(/No strategy resolves for ZZZZ — pick a live strategy above/),
     ).toBeVisible({ timeout: 30000 });
   });
 
@@ -293,7 +297,10 @@ test.describe('Single Position page', () => {
     page,
   }) => {
     await addAuthCookie(page);
-    await watchlist(page, 'AAPL', 'strat-live-001');
+    // Watchlisted but with an EMPTY binding (feature 145): the page-level strategy selection now
+    // seeds from the watchlist binding, so a NON-empty binding would auto-resolve and evaluate. An
+    // empty binding keeps effectiveStrategyId='' → the readiness panel still prompts.
+    await watchlist(page, 'AAPL', '');
     await page.goto('/trader/positions/AAPL');
     // Scoped for the same strict-mode reason as 'Why this fired' above — this empty-state
     // paragraph is the other half of SignalReadiness's first-paint content.
@@ -306,13 +313,14 @@ test.describe('Single Position page', () => {
     page,
   }) => {
     await addAuthCookie(page);
-    await watchlist(page, 'AAPL', 'strat-live-001');
+    await watchlist(page, 'AAPL', ''); // empty binding → the prompt (not auto-evaluation)
     await page.goto('/trader/positions/AAPL');
     await expect(readinessCard(page).getByText(/Select a strategy to evaluate/)).toBeVisible({
       timeout: 30000,
     });
-    // Exact label — the readiness picker is "Strategy"; the Mute card's trigger is "Mute strategy".
-    await page.getByLabel('Strategy', { exact: true }).click();
+    // Distinct label (feature 145): three synced pickers exist (Indicators/Backtests/Why this fired);
+    // "Strategy for Why this fired" targets the readiness one unambiguously.
+    await page.getByLabel('Strategy for Why this fired', { exact: true }).click();
     await expect(page.getByRole('option', { name: 'Live Test Strategy' })).toBeVisible();
     // "Inactive Strategy" (liveEnabled: false) must not be a selectable readiness option.
     await expect(page.getByRole('option', { name: 'Inactive Strategy' })).toHaveCount(0);
@@ -475,11 +483,18 @@ test.describe('Single Position page', () => {
     await page.setViewportSize({ width: 390, height: 844 }); // mobile → tabbed panels, not columns
     await page.goto('/trader/positions/AAPL');
 
-    // AAPL is held → the Trade panel group carries Position · Orders & fills · Place order. On
-    // mobile it renders a ToggleGroup tab bar (radios); Orders & fills is the default-active panel.
+    // AAPL is held (with an owning strategy from its order) → the Trade panel group carries
+    // Position · Risk & exit · Why it's held · Orders & fills · Place order (feature 145 split the
+    // former single position card into standalone panels). On mobile it renders a ToggleGroup tab bar.
     const tradeTabs = page.getByRole('radiogroup', { name: 'Trade panels' });
     await expect(tradeTabs).toBeVisible({ timeout: 30000 });
-    for (const label of ['Position', 'Orders & fills', 'Place order']) {
+    for (const label of [
+      'Position',
+      'Risk & exit',
+      "Why it's held",
+      'Orders & fills',
+      'Place order',
+    ]) {
       await expect(tradeTabs.getByRole('radio', { name: label, exact: true })).toBeVisible();
     }
 
@@ -489,6 +504,70 @@ test.describe('Single Position page', () => {
     await expect(page.getByText('Trade AAPL')).toBeVisible();
     await expect(page.getByText('Orders & fills · AAPL')).toBeAttached();
     await expect(page.getByText('Orders & fills · AAPL')).not.toBeVisible();
+  });
+
+  // ── feature 145 — panel refinements (tabbed opportunities, always-on Fundamentals, shared picker).
+
+  test('feature 145: a symbol with multiple live opportunities tabs them into one panel group', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // AMZN carries two live-strategy opportunities (strat-live-001 + strat-001) and is not
+    // watchlisted → the Research section renders them as one Opportunities panel group (one card per
+    // strategy). At the default desktop viewport the group renders both cards as columns.
+    await page.goto('/trader/positions/AMZN');
+    await expect(page.getByRole('heading', { name: 'Opportunity' })).toHaveCount(2, {
+      timeout: 30000,
+    });
+    // Both strategy ids surface in the cards' visible meta lines (a <p>, not the hidden mobile tab
+    // radio whose label is also the strategy id).
+    await expect(page.locator('p').filter({ hasText: 'strat-live-001' }).first()).toBeVisible();
+    await expect(page.locator('p').filter({ hasText: 'strat-001' }).first()).toBeVisible();
+  });
+
+  test('feature 145: Fundamentals renders for a non-watchlisted symbol (always-on)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // AAPL is NOT watchlisted here; Fundamentals is symbol-level and no longer watchlist-gated.
+    await page.goto('/trader/positions/AAPL');
+    await expect(page.getByRole('heading', { name: 'Fundamentals' })).toBeVisible({
+      timeout: 30000,
+    });
+    await expect(page.getByText('31.40')).toBeVisible({ timeout: 10000 }); // FUNDAMENTALS_AAPL P/E
+  });
+
+  test('feature 145: picking a strategy in one panel header syncs the others and the URL', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // AAPL watchlisted but UNBOUND (empty binding) → all three synced pickers render, empty.
+    await watchlist(page, 'AAPL', '');
+    await page.goto('/trader/positions/AAPL');
+    // Readiness starts in the prompt state (no strategy resolved yet).
+    await expect(readinessCard(page).getByText(/Select a strategy to evaluate/)).toBeVisible({
+      timeout: 30000,
+    });
+    // Pick a live strategy from the INDICATORS header picker.
+    await page.getByLabel('Strategy for Indicators', { exact: true }).click();
+    await page.getByRole('option', { name: 'Live Test Strategy' }).click();
+    // The pick syncs to the readiness panel (no longer prompting) and to the URL (?strategy=).
+    await expect(readinessCard(page).getByText(/Select a strategy to evaluate/)).toHaveCount(0);
+    await expect(page).toHaveURL(/strategy=strat-live-001/);
+  });
+
+  test('feature 145: ?strategy= unblocks Backtests + Indicators for a non-watchlisted symbol', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // AMZN: non-watchlisted, unheld, but the URL threads a live strategy → the strategy-scoped panels
+    // resolve it instead of showing "No strategy resolves for AMZN" (the former dead-end).
+    await page.goto('/trader/positions/AMZN?strategy=strat-live-001');
+    // Backtests resolved: the "Run backtest" action only renders once a strategy resolves (its
+    // no-strategy branch has no such button) — proof the threaded ?strategy= unblocked the panel.
+    await expect(page.getByTestId('run-backtest')).toBeVisible({ timeout: 30000 });
+    // Neither Backtests nor Indicators shows the no-strategy dead-end.
+    await expect(page.getByText(/No strategy resolves for AMZN/)).toHaveCount(0);
   });
 });
 

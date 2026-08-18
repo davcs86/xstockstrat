@@ -1,7 +1,7 @@
 'use client';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { AppShell } from '@/components/trader/AppShell';
 import { useAccountContext } from '@/context/AccountContext';
@@ -25,6 +25,7 @@ import { useIndicatorSeries, type IndicatorSeriesInput } from '@/hooks/useIndica
 import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { timestampToDate } from '@/lib/protoTime';
 import { SignalReadiness } from '@/components/insights/SignalReadiness';
+import { StrategyPicker } from '@/components/insights/StrategyPicker';
 import { SymbolScreening } from '@/components/trader/SymbolScreening';
 import { IndicatorPanels } from '@/components/trader/IndicatorPanels';
 import { SymbolSectionNav, SECTION_SCROLL_MT } from '@/components/trader/SymbolSectionNav';
@@ -68,9 +69,27 @@ type TradingMode = 'paper' | 'live';
 // A dashed reference overlay drawn on the price chart. LineStyle.Dashed = 2 in lightweight-charts.
 const DASHED = 2;
 
+// The page reads `useSearchParams()` (the `?strategy=` seed) at the top level, which Next 15 requires
+// to sit under a Suspense boundary or the route de-opts to client-side rendering at build time. The
+// real page body is `PositionDetailInner`; this thin default export supplies the boundary.
 export default function PositionDetailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-4 sm:p-6">
+          <Skeleton className="h-16 w-full" />
+        </div>
+      }
+    >
+      <PositionDetailInner />
+    </Suspense>
+  );
+}
+
+function PositionDetailInner() {
   const params = useParams<{ symbol: string }>();
   const symbol = (params?.symbol ?? '').toUpperCase();
+  const searchParams = useSearchParams();
   const { selectedAccountId, environmentMode } = useAccountContext();
   const mode: TradingMode = environmentMode ?? 'paper';
 
@@ -140,17 +159,29 @@ export default function PositionDetailPage() {
     return { isSymbolWatchlisted: found, boundStrategyId: bound };
   }, [watchlistsData, symbol]);
 
+  // Single page-level strategy selection (feature 145), shared by Indicators, Backtests, and
+  // "Why this fired". The EFFECTIVE strategy is a pure derivation — no effect, no seed ref — so it
+  // recomputes race-free once the async watchlist binding resolves:
+  //   picker choice → ?strategy= query → watchlist binding → empty.
+  // Only the user's explicit pick is state (default undefined = "not picked").
+  const [pickedStrategyId, setPickedStrategyId] = useState<string>();
+  const urlStrategy = searchParams?.get('strategy') ?? '';
+  const effectiveStrategyId = pickedStrategyId ?? (urlStrategy || boundStrategyId || '');
+  // Picking sets state AND mirrors to ?strategy= without a Next navigation/refetch, preserving the
+  // section-nav's #hash (mirror of SymbolSectionNav's bare-hash replaceState convention).
+  const handleStrategyChange = (id: string) => {
+    setPickedStrategyId(id);
+    const u = new URL(window.location.href);
+    u.searchParams.set('strategy', id);
+    window.history.replaceState(null, '', u.pathname + u.search + u.hash);
+  };
+
   // Opportunity for this symbol (watchlisted branch) — replicate the former Signal-detail tie-break:
   // prefer the watchlist-bound strategy's opportunity, else the highest-conviction match.
   const { data: oppData } = useOpportunities(0);
   const symbolOpportunities = useMemo(
     () => (oppData?.opportunities ?? []).filter((o) => o.symbol === symbol),
     [oppData, symbol],
-  );
-  const opportunity = useMemo(
-    () =>
-      symbolOpportunities.find((o) => o.strategyId === boundStrategyId) ?? symbolOpportunities[0],
-    [symbolOpportunities, boundStrategyId],
   );
 
   useEffect(() => {
@@ -231,19 +262,35 @@ export default function PositionDetailPage() {
   // Trade section (feature 139 amendment): the held-Position stats fold in here as the first panel
   // (only when a position is held), beside Orders & fills and the order ticket.
   const tradePanels: SymbolPanel[] = [
+    // Held-position detail (feature 145): the former single risk-framed sidebar is split into
+    // standalone Card panels that join the Trade panel group (tabbed on mobile / columns on desktop).
     ...(position && position.symbol
       ? [
           {
             id: 'position-stats',
             label: 'Position',
             node: (
-              <PositionBody
+              <PositionPanel
                 position={position}
                 equity={Number(portfolio?.equity ?? 0)}
                 owningStrategy={owningStrategy}
               />
             ),
           },
+          {
+            id: 'risk-exit',
+            label: 'Risk & exit',
+            node: <RiskExitPanel position={position} />,
+          },
+          ...(owningStrategy
+            ? [
+                {
+                  id: 'why-held',
+                  label: "Why it's held",
+                  node: <WhyHeldPanel position={position} owningStrategy={owningStrategy} />,
+                },
+              ]
+            : []),
         ]
       : []),
     {
@@ -269,31 +316,14 @@ export default function PositionDetailPage() {
     },
   ];
 
-  // Research section, watchlisted branch (FR-11): the four watchlist panels cluster together; the
-  // non-watchlisted branch stays a single standalone Screener card (no group).
-  const researchPanels: SymbolPanel[] = [
-    {
-      id: 'opportunity',
-      label: 'Opportunity',
-      node: <OpportunitySection opportunity={opportunity} symbol={symbol} />,
-    },
-    {
-      id: 'readiness',
-      label: 'Why this fired',
-      node: (
-        <Suspense fallback={<div className="h-24" />}>
-          <SignalReadiness symbol={symbol} />
-        </Suspense>
-      ),
-    },
-    {
-      id: 'fundamentals',
-      label: 'Fundamentals',
-      node: <FundamentalsSection symbol={symbol} />,
-    },
-    // feature 132 mute control, relocated here from the retired Signal-detail page.
-    { id: 'mute', label: 'Mute', node: <MuteForStrategy symbol={symbol} /> },
-  ];
+  // Opportunities (feature 145): every live-strategy opportunity for this symbol becomes one panel in
+  // a tabbed/columned group (one card per strategy) — replacing the former vertical stack. A symbol
+  // with a single opportunity renders the card bare (SymbolPanelGroup: 1 panel → no tab bar).
+  const opportunityPanels: SymbolPanel[] = symbolOpportunities.map((o) => ({
+    id: o.opportunityKey,
+    label: o.strategyId || o.symbol,
+    node: <OpportunitySection opportunity={o} symbol={symbol} />,
+  }));
 
   // Analysis section (feature 139 amendment): merges the former Backtests (FR-9) and Coverage
   // (FR-10) sections into one clustered pair.
@@ -301,7 +331,13 @@ export default function PositionDetailPage() {
     {
       id: 'backtests',
       label: 'Backtests',
-      node: <BacktestsSection symbol={symbol} strategyId={boundStrategyId || owningStrategy} />,
+      node: (
+        <BacktestsSection
+          symbol={symbol}
+          strategyId={effectiveStrategyId}
+          onStrategyChange={handleStrategyChange}
+        />
+      ),
     },
     {
       id: 'coverage',
@@ -321,7 +357,7 @@ export default function PositionDetailPage() {
         />
 
         {/* Minimal always-on page title (feature 125): an unheld symbol has no position header, so
-            this is the page's only title in that case; when held, the richer PositionBody header
+            this is the page's only title in that case; when held, the richer Position panel header
             renders below it too. */}
         <h1 className="font-mono text-2xl font-semibold tracking-tight">{symbol}</h1>
 
@@ -357,7 +393,8 @@ export default function PositionDetailPage() {
               components charted over the exact bars above. Strategy resolves like Backtests/Readiness. */}
           <IndicatorSection
             symbol={symbol}
-            strategyId={boundStrategyId || owningStrategy}
+            strategyId={effectiveStrategyId}
+            onStrategyChange={handleStrategyChange}
             closes={barSeries.closes}
             times={barSeries.times}
           />
@@ -380,14 +417,27 @@ export default function PositionDetailPage() {
         <section id="research" className={cn('space-y-4', SECTION_SCROLL_MT)}>
           {watchlistsLoading ? (
             <Skeleton className="h-24 w-full" />
-          ) : isSymbolWatchlisted ? (
-            <SymbolPanelGroup panels={researchPanels} ariaLabel="Research panels" />
           ) : (
             <div className="space-y-4">
-              {symbolOpportunities.map((o) => (
-                <OpportunitySection key={o.opportunityKey} opportunity={o} symbol={symbol} />
-              ))}
-              <SymbolScreening symbol={symbol} />
+              {/* All live-strategy opportunities, tabbed (feature 145) — for held/watchlisted/ad-hoc alike. */}
+              <SymbolPanelGroup panels={opportunityPanels} ariaLabel="Opportunities" />
+              {/* Fundamentals is symbol-level, strategy-independent → always-on (feature 145, FR-5). */}
+              <FundamentalsSection symbol={symbol} />
+              {isSymbolWatchlisted ? (
+                <>
+                  {/* Readiness + Mute stay watchlist-gated (a strategy binding gives them meaning). */}
+                  <Suspense fallback={<div className="h-24" />}>
+                    <SignalReadiness
+                      symbol={symbol}
+                      strategyId={effectiveStrategyId}
+                      onStrategyChange={handleStrategyChange}
+                    />
+                  </Suspense>
+                  <MuteForStrategy symbol={symbol} />
+                </>
+              ) : (
+                <SymbolScreening symbol={symbol} />
+              )}
             </div>
           )}
         </section>
@@ -562,10 +612,13 @@ const SYMBOL_ORDERS_COLUMNS: ColumnDef<Order>[] = [
   },
 ];
 
-// PositionBody renders the risk-framed detail once a Position is loaded — the stat-tile header and
-// the risk/manage/why/broker sidebar. The price chart, orders, and trade widget are hoisted to the
-// page level (feature 125) so they render for unheld symbols too, so they are no longer here.
-function PositionBody({
+// Held-position detail (feature 145) — split from the former `PositionBody` into three self-contained
+// Card panels that join the Trade panel group. Manage + Broker were removed (redundant/broken); the
+// 2-column sidebar layout is gone. The price chart, orders, and trade widget stay hoisted to the page
+// level (feature 125) so they render for unheld symbols too.
+
+// Position panel — the header (symbol/side/price/day/weight + Unrealized + Open R) and the stat grid.
+function PositionPanel({
   position,
   equity,
   owningStrategy,
@@ -577,198 +630,164 @@ function PositionBody({
   const r = openR(position);
   const marketValue = Number(position.marketValue ?? 0);
   const weightPct = equity > 0 ? Math.abs(marketValue) / equity : null;
+
+  return (
+    <Card>
+      <CardContent className="space-y-4 pt-6">
+        {/* Header — symbol, side + qty, price, day change, weight; big Unrealized + Open R. */}
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-4">
+          <div className="min-w-0 space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-2xl font-semibold tracking-tight">
+                {position.symbol}
+              </span>
+              <Badge variant="secondary" className="font-mono">
+                {sideLabel(position.qty).toUpperCase()} {position.qty}
+              </Badge>
+              <span className="font-mono text-base tabular-nums">
+                {fmtUsd(position.currentPrice)}
+              </span>
+              <span className={`font-mono text-sm tabular-nums ${pnlClass(position.dayPnl)}`}>
+                {fmtSignedUsd(position.dayPnl)} ({fmtPct(position.dayPnlPct)})
+              </span>
+              {weightPct !== null && (
+                <Badge variant="secondary" className="font-mono">
+                  {(weightPct * 100).toFixed(1)}% of equity
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {position.accountId ? `${position.accountId} · ` : ''}
+              {position.exitRule ? `exit rule ${position.exitRule}` : 'no exit rule set'}
+              {owningStrategy ? ` · owned by ${owningStrategy}` : ''}
+            </p>
+          </div>
+          <div className="flex items-center gap-6">
+            <div className="text-right">
+              <Eyebrow>Unrealized</Eyebrow>
+              <div
+                className={`font-mono text-2xl tabular-nums ${pnlClass(position.unrealizedPnl)}`}
+              >
+                {fmtSignedUsd(position.unrealizedPnl)}
+              </div>
+              <div className={`font-mono text-xs tabular-nums ${pnlClass(position.unrealizedPnl)}`}>
+                {fmtPct(position.unrealizedPnlPct)}
+              </div>
+            </div>
+            <div className="text-right">
+              <Eyebrow>Open R</Eyebrow>
+              <div className={`font-mono text-2xl tabular-nums ${r === null ? '' : pnlClass(r)}`}>
+                {fmtR(r)}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Stat grid (position-specific figures). */}
+        <div className="grid grid-cols-2 overflow-hidden rounded-md border border-border sm:grid-cols-3">
+          <StatTile size="md" label="Avg cost" value={fmtUsd(position.avgEntryPrice)} />
+          <StatTile size="md" label="Last" value={fmtUsd(position.currentPrice)} />
+          <StatTile size="md" label="Cost basis" value={fmtUsd(position.costBasis)} />
+          <StatTile size="md" label="Market value" value={fmtUsd(position.marketValue)} />
+          <StatTile
+            size="md"
+            label="Unrealized"
+            value={fmtSignedUsd(position.unrealizedPnl)}
+            tone={Number(position.unrealizedPnl ?? 0) >= 0 ? 'gain' : 'loss'}
+          />
+          <StatTile
+            size="md"
+            label="Day P&L"
+            value={fmtSignedUsd(position.dayPnl)}
+            tone={Number(position.dayPnl ?? 0) >= 0 ? 'gain' : 'loss'}
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Risk & exit panel — the stop-distance meter + the risk/exit detail list.
+function RiskExitPanel({ position }: { position: Position }) {
   const hasStop = Number(position.stopPrice ?? 0) > 0;
   // The stop-distance meter fills toward the stop: 0% distance = full (at the stop), further = less.
   const stopDist = Number(position.stopDistancePct ?? 0);
   const stopMeterPct = hasStop ? Math.max(4, Math.min(100, 100 - stopDist * 100 * 10)) : 0;
 
   return (
-    <>
-      {/* Header — symbol, side + qty, price, day change, weight; big Unrealized + Open R. */}
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-4">
-        <div className="min-w-0 space-y-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-2xl font-semibold tracking-tight">
-              {position.symbol}
-            </span>
-            <Badge variant="secondary" className="font-mono">
-              {sideLabel(position.qty).toUpperCase()} {position.qty}
-            </Badge>
-            <span className="font-mono text-base tabular-nums">
-              {fmtUsd(position.currentPrice)}
-            </span>
-            <span className={`font-mono text-sm tabular-nums ${pnlClass(position.dayPnl)}`}>
-              {fmtSignedUsd(position.dayPnl)} ({fmtPct(position.dayPnlPct)})
-            </span>
-            {weightPct !== null && (
-              <Badge variant="secondary" className="font-mono">
-                {(weightPct * 100).toFixed(1)}% of equity
-              </Badge>
-            )}
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <Eyebrow as="span">Risk &amp; exit</Eyebrow>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div>
+          <div className="mb-1.5 flex justify-between text-xs text-muted-foreground">
+            <span>{hasStop ? `stop ${fmtUsd(position.stopPrice)}` : 'no stop set'}</span>
+            <span>{hasStop ? `${fmtPct(position.stopDistancePct)} away` : '—'}</span>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {position.accountId ? `${position.accountId} · ` : ''}
-            {position.exitRule ? `exit rule ${position.exitRule}` : 'no exit rule set'}
-            {owningStrategy ? ` · owned by ${owningStrategy}` : ''}
-          </p>
-        </div>
-        <div className="flex items-center gap-6">
-          <div className="text-right">
-            <Eyebrow>Unrealized</Eyebrow>
-            <div className={`font-mono text-2xl tabular-nums ${pnlClass(position.unrealizedPnl)}`}>
-              {fmtSignedUsd(position.unrealizedPnl)}
-            </div>
-            <div className={`font-mono text-xs tabular-nums ${pnlClass(position.unrealizedPnl)}`}>
-              {fmtPct(position.unrealizedPnlPct)}
-            </div>
-          </div>
-          <div className="text-right">
-            <Eyebrow>Open R</Eyebrow>
-            <div className={`font-mono text-2xl tabular-nums ${r === null ? '' : pnlClass(r)}`}>
-              {fmtR(r)}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
-        {/* Left column: stat grid (position-specific figures). */}
-        <div className="min-w-0 space-y-4">
-          <div className="grid grid-cols-2 overflow-hidden rounded-md border border-border sm:grid-cols-3">
-            <StatTile size="md" label="Avg cost" value={fmtUsd(position.avgEntryPrice)} />
-            <StatTile size="md" label="Last" value={fmtUsd(position.currentPrice)} />
-            <StatTile size="md" label="Cost basis" value={fmtUsd(position.costBasis)} />
-            <StatTile size="md" label="Market value" value={fmtUsd(position.marketValue)} />
-            <StatTile
-              size="md"
-              label="Unrealized"
-              value={fmtSignedUsd(position.unrealizedPnl)}
-              tone={Number(position.unrealizedPnl ?? 0) >= 0 ? 'gain' : 'loss'}
-            />
-            <StatTile
-              size="md"
-              label="Day P&L"
-              value={fmtSignedUsd(position.dayPnl)}
-              tone={Number(position.dayPnl ?? 0) >= 0 ? 'gain' : 'loss'}
+          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+            <div
+              className={hasStop ? 'h-full bg-destructive' : 'h-full bg-muted'}
+              style={{ width: `${stopMeterPct}%` }}
             />
           </div>
         </div>
+        <dl className="space-y-1.5 text-sm">
+          <Row label="Risk at stop" valueClass="text-destructive tabular-nums font-mono">
+            {position.riskAtStop ? `-${fmtUsd(position.riskAtStop)}` : '—'}
+          </Row>
+          <Row label="Exit rule" valueClass="font-mono text-xs">
+            {position.exitRule || '—'}
+          </Row>
+          <Row label="Stop order" valueClass="font-mono text-xs">
+            {position.stopOrderId || '—'}
+          </Row>
+          <Row label="Take-profit order" valueClass="font-mono text-xs">
+            {position.takeProfitOrderId || '—'}
+          </Row>
+          <Row label="Factor bucket">{position.factor || 'Unclassified'}</Row>
+          <Row label="Flag">
+            {position.flag ? <EnumBadge render={POSITION_RISK_FLAG[position.flag]} /> : '—'}
+          </Row>
+          <Row label="Day P&L" valueClass={`tabular-nums font-mono ${pnlClass(position.dayPnl)}`}>
+            {fmtSignedUsd(position.dayPnl)}
+          </Row>
+        </dl>
+      </CardContent>
+    </Card>
+  );
+}
 
-        {/* Right sidebar: risk & exit / manage / why-it's-held / broker. */}
-        <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                <Eyebrow as="span">Risk &amp; exit</Eyebrow>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <div className="mb-1.5 flex justify-between text-xs text-muted-foreground">
-                  <span>{hasStop ? `stop ${fmtUsd(position.stopPrice)}` : 'no stop set'}</span>
-                  <span>{hasStop ? `${fmtPct(position.stopDistancePct)} away` : '—'}</span>
-                </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className={hasStop ? 'h-full bg-destructive' : 'h-full bg-muted'}
-                    style={{ width: `${stopMeterPct}%` }}
-                  />
-                </div>
-              </div>
-              <dl className="space-y-1.5 text-sm">
-                <Row label="Risk at stop" valueClass="text-destructive tabular-nums font-mono">
-                  {position.riskAtStop ? `-${fmtUsd(position.riskAtStop)}` : '—'}
-                </Row>
-                <Row label="Exit rule" valueClass="font-mono text-xs">
-                  {position.exitRule || '—'}
-                </Row>
-                <Row label="Stop order" valueClass="font-mono text-xs">
-                  {position.stopOrderId || '—'}
-                </Row>
-                <Row label="Take-profit order" valueClass="font-mono text-xs">
-                  {position.takeProfitOrderId || '—'}
-                </Row>
-                <Row label="Factor bucket">{position.factor || 'Unclassified'}</Row>
-                <Row label="Flag">
-                  {position.flag ? <EnumBadge render={POSITION_RISK_FLAG[position.flag]} /> : '—'}
-                </Row>
-                <Row
-                  label="Day P&L"
-                  valueClass={`tabular-nums font-mono ${pnlClass(position.dayPnl)}`}
-                >
-                  {fmtSignedUsd(position.dayPnl)}
-                </Row>
-              </dl>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                <Eyebrow as="span">Manage</Eyebrow>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                {['Add', 'Trim', 'Move stop', 'Close'].map((label) => (
-                  <Button key={label} asChild variant="outline" size="sm" className="min-h-[44px]">
-                    <Link href={`/trader?symbol=${encodeURIComponent(position.symbol)}`}>
-                      {label}
-                    </Link>
-                  </Button>
-                ))}
-              </div>
-              <Button asChild className="min-h-[44px] w-full">
-                <Link href={`/trader?symbol=${encodeURIComponent(position.symbol)}`}>
-                  Open order ticket
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
-
-          {owningStrategy && (
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  <Eyebrow as="span">Why it&apos;s held</Eyebrow>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  Held under <span className="font-mono">{owningStrategy}</span>
-                  {position.factor ? ` in the ${position.factor} factor bucket` : ''}
-                  {position.exitRule ? `; exits on ${position.exitRule}.` : '.'}
-                </p>
-                <Button asChild variant="ghost" size="sm" className="px-0">
-                  <Link href={`/insights/strategies/${owningStrategy}`}>
-                    Open {owningStrategy} →
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                <Eyebrow as="span">Broker</Eyebrow>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Row label="Account" valueClass="font-mono text-xs">
-                {position.accountId || '—'}
-              </Row>
-              <p className="font-mono text-[11px] leading-relaxed text-muted-foreground">
-                The broker owns the ledger and the P&amp;L · xstockstrat mirrors it read-only.
-              </p>
-              <Button asChild variant="ghost" size="sm" className="px-0">
-                <Link href="/trader/portfolio">See all positions →</Link>
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </>
+// Why-it's-held panel — the orders-derived owning strategy (kept as a DISPLAY value in feature 145;
+// dropped only as a resolution source for the strategy-scoped panels). Rendered only when an owning
+// strategy is derivable, so the panel is never fabricated.
+function WhyHeldPanel({
+  position,
+  owningStrategy,
+}: {
+  position: Position;
+  owningStrategy: string;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <Eyebrow as="span">Why it&apos;s held</Eyebrow>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p className="text-sm text-muted-foreground">
+          Held under <span className="font-mono">{owningStrategy}</span>
+          {position.factor ? ` in the ${position.factor} factor bucket` : ''}
+          {position.exitRule ? `; exits on ${position.exitRule}.` : '.'}
+        </p>
+        <Button asChild variant="ghost" size="sm" className="px-0">
+          <Link href={`/insights/strategies/${owningStrategy}`}>Open {owningStrategy} →</Link>
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -898,7 +917,15 @@ function FundamentalsSection({ symbol }: { symbol: string }) {
 // Backtests section (FR-9) — the run history for the resolved strategy, client-side filtered to the
 // runs that included this symbol (the accepted narrower coverage), plus a "Run backtest" action.
 // History-list only: no embedded per-run detail (that stays on /insights/strategies/[id]).
-function BacktestsSection({ symbol, strategyId }: { symbol: string; strategyId: string }) {
+function BacktestsSection({
+  symbol,
+  strategyId,
+  onStrategyChange,
+}: {
+  symbol: string;
+  strategyId: string;
+  onStrategyChange: (id: string) => void;
+}) {
   const queryClient = useQueryClient();
   const { data: history, isLoading } = useBacktestHistory(strategyId || undefined);
   const { mutate: runBacktest, isPending, error } = useRunBacktest();
@@ -908,17 +935,25 @@ function BacktestsSection({ symbol, strategyId }: { symbol: string; strategyId: 
     [history, symbol],
   );
 
-  // No watchlist binding and no orders-derived owning strategy → nothing to back-test against.
+  // No strategy selected → nothing to back-test against, but the picker is still offered so the user
+  // can resolve one from here (feature 145 — Backtests no longer a dead-end).
   if (!strategyId) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Backtests</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-base">Backtests</CardTitle>
+            <StrategyPicker
+              value={strategyId}
+              onChange={onStrategyChange}
+              ariaLabel="Strategy for Backtests"
+            />
+          </div>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            No strategy resolves for {symbol} — add it to a watchlist bound to a strategy, or place
-            an order under one, to back-test it here.
+            No strategy resolves for {symbol} — pick a live strategy above, add it to a watchlist
+            bound to a strategy, or place an order under one, to back-test it here.
           </p>
         </CardContent>
       </Card>
@@ -952,7 +987,14 @@ function BacktestsSection({ symbol, strategyId }: { symbol: string; strategyId: 
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-base">Backtests</CardTitle>
-          <span className="font-mono text-xs text-muted-foreground">{strategyId}</span>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs text-muted-foreground">{strategyId}</span>
+            <StrategyPicker
+              value={strategyId}
+              onChange={onStrategyChange}
+              ariaLabel="Strategy for Backtests"
+            />
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -1016,11 +1058,13 @@ function BacktestsSection({ symbol, strategyId }: { symbol: string; strategyId: 
 function IndicatorSection({
   symbol,
   strategyId,
+  onStrategyChange,
   closes,
   times,
 }: {
   symbol: string;
   strategyId: string;
+  onStrategyChange: (id: string) => void;
   closes: number[];
   times: IndicatorSeriesInput['times'];
 }) {
@@ -1035,29 +1079,40 @@ function IndicatorSection({
     times,
   });
 
-  if (strategyId && strategyLoading) {
-    return <Skeleton className="h-40 w-full" data-testid="indicator-panels-loading" />;
-  }
-  if (!strategyId || !hasComponents) {
-    return (
-      <Card data-testid="indicator-panels-empty">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Indicators</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            {strategyId
-              ? 'This strategy has no components to chart.'
-              : `No strategy resolves for ${symbol} to chart indicators.`}
-          </p>
-        </CardContent>
-      </Card>
+  // Stable Card shell (feature 145): the "Indicators" title + strategy picker persist on every branch
+  // so the user can select a strategy even from the default-empty / no-strategy state.
+  const loading =
+    (strategyId && strategyLoading) || (strategyId && hasComponents && (seriesLoading || !series));
+  let body: React.ReactNode;
+  if (loading) {
+    body = <Skeleton className="h-40 w-full" data-testid="indicator-panels-loading" />;
+  } else if (!strategyId || !hasComponents) {
+    body = (
+      <p className="text-sm text-muted-foreground" data-testid="indicator-panels-empty">
+        {strategyId
+          ? 'This strategy has no components to chart.'
+          : `No strategy resolves for ${symbol} to chart indicators.`}
+      </p>
     );
+  } else {
+    body = <IndicatorPanels components={series!.components} />;
   }
-  if (seriesLoading || !series) {
-    return <Skeleton className="h-40 w-full" data-testid="indicator-panels-loading" />;
-  }
-  return <IndicatorPanels components={series.components} />;
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle className="text-base">Indicators</CardTitle>
+          <StrategyPicker
+            value={strategyId}
+            onChange={onStrategyChange}
+            ariaLabel="Strategy for Indicators"
+          />
+        </div>
+      </CardHeader>
+      <CardContent>{body}</CardContent>
+    </Card>
+  );
 }
 
 // Backfill coverage section (FR-10) — the symbol's ingested OHLCV date span, dates only (no chart).
