@@ -136,12 +136,15 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
       previously self-decided by a subagent debate and later overridden by the human gate — resolve
       this in `/sdd-design` with a real proposer/adversary round and an explicit user decision, and
       record whether it upholds or revisits the CLAUDE.md sanctioned `lightweight-charts` exception.
-- [ ] **Decision dependency on feature 123 (`shadcn-migration-custom-composites`, `code-completed`).**
-      Feature 123 bumps `recharts` v2→v3 repo-wide and its **FR-5 already records a keep-vs-replace
-      verdict on the `lightweight-charts` OHLCV chart** — the same sanctioned exception 146's FR-6
-      revisits. Before deciding 146's charting-library fork, `/sdd-design` MUST read 123's `design.md`
-      FR-5 outcome and treat the v3 `recharts` / `ui/chart.tsx` baseline 123 lands as the starting
-      point (do not re-litigate what 123 already settled; build on it or explicitly supersede it).
+- [ ] **Prior art from feature 123 (`shadcn-migration-custom-composites`) — already on `main-dev`.**
+      123 is `code-completed` and **its code is already merged into `main-dev`** (`recharts` is
+      `^3.10.1` on trunk, and 123's `design.md` is present); its status flips to `launched` only on
+      prod promotion, so this is settled prior art, not a blocking dependency 146 waits on. 123's
+      **FR-5 verdict = keep `lightweight-charts`** as a sanctioned exception (user-confirmed), and the
+      OHLCV chart is still on `lightweight-charts` in `main-dev`. Since 146's FR-6 fork revisits that
+      exact exception, `/sdd-design` MUST read 123's `design.md` FR-5 rationale and either uphold it or
+      explicitly, at the human gate, supersede it — building on the landed v3 `recharts` / `ui/chart.tsx`
+      baseline rather than re-litigating what 123 already settled.
 - [ ] **`chart-panel.spec.ts` readiness dependency (ledger fails.md, ~L232-234).**
       `e2e/trader/chart-panel.spec.ts` uses `lightweight-charts`' injected `.tv-lightweight-charts`
       DOM class as an async-readiness signal. If the price chart changes, that signal must be
