@@ -2,7 +2,7 @@
 name: sdd-qa
 description: Design tests, run them, and record the defects they expose, across the whole xstockstrat monorepo (Go, Python, Node, and the xstockstrat-ui Playwright + vitest suites). Usage — /sdd-qa [design <target> | run [target] | gaps [service] | flake <target> [--runs N] | defect | audit [service] | add <domain> | update <fixture-symbol>]. `design` plans cases and RED assertions, `run` executes a suite and classifies failures, `gaps` reports untested behavior against each service's CI threshold, `flake` re-runs a suite to find non-determinism, `defect` records a finding for /sdd-triage, and `audit`/`add`/`update` steward the C-13 fixture inventory (absorbed from the retired test-data skill). Use this whenever anyone asks what tests a change needs, to write or run tests, whether something is covered, why a test is failing or flaky, to check or fix mocked/dummy test data, or to record a bug found while testing. A test step inside an in-flight SDD feature belongs to /sdd-execute; pull-request review belongs to /review.
 argument-hint: design <target> | run [target] | gaps [service] | flake <target> [--runs N] | defect | audit | add <domain> | update <symbol>
-allowed-tools: Read Write Edit Task AskUserQuestion Bash(ls *) Bash(find *) Bash(grep *) Bash(git diff *) Bash(git status *) Bash(git branch *) Bash(go *) Bash(golangci-lint *) Bash(python3 *) Bash(pytest *) Bash(uv *) Bash(ruff *) Bash(pnpm *) Bash(npx *) Bash(node *)
+allowed-tools: Read Write Edit Task AskUserQuestion Bash(ls *) Bash(find *) Bash(grep *) Bash(egrep *) Bash(git diff *) Bash(git status *) Bash(git branch *) Bash(go *) Bash(golangci-lint *) Bash(python3 *) Bash(pytest *) Bash(uv *) Bash(ruff *) Bash(pnpm *) Bash(npx *) Bash(node *)
 effort: medium
 ---
 
@@ -38,8 +38,10 @@ never commit, so uncommitted test files would sit on a trunk branch (**F-02** ad
 gate" enforceable rather than aspirational, and it is not optional:
 
 ```bash
-grep -l 'Lifecycle Status.*in-progress' docs/roadmap/features/*/feature.md
+egrep -l '^in-progress$' docs/roadmap/features/*/status.md
 ```
+(Single shell call across all features — see `docs/roadmap/features/CLAUDE.md` § Bulk Status
+Reads, Case 1. Derive each hit's slug from its directory name.)
 
 For each hit, read that feature's `implementation-spec.md` and find the current step's `**Files**`
 list. If your write target appears there, **stop** — print the plan you would have executed and:

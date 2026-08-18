@@ -1549,3 +1549,225 @@ reusing.
   same interactive-target predicate — verify by concretely tracing at least one real
   keyboard-activation path through the actual DOM structure, not just reasoning about event bubbling
   in the abstract.
+
+### 2026-08-14 — signal-time-decay — design
+- **Pattern**: Any new `google.protobuf.Timestamp` field used in downstream arithmetic must carry a `HasField()` guard + neutral fallback against the zero-value at the consumer. When absent (proto zero-value = epoch 1970), computing an age from it produces ~55 years; a decay or weight multiplier based on that age underflows to 0.0 for every item — a platform-wide blackout, not per-item degradation. `HasField()` + `decay_multiplier = 1.0` (fresh/neutral) is the correct fallback.
+- **Evidence**: `docs/roadmap/features/022-signal-time-decay/design.md` § Chosen Approach — finalized decision #2; context.md 2026-08-14T00:30:00Z round 2
+- **Rule it implies**: Any new `google.protobuf.Timestamp` field used in cross-service arithmetic must carry a `HasField()` guard + neutral fallback against the proto zero-value at the consumer.
+
+### 2026-08-14 — signal-time-decay — design
+- **Pattern**: `ConfigWatcher.get_float` in `xstockstrat-analysis` uses `v.float_val or default` — a stored `0.0` is falsy in Python and silently returns the default. `get_float_present` (mirrors `get_int_present`) uses `HasField("float_val")` to safely read legitimate zeros. Every analysis config key where `0` is a meaningful operator-set value must use `get_float_present`, never `get_float`.
+- **Evidence**: `services/xstockstrat-analysis/app/watcher.py:124-130` vs `:103-114`; `docs/roadmap/features/022-signal-time-decay/design.md` § Chosen Approach — Config; `docs/roadmap/features/022-signal-time-decay/recon.md` § Risks — Critical
+- **Rule it implies**: `ANALYSIS` config keys where `0` is a meaningful operator-set value use `get_float_present`; never `get_float` for such keys. Propose as `ANALYSIS-WATCHER-1`.
+
+### 2026-08-14 — signal-time-decay — perf
+- **Pattern**: `_compute_opportunities`'s signals-merge section is a three-level nested loop (symbol → targets/strategies → signals). Per-signal work placed inside the `targets` loop runs once per (target × signal) — multiplied by the number of watchlist strategies a symbol is bound to. Decay computation, debug logging, and missing-field counting must be hoisted above the `targets` loop into a `sig_contribs` list.
+- **Evidence**: `services/xstockstrat-analysis/app/servicer.py:2154-2168`; `docs/roadmap/features/022-signal-time-decay/design.md` § Chosen Approach — nested-loop finding; context.md 2026-08-14T00:30:00Z round 4
+- **Rule it implies**: Any new per-signal logic added to `_compute_opportunities` §3 signals-merge must be placed above the `targets` loop, not inside it. Propose as `ANALYSIS-LOOP-1`.
+
+### 2026-08-15 — signal-time-decay — ordering
+- **Pattern**: Inter-feature dependency specs must split the behavioral contract (durable across landing-order rebases) from literal code anchors (volatile until sibling features land). Carry an explicit execute-time re-grep instruction in `## Step Dependencies` — the behavioral contract survives intact while literal symbols resolve to the real landed ones. Feature 022's D-1 rebase: behavioral contract survived; `weight_for` resolved to the real `source_weights.get()`.
+- **Evidence**: `docs/roadmap/features/022-signal-time-decay/implementation-spec.md` § Step Dependencies — MERGE-ORDER / REBASE CONSTRAINT; context.md 2026-08-15 D-1
+- **Rule it implies**: Inter-feature dependency specs must carry an execute-time re-grep instruction and split the behavioral contract from literal code citations.
+
+### 2026-08-05 — position-sizing-engine — design
+- **Pattern**: Authoritative-quantity generators (sole source of a computed value for an automated decision) must be fail-closed on missing/insufficient data; advisory-only (warn-log) checks running alongside them can remain fail-open without compromising safety. Mixing the two in the same request handler is valid but the asymmetry must be named explicitly in code (`// warn-only, non-blocking` vs `// fail-closed`) — the decisive test: would a "fail" here mean returning nothing (advisory) or fabricating a value the caller treats as authoritative?
+- **Evidence**: `docs/roadmap/features/023-position-sizing-engine/design.md` § Rejected Alternatives ("Fail-open on missing portfolio/price/ATR data — rejected: `ComputePositionSize` is the sole source of quantity"); context.md 2026-08-05 sdd-design session
+- **Rule it implies**: When a handler has both advisory and authoritative sub-checks, label each explicitly in code and test them independently — a future feature that changes one must not silently change the other.
+
+### 2026-08-07 — stop-loss-bracket-orders — reuse
+- **Pattern**: When only one or two `config.Watcher` booleans/floats make a method untestable in `xstockstrat-trading`, hoist the config-resolved value as an explicit call parameter (`s.cfgW.GetBool("key", default)` at the call site; the resolved value flows as a typed param). This is lighter-weight than the full interface-seam approach and three features in this codebase independently converged on it (100's `checkTradingStateForPlace`, 101's `computeStaleThreshold`, 023's `needSizing`, 030's `bracketOrdersEnabled`).
+- **Evidence**: `docs/roadmap/features/030-stop-loss-bracket-orders/implementation-spec.md` Deviation Log Step 9/10; context.md 2026-08-07 execute session ("Three recurring instances of the same testability constraint")
+- **Rule it implies**: When a single config read blocks unit-testing a function in `xstockstrat-trading`, prefer hoisting as a named parameter over introducing an interface — reserve the interface-seam approach for cases with multiple config reads or a richer dependency needing injection.
+
+### 2026-08-06 — stop-loss-bracket-orders — design
+- **Pattern**: IBKR Client Portal Web API uses linked-array bracket submission, not a client-settable `OCAGroup` string. Submit stop+take-profit together as a JSON array to `POST /iserver/account/{accountId}/orders`, each leg with `isSingleGroup: true`; child leg's `parentId` = parent's client-set `cOID`. The parent's `cOID` must be set explicitly — `ibkr.go`'s `SubmitOrder` did not send one prior to this feature. `OCAGroup` as a client-settable string field does not exist in IBKR's real Client Portal Web API.
+- **Evidence**: `docs/roadmap/features/030-stop-loss-bracket-orders/implementation-spec.md` Deviation Log Step 7; context.md 2026-08-06 sdd-spec session ("Key finding — corrects a `design.md` assumption")
+- **Rule it implies**: Any future feature touching IBKR bracket or OCA semantics must verify against IBKR's published Client Portal Web API reference (`isSingleGroup`/`parentId`/`cOID` array submission), not assume a field named `OCAGroup` exists.
+
+### 2026-08-06 — stop-loss-bracket-orders — design
+- **Pattern**: When a new per-account circuit-breaker (030's `broker_accounts.halted`) and an existing platform-wide gate (100's `platform.maintenance_mode`) coexist in the same gating chain, they are orthogonal: the per-account gate catches a single account's automated failure; the platform-wide gate is operator-driven and manual. Both must persist independently and gate `PlaceOrder`/`ReplaceOrder` in sequence. A future feature must not attempt to unify them.
+- **Evidence**: `docs/roadmap/features/030-stop-loss-bracket-orders/design.md` § "Coexistence with feature 100"; context.md 2026-08-06 design session (round 5 final approval)
+- **Rule it implies**: Feature 100's `/sdd-design` must record 030's `broker_accounts.halted` as prior art and not reinvent a per-account auto-halt via 100's own schema.
+
+### 2026-08-02 — position-and-order-detail-pages — design
+- **Pattern**: When a single-record RPC exists in proto but is not wired through the BFF, add it as an additive BFF handler rather than filtering the equivalent list RPC client-side. Avoids paging edge cases and keeps C-10(b) parity honest (both surfaces read the same authoritative RPC).
+- **Evidence**: `docs/roadmap/features/096-position-and-order-detail-pages/design.md` § Rejected Alternatives; `docs/roadmap/features/096-position-and-order-detail-pages/recon.md:63-65`; implementation-spec.md Step 2
+- **Rule it implies**: New per-entity pages requiring a single-record RPC must wire through an additive BFF handler, not client-side filtering of the list RPC.
+
+### 2026-08-02 — position-and-order-detail-pages — design
+- **Pattern**: A Sheet (quick peek) and a full page serve distinct interaction goals for the same entity and can coexist: Sheet for fast in-list scan, page for bookmarkable deep view. Keep existing Sheets as quick peeks when adding a full page; add an "Open full view →" link rather than removing the Sheet.
+- **Evidence**: `docs/roadmap/features/096-position-and-order-detail-pages/design.md` § Open Risks and § Rejected Alternatives
+- **Rule it implies**: Adding a full detail page for an entity does not require removing the existing Sheet; both serve distinct interaction patterns and can coexist.
+
+### 2026-08-02 — position-and-order-detail-pages — reuse
+- **Pattern**: Second-consumer rule — extract local page helpers to `lib/` the moment a second page needs them, not after.
+- **Evidence**: `docs/roadmap/features/096-position-and-order-detail-pages/recon.md` § Patterns to REUSE; implementation-spec.md Step 1
+- **Rule it implies**: Extract shared page helpers to `lib/` on the second consumer, not after.
+
+### 2026-08-07 — account-trading-halt-and-kill-switch — reuse
+- **Pattern**: When `config.Watcher` has no exported snapshot setter, its zero-value's `GetString`/`GetBool` always returns the `def` argument (nil-map read returns Go zero value). Test live-config-gated logic by testing pure state-parsing helpers independently, then prove fail-closed wiring via the zero-value watcher's `GetString` default (a `&config.Watcher{}` struct literal suffices).
+- **Evidence**: `services/xstockstrat-trading/internal/config/config.go:142-150`; context.md 2026-08-07 execute Step 8; `services/xstockstrat-trading/internal/service/trading_state_gate_test.go`
+- **Rule it implies**: In `xstockstrat-trading`, test config-gated logic by extracting pure state-parsing helpers and testing them directly; the zero-value `&config.Watcher{}` proves fail-closed wiring.
+
+### 2026-08-07 — account-trading-halt-and-kill-switch — design
+- **Pattern**: Config keys that carry safety-critical halt states should be seeded with per-`trading_mode` rows (independent paper/live), not a single `trading_mode='all'` row — halting live trading should not freeze paper testing during an incident.
+- **Evidence**: `services/xstockstrat-config/migrations/002_config_environment.up.sql:65-66`; `services/xstockstrat-config/migrations/011_platform_trading_state.up.sql`; context.md 2026-08-05 sdd-review round 1
+- **Rule it implies**: Safety-critical halt config keys must seed per-`trading_mode` rows; never a single `trading_mode='all'` row.
+
+### 2026-08-06 — account-trading-halt-and-kill-switch — reuse
+- **Pattern**: Before designing a new cross-service audit dependency for config mutations, check the existing `config.config_audit` table written by `010_config_audit_insert_trigger.up.sql` — it already captures every `SetConfig` write with actor, reason, and timestamp synchronously in the same DB transaction.
+- **Evidence**: `services/xstockstrat-config/migrations/001_config_tables.up.sql:26-51`; `services/xstockstrat-config/migrations/010_config_audit_insert_trigger.up.sql`; context.md 2026-08-06 round 2
+- **Rule it implies**: Config-mutation audit must route to the existing `config.config_audit` table; check it before designing any new cross-service audit dependency.
+
+### 2026-08-06 — exactly-once-order-intent — design
+- **Pattern**: `INSERT ... ON CONFLICT (intent_id) DO NOTHING RETURNING *` + staleness-gated optimistic CAS (`UPDATE ... WHERE state=$pending AND updated_at < $threshold RETURNING`) gives correct insert-or-return-existing idempotency at any instance count. Under READ COMMITTED isolation, `EvalPlanQual` means a second concurrent `UPDATE` sees 0 rows without an application mutex. Every `order_intents` operation must remain a single autocommit statement — holding a connection across a synchronous broker HTTP call against a 2-connection pool cap starves all other RPC handlers.
+- **Evidence**: `services/xstockstrat-trading/internal/repository/order_intent_repo.go` (`insertIntentSQL`, `reclaimOrphanIntentSQL`, `finalizeIntentSQL`); `docs/roadmap/features/101-exactly-once-order-intent/design.md` § Concurrency — pure DB-only; context.md 2026-08-06 sdd-design round 2
+- **Rule it implies**: When a service needs at-most-once semantics for an external side-effect call, prefer a DB-constraint-based insert-or-return-existing over any process-local mutex — the mutex's "single instance" premise is false during a rolling redeploy.
+
+### 2026-08-07 — exactly-once-order-intent — ordering
+- **Pattern**: When two features have a `merge-order.md` same-function-overlap dependency, branch feature/B off the unmerged feature/A branch. The integration PR for B targets A's branch; A's code is present via the stack, resolving the manual-merge risk without waiting for A to merge. Step line-numbers must be re-verified against the post-stack function body, not the spec's citations, before each step.
+- **Evidence**: context.md 2026-08-07 sdd-execute — "stacked-branch PR strategy" directive; feature.md Status History ("PR #880 targeting `feature/account-trading-halt-and-kill-switch`"); `docs/roadmap/features/merge-order.md` (101 blocked on 100, same-function overlap)
+- **Rule it implies**: A `merge-order.md` same-function overlap entry is a trigger for a stacked-branch strategy (feature/B off feature/A), not for blocking execute until A merges.
+
+### 2026-08-07 — exactly-once-order-intent — design
+- **Pattern**: When a config-gated computation includes a floor clamp and `config.Watcher` has no exported snapshot setter for tests, factor the pure math into a zero-dependency function (`computeStaleThreshold(floorMs, multiplier)`) and test the clamp/no-clamp cases against it directly. The config-aware wrapper is tested only for "uses the live config defaults correctly." Repeating pattern in `xstockstrat-trading` (features 100 and 101 both).
+- **Evidence**: `services/xstockstrat-trading/internal/service/order_intent.go` (`computeStaleThreshold`); context.md 2026-08-07 Step 9+10 deviation note; `docs/roadmap/features/101-exactly-once-order-intent/design.md` § Sweep
+- **Rule it implies**: In `xstockstrat-trading`, any new config-gated computation with clamping/floor logic should use the pure-function extraction pattern immediately rather than discovering the `config.Watcher` test limitation at the TDD step.
+
+### 2026-08-06 — exactly-once-order-intent — design
+- **Pattern**: When a service's repo layer has zero test files and no DB-mocking library, route behavioral proof of a complex DB idiom through a pure classifier function (`classifyIntentLookup`) with zero DB dependency. The pure function covers all branching logic with full unit tests; the integration script covers real SQL execution. Avoids introducing a DB-mocking library the service does not otherwise use.
+- **Evidence**: `services/xstockstrat-trading/internal/service/order_intent.go` (`classifyIntentLookup`); `services/xstockstrat-trading/internal/service/order_intent_test.go`; context.md 2026-08-06 sdd-spec ("zero *_test.go in internal/repository")
+- **Rule it implies**: Before routing behavioral proof through a repository unit test in a Go service, grep `internal/repository` for `*_test.go`; if none exist, prefer the pure-function + integration-script proof pattern.
+
+### 2026-08-04 — broker-state-reconciliation — ordering
+- **Pattern**: When an initial feasibility check finds a feature depends on a nonexistent automated path, try a lightweight rescoped version (reusing existing clients/infra, no new service) before demoting outright — the cheap version of a safety control can be worth building now even when the expensive version should wait.
+- **Evidence**: context.md 2026-08-04T02:00:00Z ("Re-scope before demoting, not just demote"); feature.md Status History (demoted then revived in same session)
+- **Rule it implies**: At the demotion gate, always ask "is there a version ≤1 service / no new DB table that is still genuinely useful?" before writing `demoted/canceled`.
+
+### 2026-08-07 — broker-state-reconciliation — ordering
+- **Pattern**: In a 5-feature stacked-branch squash-merge chain, after each upstream squash lands on `main-dev`, downstream feature PRs require manual retarget + `git merge origin/main-dev` (not rebase) — rebase rewrites already-integrated content as new commits because the squash creates a synthetic commit with no ancestry to the pre-squash history. Conflicts in shared files resolved by "ours" (verified byte-identical to pre-merge state).
+- **Evidence**: context.md 2026-08-07 post-code deviation bullet (stacked chain 100→101→023→030→102, PRs #879→#883)
+- **Rule it implies**: For cross-feature stacked chains larger than 2, use `git merge --no-edit origin/main-dev` with "ours" for shared-file conflicts at each retarget step — not `git rebase`.
+
+### 2026-08-07 — fix-mcp-target-user-authz — design
+- **Pattern**: When removing a caller-suppliable identity/routing parameter from an API surface, replace it with a **required parameter with no default** (not a flipped default). Fails loudly at schema level, avoids silently re-shipping old default behavior, avoids silent narrowing.
+- **Evidence**: `docs/roadmap/features/111-fix-mcp-target-user-authz/design.md` § Rejected Alternatives; context.md 2026-08-07 /sdd-design round 2
+- **Rule it implies**: When removing a caller-suppliable identity param, use a required parameter with no default — not a flipped default value.
+
+### 2026-08-07 — fix-mcp-target-user-authz — design
+- **Pattern**: Shared claims-primitive helpers should be thin single-purpose wrappers, not a combined tuple return. Deciding test: do any callers actually need both values from a single call? If not, the tuple optimizes for coupling that does not exist.
+- **Evidence**: `docs/roadmap/features/111-fix-mcp-target-user-authz/design.md` § Chosen Approach #1; § Rejected Alternatives (merge-into-tuple rejected)
+- **Rule it implies**: Design shared auth helper primitives as thin single-purpose wrappers; merge into a tuple only if multiple callers demonstrably need both values in one call.
+
+### 2026-08-07 — fix-mcp-target-user-authz — reuse
+- **Pattern**: Test shared security primitives directly (one test class for the helper), not only transitively through one consumer. This covers all N consumers' raise path without touching unrelated test files.
+- **Evidence**: `docs/roadmap/features/111-fix-mcp-target-user-authz/implementation-spec.md` Step 2 (TestCallerIdentityHelpers)
+- **Rule it implies**: New shared auth primitives get their own test class testing all raise paths directly.
+
+### 2026-08-07 — ingest-signal-dedup — design
+- **Pattern**: Sentinel-exception rollback for asyncpg transactions — raise a private sentinel inside `async with conn.transaction():`, catch it before the generic `except Exception` to guarantee rollback. Pin with mock-call-count assertion, not a live-DB row count (when a service has no DB fixtures).
+- **Evidence**: `docs/roadmap/features/111-ingest-signal-dedup/design.md:277-312`; context.md 2026-08-07 sdd-design round 2 synthesis
+- **Rule it implies**: asyncpg transaction rollback-on-condition must use a private sentinel exception caught before the generic `except Exception` — not a conditional `ROLLBACK` or return-without-commit.
+
+### 2026-08-07 — ingest-signal-dedup — reuse
+- **Pattern**: Async-context-manager mock for `self._db.acquire()` / `conn.transaction()` — house in `tests/_helpers.py` when a service introduces its first explicit transaction so all test classes share the construct.
+- **Evidence**: `docs/roadmap/features/111-ingest-signal-dedup/design.md:303-318`; context.md:107-115; implementation-spec.md:363-366
+- **Rule it implies**: When a Python service introduces its first asyncpg transaction, place the mock async-context-manager helper in `tests/_helpers.py` immediately — not per-class.
+
+### 2026-08-07 — watchlist-screen-improvements — design
+- **Pattern**: For a detail component with multiple local state variables, apply `key={itemId}` to the whole component to reset all state on a switch, then verify remount is cheap by checking the app's actual `staleTime`. A `useEffect`-based reset produces a one-paint stale-frame flicker; per-piece keyed subcomponents reproduce the same leak for every new state variable added. Deciding test: if queries cache long enough that a switch within the stale window costs zero refetches, keying the whole component is free and closes the entire local-state leak class.
+- **Evidence**: context.md 2026-08-07T00:20:00Z rounds R1-R5; `docs/roadmap/features/112-watchlist-screen-improvements/design.md` §4; `services/xstockstrat-ui/src/lib/queryClient.ts:14`
+- **Rule it implies**: Key the whole detail component and verify cheapness via staleTime; do not key subcomponents piecemeal.
+
+### 2026-08-07 — watchlist-screen-improvements — design
+- **Pattern**: A `key`-remounted detail component discards its own `writeInFlight` boolean on switch-away. Close the residual cross-instance race with a two-layer guard: (1) local `writeInFlight` boolean for intra-pane races; (2) shared `mutationKey` on relevant mutation hooks + `useIsMutating` at the ancestor that owns the switch control, additionally gated on `isFetching` because `invalidateQueries` in `onSuccess` is not awaited and a mutation can report "done" before its refetch settles.
+- **Evidence**: context.md 2026-08-07T00:20:00Z R5-R6; `docs/roadmap/features/112-watchlist-screen-improvements/design.md` §5; `services/xstockstrat-ui/src/hooks/useInvalidatingMutation.ts`
+- **Rule it implies**: A key-remounted component requires a two-layer concurrency guard: local `writeInFlight` + ancestor `useIsMutating` || `isFetching`.
+
+### 2026-08-16 — fix-config-ui-env — design
+- **Pattern**: When gating a config write to only the native deployment environment, enforce at both (1) the BFF layer (the single choke point all browser writes flow through) and (2) the UI presentation layer (badge + disabled form). BFF-only leaves the UI misleading; UI-only leaves every direct-URL/stale-tab/bookmark access path wide open. The decisive test: identify the single choke point all writes pass through and put the enforcement there, then add UI gating as a clear signal to the user.
+- **Evidence**: `docs/roadmap/features/115-fix-config-ui-env/context.md` sdd-design round 1 (switcher-only rejected), round 2 (BFF guard); `services/xstockstrat-ui/src/lib/configUiBff.ts` (setConfig guard); `services/xstockstrat-ui/src/app/config-ui/page.tsx` (EnvModeSwitcher gating)
+- **Rule it implies**: Deployment-context writes must be enforced at the BFF-layer choke point; UI gating is complementary, never a substitute.
+
+### 2026-08-16 — fix-config-ui-env — design
+- **Pattern**: Use `Code.FailedPrecondition` (→ HTTP 400) for a "wrong deployment configuration" error, not `Code.PermissionDenied` (→ HTTP 403). Topology mismatch is not an authorization failure — the caller has full credentials but has invoked the operation from the wrong deployment. PermissionDenied implies the caller needs different credentials; FailedPrecondition implies the system state must change first.
+- **Evidence**: `docs/roadmap/features/115-fix-config-ui-env/context.md` sdd-design round 2 (PermissionDenied rejected by adversary); `docs/roadmap/features/115-fix-config-ui-env/design.md` §Rejected Alternatives
+- **Rule it implies**: Map topology-mismatch errors to `Code.FailedPrecondition`, not `Code.PermissionDenied`; reserve PermissionDenied for missing auth scope.
+
+### 2026-08-16 — fix-config-ui-env — design
+- **Pattern**: When a Next.js page needs a server-only env var (not `NEXT_PUBLIC_*`) to gate UI behavior, wrap the Client Component in a thin Server Component that reads the env var at request time and passes the computed boolean as a plain prop. Avoids exposing the variable to the client bundle and eliminates the network round-trip a `getServerSideProps`-style API route would introduce.
+- **Evidence**: `docs/roadmap/features/115-fix-config-ui-env/context.md` Steps 7-8 (NamespaceEditor.tsx Server/Client split); `services/xstockstrat-ui/src/app/config-ui/[namespace]/page.tsx` (thin Server Component wrapper) and `NamespaceEditor.tsx` (Client Component child receiving `isNativeEnv` prop)
+- **Rule it implies**: To gate Client Component behavior on a server-only env var, use a Server Component wrapper that passes the resolved boolean as a prop — never read `process.env.NON_PUBLIC_VAR` inside a Client Component.
+
+### 2026-08-16 — exit-cooldown — design
+- **Pattern**: A state-replay fold that reconstructs cooldown anchors (e.g., `_last_entry_at`) from historical bars must start from a **hydrated** initial state drawn from the DB (last known anchors), not from blank identity. Starting from identity silently discards all currently-active cooldowns and treats the first qualifying bar as the anchor — incorrect for positions open before the replay window. The deciding test: does the fold reset or reconstruct? If reconstruct, the identity initial state is wrong.
+- **Evidence**: `docs/roadmap/features/116-exit-cooldown/context.md` sdd-design session rounds 3-4 (async-backfill race closure); `services/xstockstrat-analysis/app/engine/live_loop.py` (`_replay_state` fold, `hydrate_cooldowns`); `docs/roadmap/features/116-exit-cooldown/design.md` §Chosen Approach (fold design, skip-until-known guard)
+- **Rule it implies**: When designing a state-replay fold that reconstructs prior transitions, seed the fold with the last DB-persisted state, not a blank initial value — folding from identity silently discards active states.
+
+### 2026-08-16 — screener-fundamental-metric-selector — design
+- **Pattern**: When a catalog item's default is load-bearing in runtime behavior (the backend validates against it; an unexpected value causes silent validation errors), extract it as a named constant (`DEFAULT_FUNDAMENTAL_METRIC = 'pe_ratio'`) rather than deriving it from array position (`FUNDAMENTAL_METRICS[0].name`). Position-derived defaults break silently if the array is reordered; named constants break loudly in code search. Use array position only when the array's order is genuinely incidental.
+- **Evidence**: `docs/roadmap/features/117-screener-fundamental-metric-selector/context.md` sdd-design session (adversary objection 2: "FR-3's correctness is load-bearing on the default staying `pe_ratio`"); `services/xstockstrat-ui/src/lib/strategyCatalog.ts` (`DEFAULT_FUNDAMENTAL_METRIC`)
+- **Rule it implies**: Use a named constant for any default that is a business requirement, not a convenience; use array-position derivation only when order is incidental.
+
+### 2026-08-16 — screener-fundamental-metric-selector — design
+- **Pattern**: When a UI catalog (`strategyCatalog.ts`) and a backend validator (`screener.py`'s `_FUNDAMENTAL_FIELDS`) share an enumerated value set, extend the existing "keep in sync" doc comment on the catalog to name the backend file. The comment already existed for the Technical indicator catalog — extending it to include a second backend source costs nothing and prevents silent drift when the backend adds a new fundamental metric name.
+- **Evidence**: `docs/roadmap/features/117-screener-fundamental-metric-selector/context.md` sdd-review session (FR-5 doc-comment note); `services/xstockstrat-ui/src/lib/strategyCatalog.ts` (`FUNDAMENTAL_METRICS` "keep in sync" comment)
+- **Rule it implies**: Every UI catalog that mirrors a backend enum or constant set must carry a "keep in sync with <path>" doc comment naming each backend source — add it when creating the catalog, not retroactively when drift is detected.
+
+### 2026-08-16 — screener-fundamental-metric-selector — reuse
+- **Pattern**: In an e2e test for a form with multiple similar rows (e.g., Screener criteria rows), scope selectors to the row's `data-testid` wrapper rather than using `nth()` index or a plain `getByLabel`/`getByRole` call. `nth()` breaks when rows are reordered; unscoped `getByRole('option', ...)` inside a `Select` can match across multiple open `Select` portals.
+- **Evidence**: `docs/roadmap/features/117-screener-fundamental-metric-selector/context.md` sdd-design session (adversary objection 4: "`aria-label='metric'` collision risk across mixed-kind multi-criteria rows"); `services/xstockstrat-ui/e2e/insights/screener.spec.ts` (row-wrapper scoping)
+- **Rule it implies**: In Screener (and similar multi-row) e2e tests, always scope Radix Select assertions to the criterion row's `data-testid` wrapper, never use bare `getByLabel` or `nth()`.
+
+### 2026-08-16 — shadcn-migration-low-confidence — design
+- **Pattern**: In zod v4, `.and()` is deprecated for composing object schemas; use `.merge()` instead. `.merge()` performs a true object merge, preserving all field definitions from both schemas with the right-hand schema taking precedence for shared keys. Using the deprecated `.and()` produces a runtime warning and may break in a future zod release.
+- **Evidence**: `docs/roadmap/features/122-shadcn-migration-low-confidence/context.md` sdd-execute steps; `services/xstockstrat-ui/src/components/insights/account-management/AddAccountForm.tsx` (credentialSchema `.merge()` call)
+- **Rule it implies**: In zod v4+, use `.merge()` not `.and()` for object schema composition — `.and()` is deprecated and will fail in a future version.
+
+### 2026-08-16 — shadcn-migration-low-confidence — design
+- **Pattern**: When a form's validation schema depends on a runtime value that changes (e.g., broker type selection), store the current schema in a React ref and pass a resolver to `useForm` that reads from the ref on each validation call. This avoids resetting the entire form (losing field values) when the schema changes — the ref update is synchronous, so the next validation call sees the new schema without a remount.
+- **Evidence**: `docs/roadmap/features/122-shadcn-migration-low-confidence/context.md` sdd-execute steps (ref-based lazy resolver for `AddAccountForm`); `services/xstockstrat-ui/src/components/insights/account-management/AddAccountForm.tsx`
+- **Rule it implies**: For forms whose validation schema depends on a changing runtime value, use a ref-based lazy resolver rather than recreating `useForm` or resetting on schema change — this pattern applies to `AddAccountForm` only (where broker type drives schema shape), not to forms with a fixed schema like `EditCredentialsForm`.
+
+### 2026-08-16 — shadcn-migration-low-confidence — reuse
+- **Pattern**: When testing form cleanup on dialog close, assert that the form element is removed from the DOM (`not.toBeVisible()` / `not.toBeInTheDocument()`), not that its inputs are empty. An unmounted form cannot have stale values — checking for empty inputs is a weaker assertion that would pass even if the form remounts with stale state.
+- **Evidence**: `docs/roadmap/features/122-shadcn-migration-low-confidence/context.md` sdd-design Round 1 (adversary objection b: `EditCredentialsForm` zero e2e parity coverage rationale); `services/xstockstrat-ui/e2e/trader/account-selector.spec.ts:63-92`
+- **Rule it implies**: In dialog/form e2e tests, assert removal from the DOM to test cleanup; asserting that inputs are empty is a weaker check that would pass even on a remount with stale state.
+
+### 2026-08-16 — shadcn-migration-low-confidence — ordering
+- **Pattern**: After running `npx shadcn add <component>`, audit the diff for collateral installs: shadcn's CLI may add peer primitives (e.g., `label.tsx` alongside `form.tsx`) or update `package.json` with new dependencies (e.g., `react-hook-form`, `@hookform/resolvers`, `zod`). Each collateral addition is a dependency the team must own; verify it is justified by the feature's actual call sites before committing.
+- **Evidence**: `docs/roadmap/features/122-shadcn-migration-low-confidence/context.md` sdd-design Rounds 1-2 (react-hook-form/zod dependency sweep; decision to decline `ui/form.tsx` in favor of `ui/field.tsx` to avoid a 2-call-site dependency)
+- **Rule it implies**: Treat `npx shadcn add` as a tentative installation; always review and trim collateral installs that the feature's actual call sites don't need before committing the result.
+
+### 2026-08-16 — symbol-page-section-nav — pattern
+
+- **Pattern**: For same-page section navigation over a long stack of cards, a sticky **anchor-nav**
+  (shadcn `ToggleGroup type="single"` + native `scrollIntoView` + an `IntersectionObserver` scroll-spy,
+  all sections left mounted) beats `Tabs`/`Accordion` when a large e2e suite already asserts multiple
+  sections visible on one `page.goto`: nothing unmounts, so those specs stay green, in-flight
+  polls/mutations survive (no FR-7 fetch-lifecycle work), and `?strategy=`-style URL seeds read on mount
+  keep working. `ToggleGroupItem` renders a `<button>` (not `role="tab"`), sidestepping the 2026-08-09
+  getByRole-substring trap. Two must-dos: put the sticky `top` offset **and** the section `scroll-mt` in
+  ONE co-located constants module keyed to the real header height (`PlatformHeader` is `sticky top-0 z-40`
+  ~85px/49px responsive), and give the nav an `aria-label` with **no "section" substring** (the header's
+  Row-2 nav is `aria-label="Section"`; Playwright name-match is case-insensitive substring).
+- **Evidence**: `docs/roadmap/features/139-symbol-page-section-nav/design.md` (2-round debate);
+  `services/xstockstrat-ui/src/components/ui/toggle-group.tsx:66`; `PlatformHeader.tsx:205-207,346,348`.
+- **Rule it implies**: reach for all-mounted anchor-nav (not Tabs) when hiding sections would break
+  existing "multiple sections visible" e2e or drop live queries; always co-locate sticky-offset +
+  scroll-margin constants and pick a collision-free nav `aria-label`.
+
+### 2026-08-18 — 145-symbol-page-panel-refinements — derive precedence, don't seed it
+- **Insight**: When a UI value has a precedence chain of sources (URL query → server-derived binding →
+  user pick, default empty), model it as a PURE DERIVATION `effective = picked ?? url ?? bound ?? ''`
+  with the user's pick as the only React state — not `useState(seed)` + a `watchlistsLoading`-gated
+  one-shot effect + a `seededRef` guard. The effect approach flashes a wrong state (panels not gated on
+  the async source paint the empty/"no strategy" branch, then flip when the effect fires) and needs a
+  second ref to tell "empty by default" from "user cleared". Derivation recomputes for free when the
+  async source resolves — race-free, flash-free, less code. The proposer's own "the seededRef guard is
+  load-bearing" was the smell.
+- **Evidence**: `docs/roadmap/features/145-symbol-page-panel-refinements/design.md` § "derived, not
+  seeded"; contrast with the rejected effect-based seed.
+- **Rule it implies**: a precedence chain of read-only sources feeding one user-overridable selection is
+  a derivation, not synchronized state; the only state is the override, defaulted `undefined`.

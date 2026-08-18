@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { Plus } from 'lucide-react';
 import { timestampFromDate } from '@bufbuild/protobuf/wkt';
 import { AppShell } from '@/components/insights/AppShell';
 import { Card, CardContent } from '@/components/ui/card';
@@ -8,6 +9,8 @@ import { StatTile } from '@/components/shared/StatTile';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { FormDialog } from '@/components/shared/FormDialog';
 import {
   AlertDialog,
   AlertDialogTrigger,
@@ -27,6 +30,10 @@ import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import type { BackfillJob } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { Timeframe } from '@xstockstrat/proto/common/v1/common_pb';
 
+// Feature 143: used ONLY by the delete-scope <select> now (the create-form select was removed —
+// daily is the only backfillable timeframe). The three options remain here because
+// DeleteBackfilledData stays deliberately permissive: an operator must still be able to scope a
+// delete to historically-stored 15m/1h rows.
 const TIMEFRAMES: { label: string; value: Timeframe }[] = [
   { label: '1 day', value: Timeframe.TIMEFRAME_1DAY },
   { label: '1 hour', value: Timeframe.TIMEFRAME_1HOUR },
@@ -78,15 +85,28 @@ function buildRange(start: string, end: string) {
   };
 }
 
+// Local date for a protobuf-es Timestamp ({ seconds: bigint }); "…" for an open bound.
+function fmtDay(ts: { seconds: bigint } | undefined): string {
+  if (!ts?.seconds) return '…';
+  return new Date(Number(ts.seconds) * 1000).toLocaleDateString();
+}
+
+// Human date range a job covers; an unbounded request backfills the full available history.
+function rangeLabel(range: BackfillJob['range']): string {
+  if (!range || (!range.start?.seconds && !range.end?.seconds)) return 'full history';
+  return `${fmtDay(range.start)} → ${fmtDay(range.end)}`;
+}
+
 export default function BackfillsPage() {
   const { data: isAdmin } = useIsAdmin();
 
-  // Create-form state (FR-1).
+  // Create-form state (FR-1). Feature 143: no timeframe selector — daily is the only servable
+  // interval, so create always sends TIMEFRAME_1DAY (the create-form <select> was removed).
   const [symbols, setSymbols] = useState('');
-  const [timeframe, setTimeframe] = useState<Timeframe>(Timeframe.TIMEFRAME_1DAY);
   const [createStart, setCreateStart] = useState('');
   const [createEnd, setCreateEnd] = useState('');
   const [overwrite, setOverwrite] = useState(false);
+  const [newOpen, setNewOpen] = useState(false);
 
   // Filter state (FR-3).
   const [statusFilter, setStatusFilter] = useState<BackfillStatus>(BackfillStatus.UNSPECIFIED);
@@ -119,7 +139,7 @@ export default function BackfillsPage() {
     trigger.mutate(
       {
         symbols: list,
-        timeframeEnum: timeframe,
+        timeframeEnum: Timeframe.TIMEFRAME_1DAY,
         range: buildRange(createStart, createEnd),
         overwrite,
       },
@@ -128,6 +148,7 @@ export default function BackfillsPage() {
           setSymbols('');
           setCreateStart('');
           setCreateEnd('');
+          setNewOpen(false);
         },
       },
     );
@@ -173,11 +194,73 @@ export default function BackfillsPage() {
               Create, monitor, cancel and delete historical OHLCV backfills that feed the engine.
             </p>
           </div>
-          {isAdmin && (
-            <Badge variant="info" className="uppercase tracking-wide text-[10px]">
-              Admin only
-            </Badge>
-          )}
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <Badge variant="info" className="uppercase tracking-wide text-[10px]">
+                Admin only
+              </Badge>
+            )}
+            {isAdmin && (
+              <FormDialog
+                open={newOpen}
+                onOpenChange={setNewOpen}
+                trigger={
+                  <Button size="sm">
+                    <Plus className="mr-1.5 h-4 w-4" />
+                    New backfill
+                  </Button>
+                }
+                title="New backfill"
+                description="Queue a historical OHLCV backfill (daily bars). Leave the dates empty to fetch the full available history."
+                className="sm:max-w-md"
+              >
+                <form onSubmit={handleCreate} className="space-y-3">
+                  <Input
+                    placeholder="Symbols (AAPL, TSLA)"
+                    value={symbols}
+                    onChange={(e) => setSymbols(e.target.value)}
+                    autoFocus
+                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="mb-1 block text-xs text-muted-foreground">Start</label>
+                      <Input
+                        type="date"
+                        value={createStart}
+                        onChange={(e) => setCreateStart(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-muted-foreground">End</label>
+                      <Input
+                        type="date"
+                        value={createEnd}
+                        onChange={(e) => setCreateEnd(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Checkbox
+                      checked={overwrite}
+                      onCheckedChange={(v) => setOverwrite(v === true)}
+                    />
+                    Overwrite existing bars
+                  </label>
+                  {trigger.error && (
+                    <p className="text-xs text-destructive">{trigger.error.message}</p>
+                  )}
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" variant="outline" onClick={() => setNewOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={trigger.isPending}>
+                      {trigger.isPending ? 'Starting…' : 'Start backfill'}
+                    </Button>
+                  </div>
+                </form>
+              </FormDialog>
+            )}
+          </div>
         </div>
 
         {/* Job stat row (feature 083) — from the polled BackfillJob list. */}
@@ -223,208 +306,187 @@ export default function BackfillsPage() {
           );
         })()}
 
-        {/* Create backfill (FR-1) — admin only */}
-        {isAdmin && (
-          <Card>
-            <CardContent className="pt-5">
-              <h2 className="text-sm font-semibold mb-3">New backfill</h2>
-              <form onSubmit={handleCreate} className="grid grid-cols-1 sm:grid-cols-5 gap-3">
-                <Input
-                  placeholder="Symbols (AAPL, TSLA)"
-                  value={symbols}
-                  onChange={(e) => setSymbols(e.target.value)}
-                  className="sm:col-span-2"
-                />
-                <select
-                  className="h-10 rounded-md border border-input bg-secondary px-3 text-sm"
-                  value={timeframe}
-                  onChange={(e) => setTimeframe(Number(e.target.value))}
-                >
-                  {TIMEFRAMES.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-                <Input
-                  type="date"
-                  value={createStart}
-                  onChange={(e) => setCreateStart(e.target.value)}
-                />
-                <Input
-                  type="date"
-                  value={createEnd}
-                  onChange={(e) => setCreateEnd(e.target.value)}
-                />
-                <label className="flex items-center gap-2 text-xs text-muted-foreground sm:col-span-2">
-                  <Checkbox checked={overwrite} onCheckedChange={(v) => setOverwrite(v === true)} />
-                  Overwrite existing bars
-                </label>
-                <Button type="submit" disabled={trigger.isPending} className="sm:col-span-1">
-                  {trigger.isPending ? 'Starting…' : 'Start backfill'}
-                </Button>
-              </form>
-              {trigger.error && (
-                <p className="text-xs text-destructive mt-2">{trigger.error.message}</p>
-              )}
-            </CardContent>
-          </Card>
-        )}
+        {/* History (filters + job list) and the destructive Delete panel live in tabs; a
+            non-admin sees only the history content (no tab bar, no delete). */}
+        <Tabs defaultValue="history" className="flex w-full flex-col gap-4">
+          {isAdmin && (
+            <TabsList>
+              <TabsTrigger value="history">History</TabsTrigger>
+              <TabsTrigger value="delete">Delete</TabsTrigger>
+            </TabsList>
+          )}
+          <TabsContent value="history" className="space-y-4">
+            {/* Filters (FR-3) */}
+            <div className="flex flex-wrap items-center gap-3">
+              <select
+                className="h-10 rounded-md border border-input bg-secondary px-3 text-sm"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(Number(e.target.value))}
+              >
+                {STATUS_FILTERS.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+              <Input
+                placeholder="Filter by symbol"
+                value={symbolFilter}
+                onChange={(e) => setSymbolFilter(e.target.value)}
+                className="max-w-[200px]"
+              />
+            </div>
 
-        {/* Filters (FR-3) */}
-        <div className="flex flex-wrap items-center gap-3">
-          <select
-            className="h-10 rounded-md border border-input bg-secondary px-3 text-sm"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(Number(e.target.value))}
-          >
-            {STATUS_FILTERS.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-          <Input
-            placeholder="Filter by symbol"
-            value={symbolFilter}
-            onChange={(e) => setSymbolFilter(e.target.value)}
-            className="max-w-[200px]"
-          />
-        </div>
-
-        {/* Job list + monitor (FR-2/FR-6) */}
-        {isLoading && <p className="text-sm text-muted-foreground">Loading jobs…</p>}
-        {error && <p className="text-sm text-destructive">Failed to load backfill jobs</p>}
-        {data && (
-          <div className="space-y-2">
-            {(data.jobs ?? []).map((job: BackfillJob) => {
-              const badge = statusBadge(job.status);
-              return (
-                <Card key={job.jobId}>
-                  <CardContent className="pt-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <Badge variant={badge.variant}>{badge.label}</Badge>
-                          <span className="text-sm font-mono truncate">
-                            {job.symbols.join(', ')}
-                          </span>
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1.5 tabular-nums">
-                          bars {job.barsProcessed.toString()} / {job.barsTotal.toString()} · chunks{' '}
-                          {job.chunksCompleted} / {job.chunksTotal}
-                          {job.failedSymbols.length > 0 && (
-                            <span className="text-destructive">
-                              {' '}
-                              · failed: {job.failedSymbols.join(', ')}
-                            </span>
+            {/* Job list + monitor (FR-2/FR-6) */}
+            {isLoading && <p className="text-sm text-muted-foreground">Loading jobs…</p>}
+            {error && <p className="text-sm text-destructive">Failed to load backfill jobs</p>}
+            {data && (
+              <div className="space-y-2">
+                {(data.jobs ?? []).map((job: BackfillJob) => {
+                  const badge = statusBadge(job.status);
+                  return (
+                    <Card key={job.jobId}>
+                      <CardContent className="pt-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <Badge variant={badge.variant}>{badge.label}</Badge>
+                              <span className="text-sm font-mono truncate">
+                                {job.symbols.join(', ')}
+                              </span>
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1.5 tabular-nums">
+                              bars {job.barsProcessed.toString()} / {job.barsTotal.toString()} ·
+                              chunks {job.chunksCompleted} / {job.chunksTotal}
+                              {job.failedSymbols.length > 0 && (
+                                <span className="text-destructive">
+                                  {' '}
+                                  · failed: {job.failedSymbols.join(', ')}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-0.5 tabular-nums">
+                              range {rangeLabel(job.range)}
+                            </div>
+                            {job.error && (
+                              <p className="text-xs text-destructive mt-1">{job.error}</p>
+                            )}
+                            <p className="text-[11px] text-muted-foreground/70 font-mono mt-1">
+                              {job.jobId}
+                            </p>
+                          </div>
+                          {isAdmin && isCancelable(job.status) && (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button size="sm" variant="outline" disabled={cancel.isPending}>
+                                  Cancel
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogDescription>
+                                  Cancel backfill {job.jobId}? Completed-chunk bars are kept.
+                                </AlertDialogDescription>
+                                <AlertDialogCancel disabled={cancel.isPending}>
+                                  Cancel
+                                </AlertDialogCancel>
+                                <AlertDialogAction
+                                  disabled={cancel.isPending}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    handleCancel(job);
+                                  }}
+                                >
+                                  Confirm
+                                </AlertDialogAction>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           )}
                         </div>
-                        {job.error && <p className="text-xs text-destructive mt-1">{job.error}</p>}
-                        <p className="text-[11px] text-muted-foreground/70 font-mono mt-1">
-                          {job.jobId}
-                        </p>
-                      </div>
-                      {isAdmin && isCancelable(job.status) && (
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button size="sm" variant="outline" disabled={cancel.isPending}>
-                              Cancel
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogDescription>
-                              Cancel backfill {job.jobId}? Completed-chunk bars are kept.
-                            </AlertDialogDescription>
-                            <AlertDialogCancel disabled={cancel.isPending}>
-                              Cancel
-                            </AlertDialogCancel>
-                            <AlertDialogAction
-                              disabled={cancel.isPending}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                handleCancel(job);
-                              }}
-                            >
-                              Confirm
-                            </AlertDialogAction>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-            {(data.jobs ?? []).length === 0 && (
-              <p className="text-sm text-muted-foreground">No backfill jobs match the filter.</p>
-            )}
-          </div>
-        )}
-
-        {/* Delete backfilled data (FR-5) — admin only, destructive */}
-        {isAdmin && (
-          <Card className="border-destructive/40">
-            <CardContent className="pt-5">
-              <h2 className="text-sm font-semibold mb-1 text-destructive">
-                Delete backfilled data
-              </h2>
-              <p className="text-xs text-muted-foreground mb-3">
-                Permanently removes stored bars for a symbol. Scope it with a date range and/or
-                timeframe — an empty range deletes <strong>all</strong> bars for the symbol.
-              </p>
-              <form onSubmit={handleDelete} className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                <Input
-                  placeholder="Symbol"
-                  value={delSymbol}
-                  onChange={(e) => setDelSymbol(e.target.value)}
-                />
-                <select
-                  className="h-10 rounded-md border border-input bg-secondary px-3 text-sm"
-                  value={delTimeframe}
-                  onChange={(e) => setDelTimeframe(Number(e.target.value))}
-                >
-                  <option value={Timeframe.TIMEFRAME_UNSPECIFIED}>All timeframes</option>
-                  {TIMEFRAMES.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-                <Input type="date" value={delStart} onChange={(e) => setDelStart(e.target.value)} />
-                <Input type="date" value={delEnd} onChange={(e) => setDelEnd(e.target.value)} />
-                <Input
-                  placeholder={`Type "${delSymbol.trim().toUpperCase() || 'SYMBOL'}" to confirm`}
-                  value={delConfirm}
-                  onChange={(e) => setDelConfirm(e.target.value)}
-                  className="sm:col-span-2"
-                />
-                {isWholeSymbolDelete && (
-                  <Input
-                    placeholder='Whole-symbol delete — type "DELETE ALL"'
-                    value={delWholeConfirm}
-                    onChange={(e) => setDelWholeConfirm(e.target.value)}
-                    className="sm:col-span-2"
-                  />
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+                {(data.jobs ?? []).length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    No backfill jobs match the filter.
+                  </p>
                 )}
-                <Button
-                  type="submit"
-                  variant="destructive"
-                  disabled={!deleteEnabled || del.isPending}
-                  className="sm:col-span-1"
-                >
-                  {del.isPending ? 'Deleting…' : 'Delete data'}
-                </Button>
-              </form>
-              {del.error && <p className="text-xs text-destructive mt-2">{del.error.message}</p>}
-              {del.data && (
-                <p className="text-xs text-buy mt-2">
-                  Deleted {del.data.rowsDeleted.toString()} rows.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        )}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Delete backfilled data (FR-5) — admin only, destructive */}
+          {isAdmin && (
+            <TabsContent value="delete">
+              <Card className="border-destructive/40">
+                <CardContent className="pt-5">
+                  <h2 className="text-sm font-semibold mb-1 text-destructive">
+                    Delete backfilled data
+                  </h2>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Permanently removes stored bars for a symbol. Scope it with a date range and/or
+                    timeframe — an empty range deletes <strong>all</strong> bars for the symbol.
+                  </p>
+                  <form onSubmit={handleDelete} className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                    <Input
+                      placeholder="Symbol"
+                      value={delSymbol}
+                      onChange={(e) => setDelSymbol(e.target.value)}
+                    />
+                    <select
+                      className="h-10 rounded-md border border-input bg-secondary px-3 text-sm"
+                      value={delTimeframe}
+                      onChange={(e) => setDelTimeframe(Number(e.target.value))}
+                    >
+                      <option value={Timeframe.TIMEFRAME_UNSPECIFIED}>All timeframes</option>
+                      {TIMEFRAMES.map((t) => (
+                        <option key={t.value} value={t.value}>
+                          {t.label}
+                        </option>
+                      ))}
+                    </select>
+                    <Input
+                      type="date"
+                      value={delStart}
+                      onChange={(e) => setDelStart(e.target.value)}
+                    />
+                    <Input type="date" value={delEnd} onChange={(e) => setDelEnd(e.target.value)} />
+                    <Input
+                      placeholder={`Type "${delSymbol.trim().toUpperCase() || 'SYMBOL'}" to confirm`}
+                      value={delConfirm}
+                      onChange={(e) => setDelConfirm(e.target.value)}
+                      className="sm:col-span-2"
+                    />
+                    {isWholeSymbolDelete && (
+                      <Input
+                        placeholder='Whole-symbol delete — type "DELETE ALL"'
+                        value={delWholeConfirm}
+                        onChange={(e) => setDelWholeConfirm(e.target.value)}
+                        className="sm:col-span-2"
+                      />
+                    )}
+                    <Button
+                      type="submit"
+                      variant="destructive"
+                      disabled={!deleteEnabled || del.isPending}
+                      className="sm:col-span-1"
+                    >
+                      {del.isPending ? 'Deleting…' : 'Delete data'}
+                    </Button>
+                  </form>
+                  {del.error && (
+                    <p className="text-xs text-destructive mt-2">{del.error.message}</p>
+                  )}
+                  {del.data && (
+                    <p className="text-xs text-buy mt-2">
+                      Deleted {del.data.rowsDeleted.toString()} rows.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+        </Tabs>
       </div>
     </AppShell>
   );

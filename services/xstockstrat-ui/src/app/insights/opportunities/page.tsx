@@ -1,10 +1,11 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { AppShell } from '@/components/insights/AppShell';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/components/ui/utils';
 import {
@@ -30,6 +31,21 @@ import { StatTile } from '@/components/shared/StatTile';
 
 type SortKey = 'conviction' | 'expiry';
 const NINETY_MIN_MS = 90 * 60 * 1000;
+// Persist the min-conviction floor so it survives a reload / navigation away and back.
+const MIN_CONVICTION_KEY = 'opportunities.minConviction';
+
+/** Readiness bar color: firing (all pass) = buy, partway = paper, none = sell, no data = muted. */
+function readinessVariant(passing: number, total: number): 'buy' | 'paper' | 'sell' | 'muted' {
+  if (total <= 0) return 'muted';
+  if (passing >= total) return 'buy';
+  if (passing > 0) return 'paper';
+  return 'sell';
+}
+
+/** Distinct provenance/source chips for a row (Signal source + Live/Watchlist tags), de-duped. */
+function opportunityChips(o: Opportunity): string[] {
+  return Array.from(new Set([o.source, ...(o.provenance ?? [])].filter(Boolean)));
+}
 
 /** Shared pill styling for the source-filter row ("All sources" + each `ToggleGroupItem`, FR-8). */
 function sourceFilterPillClass(active: boolean): string {
@@ -79,6 +95,25 @@ export default function OpportunitiesPage() {
   // transient client-side `Set` (which lost state on reload / didn't sync across devices).
   const setAction = useSetOpportunityAction();
 
+  // Hydrate the persisted min-conviction floor once on mount (client-only — reading it in the
+  // initial state would mismatch the SSR render, so do it in an effect).
+  useEffect(() => {
+    const stored = window.localStorage.getItem(MIN_CONVICTION_KEY);
+    if (stored === null) return;
+    const n = Number(stored);
+    if (Number.isFinite(n)) setMinConviction(Math.min(1, Math.max(0, n)));
+  }, []);
+
+  // Persist on every change (the slider is the only writer) so the floor survives a reload.
+  const updateMinConviction = (v: number) => {
+    setMinConviction(v);
+    try {
+      window.localStorage.setItem(MIN_CONVICTION_KEY, String(v));
+    } catch {
+      // localStorage may be unavailable (private mode) — the in-memory value still applies.
+    }
+  };
+
   // Deployable = real broker buying power (summed across accounts). Best-effort: on any error the
   // stat renders "—" rather than a fabricated figure.
   const { data: deployable } = useQuery({
@@ -95,10 +130,6 @@ export default function OpportunitiesPage() {
     () => Array.from(new Set(opportunities.map((o) => o.source).filter(Boolean))).sort(),
     [opportunities],
   );
-
-  // Stable server-issued key (FR-4): survives an ENTER→ADD action flip, so a snooze/dismiss keyed
-  // on it is stable too. Replaces the old `${symbol}-${source}` key.
-  const key = (o: Opportunity) => o.opportunityKey;
 
   const rows = useMemo(() => {
     const filtered = opportunities.filter(
@@ -143,16 +174,30 @@ export default function OpportunitiesPage() {
       ? `/trader/positions/${o.symbol}?strategy=${o.strategyId}`
       : `/trader/positions/${o.symbol}`;
 
-  // Mobile 1:1 of the queue (FR-16) — the same rows as one `signal` section each.
+  // Mobile 1:1 of the queue (FR-16) — the same rows as one `signal` section each, now carrying
+  // conviction + strategy readiness so the phone view matches the desktop card.
   const mobileSections: Section[] = rows.map((o) => ({
     kind: 'signal',
     symbol: o.symbol,
     badge: OPPORTUNITY_ACTION[o.action],
     conviction: o.conviction,
+    readiness: { passing: o.passingConditions, total: o.totalConditions },
     caption: o.thesis || o.source || undefined,
     href: reviewHref(o),
     muted: o.muted, // feature 132 — deny-listed row renders a "Muted" marker on mobile too
   }));
+
+  // Desktop: group the ranked rows by symbol into one card each (item 14). `rows` is already
+  // sorted, so a symbol's card position follows its first (highest-ranked) row.
+  const symbolGroups = useMemo(() => {
+    const map = new Map<string, Opportunity[]>();
+    for (const o of rows) {
+      const arr = map.get(o.symbol);
+      if (arr) arr.push(o);
+      else map.set(o.symbol, [o]);
+    }
+    return [...map.entries()].map(([symbol, opps]) => ({ symbol, opps }));
+  }, [rows]);
 
   return (
     <AppShell>
@@ -250,7 +295,7 @@ export default function OpportunitiesPage() {
               min={0}
               max={100}
               value={Math.round(minConviction * 100)}
-              onChange={(e) => setMinConviction(Number(e.target.value) / 100)}
+              onChange={(e) => updateMinConviction(Number(e.target.value) / 100)}
               className="accent-primary"
               aria-label="Minimum conviction"
             />
@@ -295,14 +340,15 @@ export default function OpportunitiesPage() {
               description="Loosen the min-conviction slider or clear the source chips to see more."
             />
           ) : (
-            rows.map((o) => (
-              <OpportunityCard
-                key={key(o)}
-                o={o}
-                onSnooze={() => act(o, OpportunityAction.SNOOZE)}
-                onDismiss={() => act(o, OpportunityAction.DISMISS)}
-                onTake={() => act(o, OpportunityAction.TAKE)}
-                href={reviewHref(o)}
+            symbolGroups.map((g) => (
+              <SymbolGroupCard
+                key={g.symbol}
+                symbol={g.symbol}
+                opps={g.opps}
+                onSnooze={(o) => act(o, OpportunityAction.SNOOZE)}
+                onDismiss={(o) => act(o, OpportunityAction.DISMISS)}
+                onTake={(o) => act(o, OpportunityAction.TAKE)}
+                reviewHref={reviewHref}
               />
             ))
           )}
@@ -312,7 +358,67 @@ export default function OpportunitiesPage() {
   );
 }
 
-function OpportunityCard({
+/**
+ * One symbol's card: a header (symbol + signal count) over one row per opportunity. Each row
+ * carries its direction, a conviction meter, a strategy-readiness meter, provenance chips, and its
+ * own act controls — so multiple signals on the same symbol (e.g. two strategies) read as a single
+ * grouped unit instead of repeating the ticker down the queue. `data-muted` marks a card whose
+ * every row is deny-listed (the e2e keys off it).
+ */
+function SymbolGroupCard({
+  symbol,
+  opps,
+  onSnooze,
+  onDismiss,
+  onTake,
+  reviewHref,
+}: {
+  symbol: string;
+  opps: Opportunity[];
+  onSnooze: (o: Opportunity) => void;
+  onDismiss: (o: Opportunity) => void;
+  onTake: (o: Opportunity) => void;
+  reviewHref: (o: Opportunity) => string;
+}) {
+  const allMuted = opps.every((o) => o.muted);
+  return (
+    <div
+      data-testid="opportunity-card"
+      data-muted={allMuted || undefined}
+      className={cn(
+        'overflow-hidden rounded-lg border',
+        allMuted ? 'border-dashed border-border bg-muted/30 opacity-75' : 'border-border bg-card',
+      )}
+    >
+      <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+        <Link
+          href={`/trader/positions/${symbol}`}
+          className="font-mono text-base font-semibold hover:underline"
+        >
+          {symbol}
+        </Link>
+        <span className="text-xs text-muted-foreground">
+          {opps.length} {opps.length === 1 ? 'signal' : 'signals'}
+        </span>
+      </div>
+      <div className="divide-y divide-border">
+        {opps.map((o) => (
+          <OpportunityRow
+            key={o.opportunityKey}
+            o={o}
+            href={reviewHref(o)}
+            onSnooze={() => onSnooze(o)}
+            onDismiss={() => onDismiss(o)}
+            onTake={() => onTake(o)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** A single opportunity within its symbol card: direction + meters + chips + act controls. */
+function OpportunityRow({
   o,
   href,
   onSnooze,
@@ -326,94 +432,92 @@ function OpportunityCard({
   onTake: () => void;
 }) {
   const conv = Math.round(o.conviction * 100);
-  // feature 132: a muted (deny-listed) row is informational — distinct styling, no action buttons,
-  // and a link back to the deny-list editor (the symbol's market page carries the mute control).
+  const hasReadiness = o.totalConditions > 0;
+  const readyPct = hasReadiness ? Math.round((o.passingConditions / o.totalConditions) * 100) : 0;
+  // feature 132: a muted (deny-listed) row is informational — no act buttons, only a link back to
+  // the deny-list editor (the symbol's market page carries the mute control).
   const muted = o.muted;
+  const chips = opportunityChips(o);
   return (
-    <div
-      data-testid="opportunity-card"
-      data-muted={muted || undefined}
-      className={
-        muted
-          ? 'flex gap-4 rounded-lg border border-dashed border-border bg-muted/30 p-4 opacity-75'
-          : 'flex gap-4 rounded-lg border border-border bg-card p-4'
-      }
-    >
-      {/* Left: conviction / conditions */}
-      <div className="flex w-16 shrink-0 flex-col items-center justify-center border-r border-border pr-4">
-        <span className="font-mono text-3xl font-semibold tabular-nums text-primary">{conv}</span>
-        {o.totalConditions > 0 ? (
-          <span className="mt-0.5 font-mono text-xs text-muted-foreground">
-            {o.passingConditions}/{o.totalConditions}
-          </span>
+    <div className="space-y-2 px-4 py-3">
+      {/* Direction + strategy + provenance/source chips + expiry */}
+      <div className="flex flex-wrap items-center gap-2">
+        {muted ? (
+          <Badge variant="outline" className="text-[11px]" data-testid={`muted-badge-${o.symbol}`}>
+            Muted
+          </Badge>
         ) : (
-          <span className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.13em] text-muted-foreground">
-            conv
-          </span>
+          <EnumBadge render={OPPORTUNITY_ACTION[o.action]} />
         )}
-      </div>
-
-      {/* Main */}
-      <div className="min-w-0 flex-1 space-y-1.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono font-semibold">{o.symbol}</span>
-          {muted ? (
-            <Badge
-              variant="outline"
-              className="text-[11px]"
-              data-testid={`muted-badge-${o.symbol}`}
-            >
-              Muted
-            </Badge>
-          ) : (
-            <EnumBadge render={OPPORTUNITY_ACTION[o.action]} />
-          )}
-          {o.source && (
-            <Badge variant="outline" className="text-[11px] text-muted-foreground">
-              {o.source}
-            </Badge>
-          )}
-          {o.strategyId && (
-            <span className="font-mono text-xs text-muted-foreground">{o.strategyId}</span>
-          )}
-        </div>
-        <p className="text-sm text-muted-foreground">{o.thesis || '—'}</p>
-      </div>
-
-      {/* Right: expiry + actions */}
-      <div className="flex shrink-0 flex-col items-end justify-between gap-2">
-        <span className="font-mono text-xs text-muted-foreground">
+        {o.strategyId && (
+          <span className="font-mono text-xs text-muted-foreground">{o.strategyId}</span>
+        )}
+        {chips.map((c) => (
+          <Badge key={c} variant="outline" className="text-[11px] text-muted-foreground">
+            {c}
+          </Badge>
+        ))}
+        <span className="ml-auto font-mono text-xs text-muted-foreground">
           expires {expiresLabel(o.validUntil)}
         </span>
-        {muted ? (
-          // No Snooze/Dismiss/Review on a muted row — only a link back to the deny-list editor.
-          <Button asChild size="sm" variant="outline" data-testid={`manage-deny-${o.symbol}`}>
-            <Link href={href}>Manage deny list</Link>
-          </Button>
-        ) : (
-          <div className="flex gap-2">
-            <Button asChild size="sm" onClick={onTake}>
-              <Link href={href}>Review &amp; add</Link>
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={onSnooze}
-              data-testid={`snooze-${o.symbol}`}
-            >
-              Snooze
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={onDismiss}
-              data-testid={`dismiss-${o.symbol}`}
-            >
-              Dismiss
-            </Button>
-          </div>
-        )}
       </div>
+
+      {/* Conviction + strategy-readiness meters */}
+      <div className="grid gap-x-6 gap-y-1.5 sm:max-w-md sm:grid-cols-2">
+        <div className="flex items-center gap-2">
+          <span className="w-14 shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
+            Conviction
+          </span>
+          <Progress value={conv} variant="default" className="h-1.5 flex-1" />
+          <span className="w-8 shrink-0 text-right font-mono text-xs tabular-nums text-foreground">
+            {conv}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="w-14 shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
+            Readiness
+          </span>
+          {hasReadiness ? (
+            <>
+              <Progress
+                value={readyPct}
+                variant={readinessVariant(o.passingConditions, o.totalConditions)}
+                className="h-1.5 flex-1"
+              />
+              <span className="w-8 shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground">
+                {o.passingConditions}/{o.totalConditions}
+              </span>
+            </>
+          ) : (
+            <span className="flex-1 text-xs text-muted-foreground/70">no conditions</span>
+          )}
+        </div>
+      </div>
+
+      {o.thesis && <p className="text-sm text-muted-foreground">{o.thesis}</p>}
+
+      {muted ? (
+        <Button asChild size="sm" variant="outline" data-testid={`manage-deny-${o.symbol}`}>
+          <Link href={href}>Manage deny list</Link>
+        </Button>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <Button asChild size="sm" onClick={onTake}>
+            <Link href={href}>Review &amp; add</Link>
+          </Button>
+          <Button size="sm" variant="outline" onClick={onSnooze} data-testid={`snooze-${o.symbol}`}>
+            Snooze
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onDismiss}
+            data-testid={`dismiss-${o.symbol}`}
+          >
+            Dismiss
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

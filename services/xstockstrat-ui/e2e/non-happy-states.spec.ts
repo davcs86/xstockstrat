@@ -83,6 +83,9 @@ test.describe('Non-happy states — destructive confirm', () => {
   }) => {
     await addAdminCookie(page);
     await page.goto('/insights/backfills');
+    // The delete form now lives in the Delete tab.
+    await expect(page.getByRole('heading', { name: 'Backfills' })).toBeVisible({ timeout: 10000 });
+    await page.getByRole('tab', { name: 'Delete' }).click();
 
     const deleteBtn = page.getByRole('button', { name: 'Delete data' });
     await expect(deleteBtn).toBeVisible({ timeout: 10000 });

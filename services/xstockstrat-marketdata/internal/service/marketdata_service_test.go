@@ -19,6 +19,10 @@ import (
 	"github.com/xstockstrat/marketdata/internal/source"
 )
 
+// f64p returns a pointer to v — source.Fundamentals' metric fields are *float64 so a
+// present-but-genuinely-missing value is distinguishable from a real 0 (bug fix).
+func f64p(v float64) *float64 { return &v }
+
 func TestEstimateExpectedBars(t *testing.T) {
 	// Mon 2024-01-01 .. Fri 2024-01-05 inclusive = 5 weekdays (no weekend).
 	monStart := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -303,9 +307,9 @@ func newFundSvc(cfg *fakeCfg, repo *fakeFundRepo, src source.FundamentalsSource,
 // Acceptance #2: a within-TTL second call issues zero FMP calls.
 func TestGetFundamentals_CacheHitNoFMP(t *testing.T) {
 	repo := newFakeFundRepo()
-	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: 100}
+	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: f64p(100)}
 	repo.fetchedAt["AAPL"] = time.Now()
-	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	svc := newFundSvc(enabledCfg("fmp"), repo, src, &fakeNotify{}, "fmp")
 
 	f, err := svc.GetFundamentals(context.Background(), "AAPL")
@@ -320,13 +324,58 @@ func TestGetFundamentals_CacheHitNoFMP(t *testing.T) {
 	}
 }
 
+// TestToProtoFundamentals_MissingMetrics is the regression test for the null-as-zero bug
+// fix: a nil metric pointer must surface in the wire message's missing_metrics list (and
+// nowhere else does the wire carry that distinction, since the numeric field itself stays
+// 0.0 either way — a consumer that skips missing_metrics silently gets the old buggy
+// behavior back).
+func TestToProtoFundamentals_MissingMetrics(t *testing.T) {
+	repo := newFakeFundRepo()
+	repo.rows["AAPL"] = &source.Fundamentals{
+		Symbol:    "AAPL",
+		Price:     f64p(100),
+		MarketCap: f64p(2.5e12),
+		ROE:       f64p(0), // genuine zero — must NOT appear in missing_metrics
+		// PERatio, PBRatio, DividendYield, EPS, Beta, DebtToEquity, YearHigh, YearLow: nil
+	}
+	repo.fetchedAt["AAPL"] = time.Now()
+	svc := newFundSvc(enabledCfg("fmp"), repo, &fakeFundSource{}, &fakeNotify{}, "fmp")
+
+	f, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	want := map[string]bool{
+		"pe_ratio": true, "pb_ratio": true, "dividend_yield": true, "eps": true,
+		"beta": true, "debt_to_equity": true, "year_high": true, "year_low": true,
+	}
+	if len(f.MissingMetrics) != len(want) {
+		t.Fatalf("missing_metrics: got %v, want exactly %v", f.MissingMetrics, want)
+	}
+	for _, m := range f.MissingMetrics {
+		if !want[m] {
+			t.Errorf("unexpected metric %q in missing_metrics: %v", m, f.MissingMetrics)
+		}
+	}
+	for _, present := range []string{"market_cap", "price", "roe"} {
+		for _, m := range f.MissingMetrics {
+			if m == present {
+				t.Errorf("%q has a real value and must not be in missing_metrics: %v", present, f.MissingMetrics)
+			}
+		}
+	}
+	if f.Roe != 0 {
+		t.Fatalf("Roe: expected wire value 0 (genuine zero), got %v", f.Roe)
+	}
+}
+
 // Acceptance #3a: at-cap miss with a stale cache returns stale=true.
 func TestGetFundamentals_AtCapStale(t *testing.T) {
 	repo := newFakeFundRepo()
-	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: 100}
+	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: f64p(100)}
 	repo.fetchedAt["AAPL"] = time.Now().Add(-48 * time.Hour)
 	repo.todayCount = 250
-	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	svc := newFundSvc(enabledCfg("fmp"), repo, src, &fakeNotify{}, "fmp")
 
 	f, err := svc.GetFundamentals(context.Background(), "AAPL")
@@ -345,7 +394,7 @@ func TestGetFundamentals_AtCapStale(t *testing.T) {
 func TestGetFundamentals_AtCapNoCacheResourceExhausted(t *testing.T) {
 	repo := newFakeFundRepo()
 	repo.todayCount = 250
-	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	svc := newFundSvc(enabledCfg("fmp"), repo, src, &fakeNotify{}, "fmp")
 
 	_, err := svc.GetFundamentals(context.Background(), "AAPL")
@@ -357,7 +406,7 @@ func TestGetFundamentals_AtCapNoCacheResourceExhausted(t *testing.T) {
 // Acceptance #4: enabled=false returns FailedPrecondition and makes zero FMP calls.
 func TestGetFundamentals_DisabledFailedPrecondition(t *testing.T) {
 	repo := newFakeFundRepo()
-	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	cfg := &fakeCfg{bools: map[string]bool{"marketdata.fmp.enabled": false}}
 	svc := newFundSvc(cfg, repo, src, &fakeNotify{}, "fmp")
 
@@ -375,7 +424,7 @@ func TestGetFundamentals_DisabledFailedPrecondition(t *testing.T) {
 // effect on the very next call, in both directions.
 func TestGetFundamentals_LiveToggle_NoRestart(t *testing.T) {
 	repo := newFakeFundRepo()
-	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	cfg := &fakeCfg{bools: map[string]bool{"marketdata.fmp.enabled": false}}
 	svc := newFundSvc(cfg, repo, src, &fakeNotify{}, "fmp")
 
@@ -409,7 +458,7 @@ func TestGetFundamentals_LiveToggle_NoRestart(t *testing.T) {
 // Acceptance #5: miss + under cap fetches and upserts.
 func TestGetFundamentals_MissFetchesAndUpserts(t *testing.T) {
 	repo := newFakeFundRepo()
-	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	svc := newFundSvc(enabledCfg("fmp"), repo, src, &fakeNotify{}, "fmp")
 
 	f, err := svc.GetFundamentals(context.Background(), "AAPL")
@@ -428,7 +477,7 @@ func TestGetFundamentals_MissFetchesAndUpserts(t *testing.T) {
 func TestGetFundamentals_QuotaWarningEmittedOnce(t *testing.T) {
 	repo := newFakeFundRepo()
 	repo.todayCount = 199 // post-fetch 200 == 80% of 250
-	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	notify := &fakeNotify{}
 	svc := newFundSvc(enabledCfg("fmp"), repo, src, notify, "fmp")
 
@@ -463,9 +512,9 @@ func TestGetFundamentals_NilSourceFailedPrecondition(t *testing.T) {
 // Mirrors TestGetFundamentals_CacheHitNoFMP.
 func TestGetFundamentals_Finnhub_CacheHitNoFetch(t *testing.T) {
 	repo := newFakeFundRepo()
-	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: 100}
+	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: f64p(100)}
 	repo.fetchedAt["AAPL"] = time.Now()
-	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	svc := newFundSvc(enabledCfg("finnhub"), repo, src, &fakeNotify{}, "finnhub")
 
 	f, err := svc.GetFundamentals(context.Background(), "AAPL")
@@ -485,10 +534,10 @@ func TestGetFundamentals_Finnhub_CacheHitNoFetch(t *testing.T) {
 // todayCount against daily_request_cap.
 func TestGetFundamentals_Finnhub_AtCapStale(t *testing.T) {
 	repo := newFakeFundRepo()
-	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: 100}
+	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: f64p(100)}
 	repo.fetchedAt["AAPL"] = time.Now().Add(-48 * time.Hour)
 	repo.sinceCount = 20
-	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	svc := newFundSvc(enabledCfg("finnhub"), repo, src, &fakeNotify{}, "finnhub")
 
 	f, err := svc.GetFundamentals(context.Background(), "AAPL")
@@ -507,7 +556,7 @@ func TestGetFundamentals_Finnhub_AtCapStale(t *testing.T) {
 func TestGetFundamentals_Finnhub_AtCapNoCacheResourceExhausted(t *testing.T) {
 	repo := newFakeFundRepo()
 	repo.sinceCount = 20
-	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	svc := newFundSvc(enabledCfg("finnhub"), repo, src, &fakeNotify{}, "finnhub")
 
 	_, err := svc.GetFundamentals(context.Background(), "AAPL")
@@ -521,7 +570,7 @@ func TestGetFundamentals_Finnhub_AtCapNoCacheResourceExhausted(t *testing.T) {
 // actually dispatches on the active provider rather than hardcoding "fmp".
 func TestGetFundamentals_Finnhub_DisabledFailedPrecondition(t *testing.T) {
 	repo := newFakeFundRepo()
-	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	cfg := &fakeCfg{bools: map[string]bool{"marketdata.finnhub.enabled": false}}
 	svc := newFundSvc(cfg, repo, src, &fakeNotify{}, "finnhub")
 
@@ -542,7 +591,7 @@ func TestGetFundamentals_Finnhub_DisabledFailedPrecondition(t *testing.T) {
 // fake source returns an empty Source, exactly as the existing FMP test's fake does.
 func TestGetFundamentals_Finnhub_MissFetchesAndUpserts(t *testing.T) {
 	repo := newFakeFundRepo()
-	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}} // Source left empty
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}} // Source left empty
 	svc := newFundSvc(enabledCfg("finnhub"), repo, src, &fakeNotify{}, "finnhub")
 
 	f, err := svc.GetFundamentals(context.Background(), "AAPL")
@@ -573,7 +622,7 @@ func TestGetFundamentals_Finnhub_MissFetchesAndUpserts(t *testing.T) {
 func TestGetFundamentals_Finnhub_QuotaWarningRefiresPerWindow(t *testing.T) {
 	repo := newFakeFundRepo()
 	repo.sinceCount = 15 // post-fetch 16 == 80% of 20
-	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	notify := &fakeNotify{}
 	svc := newFundSvc(enabledCfg("finnhub"), repo, src, notify, "finnhub")
 
@@ -610,7 +659,7 @@ func TestGetFundamentals_Finnhub_QuotaWarningRefiresPerWindow(t *testing.T) {
 func TestGetFundamentals_Finnhub_ThreeCallsPerSymbolCostsQuota(t *testing.T) {
 	repo := newFakeFundRepo()
 	repo.sinceCount = 17 // 17 + 3 fetched == 20 == 100% of cap, crosses the 80% (16) threshold
-	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	notify := &fakeNotify{}
 	svc := newFundSvc(enabledCfg("finnhub"), repo, src, notify, "finnhub")
 
@@ -690,8 +739,64 @@ func TestBackfillBars_EnumOnlyRequestResolves(t *testing.T) {
 	}
 }
 
+// TestGetBars_RejectsNon1d / TestBackfillBars_RejectsNon1d — feature 143: only "1d" is
+// servable going forward; GetBars/BackfillBars reject any other requested timeframe with
+// InvalidArgument.
+func TestGetBars_RejectsNon1d(t *testing.T) {
+	svc := &MarketDataService{registry: source.NewRegistry(), ledger: &fakeLedger{}}
+	req := &marketdatav1.GetBarsRequest{
+		Symbol:        "AAPL",
+		TimeframeEnum: commonv1.Timeframe_TIMEFRAME_15MIN, //nolint:staticcheck // SA1019: deliberately sends a now-deprecated (feature 143) timeframe to prove it is rejected
+	}
+	_, err := svc.GetBars(context.Background(), req)
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("want InvalidArgument, got %v (err=%v)", connect.CodeOf(err), err)
+	}
+}
+
+func TestBackfillBars_RejectsNon1d(t *testing.T) {
+	svc := &MarketDataService{registry: source.NewRegistry(), ledger: &fakeLedger{}}
+	req := &marketdatav1.BackfillBarsRequest{
+		Symbols:       []string{"AAPL"},
+		TimeframeEnum: commonv1.Timeframe_TIMEFRAME_1HOUR, //nolint:staticcheck // SA1019: deliberately sends a now-deprecated (feature 143) timeframe to prove it is rejected
+	}
+	_, err := svc.BackfillBars(context.Background(), req)
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("want InvalidArgument, got %v (err=%v)", connect.CodeOf(err), err)
+	}
+}
+
+// TestMinIngestLookback is the regression test for the second half of the OHLCV-staleness
+// bug fix: the configured marketdata.stream.bar_ingest_lookback_ms (900000ms = 15min
+// default) is sized for the "15m" timeframe and is far too short to ever re-cover a "1d"
+// bar (24h interval) — ingestRecentBars must widen the window per timeframe rather than
+// applying that flat value to every configured timeframe.
+func TestMinIngestLookback(t *testing.T) {
+	cases := []struct {
+		tf   string
+		want time.Duration
+	}{
+		{"15m", 30 * time.Minute},
+		{"1h", 2 * time.Hour},
+		{"1d", 48 * time.Hour}, // >> the 15min-sized configured default — the actual bug fix
+		{"unknown", 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.tf, func(t *testing.T) {
+			if got := minIngestLookback(tc.tf); got != tc.want {
+				t.Errorf("minIngestLookback(%q) = %v, want %v", tc.tf, got, tc.want)
+			}
+		})
+	}
+	// The actual defect: the flat 15-min-sized default must not be used unmodified for "1d".
+	const defaultLookback = 900000 * time.Millisecond
+	if got := minIngestLookback("1d"); got <= defaultLookback {
+		t.Fatalf("minIngestLookback(\"1d\") = %v, must exceed the 15m-sized default %v", got, defaultLookback)
+	}
+}
+
 // countingWarnHandler counts slog.LevelWarn records. slog.SetDefault is process-global, so
-// this test (and its subtests) must not call t.Parallel() — see resolveIngestTimeframe's
+// this test (and its subtests) must not call t.Parallel() — see resolveIngestTimeframes'
 // doc comment and feature 080 implementation-spec.md Step 4 instruction 5.
 type countingWarnHandler struct {
 	count *int
@@ -825,23 +930,30 @@ func funcBody(t *testing.T, src, signature string) string {
 	return rest
 }
 
-// TestResolveIngestTimeframe covers AC-10's three cases directly, with the paired
-// "something does change" WARN assertion (insights.md 2026-07-27, teeth test).
-func TestResolveIngestTimeframe(t *testing.T) {
+// TestResolveIngestTimeframes covers AC-10's three cases plus the list-parsing bug fix
+// (a single configured timeframe used to leave every OTHER continuously-consumed
+// timeframe — "1d" in particular — permanently stale; see defaultBarIngestTimeframe's doc
+// comment), with the paired "something does change" WARN assertion (insights.md
+// 2026-07-27, teeth test).
+func TestResolveIngestTimeframes(t *testing.T) {
 	cases := []struct {
 		name     string
 		raw      string
-		want     string
-		wantWarn bool
+		want     []string
+		wantWarn int
 	}{
-		{"empty falls back to default 1d", "", "1d", false}, // feature 140: default flipped 15m→1d
-		{"canonical 1d passes through", "1d", "1d", false},
-		{"canonical 1h passes through", "1h", "1h", false},
-		{"canonical 15m passes through", "15m", "15m", false},
-		{"alias 1Day resolves", "1Day", "1d", false},
-		{"alias 1Hour resolves", "1Hour", "1h", false},
-		{"alias 15Min resolves", "15Min", "15m", false},
-		{"unresolvable falls back to default 1d and warns", "10Min", "1d", true}, // feature 140
+		{"empty falls back to default list", "", []string{"1d"}, 0}, // feature 143: default narrowed 15m,1d → 1d
+		{"canonical 1d passes through", "1d", []string{"1d"}, 0},
+		{"canonical 1h passes through", "1h", []string{"1h"}, 0},
+		{"canonical 15m passes through", "15m", []string{"15m"}, 0},
+		{"alias 1Day resolves", "1Day", []string{"1d"}, 0},
+		{"alias 1Hour resolves", "1Hour", []string{"1h"}, 0},
+		{"alias 15Min resolves", "15Min", []string{"15m"}, 0},
+		{"comma list resolves in order", "15m,1d", []string{"15m", "1d"}, 0},
+		{"comma list tolerates whitespace", "15m, 1d", []string{"15m", "1d"}, 0},
+		{"duplicates deduped", "15m,15m,1d", []string{"15m", "1d"}, 0},
+		{"unresolvable entry skipped, valid entries kept", "15m,10Min", []string{"15m"}, 1},
+		{"wholly unresolvable falls back to default and warns twice", "10Min", []string{"1d"}, 2}, // feature 143: default narrowed 15m,1d → 1d
 	}
 
 	for _, tc := range cases {
@@ -851,16 +963,17 @@ func TestResolveIngestTimeframe(t *testing.T) {
 			slog.SetDefault(slog.New(&countingWarnHandler{count: &warnCount}))
 			t.Cleanup(func() { slog.SetDefault(prev) })
 
-			got := resolveIngestTimeframe(tc.raw)
-			if got != tc.want {
-				t.Errorf("resolveIngestTimeframe(%q) = %q, want %q", tc.raw, got, tc.want)
+			got := resolveIngestTimeframes(tc.raw)
+			if len(got) != len(tc.want) {
+				t.Fatalf("resolveIngestTimeframes(%q) = %v, want %v", tc.raw, got, tc.want)
 			}
-			wantCount := 0
-			if tc.wantWarn {
-				wantCount = 1
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Errorf("resolveIngestTimeframes(%q) = %v, want %v", tc.raw, got, tc.want)
+				}
 			}
-			if warnCount != wantCount {
-				t.Errorf("resolveIngestTimeframe(%q): expected %d WARN record(s), got %d", tc.raw, wantCount, warnCount)
+			if warnCount != tc.wantWarn {
+				t.Errorf("resolveIngestTimeframes(%q): expected %d WARN record(s), got %d", tc.raw, tc.wantWarn, warnCount)
 			}
 		})
 	}

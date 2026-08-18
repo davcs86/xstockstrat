@@ -1,6 +1,5 @@
 # Feature: broker-state-reconciliation
 
-**Lifecycle Status**: `launched`
 **Committed to main**: 856ad5a3a2ebc431c108cc7f508deb26885545c6
 **Launched date**: 2026-08-07
 **Priority**: `P1` — revived 2026-08-04 after user pushback on the demotion; rescoped to a lightweight
@@ -9,6 +8,7 @@ dashboard (see context.md)
 **Development Branch**: `feature/broker-state-reconciliation`
 **Created**: 2026-08-04
 **Last Updated**: 2026-08-07
+**Archived**: 2026-08-16
 
 ---
 
@@ -26,6 +26,7 @@ dashboard (see context.md)
 | 2026-08-07 | `code-completed` (PR #883 merged) | /sdd-execute | PR #883 squash-merged into `main-dev`, the last of the 100→101→023→030→102 chain to land (#879→#880→#881→#882→#883, each retargeted to `main-dev` and reconciled after the prior squash-merge) |
 
 | 2026-08-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #878; committed 856ad5a3a2ebc431c108cc7f508deb26885545c6 |
+| 2026-08-16 | launched (unchanged) | /sdd-archiver | Archived: synthesis written to context.md + Ledger, specs pruned. |
 ---
 
 ## Artifacts

@@ -6,6 +6,7 @@ require (
 	connectrpc.com/connect v1.16.2
 	github.com/coder/websocket v1.8.14
 	github.com/jackc/pgx/v5 v5.9.2
+	github.com/pashagolub/pgxmock/v4 v4.9.0
 	github.com/xstockstrat/contracts v0.0.0
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.52.0
 	go.opentelemetry.io/otel v1.43.0

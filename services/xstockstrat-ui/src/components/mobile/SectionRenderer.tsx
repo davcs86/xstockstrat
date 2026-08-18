@@ -53,10 +53,21 @@ function SectionItem({ section: s }: { section: Section }) {
       );
 
     case 'signal': {
+      const hasReadiness = !!s.readiness && s.readiness.total > 0;
+      const readyPct = hasReadiness
+        ? Math.round((s.readiness!.passing / s.readiness!.total) * 100)
+        : 0;
+      const readyVariant = !hasReadiness
+        ? 'muted'
+        : s.readiness!.passing >= s.readiness!.total
+          ? 'buy'
+          : s.readiness!.passing > 0
+            ? 'paper'
+            : 'sell';
       const body = (
-        <div className={cn('flex items-center justify-between gap-3 px-3 py-2', TAP)}>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
+        <div className={cn('flex flex-col gap-2 px-3 py-2', TAP)}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
               <span className="font-mono font-semibold">{s.symbol}</span>
               {s.muted ? (
                 <span
@@ -69,18 +80,48 @@ function SectionItem({ section: s }: { section: Section }) {
                 s.badge && <EnumBadge render={s.badge} />
               )}
             </div>
-            {s.caption && <p className="truncate text-xs text-muted-foreground">{s.caption}</p>}
-          </div>
-          <div className="flex items-center gap-2">
-            {typeof s.conviction === 'number' && (
-              <Progress
-                value={Math.round(s.conviction * 100)}
-                className="h-1.5 w-16"
-                variant="default"
-              />
-            )}
             {s.href && <CaretRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
           </div>
+          {s.caption && <p className="truncate text-xs text-muted-foreground">{s.caption}</p>}
+          {/* Conviction + strategy-readiness meters (mobile parity with the desktop card). The
+              readiness slot renders whenever the row carries readiness data — with a "—" when there
+              are no traced conditions — so both meters stay aligned across rows (matches the spec). */}
+          {(typeof s.conviction === 'number' || s.readiness) && (
+            <div className="flex items-center gap-4">
+              {typeof s.conviction === 'number' && (
+                <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    conv
+                  </span>
+                  <Progress
+                    value={Math.round(s.conviction * 100)}
+                    className="h-1.5 flex-1"
+                    variant="default"
+                  />
+                  <span className="font-mono text-[11px] tabular-nums text-foreground">
+                    {Math.round(s.conviction * 100)}
+                  </span>
+                </div>
+              )}
+              {s.readiness && (
+                <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    ready
+                  </span>
+                  {hasReadiness ? (
+                    <>
+                      <Progress value={readyPct} className="h-1.5 flex-1" variant={readyVariant} />
+                      <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                        {s.readiness.passing}/{s.readiness.total}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="flex-1 text-[11px] text-muted-foreground/70">—</span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       );
       return (

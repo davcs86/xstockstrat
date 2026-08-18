@@ -13,26 +13,21 @@ import {
   ComboboxItem,
   ComboboxEmpty,
 } from '../ui/combobox';
-import { type Timeframe, TIMEFRAMES, TIMEFRAME_ENUM, mapBars } from '@/lib/chart';
-import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
+import { type Timeframe, TIMEFRAME_ENUM, mapBars } from '@/lib/chart';
 import { useCandlestickChart } from '@/hooks/useCandlestickChart';
 
 type BarCount = 50 | 100 | 200;
 
-// Every timeframe auto-refreshes on a bounded interval (feature 140). Daily was previously excluded,
-// which — combined with the server returning a stale page — left daily charts frozen at old bars.
-const POLL_INTERVALS_MS: Partial<Record<Timeframe, number>> = {
-  '15Min': 120_000,
-  '1Hour': 900_000,
-  '1Day': 300_000,
-};
+// feature 140: poll interval for the daily chart auto-refresh (ms). Since feature 143 fixed the
+// view at 1d, a single interval suffices — no per-timeframe map.
+const DAILY_POLL_MS = 300_000;
 
 export function ChartPanel() {
   const { containerRef, seriesRef } = useCandlestickChart(320);
 
   const [symbols, setSymbols] = useState<string[]>([]);
   const [symbol, setSymbol] = useState<string>('');
-  const [timeframe, setTimeframe] = useState<Timeframe>('1Day');
+  const timeframe: Timeframe = '1Day';
   const [barCount, setBarCount] = useState<BarCount>(100);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,18 +65,19 @@ export function ChartPanel() {
     }
   };
 
-  // Re-fetch when symbol, timeframe, or barCount changes
+  // Re-fetch when symbol or barCount changes (timeframe is fixed at 1d)
   useEffect(() => {
     if (symbol) fetchBars(symbol, timeframe, barCount);
   }, [symbol, timeframe, barCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-refresh on the timeframe's poll interval (all timeframes, incl. daily — feature 140)
+  // feature 140: auto-refresh the daily chart on a bounded interval so new bars appear without a
+  // manual reload. The backend serves the newest page (feature 140 FR-7), so a re-fetch reflects
+  // any bar the always-on ingester has added since the last poll.
   useEffect(() => {
-    const interval = POLL_INTERVALS_MS[timeframe];
-    if (!symbol || !interval) return;
-    const id = setInterval(() => fetchBars(symbol, timeframe, barCount), interval);
+    if (!symbol) return;
+    const id = setInterval(() => fetchBars(symbol, timeframe, barCount), DAILY_POLL_MS);
     return () => clearInterval(id);
-  }, [symbol, timeframe, barCount]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [symbol, barCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <Card>
@@ -116,17 +112,6 @@ export function ChartPanel() {
               </ComboboxContent>
             </Combobox>
           )}
-
-          {/* Timeframe switcher */}
-          <Tabs value={timeframe} onValueChange={(v) => setTimeframe(v as Timeframe)}>
-            <TabsList>
-              {TIMEFRAMES.map(({ value, label }) => (
-                <TabsTrigger key={value} value={value}>
-                  {label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
 
           {/* Bar count selector */}
           <Select

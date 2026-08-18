@@ -43,7 +43,7 @@ no extras).
 
 ---
 
-## 3. `feature.md` — marker + Status History row (lifecycle UNCHANGED)
+## 3. `feature.md` — marker + Status History row (`status.md` UNCHANGED)
 
 Add the header field immediately after the status/tracking block (e.g. after `**Launched date**` /
 `**Last Updated**`):
@@ -52,7 +52,7 @@ Add the header field immediately after the status/tracking block (e.g. after `**
 **Archived**: <ISO date>
 ```
 
-Append one row to the `## Status History` table (do **not** edit `**Lifecycle Status**`):
+Append one row to the `## Status History` table (do **not** touch `status.md`):
 
 ```markdown
 | <ISO date> | `<terminal-status>` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(<n>)/fails(<m>); pruned <k> specs |
@@ -75,8 +75,8 @@ git rm docs/roadmap/features/<NNN-slug>/product-spec.md \
 # git rm -r docs/roadmap/features/<NNN-slug>/<extra-the-human-deleted>
 ```
 
-Never `git rm` `feature.md`, `context.md`, or any extra the human chose to keep/relocate. If an
-allowlist file is absent, omit it (do not error).
+Never `git rm` `feature.md`, `status.md`, `context.md`, or any extra the human chose to
+keep/relocate. If an allowlist file is absent, omit it (do not error).
 
 ---
 

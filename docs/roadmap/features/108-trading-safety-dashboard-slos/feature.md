@@ -1,6 +1,5 @@
 # Feature: trading-safety-dashboard-slos
 
-**Lifecycle Status**: `demoted/canceled`
 **Development Branch**: `feature/trading-safety-dashboard-slos`
 **Created**: 2026-08-04
 **Last Updated**: 2026-08-04

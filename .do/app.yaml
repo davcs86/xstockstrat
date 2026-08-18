@@ -498,7 +498,7 @@ jobs:
 databases:
   - name: xstockstrat
     engine: PG
-    version: "15"
+    version: "18"
     production: true
     cluster_name: xstockstrat
     db_name: xstockstrat-production

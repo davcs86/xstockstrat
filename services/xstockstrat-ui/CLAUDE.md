@@ -210,7 +210,8 @@ propagation in `docs/patterns/header-propagation.md`.
 | `src/lib/basepath.ts` | shared | **Canonical** segment base paths (`BASE_PATH_*`) for cross-segment links/fetches. |
 | `src/hooks/useInvalidatingMutation.ts` | Browser | **Canonical** factory for "call a BFF RPC then invalidate query keys" mutation hooks (order + watchlist hooks build on it). |
 | `src/middleware.ts` | Edge | Route protection, token refresh, trace-ID injection; matcher must include `/` |
-| `src/app/auth/{login,oauth-login}/page.tsx` | Browser | Unified login (domain root, outside all basePaths) + OAuth agent login |
+| `src/app/auth/layout.tsx` | Server | `export const dynamic = 'force-dynamic'` — forces every `/auth/*` page uncacheable (`Cache-Control: no-store`). **Do not remove.** Statically prerendered auth pages get `s-maxage=31536000`, and the prod edge (Cloudflare) ignores `Vary: RSC`, so it cross-serves the `text/x-component` RSC/Flight prefetch payload to document navigations — the browser then renders raw Flight text (incl. Next's built-in "404: This page could not be found." string), surfacing as the login route "not found". |
+| `src/app/auth/{login,oauth-login}/page.tsx` | Browser | Unified login (domain root, outside all basePaths) + OAuth agent login. Kept non-static by the segment layout above. |
 | `src/app/api/auth/{login,refresh,logout,me}/route.ts` | Node | Auth endpoints (set/clear cookies, current session) |
 | `src/app/<segment>/api/[...connect]/route.ts` | Node | Segment BFF entrypoint — re-exports `dispatchConnect` |
 

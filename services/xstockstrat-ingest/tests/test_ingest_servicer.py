@@ -295,7 +295,7 @@ class TestTriggerBackfill:
         req = MagicMock()
         req.symbols = ["AAPL"]
         req.timeframe = ""
-        req.timeframe_enum = 5  # TIMEFRAME_15MIN, as backfills/page.tsx:112 sends
+        req.timeframe_enum = 4  # TIMEFRAME_1DAY, as backfills/page.tsx sends post-143
         req.range = common_pb2.TimeRange()
 
         with (
@@ -304,13 +304,13 @@ class TestTriggerBackfill:
         ):
             await svc.TriggerBackfill(req, _ctx("4"))  # feature 092: admin-scoped
 
-        assert insert.await_args.kwargs["timeframe"] == "15m"
+        assert insert.await_args.kwargs["timeframe"] == "1d"
         queued = [
             c.args[0]
             for c in svc._ledger.AppendEvent.call_args_list
             if c.args[0].event_type == "ingest.backfill.queued"
         ]
-        assert MessageToDict(queued[0].payload)["timeframe"] == "15m"
+        assert MessageToDict(queued[0].payload)["timeframe"] == "1d"
 
     @pytest.mark.asyncio
     async def test_aborts_when_no_db(self):
@@ -358,6 +358,27 @@ class TestTriggerBackfill:
             resp = await svc.TriggerBackfill(req, _ctx("4"))
         assert resp.status == ingest_pb2.BACKFILL_STATUS_QUEUED
         insert.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_rejects_non_1d_timeframe(self):
+        """Feature 143: only 1d is a servable timeframe — an admin-scoped 15m/1h request is
+        still rejected before any job is queued."""
+        svc = make_servicer(db=MagicMock())
+        req = MagicMock()
+        req.symbols = ["AAPL"]
+        req.timeframe = ""
+        req.timeframe_enum = 5  # TIMEFRAME_15MIN
+        req.range = common_pb2.TimeRange()
+        ctx = _ctx("4")  # admin scope set, so the reject check (not the admin gate) is what fires
+        with (
+            patch("asyncio.create_task") as spawn,
+            patch(f"{_REPO}.insert_job", AsyncMock()) as insert,
+        ):
+            with pytest.raises(Exception, match="aborted"):
+                await svc.TriggerBackfill(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.INVALID_ARGUMENT
+        insert.assert_not_awaited()
+        spawn.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -486,6 +507,24 @@ class TestRunBackfill:
         with patch_chunk_repo([_chunk(["TSLA"])]), patch("asyncio.sleep", AsyncMock()):
             await svc._run_backfill("job-5", _make_backfill_req(["TSLA"]))
         assert svc._marketdata.BackfillBars.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_invalid_argument_stops_retrying_immediately(self):
+        """Feature 143: a permanent INVALID_ARGUMENT (e.g. marketdata's 1d-only gate) must not
+        be retried — retrying an identical rejected request wastes the full 2s/4s/8s backoff."""
+        svc = make_servicer(db=MagicMock(), retry=True, max_retry=2)
+        svc._marketdata = MagicMock()
+        err = grpc.aio.AioRpcError(
+            grpc.StatusCode.INVALID_ARGUMENT,
+            grpc.aio.Metadata(),
+            grpc.aio.Metadata(),
+            details="timeframe not supported",
+        )
+        svc._marketdata.BackfillBars = AsyncMock(side_effect=err)
+        with patch_chunk_repo([_chunk(["AAPL"])]), patch("asyncio.sleep", AsyncMock()) as sleep:
+            await svc._run_backfill("job-6", _make_backfill_req(["AAPL"]))
+        assert svc._marketdata.BackfillBars.await_count == 1  # no retry despite retry=True
+        sleep.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_job_concurrency_gate_serializes_jobs(self):

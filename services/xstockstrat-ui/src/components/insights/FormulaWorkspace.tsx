@@ -260,7 +260,7 @@ export function FormulaWorkspace({
         </div>
       </div>
 
-      <div className={showReference ? 'grid gap-4 lg:grid-cols-[1fr_340px]' : ''}>
+      <div className={showReference ? 'grid min-w-0 gap-4 lg:grid-cols-[1fr_340px]' : ''}>
         {/* Notebook column */}
         <div className="min-w-0 space-y-4">
           {/* Metadata, Parameters and Outputs inputs are locked for read-only system formulas
@@ -455,9 +455,10 @@ export function FormulaWorkspace({
           {saveError && <p className="text-sm text-destructive">{saveError}</p>}
         </div>
 
-        {/* Reference column */}
+        {/* Reference column — bounded height at every breakpoint so it scrolls internally instead
+            of stacking as one tall block below the notebook on narrow screens. */}
         {showReference && (
-          <aside className="lg:sticky lg:top-4 lg:h-[calc(100vh-7rem)]">
+          <aside className="min-w-0 h-[60vh] lg:sticky lg:top-4 lg:h-[calc(100vh-7rem)]">
             <FormulaReferencePanel
               onLoadTemplate={loadTemplate}
               onClose={() => setShowReference(false)}

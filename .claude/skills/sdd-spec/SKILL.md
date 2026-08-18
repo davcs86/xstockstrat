@@ -33,7 +33,7 @@ Capture the result as `FEATURE_DIR`. Use `$FEATURE_DIR` for all file reads and w
 
 Read `$FEATURE_DIR/product-spec.md`. If absent: stop with "No product spec found. Run /sdd-story $ARGUMENTS[0] first."
 
-Read `$FEATURE_DIR/feature.md` and check `**Lifecycle Status**`.
+Read `$FEATURE_DIR/status.md` — its content is the current lifecycle status (a plain string).
 If status is `draft` (`/sdd-review product-spec` has not been run):
 > "Product spec has not been AI-reviewed. Run `/sdd-review $ARGUMENTS[0] product-spec` first
 > to advance to `spec-ready`. Proceed anyway? (yes / no)"
@@ -131,12 +131,13 @@ Write `$FEATURE_DIR/implementation-spec.md` using the structure, step categories
 test-step-pairing rules in **`reference/spec-template.md`** (includes the coverage-threshold
 table). Load it now.
 
-### 7. Update feature.md status
+### 7. Update status
+
+Overwrite `$FEATURE_DIR/status.md` with `implementation-ready` (plain string). The prior value —
+read in Step 1 — is normally `design-approved`; it is `spec-ready` when the design phase was
+skipped, or `draft` if both gates were skipped.
 
 Edit `$FEATURE_DIR/feature.md`:
-- Change `**Lifecycle Status**` to `**Lifecycle Status**: \`implementation-ready\`` (the prior value is
-  normally `design-approved`; it is `spec-ready` when the design phase was skipped, or `draft` if both
-  gates were skipped)
 - Append a Status History row: `| <ISO date> | <prev> → \`implementation-ready\` | /sdd-spec | Implementation spec generated with N steps |`
 - Update Artifacts: replace `_not yet generated_` with `[Implementation Spec](implementation-spec.md)`
 - Finalize the `## Reviewers` table: collect all distinct `**Reviewers**` values from all

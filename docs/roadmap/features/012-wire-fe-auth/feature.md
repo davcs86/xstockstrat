@@ -1,6 +1,5 @@
 # Feature: wire-fe-auth
 
-**Lifecycle Status**: `launched`
 **Development Branch**: `feature/wire-fe-auth`
 **Committed to main**: fb84473
 **Launched date**: 2026-05-19

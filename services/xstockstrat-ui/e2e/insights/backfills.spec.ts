@@ -47,12 +47,15 @@ test.describe('Backfills page — admin visibility (FR-7)', () => {
 
     await page.goto('/insights/backfills');
     await expect(page.getByRole('heading', { name: 'Backfills' })).toBeVisible({ timeout: 20000 });
-    await expect(page.getByText('New backfill')).toBeVisible();
-    await expect(page.getByText('Delete backfilled data')).toBeVisible();
+    // "New backfill" is now the modal trigger button in the header.
+    await expect(page.getByRole('button', { name: 'New backfill' })).toBeVisible();
     // Job stat row (feature 083) + ADMIN ONLY badge.
     await expect(page.getByText('Jobs running')).toBeVisible();
     await expect(page.getByText('Needs attention')).toBeVisible();
     await expect(page.getByText('Admin only')).toBeVisible();
+    // The destructive delete surface now lives in the Delete tab.
+    await page.getByRole('tab', { name: 'Delete' }).click();
+    await expect(page.getByText('Delete backfilled data')).toBeVisible();
   });
 
   test('non-admin sees neither the nav entry nor the admin-only panels', async ({ page }) => {
@@ -98,6 +101,8 @@ test.describe('Backfills page — list, create, cancel (AC-1/2/3)', () => {
     });
 
     await page.goto('/insights/backfills');
+    // Creation now happens in a modal opened from the header "New backfill" button.
+    await page.getByRole('button', { name: 'New backfill' }).click();
     await page.getByPlaceholder('Symbols (AAPL, TSLA)').fill('aapl, tsla');
     await page.getByRole('button', { name: 'Start backfill' }).click();
 
@@ -145,6 +150,9 @@ test.describe('Backfills page — scoped delete (AC-4 / FR-5)', () => {
     });
 
     await page.goto('/insights/backfills');
+    await expect(page.getByRole('heading', { name: 'Backfills' })).toBeVisible({ timeout: 20000 });
+    // The delete form lives in the Delete tab now.
+    await page.getByRole('tab', { name: 'Delete' }).click();
 
     await expect(page.getByText('Delete backfilled data')).toBeVisible({ timeout: 20000 });
     const deleteBtn = page.getByRole('button', { name: 'Delete data' });

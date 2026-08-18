@@ -155,6 +155,17 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         self._component_series_sem = asyncio.Semaphore(
             max(1, self._cfg.get_int("analysis.series.max_concurrent_components", 4))
         )
+        # feature 141: process-lifetime singleton semaphore bounding cross-request concurrency
+        # of _compute_opportunities' bars-fetch calls (SEV-2 fix — TimescaleDB "out of shared
+        # memory" under multi-user load, see docs/roadmap/features/141-fix-opportunities-bars-
+        # fetch-oom). Modeled on self._component_series_sem above (the one existing precedent
+        # that is itself process-lifetime + cross-request-scoped) — not the per-call semaphores
+        # in screener.py:84-86 or entry_backfill.py:55-57, which would bound nothing across
+        # different users' calls. `max(1, …)` guards a negative config value from reaching
+        # asyncio.Semaphore.
+        self._bars_fetch_sem = asyncio.Semaphore(
+            max(1, self._cfg.get_int("analysis.opportunity.max_concurrent_bars_fetches", 2))
+        )
         # Durable backup for the in-memory _strategies dict (feature 064). Reads stay
         # in-memory; this persists on score and hydrates it at boot. None in the no-DB
         # test path so make_servicer()-based tests are unaffected.
@@ -2579,6 +2590,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         evaluator = StrategyEvaluator(self._indicators, propagation_meta)
         range_msg = _recent_range(_READINESS_LOOKBACK_DAYS)
         strategy_defs: dict[str, object] = {}  # strategy_id → StrategyDefinition | None (cache)
+        # feature 141: per-pass symbol-keyed bars dedup — one bars-fetch per unique symbol, not
+        # per (symbol, strategy) candidate. A failed fetch caches [] and is not retried by a later
+        # candidate sharing the symbol this pass (an explicit trade-off, design.md § Chosen
+        # Approach) — every candidate still resolves to a real trace or the 0/0 empty-readiness
+        # fallback, never an unhandled exception.
+        bars_by_symbol: dict[str, list] = {}
         session_end_seconds = 0
         window_hours = self._cfg.get_int("analysis.opportunity.valid_window_hours", 24)
 
@@ -2595,11 +2612,20 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if strat and not (c["muted"] and not c["is_held"]):
                 definition = await self._load_strategy_definition(user_id, strat, strategy_defs)
                 if definition is not None:
-                    try:
-                        bars = await self._fetch_bars_paged(sym, range_msg, propagation_meta)
-                    except Exception as e:  # bar fetch is best-effort per symbol
-                        log.warning("_compute_opportunities: bars fetch failed for %s: %s", sym, e)
-                        bars = []
+                    if sym in bars_by_symbol:
+                        bars = bars_by_symbol[sym]
+                    else:
+                        async with self._bars_fetch_sem:
+                            try:
+                                bars = await self._fetch_bars_paged(
+                                    sym, range_msg, propagation_meta
+                                )
+                            except Exception as e:  # bar fetch is best-effort per symbol
+                                log.warning(
+                                    "_compute_opportunities: bars fetch failed for %s: %s", sym, e
+                                )
+                                bars = []
+                        bars_by_symbol[sym] = bars
                     if bars:
                         newest = bars[-1].time.seconds
                         session_end_seconds = max(session_end_seconds, newest)

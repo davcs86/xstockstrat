@@ -667,6 +667,31 @@ export async function startMockBackend(): Promise<void> {
         // Feature 053: return a structured INSUFFICIENT_DATA result with a coverage gap so
         // the backtest view renders the gap panel + "backfill this range" action (AC-4).
         async runBacktest(req) {
+          if (req.strategyId === 'strat-insufficient-001') {
+            // A data-less symbol: RunBacktest returns a *successful* RPC with INSUFFICIENT_DATA and a
+            // per-symbol coverage gap (never an error). The symbol page surfaces this inline instead
+            // of discarding it (UI-operability pass).
+            return {
+              backtestId: 'bt-insufficient-1',
+              strategyId: req.strategyId,
+              status: 2, // BACKTEST_STATUS_INSUFFICIENT_DATA
+              totalReturn: 0,
+              totalTrades: 0,
+              trades: [],
+              coverageGaps: [
+                {
+                  symbol: req.symbols[0] ?? 'ZZZZ',
+                  barsHave: BigInt(0),
+                  barsNeed: BigInt(200),
+                  gap: {
+                    start: { seconds: BigInt(1704067200), nanos: 0 }, // 2024-01-01
+                    end: { seconds: BigInt(1735603200), nanos: 0 }, // 2024-12-31
+                  },
+                },
+              ],
+              diagnostics: [],
+            };
+          }
           if (req.strategyId === 'strat-diag-001') {
             // feature 064: an OK result carrying per-bar diagnostics + a no-trade reason.
             const sym = req.symbols[0] ?? 'AAPL';

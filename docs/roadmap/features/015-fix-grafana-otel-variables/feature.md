@@ -1,6 +1,5 @@
 # Feature: fix-grafana-otel-variables
 
-**Lifecycle Status**: `launched`
 **Development Branch**: `feature/fix-grafana-otel-variables`
 **Created**: 2026-05-21
 **Last Updated**: 2026-05-21

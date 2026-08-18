@@ -1,7 +1,6 @@
 # Feature: fix-config-value-roundtrip
 
 **Type**: bug
-**Lifecycle Status**: `launched`
 **Committed to main**: 0eae638104744992c61c8a1ac4bd8cbaac10862b
 **Launched date**: 2026-07-29
 **Development Branch**: `feature/fix-config-value-roundtrip` (this run: implemented on the

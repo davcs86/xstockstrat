@@ -517,8 +517,11 @@ class TestTriggerBackfillClient:
             await client.trigger_backfill(symbols=[])
         with pytest.raises(ValueError, match="max 50"):
             await client.trigger_backfill(symbols=[f"S{i}" for i in range(51)])
-        with pytest.raises(ValueError, match="15m/15Min/1h/1Hour/1d/1Day"):
-            await client.trigger_backfill(symbols=["AAPL"], timeframe="1w")
+        # Feature 143: only 1d/1Day accepted — 15m/1h are no longer valid timeframes.
+        with pytest.raises(ValueError, match="1d/1Day"):
+            await client.trigger_backfill(symbols=["AAPL"], timeframe="15m")
+        with pytest.raises(ValueError, match="1d/1Day"):
+            await client.trigger_backfill(symbols=["AAPL"], timeframe="1h")
         with pytest.raises(ValueError, match="full/gaps_only"):
             await client.trigger_backfill(symbols=["AAPL"], fill_mode="everything")
         with pytest.raises(ValueError, match="start"):

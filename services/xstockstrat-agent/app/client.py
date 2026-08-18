@@ -989,9 +989,12 @@ async def get_config_value(
 
 # Mirror of ingest's accepted timeframe strings and enum values
 # (services/xstockstrat-ingest/app/handlers/servicer.py _TF_ALIASES/_STR_TO_ENUM).
-# Accepted drift risk: if ingest adds a timeframe, extend these maps (design.md, feature 066).
-_TF_ALIASES = {"15m": "15m", "15Min": "15m", "1h": "1h", "1Hour": "1h", "1d": "1d", "1Day": "1d"}
-_TF_TO_ENUM = {"15m": 5, "1h": 3, "1d": 4}  # common.v1.Timeframe values
+# Feature 143: only "1d"/"1Day" are accepted — the surviving set matches ingest's own narrowed
+# _TF_ALIASES. GetBars/BackfillBars/TriggerBackfill reject anything else, so accepting 15m/1h here
+# would only defer the same rejection to the backend. Accepted drift risk: if daily-only is ever
+# reversed, extend these maps in lockstep with ingest's (design.md, feature 066).
+_TF_ALIASES = {"1d": "1d", "1Day": "1d"}
+_TF_TO_ENUM = {"1d": 4}  # common.v1.Timeframe values
 _FILL_MODE_MAP = {"full": 1, "gaps_only": 2}  # ingest.v1.FillMode; None → UNSPECIFIED (server FULL)
 _BACKFILL_MAX_SYMBOLS = 50  # client-side cost-sanity cap on a paid-fetch operation
 
@@ -1021,7 +1024,7 @@ async def trigger_backfill(
             f"too many symbols ({len(symbols)}) — max {_BACKFILL_MAX_SYMBOLS} per call"
         )
     if timeframe not in _TF_ALIASES:
-        raise ValueError(f"unknown timeframe '{timeframe}' (expected 15m/15Min/1h/1Hour/1d/1Day)")
+        raise ValueError(f"unknown timeframe '{timeframe}' (expected 1d/1Day)")
     if fill_mode is not None and fill_mode not in _FILL_MODE_MAP:
         raise ValueError(f"unknown fill_mode '{fill_mode}' (expected full/gaps_only)")
 

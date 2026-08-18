@@ -179,6 +179,18 @@ export interface DeleteBackfilledDataResponse {
 /**
  * Fundamentals (feature 059; provider made switchable by feature 129) — cached fundamental
  * metrics for a symbol, sourced from the active marketdata.fundamentals.provider.
+ *
+ * The 11 metric fields below have no wire presence (proto3 implicit presence, unchanged —
+ * switching them to `optional` was tried and reverted: it changes field cardinality, which
+ * `buf breaking` flags and which needs proto-approval-matrix sign-off this fix does not
+ * have). Instead, `missing_metrics` (field 18) is a fully-additive list of the canonical
+ * snake_case field names (matching `market_cap`, `pe_ratio`, … verbatim) that the active
+ * provider did NOT supply for this symbol — a genuinely-missing value is distinguishable
+ * from a real `0.0` (e.g. a zero-debt company's `debt_to_equity`, or a non-dividend-payer's
+ * `dividend_yield`) by checking membership in this list, not by reading the numeric field.
+ * A consumer MUST check `missing_metrics` before treating a `0.0` reading as data; comparing
+ * an absent value against a threshold (e.g. a screener `lte` hard filter) must fail closed,
+ * not silently pass on the wire-default zero (bug fix).
  */
 export interface Fundamentals {
   symbol: string;
@@ -201,6 +213,8 @@ export interface Fundamentals {
   source: string;
   /** true when served past TTL under quota exhaustion (FR-4) */
   stale: boolean;
+  /** Canonical field names (of the 11 above) the provider did not supply for this symbol. */
+  missingMetrics: string[];
 }
 
 export interface Fundamentals_ExtraMetricsEntry {
@@ -2054,6 +2068,7 @@ function createBaseFundamentals(): Fundamentals {
     currency: "",
     source: "",
     stale: false,
+    missingMetrics: [],
   };
 }
 
@@ -2109,6 +2124,9 @@ export const Fundamentals: MessageFns<Fundamentals> = {
     }
     if (message.stale !== false) {
       writer.uint32(136).bool(message.stale);
+    }
+    for (const v of message.missingMetrics) {
+      writer.uint32(146).string(v!);
     }
     return writer;
   },
@@ -2259,6 +2277,14 @@ export const Fundamentals: MessageFns<Fundamentals> = {
           message.stale = reader.bool();
           continue;
         }
+        case 18: {
+          if (tag !== 146) {
+            break;
+          }
+
+          message.missingMetrics.push(reader.string());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2335,6 +2361,11 @@ export const Fundamentals: MessageFns<Fundamentals> = {
       currency: isSet(object.currency) ? globalThis.String(object.currency) : "",
       source: isSet(object.source) ? globalThis.String(object.source) : "",
       stale: isSet(object.stale) ? globalThis.Boolean(object.stale) : false,
+      missingMetrics: globalThis.Array.isArray(object?.missingMetrics)
+        ? object.missingMetrics.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.missing_metrics)
+        ? object.missing_metrics.map((e: any) => globalThis.String(e))
+        : [],
     };
   },
 
@@ -2397,6 +2428,9 @@ export const Fundamentals: MessageFns<Fundamentals> = {
     if (message.stale !== false) {
       obj.stale = message.stale;
     }
+    if (message.missingMetrics?.length) {
+      obj.missingMetrics = message.missingMetrics;
+    }
     return obj;
   },
 
@@ -2430,6 +2464,7 @@ export const Fundamentals: MessageFns<Fundamentals> = {
     message.currency = object.currency ?? "";
     message.source = object.source ?? "";
     message.stale = object.stale ?? false;
+    message.missingMetrics = object.missingMetrics?.map((e) => e) || [];
     return message;
   },
 };

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -12,9 +13,19 @@ import (
 	tradingv1 "github.com/xstockstrat/contracts/gen/go/trading/v1"
 )
 
+// dbQuerier is the subset of *pgxpool.Pool that GetOrder/ListOrders/ListSubmittedOrders need,
+// extracted so the LATERAL-join queries can be exercised with pgxmock (this service has no
+// live-DB test harness and CI provisions no database — see internal/repository/trading_repo_test.go).
+// Both *pgxpool.Pool and pgxmock.PgxPoolIface satisfy it; production wires it to the real pool.
+type dbQuerier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+}
+
 // TradingRepo persists orders to the trading.orders hypertable.
 type TradingRepo struct {
 	pool *pgxpool.Pool
+	db   dbQuerier
 }
 
 // NewTradingRepo opens a pgxpool connection to the given DSN.
@@ -23,7 +34,7 @@ func NewTradingRepo(connStr string) (*TradingRepo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("newPool: %w", err)
 	}
-	return &TradingRepo{pool: pool}, nil
+	return &TradingRepo{pool: pool, db: pool}, nil
 }
 
 // Pool exposes the underlying connection pool so sibling repositories
@@ -84,14 +95,14 @@ func (r *TradingRepo) UpsertOrder(ctx context.Context, o *tradingv1.Order) error
 // read-time query, not a second write path — adds zero writes beyond order_intents itself.
 const intentLateralJoinSQL = `
 	LEFT JOIN LATERAL (
-	    SELECT state, updated_at FROM trading.order_intents
+	    SELECT state, updated_at AS intent_updated_at FROM trading.order_intents
 	    WHERE order_id = trading.orders.order_id
 	    ORDER BY updated_at DESC LIMIT 1
 	) li ON true`
 
 // GetOrder fetches a single order by order_id. Returns nil if not found.
 func (r *TradingRepo) GetOrder(ctx context.Context, orderID string) (*tradingv1.Order, error) {
-	row := r.pool.QueryRow(ctx, `
+	row := r.db.QueryRow(ctx, `
 		SELECT order_id, client_order_id, broker_order_id, symbol, side, order_type,
 		       status, qty, filled_qty, limit_price, stop_price, filled_avg_price,
 		       time_in_force, strategy_id, user_id, trading_mode, created_at, updated_at,
@@ -184,7 +195,7 @@ func (r *TradingRepo) ListOrders(
 	}
 	query += " ORDER BY created_at DESC LIMIT 500"
 
-	rows, err := r.pool.Query(ctx, query, args...)
+	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +216,7 @@ func (r *TradingRepo) ListOrders(
 // (status NEW or PARTIALLY_FILLED with a broker_order_id set).
 // Used by the fill poller to detect fills.
 func (r *TradingRepo) ListSubmittedOrders(ctx context.Context) ([]*tradingv1.Order, error) {
-	rows, err := r.pool.Query(ctx, `
+	rows, err := r.db.Query(ctx, `
 		SELECT order_id, client_order_id, broker_order_id, symbol, side, order_type,
 		       status, qty, filled_qty, limit_price, stop_price, filled_avg_price,
 		       time_in_force, strategy_id, user_id, trading_mode, created_at, updated_at,

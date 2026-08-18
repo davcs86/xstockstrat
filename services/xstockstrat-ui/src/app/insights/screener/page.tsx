@@ -192,6 +192,12 @@ export default function ScreenerPage() {
         meta: { className: 'p-3 font-mono tabular-nums font-semibold' },
         cell: ({ row }) => {
           const r = row.original;
+          // Bug fix (feature 144): a `scoreUnavailable` result's `score` is a neutral
+          // placeholder the engine keeps internally for the signal blend, not a real computed
+          // value — render it as no-data rather than a plausible-looking number.
+          if (r.scoreUnavailable) {
+            return <span className="text-muted-foreground">—</span>;
+          }
           return (
             <span className="inline-flex items-center gap-1.5">
               <span
@@ -246,8 +252,8 @@ export default function ScreenerPage() {
         meta: { className: 'p-3' },
         cell: ({ row }) => {
           const r = row.original;
-          return r.status === ScreenResultStatus.INSUFFICIENT_DATA ? (
-            r.gap ? (
+          if (r.status === ScreenResultStatus.INSUFFICIENT_DATA) {
+            return r.gap ? (
               <Badge variant="warning" data-testid="insufficient-data">
                 Insufficient data
               </Badge>
@@ -259,10 +265,24 @@ export default function ScreenerPage() {
               >
                 Fundamentals pending
               </Badge>
-            )
-          ) : (
-            <Badge variant="info">OK</Badge>
-          );
+            );
+          }
+          // Bug fix (feature 144): `status` stays OK here (this candidate WAS evaluated), but
+          // none of its configured criteria had usable data — distinct from INSUFFICIENT_DATA
+          // (which is retry-eligible; this may well be permanent, e.g. an ETF with no P/E ratio),
+          // so it gets its own badge rather than either a misleading "OK" or the pending-retry one.
+          if (r.scoreUnavailable) {
+            return (
+              <Badge
+                variant="warning"
+                data-testid="no-criteria-data"
+                title="None of this scan's criteria had usable data for this candidate — its score is not a real result."
+              >
+                No criteria data
+              </Badge>
+            );
+          }
+          return <Badge variant="info">OK</Badge>;
         },
       },
     ],

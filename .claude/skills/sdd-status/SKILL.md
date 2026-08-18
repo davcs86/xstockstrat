@@ -30,10 +30,18 @@ You are reporting the status of SDD features. This skill is read-only — you ma
      git ls-remote --heads origin feature/<slug>
      ```
    - Determine the authoritative source: if `origin/feature/<slug>` exists use it as `<SRC>`, otherwise use `origin/main-dev`.
-   - Read `feature.md` in full (needed for lifecycle status, type, severity, and status history):
+   - Read `feature.md` in full (needed for type, severity, and status history):
      ```bash
      git show <SRC>:<full-dir-path>/feature.md
      ```
+   - Read `status.md` (its content IS the current lifecycle status — a plain string, one line):
+     ```bash
+     git show <SRC>:<full-dir-path>/status.md
+     ```
+     `<SRC>` differs per feature (its own branch vs. `main-dev`), so this cannot collapse into a
+     single bulk `egrep` across the local tree without risking stale status for a feature with
+     unmerged branch changes — see `docs/roadmap/features/CLAUDE.md` § Bulk Status Reads, Case 2.
+     It is still a one-line fetch per feature, not a full-file one.
    - Extract step counts from `implementation-spec.md` using targeted grep — do not load the full file:
      ```bash
      git show <SRC>:<full-dir-path>/implementation-spec.md | grep -cF '**Status**: `done`'
@@ -46,7 +54,8 @@ You are reporting the status of SDD features. This skill is read-only — you ma
      git show <SRC>:<full-dir-path>/context.md | grep '^## Session' | tail -1
      ```
      If `context.md` does not exist, show `—` for Last Session.
-   - From `feature.md`: extract `**Lifecycle Status**`, `**Type**` (default `feature` if absent), `**Severity**` (for bugs), and the last row of the Status History table.
+   - Status is `status.md`'s content (verbatim). From `feature.md`: extract `**Type**` (default
+     `feature` if absent), `**Severity**` (for bugs), and the last row of the Status History table.
 
 3. Print two tables — features first, bugs second (omit a table if it has no rows):
 
@@ -90,9 +99,11 @@ git fetch origin feature/$ARGUMENTS[0]
 git ls-remote --heads origin feature/$ARGUMENTS[0]
 ```
 
-If the branch exists on origin: read `feature.md`, `implementation-spec.md`, and `context.md` using:
+If the branch exists on origin: read `feature.md`, `status.md`, `implementation-spec.md`, and
+`context.md` using:
 ```bash
 git show origin/feature/$ARGUMENTS[0]:$FEATURE_DIR/feature.md
+git show origin/feature/$ARGUMENTS[0]:$FEATURE_DIR/status.md
 git show origin/feature/$ARGUMENTS[0]:$FEATURE_DIR/implementation-spec.md
 git show origin/feature/$ARGUMENTS[0]:$FEATURE_DIR/context.md
 ```
@@ -102,18 +113,19 @@ If the branch does not exist on origin: fall back to `origin/main-dev`:
 ```bash
 git fetch origin main-dev
 git show origin/main-dev:$FEATURE_DIR/feature.md
+git show origin/main-dev:$FEATURE_DIR/status.md
 git show origin/main-dev:$FEATURE_DIR/implementation-spec.md
 git show origin/main-dev:$FEATURE_DIR/context.md
 ```
 Note: "`origin/feature/$ARGUMENTS[0]` not found — reading from `origin/main-dev`."
 
-### 1. Read feature.md
+### 1. Read feature.md and status.md
 
 Print:
 ```
 Feature: <slug>
 Type: <feature | bug>
-Lifecycle Status: <status>
+Lifecycle Status: <status.md content, verbatim>
 Severity: <SEV-N>          (omit if Type is feature)
 GitHub Issue: <url>        (omit if Type is feature or no issue linked)
 

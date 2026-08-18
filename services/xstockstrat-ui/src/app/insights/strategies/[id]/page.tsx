@@ -307,6 +307,20 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                       Could not update live status — admin scope required.
                     </p>
                   )}
+                  <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">Signal-eligible</p>
+                      <p className="text-xs text-muted-foreground">
+                        Joins platform-wide signals in the live universe.
+                      </p>
+                    </div>
+                    <Badge
+                      variant={definition.signalEligible ? 'buy' : 'secondary'}
+                      data-testid="signal-eligible-badge"
+                    >
+                      {definition.signalEligible ? 'On' : 'Off'}
+                    </Badge>
+                  </div>
                 </CardContent>
               </Card>
             )}

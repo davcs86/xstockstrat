@@ -1,8 +1,8 @@
 ---
 name: sdd-sync
-description: Sync the six per-feature SDD spec files between feature branches and main-dev via 3-way merge. Usage — /sdd-sync [feature-slug]. Auto-merges non-conflicting diffs in both directions (feature branches gain SDD progress; main-dev gains state flips like launched), stops only on real conflicts, opens a docs-only PR targeting main-dev, and offers to delete branches for launched features. Use this whenever feature.md, product-spec.md, implementation-spec.md, recon/design/context files look stale or divergent between a branch and main-dev, after a promotion flipped features to launched, or when the user asks to reconcile, sync, or tidy up SDD docs and leftover merged feature branches. Never touches service code.
+description: Sync the seven per-feature SDD spec files between feature branches and main-dev via 3-way merge. Usage — /sdd-sync [feature-slug]. Auto-merges non-conflicting diffs in both directions (feature branches gain SDD progress; main-dev gains state flips like launched), stops only on real conflicts, opens a docs-only PR targeting main-dev, and offers to delete branches for launched features. Use this whenever feature.md, status.md, product-spec.md, implementation-spec.md, recon/design/context files look stale or divergent between a branch and main-dev, after a promotion flipped features to launched, or when the user asks to reconcile, sync, or tidy up SDD docs and leftover merged feature branches. Never touches service code.
 argument-hint: [feature-slug]
-allowed-tools: Read Write AskUserQuestion Bash(ls *) Bash(find *) Bash(mkdir *) Bash(git *) Bash(gh pr *) Bash(diff *) Bash(grep *) mcp__github__list_branches
+allowed-tools: Read Write AskUserQuestion Bash(ls *) Bash(find *) Bash(mkdir *) Bash(git *) Bash(gh pr *) Bash(diff *) Bash(grep *) Bash(egrep *) mcp__github__list_branches
 effort: low
 ---
 
@@ -16,8 +16,9 @@ You are syncing SDD spec files between feature branches and main-dev. Both sides
 
 ## SPEC FILES
 
-The six SDD artifacts per feature (directory is `NNN-<slug>`, e.g. `001-add-ikbr-account-support`):
+The seven SDD artifacts per feature (directory is `NNN-<slug>`, e.g. `001-add-ikbr-account-support`):
 - `docs/roadmap/features/<NNN-slug>/feature.md`
+- `docs/roadmap/features/<NNN-slug>/status.md`
 - `docs/roadmap/features/<NNN-slug>/product-spec.md`
 - `docs/roadmap/features/<NNN-slug>/recon.md`
 - `docs/roadmap/features/<NNN-slug>/design.md`
@@ -85,7 +86,7 @@ BASE_COMMIT=$(git merge-base origin/main-dev origin/feature/<slug>)
 ```
 If `git merge-base` fails (unrelated histories): stop — "No common ancestor between origin/main-dev and origin/feature/<slug>. Investigate before re-running."
 
-**c.** For each file in `{feature.md, product-spec.md, recon.md, design.md, implementation-spec.md, context.md}`:
+**c.** For each file in `{feature.md, status.md, product-spec.md, recon.md, design.md, implementation-spec.md, context.md}`:
 
 1. Determine which sides have the file:
    ```bash
@@ -230,9 +231,11 @@ Print the PR URL.
 
 ### Step 10 — Branch cleanup for launched features
 
-Read each synced feature's `feature.md` (use the just-merged content for synced features; for skipped features, read from `origin/main-dev:$FEATURE_DIR/feature.md`). Look for:
-```
-**Lifecycle Status**: `launched`
+Check every synced feature's `status.md` in a single shell call (use the just-merged local content
+for synced features; for skipped features this already reflects `origin/main-dev` since no local
+change was made) — see `docs/roadmap/features/CLAUDE.md` § Bulk Status Reads, Case 1:
+```bash
+egrep -l '^launched$' docs/roadmap/features/*/status.md
 ```
 
 For every feature in `launched` state, enumerate its branches on origin:

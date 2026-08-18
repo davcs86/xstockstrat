@@ -1,6 +1,5 @@
 # Feature: user-metadata-management
 
-**Lifecycle Status**: `launched`
 **Committed to main**: edb7c4172bb973b2111eb833253e1b454301bbde
 **Launched date**: 2026-08-14
 **Development Branch**: `feature/user-metadata-management`

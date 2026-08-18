@@ -129,6 +129,18 @@ export interface DeleteBackfilledDataResponse {
 /**
  * Fundamentals (feature 059; provider made switchable by feature 129) — cached fundamental
  * metrics for a symbol, sourced from the active marketdata.fundamentals.provider.
+ *
+ * The 11 metric fields below have no wire presence (proto3 implicit presence, unchanged —
+ * switching them to `optional` was tried and reverted: it changes field cardinality, which
+ * `buf breaking` flags and which needs proto-approval-matrix sign-off this fix does not
+ * have). Instead, `missing_metrics` (field 18) is a fully-additive list of the canonical
+ * snake_case field names (matching `market_cap`, `pe_ratio`, … verbatim) that the active
+ * provider did NOT supply for this symbol — a genuinely-missing value is distinguishable
+ * from a real `0.0` (e.g. a zero-debt company's `debt_to_equity`, or a non-dividend-payer's
+ * `dividend_yield`) by checking membership in this list, not by reading the numeric field.
+ * A consumer MUST check `missing_metrics` before treating a `0.0` reading as data; comparing
+ * an absent value against a threshold (e.g. a screener `lte` hard filter) must fail closed,
+ * not silently pass on the wire-default zero (bug fix).
  */
 export interface Fundamentals {
     symbol: string;
@@ -153,6 +165,8 @@ export interface Fundamentals {
     source: string;
     /** true when served past TTL under quota exhaustion (FR-4) */
     stale: boolean;
+    /** Canonical field names (of the 11 above) the provider did not supply for this symbol. */
+    missingMetrics: string[];
 }
 export interface Fundamentals_ExtraMetricsEntry {
     key: string;

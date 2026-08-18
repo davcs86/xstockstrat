@@ -1,8 +1,8 @@
 # Feature: shadcn-sidebar-visual-rewrite
 
-**Lifecycle Status**: `launched`
 **Committed to main**: be21f3389151ccac1bfd68e7aa96d73d3d4efd78
 **Launched date**: 2026-08-10
+**Archived**: 2026-08-16
 **Development Branch**: `claude/implement-124-e48xkn` (harness-assigned; see note below)
 **Created**: 2026-08-10
 **Last Updated**: 2026-08-10
@@ -23,6 +23,7 @@
 | 2026-08-10 | `code-completed` (unchanged) | /sdd-execute (sequential) | **Post-checkpoint correction**, triggered by the user's own visual review of the Step 4 screenshot against the real shadcn reference page. Found and fixed: (1) the design/implementation omitted shadcn's `SidebarMenu`/`SidebarMenuItem` wrapper around each collapsible group — corrected to match the reference's actual DOM composition (user supplied the exact structure); (2) a real bug in the *vendored* `ui/sidebar.tsx` primitive — `data-active={isActive}` always renders the attribute, and Tailwind's bare `data-active:bg-sidebar-accent` variant matches on presence not value, so every row was permanently painted with the accent background regardless of state — this, not any styling choice, was the actual cause of the "chunky pill button" look; fixed to `isActive \|\| undefined`, documented in `xstockstrat-ui/CLAUDE.md`'s customization list. One pre-existing test assertion updated to match the resulting flatter active-state styling; full suite re-verified 9/9 green. A third visual concern (panel not reaching full height) was investigated and found to be a `fullPage: true` screenshot-capture artifact plus Next.js's dev-only toolbar indicator, not a real bug — confirmed via direct `boundingBox()` measurement. `design.md` ADDENDUM records the full design-level narrative; a third `fails.md` entry (2026-08-10) records the process lesson: no design round fetched the live external reference to check DOM composition, only its visual styling. User signed off on the corrected result. |
 
 | 2026-08-10 | `code-completed` → `launched` | CI workflow | Promoted via PR #923; committed be21f3389151ccac1bfd68e7aa96d73d3d4efd78 |
+| 2026-08-16 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(0)/fails(2); pruned 4 specs |
 ---
 
 **Note on Development Branch**: this session runs on the harness-assigned branch

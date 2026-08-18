@@ -1,7 +1,7 @@
 'use client';
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts';
 import type { ComponentSeries } from '@xstockstrat/proto/analysis/v1/analysis_pb';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Eyebrow } from '@/components/shared/Eyebrow';
 import {
   ChartContainer,
   ChartTooltip,
@@ -14,6 +14,8 @@ import {
 // line (primary "value" + secondaries like bb.upper/macd.signal/stoch.d). A component that failed to
 // compute (soft-deleted formula, sandbox error) renders a per-panel error state instead of a chart —
 // per-component fault isolation surfaced to the UI. Built from the shadcn `chart` (recharts) wrapper.
+// Each component renders as a bordered strip (not a nested Card) so the enclosing "Indicators" card
+// reads as one framed unit, matching the single-Card price chart above it (UI-consistency pass).
 const SERIES_COLORS = [
   'var(--chart-1)',
   'var(--chart-2)',
@@ -25,7 +27,10 @@ const SERIES_COLORS = [
 export function IndicatorPanels({ components }: { components: ComponentSeries[] }) {
   if (components.length === 0) return null;
   return (
-    <div className="space-y-3" data-testid="indicator-panels">
+    <div
+      className="divide-y divide-border overflow-hidden rounded-md border border-border"
+      data-testid="indicator-panels"
+    >
       {components.map((comp) => (
         <IndicatorPanel key={comp.refName} comp={comp} />
       ))}
@@ -36,16 +41,12 @@ export function IndicatorPanels({ components }: { components: ComponentSeries[] 
 function IndicatorPanel({ comp }: { comp: ComponentSeries }) {
   if (comp.error) {
     return (
-      <Card data-testid="indicator-panel-error">
-        <CardHeader className="pb-2">
-          <CardTitle className="font-mono text-sm">{comp.refName}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Couldn&apos;t compute this indicator — {comp.error}
-          </p>
-        </CardContent>
-      </Card>
+      <div className="space-y-1 p-3" data-testid="indicator-panel-error">
+        <Eyebrow>{comp.refName}</Eyebrow>
+        <p className="text-sm text-muted-foreground">
+          Couldn&apos;t compute this indicator — {comp.error}
+        </p>
+      </div>
     );
   }
 
@@ -67,32 +68,28 @@ function IndicatorPanel({ comp }: { comp: ComponentSeries }) {
   });
 
   return (
-    <Card data-testid="indicator-panel">
-      <CardHeader className="pb-0">
-        <CardTitle className="font-mono text-sm">{comp.refName}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ChartContainer config={config} className="aspect-auto h-[140px] w-full">
-          <LineChart data={data} margin={{ top: 8, right: 8, bottom: 4, left: 4 }}>
-            <CartesianGrid vertical={false} strokeDasharray="3 3" />
-            <XAxis dataKey="i" hide />
-            <YAxis width={44} domain={['dataMin', 'dataMax']} tick={{ fontSize: 10 }} />
-            <ChartTooltip content={<ChartTooltipContent />} />
-            {comp.series.map((s) => (
-              <Line
-                key={s.name}
-                dataKey={s.name}
-                type="monotone"
-                stroke={`var(--color-${s.name})`}
-                strokeWidth={1.5}
-                dot={false}
-                isAnimationActive={false}
-                connectNulls={false}
-              />
-            ))}
-          </LineChart>
-        </ChartContainer>
-      </CardContent>
-    </Card>
+    <div className="space-y-1 p-3" data-testid="indicator-panel">
+      <Eyebrow>{comp.refName}</Eyebrow>
+      <ChartContainer config={config} className="aspect-auto h-[140px] w-full">
+        <LineChart data={data} margin={{ top: 8, right: 8, bottom: 4, left: 4 }}>
+          <CartesianGrid vertical={false} strokeDasharray="3 3" />
+          <XAxis dataKey="i" hide />
+          <YAxis width={44} domain={['dataMin', 'dataMax']} tick={{ fontSize: 10 }} />
+          <ChartTooltip content={<ChartTooltipContent />} />
+          {comp.series.map((s) => (
+            <Line
+              key={s.name}
+              dataKey={s.name}
+              type="monotone"
+              stroke={`var(--color-${s.name})`}
+              strokeWidth={1.5}
+              dot={false}
+              isAnimationActive={false}
+              connectNulls={false}
+            />
+          ))}
+        </LineChart>
+      </ChartContainer>
+    </div>
   );
 }

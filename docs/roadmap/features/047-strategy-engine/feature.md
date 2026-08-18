@@ -1,6 +1,5 @@
 # Feature: strategy-engine
 
-**Lifecycle Status**: `launched`
 **Committed to main**: a7201b02bb2b035e48f96aba634594c605d2de56
 **Launched date**: 2026-06-06
 **Development Branch**: `feature/strategy-engine`

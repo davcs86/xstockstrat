@@ -328,11 +328,11 @@ func TestGetBars_TranslatesCanonicalTimeframe(t *testing.T) {
 		want     string
 		wantEnum commonv1.Timeframe
 	}{
-		{"15m", "15Min", commonv1.Timeframe_TIMEFRAME_15MIN},
-		{"1h", "1Hour", commonv1.Timeframe_TIMEFRAME_1HOUR},
+		{"15m", "15Min", commonv1.Timeframe_TIMEFRAME_15MIN}, //nolint:staticcheck // SA1019: deprecated for requests (feature 143) but still resolved for historical rows
+		{"1h", "1Hour", commonv1.Timeframe_TIMEFRAME_1HOUR},  //nolint:staticcheck // SA1019: deprecated for requests (feature 143) but still resolved for historical rows
 		{"1d", "1Day", commonv1.Timeframe_TIMEFRAME_1DAY},
-		{"15Min", "15Min", commonv1.Timeframe_TIMEFRAME_15MIN}, // already-Alpaca form passes through
-		{"1Hour", "1Hour", commonv1.Timeframe_TIMEFRAME_1HOUR}, // already-Alpaca form passes through
+		{"15Min", "15Min", commonv1.Timeframe_TIMEFRAME_15MIN}, //nolint:staticcheck // SA1019: already-Alpaca form passes through; deprecated for requests (feature 143) but still resolved for historical rows
+		{"1Hour", "1Hour", commonv1.Timeframe_TIMEFRAME_1HOUR}, //nolint:staticcheck // SA1019: already-Alpaca form passes through; deprecated for requests (feature 143) but still resolved for historical rows
 		{"1Day", "1Day", commonv1.Timeframe_TIMEFRAME_1DAY},    // feature 080: no 1Day input row existed before
 	}
 	for _, tc := range cases {

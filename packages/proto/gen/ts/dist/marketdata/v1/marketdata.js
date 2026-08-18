@@ -1685,6 +1685,7 @@ function createBaseFundamentals() {
         currency: "",
         source: "",
         stale: false,
+        missingMetrics: [],
     };
 }
 exports.Fundamentals = {
@@ -1739,6 +1740,9 @@ exports.Fundamentals = {
         }
         if (message.stale !== false) {
             writer.uint32(136).bool(message.stale);
+        }
+        for (const v of message.missingMetrics) {
+            writer.uint32(146).string(v);
         }
         return writer;
     },
@@ -1871,6 +1875,13 @@ exports.Fundamentals = {
                     message.stale = reader.bool();
                     continue;
                 }
+                case 18: {
+                    if (tag !== 146) {
+                        break;
+                    }
+                    message.missingMetrics.push(reader.string());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1940,6 +1951,11 @@ exports.Fundamentals = {
             currency: isSet(object.currency) ? globalThis.String(object.currency) : "",
             source: isSet(object.source) ? globalThis.String(object.source) : "",
             stale: isSet(object.stale) ? globalThis.Boolean(object.stale) : false,
+            missingMetrics: globalThis.Array.isArray(object?.missingMetrics)
+                ? object.missingMetrics.map((e) => globalThis.String(e))
+                : globalThis.Array.isArray(object?.missing_metrics)
+                    ? object.missing_metrics.map((e) => globalThis.String(e))
+                    : [],
         };
     },
     toJSON(message) {
@@ -2001,6 +2017,9 @@ exports.Fundamentals = {
         if (message.stale !== false) {
             obj.stale = message.stale;
         }
+        if (message.missingMetrics?.length) {
+            obj.missingMetrics = message.missingMetrics;
+        }
         return obj;
     },
     create(base) {
@@ -2030,6 +2049,7 @@ exports.Fundamentals = {
         message.currency = object.currency ?? "";
         message.source = object.source ?? "";
         message.stale = object.stale ?? false;
+        message.missingMetrics = object.missingMetrics?.map((e) => e) || [];
         return message;
     },
 };

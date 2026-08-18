@@ -1,7 +1,6 @@
 # Feature: fix-mcp-target-user-authz
 
 **Type**: bug
-**Lifecycle Status**: `launched`
 **Committed to main**: 856ad5a3a2ebc431c108cc7f508deb26885545c6
 **Launched date**: 2026-08-07
 **Development Branch**: `feature/fix-mcp-target-user-authz` (implemented on harness-pinned `claude/remove-target-user-mcp-g4tfqm` — see context.md)
@@ -9,6 +8,7 @@
 **Severity**: SEV-2
 **Created**: 2026-08-07
 **Last Updated**: 2026-08-07
+**Archived**: 2026-08-16
 
 ---
 
@@ -22,6 +22,7 @@
 | 2026-08-07 | `implementation-ready` → `code-completed` | /sdd-execute | All 7 steps implemented directly on harness-pinned branch `claude/remove-target-user-mcp-g4tfqm` (red-before-green proven per step-pair); 208 tests passing, ruff clean. `docs/runbooks/mcp-tools.md` rewritten. PR #886. |
 
 | 2026-08-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #878; committed 856ad5a3a2ebc431c108cc7f508deb26885545c6 |
+| 2026-08-16 | launched (unchanged) | /sdd-archiver | Archived: synthesis written to context.md + Ledger, specs pruned. |
 ---
 
 ## Artifacts

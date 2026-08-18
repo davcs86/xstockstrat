@@ -4531,6 +4531,7 @@ function createBaseScreenResult() {
         held: false,
         criterionRawValues: {},
         criterionPassed: {},
+        scoreUnavailable: false,
     };
 }
 exports.ScreenResult = {
@@ -4574,6 +4575,9 @@ exports.ScreenResult = {
         globalThis.Object.entries(message.criterionPassed).forEach(([key, value]) => {
             exports.ScreenResult_CriterionPassedEntry.encode({ key: key, value }, writer.uint32(106).fork()).join();
         });
+        if (message.scoreUnavailable !== false) {
+            writer.uint32(112).bool(message.scoreUnavailable);
+        }
         return writer;
     },
     decode(input, length) {
@@ -4683,6 +4687,13 @@ exports.ScreenResult = {
                     }
                     continue;
                 }
+                case 14: {
+                    if (tag !== 112) {
+                        break;
+                    }
+                    message.scoreUnavailable = reader.bool();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -4742,6 +4753,11 @@ exports.ScreenResult = {
                         return acc;
                     }, {})
                     : {},
+            scoreUnavailable: isSet(object.scoreUnavailable)
+                ? globalThis.Boolean(object.scoreUnavailable)
+                : isSet(object.score_unavailable)
+                    ? globalThis.Boolean(object.score_unavailable)
+                    : false,
         };
     },
     toJSON(message) {
@@ -4803,6 +4819,9 @@ exports.ScreenResult = {
                 });
             }
         }
+        if (message.scoreUnavailable !== false) {
+            obj.scoreUnavailable = message.scoreUnavailable;
+        }
         return obj;
     },
     create(base) {
@@ -4839,6 +4858,7 @@ exports.ScreenResult = {
             }
             return acc;
         }, {});
+        message.scoreUnavailable = object.scoreUnavailable ?? false;
         return message;
     },
 };

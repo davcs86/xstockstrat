@@ -77,6 +77,20 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 141 — fix-opportunities-bars-fetch-oom (`xstockstrat-analysis`)
+
+Adds one process-lifetime singleton semaphore key bounding cross-request concurrency of
+`_compute_opportunities`' bars-fetch calls — a SEV-2 fix for TimescaleDB "out of shared memory"
+(SQLSTATE 53200) failures under multi-user load. Paired with a per-pass, symbol-keyed bars dedup
+cache (no config key — a plain function-local dict) that collapses feature 131's live-strategy
+fan-out and the uncapped watchlist-binding multiplier down to one bars-fetch per unique symbol
+per compute pass. Read live via `self._cfg.get_int(...)` (F-07), no config-service seed
+migration — mirrors `analysis.series.max_concurrent_components`'s no-seed pattern.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.opportunity.max_concurrent_bars_fetches` | int | `2` | Bounds concurrent bars-fetch attempts across simultaneous `_compute_opportunities` passes (different users), so Postgres never sees more concurrent multi-chunk `GetBars` queries than this. `max(1, get_int(...))` clamp. Default `2` (not the sibling semaphore precedents' `4`) to match `xstockstrat-marketdata`'s own `DB_POOL_MAX` default. |
+
 ### feature 125 — unified-symbol-page (`xstockstrat-analysis`)
 
 Adds one process-lifetime singleton semaphore key for the FR-6 indicator-overlay-panel RPC

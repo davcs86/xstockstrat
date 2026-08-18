@@ -1,6 +1,5 @@
 # Feature: ui-middleware-nodejs-runtime
 
-**Lifecycle Status**: `draft`
 **Development Branch**: `feature/ui-middleware-nodejs-runtime`
 **Created**: 2026-08-11
 **Last Updated**: 2026-08-11

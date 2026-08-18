@@ -1,6 +1,5 @@
 # Feature: user-management-ui
 
-**Lifecycle Status**: `draft`
 **Development Branch**: `feature/user-management-ui`
 **Created**: 2026-05-28
 **Last Updated**: 2026-05-28

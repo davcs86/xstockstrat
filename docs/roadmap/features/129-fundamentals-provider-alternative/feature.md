@@ -1,6 +1,5 @@
 # Feature: fundamentals-provider-alternative
 
-**Lifecycle Status**: `launched`
 **Committed to main**: 947c3cb0a7af9243532c08b9ab6507c83a685fac
 **Launched date**: 2026-08-13
 **Development Branch**: `claude/fmp-free-layer-ratios-dr0c4j`
