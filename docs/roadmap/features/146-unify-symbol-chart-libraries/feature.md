@@ -13,6 +13,7 @@
 | 2026-08-18 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-18 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings addressed: AC-2 token backstop, feature-123 decision dependency; rebase note recorded) |
 | 2026-08-18 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. Fork (a) at live gate: indicators onto lightweight-charts **v5 native panes**, drop recharts from symbol page, shared crosshair in-scope |
+| 2026-08-18 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps |
 
 ---
 
@@ -21,7 +22,7 @@
 - [Product Spec](product-spec.md) — requirements and governance
 - [Recon Dossier](recon.md) — grounded codebase map (/sdd-design Phase 0)
 - [Design](design.md) — debated, approved architecture (/sdd-design Phase 1)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec <slug>`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -41,8 +42,13 @@ re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
-| `xstockstrat-ui` service owner | Trading UI correctness, analytics display accuracy, Connect-RPC call safety, environment scope correctness (chart rendering + e2e stability) |
+| `xstockstrat-ui` service owner | Trading UI correctness, analytics display accuracy, Connect-RPC call safety, environment scope correctness — chart rendering + e2e stability (v5 migration, one pane per component / all sub-series drawn / gaps-not-0, disposal-safe teardown, `.tv-lightweight-charts` readiness preserved, card→panes layout change) |
+
+_All 8 steps are `service`/`test`/`docs` in `xstockstrat-ui`; the single distinct reviewer above is
+the `xstockstrat-ui` service owner (the `docs` step, Step 8, carries no reviewer per the registry
+matrix)._
 
 ## Next Action
 
-`/sdd-spec unify-symbol-chart-libraries` — generate the implementation spec from the approved design
+`/sdd-review unify-symbol-chart-libraries impl-spec` — validate the implementation spec, then
+`/sdd-execute unify-symbol-chart-libraries`

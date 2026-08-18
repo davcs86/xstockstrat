@@ -88,3 +88,67 @@
 - [ ] AC-3 "all sub-series drawn": data-series-count is a readiness helper only — back with a setData-invoked-N-times seam or snapshot. (→ e2e-rewrite step)
 - [ ] Disposal-safe pane teardown on strategy switch (IndicatorSection re-resolve). (→ pane-coordinator step)
 - [ ] Soft rebase: re-verify page.tsx / IndicatorPanels.tsx citations vs post-125/145/139 state. (→ /sdd-spec)
+
+## Session 2026-08-18 — sdd-spec
+
+- Generated implementation-spec.md with 8 steps. Status → implementation-ready.
+- Consumed recon.md + design.md (fork (a), lightweight-charts v5 native panes). No proto/config/DB
+  steps — UI-only, single service (xstockstrat-ui).
+- Step shape: (1) pin+verify lightweight-charts v5 API before any code (feature-014 trap,
+  insights.md:659-663); (2) pure src/lib unset→whitespace point mapper + monotonic-time normalize
+  (vitest); (3) pure src/lib oklch→rgb token resolver + new `--chart-grid` token (vitest for the pure
+  branches; probe round-trip proven on chromium); (4) migrate `useCandlestickChart` to v5 panes +
+  hex→tokens; (5) build indicator panes on the shared chart, drop recharts from the symbol page, move
+  avg/stop overlay hex→tokens, shared crosshair; (6) migrate `ChartPanel.tsx` lock-step; (7) rewrite
+  `position-detail.spec.ts` recharts assertions → v5 panes + `data-series-count` + setData seam;
+  (8) rewrite CLAUDE.md sanctioned exception + fix stale `insights/market` doc-drift.
+- Key codebase findings (all citations re-verified against post-125/145/139 tree):
+  - Rebase clean: `page.tsx` is 1277 lines; chart wiring at `page.tsx:116` (`useCandlestickChart(260)`),
+    overview render `page.tsx:381-401`, bars fetch + avg/stop overlays `page.tsx:189-246` (hex `#94a3b8`
+    :219 / `#e0787a` :231, `DASHED=2` :72), `IndicatorSection` `page.tsx:1105-1163`. `IndicatorPanels.tsx`
+    is the recharts renderer (testids `indicator-panels`/`indicator-panel`/`indicator-panel-error`;
+    gap `?? null` + `connectNulls={false}` :63-67,88; hidden index axis :59,76).
+  - `useCandlestickChart.ts:32-40` still v4 `addCandlestickSeries` + hard-coded hex; only 2 real
+    consumers (`ChartPanel.tsx` + symbol page) — `insights/market/[symbol]` renders NO chart (CLAUDE.md
+    doc-drift confirmed, grep=0).
+  - `node_modules` absent at spec time → v5 API names are design assumptions to CONFIRM in Step 1
+    against installed typings (recorded as F-09 Deviation Log if they differ), not invented (F-04).
+  - Root CLAUDE.md version table does NOT track lightweight-charts (grep=0) → no root edit; the only
+    doc surface is `services/xstockstrat-ui/CLAUDE.md` § Styling (Step 8).
+  - vitest env is `node` (not jsdom) → the oklch `getComputedStyle` probe is NOT node-unit-testable;
+    surfaced in Step 3 (P-03) — vitest covers the pure branches, chromium diagnosed run proves the probe.
+  - Reuse (C-12/C-13): `INDICATOR_SERIES_AAPL` (`e2e/fixtures/indicatorSeries.ts`, INVENTORY.md:32),
+    served by `mock-backend.ts:944-946` + AAPL bars :429-464, auth `e2e/helpers/auth.ts`. No new fixture,
+    no new mock/env wiring (confirm-don't-add, feature-014 sibling-wiring trap).
+  - Gap-not-0 wire proof already exists, unchanged: `test_analysis_servicer.py:5530`
+    (`test_none_maps_to_unset_indicator_value_not_zero`).
+
+### Open Threads (carried into /sdd-execute)
+- [ ] Step 1: confirm exact v5 symbol names (`addSeries(CandlestickSeries|LineSeries)`, pane API,
+      `WhitespaceData`) against installed typings; pin exact patch; record any divergence in Deviation Log.
+- [ ] Step 3: pick a visible `--chart-grid` token (not 10%-alpha `--border`); prove the oklch→rgb probe
+      on the chromium diagnosed run (vitest is node-env, can't).
+- [ ] Step 5: card-per-panel framing (feature 145) → stacked v5 panes is a real layout change — owner review.
+- [ ] Step 7: `data-series-count` is a readiness helper only — back "all series drawn" with a
+      setData-N-times/snapshot seam; preserve `.tv-lightweight-charts` readiness; defer full green to CI.
+
+## Session 2026-08-18 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 2 warnings, 3 notes (advisory — did not block). No Floor breach. Every code
+  citation spot-checked resolved exactly against the working tree.
+- Overlap: CLEAN — no collisions. Every feature sharing 146's UI files (125/145/139/143/123) is
+  already merged to trunk (the baseline 146 was specced against); the only strictly in-flight features
+  (142, 084) touch none of 146's files. No merge-order row required.
+- Findings — addressed this session (spec edits):
+  - [x] Step 8 (C-10 doc-completeness): the stale "insights/market/[symbol] has a chart" claim appears
+        TWICE in services/xstockstrat-ui/CLAUDE.md (§ Styling sanctioned-exception AND § Opportunities-first
+        "Decide screens"). Step 8 now targets BOTH and greps `insights/market` to confirm none survive.
+  - [x] Step 6 (C-01, cosmetic): off-by-one citations fixed (setData `:57`→`:56`; div `:129-134`→`:127-133`).
+- Findings — accepted / carried (not spec-edited):
+  - [ ] Step 5 (B2 step breadth): bundles 6 concerns (panes, fault isolation, DOM/readiness seam,
+        shared crosshair+tooltip, overlay hex→token, recharts removal). Reviewer judged it "cohesive
+        enough to proceed"; /sdd-execute MAY split the shared-crosshair/tooltip sub-task into its own
+        commit if it grows. — unaddressed by design (accepted).
+  - [note] Steps 2/3 use vitest-config-driven coverage thresholds (not a CLI flag) — matches this
+        service's testing convention; no action.
+- Next: /sdd-execute unify-symbol-chart-libraries.
