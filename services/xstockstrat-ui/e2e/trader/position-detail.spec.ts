@@ -418,11 +418,15 @@ test.describe('Single Position page', () => {
     await addAuthCookie(page);
     // ZZZZ: unheld, non-watchlisted, no orders → no strategy resolves → explicit no-data state.
     await page.goto('/trader/positions/ZZZZ');
-    const empty = page.getByTestId('indicator-panels-empty');
+    // Scope to the hydrated `<main>` subtree: the page's top-level Suspense boundary (feature 145)
+    // briefly streams two copies of the content during SSR→client hydration, so a bare page-level
+    // getByTestId trips strict mode on the transient duplicate — the same SSR/hydration timing the
+    // `readinessCard` helper already guards against for SignalReadiness.
+    const empty = page.getByRole('main').getByTestId('indicator-panels-empty');
     await expect(empty).toBeVisible({ timeout: 30000 });
     await expect(empty).toContainText(/No strategy resolves for ZZZZ/);
     // No panels rendered (the RPC was never called with an empty strategy).
-    await expect(page.getByTestId('indicator-panel')).toHaveCount(0);
+    await expect(page.getByRole('main').getByTestId('indicator-panel')).toHaveCount(0);
   });
 
   // ── Section nav (feature 139) — a sticky segmented anchor-nav groups the stacked sections.
@@ -565,7 +569,11 @@ test.describe('Single Position page', () => {
     await page.goto('/trader/positions/AMZN?strategy=strat-live-001');
     // Backtests resolved: the "Run backtest" action only renders once a strategy resolves (its
     // no-strategy branch has no such button) — proof the threaded ?strategy= unblocked the panel.
-    await expect(page.getByTestId('run-backtest')).toBeVisible({ timeout: 30000 });
+    // Scoped to the hydrated `<main>` (the top-level Suspense boundary transiently double-renders
+    // during SSR→client hydration — see the FR-6 no-data test above).
+    await expect(page.getByRole('main').getByTestId('run-backtest')).toBeVisible({
+      timeout: 30000,
+    });
     // Neither Backtests nor Indicators shows the no-strategy dead-end.
     await expect(page.getByText(/No strategy resolves for AMZN/)).toHaveCount(0);
   });
