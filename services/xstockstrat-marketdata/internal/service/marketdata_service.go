@@ -466,6 +466,22 @@ func (s *MarketDataService) markWarm(symbol string) {
 	s.warmMu.Unlock()
 }
 
+// warmSnapshot returns the current warm-symbol set as a slice. This is the demand-driven set that
+// GetBars / GetLatestQuote populate (via markWarm) and that the always-on bar ingester consumes each
+// cycle — so any symbol a caller has queried gets its bars refreshed. This coupling is the
+// autonomous-freshness contract (feature 140): the analysis live loop and the opportunities refresh
+// query GetBars for every symbol they evaluate, which warms exactly those symbols, so the ingester
+// keeps their daily bars fresh with no chart view / portal interaction required.
+func (s *MarketDataService) warmSnapshot() []string {
+	s.warmMu.Lock()
+	defer s.warmMu.Unlock()
+	symbols := make([]string, 0, len(s.warmSymbols))
+	for sym := range s.warmSymbols {
+		symbols = append(symbols, sym)
+	}
+	return symbols
+}
+
 // StartWarmQuotePoller periodically refreshes the latest quote for every symbol
 // that has been queried via GetLatestQuote, writing it to the DB so reads serve
 // from the cache instead of a live Alpaca call. Interval is configurable via
@@ -608,12 +624,7 @@ func resolveIngestTimeframe(raw string) string {
 // routine market closure (a holiday-extended weekend) lets the feed self-heal after a pause or
 // restart while still always covering the latest completed daily bar.
 func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
-	s.warmMu.Lock()
-	symbols := make([]string, 0, len(s.warmSymbols))
-	for sym := range s.warmSymbols {
-		symbols = append(symbols, sym)
-	}
-	s.warmMu.Unlock()
+	symbols := s.warmSnapshot()
 	if len(symbols) == 0 {
 		return
 	}

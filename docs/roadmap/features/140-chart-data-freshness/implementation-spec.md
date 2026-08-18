@@ -66,6 +66,21 @@
   `test_screener.py` (summarized WARN; RpcError not double-counted); `test_analysis_servicer.py`
   (readiness successful-but-empty WARN). All green; ruff clean; full analysis suite 524 passed.
 
+## Step 6 — Autonomous-freshness regression guards ✅ DONE (follow-up)
+
+Locks the invariant that indicator/strategy calculation stays fresh **without any portal/chart view**:
+querying a symbol warms it, the ingester refreshes exactly the warm set, and the live loop queries
+every symbol it evaluates.
+
+- `marketdata_service.go`: extracted `warmSnapshot()` (the set `ingestRecentBars` consumes) beside
+  `markWarm`, with a doc comment stating the autonomous-freshness contract.
+- **Go guards** (`marketdata_service_test.go`): `TestMarkWarmFeedsIngestSet` (markWarm populates
+  exactly the ingester's `warmSnapshot`); `TestGetBarsMarksSymbolWarm` (structural check that
+  `GetBars` calls `s.markWarm(req.Symbol)` — GetBars needs a live pool, so a source-level guard).
+- **Analysis guard** (`test_live_loop.py`): `test_cycle_queries_getbars_for_every_universe_symbol`
+  (a `_run_cycle` over a 2-symbol universe issues `GetBars` for both, at `1d`) — so the loop can't
+  silently stop warming its symbols via a batching/caching refactor.
+
 ## Verification summary
 
 - **marketdata** (Go): `go build`, `go vet`, `gofmt -l` clean; `go test ./internal/...` green (new

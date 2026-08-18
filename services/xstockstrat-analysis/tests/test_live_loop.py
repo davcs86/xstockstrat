@@ -163,6 +163,36 @@ class TestLiveEvaluationLoopRequestShape:
         assert called_req.timeframe == "1d"
         assert called_req.timeframe_enum == common_pb2.Timeframe.TIMEFRAME_1DAY
 
+    @pytest.mark.asyncio
+    async def test_cycle_queries_getbars_for_every_universe_symbol(self):
+        # feature 140 autonomous-freshness guard: the live loop must issue GetBars for EVERY symbol
+        # it evaluates. That GetBars call is exactly what marks the symbol "warm" in marketdata, so
+        # the always-on ingester keeps its daily bars fresh WITHOUT anyone opening a chart/portal.
+        # If a refactor ever stopped the loop querying per symbol (e.g. batching or caching bars),
+        # autonomous strategies would silently run on stale data — this test fails first.
+        loop = _make_loop()
+        loop._db.fetch = AsyncMock(
+            return_value=[
+                {
+                    "strategy_id": "s1",
+                    "user_id": "u1",
+                    "display_name": "S1",
+                    "active": True,
+                    "live_enabled": True,
+                    "definition_json": {"signal_params": {"symbols": ["AAA", "BBB"]}},
+                }
+            ]
+        )
+        loop._evaluator.evaluate = AsyncMock(return_value=[])  # no decisions → stop after fetch
+        await loop._run_cycle()
+
+        queried = {call.args[0].symbol for call in loop._marketdata.GetBars.await_args_list}
+        assert queried == {"AAA", "BBB"}  # every universe symbol was queried → all get warmed
+        # Every query targets the canonical 1d bars the ingester now refreshes (FR-2).
+        assert all(
+            call.args[0].timeframe == "1d" for call in loop._marketdata.GetBars.await_args_list
+        )
+
 
 class TestLiveEvaluationLoopThrottle:
     @pytest.mark.asyncio

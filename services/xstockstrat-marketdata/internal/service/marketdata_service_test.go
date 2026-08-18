@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"log/slog"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -768,6 +769,60 @@ func barsSeconds(bars []*marketdatav1.Bar) []int64 {
 		out[i] = b.GetTime().AsTime().Unix()
 	}
 	return out
+}
+
+// TestMarkWarmFeedsIngestSet is a feature-140 regression guard on the autonomous-freshness contract:
+// the set markWarm populates is exactly the set the always-on bar ingester consumes (warmSnapshot).
+// If these ever diverge, a symbol could be queried yet never get its bars refreshed by the ingester
+// — the failure mode the user asked to be protected against.
+func TestMarkWarmFeedsIngestSet(t *testing.T) {
+	s := &MarketDataService{warmSymbols: make(map[string]struct{})}
+	if got := s.warmSnapshot(); len(got) != 0 {
+		t.Fatalf("fresh service should have no warm symbols, got %v", got)
+	}
+	s.markWarm("AAPL")
+	s.markWarm("MSFT")
+	s.markWarm("AAPL") // idempotent
+	s.markWarm("")     // ignored
+
+	got := map[string]bool{}
+	for _, sym := range s.warmSnapshot() {
+		got[sym] = true
+	}
+	if len(got) != 2 || !got["AAPL"] || !got["MSFT"] {
+		t.Errorf("warmSnapshot should be exactly {AAPL, MSFT}, got %v", got)
+	}
+}
+
+// TestGetBarsMarksSymbolWarm guards the other half of the feature-140 autonomous-freshness contract:
+// GetBars must warm the queried symbol, so that the analysis live loop / opportunities refresh —
+// which query GetBars for every symbol they evaluate — thereby register those symbols for the
+// always-on ingester WITHOUT any chart view. A structural (source) check because GetBars needs a live
+// DB pool to invoke; removing the markWarm call would silently break autonomous bar freshness.
+func TestGetBarsMarksSymbolWarm(t *testing.T) {
+	src, err := os.ReadFile("marketdata_service.go")
+	if err != nil {
+		t.Fatalf("read source: %v", err)
+	}
+	body := funcBody(t, string(src), "func (s *MarketDataService) GetBars(")
+	if !strings.Contains(body, "s.markWarm(req.Symbol)") {
+		t.Error("GetBars must call s.markWarm(req.Symbol) — the query path feeds the always-on " +
+			"ingester's warm set (feature 140 autonomous-freshness contract)")
+	}
+}
+
+// funcBody returns the source text from the given func signature up to the next top-level `func (`.
+func funcBody(t *testing.T, src, signature string) string {
+	t.Helper()
+	start := strings.Index(src, signature)
+	if start < 0 {
+		t.Fatalf("signature %q not found in source", signature)
+	}
+	rest := src[start+len(signature):]
+	if end := strings.Index(rest, "\nfunc ("); end >= 0 {
+		return rest[:end]
+	}
+	return rest
 }
 
 // TestResolveIngestTimeframe covers AC-10's three cases directly, with the paired
