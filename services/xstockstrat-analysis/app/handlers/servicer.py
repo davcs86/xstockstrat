@@ -2110,11 +2110,22 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         range_msg = _recent_range(_READINESS_LOOKBACK_DAYS)
         readiness = []
         for symbol in request.symbols:
+            fetch_ok = True
             try:
                 bars = await self._fetch_bars_paged(symbol, range_msg, propagation_meta)
             except Exception as e:  # bar fetch is best-effort per symbol
                 log.warning("EvaluateReadiness: bars fetch failed for %s: %s", symbol, e)
                 bars = []
+                fetch_ok = False
+            if fetch_ok and not bars:
+                # feature 140 FR-6: a successful-but-empty fetch was previously silent — the empty
+                # readiness surfaced only in the response the UI reads. Request-bounded loop, so a
+                # per-symbol WARN is rate-safe (unlike the live loop / screener, which summarize).
+                log.warning(
+                    "EvaluateReadiness: no 1d bars for %s (strategy %s) — readiness will be empty",
+                    symbol,
+                    request.strategy_id,
+                )
             trace = await evaluator.evaluate_conditions_traced(definition, bars, symbol, rule=rule)
             readiness.append(_readiness_to_proto(trace))
         return analysis_pb2.EvaluateReadinessResponse(readiness=readiness)

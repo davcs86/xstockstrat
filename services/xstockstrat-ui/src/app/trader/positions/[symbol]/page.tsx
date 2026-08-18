@@ -146,10 +146,14 @@ export default function PositionDetailPage() {
     return matches.find((o) => o.strategyId === boundStrategyId) ?? matches[0];
   }, [oppData, symbol, boundStrategyId]);
 
-  useEffect(() => {
+  // feature 140: the fetch body is kept in a ref (reassigned every render) so the poll interval
+  // below always runs the latest closure over symbol/timeframe/avg/stop, and a stale in-flight
+  // response from a superseded load can't overwrite the chart. latestReqRef replaces the prior
+  // per-effect `cancelled` flag and also guards the interval-driven fetches.
+  const latestReqRef = useRef(0);
+  const loadBars = () => {
     if (!symbol) return;
-    let cancelled = false;
-    setBarsError(null);
+    const reqId = ++latestReqRef.current;
     marketDataClient
       .getBars({
         symbol,
@@ -158,7 +162,7 @@ export default function PositionDetailPage() {
         page: { pageSize: 200 },
       })
       .then((res) => {
-        if (cancelled) return;
+        if (reqId !== latestReqRef.current) return; // superseded by a newer load
         // Capture closes+times for the indicator panels first — independent of the lightweight
         // chart's own readiness (bars with no timestamp are dropped to keep the two index-aligned).
         const withTime = res.bars.filter((b) => b.time);
@@ -166,6 +170,7 @@ export default function PositionDetailPage() {
           closes: withTime.map((b) => b.close),
           times: withTime.map((b) => b.time!),
         });
+        setBarsError(null);
         const series = seriesRef.current;
         if (!series) return;
         series.setData(mapBars(res.bars));
@@ -198,12 +203,26 @@ export default function PositionDetailPage() {
         }
       })
       .catch((err: unknown) => {
-        if (!cancelled) setBarsError((err as Error).message);
+        if (reqId === latestReqRef.current) setBarsError((err as Error).message);
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [symbol, timeframe, avg, stop, seriesRef]);
+  };
+  const loadBarsRef = useRef(loadBars);
+  loadBarsRef.current = loadBars;
+
+  // Fetch on mount and whenever symbol / timeframe / avg / stop change.
+  useEffect(() => {
+    loadBarsRef.current();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol, timeframe, avg, stop]);
+
+  // feature 140: poll the daily chart on a bounded interval so new bars appear without a manual
+  // reload. Keyed on [symbol] only — so the timer isn't reset on every avg/stop position tick — and
+  // cleared on symbol change / unmount.
+  useEffect(() => {
+    if (!symbol) return;
+    const id = setInterval(() => loadBarsRef.current(), 300_000);
+    return () => clearInterval(id);
+  }, [symbol]);
 
   // GetPosition returns a NotFound *error* for a non-held / watchlist-research symbol (the common
   // case) — route that (and a plain empty result) to the inline notice below, and reserve the scary

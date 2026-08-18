@@ -706,6 +706,70 @@ func (h *countingWarnHandler) Handle(_ context.Context, r slog.Record) error {
 func (h *countingWarnHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
 func (h *countingWarnHandler) WithGroup(string) slog.Handler      { return h }
 
+// TestStaleCheckDue covers feature 140 FR-3's per-(symbol,tf) cooldown: the first check for a key is
+// due (and marks it), an immediate repeat within one interval is suppressed, and after one interval
+// it is due again. This is the guard that stops a weekend/holiday — where the newest real bar is
+// legitimately older than one interval — from refetching from Alpaca on every chart poll.
+func TestStaleCheckDue(t *testing.T) {
+	s := &MarketDataService{lastStaleCheck: make(map[string]time.Time)}
+	interval := 24 * time.Hour
+	t0 := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
+
+	if !s.staleCheckDue("AAPL", "1d", interval, t0) {
+		t.Fatal("first check for AAPL|1d should be due")
+	}
+	if s.staleCheckDue("AAPL", "1d", interval, t0.Add(time.Hour)) {
+		t.Error("repeat within one interval should be suppressed")
+	}
+	if s.staleCheckDue("AAPL", "1d", interval, t0.Add(interval-time.Second)) {
+		t.Error("just under one interval should still be suppressed")
+	}
+	if !s.staleCheckDue("AAPL", "1d", interval, t0.Add(interval+time.Second)) {
+		t.Error("after one interval the check should be due again")
+	}
+	// A different (symbol,tf) key is tracked independently.
+	if !s.staleCheckDue("MSFT", "1d", interval, t0.Add(time.Hour)) {
+		t.Error("first check for a different symbol should be due")
+	}
+	if !s.staleCheckDue("AAPL", "1h", interval, t0.Add(time.Hour)) {
+		t.Error("first check for a different timeframe on the same symbol should be due")
+	}
+}
+
+// TestTruncateBars covers feature 140 FR-7's cache-write-failure fallback slice: when serving
+// freshly-fetched (ascending) live bars without a DB re-read, the recent path must return the NEWEST
+// pageSize bars, the non-recent path the first page, and a short slice passes through untouched.
+func TestTruncateBars(t *testing.T) {
+	mk := func(n int) []*marketdatav1.Bar {
+		out := make([]*marketdatav1.Bar, n)
+		for i := range out {
+			out[i] = &marketdatav1.Bar{Time: timestamppb.New(time.Unix(int64(i), 0))}
+		}
+		return out
+	}
+	live := mk(5)
+
+	recent := truncateBars(live, 2, true)
+	if len(recent) != 2 || recent[0].GetTime().AsTime().Unix() != 3 || recent[1].GetTime().AsTime().Unix() != 4 {
+		t.Errorf("recent=true should return the newest 2 bars [3,4], got %v", barsSeconds(recent))
+	}
+	oldest := truncateBars(live, 2, false)
+	if len(oldest) != 2 || oldest[0].GetTime().AsTime().Unix() != 0 || oldest[1].GetTime().AsTime().Unix() != 1 {
+		t.Errorf("recent=false should return the first 2 bars [0,1], got %v", barsSeconds(oldest))
+	}
+	if got := truncateBars(mk(2), 5, true); len(got) != 2 {
+		t.Errorf("a slice shorter than pageSize should pass through, got len %d", len(got))
+	}
+}
+
+func barsSeconds(bars []*marketdatav1.Bar) []int64 {
+	out := make([]int64, len(bars))
+	for i, b := range bars {
+		out[i] = b.GetTime().AsTime().Unix()
+	}
+	return out
+}
+
 // TestResolveIngestTimeframe covers AC-10's three cases directly, with the paired
 // "something does change" WARN assertion (insights.md 2026-07-27, teeth test).
 func TestResolveIngestTimeframe(t *testing.T) {
@@ -715,14 +779,14 @@ func TestResolveIngestTimeframe(t *testing.T) {
 		want     string
 		wantWarn bool
 	}{
-		{"empty falls back to default", "", "15m", false},
+		{"empty falls back to default 1d", "", "1d", false}, // feature 140: default flipped 15m→1d
 		{"canonical 1d passes through", "1d", "1d", false},
 		{"canonical 1h passes through", "1h", "1h", false},
 		{"canonical 15m passes through", "15m", "15m", false},
 		{"alias 1Day resolves", "1Day", "1d", false},
 		{"alias 1Hour resolves", "1Hour", "1h", false},
 		{"alias 15Min resolves", "15Min", "15m", false},
-		{"unresolvable falls back and warns", "10Min", "15m", true},
+		{"unresolvable falls back to default 1d and warns", "10Min", "1d", true}, // feature 140
 	}
 
 	for _, tc := range cases {

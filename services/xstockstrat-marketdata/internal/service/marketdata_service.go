@@ -45,6 +45,12 @@ type MarketDataService struct {
 	warmMu      sync.Mutex
 	warmSymbols map[string]struct{}
 
+	// lastStaleCheck rate-limits FR-3's stale-bar refetch (GetBars) to at most one live Alpaca
+	// fetch per (symbol|timeframe) per bar interval. Without it, a weekend/holiday — where the
+	// newest real bar is legitimately older than one interval — would refetch on every chart poll.
+	staleMu        sync.Mutex
+	lastStaleCheck map[string]time.Time
+
 	// fundamentals is the active fundamentals source (feature 059; provider made
 	// switchable by feature 129), held separately from the OHLCV registry (FR-2).
 	// Always non-nil since feature 082 — marketdata.<fundProvider>.enabled gates use
@@ -102,18 +108,19 @@ func NewMarketDataService(
 		return nil, fmt.Errorf("dial notify: %w", err)
 	}
 	return &MarketDataService{
-		registry:     registry,
-		repo:         repo,
-		cfg:          cfgWatcher,
-		ledger:       ledgerv1.NewLedgerServiceClient(ledgerConn),
-		notify:       notifyv1.NewNotifyServiceClient(notifyConn),
-		barSubs:      make(map[string]chan *marketdatav1.Bar),
-		quoteSubs:    make(map[string]chan *marketdatav1.Quote),
-		warmSymbols:  make(map[string]struct{}),
-		fundamentals: fundamentals,
-		fundProvider: provider,
-		fundCfg:      cfgWatcher,
-		fundRepo:     repo,
+		registry:       registry,
+		repo:           repo,
+		cfg:            cfgWatcher,
+		ledger:         ledgerv1.NewLedgerServiceClient(ledgerConn),
+		notify:         notifyv1.NewNotifyServiceClient(notifyConn),
+		barSubs:        make(map[string]chan *marketdatav1.Bar),
+		quoteSubs:      make(map[string]chan *marketdatav1.Quote),
+		warmSymbols:    make(map[string]struct{}),
+		lastStaleCheck: make(map[string]time.Time),
+		fundamentals:   fundamentals,
+		fundProvider:   provider,
+		fundCfg:        cfgWatcher,
+		fundRepo:       repo,
 	}, nil
 }
 
@@ -152,6 +159,11 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 			end = req.Range.End.AsTime()
 		}
 	}
+	// A request with no explicit range START is a "latest bars" read (charts, screener): serve the
+	// most-recent page (FR-7 — QueryRecentBars). A request WITH an explicit start is a
+	// historical/paginated read (backtest): keep the oldest-page-forward pagination unchanged.
+	// startImplicit also gates the FR-3 staleness refetch below (current-window reads only).
+	startImplicit := req.Range == nil || req.Range.Start == nil
 	if end.IsZero() {
 		end = time.Now()
 	}
@@ -163,18 +175,48 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 		start = end.Add(-defaultBarLookback(canonicalTf, pageSize))
 	}
 
-	bars, nextToken, err := s.repo.QueryBars(ctx, req.Symbol, canonicalTf, start, end, pageSize, pageToken)
+	var (
+		bars      []*marketdatav1.Bar
+		nextToken string
+		err       error
+	)
+	if startImplicit && pageToken == "" {
+		// FR-7: the newest page (ascending), independent of how much history is stored — the
+		// chart/screener fetch only the first page, so an oldest-page-forward read here (QueryBars)
+		// would render months-old bars for any symbol with more than pageSize stored bars.
+		bars, err = s.repo.QueryRecentBars(ctx, req.Symbol, canonicalTf, end, pageSize)
+	} else {
+		bars, nextToken, err = s.repo.QueryBars(ctx, req.Symbol, canonicalTf, start, end, pageSize, pageToken)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("query bars: %w", err)
 	}
 
-	// DB miss on the first page — fall back to a live Alpaca fetch, cache the result,
-	// and re-read so pagination stays consistent. Without this the chart stays empty
-	// until an explicit backfill runs, even though the data is one REST call away.
-	// (Mirrors GetLatestQuote's live fallback.) Only on the first page: an empty later
-	// page means end-of-data, not a miss.
-	if len(bars) == 0 && pageToken == "" {
-		bars, nextToken = s.fetchAndCacheBars(ctx, req.Symbol, canonicalTf, start, end, pageSize)
+	// Live-fetch fallback (first page only — a later empty page is end-of-data, not a miss). Two
+	// triggers, both routed through fetchAndCacheBars (live → cache → re-read):
+	//   (1) DB miss — no stored bars at all (existing behavior; every window).
+	//   (2) FR-3 staleness — current-window (implicit-start) read whose newest stored bar is older
+	//       than one bar interval, so today's bar is missing. On the FR-7 path bars are ascending, so
+	//       bars[len-1] is the globally newest stored bar. Rate-limited to one live fetch per
+	//       (symbol,tf) per interval (staleCheckDue) so a weekend — where the newest real bar is
+	//       legitimately older than one interval — does not refetch on every poll.
+	if pageToken == "" {
+		refetch := len(bars) == 0
+		if !refetch && startImplicit && len(bars) > 0 {
+			if interval := timeframe.Interval(canonicalTf); interval > 0 {
+				newest := bars[len(bars)-1].GetTime().AsTime()
+				if time.Since(newest) > interval && s.staleCheckDue(req.Symbol, canonicalTf, interval, time.Now()) {
+					refetch = true
+				}
+			}
+		}
+		if refetch {
+			// Keep the stale-but-present bars if the refetch yields nothing (e.g. a weekend with no
+			// newer bar) rather than blanking a chart that has data.
+			if fresh, freshToken := s.fetchAndCacheBars(ctx, req.Symbol, canonicalTf, start, end, pageSize, startImplicit); len(fresh) > 0 {
+				bars, nextToken = fresh, freshToken
+			}
+		}
 	}
 
 	return &marketdatav1.GetBarsResponse{
@@ -183,12 +225,28 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 	}, nil
 }
 
-// fetchAndCacheBars fetches bars for a symbol from the live source, persists them, and
-// returns the first page from the DB (so the next_page_token is consistent with a normal
-// cached read). On any failure it logs and returns no bars — GetBars then yields an empty
-// (but valid) response rather than erroring. If caching fails the freshly fetched bars are
-// still served, truncated to pageSize.
-func (s *MarketDataService) fetchAndCacheBars(ctx context.Context, symbol, tf string, start, end time.Time, pageSize int) ([]*marketdatav1.Bar, string) {
+// staleCheckDue reports whether a FR-3 stale-bar refetch may run now for this (symbol,timeframe),
+// and atomically marks it done — so at most one live Alpaca fetch runs per interval even when the
+// newest stored bar is legitimately older than one interval (weekend/holiday) and every poll would
+// otherwise see it as stale. Mirrors the warmSymbols map+mutex pattern.
+func (s *MarketDataService) staleCheckDue(symbol, tf string, interval time.Duration, now time.Time) bool {
+	key := symbol + "|" + tf
+	s.staleMu.Lock()
+	defer s.staleMu.Unlock()
+	if last, ok := s.lastStaleCheck[key]; ok && now.Sub(last) < interval {
+		return false
+	}
+	s.lastStaleCheck[key] = now
+	return true
+}
+
+// fetchAndCacheBars fetches bars for a symbol from the live source, persists them, and returns a
+// page from the DB. When recent is true (the implicit-window chart/screener path) it re-reads the
+// NEWEST page (FR-7) with no page token; otherwise it re-reads the oldest-page-forward window so
+// pagination stays consistent for historical/backtest callers. On any failure it logs and returns no
+// bars — GetBars then yields an empty (but valid) response rather than erroring. If caching fails the
+// freshly fetched bars are still served, truncated to pageSize (newest slice when recent).
+func (s *MarketDataService) fetchAndCacheBars(ctx context.Context, symbol, tf string, start, end time.Time, pageSize int, recent bool) ([]*marketdatav1.Bar, string) {
 	src, err := s.registry.Get("")
 	if err != nil {
 		slog.Warn("GetBars: resolve source failed", "symbol", symbol, "error", err)
@@ -204,21 +262,34 @@ func (s *MarketDataService) fetchAndCacheBars(ctx context.Context, symbol, tf st
 	}
 	if err := s.repo.InsertBars(ctx, live); err != nil {
 		slog.Warn("GetBars: cache insert failed", "symbol", symbol, "error", err)
-		// Serve what we fetched even if caching failed.
-		if len(live) > pageSize {
-			return live[:pageSize], ""
+		return truncateBars(live, pageSize, recent), ""
+	}
+	if recent {
+		bars, err := s.repo.QueryRecentBars(ctx, symbol, tf, end, pageSize)
+		if err != nil {
+			slog.Warn("GetBars: re-read after cache failed", "symbol", symbol, "error", err)
+			return truncateBars(live, pageSize, recent), ""
 		}
-		return live, ""
+		return bars, ""
 	}
 	bars, nextToken, err := s.repo.QueryBars(ctx, symbol, tf, start, end, pageSize, "")
 	if err != nil {
 		slog.Warn("GetBars: re-read after cache failed", "symbol", symbol, "error", err)
-		if len(live) > pageSize {
-			return live[:pageSize], ""
-		}
-		return live, ""
+		return truncateBars(live, pageSize, recent), ""
 	}
 	return bars, nextToken
+}
+
+// truncateBars returns at most pageSize bars from a freshly-fetched (ascending) live slice — the
+// NEWEST page when recent, else the first page — used only on the cache-write-failure fallback.
+func truncateBars(live []*marketdatav1.Bar, pageSize int, recent bool) []*marketdatav1.Bar {
+	if len(live) <= pageSize {
+		return live
+	}
+	if recent {
+		return live[len(live)-pageSize:]
+	}
+	return live[:pageSize]
 }
 
 // defaultBarLookback sizes the implicit history window (when the caller supplies no
@@ -479,9 +550,9 @@ func (s *MarketDataService) StartWarmQuotePoller(ctx context.Context) {
 // queried (the same warm set StartWarmQuotePoller tracks — populated by GetLatestQuote and
 // GetBars), upserting them into marketdata.ohlcv. This gives the platform an always-on feed
 // instead of one that only runs while a client holds a StreamBars RPC open. Interval is
-// configurable via marketdata.stream.bar_ingest_interval_ms (default 60s); set to 0 to pause.
+// configurable via marketdata.stream.bar_ingest_interval_ms (default 5m); set to 0 to pause.
 func (s *MarketDataService) StartBarIngestPoller(ctx context.Context) {
-	const defaultIntervalMs = 60000
+	const defaultIntervalMs = 300000
 	interval := time.Duration(s.cfg.GetInt("marketdata.stream.bar_ingest_interval_ms", defaultIntervalMs)) * time.Millisecond
 	if interval <= 0 {
 		interval = defaultIntervalMs * time.Millisecond
@@ -507,8 +578,11 @@ func (s *MarketDataService) StartBarIngestPoller(ctx context.Context) {
 }
 
 // defaultBarIngestTimeframe is the declared default of
-// marketdata.stream.bar_ingest_timeframe (see the service CLAUDE.md config table).
-const defaultBarIngestTimeframe = "15m"
+// marketdata.stream.bar_ingest_timeframe (see the service CLAUDE.md config table). The always-on
+// ingester keeps DAILY bars fresh: the platform's charts, screener, strategy evaluation, backtests
+// and readiness all read 1d, and no automated consumer reads stored 15m/1h (feature 140). A human
+// manually picking an intraday chart tab still self-heals on demand via GetBars' live fallback.
+const defaultBarIngestTimeframe = "1d"
 
 // resolveIngestTimeframe canonicalizes the configured bar-ingest timeframe. Bars fetched
 // with this value are PERSISTED (InsertBars), so an out-of-vocabulary config value would
@@ -529,9 +603,10 @@ func resolveIngestTimeframe(raw string) string {
 }
 
 // ingestRecentBars fetches the recent bar window for every warm symbol and upserts it.
-// The lookback (marketdata.stream.bar_ingest_lookback_ms, default 15m) is re-fetched each
-// cycle; overlap is harmless because InsertBars upserts, and a window wider than the poll
-// interval lets the feed self-heal after a brief pause or restart.
+// The lookback (marketdata.stream.bar_ingest_lookback_ms, default 4 days) is re-fetched each
+// cycle; overlap is harmless because InsertBars upserts, and a window that spans the longest
+// routine market closure (a holiday-extended weekend) lets the feed self-heal after a pause or
+// restart while still always covering the latest completed daily bar.
 func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
 	s.warmMu.Lock()
 	symbols := make([]string, 0, len(s.warmSymbols))
@@ -547,9 +622,9 @@ func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
 		return
 	}
 	tf := resolveIngestTimeframe(s.cfg.GetString("marketdata.stream.bar_ingest_timeframe", defaultBarIngestTimeframe))
-	lookbackMs := s.cfg.GetInt("marketdata.stream.bar_ingest_lookback_ms", 900000)
+	lookbackMs := s.cfg.GetInt("marketdata.stream.bar_ingest_lookback_ms", 345600000)
 	if lookbackMs <= 0 {
-		lookbackMs = 900000
+		lookbackMs = 345600000
 	}
 	end := time.Now().UTC()
 	start := end.Add(-time.Duration(lookbackMs) * time.Millisecond)

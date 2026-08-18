@@ -6,6 +6,7 @@ throttling (FR-3), and per-(strategy, symbol) isolation (FR-8).
 """
 
 import inspect
+import logging
 import time
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -84,8 +85,69 @@ class TestLiveEvaluationLoopStateTracking:
         loop = _make_loop()
         loop._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=[]))
         defn = analysis_pb2.StrategyDefinition(strategy_id="s1", user_id="u1")
-        await loop._eval_pair(defn, "AAPL", throttle=0)
+        # feature 140 FR-6: an empty GetBars fires no alert AND signals the gap to _run_cycle.
+        result = await loop._eval_pair(defn, "AAPL", throttle=0)
         loop._notify.EmitAlert.assert_not_called()
+        assert result == live_loop_module._EVAL_NO_BARS
+
+
+class TestLiveEvaluationLoopMissingDataLogging:
+    """feature 140 FR-6: data-less live evaluations, previously silent, now emit one summarized
+    WARN per cycle (not a per-pair flood)."""
+
+    @pytest.mark.asyncio
+    async def test_dataless_pairs_logged_once_per_cycle(self, caplog):
+        loop = _make_loop()
+        # resolve_universe: the explicit allowlist yields the {AAA, BBB} evaluation universe.
+        loop._db.fetch = AsyncMock(
+            return_value=[
+                {
+                    "strategy_id": "s1",
+                    "user_id": "u1",
+                    "display_name": "S1",
+                    "active": True,
+                    "live_enabled": True,
+                    "definition_json": {"signal_params": {"symbols": ["AAA", "BBB"]}},
+                }
+            ]
+        )
+        # Both symbols come back with no bars (the gap FR-6 surfaces).
+        loop._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=[]))
+
+        with caplog.at_level(logging.WARNING, logger="app.engine.live_loop"):
+            await loop._run_cycle()
+
+        summaries = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and "had no 1d bars this cycle" in r.getMessage()
+        ]
+        assert len(summaries) == 1, "expected exactly one summarized WARN for the whole cycle"
+        msg = summaries[0].getMessage()
+        assert "2/2" in msg  # both evaluated pairs were data-less
+        assert "AAA" in msg and "BBB" in msg  # bounded sample names the pairs
+
+    @pytest.mark.asyncio
+    async def test_no_warn_when_all_pairs_have_bars(self, caplog):
+        loop = _make_loop()  # default GetBars mock returns one bar
+        loop._db.fetch = AsyncMock(
+            return_value=[
+                {
+                    "strategy_id": "s1",
+                    "user_id": "u1",
+                    "display_name": "S1",
+                    "active": True,
+                    "live_enabled": True,
+                    "definition_json": {"signal_params": {"symbols": ["AAA"]}},
+                }
+            ]
+        )
+        loop._evaluator.evaluate = AsyncMock(return_value=[_decision(False, False)])
+        with caplog.at_level(logging.WARNING, logger="app.engine.live_loop"):
+            await loop._run_cycle()
+        assert not [
+            r for r in caplog.records if "had no 1d bars this cycle" in r.getMessage()
+        ]
 
 
 class TestLiveEvaluationLoopRequestShape:

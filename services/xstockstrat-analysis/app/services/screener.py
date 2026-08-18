@@ -122,6 +122,26 @@ class ScreenerEngine:
                 )
             )
 
+        # feature 140 FR-6: surface bars gaps in the runtime logs (they were previously carried
+        # only in the per-row INSUFFICIENT_DATA status + coverage_gaps response fields the UI
+        # reads). One summarized WARN per scan with a bounded sample; excludes symbols whose
+        # GetBars raised (already logged per-symbol above) so an RPC failure is not double-reported.
+        dataless_bars = [
+            r["symbol"]
+            for r in per_symbol
+            if r["status"] == analysis_pb2.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA
+            and r["gap"] is not None
+            and not r["bars_errored"]
+        ]
+        if dataless_bars:
+            log.warning(
+                "screener: %d/%d scanned symbols had insufficient 1d bars for technical "
+                "criteria; sample=%s",
+                len(dataless_bars),
+                len(per_symbol),
+                dataless_bars[:10],
+            )
+
         # FR-6: min-max normalize each criterion's raw values across the scanned universe.
         norm = self._normalize_universe(criteria, per_symbol)
 
@@ -190,6 +210,9 @@ class ScreenerEngine:
             "signal_score": 0.5,
             "status": analysis_pb2.SCREEN_RESULT_STATUS_OK,
             "gap": None,
+            # feature 140 FR-6: True when GetBars itself raised (already logged per-symbol below),
+            # so the per-scan missing-data summary can exclude it and not double-log an RPC failure.
+            "bars_errored": False,
         }
 
         # 1. Bars (latest window) for technical criteria.
@@ -206,6 +229,7 @@ class ScreenerEngine:
             closes = [b.close for b in bars_resp.bars]
         except grpc.RpcError as e:
             log.warning("GetBars failed for %s: %s", symbol, e)
+            row["bars_errored"] = True
 
         needs_technical = any(c.kind in _TECHNICAL_KINDS for c in criteria)
         if needs_technical and len(closes) < 2:

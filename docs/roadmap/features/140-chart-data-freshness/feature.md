@@ -1,6 +1,6 @@
 # Feature: chart-data-freshness
 
-**Lifecycle Status**: `design-approved`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/chart-data-freshness`
 **Created**: 2026-08-18
 **Last Updated**: 2026-08-18
@@ -13,6 +13,7 @@
 |---|---|---|---|
 | 2026-08-18 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-18 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, quick→upgraded) and approved; recon.md + design.md written; FR-7 read-path root cause folded in |
+| 2026-08-18 | `design-approved` → `code-completed` | direct-impl | FR-7/FR-2/FR-3 (marketdata), FR-1 (ui), FR-6 (analysis) implemented + tested; go/tsc/ruff/pytest green |
 
 ---
 
@@ -21,7 +22,7 @@
 - [Product Spec](product-spec.md) — requirements and governance
 - [Recon](recon.md) — grounded codebase dossier
 - [Design](design.md) — debated, approved architecture
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec chart-data-freshness`_
+- [Implementation Spec](implementation-spec.md) — completed-step record
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -51,4 +52,6 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec chart-data-freshness` — generate the implementation spec from the approved design
+Open the integration PR to `main-dev` (branch `claude/chart-data-freshness-pe7mvm`). Operator TODO
+before/at rollout: verify no explicit `marketdata.stream.bar_ingest*` config row exists in dev + prod
+(else set `bar_ingest_timeframe=1d` via config rollout — the code-default flip is a no-op if a row exists).

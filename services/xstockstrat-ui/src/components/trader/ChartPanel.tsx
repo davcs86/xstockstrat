@@ -19,10 +19,12 @@ import { useCandlestickChart } from '@/hooks/useCandlestickChart';
 
 type BarCount = 50 | 100 | 200;
 
-// Intraday timeframes get auto-refresh; daily does not.
+// Every timeframe auto-refreshes on a bounded interval (feature 140). Daily was previously excluded,
+// which — combined with the server returning a stale page — left daily charts frozen at old bars.
 const POLL_INTERVALS_MS: Partial<Record<Timeframe, number>> = {
   '15Min': 120_000,
   '1Hour': 900_000,
+  '1Day': 300_000,
 };
 
 export function ChartPanel() {
@@ -73,7 +75,7 @@ export function ChartPanel() {
     if (symbol) fetchBars(symbol, timeframe, barCount);
   }, [symbol, timeframe, barCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-refresh for intraday timeframes only
+  // Auto-refresh on the timeframe's poll interval (all timeframes, incl. daily — feature 140)
   useEffect(() => {
     const interval = POLL_INTERVALS_MS[timeframe];
     if (!symbol || !interval) return;
