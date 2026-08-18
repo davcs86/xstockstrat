@@ -113,6 +113,26 @@ new/continuous `15m`/`1h` pull.
 - **FR-6 rate-safety (OQ-4):** live loop + screener iterate many symbols; per-symbol WARN could flood.
   Summarize per cycle (live loop) / per-call (single-symbol RPCs).
 
+## ROOT CAUSE (surfaced by design round 2 — verified in code)
+
+**The primary cause of stale charts is a read-path bug, not ingestion freshness.** `QueryBars`
+(`marketdata_repo.go:74-91`) sets `cursor = start` and runs `ORDER BY time ASC LIMIT pageSize+1`, so
+the first page is the **oldest** `pageSize` bars of the window. For an implicit-window request the
+window is `defaultBarLookback = pageSize × interval × 3` (`marketdata_service.go:228-238`) ≈ 1500
+days for a 500-bar daily request (≈600 days for the position page's 200). Any symbol with more stored
+daily bars than one page renders its *oldest* bars; the UI fetches only page 1 (ignores `nextToken`
+— `ChartPanel.tsx:57-63`, `positions/[symbol]/page.tsx:154-159`). **Blast radius (verified):**
+- ❌ UI ChartPanel + position-detail page — no range → oldest page → months-old candles (the symptom).
+- ❌ Analysis **screener** (`screener.py:198-206`) — no range, `pageSize` defaults to 500 → evaluates
+  technical criteria on the oldest ~500 bars (ancient data). Same bug, silent.
+- ✅ Analysis live loop (`live_loop.py:423-438`, `_LOOKBACK_DAYS = 365` explicit range → ~250 trading
+  bars < pageSize 500 → `bars[-1]` is the true newest). Unaffected.
+- ✅ Backtest (`_fetch_bars_paged`, explicit range + full pagination). Unaffected.
+
+Fix = **FR-7**: when the request has no explicit range start, return the newest `pageSize` bars
+(`ORDER BY time DESC LIMIT pageSize`, reversed to ascending); leave explicit-range/paginated behavior
+unchanged. This also makes FR-3 trivial (`bars[len-1]` is then the global newest).
+
 ## Recommended Scope
 
 Advisory step boundaries for `/sdd-spec`:

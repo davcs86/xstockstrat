@@ -1,6 +1,6 @@
 # Feature: chart-data-freshness
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `design-approved`
 **Development Branch**: `feature/chart-data-freshness`
 **Created**: 2026-08-18
 **Last Updated**: 2026-08-18
@@ -12,12 +12,15 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-18 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-18 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, quick→upgraded) and approved; recon.md + design.md written; FR-7 read-path root cause folded in |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon](recon.md) — grounded codebase dossier
+- [Design](design.md) — debated, approved architecture
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec chart-data-freshness`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -48,4 +51,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review chart-data-freshness product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec chart-data-freshness` — generate the implementation spec from the approved design

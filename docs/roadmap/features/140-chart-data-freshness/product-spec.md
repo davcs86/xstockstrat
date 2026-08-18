@@ -31,6 +31,18 @@ indicators and strategy-readiness reads drawn from daily bars.
 
 ## Functional Requirements
 
+FR-7. **(PRIMARY — the actual root cause.) `GetBars` must return the *newest* page for
+implicit-window requests.** Today `QueryBars` (`marketdata_repo.go:78,90`) cursors from `start` and
+returns `ORDER BY time ASC LIMIT pageSize` — the **oldest** page of a window sized
+`pageSize × interval × 3` (`defaultBarLookback`, `marketdata_service.go:228-238`). Any symbol with
+more stored daily bars than one page therefore renders its *oldest* bars, and the UI only fetches page
+1 (ignores `nextToken`). When a caller supplies **no explicit range start** (the chart and screener
+case), `GetBars` must instead return the most-recent `pageSize` bars (`ORDER BY time DESC LIMIT
+pageSize`, reversed to ascending for display). Explicit-range / paginated callers (backtest) keep the
+existing ascending-from-start pagination unchanged. This is what actually makes the latest bars reach
+the chart — and it fixes the screener, which also passes no range and today evaluates technical
+criteria on the oldest ~500 bars (`screener.py:198-206`).
+
 FR-1. The daily (`1Day`) chart view must auto-refresh on a bounded interval on **both** the trader
 `ChartPanel` and the position-detail page, so a user leaving the page open sees new daily bars appear
 without a manual reload. (Fix #1)
@@ -41,7 +53,10 @@ the current/most-recent daily bar is written to `marketdata.ohlcv` without an ex
 
 FR-3. `GetBars` must refresh from Alpaca when the newest stored bar for the requested window is
 **older than one bar interval** (i.e. stale), not only when the DB returns zero rows — so a
-stale-but-present daily series updates to include today's bar. (Fix #2)
+stale-but-present daily series updates to include today's bar. (Fix #2) With FR-7 returning the newest
+page, the staleness check reads the last returned bar directly (`bars[len-1]` is the true newest on
+the implicit-window path); it is current-window-gated and rate-limited by a per-`(symbol,tf)` cooldown
+so a weekend/holiday (newest real bar legitimately > 1 interval old) does not refetch on every poll.
 
 FR-4. The staleness/refresh behavior must be **idempotent** — an upsert-on-conflict write, never a
 duplicate or a partial-bar corruption of a completed bar (marketdata invariant: Alpaca feed
@@ -74,8 +89,8 @@ per cycle; design to decide the exact shape — see OQ-4).
 
 ## Affected Services
 
-- `xstockstrat-marketdata` (Go) — the always-on bar ingester (FR-2) and `GetBars` staleness fallback
-  (FR-3).
+- `xstockstrat-marketdata` (Go) — the `GetBars` newest-page read path (FR-7, primary), the always-on
+  bar ingester (FR-2), and the `GetBars` staleness fallback (FR-3).
 - `xstockstrat-ui` (Next.js) — daily-chart auto-refresh on `ChartPanel` and the position-detail page
   (FR-1).
 - `xstockstrat-analysis` (Python) — WARN logging on the steady-state empty/insufficient-bar branches
@@ -131,6 +146,11 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Acceptance Criteria
 
+0. **(FR-7)** For a symbol with more stored `1d` bars than one page, an implicit-window `GetBars`
+   (no explicit range) returns the **most-recent** `pageSize` bars in ascending order — verified by a
+   Go unit test — so the chart draws current price action, not the oldest page. An explicit-range /
+   paginated `GetBars` (backtest) is byte-for-byte unchanged (regression test). The screener, which
+   passes no range, is fixed by the same change (it evaluates technicals on recent bars).
 1. With a warm symbol whose newest stored `1d` bar is from a prior day, opening its daily chart (or
    leaving it open across the ingester interval) results in the current/most-recent daily bar being
    fetched and drawn — no manual backfill, no page reload required.

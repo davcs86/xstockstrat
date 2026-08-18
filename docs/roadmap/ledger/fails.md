@@ -1216,3 +1216,25 @@ ambiguity is logged here).
   inventoried, not just move the ones already known — re-verification-only recon is blind to that by
   construction. Candidate for a binding note in the re-spec-gate section of `reference/sequential-mode.md`
   (or the `/sdd-design` Phase 0 recon skill) if this recurs on a future feature.
+
+### 2026-08-18 — 140-chart-data-freshness — assumption
+- **Mistake**: The feature (and the initial investigation, and design round 1) framed "charts never
+  show the latest bars" as an *ingestion-freshness* problem (stale ingester, empty-only live fallback)
+  — the true root cause is a **read-path** bug that only surfaced in design round 2: `QueryBars`
+  cursors from `start` and returns `ORDER BY time ASC LIMIT pageSize` (`marketdata_repo.go:78,90`), so
+  the first page is the **oldest** bars of a window sized `pageSize × interval × 3`
+  (`marketdata_service.go:228-238`). Any symbol with more stored `1d` bars than one page renders its
+  *oldest* page; the UI fetches only page 1 (ignores `nextToken`). Perfect ingestion would not have
+  fixed the symptom. Same "latest ≠ page 1 of an ASC-from-start query" mistake silently mis-fed the
+  analysis **screener** (`screener.py:198-206`), which also passes no range and evaluated technicals on
+  the oldest ~500 bars. The live loop escaped only because it passes an explicit `_LOOKBACK_DAYS=365`
+  range that keeps the bar count under `pageSize`.
+- **Evidence**: `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go:74-91`;
+  `services/xstockstrat-marketdata/internal/service/marketdata_service.go:158-178,228-238`;
+  `services/xstockstrat-analysis/app/services/screener.py:198-206`; feature 140 design.md § ROOT CAUSE
+  / FR-7, context.md round-2.
+- **Rule it implies**: when a caller wants "the latest N bars/rows," verify the read actually returns
+  the newest N — an `ORDER BY <time> ASC LIMIT N` from a wide default window returns the OLDEST N. For
+  a "most-recent" read, order DESC + LIMIT then reverse, or size the window to N; and treat a
+  paginated read whose consumer only ever fetches page 1 as a red flag. Before attributing a staleness
+  symptom to the *write/ingest* side, confirm the *read* returns what the consumer assumes.

@@ -36,3 +36,29 @@
   OQ-4 (log shape / rate-safety / log-only-vs-notify), and `xstockstrat-analysis` as a third affected
   service. Response-field behavior stays unchanged — FR-6 only adds log visibility.
 - Design Phase 0 recon therefore now covers three services: marketdata, ui, analysis.
+
+## Session 2026-08-18 — sdd-design (2 rounds, quick→upgraded)
+
+- Phase 0 Recon: wrote recon.md (services: marketdata, ui, analysis). Key reuse patterns: ChartPanel's
+  generic poll effect, `InsertBars` upsert, `timeframe.Interval`, `fetchAndCacheBars`.
+- OQ-1 resolved by the cross-service GetBars-timeframe audit: **no automated consumer reads stored
+  `15m`** (all programmatic callers hardcode `1d`), so flipping the always-on ingester `15m→1d` stales
+  no consumer. Safe.
+- Phase 1 Grilling: 2 rounds. Round 1 corrected FR-3 (newest via a real MAX, not page-1-last), kept the
+  time cooldown (rejected the value-guard that deadlocks on a paused ingester), moved FR-6 WARN to call
+  sites (not the frozen evaluator), and tuned FR-2 to 4-day lookback / 5-min interval.
+- **Round 2 surfaced the actual ROOT CAUSE (FR-7):** `QueryBars` returns the OLDEST page of an
+  oversized implicit window (`ORDER BY time ASC` from `start`, `marketdata_repo.go:78,90`), so charts
+  (and the screener) render months-old bars regardless of ingestion freshness. Verified in code + blast
+  radius (UI charts + screener broken; live loop + backtest OK). User chose to **fold FR-7 in as the
+  primary fix**. FR-3 simplified: with FR-7 returning the newest page, `bars[len-1]` is the true newest,
+  so no `GetCoverage` call is needed.
+- Constitution rules touched: F-01/F-06/F-07/C-05/C-08/C-10(b)/C-14/P-03/P-05. Floor breaches: none.
+- Build order: FR-7 → FR-2 → FR-3 → FR-1 → FR-6. Status: draft → design-approved.
+
+## Open Threads
+
+- Config-store verification for FR-2 (`SELECT … LIKE 'marketdata.stream.bar_ingest%'` in dev + prod) — FR-2 step.
+- Screener first-scan latency from FR-3 within the 120s deadline — FR-3 step.
+- FR-3 intentionally dead for the live loop (explicit `end`) — document at FR-3 step.
+- `_compute_opportunities` empty branch stays silent by design (flood avoidance) — FR-6 step.
