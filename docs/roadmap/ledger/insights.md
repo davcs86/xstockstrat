@@ -1757,3 +1757,17 @@ reusing.
 - **Rule it implies**: reach for all-mounted anchor-nav (not Tabs) when hiding sections would break
   existing "multiple sections visible" e2e or drop live queries; always co-locate sticky-offset +
   scroll-margin constants and pick a collision-free nav `aria-label`.
+
+### 2026-08-18 — 145-symbol-page-panel-refinements — derive precedence, don't seed it
+- **Insight**: When a UI value has a precedence chain of sources (URL query → server-derived binding →
+  user pick, default empty), model it as a PURE DERIVATION `effective = picked ?? url ?? bound ?? ''`
+  with the user's pick as the only React state — not `useState(seed)` + a `watchlistsLoading`-gated
+  one-shot effect + a `seededRef` guard. The effect approach flashes a wrong state (panels not gated on
+  the async source paint the empty/"no strategy" branch, then flip when the effect fires) and needs a
+  second ref to tell "empty by default" from "user cleared". Derivation recomputes for free when the
+  async source resolves — race-free, flash-free, less code. The proposer's own "the seededRef guard is
+  load-bearing" was the smell.
+- **Evidence**: `docs/roadmap/features/145-symbol-page-panel-refinements/design.md` § "derived, not
+  seeded"; contrast with the rejected effect-based seed.
+- **Rule it implies**: a precedence chain of read-only sources feeding one user-overridable selection is
+  a derivation, not synchronized state; the only state is the override, defaulted `undefined`.

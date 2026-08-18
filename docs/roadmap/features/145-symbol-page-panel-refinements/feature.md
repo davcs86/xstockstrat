@@ -11,12 +11,15 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-18 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-18 | `draft` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon](recon.md) — Phase 0 codebase dossier
+- [Design](design.md) — debated, approved architecture
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec <slug>`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -41,4 +44,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review symbol-page-panel-refinements product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec symbol-page-panel-refinements` — generate implementation spec from the approved design
