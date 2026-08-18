@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { addAuthCookie } from '../helpers/auth';
+import { addAuthCookie, addAdminCookie } from '../helpers/auth';
 
 /**
  * Single-Position page (feature 096) — the dedicated `/trader/positions/[symbol]` view built from
@@ -253,6 +253,38 @@ test.describe('Single Position page', () => {
     await page.goto('/trader/positions/ZZZZ');
     await expect(page.getByTestId('no-backfill')).toBeVisible({ timeout: 30000 });
     await expect(page.getByTestId('no-backfill')).toContainText(/No ingested coverage for ZZZZ/);
+    // Non-admin sees no trigger — the Backfill panel stays read-only for them.
+    await expect(page.getByTestId('trigger-backfill')).toHaveCount(0);
+  });
+
+  test('an admin can trigger a backfill for a symbol with no coverage (UI operability)', async ({
+    page,
+  }) => {
+    await addAdminCookie(page);
+    await page.goto('/trader/positions/ZZZZ');
+    // The admin-gated "Start backfill" action appears on the otherwise-dead-end no-coverage panel.
+    const trigger = page.getByTestId('trigger-backfill');
+    await expect(trigger).toBeVisible({ timeout: 30000 });
+    await expect(trigger).toBeEnabled();
+    await trigger.click();
+    // The mock accepts the TriggerBackfill (job queued) — no error surfaces.
+    await expect(page.getByTestId('trigger-backfill-error')).toHaveCount(0);
+  });
+
+  test('a backtest over a data-less symbol surfaces INSUFFICIENT_DATA inline instead of looking inert (UI operability)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // Seed the strategy via ?strategy= (feature 145) so the Run button renders without a binding;
+    // the mock returns a successful INSUFFICIENT_DATA result + coverage gap for this strategy.
+    await page.goto('/trader/positions/ZZZZ?strategy=strat-insufficient-001');
+    const run = page.getByRole('main').getByTestId('run-backtest');
+    await expect(run).toBeVisible({ timeout: 30000 });
+    await run.click();
+    const notice = page.getByTestId('backtest-insufficient');
+    await expect(notice).toBeVisible({ timeout: 10000 });
+    await expect(notice).toContainText(/Insufficient data/);
+    await expect(notice).toContainText(/Backfill coverage panel/);
   });
 
   // ── Signal-detail readiness, relocated from the retired insights/market/[symbol] page (Step 25).

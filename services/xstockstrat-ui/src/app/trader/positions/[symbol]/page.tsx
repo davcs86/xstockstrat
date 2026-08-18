@@ -19,10 +19,12 @@ import { useFundamentals } from '@/hooks/useFundamentals';
 import { MuteForStrategy } from '@/components/insights/MuteForStrategy';
 import { useBacktestHistory } from '@/hooks/useStrategies';
 import { useRunBacktest } from '@/hooks/useBacktest';
-import { useBackfillJobs } from '@/hooks/useBackfills';
+import { useBackfillJobs, useTriggerBackfill } from '@/hooks/useBackfills';
+import { useIsAdmin } from '@/hooks/useLiveStrategies';
 import { useGetStrategy } from '@/hooks/useStrategyDefinitions';
 import { useIndicatorSeries, type IndicatorSeriesInput } from '@/hooks/useIndicatorSeries';
 import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
+import { BacktestStatus } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { timestampToDate } from '@/lib/protoTime';
 import { SignalReadiness } from '@/components/insights/SignalReadiness';
 import { StrategyPicker } from '@/components/insights/StrategyPicker';
@@ -304,9 +306,7 @@ function PositionDetailInner() {
       node: (
         <Card>
           <CardHeader>
-            <CardTitle>
-              <Eyebrow as="span">Trade {symbol}</Eyebrow>
-            </CardTitle>
+            <CardTitle>Trade {symbol}</CardTitle>
           </CardHeader>
           <CardContent>
             <OrderForm mode={mode} initialSymbol={symbol} />
@@ -633,7 +633,10 @@ function PositionPanel({
 
   return (
     <Card>
-      <CardContent className="space-y-4 pt-6">
+      <CardHeader>
+        <CardTitle>Position</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
         {/* Header — symbol, side + qty, price, day change, weight; big Unrealized + Open R. */}
         <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-4">
           <div className="min-w-0 space-y-1.5">
@@ -717,11 +720,9 @@ function RiskExitPanel({ position }: { position: Position }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>
-          <Eyebrow as="span">Risk &amp; exit</Eyebrow>
-        </CardTitle>
+        <CardTitle>Risk &amp; exit</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-4">
         <div>
           <div className="mb-1.5 flex justify-between text-xs text-muted-foreground">
             <span>{hasStop ? `stop ${fmtUsd(position.stopPrice)}` : 'no stop set'}</span>
@@ -734,10 +735,28 @@ function RiskExitPanel({ position }: { position: Position }) {
             />
           </div>
         </div>
+        {/* Numeric readings share the same StatTile grid as Position/Fundamentals (feature: UI
+            consistency); the id/rule/flag reference values stay a label↔value list below. */}
+        <div className="grid grid-cols-2 overflow-hidden rounded-md border border-border sm:grid-cols-3">
+          <StatTile
+            size="md"
+            label="Risk at stop"
+            value={position.riskAtStop ? `-${fmtUsd(position.riskAtStop)}` : '—'}
+            tone={position.riskAtStop ? 'loss' : undefined}
+          />
+          <StatTile
+            size="md"
+            label="Stop distance"
+            value={hasStop ? `${fmtPct(position.stopDistancePct)}` : '—'}
+          />
+          <StatTile
+            size="md"
+            label="Day P&L"
+            value={fmtSignedUsd(position.dayPnl)}
+            tone={Number(position.dayPnl ?? 0) >= 0 ? 'gain' : 'loss'}
+          />
+        </div>
         <dl className="space-y-1.5 text-sm">
-          <Row label="Risk at stop" valueClass="text-destructive tabular-nums font-mono">
-            {position.riskAtStop ? `-${fmtUsd(position.riskAtStop)}` : '—'}
-          </Row>
           <Row label="Exit rule" valueClass="font-mono text-xs">
             {position.exitRule || '—'}
           </Row>
@@ -750,9 +769,6 @@ function RiskExitPanel({ position }: { position: Position }) {
           <Row label="Factor bucket">{position.factor || 'Unclassified'}</Row>
           <Row label="Flag">
             {position.flag ? <EnumBadge render={POSITION_RISK_FLAG[position.flag]} /> : '—'}
-          </Row>
-          <Row label="Day P&L" valueClass={`tabular-nums font-mono ${pnlClass(position.dayPnl)}`}>
-            {fmtSignedUsd(position.dayPnl)}
           </Row>
         </dl>
       </CardContent>
@@ -773,9 +789,7 @@ function WhyHeldPanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>
-          <Eyebrow as="span">Why it&apos;s held</Eyebrow>
-        </CardTitle>
+        <CardTitle>Why it&apos;s held</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         <p className="text-sm text-muted-foreground">
@@ -900,14 +914,11 @@ function FundamentalsSection({ symbol }: { symbol: string }) {
             {error instanceof ConnectError ? ` — ${error.rawMessage}` : ''}.
           </p>
         ) : (
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-4">
+          <div className="grid grid-cols-2 overflow-hidden rounded-md border border-border sm:grid-cols-4">
             {rows.map((r) => (
-              <div key={r.label} className="flex flex-col">
-                <dt className="text-xs text-muted-foreground">{r.label}</dt>
-                <dd className="font-mono tabular-nums">{r.value}</dd>
-              </div>
+              <StatTile key={r.label} size="md" label={r.label} value={r.value} />
             ))}
-          </dl>
+          </div>
         )}
       </CardContent>
     </Card>
@@ -928,7 +939,7 @@ function BacktestsSection({
 }) {
   const queryClient = useQueryClient();
   const { data: history, isLoading } = useBacktestHistory(strategyId || undefined);
-  const { mutate: runBacktest, isPending, error } = useRunBacktest();
+  const { mutate: runBacktest, isPending, data: runResult, error } = useRunBacktest();
 
   const runs = useMemo(
     () => (history?.runs ?? []).filter((r) => r.symbols.includes(symbol)),
@@ -1007,6 +1018,31 @@ function BacktestsSection({
           </span>
         </div>
         {errorMessage && <p className="text-sm text-destructive">{errorMessage}</p>}
+        {/* Surface the run's own outcome inline (feature: UI operability). A data-less symbol returns
+            a successful RPC with status INSUFFICIENT_DATA + coverage_gaps rather than an error — the
+            gaps were previously discarded, so the click looked inert. Point the user at the Backfill
+            panel (its own admin trigger, below/beside) to ingest the missing history. */}
+        {runResult && runResult.status === BacktestStatus.INSUFFICIENT_DATA && (
+          <div
+            className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
+            data-testid="backtest-insufficient"
+          >
+            <Badge variant="warning">Insufficient data</Badge>
+            <span>
+              No ingested history for {symbol} in this window
+              {runResult.coverageGaps[0]
+                ? ` — has ${runResult.coverageGaps[0].barsHave}, needs ${runResult.coverageGaps[0].barsNeed} bars`
+                : ''}
+              . Ingest it from the Backfill coverage panel, then re-run.
+            </span>
+          </div>
+        )}
+        {runResult && runResult.status === BacktestStatus.OK && (
+          <p className="text-sm text-muted-foreground" data-testid="backtest-ok">
+            Run complete — {((runResult.totalReturn ?? 0) * 100).toFixed(2)}% return over{' '}
+            {runResult.totalTrades ?? 0} trade{(runResult.totalTrades ?? 0) === 1 ? '' : 's'}.
+          </p>
+        )}
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading backtest history…</p>
         ) : runs.length === 0 ? (
@@ -1018,30 +1054,41 @@ function BacktestsSection({
             <TableHeader>
               <TableRow>
                 <TableHead>When</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead className="text-right">Return</TableHead>
                 <TableHead className="text-right">Sharpe</TableHead>
                 <TableHead className="text-right">Trades</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {runs.map((run) => (
-                <TableRow key={run.backtestId} data-testid="backtest-row">
-                  <TableCell className="whitespace-nowrap text-muted-foreground">
-                    {timestampToDate(run.completedAt)?.toLocaleDateString() ?? '—'}
-                  </TableCell>
-                  <TableCell
-                    className={`text-right font-mono tabular-nums ${pnlClass(run.totalReturn ?? 0)}`}
-                  >
-                    {((run.totalReturn ?? 0) * 100).toFixed(2)}%
-                  </TableCell>
-                  <TableCell className="text-right font-mono tabular-nums">
-                    {(run.sharpeRatio ?? 0).toFixed(2)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono tabular-nums">
-                    {String(run.totalTrades ?? 0)}
-                  </TableCell>
-                </TableRow>
-              ))}
+              {runs.map((run) => {
+                const insufficient = run.status === BacktestStatus.INSUFFICIENT_DATA;
+                return (
+                  <TableRow key={run.backtestId} data-testid="backtest-row">
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                      {timestampToDate(run.completedAt)?.toLocaleDateString() ?? '—'}
+                    </TableCell>
+                    <TableCell>
+                      {insufficient ? (
+                        <Badge variant="warning">No data</Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">OK</span>
+                      )}
+                    </TableCell>
+                    <TableCell
+                      className={`text-right font-mono tabular-nums ${insufficient ? 'text-muted-foreground' : pnlClass(run.totalReturn ?? 0)}`}
+                    >
+                      {((run.totalReturn ?? 0) * 100).toFixed(2)}%
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">
+                      {(run.sharpeRatio ?? 0).toFixed(2)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">
+                      {String(run.totalTrades ?? 0)}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         )}
@@ -1119,10 +1166,22 @@ function IndicatorSection({
 // Always-on for any symbol. Reduces the completed backfill jobs carrying a range into one covered
 // window (earliest start … latest end); an empty job list is an explicit no-coverage state.
 function BackfillSection({ symbol }: { symbol: string }) {
+  const queryClient = useQueryClient();
   const { data, isLoading } = useBackfillJobs({ symbol });
+  const { data: isAdmin } = useIsAdmin();
+  const {
+    mutate: triggerBackfill,
+    isPending: triggerPending,
+    error: triggerError,
+  } = useTriggerBackfill();
   const jobs = data?.jobs ?? [];
   const completed = jobs.filter(
     (j) => j.status === BackfillStatus.COMPLETED && j.range?.start && j.range?.end,
+  );
+  // Any non-terminal job for this symbol means a backfill is already in flight — don't offer a
+  // second trigger (matches the ingest server's own de-dup posture and keeps the panel honest).
+  const inFlight = jobs.some(
+    (j) => j.status === BackfillStatus.QUEUED || j.status === BackfillStatus.RUNNING,
   );
   let coverStart = Infinity;
   let coverEnd = -Infinity;
@@ -1133,12 +1192,39 @@ function BackfillSection({ symbol }: { symbol: string }) {
   const hasCoverage = completed.length > 0;
   const fmtDay = (secs: number) => new Date(secs * 1000).toISOString().slice(0, 10);
 
+  // Full daily history for this one symbol — the same defaults the /insights/backfills create form
+  // sends (feature 143: daily is the only servable interval; omitting range = full history). Admin
+  // only, mirroring that page's gate; the BFF + ingest server re-check server-side (defense in depth).
+  function handleTrigger() {
+    triggerBackfill(
+      {
+        symbols: [symbol],
+        timeframeEnum: TIMEFRAME_ENUM['1Day'],
+        range: undefined,
+        overwrite: false,
+      },
+      { onSuccess: () => queryClient.invalidateQueries({ queryKey: ['insights-backfill-jobs'] }) },
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Backfill coverage</CardTitle>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle className="text-base">Backfill coverage</CardTitle>
+          {isAdmin && (
+            <Button
+              size="sm"
+              onClick={handleTrigger}
+              disabled={triggerPending || inFlight}
+              data-testid="trigger-backfill"
+            >
+              {triggerPending ? 'Starting…' : inFlight ? 'Backfill running…' : 'Start backfill'}
+            </Button>
+          )}
+        </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-2">
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading ingested coverage…</p>
         ) : jobs.length === 0 ? (
@@ -1157,6 +1243,14 @@ function BackfillSection({ symbol }: { symbol: string }) {
           <p className="text-sm text-muted-foreground" data-testid="backfill-pending">
             {jobs.length} backfill job{jobs.length > 1 ? 's' : ''} for {symbol} — none completed
             with a recorded range yet.
+          </p>
+        )}
+        {isAdmin && !hasCoverage && !inFlight && (
+          <p className="text-xs text-muted-foreground">Ingests full daily history for {symbol}.</p>
+        )}
+        {triggerError && (
+          <p className="text-sm text-destructive" data-testid="trigger-backfill-error">
+            {triggerError.message}
           </p>
         )}
       </CardContent>

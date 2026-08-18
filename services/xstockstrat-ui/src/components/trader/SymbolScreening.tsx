@@ -15,7 +15,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { DataTable } from '@/components/ui/data-table';
-import { Eyebrow } from '@/components/shared/Eyebrow';
 import { useScreenSymbols, type ScreenSymbolsInput } from '@/hooks/useScreenSymbols';
 import {
   BUILTIN_INDICATORS,
@@ -120,9 +119,7 @@ export function SymbolScreening({ symbol }: { symbol: string }) {
   return (
     <Card data-testid="symbol-screening">
       <CardHeader>
-        <CardTitle className="text-base">
-          <Eyebrow as="span">Screening</Eyebrow>
-        </CardTitle>
+        <CardTitle className="text-base">Screening</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-sm text-muted-foreground">
