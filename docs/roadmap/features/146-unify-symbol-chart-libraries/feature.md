@@ -12,12 +12,15 @@
 |---|---|---|---|
 | 2026-08-18 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-18 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings addressed: AC-2 token backstop, feature-123 decision dependency; rebase note recorded) |
+| 2026-08-18 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. Fork (a) at live gate: indicators onto lightweight-charts **v5 native panes**, drop recharts from symbol page, shared crosshair in-scope |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon Dossier](recon.md) — grounded codebase map (/sdd-design Phase 0)
+- [Design](design.md) — debated, approved architecture (/sdd-design Phase 1)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec <slug>`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -42,5 +45,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design unify-symbol-chart-libraries` — recon + adversarial design debate (must resolve the
-charting-library fork at the human gate) before running /sdd-spec
+`/sdd-spec unify-symbol-chart-libraries` — generate the implementation spec from the approved design
