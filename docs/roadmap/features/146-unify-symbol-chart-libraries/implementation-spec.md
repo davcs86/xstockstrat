@@ -114,7 +114,7 @@ cd services/xstockstrat-ui && pnpm run lint   # lint/format gate
 
 ### Step 2 — service: Add the pure indicator-point mapper (unset→whitespace, strictly-ascending time)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/indicatorChart.ts` — create

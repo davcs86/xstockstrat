@@ -193,3 +193,15 @@
   preserved. No deviation from the spec's assumptions.
 - Lint clean (only pre-existing unrelated react-hooks warnings). TDD: N/A (dependency pin).
 - Files modified: `services/xstockstrat-ui/package.json`, `pnpm-lock.yaml`.
+
+### Step 2 — Pure indicator-point mapper (unset→whitespace, ascending-unique time) [done]
+- Created `src/lib/indicatorChart.ts`: `toLineData(values, times)` maps a NamedSeries' values over the
+  shared parity times → lightweight-charts v5 points — UNSET `value===undefined` → whitespace `{time}`
+  (gap, never a fabricated 0), genuine 0 → `{time,value:0}`; iterates over `times` so a short values
+  array yields trailing gaps, not invented data. `normalizeAscendingUnique` (exported) guards the v5
+  `setData` strictly-ascending-unique precondition: stable ascending sort + duplicate-timestamp
+  "last wins" (documented rule).
+- TDD: RED `pnpm run test:unit indicatorChart.test.ts` → "Failed to load ./indicatorChart" (module
+  missing). GREEN → 7/7 pass. Full suite 104/104; coverage 85% (≥40% floor), indicatorChart.ts 100%.
+  tsc --noEmit clean. Reused canonical fixture `INDICATOR_SERIES_AAPL` (C-13), no new fixture.
+- Files modified: `src/lib/indicatorChart.ts`, `src/lib/indicatorChart.test.ts`.
