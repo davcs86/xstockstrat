@@ -5,7 +5,9 @@
 **Defect Report**: `docs/reports/2026-08-15-signal-detail-readiness-traces-entry-rule-on-reduce.md`
 **Severity**: SEV-3
 **Created**: 2026-08-15
-**Last Updated**: 2026-08-15
+**Last Updated**: 2026-08-19
+**Committed to main**: 1d97c6c78caa532a24265dae2fa79c674b3b69dd
+**Launched date**: 2026-08-19
 
 ---
 
@@ -16,6 +18,7 @@
 | 2026-08-15 | `bug-reported` → `draft` | /sdd-triage | Pre-populated from defect report (Issues disabled; report path stands in for the issue URL). SEV-3, Track C (SDD path). |
 | 2026-08-15 | `draft` → `code-completed` | direct fix | User chose the full exit-rule-trace approach (AskUserQuestion). Implemented directly as a Track C bug fix (design/impl-spec optional for bugs): additive `ReadinessRule` proto field, analysis handler routing, UI (`useReadiness` + `SignalReadiness`) requests EXIT when the matching opportunity is held (`provenance` includes `position`). Analysis 514 passed; tsc + lint clean; e2e added (CI-gated). |
 
+| 2026-08-19 | `code-completed` → `launched` | status reconciliation | Reconciled to launched: code in production (main==main-dev @ 1d97c6c7); CI status automation (ci-validate-feature-status.yml) missed the slug grep-match. PR #957. |
 ---
 
 ## Artifacts

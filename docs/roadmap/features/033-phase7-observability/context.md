@@ -56,3 +56,12 @@
 - NOTE for reviewers: the roadmap's old `platform.otel.*` config-key table is intentionally NOT
   implemented — product spec mandates OTLP endpoint/creds stay infra env/secrets, not config keys.
 
+
+## Session 2026-08-19 (status reconciliation)
+
+- Feature was stalled at `code-completed` though its code is in production.
+- Root cause: `ci-validate-feature-status.yml` only flips a feature to `launched` when a
+  commit in the promotion delta matches the feature *slug* via `git log --grep`; this feature's
+  merge commit message did not contain the slug, so the automation skipped it.
+- Verified in production: main == main-dev @ 1d97c6c78caa532a24265dae2fa79c674b3b69dd. Merge reference: code verified in production (services/xstockstrat-agent/app/telemetry.py, packages/otel/dashboards, packages/otel/alerts) — harness branch claude/phase-7-jnruyq.
+- Status updated: `code-completed` → `launched`; Launched date: 2026-08-19.

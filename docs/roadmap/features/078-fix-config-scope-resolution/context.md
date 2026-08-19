@@ -81,3 +81,12 @@ Since every service — including `xstockstrat-agent` — already knows its own 
 `TRADING_MODE` rather than letting the proto zero-values decide. Without that, an operator who omits
 the parameter writes a `dev` row from a production agent (product-spec Known Constraint 1). Folded
 into 073's spec.
+
+## Session 2026-08-19 (status reconciliation)
+
+- Feature was stalled at `code-completed` though its code is in production.
+- Root cause: `ci-validate-feature-status.yml` only flips a feature to `launched` when a
+  commit in the promotion delta matches the feature *slug* via `git log --grep`; this feature's
+  merge commit message did not contain the slug, so the automation skipped it.
+- Verified in production: main == main-dev @ 1d97c6c78caa532a24265dae2fa79c674b3b69dd. Merge reference: PR #806.
+- Status updated: `code-completed` → `launched`; Launched date: 2026-08-19.

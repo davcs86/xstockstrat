@@ -227,3 +227,12 @@ then `/sdd-execute mcp-python-sdk-v2-upgrade`.
 - Re-ran the full verification after the rename: **138 passed**, 68% coverage, ruff clean —
   unaffected, since the renumbering only touched doc paths and one docstring comment, not any
   executable logic.
+
+## Session 2026-08-19 (status reconciliation)
+
+- Feature was stalled at `code-completed` though its code is in production.
+- Root cause: `ci-validate-feature-status.yml` only flips a feature to `launched` when a
+  commit in the promotion delta matches the feature *slug* via `git log --grep`; this feature's
+  merge commit message did not contain the slug, so the automation skipped it.
+- Verified in production: main == main-dev @ 1d97c6c78caa532a24265dae2fa79c674b3b69dd. Merge reference: PR #819.
+- Status updated: `code-completed` → `launched`; Launched date: 2026-08-19.
