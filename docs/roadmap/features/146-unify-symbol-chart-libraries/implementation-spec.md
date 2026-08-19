@@ -171,7 +171,7 @@ pnpm run lint
 
 ### Step 3 — service: Add the chart-color token resolver (oklch→rgb) + gridline token
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/chartColors.ts` — create

@@ -205,3 +205,15 @@
   missing). GREEN → 7/7 pass. Full suite 104/104; coverage 85% (≥40% floor), indicatorChart.ts 100%.
   tsc --noEmit clean. Reused canonical fixture `INDICATOR_SERIES_AAPL` (C-13), no new fixture.
 - Files modified: `src/lib/indicatorChart.ts`, `src/lib/indicatorChart.test.ts`.
+
+### Step 3 — Chart color-token resolver (oklch→rgb) + --chart-grid token [done]
+- Created `src/lib/chartColors.ts`: `resolveChartColor(varName, fallback)` reads a CSS custom property
+  and returns a canvas-usable color — hsl/rgb/hex pass through (`isCanvasSafeColor`), oklch/oklab/lab
+  resolve to rgb() via a hidden probe element the browser computes; off-DOM (SSR/node) or on failure
+  returns the fallback (never throws). Exposed `CHART_COLOR_TOKENS` + `CHART_GRID_TOKEN` ('--chart-grid').
+- Added `--chart-grid: oklch(0.42 0.01 56.043 / 0.55)` to globals.css `:root` — a visible gridline
+  token (NOT the 10%-alpha `--border`); opacity tuned in the Step 8 diagnosed run.
+- TDD: RED (module missing) → GREEN 5/5. Full suite 109/109; aggregate coverage 82.47% (≥40% floor).
+  chartColors.ts shows 55.88% because the live probe + DOM branch aren't node-reachable — proven in the
+  Step 8 chromium run (P-03: surfaced, not silently worked around). tsc clean.
+- Files modified: `src/lib/chartColors.ts`, `src/lib/chartColors.test.ts`, `src/app/globals.css`.
