@@ -55,3 +55,12 @@ Append-only.
 question is now largely moot — but the guard stays, so the next person who adds one cannot write a
 credential through an MCP tool. `get_config`'s redaction (073 FR-1) also stays: it is cheap, and
 feature 075 made the `is_secret` field trustworthy.
+
+## Session 2026-08-19 (status reconciliation)
+
+- Feature was stalled at `code-completed` though its code is in production.
+- Root cause: `ci-validate-feature-status.yml` only flips a feature to `launched` when a
+  commit in the promotion delta matches the feature *slug* via `git log --grep`; this feature's
+  merge commit message did not contain the slug, so the automation skipped it.
+- Verified in production: main == main-dev @ 1d97c6c78caa532a24265dae2fa79c674b3b69dd. Merge reference: PR #818.
+- Status updated: `code-completed` → `launched`; Launched date: 2026-08-19.
