@@ -3,6 +3,8 @@
 **Development Branch**: `feature/unify-symbol-chart-libraries`
 **Created**: 2026-08-18
 **Last Updated**: 2026-08-18
+**Committed to main**: 6cd5572193b09a153c24e4cb90e3b65708846981
+**Launched date**: 2026-08-19
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-08-18 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done — pinned lightweight-charts v5.2.1, verified pane/series/whitespace API |
 | 2026-08-18 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done — v5 multi-pane symbol chart (price + indicator panes, one instance), shared crosshair/tooltip, recharts dropped from symbol page, CLAUDE.md updated |
 
+| 2026-08-19 | `code-completed` → `launched` | CI workflow | Promoted via PR #985; committed 6cd5572193b09a153c24e4cb90e3b65708846981 |
 ---
 
 ## Artifacts

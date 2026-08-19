@@ -410,3 +410,10 @@ no feature code. Part of an operator-requested sequential run of 143 then 139, o
   rewrite captured no GetBars (ChartPanel's mount fetch races the async chart-series init and isn't
   retried). Fixed AC-8 to wait for `.tv-lightweight-charts` then change the bar-count selector as a
   deterministic trigger. **Both specs now 16/16 green.** See Deviation Log D-6 (revised).
+
+## Session 2026-08-19 (CI: feature status automation)
+
+- Promotion PR #985 merged to main
+- Feature promoted and committed: 6cd5572193b09a153c24e4cb90e3b65708846981
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-19

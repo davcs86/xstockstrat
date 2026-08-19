@@ -3,6 +3,8 @@
 **Development Branch**: `feature/symbol-page-panel-refinements` (harness branch: `claude/symbol-page-ui-refinements-t2xp26`)
 **Created**: 2026-08-18
 **Last Updated**: 2026-08-18
+**Committed to main**: 6cd5572193b09a153c24e4cb90e3b65708846981
+**Launched date**: 2026-08-19
 
 ---
 
@@ -15,6 +17,7 @@
 | 2026-08-18 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 3 steps |
 | 2026-08-18 | `implementation-ready` → `code-completed` | direct implementation | All 3 steps implemented on `claude/symbol-page-ui-refinements-t2xp26`; tsc + lint + build (R2) clean, trader e2e green (R1 broad pass) |
 
+| 2026-08-19 | `code-completed` → `launched` | CI workflow | Promoted via PR #985; committed 6cd5572193b09a153c24e4cb90e3b65708846981 |
 ---
 
 ## Artifacts

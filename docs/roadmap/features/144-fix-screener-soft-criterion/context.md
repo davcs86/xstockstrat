@@ -108,3 +108,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   regenerated `packages/proto/gen/go` package builds clean; no Go service imports
   `analysis/v1` today, so no further Go-side verification applies.
 - Status: `code-completed`.
+
+## Session 2026-08-19 (CI: feature status automation)
+
+- Promotion PR #985 merged to main
+- Feature promoted and committed: 6cd5572193b09a153c24e4cb90e3b65708846981
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-19

@@ -86,3 +86,10 @@ Accountability:
 - Out-of-scope changes: none
 - Open questions / items: pgxmock never parses real SQL (Open Risk 1, design.md) — a live-DB smoke test against local docker-compose Postgres remains recommended before this fix is considered fully verified in a real environment; C-13 fixture-centralization question was resolved (see Step 2 above), not left open.
 - Unaddressed review warnings: none (this feature never went through /sdd-review — Track C bug fix, per docs/runbooks/bug-triage.md).
+
+## Session 2026-08-19 (CI: feature status automation)
+
+- Promotion PR #985 merged to main
+- Feature promoted and committed: 6cd5572193b09a153c24e4cb90e3b65708846981
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-19

@@ -1013,3 +1013,10 @@ widget (any symbol), watchlist-conditional Opportunity/Readiness/Fundamentals/Mu
 always-on Backtests + Backfill + FR-6 indicator overlay panels; old Signal-detail page retired to a
 redirect with its 132/138 controls absorbed. Backend: additive ScreenResult fields, GetPosition
 account_id fix, GetIndicatorSeries RPC. Ready for the final integration PR (#958).
+
+## Session 2026-08-19 (CI: feature status automation)
+
+- Promotion PR #985 merged to main
+- Feature promoted and committed: 6cd5572193b09a153c24e4cb90e3b65708846981
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-19

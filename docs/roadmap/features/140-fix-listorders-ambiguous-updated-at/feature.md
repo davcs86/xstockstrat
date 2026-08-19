@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-08-16
 **Last Updated**: 2026-08-16
+**Committed to main**: 6cd5572193b09a153c24e4cb90e3b65708846981
+**Launched date**: 2026-08-19
 
 ---
 
@@ -20,6 +22,7 @@
 | 2026-08-16 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started on `claude/commit-135-opportunities-strategies-0xjnxk`. Step 1 done: renamed intentLateralJoinSQL's updated_at → intent_updated_at, added dbQuerier seam. |
 | 2026-08-16 | `in-progress` → `code-completed` | /sdd-execute | Step 2 done: 3 pgxmock regression tests, red-before-green confirmed against real pre/post-rename SQL. go vet + golangci-lint clean; full suite passes. Live-DB smoke test unavailable (no docker daemon) — go vet/query-shape fallback used per spec. Both steps complete. |
 
+| 2026-08-19 | `code-completed` → `launched` | CI workflow | Promoted via PR #985; committed 6cd5572193b09a153c24e4cb90e3b65708846981 |
 ---
 
 ## Artifacts

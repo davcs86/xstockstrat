@@ -118,3 +118,10 @@ Accountability:
 - Out-of-scope changes: none
 - Open questions / items: root cause confidence remains low per design.md Open Risk 1 (never confirmed against a real Postgres memory/lock profile) — monitor in staging after this fix ships, not a merge blocker per user's earlier decision; the ≥200-row test scale is a reasoned substitute for the unknown real incident size (documented in the test's own docstring, per design.md Open Risk 2).
 - Unaddressed review warnings: none (Track C bug fix, never went through /sdd-review). `/context-scrubber` unavailability is recorded above, not an unaddressed warning — it's an environment constraint noted per Teardown instructions, to be surfaced in the PR body.
+
+## Session 2026-08-19 (CI: feature status automation)
+
+- Promotion PR #985 merged to main
+- Feature promoted and committed: 6cd5572193b09a153c24e4cb90e3b65708846981
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-19

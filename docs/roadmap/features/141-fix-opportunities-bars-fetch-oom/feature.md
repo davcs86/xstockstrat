@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-08-16
 **Last Updated**: 2026-08-16
+**Committed to main**: 6cd5572193b09a153c24e4cb90e3b65708846981
+**Launched date**: 2026-08-19
 
 ---
 
@@ -20,6 +22,7 @@
 | 2026-08-16 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started on `claude/commit-135-opportunities-strategies-0xjnxk`. Step 1 done: bars_by_symbol dedup dict + self._bars_fetch_sem semaphore. Step 2 done: 3 tests, red-before-green confirmed. One deviation: read-side pagination (_DEFAULT_OPP_PAGE_SIZE=50, unrelated pre-existing behavior) required page_size=300 in the scale test. |
 | 2026-08-16 | `in-progress` → `code-completed` | /sdd-execute | Step 3 done: analysis.opportunity.max_concurrent_bars_fetches registered in CLAUDE.md + config-governance.md. /context-scrubber unavailable this session (recorded, not skipped silently). ruff clean; full suite 522 passed, 83.5% coverage. All 3 steps complete. |
 
+| 2026-08-19 | `code-completed` → `launched` | CI workflow | Promoted via PR #985; committed 6cd5572193b09a153c24e4cb90e3b65708846981 |
 ---
 
 ## Artifacts

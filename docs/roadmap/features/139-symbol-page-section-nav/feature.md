@@ -3,6 +3,8 @@
 **Development Branch**: `feature/symbol-page-section-nav`
 **Created**: 2026-08-15
 **Last Updated**: 2026-08-17
+**Committed to main**: 6cd5572193b09a153c24e4cb90e3b65708846981
+**Launched date**: 2026-08-19
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-08-16 | `implementation-ready` → `code-completed` | /sdd-execute | All 3 steps done (sequential mode, feature branch). Red→green verified via a real prebuilt-harness e2e run: RED = 5 nav tests fail (nav absent) → GREEN = 228-test trader+insights suite passes, `mobile-overflow` green at 390px, no role/label collision. Deviations: D-1 (design Open Risks resolved — scroll-spy resize re-subscribe done, rootMargin/scroll-mt cosmetic), D-2 (`groupKey` stable effect dep), D-3 (ToggleGroup `type="single"` renders `radiogroup`/`radio` not `button` — e2e locators fixed to `getByRole('radio')`+`toBeChecked()`; caught by the first GREEN run). Scroll-spy FR-2 e2e retry-passes (logged Open Risk). |
 | 2026-08-17 | `code-completed` (amendment) | user request | Amended the layout: related panels within each section are clustered into a responsive `SymbolPanelGroup` (desktop columns / mobile tabbed panel, all panels **mounted**), reducing the top-level nav to a stable 4-section spine (Overview/Trade/Research/Analysis — Position folds into Trade, Backtests+Coverage merge into Analysis). No panel dropped (all 13 render targets preserved). D-4: rejected the user's "Screener/Fundamentals" group (mutually exclusive FR-11 branches). D-5: scroll-spy rewritten from `IntersectionObserver` to a deterministic scroll-position read (the shorter column layout broke the band heuristic for the last section). D-6: scoped two sibling-spec `getByText` gates + a `min-w-0` grid fix (390px overflow). Verified green: **230** trader+insights passed, `--retries=0` deterministic (incl. scroll-spy). See implementation-spec § Amendment. |
 
+| 2026-08-19 | `code-completed` → `launched` | CI workflow | Promoted via PR #985; committed 6cd5572193b09a153c24e4cb90e3b65708846981 |
 ---
 
 ## Artifacts

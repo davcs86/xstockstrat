@@ -205,3 +205,10 @@ PR #974 (not a new feature).
   feature-139 component, justified by the amendment's layout change breaking its precondition — not a
   drive-by. Two sibling-spec test edits (D-6) are collision fixes, not behavior changes. No panel
   dropped (explicit user constraint honored). Open items: none.
+
+## Session 2026-08-19 (CI: feature status automation)
+
+- Promotion PR #985 merged to main
+- Feature promoted and committed: 6cd5572193b09a153c24e4cb90e3b65708846981
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-19

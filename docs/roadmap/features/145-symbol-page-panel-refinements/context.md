@@ -91,3 +91,10 @@
   → 102 passed (2 pre-existing timing flakes passed on retry, both in untouched specs). R1 sweep:
   no unscoped `getByLabel('Strategy')`/`getByRole('combobox')` collision on the symbol page.
 - Status: implementation-ready → code-completed.
+
+## Session 2026-08-19 (CI: feature status automation)
+
+- Promotion PR #985 merged to main
+- Feature promoted and committed: 6cd5572193b09a153c24e4cb90e3b65708846981
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-19

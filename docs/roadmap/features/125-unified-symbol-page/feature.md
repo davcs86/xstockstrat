@@ -3,6 +3,8 @@
 **Development Branch**: `feature/unified-symbol-page`
 **Created**: 2026-08-10
 **Last Updated**: 2026-08-16 (status corrected to `code-completed` — PR #958 merged)
+**Committed to main**: 6cd5572193b09a153c24e4cb90e3b65708846981
+**Launched date**: 2026-08-19
 
 ---
 
@@ -21,6 +23,7 @@
 | 2026-08-15 | `implementation-ready` → `in-progress` | /sdd-execute | **Sequential execution started** (full feature, one commit per step, single integration PR #958). Executing on `claude/strategy-charts-symbol-page-itodkw` (harness-pinned; `feature/unified-symbol-page` absent on origin). Toolchain provisioned + codegen validated (empty stub diff). Step 1 done: additive `ScreenResult.criterion_raw_values`/`criterion_passed` (fields 12/13) — buf lint + buf breaking pass. |
 | 2026-08-16 | `in-progress` → `code-completed` | /sdd-sync (session, manual correction) | **Status correction — `status.md`/history had never advanced past Step 1.** All 33 implementation steps actually completed (confirmed via `context.md`'s "Feature 125 COMPLETE — all 33 steps done" checkpoint on `claude/strategy-charts-symbol-page-itodkw`), and the single integration PR #958 was squash-merged into `main-dev` on 2026-08-15T23:42:47Z (commit `d4c104b`). `/sdd-sync` found no `feature/unified-symbol-page` branch to reconcile against (squash-merge left none), so this row/`status.md` were corrected by hand instead. No `merge-order.md` blocking entry for this slug. Next: `/promote` will pick this up for the next production promotion. |
 
+| 2026-08-19 | `code-completed` → `launched` | CI workflow | Promoted via PR #985; committed 6cd5572193b09a153c24e4cb90e3b65708846981 |
 ---
 
 ## Artifacts

@@ -315,3 +315,10 @@ ran the specs) — two real defects, now fixed and re-verified 42/42 locally:
    points at the price-pane plot area.
 - Note: a batch of 31 failures during debugging was a stale-`.next` ChunkLoadError from my overlapping
   local builds, not a code defect — a clean rebuild passed 42/42.
+
+## Session 2026-08-19 (CI: feature status automation)
+
+- Promotion PR #985 merged to main
+- Feature promoted and committed: 6cd5572193b09a153c24e4cb90e3b65708846981
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-19
