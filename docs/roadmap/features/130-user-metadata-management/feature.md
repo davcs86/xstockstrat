@@ -2,6 +2,7 @@
 
 **Committed to main**: edb7c4172bb973b2111eb833253e1b454301bbde
 **Launched date**: 2026-08-14
+**Archived**: 2026-08-19
 **Development Branch**: `feature/user-metadata-management`
 **Created**: 2026-08-14
 **Last Updated**: 2026-08-14
@@ -18,6 +19,7 @@
 | 2026-08-14 | `implementation-ready` → `code-completed` | /sdd-execute | All 13 steps done |
 
 | 2026-08-14 | `code-completed` → `launched` | CI workflow | Promoted via PR #950; committed edb7c4172bb973b2111eb833253e1b454301bbde |
+| 2026-08-19 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(2); pruned 4 specs |
 ---
 
 ## Artifacts

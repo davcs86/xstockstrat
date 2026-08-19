@@ -2,6 +2,7 @@
 
 **Committed to main**: be21f3389151ccac1bfd68e7aa96d73d3d4efd78
 **Launched date**: 2026-08-10
+**Archived**: 2026-08-19
 **Development Branch**: `claude/implement-124-e48xkn` (harness-assigned; see note below)
 **Created**: 2026-08-09
 **Last Updated**: 2026-08-10
@@ -22,6 +23,7 @@
 | 2026-08-10 | `code-completed` (merged to main-dev) | /sdd-execute (sequential) | [PR #919](https://github.com/davcs86/xstockstrat/pull/919) merged (squash) as `a2107ee`. CI (Frontend E2E) initially failed on the new Step 23 1024px overflow test — root-caused via a temporary diagnostic dump read from the CI job log to a pre-existing, feature-124-unrelated `PlatformHeader` Row 1 header-tightness edge case, only ever exposed at the bare 1024px `lg`-breakpoint minimum (the first test in the suite to check overflow at any desktop width). Fixed by widening the test to a representative 1280px small-desktop viewport rather than redesigning the unrelated pre-existing header component; two harmless, consistency-only `min-w-0` additions from an earlier (incorrect) fix attempt were kept. Status stays `code-completed` pending production promotion — CI auto-flips to `launched` on that promotion PR, not manually here. |
 
 | 2026-08-10 | `code-completed` → `launched` | CI workflow | Promoted via PR #923; committed be21f3389151ccac1bfd68e7aa96d73d3d4efd78 |
+| 2026-08-19 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(2); pruned 4 specs |
 ---
 
 ## Artifacts

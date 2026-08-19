@@ -1794,3 +1794,83 @@ reusing.
   prefer its native multi-pane; if the pinned version lacks panes, budget for the synced-instances bug
   class (pinned width + re-entrancy + disposal guards) or the major-version upgrade — and verify canvas
   correctness (tokens, drawn-series, monotonic time) off the DOM.
+
+### 2026-08-19 — screener-data-readiness-polling — design
+- **Pattern**: Playwright `page.clock.install()/fastForward()` virtualizes only the page's own timers; it does NOT control the real-Node-time resolution of a `page.route` mock handler. A poll/interval test that both fast-forwards virtual time AND relies on a delayed mock response must interleave real `page.waitForTimeout()` waits between `fastForward()` calls, or attempt-count assertions undercount by one.
+- **Evidence**: `docs/roadmap/features/118-screener-data-readiness-polling/context.md` § Archive Synthesis; `services/xstockstrat-ui/e2e/insights/screener.spec.ts` cap-exhaustion tests.
+- **Rule it implies**: when using `page.clock` to advance a `refetchInterval`/`setInterval` loop whose responses are `page.route`-delayed, add a real wait per iteration so each delayed response resolves before the next virtual jump (test-craft; not binding).
+
+### 2026-08-19 — shadcn-ui-migration — ordering
+- **Pattern**: a single vendored-preset regeneration (`shadcn apply --preset`) breaks the whole-repo build in one atomic pass across multiple unrelated primitives (combobox compound API + button/badge cva variant keys), so a whole-repo `pnpm build` is useless as intermediate verification. Sequence the API rewrite immediately after the apply, gate every intermediate step with scoped `grep`/`tsc --noEmit`, and defer the first expected-passing full build to the last reconciling step.
+- **Evidence**: `docs/roadmap/features/119-shadcn-ui-migration/context.md` § Archive Synthesis (sdd-spec Sequencing correction).
+- **Rule it implies**: when a codegen/vendor step regenerates many files at once, plan step-scoped verification and one deferred full-build checkpoint — never assume a full build can validate an intermediate step.
+
+### 2026-08-19 — shadcn-ui-migration — design
+- **Pattern**: when adopting a vendored theme preset under a "full adoption, no hybrid" user decision, do NOT re-impose the old brand's color choices even at call sites where the pre-migration code carried them — re-adding them recreates exactly the hybrid the decision rejected. Re-apply only functional affordances the preset genuinely lacks, and guard them with a mechanical regression test (a Vitest variants assertion), never an attribution comment — a comment does not survive `--overwrite` (the shipped `CardTitle` `<h3>` override is a live example of an UNguarded such fix).
+- **Evidence**: `docs/roadmap/features/119-shadcn-ui-migration/context.md` § Archive Synthesis (TableRow non-application; unguarded CardTitle override).
+- **Rule it implies**: distinguish brand-value customizations (drop) from functional customizations (re-apply + test-guard) when regenerating from a vendored source.
+
+### 2026-08-19 — shadcn-migration-high-confidence — ordering
+- **Pattern**: for a multi-primitive vendored-component migration, interleave each primitive-add with its lowest-risk consumer wire in the same tier (and split every confirmed e2e-risk site into a mandatory red-then-green two-step), rather than batching all primitive-adds first — an integration-fit mismatch then surfaces while that primitive's step is open, not as a late F-09 patch.
+- **Evidence**: `docs/roadmap/features/120-shadcn-migration-high-confidence/context.md` § Archive Synthesis.
+- **Rule it implies**: prefer add-plus-first-wire interleaving over batch-all-primitives-first when migrating N shared UI primitives at once (reinforces F-09).
+
+### 2026-08-19 — shadcn-migration-high-confidence — design
+- **Pattern**: migrating a hand-rolled control to a Radix-backed primitive silently changes its rendered ARIA role, breaking `getByRole` locators: `Tabs.Trigger`→`role="tab"`; single-type `ToggleGroupItem`/Root→`role="radio"`/`"radiogroup"` with `aria-checked` (Radix voids `aria-pressed` for single-type); `Alert` root carries `role="alert"` but `AlertDescription` alone does not.
+- **Evidence**: `docs/roadmap/features/120-shadcn-migration-high-confidence/context.md` § Archive Synthesis (confirmed against `@radix-ui/react-toggle-group` source).
+- **Rule it implies**: before wiring a Radix primitive over a control an e2e spec targets by role, verify the primitive's actual rendered role and update every `getByRole` locator in the same step.
+
+### 2026-08-19 — shadcn-table-actions-responsive — ordering
+- **Pattern**: when grounding a feature's scope against a sibling feature, verify against the current working tree, not the sibling's PR "Merged" badge or its spec text — a stacked-branch PR can read "Merged" on GitHub while its code never reached `main-dev`. Re-merge and re-verify each shared site before locking scope.
+- **Evidence**: `docs/roadmap/features/124-shadcn-table-actions-responsive/context.md` § Archive Synthesis (siblings 121/122/123; corrective PR #917).
+- **Rule it implies**: `/sdd-design` recon of any cross-feature overlap must ground on `git show origin/main-dev` working-tree reads, treating sibling `feature.md` status (`code-completed` ≠ landed) and the GitHub merge badge as untrusted.
+
+### 2026-08-19 — user-metadata-management — design
+- **Pattern**: new self-management RPCs on a leaf auth service (identity) should derive the caller from the propagated `x-user-id` gRPC metadata (C-03), never from a request-body `userId` — the body variant is an IDOR surface. Replicate config's minimal `first`/`userIdFrom` accessor into a small `authz.ts`, and keep a runtime guard (`if (!call.metadata?.get)`) since it may be the service's first `call.metadata` use.
+- **Evidence**: `services/xstockstrat-identity/src/grpc/authz.ts`; `docs/roadmap/features/130-user-metadata-management/context.md` § Archive Synthesis.
+- **Rule it implies**: self-scoped RPCs identify the caller from propagated auth metadata, not request fields (ties into C-03).
+
+### 2026-08-19 — user-metadata-management — reuse
+- **Pattern**: the agent's `[*_metadata(), ("x-user-id", user_id)]` metadata-spread mirrors the existing `x-access-scope` call sites; self-only tools forward only `x-user-id` (no `x-access-scope`, which is reserved for admin-gated tools).
+- **Evidence**: `services/xstockstrat-agent/app/client.py`; `docs/roadmap/features/130-user-metadata-management/context.md` § Archive Synthesis.
+- **Rule it implies**: self-only agent tools forward `x-user-id` only; `x-access-scope` stays exclusive to admin management tools.
+
+### 2026-08-19 — live-strategy-opportunity-attribution — design
+- **Pattern**: when a duplicated fragment is a one-line SQL predicate and one consumer is a tested production loop, extract a shared constant (imported into both inline queries) rather than a shared repo method — single-source-of-truth for the WHERE clause without the blast radius of a shared call site or the emptiness of a re-declared-string parity test.
+- **Evidence**: `services/xstockstrat-analysis` `LIVE_ENABLED_PREDICATE_SQL`; `docs/roadmap/features/131-live-strategy-opportunity-attribution/context.md` § Archive Synthesis.
+- **Rule it implies**: DRY resolution = single textual source, not necessarily a shared call site; prefer a constant when the shared call site's blast radius is disproportionate (candidate note under C-10(b)).
+
+### 2026-08-19 — live-strategy-opportunity-attribution — ordering
+- **Pattern**: for a "top-N then filter for newness" selection reused at two call sites, cap-first-then-filter is the only order that provably bounds a per-key total; exclude-before-cap silently re-opens the ranking window past the cap. Prove composition, don't assume it.
+- **Evidence**: `docs/roadmap/features/131-live-strategy-opportunity-attribution/context.md` § Archive Synthesis (`_capped_live` proof).
+- **Rule it implies**: a cap-then-filter helper's argument order is load-bearing; document/test it wherever the helper is called with a pre-existing exclude set.
+
+### 2026-08-19 — strategy-symbol-denylist — design
+- **Pattern**: to add a proto scalar to a persisted message whose table has fixed INSERT/SELECT column lists, carry it inside an existing JSONB column via a marker (e.g. `Opportunity.muted` ← a `"denied"` entry in the `provenance` JSONB, derived read-side) instead of a migration — but teach every consumer of that JSONB to skip the marker.
+- **Evidence**: `docs/roadmap/features/132-strategy-symbol-denylist/context.md` § Archive Synthesis.
+- **Rule it implies**: a top-level dict/proto field silently disappears at persist if the repo's INSERT/SELECT columns are hardcoded — route it through JSONB or add the column, never assume it round-trips.
+
+### 2026-08-19 — strategy-symbol-denylist — design
+- **Pattern**: when one predicate governs two independent edges (entry vs exit), the resolver must return structured membership — `(universe, deny_entry, union, denied)` — not a single filtered set; a single `union − denied` cannot express "block entry but keep the exit."
+- **Evidence**: `docs/roadmap/features/132-strategy-symbol-denylist/context.md` § Archive Synthesis.
+- **Rule it implies**: a filter that some downstream paths must partially ignore (replay, exit) needs a per-edge flag defaulting off on the paths that must not see it.
+
+### 2026-08-19 — strategy-symbol-denylist — ordering
+- **Pattern**: churn- and restart-safe fair-share rotation over a per-cycle-rebuilt work list uses an identity-keyed resume cursor (`bisect_right` on the last-processed `(created_at, strategy_id, symbol)` tuple) with a zero-guard and clamp, not an integer `% len` cursor (no stable index→item identity, resets to 0 on restart). No persisted cursor column needed.
+- **Evidence**: `docs/roadmap/features/132-strategy-symbol-denylist/context.md` § Archive Synthesis.
+- **Rule it implies**: prefer deterministic total-order + identity-resume over index-modulo whenever the collection is rebuilt each cycle.
+
+### 2026-08-19 — strategy-symbol-denylist — reuse
+- **Pattern**: to get "best-effort readiness" cheaply, reuse an existing component's already-failure-tolerant drains rather than wiring a new `channel_ready()`/retry gate — same accepted-residual contract, zero new constructor deps.
+- **Evidence**: `docs/roadmap/features/132-strategy-symbol-denylist/context.md` § Archive Synthesis.
+- **Rule it implies**: before adding readiness plumbing, check whether an existing best-effort path already yields the same graceful-degradation contract.
+
+### 2026-08-19 — strategy-user-ownership — design
+- **Pattern**: for an ownership/authz feature, return a uniform `PERMISSION_DENIED` on every lookup miss (row absent OR owned by someone else) rather than splitting `NOT_FOUND`-on-absence vs `PERMISSION_DENIED`-on-mismatch. The split leaks existence: a caller learns from the response code whether an id exists under another owner. This deliberately diverged from the `xstockstrat-indicators` formula-ownership precedent (which splits).
+- **Evidence**: `docs/roadmap/features/133-strategy-user-ownership/context.md` § Archive Synthesis.
+- **Rule it implies**: ownership gates should default to existence-hiding uniform-deny; a `NOT_FOUND`/`PERMISSION_DENIED` split is an IDOR information leak unless deliberately justified (candidate Constitution ID: security/IDOR gate).
+
+### 2026-08-19 — strategy-user-ownership — ordering
+- **Pattern**: when a security feature and a data-shaping feature both need one shared owner-scoped builder, thread identity only in the security feature and defer the builder to the feature that owns it — don't half-build a duplicate. 133 owner-keyed the live-loop state dicts + gated the RPCs but deferred the owner-`union(watchlist,held,signals)` firing universe to 132's `resolve_universe`, leaving AC-4 formally unmet by 133 (satisfied by 132) — an acceptable, recorded consequence.
+- **Evidence**: `docs/roadmap/features/133-strategy-user-ownership/context.md` § Archive Synthesis.
+- **Rule it implies**: a requirement whose mechanism belongs to a sibling feature should be explicitly deferred with a forward-pointer, not partially/duplicatively built; record which ACs are consequently satisfied elsewhere.
