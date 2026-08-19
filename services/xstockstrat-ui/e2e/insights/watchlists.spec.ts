@@ -91,6 +91,16 @@ test.describe('Watchlists (insights)', () => {
     const box = await row.boundingBox();
     expect(box).not.toBeNull();
 
+    // Alignment regression guard: the "in queue" badge on this row must NOT push the row's
+    // controls (Select + Remove X) off the right edge of the readiness card. `toBeVisible()`
+    // above does not catch overflow-clipping, so assert the Remove button's right edge stays
+    // within the card's own right edge — the horizontal-scroll container the row lives in.
+    const cardBox = await readiness.locator('.overflow-x-auto').boundingBox();
+    const removeBox = await row.getByLabel('Remove AAPL').boundingBox();
+    expect(cardBox).not.toBeNull();
+    expect(removeBox).not.toBeNull();
+    expect(removeBox!.x + removeBox!.width).toBeLessThanOrEqual(cardBox!.x + cardBox!.width + 1);
+
     // The binding is persisted: a reload re-fetches it (the Select keeps its strategy, still evaluated).
     await page.reload();
     await expect(readiness.getByTestId('readiness-row-AAPL')).toBeVisible({ timeout: 8000 });
