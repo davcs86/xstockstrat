@@ -249,3 +249,16 @@
   changed files), no recharts import, no overlay hex, unit suite 109/109. Full pane render validated by
   Step 8 in CI (chart-heavy cold-compile trap — the current recharts e2e is intentionally red until Step 8).
 - Files modified: `src/components/trader/IndicatorPanels.tsx`, `src/app/trader/positions/[symbol]/page.tsx`.
+
+### Step 6 — Shared crosshair + unified tooltip across price and all panes [done]
+- The single v5 instance already draws ONE native crosshair across every pane (no cross-instance
+  sync — grep confirms none). Added a unified readout in IndicatorPanels: builds a series→label map
+  (pane-0 candlestick → 'price'; each line → `<refName>.<seriesName>`), subscribes
+  `chart.subscribeCrosshairMove`, and renders one combined value row (`chart-crosshair-readout`) at the
+  hovered bar. A whitespace/gap point (time only) shows an em dash '—', never a fabricated 0
+  (`readoutValue`). Unsubscribes on teardown.
+- Scoped to this feature only (no multi-symbol/compare infra). Touched only IndicatorPanels.tsx (the
+  hook's crosshair.mode:1 already correct, not per-pane).
+- TDD: hover assertion in the red-first Step 8 e2e (CI). Local gates: tsc clean, eslint clean,
+  unit suite 109/109.
+- Files modified: `src/components/trader/IndicatorPanels.tsx`.

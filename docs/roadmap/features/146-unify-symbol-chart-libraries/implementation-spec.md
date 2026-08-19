@@ -366,7 +366,7 @@ pnpm exec tsc --noEmit
 
 ### Step 6 — service: Shared crosshair + unified tooltip across price and all indicator panes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/IndicatorPanels.tsx` — modify (tooltip readout across panes)

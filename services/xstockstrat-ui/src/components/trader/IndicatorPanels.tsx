@@ -1,6 +1,6 @@
 'use client';
-import { useEffect } from 'react';
-import type { IChartApi, ISeriesApi } from 'lightweight-charts';
+import { useEffect, useState } from 'react';
+import type { IChartApi, ISeriesApi, MouseEventParams } from 'lightweight-charts';
 import type { ComponentSeries } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { Eyebrow } from '@/components/shared/Eyebrow';
 import { resolveChartColor } from '@/lib/chartColors';
@@ -27,6 +27,22 @@ function isChartable(c: ComponentSeries): boolean {
   return !c.error && c.series.length > 0;
 }
 
+type ReadoutRow = { label: string; value: string };
+
+// Read one series' value at the crosshair from the event's per-series data. Candlestick → close;
+// line → value; a whitespace/gap point (time only, no value) → em dash, never a fabricated 0.
+function readoutValue(data: unknown): string {
+  if (data && typeof data === 'object') {
+    if ('close' in data && typeof (data as { close: unknown }).close === 'number') {
+      return (data as { close: number }).close.toFixed(2);
+    }
+    if ('value' in data && typeof (data as { value: unknown }).value === 'number') {
+      return (data as { value: number }).value.toFixed(2);
+    }
+  }
+  return '—';
+}
+
 export function IndicatorPanels({
   components,
   times,
@@ -38,6 +54,10 @@ export function IndicatorPanels({
   chartRef: React.RefObject<IChartApi | null>;
   containerRef: React.RefObject<HTMLDivElement | null>;
 }) {
+  // Unified crosshair readout: the single v5 instance already draws ONE native crosshair across every
+  // pane; this shows one combined price + per-indicator value at the hovered bar (feature 146 Step 6).
+  const [readout, setReadout] = useState<ReadoutRow[] | null>(null);
+
   // Draw one pane per chartable component on the shared chart. Disposal-safe: removes its own series
   // + panes and restores the price-only height on unmount / strategy switch — never calls into a
   // disposed chart (guarded), so re-resolving the strategy (IndicatorSection) can't crash the chart.
@@ -47,6 +67,7 @@ export function IndicatorPanels({
     // instance rather than reading a possibly-changed ref at teardown time.
     let usedChart: IChartApi | null = null;
     let usedContainer: HTMLDivElement | null = null;
+    let crosshairHandler: ((param: MouseEventParams) => void) | null = null;
     const added: ISeriesApi<'Line'>[] = [];
     const chartable = components.filter(isChartable);
     // The parity times are protobuf-es Timestamps ({ seconds: bigint }); the request-input type is
@@ -71,6 +92,13 @@ export function IndicatorPanels({
         container.style.height = `${total}px`;
         chart.resize(container.clientWidth, total);
 
+        // series → readout label, so the shared crosshair can show every value at the hovered bar.
+        const labels = new Map<ISeriesApi<'Line' | 'Candlestick'>, string>();
+        const priceSeries = chart.panes()[0]?.getSeries()[0] as
+          | ISeriesApi<'Candlestick'>
+          | undefined;
+        if (priceSeries) labels.set(priceSeries, 'price');
+
         let paneIndex = 1;
         for (const comp of chartable) {
           comp.series.forEach((s, si) => {
@@ -82,6 +110,7 @@ export function IndicatorPanels({
             );
             line.setData(toLineData(s.values, paneTimes));
             added.push(line);
+            labels.set(line, `${comp.refName}.${s.name}`);
           });
           paneIndex++;
         }
@@ -91,6 +120,21 @@ export function IndicatorPanels({
           .forEach((p, i) =>
             p.setStretchFactor(i === 0 ? PRICE_PANE_HEIGHT : INDICATOR_PANE_HEIGHT),
           );
+
+        // One tooltip for the whole instrument: read each series' value at the crosshair time.
+        crosshairHandler = (param: MouseEventParams) => {
+          if (cancelled) return;
+          if (param.time === undefined || !param.point) {
+            setReadout(null);
+            return;
+          }
+          const rows: ReadoutRow[] = [];
+          for (const [series, label] of labels) {
+            rows.push({ label, value: readoutValue(param.seriesData.get(series)) });
+          }
+          setReadout(rows);
+        };
+        chart.subscribeCrosshairMove(crosshairHandler);
       };
       draw();
     });
@@ -101,6 +145,7 @@ export function IndicatorPanels({
       const container = usedContainer;
       if (!chart) return;
       try {
+        if (crosshairHandler) chart.unsubscribeCrosshairMove(crosshairHandler);
         for (const s of added) chart.removeSeries(s);
         const panes = chart.panes();
         for (let i = panes.length - 1; i >= 1; i--) chart.removePane(i);
@@ -117,6 +162,18 @@ export function IndicatorPanels({
   if (components.length === 0) return null;
   return (
     <div className="space-y-2" data-testid="indicator-panels">
+      {readout && (
+        <div
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums text-muted-foreground"
+          data-testid="chart-crosshair-readout"
+        >
+          {readout.map((r) => (
+            <span key={r.label}>
+              <span className="text-foreground">{r.label}</span> {r.value}
+            </span>
+          ))}
+        </div>
+      )}
       {components.map((comp) =>
         comp.error ? (
           <div key={comp.refName} className="space-y-1" data-testid="indicator-panel-error">
