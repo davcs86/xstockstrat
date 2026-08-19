@@ -8,6 +8,7 @@
 **Last Updated**: 2026-08-19
 **Committed to main**: 1d97c6c78caa532a24265dae2fa79c674b3b69dd
 **Launched date**: 2026-08-19
+**Archived**: 2026-08-19
 
 ---
 
@@ -16,13 +17,14 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-07-29 | `bug-reported` → `code-completed` | direct fix | Surfaced by the 073 re-review, confirmed by executing a real gRPC call. Same defect class feature 075 fixed for `ConfigSnapshot` and missed for `ListKeysResponse`. |
-
 | 2026-08-19 | `code-completed` → `launched` | status reconciliation | Reconciled to launched: code in production (main==main-dev @ 1d97c6c7); CI status automation (ci-validate-feature-status.yml) missed the slug grep-match. PR #806. |
+| 2026-08-19 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 1 spec |
+
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md)
+- _Product Spec — pruned on archive (2026-08-19); recoverable via git history._
 - [Context Log](context.md)
 
 ---

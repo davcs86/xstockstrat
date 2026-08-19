@@ -1,49 +1,26 @@
-# Context Log: fix-listkeys-wire-encoding
+# Context: fix-listkeys-wire-encoding  (archived 2026-08-19)
 
-Append-only.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-08-19 — /sdd-archiver
 
-## Session 2026-07-29 — surfaced, verified, fixed
+**What**: A SEV-2 wire-encoding bug in `xstockstrat-config`'s `ListKeys`: the handler hand-built each `ConfigKeyMeta` with snake_case keys and numeric enums, but the ts-proto grpc-js encoder (`snakeToCamel` + `stringEnums=true`) reads camelCase field names and string enum constants, so every field except `key`/`description` silently encoded to proto defaults over the wire. Same defect class feature 075 fixed for `ConfigSnapshot` and did not sweep into `listKeys`. Direct bug-track edit (no design/recon/spec artifacts).
 
-- Raised by the `/sdd-review` re-run on feature 073 as a blocker against FR-2 ("`list_config_keys`
-  returns each key's `ConfigKeyMeta`"), which is undeliverable while the fields are dropped.
-- **Verified by execution, not by reading**: stood up a real `grpc.Server` with the real service
-  definition and the real impl, dialled it with the generated `ConfigServiceClient`, and printed
-  what the client received. `isSecret` came back `false` for a row with `is_secret = TRUE`;
-  `defaultValue`/`consumingService` were empty; both enums were `UNRECOGNIZED`.
-- **This is my own incomplete fix from feature 075.** That feature fixed exactly this defect class
-  in `toProtoSnapPayload`/`buildConfigValue` for `ConfigSnapshot`, and I did not check `listKeys`,
-  which had the identical bug. Recording that plainly so the pattern is visible: when fixing a
-  wire-encoding bug, sweep **every** handler that builds a proto message by hand.
-- Fix mirrors 075: camelCase field names, `Environment.*`/`TradingMode.*` string enum constants,
-  and `valueType`/`minValue`/`maxValue` inside `validation`.
-- The pre-existing unit test asserted `k.validation.value_type` on the pre-encode object; it now
-  asserts `valueType`, matching what the handler actually emits.
-- New `src/__tests__/listKeysWire.test.ts` asserts over a real connection, because a pre-encode
-  assertion is precisely what let this survive.
+**Why (irrecoverable rationale)**: The bug survived because both existing test layers exercised the wrong surface — the unit test asserted on the handler's pre-encode object (where snake_case looks correct) and the config-ui e2e ran against `e2e/mock-backend.ts` which returns its own already-camelCase shape; neither ran the real ts-proto encoder. The fix was verified by execution: a real `grpc.Server` + real service definition + generated client, printing what the client actually received. `src/__tests__/listKeysWire.test.ts` asserts over a real connection precisely because a pre-encode assertion is what let this survive. Security dimension: `/config-ui`'s secret-edit guard gates editability on `k.isSecret` from `ListKeys`; because that field always encoded `false`, the guard was inert since it was written (secret-flagged keys were always editable). Blast radius was later narrowed by feature 074 (non-admins can't write config at all), leaving the guard as restored defence-in-depth; the service's `CLAUDE.md` documented the guard as working — true of intent, false of behavior.
 
-### Verification
+**Rejected alternatives**: none debated — bug-track direct fix.
 
-| Gate | Result |
-|---|---|
-| red-before-green | 5 failures with the fix reverted → 31/31 with it |
-| `pnpm test` | 31/31, terminates cleanly |
-| `pnpm lint` | 0 errors |
+**Scars & gotchas**: Pre-encode unit assertions and camelCase mock backends both mask ts-proto snake/camel encoding bugs completely; only a real-connection round-trip catches them. When any handler builds a proto message by hand, ts-proto grpc-js requires camelCase field names + string enum constants (`Environment.*`/`TradingMode.*`), with `valueType`/`minValue`/`maxValue` nested under `validation` — snake_case or numeric enums encode to defaults with no error.
 
-### Security note
+**Permanent deviations**: none — no design.md existed.
 
-`/config-ui`'s secret-edit guard reads `isSecret` from `ListKeys`, so until this fix it never
-fired — secret-flagged keys were editable in the UI. After feature 074 a non-admin can no longer
-write config at all, so the practical exposure now requires an admin session; the guard is a
-defence-in-depth affordance, restored here. `services/xstockstrat-config/CLAUDE.md` documents the
-guard as working, which was true of the intent and not of the behavior.
+**Cross-feature signal**: Third instance of the ts-proto hand-built-message snake/camel encoding trap in `xstockstrat-config` (075 fixed `ConfigSnapshot`/`getConfig`/`watchConfig`; 077 fixes `listKeys`). A wire-encoding fix that does not sweep every hand-built message leaves latent duplicates.
 
-## Session 2026-08-19 (status reconciliation)
+**Deferred follow-ons** (both out of scope, logged in the config service findings doc): request-side `trading_mode` snake/camel collapse (`configServiceImpl.ts` reads `call.request.trading_mode`, same root cause on the request path); `buildConfigValue` has no `'json'` case, so a `json`-typed value reads back as a string.
 
-- Feature was stalled at `code-completed` though its code is in production.
-- Root cause: `ci-validate-feature-status.yml` only flips a feature to `launched` when a
-  commit in the promotion delta matches the feature *slug* via `git log --grep`; this feature's
-  merge commit message did not contain the slug, so the automation skipped it.
-- Verified in production: main == main-dev @ 1d97c6c78caa532a24265dae2fa79c674b3b69dd. Merge reference: PR #806.
-- Status updated: `code-completed` → `launched`; Launched date: 2026-08-19.
+**Ledger entries written**: insights.md (1), fails.md (1) — see the 2026-08-19 `fix-listkeys-wire-encoding` entries. (A third candidate — pre-encode/camelCase-mock trap — was a DUP of the fails.md 2026-07-27 entry and skipped.)
+
+**Runtime-invariant recommendations (→ /context-constitution)**: config service still carries two unfixed siblings of the ts-proto encoding class (request-side `call.request.trading_mode` collapse; `buildConfigValue` missing `'json'`) — verify they landed in the config service findings doc. Doc-drift candidate: `services/xstockstrat-config/CLAUDE.md` documented the secret-edit guard as working; verify it reflects that the guard depended on this fix.
+
+**Pruned artifacts**: product-spec.md — last present at 1d97c6c.

@@ -8,6 +8,7 @@
 **Last Updated**: 2026-08-19
 **Committed to main**: 1d97c6c78caa532a24265dae2fa79c674b3b69dd
 **Launched date**: 2026-08-19
+**Archived**: 2026-08-19
 
 ---
 
@@ -19,8 +20,9 @@
 | 2026-08-02 | `draft` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written. NaN-rejecting range form + tools.py docstring sync + notify compile-first de-cloak folded in from adversary round 1 |
 | 2026-08-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
 | 2026-08-02 | `implementation-ready` → `code-completed` | /sdd-execute | All 5 steps done RED-first: ingest F-9 conviction guard (155 tests green), notify F-10 empty-field guard + compile-first de-cloak (19 tests green, no latent red), docstrings/mcp-tools.md/merge-order updated |
-
 | 2026-08-19 | `code-completed` → `launched` | status reconciliation | Reconciled to launched: code in production (main==main-dev @ 1d97c6c7); CI status automation (ci-validate-feature-status.yml) missed the slug grep-match. PR #852. |
+| 2026-08-19 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 4 specs |
+
 ---
 
 ## Reviewers
@@ -35,10 +37,7 @@
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Recon](recon.md) — grounded codebase dossier (Phase 0)
-- [Design](design.md) — debated, approved architecture (Phase 1)
-- [Implementation Spec](implementation-spec.md) — 5 numbered steps with codebase evidence
+- _Product Spec, Recon, Design, Implementation Spec — pruned on archive (2026-08-19); recoverable via git history._
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
