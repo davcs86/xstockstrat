@@ -216,6 +216,8 @@ function PositionDetailInner() {
         const series = seriesRef.current;
         if (!series) return;
         series.setData(mapBars(res.bars));
+        // Fit the bars into the visible range (indicator panes re-fit the union when they load).
+        chartRef.current?.timeScale().fitContent();
         // Replace overlays (avg cost always; stop only when the position has a resting stop).
         for (const line of priceLinesRef.current) series.removePriceLine(line);
         priceLinesRef.current = [];

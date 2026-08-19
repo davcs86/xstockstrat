@@ -1,31 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import {
-  CHART_COLOR_TOKENS,
-  CHART_GRID_TOKEN,
-  isCanvasSafeColor,
-  resolveChartColor,
-} from './chartColors';
+import { CHART_COLOR_TOKENS, CHART_GRID_TOKEN, resolveChartColor } from './chartColors';
 
-// Node/vitest env only — `document`/`getComputedStyle` are absent, so the live oklch→rgb probe
-// inside resolveChartColor cannot run here. These tests cover the PURE branches (canvas-safe
-// detection, token constants, the grid-token choice, the SSR/no-document fallback). The probe's
-// real oklch→rgb resolution is proven in Step 8's diagnosed chromium run (canvas fills aren't
-// DOM-inspectable, so a node test physically cannot reach them).
-describe('isCanvasSafeColor', () => {
-  it('treats hsl / rgb / hex as canvas-safe (pass through unchanged)', () => {
-    expect(isCanvasSafeColor('hsl(159 52% 54%)')).toBe(true);
-    expect(isCanvasSafeColor('rgb(20, 30, 40)')).toBe(true);
-    expect(isCanvasSafeColor('#1e293b')).toBe(true);
-  });
-
-  it('treats oklch / oklab / lab / lch as NOT canvas-safe (need probe resolution)', () => {
-    expect(isCanvasSafeColor('oklch(0.869 0.005 56.366)')).toBe(false);
-    expect(isCanvasSafeColor('oklab(0.4 0 0)')).toBe(false);
-    expect(isCanvasSafeColor('lab(50% 40 59.5)')).toBe(false);
-    expect(isCanvasSafeColor(' OKLCH(0.5 0 0) ')).toBe(false); // trims + case-insensitive
-  });
-});
-
+// Node/vitest env only — `document`/`getComputedStyle` are absent, so the live oklch→rgb canvas
+// conversion inside resolveChartColor cannot run here. These tests cover the PURE branches (token
+// constants, the grid-token choice, the SSR/no-document fallback). The 1×1-canvas pixel read-back
+// conversion is proven in a real browser (the feature's diagnosed chromium run / CI e2e) — a canvas
+// fill is not DOM-inspectable, so a node test physically cannot reach it.
 describe('CHART_GRID_TOKEN', () => {
   it('is the dedicated visible grid token, not the 10%-alpha --border', () => {
     expect(CHART_GRID_TOKEN).toBe('--chart-grid');
@@ -53,7 +33,7 @@ describe('CHART_COLOR_TOKENS', () => {
 
 describe('resolveChartColor', () => {
   it('returns the documented fallback when there is no document (node/SSR) instead of throwing', () => {
-    expect(resolveChartColor('--chart-1', '#abcdef')).toBe('#abcdef');
-    expect(resolveChartColor('--color-buy', 'hsl(159 52% 54%)')).toBe('hsl(159 52% 54%)');
+    expect(resolveChartColor('--chart-1', 'rgb(1, 2, 3)')).toBe('rgb(1, 2, 3)');
+    expect(resolveChartColor('--color-buy', 'green')).toBe('green');
   });
 });

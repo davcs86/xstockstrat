@@ -120,6 +120,10 @@ export function IndicatorPanels({
           .forEach((p, i) =>
             p.setStretchFactor(i === 0 ? PRICE_PANE_HEIGHT : INDICATOR_PANE_HEIGHT),
           );
+        // Fit the union of price + indicator data into the visible range so the shared time axis
+        // (and the crosshair that reads it) lands on the drawn bars — sparse series would otherwise
+        // sit off-screen with no hoverable time.
+        chart.timeScale().fitContent();
 
         // One tooltip for the whole instrument: read each series' value at the crosshair time.
         crosshairHandler = (param: MouseEventParams) => {

@@ -454,7 +454,9 @@ test.describe('Single Position page', () => {
     // Shared crosshair + unified tooltip (feature 146 Step 6): hovering the chart shows ONE combined
     // readout of price + each indicator series at the hovered bar. Its presence (with a row per added
     // line series) is the proof the sub-series were actually drawn onto the chart, not just declared.
-    await chart.hover();
+    // Hover a point inside the top (price) pane plot area. The chart fits its content, so a plot-area
+    // hover lands on the drawn bars; the Magnet crosshair (mode 1) yields a time and the readout renders.
+    await chart.hover({ position: { x: 200, y: 40 } });
     const readout = page.getByTestId('chart-crosshair-readout');
     await expect(readout).toBeVisible({ timeout: 10000 });
     await expect(readout).toContainText('price');
