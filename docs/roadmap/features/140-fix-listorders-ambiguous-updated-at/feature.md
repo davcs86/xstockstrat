@@ -29,10 +29,7 @@
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Recon](recon.md) — grounded codebase dossier
-- [Design](design.md) — debated, approved architecture (single-site AS-alias rename)
-- [Implementation Spec](implementation-spec.md) — 2 steps (service + test)
+- _Product Spec, Recon, Design, Implementation Spec — pruned on archive (2026-08-19); recoverable via git history._
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

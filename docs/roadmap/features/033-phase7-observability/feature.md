@@ -20,8 +20,7 @@
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — delivered steps + evidence
+- _Product Spec, Implementation Spec — pruned on archive (2026-08-19); recoverable via git history._
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

@@ -23,8 +23,8 @@
 ## Artifacts
 
 - [Defect Report](../../../reports/2026-08-15-signal-detail-readiness-traces-entry-rule-on-reduce.md) — observed vs. expected, root cause
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-signal-detail-readiness-rule`_
+- _Product Spec — pruned on archive (2026-08-19); recoverable via git history._
+- _Implementation Spec — never generated (Track C direct bug fix)._
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

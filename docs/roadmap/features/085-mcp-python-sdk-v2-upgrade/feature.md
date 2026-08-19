@@ -21,10 +21,7 @@
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Recon](recon.md) — grounded codebase dossier, live-verified against the real `mcp==2.0.0` package
-- [Design](design.md) — debated, approved architecture (2 rounds)
-- [Implementation Spec](implementation-spec.md) — 5 steps, generated 2026-07-30
+- _Product Spec, Recon, Design, Implementation Spec — pruned on archive (2026-08-19); recoverable via git history._
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

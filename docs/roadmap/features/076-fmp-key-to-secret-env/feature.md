@@ -22,7 +22,7 @@ harness-designated branch `claude/runs-073-074-sdd-6wtwal` → `main-dev`)
 
 ## Artifacts
 
-- [Product Spec](product-spec.md)
+- _Product Spec — pruned on archive (2026-08-19); recoverable via git history._
 - [Context Log](context.md)
 
 ---
