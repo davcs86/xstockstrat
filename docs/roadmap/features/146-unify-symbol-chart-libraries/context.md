@@ -282,3 +282,19 @@
   green run deferred to CI's prebuilt server (local `pnpm dev` 10s/test cold-compile trap) — logged as
   a CI-equivalent fallback in the Deviation Log. No new mock/env wiring (confirmed, not added).
 - Files modified: `e2e/trader/position-detail.spec.ts`.
+
+### Step 9 — Rewrite CLAUDE.md sanctioned exception; fix stale insights/market claim [done]
+- Rewrote the § Styling "Sanctioned exception" bullet: symbol page + ChartPanel now both on
+  lightweight-charts v5; symbol page draws OHLCV + indicators as native multi-pane on ONE instance;
+  recharts dropped from the symbol page but kept for EquityCurveChart/FormulaRunResult/insights/page.
+  Corrected the stale "3 shared consumers / insights/market has a chart" claim in BOTH places (§ Styling
+  and the § Opportunities-first "Decide screens" bullet — verified insights/market renders no chart).
+- /context-scrubber scan (teardown rule): the context-forge plugin is NOT available in this session →
+  noted in the integration PR body rather than skipped silently.
+- Files modified: `services/xstockstrat-ui/CLAUDE.md`.
+
+## Session 2026-08-18 — sdd-execute (sequential) — COMPLETE
+**Steps this session**: 1–9 (all)
+**Progress**: 9 done / 9 total
+**Stopped at**: all complete → code-completed
+**Next**: integration PR → main-dev; CI runs the full e2e (validates pane render + oklch canvas probe)

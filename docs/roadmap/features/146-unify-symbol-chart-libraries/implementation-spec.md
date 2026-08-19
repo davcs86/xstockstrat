@@ -1,6 +1,6 @@
 # Implementation Spec: unify-symbol-chart-libraries
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-08-18
 **Feature**: `docs/roadmap/features/146-unify-symbol-chart-libraries/feature.md`
 **Total Steps**: 9
@@ -531,7 +531,7 @@ grep -n "recharts" e2e/trader/position-detail.spec.ts     # expect NO match
 
 ### Step 9 — docs: Rewrite the CLAUDE.md sanctioned-exception; fix the stale `insights/market` claim
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (`services/xstockstrat-ui/CLAUDE.md`)
 **Files**:
 - `services/xstockstrat-ui/CLAUDE.md` — modify (§ Styling sanctioned-exception bullet)

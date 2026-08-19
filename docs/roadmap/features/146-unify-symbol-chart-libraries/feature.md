@@ -15,6 +15,7 @@
 | 2026-08-18 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. Fork (a) at live gate: indicators onto lightweight-charts **v5 native panes**, drop recharts from symbol page, shared crosshair in-scope |
 | 2026-08-18 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (8 steps; split to 9 after /sdd-review impl-spec — shared crosshair/tooltip is its own step) |
 | 2026-08-18 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done — pinned lightweight-charts v5.2.1, verified pane/series/whitespace API |
+| 2026-08-18 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done — v5 multi-pane symbol chart (price + indicator panes, one instance), shared crosshair/tooltip, recharts dropped from symbol page, CLAUDE.md updated |
 
 ---
 
