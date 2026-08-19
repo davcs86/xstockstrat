@@ -232,3 +232,20 @@
   trap). Local gates: no hex (grep), `addSeries(CandlestickSeries)` present, tsc --noEmit clean, eslint
   clean on changed files.
 - Files modified: `src/hooks/useCandlestickChart.ts`.
+
+### Step 5 — Indicator panes on the shared v5 chart; drop recharts from the symbol page [done]
+- Rewrote `IndicatorPanels.tsx`: recharts removed. Now draws one native v5 pane per chartable
+  component on the SHARED chart (from `chartRef`), each named sub-series a `LineSeries` at paneIndex
+  1..N with `toLineData(values, times)` (gaps-not-0) and `--chart-N` colors (resolveChartColor).
+  Grows the shared canvas + container height (min-height on the div so React won't fight it) and sets
+  price-pane stretch > indicator panes. Per-component fault isolation preserved (error → DOM strip, no
+  pane). Kept testids `indicator-panels`/`indicator-panel`/`indicator-panel-error` + added
+  `data-series-count`/`data-series` readiness seam. Disposal-safe cleanup (captures the async chart in
+  effect scope; removes its series + panes, restores 260px; guarded against a disposed chart).
+- `page.tsx`: grabbed `chartRef`; passed `chartRef`+`containerRef` through IndicatorSection →
+  IndicatorPanels; div `height:260` → `minHeight:260`; avg/stop `createPriceLine` hex → tokens
+  (`--muted-foreground`/`--color-sell`). recharts kept in package.json + ui/chart.tsx (3 other consumers).
+- TDD: covered by the red-first Step 8 e2e (CI). Local gates green: tsc --noEmit, eslint (0 warnings on
+  changed files), no recharts import, no overlay hex, unit suite 109/109. Full pane render validated by
+  Step 8 in CI (chart-heavy cold-compile trap — the current recharts e2e is intentionally red until Step 8).
+- Files modified: `src/components/trader/IndicatorPanels.tsx`, `src/app/trader/positions/[symbol]/page.tsx`.

@@ -292,7 +292,7 @@ pnpm exec tsc --noEmit                                                     # typ
 
 ### Step 5 — service: Build indicator panes on the shared v5 chart; drop recharts from the symbol page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/IndicatorPanels.tsx` — modify (recharts → lightweight-charts panes)
