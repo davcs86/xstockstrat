@@ -180,3 +180,16 @@
   acceptable execution latitude, F-08-safe (over-list not under-list). (ii) Step 8 has no
   `--cov-fail-under` by design for a Playwright e2e step — documented, not omitted.
 - Spec is clean and stable at 9 steps. No further spec edits. Next: /sdd-execute unify-symbol-chart-libraries.
+
+## Session 2026-08-18 — sdd-execute (sequential)
+**Steps this session**: starting 1..9 on feature/unify-symbol-chart-libraries
+
+### Step 1 — Pin lightweight-charts v5 and verify its API [done]
+- Pinned `lightweight-charts@5.2.1` (exact, no caret); `pnpm install` updated root pnpm-lock.yaml;
+  node_modules present (registry reachable via proxy).
+- Verified all v5 API assumptions against installed typings + a `tsc --noEmit` import probe — full
+  detail in Deviation Log. Key: `chart.addSeries(CandlestickSeries|LineSeries, opts, paneIndex?)`,
+  `chart.addPane()`/`chart.panes()`, `WhitespaceData {time}` gap points, `series.createPriceLine()`
+  preserved. No deviation from the spec's assumptions.
+- Lint clean (only pre-existing unrelated react-hooks warnings). TDD: N/A (dependency pin).
+- Files modified: `services/xstockstrat-ui/package.json`, `pnpm-lock.yaml`.

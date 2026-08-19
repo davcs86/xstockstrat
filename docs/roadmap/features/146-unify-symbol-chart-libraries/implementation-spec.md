@@ -59,7 +59,7 @@ proven at the wire layer by `services/xstockstrat-analysis/tests/test_analysis_s
 
 ### Step 1 — service: Pin lightweight-charts v5 and verify its pane / series / whitespace API
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/package.json` — modify (bump `lightweight-charts`)
@@ -585,4 +585,20 @@ grep -n "multi-pane\|v5\|one lightweight-charts" services/xstockstrat-ui/CLAUDE.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Step 1 — confirmed lightweight-charts v5 API (F-09 record; no deviation)
+Pinned `lightweight-charts@5.2.1` (latest v5; `dist-tags.latest`). Verified every v5 API the later
+(immutable) step bodies assume, against the installed typings
+(`node_modules/lightweight-charts/dist/typings.d.ts`) + a `tsc --noEmit` import probe — all confirmed,
+so Steps 4-6 build against these exact names with **no deviation**:
+- Candlestick creation: `import { CandlestickSeries } from 'lightweight-charts'` →
+  `chart.addSeries(CandlestickSeries, options, paneIndex?)` (`typings.d.ts:1640`). Confirms the spec's
+  `addSeries(CandlestickSeries, …)` assumption (replaces v4 `addCandlestickSeries`).
+- Line creation: `import { LineSeries }` → `chart.addSeries(LineSeries, options, paneIndex?)`.
+- Multi-pane: `addSeries(def, opts, paneIndex)` takes a **`paneIndex`** (pane 0 = price; panes 1..N =
+  indicators); also `chart.addPane(): IPaneApi` (`:1773`), `chart.panes(): IPaneApi[]` (`:1779`), and
+  `pane.addSeries(def, opts)` (`:2130`). Native multi-pane confirmed present in v5.2.1.
+- Line-series whitespace gap: `interface WhitespaceData { time }` (`:4579`); `SeriesDataItemTypeMap`
+  types `Line` as `LineData | WhitespaceData` (`:3911`) — a `{ time }`-only point (no `value`) is
+  accepted by `lineSeries.setData([...])`, so gaps break the line with no fabricated `0` (FR-3).
+- Overlays preserved: `series.createPriceLine(options)` still exists (`:2541`) — FR-5 avg/stop lines.
+- `createChart(container, options)` unchanged (`:212`).
