@@ -3,6 +3,36 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-08-19
+
+### Features
+- phase7-observability: Completes the pending Phase 7 implementation roadmap item: activates the OTel SDK already stubbed in every service, routes telemetry to Grafana Cloud via the OTLP collector, and delivers service health, latency, and signal pipeline throughput dashboards — providing operational visibility before live capital is at risk.
+- fmp-key-to-secret-env: Feature 059 routed the FMP API key through `xstockstrat-config` as `secret.marketdata.fmp.api_key` — the only credential on the platform stored that way, and the only `is_secret = TRUE` row.
+- fix-listkeys-wire-encoding: `ConfigService.ListKeys` built its response with **snake_case** field names and **numeric** enums, but ts-proto encodes **camelCase** and (`stringEnums=true`) string enum constants.
+- fix-config-scope-resolution: `ConfigService` resolved **every** request to the `('dev', 'all')` scope, whatever the caller asked for.
+- mcp-python-sdk-v2-upgrade: Upgrade `xstockstrat-agent` from the Python `mcp` SDK v1.27.1 to v2.0.0 (released 2026-07-28), a breaking rewrite: `FastMCP` → `MCPServer`, all 17 `@mcp.tool()` handlers gain an injected `ctx: Context` parameter, ASGI transport/mounting setup moves off the constructor (`mount_path` removed), `httpx`/`httpx-sse` are replaced by `httpx2`, the OAuth 2.1 edge-auth layer picks up several SEP-numbered behavior changes, and the protocol itself becomes stateless with no server-initiated back-channel (sampling/elicitation/roots deprecated).
+- fix-mcp-server-input-validation: Two small independent server guards: ingest range-validates conviction to INVALID_ARGUMENT (not INTERNAL/silent NULL), and notify rejects empty title/body (INVALID_ARGUMENT).
+- shadcn-migration-custom-composites: Fourth and final backlog feature from "The Component Ledger" shadcn/ui gap audit: close out the Combobox finding (already resolved by `119-shadcn-ui-migration` — verification only), consolidate the app's three independent charting approaches onto the official shadcn `Chart` primitive where the shape fits, extract a shared shadcn-primitive-based composite for the app's three repeatable-row editors (`OutputEditor`, `ParameterEditor`, `RuleEditor`'s condition builder), and adopt the shadcn `Questionnaire` primitive for `StrategyWizard`'s step shell.
+- unified-symbol-page: Consolidate everything the platform already knows about a single stock symbol — position, orders, a trade-entry widget, opportunity/conviction and indicator/strategy signals and fundamentals (for watchlisted symbols), screening tools (for non-watchlisted symbols), backtest history, and backfill coverage — into one page, superseding the narrower `/trader/positions/[symbol]` and `/trader/orders/[id]` pages shipped by feature 096.
+- fix-signal-detail-readiness-rule: On the Signal-detail page, a held opportunity tagged `Reduce` shows a header conviction sourced from the queue's **exit-rule** trace (e.g.
+- symbol-page-section-nav: Group the many stacked sections of the unified Symbol page (`/trader/positions/[symbol]`, feature 125) into a same-page navigation pattern (tabs, sticky segmented section-nav, or anchored jump-links — decided at `/sdd-design`) so a trader can move between logical section groups without scrolling the whole page, on desktop and mobile.
+- fix-listorders-ambiguous-updated-at: `TradingRepo.ListOrders`/`GetOrder`/`ListSubmittedOrders` fail on every call against staging Postgres with `column reference "updated_at" is ambiguous (SQLSTATE 42702)` and silently fall back to an in-memory store, because the `intentLateralJoinSQL` LATERAL join (feature 101) exposes a second unqualified `updated_at` column that the outer SELECT collides with.
+- fix-opportunities-bars-fetch-oom: `_compute_opportunities`'s per-candidate bars-fetch call to `xstockstrat-marketdata` intermittently fails with Postgres `out of shared memory (SQLSTATE 53200)`, skipping affected symbols for that cycle's opportunity scoring/readiness trace.
+- daily-bars-only: Strip platform-wide support for non-daily OHLCV timeframes (`15m`/`1h`): restrict `GetBars`/`BackfillBars`/the always-on bar ingester to `1d` only, and remove the UI's 15-minute/1-hour chart timeframe options — since no trading-path consumer (the live loop, screener technical criteria, default SMA strategy) ever evaluates anything but daily bars.
+- fix-screener-soft-criterion: The screener's soft/weighted-criterion scoring (`ScreenerEngine._build_result`, `services/xstockstrat-analysis/app/services/screener.py:474`) falls back to a hardcoded neutral `0.5` `technical_score` whenever a candidate has zero usable data for every configured soft criterion (e.g.
+- symbol-page-panel-refinements: Refine the trader symbol page (`/trader/positions/[symbol]`, feature 139's section-nav layout) so every section follows the Card/panel pattern, redundant broken panels are removed, Fundamentals is always-on, and a single user-controllable strategy selection drives the Indicators / Backtests / "Why this fired" panels so they are no longer dead-ends for symbols like AMZN.
+- unify-symbol-chart-libraries: On the trader symbol page (`/trader/positions/[symbol]`), unify the presentation of the OHLCV price chart (`lightweight-charts`) and the indicator overlay panels (`recharts`) so they read as one instrument with a single, aligned time axis and a consistent visual language — resolving the follow-up left open by PR #980, which harmonized only the panels' card framing.
+
+### Proto Changes
+- analysis/v1/analysis.proto
+- common/v1/common.proto
+- marketdata/v1/marketdata.proto
+
+### Summary
+19 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-08-16
 
 ### Features

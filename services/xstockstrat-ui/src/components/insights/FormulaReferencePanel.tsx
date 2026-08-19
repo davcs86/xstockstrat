@@ -47,7 +47,14 @@ export function FormulaReferencePanel({ onLoadTemplate, onClose }: FormulaRefere
         )}
       </div>
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="min-h-0 flex-1">
+      {/* Force column layout: the ui/tabs `data-horizontal:flex-col` variant doesn't match the
+          rendered `data-orientation` attribute, so without this the tab list and content lay out
+          as a row and the content is crushed into an unreadable sliver. */}
+      <Tabs
+        value={tab}
+        onValueChange={(v) => setTab(v as Tab)}
+        className="flex min-h-0 flex-1 flex-col"
+      >
         <TabsList className="mx-2 mt-1.5">
           {TABS.map((t) => (
             <TabsTrigger key={t.id} value={t.id}>

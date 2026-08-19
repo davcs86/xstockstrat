@@ -185,16 +185,26 @@ function brokerTypeToNumber(object) {
  * Timeframe is the canonical OHLCV bar interval, shared by marketdata + analysis + ingest.
  * Replaces the free-text "1d"/"1Day"/"1m" strings that previously mismatched across services.
  *
- * 15 minutes is the smallest supported interval: the free Alpaca market-data plan serves
- * 15-minute-delayed data, and the platform is not a real-time trader. TIMEFRAME_1MIN and
- * TIMEFRAME_5MIN are deprecated — no longer ingested or selectable — but retained (not
- * deleted) so the change stays wire- and source-compatible.
+ * Only TIMEFRAME_1DAY is requestable (feature 143) — GetBars/BackfillBars reject anything
+ * else. TIMEFRAME_15MIN/TIMEFRAME_1HOUR are deprecated but retained (not deleted, not
+ * renumbered) for wire compatibility with historically-stored 15m/1h rows, mirroring how
+ * TIMEFRAME_1MIN/TIMEFRAME_5MIN were already handled when sub-15m intervals stopped being
+ * selectable.
  */
 var Timeframe;
 (function (Timeframe) {
     Timeframe["TIMEFRAME_UNSPECIFIED"] = "TIMEFRAME_UNSPECIFIED";
-    /** TIMEFRAME_15MIN - smallest supported interval */
+    /**
+     * TIMEFRAME_15MIN - deprecated: only 1d is requestable (feature 143)
+     *
+     * @deprecated
+     */
     Timeframe["TIMEFRAME_15MIN"] = "TIMEFRAME_15MIN";
+    /**
+     * TIMEFRAME_1HOUR - deprecated: only 1d is requestable (feature 143)
+     *
+     * @deprecated
+     */
     Timeframe["TIMEFRAME_1HOUR"] = "TIMEFRAME_1HOUR";
     Timeframe["TIMEFRAME_1DAY"] = "TIMEFRAME_1DAY";
     /**

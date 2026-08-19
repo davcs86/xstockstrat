@@ -1,6 +1,5 @@
 # Feature: ledger-event-export
 
-**Lifecycle Status**: `draft`
 **Development Branch**: `feature/ledger-event-export`
 **Created**: 2026-05-26
 **Last Updated**: 2026-05-26

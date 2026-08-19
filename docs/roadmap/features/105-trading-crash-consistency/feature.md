@@ -1,6 +1,5 @@
 # Feature: trading-crash-consistency
 
-**Lifecycle Status**: `demoted/canceled`
 **Development Branch**: `feature/trading-crash-consistency`
 **Created**: 2026-08-04
 **Last Updated**: 2026-08-04

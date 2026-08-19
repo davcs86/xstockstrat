@@ -220,10 +220,11 @@ export declare const BrokerTypeSchema: GenEnum<BrokerType>;
  * Timeframe is the canonical OHLCV bar interval, shared by marketdata + analysis + ingest.
  * Replaces the free-text "1d"/"1Day"/"1m" strings that previously mismatched across services.
  *
- * 15 minutes is the smallest supported interval: the free Alpaca market-data plan serves
- * 15-minute-delayed data, and the platform is not a real-time trader. TIMEFRAME_1MIN and
- * TIMEFRAME_5MIN are deprecated — no longer ingested or selectable — but retained (not
- * deleted) so the change stays wire- and source-compatible.
+ * Only TIMEFRAME_1DAY is requestable (feature 143) — GetBars/BackfillBars reject anything
+ * else. TIMEFRAME_15MIN/TIMEFRAME_1HOUR are deprecated but retained (not deleted, not
+ * renumbered) for wire compatibility with historically-stored 15m/1h rows, mirroring how
+ * TIMEFRAME_1MIN/TIMEFRAME_5MIN were already handled when sub-15m intervals stopped being
+ * selectable.
  *
  * @generated from enum xstockstrat.common.v1.Timeframe
  */
@@ -233,13 +234,17 @@ export declare enum Timeframe {
      */
     TIMEFRAME_UNSPECIFIED = 0,
     /**
-     * smallest supported interval
+     * deprecated: only 1d is requestable (feature 143)
      *
-     * @generated from enum value: TIMEFRAME_15MIN = 5;
+     * @generated from enum value: TIMEFRAME_15MIN = 5 [deprecated = true];
+     * @deprecated
      */
     TIMEFRAME_15MIN = 5,
     /**
-     * @generated from enum value: TIMEFRAME_1HOUR = 3;
+     * deprecated: only 1d is requestable (feature 143)
+     *
+     * @generated from enum value: TIMEFRAME_1HOUR = 3 [deprecated = true];
+     * @deprecated
      */
     TIMEFRAME_1HOUR = 3,
     /**

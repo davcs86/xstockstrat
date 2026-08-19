@@ -1,7 +1,6 @@
 # Feature: fmp-key-to-secret-env
 
 **Type**: bug
-**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/fmp-key-to-secret-env` (this run: implemented on the
 harness-designated branch `claude/runs-073-074-sdd-6wtwal` → `main-dev`)
 **GitHub Issue**: n/a — GitHub Issues are disabled on `davcs86/xstockstrat`

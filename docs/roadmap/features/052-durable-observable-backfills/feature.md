@@ -1,6 +1,5 @@
 # Feature: durable-observable-backfills
 
-**Lifecycle Status**: `launched`
 **Committed to main**: 0b503103817c8d8d2089c057a10db12fb7a098a5
 **Launched date**: 2026-06-09
 **Development Branch**: `feature/durable-observable-backfills`

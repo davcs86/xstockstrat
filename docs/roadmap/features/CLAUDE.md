@@ -43,20 +43,49 @@ Additional fields present in bug `feature.md` files:
 
 | File | Created by | Purpose |
 |---|---|---|
-| `feature.md` | `/sdd-story` or `/sdd-triage` | Lifecycle status, Reviewers snapshot, links to all artifacts — **check this first** |
+| `status.md` | `/sdd-story` or `/sdd-triage` | **Canonical current lifecycle status** — a single line, plain string, nothing else (e.g. `design-approved`). No markdown formatting. This is the ONLY place current status is stored — **check this first**, and prefer a bulk `egrep` over all features' `status.md` files instead of reading them one at a time (see § Bulk Status Reads below) |
+| `feature.md` | `/sdd-story` or `/sdd-triage` | Status History audit log, Reviewers snapshot, links to all artifacts |
 | `product-spec.md` | `/sdd-story` or `/sdd-triage` | Requirements or bug description and fix scope; governance gates |
 | `recon.md` | `/sdd-design` (Phase 0) | Grounded codebase dossier — codebase map, **Patterns to REUSE**, dependencies, risks, recommended scope (only present once /sdd-design has run) |
 | `design.md` | `/sdd-design` (Phase 1) | Debated, user-approved architecture — chosen approach, **rejected alternatives**, open risks, Constitution rules touched (only present once /sdd-design has run) |
 | `implementation-spec.md` | `/sdd-spec` | Numbered steps with exact file/symbol references, statuses, and per-step Reviewers |
 | `context.md` | All skills | Append-only session log — **ALWAYS read before touching feature files** |
 
+### Bulk Status Reads — Use egrep, Never a Read-Loop
+
+Any skill that needs the status of **more than one** feature has two cases — they take different
+mechanisms; do not conflate them:
+
+**Case 1 — scanning the local working tree** (no per-feature branch resolution needed: `promote`'s
+`code-completed` filter, `sdd-qa`'s `in-progress` TDD-gate scan, `sdd-archiver`'s terminal-state
+prefilter, `sdd-sync`'s `launched` branch-cleanup check). These MUST issue a single shell command
+across all `status.md` files — never `Read` each one individually in a loop:
+
+```bash
+# All statuses, one call:
+egrep -H '' docs/roadmap/features/*/status.md
+# → docs/roadmap/features/<NNN-slug>/status.md:design-approved
+
+# Filtered to one status, one call:
+egrep -l '^launched$' docs/roadmap/features/*/status.md
+```
+
+**Case 2 — needing each feature's *authoritative* branch state** (`/sdd-status` with no slug:
+per feature, the authoritative source is `origin/feature/<slug>` if it exists, else
+`origin/main-dev` — different remotes/refs per feature, so they cannot collapse into one local
+`egrep` without risking stale status for a feature with unmerged branch changes). These still
+issue one `git show <SRC>:.../status.md` per feature, in the same per-feature loop that already
+fetches `feature.md` for Type/Severity/Status History — but that read is now one line instead of
+a full file.
+
 ### Metadata Fields in feature.md
 
-Every `feature.md` contains required headers plus optional tracking fields:
+Every `feature.md` contains required headers plus optional tracking fields. Current lifecycle
+status is **not** one of them — it lives only in the sibling `status.md` (see above); duplicating
+it in `feature.md` would just reintroduce the two-source drift this repo already avoids elsewhere.
 
 **Required fields (all features):**
 
-- `**Lifecycle Status**` — current status (`idea`, `draft`, `spec-ready`, `design-approved`, `implementation-ready`, `in-progress`, `code-completed`, `launched`, etc.)
 - `**Development Branch**` — git branch name (`feature/<slug>`)
 - `**Created**` — date feature was created (YYYY-MM-DD)
 - `**Last Updated**` — date file was last modified (YYYY-MM-DD)
@@ -103,4 +132,6 @@ These tracking fields make production audits easy: you can always see exactly wh
 
 2. **Do not manually update feature statuses after promotion.** The CI workflow handles it automatically.
 
-3. **Run `/sdd-status` for a live summary of all features.** It reflects the current state pulled from `feature.md` files.
+3. **Run `/sdd-status` for a live summary of all features.** It reflects the current state pulled from each feature's `status.md`.
+
+4. **Current lifecycle status lives only in `status.md`.** Never add a `**Lifecycle Status**` field back to `feature.md` — that field was removed specifically to avoid two files disagreeing about the same fact. `feature.md`'s `## Status History` table remains the append-only audit trail of transitions; it is a different concern (history, not current state).

@@ -1,6 +1,5 @@
 # Feature: agent-mcp-server
 
-**Lifecycle Status**: `launched`
 **Committed to main**: 16bc098f11328c718fa567c97cf48670b95332da
 **Launched date**: 2026-05-25
 **Development Branch**: `feature/agent-mcp-server`

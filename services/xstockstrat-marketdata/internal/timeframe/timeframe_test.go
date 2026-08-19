@@ -15,10 +15,10 @@ func TestFromString(t *testing.T) {
 		// The load-bearing bug: "1Day" (analysis) and "1d" (backfill) must agree.
 		{"1Day", commonv1.Timeframe_TIMEFRAME_1DAY},
 		{"1d", commonv1.Timeframe_TIMEFRAME_1DAY},
-		{"15m", commonv1.Timeframe_TIMEFRAME_15MIN},
-		{"15Min", commonv1.Timeframe_TIMEFRAME_15MIN},
-		{"1h", commonv1.Timeframe_TIMEFRAME_1HOUR},
-		{"1Hour", commonv1.Timeframe_TIMEFRAME_1HOUR},
+		{"15m", commonv1.Timeframe_TIMEFRAME_15MIN},   //nolint:staticcheck // SA1019: deprecated for requests (feature 143) but still resolved for historical rows
+		{"15Min", commonv1.Timeframe_TIMEFRAME_15MIN}, //nolint:staticcheck // SA1019: deprecated for requests (feature 143) but still resolved for historical rows
+		{"1h", commonv1.Timeframe_TIMEFRAME_1HOUR},    //nolint:staticcheck // SA1019: deprecated for requests (feature 143) but still resolved for historical rows
+		{"1Hour", commonv1.Timeframe_TIMEFRAME_1HOUR}, //nolint:staticcheck // SA1019: deprecated for requests (feature 143) but still resolved for historical rows
 		// Sub-15m intervals were removed from the product — no longer resolvable.
 		// Load-bearing for feature 080 FR-6/AC-7: streamed bars now WRITE TIMEFRAME_1MIN
 		// explicitly (internal/alpaca/stream.go dispatch) without going through FromString —
@@ -63,8 +63,8 @@ func TestToCanonical(t *testing.T) {
 		want   string
 		wantOk bool
 	}{
-		{commonv1.Timeframe_TIMEFRAME_15MIN, "15m", true},
-		{commonv1.Timeframe_TIMEFRAME_1HOUR, "1h", true},
+		{commonv1.Timeframe_TIMEFRAME_15MIN, "15m", true}, //nolint:staticcheck // SA1019: deprecated for requests (feature 143) but still resolved for historical rows
+		{commonv1.Timeframe_TIMEFRAME_1HOUR, "1h", true},  //nolint:staticcheck // SA1019: deprecated for requests (feature 143) but still resolved for historical rows
 		{commonv1.Timeframe_TIMEFRAME_1DAY, "1d", true},
 		{commonv1.Timeframe_TIMEFRAME_UNSPECIFIED, "", false},
 		// Deprecated sub-15m enums no longer map to a canonical string.

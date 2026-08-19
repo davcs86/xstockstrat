@@ -337,6 +337,18 @@ mkdir -p docs/roadmap/features/${FEATURE_DIRNAME}
 
 Use `${FEATURE_DIRNAME}` (e.g. `003-fix-42-wrong-pnl-portfolio`) for all subsequent file paths.
 
+### C-2.5. Write status.md
+
+Write `docs/roadmap/features/${FEATURE_DIRNAME}/status.md` — a single line, plain string, nothing
+else:
+
+```
+draft
+```
+
+This is the canonical current lifecycle status (see `docs/roadmap/features/CLAUDE.md` §
+Bulk Status Reads). `feature.md` never repeats it.
+
 ### C-3. Write feature.md
 
 Write `docs/roadmap/features/${FEATURE_DIRNAME}/feature.md`:
@@ -345,7 +357,6 @@ Write `docs/roadmap/features/${FEATURE_DIRNAME}/feature.md`:
 # Feature: <slug>
 
 **Type**: bug
-**Lifecycle Status**: `draft`
 **Development Branch**: `feature/<slug>`
 **GitHub Issue**: <url>
 **Severity**: <SEV-N>

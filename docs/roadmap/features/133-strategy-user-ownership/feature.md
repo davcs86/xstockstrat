@@ -1,8 +1,8 @@
 # Feature: strategy-user-ownership
 
-**Lifecycle Status**: `launched`
 **Committed to main**: 94e4e24fa6ac41eb20bd16e1e9af15c8388e885a
 **Launched date**: 2026-08-16
+**Archived**: 2026-08-19
 **Development Branch**: `feature/strategy-user-ownership`
 **Created**: 2026-08-14
 **Last Updated**: 2026-08-15
@@ -21,6 +21,7 @@
 | 2026-08-14 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started. Step 1 (proto: `StrategyDefinition.user_id = 13`) done — buf lint + buf breaking (vs main-dev, non-breaking) pass. |
 
 | 2026-08-16 | `code-completed` → `launched` | CI workflow | Promoted via PR #963; committed 94e4e24fa6ac41eb20bd16e1e9af15c8388e885a |
+| 2026-08-19 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 4 specs |
 ---
 
 ## Artifacts

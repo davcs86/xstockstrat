@@ -8,6 +8,7 @@ populating _backtests/_strategies directly, same pattern as ingest.
 import asyncio
 import inspect
 import json
+import logging
 import math
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -3752,6 +3753,21 @@ class TestEvaluateReadiness:
         assert r.conditions[0].state == analysis_pb2.CONDITION_STATE_PASS
 
     @pytest.mark.asyncio
+    async def test_empty_bars_logs_warning(self, caplog):
+        # feature 140 FR-6: a successful-but-empty GetBars is no longer silent — it logs a WARN
+        # naming the symbol + strategy. The response still returns an (empty) readiness row, so
+        # the RPC shape is unchanged.
+        svc = self._svc({"AAPL": []})
+        with caplog.at_level(logging.WARNING, logger="app.handlers.servicer"):
+            resp = await svc.EvaluateReadiness(
+                analysis_pb2.EvaluateReadinessRequest(strategy_id="s1", symbols=["AAPL"]),
+                _ctx(_HEADERS),
+            )
+        assert len(resp.readiness) == 1  # empty readiness still returned
+        warns = [r for r in caplog.records if "no 1d bars for AAPL" in r.getMessage()]
+        assert len(warns) == 1
+
+    @pytest.mark.asyncio
     async def test_default_rule_traces_entry(self):
         """feature 138: an unset `rule` (READINESS_RULE_UNSPECIFIED) traces the entry rule —
         back-compat, so watchlist readiness is unchanged. Entry `sma > 100` fires at ~150 → 1/1."""
@@ -4574,6 +4590,134 @@ class TestListOpportunitiesMaterialized:
         by_symbol, _ = await _list_opps(svc, min_conviction=0.5)
         assert "XYZ" in by_symbol  # exempt from the floor
         assert by_symbol["XYZ"].muted is True
+
+
+class TestOpportunityBarsFetchDedup:
+    """feature 141 — per-pass bars dedup + cross-request semaphore fixing the "out of shared
+    memory" (SQLSTATE 53200) bars-fetch failures caused by feature 131/132's widened candidate
+    set (product-spec.md Root Cause Hypothesis)."""
+
+    @pytest.mark.asyncio
+    async def test_bars_fetch_deduped_at_documented_worst_case_scale(self):
+        """Scale reasoning (design.md Open Risk 2): the real production candidate-set size that
+        triggered the incident is unavailable, so this ~241-row / 30-symbol scenario is a
+        REASONED SUBSTITUTE grounded in this service's own documented feature-131 worst-case
+        ceiling (5 x (20+20) = 200, CLAUDE.md § Config Keys Consumed) — not a confirmed
+        reproduction. It uses 8 watchlist strategies per symbol (recon: watchlist bindings are
+        the UNCAPPED multiplier) to reach scale, rather than reproducing the live-strategy
+        fan-out cap's exact mechanics — this test's job is the dedup invariant at scale, not a
+        second proof of the already-shipped feature-131 cap. One muted-only row (feature 132) is
+        included to prove muted placeholders never reach the bars-fetch gate at all."""
+        symbols = [f"S{i:02d}" for i in range(30)]
+        strat_ids = [f"wl{i}" for i in range(8)]
+        strategies = {sid: _strat_row(sid, entry=_GT_100) for sid in strat_ids}
+        strategies["muted0"] = _strat_row("muted0", entry=_GT_100, symbols=["M00"], denied=["M00"])
+        bindings = [(sym, sid) for sym in symbols for sid in strat_ids]
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=bindings)],
+            strategies=strategies,
+            live_strategies=[strategies["muted0"]],
+            bars={sym: _FIRING_BARS for sym in symbols},
+        )
+
+        # ListOpportunities paginates its read at _DEFAULT_OPP_PAGE_SIZE=50 (unrelated,
+        # pre-existing RPC behavior) — request a page large enough to see the whole materialized
+        # set in one read, so this assertion reflects what _compute_opportunities actually wrote,
+        # not an artifact of read-side pagination.
+        by_symbol, opps = await _list_opps(svc, page=common_pb2.PageRequest(page_size=300))
+
+        assert (
+            len(opps) >= 200
+        )  # design's documented worst-case scale (240 watchlist rows + 1 muted)
+        assert svc._marketdata.GetBars.call_count == 30  # one fetch per DISTINCT traced symbol —
+        # never per candidate row, and the muted-only symbol below is never fetched at all
+        fetched = {c.args[0].symbol for c in svc._marketdata.GetBars.call_args_list}
+        assert fetched == set(symbols)
+        assert "M00" not in fetched
+        assert by_symbol["M00"].muted is True
+        assert (
+            by_symbol["M00"].total_conditions == 0
+        )  # never traced — placeholder, not a real 0/0 fetch
+
+    @pytest.mark.asyncio
+    async def test_failed_fetch_cached_once_and_every_sharing_candidate_resolves(self):
+        """design.md § Chosen Approach: a fetch failure is cached as [] and NOT retried by a
+        later candidate sharing the symbol this pass — an explicit, named trade-off. Also proves
+        the companion "every candidate resolves" property: both candidates sharing the failing
+        symbol still return a row (empty readiness), never an unhandled exception propagating out
+        of ListOpportunities."""
+        strategies = {
+            "wl0": _strat_row("wl0", entry=_GT_100),
+            "wl1": _strat_row("wl1", entry=_GT_100),
+            "wl2": _strat_row("wl2", entry=_GT_100),
+        }
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("BAD", "wl0"), ("BAD", "wl1"), ("OK", "wl2")])],
+            strategies=strategies,
+        )
+
+        async def _flaky_get_bars(req, metadata=None):
+            if req.symbol == "BAD":
+                raise Exception("simulated shared-memory failure")
+            return _recent_bars_resp(_FIRING_BARS)
+
+        svc._marketdata.GetBars = AsyncMock(side_effect=_flaky_get_bars)
+
+        by_symbol, opps = await _list_opps(svc)  # must not raise
+
+        bad_calls = [c for c in svc._marketdata.GetBars.call_args_list if c.args[0].symbol == "BAD"]
+        assert len(bad_calls) == 1  # attempted exactly once for BAD despite 2 candidates sharing it
+        assert len(opps) == 3  # wl0/BAD, wl1/BAD, wl2/OK all resolved
+        bad_rows = [o for o in opps if o.symbol == "BAD"]
+        assert len(bad_rows) == 2
+        assert all(
+            o.total_conditions == 0 and o.conviction == 0.0 for o in bad_rows
+        )  # cached [] fallback
+        assert (
+            by_symbol["OK"].total_conditions == 1
+        )  # unaffected sibling symbol still traces normally
+
+    @pytest.mark.asyncio
+    async def test_cross_user_concurrency_bounded_by_semaphore(self):
+        """design.md Testing — mechanical proof (not a real-Postgres load test): asyncio.gather
+        over N=6 concurrent ListOpportunities calls for 6 different user_ids against ONE shared
+        servicer instance (mirrors production: AnalysisServicer is constructed once,
+        instance_count=1 per .do/app.yaml:232), with the bars-fetch mocked to block on a shared
+        counter. Asserts peak in-flight fetches == the configured max_concurrent_bars_fetches (2,
+        default) — proving BOTH that fetches genuinely overlap (a "teeth" assertion — insights.md
+        2026-07-27: an upper bound alone can pass vacuously if nothing ever overlaps) AND that the
+        semaphore caps them at exactly the configured bound, not some other number."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("SOLO", "wl0")])],
+            strategies={"wl0": _strat_row("wl0", entry=_GT_100)},
+        )
+        in_flight = 0
+        peak = 0
+        state_lock = asyncio.Lock()
+
+        async def _blocking_get_bars(req, metadata=None):
+            nonlocal in_flight, peak
+            async with state_lock:
+                in_flight += 1
+                peak = max(peak, in_flight)
+            await asyncio.sleep(0.05)
+            async with state_lock:
+                in_flight -= 1
+            return _recent_bars_resp(_FIRING_BARS)
+
+        svc._marketdata.GetBars = AsyncMock(side_effect=_blocking_get_bars)
+
+        await asyncio.gather(
+            *[
+                svc.ListOpportunities(
+                    analysis_pb2.ListOpportunitiesRequest(),
+                    _ctx({"x-user-id": f"u{i}", "x-access-scope": "7", "x-trace-id": "t1"}),
+                )
+                for i in range(6)
+            ]
+        )
+
+        assert peak == 2  # exactly the configured max_concurrent_bars_fetches default
 
 
 class TestGetStrategyAnalytics:

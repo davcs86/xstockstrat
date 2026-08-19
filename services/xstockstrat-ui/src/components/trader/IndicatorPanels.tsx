@@ -1,98 +1,215 @@
 'use client';
-import { CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts';
+import { useEffect, useState } from 'react';
+import type { IChartApi, ISeriesApi, MouseEventParams } from 'lightweight-charts';
 import type { ComponentSeries } from '@xstockstrat/proto/analysis/v1/analysis_pb';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from '@/components/ui/chart';
+import { Eyebrow } from '@/components/shared/Eyebrow';
+import { resolveChartColor } from '@/lib/chartColors';
+import { toLineData } from '@/lib/indicatorChart';
+import type { IndicatorSeriesInput } from '@/hooks/useIndicatorSeries';
 
-// Stacked indicator overlay panels beneath the price chart (feature 125, FR-6). One panel per
-// declared strategy component; each draws every one of that component's named series as its own
-// line (primary "value" + secondaries like bb.upper/macd.signal/stoch.d). A component that failed to
-// compute (soft-deleted formula, sandbox error) renders a per-panel error state instead of a chart —
-// per-component fault isolation surfaced to the UI. Built from the shadcn `chart` (recharts) wrapper.
-const SERIES_COLORS = [
-  'var(--chart-1)',
-  'var(--chart-2)',
-  'var(--chart-3)',
-  'var(--chart-4)',
-  'var(--chart-5)',
-];
+// Indicator overlay panes (feature 146). Every chartable strategy component is drawn as its own
+// native lightweight-charts v5 PANE on the SAME chart instance as the OHLCV candlestick (pane 0),
+// so price + indicators share one time scale and one native crosshair — one coherent instrument,
+// superseding the previous recharts card-per-panel. A component that failed to compute renders a DOM
+// error strip and gets no pane (per-component fault isolation). Warm-up/gap points render as gaps,
+// never a fabricated 0 (the src/lib/indicatorChart mapper; FR-3/AC-3). This component owns the
+// imperative pane lifecycle on the shared chart and renders the DOM legend + error strips; the actual
+// lines live in the price card's canvas above.
 
-export function IndicatorPanels({ components }: { components: ComponentSeries[] }) {
-  if (components.length === 0) return null;
-  return (
-    <div className="space-y-3" data-testid="indicator-panels">
-      {components.map((comp) => (
-        <IndicatorPanel key={comp.refName} comp={comp} />
-      ))}
-    </div>
-  );
+const PRICE_PANE_HEIGHT = 260;
+const INDICATOR_PANE_HEIGHT = 120;
+// Theme tokens per named sub-series; fallbacks are CSS named colors (no brand hex), unreachable
+// client-side where the static dark tokens always resolve.
+const SERIES_TOKENS = ['--chart-1', '--chart-2', '--chart-3', '--chart-4', '--chart-5'] as const;
+const SERIES_FALLBACK = ['teal', 'slateblue', 'goldenrod', 'indianred', 'silver'] as const;
+
+function isChartable(c: ComponentSeries): boolean {
+  return !c.error && c.series.length > 0;
 }
 
-function IndicatorPanel({ comp }: { comp: ComponentSeries }) {
-  if (comp.error) {
-    return (
-      <Card data-testid="indicator-panel-error">
-        <CardHeader className="pb-2">
-          <CardTitle className="font-mono text-sm">{comp.refName}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Couldn&apos;t compute this indicator — {comp.error}
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
+type ReadoutRow = { label: string; value: string };
 
-  const config: ChartConfig = {};
-  comp.series.forEach((s, i) => {
-    config[s.name] = { label: s.name, color: SERIES_COLORS[i % SERIES_COLORS.length] };
-  });
-
-  const len = comp.series[0]?.values.length ?? 0;
-  const data = Array.from({ length: len }, (_, i) => {
-    const row: Record<string, number | null> = { i };
-    for (const s of comp.series) {
-      // An UNSET IndicatorValue (warm-up head / gap) has `value === undefined` → render a gap
-      // (recharts null + connectNulls={false}), never a fabricated 0 (AC-4a/P-03). A genuine 0
-      // reading has `value === 0` and is kept. `?? null` maps only undefined/null → gap.
-      row[s.name] = s.values[i]?.value ?? null;
+// Read one series' value at the crosshair from the event's per-series data. Candlestick → close;
+// line → value; a whitespace/gap point (time only, no value) → em dash, never a fabricated 0.
+function readoutValue(data: unknown): string {
+  if (data && typeof data === 'object') {
+    if ('close' in data && typeof (data as { close: unknown }).close === 'number') {
+      return (data as { close: number }).close.toFixed(2);
     }
-    return row;
-  });
+    if ('value' in data && typeof (data as { value: unknown }).value === 'number') {
+      return (data as { value: number }).value.toFixed(2);
+    }
+  }
+  return '—';
+}
 
+export function IndicatorPanels({
+  components,
+  times,
+  chartRef,
+  containerRef,
+}: {
+  components: ComponentSeries[];
+  times: IndicatorSeriesInput['times'];
+  chartRef: React.RefObject<IChartApi | null>;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  // Unified crosshair readout: the single v5 instance already draws ONE native crosshair across every
+  // pane; this shows one combined price + per-indicator value at the hovered bar (feature 146 Step 6).
+  const [readout, setReadout] = useState<ReadoutRow[] | null>(null);
+
+  // Draw one pane per chartable component on the shared chart. Disposal-safe: removes its own series
+  // + panes and restores the price-only height on unmount / strategy switch — never calls into a
+  // disposed chart (guarded), so re-resolving the strategy (IndicatorSection) can't crash the chart.
+  useEffect(() => {
+    let cancelled = false;
+    // Capture the async-created chart/container the draw actually used, so cleanup operates on that
+    // instance rather than reading a possibly-changed ref at teardown time.
+    let usedChart: IChartApi | null = null;
+    let usedContainer: HTMLDivElement | null = null;
+    let crosshairHandler: ((param: MouseEventParams) => void) | null = null;
+    const added: ISeriesApi<'Line'>[] = [];
+    const chartable = components.filter(isChartable);
+    // The parity times are protobuf-es Timestamps ({ seconds: bigint }); the request-input type is
+    // a wider union incl. undefined — narrow to the mapper's shape.
+    const paneTimes = (times ?? []) as { seconds: bigint | number }[];
+
+    import('lightweight-charts').then(({ LineSeries }) => {
+      const draw = () => {
+        if (cancelled) return;
+        const chart = chartRef.current;
+        const container = containerRef.current;
+        if (!chart || !container) {
+          // Chart is created asynchronously by useCandlestickChart — wait for it.
+          requestAnimationFrame(draw);
+          return;
+        }
+        usedChart = chart;
+        usedContainer = container;
+        const total = PRICE_PANE_HEIGHT + INDICATOR_PANE_HEIGHT * chartable.length;
+        // Grow the shared canvas + its container so the panes have room. SymbolPriceChart declares
+        // only `min-height`, so setting `height` here does not fight React's style reconciliation.
+        container.style.height = `${total}px`;
+        chart.resize(container.clientWidth, total);
+
+        // series → readout label, so the shared crosshair can show every value at the hovered bar.
+        const labels = new Map<ISeriesApi<'Line' | 'Candlestick'>, string>();
+        const priceSeries = chart.panes()[0]?.getSeries()[0] as
+          | ISeriesApi<'Candlestick'>
+          | undefined;
+        if (priceSeries) labels.set(priceSeries, 'price');
+
+        let paneIndex = 1;
+        for (const comp of chartable) {
+          comp.series.forEach((s, si) => {
+            const color = resolveChartColor(SERIES_TOKENS[si % 5], SERIES_FALLBACK[si % 5]);
+            const line = chart.addSeries(
+              LineSeries,
+              { color, lineWidth: 2, priceLineVisible: false, lastValueVisible: false },
+              paneIndex,
+            );
+            line.setData(toLineData(s.values, paneTimes));
+            added.push(line);
+            labels.set(line, `${comp.refName}.${s.name}`);
+          });
+          paneIndex++;
+        }
+        // Price pane taller than each indicator pane (stretch factors are relative weights).
+        chart
+          .panes()
+          .forEach((p, i) =>
+            p.setStretchFactor(i === 0 ? PRICE_PANE_HEIGHT : INDICATOR_PANE_HEIGHT),
+          );
+        // Fit the union of price + indicator data into the visible range so the shared time axis
+        // (and the crosshair that reads it) lands on the drawn bars — sparse series would otherwise
+        // sit off-screen with no hoverable time.
+        chart.timeScale().fitContent();
+
+        // One tooltip for the whole instrument: read each series' value at the crosshair time.
+        crosshairHandler = (param: MouseEventParams) => {
+          if (cancelled) return;
+          if (param.time === undefined || !param.point) {
+            setReadout(null);
+            return;
+          }
+          const rows: ReadoutRow[] = [];
+          for (const [series, label] of labels) {
+            rows.push({ label, value: readoutValue(param.seriesData.get(series)) });
+          }
+          setReadout(rows);
+        };
+        chart.subscribeCrosshairMove(crosshairHandler);
+      };
+      draw();
+    });
+
+    return () => {
+      cancelled = true;
+      const chart = usedChart;
+      const container = usedContainer;
+      if (!chart) return;
+      try {
+        if (crosshairHandler) chart.unsubscribeCrosshairMove(crosshairHandler);
+        for (const s of added) chart.removeSeries(s);
+        const panes = chart.panes();
+        for (let i = panes.length - 1; i >= 1; i--) chart.removePane(i);
+        if (container) {
+          container.style.height = `${PRICE_PANE_HEIGHT}px`;
+          chart.resize(container.clientWidth, PRICE_PANE_HEIGHT);
+        }
+      } catch {
+        // chart already disposed by useCandlestickChart teardown — nothing to clean up.
+      }
+    };
+  }, [components, times, chartRef, containerRef]);
+
+  if (components.length === 0) return null;
   return (
-    <Card data-testid="indicator-panel">
-      <CardHeader className="pb-0">
-        <CardTitle className="font-mono text-sm">{comp.refName}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ChartContainer config={config} className="aspect-auto h-[140px] w-full">
-          <LineChart data={data} margin={{ top: 8, right: 8, bottom: 4, left: 4 }}>
-            <CartesianGrid vertical={false} strokeDasharray="3 3" />
-            <XAxis dataKey="i" hide />
-            <YAxis width={44} domain={['dataMin', 'dataMax']} tick={{ fontSize: 10 }} />
-            <ChartTooltip content={<ChartTooltipContent />} />
-            {comp.series.map((s) => (
-              <Line
+    <div className="space-y-2" data-testid="indicator-panels">
+      {readout && (
+        <div
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums text-muted-foreground"
+          data-testid="chart-crosshair-readout"
+        >
+          {readout.map((r) => (
+            <span key={r.label}>
+              <span className="text-foreground">{r.label}</span> {r.value}
+            </span>
+          ))}
+        </div>
+      )}
+      {components.map((comp) =>
+        comp.error ? (
+          <div key={comp.refName} className="space-y-1" data-testid="indicator-panel-error">
+            <Eyebrow>{comp.refName}</Eyebrow>
+            <p className="text-sm text-muted-foreground">
+              Couldn&apos;t compute this indicator — {comp.error}
+            </p>
+          </div>
+        ) : (
+          <div
+            key={comp.refName}
+            className="flex flex-wrap items-center gap-x-3 gap-y-1"
+            data-testid="indicator-panel"
+            data-series-count={comp.series.length}
+            data-series={comp.series.map((s) => s.name).join(',')}
+          >
+            <Eyebrow>{comp.refName}</Eyebrow>
+            {comp.series.map((s, si) => (
+              <span
                 key={s.name}
-                dataKey={s.name}
-                type="monotone"
-                stroke={`var(--color-${s.name})`}
-                strokeWidth={1.5}
-                dot={false}
-                isAnimationActive={false}
-                connectNulls={false}
-              />
+                className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+              >
+                <span
+                  className="inline-block h-2 w-2 rounded-full"
+                  style={{ background: `var(${SERIES_TOKENS[si % 5]})` }}
+                />
+                {s.name}
+              </span>
             ))}
-          </LineChart>
-        </ChartContainer>
-      </CardContent>
-    </Card>
+          </div>
+        ),
+      )}
+    </div>
   );
 }

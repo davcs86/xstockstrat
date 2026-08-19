@@ -1,6 +1,5 @@
 # Feature: live-capital-canary-rollout
 
-**Lifecycle Status**: `demoted/canceled`
 **Development Branch**: `feature/live-capital-canary-rollout`
 **Created**: 2026-08-04
 **Last Updated**: 2026-08-04

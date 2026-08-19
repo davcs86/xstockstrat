@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { Plus } from 'lucide-react';
 import { useAccountContext } from '@/context/AccountContext';
 import { BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
 import { CredentialStatus } from '@xstockstrat/proto/trading/v1/trading_pb';
@@ -8,6 +9,7 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { FilterToolbar } from '../shared/FilterToolbar';
+import { FormDialog } from '../shared/FormDialog';
 import { AccountRow, AddAccountForm } from './accountShared';
 
 type BrokerFilter = 'all' | 'alpaca' | 'ibkr';
@@ -17,6 +19,8 @@ type StatusFilter = 'all' | 'ok' | 'unknown' | 'invalid';
 /** Full broker-accounts page: filter toolbar + registered-accounts list + add form. */
 export function AccountsModule() {
   const { accounts, environmentMode } = useAccountContext();
+
+  const [addOpen, setAddOpen] = React.useState(false);
 
   // Filter state
   const [search, setSearch] = React.useState('');
@@ -70,21 +74,37 @@ export function AccountsModule() {
                 </span>
               )}
             </CardTitle>
-            {activeFilterCount > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs h-7"
-                onClick={() => {
-                  setSearch('');
-                  setBrokerFilter('all');
-                  setActiveFilter('all');
-                  setStatusFilter('all');
-                }}
+            <div className="flex items-center gap-2">
+              {activeFilterCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs h-7"
+                  onClick={() => {
+                    setSearch('');
+                    setBrokerFilter('all');
+                    setActiveFilter('all');
+                    setStatusFilter('all');
+                  }}
+                >
+                  Clear filters
+                </Button>
+              )}
+              <FormDialog
+                open={addOpen}
+                onOpenChange={setAddOpen}
+                trigger={
+                  <Button size="sm">
+                    <Plus className="mr-1.5 h-4 w-4" />
+                    Add account
+                  </Button>
+                }
+                title="Add account"
+                description="Register a broker account. Credentials are validated against the broker on save."
               >
-                Clear filters
-              </Button>
-            )}
+                <AddAccountForm className="space-y-3" onDone={() => setAddOpen(false)} />
+              </FormDialog>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -149,20 +169,10 @@ export function AccountsModule() {
           ) : (
             <div className="space-y-2">
               {filteredAccounts.map((account) => (
-                <AccountRow key={account.id} account={account} />
+                <AccountRow key={account.id} account={account} showId />
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      {/* Add Account */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Add Account</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <AddAccountForm className="space-y-3 max-w-sm" />
         </CardContent>
       </Card>
     </div>

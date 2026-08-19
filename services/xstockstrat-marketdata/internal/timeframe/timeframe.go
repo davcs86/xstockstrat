@@ -26,9 +26,9 @@ import (
 // TIMEFRAME_UNSPECIFIED / unknown values.
 func ToCanonical(tf commonv1.Timeframe) (string, bool) {
 	switch tf {
-	case commonv1.Timeframe_TIMEFRAME_15MIN:
+	case commonv1.Timeframe_TIMEFRAME_15MIN: //nolint:staticcheck // SA1019: deprecated for *requests* (feature 143) but still resolved here for the permissive GetDataCoverage/DeleteBackfilledData path on historically-stored 15m rows
 		return "15m", true
-	case commonv1.Timeframe_TIMEFRAME_1HOUR:
+	case commonv1.Timeframe_TIMEFRAME_1HOUR: //nolint:staticcheck // SA1019: deprecated for *requests* (feature 143) but still resolved here for historically-stored 1h rows
 		return "1h", true
 	case commonv1.Timeframe_TIMEFRAME_1DAY:
 		return "1d", true
@@ -61,9 +61,9 @@ func Interval(canonical string) time.Duration {
 func FromString(s string) commonv1.Timeframe {
 	switch s {
 	case "15m", "15Min":
-		return commonv1.Timeframe_TIMEFRAME_15MIN
+		return commonv1.Timeframe_TIMEFRAME_15MIN //nolint:staticcheck // SA1019: deprecated for *requests* (feature 143) but still mapped for historically-stored 15m rows on the permissive path
 	case "1h", "1Hour":
-		return commonv1.Timeframe_TIMEFRAME_1HOUR
+		return commonv1.Timeframe_TIMEFRAME_1HOUR //nolint:staticcheck // SA1019: deprecated for *requests* (feature 143) but still mapped for historically-stored 1h rows
 	case "1d", "1Day":
 		return commonv1.Timeframe_TIMEFRAME_1DAY
 	default:

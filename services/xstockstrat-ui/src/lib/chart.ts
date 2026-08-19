@@ -4,25 +4,19 @@
 
 import { Timeframe as PbTimeframe } from '@xstockstrat/proto/common/v1/common_pb';
 
-// Only 15m/1h/1d are supported platform-wide: the marketdata service stores and resolves
-// exactly these canonical intervals (common.v1.Timeframe = 15MIN/1HOUR/1DAY; 15m is the
-// smallest interval the free Alpaca data plan serves). 10m/30m/1w/1mo have no backend
-// support and render empty, so they are not offered.
-export type Timeframe = '15Min' | '1Hour' | '1Day';
+// Only 1d is supported platform-wide (feature 143) — GetBars/BackfillBars reject any other
+// requested timeframe, and the always-on ingester only ever fetches 1d. The 15m/1h options were
+// removed: no trading-path consumer (live loop, screener technical criteria, default SMA strategy)
+// evaluates anything but daily bars. Historical 15m/1h rows stay stored but are no longer fetchable.
+export type Timeframe = '1Day';
 
-export const TIMEFRAMES: { value: Timeframe; label: string }[] = [
-  { value: '15Min', label: '15m' },
-  { value: '1Hour', label: '1h' },
-  { value: '1Day', label: '1d' },
-];
+export const TIMEFRAMES: { value: Timeframe; label: string }[] = [{ value: '1Day', label: '1d' }];
 
 // The deprecated GetBarsRequest.timeframe string is scheduled for removal; senders must
 // populate timeframe_enum too, or timeframe.Resolve(UNSPECIFIED, "") errors and the chart
-// goes blank. Mapped type, not a lookup object: a fourth Timeframe member fails tsc here
-// rather than silently skipping the enum (feature 080 FR-8/AC-8).
+// goes blank. Mapped type, not a lookup object: a Timeframe member without an enum here fails
+// tsc rather than silently skipping the enum (feature 080 FR-8/AC-8).
 export const TIMEFRAME_ENUM: Record<Timeframe, PbTimeframe> = {
-  '15Min': PbTimeframe.TIMEFRAME_15MIN,
-  '1Hour': PbTimeframe.TIMEFRAME_1HOUR,
   '1Day': PbTimeframe.TIMEFRAME_1DAY,
 };
 

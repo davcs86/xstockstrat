@@ -1,11 +1,12 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useIsMutating } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { Plus, ChevronLeft } from 'lucide-react';
 import { AppShell } from '@/components/insights/AppShell';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { FormDialog } from '@/components/shared/FormDialog';
 import { cn } from '@/components/ui/utils';
 import {
   useWatchlists,
@@ -29,7 +30,11 @@ export default function WatchlistsPage() {
     useIsMutating({ mutationKey: WATCHLIST_WRITE_KEY }) > 0 || isFetching;
 
   const [newName, setNewName] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Email-inbox navigation on mobile: the list and the detail are two panes side-by-side on md+,
+  // but on a phone only one shows at a time — tap a list to open its detail, "back" to the list.
+  const [mobileView, setMobileView] = useState<'list' | 'detail'>('list');
   // A just-created list id we want to select as soon as it lands in the refetched list. Setting
   // selectedId directly in create's onSuccess would race the ListWatchlists refetch — the reconcile
   // effect would see an id "not in the list yet" and clobber it back to the first list.
@@ -64,6 +69,7 @@ export default function WatchlistsPage() {
       {
         onSuccess: (res) => {
           setNewName('');
+          setCreateOpen(false);
           // Auto-select the created list once the refetch includes it (see pendingSelectRef).
           if (res?.watchlist?.watchlistId) pendingSelectRef.current = res.watchlist.watchlistId;
         },
@@ -80,56 +86,81 @@ export default function WatchlistsPage() {
   return (
     <AppShell>
       <div className="p-4 sm:p-6">
-        <div className="mb-6">
-          <h1 className="text-xl font-bold tracking-tight">Watchlists</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Ranked by how close each name is to firing a signal — not by price change. Pick a
-            strategy to see each list&apos;s readiness.
-          </p>
-        </div>
-
-        <Card className="mb-6">
-          <CardContent className="flex items-end gap-2 p-4">
-            <div className="flex-1">
-              <label className="text-xs text-muted-foreground" htmlFor="new-watchlist">
-                New watchlist name
-              </label>
-              <Input
-                id="new-watchlist"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-                placeholder="e.g. Tech Large-Cap"
-              />
+        <div className="mb-6 flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">Watchlists</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Ranked by how close each name is to firing a signal — not by price change. Pick a
+              strategy to see each list&apos;s readiness.
+            </p>
+          </div>
+          <FormDialog
+            open={createOpen}
+            onOpenChange={(o) => {
+              setCreateOpen(o);
+              if (!o) setNewName('');
+            }}
+            trigger={
+              <Button className="shrink-0">
+                <Plus className="mr-1.5 h-4 w-4" />
+                New watchlist
+              </Button>
+            }
+            title="New watchlist"
+            description="Name it now — add symbols and bind strategies after it's created."
+          >
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground" htmlFor="new-watchlist">
+                  Watchlist name
+                </label>
+                <Input
+                  id="new-watchlist"
+                  autoFocus
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+                  placeholder="e.g. Tech Large-Cap"
+                />
+              </div>
+              {createWl.error && (
+                <p className="text-sm text-destructive">{(createWl.error as Error).message}</p>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setCreateOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleCreate} disabled={createWl.isPending || !newName.trim()}>
+                  {createWl.isPending ? 'Creating…' : 'Create'}
+                </Button>
+              </div>
             </div>
-            <Button onClick={handleCreate} disabled={createWl.isPending || !newName.trim()}>
-              <Plus className="h-4 w-4 mr-1.5" />
-              Create
-            </Button>
-          </CardContent>
-        </Card>
-
-        {createWl.error && (
-          <p className="text-sm text-destructive mb-4">{(createWl.error as Error).message}</p>
-        )}
+          </FormDialog>
+        </div>
 
         {isLoading && <p className="text-sm text-muted-foreground">Loading watchlists…</p>}
         {error && <p className="text-sm text-destructive">Failed to load watchlists.</p>}
         {!isLoading && !error && watchlists.length === 0 && (
-          <p className="text-sm text-muted-foreground">No watchlists yet. Create one above.</p>
+          <p className="text-sm text-muted-foreground">
+            No watchlists yet. Use “New watchlist” to create one.
+          </p>
         )}
 
         {watchlists.length > 0 && (
-          <div className="grid gap-4 md:grid-cols-[minmax(0,16rem)_1fr]">
-            {/* Master column — select a list to see its detail. */}
-            <Card>
+          <div className="grid gap-4 md:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
+            {/* Master column (inbox) — select a list to see its detail. Hidden on mobile while a
+                detail is open. */}
+            <Card className={cn(mobileView === 'detail' && 'hidden md:block')}>
               <CardContent className="p-2" data-testid="watchlist-master">
                 <ul className="space-y-1">
                   {watchlists.map((wl) => (
                     <li key={wl.watchlistId}>
                       <button
                         type="button"
-                        onClick={() => setSelectedId(wl.watchlistId)}
+                        onClick={() => {
+                          setSelectedId(wl.watchlistId);
+                          setMobileView('detail');
+                        }}
                         aria-current={wl.watchlistId === selectedId}
                         disabled={anyWatchlistWriteInFlight}
                         className={cn(
@@ -151,9 +182,18 @@ export default function WatchlistsPage() {
               </CardContent>
             </Card>
 
-            {/* Detail column — the selected list. */}
-            <Card>
+            {/* Detail column (reading pane) — the selected list. Hidden on mobile until a list is
+                opened from the inbox. */}
+            <Card className={cn('min-w-0', mobileView === 'list' && 'hidden md:block')}>
               <CardContent className="p-0">
+                <button
+                  type="button"
+                  onClick={() => setMobileView('list')}
+                  className="flex items-center gap-1 px-4 pt-3 text-sm text-muted-foreground hover:text-foreground md:hidden"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  All watchlists
+                </button>
                 {selected ? (
                   <WatchlistDetail
                     watchlist={selected}

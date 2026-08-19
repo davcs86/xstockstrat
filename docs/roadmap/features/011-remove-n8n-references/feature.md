@@ -1,6 +1,5 @@
 # Feature: remove-n8n-references
 
-**Lifecycle Status**: `launched`
 **Development Branch**: `feature/remove-n8n-references`
 **Created**: 2026-05-16
 **Last Updated**: 2026-05-18

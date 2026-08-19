@@ -1,6 +1,5 @@
 # Feature: broker-accounts-ui
 
-**Lifecycle Status**: `launched`
 **Development Branch**: `feature/broker-accounts-ui`
 **Created**: 2026-05-06
 **Last Updated**: 2026-05-12

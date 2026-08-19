@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -16,9 +17,20 @@ import (
 	tfpkg "github.com/xstockstrat/marketdata/internal/timeframe"
 )
 
+// execer is the subset of *pgxpool.Pool that UpsertFundamentals needs, extracted so
+// its ::jsonb-cast SQL text can be exercised with pgxmock (this service has no
+// live-DB test harness and CI provisions no database). Both *pgxpool.Pool and
+// pgxmock.PgxPoolIface satisfy it; production wires it to the real pool.
+type execer interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
 // MarketDataRepo handles TimescaleDB reads and writes for OHLCV bars and quotes.
 type MarketDataRepo struct {
 	pool *pgxpool.Pool
+	// db is the query surface UpsertFundamentals executes against — the same
+	// *pgxpool.Pool in production, a pgxmock in the repository test.
+	db execer
 }
 
 // NewMarketDataRepo opens a pgx connection pool.
@@ -30,7 +42,7 @@ func NewMarketDataRepo(connStr string) (*MarketDataRepo, error) {
 	if err := pool.Ping(context.Background()); err != nil {
 		return nil, fmt.Errorf("db ping: %w", err)
 	}
-	return &MarketDataRepo{pool: pool}, nil
+	return &MarketDataRepo{pool: pool, db: pool}, nil
 }
 
 // InsertBars bulk-upserts OHLCV bars into the marketdata.ohlcv hypertable.
@@ -96,6 +108,24 @@ func (r *MarketDataRepo) QueryBars(ctx context.Context, symbol, timeframe string
 	}
 	defer rows.Close()
 
+	bars, err := scanBars(rows)
+	if err != nil {
+		return nil, "", err
+	}
+
+	nextToken := ""
+	if len(bars) > pageSize {
+		last := bars[pageSize]
+		nextToken = last.Time.AsTime().Format(time.RFC3339Nano)
+		bars = bars[:pageSize]
+	}
+	return bars, nextToken, nil
+}
+
+// scanBars materializes OHLCV rows into Bar protos in the order the query returned them. Shared by
+// QueryBars (oldest-page-forward pagination) and QueryRecentBars (newest-page) so the row→proto
+// mapping lives in exactly one place (DRY guard rail).
+func scanBars(rows pgx.Rows) ([]*marketdatav1.Bar, error) {
 	var bars []*marketdatav1.Bar
 	for rows.Next() {
 		var (
@@ -108,7 +138,7 @@ func (r *MarketDataRepo) QueryBars(ctx context.Context, symbol, timeframe string
 			source                 string
 		)
 		if err := rows.Scan(&t, &sym, &tf, &open, &high, &low, &close, &volume, &vwap, &tradeCount, &source); err != nil {
-			return nil, "", fmt.Errorf("scan bar: %w", err)
+			return nil, fmt.Errorf("scan bar: %w", err)
 		}
 		bars = append(bars, &marketdatav1.Bar{
 			Time:          timestamppb.New(t),
@@ -126,16 +156,40 @@ func (r *MarketDataRepo) QueryBars(ctx context.Context, symbol, timeframe string
 		})
 	}
 	if rows.Err() != nil {
-		return nil, "", rows.Err()
+		return nil, rows.Err()
 	}
+	return bars, nil
+}
 
-	nextToken := ""
-	if len(bars) > pageSize {
-		last := bars[pageSize]
-		nextToken = last.Time.AsTime().Format(time.RFC3339Nano)
-		bars = bars[:pageSize]
+// QueryRecentBars returns the most-recent `pageSize` bars for a symbol/timeframe at or before `end`,
+// in ASCENDING time order (the order lightweight-charts requires for display). Unlike QueryBars —
+// which pages the OLDEST bars forward from a `start` cursor and, for an oversized default window,
+// returns ancient bars — this is the read a live chart/screener actually wants: "the latest N bars,"
+// independent of how much history is stored. No pagination token: these are already the newest bars.
+func (r *MarketDataRepo) QueryRecentBars(ctx context.Context, symbol, timeframe string, end time.Time, pageSize int) ([]*marketdatav1.Bar, error) {
+	if pageSize <= 0 || pageSize > 5000 {
+		pageSize = 500
 	}
-	return bars, nextToken, nil
+	const q = `
+		SELECT time, symbol, timeframe, open, high, low, close, volume, vwap, trade_count, source
+		FROM marketdata.ohlcv
+		WHERE symbol=$1 AND timeframe=$2 AND time <= $3
+		ORDER BY time DESC
+		LIMIT $4`
+	rows, err := r.pool.Query(ctx, q, symbol, timeframe, end, pageSize)
+	if err != nil {
+		return nil, fmt.Errorf("query recent bars: %w", err)
+	}
+	defer rows.Close()
+	bars, err := scanBars(rows)
+	if err != nil {
+		return nil, err
+	}
+	// Reverse newest-first → oldest-first (ascending) for chart display.
+	for i, j := 0, len(bars)-1; i < j; i, j = i+1, j-1 {
+		bars[i], bars[j] = bars[j], bars[i]
+	}
+	return bars, nil
 }
 
 // GetCoverage returns the earliest/latest stored bar timestamps and the bar count for a
@@ -269,26 +323,23 @@ func (r *MarketDataRepo) GetFundamentals(ctx context.Context, symbol string) (f 
 	if len(extraJSON) > 0 {
 		_ = json.Unmarshal(extraJSON, &extra)
 	}
-	deref := func(p *float64) float64 {
-		if p == nil {
-			return 0
-		}
-		return *p
-	}
+	// The scanned locals are already *float64 (NULL-preserving) — pass them straight
+	// through instead of collapsing a real SQL NULL to 0.0 (bug fix; source.Fundamentals'
+	// metric fields are pointers for exactly this reason).
 	return &source.Fundamentals{
 		Symbol:        sym,
 		AsOf:          asOf,
-		MarketCap:     deref(marketCap),
-		PERatio:       deref(pe),
-		PBRatio:       deref(pb),
-		DividendYield: deref(divYield),
-		EPS:           deref(eps),
-		Beta:          deref(beta),
-		ROE:           deref(roe),
-		DebtToEquity:  deref(dte),
-		Price:         deref(price),
-		YearHigh:      deref(yHigh),
-		YearLow:       deref(yLow),
+		MarketCap:     marketCap,
+		PERatio:       pe,
+		PBRatio:       pb,
+		DividendYield: divYield,
+		EPS:           eps,
+		Beta:          beta,
+		ROE:           roe,
+		DebtToEquity:  dte,
+		Price:         price,
+		YearHigh:      yHigh,
+		YearLow:       yLow,
 		ExtraMetrics:  extra,
 		Currency:      currency,
 		Source:        src,
@@ -305,6 +356,16 @@ func (r *MarketDataRepo) UpsertFundamentals(ctx context.Context, f *source.Funda
 	if len(extraJSON) == 0 {
 		extraJSON = []byte("{}")
 	}
+	// pgx's QueryExecModeExec (active under DB_PGBOUNCER=true, this service's PgBouncer-pooled
+	// connection mode) infers each parameter's wire type from its Go type with no server
+	// round-trip. A []byte value is encoded as bytea — and bytea::jsonb does NOT decode the bytes
+	// as UTF-8 text, it casts through bytea's hex-escaped ("\x...") text representation, which is
+	// never valid JSON, producing this exact SQLSTATE 22P02 regardless of the ::jsonb cast below.
+	// pgx's own docs are explicit about this (QueryExecModeSimpleProtocol's doc comment, which
+	// QueryExecModeExec shares behavior with): "string must be used instead for text type values
+	// including json and jsonb." Binding as string (→ pgx's `text` OID) makes the ::jsonb cast a
+	// genuine text→jsonb parse instead of a bytea→text→jsonb hex-garble.
+	extraJSONText := string(extraJSON)
 	src := f.Source
 	if src == "" {
 		src = "fmp"
@@ -313,7 +374,7 @@ func (r *MarketDataRepo) UpsertFundamentals(ctx context.Context, f *source.Funda
 		INSERT INTO marketdata.fundamentals
 		  (symbol, as_of, market_cap, pe_ratio, pb_ratio, dividend_yield, eps, beta, roe,
 		   debt_to_equity, price, year_high, year_low, extra_metrics, currency, source, fetched_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16, now())
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16, now())
 		ON CONFLICT (symbol) DO UPDATE SET
 		  as_of=EXCLUDED.as_of, market_cap=EXCLUDED.market_cap, pe_ratio=EXCLUDED.pe_ratio,
 		  pb_ratio=EXCLUDED.pb_ratio, dividend_yield=EXCLUDED.dividend_yield, eps=EXCLUDED.eps,
@@ -325,9 +386,9 @@ func (r *MarketDataRepo) UpsertFundamentals(ctx context.Context, f *source.Funda
 	if asOf.IsZero() {
 		asOf = time.Now().UTC()
 	}
-	_, err = r.pool.Exec(ctx, q,
+	_, err = r.db.Exec(ctx, q,
 		f.Symbol, asOf, f.MarketCap, f.PERatio, f.PBRatio, f.DividendYield, f.EPS, f.Beta, f.ROE,
-		f.DebtToEquity, f.Price, f.YearHigh, f.YearLow, extraJSON, f.Currency, src)
+		f.DebtToEquity, f.Price, f.YearHigh, f.YearLow, extraJSONText, f.Currency, src)
 	if err != nil {
 		return fmt.Errorf("upsert fundamentals %s: %w", f.Symbol, err)
 	}

@@ -1,6 +1,5 @@
 # Feature: phase7-observability
 
-**Lifecycle Status**: `code-completed`
 **Development Branch**: `claude/phase-7-jnruyq` (harness-assigned; PR into `main-dev`)
 **Created**: 2026-05-26
 **Last Updated**: 2026-06-09

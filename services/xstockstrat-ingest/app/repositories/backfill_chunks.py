@@ -11,9 +11,11 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 # Approximate bars per trading day per symbol, keyed by canonical timeframe. Mirrors the
-# marketdata estimate + the runbook Timeframe Guide. 15m is the smallest supported interval
-# (~6.5 RTH hours × 4 fifteen-min bars); sub-15m intervals were removed from the product.
-_BARS_PER_DAY = {"15m": 26, "1h": 7, "1d": 1}
+# marketdata estimate + the runbook Timeframe Guide. Feature 143 dropped the "15m"/"1h"
+# density entries — chunk-planning for a now-unrequestable timeframe has no reason to exist
+# (TriggerBackfill rejects anything but "1d" before a job is ever planned). The `.get(timeframe, 1)`
+# default at both call sites keeps this safe for any leftover caller.
+_BARS_PER_DAY = {"1d": 1}
 
 # Chunk status ordinals (mirror BackfillStatus): PENDING reuses QUEUED(1) semantics here.
 CHUNK_PENDING = 1

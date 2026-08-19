@@ -18,6 +18,12 @@ evaluated). The same fail-closed rule applies per-symbol when fundamentals were 
 batch but a specific symbol's value is still missing (e.g. FMP omitted that symbol, or the metric
 is an ``extra_metrics`` key that symbol doesn't carry): a hard-filter criterion with no raw value
 never silently passes.
+
+A *known* field (``_FUNDAMENTAL_FIELDS``) that is present for the symbol but individually
+missing from the provider (e.g. ``dividend_yield`` never fetched because the extended metric
+tier was off) is also fail-closed rather than read as its wire-default ``0.0`` (bug fix — a
+known field has no wire presence, so the marketdata proto instead marks per-field absence via
+``Fundamentals.missing_metrics``; ``_fundamental_value`` checks it before reading).
 """
 
 import asyncio
@@ -122,6 +128,26 @@ class ScreenerEngine:
                 )
             )
 
+        # feature 140 FR-6: surface bars gaps in the runtime logs (they were previously carried
+        # only in the per-row INSUFFICIENT_DATA status + coverage_gaps response fields the UI
+        # reads). One summarized WARN per scan with a bounded sample; excludes symbols whose
+        # GetBars raised (already logged per-symbol above) so an RPC failure is not double-reported.
+        dataless_bars = [
+            r["symbol"]
+            for r in per_symbol
+            if r["status"] == analysis_pb2.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA
+            and r["gap"] is not None
+            and not r["bars_errored"]
+        ]
+        if dataless_bars:
+            log.warning(
+                "screener: %d/%d scanned symbols had insufficient 1d bars for technical "
+                "criteria; sample=%s",
+                len(dataless_bars),
+                len(per_symbol),
+                dataless_bars[:10],
+            )
+
         # FR-6: min-max normalize each criterion's raw values across the scanned universe.
         norm = self._normalize_universe(criteria, per_symbol)
 
@@ -129,8 +155,10 @@ class ScreenerEngine:
         for row in per_symbol:
             results.append(self._build_result(row, criteria, request, norm))
 
-        # Rank descending by score.
-        results.sort(key=lambda r: r.score, reverse=True)
+        # Rank descending by score. A `score_unavailable` result's `score` is a neutral
+        # placeholder, not real evidence (bug fix, feature 144) — sort it after every genuinely-
+        # scored result regardless of its numeric value, so it can never outrank real data.
+        results.sort(key=lambda r: (r.score_unavailable, -r.score))
 
         # feature 090 (AC-4): coverage_gaps come from the FULL sorted list, BEFORE min_conviction
         # and rank_limit truncation — an INSUFFICIENT_DATA symbol ranked below the cut must still
@@ -190,6 +218,9 @@ class ScreenerEngine:
             "signal_score": 0.5,
             "status": analysis_pb2.SCREEN_RESULT_STATUS_OK,
             "gap": None,
+            # feature 140 FR-6: True when GetBars itself raised (already logged per-symbol below),
+            # so the per-scan missing-data summary can exclude it and not double-log an RPC failure.
+            "bars_errored": False,
         }
 
         # 1. Bars (latest window) for technical criteria.
@@ -206,6 +237,7 @@ class ScreenerEngine:
             closes = [b.close for b in bars_resp.bars]
         except grpc.RpcError as e:
             log.warning("GetBars failed for %s: %s", symbol, e)
+            row["bars_errored"] = True
 
         needs_technical = any(c.kind in _TECHNICAL_KINDS for c in criteria)
         if needs_technical and len(closes) < 2:
@@ -379,6 +411,15 @@ class ScreenerEngine:
         if fund is None or not metric_name:
             return None
         if metric_name in _FUNDAMENTAL_FIELDS:
+            # A known field has no wire presence (plain double) — the provider marks a
+            # genuinely-missing value via `missing_metrics` instead (bug fix: previously
+            # this unconditionally read the field, so a missing value's wire-default 0.0
+            # was indistinguishable from a real 0.0, and an `lte` hard filter silently
+            # "passed" data that was never actually fetched). None here routes through the
+            # same fail-closed path `_eval_symbol`/`_build_result` already apply to any
+            # other unavailable raw value.
+            if metric_name in fund.missing_metrics:
+                return None
             return float(getattr(fund, metric_name))
         # Fall back to the open-ended extra_metrics map.
         if metric_name in fund.extra_metrics:
@@ -456,6 +497,16 @@ class ScreenerEngine:
             if c.hard_filter and not row["passes"].get(c.ref_name, False):
                 passed = False
 
+        # Bug fix (feature 144): `weight_total` stays 0 whenever every criterion configured for
+        # this scan was skipped for this candidate specifically (e.g. an ETF with no P/E ratio
+        # scanned against a `pe_ratio` criterion) — distinct from a scan configured with zero
+        # criteria at all (`criteria` empty), which is a harmless no-op left as-is. The `else 0.5`
+        # fallback below is kept (it's still what feeds `tech_signal`/`combine_score`, unchanged,
+        # so a real independent signal-weighted score can still blend normally) but is flagged via
+        # `score_unavailable` so callers stop treating it as a genuinely-computed mid-range result
+        # indistinguishable from real evidence (soft-criterion sibling of the hard-filter
+        # null-as-zero fix above — that one covers `passed`, this one covers `score`).
+        score_unavailable = weight_total <= 0 and len(criteria) > 0
         technical_score = weighted_sum / weight_total if weight_total > 0 else 0.5
 
         # Blend technical + signal exactly as a backtest does (FR-4). Map the technical
@@ -477,6 +528,7 @@ class ScreenerEngine:
             criterion_passed=criterion_passed,
             passed=passed,
             status=analysis_pb2.SCREEN_RESULT_STATUS_OK,
+            score_unavailable=score_unavailable,
             # feature 083 raw display columns (FR-8); held is set by the servicer cross-ref.
             pe=row.get("pe", 0.0),
             rsi=row.get("rsi", 0.0),

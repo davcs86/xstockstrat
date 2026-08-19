@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { addAuthCookie } from '../helpers/auth';
+import { addAuthCookie, addAdminCookie } from '../helpers/auth';
 
 /**
  * Single-Position page (feature 096) — the dedicated `/trader/positions/[symbol]` view built from
@@ -26,7 +26,7 @@ test.describe('Single Position page', () => {
     await expect(page.getByText('Open R')).toBeVisible();
 
     // Risk & exit sidebar — factor, flag, exit rule from the enriched Position.
-    await expect(page.getByText('Risk & exit')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Risk & exit' })).toBeVisible();
     await expect(page.getByText('Tech', { exact: true })).toBeVisible();
     await expect(page.getByText('Stop near')).toBeVisible();
 
@@ -63,7 +63,9 @@ test.describe('Single Position page', () => {
     // The Exposure table's AAPL symbol links to the dedicated page.
     await page.getByRole('link', { name: 'AAPL', exact: true }).click();
     await expect(page).toHaveURL(/\/trader\/positions\/AAPL/);
-    await expect(page.getByText('Risk & exit')).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole('heading', { name: 'Risk & exit' })).toBeVisible({
+      timeout: 30000,
+    });
   });
 
   test('an unheld symbol still renders the chart, orders and trade sections (feature 125)', async ({
@@ -83,7 +85,7 @@ test.describe('Single Position page', () => {
     await expect(page.getByText('Trade ZZZZ')).toBeVisible();
 
     // The position-specific sidebar (Risk & exit) is absent for an unheld symbol.
-    await expect(page.getByText('Risk & exit')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Risk & exit' })).toHaveCount(0);
   });
 
   test('a NotFound position shows the notice, not the generic error paragraph (render-order fix)', async ({
@@ -106,7 +108,13 @@ test.describe('Single Position page', () => {
     await watchlist(page, 'AAPL');
     await page.goto('/trader/positions/AAPL');
 
-    await expect(page.getByText('Opportunity').first()).toBeVisible({ timeout: 30000 });
+    // Scope to the CardTitle heading, not a bare getByText('Opportunity'): the Research panel group
+    // (feature 139 amendment) now also renders an "Opportunity" mobile tab (a role="radio", hidden
+    // md:hidden at this desktop viewport) — a bare getByText.first() would resolve that hidden tab
+    // (first in DOM) and fail toBeVisible. The heading role addresses the visible section title.
+    await expect(page.getByRole('heading', { name: 'Opportunity' })).toBeVisible({
+      timeout: 30000,
+    });
     // Scoped to the stable data-testid, not a bare page-level getByText: SignalReadiness's
     // CardTitle briefly resolves to 2 DOM elements on first paint (SSR/hydration timing), which
     // trips Playwright strict mode intermittently — the same root cause already fixed once for
@@ -114,18 +122,22 @@ test.describe('Single Position page', () => {
     await expect(readinessCard(page).getByText('Why this fired')).toBeVisible({ timeout: 10000 });
   });
 
-  test('a non-watchlisted symbol hides the Opportunity + Readiness sections (FR-11 gate)', async ({
+  test('a non-watchlisted live-opportunity symbol surfaces the Opportunity card but still hides Readiness', async ({
     page,
   }) => {
     await addAuthCookie(page);
-    // Default mock returns no watchlists → AAPL is not watchlisted → the watchlisted branch's
-    // Opportunity/Readiness must be absent (the Screening branch arrives in Step 16).
+    // Default mock returns no watchlists → AAPL is not watchlisted, but it IS a live opportunity in
+    // the queue. The Opportunity card is no longer gated by watchlist membership, so it surfaces
+    // (UI refinement); the watchlist-only Readiness ("Why this fired") stays absent.
     await page.goto('/trader/positions/AAPL');
 
-    // Wait for the page to render (the position header), then assert the gated sections are absent.
-    await expect(page.getByText('Risk & exit')).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole('heading', { name: 'Risk & exit' })).toBeVisible({
+      timeout: 30000,
+    });
+    await expect(page.getByRole('heading', { name: 'Opportunity' })).toBeVisible({
+      timeout: 10000,
+    });
     await expect(page.getByText('Why this fired')).toHaveCount(0);
-    await expect(page.getByText('Opportunity', { exact: true })).toHaveCount(0);
   });
 
   test('the Fundamentals section renders metrics for a watchlisted symbol with data (FR-7)', async ({
@@ -217,7 +229,7 @@ test.describe('Single Position page', () => {
     await page.goto('/trader/positions/ZZZZ');
     // Backtests-specific phrasing (the Indicators section also shows a "No strategy resolves" note).
     await expect(
-      page.getByText(/No strategy resolves for ZZZZ — add it to a watchlist/),
+      page.getByText(/No strategy resolves for ZZZZ — pick a live strategy above/),
     ).toBeVisible({ timeout: 30000 });
   });
 
@@ -241,6 +253,38 @@ test.describe('Single Position page', () => {
     await page.goto('/trader/positions/ZZZZ');
     await expect(page.getByTestId('no-backfill')).toBeVisible({ timeout: 30000 });
     await expect(page.getByTestId('no-backfill')).toContainText(/No ingested coverage for ZZZZ/);
+    // Non-admin sees no trigger — the Backfill panel stays read-only for them.
+    await expect(page.getByTestId('trigger-backfill')).toHaveCount(0);
+  });
+
+  test('an admin can trigger a backfill for a symbol with no coverage (UI operability)', async ({
+    page,
+  }) => {
+    await addAdminCookie(page);
+    await page.goto('/trader/positions/ZZZZ');
+    // The admin-gated "Start backfill" action appears on the otherwise-dead-end no-coverage panel.
+    const trigger = page.getByTestId('trigger-backfill');
+    await expect(trigger).toBeVisible({ timeout: 30000 });
+    await expect(trigger).toBeEnabled();
+    await trigger.click();
+    // The mock accepts the TriggerBackfill (job queued) — no error surfaces.
+    await expect(page.getByTestId('trigger-backfill-error')).toHaveCount(0);
+  });
+
+  test('a backtest over a data-less symbol surfaces INSUFFICIENT_DATA inline instead of looking inert (UI operability)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // Seed the strategy via ?strategy= (feature 145) so the Run button renders without a binding;
+    // the mock returns a successful INSUFFICIENT_DATA result + coverage gap for this strategy.
+    await page.goto('/trader/positions/ZZZZ?strategy=strat-insufficient-001');
+    const run = page.getByRole('main').getByTestId('run-backtest');
+    await expect(run).toBeVisible({ timeout: 30000 });
+    await run.click();
+    const notice = page.getByTestId('backtest-insufficient');
+    await expect(notice).toBeVisible({ timeout: 10000 });
+    await expect(notice).toContainText(/Insufficient data/);
+    await expect(notice).toContainText(/Backfill coverage panel/);
   });
 
   // ── Signal-detail readiness, relocated from the retired insights/market/[symbol] page (Step 25).
@@ -285,7 +329,10 @@ test.describe('Single Position page', () => {
     page,
   }) => {
     await addAuthCookie(page);
-    await watchlist(page, 'AAPL', 'strat-live-001');
+    // Watchlisted but with an EMPTY binding (feature 145): the page-level strategy selection now
+    // seeds from the watchlist binding, so a NON-empty binding would auto-resolve and evaluate. An
+    // empty binding keeps effectiveStrategyId='' → the readiness panel still prompts.
+    await watchlist(page, 'AAPL', '');
     await page.goto('/trader/positions/AAPL');
     // Scoped for the same strict-mode reason as 'Why this fired' above — this empty-state
     // paragraph is the other half of SignalReadiness's first-paint content.
@@ -298,13 +345,14 @@ test.describe('Single Position page', () => {
     page,
   }) => {
     await addAuthCookie(page);
-    await watchlist(page, 'AAPL', 'strat-live-001');
+    await watchlist(page, 'AAPL', ''); // empty binding → the prompt (not auto-evaluation)
     await page.goto('/trader/positions/AAPL');
     await expect(readinessCard(page).getByText(/Select a strategy to evaluate/)).toBeVisible({
       timeout: 30000,
     });
-    // Exact label — the readiness picker is "Strategy"; the Mute card's trigger is "Mute strategy".
-    await page.getByLabel('Strategy', { exact: true }).click();
+    // Distinct label (feature 145): three synced pickers exist (Indicators/Backtests/Why this fired);
+    // "Strategy for Why this fired" targets the readiness one unambiguously.
+    await page.getByLabel('Strategy for Why this fired', { exact: true }).click();
     await expect(page.getByRole('option', { name: 'Live Test Strategy' })).toBeVisible();
     // "Inactive Strategy" (liveEnabled: false) must not be a selectable readiness option.
     await expect(page.getByRole('option', { name: 'Inactive Strategy' })).toHaveCount(0);
@@ -389,11 +437,30 @@ test.describe('Single Position page', () => {
     await expect(panels.getByText('macd')).toBeVisible();
     // The failed component surfaces its error, never a chart.
     await expect(page.getByText(/sandbox timeout/)).toBeVisible();
-    // All three named series of the macd component are drawn (value/signal/histogram) — no sub-series
-    // dropped (FR-12/P-03). The warm-up-head gaps are unset IndicatorValues (mapped to recharts null
-    // via `?? null`, connectNulls={false}), never a fabricated 0.0 — proven at the wire/handler layer
-    // by the analysis unit test (test_analysis_servicer.py::…none_maps_to_unset…).
-    await expect(page.getByTestId('indicator-panel').locator('.recharts-line')).toHaveCount(3);
+    // All three named series of the macd component are present (value/signal/histogram) — no
+    // sub-series dropped (FR-3/AC-3). Each is drawn as its own line on the macd PANE of the shared
+    // lightweight-charts v5 instance; canvas has no per-line DOM, so `data-series-count` is the DOM
+    // readiness seam and the crosshair readout below is the drawn-geometry backstop. The warm-up-head
+    // gaps are unset IndicatorValues (mapped to whitespace `{time}` points, never a fabricated 0.0) —
+    // proven at the wire layer by test_analysis_servicer.py::…none_maps_to_unset… and by the
+    // src/lib/indicatorChart unit test.
+    const macdPanel = page.getByTestId('indicator-panel');
+    await expect(macdPanel).toHaveAttribute('data-series-count', '3');
+    await expect(macdPanel).toHaveAttribute('data-series', /value.*signal.*histogram/);
+    // Price + indicators share ONE v5 chart instance — its readiness canvas class is present (the same
+    // signal chart-panel.spec.ts uses), now covering every pane.
+    const chart = page.locator('.tv-lightweight-charts').first();
+    await expect(chart).toBeVisible({ timeout: 30000 });
+    // Shared crosshair + unified tooltip (feature 146 Step 6): hovering the chart shows ONE combined
+    // readout of price + each indicator series at the hovered bar. Its presence (with a row per added
+    // line series) is the proof the sub-series were actually drawn onto the chart, not just declared.
+    // Hover a point inside the top (price) pane plot area. The chart fits its content, so a plot-area
+    // hover lands on the drawn bars; the Magnet crosshair (mode 1) yields a time and the readout renders.
+    await chart.hover({ position: { x: 200, y: 40 } });
+    const readout = page.getByTestId('chart-crosshair-readout');
+    await expect(readout).toBeVisible({ timeout: 10000 });
+    await expect(readout).toContainText('price');
+    await expect(readout).toContainText('macd.value');
   });
 
   test('the indicator panels show a no-data state (and skip the RPC) when no strategy resolves (FR-6)', async ({
@@ -402,11 +469,164 @@ test.describe('Single Position page', () => {
     await addAuthCookie(page);
     // ZZZZ: unheld, non-watchlisted, no orders → no strategy resolves → explicit no-data state.
     await page.goto('/trader/positions/ZZZZ');
-    const empty = page.getByTestId('indicator-panels-empty');
+    // Scope to the hydrated `<main>` subtree: the page's top-level Suspense boundary (feature 145)
+    // briefly streams two copies of the content during SSR→client hydration, so a bare page-level
+    // getByTestId trips strict mode on the transient duplicate — the same SSR/hydration timing the
+    // `readinessCard` helper already guards against for SignalReadiness.
+    const empty = page.getByRole('main').getByTestId('indicator-panels-empty');
     await expect(empty).toBeVisible({ timeout: 30000 });
     await expect(empty).toContainText(/No strategy resolves for ZZZZ/);
     // No panels rendered (the RPC was never called with an empty strategy).
-    await expect(page.getByTestId('indicator-panel')).toHaveCount(0);
+    await expect(page.getByRole('main').getByTestId('indicator-panel')).toHaveCount(0);
+  });
+
+  // ── Section nav (feature 139) — a sticky segmented anchor-nav groups the stacked sections.
+  // All sections stay mounted (that is why the 20 assertions above keep passing), so these cases
+  // add only the nav interaction, not any change to section content.
+
+  test('feature 139: the section nav lets you jump to a group, and reflects the active one', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/trader/positions/AAPL');
+
+    // Collision-safe landmark: aria-label "Symbol navigation" (deliberately NOT "Section", which the
+    // header's own sub-nav claims). A ToggleGroup type="single" renders a radiogroup of radios (one
+    // active) — not role="tab", so no collision with tab-role locators.
+    const nav = page.getByRole('navigation', { name: 'Symbol navigation' });
+    await expect(nav).toBeVisible({ timeout: 30000 });
+
+    // A stable four-section spine (feature 139 amendment): related panels are clustered inside each
+    // section (desktop columns / mobile tabbed panel), so the top-level nav no longer grows/shrinks
+    // with what's held — it is always these four.
+    for (const label of ['Overview', 'Trade', 'Research', 'Analysis']) {
+      await expect(nav.getByRole('radio', { name: label, exact: true })).toBeVisible();
+    }
+    // The former standalone Backtests/Coverage/Position chips are gone (merged/folded into the
+    // Analysis and Trade sections) — no top-level chip for them.
+    for (const label of ['Backtests', 'Coverage', 'Position']) {
+      await expect(nav.getByRole('radio', { name: label, exact: true })).toHaveCount(0);
+    }
+
+    // Clicking Analysis scrolls that section into view and marks the chip active — the Backtests +
+    // Backfill-coverage pair it clusters stays mounted the whole time (nothing unmounts). At the
+    // default desktop viewport the panel group renders both as columns, so backfill-coverage shows.
+    await nav.getByRole('radio', { name: 'Analysis', exact: true }).click();
+    await expect(nav.getByRole('radio', { name: 'Analysis', exact: true })).toBeChecked();
+    await expect(page.getByTestId('backfill-coverage')).toBeVisible();
+  });
+
+  test('feature 139: the nav is a stable four-section spine for an unheld symbol', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/trader/positions/ZZZZ');
+
+    const nav = page.getByRole('navigation', { name: 'Symbol navigation' });
+    await expect(nav).toBeVisible({ timeout: 30000 });
+    // The four sections are always present — held or not (the held-Position stats fold into the
+    // Trade section's panel group as a tab, not into a top-level chip).
+    for (const label of ['Overview', 'Trade', 'Research', 'Analysis']) {
+      await expect(nav.getByRole('radio', { name: label, exact: true })).toBeVisible();
+    }
+  });
+
+  test('feature 139: the Trade section clusters its panels into a mobile tabbed panel (all mounted)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.setViewportSize({ width: 390, height: 844 }); // mobile → tabbed panels, not columns
+    await page.goto('/trader/positions/AAPL');
+
+    // AAPL is held (with an owning strategy from its order) → the Trade panel group carries
+    // Position · Risk & exit · Why it's held · Orders & fills · Place order (feature 145 split the
+    // former single position card into standalone panels). On mobile it renders a ToggleGroup tab bar.
+    const tradeTabs = page.getByRole('radiogroup', { name: 'Trade panels' });
+    await expect(tradeTabs).toBeVisible({ timeout: 30000 });
+    for (const label of [
+      'Position',
+      'Risk & exit',
+      "Why it's held",
+      'Orders & fills',
+      'Place order',
+    ]) {
+      await expect(tradeTabs.getByRole('radio', { name: label, exact: true })).toBeVisible();
+    }
+
+    // Switching to Place order reveals the order ticket; every panel stays MOUNTED (the inactive
+    // ones are hidden via CSS), so the Orders & fills card is still in the DOM, just not visible.
+    await tradeTabs.getByRole('radio', { name: 'Place order', exact: true }).click();
+    await expect(page.getByText('Trade AAPL')).toBeVisible();
+    await expect(page.getByText('Orders & fills · AAPL')).toBeAttached();
+    await expect(page.getByText('Orders & fills · AAPL')).not.toBeVisible();
+  });
+
+  // ── feature 145 — panel refinements (tabbed opportunities, always-on Fundamentals, shared picker).
+
+  test('feature 145: a symbol with multiple live opportunities tabs them into one panel group', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // AMZN carries two live-strategy opportunities (strat-live-001 + strat-001) and is not
+    // watchlisted → the Research section renders them as one Opportunities panel group (one card per
+    // strategy). At the default desktop viewport the group renders both cards as columns.
+    await page.goto('/trader/positions/AMZN');
+    await expect(page.getByRole('heading', { name: 'Opportunity' })).toHaveCount(2, {
+      timeout: 30000,
+    });
+    // Both strategy ids surface in the cards' visible meta lines (a <p>, not the hidden mobile tab
+    // radio whose label is also the strategy id).
+    await expect(page.locator('p').filter({ hasText: 'strat-live-001' }).first()).toBeVisible();
+    await expect(page.locator('p').filter({ hasText: 'strat-001' }).first()).toBeVisible();
+  });
+
+  test('feature 145: Fundamentals renders for a non-watchlisted symbol (always-on)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // AAPL is NOT watchlisted here; Fundamentals is symbol-level and no longer watchlist-gated.
+    await page.goto('/trader/positions/AAPL');
+    await expect(page.getByRole('heading', { name: 'Fundamentals' })).toBeVisible({
+      timeout: 30000,
+    });
+    await expect(page.getByText('31.40')).toBeVisible({ timeout: 10000 }); // FUNDAMENTALS_AAPL P/E
+  });
+
+  test('feature 145: picking a strategy in one panel header syncs the others and the URL', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // AAPL watchlisted but UNBOUND (empty binding) → all three synced pickers render, empty.
+    await watchlist(page, 'AAPL', '');
+    await page.goto('/trader/positions/AAPL');
+    // Readiness starts in the prompt state (no strategy resolved yet).
+    await expect(readinessCard(page).getByText(/Select a strategy to evaluate/)).toBeVisible({
+      timeout: 30000,
+    });
+    // Pick a live strategy from the INDICATORS header picker.
+    await page.getByLabel('Strategy for Indicators', { exact: true }).click();
+    await page.getByRole('option', { name: 'Live Test Strategy' }).click();
+    // The pick syncs to the readiness panel (no longer prompting) and to the URL (?strategy=).
+    await expect(readinessCard(page).getByText(/Select a strategy to evaluate/)).toHaveCount(0);
+    await expect(page).toHaveURL(/strategy=strat-live-001/);
+  });
+
+  test('feature 145: ?strategy= unblocks Backtests + Indicators for a non-watchlisted symbol', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // AMZN: non-watchlisted, unheld, but the URL threads a live strategy → the strategy-scoped panels
+    // resolve it instead of showing "No strategy resolves for AMZN" (the former dead-end).
+    await page.goto('/trader/positions/AMZN?strategy=strat-live-001');
+    // Backtests resolved: the "Run backtest" action only renders once a strategy resolves (its
+    // no-strategy branch has no such button) — proof the threaded ?strategy= unblocked the panel.
+    // Scoped to the hydrated `<main>` (the top-level Suspense boundary transiently double-renders
+    // during SSR→client hydration — see the FR-6 no-data test above).
+    await expect(page.getByRole('main').getByTestId('run-backtest')).toBeVisible({
+      timeout: 30000,
+    });
+    // Neither Backtests nor Indicators shows the no-strategy dead-end.
+    await expect(page.getByText(/No strategy resolves for AMZN/)).toHaveCount(0);
   });
 });
 

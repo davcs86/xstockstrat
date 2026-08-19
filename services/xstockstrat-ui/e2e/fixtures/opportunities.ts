@@ -91,6 +91,34 @@ export const OPPORTUNITIES = [
     provenance: ['denied'],
     muted: true,
   },
+  // feature 145 — AMZN carries TWO live-strategy opportunities (a non-watchlisted symbol evaluated by
+  // more than one strategy). Exercises the tabbed opportunity panel group (one card per strategy).
+  {
+    symbol: 'AMZN',
+    action: OpportunityActionTag.REDUCE,
+    conviction: 1.0,
+    passingConditions: 1,
+    totalConditions: 1,
+    thesis: 'Range mean-reversion — trim into strength',
+    strategyId: 'strat-live-001',
+    source: '',
+    validUntil: VALID_UNTIL,
+    opportunityKey: 'u1|AMZN|strat-live-001',
+    provenance: ['live_strategy'],
+  },
+  {
+    symbol: 'AMZN',
+    action: OpportunityActionTag.ADD,
+    conviction: 0.33,
+    passingConditions: 1,
+    totalConditions: 3,
+    thesis: 'Quality dip — accumulate',
+    strategyId: 'strat-001',
+    source: '',
+    validUntil: VALID_UNTIL,
+    opportunityKey: 'u1|AMZN|strat-001',
+    provenance: ['live_strategy'],
+  },
 ];
 
 /**

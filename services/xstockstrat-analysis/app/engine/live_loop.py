@@ -44,6 +44,10 @@ _LOOKBACK_DAYS = 365  # window of bars fetched per (strategy, symbol) for warm-u
 _DRAIN_PAGES = 50  # max pages when draining owner-scoped positions/watchlists/signals per cycle
 _DRAIN_PAGE_SIZE = 1000
 
+# feature 140 FR-6: sentinel _eval_pair returns when GetBars came back empty, so _run_cycle can
+# distinguish a genuine data gap (worth a WARN) from an evaluated-but-no-decision pair.
+_EVAL_NO_BARS = "no_bars"
+
 # feature 132 — bounded observability for the fair-share scheduler: how many live (strategy, symbol)
 # pairs were deferred past max_strategies_per_cycle in a cycle (no-op meter when OTel is disabled).
 _TRUNCATION_COUNTER = metrics.get_meter(__name__).create_counter(
@@ -323,15 +327,31 @@ class LiveEvaluationLoop:
         if start >= len(pairs):
             start = 0  # cursor past the end (fleet shrank) → resume at the oldest
         last_idx = None
+        dataless: list = []
         for i in range(n):
             idx = (start + i) % len(pairs)
             _ca, strategy_id, symbol, definition, deny_entry = records[idx]
             last_idx = idx
             try:  # FR-8 per-pair isolation
-                await self._eval_pair(definition, symbol, throttle, deny_entry=deny_entry)
+                if (
+                    await self._eval_pair(definition, symbol, throttle, deny_entry=deny_entry)
+                    == _EVAL_NO_BARS
+                ):
+                    dataless.append((strategy_id, symbol))
             except Exception as e:
                 log.warning("live_loop: (%s,%s) error: %s — continuing", strategy_id, symbol, e)
         self._cursor_key = pairs[last_idx]
+        if dataless:
+            # feature 140 FR-6: surface data gaps in the runtime logs (not only in RPC response
+            # fields). One summarized WARN per cycle with a bounded sample, mirroring the truncation
+            # WARN above — a per-pair WARN would flood a large fleet.
+            log.warning(
+                "live_loop: %d/%d evaluated (strategy,symbol) pairs had no 1d bars this "
+                "cycle; sample=%s",
+                len(dataless),
+                n,
+                dataless[:10],
+            )
 
     async def _drain_signals(self) -> set:
         """Platform-wide active-signal symbols (normalized), once per cycle. Best-effort — an
@@ -438,7 +458,10 @@ class LiveEvaluationLoop:
         )
         bars = list(bars_resp.bars)
         if not bars:
-            return
+            # feature 140 FR-6: report the gap to _run_cycle for a summarized per-cycle WARN. The
+            # RPC response fields (coverage gaps etc.) that other paths surface never reach the
+            # runtime logs, so a data-less live evaluation was previously silent.
+            return _EVAL_NO_BARS
 
         decisions = await self._evaluator.evaluate(definition, bars, None)
         if not decisions:

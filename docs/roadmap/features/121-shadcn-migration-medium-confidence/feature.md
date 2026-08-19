@@ -1,8 +1,8 @@
 # Feature: shadcn-migration-medium-confidence
 
-**Lifecycle Status**: `launched`
 **Committed to main**: be21f3389151ccac1bfd68e7aa96d73d3d4efd78
 **Launched date**: 2026-08-10
+**Archived**: 2026-08-19
 **Development Branch**: `feature/shadcn-migration-medium-confidence`
 **Created**: 2026-08-08
 **Last Updated**: 2026-08-09
@@ -23,6 +23,7 @@
 | 2026-08-09 | `in-progress` → `code-completed` | /sdd-execute sequential | Tranche 2 complete (Steps 22-37); final whole-feature gate green (lint/build/test:unit 85/85/test:e2e 256/256) — see implementation-spec.md Step 37. Two mid-execution findings: FR-13 `NavigationMenuLink` needs `asChild` not `render` (Step 17); FR-5's `Tabs` wrap was reverted after breaking `role="link"` (Steps 26-27) — both logged in `docs/roadmap/ledger/fails.md`. |
 
 | 2026-08-10 | `code-completed` → `launched` | CI workflow | Promoted via PR #923; committed be21f3389151ccac1bfd68e7aa96d73d3d4efd78 |
+| 2026-08-19 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(0)/fails(1); pruned 4 specs |
 ---
 
 ## Artifacts

@@ -1,7 +1,6 @@
 # Feature: fix-signal-detail-readiness-rule
 
 **Type**: bug
-**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/fix-signal-detail-readiness-rule`
 **Defect Report**: `docs/reports/2026-08-15-signal-detail-readiness-traces-entry-rule-on-reduce.md`
 **Severity**: SEV-3

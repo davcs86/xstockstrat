@@ -1,8 +1,8 @@
 # Feature: shadcn-migration-low-confidence
 
-**Lifecycle Status**: `launched`
 **Committed to main**: be21f3389151ccac1bfd68e7aa96d73d3d4efd78
 **Launched date**: 2026-08-10
+**Archived**: 2026-08-16
 **Development Branch**: `feature/shadcn-migration-low-confidence`
 **Created**: 2026-08-08
 **Last Updated**: 2026-08-09
@@ -23,6 +23,7 @@
 | 2026-08-09 | `in-progress` → `code-completed` | /sdd-execute sequential | All 12 steps done: FR-2/FR-3/FR-4 (Steps 1-8 — `CredentialsForm`/`AddAccountForm`/`EditCredentialsForm` migrated to react-hook-form + zod + `ui/field.tsx`, sharing one `credentialSchema(brokerType)` factory) and FR-1 (Steps 9-12 — `OrderForm.tsx`/`EditOrderDialog.tsx` migrated to `Alert`/`AlertDescription`). Whole-feature gate green: `pnpm lint` clean, `pnpm build` succeeds, full `pnpm test:e2e` — **257 passed**, no skips/failures. Draft PR [#913](https://github.com/davcs86/xstockstrat/pull/913) flipped to ready-for-review. |
 
 | 2026-08-10 | `code-completed` → `launched` | CI workflow | Promoted via PR #923; committed be21f3389151ccac1bfd68e7aa96d73d3d4efd78 |
+| 2026-08-16 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(4)/fails(1); pruned 4 specs |
 ---
 
 ## Artifacts

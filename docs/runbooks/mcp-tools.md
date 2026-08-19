@@ -689,7 +689,7 @@ caller is rejected `PERMISSION_DENIED` ("admin scope required") rather than queu
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `symbols` | `string[]` | Yes | Explicit ticker list, e.g. `["AAPL", "MSFT"]`; max 50 per call |
-| `timeframe` | `string` | No | `"1d"` default; accepts `15m`/`15Min`/`1h`/`1Hour`/`1d`/`1Day` (canonicalized) |
+| `timeframe` | `string` | No | `"1d"` default; `"1Day"` also accepted (canonicalized) — only daily bars are supported |
 | `start` / `end` | `string` (ISO 8601) | No | Optional range bounds; one-sided allowed; both omitted = service default range |
 | `overwrite` | `bool` | No | `false` default; `true` re-fetches bars that already exist |
 | `fill_mode` | `string` | No | `"full"` \| `"gaps_only"`; omitted → server default FULL (`gaps_only` fetches only missing ranges) |

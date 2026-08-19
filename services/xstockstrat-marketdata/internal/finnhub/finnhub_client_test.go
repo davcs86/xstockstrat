@@ -51,6 +51,16 @@ func newTestClient(rt *recordingRT) *Client {
 	})
 }
 
+// derefF reads a *float64 metric for assertions, failing loudly on an unexpected nil
+// rather than silently comparing against 0. Mirrors internal/fmp/fmp_client_test.go's helper.
+func derefF(t *testing.T, name string, p *float64) float64 {
+	t.Helper()
+	if p == nil {
+		t.Fatalf("%s: expected a value, got nil", name)
+	}
+	return *p
+}
+
 // TestGetFundamentals_MapsField verifies field mapping across all three endpoints, using
 // the exact field names and shapes confirmed live against api.finnhub.io this session
 // (context.md § Step 2 session note) — including the two unit conversions the live check
@@ -77,26 +87,28 @@ func TestGetFundamentals_MapsField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetFundamentals: %v", err)
 	}
-	if f.Symbol != "AAPL" || f.Price != 302.25 {
+	if f.Symbol != "AAPL" || derefF(t, "Price", f.Price) != 302.25 {
 		t.Fatalf("core mapping wrong: %+v", f)
 	}
-	if f.YearHigh != 344.5699 || f.YearLow != 223.78 || f.Beta != 1.0781745 {
+	if derefF(t, "YearHigh", f.YearHigh) != 344.5699 || derefF(t, "YearLow", f.YearLow) != 223.78 ||
+		derefF(t, "Beta", f.Beta) != 1.0781745 {
 		t.Fatalf("metric mapping wrong: %+v", f)
 	}
-	if f.PERatio != 34.7202 || f.PBRatio != 41.6339 || f.EPS != 8.7233 {
+	if derefF(t, "PERatio", f.PERatio) != 34.7202 || derefF(t, "PBRatio", f.PBRatio) != 41.6339 ||
+		derefF(t, "EPS", f.EPS) != 8.7233 {
 		t.Fatalf("ratio mapping wrong: %+v", f)
 	}
-	if f.DebtToEquity != 0.7844 {
+	if derefF(t, "DebtToEquity", f.DebtToEquity) != 0.7844 {
 		t.Fatalf("debt-to-equity mapping wrong: %+v", f)
 	}
 	// Unit conversions confirmed live this session — the load-bearing assertions.
-	if got, want := f.ROE, 1.3718; !closeEnough(got, want) {
+	if got, want := derefF(t, "ROE", f.ROE), 1.3718; !closeEnough(got, want) {
 		t.Fatalf("ROE not converted percentage-points -> fraction: got %v want ~%v", got, want)
 	}
-	if got, want := f.DividendYield, 0.003494; !closeEnough(got, want) {
+	if got, want := derefF(t, "DividendYield", f.DividendYield), 0.003494; !closeEnough(got, want) {
 		t.Fatalf("DividendYield not converted percentage-points -> fraction: got %v want ~%v", got, want)
 	}
-	if got, want := f.MarketCap, 4476472.5*1_000_000; !closeEnough(got, want) {
+	if got, want := derefF(t, "MarketCap", f.MarketCap), 4476472.5*1_000_000; !closeEnough(got, want) {
 		t.Fatalf("MarketCap not converted millions -> raw dollars: got %v want %v", got, want)
 	}
 	if f.Currency != "USD" {
@@ -104,6 +116,43 @@ func TestGetFundamentals_MapsField(t *testing.T) {
 	}
 	if f.Source != "finnhub" {
 		t.Fatalf("source: got %q want finnhub", f.Source)
+	}
+}
+
+// TestGetFundamentals_MissingFieldStaysNil is the regression test for the null-as-zero
+// bug fix: a key Finnhub omits from its JSON response — common for smaller-cap/foreign
+// symbols — must decode to a nil pointer, not a false 0.0 that a screener `lte` hard
+// filter would silently treat as a real, passing value.
+func TestGetFundamentals_MissingFieldStaysNil(t *testing.T) {
+	rt := &recordingRT{respond: func(path string) (int, string) {
+		switch path {
+		case "/stock/metric":
+			// "peTTM" and "currentDividendYieldTTM" omitted; "roeTTM" present as a genuine 0.
+			return 200, `{"metric":{"52WeekHigh":344.5699,"52WeekLow":223.78,"beta":1.0781745,` +
+				`"pb":41.6339,"epsTTM":8.7233,"roeTTM":0,` +
+				`"totalDebt/totalEquityQuarterly":0.7844,"marketCapitalization":4476472.5}}`
+		case "/quote":
+			return 200, `{"c":302.25}`
+		case "/stock/profile2":
+			return 200, `{"currency":"USD"}`
+		}
+		return 404, `{}`
+	}}
+	c := newTestClient(rt)
+
+	f, err := c.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if f.PERatio != nil {
+		t.Fatalf("PERatio: expected nil (omitted by Finnhub), got %v", *f.PERatio)
+	}
+	if f.DividendYield != nil {
+		t.Fatalf("DividendYield: expected nil (omitted by Finnhub), got %v", *f.DividendYield)
+	}
+	// A genuine 0 (zero ROE) must still decode as present, not nil.
+	if f.ROE == nil || *f.ROE != 0 {
+		t.Fatalf("ROE: expected present value 0, got %v", f.ROE)
 	}
 }
 

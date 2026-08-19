@@ -66,14 +66,20 @@ theme values come entirely from the preset).
   not read `tsconfig.json`'s `paths` automatically the way Next's own bundler does, and the
   shadcn-CLI-regenerated `components/ui/*` files use `@/...` alias imports (the old hand-rolled
   files used relative imports, which never needed this).
-- **Sanctioned exception — `ChartPanel.tsx` stays on `lightweight-charts`.** `ChartPanel.tsx` (and
-  its siblings via the shared `useCandlestickChart.ts` hook — `trader/positions/[symbol]/page.tsx`,
-  `insights/market/[symbol]/page.tsx`) intentionally stays on `lightweight-charts` rather than
-  `recharts`/`ui/chart.tsx` (feature 123 design decision, 2026-08-08): `recharts` has no
-  first-party OHLCV candlestick geometry, the hook has 3 shared consumers across `/trader` and
-  `/insights`, and `e2e/trader/chart-panel.spec.ts` depends on `lightweight-charts`'s own injected
-  `.tv-lightweight-charts` DOM class as an async-readiness signal. Do not re-flag this as an
-  unconsolidated charting approach in a future audit.
+- **Charting on `lightweight-charts` v5 (feature 146 superseded the old `recharts`-panels split).**
+  The trader symbol page (`trader/positions/[symbol]/page.tsx`) and the trader dashboard
+  (`ChartPanel.tsx`) both render on **`lightweight-charts` v5** (pinned exact in `package.json`) via
+  the shared `useCandlestickChart.ts` hook — the hook's two real consumers. On the symbol page the
+  OHLCV candlestick **and** every strategy indicator are drawn as native **multi-pane** series on ONE
+  chart instance (pane 0 = price; panes 1..N = indicators), sharing one time scale and one native
+  crosshair; `recharts` was dropped from that page by feature 146 (it originally sat on
+  `recharts`/`ui/chart.tsx`). `recharts`/`ui/chart.tsx` **remain** for their other consumers
+  (`insights/EquityCurveChart.tsx`, `insights/FormulaRunResult.tsx`, `insights/page.tsx`) — do not
+  remove them. `recharts` has no first-party OHLCV candlestick geometry, and
+  `e2e/trader/chart-panel.spec.ts` (and the symbol-page e2e) depend on `lightweight-charts`'s own
+  injected `.tv-lightweight-charts` DOM class as an async-readiness signal. Do not re-flag the
+  symbol-page charting as unconsolidated in a future audit. (Correcting prior doc-drift:
+  `insights/market/[symbol]/page.tsx` renders **no** chart — it was never a hook consumer.)
 - **Sanctioned exception — the unified `/trader/positions/[symbol]` page reuses `/insights`-segment
   browser clients.** `analysisClient`, `insightsIngestClient`, and `insightsPortfolioClient` (all
   `baseUrl: '/insights/api'`) are called directly from this `/trader`-segment page rather than
@@ -127,8 +133,8 @@ The physical routes/segments above are **unchanged**; feature 083 layers an oppo
   cycle → a prerender TDZ crash); import from `navGroups.tsx`.
 - **Decide screens** — `insights/opportunities` (ranked queue over analysis `ListOpportunities`)
   and the Signal-detail page `insights/market/[symbol]`. Signal-detail is a two-column grammar:
-  **left** = candlestick chart + "Why this fired" (`EvaluateReadiness` for an explicit strategy —
-  via a strategy picker, never a fabricated signal→strategy binding); **right** = an FR-6 order
+  **left** = "Why this fired" (`EvaluateReadiness` for an explicit strategy — via a strategy picker,
+  never a fabricated signal→strategy binding); **right** = an FR-6 order
   ticket re-presenting `OrderForm` inside its own `AccountProvider`. The header enriches from the
   ranked queue when the symbol is in it (action tag + Conviction from the matching `Opportunity`,
   Edge (BT) from `GetStrategyAnalytics`); it degrades to symbol + price only when the symbol is not
@@ -210,7 +216,8 @@ propagation in `docs/patterns/header-propagation.md`.
 | `src/lib/basepath.ts` | shared | **Canonical** segment base paths (`BASE_PATH_*`) for cross-segment links/fetches. |
 | `src/hooks/useInvalidatingMutation.ts` | Browser | **Canonical** factory for "call a BFF RPC then invalidate query keys" mutation hooks (order + watchlist hooks build on it). |
 | `src/middleware.ts` | Edge | Route protection, token refresh, trace-ID injection; matcher must include `/` |
-| `src/app/auth/{login,oauth-login}/page.tsx` | Browser | Unified login (domain root, outside all basePaths) + OAuth agent login |
+| `src/app/auth/layout.tsx` | Server | `export const dynamic = 'force-dynamic'` — forces every `/auth/*` page uncacheable (`Cache-Control: no-store`). **Do not remove.** Statically prerendered auth pages get `s-maxage=31536000`, and the prod edge (Cloudflare) ignores `Vary: RSC`, so it cross-serves the `text/x-component` RSC/Flight prefetch payload to document navigations — the browser then renders raw Flight text (incl. Next's built-in "404: This page could not be found." string), surfacing as the login route "not found". |
+| `src/app/auth/{login,oauth-login}/page.tsx` | Browser | Unified login (domain root, outside all basePaths) + OAuth agent login. Kept non-static by the segment layout above. |
 | `src/app/api/auth/{login,refresh,logout,me}/route.ts` | Node | Auth endpoints (set/clear cookies, current session) |
 | `src/app/<segment>/api/[...connect]/route.ts` | Node | Segment BFF entrypoint — re-exports `dispatchConnect` |
 

@@ -1,6 +1,5 @@
 # Feature: ci-docker-registry-deploy
 
-**Lifecycle Status**: `launched`
 **Committed to main**: 790d855782d7581455619911aa86fdaf627376b4
 **Launched date**: 2026-05-27
 **Development Branch**: `feature/ci-docker-registry-deploy`

@@ -1,8 +1,8 @@
 # Feature: shadcn-ui-migration
 
-**Lifecycle Status**: `launched`
 **Committed to main**: fb8a987e22cd4cd242fcc9077e0a1d312a89bb1f
 **Launched date**: 2026-08-09
+**Archived**: 2026-08-19
 **Development Branch**: `feature/shadcn-ui-migration`
 **Created**: 2026-08-08
 **Last Updated**: 2026-08-08
@@ -20,6 +20,7 @@
 | 2026-08-08 | `in-progress` → `code-completed` | /sdd-execute | All 11 steps done; ready for integration PR |
 
 | 2026-08-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #908; committed fb8a987e22cd4cd242fcc9077e0a1d312a89bb1f |
+| 2026-08-19 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(2); pruned 4 specs |
 ---
 
 ## Artifacts

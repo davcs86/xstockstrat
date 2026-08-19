@@ -1,6 +1,5 @@
 # Feature: strategy-performance-dashboard
 
-**Lifecycle Status**: `draft`
 **Development Branch**: `feature/strategy-performance-dashboard`
 **Created**: 2026-05-26
 **Last Updated**: 2026-05-26

@@ -8,6 +8,8 @@ import { mockWatchlists } from '../helpers/watchlistMock';
  * Select; readiness evaluates each symbol against its own bound strategy (unbound → not evaluated).
  */
 async function createList(page: Page, name: string) {
+  // Creation now happens in a modal opened from the header "New watchlist" button.
+  await page.getByRole('button', { name: 'New watchlist' }).click();
   await page.getByPlaceholder('e.g. Tech Large-Cap').fill(name);
   await page.getByRole('button', { name: 'Create' }).click();
   await expect(page.getByRole('heading', { name })).toBeVisible({ timeout: 5000 });
@@ -52,7 +54,9 @@ test.describe('Watchlists (insights)', () => {
     await page.getByRole('button', { name: 'Delete My List' }).click();
     await page.getByRole('button', { name: 'Confirm' }).click();
     await expect(page.getByRole('heading', { name: 'My List' })).toHaveCount(0, { timeout: 5000 });
-    await expect(page.getByText('No watchlists yet. Create one above.')).toBeVisible({
+    await expect(
+      page.getByText('No watchlists yet. Use “New watchlist” to create one.'),
+    ).toBeVisible({
       timeout: 5000,
     });
   });

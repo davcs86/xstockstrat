@@ -109,6 +109,11 @@
     --chart-3: oklch(0.444 0.011 73.639);
     --chart-4: oklch(0.374 0.01 67.558);
     --chart-5: oklch(0.268 0.007 34.298);
+    /* Dedicated chart gridline token (feature 146): a visible, low-contrast line over the card
+       background. NOT --border (oklch(1 0 0 / 10%) — 10%-alpha white near-erases gridlines). Read
+       by the lightweight-charts grid options via src/lib/chartColors.ts; opacity tuned against the
+       rendered chart in the diagnosed e2e run. */
+    --chart-grid: oklch(0.42 0.01 56.043 / 0.55);
     --sidebar: oklch(0.216 0.006 56.043);
     --sidebar-foreground: oklch(0.985 0.001 106.423);
     --sidebar-primary: oklch(0.696 0.17 162.48);

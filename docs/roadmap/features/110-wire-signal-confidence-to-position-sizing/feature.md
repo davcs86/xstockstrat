@@ -1,6 +1,5 @@
 # Feature: wire-signal-confidence-to-position-sizing
 
-**Lifecycle Status**: `draft`
 **Development Branch**: `feature/wire-signal-confidence-to-position-sizing`
 **Created**: 2026-08-05
 **Last Updated**: 2026-08-05

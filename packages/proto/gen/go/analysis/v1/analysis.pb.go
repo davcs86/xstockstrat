@@ -2731,8 +2731,15 @@ type ScreenResult struct {
 	// normalized.
 	CriterionRawValues map[string]float64 `protobuf:"bytes,12,rep,name=criterion_raw_values,json=criterionRawValues,proto3" json:"criterion_raw_values,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"fixed64,2,opt,name=value"`
 	CriterionPassed    map[string]bool    `protobuf:"bytes,13,rep,name=criterion_passed,json=criterionPassed,proto3" json:"criterion_passed,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// True when every criterion configured for this scan was skipped for this candidate (no
+	// usable data for any of them, e.g. an ETF with no P/E ratio scanned against a `pe_ratio`
+	// criterion) — `score`/`criterion_scores` still carry the same neutral-abstention values the
+	// engine already used to keep the signal blend well-defined (`status` stays OK; this is the
+	// soft-criterion sibling of the hard-filter null-as-zero fix, feature 144), but they are not a
+	// real computed result and must not be treated as one (e.g. ranked/sorted as if genuine).
+	ScoreUnavailable bool `protobuf:"varint,14,opt,name=score_unavailable,json=scoreUnavailable,proto3" json:"score_unavailable,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ScreenResult) Reset() {
@@ -2854,6 +2861,13 @@ func (x *ScreenResult) GetCriterionPassed() map[string]bool {
 		return x.CriterionPassed
 	}
 	return nil
+}
+
+func (x *ScreenResult) GetScoreUnavailable() bool {
+	if x != nil {
+		return x.ScoreUnavailable
+	}
+	return false
 }
 
 type ScreenSymbolsRequest struct {
@@ -4429,7 +4443,7 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x0ethreshold_high\x18\a \x01(\x01R\rthresholdHigh\x12\x16\n" +
 	"\x06weight\x18\b \x01(\x01R\x06weight\x12\x1f\n" +
 	"\vhard_filter\x18\t \x01(\bR\n" +
-	"hardFilter\"\xc6\x06\n" +
+	"hardFilter\"\xf3\x06\n" +
 	"\fScreenResult\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12\x14\n" +
 	"\x05score\x18\x02 \x01(\x01R\x05score\x12e\n" +
@@ -4445,7 +4459,8 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	" \x01(\x01R\trevGrowth\x12\x12\n" +
 	"\x04held\x18\v \x01(\bR\x04held\x12o\n" +
 	"\x14criterion_raw_values\x18\f \x03(\v2=.xstockstrat.analysis.v1.ScreenResult.CriterionRawValuesEntryR\x12criterionRawValues\x12e\n" +
-	"\x10criterion_passed\x18\r \x03(\v2:.xstockstrat.analysis.v1.ScreenResult.CriterionPassedEntryR\x0fcriterionPassed\x1aB\n" +
+	"\x10criterion_passed\x18\r \x03(\v2:.xstockstrat.analysis.v1.ScreenResult.CriterionPassedEntryR\x0fcriterionPassed\x12+\n" +
+	"\x11score_unavailable\x18\x0e \x01(\bR\x10scoreUnavailable\x1aB\n" +
 	"\x14CriterionScoresEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\x1aE\n" +

@@ -103,25 +103,25 @@ jobs:
             | sed 's|packages/proto/||' \
             > /tmp/proto_changes.txt || true
 
-          # Features at code-completed
+          # Features at code-completed — single bulk egrep over status.md (see
+          # docs/roadmap/features/CLAUDE.md § Bulk Status Reads, Case 1) instead of looping
+          # every feature.md and sed-extracting a field that no longer lives there.
           > /tmp/code_completed.txt
-          for feature_md in docs/roadmap/features/*/feature.md; do
+          for status_md in $(egrep -l '^code-completed$' docs/roadmap/features/*/status.md 2>/dev/null); do
+            feature_md="$(dirname "$status_md")/feature.md"
             [ -f "$feature_md" ] || continue
             SLUG=$(echo "$feature_md" | sed 's|docs/roadmap/features/[0-9][0-9][0-9]-\([^/]*\)/feature.md|\1|')
-            STATUS=$(sed -n 's/.*\*\*Lifecycle Status\*\*[^`]*`\([^`]*\)`.*/\1/p' "$feature_md" | head -1)
-            if [ "$STATUS" = "code-completed" ]; then
-              # feature.md summaries are hand-wrapped prose spanning multiple source
-              # lines — join the whole paragraph before extracting the first sentence,
-              # so a mid-paragraph line break doesn't truncate the changelog entry.
-              JOINED=$(awk '
-                /^## Summary/ { insummary=1; next }
-                insummary && /^[[:space:]]*$/ { if (started) exit; next }
-                insummary { started=1; print }
-              ' "$feature_md" | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')
-              SUMMARY=$(printf '%s' "$JOINED" | grep -oP '^.*?[.!?](?=\s|$)' | head -1)
-              [ -z "$SUMMARY" ] && SUMMARY="$JOINED"
-              echo "${SLUG}: ${SUMMARY}" >> /tmp/code_completed.txt
-            fi
+            # feature.md summaries are hand-wrapped prose spanning multiple source
+            # lines — join the whole paragraph before extracting the first sentence,
+            # so a mid-paragraph line break doesn't truncate the changelog entry.
+            JOINED=$(awk '
+              /^## Summary/ { insummary=1; next }
+              insummary && /^[[:space:]]*$/ { if (started) exit; next }
+              insummary { started=1; print }
+            ' "$feature_md" | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')
+            SUMMARY=$(printf '%s' "$JOINED" | grep -oP '^.*?[.!?](?=\s|$)' | head -1)
+            [ -z "$SUMMARY" ] && SUMMARY="$JOINED"
+            echo "${SLUG}: ${SUMMARY}" >> /tmp/code_completed.txt
           done
 
       - name: Build changelog entry
@@ -261,6 +261,6 @@ jobs:
               echo "### Features Included (code-completed)"
               while IFS= read -r line; do echo "- $line"; done < /tmp/code_completed.txt
               echo ""
-              echo "**Note:** Feature lifecycle tracking (P7) must be completed after the PR merges — run \`/promote\` in a Claude session to update \`feature.md\` status from \`code-completed\` to \`launched\`."
+              echo "**Note:** Feature lifecycle tracking (P7) must be completed after the PR merges — run \`/promote\` in a Claude session to update each feature's \`status.md\` from \`code-completed\` to \`launched\`."
             fi
           } >> "$GITHUB_STEP_SUMMARY"

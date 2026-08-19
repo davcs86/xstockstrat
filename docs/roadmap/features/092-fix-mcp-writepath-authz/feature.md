@@ -1,7 +1,6 @@
 # Feature: fix-mcp-writepath-authz
 
 **Type**: bug
-**Lifecycle Status**: `launched`
 **Committed to main**: a76237080a282abac145b7f88a6044869132ba5f
 **Launched date**: 2026-08-02
 **Development Branch**: `feature/fix-mcp-writepath-authz`
