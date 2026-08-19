@@ -2,6 +2,7 @@
 
 **Committed to main**: 94e4e24fa6ac41eb20bd16e1e9af15c8388e885a
 **Launched date**: 2026-08-16
+**Archived**: 2026-08-19
 **Development Branch**: `feature/signal-source-reliability-weight`
 **Created**: 2026-08-13
 **Last Updated**: 2026-08-14
@@ -20,6 +21,7 @@
 | 2026-08-15 | `in-progress` → `code-completed` | /sdd-execute | All 11 steps done; integration PR next |
 
 | 2026-08-16 | `code-completed` → `launched` | CI workflow | Promoted via PR #963; committed 94e4e24fa6ac41eb20bd16e1e9af15c8388e885a |
+| 2026-08-19 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(0); pruned 4 specs |
 ---
 
 ## Artifacts
