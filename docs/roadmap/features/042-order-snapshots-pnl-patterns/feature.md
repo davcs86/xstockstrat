@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-26 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-19 | `draft` → `spec-ready` | /sdd-review | Product spec approved after fixing 6 review blockers (all scope-preserving): service rename `xstockstrat-insights`→`xstockstrat-ui`, migration strategy (016) + hypertable PK, nav registration, Consumer Surface section, partial-fill enum reconciliation, 2 open questions resolved from code. No scope reduced. 2 open questions remain as design-owned forks for /sdd-design. |
 
 ---
 
@@ -45,4 +46,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review order-snapshots-pnl-patterns product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design order-snapshots-pnl-patterns` — ground and debate the design; must close the 2 remaining design-owned open questions (snapshot DB ownership; sync vs async pattern analysis)

@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-26 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-19 | `draft` → `spec-ready` | /sdd-review | Product spec approved after fixing 3 blockers. **Scope reduction accepted by feature owner** (sign-off in context.md): the two vendor credentials (SendGrid key, Slack webhook URL) move from config keys to `type: SECRET` env vars per config governance (feature 076), so credential rotation now requires a redeploy rather than a live config push. Also added the Consumer Surface section and resolved both open questions (credential storage → env var; dedup store → in-memory V1). |
 
 ---
 
@@ -39,4 +40,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review notify-external-fanout product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design notify-external-fanout` — ground and debate the design (fanout client, in-memory dedup, credential env-var wiring)

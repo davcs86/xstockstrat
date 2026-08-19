@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-11 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-19 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS: 4 design-owned open questions + agent `PORTFOLIO_ENDPOINT` deploy-parity, both to close at /sdd-design and /sdd-spec) |
 
 ---
 
@@ -40,4 +41,4 @@ same-named concepts are actually linked instead of colliding only in vocabulary.
 
 ## Next Action
 
-`/sdd-review consolidate-watchlist-signal product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design consolidate-watchlist-signal` — ground and debate the design (must close the 4 design-owned open questions, especially the "whose watchlist?" identity fork)
