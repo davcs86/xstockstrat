@@ -6,6 +6,7 @@
 **Severity**: SEV-1
 **Created**: 2026-07-29
 **Last Updated**: 2026-07-29
+**Archived**: 2026-08-19
 
 ---
 
@@ -14,6 +15,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-07-29 | `bug-reported` → `code-completed` | direct fix | Predicted by the 073 design-adversary, then confirmed by executing a real gRPC call. Partially logged already (`trading_mode` half) in the service findings doc; the `environment` half and the read-path impact were not known. |
+| 2026-08-19 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 1 spec |
 
 ---
 

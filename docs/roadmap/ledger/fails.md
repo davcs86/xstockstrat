@@ -1570,3 +1570,63 @@ ambiguity is logged here).
 - **Mistake**: `design.md` predicted the `LiveStrategiesPanel` keyboard defect as a "double-fire"; the RED test written to that prediction didn't reproduce it. The real mechanism (verified against the DOM spec) was a single *mis-fire* — the row's `preventDefault()` on the bubbling keydown cancels the button's native Enter-activation, so only the wrong handler fired. Writing the red test to the design's *assumed* failure mode masked the true one until it was investigated.
 - **Evidence**: `docs/roadmap/features/135-shadcn-datatable-migration/context.md` § Archive Synthesis (Step 26).
 - **Rule it implies**: when a design predicts a specific failure mechanism, validate the red test against the actual observed/DOM-spec behavior before trusting the prediction — a red that fails for a different reason is not a valid red.
+
+### 2026-08-19 — phase7-observability — assumption
+- **Mistake**: product-spec FR-1 asserted the DO app specs wired OTEL only for the collector component; in reality a global `envs:` block already covered all components. The spec was written without grounding, so it shipped a false premise that execute-time discovery had to correct.
+- **Evidence**: `docs/roadmap/features/033-phase7-observability/context.md` § Archive Synthesis; `docs/roadmap/phase7-deviations.md` § What already existed.
+- **Rule it implies**: story/spec claims about existing infra state must be grounded against the repo, not asserted from memory.
+
+### 2026-08-19 — fmp-key-to-secret-env — config
+- **Mistake**: a config key was seeded with a `secret://…` placeholder and a migration comment promising it was "resolved at deploy, never plaintext" — but the resolver was never built, so the only way to make the feature work was to store the real credential as plaintext in a broadcast (`WatchConfig`) table. The aspirational comment masked a live plaintext-secret exposure until a later feature audited it.
+- **Evidence**: `docs/roadmap/features/076-fmp-key-to-secret-env/context.md` § Archive Synthesis (feature 059 introduced it, 076 reversed it).
+- **Rule it implies**: a credential must never live in `config.config_values` (streamed to all subscribers); vendor API keys go through `type: SECRET` env vars.
+
+### 2026-08-19 — fix-listkeys-wire-encoding — duplication
+- **Mistake**: a wire-encoding bug was fixed in one hand-built-proto handler (feature 075: `ConfigSnapshot`) but the identical bug in a sibling handler (`listKeys`) was never swept, shipping a latent duplicate that resurfaced as SEV-2. Same author, same defect class, two features apart.
+- **Evidence**: `docs/roadmap/features/077-fix-listkeys-wire-encoding/context.md` § Archive Synthesis.
+- **Rule it implies**: when fixing a hand-built-proto encoding bug, audit *every* handler in the service that constructs a proto message by hand in the same PR.
+
+### 2026-08-19 — fix-config-scope-resolution — assumption
+- **Mistake**: Node gRPC handlers read decoded proto fields by numeric enum value and/or snake_case name, but ts-proto (`packages/proto/buf.gen.yaml` `stringEnums=true`) delivers string enum constants and camelCase field names — the lookup silently misses and falls through to a default. Recurred identically across features 075, 077, 078.
+- **Evidence**: `docs/roadmap/features/078-fix-config-scope-resolution/context.md` § Archive Synthesis.
+- **Rule it implies**: in any Node service, decode proto enums by string constant and access fields by their camelCase ts-proto name; never index a numeric map with a decoded enum.
+
+### 2026-08-19 — mcp-python-sdk-v2-upgrade — assumption
+- **Mistake**: a design's own live-verification pass can still miss API surface it did not specifically exercise — a return-type shape, a default-parameter side effect. The 085 design verified imports/renames live yet missed `get_tool`'s real location, `call_tool`'s changed return type, and a production-breaking DNS-rebinding 421 default; all three were caught only because /sdd-spec re-ran the same live method against the *specific* call shapes the implementation would use.
+- **Evidence**: `docs/roadmap/features/085-mcp-python-sdk-v2-upgrade/context.md` § Archive Synthesis.
+- **Rule it implies**: each SDD phase that consumes a prior phase's live-verification must re-run it against the exact call shapes/return values its own step will exercise, not accept the upstream conclusion.
+
+### 2026-08-19 — fix-mcp-server-input-validation — assumption
+- **Mistake**: the "obvious" float range check (`c < 0.0 or c > 1.0`) silently admits `NaN`, which then interacts with a `> 0.0` NULL-sentinel to store NULL — a validation guard written the naive way would have re-created the exact silent-NULL bug it was meant to fix.
+- **Evidence**: `docs/roadmap/features/094-fix-mcp-server-input-validation/context.md` § Archive Synthesis (caught in the design/adversary round).
+- **Rule it implies**: treat NaN as an explicit failure mode in any numeric-range validation; the inverted-range form `not (lo <= x <= hi)` is the cheap fix.
+
+### 2026-08-19 — shadcn-migration-custom-composites — assumption
+- **Mistake**: a client-side create-time format rule (`STRATEGY_ID_RE = /^[a-z0-9_]+$/`, no hyphen) was applied to `idValid` *unconditionally*, including edit mode where the Strategy ID field is disabled and holds immutable server-sourced data — so any legacy strategy with a hyphenated id could never advance past Step 1 in edit mode. Latent because no prior test path clicked Next in edit mode; surfaced only when sub-screen navigation became mandatory. Fixed to `mode === 'create' && !idValid`.
+- **Evidence**: `docs/roadmap/features/123-shadcn-migration-custom-composites/context.md` § Archive Synthesis (Step 13).
+- **Rule it implies**: a create-time input-validation predicate must be scoped to `mode==='create'` when the same field is immutable/server-sourced in edit mode.
+
+### 2026-08-19 — shadcn-migration-custom-composites — config
+- **Mistake**: `npx shadcn@latest add <name>` silently rewrites the shared `package.json` dependency version to the registry item's declared version (reset `recharts` `^3.10.1` → `^3.8.0`) and re-prompts to overwrite already-customized primitives (`button.tsx`); both must be caught and reverted/declined in the same step.
+- **Evidence**: `docs/roadmap/features/123-shadcn-migration-custom-composites/context.md` § Archive Synthesis (Steps 3, 12).
+- **Rule it implies**: after any `shadcn add`, diff `package.json` and the `ui/` tree and restore any version/customization the CLI clobbered before committing.
+
+### 2026-08-19 — shadcn-migration-custom-composites — assumption
+- **Mistake**: a `/sdd-design` session run without the Proposer/Adversary `Task` subagents (a tooling gap — self-run debate) asserted a concrete `path:line` citation for evidence that did not yet exist in `recon.md`; it was only later verified via live `WebFetch` and back-filled into recon.
+- **Evidence**: `docs/roadmap/features/123-shadcn-migration-custom-composites/context.md` § Archive Synthesis.
+- **Rule it implies**: a self-run design debate with no independent adversary subagent must treat every `path:line` citation as unverified until the cited evidence is confirmed to exist.
+
+### 2026-08-19 — fix-signal-detail-readiness-rule — duplication
+- **Mistake**: a single user-facing quantity (readiness) was computed by two separate code paths (queue exit-rule trace vs `EvaluateReadiness` entry default) and shown together, so they contradicted (`CONVICTION 100` beside `0/2 conditions`). The rule-blind `EvaluateReadiness` default (`rule="entry"`) silently mismatched the queue's exit trace for held rows.
+- **Evidence**: `docs/roadmap/features/138-fix-signal-detail-readiness-rule/context.md` § Archive Synthesis.
+- **Rule it implies**: a default argument that silently picks one branch (`rule="entry"`) is a latent contradiction wherever another path picks a different branch for the same display — make the branch explicit at the seam.
+
+### 2026-08-19 — fix-listorders-ambiguous-updated-at — duplication
+- **Mistake**: feature 101 added a shared `LEFT JOIN LATERAL` fragment that projected a column (`updated_at`) whose name duplicated one already in the outer SELECTs' range, making every `GetOrder`/`ListOrders`/`ListSubmittedOrders` DB read fail with `SQLSTATE 42702`. A change to a shared SQL const silently broke three callers it never edited.
+- **Evidence**: `docs/roadmap/features/140-fix-listorders-ambiguous-updated-at/context.md` § Archive Synthesis (PR #880, 2026-08-06).
+- **Rule it implies**: any column projected by a shared/joined SQL fragment must carry a name unique across the joined range (alias it) — proto/DB CI won't catch a name collision; only a live query will.
+
+### 2026-08-19 — fix-listorders-ambiguous-updated-at — assumption
+- **Mistake**: the `ListOrders` in-memory fallback was designed for transient DB failures but silently absorbed a *100%*, permanent query bug for ~10 days — masking total DB-read failure as a mere WARN in staging logs; the process-local store also diverges across a multi-replica deploy, so the degradation was silently non-deterministic per replica.
+- **Evidence**: `docs/roadmap/features/140-fix-listorders-ambiguous-updated-at/context.md` § Archive Synthesis.
+- **Rule it implies**: a silent degradation fallback must escalate/alert when its trigger rate is sustained (not one-off), or a hard failure hides as noise.

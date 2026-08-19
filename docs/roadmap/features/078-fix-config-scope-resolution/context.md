@@ -1,83 +1,28 @@
-# Context Log: fix-config-scope-resolution
+# Context: fix-config-scope-resolution  (archived 2026-08-19)
 
-Append-only.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-08-19 — /sdd-archiver
 
-## Session 2026-07-29 — predicted, verified, fixed
+**What**: `ConfigService` silently collapsed every scoped request to `('dev','all')` on all four RPCs (`WatchConfig`/`GetConfig`/`SetConfig`/`ListKeys`) because its `resolveEnv`/`resolveMode` helpers decoded the wire in a shape ts-proto never produces. Production config rows (seeded by migration `007`) were unreachable, every service booted on dev config even in production, and `SetConfig(production)` wrote dev rows while reporting success. The fix taught both helpers to accept the string constant and the legacy numeric form, plus a `requestMode(req)` helper reading `tradingMode ?? trading_mode`. Shipped as PR #806, but operationally a config change disguised as a bug fix.
 
-- **Predicted by the feature-073 design-adversary**, which reasoned from `stringEnums=true` that
-  `resolveEnv`'s numeric map could not match a string constant, and flagged it as the same defect
-  class as features 075/077.
-- **Verified by execution**, not accepted on the argument: a probe test dialled a real
-  `grpc.Server` and sent `ListKeys` with `environment: 'ENVIRONMENT_PRODUCTION'`,
-  `tradingMode: 'TRADING_MODE_LIVE'`. The handler bound SQL parameters
-  `["marketdata", "dev", "all"]`.
-- Severity **SEV-1**, higher than its two siblings: this is not a metadata field being dropped, it
-  is the service's central scoping contract failing silently on all four RPCs, in both directions,
-  for every consumer on the platform.
+**Why (irrecoverable rationale)**: The bug survived because the failure is self-consistent — reads and writes both funneled to the same `dev` bucket, so any round-trip through the service looked correct (you read back what you wrote). Only a caller inspecting a stored `environment` column or comparing two scopes could see it, and nothing did. Third identical instance in one session (075, 077, 078): same root cause (`stringEnums=true` + camelCase decoding vs. a handler expecting numeric/snake_case), same reason for surviving.
 
-### Why this went unnoticed for so long
+**Rejected alternatives**:
+- Tighten the helpers to string-only / delete `ENV_MAP`+`MODE_MAP` — rejected because the existing unit tests hand-build requests as `{ environment: 1, trading_mode: 1 }`, and string-only would break them for no behavioral gain. The numeric branch is kept deliberately.
+- Move the scope selector (`environment`/`trading_mode`) into config values — explicitly forbidden. User confirmed the architecture: scope stays env vars (`APPLICATION_ENV`/`TRADING_MODE`) while config values are partitioned per environment. Recorded so a future reader doesn't "simplify" by inverting the model.
 
-The failure is *self-consistent*. Reads and writes both collapse to the same bucket, so
-round-tripping through the service looks correct — you write `production`, you read back what you
-wrote, because both silently went to `dev`. Only a caller that inspects the stored row's
-`environment` column, or one that compares two scopes, could see it. Nothing did.
+**Scars & gotchas**: The unit-test fixture trap — tests that hand-build the request in the handler's expected shape (numeric, snake_case) pass against the bug and keep passing forever; only a probe over a real `grpc.Server` connection exposed the fault (recurred across 075/077/078). Prediction ≠ proof: the defect was predicted by feature-073's design-adversary from `stringEnums=true`, but was verified by execution — a real `ListKeys` call with `ENVIRONMENT_PRODUCTION`/`TRADING_MODE_LIVE` that bound SQL params `["marketdata","dev","all"]`. Deploy-time operational scar (AC-6 still open): production has been served dev config for the entire life of the bug; after this fix each service starts reading its actual `production` rows, so anywhere the two scopes drifted, behavior changes at deploy.
 
-The existing unit tests hand-build requests as `{ environment: 1, trading_mode: 1 }` — numeric and
-snake_case, i.e. the shape the handler *expected* rather than the one ts-proto produces — so they
-passed against the bug and would have kept passing forever. Third instance of that trap in this
-session (features 075, 077, 078), all with the same root cause and the same reason for surviving.
+**Permanent deviations**: No design.md existed (bug fast-track). The one intentional divergence from a clean fix: the numeric decode branch was retained rather than removed, purely to keep the pre-existing hand-built tests valid.
 
-### Fix
+**Cross-feature signal**: ts-proto wire-shape decoding faults are a defect class on this platform, not isolated bugs — features 075, 077, 078 share the identical root cause and survival mechanism. Any Node handler reading a decoded proto field by numeric value or snake_case name is suspect. The `trading_mode` half of this one was already partially logged in the config service findings doc; the `environment` half and the read-path collapse were not.
 
-`resolveEnv`/`resolveMode` accept both the string constant and the legacy numeric form; a new
-`requestMode(req)` helper reads `tradingMode ?? trading_mode`. All four call sites use it. The
-numeric branch is kept deliberately so the existing hand-built unit tests remain valid.
+**Deferred follow-ons**: Folded into feature 073 — since every service knows its own scope from env vars, 073's MCP config tools must default `environment`/`trading_mode` to the agent's `APPLICATION_ENV`/`TRADING_MODE`, not let proto zero-values decide. AC-6 operational check remains outstanding at archive time — the pre-deploy `dev` vs `production` config diff is a runbook action.
 
-### Verification
+**Ledger entries written**: insights.md (1), fails.md (1) — see the 2026-08-19 `fix-config-scope-resolution` entries.
 
-| Gate | Result |
-|---|---|
-| red-before-green | 3 failures with the fix reverted → 36/36 with it |
-| `pnpm test` | 36/36 |
-| `pnpm lint` | 0 errors |
-| coverage | 69.5% lines (threshold 40) |
+**Runtime-invariant recommendations (→ /context-constitution)**: PLAT-* candidate — "ts-proto (`stringEnums=true`) delivers enum fields as their string constant and all fields under camelCase names; any Node handler that reads them numerically or in snake_case silently gets a default" (proven three times: 075/077/078). CONFIG-* candidate — "the config scope selector (`environment`/`trading_mode`) is an env-var-derived request parameter, never a config value; config values are partitioned per scope. Do not move scope into config."
 
-### OUTSTANDING — operational, and the reason this needs care on deploy
-
-Production has been reading **dev** config for as long as this bug has existed. After this fix each
-service will start reading its actual `production` rows. Anywhere the two have drifted, behavior
-changes at deploy time. Diff `config.config_values` between `environment='dev'` and `'production'`
-before rolling out — this is a config change disguised as a bug fix.
-
-## Session 2026-07-29 (later) — architecture confirmed by the user
-
-User clarified: **`environment` and `trading_mode` stay env vars, not config values — but config
-values are partitioned per environment.** That is exactly the model this fix restores, and the code
-already implements the client half of it:
-
-- `docker-compose.yml:15-17` — `APPLICATION_ENV` / `TRADING_MODE` live in the shared `common-env`
-  anchor, so **every** service (agent included) carries its own deployment scope.
-- `services/xstockstrat-config/src/services/configWatcher.ts:37-45` — the watcher reads those env
-  vars, converts them to proto enums, and sends them on the `WatchConfig` request as
-  `environment` / `tradingMode`. The Python and Go watchers do the same.
-- `config.config_values` is keyed `(namespace, key, environment, trading_mode)` — the per-environment
-  partition.
-
-So the scope selector was never a config value and must not become one. **The client half was
-always correct; the server half was misreading it.** A service deployed with
-`APPLICATION_ENV=production` sent `ENVIRONMENT_PRODUCTION` and the server answered with the `dev`
-bucket. This fix makes the env-var-derived scope actually take effect — it does not introduce a new
-mechanism, it makes the existing one work.
-
-**Confirms the fix direction; no change to the fix.** Recorded because a future reader might
-otherwise "simplify" by moving scope into config, which would invert the intended architecture.
-
-### Consequence for feature 073
-
-Since every service — including `xstockstrat-agent` — already knows its own scope from env vars,
-073's tools must **default** `environment`/`trading_mode` to the agent's `APPLICATION_ENV` /
-`TRADING_MODE` rather than letting the proto zero-values decide. Without that, an operator who omits
-the parameter writes a `dev` row from a production agent (product-spec Known Constraint 1). Folded
-into 073's spec.
+**Pruned artifacts**: product-spec.md — last present at 1d97c6c.

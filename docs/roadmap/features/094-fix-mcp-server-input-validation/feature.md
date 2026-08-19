@@ -6,6 +6,7 @@
 **Severity**: SEV-3
 **Created**: 2026-08-02
 **Last Updated**: 2026-08-02
+**Archived**: 2026-08-19
 
 ---
 
@@ -17,6 +18,7 @@
 | 2026-08-02 | `draft` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written. NaN-rejecting range form + tools.py docstring sync + notify compile-first de-cloak folded in from adversary round 1 |
 | 2026-08-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
 | 2026-08-02 | `implementation-ready` → `code-completed` | /sdd-execute | All 5 steps done RED-first: ingest F-9 conviction guard (155 tests green), notify F-10 empty-field guard + compile-first de-cloak (19 tests green, no latent red), docstrings/mcp-tools.md/merge-order updated |
+| 2026-08-19 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 4 specs |
 
 ---
 

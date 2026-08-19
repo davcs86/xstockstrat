@@ -6,6 +6,7 @@
 **Severity**: SEV-2
 **Created**: 2026-07-29
 **Last Updated**: 2026-07-29
+**Archived**: 2026-08-19
 
 ---
 
@@ -14,6 +15,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-07-29 | `bug-reported` → `code-completed` | direct fix | Surfaced by the 073 re-review, confirmed by executing a real gRPC call. Same defect class feature 075 fixed for `ConfigSnapshot` and missed for `ListKeysResponse`. |
+| 2026-08-19 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 1 spec |
 
 ---
 

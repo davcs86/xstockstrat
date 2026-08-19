@@ -1,115 +1,30 @@
-# Context Log: fix-mcp-server-input-validation
+# Context: fix-mcp-server-input-validation  (archived 2026-08-19)
 
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-08-19 — /sdd-archiver
 
-## Session 2026-08-02 (/sdd-triage --from-report)
+**What**: Shipped two additive server-side validation guards — an ingest `IngestSignal` conviction-range guard and a notify `emitAlert` empty/whitespace title-body guard — each converting a previously silent or mis-typed failure into `INVALID_ARGUMENT`. The ingest guard closes a silent-NULL data-corruption path; the notify guard was gated on first resurrecting a test suite that had never actually run. Both landed as one self-contained PR; no proto/migration/config touched.
 
-- Routed from the MCP-alignment triage report: docs/reports/2026-08-01-mcp-tools-alignment-triage.md
-- Findings bundled into this feature: F-9 (code), F-10 (notify field validation)
-- Severity: SEV-3 (max across bundled findings)
-- Routed to SDD path (Track C)
-- Created: feature.md, product-spec.md, context.md
-- Affected services: xstockstrat-ingest, xstockstrat-notify
-- Root cause(s) from the report: RC-4
-- Recommended design depth: quick → `/sdd-design fix-mcp-server-input-validation quick` (rationale: two independent single-clause server guards, no cross-service coupling or proto)
-- Development branch: feature/fix-mcp-server-input-validation
-- Bundling rationale: the report's cross-finding notes tie these findings to one surface/root
-  cause, so they land as one feature (one PR-able change) rather than artificially-split dirs.
-  The full per-finding fix plan (verified 2026-08-02, one read-only investigator per finding)
-  lives in the source report; consult it during /sdd-design and /sdd-spec.
+**Why (irrecoverable rationale)**: The ingest guard is deliberately written as the inverted-range form `not (0.0 <= c <= 1.0)` rather than the obvious `c < 0.0 or c > 1.0`. The two are identical for every finite value, but the naive form lets `NaN` through (every NaN comparison is `False`), and a `NaN` conviction then hits the `> 0.0` NULL-sentinel at `servicer.py:692` (`NaN > 0.0 == False`) and is silently stored NULL — reproducing this very feature's bug for a different input class. A future agent reading the shipped `not (...)` guard cannot recover why it isn't the naive form. `0.0` intentionally still passes the guard and falls through to NULL because the proto `conviction` is a plain-scalar `double` with no proto3 presence, so `0.0` is indistinguishable from unset.
 
-## Session 2026-08-02 — sdd-design (quick)
+**Rejected alternatives**:
+- Naive `c < 0.0 or c > 1.0` conviction guard — lost because it admits NaN → silent NULL.
+- `emitAlert` empty-string-only guard (no `.trim()`) — lost because a whitespace-only title/body delivers visually blank to a `StreamAlerts` subscriber; `.trim()` is a recorded, deliberate widening of AC-2.
+- Split into 094a (ingest) + 094b (notify stacked on 092) — lost because it violates one-PR-per-feature and creates a hard ordering dependency on 092 landing.
+- Keep the strip-types harness / drop notify's parameter-property constructor instead of flipping — lost: the former makes a genuine RED impossible; the latter is a larger, riskier source edit than the 2-file harness flip.
 
-- Phase 0 Recon: wrote recon.md (services: xstockstrat-ingest, xstockstrat-notify). Key reuse
-  patterns: ingest direction-guard `abort+return` idiom (`servicer.py:667-672`); notify identity
-  numeric-`code:3` guard (`identityServiceImpl.ts:52`); config compile-first test harness
-  (`config/package.json:12`).
-- Phase 1 Grilling: 1 round (quick). Chosen approach: two additive server guards —
-  F-9 `if not (0.0 <= signal.conviction <= 1.0): abort(INVALID_ARGUMENT)` in IngestSignal;
-  F-10 `if (!req.title?.trim() || !req.body?.trim()) callback({code:3})` in emitAlert. Rejected:
-  the naive `c<0 or c>1` form (lets NaN through → silent NULL, the feature's own bug), splitting
-  into 094a/094b (violates one-PR-per-feature), and skipping the notify harness flip.
-- Adversary round 1 folded in (NEEDS WORK → resolved, no Floor breach): (1) **NaN slip** — switched
-  to the inverted-range form so NaN is rejected instead of stored NULL; (2) **tools.py docstring
-  drift** — both `ingest_signal` (`:214-216`) and `emit_alert` (`:274-275`) docstrings added to the
-  change surface (RC-1 / C-10); (3) **074 de-cloak** — Step 2 must green the never-executed notify
-  suite before adding F-10; (4) **092 overlap** — recorded, 094 stays self-contained + merge-order
-  entry; (5) **080 absence claim** — the `EmitAlert|IngestSignal` caller grep recorded in design.md.
-- Constitution rules touched: C-01, C-08, C-10, C-13, P-03, P-06, F-04, F-11. Floor breaches: none.
-- Status: draft → design-approved.
+**Scars & gotchas**: The NaN→silent-NULL interaction is the load-bearing gotcha: any float range-guard upstream of a `> 0.0`-style NULL-sentinel must reject NaN, or it re-opens the corruption path. notify's `emitAlert` test suite was a zero-assertion green that had never executed — the `--experimental-strip-types` harness cannot compile the `NotifyServiceImpl` parameter-property constructor, and the test's lazy `try/catch` import + `if (!impl) return` early-returns swallowed that into a passing no-op (the "074 trap"); RED-first work first required flipping to the compile-first script (byte-identical to config's) and de-cloaking every pre-existing case. Under the flipped `tsc` harness, inline `pool` object-literals passed to `new NotifyServiceImpl(pool, {})` fail TS excess/missing-property checks against the `Pool` type and need `as any` casts. Step-2 RED mechanics: a bare `MagicMock()` `_db` would go RED via an await-on-MagicMock `TypeError` rather than the asserted abort-miss, so the RED test mocked the full happy path so the pre-guard tree runs to completion and cleanly reports DID NOT RAISE. The `emitAlert` guard keeps the optional-chain `req.title?.trim()` deliberately, even though proto3's `""` default means `title`/`body` can never be `undefined`: cheap defense so an impossible `undefined` yields `INVALID_ARGUMENT`, not an uncaught `TypeError`→`UNKNOWN` — noted so a future reader doesn't read the `?.` on a non-nullable proto3 string as cargo-culting.
 
-### Decisions
+**Permanent deviations**: None — shipped guards matched design exactly. The one design-time risk (that de-cloaking notify might surface latent red, as config's identical flip had "1 fails, 1 hangs") did not materialize: all 14 pre-existing notify cases passed green on first compiled run. Recorded only so a future reader doesn't assume the clean de-cloak means the cases were never real.
 
-- F-9 uses the inverted-range form `not (0.0 <= c <= 1.0)` (not `c<0 or c>1`) specifically to reject
-  NaN; `0.0` intentionally still passes (plain-scalar-double unset sentinel → NULL at `:692`).
-- F-10 uses `.trim()` — a deliberate widening of AC-2 ("empty") to cover whitespace-only, justified
-  by the "delivered blank" harm.
-- notify flips to the compile-first harness (mirrors config + feature 092) — mandatory for a real RED.
+**Cross-feature signal**: The notify strip-types → compile-first flip has now been forced by three separate features (074 originating the trap, 092, 094), remediated piecemeal one Node service per feature. Generalizable exposure: any Node service whose impl uses parameter-property constructors and still runs `--experimental-strip-types` may be shipping a never-executing suite.
 
-### Open Threads
+**Deferred follow-ons**: Making a genuine zero-conviction representable requires a proto3-presence change on `ExternalSignal.conviction`; out of scope, tracked in report F-9. Until then `0.0` == unset == NULL is a load-bearing invariant. `emit_alert` authorization gating is feature 092 (F-11), not this fix.
 
-- [ ] 092↔094 notify-harness collision (`package.json` + `notifyServiceImpl.test.ts`) — reconcile at
-  rebase; record in merge-order.md; confirm at `/sdd-review impl-spec`. Target: Step 2 + merge-order.
-- [ ] notify de-cloak may surface latent red in never-run existing cases — green them first in Step 2;
-  escalate as a P-03 deviation if remediation balloons. Target: Step 2.
+**Ledger entries written**: insights.md (1), fails.md (1) — see the 2026-08-19 `fix-mcp-server-input-validation` entries. (A second insight — the strip-types→compile-first flip — was a DUP of the 074 fails.md lesson and skipped.)
 
-## Session 2026-08-02 — sdd-spec
+**Runtime-invariant recommendations (→ /context-constitution)**: NOTIFY-* / PLAT test-infra candidate for `docs/context-constitution-findings.md` — "a Node service test suite running under `node --experimental-strip-types` silently becomes a zero-assertion no-op when the implementation uses parameter-property constructors, especially if the test wraps imports in `try/catch` + `if (!impl) return`. notify was remediated by 094; audit identity and ledger for the same latent pattern" (may partially exist via the 074 findings entry — verify before adding).
 
-- Generated implementation-spec.md with 5 steps. Status → implementation-ready.
-- Step model: 2 service/test pairs (ingest F-9, notify F-10) + 1 docs step; ingest and notify
-  are fully decoupled (either pair may land first).
-- Key codebase findings (all verified this session, not from recon alone):
-  - F-9 guard inserts between `servicer.py:672` (direction-guard return) and `:674` (FR-3 comment);
-    NULL-sentinel at `:692` and DB CHECK (`001_newsletter_signals.up.sql:14`) left untouched. Inverted
-    range form `not (0.0 <= c <= 1.0)` mandated (rejects NaN; naive form would store NaN as NULL).
-  - F-9 test mirrors `TestIngestSignalRegistryValidation` (`:822`, real proto + abort AsyncMock) and
-    the green path `test_proceeds_when_source_registered` (`:848`, fetchrow side_effect
-    `[{"slug":...},{"id":42}]` + mocked `_ledger`).
-  - F-10 guard inserts after `notifyServiceImpl.ts:31` (`const req = call.request;`); numeric `code:3`
-    mirrors `identityServiceImpl.ts:52`; `.trim()` widens to whitespace-only (recorded).
-  - notify harness flip is mandatory (074 trap): `package.json:12-13` strip-types + param-property
-    constructor `:21-24` = zero-assertion green suite that never runs. Flip to config's byte-identical
-    compile-first script (`config/package.json:12-13`); notify tsconfig already emits `dist/__tests__`.
-    Step 4 enumerates all 13 pre-existing cases to green (de-cloak) before the RED empty-field case.
-  - Docs surfaces confirmed: `tools.py:215-216` (ingest_signal) + `:274-275` (emit_alert) stale
-    docstrings; `mcp-tools.md:200/:216-217/:244`; merge-order.md 092↔094 rebase note.
-- Neither `xstockstrat-ingest/CLAUDE.md` nor `xstockstrat-notify/CLAUDE.md` documents the input-
-  validation surface (grep confirmed), so no service CLAUDE.md edit is in scope — matches design.md's
-  change-surface list (tools.py + mcp-tools.md + merge-order.md only).
-
-### Open Threads
-
-- [ ] 092↔094 notify-harness collision — recorded as a Step 5 merge-order.md entry (rebase-only,
-  identical-intent flip; union of the two added test cases). `/sdd-review impl-spec` overlap scan must confirm.
-- [ ] notify de-cloak latent red — Step 4 greens all pre-existing cases before the RED case; escalate
-  as a P-03 deviation if remediation balloons.
-
-## Session 2026-08-02 — sdd-review impl-spec + sdd-execute
-
-- **Review (Mode B, advisory):** criteria pass = PASS WITH WARNINGS (0 failures); overlap scan =
-  no FAIL-class collision (no proto/migration/config), only rebase-only source-file unions with 085
-  (`tools.py` wholesale rewrite vs 094's two docstrings) and 092 (notify harness + adjacent emitAlert
-  guard; ingest servicer.py different handlers). Folded in: Step 2 clean-RED mocking; merge-order note
-  names the notify files + the 085 `tools.py` overlap.
-- **Execute — all 5 steps done, RED-first, both suites green:**
-  - Step 1/2 (ingest F-9): added the inverted-range guard `not (0.0 <= signal.conviction <= 1.0)` in
-    `IngestSignal` after the direction guard. RED demonstrated (3 abort cases `1.5`/`-0.1`/`NaN` →
-    DID NOT RAISE pre-guard; GREEN after). Full ingest suite **155 passed**, ruff clean, cov 76%.
-  - Step 3/4 (notify F-10): flipped `package.json` to compile-first, rewrote `notifyServiceImpl.test.ts`
-    to static imports (removed the lazy try/catch + all `if (!X) return` skip-guards), de-cloaked the
-    suite. **De-cloak surfaced NO latent red** — all 14 pre-existing cases passed green on first
-    compiled run (contra config's "1 fails/1 hangs"); no P-03 deviation needed (D-2). Added the
-    empty/whitespace title-body guard `if (!req.title?.trim() || !req.body?.trim()) callback({code:3})`.
-    RED demonstrated (4 empty-field cases failed pre-guard while all pre-existing passed; GREEN after).
-    Full notify suite **19 passed**, lint 0 errors, cov 85%.
-  - Step 5 (docs): synced both `tools.py` docstrings (`ingest_signal`, `emit_alert`), the `mcp-tools.md`
-    conviction row + both error tables + emit_alert prose, and added the 085/092↔094 rebase note to
-    `merge-order.md`. ruff clean.
-- **Deviations:** D-1 (Step 2 clean-RED mocking), D-2 (clean de-cloak, no latent red), D-3 (inline pool
-  `as any` cast under tsc) — see implementation-spec.md § Deviation Log. None changed scope.
-- **context-scrubber:** the context-forge/context-scrubber plugin is not available in this session
-  (no `/context-scrubber` skill), so the teardown scan of the touched docs (`mcp-tools.md`,
-  `merge-order.md`) could not run — noted in the PR body per root CLAUDE.md teardown.
-- Status: implementation-ready → code-completed.
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 1d97c6c. (Surviving triage report `docs/reports/2026-08-01-mcp-tools-alignment-triage.md` independently holds the reproduction detail.)

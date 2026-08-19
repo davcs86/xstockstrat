@@ -3,6 +3,7 @@
 **Development Branch**: `claude/phase-7-jnruyq` (harness-assigned; PR into `main-dev`)
 **Created**: 2026-05-26
 **Last Updated**: 2026-06-09
+**Archived**: 2026-08-19
 
 ---
 
@@ -13,6 +14,7 @@
 | 2026-05-26 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-30 | `draft` → `draft` | /sdd-story | Product spec regenerated fresh; open questions left for review |
 | 2026-06-09 | `draft` → `code-completed` | harness (`implement phase 7`) | Activation verified; agent telemetry gap filled; dashboards + alerts + docs delivered. Open questions resolved with documented defaults (see implementation-spec.md / phase7-deviations.md). |
+| 2026-08-19 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 2 specs |
 
 ---
 

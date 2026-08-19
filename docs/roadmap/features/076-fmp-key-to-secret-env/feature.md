@@ -7,6 +7,7 @@ harness-designated branch `claude/runs-073-074-sdd-6wtwal` → `main-dev`)
 **Severity**: SEV-2
 **Created**: 2026-07-29
 **Last Updated**: 2026-07-29
+**Archived**: 2026-08-19
 
 ---
 
@@ -15,6 +16,7 @@ harness-designated branch `claude/runs-073-074-sdd-6wtwal` → `main-dev`)
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-07-29 | `bug-reported` → `code-completed` | direct fix | Surfaced while resolving feature 073's secrets blocker; user decided to use the existing Alpaca/IBKR secret mechanism rather than permit plaintext in config. |
+| 2026-08-19 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 1 spec |
 
 ---
 
