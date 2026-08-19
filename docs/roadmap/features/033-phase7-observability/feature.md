@@ -2,7 +2,9 @@
 
 **Development Branch**: `claude/phase-7-jnruyq` (harness-assigned; PR into `main-dev`)
 **Created**: 2026-05-26
-**Last Updated**: 2026-06-09
+**Last Updated**: 2026-08-19
+**Committed to main**: 1d97c6c78caa532a24265dae2fa79c674b3b69dd
+**Launched date**: 2026-08-19
 **Archived**: 2026-08-19
 
 ---
@@ -14,6 +16,7 @@
 | 2026-05-26 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-30 | `draft` → `draft` | /sdd-story | Product spec regenerated fresh; open questions left for review |
 | 2026-06-09 | `draft` → `code-completed` | harness (`implement phase 7`) | Activation verified; agent telemetry gap filled; dashboards + alerts + docs delivered. Open questions resolved with documented defaults (see implementation-spec.md / phase7-deviations.md). |
+| 2026-08-19 | `code-completed` → `launched` | status reconciliation | Reconciled to launched: code in production (main==main-dev @ 1d97c6c7); CI status automation (ci-validate-feature-status.yml) missed the slug grep-match. code verified in production (services/xstockstrat-agent/app/telemetry.py, packages/otel/dashboards, packages/otel/alerts) — harness branch claude/phase-7-jnruyq. |
 | 2026-08-19 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 2 specs |
 
 ---

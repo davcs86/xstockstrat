@@ -6,7 +6,9 @@ harness-designated branch `claude/runs-073-074-sdd-6wtwal` → `main-dev`)
 **GitHub Issue**: n/a — GitHub Issues are disabled on `davcs86/xstockstrat`
 **Severity**: SEV-2
 **Created**: 2026-07-29
-**Last Updated**: 2026-07-29
+**Last Updated**: 2026-08-19
+**Committed to main**: 1d97c6c78caa532a24265dae2fa79c674b3b69dd
+**Launched date**: 2026-08-19
 **Archived**: 2026-08-19
 
 ---
@@ -16,6 +18,7 @@ harness-designated branch `claude/runs-073-074-sdd-6wtwal` → `main-dev`)
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-07-29 | `bug-reported` → `code-completed` | direct fix | Surfaced while resolving feature 073's secrets blocker; user decided to use the existing Alpaca/IBKR secret mechanism rather than permit plaintext in config. |
+| 2026-08-19 | `code-completed` → `launched` | status reconciliation | Reconciled to launched: code in production (main==main-dev @ 1d97c6c7); CI status automation (ci-validate-feature-status.yml) missed the slug grep-match. PR #818. |
 | 2026-08-19 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 1 spec |
 
 ---
