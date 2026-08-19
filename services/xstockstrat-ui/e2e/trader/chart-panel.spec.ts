@@ -202,3 +202,62 @@ test.describe('ChartPanel component — trading dashboard', () => {
     await expect.poll(() => capturedBody?.timeframeEnum, { timeout: 10000 }).toBe('TIMEFRAME_1DAY');
   });
 });
+
+test.describe('ChartPanel — daily auto-refresh (feature 140, FR-1)', () => {
+  test('re-fetches GetBars after the daily poll interval elapses', async ({ page }) => {
+    // The default timeframe is 1Day. Before feature 140 the daily view never auto-refreshed, so a
+    // left-open chart went stale. Virtualize the clock (before navigation, so the component's
+    // setInterval is faked) and assert a second GetBars fires after the 5-min poll interval, with
+    // no manual reload. Uses a stub GetBars so the assertion is on call COUNT, not data.
+    await page.clock.install();
+    await addAuthCookie(page);
+
+    let getBarsCalls = 0;
+    await page.route('**/xstockstrat.marketdata.v1.MarketDataService/GetBars', async (route) => {
+      getBarsCalls++;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          bars: [
+            {
+              symbol: 'AAPL',
+              open: 188.0,
+              high: 190.5,
+              low: 187.2,
+              close: 189.8,
+              volume: '45000000',
+              vwap: 189.1,
+              tradeCount: 120000,
+              timeframe: '1d',
+              timeframeEnum: 'TIMEFRAME_1DAY',
+              source: 'alpaca',
+            },
+          ],
+        }),
+      });
+    });
+
+    await page.goto('/trader/');
+
+    // Wait for the chart series to finish its async lightweight-charts import. Until the series
+    // exists, ChartPanel.fetchBars early-returns, and because seriesRef is NOT an effect dependency,
+    // a mount fetch that raced ahead of the series is dropped and never retried — so we deliberately
+    // do NOT assert on the initial mount fetch (it may or may not have landed). We assert on the
+    // poll-driven fetch below, which fires once the series is ready.
+    await expect(
+      page.locator('[data-testid="chart-container"] .tv-lightweight-charts'),
+    ).toBeVisible({ timeout: 15000 });
+
+    // The Combobox only renders once ListAssets resolves and a symbol is selected — the same state
+    // change that registers the daily-poll interval effect. Waiting for it makes the interval's
+    // presence deterministic before we advance the (virtualized) clock.
+    await expect(page.getByLabel('Chart symbol')).toBeVisible({ timeout: 10000 });
+    const beforePoll = getBarsCalls;
+
+    // Advance past the 5-minute daily poll interval (DAILY_POLL_MS = 300_000ms). The interval fires
+    // fetchBars with the series now ready, so a fresh GetBars lands with no manual reload.
+    await page.clock.fastForward('05:10');
+    await expect.poll(() => getBarsCalls, { timeout: 10000 }).toBeGreaterThan(beforePoll);
+  });
+});

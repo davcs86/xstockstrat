@@ -1450,3 +1450,25 @@ ambiguity is logged here).
 - **Mistake**: Two recurring UI-layout traps hit at once when grouping stacked sections into responsive panel clusters (desktop columns / mobile tabbed panel). (1) An `IntersectionObserver` "topmost section intersecting a thin band near the top" scroll-spy silently depends on the page being **taller** than the offset line + the last section — column-grouping shortens the page, so the last section can never scroll under the offset line, and a band observer both fails to highlight it and steals `active` back from a deep-link to it. (2) CSS grid items default to `min-width: auto`, so a wide child (a stat grid / an orders table) forces horizontal page overflow — a block layout doesn't, so the regression appears only after wrapping panels in a `grid`. (3) New mobile-tab labels (`Opportunity`, `Place order`) case-insensitively substring-match existing bare `getByText('…').first()` gates in **sibling** specs; because the `md:hidden` tab bar renders before the columns, `.first()` resolves the hidden tab and fails `toBeVisible` at the desktop viewport.
 - **Evidence**: `docs/roadmap/features/139-symbol-page-section-nav/implementation-spec.md` Deviation Log D-5/D-6; `services/xstockstrat-ui/src/components/trader/SymbolSectionNav.tsx` (scroll-spy rewritten to a scroll-position read + bottom-of-page rule), `SymbolPanelGroup.tsx` (`min-w-0` on grid items); `e2e/trader/position-detail.spec.ts:109` + `order-parity.spec.ts:155` (gates scoped to `heading` role / the `<form>` field). All three caught by re-running the **broad** trader+insights+mobile e2e scope, not the changed files' narrow run.
 - **Rule it implies**: (a) A band-based `IntersectionObserver` scroll-spy is only correct on a page tall enough to scroll every section (incl. the last) under the offset line; if a layout change can shorten the page, use a scroll-position read ("last section whose top passed the offset line" + an explicit bottom-of-page rule for the final section) instead. (b) Any panel wrapped as a CSS grid item needs `min-w-0` to keep a wide child from causing page overflow (re-check `mobile-overflow.spec.ts` at 390px). (c) A new tab/label string can collide **case-insensitively** with bare `getByText().first()` in sibling specs — grep the label across all specs and scope gates to a role/heading/form, and always re-run the broad e2e scope after adding user-visible labels.
+
+### 2026-08-18 — 140-chart-data-freshness — assumption
+- **Mistake**: The feature (and the initial investigation, and design round 1) framed "charts never
+  show the latest bars" as an *ingestion-freshness* problem (stale ingester, empty-only live fallback)
+  — the true root cause is a **read-path** bug that only surfaced in design round 2: `QueryBars`
+  cursors from `start` and returns `ORDER BY time ASC LIMIT pageSize` (`marketdata_repo.go:78,90`), so
+  the first page is the **oldest** bars of a window sized `pageSize × interval × 3`
+  (`marketdata_service.go:228-238`). Any symbol with more stored `1d` bars than one page renders its
+  *oldest* page; the UI fetches only page 1 (ignores `nextToken`). Perfect ingestion would not have
+  fixed the symptom. Same "latest ≠ page 1 of an ASC-from-start query" mistake silently mis-fed the
+  analysis **screener** (`screener.py:198-206`), which also passes no range and evaluated technicals on
+  the oldest ~500 bars. The live loop escaped only because it passes an explicit `_LOOKBACK_DAYS=365`
+  range that keeps the bar count under `pageSize`.
+- **Evidence**: `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go:74-91`;
+  `services/xstockstrat-marketdata/internal/service/marketdata_service.go:158-178,228-238`;
+  `services/xstockstrat-analysis/app/services/screener.py:198-206`; feature 140 design.md § ROOT CAUSE
+  / FR-7, context.md round-2.
+- **Rule it implies**: when a caller wants "the latest N bars/rows," verify the read actually returns
+  the newest N — an `ORDER BY <time> ASC LIMIT N` from a wide default window returns the OLDEST N. For
+  a "most-recent" read, order DESC + LIMIT then reverse, or size the window to N; and treat a
+  paginated read whose consumer only ever fetches page 1 as a red flag. Before attributing a staleness
+  symptom to the *write/ingest* side, confirm the *read* returns what the consumer assumes.

@@ -108,6 +108,24 @@ func (r *MarketDataRepo) QueryBars(ctx context.Context, symbol, timeframe string
 	}
 	defer rows.Close()
 
+	bars, err := scanBars(rows)
+	if err != nil {
+		return nil, "", err
+	}
+
+	nextToken := ""
+	if len(bars) > pageSize {
+		last := bars[pageSize]
+		nextToken = last.Time.AsTime().Format(time.RFC3339Nano)
+		bars = bars[:pageSize]
+	}
+	return bars, nextToken, nil
+}
+
+// scanBars materializes OHLCV rows into Bar protos in the order the query returned them. Shared by
+// QueryBars (oldest-page-forward pagination) and QueryRecentBars (newest-page) so the row→proto
+// mapping lives in exactly one place (DRY guard rail).
+func scanBars(rows pgx.Rows) ([]*marketdatav1.Bar, error) {
 	var bars []*marketdatav1.Bar
 	for rows.Next() {
 		var (
@@ -120,7 +138,7 @@ func (r *MarketDataRepo) QueryBars(ctx context.Context, symbol, timeframe string
 			source                 string
 		)
 		if err := rows.Scan(&t, &sym, &tf, &open, &high, &low, &close, &volume, &vwap, &tradeCount, &source); err != nil {
-			return nil, "", fmt.Errorf("scan bar: %w", err)
+			return nil, fmt.Errorf("scan bar: %w", err)
 		}
 		bars = append(bars, &marketdatav1.Bar{
 			Time:          timestamppb.New(t),
@@ -138,16 +156,40 @@ func (r *MarketDataRepo) QueryBars(ctx context.Context, symbol, timeframe string
 		})
 	}
 	if rows.Err() != nil {
-		return nil, "", rows.Err()
+		return nil, rows.Err()
 	}
+	return bars, nil
+}
 
-	nextToken := ""
-	if len(bars) > pageSize {
-		last := bars[pageSize]
-		nextToken = last.Time.AsTime().Format(time.RFC3339Nano)
-		bars = bars[:pageSize]
+// QueryRecentBars returns the most-recent `pageSize` bars for a symbol/timeframe at or before `end`,
+// in ASCENDING time order (the order lightweight-charts requires for display). Unlike QueryBars —
+// which pages the OLDEST bars forward from a `start` cursor and, for an oversized default window,
+// returns ancient bars — this is the read a live chart/screener actually wants: "the latest N bars,"
+// independent of how much history is stored. No pagination token: these are already the newest bars.
+func (r *MarketDataRepo) QueryRecentBars(ctx context.Context, symbol, timeframe string, end time.Time, pageSize int) ([]*marketdatav1.Bar, error) {
+	if pageSize <= 0 || pageSize > 5000 {
+		pageSize = 500
 	}
-	return bars, nextToken, nil
+	const q = `
+		SELECT time, symbol, timeframe, open, high, low, close, volume, vwap, trade_count, source
+		FROM marketdata.ohlcv
+		WHERE symbol=$1 AND timeframe=$2 AND time <= $3
+		ORDER BY time DESC
+		LIMIT $4`
+	rows, err := r.pool.Query(ctx, q, symbol, timeframe, end, pageSize)
+	if err != nil {
+		return nil, fmt.Errorf("query recent bars: %w", err)
+	}
+	defer rows.Close()
+	bars, err := scanBars(rows)
+	if err != nil {
+		return nil, err
+	}
+	// Reverse newest-first → oldest-first (ascending) for chart display.
+	for i, j := 0, len(bars)-1; i < j; i, j = i+1, j-1 {
+		bars[i], bars[j] = bars[j], bars[i]
+	}
+	return bars, nil
 }
 
 // GetCoverage returns the earliest/latest stored bar timestamps and the bar count for a
