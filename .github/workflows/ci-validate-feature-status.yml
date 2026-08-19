@@ -47,25 +47,28 @@ jobs:
             echo "✓ Detected promotion PR merge: $CURRENT_SHA"
             echo "Previous commit: $PREVIOUS_SHA"
 
-            # Find all features at code-completed (single bulk egrep over status.md — see
-            # docs/roadmap/features/CLAUDE.md § Bulk Status Reads, Case 1) and check if they're
-            # in the promotion commits
+            # A promotion PR merges ALL of main-dev into main, so EVERY feature at
+            # `code-completed` is — by definition — now in production and must flip to
+            # `launched`. Select them by the canonical status.md (single source of truth;
+            # single bulk egrep — see docs/roadmap/features/CLAUDE.md § Bulk Status Reads,
+            # Case 1).
+            #
+            # Do NOT filter by matching the feature slug against promotion commit messages.
+            # The previous `git log $PREVIOUS_SHA..$CURRENT_SHA --grep="$slug"` filter
+            # permanently stranded any feature whose squash-merge message omitted its slug
+            # (e.g. "feature(140): daily chart freshness" vs slug "chart-data-freshness"),
+            # leaving it stuck at `code-completed` forever. Keying off status.md instead is
+            # both correct (promotion carries the whole branch) and self-healing: a feature
+            # stranded by an earlier run is picked up on the next promotion. This also
+            # matches promote.yml, whose changelog already lists ALL code-completed features
+            # as "included in this promotion".
             PROMOTED_FEATURES=()
 
             while IFS= read -r status_file; do
-              if [ -z "$status_file" ]; then continue; fi
-
+              [ -z "$status_file" ] && continue
               feature_dir=$(dirname "$status_file")
-              feature_name=$(basename "$feature_dir")
-
-              # Check if any commits between PREVIOUS_SHA and CURRENT_SHA match this feature
-              # by looking for the feature branch or feature name in the commit log
-              feature_slug=$(echo "$feature_name" | sed 's/^[0-9]\+-//')
-
-              if git log $PREVIOUS_SHA..$CURRENT_SHA --oneline --all-match --grep="$feature_slug" | grep -q .; then
-                PROMOTED_FEATURES+=("$feature_dir")
-                echo "  → Detected promoted feature: $feature_name"
-              fi
+              PROMOTED_FEATURES+=("$feature_dir")
+              echo "  → Promoting feature (code-completed → launched): $(basename "$feature_dir")"
             done < <(egrep -l '^code-completed$' docs/roadmap/features/*/status.md 2>/dev/null)
 
             # Update each promoted feature's status
