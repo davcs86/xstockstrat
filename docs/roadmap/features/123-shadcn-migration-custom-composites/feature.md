@@ -2,7 +2,9 @@
 
 **Development Branch**: `feature/shadcn-migration-custom-composites`
 **Created**: 2026-08-08
-**Last Updated**: 2026-08-09
+**Last Updated**: 2026-08-19
+**Committed to main**: 1d97c6c78caa532a24265dae2fa79c674b3b69dd
+**Launched date**: 2026-08-19
 
 ---
 
@@ -19,6 +21,7 @@
 | 2026-08-09 | `implementation-ready` → `in-progress` | /sdd-execute sequential | Branch created (`feature/shadcn-migration-custom-composites`, stacked on `feature/shadcn-migration-low-confidence`). A live confirmation attempt for FR-9 (the one remaining unconfirmed item) did not yield an interactive answer in this execute session; execution proceeds on `design.md`'s own already-adversarially-vetted Chosen Approach #9, with Step 12's own live-registry re-verification as the concrete mitigation (see Next Action note above). Execution begins against all 15 steps. |
 | 2026-08-09 | `in-progress` → `code-completed` | /sdd-execute sequential | All 15 steps done. Step 13 (FR-10 Step 1 restructure) found a genuine `Questionnaire.Next`/`Previous` single-item-visibility mismatch (resolved via a plain-`Button` `IdentityNav` helper) and a pre-existing latent edit-mode bug the restructuring surfaced (hyphenated legacy strategy IDs permanently blocking Next — fixed, scoped to create-mode only); captured a genuine red state (10 failed/8 passed) before rewriting the e2e spec's Step-1 click sequencing, then 23/23 green. Step 14 (FR-11 step indicator) found the identical registered-item-architecture mismatch applies to `Questionnaire.Progress`/outer nav too — resolved via the implementation spec's own built-in escape hatch (Progress adopted via a zero-item Root driven entirely by `children`; outer nav Buttons kept, no shell wrap needed). Step 15's whole-feature pass: `pnpm lint`/`build` clean, 43/43 across the three required e2e specs, plus a temporary (never-committed) Playwright script standing in for the manual-verification checklist on the four files with no e2e coverage — all passed, no defects found. Draft PR [#914](https://github.com/davcs86/xstockstrat/pull/914) ready to flip to ready-for-review. |
 
+| 2026-08-19 | `code-completed` → `launched` | status reconciliation | Reconciled to launched: code in production (main==main-dev @ 1d97c6c7); CI status automation (ci-validate-feature-status.yml) missed the slug grep-match. PR #917. |
 ---
 
 ## Artifacts

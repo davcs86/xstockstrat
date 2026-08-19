@@ -2,7 +2,9 @@
 
 **Development Branch**: `claude/mcp-2-upgrade-e3v1uy` (harness-assigned; see context.md for the branch-handling deviation from the standard `feature/mcp-python-sdk-v2-upgrade` model)
 **Created**: 2026-07-30
-**Last Updated**: 2026-07-30
+**Last Updated**: 2026-08-19
+**Committed to main**: 1d97c6c78caa532a24265dae2fa79c674b3b69dd
+**Launched date**: 2026-08-19
 
 ---
 
@@ -15,6 +17,7 @@
 | 2026-07-30 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps. Fresh live re-verification against `mcp==2.0.0` during this session found and corrected two factual errors in `design.md` (`server.get_tool()` does not exist; `MCPServer.call_tool()`'s return shape changed to `CallToolResult`) and one previously-uncaught production risk (`Server.streamable_http_app()` auto-enables a localhost-only DNS-rebinding Host-header check that would 421 every real request unless `transport_security` is passed explicitly). |
 | 2026-07-30 | `implementation-ready` → `code-completed` | /sdd-execute | All 5 steps implemented and verified (138 tests pass, 68% coverage, ruff clean, zero remaining `FastMCP` references outside the ledger). One additional stale reference found and fixed beyond the spec's own evidence (`tests/test_backtest_view.py:3`). Implemented directly on the harness-assigned branch `claude/mcp-2-upgrade-e3v1uy` rather than the standard `feature/<slug>` + per-step sub-branch model — see context.md and implementation-spec.md's Deviation Log. |
 
+| 2026-08-19 | `code-completed` → `launched` | status reconciliation | Reconciled to launched: code in production (main==main-dev @ 1d97c6c7); CI status automation (ci-validate-feature-status.yml) missed the slug grep-match. PR #819. |
 ---
 
 ## Artifacts

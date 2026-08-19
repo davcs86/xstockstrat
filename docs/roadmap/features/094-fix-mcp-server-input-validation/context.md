@@ -113,3 +113,12 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   (no `/context-scrubber` skill), so the teardown scan of the touched docs (`mcp-tools.md`,
   `merge-order.md`) could not run — noted in the PR body per root CLAUDE.md teardown.
 - Status: implementation-ready → code-completed.
+
+## Session 2026-08-19 (status reconciliation)
+
+- Feature was stalled at `code-completed` though its code is in production.
+- Root cause: `ci-validate-feature-status.yml` only flips a feature to `launched` when a
+  commit in the promotion delta matches the feature *slug* via `git log --grep`; this feature's
+  merge commit message did not contain the slug, so the automation skipped it.
+- Verified in production: main == main-dev @ 1d97c6c78caa532a24265dae2fa79c674b3b69dd. Merge reference: PR #852.
+- Status updated: `code-completed` → `launched`; Launched date: 2026-08-19.

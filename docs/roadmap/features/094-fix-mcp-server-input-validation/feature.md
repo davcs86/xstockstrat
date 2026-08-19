@@ -5,7 +5,9 @@
 **Source Report**: docs/reports/2026-08-01-mcp-tools-alignment-triage.md (F-9 (code), F-10 (notify field validation))
 **Severity**: SEV-3
 **Created**: 2026-08-02
-**Last Updated**: 2026-08-02
+**Last Updated**: 2026-08-19
+**Committed to main**: 1d97c6c78caa532a24265dae2fa79c674b3b69dd
+**Launched date**: 2026-08-19
 
 ---
 
@@ -18,6 +20,7 @@
 | 2026-08-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
 | 2026-08-02 | `implementation-ready` → `code-completed` | /sdd-execute | All 5 steps done RED-first: ingest F-9 conviction guard (155 tests green), notify F-10 empty-field guard + compile-first de-cloak (19 tests green, no latent red), docstrings/mcp-tools.md/merge-order updated |
 
+| 2026-08-19 | `code-completed` → `launched` | status reconciliation | Reconciled to launched: code in production (main==main-dev @ 1d97c6c7); CI status automation (ci-validate-feature-status.yml) missed the slug grep-match. PR #852. |
 ---
 
 ## Reviewers

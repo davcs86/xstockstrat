@@ -76,7 +76,7 @@ function BindingRowControls({
       ? liveStrategies
       : [...liveStrategies, ...strategies.filter((s) => s.strategyId === strategyId)];
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex shrink-0 items-center gap-2">
       <Select
         value={strategyId || UNBOUND}
         onValueChange={(v) => onRebind(symbol, toApiStrategyId(v))}
@@ -201,8 +201,8 @@ export function WatchlistReadiness({
                   className="flex items-center gap-3 px-3 py-2 text-xs"
                   data-testid={`readiness-row-${binding.symbol}`}
                 >
-                  <span className="w-14 font-mono font-semibold">{r.symbol}</span>
-                  <div className="flex items-center gap-2">
+                  <span className="w-14 shrink-0 font-mono font-semibold">{r.symbol}</span>
+                  <div className="flex shrink-0 items-center gap-2">
                     <Progress
                       value={Math.round(r.conviction * 100)}
                       className="h-1.5 w-20"
@@ -221,12 +221,16 @@ export function WatchlistReadiness({
                       {stateLabel(r)}
                     </span>
                   </div>
-                  {queued && (
-                    <Badge variant="info" data-testid="in-queue">
-                      in queue
-                    </Badge>
-                  )}
-                  <span className="ml-auto truncate font-mono text-muted-foreground">
+                  {/* Reserve the badge column on every row so the blocking-condition and control
+                      columns start at the same x whether or not this symbol is in queue. */}
+                  <span className="w-20 shrink-0">
+                    {queued && (
+                      <Badge variant="info" data-testid="in-queue">
+                        in queue
+                      </Badge>
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">
                     {blockingCondition(r)}
                   </span>
                   <BindingRowControls
@@ -248,8 +252,11 @@ export function WatchlistReadiness({
               className="flex items-center gap-3 px-3 py-2 text-xs"
               data-testid={`readiness-row-${b.symbol}`}
             >
-              <span className="w-14 font-mono font-semibold">{b.symbol}</span>
-              <span className="text-muted-foreground/60" data-testid={`unbound-${b.symbol}`}>
+              <span className="w-14 shrink-0 font-mono font-semibold">{b.symbol}</span>
+              <span
+                className="min-w-0 flex-1 truncate text-muted-foreground/60"
+                data-testid={`unbound-${b.symbol}`}
+              >
                 not evaluated — bind a strategy
               </span>
               <BindingRowControls
