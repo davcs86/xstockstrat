@@ -1565,3 +1565,8 @@ ambiguity is logged here).
 - **Mistake**: a migration guard that hard-fails on an unset env var (`db-migrate.sh` `:?` on `SEED_USER_ID`) will break every local `docker compose up` on a fresh DB unless the compose service supplies a *concrete non-empty* default, not an empty pass-through. Also `Dockerfile.migrate` had no `gettext`/`envsubst`, and there was no existing envsubst invocation site to extend — the whole templating path was net-new.
 - **Evidence**: `docs/roadmap/features/133-strategy-user-ownership/context.md` § Archive Synthesis.
 - **Rule it implies**: when a migration adds a required env var, wire it into all three run sites (compose default, `.do/app*.yaml`, setup-env/.env.example) in the same step, and give local dev a concrete default so the migrator guard doesn't brick `docker compose up`.
+
+### 2026-08-19 — shadcn-datatable-migration — assumption
+- **Mistake**: `design.md` predicted the `LiveStrategiesPanel` keyboard defect as a "double-fire"; the RED test written to that prediction didn't reproduce it. The real mechanism (verified against the DOM spec) was a single *mis-fire* — the row's `preventDefault()` on the bubbling keydown cancels the button's native Enter-activation, so only the wrong handler fired. Writing the red test to the design's *assumed* failure mode masked the true one until it was investigated.
+- **Evidence**: `docs/roadmap/features/135-shadcn-datatable-migration/context.md` § Archive Synthesis (Step 26).
+- **Rule it implies**: when a design predicts a specific failure mechanism, validate the red test against the actual observed/DOM-spec behavior before trusting the prediction — a red that fails for a different reason is not a valid red.

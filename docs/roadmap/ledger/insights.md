@@ -1874,3 +1874,28 @@ reusing.
 - **Pattern**: when a security feature and a data-shaping feature both need one shared owner-scoped builder, thread identity only in the security feature and defer the builder to the feature that owns it — don't half-build a duplicate. 133 owner-keyed the live-loop state dicts + gated the RPCs but deferred the owner-`union(watchlist,held,signals)` firing universe to 132's `resolve_universe`, leaving AC-4 formally unmet by 133 (satisfied by 132) — an acceptable, recorded consequence.
 - **Evidence**: `docs/roadmap/features/133-strategy-user-ownership/context.md` § Archive Synthesis.
 - **Rule it implies**: a requirement whose mechanism belongs to a sibling feature should be explicitly deferred with a forward-pointer, not partially/duplicatively built; record which ACs are consequently satisfied elsewhere.
+
+### 2026-08-19 — signal-source-reliability-weight — reuse
+- **Pattern**: on a freshly-created local feature branch with no commits yet, `buf breaking --against .git#branch=<branch>` fails with a git-remote read error; the working CI-equivalent baseline is `--against .git#ref=HEAD,subdir=packages/proto`.
+- **Evidence**: `docs/roadmap/features/134-signal-source-reliability-weight/context.md` § Archive Synthesis (Step 1, 2026-08-15).
+- **Rule it implies**: document the HEAD-ref `buf breaking` form for pre-first-commit branches in the proto-versioning runbook (advisory, not Constitution-worthy).
+
+### 2026-08-19 — signal-source-reliability-weight — ordering
+- **Pattern**: the `merge-order.md` "renumber the later one" numbering-collision rule resolves by *which colliding feature is already merged to `main-dev`*, not by which `/sdd-story` ran first — here the earlier-storied feature was renumbered to 134 because the feature already merged to trunk held the lower number uncontested.
+- **Evidence**: `docs/roadmap/features/134-signal-source-reliability-weight/context.md` § Archive Synthesis (2026-08-14T07:00:00Z).
+- **Rule it implies**: interpret the numbering-collision rule against trunk-merge state, not `/sdd-story` timestamps (candidate clarification to `feature-workflow.md` § Feature Numbering).
+
+### 2026-08-19 — shadcn-datatable-migration — reuse
+- **Pattern**: when migrating shadcn `Table`-primitive sites to a `ColumnDef`-driven `DataTable`, shared per-cell helpers that return a full `<TableCell>` cannot be reused as a `ColumnDef.cell` (nests `<td>` in `<td>`). Reuse only bare-content exports (badges, inlined link JSX); the full-`<TableCell>` wrappers become dead code and should be removed in the sweep step.
+- **Evidence**: `docs/roadmap/features/135-shadcn-datatable-migration/context.md` § Archive Synthesis (Steps 23, 27, 33; `orderShared.tsx`).
+- **Rule it implies**: expose cell *content* separately from cell *containers* so both the primitive and the composite can consume it; grep for orphaned `*Cell` wrappers after a table migration.
+
+### 2026-08-19 — shadcn-datatable-migration — design
+- **Pattern**: a shared composite that sets `role="button"` on interactive rows overrides the native `row` ARIA role, silently breaking every `getByRole('row', …)` e2e locator on migrated tables; migrate those locators to `getByRole('button', …)`, and disambiguate same-route duplicate headers with a `tableTestId` rather than role/name text tricks.
+- **Evidence**: `docs/roadmap/features/135-shadcn-datatable-migration/context.md` § Archive Synthesis (Steps 28, 30).
+- **Rule it implies**: when a UI composite reassigns a semantic ARIA role, treat existing role-based test locators as a required migration surface, not incidental.
+
+### 2026-08-19 — shadcn-datatable-migration — reuse
+- **Pattern**: migrating a table onto a `ColumnDef`-driven composite makes every cell render independently, so per-row shared state can't survive: a wrapper that fetches once (`useStrategyAnalytics(strategyId)` read across 6 cells) becomes 6 per-cell calls relying on React Query key-dedup to stay one round-trip, and a dynamic per-row className must move onto an inner `<span>` (the composite's `meta.className` is static-per-column, no per-row hook by design).
+- **Evidence**: `docs/roadmap/features/135-shadcn-datatable-migration/context.md` § Archive Synthesis (Step 11; Step 29 deviation).
+- **Rule it implies**: under a `ColumnDef` migration, re-express per-row shared state per-cell — lean on query-key dedup for a shared fetch and an inner `<span>` for a conditional class.
