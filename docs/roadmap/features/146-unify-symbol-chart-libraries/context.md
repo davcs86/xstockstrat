@@ -262,3 +262,12 @@
 - TDD: hover assertion in the red-first Step 8 e2e (CI). Local gates: tsc clean, eslint clean,
   unit suite 109/109.
 - Files modified: `src/components/trader/IndicatorPanels.tsx`.
+
+### Step 7 — Migrate ChartPanel.tsx to the v5 hook in lock-step [done]
+- No code change needed: ChartPanel uses only the hook's returned containerRef/seriesRef and never
+  called v4 addCandlestickSeries directly. Step 4's additive hook change carries the v5 migration +
+  token colors through automatically. Recorded as a Deviation Log entry (anticipated "modify" → no-op).
+- Verified: grep addCandlestickSeries → none; whole-app tsc --noEmit clean against v5. Its
+  `.tv-lightweight-charts` readiness (chart-panel.spec.ts) is preserved (v5 still emits it, confirmed
+  Step 4). Full green run in CI (Step 8).
+- Files modified: none (ChartPanel.tsx unchanged); Deviation Log + context only.

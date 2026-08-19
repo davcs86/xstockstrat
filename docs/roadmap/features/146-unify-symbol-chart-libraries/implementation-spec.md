@@ -418,7 +418,7 @@ grep -rn "subscribeCrosshairMove\|chart-crosshair-readout" src/components/trader
 
 ### Step 7 — service: Migrate `ChartPanel.tsx` (dashboard) to the v5 hook in lock-step
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/ChartPanel.tsx` — modify
@@ -602,3 +602,12 @@ so Steps 4-6 build against these exact names with **no deviation**:
   accepted by `lineSeries.setData([...])`, so gaps break the line with no fabricated `0` (FR-3).
 - Overlays preserved: `series.createPriceLine(options)` still exists (`:2541`) — FR-5 avg/stop lines.
 - `createChart(container, options)` unchanged (`:212`).
+
+### Step 7 — ChartPanel.tsx required no code edit (anticipated "modify" → no-op)
+`ChartPanel.tsx` consumes only the hook's returned `{ containerRef, seriesRef }` (`:26`) and calls
+`seriesRef.current.setData(mapBars(...))` (`:60`) — it never called the v4 `addCandlestickSeries`
+directly. Step 4's hook change was **additive** (added `chartRef`; kept `containerRef`/`seriesRef`),
+so the v5 `addSeries` migration + hex→token colors + `rightPriceScale.minimumWidth` flow through the
+hook with **zero source change** to ChartPanel. Verified: `grep addCandlestickSeries` → none; whole-app
+`tsc --noEmit` clean against v5. The dashboard chart is visually migrated (v5 + tokens) purely by
+inheriting the hook. No ChartPanel.tsx diff is staged for this step.
