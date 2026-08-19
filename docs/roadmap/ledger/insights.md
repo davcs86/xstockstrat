@@ -1771,3 +1771,26 @@ reusing.
   seeded"; contrast with the rejected effect-based seed.
 - **Rule it implies**: a precedence chain of read-only sources feeding one user-overridable selection is
   a derivation, not synchronized state; the only state is the override, defaulted `undefined`.
+
+### 2026-08-18 — 146-unify-symbol-chart-libraries — align charts on one engine, not two
+- **Insight**: To make two stacked charts share a time axis so a vertical at bar D lines up across all
+  of them (a hard "lines up" AC), put them on the SAME rendering engine driven by the SAME time array —
+  do not sync two different engines (e.g. lightweight-charts + recharts). Cross-engine tick algorithms
+  never align by construction (each maps time→x by its own rule), so the best you get is a tolerance.
+  Same-engine collapses the residual to a single bounded variable (per-instance price-scale/left-edge
+  width). On lightweight-charts specifically: native multi-pane (one chart, one time scale, one native
+  crosshair → true construction guarantee + shared tooltip for free) is a **v5** feature; on **v4** you
+  must run N synced chart instances (`subscribeVisibleLogicalRangeChange`) with a PINNED shared
+  price-scale width (`minimumWidth` is a floor, not a pin) plus an `isApplying` re-entrancy guard and
+  disposal-safe deregistration on teardown — a whole bug class the v5 upgrade removes. Canvas fills
+  aren't DOM-inspectable, so the "all colors are theme tokens" AC must be proven by a pure unit-tested
+  token→rgb resolver (oklch tokens need a probe-element `getComputedStyle().color` round-trip), and
+  "all series drawn" needs a `setData`-invoked-N-times/snapshot seam, not a component-authored
+  `data-series-count` attribute (that proves the prop, not the render).
+- **Evidence**: `docs/roadmap/features/146-unify-symbol-chart-libraries/design.md` (2-round debate; fork
+  (a) v5 chosen at the live human gate); `recon.md` (v4.2.0 has no pane API; `useCandlestickChart.ts:32-34`
+  flags the v5 `addSeries` rename).
+- **Rule it implies**: for a "charts share one aligned time axis" requirement, choose one engine and
+  prefer its native multi-pane; if the pinned version lacks panes, budget for the synced-instances bug
+  class (pinned width + re-entrancy + disposal guards) or the major-version upgrade — and verify canvas
+  correctness (tokens, drawn-series, monotonic time) off the DOM.

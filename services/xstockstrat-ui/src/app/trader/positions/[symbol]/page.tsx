@@ -9,6 +9,7 @@ import { usePosition, usePortfolio } from '@/hooks/usePortfolio';
 import { useOrders } from '@/hooks/useOrders';
 import { useCandlestickChart } from '@/hooks/useCandlestickChart';
 import { type Timeframe, TIMEFRAME_ENUM, mapBars } from '@/lib/chart';
+import { resolveChartColor } from '@/lib/chartColors';
 import { marketDataClient } from '@/lib/browserClients/marketDataClient';
 import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
 import { openR, fmtR, sideLabel } from '@/lib/positionRisk';
@@ -30,6 +31,7 @@ import { SignalReadiness } from '@/components/insights/SignalReadiness';
 import { StrategyPicker } from '@/components/insights/StrategyPicker';
 import { SymbolScreening } from '@/components/trader/SymbolScreening';
 import { IndicatorPanels } from '@/components/trader/IndicatorPanels';
+import type { IChartApi } from 'lightweight-charts';
 import { SymbolSectionNav, SECTION_SCROLL_MT } from '@/components/trader/SymbolSectionNav';
 import { SymbolPanelGroup, type SymbolPanel } from '@/components/trader/SymbolPanelGroup';
 import { cn } from '@/components/ui/utils';
@@ -113,7 +115,7 @@ function PositionDetailInner() {
   }, [orders]);
 
   // Candlestick chart (marketdata bars) with avg-cost / stop reference overlays.
-  const { containerRef, seriesRef } = useCandlestickChart(260);
+  const { containerRef, seriesRef, chartRef } = useCandlestickChart(260);
   const timeframe: Timeframe = '1Day';
   const [barsError, setBarsError] = useState<string | null>(null);
   // Retain the fetched bars' closes + times (feature 125, FR-6) so the indicator overlay panels
@@ -214,6 +216,8 @@ function PositionDetailInner() {
         const series = seriesRef.current;
         if (!series) return;
         series.setData(mapBars(res.bars));
+        // Fit the bars into the visible range (indicator panes re-fit the union when they load).
+        chartRef.current?.timeScale().fitContent();
         // Replace overlays (avg cost always; stop only when the position has a resting stop).
         for (const line of priceLinesRef.current) series.removePriceLine(line);
         priceLinesRef.current = [];
@@ -221,7 +225,7 @@ function PositionDetailInner() {
           priceLinesRef.current.push(
             series.createPriceLine({
               price: avg,
-              color: '#94a3b8',
+              color: resolveChartColor('--muted-foreground', 'gray'),
               lineWidth: 1,
               lineStyle: DASHED,
               axisLabelVisible: true,
@@ -233,7 +237,7 @@ function PositionDetailInner() {
           priceLinesRef.current.push(
             series.createPriceLine({
               price: stop,
-              color: '#e0787a',
+              color: resolveChartColor('--color-sell', 'red'),
               lineWidth: 1,
               lineStyle: DASHED,
               axisLabelVisible: true,
@@ -416,6 +420,8 @@ function PositionDetailInner() {
             onStrategyChange={handleStrategyChange}
             closes={barSeries.closes}
             times={barSeries.times}
+            chartRef={chartRef}
+            containerRef={containerRef}
           />
         </section>
 
@@ -516,7 +522,9 @@ function SymbolPriceChart({
       </CardHeader>
       <CardContent>
         {barsError && <p className="mb-2 text-xs text-destructive">{barsError}</p>}
-        <div ref={chartRef} className="w-full" style={{ height: 260 }} />
+        {/* Shared chart canvas: candlestick pane 0 + the indicator panes (feature 146). Uses
+            min-height so IndicatorPanels can grow it imperatively as panes are added. */}
+        <div ref={chartRef} className="w-full" style={{ minHeight: 260 }} />
         {(avg > 0 || hasStop) && (
           <div className="flex flex-wrap gap-4 pt-2 font-mono text-[11px] text-muted-foreground">
             {avg > 0 && (
@@ -1127,12 +1135,16 @@ function IndicatorSection({
   onStrategyChange,
   closes,
   times,
+  chartRef,
+  containerRef,
 }: {
   symbol: string;
   strategyId: string;
   onStrategyChange: (id: string) => void;
   closes: number[];
   times: IndicatorSeriesInput['times'];
+  chartRef: React.RefObject<IChartApi | null>;
+  containerRef: React.RefObject<HTMLDivElement | null>;
 }) {
   const { data: strategy, isLoading: strategyLoading } = useGetStrategy(strategyId || undefined);
   const hasComponents = (strategy?.components?.length ?? 0) > 0;
@@ -1161,7 +1173,14 @@ function IndicatorSection({
       </p>
     );
   } else {
-    body = <IndicatorPanels components={series!.components} />;
+    body = (
+      <IndicatorPanels
+        components={series!.components}
+        times={times}
+        chartRef={chartRef}
+        containerRef={containerRef}
+      />
+    );
   }
 
   return (

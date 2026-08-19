@@ -437,11 +437,30 @@ test.describe('Single Position page', () => {
     await expect(panels.getByText('macd')).toBeVisible();
     // The failed component surfaces its error, never a chart.
     await expect(page.getByText(/sandbox timeout/)).toBeVisible();
-    // All three named series of the macd component are drawn (value/signal/histogram) — no sub-series
-    // dropped (FR-12/P-03). The warm-up-head gaps are unset IndicatorValues (mapped to recharts null
-    // via `?? null`, connectNulls={false}), never a fabricated 0.0 — proven at the wire/handler layer
-    // by the analysis unit test (test_analysis_servicer.py::…none_maps_to_unset…).
-    await expect(page.getByTestId('indicator-panel').locator('.recharts-line')).toHaveCount(3);
+    // All three named series of the macd component are present (value/signal/histogram) — no
+    // sub-series dropped (FR-3/AC-3). Each is drawn as its own line on the macd PANE of the shared
+    // lightweight-charts v5 instance; canvas has no per-line DOM, so `data-series-count` is the DOM
+    // readiness seam and the crosshair readout below is the drawn-geometry backstop. The warm-up-head
+    // gaps are unset IndicatorValues (mapped to whitespace `{time}` points, never a fabricated 0.0) —
+    // proven at the wire layer by test_analysis_servicer.py::…none_maps_to_unset… and by the
+    // src/lib/indicatorChart unit test.
+    const macdPanel = page.getByTestId('indicator-panel');
+    await expect(macdPanel).toHaveAttribute('data-series-count', '3');
+    await expect(macdPanel).toHaveAttribute('data-series', /value.*signal.*histogram/);
+    // Price + indicators share ONE v5 chart instance — its readiness canvas class is present (the same
+    // signal chart-panel.spec.ts uses), now covering every pane.
+    const chart = page.locator('.tv-lightweight-charts').first();
+    await expect(chart).toBeVisible({ timeout: 30000 });
+    // Shared crosshair + unified tooltip (feature 146 Step 6): hovering the chart shows ONE combined
+    // readout of price + each indicator series at the hovered bar. Its presence (with a row per added
+    // line series) is the proof the sub-series were actually drawn onto the chart, not just declared.
+    // Hover a point inside the top (price) pane plot area. The chart fits its content, so a plot-area
+    // hover lands on the drawn bars; the Magnet crosshair (mode 1) yields a time and the readout renders.
+    await chart.hover({ position: { x: 200, y: 40 } });
+    const readout = page.getByTestId('chart-crosshair-readout');
+    await expect(readout).toBeVisible({ timeout: 10000 });
+    await expect(readout).toContainText('price');
+    await expect(readout).toContainText('macd.value');
   });
 
   test('the indicator panels show a no-data state (and skip the RPC) when no strategy resolves (FR-6)', async ({
