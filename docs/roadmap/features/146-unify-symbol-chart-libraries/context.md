@@ -217,3 +217,18 @@
   chartColors.ts shows 55.88% because the live probe + DOM branch aren't node-reachable — proven in the
   Step 8 chromium run (P-03: surfaced, not silently worked around). tsc clean.
 - Files modified: `src/lib/chartColors.ts`, `src/lib/chartColors.test.ts`, `src/app/globals.css`.
+
+### Step 4 — Migrate useCandlestickChart to lightweight-charts v5 panes + tokens [done]
+- v4 `addCandlestickSeries` → v5 `chart.addSeries(CandlestickSeries, …)` (dynamic-imported alongside
+  `createChart`). Hard-coded hex removed — colors resolved from tokens via `resolveChartColor`
+  (`--muted-foreground` text, `--chart-grid` grid, `--border` borders, `--color-buy`/`--color-sell`
+  candles); fallbacks are CSS named colors (no brand hex), unreachable in practice (client-only create,
+  static dark tokens). Added `rightPriceScale.minimumWidth: 64` so stacked indicator panes (Step 5)
+  keep aligned plot-area left edges. Exposed `chartRef` (typed `IChartApi`) for Step 5's panes; kept
+  `containerRef`/`seriesRef` (`any`) contract so page.tsx + ChartPanel are untouched. Teardown nulls
+  both refs (disposal-safe).
+- Verified v5 still emits `.tv-lightweight-charts` (e2e readiness preserved) and `CrosshairMode.Magnet=1`.
+- TDD: behavior covered by the red-first Step 8 e2e (deferred to CI per the chart-heavy cold-compile
+  trap). Local gates: no hex (grep), `addSeries(CandlestickSeries)` present, tsc --noEmit clean, eslint
+  clean on changed files.
+- Files modified: `src/hooks/useCandlestickChart.ts`.

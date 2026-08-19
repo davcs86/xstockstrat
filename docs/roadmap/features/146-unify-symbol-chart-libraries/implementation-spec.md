@@ -237,7 +237,7 @@ pnpm run lint
 
 ### Step 4 — service: Migrate `useCandlestickChart` to lightweight-charts v5 panes + tokens
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/hooks/useCandlestickChart.ts` — modify
