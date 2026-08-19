@@ -2,6 +2,7 @@
 
 **Committed to main**: d5763e05e9750931610d809c6b4edd7fd810525e
 **Launched date**: 2026-08-09
+**Archived**: 2026-08-19
 **Development Branch**: `feature/shadcn-migration-high-confidence`
 **Created**: 2026-08-08
 **Last Updated**: 2026-08-09
@@ -20,6 +21,7 @@
 | 2026-08-09 | `in-progress` → `code-completed` | /sdd-execute sequential | All 36 steps done; full suite green (255/255 e2e, 80/80 unit); ready for integration PR |
 
 | 2026-08-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #916; committed d5763e05e9750931610d809c6b4edd7fd810525e |
+| 2026-08-19 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 4 specs |
 ---
 
 ## Artifacts

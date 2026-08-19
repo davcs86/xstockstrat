@@ -2,6 +2,7 @@
 
 **Committed to main**: fb8a987e22cd4cd242fcc9077e0a1d312a89bb1f
 **Launched date**: 2026-08-09
+**Archived**: 2026-08-19
 **Development Branch**: `feature/screener-data-readiness-polling`
 **Created**: 2026-08-08
 **Last Updated**: 2026-08-08
@@ -24,6 +25,7 @@
 | 2026-08-08 | `code-completed` (unchanged) | /sdd-execute integration | Integration PR #903 opened (`feature/screener-data-readiness-polling` → `main-dev`), blocked on PR #902 per merge-order.md. #902 merged first (`bef4258`); rebased this feature's branch onto `main-dev`, resolving a textual (not semantic) conflict in `page.tsx`/`fails.md` and discarding a stale pre-renumber `117-*` directory the merge's rename-detection tried to resurrect. #903 then merged (`7c432aa`) — feature is fully on `main-dev`. |
 
 | 2026-08-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #908; committed fb8a987e22cd4cd242fcc9077e0a1d312a89bb1f |
+| 2026-08-19 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(0); pruned 4 specs |
 ---
 
 ## Artifacts

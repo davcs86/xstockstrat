@@ -2,6 +2,7 @@
 
 **Committed to main**: 94e4e24fa6ac41eb20bd16e1e9af15c8388e885a
 **Launched date**: 2026-08-16
+**Archived**: 2026-08-19
 **Development Branch**: `feature/strategy-symbol-denylist`
 **Created**: 2026-08-14
 **Last Updated**: 2026-08-15
@@ -20,6 +21,7 @@
 | 2026-08-15 | `in-progress` → `code-completed` | /sdd-execute | All 17 steps done. analysis 499 pass / 83.1%, agent 222 pass / 75.8%, UI tsc+lint clean (e2e is the CI gate). Integration PR next. |
 
 | 2026-08-16 | `code-completed` → `launched` | CI workflow | Promoted via PR #963; committed 94e4e24fa6ac41eb20bd16e1e9af15c8388e885a |
+| 2026-08-19 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(4)/fails(2); pruned 4 specs |
 ---
 
 ## Artifacts

@@ -1490,3 +1490,78 @@ ambiguity is logged here).
   trust `getComputedStyle().color` or `fillStyle` read-back to down-convert oklch/oklab/lab. And a
   charting migration that only passes tsc/unit is unverified: run the real browser e2e (prebuilt
   server + the sandbox's Chromium via `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`) before calling it done.
+
+### 2026-08-19 — shadcn-ui-migration — assumption
+- **Mistake**: a design finding ("no shadcn equivalent for combobox, keep the hand-rolled file") was true for *generic* shadcn but wrong for the *specific* user-supplied preset, which ships its own Base-UI compound `Combobox`; the correct migration target was found only by running the actual preset apply, not by reasoning about the library in general.
+- **Evidence**: `docs/roadmap/features/119-shadcn-ui-migration/context.md` § Archive Synthesis.
+- **Rule it implies**: when a feature names an external library's preset/config-specific artifact, verify against that exact preset (run it), not the library's generic docs.
+
+### 2026-08-19 — shadcn-ui-migration — config
+- **Mistake**: `shadcn`'s CLI preflight silently requires a bare `tailwindcss` dep alongside `@tailwindcss/postcss` under v4, and `apply --preset` needs a pre-existing `components.json` plus a piped `y` despite `--yes`; each surfaced only by hitting the hang/failure live.
+- **Evidence**: `docs/roadmap/features/119-shadcn-ui-migration/context.md` § Archive Synthesis.
+- **Rule it implies**: treat a vendor CLI's non-interactive invocation as a scar to capture in the service CLAUDE.md — do not assume `--yes` is sufficient.
+
+### 2026-08-19 — shadcn-migration-high-confidence — duplication
+- **Mistake**: a shared hand-rolled control (`ChartPanel.tsx`'s timeframe switcher) was e2e-risk-classified from the FR-cited file only, but the identical pattern repeats in a sibling non-FR-cited file (`chart-panel.spec.ts` asserted 3 `getByRole('button',…)`), so the migration broke a spec the recon sweep never looked at. Caught only at the step's own verification.
+- **Evidence**: `docs/roadmap/features/120-shadcn-migration-high-confidence/context.md` § Archive Synthesis.
+- **Rule it implies**: recon's e2e-risk sweep must, for any *shared/repeated* hand-rolled control, grep every file the pattern appears in (not just the FR-cited one) for `getByRole`/`getByText` assertions before classing a site "no e2e-risk."
+
+### 2026-08-19 — shadcn-migration-medium-confidence — duplication
+- **Mistake**: a product-spec-named primitive (`Accordion`) was structurally impossible for the target — `AccordionItem` wraps a `<tr>` but `AccordionContent` must render the shared detail panel *outside* the `<table>`; substituted `Collapsible`. A distinct failure mode from the ARIA-role mismatch already logged: here the DOM *structure*, not the role, breaks.
+- **Evidence**: `docs/roadmap/features/121-shadcn-migration-medium-confidence/context.md` § Archive Synthesis.
+- **Rule it implies**: before adopting a compound primitive (Accordion/Tabs/Table) for a control, check its required parent/child DOM nesting against the target's actual layout (per-item-inline vs one-shared-panel), not just its visual output.
+
+### 2026-08-19 — shadcn-table-actions-responsive — assumption
+- **Mistake**: a component hidden via off-screen CSS positioning (negative `left`) rather than `display:none` stays in the accessibility tree and remains Playwright-queryable — shadcn `Sidebar`'s desktop branch left the mobile nav's links live at desktop width, colliding with real nav links AND silently satisfying a pre-existing `getByText(...).first()` that was asserting the wrong element (`toBeVisible()` ignores viewport position). Fixed by `sm:hidden`-wrapping the whole subtree.
+- **Evidence**: `docs/roadmap/features/124-shadcn-table-actions-responsive/context.md` § Archive Synthesis.
+- **Rule it implies**: hide off-mode UI subtrees with `display:none`/`hidden` (removes them from the a11y tree) — never off-screen positioning alone — before relying on any narrowly-scoped e2e; and tighten any *passing* locator that could match a duplicate/off-screen node.
+
+### 2026-08-19 — shadcn-table-actions-responsive — assumption
+- **Mistake**: a new horizontal-overflow test at a desktop (≥`lg`) viewport failed deterministically in CI (~18px) but never locally — the repo ships no bundled webfont so system font-fallback metrics differ between sandbox and CI Chromium, and it was the first overflow test ever exercised at a desktop width, exposing a pre-existing unrelated header-tightness edge case. Two wrong fix attempts (`min-w-0` on grid items) chased the wrong cause.
+- **Evidence**: `docs/roadmap/features/124-shadcn-table-actions-responsive/context.md` § Archive Synthesis.
+- **Rule it implies**: any e2e assertion measuring layout at a *desktop* width (in a repo with no embedded webfont) must leave px slack for CI-vs-local font-metric drift and target a representative width, not a razor-thin breakpoint minimum.
+
+### 2026-08-19 — fundamentals-provider-alternative — config
+- **Mistake**: three governance docs (`CLAUDE.md` §Config Governance, `config-governance.md` Rule 6, `reviewer-registry.md` Security row) asserted a `secret.*`-prefix rule dead since feature 076/migration 009 — a reader following the stated rule would re-commit the exact config-key-for-a-credential mistake migration 009 already reversed. Recon flagged the doc as stale but no gate forced the fix.
+- **Evidence**: `docs/roadmap/features/129-fundamentals-provider-alternative/context.md` § Archive Synthesis (recon.md:167-172).
+- **Rule it implies**: when recon flags a governance/pattern doc as "aspirational, superseded in practice," fixing the doc is in-scope for the feature that relies on the real precedent — a dead rule left standing is a future fails.md entry waiting to happen.
+
+### 2026-08-19 — user-metadata-management — duplication
+- **Mistake**: agent tool count lives in 6 surfaces (5 prose + 1 numeric `COPILOT_MCP_TOOL_COUNT`) and the numeric one had silently drifted to 18 while prose said 22 — an unenforced duplication only a manual grep catches.
+- **Evidence**: `services/xstockstrat-ui/src/lib/copilot.ts`; `docs/roadmap/features/130-user-metadata-management/context.md` § Archive Synthesis.
+- **Rule it implies**: every agent-tool change must sync all six tool-count surfaces; a single-source-of-truth or CI grep-check should enforce it (overlaps `trigger-backfill-mcp-tool`, `fix-mcp-config-key-registry`).
+
+### 2026-08-19 — user-metadata-management — assumption
+- **Mistake**: the impl-spec encoded contracts the codebase did not have — an authz module that throws/returns undefined (it returns `''`), and a class-based agent client `XStockStratClient` (it is module-level functions). Both surfaced only at test time and forced test rewrites.
+- **Evidence**: `docs/roadmap/features/130-user-metadata-management/context.md` § Archive Synthesis.
+- **Rule it implies**: the spec-writer must confirm helper/client contracts against the actual shipped signature, not an assumed shape, before writing paired tests.
+
+### 2026-08-19 — live-strategy-opportunity-attribution — assumption
+- **Mistake**: symbol-key normalization was applied at read sites, so a raw-vs-normalized key mismatch silently no-op'd mixed-case-configured symbols — the same bug recurred three times in one feature (`live_by_symbol`, `held_value_by_symbol`, screener membership test). `signal_params.symbols` has no write-time case validation.
+- **Evidence**: `docs/roadmap/features/131-live-strategy-opportunity-attribution/context.md` § Archive Synthesis.
+- **Rule it implies**: normalize symbol keys at construction/source, never per read site; when adding a new `*_by_symbol` index, mirror `watchlist_by_symbol`'s normalization exactly.
+
+### 2026-08-19 — live-strategy-opportunity-attribution — assumption
+- **Mistake**: 131's spec was authored before feature 133 (strategy ownership) merged; a global `list_live_enabled()` would have cross-attributed another user's live strategy (IDOR) into a now-per-user compute — caught only at execute time and retrofitted with owner scoping.
+- **Evidence**: `docs/roadmap/features/131-live-strategy-opportunity-attribution/context.md` § Archive Synthesis.
+- **Rule it implies**: when a security/tenancy feature merges between a feature's spec and its execute, re-owner-scope every new query the feature adds before implementing.
+
+### 2026-08-19 — live-strategy-opportunity-attribution — duplication
+- **Mistake**: a sibling feature (134) genuinely *removed* a UI behavior (config-blob source-weight parse) but left a stale e2e (`value-persists-after-save.spec.ts:83`) asserting the removed behavior — surfaced as a red CI shard on the stacked base branch, not at removal time.
+- **Evidence**: `docs/roadmap/features/131-live-strategy-opportunity-attribution/context.md` § Archive Synthesis (PR #953).
+- **Rule it implies**: a deliberate behavior removal must sweep and prune the tests that assert the old behavior in the same PR.
+
+### 2026-08-19 — strategy-symbol-denylist — assumption
+- **Mistake**: a per-request flag added to a transition function shared by the live path AND restart-replay, leaked into replay, would reconstruct a held-denied symbol as flat-on-restart, permanently suppressing its exit. Caught in design (round 2), not runtime.
+- **Evidence**: `docs/roadmap/features/132-strategy-symbol-denylist/context.md` § Archive Synthesis (`_apply_transition`/`_replay_state`).
+- **Rule it implies**: a new flag on a function reached by multiple call paths must default to the *safe* value on every path except the one that needs it; enumerate the callers.
+
+### 2026-08-19 — strategy-symbol-denylist — duplication
+- **Mistake**: exempting muted rows from the *UI* conviction filter alone silently re-introduced the "vanish" bug — the backend read query (`opportunities.py:105`) applied its own conviction floor. A filter rule must be applied at *every* layer that filters.
+- **Evidence**: `docs/roadmap/features/132-strategy-symbol-denylist/context.md` § Archive Synthesis.
+- **Rule it implies**: when a "must never disappear" invariant is added, grep for *all* filters/floors across UI + BFF + DB, not just the visible one.
+
+### 2026-08-19 — strategy-user-ownership — config
+- **Mistake**: a migration guard that hard-fails on an unset env var (`db-migrate.sh` `:?` on `SEED_USER_ID`) will break every local `docker compose up` on a fresh DB unless the compose service supplies a *concrete non-empty* default, not an empty pass-through. Also `Dockerfile.migrate` had no `gettext`/`envsubst`, and there was no existing envsubst invocation site to extend — the whole templating path was net-new.
+- **Evidence**: `docs/roadmap/features/133-strategy-user-ownership/context.md` § Archive Synthesis.
+- **Rule it implies**: when a migration adds a required env var, wire it into all three run sites (compose default, `.do/app*.yaml`, setup-env/.env.example) in the same step, and give local dev a concrete default so the migrator guard doesn't brick `docker compose up`.
