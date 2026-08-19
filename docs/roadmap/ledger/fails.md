@@ -1472,3 +1472,21 @@ ambiguity is logged here).
   a "most-recent" read, order DESC + LIMIT then reverse, or size the window to N; and treat a
   paginated read whose consumer only ever fetches page 1 as a red flag. Before attributing a staleness
   symptom to the *write/ingest* side, confirm the *read* returns what the consumer assumes.
+
+### 2026-08-19 — 146-unify-symbol-chart-libraries — canvas charting rejects oklch tokens
+- **Mistake**: Fed theme color tokens (this app's `--chart-*`/`--muted-foreground`/`--border` are
+  `oklch(...)`) straight into lightweight-charts (a **canvas** renderer). v5 `createChart`/`addSeries`
+  **throws** `Failed to parse color: oklch(...)`, so every chart silently failed to render (no
+  `.tv-lightweight-charts`, series never set) — only caught in CI e2e, not by tsc/unit. Worse, the
+  first fix attempt (a `getComputedStyle(probe).color` read-back) did NOT convert: **current Chromium
+  preserves the color space** in both `getComputedStyle().color` and canvas `fillStyle` serialization,
+  returning the oklch string unchanged.
+- **Evidence**: `services/xstockstrat-ui/src/lib/chartColors.ts` (feature 146); repro'd with the
+  pre-installed Chromium — createChart threw on an oklch textColor; getComputedStyle + fillStyle both
+  returned `oklch(...)`; only a **1×1-canvas pixel read-back** (`fillRect` + `getImageData`) yielded
+  `rgb()`.
+- **Rule it implies**: to hand a CSS custom property to a **canvas** API (charting, `ctx.fillStyle`),
+  convert it to `rgb()`/`rgba()` by painting to a 1×1 canvas and reading `getImageData` bytes — do NOT
+  trust `getComputedStyle().color` or `fillStyle` read-back to down-convert oklch/oklab/lab. And a
+  charting migration that only passes tsc/unit is unverified: run the real browser e2e (prebuilt
+  server + the sandbox's Chromium via `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`) before calling it done.

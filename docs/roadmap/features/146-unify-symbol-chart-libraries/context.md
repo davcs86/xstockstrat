@@ -298,3 +298,20 @@
 **Progress**: 9 done / 9 total
 **Stopped at**: all complete → code-completed
 **Next**: integration PR → main-dev; CI runs the full e2e (validates pane render + oklch canvas probe)
+
+## Session 2026-08-19 — sdd-execute (CI fix on PR #984)
+CI Frontend E2E shard 2 red. Root-caused with the pre-installed Chromium (built + served the app,
+ran the specs) — two real defects, now fixed and re-verified 42/42 locally:
+1. **oklch crashes lightweight-charts v5.** createChart throws "Failed to parse color: oklch(...)";
+   the theme tokens are oklch, so every chart (symbol page AND ChartPanel dashboard) failed to render
+   and never set its series. Current Chromium preserves the color space in BOTH
+   getComputedStyle().color and canvas fillStyle serialization, so the original probe returned oklch
+   unchanged. Fixed resolveChartColor to convert via a **1×1-canvas pixel read-back** (paint → read
+   sRGB bytes → rgb()/rgba()), reliable for oklch/hsl/hex. chartColors.test.ts updated (dropped the
+   now-removed isCanvasSafeColor).
+2. **Crosshair readout needed fitContent.** Sparse mock bars sat off-screen (no hoverable time), so
+   the shared-crosshair readout never fired. Added `chart.timeScale().fitContent()` after data is set
+   (IndicatorPanels + page.tsx) — fixes the e2e AND is a real UX win (chart fits its bars); e2e hover
+   points at the price-pane plot area.
+- Note: a batch of 31 failures during debugging was a stale-`.next` ChunkLoadError from my overlapping
+  local builds, not a code defect — a clean rebuild passed 42/42.
