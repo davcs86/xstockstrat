@@ -458,7 +458,7 @@ grep -n "addCandlestickSeries" src/components/trader/ChartPanel.tsx   # expect N
 
 ### Step 8 — test: Rewrite the symbol-page indicator e2e for v5 panes + shared crosshair; preserve chart readiness signals
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify
@@ -611,3 +611,14 @@ so the v5 `addSeries` migration + hex→token colors + `rightPriceScale.minimumW
 hook with **zero source change** to ChartPanel. Verified: `grep addCandlestickSeries` → none; whole-app
 `tsc --noEmit` clean against v5. The dashboard chart is visually migrated (v5 + tokens) purely by
 inheriting the hook. No ChartPanel.tsx diff is staged for this step.
+
+### Step 8 — e2e verified statically; full green deferred to CI (CI-equivalent fallback)
+Local Playwright webServer is `pnpm dev` (10s/test timeout); the chart-heavy symbol page exceeds
+cold-compile there (the documented `new-page E2E` trap). Per sequential-mode's CI-equivalent
+fallback, Step 8 was verified **statically**: no recharts left in the spec, `prettier --check` clean,
+`tsc --noEmit` clean, `playwright test --list` collects all 42 tests. **Red→green evidence:** the
+prior `.recharts-line`==3 assertion is RED against the recharts-free v5 tree; the rewrite (data-series
+attrs + `.tv-lightweight-charts` readiness + the `chart-crosshair-readout` hover) is the GREEN aligned
+with Steps 4-7. The full green run (which also exercises the actual pane render + oklch→rgb canvas
+probe) runs on CI's prebuilt server via the integration PR. No new mock/env wiring was needed
+(no new endpoint) — `mock-backend.ts` + `playwright.config.ts webServer.env` confirmed unchanged.

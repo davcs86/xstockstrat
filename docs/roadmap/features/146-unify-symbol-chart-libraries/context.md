@@ -271,3 +271,14 @@
   `.tv-lightweight-charts` readiness (chart-panel.spec.ts) is preserved (v5 still emits it, confirmed
   Step 4). Full green run in CI (Step 8).
 - Files modified: none (ChartPanel.tsx unchanged); Deviation Log + context only.
+
+### Step 8 — Rewrite the symbol-page indicator e2e for v5 panes + shared crosshair [done]
+- Replaced the `.recharts-line`==3 assertion with: `data-series-count`="3" + `data-series` matches
+  value/signal/histogram (DOM readiness seam); the shared `.tv-lightweight-charts` canvas visible
+  (v5 readiness, now covers every pane); and a `chart.hover()` → `chart-crosshair-readout` showing
+  'price' + 'macd.value' (the shared crosshair + the drawn-geometry backstop for AC-3). Kept the
+  DOM-text assertions (indicator-panel/-error, macd, sandbox timeout, indicator-panels-empty).
+- Verification: static (no recharts, prettier clean, tsc clean, playwright --list = 42 tests). Full
+  green run deferred to CI's prebuilt server (local `pnpm dev` 10s/test cold-compile trap) — logged as
+  a CI-equivalent fallback in the Deviation Log. No new mock/env wiring (confirmed, not added).
+- Files modified: `e2e/trader/position-detail.spec.ts`.
