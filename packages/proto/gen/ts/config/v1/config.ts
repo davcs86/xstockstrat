@@ -151,10 +151,19 @@ export interface WatchConfigRequest {
   clientId: string;
   /** last known version (for delta updates) */
   version: string;
-  /** dev or production; defaults to dev */
+  /** production or staging; defaults to staging */
   environment: Environment;
-  /** paper or live; 'all' rows included always */
+  /**
+   * deprecated (feature 147): ignored by the server; paper/live derives from environment
+   *
+   * @deprecated
+   */
   tradingMode: TradingMode;
+  /**
+   * Optional per-user scope. When set, the server overlays this user's per-user values on top of
+   * the global (user-unset) values for the resolved (namespace, environment). Empty = global.
+   */
+  userId: string;
 }
 
 export interface ConfigSnapshot {
@@ -166,6 +175,11 @@ export interface ConfigSnapshot {
   /** populated for DELTA updates */
   changedKeys: string[];
   environment: Environment;
+  /**
+   * deprecated (feature 147): always UNSPECIFIED
+   *
+   * @deprecated
+   */
   tradingMode: TradingMode;
 }
 
@@ -202,7 +216,28 @@ export interface ValidationRule {
 export interface GetConfigRequest {
   namespace: string;
   environment: Environment;
+  /**
+   * deprecated (feature 147): ignored
+   *
+   * @deprecated
+   */
   tradingMode: TradingMode;
+  /** optional per-user scope; empty = global */
+  userId: string;
+}
+
+export interface GetSecretRequest {
+  namespace: string;
+  key: string;
+  /** production or staging */
+  environment: Environment;
+}
+
+export interface GetSecretResponse {
+  /** decrypted plaintext; empty when found=false */
+  value: string;
+  /** false when the secret is unset (row absent or ciphertext NULL) */
+  found: boolean;
 }
 
 export interface SetConfigRequest {
@@ -212,13 +247,23 @@ export interface SetConfigRequest {
   author: string;
   reason: string;
   environment: Environment;
+  /**
+   * deprecated (feature 147): ignored
+   *
+   * @deprecated
+   */
   tradingMode: TradingMode;
   /**
    * When true, allow this write to CREATE a not-yet-registered key at the exact
-   * (namespace,key,environment,trading_mode) scope. Default false: a write to an
+   * (namespace,key,environment,user_id) scope. Default false: a write to an
    * unregistered scope is refused with NOT_FOUND, so a typo cannot mint an orphan key.
    */
   createKey: boolean;
+  /**
+   * Optional per-user scope. Empty = the global value; a non-empty user_id writes/updates that
+   * user's per-user override. Secret keys (is_secret) are global-scope only (feature 147).
+   */
+  userId: string;
 }
 
 export interface SetConfigResponse {
@@ -229,7 +274,14 @@ export interface SetConfigResponse {
 export interface ListKeysRequest {
   namespace: string;
   environment: Environment;
+  /**
+   * deprecated (feature 147): ignored
+   *
+   * @deprecated
+   */
   tradingMode: TradingMode;
+  /** optional per-user scope; empty = global */
+  userId: string;
 }
 
 export interface ListKeysResponse {
@@ -247,6 +299,11 @@ export interface ConfigKeyMeta {
   isSecret: boolean;
   consumingService: string;
   environment: Environment;
+  /**
+   * deprecated (feature 147): always UNSPECIFIED
+   *
+   * @deprecated
+   */
   tradingMode: TradingMode;
   /** optional; absent = no validation */
   validation?:
@@ -266,6 +323,7 @@ function createBaseWatchConfigRequest(): WatchConfigRequest {
     version: "",
     environment: Environment.ENVIRONMENT_UNSPECIFIED,
     tradingMode: TradingMode.TRADING_MODE_UNSPECIFIED,
+    userId: "",
   };
 }
 
@@ -285,6 +343,9 @@ export const WatchConfigRequest: MessageFns<WatchConfigRequest> = {
     }
     if (message.tradingMode !== TradingMode.TRADING_MODE_UNSPECIFIED) {
       writer.uint32(40).int32(tradingModeToNumber(message.tradingMode));
+    }
+    if (message.userId !== "") {
+      writer.uint32(50).string(message.userId);
     }
     return writer;
   },
@@ -336,6 +397,14 @@ export const WatchConfigRequest: MessageFns<WatchConfigRequest> = {
           message.tradingMode = tradingModeFromJSON(reader.int32());
           continue;
         }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -362,6 +431,11 @@ export const WatchConfigRequest: MessageFns<WatchConfigRequest> = {
         : isSet(object.trading_mode)
         ? tradingModeFromJSON(object.trading_mode)
         : TradingMode.TRADING_MODE_UNSPECIFIED,
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
     };
   },
 
@@ -382,6 +456,9 @@ export const WatchConfigRequest: MessageFns<WatchConfigRequest> = {
     if (message.tradingMode !== TradingMode.TRADING_MODE_UNSPECIFIED) {
       obj.tradingMode = tradingModeToJSON(message.tradingMode);
     }
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
     return obj;
   },
 
@@ -395,6 +472,7 @@ export const WatchConfigRequest: MessageFns<WatchConfigRequest> = {
     message.version = object.version ?? "";
     message.environment = object.environment ?? Environment.ENVIRONMENT_UNSPECIFIED;
     message.tradingMode = object.tradingMode ?? TradingMode.TRADING_MODE_UNSPECIFIED;
+    message.userId = object.userId ?? "";
     return message;
   },
 };
@@ -1015,6 +1093,7 @@ function createBaseGetConfigRequest(): GetConfigRequest {
     namespace: "",
     environment: Environment.ENVIRONMENT_UNSPECIFIED,
     tradingMode: TradingMode.TRADING_MODE_UNSPECIFIED,
+    userId: "",
   };
 }
 
@@ -1028,6 +1107,9 @@ export const GetConfigRequest: MessageFns<GetConfigRequest> = {
     }
     if (message.tradingMode !== TradingMode.TRADING_MODE_UNSPECIFIED) {
       writer.uint32(24).int32(tradingModeToNumber(message.tradingMode));
+    }
+    if (message.userId !== "") {
+      writer.uint32(34).string(message.userId);
     }
     return writer;
   },
@@ -1063,6 +1145,14 @@ export const GetConfigRequest: MessageFns<GetConfigRequest> = {
           message.tradingMode = tradingModeFromJSON(reader.int32());
           continue;
         }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1083,6 +1173,11 @@ export const GetConfigRequest: MessageFns<GetConfigRequest> = {
         : isSet(object.trading_mode)
         ? tradingModeFromJSON(object.trading_mode)
         : TradingMode.TRADING_MODE_UNSPECIFIED,
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
     };
   },
 
@@ -1097,6 +1192,9 @@ export const GetConfigRequest: MessageFns<GetConfigRequest> = {
     if (message.tradingMode !== TradingMode.TRADING_MODE_UNSPECIFIED) {
       obj.tradingMode = tradingModeToJSON(message.tradingMode);
     }
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
     return obj;
   },
 
@@ -1108,6 +1206,177 @@ export const GetConfigRequest: MessageFns<GetConfigRequest> = {
     message.namespace = object.namespace ?? "";
     message.environment = object.environment ?? Environment.ENVIRONMENT_UNSPECIFIED;
     message.tradingMode = object.tradingMode ?? TradingMode.TRADING_MODE_UNSPECIFIED;
+    message.userId = object.userId ?? "";
+    return message;
+  },
+};
+
+function createBaseGetSecretRequest(): GetSecretRequest {
+  return { namespace: "", key: "", environment: Environment.ENVIRONMENT_UNSPECIFIED };
+}
+
+export const GetSecretRequest: MessageFns<GetSecretRequest> = {
+  encode(message: GetSecretRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.namespace !== "") {
+      writer.uint32(10).string(message.namespace);
+    }
+    if (message.key !== "") {
+      writer.uint32(18).string(message.key);
+    }
+    if (message.environment !== Environment.ENVIRONMENT_UNSPECIFIED) {
+      writer.uint32(24).int32(environmentToNumber(message.environment));
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetSecretRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetSecretRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.namespace = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.environment = environmentFromJSON(reader.int32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetSecretRequest {
+    return {
+      namespace: isSet(object.namespace) ? globalThis.String(object.namespace) : "",
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      environment: isSet(object.environment)
+        ? environmentFromJSON(object.environment)
+        : Environment.ENVIRONMENT_UNSPECIFIED,
+    };
+  },
+
+  toJSON(message: GetSecretRequest): unknown {
+    const obj: any = {};
+    if (message.namespace !== "") {
+      obj.namespace = message.namespace;
+    }
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.environment !== Environment.ENVIRONMENT_UNSPECIFIED) {
+      obj.environment = environmentToJSON(message.environment);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetSecretRequest>, I>>(base?: I): GetSecretRequest {
+    return GetSecretRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetSecretRequest>, I>>(object: I): GetSecretRequest {
+    const message = createBaseGetSecretRequest();
+    message.namespace = object.namespace ?? "";
+    message.key = object.key ?? "";
+    message.environment = object.environment ?? Environment.ENVIRONMENT_UNSPECIFIED;
+    return message;
+  },
+};
+
+function createBaseGetSecretResponse(): GetSecretResponse {
+  return { value: "", found: false };
+}
+
+export const GetSecretResponse: MessageFns<GetSecretResponse> = {
+  encode(message: GetSecretResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.value !== "") {
+      writer.uint32(10).string(message.value);
+    }
+    if (message.found !== false) {
+      writer.uint32(16).bool(message.found);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetSecretResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetSecretResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.value = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.found = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetSecretResponse {
+    return {
+      value: isSet(object.value) ? globalThis.String(object.value) : "",
+      found: isSet(object.found) ? globalThis.Boolean(object.found) : false,
+    };
+  },
+
+  toJSON(message: GetSecretResponse): unknown {
+    const obj: any = {};
+    if (message.value !== "") {
+      obj.value = message.value;
+    }
+    if (message.found !== false) {
+      obj.found = message.found;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetSecretResponse>, I>>(base?: I): GetSecretResponse {
+    return GetSecretResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetSecretResponse>, I>>(object: I): GetSecretResponse {
+    const message = createBaseGetSecretResponse();
+    message.value = object.value ?? "";
+    message.found = object.found ?? false;
     return message;
   },
 };
@@ -1122,6 +1391,7 @@ function createBaseSetConfigRequest(): SetConfigRequest {
     environment: Environment.ENVIRONMENT_UNSPECIFIED,
     tradingMode: TradingMode.TRADING_MODE_UNSPECIFIED,
     createKey: false,
+    userId: "",
   };
 }
 
@@ -1150,6 +1420,9 @@ export const SetConfigRequest: MessageFns<SetConfigRequest> = {
     }
     if (message.createKey !== false) {
       writer.uint32(64).bool(message.createKey);
+    }
+    if (message.userId !== "") {
+      writer.uint32(74).string(message.userId);
     }
     return writer;
   },
@@ -1225,6 +1498,14 @@ export const SetConfigRequest: MessageFns<SetConfigRequest> = {
           message.createKey = reader.bool();
           continue;
         }
+        case 9: {
+          if (tag !== 74) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1254,6 +1535,11 @@ export const SetConfigRequest: MessageFns<SetConfigRequest> = {
         : isSet(object.create_key)
         ? globalThis.Boolean(object.create_key)
         : false,
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
     };
   },
 
@@ -1283,6 +1569,9 @@ export const SetConfigRequest: MessageFns<SetConfigRequest> = {
     if (message.createKey !== false) {
       obj.createKey = message.createKey;
     }
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
     return obj;
   },
 
@@ -1301,6 +1590,7 @@ export const SetConfigRequest: MessageFns<SetConfigRequest> = {
     message.environment = object.environment ?? Environment.ENVIRONMENT_UNSPECIFIED;
     message.tradingMode = object.tradingMode ?? TradingMode.TRADING_MODE_UNSPECIFIED;
     message.createKey = object.createKey ?? false;
+    message.userId = object.userId ?? "";
     return message;
   },
 };
@@ -1390,6 +1680,7 @@ function createBaseListKeysRequest(): ListKeysRequest {
     namespace: "",
     environment: Environment.ENVIRONMENT_UNSPECIFIED,
     tradingMode: TradingMode.TRADING_MODE_UNSPECIFIED,
+    userId: "",
   };
 }
 
@@ -1403,6 +1694,9 @@ export const ListKeysRequest: MessageFns<ListKeysRequest> = {
     }
     if (message.tradingMode !== TradingMode.TRADING_MODE_UNSPECIFIED) {
       writer.uint32(24).int32(tradingModeToNumber(message.tradingMode));
+    }
+    if (message.userId !== "") {
+      writer.uint32(34).string(message.userId);
     }
     return writer;
   },
@@ -1438,6 +1732,14 @@ export const ListKeysRequest: MessageFns<ListKeysRequest> = {
           message.tradingMode = tradingModeFromJSON(reader.int32());
           continue;
         }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1458,6 +1760,11 @@ export const ListKeysRequest: MessageFns<ListKeysRequest> = {
         : isSet(object.trading_mode)
         ? tradingModeFromJSON(object.trading_mode)
         : TradingMode.TRADING_MODE_UNSPECIFIED,
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
     };
   },
 
@@ -1472,6 +1779,9 @@ export const ListKeysRequest: MessageFns<ListKeysRequest> = {
     if (message.tradingMode !== TradingMode.TRADING_MODE_UNSPECIFIED) {
       obj.tradingMode = tradingModeToJSON(message.tradingMode);
     }
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
     return obj;
   },
 
@@ -1483,6 +1793,7 @@ export const ListKeysRequest: MessageFns<ListKeysRequest> = {
     message.namespace = object.namespace ?? "";
     message.environment = object.environment ?? Environment.ENVIRONMENT_UNSPECIFIED;
     message.tradingMode = object.tradingMode ?? TradingMode.TRADING_MODE_UNSPECIFIED;
+    message.userId = object.userId ?? "";
     return message;
   },
 };
@@ -1772,7 +2083,10 @@ export const ConfigKeyMeta: MessageFns<ConfigKeyMeta> = {
 /**
  * ConfigService — live configuration via server-streaming WatchConfig.
  * All services call WatchConfig at startup and stream config updates.
- * Config values are scoped by environment (dev/production) and trading_mode (paper/live/all).
+ * Config values are scoped by environment (production/staging) and global/per-user (user_id),
+ * feature 147. paper/live is derived from environment; the trading_mode fields below are
+ * deprecated and ignored by the server. Secrets are stored encrypted at rest, redacted at every
+ * broadcast/read edge, and resolved only via GetSecret by allow-listed internal callers.
  */
 export type ConfigServiceService = typeof ConfigServiceService;
 export const ConfigServiceService = {
@@ -1819,6 +2133,21 @@ export const ConfigServiceService = {
     responseSerialize: (value: ListKeysResponse): Buffer => Buffer.from(ListKeysResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): ListKeysResponse => ListKeysResponse.decode(value),
   },
+  /**
+   * Resolve a secret's decrypted plaintext. Gated to allow-listed internal service callers
+   * (x-internal-caller); the value is decrypted server-side and never appears on WatchConfig,
+   * GetConfig, or ListKeys. Returns found=false for an absent/unset (NULL-ciphertext) secret;
+   * a decrypt failure is an INTERNAL error, never a partial/empty value (feature 147).
+   */
+  getSecret: {
+    path: "/xstockstrat.config.v1.ConfigService/GetSecret" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetSecretRequest): Buffer => Buffer.from(GetSecretRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetSecretRequest => GetSecretRequest.decode(value),
+    responseSerialize: (value: GetSecretResponse): Buffer => Buffer.from(GetSecretResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetSecretResponse => GetSecretResponse.decode(value),
+  },
 } as const;
 
 export interface ConfigServiceServer extends UntypedServiceImplementation {
@@ -1833,6 +2162,13 @@ export interface ConfigServiceServer extends UntypedServiceImplementation {
   setConfig: handleUnaryCall<SetConfigRequest, SetConfigResponse>;
   /** Admin: list all keys for a namespace */
   listKeys: handleUnaryCall<ListKeysRequest, ListKeysResponse>;
+  /**
+   * Resolve a secret's decrypted plaintext. Gated to allow-listed internal service callers
+   * (x-internal-caller); the value is decrypted server-side and never appears on WatchConfig,
+   * GetConfig, or ListKeys. Returns found=false for an absent/unset (NULL-ciphertext) secret;
+   * a decrypt failure is an INTERNAL error, never a partial/empty value (feature 147).
+   */
+  getSecret: handleUnaryCall<GetSecretRequest, GetSecretResponse>;
 }
 
 export interface ConfigServiceClient extends Client {
@@ -1893,6 +2229,27 @@ export interface ConfigServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ListKeysResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Resolve a secret's decrypted plaintext. Gated to allow-listed internal service callers
+   * (x-internal-caller); the value is decrypted server-side and never appears on WatchConfig,
+   * GetConfig, or ListKeys. Returns found=false for an absent/unset (NULL-ciphertext) secret;
+   * a decrypt failure is an INTERNAL error, never a partial/empty value (feature 147).
+   */
+  getSecret(
+    request: GetSecretRequest,
+    callback: (error: ServiceError | null, response: GetSecretResponse) => void,
+  ): ClientUnaryCall;
+  getSecret(
+    request: GetSecretRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetSecretResponse) => void,
+  ): ClientUnaryCall;
+  getSecret(
+    request: GetSecretRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetSecretResponse) => void,
   ): ClientUnaryCall;
 }
 

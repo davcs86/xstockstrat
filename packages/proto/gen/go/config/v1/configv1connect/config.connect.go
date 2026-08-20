@@ -42,6 +42,8 @@ const (
 	ConfigServiceSetConfigProcedure = "/xstockstrat.config.v1.ConfigService/SetConfig"
 	// ConfigServiceListKeysProcedure is the fully-qualified name of the ConfigService's ListKeys RPC.
 	ConfigServiceListKeysProcedure = "/xstockstrat.config.v1.ConfigService/ListKeys"
+	// ConfigServiceGetSecretProcedure is the fully-qualified name of the ConfigService's GetSecret RPC.
+	ConfigServiceGetSecretProcedure = "/xstockstrat.config.v1.ConfigService/GetSecret"
 )
 
 // ConfigServiceClient is a client for the xstockstrat.config.v1.ConfigService service.
@@ -55,6 +57,11 @@ type ConfigServiceClient interface {
 	SetConfig(context.Context, *connect.Request[v1.SetConfigRequest]) (*connect.Response[v1.SetConfigResponse], error)
 	// Admin: list all keys for a namespace
 	ListKeys(context.Context, *connect.Request[v1.ListKeysRequest]) (*connect.Response[v1.ListKeysResponse], error)
+	// Resolve a secret's decrypted plaintext. Gated to allow-listed internal service callers
+	// (x-internal-caller); the value is decrypted server-side and never appears on WatchConfig,
+	// GetConfig, or ListKeys. Returns found=false for an absent/unset (NULL-ciphertext) secret;
+	// a decrypt failure is an INTERNAL error, never a partial/empty value (feature 147).
+	GetSecret(context.Context, *connect.Request[v1.GetSecretRequest]) (*connect.Response[v1.GetSecretResponse], error)
 }
 
 // NewConfigServiceClient constructs a client for the xstockstrat.config.v1.ConfigService service.
@@ -92,6 +99,12 @@ func NewConfigServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(configServiceMethods.ByName("ListKeys")),
 			connect.WithClientOptions(opts...),
 		),
+		getSecret: connect.NewClient[v1.GetSecretRequest, v1.GetSecretResponse](
+			httpClient,
+			baseURL+ConfigServiceGetSecretProcedure,
+			connect.WithSchema(configServiceMethods.ByName("GetSecret")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -101,6 +114,7 @@ type configServiceClient struct {
 	getConfig   *connect.Client[v1.GetConfigRequest, v1.ConfigSnapshot]
 	setConfig   *connect.Client[v1.SetConfigRequest, v1.SetConfigResponse]
 	listKeys    *connect.Client[v1.ListKeysRequest, v1.ListKeysResponse]
+	getSecret   *connect.Client[v1.GetSecretRequest, v1.GetSecretResponse]
 }
 
 // WatchConfig calls xstockstrat.config.v1.ConfigService.WatchConfig.
@@ -123,6 +137,11 @@ func (c *configServiceClient) ListKeys(ctx context.Context, req *connect.Request
 	return c.listKeys.CallUnary(ctx, req)
 }
 
+// GetSecret calls xstockstrat.config.v1.ConfigService.GetSecret.
+func (c *configServiceClient) GetSecret(ctx context.Context, req *connect.Request[v1.GetSecretRequest]) (*connect.Response[v1.GetSecretResponse], error) {
+	return c.getSecret.CallUnary(ctx, req)
+}
+
 // ConfigServiceHandler is an implementation of the xstockstrat.config.v1.ConfigService service.
 type ConfigServiceHandler interface {
 	// Subscribe to config updates for a given namespace/service.
@@ -134,6 +153,11 @@ type ConfigServiceHandler interface {
 	SetConfig(context.Context, *connect.Request[v1.SetConfigRequest]) (*connect.Response[v1.SetConfigResponse], error)
 	// Admin: list all keys for a namespace
 	ListKeys(context.Context, *connect.Request[v1.ListKeysRequest]) (*connect.Response[v1.ListKeysResponse], error)
+	// Resolve a secret's decrypted plaintext. Gated to allow-listed internal service callers
+	// (x-internal-caller); the value is decrypted server-side and never appears on WatchConfig,
+	// GetConfig, or ListKeys. Returns found=false for an absent/unset (NULL-ciphertext) secret;
+	// a decrypt failure is an INTERNAL error, never a partial/empty value (feature 147).
+	GetSecret(context.Context, *connect.Request[v1.GetSecretRequest]) (*connect.Response[v1.GetSecretResponse], error)
 }
 
 // NewConfigServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -167,6 +191,12 @@ func NewConfigServiceHandler(svc ConfigServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(configServiceMethods.ByName("ListKeys")),
 		connect.WithHandlerOptions(opts...),
 	)
+	configServiceGetSecretHandler := connect.NewUnaryHandler(
+		ConfigServiceGetSecretProcedure,
+		svc.GetSecret,
+		connect.WithSchema(configServiceMethods.ByName("GetSecret")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.config.v1.ConfigService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ConfigServiceWatchConfigProcedure:
@@ -177,6 +207,8 @@ func NewConfigServiceHandler(svc ConfigServiceHandler, opts ...connect.HandlerOp
 			configServiceSetConfigHandler.ServeHTTP(w, r)
 		case ConfigServiceListKeysProcedure:
 			configServiceListKeysHandler.ServeHTTP(w, r)
+		case ConfigServiceGetSecretProcedure:
+			configServiceGetSecretHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -200,4 +232,8 @@ func (UnimplementedConfigServiceHandler) SetConfig(context.Context, *connect.Req
 
 func (UnimplementedConfigServiceHandler) ListKeys(context.Context, *connect.Request[v1.ListKeysRequest]) (*connect.Response[v1.ListKeysResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.config.v1.ConfigService.ListKeys is not implemented"))
+}
+
+func (UnimplementedConfigServiceHandler) GetSecret(context.Context, *connect.Request[v1.GetSecretRequest]) (*connect.Response[v1.GetSecretResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.config.v1.ConfigService.GetSecret is not implemented"))
 }

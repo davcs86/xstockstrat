@@ -36,7 +36,7 @@ assertions (feature-074 trap).
 
 ### Step 1 — proto: environment STAGING, user_id, deprecate trading_mode, GetSecret RPC
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/common/v1/common.proto` — modify (Environment enum)

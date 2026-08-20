@@ -10,7 +10,10 @@ import "common/v1/common.proto";
 
 // ConfigService — live configuration via server-streaming WatchConfig.
 // All services call WatchConfig at startup and stream config updates.
-// Config values are scoped by environment (dev/production) and trading_mode (paper/live/all).
+// Config values are scoped by environment (production/staging) and global/per-user (user_id),
+// feature 147. paper/live is derived from environment; the trading_mode fields below are
+// deprecated and ignored by the server. Secrets are stored encrypted at rest, redacted at every
+// broadcast/read edge, and resolved only via GetSecret by allow-listed internal callers.
 service ConfigService {
   // Subscribe to config updates for a given namespace/service.
   // Server streams updates as config changes; initial snapshot is the first message.
@@ -24,14 +27,23 @@ service ConfigService {
 
   // Admin: list all keys for a namespace
   rpc ListKeys(ListKeysRequest) returns (ListKeysResponse);
+
+  // Resolve a secret's decrypted plaintext. Gated to allow-listed internal service callers
+  // (x-internal-caller); the value is decrypted server-side and never appears on WatchConfig,
+  // GetConfig, or ListKeys. Returns found=false for an absent/unset (NULL-ciphertext) secret;
+  // a decrypt failure is an INTERNAL error, never a partial/empty value (feature 147).
+  rpc GetSecret(GetSecretRequest) returns (GetSecretResponse);
 }
 
 message WatchConfigRequest {
   string namespace = 1;   // e.g. "indicators", "trading", "platform"
   string client_id = 2;   // service instance identifier
   string version = 3;     // last known version (for delta updates)
-  xstockstrat.common.v1.Environment environment = 4;    // dev or production; defaults to dev
-  xstockstrat.common.v1.TradingMode trading_mode = 5;   // paper or live; 'all' rows included always
+  xstockstrat.common.v1.Environment environment = 4;    // production or staging; defaults to staging
+  xstockstrat.common.v1.TradingMode trading_mode = 5 [deprecated = true];   // deprecated (feature 147): ignored by the server; paper/live derives from environment
+  // Optional per-user scope. When set, the server overlays this user's per-user values on top of
+  // the global (user-unset) values for the resolved (namespace, environment). Empty = global.
+  string user_id = 6;
 }
 
 message ConfigSnapshot {
@@ -42,7 +54,7 @@ message ConfigSnapshot {
   ConfigUpdateType update_type = 5;
   repeated string changed_keys = 6; // populated for DELTA updates
   xstockstrat.common.v1.Environment environment = 7;
-  xstockstrat.common.v1.TradingMode trading_mode = 8;
+  xstockstrat.common.v1.TradingMode trading_mode = 8 [deprecated = true];  // deprecated (feature 147): always UNSPECIFIED
 }
 
 message ConfigValue {
@@ -82,7 +94,19 @@ message ValidationRule {
 message GetConfigRequest {
   string namespace = 1;
   xstockstrat.common.v1.Environment environment = 2;
-  xstockstrat.common.v1.TradingMode trading_mode = 3;
+  xstockstrat.common.v1.TradingMode trading_mode = 3 [deprecated = true];  // deprecated (feature 147): ignored
+  string user_id = 4;  // optional per-user scope; empty = global
+}
+
+message GetSecretRequest {
+  string namespace = 1;
+  string key = 2;
+  xstockstrat.common.v1.Environment environment = 3;  // production or staging
+}
+
+message GetSecretResponse {
+  string value = 1;   // decrypted plaintext; empty when found=false
+  bool found = 2;     // false when the secret is unset (row absent or ciphertext NULL)
 }
 
 message SetConfigRequest {
@@ -92,11 +116,14 @@ message SetConfigRequest {
   string author = 4;
   string reason = 5;
   xstockstrat.common.v1.Environment environment = 6;
-  xstockstrat.common.v1.TradingMode trading_mode = 7;
+  xstockstrat.common.v1.TradingMode trading_mode = 7 [deprecated = true];  // deprecated (feature 147): ignored
   // When true, allow this write to CREATE a not-yet-registered key at the exact
-  // (namespace,key,environment,trading_mode) scope. Default false: a write to an
+  // (namespace,key,environment,user_id) scope. Default false: a write to an
   // unregistered scope is refused with NOT_FOUND, so a typo cannot mint an orphan key.
   bool create_key = 8;
+  // Optional per-user scope. Empty = the global value; a non-empty user_id writes/updates that
+  // user's per-user override. Secret keys (is_secret) are global-scope only (feature 147).
+  string user_id = 9;
 }
 
 message SetConfigResponse {
@@ -107,7 +134,8 @@ message SetConfigResponse {
 message ListKeysRequest {
   string namespace = 1;
   xstockstrat.common.v1.Environment environment = 2;
-  xstockstrat.common.v1.TradingMode trading_mode = 3;
+  xstockstrat.common.v1.TradingMode trading_mode = 3 [deprecated = true];  // deprecated (feature 147): ignored
+  string user_id = 4;  // optional per-user scope; empty = global
 }
 
 message ListKeysResponse {
@@ -123,7 +151,7 @@ message ConfigKeyMeta {
   bool is_secret = 4;
   string consuming_service = 5;
   xstockstrat.common.v1.Environment environment = 6;
-  xstockstrat.common.v1.TradingMode trading_mode = 7;
+  xstockstrat.common.v1.TradingMode trading_mode = 7 [deprecated = true];  // deprecated (feature 147): always UNSPECIFIED
   ValidationRule validation = 8;  // optional; absent = no validation
   // The row's live value_data — what SetConfig writes and WatchConfig/GetConfig serve.
   // This is what a config-ui "Value" column must display and prefill for editing.

@@ -170,8 +170,11 @@ export declare enum TradingMode {
  */
 export declare const TradingModeSchema: GenEnum<TradingMode>;
 /**
- * Environment distinguishes dev from production deployments.
- * Used by xstockstrat-config to scope config values per deployment environment.
+ * Environment distinguishes deployment environments; used by xstockstrat-config to scope config
+ * values. The platform's two environments are STAGING and PRODUCTION (feature 147). paper/live
+ * trading mode is DERIVED from the environment (production=live, staging=paper), not a separate
+ * config dimension. ENVIRONMENT_DEV is deprecated in favor of ENVIRONMENT_STAGING but retained for
+ * wire compatibility; the config server treats DEV and STAGING as the same 'staging' scope.
  *
  * @generated from enum xstockstrat.common.v1.Environment
  */
@@ -181,13 +184,20 @@ export declare enum Environment {
      */
     UNSPECIFIED = 0,
     /**
-     * @generated from enum value: ENVIRONMENT_DEV = 1;
+     * deprecated: use ENVIRONMENT_STAGING (feature 147)
+     *
+     * @generated from enum value: ENVIRONMENT_DEV = 1 [deprecated = true];
+     * @deprecated
      */
     DEV = 1,
     /**
      * @generated from enum value: ENVIRONMENT_PRODUCTION = 2;
      */
-    PRODUCTION = 2
+    PRODUCTION = 2,
+    /**
+     * @generated from enum value: ENVIRONMENT_STAGING = 3;
+     */
+    STAGING = 3
 }
 /**
  * Describes the enum xstockstrat.common.v1.Environment.

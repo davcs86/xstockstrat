@@ -30,10 +30,19 @@ export interface WatchConfigRequest {
     clientId: string;
     /** last known version (for delta updates) */
     version: string;
-    /** dev or production; defaults to dev */
+    /** production or staging; defaults to staging */
     environment: Environment;
-    /** paper or live; 'all' rows included always */
+    /**
+     * deprecated (feature 147): ignored by the server; paper/live derives from environment
+     *
+     * @deprecated
+     */
     tradingMode: TradingMode;
+    /**
+     * Optional per-user scope. When set, the server overlays this user's per-user values on top of
+     * the global (user-unset) values for the resolved (namespace, environment). Empty = global.
+     */
+    userId: string;
 }
 export interface ConfigSnapshot {
     namespace: string;
@@ -46,6 +55,11 @@ export interface ConfigSnapshot {
     /** populated for DELTA updates */
     changedKeys: string[];
     environment: Environment;
+    /**
+     * deprecated (feature 147): always UNSPECIFIED
+     *
+     * @deprecated
+     */
     tradingMode: TradingMode;
 }
 export interface ConfigSnapshot_ValuesEntry {
@@ -78,7 +92,26 @@ export interface ValidationRule {
 export interface GetConfigRequest {
     namespace: string;
     environment: Environment;
+    /**
+     * deprecated (feature 147): ignored
+     *
+     * @deprecated
+     */
     tradingMode: TradingMode;
+    /** optional per-user scope; empty = global */
+    userId: string;
+}
+export interface GetSecretRequest {
+    namespace: string;
+    key: string;
+    /** production or staging */
+    environment: Environment;
+}
+export interface GetSecretResponse {
+    /** decrypted plaintext; empty when found=false */
+    value: string;
+    /** false when the secret is unset (row absent or ciphertext NULL) */
+    found: boolean;
 }
 export interface SetConfigRequest {
     namespace: string;
@@ -87,13 +120,23 @@ export interface SetConfigRequest {
     author: string;
     reason: string;
     environment: Environment;
+    /**
+     * deprecated (feature 147): ignored
+     *
+     * @deprecated
+     */
     tradingMode: TradingMode;
     /**
      * When true, allow this write to CREATE a not-yet-registered key at the exact
-     * (namespace,key,environment,trading_mode) scope. Default false: a write to an
+     * (namespace,key,environment,user_id) scope. Default false: a write to an
      * unregistered scope is refused with NOT_FOUND, so a typo cannot mint an orphan key.
      */
     createKey: boolean;
+    /**
+     * Optional per-user scope. Empty = the global value; a non-empty user_id writes/updates that
+     * user's per-user override. Secret keys (is_secret) are global-scope only (feature 147).
+     */
+    userId: string;
 }
 export interface SetConfigResponse {
     version: string;
@@ -102,7 +145,14 @@ export interface SetConfigResponse {
 export interface ListKeysRequest {
     namespace: string;
     environment: Environment;
+    /**
+     * deprecated (feature 147): ignored
+     *
+     * @deprecated
+     */
     tradingMode: TradingMode;
+    /** optional per-user scope; empty = global */
+    userId: string;
 }
 export interface ListKeysResponse {
     keys: ConfigKeyMeta[];
@@ -118,6 +168,11 @@ export interface ConfigKeyMeta {
     isSecret: boolean;
     consumingService: string;
     environment: Environment;
+    /**
+     * deprecated (feature 147): always UNSPECIFIED
+     *
+     * @deprecated
+     */
     tradingMode: TradingMode;
     /** optional; absent = no validation */
     validation?: ValidationRule | undefined;
@@ -133,6 +188,8 @@ export declare const ConfigSnapshot_ValuesEntry: MessageFns<ConfigSnapshot_Value
 export declare const ConfigValue: MessageFns<ConfigValue>;
 export declare const ValidationRule: MessageFns<ValidationRule>;
 export declare const GetConfigRequest: MessageFns<GetConfigRequest>;
+export declare const GetSecretRequest: MessageFns<GetSecretRequest>;
+export declare const GetSecretResponse: MessageFns<GetSecretResponse>;
 export declare const SetConfigRequest: MessageFns<SetConfigRequest>;
 export declare const SetConfigResponse: MessageFns<SetConfigResponse>;
 export declare const ListKeysRequest: MessageFns<ListKeysRequest>;
@@ -141,7 +198,10 @@ export declare const ConfigKeyMeta: MessageFns<ConfigKeyMeta>;
 /**
  * ConfigService — live configuration via server-streaming WatchConfig.
  * All services call WatchConfig at startup and stream config updates.
- * Config values are scoped by environment (dev/production) and trading_mode (paper/live/all).
+ * Config values are scoped by environment (production/staging) and global/per-user (user_id),
+ * feature 147. paper/live is derived from environment; the trading_mode fields below are
+ * deprecated and ignored by the server. Secrets are stored encrypted at rest, redacted at every
+ * broadcast/read edge, and resolved only via GetSecret by allow-listed internal callers.
  */
 export type ConfigServiceService = typeof ConfigServiceService;
 export declare const ConfigServiceService: {
@@ -188,6 +248,21 @@ export declare const ConfigServiceService: {
         readonly responseSerialize: (value: ListKeysResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => ListKeysResponse;
     };
+    /**
+     * Resolve a secret's decrypted plaintext. Gated to allow-listed internal service callers
+     * (x-internal-caller); the value is decrypted server-side and never appears on WatchConfig,
+     * GetConfig, or ListKeys. Returns found=false for an absent/unset (NULL-ciphertext) secret;
+     * a decrypt failure is an INTERNAL error, never a partial/empty value (feature 147).
+     */
+    readonly getSecret: {
+        readonly path: "/xstockstrat.config.v1.ConfigService/GetSecret";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetSecretRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetSecretRequest;
+        readonly responseSerialize: (value: GetSecretResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => GetSecretResponse;
+    };
 };
 export interface ConfigServiceServer extends UntypedServiceImplementation {
     /**
@@ -201,6 +276,13 @@ export interface ConfigServiceServer extends UntypedServiceImplementation {
     setConfig: handleUnaryCall<SetConfigRequest, SetConfigResponse>;
     /** Admin: list all keys for a namespace */
     listKeys: handleUnaryCall<ListKeysRequest, ListKeysResponse>;
+    /**
+     * Resolve a secret's decrypted plaintext. Gated to allow-listed internal service callers
+     * (x-internal-caller); the value is decrypted server-side and never appears on WatchConfig,
+     * GetConfig, or ListKeys. Returns found=false for an absent/unset (NULL-ciphertext) secret;
+     * a decrypt failure is an INTERNAL error, never a partial/empty value (feature 147).
+     */
+    getSecret: handleUnaryCall<GetSecretRequest, GetSecretResponse>;
 }
 export interface ConfigServiceClient extends Client {
     /**
@@ -221,6 +303,15 @@ export interface ConfigServiceClient extends Client {
     listKeys(request: ListKeysRequest, callback: (error: ServiceError | null, response: ListKeysResponse) => void): ClientUnaryCall;
     listKeys(request: ListKeysRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListKeysResponse) => void): ClientUnaryCall;
     listKeys(request: ListKeysRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListKeysResponse) => void): ClientUnaryCall;
+    /**
+     * Resolve a secret's decrypted plaintext. Gated to allow-listed internal service callers
+     * (x-internal-caller); the value is decrypted server-side and never appears on WatchConfig,
+     * GetConfig, or ListKeys. Returns found=false for an absent/unset (NULL-ciphertext) secret;
+     * a decrypt failure is an INTERNAL error, never a partial/empty value (feature 147).
+     */
+    getSecret(request: GetSecretRequest, callback: (error: ServiceError | null, response: GetSecretResponse) => void): ClientUnaryCall;
+    getSecret(request: GetSecretRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetSecretResponse) => void): ClientUnaryCall;
+    getSecret(request: GetSecretRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetSecretResponse) => void): ClientUnaryCall;
 }
 export declare const ConfigServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): ConfigServiceClient;
