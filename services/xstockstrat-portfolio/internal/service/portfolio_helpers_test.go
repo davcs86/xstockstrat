@@ -122,12 +122,13 @@ func computeRealizedPnL(completeFills, partialFills []orderFillPayload) float64 
 			acc.qty += qty
 			acc.costBasis += qty * fillPrice
 		} else {
-			avgEntry := acc.costBasis / acc.qty
+			// feature 042: route the realized computation through the ONE production helper so this
+			// mirror can never drift from GetPnL's math (DRY collapse — design Open Risk).
+			realized += realizedDelta(acc.qty, acc.costBasis, qty, fillPrice)
 			closeQty := qty
 			if math.Abs(closeQty) > math.Abs(acc.qty) {
 				closeQty = -acc.qty
 			}
-			realized += (-closeQty) * (fillPrice - avgEntry)
 			oldQty := acc.qty
 			acc.qty += closeQty
 			if math.Abs(acc.qty) < 1e-9 {
@@ -425,5 +426,62 @@ func nearlyEqualPos(t *testing.T, field string, got, want float64) {
 	t.Helper()
 	if math.Abs(got-want) > 1e-9 {
 		t.Errorf("%s: got %v, want %v", field, got, want)
+	}
+}
+
+// ─── realizedDelta (feature 042) — the ONE realized-P&L reduce helper ──────────
+
+// TestRealizedDelta_Characterization pins the reduce math directly. This is the load-bearing
+// computation the enriched portfolio.position.closed payload's realized_pnl and the partial
+// realized_accum accumulation are built from (both = sum of realizedDelta over reducing fills).
+func TestRealizedDelta_Characterization(t *testing.T) {
+	cases := []struct {
+		name                             string
+		accQty, accCost, fillQty, fillPx float64
+		want                             float64
+	}{
+		// Long 100 @ avg 10 (cost 1000); sell 40 @ 15 → realized = 40*(15-10) = 200.
+		{"long_partial_sell", 100, 1000, -40, 15, 200},
+		// Long 100 @ avg 10; sell 100 @ 12 → realized = 100*(12-10) = 200.
+		{"long_full_close", 100, 1000, -100, 12, 200},
+		// Long 100 @ avg 10; sell 150 @ 12 → only 100 closes → realized = 100*(12-10) = 200.
+		{"long_oversell_caps", 100, 1000, -150, 12, 200},
+		// Opening / adding (same direction) → 0.
+		{"long_add_more", 100, 1000, 50, 11, 0},
+		// Empty position (no prior qty) → 0 (a redelivered post-close sell must not contribute).
+		{"empty_position", 0, 0, -40, 15, 0},
+		// Short 100 @ avg 20 (cost -2000); cover 40 @ 15 → realized = 40*(20-15) = 200.
+		{"short_partial_cover", -100, -2000, 40, 15, 200},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := realizedDelta(tc.accQty, tc.accCost, tc.fillQty, tc.fillPx)
+			if math.Abs(got-tc.want) > 1e-9 {
+				t.Fatalf("realizedDelta(%v,%v,%v,%v) = %v, want %v",
+					tc.accQty, tc.accCost, tc.fillQty, tc.fillPx, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestRealizedDelta_MatchesGetPnLPath proves the extraction is behavior-preserving: computeRealizedPnL
+// (the independent two-pass mirror of GetPnL, now routed through realizedDelta) reproduces the exact
+// realized figure for a known multi-fill long — open 100@10, partial sell 40@15, full close 60@20.
+func TestRealizedDelta_MatchesGetPnLPath(t *testing.T) {
+	fills := []orderFillPayload{
+		{OrderID: "o1", Symbol: "AAPL", Qty: 100, FillPrice: 10},
+		{OrderID: "o2", Symbol: "AAPL", Qty: -40, FillPrice: 15},
+		{OrderID: "o3", Symbol: "AAPL", Qty: -60, FillPrice: 20},
+	}
+	// Expected realized = 40*(15-10) + 60*(20-10) = 200 + 600 = 800.
+	got := computeRealizedPnL(fills, nil)
+	if math.Abs(got-800) > 1e-9 {
+		t.Fatalf("computeRealizedPnL = %v, want 800 (via realizedDelta)", got)
+	}
+	// And the sum of per-reducing-fill realizedDelta calls equals the same total (the payload math).
+	d1 := realizedDelta(100, 1000, -40, 15) // 200
+	d2 := realizedDelta(60, 600, -60, 20)   // remaining 60 @ avg 10 (cost 600), sell 60@20 → 600
+	if math.Abs((d1+d2)-800) > 1e-9 {
+		t.Fatalf("sum of realizedDelta reduce steps = %v, want 800", d1+d2)
 	}
 }

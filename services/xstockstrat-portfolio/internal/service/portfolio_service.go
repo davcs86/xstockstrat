@@ -284,13 +284,28 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 		acctID = "alpaca-default"
 	}
 
+	// feature 042 — realized P&L this fill contributed by reducing the position (0 when opening/
+	// adding, or when no prior position exists — a redelivered post-close sell must not nil-deref).
+	var delta float64
+	if existing != nil {
+		delta = realizedDelta(existing.Qty, existing.CostBasis, fill.Qty, fill.FillPrice)
+	}
+
 	if newQty <= 0 {
-		_ = s.repo.ClosePosition(ctx, fill.UserID, fill.Symbol, mode)
+		// The row is about to be deleted, so the cumulative realized goes into the emitted payload
+		// only (never persisted onto the deleted row). Read the prior accum + this closing delta.
+		var sealed float64
+		if existing != nil {
+			priorAccum, _ := s.repo.GetRealizedAccum(ctx, fill.UserID, fill.Symbol, mode, acctID)
+			sealed = priorAccum + delta
+		}
+		_ = s.repo.ClosePosition(ctx, fill.UserID, fill.Symbol, mode, acctID)
 		s.emitEvent(ctx, "portfolio.position.closed", "portfolio:"+fill.UserID, map[string]interface{}{
-			"user_id": fill.UserID, "symbol": fill.Symbol,
+			"user_id": fill.UserID, "symbol": fill.Symbol, "account_id": acctID,
+			"trading_mode": mode.String(), "realized_pnl": sealed,
 		})
 	} else {
-		_ = s.repo.UpsertPosition(ctx, fill.UserID, fill.Symbol, newQty, newAvgEntry, newCost, mode, acctID)
+		_ = s.repo.UpsertPosition(ctx, fill.UserID, fill.Symbol, newQty, newAvgEntry, newCost, mode, acctID, delta)
 		eventType := "portfolio.position.opened"
 		if existing != nil {
 			eventType = "portfolio.position.updated"
@@ -497,6 +512,23 @@ func (s *PortfolioService) ListPositions(ctx context.Context, req *portfoliov1.L
 }
 
 // GetPnL computes realized + unrealized P&L for a user over a time range.
+// realizedDelta returns the realized P&L contributed by fillQty@fillPrice reducing a position of
+// accQty at average cost accCost/accQty. A non-reducing (opening/adding, or empty) fill returns 0.
+// This is the ONE realized-P&L reduce implementation (feature 042; C-10(b)) — GetPnL's applyFill
+// and ConsumeOrderFills' close-event enrichment both route through it, never a second formula.
+func realizedDelta(accQty, accCost, fillQty, fillPrice float64) float64 {
+	sameDirection := accQty == 0 || (fillQty > 0) == (accQty > 0)
+	if sameDirection {
+		return 0
+	}
+	avgEntry := accCost / accQty
+	closeQty := fillQty
+	if math.Abs(closeQty) > math.Abs(accQty) {
+		closeQty = -accQty
+	}
+	return (-closeQty) * (fillPrice - avgEntry)
+}
+
 func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRequest) (*portfoliov1.PnLResponse, error) {
 	positions, _, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
 	if err != nil {
@@ -527,12 +559,11 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 			acc.qty += qty
 			acc.costBasis += qty * fillPrice
 		} else {
-			avgEntry := acc.costBasis / acc.qty
+			realized += realizedDelta(acc.qty, acc.costBasis, qty, fillPrice)
 			closeQty := qty
 			if math.Abs(closeQty) > math.Abs(acc.qty) {
 				closeQty = -acc.qty
 			}
-			realized += (-closeQty) * (fillPrice - avgEntry)
 			oldQty := acc.qty
 			acc.qty += closeQty
 			if math.Abs(acc.qty) < 1e-9 {

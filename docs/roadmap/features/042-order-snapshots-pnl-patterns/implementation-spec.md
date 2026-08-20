@@ -1,6 +1,6 @@
 # Implementation Spec: order-snapshots-pnl-patterns
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-08-20
 **Feature**: `docs/roadmap/features/042-order-snapshots-pnl-patterns/feature.md`
 **Total Steps**: 14
@@ -79,7 +79,7 @@ nav-reachability). No Agent step is required — the product spec marks Agent `n
 
 ### Step 1 — proto: add OrderSnapshot / PnLPatternFactor / QueryPnLPatterns to analysis.proto
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -121,7 +121,7 @@ Expect `buf lint` clean and `buf breaking` to report no breaking changes (all ad
 
 ### Step 2 — proto-gen: regenerate and compile stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/**` — modify (generated)
@@ -154,7 +154,7 @@ Confirm the diff contains the new `QueryPnLPatterns`/`OrderSnapshot`/`PnLPattern
 
 ### Step 3 — migration: portfolio 010 add realized_accum to positions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/migrations/010_positions_realized_accum.up.sql` — create
@@ -186,7 +186,7 @@ Read both: confirm the `.up.sql` `ADD COLUMN` has its inverse `DROP COLUMN` in `
 
 ### Step 4 — service: portfolio realized_accum accumulation + enriched close payload + account-scoped ClosePosition
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -235,7 +235,7 @@ cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-down
 
 ### Step 5 — test: portfolio realizedDelta characterization + close-payload parity + account-scope
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_helpers_test.go` — modify
@@ -598,4 +598,29 @@ Confirm the producer contract, consumer, and retention note are present.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Step 3 & 6 — offline migration verification
+- **Disposition**: offline up/down parity by inspection (HARD CONSTRAINT — no DB spun up). Portfolio
+  010 (realized_accum) verified ADD↔DROP; analysis 016 pending Step 6.
+
+### Step 4 — `existing.RealizedAccum` → `GetRealizedAccum` repo read
+- The spec said "load `RealizedAccum` when reading a position (so `existing.RealizedAccum` is
+  populated)", but `GetPosition` returns the proto `Position`, which has **no** `realized_accum`
+  field — and the design forbids a proto field for it (attribution-stats-only, DB column). Added a
+  dedicated `PortfolioRepo.GetRealizedAccum(ctx, user, symbol, mode, account)` read instead, called
+  in the full-close branch to compute `realized_pnl = priorAccum + delta`.
+- **Disposition**: in-scope adaptation, same intent, no proto change (respects the design's
+  "no proto field" constraint). Files unchanged beyond the step's `**Files**` (repo + service).
+
+### Step 5 — ConsumeOrderFills/ClosePosition end-to-end DB assertions deferred (offline)
+- `PortfolioService.repo` is the concrete DB-backed `*repository.PortfolioRepo` (not an interface),
+  so driving `ConsumeOrderFills` end-to-end or asserting `ClosePosition`'s `AND account_id=$4`
+  against real rows needs a live database — forbidden by HARD CONSTRAINTS — and introducing a
+  position-repo interface is outside this step's `**Files**` scope. The load-bearing realized math
+  (which the enriched `realized_pnl` payload and the `realized_accum` accumulation are both built
+  from) is covered directly by `TestRealizedDelta_Characterization` +
+  `TestRealizedDelta_MatchesGetPnLPath`, and the DRY mirror `computeRealizedPnL` now routes through
+  `realizedDelta` (behavior-preserving proof via the unchanged `TestRealizedPnL_*` suite). The
+  account-scoped `ClosePosition` SQL and the payload assembly are verified by inspection + build +
+  lint; live behavior is exercised in CI/integration.
+- **Disposition**: offline-verified; end-to-end DB assertion deferred to CI (no F-* breach — the
+  realized math has direct red-green coverage).

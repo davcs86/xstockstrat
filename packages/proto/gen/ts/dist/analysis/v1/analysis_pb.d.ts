@@ -1584,6 +1584,172 @@ export type IndicatorValue = Message<"xstockstrat.analysis.v1.IndicatorValue"> &
  */
 export declare const IndicatorValueSchema: GenMessage<IndicatorValue>;
 /**
+ * One signal active for the symbol at snapshot time; `value` is the ingest conviction (0.0–1.0).
+ *
+ * @generated from message xstockstrat.analysis.v1.SignalEntry
+ */
+export type SignalEntry = Message<"xstockstrat.analysis.v1.SignalEntry"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
+    /**
+     * @generated from field: double value = 2;
+     */
+    value: number;
+    /**
+     * @generated from field: string source = 3;
+     */
+    source: string;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.SignalEntry.
+ * Use `create(SignalEntrySchema)` to create a new message.
+ */
+export declare const SignalEntrySchema: GenMessage<SignalEntry>;
+/**
+ * A point-in-time capture of the indicator/signal/market context at an order event.
+ *
+ * @generated from message xstockstrat.analysis.v1.OrderSnapshot
+ */
+export type OrderSnapshot = Message<"xstockstrat.analysis.v1.OrderSnapshot"> & {
+    /**
+     * @generated from field: string order_id = 1;
+     */
+    orderId: string;
+    /**
+     * @generated from field: string position_id = 2;
+     */
+    positionId: string;
+    /**
+     * @generated from field: string symbol = 3;
+     */
+    symbol: string;
+    /**
+     * @generated from field: xstockstrat.analysis.v1.SnapshotEventType event_type = 4;
+     */
+    eventType: SnapshotEventType;
+    /**
+     * @generated from field: google.protobuf.Timestamp event_ts = 5;
+     */
+    eventTs?: Timestamp | undefined;
+    /**
+     * @generated from field: string side = 6;
+     */
+    side: string;
+    /**
+     * @generated from field: double quantity = 7;
+     */
+    quantity: number;
+    /**
+     * @generated from field: double price = 8;
+     */
+    price: number;
+    /**
+     * @generated from field: google.protobuf.Struct ohlcv_bar = 9;
+     */
+    ohlcvBar?: JsonObject | undefined;
+    /**
+     * @generated from field: map<string, double> indicator_values = 10;
+     */
+    indicatorValues: {
+        [key: string]: number;
+    };
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.SignalEntry signals = 11;
+     */
+    signals: SignalEntry[];
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.OrderSnapshot.
+ * Use `create(OrderSnapshotSchema)` to create a new message.
+ */
+export declare const OrderSnapshotSchema: GenMessage<OrderSnapshot>;
+/**
+ * A ranked attribution factor: an indicator value-range or a signal, with its avg realized-P&L impact.
+ *
+ * @generated from message xstockstrat.analysis.v1.PnLPatternFactor
+ */
+export type PnLPatternFactor = Message<"xstockstrat.analysis.v1.PnLPatternFactor"> & {
+    /**
+     * @generated from field: string factor_name = 1;
+     */
+    factorName: string;
+    /**
+     * @generated from field: xstockstrat.analysis.v1.FactorType factor_type = 2;
+     */
+    factorType: FactorType;
+    /**
+     * @generated from field: double value_range_low = 3;
+     */
+    valueRangeLow: number;
+    /**
+     * @generated from field: double value_range_high = 4;
+     */
+    valueRangeHigh: number;
+    /**
+     * @generated from field: int32 sample_count = 5;
+     */
+    sampleCount: number;
+    /**
+     * @generated from field: double avg_pnl_impact = 6;
+     */
+    avgPnlImpact: number;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.PnLPatternFactor.
+ * Use `create(PnLPatternFactorSchema)` to create a new message.
+ */
+export declare const PnLPatternFactorSchema: GenMessage<PnLPatternFactor>;
+/**
+ * @generated from message xstockstrat.analysis.v1.QueryPnLPatternsRequest
+ */
+export type QueryPnLPatternsRequest = Message<"xstockstrat.analysis.v1.QueryPnLPatternsRequest"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * @generated from field: string strategy_id = 2;
+     */
+    strategyId: string;
+    /**
+     * @generated from field: google.protobuf.Timestamp from_ts = 3;
+     */
+    fromTs?: Timestamp | undefined;
+    /**
+     * @generated from field: google.protobuf.Timestamp to_ts = 4;
+     */
+    toTs?: Timestamp | undefined;
+    /**
+     * @generated from field: int32 limit = 5;
+     */
+    limit: number;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.QueryPnLPatternsRequest.
+ * Use `create(QueryPnLPatternsRequestSchema)` to create a new message.
+ */
+export declare const QueryPnLPatternsRequestSchema: GenMessage<QueryPnLPatternsRequest>;
+/**
+ * @generated from message xstockstrat.analysis.v1.QueryPnLPatternsResponse
+ */
+export type QueryPnLPatternsResponse = Message<"xstockstrat.analysis.v1.QueryPnLPatternsResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.PnLPatternFactor positive_factors = 1;
+     */
+    positiveFactors: PnLPatternFactor[];
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.PnLPatternFactor negative_factors = 2;
+     */
+    negativeFactors: PnLPatternFactor[];
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.QueryPnLPatternsResponse.
+ * Use `create(QueryPnLPatternsResponseSchema)` to create a new message.
+ */
+export declare const QueryPnLPatternsResponseSchema: GenMessage<QueryPnLPatternsResponse>;
+/**
  * @generated from enum xstockstrat.analysis.v1.BacktestStatus
  */
 export declare enum BacktestStatus {
@@ -1971,6 +2137,60 @@ export declare enum OpportunityAction {
  */
 export declare const OpportunityActionSchema: GenEnum<OpportunityAction>;
 /**
+ * The order-lifecycle event a snapshot was captured at.
+ *
+ * @generated from enum xstockstrat.analysis.v1.SnapshotEventType
+ */
+export declare enum SnapshotEventType {
+    /**
+     * @generated from enum value: SNAPSHOT_EVENT_TYPE_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: SNAPSHOT_EVENT_TYPE_ORDER_CREATED = 1;
+     */
+    ORDER_CREATED = 1,
+    /**
+     * @generated from enum value: SNAPSHOT_EVENT_TYPE_ORDER_FILLED = 2;
+     */
+    ORDER_FILLED = 2,
+    /**
+     * @generated from enum value: SNAPSHOT_EVENT_TYPE_ORDER_PARTIALLY_FILLED = 3;
+     */
+    ORDER_PARTIALLY_FILLED = 3,
+    /**
+     * @generated from enum value: SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED = 4;
+     */
+    ORDER_CANCELLED = 4
+}
+/**
+ * Describes the enum xstockstrat.analysis.v1.SnapshotEventType.
+ */
+export declare const SnapshotEventTypeSchema: GenEnum<SnapshotEventType>;
+/**
+ * Whether an attribution factor is an indicator value-range or a signal presence.
+ *
+ * @generated from enum xstockstrat.analysis.v1.FactorType
+ */
+export declare enum FactorType {
+    /**
+     * @generated from enum value: FACTOR_TYPE_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: FACTOR_TYPE_INDICATOR = 1;
+     */
+    INDICATOR = 1,
+    /**
+     * @generated from enum value: FACTOR_TYPE_SIGNAL = 2;
+     */
+    SIGNAL = 2
+}
+/**
+ * Describes the enum xstockstrat.analysis.v1.FactorType.
+ */
+export declare const FactorTypeSchema: GenEnum<FactorType>;
+/**
  * @generated from service xstockstrat.analysis.v1.AnalysisService
  */
 export declare const AnalysisService: GenService<{
@@ -2135,5 +2355,16 @@ export declare const AnalysisService: GenService<{
         methodKind: "unary";
         input: typeof GetIndicatorSeriesRequestSchema;
         output: typeof GetIndicatorSeriesResponseSchema;
+    };
+    /**
+     * Ranked P&L-attribution factors (feature 042): which indicator value-ranges and signals
+     * correlate with positive vs negative realized P&L, scoped by symbol/strategy/time window.
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.QueryPnLPatterns
+     */
+    queryPnLPatterns: {
+        methodKind: "unary";
+        input: typeof QueryPnLPatternsRequestSchema;
+        output: typeof QueryPnLPatternsResponseSchema;
     };
 }>;

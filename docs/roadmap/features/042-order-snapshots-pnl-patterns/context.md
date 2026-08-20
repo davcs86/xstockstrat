@@ -312,3 +312,34 @@ corrections directly to implementation-spec.md (pre-execution; step bodies not y
 - Step 12 navGroups Engine items cite → `:62-67` (verified).
 The 6-file Step 8 count is left as-is (cohesive unit; not split). No lifecycle change (stays
 implementation-ready).
+
+## Session 2026-08-20 — sdd-execute (steps 1–5)
+
+Executed on harness branch `claude/execute-020-042-127-pfa5cw` (single integration PR model).
+
+### Step 1 — proto [done]
+- analysis.proto: SnapshotEventType + FactorType enums, SignalEntry/OrderSnapshot/PnLPatternFactor/
+  QueryPnLPatternsRequest+Response messages, QueryPnLPatterns RPC. ledger.proto:29 comment fixed to
+  "GLOBAL monotonic sequence". buf lint + breaking (against main-dev) pass.
+
+### Step 2 — proto-gen [done]
+- buf-gen.sh regenerated Go/Python/TS stubs; diff limited to analysis + the ledger comment line.
+
+### Step 3 — portfolio migration 010 [done]
+- 010_positions_realized_accum.{up,down}.sql: ADD/DROP realized_accum NUMERIC NOT NULL DEFAULT 0.
+  Offline parity verified. (127 uses 011; both coexist on the branch.)
+
+### Step 4 — portfolio producer [done]
+- realizedDelta() package-level helper (the ONE reduce formula); GetPnL applyFill routed through it.
+- ConsumeOrderFills: compute delta; full-close emits enriched portfolio.position.closed
+  {user_id,symbol,account_id,trading_mode,realized_pnl=priorAccum+delta}; partial passes delta to
+  UpsertPosition ($8, accumulates realized_accum). ClosePosition account-scoped (AND account_id=$4).
+- New repo GetRealizedAccum (deviation — proto Position has no realized_accum field). Build+lint clean.
+
+### Step 5 — portfolio tests [done]
+- computeRealizedPnL mirror collapsed onto realizedDelta (DRY); TestRealizedDelta_Characterization
+  (long/short partial+full+oversell+add+empty) + TestRealizedDelta_MatchesGetPnLPath. Full suite
+  green, total coverage 55.9% (≥40). End-to-end ConsumeOrderFills/DB assertions deferred (deviation).
+
+**Next:** Step 6 (analysis migration 016), 7 (config keys), 8 (analysis consumer), 9 (consumer test),
+10 (QueryPnLPatterns RPC), 11 (RPC test), 12 (UI), 13 (UI e2e), 14 (docs).

@@ -21,7 +21,7 @@ export interface LedgerEvent {
     metadata: {
         [key: string]: string;
     };
-    /** monotonically increasing per stream_key */
+    /** GLOBAL monotonic sequence (nextval('ledger.global_sequence')), ordered across all stream_keys */
     sequence: number;
     /** partition key (e.g. "order:uuid") */
     streamKey: string;

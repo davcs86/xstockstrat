@@ -84,6 +84,9 @@ const (
 	// AnalysisServiceGetIndicatorSeriesProcedure is the fully-qualified name of the AnalysisService's
 	// GetIndicatorSeries RPC.
 	AnalysisServiceGetIndicatorSeriesProcedure = "/xstockstrat.analysis.v1.AnalysisService/GetIndicatorSeries"
+	// AnalysisServiceQueryPnLPatternsProcedure is the fully-qualified name of the AnalysisService's
+	// QueryPnLPatterns RPC.
+	AnalysisServiceQueryPnLPatternsProcedure = "/xstockstrat.analysis.v1.AnalysisService/QueryPnLPatterns"
 )
 
 // AnalysisServiceClient is a client for the xstockstrat.analysis.v1.AnalysisService service.
@@ -122,6 +125,9 @@ type AnalysisServiceClient interface {
 	// evaluator's own _compute_component per declared component in a dedicated handler loop — never
 	// the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
 	GetIndicatorSeries(context.Context, *connect.Request[v1.GetIndicatorSeriesRequest]) (*connect.Response[v1.GetIndicatorSeriesResponse], error)
+	// Ranked P&L-attribution factors (feature 042): which indicator value-ranges and signals
+	// correlate with positive vs negative realized P&L, scoped by symbol/strategy/time window.
+	QueryPnLPatterns(context.Context, *connect.Request[v1.QueryPnLPatternsRequest]) (*connect.Response[v1.QueryPnLPatternsResponse], error)
 }
 
 // NewAnalysisServiceClient constructs a client for the xstockstrat.analysis.v1.AnalysisService
@@ -237,6 +243,12 @@ func NewAnalysisServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(analysisServiceMethods.ByName("GetIndicatorSeries")),
 			connect.WithClientOptions(opts...),
 		),
+		queryPnLPatterns: connect.NewClient[v1.QueryPnLPatternsRequest, v1.QueryPnLPatternsResponse](
+			httpClient,
+			baseURL+AnalysisServiceQueryPnLPatternsProcedure,
+			connect.WithSchema(analysisServiceMethods.ByName("QueryPnLPatterns")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -259,6 +271,7 @@ type analysisServiceClient struct {
 	setOpportunityAction    *connect.Client[v1.SetOpportunityActionRequest, v1.SetOpportunityActionResponse]
 	getStrategyAnalytics    *connect.Client[v1.GetStrategyAnalyticsRequest, v1.StrategyAnalytics]
 	getIndicatorSeries      *connect.Client[v1.GetIndicatorSeriesRequest, v1.GetIndicatorSeriesResponse]
+	queryPnLPatterns        *connect.Client[v1.QueryPnLPatternsRequest, v1.QueryPnLPatternsResponse]
 }
 
 // RunBacktest calls xstockstrat.analysis.v1.AnalysisService.RunBacktest.
@@ -346,6 +359,11 @@ func (c *analysisServiceClient) GetIndicatorSeries(ctx context.Context, req *con
 	return c.getIndicatorSeries.CallUnary(ctx, req)
 }
 
+// QueryPnLPatterns calls xstockstrat.analysis.v1.AnalysisService.QueryPnLPatterns.
+func (c *analysisServiceClient) QueryPnLPatterns(ctx context.Context, req *connect.Request[v1.QueryPnLPatternsRequest]) (*connect.Response[v1.QueryPnLPatternsResponse], error) {
+	return c.queryPnLPatterns.CallUnary(ctx, req)
+}
+
 // AnalysisServiceHandler is an implementation of the xstockstrat.analysis.v1.AnalysisService
 // service.
 type AnalysisServiceHandler interface {
@@ -383,6 +401,9 @@ type AnalysisServiceHandler interface {
 	// evaluator's own _compute_component per declared component in a dedicated handler loop — never
 	// the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
 	GetIndicatorSeries(context.Context, *connect.Request[v1.GetIndicatorSeriesRequest]) (*connect.Response[v1.GetIndicatorSeriesResponse], error)
+	// Ranked P&L-attribution factors (feature 042): which indicator value-ranges and signals
+	// correlate with positive vs negative realized P&L, scoped by symbol/strategy/time window.
+	QueryPnLPatterns(context.Context, *connect.Request[v1.QueryPnLPatternsRequest]) (*connect.Response[v1.QueryPnLPatternsResponse], error)
 }
 
 // NewAnalysisServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -494,6 +515,12 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 		connect.WithSchema(analysisServiceMethods.ByName("GetIndicatorSeries")),
 		connect.WithHandlerOptions(opts...),
 	)
+	analysisServiceQueryPnLPatternsHandler := connect.NewUnaryHandler(
+		AnalysisServiceQueryPnLPatternsProcedure,
+		svc.QueryPnLPatterns,
+		connect.WithSchema(analysisServiceMethods.ByName("QueryPnLPatterns")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.analysis.v1.AnalysisService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AnalysisServiceRunBacktestProcedure:
@@ -530,6 +557,8 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 			analysisServiceGetStrategyAnalyticsHandler.ServeHTTP(w, r)
 		case AnalysisServiceGetIndicatorSeriesProcedure:
 			analysisServiceGetIndicatorSeriesHandler.ServeHTTP(w, r)
+		case AnalysisServiceQueryPnLPatternsProcedure:
+			analysisServiceQueryPnLPatternsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -605,4 +634,8 @@ func (UnimplementedAnalysisServiceHandler) GetStrategyAnalytics(context.Context,
 
 func (UnimplementedAnalysisServiceHandler) GetIndicatorSeries(context.Context, *connect.Request[v1.GetIndicatorSeriesRequest]) (*connect.Response[v1.GetIndicatorSeriesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.GetIndicatorSeries is not implemented"))
+}
+
+func (UnimplementedAnalysisServiceHandler) QueryPnLPatterns(context.Context, *connect.Request[v1.QueryPnLPatternsRequest]) (*connect.Response[v1.QueryPnLPatternsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.QueryPnLPatterns is not implemented"))
 }

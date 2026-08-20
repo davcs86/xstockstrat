@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BacktestResult, EvaluateReadinessRequest, EvaluateReadinessResponse, FundamentalsScanSummary, GetBacktestRequest, GetIndicatorSeriesRequest, GetIndicatorSeriesResponse, GetStrategyAnalyticsRequest, GetStrategyReportRequest, GetStrategyRequest, ListBacktestsRequest, ListBacktestsResponse, ListOpportunitiesRequest, ListOpportunitiesResponse, ListStrategiesRequest, ListStrategiesResponse, ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse, ManageStrategyRequest, RunBacktestRequest, RunFundamentalsScanRequest, ScoreStrategyRequest, ScreenSymbolsRequest, ScreenSymbolsResponse, SetOpportunityActionRequest, SetOpportunityActionResponse, SetStrategyLiveRequest, SetStrategyLiveResponse, StrategyAnalytics, StrategyDefinition, StrategyReport, StrategyScore } from "./analysis_pb.js";
+import { BacktestResult, EvaluateReadinessRequest, EvaluateReadinessResponse, FundamentalsScanSummary, GetBacktestRequest, GetIndicatorSeriesRequest, GetIndicatorSeriesResponse, GetStrategyAnalyticsRequest, GetStrategyReportRequest, GetStrategyRequest, ListBacktestsRequest, ListBacktestsResponse, ListOpportunitiesRequest, ListOpportunitiesResponse, ListStrategiesRequest, ListStrategiesResponse, ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse, ManageStrategyRequest, QueryPnLPatternsRequest, QueryPnLPatternsResponse, RunBacktestRequest, RunFundamentalsScanRequest, ScoreStrategyRequest, ScreenSymbolsRequest, ScreenSymbolsResponse, SetOpportunityActionRequest, SetOpportunityActionResponse, SetStrategyLiveRequest, SetStrategyLiveResponse, StrategyAnalytics, StrategyDefinition, StrategyReport, StrategyScore } from "./analysis_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -189,6 +189,18 @@ export const AnalysisService = {
       name: "GetIndicatorSeries",
       I: GetIndicatorSeriesRequest,
       O: GetIndicatorSeriesResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Ranked P&L-attribution factors (feature 042): which indicator value-ranges and signals
+     * correlate with positive vs negative realized P&L, scoped by symbol/strategy/time window.
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.QueryPnLPatterns
+     */
+    queryPnLPatterns: {
+      name: "QueryPnLPatterns",
+      I: QueryPnLPatternsRequest,
+      O: QueryPnLPatternsResponse,
       kind: MethodKind.Unary,
     },
   }
