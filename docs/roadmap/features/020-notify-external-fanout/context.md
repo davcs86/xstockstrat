@@ -72,3 +72,38 @@
   FR-1/FR-2/FR-5 literally; proto change C-09 + touches every emitter — larger scope]; (C) hybrid —
   gate on `severity`, refine with `context.conviction` where present, payload from available fields.
 - Round 1 complete; full mode mandates ≥2 rounds. Awaiting user steer on the fork before round 2.
+
+## Session 2026-08-19 — sdd-design (Phase 1 round 2 + approval)
+
+- Round 2 (proposer+adversary) on the HYBRID gate. Adversary verdict REVISE, no Floor breach.
+  Verified: `alertSeverityToNumber` exists (`notifyServiceImpl.ts:3,53` — not F-04); AlertSeverity
+  enum INFO=1/WARNING=2/ERROR=3/CRITICAL=4 (`notify.proto:43-47`); all 5 config value_type↔getter
+  pairs match. Fixes baked into design.md:
+  - **Dedup key → content hash** `sha256(category|source_service|title|body [+symbol/trigger_type/
+    strategy_id when present])`. Round-1's exclude-title/body steer was WRONG: it collapsed distinct
+    context-less trading alerts (CRITICAL reconciliation/approval/fill — `trading.go:1357/3059/3073`)
+    to one key; gate-passing producers embed no wall-clock in title/body, so a content hash dedups a
+    byte-identical re-fire without dropping distinct alerts.
+  - **Hook after the success callback** (`queueMicrotask`) so dispatch's synchronous prefix can't
+    throw an RPC error onto an already-succeeded emit; full-body try/catch + `.catch` on the floating
+    promise (FR-6/AC-4).
+  - **NaN conviction → severity-only fallback**; `min_confidence_threshold` reworded to a readiness-
+    ordinal floor (ledger 023, not a probability); `min_severity` registered + range-clamped + 0-4↔
+    severity map documented (C-05/C-14).
+- **User decision at the round-2 approval gate: `min_severity` default = WARNING (2).** Trade-off
+  accepted: INFO fill confirmations do NOT fan out by default (despite the user story headline);
+  operator lowers `notify.fanout.min_severity` to 1 to capture fills. Recorded as an Open Risk.
+- Chosen approach: hybrid severity-primary + conviction-floor-when-present gate; fire-and-forget
+  content-hash-deduped fanout via Node `fetch`; 5 config keys seeded by config migration 017; 2
+  SECRET env vars across 3 deploy files. Rejected: context.confidence fail-closed (inert),
+  proto-field addition (scope), alertId dedup, exclude-title/body dedup. Constitution touched:
+  C-01/P-03, C-04, C-05, C-07, C-10, C-14, F-04, F-07, C-08/P-06 (all honored; no Floor breach).
+- Status: spec-ready → design-approved. Rounds: 2 (full). 4 open risks carried to /sdd-spec.
+- **Note for /sdd-spec:** the product-spec's FR-1/FR-2/FR-5 still say "confidence score" and list 4
+  config keys — reword to the hybrid model and register `notify.fanout.min_severity` (the 5th key).
+
+### Open Threads
+- [ ] min_severity=WARNING default excludes INFO fills — document prominently → config-seed/docs step.
+- [ ] Struct-key pinning (`conviction`/`symbol`/`trigger_type`/`strategy_id`) — red-before-green test → fanout-wiring test step.
+- [ ] SECRET env parity across docker-compose + 2 DO specs → deploy-wiring step (C-10 verification).
+- [ ] Reword FR-1/FR-2/FR-5 + register 5th config key → before/at /sdd-spec.
