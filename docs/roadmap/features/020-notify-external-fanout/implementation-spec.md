@@ -1,6 +1,6 @@
 # Implementation Spec: notify-external-fanout
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-08-20
 **Feature**: `docs/roadmap/features/020-notify-external-fanout/feature.md`
 **Total Steps**: 7
@@ -62,7 +62,7 @@ architecture.
 
 ### Step 1 — migration: seed the five `notify.fanout.*` config keys (config migration 017)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/017_notify_fanout.up.sql` — create
@@ -128,7 +128,7 @@ the table above, and no credential key is present. Offline only — do **not** s
 
 ### Step 2 — service: `FanoutDispatcher` module (Slack + SendGrid senders, gate, dedup)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/fanout/fanout.ts` — create
@@ -215,7 +215,7 @@ build check: `cd services/xstockstrat-notify && pnpm run build` — `tsc` compil
 
 ### Step 3 — test: `FanoutDispatcher` unit tests (gate, dedup, payload, enable-iff-set, error logging)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/fanout.test.ts` — create
@@ -276,7 +276,7 @@ tree to confirm RED (module import fails / behavior absent), then GREEN after St
 
 ### Step 4 — service: wire `FanoutDispatcher` into `emitAlert` (post-callback, non-blocking)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/index.ts` — modify
@@ -328,7 +328,7 @@ tree to confirm RED (module import fails / behavior absent), then GREEN after St
 
 ### Step 5 — test: `emitAlert` fanout wiring — isolation, dedup end-to-end, flat-Struct conviction read
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts` — modify

@@ -156,3 +156,33 @@
   - Note: `makeImpl` cited at notifyServiceImpl.test.ts:55/:56 but actually lives at :47
     (makePool:38 correct) — line drift only, symbol/behavior accurate. — [x] FIXED in the 2026-08-20
     spec-fix pass: both cites corrected to `:47` (verified against the test file).
+
+## Session 2026-08-20 — sdd-execute (steps 1–5)
+
+Executed on harness branch `claude/execute-020-042-127-pfa5cw` (single integration PR model, same
+as 127). Node/TS notify service — no proto/codegen.
+
+### Step 1 — config migration 017 [done]
+- `017_notify_fanout.{up,down}.sql`: 5 keys × 2 envs (min_severity int 2, min_confidence_threshold
+  float 0.7, dedup_window_seconds int 300, sendgrid_from_email/to_email string ''). No credential
+  rows. Offline up/down parity verified; value_types match getInt/getFloat/getString.
+
+### Step 2 — FanoutDispatcher module [done]
+- `src/fanout/fanout.ts`: severity+conviction gate (live config read), content-hash dedup with
+  sweep, Slack + SendGrid v3 senders (AbortController 3s timeout), enable-iff-credential-set, full
+  best-effort try/catch. Node global fetch (first outbound HTTP; no new dep). Build clean.
+
+### Step 3 — fanout unit tests [done]
+- `src/__tests__/fanout.test.ts`: AC-2/3/5/6/7/8/9 + sendgrid-disabled-when-to-empty. fetch stubbed.
+  31 tests pass, fanout.js coverage 96%.
+
+### Step 4 — wire into emitAlert [done]
+- `src/index.ts`: construct + inject FanoutDispatcher. `notifyServiceImpl.ts`: 3rd ctor param;
+  `queueMicrotask(() => void fanout.dispatch(alert).catch(...))` AFTER the success callback so
+  fanout never affects the RPC result or primary stream latency (FR-6/AC-4).
+
+### Step 5 — emitAlert wiring tests [done]
+- Extended `notifyServiceImpl.test.ts`: AC-1/3/4/5/6 + flat-Struct conviction read. Fixed existing
+  makeImpl + 4 direct constructors for the new 3rd arg. 37 tests pass, lint 0 errors.
+
+**Next:** Step 6 (deploy pipeline secrets), Step 7 (docs + context-scrubber).
