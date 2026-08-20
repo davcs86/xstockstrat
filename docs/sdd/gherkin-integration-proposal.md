@@ -97,9 +97,12 @@ Feature: <slug>
 - Scenario IDs are **append-only within a feature** — never renumber `@AC-*`, because test steps and
   RED assertions cite them (mirrors the Constitution's stable-ID rule).
 
-`## Acceptance Criteria` in `product-spec.md` is retained as a short human-readable summary; the
-`.feature` file is the authoritative, testable form. (Alternatively, the AC section may become a
-one-line pointer to `acceptance.feature` — decide at adoption.)
+**Decision (resolves former O-2): `acceptance.feature` replaces the prose `## Acceptance Criteria`.**
+The numbered `## Acceptance Criteria` list is removed from `product-spec.md`; scenarios in
+`acceptance.feature` are the single source of acceptance truth, avoiding two-source drift (the same
+reasoning that keeps lifecycle status only in `status.md`). `product-spec.md` keeps its `FR-N`
+Functional Requirements and, in place of the old AC section, a one-line pointer:
+`## Acceptance Criteria — see acceptance.feature (scenarios @AC-*)`.
 
 ---
 
@@ -109,7 +112,9 @@ Each change is additive and surgical; no new skills are created.
 
 ### 4.1 `/sdd-story` (Phase 1 — writes the artifact)
 - After writing `product-spec.md`, generate `acceptance.feature` with a `Feature:` block and one
-  tagged `Scenario:` per acceptance criterion, derived from the FRs and the user story.
+  tagged `Scenario:` per behavior, derived from the FRs and the user story.
+- Change the `product-spec.md` template: **drop the numbered `## Acceptance Criteria` list**, replace
+  it with the one-line pointer (§3), keep `FR-N`.
 - Add `acceptance.feature` to the `## Artifacts` list in `feature.md` and to the file-list echoed to
   the operator.
 - The SKILL's `allowed-tools` already permit `Write`; no tooling change.
@@ -177,13 +182,20 @@ The per-feature file set is enumerated in several places; all must learn about `
 
 ## 5. Rollout
 
-1. **Docs/spec first** (this proposal + the skill/Constitution edits) — a docs-only PR to `main-dev`.
-2. **Opt-in** on the next 2–3 *new* features to prove the format and the traceability check.
-3. **Do not backfill.** The 32 features that still have a `product-spec.md` are not retrofitted;
-   archived features have no `product-spec.md` at all. Backfilling would be pure token cost with no
-   regression caught.
-4. **Promote to enforced** (C-15 becomes a hard `/sdd-review` blocker) only after the opt-in features
-   validate the workflow.
+**Decision (resolves former O-4): binding immediately — no advisory pilot window.** C-15 and the
+scenario↔test coverage gate are enforced from the adoption PR onward.
+
+1. **One PR lands everything**: this proposal, the skill edits (§4.1–4.7), and Constitution **C-15**
+   (§4.8) — docs/skills-only, to `main-dev`.
+2. **Applies to features entering the pipeline after adoption.** Any feature that reaches
+   `/sdd-story` or `/sdd-review product-spec` after the adoption PR must carry a well-formed
+   `acceptance.feature`; a missing/uncovered scenario is a hard `BLOCKER` citing C-15.
+3. **Grandfather in-flight and completed work.** Features already at `spec-ready` or later are **not**
+   re-gated, and the ~32 features with a `product-spec.md` are **not backfilled** (archived features
+   have no `product-spec.md` at all). Backfilling would be pure token cost catching no regression.
+4. **First real feature is the de-facto dogfood** — because the gate is binding, the first
+   post-adoption feature both validates the format and is held to it; refine the templates by
+   fast-follow PR if friction surfaces, not by relaxing the gate.
 
 ---
 
@@ -201,12 +213,19 @@ The per-feature file set is enumerated in several places; all must learn about `
 
 ---
 
-## 7. Open questions
+## 7. Settled decisions & remaining open questions
+
+**Settled:**
+
+- Executability → **spec + traceability only** (no per-language BDD runners). §2.1.
+- Placement → **separate `acceptance.feature`** file. §2.2.
+- AC format → **`acceptance.feature` replaces** the prose `## Acceptance Criteria`. §3 (was O-2).
+- Enforcement → **binding immediately** from the adoption PR; grandfather in-flight/completed work;
+  no backfill. §5 (was O-4).
+
+**Still open:**
 
 - **O-1** — Archiver policy: **keep** `acceptance.feature` as durable regression memory (recommended),
   or fold-and-delete into `## Archive Synthesis`?
-- **O-2** — `## Acceptance Criteria` in `product-spec.md`: keep as a human summary, or reduce to a
-  pointer at `acceptance.feature`?
-- **O-3** — Should Track-C bug fixes be *required* to add a regression scenario in v1, or is that a
-  later phase?
-- **O-4** — Enforcement timing: how many opt-in features before C-15 flips from advisory to blocking?
+- **O-3** — Should Track-C bug fixes be *required* to add a regression scenario at adoption, or is that
+  a fast-follow?
