@@ -12,6 +12,8 @@
 |---|---|---|---|
 | 2026-08-20 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-20 | `draft` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written. Operator kept per-user overlay on WatchConfig. |
+| 2026-08-20 | `design-approved` → `implementation-ready` | /sdd-spec | 12-step implementation-spec.md written (evidence-cited, AC-mapped). |
+| 2026-08-20 | `implementation-ready` → `in-progress` | implementation | Implementing on `claude/config-secrets-environment-e0eue6`. |
 
 ---
 
