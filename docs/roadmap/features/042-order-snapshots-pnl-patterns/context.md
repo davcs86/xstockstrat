@@ -127,3 +127,40 @@
     duplicates portfolio's avg-entry/realized accounting.
   - **Run round 3** to validate the substantially-revised design before writing design.md.
 - Round 2 complete. Proceeding to round 3 with Option A + all bake-in fixes.
+
+## Session 2026-08-19 — sdd-design (Phase 1 round 3)
+
+- Round 3 proposer locked the corrected mechanics (Option A portfolio cumulative + raw-sample store +
+  4 analysis tables + single-txn cursor-gated consumer + query-time bucketing). Round-3 adversary
+  verdict REVISE, **no Floor breach** — and it VALIDATED the load-bearing mechanics: global-sequence
+  ordering holds (ledger `sequence` is globally monotonic via `nextval('ledger.global_sequence')`,
+  ledger CLAUDE.md invariant #4 + `ledgerServiceImpl.test.ts:373-402` — NOT "per stream_key" as the
+  stale `ledger.proto:29` comment says); idempotency holds; the seal-after-close ordering is provably
+  safe (`seq(order.filled) < seq(position.closed)` because portfolio emits the close only after
+  consuming the closing fill).
+- **Round-3 bake-in fixes (fold into round 4 / design.md):**
+  - [C-10(b), 056 fail] Do NOT compute realized P&L two ways. Compute the cumulative using portfolio's
+    EXISTING proven direction-aware `applyFill` algorithm (`portfolio_service.go:519-550`), not a
+    parallel long-only formula (which diverges on shorts/flips) + a PARITY TEST
+    `realized_accum == GetPnL.realized` for the closed position.
+  - [P-03 shorts] The live reduce branch keys on sign-of-fill (`:269`), so a short cover enters the
+    "buying more" branch (no realized calc) and the residual short is dropped by pre-existing
+    `newQty<=0→ClosePosition` logic; the live fill path can't even open a short (shorts enter via
+    `account.positions.synced`). Reusing `applyFill` handles both directions; document the scope.
+  - [C-01] `ClosePosition` DELETEs the row (`portfolio_repo.go:66-70`) → on full close the cumulative
+    goes into the EMITTED PAYLOAD only, never "persisted on close." And `UpsertPosition`'s
+    `ON CONFLICT DO UPDATE` must actually add `realized_accum = positions.realized_accum + $N` + the
+    INSERT column (a concrete load-bearing SQL edit for /sdd-spec).
+  - [P-03/C-01] `event_ts := LedgerEvent.recorded_at` (immutable server ts — `occurred_at` is
+    caller-skewable; consumer `NOW()` breaks redelivery dedup). Ground ordering on the global
+    sequence. FIX the stale `ledger.proto:29` "per stream_key" comment in-feature (mcp-tools drift).
+  - [should-fix] Compose the snapshot BEFORE opening the DB txn; the txn holds only the writes
+    (insert order_snapshots + UPDATE cursor) — no gRPC I/O pinning a PgBouncer slot.
+- **Residual risks (accept-with-note, carried as Open Risks):** (a) snapshot completeness has no
+  reconciliation backstop — a lower-sequence event committing after a higher one for the SAME position
+  can be dropped (narrow; positions self-heal via positions.synced, snapshots don't; degrades
+  gracefully under min_sample_count=5); (b) `ClosePosition` is not account-scoped (pre-existing;
+  recommend scoping the DELETE to account_id while in the code); (c) `pnl_pattern_samples`/`order_snapshots`
+  unbounded — v1 no retention (documented); snapshot retention must be POSITION-LIFECYCLE-keyed, never
+  time-keyed (a wall-clock policy would drop a still-open long-held position's snapshots).
+- **User chose to RUN ANOTHER ROUND (round 4)** rather than approve at round 3.
