@@ -33,6 +33,12 @@ Capture the result as `FEATURE_DIR`. Use `$FEATURE_DIR` for all file reads and w
 
 Read `$FEATURE_DIR/product-spec.md`. If absent: stop with "No product spec found. Run /sdd-story $ARGUMENTS[0] first."
 
+Read `$FEATURE_DIR/acceptance.feature` — the `@AC-*` scenarios are the behaviors your `test` steps
+must cover. Each step you write carries a `**Covers**` line, and every scenario must be covered by
+some step (Constitution **C-15**; see `reference/spec-template.md` § Scenario coverage rule). If
+`acceptance.feature` is absent, stop with "No acceptance.feature found — re-run /sdd-story (or
+/sdd-review) before /sdd-spec."
+
 Read `$FEATURE_DIR/status.md` — its content is the current lifecycle status (a plain string).
 If status is `draft` (`/sdd-review product-spec` has not been run):
 > "Product spec has not been AI-reviewed. Run `/sdd-review $ARGUMENTS[0] product-spec` first

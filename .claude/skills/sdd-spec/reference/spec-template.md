@@ -48,6 +48,10 @@ non-code-bearing categories (`proto`, `proto-gen`, `migration`, `config`, `docs`
 required, `/sdd-execute` proves the paired test fails before implementation, then passes after — see
 `.claude/skills/sdd-execute/reference/tdd-gate.md`.
 
+**Covers**: `AC-2, AC-5` — the `@AC-*` scenario ID(s) from `acceptance.feature` this step verifies
+(Constitution **C-15**). Required on every `test` step; omit (`—`) on non-test steps. Every scenario
+in `acceptance.feature` must appear in some step's `**Covers**` (see § Scenario coverage rule).
+
 **Instructions**:
 <Precise, actionable steps that cite real file paths and real symbol names confirmed above>
 
@@ -66,6 +70,24 @@ _Populated by /sdd-execute as implementation proceeds._
 ```
 
 Categories to use for step naming: `proto`, `proto-gen`, `migration`, `service`, `config`, `docs`, `test`.
+
+## Scenario coverage rule (Constitution C-15)
+
+Read `acceptance.feature`. **Every `@AC-*` scenario must be covered by at least one step's
+`**Covers**` line** — normally a `test` step, occasionally a Playwright/e2e step for a UI scenario.
+Build the mapping explicitly:
+
+- In `## Execution Summary` (or a short `## Scenario Coverage` block), list each `@AC-N` → the step
+  number(s) that cover it. An uncovered scenario is a spec defect — either add the covering test step
+  or, if the scenario is out of scope for this feature, that is a product-spec problem to resolve in
+  `/sdd-review`, not to paper over here.
+- A `test` step's `**Verification**` still enforces the CI coverage threshold (**C-08**); `**Covers**`
+  is the orthogonal behavioral traceability that makes a dropped scenario visible.
+- `/sdd-execute` reuses these IDs: the RED assertion for a covered step names its `@AC-*`
+  (`reference/tdd-gate.md`).
+
+This mirrors the consumer-surface rule below: C-14 is "reach every named surface"; C-15 is "cover
+every named scenario."
 
 ## Consumer-surface coverage rule (Constitution C-14)
 
