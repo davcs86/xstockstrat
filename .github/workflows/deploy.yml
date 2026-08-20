@@ -26,23 +26,14 @@ on:
         # from GitHub Secrets into this unified parameter.
       JWT_SECRET:
         required: true
-        # Callers pass DEV_JWT_SECRET or PROD_JWT_SECRET from GitHub Secrets.
-      ALPACA_API_KEY:
+        # Callers pass DEV_JWT_SECRET or PROD_JWT_SECRET from GitHub Secrets. Also injected into the
+        # agent block (feature 147: it HMAC-signs the OAuth txn blob).
+      CONFIG_SECRETS_ENCRYPTION_KEY:
         required: true
-        # Callers pass DEV_ALPACA_API_KEY (paper) or PROD_ALPACA_API_KEY (live) from GitHub Secrets.
-      ALPACA_API_SECRET:
-        required: true
-        # Callers pass DEV_ALPACA_API_SECRET (paper) or PROD_ALPACA_API_SECRET (live) from GitHub Secrets.
-      FMP_API_KEY:
-        required: false
-        # Callers pass DEV_FMP_API_KEY or PROD_FMP_API_KEY from GitHub Secrets. Optional — the FMP
-        # fundamentals pipeline is off by default (marketdata.fmp.enabled=false), so an unset key is
-        # a valid state, unlike the Alpaca credentials above.
-      FINNHUB_API_KEY:
-        required: false
-        # Callers pass DEV_FINNHUB_API_KEY or PROD_FINNHUB_API_KEY from GitHub Secrets. Optional —
-        # same reasoning as FMP_API_KEY above: the Finnhub fundamentals pipeline is off by default
-        # (marketdata.finnhub.enabled=false), so an unset key is a valid state (feature 129).
+        # Feature 147: AES-256 master key for encrypting config secrets at rest. Callers pass
+        # DEV_CONFIG_SECRETS_ENCRYPTION_KEY or PROD_CONFIG_SECRETS_ENCRYPTION_KEY from GitHub Secrets.
+        # The vendor credentials (Alpaca/FMP/Finnhub) are no longer deploy secrets — they live in
+        # encrypted config and are set post-deploy through the config write path.
 
 jobs:
   deploy:
@@ -58,10 +49,7 @@ jobs:
         env:
           BROKER_ACCOUNTS_ENCRYPTION_KEY: ${{ secrets.BROKER_ACCOUNTS_ENCRYPTION_KEY }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
-          ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
-          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
-          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          CONFIG_SECRETS_ENCRYPTION_KEY: ${{ secrets.CONFIG_SECRETS_ENCRYPTION_KEY }}
         run: |
           sed \
             -e "s|YOUR_GITHUB_ORG|${{ github.repository_owner }}|g" \
@@ -69,10 +57,7 @@ jobs:
             ${{ inputs.app_spec }} \
           | BROKER_ACCOUNTS_ENCRYPTION_KEY="$BROKER_ACCOUNTS_ENCRYPTION_KEY" \
             JWT_SECRET="$JWT_SECRET" \
-            ALPACA_API_KEY="$ALPACA_API_KEY" \
-            ALPACA_API_SECRET="$ALPACA_API_SECRET" \
-            FMP_API_KEY="$FMP_API_KEY" \
-            FINNHUB_API_KEY="$FINNHUB_API_KEY" \
+            CONFIG_SECRETS_ENCRYPTION_KEY="$CONFIG_SECRETS_ENCRYPTION_KEY" \
             python3 -c "
           import os, sys
           content = sys.stdin.read()
@@ -82,18 +67,9 @@ jobs:
           jwt = os.environ['JWT_SECRET']
           content = content.replace('YOUR_DEV_JWT_SECRET', jwt)
           content = content.replace('YOUR_PROD_JWT_SECRET', jwt)
-          alpaca_key = os.environ['ALPACA_API_KEY']
-          content = content.replace('YOUR_DEV_ALPACA_API_KEY', alpaca_key)
-          content = content.replace('YOUR_PROD_ALPACA_API_KEY', alpaca_key)
-          alpaca_secret = os.environ['ALPACA_API_SECRET']
-          content = content.replace('YOUR_DEV_ALPACA_API_SECRET', alpaca_secret)
-          content = content.replace('YOUR_PROD_ALPACA_API_SECRET', alpaca_secret)
-          fmp_key = os.environ.get('FMP_API_KEY', '')
-          content = content.replace('YOUR_DEV_FMP_API_KEY', fmp_key)
-          content = content.replace('YOUR_PROD_FMP_API_KEY', fmp_key)
-          finnhub_key = os.environ.get('FINNHUB_API_KEY', '')
-          content = content.replace('YOUR_DEV_FINNHUB_API_KEY', finnhub_key)
-          content = content.replace('YOUR_PROD_FINNHUB_API_KEY', finnhub_key)
+          cfg_key = os.environ['CONFIG_SECRETS_ENCRYPTION_KEY']
+          content = content.replace('YOUR_DEV_CONFIG_SECRETS_ENCRYPTION_KEY', cfg_key)
+          content = content.replace('YOUR_PROD_CONFIG_SECRETS_ENCRYPTION_KEY', cfg_key)
           sys.stdout.write(content)
           " > /tmp/app_spec_substituted.yaml
 

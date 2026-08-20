@@ -280,7 +280,7 @@ assertions (feature-074 trap).
 
 ### Step 11 — config: deploy-file env-var sweep
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: deploy wiring
 **Files**:
 - `docker-compose.yml`, `.do/app.yaml`, `.do/app.dev.yaml`, `scripts/do-inject-prod-secrets.py`, `scripts/setup-env.sh`, `.env.example`, `.github/workflows/{deploy,deploy-dev,deploy-prod,prod-up}.yml` — modify
