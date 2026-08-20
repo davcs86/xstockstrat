@@ -128,3 +128,29 @@
 - Round 2 complete. Two decisions to the user before finalizing: (a) confirm the per-entry-source DROP
   (watchlist-level distinction) vs keep per-entry badges; (b) the process — update product spec for the
   expanded scope + re-run /sdd-review product-spec, THEN finalize design.md/design-approved.
+
+## Session 2026-08-19 — sdd-design COMPLETION (approved, expanded scope)
+
+- User APPROVED at the round-2 gate (both decisions: keep per-entry `source`; update spec + re-review
+  then approve). design.md written. Status: spec-ready → design-approved.
+- Product spec was UPDATED for the expanded scope (Proto additive: `Watchlist.system_managed`,
+  `WatchlistBinding.source` + `WATCHLIST_ENTRY_SOURCE_*` enum, `EnsureSignalWatchlist` RPC; Database:
+  portfolio migration — NNN re-derived at /sdd-spec, `011` (042 holds `010`); Consumer Surfaces:
+  Agent + UI; Affected Services: +portfolio +ui; FR-7..10; ACs 6-8; approval gates: proto/DBA/UI) and
+  **RE-RUN through /sdd-review product-spec → PASS WITH WARNINGS** (no blockers/Floor breach; 1 warning
+  — enum value prefix, FIXED). Overlap: hard portfolio-migration-010 collision with 042 → 127 = `011`;
+  **merge-order.md hard row added**; soft/rebase on the code-completed 085/094 MCP-alignment cohort.
+- Chosen approach: agent `_caller_user_id` + best-effort side effect (stdio-only skip); portfolio
+  `system_managed` flag + atomic `EnsureSignalWatchlist` (ON CONFLICT (user_id) WHERE system_managed) +
+  name constraint reworked `WHERE NOT system_managed` + `FAILED_PRECONDITION` delete-guard; per-entry
+  `source` (first-writer-wins caveat); UI undeletable affordance + badge; descriptor-parity doc test.
+- Constitution rules touched: C-01/P-03, C-03, C-04, C-05/F-07, C-07/F-01, C-09, C-10(a)/C-10(c), C-14,
+  C-08/P-06 — all honored; no Floor breach across 2 rounds + re-review.
+- Next: /sdd-spec consolidate-watchlist-signal (re-derive migration NNN vs 042 across all remote branches).
+
+### Open Threads (carry to /sdd-spec)
+- [ ] Portfolio migration NNN re-derive vs 042 (→ `011`) across all remote branches.
+- [ ] Per-entry `source` first-writer-wins caveat (state in UI/tests).
+- [ ] Rebase onto the landed 085/094 agent cohort (ingest_signal/client.py/mcp-tools.md).
+- [ ] Name-constraint drop+recreate: verify no existing rows violate `WHERE NOT system_managed`.
+- [ ] Empty-but-undeletable system list is deliberate (document).

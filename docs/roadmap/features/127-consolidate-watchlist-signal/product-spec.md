@@ -133,8 +133,10 @@ manually first then re-signaled stays `MANUAL` (and vice-versa); acceptable for 
 - [x] **Additive, non-breaking** (`packages/proto/portfolio/v1/portfolio.proto`; run `./scripts/buf-gen.sh`,
   `buf lint` + `buf breaking` must pass):
   - `Watchlist.system_managed` (new bool field — next free number confirmed at `/sdd-spec`).
-  - `WatchlistBinding.source` (new field) + a `WatchlistEntrySource` enum (`SOURCE_UNSPECIFIED=0`,
-    `MANUAL=1`, `SIGNAL=2` — mandatory zero-value sentinel per proto governance).
+  - `WatchlistBinding.source` (new field) + a `WatchlistEntrySource` enum
+    (`WATCHLIST_ENTRY_SOURCE_UNSPECIFIED=0`, `WATCHLIST_ENTRY_SOURCE_MANUAL=1`,
+    `WATCHLIST_ENTRY_SOURCE_SIGNAL=2` — full-enum-name value prefix per buf `ENUM_VALUE_PREFIX`, and
+    the mandatory zero-value sentinel; consumers default unspecified→manual).
   - New RPC `EnsureSignalWatchlist` (+ request/response messages) on `PortfolioService`.
   - Still **reuses** `AddWatchlistSymbols`/`DeleteWatchlist` (the delete-guard is handler-side, no
     proto change).
