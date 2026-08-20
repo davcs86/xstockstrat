@@ -224,8 +224,11 @@ The per-feature file set is enumerated in several places; all must learn about `
   Directory" table (created by `/sdd-story`).
 - **`/sdd-status`**: probe for `acceptance.feature` presence and report scenario count (optional,
   low priority).
-- **`/sdd-triage` (Track C bugs)**: bug features may add a regression scenario reproducing the defect
-  — a natural anti-regression fit, but **optional** for v1.
+- **`/sdd-triage` (Track C bugs)**: a Track-C bug fix **must** add a regression scenario reproducing
+  the defect (resolves O-3) — a `@AC-*` scenario that fails on the buggy behavior and passes after the
+  fix, so the bug can never silently return. Edit the `/sdd-triage` bug `product-spec` template to
+  require it, and its paired `test` step traces to that scenario (C-15). This is the anti-regression
+  mandate applied exactly where regressions are most likely.
 
 ### 4.8 Constitution (`docs/sdd/constitution.md`)
 - Add a Commandment at the next free ID — **C-15**: *"Every acceptance scenario in
@@ -278,7 +281,9 @@ scenario↔test coverage gate are enforced from the adoption PR onward.
 
 ---
 
-## 7. Settled decisions & remaining open questions
+## 7. Settled decisions
+
+All design forks are locked; the proposal is ready to convert into the §4 edits.
 
 **Settled:**
 
@@ -292,13 +297,16 @@ scenario↔test coverage gate are enforced from the adoption PR onward.
   (resolves O-1: per-feature file is not deleted, and the durable copy lives in the suite).
 - Cross-service index → **none for v1**. §2.3.
 
-**Still open:**
+- Bug-fix regressions → **Track-C bug fixes must add a regression scenario** (was O-3). §4.7.
+- Promotion mechanics → **assisted-but-manual for v1** (was O-5): a helper/subagent dedups and appends
+  scenarios into the per-service suite during the **`/sdd-execute` final integration PR** (with
+  `/promote` as the backstop if a feature reaches prod without it). No CI-enforced membership gate in
+  v1. §2.3, §4.7.
+- Copilot auto-request → **manual for v1** (was O-6): the operator requests the Copilot review; no
+  automatic side effect from `/sdd-execute` while the format proves out. §8.
 
-- **O-3** — Should Track-C bug fixes be *required* to add a regression scenario at adoption, or is that
-  a fast-follow?
-- **O-5** — Promotion mechanics: fully manual (the operator appends during the integration PR),
-  assisted (a promotion helper/subagent dedups and appends), or a scripted check that CI enforces
-  suite membership before `launched`? (Leaning assisted-but-manual for v1 to avoid new machinery.)
+_No open questions remain — the proposal is complete and ready to convert into the §4 skill /
+Constitution edits._
 
 ---
 
@@ -337,14 +345,11 @@ updated suites are what's consulted):
   so adding a service adds its instruction file automatically and they never drift.
 - **`excludeAgent`** can scope an instruction to code review vs. the cloud agent if the two ever need
   different phrasing.
-- **Optionally auto-request review** — `/sdd-execute` can call the GitHub *request Copilot review*
-  API on the step / integration PR so the check runs without a human clicking. Whether to wire that
-  is **O-6**.
+- **Review request stays manual (v1)** — the operator requests the Copilot review; `/sdd-execute`
+  does **not** auto-call the GitHub *request Copilot review* API in v1 (resolves O-6), keeping the
+  pipeline free of an automatic side effect while the format proves out. Revisit once the suites are
+  populated and the review is demonstrably useful.
 - **Trust boundary** — Copilot's finding is *advisory*, exactly like the design-adversary's: it
   surfaces a suspected regression for the human/PR-steward to judge, it does not gate merge on its
   own. The binding regression gate remains C-16 at design time.
 
-**Open question:**
-
-- **O-6** — Should `/sdd-execute` auto-request a Copilot review on the integration PR, or leave that
-  to the operator?
