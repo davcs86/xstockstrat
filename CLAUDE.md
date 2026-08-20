@@ -77,7 +77,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 | Using or troubleshooting the agent MCP tools | `docs/runbooks/mcp-tools.md` |
 | Adding/refactoring a skill, subagent, or `CLAUDE.md`; how the AI tooling curates context (subagent delegation, progressive disclosure, structured `context.md` memory) | `docs/patterns/context-engineering.md` |
 | SDD binding rules — Constitution constraint IDs (`C-*`/`P-*`/`F-*`) cited by review/design/execute | `docs/sdd/constitution.md` |
-| Acceptance scenarios & business rules (Gherkin `@AC-*`) — per-feature `acceptance.feature`, durable per-service suites read by recon/design, C-15/C-16 | `docs/sdd/business-rules/README.md`, `docs/sdd/gherkin-integration-proposal.md` |
+| Acceptance scenarios & business rules (Gherkin `@AC-*`) — per-feature `acceptance.feature`, durable per-service suites read by recon/design, C-15/C-16 | `docs/sdd/business-rules/README.md`, `docs/sdd/constitution.md` |
 | Codebase/runtime invariants (`PLAT-*`/`<MODULE>-*`) — non-obvious patterns, cross-module contracts, and scars an agent would otherwise miss; plus the defects/doc-drift log | `docs/context-constitution.md`, `docs/context-constitution-findings.md` (per-module: `services/*/docs/`, `packages/*/docs/`) |
 | Cross-feature SDD memory — insights (patterns that worked) and fails (mistakes that recurred) | `docs/roadmap/ledger/insights.md`, `docs/roadmap/ledger/fails.md` |
 | Changing `run_backtest`, `manage_strategy`, `trigger_backfill`/`get_backfill_status` or `set_strategy_live` — this repo ships the `strat-lab` plugin (`plugins/strat-lab/`) whose `backtest` skill encodes these APIs' current quirks, and a change to them must update the skill in the **same** PR | `docs/patterns/strat-lab-plugin.md` |

@@ -33,4 +33,5 @@ launched feature promotes a scenario into it, not ahead of demand.
 - On promotion, prefix a promoted scenario's tags with its source so provenance survives, e.g.
   `@AC-1 @FR-2 @feature-032` (source feature slug/number).
 
-See `docs/sdd/gherkin-integration-proposal.md` for the full rationale and the per-skill integration.
+The binding rules are Constitution **C-15** (scenarios trace to tests) and **C-16** (business-rule
+regression guard) in `docs/sdd/constitution.md`.
