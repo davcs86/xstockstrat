@@ -258,3 +258,18 @@ diff on the unedited proto before editing — toolchain reproduces committed stu
 - Documented the watchlist auto-add side effect + dedup suppression in the `ingest_signal` entry.
 
 **Next:** Steps 6 (agent), 8 (agent test), 9 (UI), 10 (UI test).
+
+### Step 6 — agent client + ingest_signal side effect [done]
+- `client.py`: PORTFOLIO_ENDPOINT + `ensure_signal_watchlist`/`add_watchlist_symbol` (SIGNAL source).
+- `tools.py`: `ingest_signal` gains `ctx: Context` (first param, MCP-injected) + best-effort
+  post-commit watchlist auto-add (gated direction=='watchlist' and not deduplicated).
+- Deploy parity: PORTFOLIO_ENDPOINT added to agent block in docker-compose.yml, .do/app.yaml,
+  .do/app.dev.yaml; agent CLAUDE.md env list. ruff clean.
+- Deviation: existing `ingest_signal` tests in test_tools.py updated to pass `ctx` (signature change).
+
+### Step 8 — agent tests [done]
+- `tests/test_ingest_signal_watchlist.py`: AC-1 (adds symbol), AC-2 (buy → no add), AC-3 (dedup →
+  no add), AC-4 (portfolio failure non-blocking + WARN), AC-5 (docstring + mcp-tools.md parity).
+- Full agent suite 227 passed, coverage 75% (≥40). ruff clean.
+
+**Next:** Steps 9 (UI), 10 (UI e2e).

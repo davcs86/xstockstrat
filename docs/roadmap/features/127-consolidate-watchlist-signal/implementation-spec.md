@@ -277,7 +277,7 @@ Must fail before Step 4, pass after. New logic is in coverage-excluded packages 
 
 ### Step 6 — service: agent — portfolio client methods, `PORTFOLIO_ENDPOINT` wiring, `ingest_signal` auto-add side effect
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -362,7 +362,7 @@ Confirms the watchlist side-effect sentence exists in the `ingest_signal` entry.
 
 ### Step 8 — test: agent — auto-add behavior, non-blocking, dedup/direction gates, doc parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_ingest_signal_watchlist.py` — create (or extend the existing `ingest_signal` test module if present)

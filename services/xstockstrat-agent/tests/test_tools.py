@@ -263,6 +263,7 @@ async def test_ingest_signal_calls_grpc():
     ):
         server = _make_server()
         result = await _tool_fn(server, "ingest_signal")(
+            ctx=_ctx(ADMIN),
             source="unusual_whales",
             symbol="NVDA",
             direction="buy",
@@ -291,6 +292,7 @@ async def test_ingest_signal_auto_alert_above_threshold():
     ):
         server = _make_server()
         await _tool_fn(server, "ingest_signal")(
+            ctx=_ctx(ADMIN),
             source="unusual_whales",
             symbol="NVDA",
             direction="buy",
@@ -318,6 +320,7 @@ async def test_ingest_signal_suppresses_alert_when_deduplicated():
     ):
         server = _make_server()
         result = await _tool_fn(server, "ingest_signal")(
+            ctx=_ctx(ADMIN),
             source="unusual_whales",
             symbol="NVDA",
             direction="buy",
@@ -339,6 +342,7 @@ async def test_ingest_signal_returns_deduplicated_field_in_payload():
     ):
         server = _make_server()
         result = await _tool_fn(server, "ingest_signal")(
+            ctx=_ctx(ADMIN),
             source="unusual_whales",
             symbol="NVDA",
             direction="buy",
@@ -363,6 +367,7 @@ async def test_ingest_signal_survives_threshold_read_failure():
     ):
         server = _make_server()
         result = await _tool_fn(server, "ingest_signal")(
+            ctx=_ctx(ADMIN),
             source="unusual_whales",
             symbol="NVDA",
             direction="buy",

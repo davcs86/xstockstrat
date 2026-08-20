@@ -22,6 +22,7 @@ ANALYSIS_ENDPOINT = os.environ.get("ANALYSIS_ENDPOINT", "xstockstrat-analysis:50
 CONFIG_ENDPOINT = os.environ.get("CONFIG_ENDPOINT", "xstockstrat-config:50060")
 INDICATORS_ENDPOINT = os.environ.get("INDICATORS_ENDPOINT", "xstockstrat-indicators:50054")
 IDENTITY_ENDPOINT = os.environ.get("IDENTITY_ENDPOINT", "xstockstrat-identity:50058")
+PORTFOLIO_ENDPOINT = os.environ.get("PORTFOLIO_ENDPOINT", "xstockstrat-portfolio:50052")
 
 
 # ── Caller propagation context (PR #994) ─────────────────────────────────────
@@ -279,6 +280,40 @@ async def emit_alert(
         stub = notify_pb2_grpc.NotifyServiceStub(channel)
         resp = await stub.EmitAlert(req, metadata=_metadata())
     return {"alert_id": resp.alert_id}
+
+
+async def ensure_signal_watchlist(user_id: str) -> str:
+    """Find-or-create the caller's system-managed signals watchlist (feature 127).
+
+    Ownership is resolved server-side from the forwarded ``x-user-id`` header; the request
+    carries no body. Returns the watchlist id.
+    """
+    from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+        stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
+        resp = await stub.EnsureSignalWatchlist(
+            portfolio_pb2.EnsureSignalWatchlistRequest(),
+            metadata=[*_metadata(), ("x-user-id", user_id)],
+        )
+    return resp.watchlist.watchlist_id
+
+
+async def add_watchlist_symbol(user_id: str, watchlist_id: str, symbol: str) -> None:
+    """Add ``symbol`` to ``watchlist_id`` as a SIGNAL-sourced, unbound binding (feature 127)."""
+    from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
+
+    binding = portfolio_pb2.WatchlistBinding(
+        symbol=symbol,
+        strategy_id="",
+        source=portfolio_pb2.WATCHLIST_ENTRY_SOURCE_SIGNAL,
+    )
+    async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+        stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
+        await stub.AddWatchlistSymbols(
+            portfolio_pb2.AddWatchlistSymbolsRequest(watchlist_id=watchlist_id, bindings=[binding]),
+            metadata=[*_metadata(), ("x-user-id", user_id)],
+        )
 
 
 async def run_backtest(
