@@ -19,10 +19,18 @@ never surfaced to a user's actual watchlist.
 
 ## User Story
 
-As a user of the MCP agent (or an automated ingestion flow, e.g. the `form4-enhanced-ingest`
-skill), when I call `ingest_signal` with `direction="watchlist"` for a symbol, I want that symbol
-automatically added to a portfolio watchlist, so that tagging a signal "watchlist" has a real,
-visible effect instead of being stored as an inert label.
+As a user of the MCP agent, when I (or any caller) invoke `ingest_signal` with
+`direction="watchlist"` for a symbol, I want that symbol automatically added to my portfolio
+watchlist, so that tagging a signal "watchlist" has a real, visible effect instead of being stored
+as an inert label.
+
+> **Premise note (corrected 2026-08-19):** the trigger is **any** caller that explicitly ingests a
+> `direction="watchlist"` signal (an interactive agent session, or a future automated flow). The
+> earlier draft cited the `form4-enhanced-ingest` skill as the driver, but that skill scores
+> `direction="watchlist"` transactions at conviction 0.30 (below the 0.6 ingest threshold) and routes
+> them to `skipped_signals` — it **never** calls `ingest_signal` for them
+> (`.claude/skills/form4-enhanced-ingest/SKILL.md`). So form4 is **not** a producer of this feature's
+> trigger; do not scope or test the feature around it.
 
 ## Functional Requirements
 
@@ -68,13 +76,21 @@ to their ingest, scoring, or alerting behavior.
 
 ## Affected Services
 
-- `xstockstrat-agent` — `ingest_signal` tool gains the auto-add side effect; `app/client.py` gains a
+- `xstockstrat-agent` — `ingest_signal` tool gains the auto-add side effect (and the caller's own
+  identity via `_caller_user_id(ctx, ...)`, resolved from the authenticated tool call's verified
+  claims — the same mechanism `emit_alert`/`manage_formula` already use); `app/client.py` gains a
   portfolio gRPC call (new `PORTFOLIO_ENDPOINT`-backed client method, mirroring the existing
-  ingest/notify client methods).
+  ingest/notify client methods, forwarding `x-user-id`).
+  - **Deploy parity (C-1):** the agent gains the env var `PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052`,
+    which is **absent from the agent block today**. It must be added to the `xstockstrat-agent` block in
+    **all three** of `docker-compose.yml`, `.do/app.yaml`, `.do/app.dev.yaml`, plus the agent's
+    `CLAUDE.md` Environment Variables list. The value is the fixed, well-known internal endpoint —
+    identical across every environment (no per-target divergence).
 - `xstockstrat-portfolio` — consumes `AddWatchlistSymbols`/`CreateWatchlist` (both RPCs already
-  exist, feature 058) from a new caller (the agent); no proto or schema change expected, but the
-  service owner should confirm no per-caller assumption in the handler breaks under a machine
-  caller (see Open Questions on identity).
+  exist, feature 058) from a new caller (the agent); **no proto or schema change**. Ownership is
+  derived server-side from the propagated `x-user-id` (never the request body), so the agent forwards
+  the caller's own `x-user-id`; a call with no verified user id is hard-rejected by portfolio
+  (`INVALID_ARGUMENT`), so the agent skips the auto-add best-effort in that case (see Open Questions).
 
 ## Consumer Surface(s)
 
@@ -92,11 +108,11 @@ to their ingest, scoring, or alerting behavior.
 
 ## Config Key Changes
 
-- [ ] No new config keys
-- OR: **TBD at design time** — a config key may be needed for the target watchlist's name (e.g.
-  `agent.signal.watchlist_name`, default `"Signals"`) if the design resolves Open Question 2 toward
-  a fixed named watchlist rather than a caller-supplied `watchlist_id`. Left open pending
-  `/sdd-design`.
+- [x] **No new config keys.** The reserved watchlist name is a **module constant** in the agent, not a
+  config key: no requirement needs a per-env-renamable name, and renaming a live value would orphan
+  every existing reserved watchlist (they'd stop matching → a duplicate is created). This is the
+  minimum-scope, footgun-free choice (a config key was considered and rejected at design time — see
+  design.md § Rejected Alternatives).
 
 ## Database Changes
 
@@ -124,28 +140,27 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Open Questions
 
-- [ ] **Whose watchlist?** `xstockstrat-portfolio`'s `Watchlist` is strictly **user-owned** —
-  ownership is taken from the propagated `x-user-id` header server-side, "intentionally absent from
-  all request messages" (`packages/proto/portfolio/v1/portfolio.proto:193-194`). `ingest_signal`
-  today derives **no** caller identity (unlike `manage_formula`'s `_caller_user_id`,
-  `services/xstockstrat-agent/app/tools.py:107-122,677`) — it is called by automated/batch flows
-  (e.g. the `form4-enhanced-ingest` skill) as much as by an interactive session, and there's no
-  guarantee a "watchlist" signal has an obvious single human owner. `/sdd-design` must resolve: (a)
-  derive `_caller_user_id(ctx, "ingest_signal")` and add per-caller like `manage_formula`'s author
-  pattern, accepting that a fully-automated/service caller with no verified user claims would then
-  need a defined fallback (reject? broadcast-style system owner, mirroring `emit_alert`'s
-  `target_user_id=""`?); or (b) introduce a system/service-owned watchlist concept that doesn't
-  exist today. This is the central architectural fork for this feature — do not guess at
-  `/sdd-spec` time.
-- [ ] **Which watchlist, if the caller has several?** Resolve to a fixed, auto-created,
-  well-known-named watchlist (e.g. `"Signals"`, config-key-driven default name) vs. requiring an
-  explicit new `watchlist_id` parameter on `ingest_signal` (a tool contract change, which raises the
-  MCP tool-contract-stability bar per the `xstockstrat-agent` reviewer focus).
-- [ ] Should the UI visually distinguish an agent/signal-sourced watchlist entry from a manually
-  added one (e.g. surfacing `source`/`headline` from the originating signal)? Deferred to a named
-  follow-up if yes — not scoped into this feature (C-14 override, needs explicit sign-off if
-  deferred rather than left unscoped).
-- [ ] Idempotency: `AddWatchlistSymbols` semantics for a symbol/binding already present in the
-  target watchlist (no-op vs error) should be confirmed against the existing feature 058 handler
-  before assuming append-only-safe repeated calls (e.g. from a non-deduplicated but repeat signal on
-  the same symbol).
+- [x] **Whose watchlist? — RESOLVED (2026-08-19, user intent + recon):** a special, system-managed,
+  **per-user** watchlist owned by the **calling user**. The agent derives the caller's own id via
+  `_caller_user_id(ctx, "ingest_signal")` (adding the MCP-injected `ctx` param, non-breaking — same as
+  `emit_alert`/`manage_formula`) and forwards it as `x-user-id`; ownership is header-derived
+  server-side (`portfolio.proto:193-194`). **Fallback:** `_caller_user_id` raises only on the
+  unauthenticated stdio-local transport (every authenticated Streamable-HTTP tool call carries verified
+  claims — `app/main.py` `_authorized`), so the auto-add is skipped best-effort with a `log.warning`
+  in that case (the signal is still ingested). No system/owner-less watchlist concept is introduced
+  (none exists; not needed — the list is user-owned, so no C-10(c) ownership sentinel is required).
+- [x] **Which watchlist? — RESOLVED:** a fixed, auto-created, well-known **reserved-named** watchlist
+  (a module constant, not a caller-supplied `watchlist_id` — no tool-contract change). The agent
+  resolves it by name via `ListWatchlists`, `CreateWatchlist`s it if absent, then `AddWatchlistSymbols`.
+  The exact reserved name + the behavior when a user already has a same-named list (`UNIQUE(user_id,
+  name)` merge) is a design detail decided in design.md § Chosen Approach (see the reserved-name note).
+- [ ] **UI distinction (C-14 override) — DEFERRAL, needs explicit sign-off in design.md/context.md:**
+  whether the `/insights/watchlists` view visually distinguishes an agent/signal-sourced entry from a
+  manually-added one is an **enhancement**, not part of this feature's consumer surface (the existing
+  page already renders the added symbol, so C-14 "name and reach the surface" is satisfied). Per C-14
+  it is resolved as **either** a named follow-up feature **or** explicitly left unscoped — recorded at
+  the design gate; it is no longer a vague "if yes."
+- [x] **Idempotency — RESOLVED (recon):** `AddWatchlistSymbols` is natively idempotent —
+  `INSERT ... ON CONFLICT (watchlist_id, symbol) DO NOTHING` (`watchlist_repo.go:266-275`), so a
+  repeated non-deduplicated signal on the same symbol is a silent no-op (no error, no duplicate). No
+  extra guard needed.
