@@ -53,18 +53,19 @@ def set_env(monkeypatch):
     monkeypatch.setenv("INGEST_ENDPOINT", "ingest-test:50055")
     monkeypatch.setenv("NOTIFY_ENDPOINT", "notify-test:50059")
     monkeypatch.setenv("ANALYSIS_ENDPOINT", "analysis-test:50056")
-    monkeypatch.setenv("MCP_AGENT_SECRET", "test-secret")
+    # Feature 147: MCP_AGENT_SECRET is retired; the OAuth txn blob is signed with JWT_SECRET.
+    monkeypatch.setenv("JWT_SECRET", "test-jwt-secret")
     monkeypatch.setenv("MCP_TRANSPORT", "stdio")
     monkeypatch.setenv("IDENTITY_ENDPOINT", "identity-test:50058")
     monkeypatch.setenv("CONFIG_ENDPOINT", "config-test:50060")
-    # Also patch module-level vars in client.py — they are read at import time so
-    # setenv alone has no effect on tests that import the module before fixtures run.
-    from app import client
+    # Also patch module-level vars — they are read at import time so setenv alone has no effect on
+    # tests that import the module before fixtures run.
+    from app import client, oauth_server
 
     monkeypatch.setattr(client, "INGEST_ENDPOINT", "ingest-test:50055")
     monkeypatch.setattr(client, "NOTIFY_ENDPOINT", "notify-test:50059")
     monkeypatch.setattr(client, "ANALYSIS_ENDPOINT", "analysis-test:50056")
-    monkeypatch.setattr(client, "MCP_AGENT_SECRET", "test-secret")
+    monkeypatch.setattr(oauth_server, "JWT_SECRET", "test-jwt-secret")
 
 
 def credentialed_source(**overrides) -> dict:

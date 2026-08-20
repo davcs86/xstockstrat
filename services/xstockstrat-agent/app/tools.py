@@ -297,10 +297,10 @@ def register_tools(server: MCPServer) -> None:
         # feature 093: env-scoped read (was env-blind → always the dev row → the default). Broad
         # try/except because this read is POST-COMMIT (the signal is already persisted above), so it
         # must never fail ingest_signal — any error falls back to the default.
-        env, mode = _resolve_scope("", "")
+        env = _resolve_scope("")
         try:
             threshold_str = await client.get_config_value(
-                _ALERT_THRESHOLD_CONFIG_KEY, namespace="agent", environment=env, trading_mode=mode
+                _ALERT_THRESHOLD_CONFIG_KEY, namespace="agent", environment=env
             )
             alert_threshold = (
                 float(threshold_str) if threshold_str is not None else _ALERT_THRESHOLD_DEFAULT
@@ -1004,27 +1004,28 @@ def register_tools(server: MCPServer) -> None:
     # oauth_server.py, outside this closure, shares one normalizer). This thin wrapper keeps the
     # three tool call sites below unchanged.
 
-    def _resolve_scope(environment: str, trading_mode: str) -> tuple[str, str]:
-        return resolve_scope(environment, trading_mode)
+    def _resolve_scope(environment: str) -> str:
+        return resolve_scope(environment)
 
     @server.tool()
-    async def get_config(namespace: str, environment: str = "", trading_mode: str = "") -> dict:
+    async def get_config(namespace: str, environment: str = "", user_id: str = "") -> dict:
         """Read the current config values for a namespace from xstockstrat-config (read-only).
         namespace: config namespace, e.g. 'marketdata', 'analysis', 'trading', 'platform'.
-        environment: 'dev' or 'production'. Omit to use this agent deployment's own environment.
-        trading_mode: 'paper', 'live' or 'all'. Omit to use this agent's own trading mode.
-        Returns {namespace, version, environment, trading_mode, values} where each value is
+        environment: 'production' or 'staging'. Omit to use this agent deployment's own environment.
+        user_id: optional per-user scope. Omit (empty) for the global values; pass a user id to see
+        that user's per-user overrides layered over the global values.
+        Returns {namespace, version, environment, user_id, values} where each value is
         {value, value_type, is_secret}.
         Any key flagged is_secret has its value replaced with '[redacted]' — secret values are
-        never returned by this tool. Note trading-mode scoping applies only to keys stored with a
-        specific mode; keys stored as 'all' are returned for every mode.
+        never returned by this tool (they are encrypted at rest and served only to allow-listed
+        internal services via a separate resolver).
         Note: an unknown or empty namespace is NOT an error — it returns an empty `values` map, so
         an empty result does not confirm the namespace name. `version` is an opaque monotonic
         counter, not a timestamp."""
-        env, mode = _resolve_scope(environment, trading_mode)
+        env = _resolve_scope(environment)
         try:
             result = await client.get_config(
-                namespace=namespace, environment=env, trading_mode=mode
+                namespace=namespace, environment=env, user_id=user_id
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="namespace not found")) from e
@@ -1036,22 +1037,23 @@ def register_tools(server: MCPServer) -> None:
 
     @server.tool()
     async def list_config_keys(
-        namespace: str, environment: str = "", trading_mode: str = ""
+        namespace: str, environment: str = "", user_id: str = ""
     ) -> dict:
         """List the config keys registered for a namespace, with metadata only (read-only).
         namespace: config namespace, e.g. 'marketdata', 'analysis', 'trading', 'platform'.
-        environment: 'dev' or 'production'. Omit to use this agent deployment's own environment.
-        trading_mode: 'paper', 'live' or 'all'. Omit to use this agent's own trading mode.
-        Returns {namespace, environment, trading_mode, keys[]} where each key carries key,
+        environment: 'production' or 'staging'. Omit to use this agent deployment's own environment.
+        user_id: optional per-user scope. Omit (empty) for the global keys; pass a user id to see
+        that user's per-user overrides layered over the global keys.
+        Returns {namespace, environment, user_id, keys[]} where each key carries key,
         description, default_value, is_secret and consuming_service.
         No values are returned by this RPC at all, so nothing here can leak a secret. Use it to
         discover what exists and which keys are secret before calling set_config.
         Note: an unknown or empty namespace is NOT an error — it returns an empty `keys` list, so
         an empty result does not confirm the namespace name."""
-        env, mode = _resolve_scope(environment, trading_mode)
+        env = _resolve_scope(environment)
         try:
             return await client.list_config_keys(
-                namespace=namespace, environment=env, trading_mode=mode
+                namespace=namespace, environment=env, user_id=user_id
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="namespace not found")) from e
@@ -1066,13 +1068,13 @@ def register_tools(server: MCPServer) -> None:
         author: str,
         reason: str,
         environment: str = "",
-        trading_mode: str = "",
+        user_id: str = "",
         create_key: bool = False,
     ) -> dict:
         """Write one non-secret config value in xstockstrat-config (admin-scoped write).
         namespace: config namespace, e.g. 'marketdata'.
         key: the config key, e.g. 'marketdata.fmp.enabled'. A write to a not-yet-registered key
-          at this exact (namespace, environment, trading_mode) scope is REFUSED with NOT_FOUND
+          at this exact (namespace, environment, user_id) scope is REFUSED with NOT_FOUND
           ("config key not registered") unless you pass create_key=true — so a typo can no longer
           silently mint an orphan key. Call list_config_keys first and copy the key verbatim.
         value_type: one of string, int, float, bool. Pass JSON-valued config as a 'string' —
@@ -1081,8 +1083,9 @@ def register_tools(server: MCPServer) -> None:
         value: the new value, as a string; it is converted according to value_type.
         author: who is making the change — required, and recorded in config.config_audit.
         reason: why — required, and recorded alongside author.
-        environment: 'dev' or 'production'. Omit to use this agent deployment's own environment.
-        trading_mode: 'paper', 'live' or 'all'. Omit to use this agent's own trading mode.
+        environment: 'production' or 'staging'. Omit to use this agent deployment's own environment.
+        user_id: optional per-user scope. Omit (empty) to write the global value; pass a user id to
+          set that user's per-user override (non-secret keys only).
         create_key: set true ONLY to deliberately register a brand-new key at this scope; leave
           false (the default) for every normal update so a mistyped key is rejected rather than
           created. Key creation is audited (config.config_audit) just like an update.
@@ -1090,30 +1093,21 @@ def register_tools(server: MCPServer) -> None:
 
         Authorization uses YOUR role, not a service-wide admin override: the write is rejected
         with 'admin scope required' unless your session has the admin role. Secret keys cannot be
-        written here at all — credentials are delivered as type: SECRET environment variables.
+        set through this tool — they are encrypted at rest and managed by an operator via config-ui.
         Requires the Streamable HTTP transport, the only remote transport the agent serves since
         feature 079 removed the legacy SSE one."""
-        # Prong (b) first: a name check is the ONLY thing that can stop a brand-new secret key.
-        # SetConfigRequest carries no is_secret field and the column defaults FALSE, so without
-        # this a caller could create an unflagged row holding a plaintext credential.
-        if key.startswith("secret."):
-            raise RuntimeError(
-                f"refusing to write '{key}': secret keys are not settable through MCP. "
-                "Credentials are delivered as type: SECRET environment variables "
-                "(see docs/patterns/config-governance.md)."
-            )
-
         # feature 092: shared with the other management tools; still fails fast (before the
         # ListKeys network call) when no verified claims are present.
         access_scope = _caller_access_scope(ctx, "set_config")
 
-        env, mode = _resolve_scope(environment, trading_mode)
+        env = _resolve_scope(environment)
 
-        # Prong (a): the is_secret flag, looked up at the SAME scope as the pending write.
-        # Fails CLOSED -- if the lookup errors we refuse, otherwise the guard is decorative.
+        # Secret guard: refuse to write a key flagged is_secret (feature 147: secrets are encrypted
+        # at rest and set by an operator via config-ui, not through the MCP agent). Looked up at the
+        # SAME scope as the pending write and fails CLOSED — if the lookup errors we refuse.
         try:
             listing = await client.list_config_keys(
-                namespace=namespace, environment=env, trading_mode=mode
+                namespace=namespace, environment=env, user_id=user_id
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(
@@ -1123,8 +1117,8 @@ def register_tools(server: MCPServer) -> None:
         for meta in listing.get("keys", []):
             if meta.get("key") == key and meta.get("is_secret"):
                 raise RuntimeError(
-                    f"refusing to write '{key}': it is flagged is_secret. Credentials are "
-                    "delivered as type: SECRET environment variables."
+                    f"refusing to write '{key}': it is flagged is_secret. Secrets are managed by "
+                    "an operator via config-ui, not through the MCP agent."
                 )
 
         try:
@@ -1134,11 +1128,11 @@ def register_tools(server: MCPServer) -> None:
                 value_type=value_type,
                 value=value,
                 environment=env,
-                trading_mode=mode,
                 author=author,
                 reason=reason,
                 access_scope=access_scope,
                 create_key=create_key,
+                user_id=user_id,
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="config key not found")) from e

@@ -1,8 +1,6 @@
 """
 Shared async gRPC client for xstockstrat-agent.
-MCP_AGENT_SECRET is not sent on outbound calls (feature 097) — it signs the agent's stateless
-OAuth txn blob in app/oauth_server.py.
-GetConfigValue() makes a one-shot gRPC call to xstockstrat-config to resolve credentials.
+GetConfigValue() makes a one-shot gRPC call to xstockstrat-config to resolve config values.
 """
 
 import logging
@@ -20,7 +18,6 @@ log = logging.getLogger(__name__)
 INGEST_ENDPOINT = os.environ.get("INGEST_ENDPOINT", "xstockstrat-ingest:50055")
 NOTIFY_ENDPOINT = os.environ.get("NOTIFY_ENDPOINT", "xstockstrat-notify:50059")
 ANALYSIS_ENDPOINT = os.environ.get("ANALYSIS_ENDPOINT", "xstockstrat-analysis:50056")
-MCP_AGENT_SECRET = os.environ.get("MCP_AGENT_SECRET", "")
 CONFIG_ENDPOINT = os.environ.get("CONFIG_ENDPOINT", "xstockstrat-config:50060")
 INDICATORS_ENDPOINT = os.environ.get("INDICATORS_ENDPOINT", "xstockstrat-indicators:50054")
 IDENTITY_ENDPOINT = os.environ.get("IDENTITY_ENDPOINT", "xstockstrat-identity:50058")
@@ -946,7 +943,7 @@ async def set_strategy_live(
 
 
 async def get_config_value(
-    key: str, *, namespace: str, environment: str, trading_mode: str = "all"
+    key: str, *, namespace: str, environment: str, user_id: str = ""
 ) -> str | None:
     """Resolve one config value via a one-shot, ENVIRONMENT-SCOPED GetConfig gRPC call.
 
@@ -963,13 +960,13 @@ async def get_config_value(
     """
     from gen.config.v1 import config_pb2, config_pb2_grpc  # noqa: PLC0415
 
-    env, mode = _config_scope(environment, trading_mode)
+    env = _config_env(environment)
     try:
         async with grpc.aio.insecure_channel(CONFIG_ENDPOINT) as channel:
             stub = config_pb2_grpc.ConfigServiceStub(channel)
             snapshot = await stub.GetConfig(
                 config_pb2.GetConfigRequest(
-                    namespace=namespace, environment=env, trading_mode=mode
+                    namespace=namespace, environment=env, user_id=user_id
                 ),
                 metadata=_metadata(),
             )
@@ -1136,33 +1133,30 @@ async def get_backfill_status(
 # AGENT-5's mapping can turn them into a useful message -- PERMISSION_DENIED in particular.
 
 
-def _config_scope(environment: str, trading_mode: str) -> tuple:
-    """Translate the caller's scope strings into the proto enums ConfigService expects."""
+def _config_env(environment: str) -> int:
+    """Translate the caller's environment string into the proto enum ConfigService expects.
+    Feature 147: environment is production/staging; trading_mode is no longer a config scope axis.
+    """
     from gen.common.v1 import common_pb2  # noqa: PLC0415
 
-    env = (
+    return (
         common_pb2.ENVIRONMENT_PRODUCTION
         if environment == "production"
-        else common_pb2.ENVIRONMENT_DEV
+        else common_pb2.ENVIRONMENT_STAGING
     )
-    if trading_mode == "live":
-        mode = common_pb2.TRADING_MODE_LIVE
-    elif trading_mode == "paper":
-        mode = common_pb2.TRADING_MODE_PAPER
-    else:
-        mode = common_pb2.TRADING_MODE_UNSPECIFIED
-    return env, mode
 
 
-async def get_config(namespace: str, environment: str, trading_mode: str) -> dict:
-    """One-shot ConfigService.GetConfig. Read path — no admin scope (AGENT-3)."""
+async def get_config(namespace: str, environment: str, user_id: str = "") -> dict:
+    """One-shot ConfigService.GetConfig. Read path — no admin scope (AGENT-3).
+    Feature 147: scoped by environment (production/staging) x optional user_id (empty = global).
+    """
     from gen.config.v1 import config_pb2, config_pb2_grpc  # noqa: PLC0415
 
-    env, mode = _config_scope(environment, trading_mode)
+    env = _config_env(environment)
     async with grpc.aio.insecure_channel(CONFIG_ENDPOINT) as channel:
         stub = config_pb2_grpc.ConfigServiceStub(channel)
         resp = await stub.GetConfig(
-            config_pb2.GetConfigRequest(namespace=namespace, environment=env, trading_mode=mode),
+            config_pb2.GetConfigRequest(namespace=namespace, environment=env, user_id=user_id),
             metadata=_metadata(),
         )
         values = {}
@@ -1177,26 +1171,28 @@ async def get_config(namespace: str, environment: str, trading_mode: str) -> dic
             "namespace": resp.namespace,
             "version": resp.version,
             "environment": environment,
-            "trading_mode": trading_mode,
+            "user_id": user_id,
             "values": values,
         }
 
 
-async def list_config_keys(namespace: str, environment: str, trading_mode: str) -> dict:
-    """ConfigService.ListKeys — metadata only, never values. Read path, no admin scope."""
+async def list_config_keys(namespace: str, environment: str, user_id: str = "") -> dict:
+    """ConfigService.ListKeys — metadata only, never values. Read path, no admin scope.
+    Feature 147: scoped by environment (production/staging) x optional user_id (empty = global).
+    """
     from gen.config.v1 import config_pb2, config_pb2_grpc  # noqa: PLC0415
 
-    env, mode = _config_scope(environment, trading_mode)
+    env = _config_env(environment)
     async with grpc.aio.insecure_channel(CONFIG_ENDPOINT) as channel:
         stub = config_pb2_grpc.ConfigServiceStub(channel)
         resp = await stub.ListKeys(
-            config_pb2.ListKeysRequest(namespace=namespace, environment=env, trading_mode=mode),
+            config_pb2.ListKeysRequest(namespace=namespace, environment=env, user_id=user_id),
             metadata=_metadata(),
         )
         return {
             "namespace": namespace,
             "environment": environment,
-            "trading_mode": trading_mode,
+            "user_id": user_id,
             "keys": [
                 {
                     "key": k.key,
@@ -1216,11 +1212,11 @@ async def set_config(
     value_type: str,
     value: str,
     environment: str,
-    trading_mode: str,
     author: str,
     reason: str,
     access_scope: int,
     create_key: bool = False,
+    user_id: str = "",
 ) -> dict:
     """ConfigService.SetConfig, forwarding the REAL caller's access scope.
 
@@ -1231,7 +1227,7 @@ async def set_config(
     """
     from gen.config.v1 import config_pb2, config_pb2_grpc  # noqa: PLC0415
 
-    env, mode = _config_scope(environment, trading_mode)
+    env = _config_env(environment)
     cv = config_pb2.ConfigValue()
     if value_type == "int":
         cv.int_val = int(value)
@@ -1252,8 +1248,8 @@ async def set_config(
                 author=author,
                 reason=reason,
                 environment=env,
-                trading_mode=mode,
                 create_key=create_key,
+                user_id=user_id,
             ),
             # The caller's real derived scope, so the server's gate decides (feature 092: every
             # management tool now does this; the hardcoded-admin path was removed).

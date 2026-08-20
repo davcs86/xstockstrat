@@ -196,7 +196,7 @@ assertions (feature-074 trap).
 
 ### Step 7 — service: agent OAuth txn re-signs with JWT_SECRET; remove MCP_AGENT_SECRET
 
-**Status**: `pending`
+**Status**: `done` (agent portion; config-ui in Step 9b)
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/oauth_server.py` — modify
@@ -223,7 +223,7 @@ assertions (feature-074 trap).
 
 ### Step 8 — test: agent txn round-trip with JWT_SECRET + MCP_AGENT_SECRET scrub
 
-**Status**: `pending`
+**Status**: `done` (agent portion; config-ui in Step 9b)
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_oauth.py` — modify/create
@@ -241,7 +241,7 @@ assertions (feature-074 trap).
 
 ### Step 9 — service: agent + config-ui consumer-surface arg changes (C-14)
 
-**Status**: `pending`
+**Status**: `done` (agent portion; config-ui in Step 9b)
 **Service**: `xstockstrat-agent`, `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py`, `app/client.py` — modify (drop trading_mode arg; environment production/staging; keep is_secret redaction; retire secret.* prefix check)

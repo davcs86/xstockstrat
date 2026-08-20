@@ -30,16 +30,28 @@ log = logging.getLogger(__name__)
 
 UI_BASE_URL = os.environ.get("UI_BASE_URL", "http://localhost:3000")
 AGENT_PUBLIC_URL = os.environ.get("AGENT_PUBLIC_URL", "http://localhost:9000")
-MCP_AGENT_SECRET = os.environ.get("MCP_AGENT_SECRET", "")
+# Feature 147: the OAuth `txn` blob is HMAC-signed with JWT_SECRET (a shared platform secret now
+# injected into the agent), replacing the retired MCP_AGENT_SECRET. A shared key is required so a
+# txn issued by one agent instance verifies on another instance's callback (statelessness).
+JWT_SECRET = os.environ.get("JWT_SECRET", "")
+
+
+def _txn_key() -> bytes:
+    """The HMAC key for the OAuth txn blob. Fail closed rather than sign/verify with an empty key
+    (which would make the stateless flow forgeable) — the agent has no settings module, so an
+    unset JWT_SECRET is caught here at first use."""
+    if not JWT_SECRET:
+        raise RuntimeError("JWT_SECRET is required to sign/verify OAuth txn blobs (feature 147)")
+    return JWT_SECRET.encode()
 
 
 def _sign_txn(data: dict) -> str:
     """Encode + HMAC-sign an authorization-request transaction blob (keeps the agent stateless).
 
-    Format: base64url(json).hex(hmac_sha256(payload)). Signed with MCP_AGENT_SECRET.
+    Format: base64url(json).hex(hmac_sha256(payload)). Signed with JWT_SECRET.
     """
     payload = base64.urlsafe_b64encode(json.dumps(data, separators=(",", ":")).encode()).decode()
-    sig = hmac.new(MCP_AGENT_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    sig = hmac.new(_txn_key(), payload.encode(), hashlib.sha256).hexdigest()
     return f"{payload}.{sig}"
 
 
@@ -49,7 +61,7 @@ def _verify_txn(txn: str) -> dict | None:
         payload, sig = txn.rsplit(".", 1)
     except ValueError:
         return None
-    expected = hmac.new(MCP_AGENT_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    expected = hmac.new(_txn_key(), payload.encode(), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(sig, expected):
         return None
     try:
@@ -69,10 +81,10 @@ async def register(request):
 
     # agent.oauth.registration_enabled (bool, default true). Disabled => 403.
     # feature 093: env-scoped read; best-effort (a config failure must not 500 DCR).
-    _env, _mode = resolve_scope("", "")
+    _env = resolve_scope("")
     try:
         reg_enabled = await client.get_config_value(
-            "oauth.registration_enabled", namespace="agent", environment=_env, trading_mode=_mode
+            "oauth.registration_enabled", namespace="agent", environment=_env
         )
     except Exception as e:
         log.warning("oauth.registration_enabled read failed, defaulting to enabled: %s", e)
@@ -93,7 +105,7 @@ async def register(request):
     # match; otherwise fall back to the https:// minimum (identity enforces the same).
     try:
         allowed_raw = await client.get_config_value(
-            "oauth.allowed_redirect_uris", namespace="agent", environment=_env, trading_mode=_mode
+            "oauth.allowed_redirect_uris", namespace="agent", environment=_env
         )
     except Exception as e:
         log.warning("oauth.allowed_redirect_uris read failed, defaulting to empty allowlist: %s", e)

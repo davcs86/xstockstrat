@@ -83,26 +83,6 @@ class TestGetConfigRedaction:
 
 class TestSetConfigGuards:
     @pytest.mark.asyncio
-    async def test_rejects_a_secret_prefixed_key_before_any_rpc(self):
-        server = _make_server()
-        with (
-            patch.object(client, "set_config", AsyncMock()) as write,
-            patch.object(client, "list_config_keys", AsyncMock()) as listing,
-        ):
-            with pytest.raises(RuntimeError, match="secret keys are not settable"):
-                await _tool_fn(server, "set_config")(
-                    ctx=_ctx(ADMIN),
-                    namespace="marketdata",
-                    key="secret.marketdata.fmp.api_key",
-                    value_type="string",
-                    value="abc",
-                    author="me",
-                    reason="r",
-                )
-        write.assert_not_awaited()
-        listing.assert_not_awaited()  # prong (b) runs before any network call
-
-    @pytest.mark.asyncio
     async def test_rejects_a_flagged_key_that_is_not_prefixed(self):
         server = _make_server()
         listing = {"keys": [{"key": "marketdata.vendor.token", "is_secret": True}]}
@@ -330,22 +310,25 @@ class TestSetConfigRequestParity:
             patch.object(config_pb2_grpc, "ConfigServiceStub", return_value=stub),
         ):
             mock_grpc.aio.insecure_channel.return_value = cm
-            # A distinct non-default value for every SetConfigRequest field so each appears in
-            # ListFields(): environment='production'/trading_mode='live' map to non-zero enums.
+            # A distinct non-default value for every SetConfigRequest field the builder sets so
+            # each appears in ListFields(): environment='production' maps to a non-zero enum,
+            # user_id is a per-user scope. trading_mode is deprecated (feature 147) and
+            # intentionally NOT set by the builder, so it is excluded from the expected set below.
             await client.set_config(
                 namespace="ns",
                 key="k",
                 value_type="string",
                 value="v",
                 environment="production",
-                trading_mode="live",
                 author="a",
                 reason="r",
                 access_scope=15,
                 create_key=True,
+                user_id="u-1",
             )
         built = {f.name for f, _ in captured["req"].ListFields()}
-        assert built == set(config_pb2.SetConfigRequest.DESCRIPTOR.fields_by_name)
+        expected = set(config_pb2.SetConfigRequest.DESCRIPTOR.fields_by_name) - {"trading_mode"}
+        assert built == expected
 
 
 class TestScopeDefaulting:
@@ -353,20 +336,18 @@ class TestScopeDefaulting:
     async def test_defaults_to_the_agent_deployment_scope(self, monkeypatch):
         """Never the proto zero-value: a production agent must not write a dev row."""
         monkeypatch.setenv("APPLICATION_ENV", "production")
-        monkeypatch.setenv("TRADING_MODE", "live")
         server = _make_server()
         with patch.object(client, "get_config", AsyncMock(return_value={"values": {}})) as read:
             await _tool_fn(server, "get_config")(namespace="marketdata")
         assert read.await_args.kwargs["environment"] == "production"
-        assert read.await_args.kwargs["trading_mode"] == "live"
 
     @pytest.mark.asyncio
     async def test_an_explicit_parameter_wins(self, monkeypatch):
         monkeypatch.setenv("APPLICATION_ENV", "production")
         server = _make_server()
         with patch.object(client, "get_config", AsyncMock(return_value={"values": {}})) as read:
-            await _tool_fn(server, "get_config")(namespace="marketdata", environment="dev")
-        assert read.await_args.kwargs["environment"] == "dev"
+            await _tool_fn(server, "get_config")(namespace="marketdata", environment="staging")
+        assert read.await_args.kwargs["environment"] == "staging"
 
 
 class TestSdkWiring:

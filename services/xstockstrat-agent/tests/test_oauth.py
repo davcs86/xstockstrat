@@ -157,10 +157,10 @@ def test_register_rejects_non_https():
 
 
 def test_register_disabled_returns_403():
-    async def _cfg(key, *, namespace, environment, trading_mode="all"):
+    async def _cfg(key, *, namespace, environment, user_id=""):
         # feature 093: the DCR reads are env-scoped in the agent namespace.
         assert namespace == "agent"
-        assert environment in ("dev", "production")
+        assert environment in ("staging", "production")
         return "false" if key == "oauth.registration_enabled" else None
 
     with patch.object(client, "get_config_value", _cfg):
@@ -274,3 +274,47 @@ def test_token_unsupported_grant():
         r = tc.post("/oauth/token", data={"grant_type": "client_credentials"})
     assert r.status_code == 400
     assert r.json()["error"] == "unsupported_grant_type"
+
+
+# ── Feature 147: OAuth txn signed with JWT_SECRET, MCP_AGENT_SECRET removed ──
+
+
+def test_txn_roundtrips_under_jwt_secret():
+    """AC-9: a txn signed with JWT_SECRET verifies back to the same payload."""
+    from app.oauth_server import _sign_txn, _verify_txn
+
+    data = {"client_id": "c-1", "redirect_uri": "https://app.example/cb", "scope": "read"}
+    txn = _sign_txn(data)
+    assert _verify_txn(txn) == data
+
+
+def test_txn_tampered_one_byte_is_rejected():
+    """AC-9: flipping a single character of the signed payload fails verification."""
+    from app.oauth_server import _sign_txn, _verify_txn
+
+    txn = _sign_txn({"client_id": "c-1"})
+    payload, sig = txn.rsplit(".", 1)
+    tampered_payload = ("A" if payload[0] != "A" else "B") + payload[1:]
+    assert _verify_txn(f"{tampered_payload}.{sig}") is None
+
+
+def test_txn_signed_with_a_different_key_is_rejected(monkeypatch):
+    """AC-9: a txn signed under one key does not verify under another (shared-key requirement)."""
+    from app import oauth_server
+
+    txn = oauth_server._sign_txn({"client_id": "c-1"})
+    monkeypatch.setattr(oauth_server, "JWT_SECRET", "a-different-secret")
+    assert oauth_server._verify_txn(txn) is None
+
+
+def test_no_operative_mcp_agent_secret_in_app_code():
+    """AC-8: no app/ module reads or assigns MCP_AGENT_SECRET (a naming comment is allowed)."""
+    import pathlib
+
+    app_dir = pathlib.Path(__file__).resolve().parent.parent / "app"
+    offenders = []
+    for py in app_dir.rglob("*.py"):
+        for i, line in enumerate(py.read_text().splitlines(), 1):
+            if "MCP_AGENT_SECRET" in line and not line.lstrip().startswith("#"):
+                offenders.append(f"{py.name}:{i}: {line.strip()}")
+    assert offenders == [], f"MCP_AGENT_SECRET still used operatively: {offenders}"
