@@ -87,3 +87,43 @@
   (paper/live collide — latent bug, masked by paper-only-dev) and recompute per-position P&L in
   analysis from the order fills it already consumes (duplicates portfolio's P&L logic, drift risk).
 - Round 1 complete; full mode mandates ≥2 rounds. Awaiting user steer on the fork before round 2.
+
+## Session 2026-08-19 — sdd-design (Phase 1 round 2 + decisions)
+
+- User decision (round-1 gate): ENRICH the close event (Option A over analysis-only). Round 2 proposer
+  built it; round-2 adversary (verdict REVISE, no Floor breach) found real correctness bugs:
+  1. **Multi-leg P&L**: enriched `realized_pnl = existing.Qty*(FillPrice-AvgEntry)` uses PRE-CLOSE
+     qty = only the FINAL exit leg. Partial sells that didn't zero the position (emit
+     `position.updated`, no realized_pnl) are lost → attribution undercounts multi-leg exits
+     (confirmed vs `GetPnL`'s two-pass sum `portfolio_service.go:499-652`). Ledger add-ikbr shape.
+  2. **Incremental aggregation ⊥ quantile bucketing**: data-dependent quantile boundaries can't
+     coexist with incremental UPSERT keyed on `value_range_*`; once aggregated the raw samples are
+     gone. **Resolution (bake-in): store raw `(symbol,strategy_id,factor_name,factor_type,
+     indicator_value,realized_pnl,closed_at,close_event_id)` samples, bucket at QUERY time** — the
+     correlation-only-v1 fit; also dissolves the NULL-in-UNIQUE signal-attribution bug (#3).
+  3. NULL-in-UNIQUE → signal factors never accumulate (moot under raw-sample store).
+  4. **Position identity omits `account_id`** (portfolio account-scoped since feature 125) →
+     multi-account collision. Bake-in: add `account_id` to the enriched payload + the position key.
+  5. **Replay-phantom**: order_snapshots dedup gates the wrong table; a replayed old order.* after a
+     seal manufactures a spurious open row. Bake-in: short-circuit the WHOLE handler on
+     already-processed (`sequence <= cursor` or event_id exists) before any pnl_positions mutation;
+     advance the cursor in the SAME transaction as the writes; ON CONFLICT on the pnl_positions open.
+  6. `pnl_bucket_size` replacement is a functional FR-4 change → correct product-spec's Config Key
+     Changes in the same pass (new config key = owner+config-team governance gate).
+  7. C-05: declare the new `analysis.snapshot.*`/`analysis.patterns.*` defaults in analysis CLAUDE.md.
+  8. C-10(a): register nav in all three (NAV_GROUPS + PLATFORM_SUBNAV + reachability GROUPS).
+  9. Enriched payload keys (trading_mode, realized_pnl, account_id) = new producer contract → document
+     in portfolio/CLAUDE.md § Ledger Events Emitted + a producer↔consumer parity test (mcp-tools lesson).
+  Correctly-handled (not re-raised): C-04 enum sentinels present; C-07 hypertable UNIQUE includes
+  the partition col (caveat: `event_ts` must be the ledger's STABLE timestamp, byte-identical on
+  redelivery, else ON CONFLICT won't match).
+- **User decisions at the round-2 gate:**
+  - **P&L source = Option A (Portfolio cumulative), on DURABILITY grounds** (user asked "which
+    survives restarts/deploys"): portfolio tracks cumulative realized per position in a DB column
+    (portfolio **migration 010**, accumulate on each reducing fill) and emits the running total on
+    close; the figure is frozen on the durable ledger event; analysis reads it via its persisted
+    cursor — no in-memory dependency, no cross-deploy fill-replay dependency, no P&L duplication.
+    Option B (analysis reconstructs from fills) rejected: fragile across the deploy boundary +
+    duplicates portfolio's avg-entry/realized accounting.
+  - **Run round 3** to validate the substantially-revised design before writing design.md.
+- Round 2 complete. Proceeding to round 3 with Option A + all bake-in fixes.
