@@ -273,3 +273,21 @@ diff on the unedited proto before editing — toolchain reproduces committed stu
 - Full agent suite 227 passed, coverage 75% (≥40). ruff clean.
 
 **Next:** Steps 9 (UI), 10 (UI e2e).
+
+### Step 9 — UI undeletable affordance + signal badge [done]
+- WatchlistDetail.tsx: `systemManaged?`/`source?` on types; delete AlertDialog gated on
+  `!watchlist.systemManaged` (rename/add/remove untouched).
+- WatchlistReadiness.tsx: `WatchlistEntrySource` import, `source?` on Binding, `SignalSourceBadge`
+  (renders "Signal" badge only for SIGNAL) on both bound + unbound rows.
+- pnpm lint + build clean.
+
+### Step 10 — UI e2e [done]
+- watchlistMock.ts: optional `seed` arg, `systemManaged`/`source` on mock types, source preserved.
+- watchlists.spec.ts: AC-7 UI half (no delete affordance; rename/add/remove enabled) + AC-8
+  (NVDA SIGNAL badge shown, MSFT MANUAL no badge). INVENTORY.md updated (C-12).
+- Full watchlists spec: 11 passed (chromium). Ran against a production `next start` build (dev-mode
+  warmup timed out on cold compile + blocked Google-Fonts fetch); JWT_SECRET set to the e2e
+  TEST_JWT_SECRET so the auth cookie validates.
+
+## Session 2026-08-20 — sdd-execute — feature 127 COMPLETE
+All 10 steps done. status.md → code-completed.

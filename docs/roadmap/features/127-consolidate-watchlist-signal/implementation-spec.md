@@ -1,6 +1,6 @@
 # Implementation Spec: consolidate-watchlist-signal
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-08-20
 **Feature**: `docs/roadmap/features/127-consolidate-watchlist-signal/feature.md`
 **Total Steps**: 10
@@ -396,7 +396,7 @@ Targeted tests fail before Steps 6/7, pass after; suite-wide coverage stays ≥ 
 
 ### Step 9 — service: UI — undeletable affordance + per-entry signal badge on `/insights/watchlists`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/WatchlistDetail.tsx` — modify
@@ -429,7 +429,7 @@ types). Behavioral coverage in Step 10.
 
 ### Step 10 — test: UI e2e — undeletable system-managed list + signal-provenance badge
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/watchlists.spec.ts` — modify

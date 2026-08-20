@@ -315,4 +315,47 @@ test.describe('Watchlists (insights)', () => {
     await expect(page.getByRole('columnheader', { name: /CHG/ })).toHaveCount(0);
     await expect(page.getByRole('tab', { name: 'Quotes' })).toHaveCount(0);
   });
+
+  // feature 127 — a system-managed signals watchlist is delete-protected (AC-7 UI half) and its
+  // agent/signal-sourced entries carry a provenance badge; manual entries do not (AC-8).
+  test('system-managed watchlist: no delete affordance, signal-provenance badge (AC-7/AC-8)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page, [
+      {
+        watchlistId: 'wl-sys',
+        userId: 'test-user-001',
+        name: 'Signals',
+        description: '',
+        symbols: ['NVDA', 'MSFT'],
+        systemManaged: true,
+        bindings: [
+          { symbol: 'NVDA', strategyId: '', source: 2 }, // WATCHLIST_ENTRY_SOURCE_SIGNAL
+          { symbol: 'MSFT', strategyId: '', source: 1 }, // WATCHLIST_ENTRY_SOURCE_MANUAL
+        ],
+      },
+    ]);
+    await page.goto('/insights/watchlists');
+    await expect(page.getByRole('heading', { name: 'Watchlists' })).toBeVisible({ timeout: 5000 });
+
+    // Select the seeded system list from the master column.
+    await page.getByTestId('watchlist-master').getByRole('button', { name: /Signals/ }).click();
+    await expect(page.getByRole('heading', { name: 'Signals' })).toBeVisible({ timeout: 5000 });
+
+    // AC-7 (UI half): the destructive delete affordance is absent, while rename + add-symbol +
+    // per-row remove stay available (an empty system list is fine; only delete is protected).
+    await expect(page.getByRole('button', { name: 'Delete Signals' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Rename /i })).toBeVisible();
+    await expect(page.getByPlaceholder('Add symbols (e.g. AAPL MSFT)')).toBeEnabled();
+    await expect(page.getByTestId('readiness-row-NVDA').getByLabel('Remove NVDA')).toBeEnabled();
+
+    // AC-8: the SIGNAL-sourced NVDA row shows the provenance badge; the MANUAL MSFT row does not.
+    await expect(
+      page.getByTestId('readiness-row-NVDA').getByTestId('signal-source-badge'),
+    ).toBeVisible();
+    await expect(
+      page.getByTestId('readiness-row-MSFT').getByTestId('signal-source-badge'),
+    ).toHaveCount(0);
+  });
 });

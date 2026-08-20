@@ -12,14 +12,28 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ConditionState } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import { WatchlistEntrySource } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { analysisClient } from '@/lib/browserClients/analysisClient';
 import { isFiring, rollupReadiness } from '@/lib/readinessRollup';
 import { UNBOUND, toApiStrategyId } from '@/hooks/useWatchlists';
 
 type EvaluateReadinessResult = Awaited<ReturnType<typeof analysisClient.evaluateReadiness>>;
 type Readiness = EvaluateReadinessResult['readiness'][number];
-type Binding = { symbol: string; strategyId: string };
+type Binding = { symbol: string; strategyId: string; source?: number };
 type StrategyDef = { strategyId: string; displayName?: string; liveEnabled: boolean };
+
+/**
+ * Provenance badge (feature 127, FR-10): a small "Signal" tag on an entry the agent auto-added
+ * from an ingest_signal(direction="watchlist"). Manual/unspecified entries render nothing.
+ */
+function SignalSourceBadge({ source }: { source?: number }) {
+  if (source !== WatchlistEntrySource.SIGNAL) return null;
+  return (
+    <Badge variant="info" data-testid="signal-source-badge">
+      Signal
+    </Badge>
+  );
+}
 
 const hasData = (r: Readiness) => r.totalConditions > 0;
 
@@ -202,6 +216,7 @@ export function WatchlistReadiness({
                   data-testid={`readiness-row-${binding.symbol}`}
                 >
                   <span className="w-14 shrink-0 font-mono font-semibold">{r.symbol}</span>
+                  <SignalSourceBadge source={binding.source} />
                   <div className="flex shrink-0 items-center gap-2">
                     <Progress
                       value={Math.round(r.conviction * 100)}
@@ -253,6 +268,7 @@ export function WatchlistReadiness({
               data-testid={`readiness-row-${b.symbol}`}
             >
               <span className="w-14 shrink-0 font-mono font-semibold">{b.symbol}</span>
+              <SignalSourceBadge source={b.source} />
               <span
                 className="min-w-0 flex-1 truncate text-muted-foreground/60"
                 data-testid={`unbound-${b.symbol}`}

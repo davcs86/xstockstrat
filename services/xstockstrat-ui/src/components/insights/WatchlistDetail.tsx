@@ -32,7 +32,7 @@ import { useOpportunities } from '@/hooks/useOpportunities';
 import { WatchlistReadiness } from '@/components/insights/WatchlistReadiness';
 import { BASE_PATH_INSIGHTS } from '@/lib/basepath';
 
-type Binding = { symbol: string; strategyId: string };
+type Binding = { symbol: string; strategyId: string; source?: number };
 
 type WatchlistLike = {
   watchlistId: string;
@@ -42,6 +42,8 @@ type WatchlistLike = {
   // feature 097 — authoritative (symbol, strategy) bindings; falls back to the deprecated flat
   // `symbols` mirror for a legacy list that predates the shape change (FR-6).
   bindings?: Binding[];
+  // feature 127 — a system-managed signals watchlist is delete-protected (FR-9).
+  systemManaged?: boolean;
 };
 
 /**
@@ -184,27 +186,31 @@ export function WatchlistDetail({
               Build from screener
             </Link>
           </Button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive" size="sm" aria-label={`Delete ${watchlist.name}`}>
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogDescription>
-                Delete watchlist &quot;{watchlist.name}&quot;? This cannot be undone.
-              </AlertDialogDescription>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={(e) => {
-                  e.preventDefault();
-                  onDelete(watchlist.watchlistId);
-                }}
-              >
-                Confirm
-              </AlertDialogAction>
-            </AlertDialogContent>
-          </AlertDialog>
+          {/* feature 127: a system-managed signals watchlist cannot be deleted (FR-9) —
+              omit the destructive affordance entirely. Rename/add/remove stay available. */}
+          {!watchlist.systemManaged && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm" aria-label={`Delete ${watchlist.name}`}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogDescription>
+                  Delete watchlist &quot;{watchlist.name}&quot;? This cannot be undone.
+                </AlertDialogDescription>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onDelete(watchlist.watchlistId);
+                  }}
+                >
+                  Confirm
+                </AlertDialogAction>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </div>
       </div>
 
