@@ -39,4 +39,13 @@ read "honored" — an unresolved Floor breach blocks approval (F-11).>
 - `C-08` — honored by: <how>.
 - `F-01` — honored by: <how>.
 - ...
+
+## Business Rules Touched (C-16)
+
+<Existing `@AC-*` guarantees (from recon's Existing Business Rules) this approach affects. Empty if
+the feature is net-new behavior only. A CHANGE line must reference the user sign-off in context.md.>
+- PRESERVE `@AC-<n>` "<title>" (`services/xstockstrat-<svc>/acceptance/<file>.feature`) — not regressed by: <how>.
+- EXTEND `@AC-<n>` "<title>" — new case added: <what>.
+- CHANGE `@AC-<n>` "<title>" — altered guarantee; signed off by user @ <ISO> (context.md).
+- ...
 ```
