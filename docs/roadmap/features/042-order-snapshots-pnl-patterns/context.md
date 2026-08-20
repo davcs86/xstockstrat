@@ -200,3 +200,27 @@
   (no v1 backfill; v2 reconciliation named as a concrete tracked follow-up, add-ikbr lesson);
   (b) ClosePosition account-scoped in-feature (done, above); (c) no v1 retention, future snapshot
   retention MUST be position-lifecycle-keyed not time-based.
+
+## Session 2026-08-19 — sdd-design (Phase 1 round 5 — FINAL/cap, ACCEPT-WITH-RISKS)
+
+- Round 5 (hard cap) final adversarial pass on the fully-consolidated design. Verdict
+  **ACCEPT-WITH-RISKS, no Floor breach** — all cited symbols verified real (F-04 clear), migrations
+  010/016 next-free (F-01/C-07), single shared pool + compose-before-txn + no new edge (F-06), all
+  tunables in WatchConfig incl. the ex-hardcoded bucket count → `indicator_bucket_count` (F-07 clear).
+- **Round-5 refinement (fold into design.md):** tighten the attribution/parity scope to
+  **"long, order-fill-originated positions only."** A short opened via `account.positions.synced` and
+  covered via a live `order.filled` buy takes the `fill.Qty>0` "buying more" branch (`portfolio_service.go:269-275`),
+  so the shared `realizedDelta` helper is never invoked → `realized_accum ≈ 0` while GetPnL computes
+  the real figure (the `realized_accum == GetPnL.realized` parity would FAIL on that case, and
+  attribution understates for live-fill-closed shorts). Make this a NAMED v1 limitation (add-ikbr
+  shape avoided), user-neutralized by the attribution-only invariant. Rejected: accumulating in
+  `ConsumePositionSyncs` too — sync snaps to a broker snapshot with no per-leg price, reintroducing
+  the 056 dual-source path the design spent 4 rounds eliminating.
+- Final residual set (all captured as design.md Open Risks): (1) long/order-fill-originated scope +
+  named short understatement; (2) migration-016-vs-029 remote-branch re-scan at /sdd-spec;
+  (3) snapshot completeness = accept+WARN diagnostic, v2 reconciliation named follow-up; (4) no v1
+  retention → future retention position-lifecycle-keyed; (5) existing==nil close-payload guard;
+  (6) real-GetPnL characterization pin + collapse the test mirror; (7) ClosePosition account-scope
+  (repo sig + :288 call-site). Load-bearing invariant: insights view never shows a per-position
+  realized P&L a user would reconcile vs the trader dashboard.
+- 5-round cap reached. Design validated (ACCEPT-WITH-RISKS, no Floor breach) → to the approval gate.
