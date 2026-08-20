@@ -1093,6 +1093,11 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 const (
 	defaultMaxWatchlistsPerUser = 50
 	defaultMaxSymbolsPerList    = 500
+	// signalWatchlistDefaultName is the cosmetic display name for a user's single
+	// system-managed signals watchlist (feature 127). It is not identity — the list
+	// is identified by the system_managed flag — so it may coexist with a user's own
+	// same-named manual list. Not a config key (fixed display string).
+	signalWatchlistDefaultName = "Signals"
 )
 
 // WatchlistStore is the persistence surface the watchlist RPCs depend on. The
@@ -1106,6 +1111,7 @@ type WatchlistStore interface {
 	AddSymbols(ctx context.Context, watchlistID string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error)
 	RemoveSymbols(ctx context.Context, watchlistID string, symbols []string) (*portfoliov1.Watchlist, error)
 	CountByUser(ctx context.Context, userID string) (int, error)
+	EnsureSystemManaged(ctx context.Context, userID, defaultName string) (*portfoliov1.Watchlist, error)
 }
 
 // watchlistConfig is the slice of the config watcher the watchlist caps read. Lets
@@ -1148,7 +1154,11 @@ func normalizeBindings(in []*portfoliov1.WatchlistBinding) []*portfoliov1.Watchl
 			continue
 		}
 		seen[sym] = struct{}{}
-		out = append(out, &portfoliov1.WatchlistBinding{Symbol: sym, StrategyId: strings.TrimSpace(b.GetStrategyId())})
+		out = append(out, &portfoliov1.WatchlistBinding{
+			Symbol:     sym,
+			StrategyId: strings.TrimSpace(b.GetStrategyId()),
+			Source:     b.GetSource(), // preserve provenance (feature 127) so SIGNAL survives to insert
+		})
 	}
 	return out
 }
@@ -1245,6 +1255,21 @@ func (s *PortfolioService) CreateWatchlist(ctx context.Context, req *portfoliov1
 	return &portfoliov1.CreateWatchlistResponse{Watchlist: wl}, nil
 }
 
+// EnsureSignalWatchlist find-or-creates the caller's single system-managed signals
+// watchlist (feature 127, FR-2). Ownership is taken from the propagated x-user-id
+// header — the request carries no body. Idempotent and race-safe (repo ON CONFLICT).
+func (s *PortfolioService) EnsureSignalWatchlist(ctx context.Context, _ *portfoliov1.EnsureSignalWatchlistRequest) (*portfoliov1.EnsureSignalWatchlistResponse, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	wl, err := s.watchlists.EnsureSystemManaged(ctx, userID, signalWatchlistDefaultName)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return &portfoliov1.EnsureSignalWatchlistResponse{Watchlist: wl}, nil
+}
+
 // GetWatchlist returns a single watchlist owned by the caller (FR-2).
 func (s *PortfolioService) GetWatchlist(ctx context.Context, req *portfoliov1.GetWatchlistRequest) (*portfoliov1.GetWatchlistResponse, error) {
 	userID, err := requireUserID(ctx)
@@ -1313,8 +1338,14 @@ func (s *PortfolioService) DeleteWatchlist(ctx context.Context, req *portfoliov1
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.loadOwned(ctx, userID, req.GetWatchlistId()); err != nil {
+	wl, err := s.loadOwned(ctx, userID, req.GetWatchlistId())
+	if err != nil {
 		return nil, err
+	}
+	// A system-managed signals watchlist is delete-protected (feature 127, FR-8):
+	// the caller owns it, so this is refused on resource state, not authorization.
+	if wl.GetSystemManaged() {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("cannot delete a system-managed watchlist"))
 	}
 	if err := s.watchlists.Delete(ctx, req.GetWatchlistId()); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)

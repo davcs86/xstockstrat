@@ -33,6 +33,16 @@ export declare enum PositionSide {
 export declare function positionSideFromJSON(object: any): PositionSide;
 export declare function positionSideToJSON(object: PositionSide): string;
 export declare function positionSideToNumber(object: PositionSide): number;
+/** Provenance of a watchlist entry (feature 127). Consumers default UNSPECIFIED→MANUAL. */
+export declare enum WatchlistEntrySource {
+    WATCHLIST_ENTRY_SOURCE_UNSPECIFIED = "WATCHLIST_ENTRY_SOURCE_UNSPECIFIED",
+    WATCHLIST_ENTRY_SOURCE_MANUAL = "WATCHLIST_ENTRY_SOURCE_MANUAL",
+    WATCHLIST_ENTRY_SOURCE_SIGNAL = "WATCHLIST_ENTRY_SOURCE_SIGNAL",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function watchlistEntrySourceFromJSON(object: any): WatchlistEntrySource;
+export declare function watchlistEntrySourceToJSON(object: WatchlistEntrySource): string;
+export declare function watchlistEntrySourceToNumber(object: WatchlistEntrySource): number;
 export interface Portfolio {
     portfolioId: string;
     userId: string;
@@ -168,6 +178,11 @@ export interface WatchlistBinding {
     symbol: string;
     /** "" = unbound (kept as a bare watched symbol) */
     strategyId: string;
+    /**
+     * Entry provenance (feature 127); first-writer-wins under ON CONFLICT DO NOTHING.
+     * Unspecified on read → treat as MANUAL.
+     */
+    source: WatchlistEntrySource;
 }
 /** Watchlist (feature 058) — a mode-agnostic, user-owned named set of symbols. */
 export interface Watchlist {
@@ -185,6 +200,11 @@ export interface Watchlist {
     updatedAt?: Date | undefined;
     /** Authoritative (symbol, strategy) shape (feature 097); when present it supersedes `symbols`. */
     bindings: WatchlistBinding[];
+    /**
+     * System-managed signals watchlist (feature 127), identified by this flag (not by name).
+     * Delete-protected (FR-7/FR-8); one per user.
+     */
+    systemManaged: boolean;
 }
 /**
  * user_id is intentionally absent from all request messages — ownership is taken
@@ -246,6 +266,12 @@ export interface RemoveWatchlistSymbolsRequest {
 export interface RemoveWatchlistSymbolsResponse {
     watchlist?: Watchlist | undefined;
 }
+/** user_id intentionally absent — ownership from the x-user-id header (feature 127, FR-2). */
+export interface EnsureSignalWatchlistRequest {
+}
+export interface EnsureSignalWatchlistResponse {
+    watchlist?: Watchlist | undefined;
+}
 export declare const Portfolio: MessageFns<Portfolio>;
 export declare const Position: MessageFns<Position>;
 export declare const PortfolioSnapshot: MessageFns<PortfolioSnapshot>;
@@ -275,6 +301,8 @@ export declare const AddWatchlistSymbolsRequest: MessageFns<AddWatchlistSymbolsR
 export declare const AddWatchlistSymbolsResponse: MessageFns<AddWatchlistSymbolsResponse>;
 export declare const RemoveWatchlistSymbolsRequest: MessageFns<RemoveWatchlistSymbolsRequest>;
 export declare const RemoveWatchlistSymbolsResponse: MessageFns<RemoveWatchlistSymbolsResponse>;
+export declare const EnsureSignalWatchlistRequest: MessageFns<EnsureSignalWatchlistRequest>;
+export declare const EnsureSignalWatchlistResponse: MessageFns<EnsureSignalWatchlistResponse>;
 export type PortfolioServiceService = typeof PortfolioServiceService;
 export declare const PortfolioServiceService: {
     readonly getPortfolio: {
@@ -407,6 +435,19 @@ export declare const PortfolioServiceService: {
         readonly responseSerialize: (value: RemoveWatchlistSymbolsResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => RemoveWatchlistSymbolsResponse;
     };
+    /**
+     * Find-or-create the caller's system_managed=true watchlist (feature 127).
+     * Ownership is taken from the propagated x-user-id header; the request has no body (FR-2).
+     */
+    readonly ensureSignalWatchlist: {
+        readonly path: "/xstockstrat.portfolio.v1.PortfolioService/EnsureSignalWatchlist";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: EnsureSignalWatchlistRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => EnsureSignalWatchlistRequest;
+        readonly responseSerialize: (value: EnsureSignalWatchlistResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => EnsureSignalWatchlistResponse;
+    };
 };
 export interface PortfolioServiceServer extends UntypedServiceImplementation {
     getPortfolio: handleUnaryCall<GetPortfolioRequest, Portfolio>;
@@ -427,6 +468,11 @@ export interface PortfolioServiceServer extends UntypedServiceImplementation {
     deleteWatchlist: handleUnaryCall<DeleteWatchlistRequest, DeleteWatchlistResponse>;
     addWatchlistSymbols: handleUnaryCall<AddWatchlistSymbolsRequest, AddWatchlistSymbolsResponse>;
     removeWatchlistSymbols: handleUnaryCall<RemoveWatchlistSymbolsRequest, RemoveWatchlistSymbolsResponse>;
+    /**
+     * Find-or-create the caller's system_managed=true watchlist (feature 127).
+     * Ownership is taken from the propagated x-user-id header; the request has no body (FR-2).
+     */
+    ensureSignalWatchlist: handleUnaryCall<EnsureSignalWatchlistRequest, EnsureSignalWatchlistResponse>;
 }
 export interface PortfolioServiceClient extends Client {
     getPortfolio(request: GetPortfolioRequest, callback: (error: ServiceError | null, response: Portfolio) => void): ClientUnaryCall;
@@ -474,6 +520,13 @@ export interface PortfolioServiceClient extends Client {
     removeWatchlistSymbols(request: RemoveWatchlistSymbolsRequest, callback: (error: ServiceError | null, response: RemoveWatchlistSymbolsResponse) => void): ClientUnaryCall;
     removeWatchlistSymbols(request: RemoveWatchlistSymbolsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: RemoveWatchlistSymbolsResponse) => void): ClientUnaryCall;
     removeWatchlistSymbols(request: RemoveWatchlistSymbolsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: RemoveWatchlistSymbolsResponse) => void): ClientUnaryCall;
+    /**
+     * Find-or-create the caller's system_managed=true watchlist (feature 127).
+     * Ownership is taken from the propagated x-user-id header; the request has no body (FR-2).
+     */
+    ensureSignalWatchlist(request: EnsureSignalWatchlistRequest, callback: (error: ServiceError | null, response: EnsureSignalWatchlistResponse) => void): ClientUnaryCall;
+    ensureSignalWatchlist(request: EnsureSignalWatchlistRequest, metadata: Metadata, callback: (error: ServiceError | null, response: EnsureSignalWatchlistResponse) => void): ClientUnaryCall;
+    ensureSignalWatchlist(request: EnsureSignalWatchlistRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: EnsureSignalWatchlistResponse) => void): ClientUnaryCall;
 }
 export declare const PortfolioServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): PortfolioServiceClient;

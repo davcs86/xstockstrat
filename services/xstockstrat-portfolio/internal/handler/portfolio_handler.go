@@ -170,6 +170,14 @@ func (h *PortfolioHandler) DeleteWatchlist(ctx context.Context, req *connect.Req
 	return connect.NewResponse(resp), nil
 }
 
+func (h *PortfolioHandler) EnsureSignalWatchlist(ctx context.Context, req *connect.Request[portfoliov1.EnsureSignalWatchlistRequest]) (*connect.Response[portfoliov1.EnsureSignalWatchlistResponse], error) {
+	resp, err := h.svc.EnsureSignalWatchlist(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
 func (h *PortfolioHandler) AddWatchlistSymbols(ctx context.Context, req *connect.Request[portfoliov1.AddWatchlistSymbolsRequest]) (*connect.Response[portfoliov1.AddWatchlistSymbolsResponse], error) {
 	resp, err := h.svc.AddWatchlistSymbols(ctx, req.Msg)
 	if err != nil {
@@ -301,6 +309,14 @@ func (a *grpcPortfolioAdapter) UpdateWatchlist(ctx context.Context, req *portfol
 
 func (a *grpcPortfolioAdapter) DeleteWatchlist(ctx context.Context, req *portfoliov1.DeleteWatchlistRequest) (*portfoliov1.DeleteWatchlistResponse, error) {
 	resp, err := a.h.DeleteWatchlist(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcPortfolioAdapter) EnsureSignalWatchlist(ctx context.Context, req *portfoliov1.EnsureSignalWatchlistRequest) (*portfoliov1.EnsureSignalWatchlistResponse, error) {
+	resp, err := a.h.EnsureSignalWatchlist(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, toGRPCError(err)
 	}

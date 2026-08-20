@@ -211,3 +211,50 @@
   - Step 6: touches 6 files (>5) — acceptable (3 are the deploy-parity trio for PORTFOLIO_ENDPOINT). — [x] no action needed (accepted)
   - Note: migration `011` deviates from strict last+1 (`010`) but is a coordinated reservation per
     merge-order.md:182 (042 keeps `010`). Not an F-01 risk (new files). — [x] no action needed (by design)
+
+## Session 2026-08-20 — sdd-execute (steps 1–5, 7)
+
+**Branch-model note (harness constraint):** This session runs under a harness that assigns a
+single branch `claude/execute-020-042-127-pfa5cw` and forbids pushing to a different branch
+without explicit permission. The SDD per-feature `feature/<slug>` branch + per-step PR model is
+therefore adapted: all three features (020, 042, 127) are implemented on the assigned claude
+branch with SDD discipline (discovery → red/green TDD → per-step context/spec updates → deviation
+log) and will land via a single integration PR into `main-dev`.
+
+**Toolchain:** Docker codegen image build failed at the NodeSource apt step (egress not routed
+inside the Docker build), so the host-toolchain fallback (`docs/runbooks/codegen-toolchain-host-setup.md`)
+was used: installed buf + pinned Go plugins (protoc-gen-go@v1.36.11, protoc-gen-go-grpc@v1.6.2,
+protoc-gen-connect-go@v1.19.2), TS plugins, grpcio-tools==1.80.0. Validated an **empty** `gen/`
+diff on the unedited proto before editing — toolchain reproduces committed stubs byte-for-byte.
+
+### Step 1 — proto additive changes [done]
+- Added `WatchlistEntrySource` enum, `WatchlistBinding.source` (3), `Watchlist.system_managed` (9),
+  `EnsureSignalWatchlist` RPC + req/resp messages to `portfolio.proto`. `buf lint`/`buf breaking`
+  (against main-dev) pass (additive).
+- Files: `packages/proto/portfolio/v1/portfolio.proto`
+
+### Step 2 — proto-gen [done]
+- `./scripts/buf-gen.sh` regenerated Go/Python/TS stubs; diff limited to portfolio stubs only.
+- Files: `packages/proto/gen/**`
+
+### Step 3 — migration 011 [done]
+- `011_watchlist_system_managed_source.{up,down}.sql`: `system_managed` col, name-constraint
+  rework (partial unique indexes), `source` col. Offline up/down parity verified.
+
+### Step 4 — portfolio repo/service/handler [done]
+- Column plumbing (system_managed/source), `EnsureSystemManaged` repo method (ON CONFLICT
+  find-or-create), `EnsureSignalWatchlist` service+handler+gRPC adapter, `DeleteWatchlist` guard
+  (FailedPrecondition on system-managed). Deviation: `normalizeBindings` preserves `source`.
+- Build + golangci-lint clean.
+- Files: `internal/repository/watchlist_repo.go`, `internal/service/portfolio_service.go`,
+  `internal/handler/portfolio_handler.go`
+
+### Step 5 — portfolio tests [done]
+- AC-6 (EnsureSignalWatchlist idempotent + coexists with same-named manual list), AC-7 API half
+  (delete guard + happy-path delete). In `watchlist_service_test.go` (not the spec's named file).
+- `go test ./... -race` + lint green.
+
+### Step 7 — mcp-tools.md doc [done]
+- Documented the watchlist auto-add side effect + dedup suppression in the `ingest_signal` entry.
+
+**Next:** Steps 6 (agent), 8 (agent test), 9 (UI), 10 (UI test).

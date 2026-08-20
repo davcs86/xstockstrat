@@ -57,10 +57,36 @@ func (r *WatchlistRepo) Create(ctx context.Context, userID, name, description st
 	return r.GetByID(ctx, id)
 }
 
+// EnsureSystemManaged find-or-creates the caller's single system-managed watchlist,
+// race-free. The INSERT ... ON CONFLICT (user_id) WHERE system_managed DO NOTHING
+// targets the watchlists_user_system_uidx partial unique index (migration 011): a
+// concurrent creator's row wins and this call's RETURNING is empty, so we fall back
+// to selecting the existing row's id. Either way exactly one system list per user.
+func (r *WatchlistRepo) EnsureSystemManaged(ctx context.Context, userID, defaultName string) (*portfoliov1.Watchlist, error) {
+	var id string
+	err := r.pool.QueryRow(ctx,
+		`INSERT INTO portfolio.watchlists (user_id, name, system_managed)
+		 VALUES ($1, $2, true)
+		 ON CONFLICT (user_id) WHERE system_managed DO NOTHING
+		 RETURNING watchlist_id`,
+		userID, defaultName).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Row already existed (conflict) — fetch the existing system list's id.
+		if err := r.pool.QueryRow(ctx,
+			`SELECT watchlist_id FROM portfolio.watchlists
+			 WHERE user_id = $1 AND system_managed`, userID).Scan(&id); err != nil {
+			return nil, fmt.Errorf("select existing system watchlist: %w", err)
+		}
+	} else if err != nil {
+		return nil, fmt.Errorf("ensure system watchlist: %w", err)
+	}
+	return r.GetByID(ctx, id)
+}
+
 // GetByID returns a single watchlist with its symbols, or ErrWatchlistNotFound.
 func (r *WatchlistRepo) GetByID(ctx context.Context, watchlistID string) (*portfoliov1.Watchlist, error) {
 	wl, err := scanWatchlist(r.pool.QueryRow(ctx,
-		`SELECT watchlist_id, user_id, name, description, created_at, updated_at
+		`SELECT watchlist_id, user_id, name, description, created_at, updated_at, system_managed
 		 FROM portfolio.watchlists WHERE watchlist_id = $1`, watchlistID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -83,7 +109,7 @@ func (r *WatchlistRepo) ListByUser(ctx context.Context, userID string, pageSize 
 		pageSize = 100
 	}
 	rows, err := r.pool.Query(ctx,
-		`SELECT watchlist_id, user_id, name, description, created_at, updated_at
+		`SELECT watchlist_id, user_id, name, description, created_at, updated_at, system_managed
 		 FROM portfolio.watchlists
 		 WHERE user_id = $1 AND ($2 = '' OR watchlist_id > $2::uuid)
 		 ORDER BY watchlist_id ASC LIMIT $3`,
@@ -220,18 +246,25 @@ func (r *WatchlistRepo) CountByUser(ctx context.Context, userID string) (int, er
 
 func (r *WatchlistRepo) listBindings(ctx context.Context, watchlistID string) ([]*portfoliov1.WatchlistBinding, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT symbol, strategy_id FROM portfolio.watchlist_symbols WHERE watchlist_id = $1 ORDER BY symbol ASC`, watchlistID)
+		`SELECT symbol, strategy_id, source FROM portfolio.watchlist_symbols WHERE watchlist_id = $1 ORDER BY symbol ASC`, watchlistID)
 	if err != nil {
 		return nil, fmt.Errorf("list bindings: %w", err)
 	}
 	defer rows.Close()
 	var binds []*portfoliov1.WatchlistBinding
 	for rows.Next() {
-		var symbol, strategyID string
-		if err := rows.Scan(&symbol, &strategyID); err != nil {
+		var (
+			symbol, strategyID string
+			source             int16
+		)
+		if err := rows.Scan(&symbol, &strategyID, &source); err != nil {
 			return nil, fmt.Errorf("scan binding: %w", err)
 		}
-		binds = append(binds, &portfoliov1.WatchlistBinding{Symbol: symbol, StrategyId: strategyID})
+		binds = append(binds, &portfoliov1.WatchlistBinding{
+			Symbol:     symbol,
+			StrategyId: strategyID,
+			Source:     portfoliov1.WatchlistEntrySource(source),
+		})
 	}
 	return binds, rows.Err()
 }
@@ -266,9 +299,9 @@ func touchWatchlistTx(ctx context.Context, tx pgx.Tx, watchlistID string) error 
 func insertBindingsTx(ctx context.Context, tx pgx.Tx, watchlistID string, bindings []*portfoliov1.WatchlistBinding) error {
 	for _, b := range bindings {
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO portfolio.watchlist_symbols (watchlist_id, symbol, strategy_id)
-			 VALUES ($1, $2, $3) ON CONFLICT (watchlist_id, symbol) DO NOTHING`,
-			watchlistID, b.GetSymbol(), b.GetStrategyId()); err != nil {
+			`INSERT INTO portfolio.watchlist_symbols (watchlist_id, symbol, strategy_id, source)
+			 VALUES ($1, $2, $3, $4) ON CONFLICT (watchlist_id, symbol) DO NOTHING`,
+			watchlistID, b.GetSymbol(), b.GetStrategyId(), int16(b.GetSource())); err != nil {
 			return fmt.Errorf("insert binding %q: %w", b.GetSymbol(), err)
 		}
 	}
@@ -279,16 +312,18 @@ func scanWatchlist(row pgxRow) (*portfoliov1.Watchlist, error) {
 	var (
 		id, userID, name, description string
 		createdAt, updatedAt          time.Time
+		systemManaged                 bool
 	)
-	if err := row.Scan(&id, &userID, &name, &description, &createdAt, &updatedAt); err != nil {
+	if err := row.Scan(&id, &userID, &name, &description, &createdAt, &updatedAt, &systemManaged); err != nil {
 		return nil, err
 	}
 	return &portfoliov1.Watchlist{
-		WatchlistId: id,
-		UserId:      userID,
-		Name:        name,
-		Description: description,
-		CreatedAt:   timestamppb.New(createdAt),
-		UpdatedAt:   timestamppb.New(updatedAt),
+		WatchlistId:   id,
+		UserId:        userID,
+		Name:          name,
+		Description:   description,
+		CreatedAt:     timestamppb.New(createdAt),
+		UpdatedAt:     timestamppb.New(updatedAt),
+		SystemManaged: systemManaged,
 	}, nil
 }

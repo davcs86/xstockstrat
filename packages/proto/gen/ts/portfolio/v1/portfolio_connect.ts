@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AddWatchlistSymbolsRequest, AddWatchlistSymbolsResponse, CreateWatchlistRequest, CreateWatchlistResponse, DeleteWatchlistRequest, DeleteWatchlistResponse, GetPnLRequest, GetPortfolioRequest, GetPositionRequest, GetSnapshotRequest, GetWatchlistRequest, GetWatchlistResponse, ListPortfoliosRequest, ListPortfoliosResponse, ListPositionsRequest, ListPositionsResponse, ListWatchlistsRequest, ListWatchlistsResponse, PnLResponse, Portfolio, PortfolioSnapshot, Position, RemoveWatchlistSymbolsRequest, RemoveWatchlistSymbolsResponse, StreamPortfolioUpdatesRequest, UpdateWatchlistRequest, UpdateWatchlistResponse } from "./portfolio_pb.js";
+import { AddWatchlistSymbolsRequest, AddWatchlistSymbolsResponse, CreateWatchlistRequest, CreateWatchlistResponse, DeleteWatchlistRequest, DeleteWatchlistResponse, EnsureSignalWatchlistRequest, EnsureSignalWatchlistResponse, GetPnLRequest, GetPortfolioRequest, GetPositionRequest, GetSnapshotRequest, GetWatchlistRequest, GetWatchlistResponse, ListPortfoliosRequest, ListPortfoliosResponse, ListPositionsRequest, ListPositionsResponse, ListWatchlistsRequest, ListWatchlistsResponse, PnLResponse, Portfolio, PortfolioSnapshot, Position, RemoveWatchlistSymbolsRequest, RemoveWatchlistSymbolsResponse, StreamPortfolioUpdatesRequest, UpdateWatchlistRequest, UpdateWatchlistResponse } from "./portfolio_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -139,6 +139,18 @@ export const PortfolioService = {
       name: "RemoveWatchlistSymbols",
       I: RemoveWatchlistSymbolsRequest,
       O: RemoveWatchlistSymbolsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Find-or-create the caller's system_managed=true watchlist (feature 127).
+     * Ownership is taken from the propagated x-user-id header; the request has no body (FR-2).
+     *
+     * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.EnsureSignalWatchlist
+     */
+    ensureSignalWatchlist: {
+      name: "EnsureSignalWatchlist",
+      I: EnsureSignalWatchlistRequest,
+      O: EnsureSignalWatchlistResponse,
       kind: MethodKind.Unary,
     },
   }

@@ -111,7 +111,7 @@ func (f *fakeWatchlistStore) AddSymbols(_ context.Context, watchlistID string, b
 	// ON CONFLICT DO NOTHING: an existing symbol keeps its stored strategy_id (fails-080).
 	for _, b := range bindings {
 		if _, dup := seen[b.GetSymbol()]; !dup {
-			wl.Bindings = append(wl.Bindings, &portfoliov1.WatchlistBinding{Symbol: b.GetSymbol(), StrategyId: b.GetStrategyId()})
+			wl.Bindings = append(wl.Bindings, &portfoliov1.WatchlistBinding{Symbol: b.GetSymbol(), StrategyId: b.GetStrategyId(), Source: b.GetSource()})
 			seen[b.GetSymbol()] = struct{}{}
 		}
 	}
@@ -147,6 +147,21 @@ func (f *fakeWatchlistStore) CountByUser(_ context.Context, userID string) (int,
 		}
 	}
 	return n, nil
+}
+
+// EnsureSystemManaged returns the user's single system-managed list, creating it on
+// first call. Mirrors the repo's one-system-list-per-user invariant (migration 011).
+func (f *fakeWatchlistStore) EnsureSystemManaged(_ context.Context, userID, defaultName string) (*portfoliov1.Watchlist, error) {
+	for _, wl := range f.byID {
+		if wl.UserId == userID && wl.GetSystemManaged() {
+			return clone(wl), nil
+		}
+	}
+	f.seq++
+	id := fmt.Sprintf("wl-%d", f.seq)
+	wl := &portfoliov1.Watchlist{WatchlistId: id, UserId: userID, Name: defaultName, SystemManaged: true}
+	f.byID[id] = wl
+	return clone(wl), nil
 }
 
 // fakeConfig returns caps that the test can mutate between calls.
@@ -443,5 +458,78 @@ func TestBindings_UpdateReplaces(t *testing.T) {
 	}
 	if b := bindingFor(t, updated.Watchlist, "NVDA"); b.GetStrategyId() != "strat-y" {
 		t.Fatalf("NVDA strategy_id: got %q want strat-y", b.GetStrategyId())
+	}
+}
+
+// ─── AC-6: EnsureSignalWatchlist idempotent + coexists with a same-named manual list ──
+
+func TestEnsureSignalWatchlist_Idempotent(t *testing.T) {
+	store := newFakeStore()
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+	ctx := ctxWithUser(t, "user-42")
+
+	// A pre-existing manual list literally named "Signals" must not collide with the
+	// system list (the system list is identified by the flag, not the name).
+	if _, err := svc.CreateWatchlist(ctx, &portfoliov1.CreateWatchlistRequest{Name: signalWatchlistDefaultName}); err != nil {
+		t.Fatalf("seed manual Signals list: %v", err)
+	}
+
+	first, err := svc.EnsureSignalWatchlist(ctx, &portfoliov1.EnsureSignalWatchlistRequest{})
+	if err != nil {
+		t.Fatalf("ensure #1: %v", err)
+	}
+	second, err := svc.EnsureSignalWatchlist(ctx, &portfoliov1.EnsureSignalWatchlistRequest{})
+	if err != nil {
+		t.Fatalf("ensure #2: %v", err)
+	}
+	if first.Watchlist.GetWatchlistId() != second.Watchlist.GetWatchlistId() {
+		t.Fatalf("not idempotent: %q != %q", first.Watchlist.GetWatchlistId(), second.Watchlist.GetWatchlistId())
+	}
+	if !first.Watchlist.GetSystemManaged() {
+		t.Fatalf("returned watchlist is not system_managed")
+	}
+	// Exactly one system-managed row for the user, coexisting with the manual "Signals".
+	systemCount := 0
+	for _, wl := range store.byID {
+		if wl.UserId == "user-42" && wl.GetSystemManaged() {
+			systemCount++
+		}
+	}
+	if systemCount != 1 {
+		t.Fatalf("expected exactly 1 system-managed list, got %d", systemCount)
+	}
+}
+
+// ─── AC-7 (API half): a system-managed watchlist cannot be deleted ───────────────────
+
+func TestDeleteWatchlist_SystemManagedGuard(t *testing.T) {
+	store := newFakeStore()
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+	ctx := ctxWithUser(t, "user-42")
+
+	ensured, err := svc.EnsureSignalWatchlist(ctx, &portfoliov1.EnsureSignalWatchlistRequest{})
+	if err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	sysID := ensured.Watchlist.GetWatchlistId()
+
+	_, err = svc.DeleteWatchlist(ctx, &portfoliov1.DeleteWatchlistRequest{WatchlistId: sysID})
+	if err == nil {
+		t.Fatalf("expected delete of system-managed list to fail")
+	}
+	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {
+		t.Fatalf("delete guard code: got %v want FailedPrecondition", got)
+	}
+	if _, ok := store.byID[sysID]; !ok {
+		t.Fatalf("system-managed row was deleted despite the guard")
+	}
+
+	// Guard has teeth but does not block ordinary deletes.
+	manual, err := svc.CreateWatchlist(ctx, &portfoliov1.CreateWatchlistRequest{Name: "Tech"})
+	if err != nil {
+		t.Fatalf("create manual: %v", err)
+	}
+	if _, err := svc.DeleteWatchlist(ctx, &portfoliov1.DeleteWatchlistRequest{WatchlistId: manual.Watchlist.GetWatchlistId()}); err != nil {
+		t.Fatalf("manual delete should succeed: %v", err)
 	}
 }
