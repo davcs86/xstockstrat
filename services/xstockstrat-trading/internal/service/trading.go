@@ -1546,7 +1546,7 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 // by definition platform-wide, not scoped to one trading mode, so REDUCE_ONLY must apply to
 // both paper and live simultaneously.
 func (s *TradingService) escalateSystemic(ctx context.Context, systemicCount, totalAccounts int) {
-	env := commonv1.Environment_ENVIRONMENT_DEV
+	env := commonv1.Environment_ENVIRONMENT_STAGING // feature 147: non-production => staging
 	if s.cfg.ApplicationEnv == "production" {
 		env = commonv1.Environment_ENVIRONMENT_PRODUCTION
 	}

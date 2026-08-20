@@ -261,7 +261,7 @@ assertions (feature-074 trap).
 
 ### Step 10 — service: remaining WatchConfig client edges drop trading_mode
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-{ledger,identity,notify,config}` (Node), `xstockstrat-{indicators,ingest,analysis}` (Python), `xstockstrat-{trading,portfolio}` (Go)
 **Files**: each service's `ConfigWatcher`/config client request builder — modify
 

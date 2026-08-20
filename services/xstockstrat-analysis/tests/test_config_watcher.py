@@ -15,15 +15,15 @@ def test_resolve_environment_production():
 
 
 def test_resolve_environment_development():
-    assert resolve_environment("development") == common_pb2.ENVIRONMENT_DEV
+    assert resolve_environment("development") == common_pb2.ENVIRONMENT_STAGING
 
 
 def test_resolve_environment_unset_defaults_dev():
-    assert resolve_environment("") == common_pb2.ENVIRONMENT_DEV
+    assert resolve_environment("") == common_pb2.ENVIRONMENT_STAGING
 
 
 def test_resolve_environment_unrecognized_defaults_dev():
-    assert resolve_environment("staging") == common_pb2.ENVIRONMENT_DEV
+    assert resolve_environment("staging") == common_pb2.ENVIRONMENT_STAGING
 
 
 def test_resolve_trading_mode_live():
