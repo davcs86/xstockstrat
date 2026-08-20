@@ -103,7 +103,40 @@
   config keys — reword to the hybrid model and register `notify.fanout.min_severity` (the 5th key).
 
 ### Open Threads
-- [ ] min_severity=WARNING default excludes INFO fills — document prominently → config-seed/docs step.
-- [ ] Struct-key pinning (`conviction`/`symbol`/`trigger_type`/`strategy_id`) — red-before-green test → fanout-wiring test step.
-- [ ] SECRET env parity across docker-compose + 2 DO specs → deploy-wiring step (C-10 verification).
-- [ ] Reword FR-1/FR-2/FR-5 + register 5th config key → before/at /sdd-spec.
+- [x] min_severity=WARNING default excludes INFO fills — documented in Step 1 key description + Step 7 notify CLAUDE.md (prominent caveat in the `min_severity` row).
+- [x] Struct-key pinning (`conviction`/`symbol`/`trigger_type`/`strategy_id`) — red-before-green test → Step 5 "flat-Struct conviction read" case (0.82 fans out, 0.55 does not).
+- [x] SECRET env parity → Step 6, expanded to the FULL add-data-source 8-file credential pipeline (not just the 3 files design.md named), with a cross-file parity grep in Verification (C-10).
+- [x] Reword FR-1/FR-2/FR-5 + register 5th config key → verified already reflected in product-spec.md (hybrid gate wording + all 5 keys, incl. `notify.fanout.min_severity`); Step 7 adds only a one-line cross-ref to the completed full-pipeline wiring.
+
+## Session 2026-08-20 — sdd-spec
+
+- Generated implementation-spec.md with 7 steps. Status → implementation-ready.
+- Steps: 1 config migration 017 (5 `notify.fanout.*` keys, dev+prod rows, value_type↔getter matched);
+  2 `src/fanout/fanout.ts` FanoutDispatcher (gate + content-hash dedup + Slack/SendGrid senders,
+  AbortController 3000ms); 3 module unit test (AC-2/3/5/6/7/8/9); 4 wire into emitAlert via
+  `queueMicrotask` AFTER the success callback (notifyServiceImpl.ts:95); 5 wiring/isolation test
+  (AC-1/3/4/5/6 + flat-Struct conviction pin); 6 full credential deploy pipeline; 7 docs + context-scrubber.
+- Key codebase findings (grounded, not from recon alone):
+  - Hook point confirmed: `emitAlert` success callback at `notifyServiceImpl.ts:95-98`; fan-out `alert`
+    object built `:67-80`; F-10 title/body guard `:35-37`; `alertSeverityToNumber` imported `:3`, used `:53`.
+  - Analysis is the sole `conviction` producer — flat Struct key in `live_loop.py` `_emit_alert`
+    (`ctx.update({strategy_id, symbol, trigger_type, conviction})`). Verified directly.
+  - Config seed: last migration 016 → next 017; copy `015_marketdata_finnhub.up.sql:24-30` shape
+    (dev+prod rows, `trading_mode='all'`, `is_secret=FALSE`, `ON CONFLICT ... DO NOTHING`).
+  - **Deploy-wiring scope decision (surfaced, not silently guessed):** design.md § Credentials named
+    only 3 deploy files; the product spec's Env Var Changes binds the credentials to the FULL
+    `add-data-source.md` § "Wiring a New Vendor Credential Through Deploy" checklist, and
+    `config-governance.md:60` records feature 129 shipping a credential into "only 3 of 8 required
+    files" as a defect needing a follow-up PR. Step 6 therefore wires all 8 applicable pipeline files
+    (`config.go` row is Go-only, N/A here — Node reads `process.env` in the Step 2 module). This
+    completes design.md's wording without changing its architecture; flagged in the Execution Summary
+    and this log for the impl-spec reviewer.
+  - Test harness: notify runs compile-first (`tsc && node --test dist/__tests__/*.test.js`), coverage
+    via `pnpm run test:coverage` (c8 `--lines 40`), lint `eslint src --ext .ts`; single-consumer inline
+    fakes are C-13-compliant (no `src/__tests__/fixtures/` home needed).
+
+### Decisions
+- Deploy credential wiring expanded to the full 8-file add-data-source pipeline (C-10) — the load-bearing
+  deviation from design.md's 3-file wording; both credentials are OPTIONAL (empty = disabled channel).
+- HTTP timeout `FANOUT_HTTP_TIMEOUT_MS = 3000` stays a code constant, not a 6th config key (F-07 —
+  not a tunable in disguise; inside AC-1's 5 s).

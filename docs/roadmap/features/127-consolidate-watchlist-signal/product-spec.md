@@ -173,23 +173,14 @@ Approval gates required (per docs/runbooks/feature-workflow.md) — **expanded b
 
 ## Acceptance Criteria
 
-1. Calling `ingest_signal(direction="watchlist", ...)` for a symbol not already present results in that
-   symbol appearing in the caller's system-managed signals watchlist `bindings` (tagged `source=SIGNAL`)
-   after the call returns.
-2. Calling `ingest_signal(direction="buy"|"sell"|"hold", ...)` produces **no** watchlist mutation.
-3. A `deduplicated=true` ingest response produces **no** watchlist mutation (matches the existing
-   auto-alert suppression behavior for the same condition).
-4. `xstockstrat-portfolio` being unreachable or rejecting the write (or the caller having no verified
-   user id) does not cause `ingest_signal` to raise or return an error — the signal is still ingested
-   and `signal_id` is still returned.
-5. `docs/runbooks/mcp-tools.md`'s `ingest_signal` entry documents the new side effect, in parity
-   with the tool's docstring (executable descriptor/parity-style assertion over both surfaces).
-6. `EnsureSignalWatchlist` is idempotent — repeated calls return the **same** watchlist id and create
-   exactly one `system_managed` row per user, coexisting with a user's own same-named manual list.
-7. `DeleteWatchlist` on a `system_managed` watchlist returns `FAILED_PRECONDITION` and the row survives;
-   the `/insights/watchlists` delete affordance is hidden/disabled for it (rename/add/remove stay).
-8. A `source=SIGNAL` entry renders a provenance badge in `/insights/watchlists`; a `MANUAL`
-   (or unspecified) entry does not.
+The acceptance scenarios are the single source of acceptance truth and live as Gherkin in
+[`acceptance.feature`](acceptance.feature) (Constitution **C-15**): `@AC-1..@AC-8`, each tagged with
+the `@FR-*` it exercises and traced to a test step at `/sdd-spec`. They cover the watchlist auto-add
+on a non-deduplicated `direction="watchlist"` signal (tagged `source=SIGNAL`), no mutation for other
+directions or a deduplicated response, best-effort non-blocking behavior on a portfolio failure, the
+docstring↔`mcp-tools.md` parity assertion, `EnsureSignalWatchlist` idempotency (one `system_managed`
+row per user, coexisting with a same-named manual list), the `DeleteWatchlist` `FAILED_PRECONDITION`
+guard plus the undeletable UI affordance, and the per-entry `source=SIGNAL` provenance badge.
 
 ## Open Questions
 

@@ -14,11 +14,11 @@ As a trader, I want platform alerts to be sent to my Slack workspace and/or emai
 
 ## Functional Requirements
 
-FR-1. When the notify service emits an alert whose confidence score meets or exceeds a configurable threshold, it must also POST to a Slack incoming webhook URL (if configured).
-FR-2. When the notify service emits an alert whose confidence score meets or exceeds a configurable threshold, it must also send an email via SendGrid (if configured).
+FR-1. When the notify service emits an alert that passes the **fanout gate**, it must also POST to a Slack incoming webhook URL (if configured). The gate is **hybrid**: the alert's `severity` must meet or exceed a configurable ordinal floor (`notify.fanout.min_severity`, default `2` = `WARNING`), AND — only when the alert carries a conviction/readiness value in its `context` (set today solely by the analysis live-loop) — that value must also meet or exceed `notify.fanout.min_confidence_threshold`. When no conviction value is present, the severity floor alone decides (the gate does not fail closed); a non-numeric conviction falls back to severity-only.
+FR-2. Under the same hybrid fanout gate as FR-1, the notify service must also send an email via SendGrid (if configured).
 FR-3. Each fanout channel (Slack, email) is independently optional — configuring one does not require the other.
 FR-4. **Non-credential** channel settings (confidence threshold, dedup window, sender/recipient email addresses) are configured via config service keys and take effect at runtime with no service redeploy. The **vendor credentials** — the Slack incoming webhook URL and the SendGrid API key — are delivered as `type: SECRET` env vars (per root CLAUDE.md § Config Governance: a vendor API credential is never a config key — the `secret.*` mechanism was reversed by feature 076). A channel is **enabled iff its credential env var is set and non-empty**; rotating a credential therefore requires a redeploy (the standard vendor-credential lifecycle), while enabling/disabling and tuning a channel's non-credential behavior stays runtime-config-driven.
-FR-5. Alert payload delivered to external channels must include: symbol, signal source, confidence score, recommended action, and timestamp (ISO 8601).
+FR-5. Alert payload delivered to external channels must include: symbol (when present in `context`), signal source (`source_service`), severity, conviction/readiness (when present in `context`), the alert title/body (recommended action), and timestamp (ISO 8601, from `created_at`). No field is claimed that producers do not set (there is no first-class numeric "confidence" on the Alert proto — the payload carries `severity` plus `conviction` when the analysis loop supplied it).
 FR-6. Fanout failures (Slack webhook down, SendGrid API error) must be logged but must not affect the primary Connect-RPC alert stream.
 FR-7. Alert deduplication: an alert already delivered within the last N seconds (configurable) must not be re-sent to external channels on reconnect or replay.
 
@@ -51,7 +51,8 @@ Runtime, non-credential settings only (served via `WatchConfig`):
 
 - `notify.fanout.sendgrid_from_email` — sender address for outbound email
 - `notify.fanout.sendgrid_to_email` — recipient address
-- `notify.fanout.min_confidence_threshold` — float 0.0–1.0; alerts below this are not fanned out (default: 0.7)
+- `notify.fanout.min_severity` — integer `0`–`4` mapping to the `AlertSeverity` enum (`UNSPECIFIED`=0 … `WARNING`=2 … `CRITICAL`=4); alerts whose severity ordinal is below this are not fanned out (default: `2` = `WARNING`). **Consequence:** at the default, `INFO`-severity fill confirmations are excluded — an operator who wants fills fanned out lowers this to `1`. Clamped to `[0,4]` at read.
+- `notify.fanout.min_confidence_threshold` — float 0.0–1.0; the **analysis readiness-ordinal floor** (fraction of passing entry-condition leaves — NOT a probability), applied only when the alert's `context` carries a conviction/readiness value; alerts with a present-but-below value are not fanned out (default: 0.7). Alerts with no conviction value are governed by `min_severity` alone.
 - `notify.fanout.dedup_window_seconds` — integer; suppress re-delivery of the same alert within this window (default: 300)
 
 > The two vendor credentials that were originally drafted as config keys
@@ -85,12 +86,12 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Acceptance Criteria
 
-1. With `SLACK_WEBHOOK_URL` set (env var), the next alert at or above `notify.fanout.min_confidence_threshold` appears in the target Slack channel within 5 seconds.
-2. With `SENDGRID_API_KEY` set (env var) and the `sendgrid_from_email`/`sendgrid_to_email` config keys populated, the next qualifying alert arrives as an email with all required fields (symbol, source, confidence, action, timestamp).
-3. With both credential env vars unset/empty, no fanout occurs and the existing Connect-RPC stream continues unaffected. Adjusting a runtime knob — e.g. raising `min_confidence_threshold` via the config service — takes effect with no restart (credential rotation, by contrast, is a redeploy per FR-4).
-4. A simulated Slack webhook timeout does not delay or drop the Connect-RPC alert delivery.
-5. The same alert fired twice within `dedup_window_seconds` is delivered to external channels only once.
-6. All fanout errors are logged at WARN level with the alert ID and channel name.
+The acceptance scenarios are the single source of acceptance truth and live as Gherkin in
+[`acceptance.feature`](acceptance.feature) (Constitution **C-15**): `@AC-1..@AC-9`, each tagged with
+the `@FR-*` it exercises and traced to a test step at `/sdd-spec`. They cover the hybrid fanout gate
+(severity floor, conviction floor when present, severity-only when conviction is absent), Slack/email
+delivery with all required fields, credential-driven enable/disable with live config knobs,
+stream-isolation under a webhook timeout, dedup within the window, and WARN-level error logging.
 
 ## Open Questions
 

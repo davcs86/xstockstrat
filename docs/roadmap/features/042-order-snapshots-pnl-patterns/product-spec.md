@@ -131,12 +131,13 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Acceptance Criteria
 
-1. Placing and filling an order in the paper trading environment produces an `order_snapshots` row with non-empty `indicators` and `signals` fields (or a logged warning if unavailable within timeout).
-2. Closing a position triggers a background pattern analysis job; `pnl_pattern_factors` rows are created within 10 seconds of the position close event.
-3. `QueryPnLPatterns` RPC returns at least one positive and one negative factor for positions with ≥5 completed trades on the same symbol.
-4. The Insights UI P&L Patterns view loads without error and displays ranked factor cards.
-5. A snapshot capture failure (simulated timeout from indicators service) does not block order execution — the order proceeds and a warning is emitted to the ledger.
-6. All snapshot and pattern events appear in `xstockstrat-ledger` with the correct event type.
+The acceptance scenarios are the single source of acceptance truth and live as Gherkin in
+[`acceptance.feature`](acceptance.feature) (Constitution **C-15**): `@AC-1..@AC-7`, each tagged with
+the `@FR-*` it exercises and traced to a test step at `/sdd-spec`. They cover snapshot capture on
+order fill (with indicator/signal context), the ledger-event-driven pattern analysis on position
+close (materializing `pnl_pattern_factors` within 10 s), the `QueryPnLPatterns` ranked-factor
+contract, the Insights P&L Patterns view and its sub-nav reachability (C-10(a)), non-blocking
+snapshot capture under timeout, and ledger audit of snapshot/pattern events.
 
 ## Open Questions
 

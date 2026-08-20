@@ -248,3 +248,29 @@
 - [ ] existing==nil close-payload guard → portfolio step.
 - [ ] Real-GetPnL characterization pin + collapse the test mirror → portfolio test step.
 - [ ] ClosePosition account-scope (repo sig + :288 call-site) → portfolio step.
+
+## Session 2026-08-20 — sdd-spec
+
+- Generated implementation-spec.md with **14 steps**. Status `design-approved` → `implementation-ready`.
+- Consumed recon.md + design.md as authoritative; the analysis-centric, ledger-event-driven design
+  is followed exactly (no order-time trading edges; snapshots + attribution owned by analysis).
+- Resolved the two design Open Risks that were routed to /sdd-spec:
+  - **Migration numbering (ledger 081):** re-verified across ALL remote branches via
+    `git ls-remote` + `git ls-tree`. Highest analysis migration = `015` (→ **016** free); highest
+    portfolio migration = `009` (→ **010** free). No remote branch carries analysis `016` or
+    portfolio `010`.
+  - **Feature 029 collision cleared:** `029-signal-performance-attribution` is `status.md = draft`,
+    has **no remote branch**, and its migration adds a `signal_id` column to the **trading** orders
+    table (not analysis). Its proto additions (`GetAttribution`/`SourceAttribution`) have distinct
+    names and no committed field numbers. → no collision with analysis 016 or our new proto
+    messages/RPC.
+- Key codebase findings (grep-verified, F-04/C-01):
+  - Portfolio: `GetPnL.applyFill` reduce math at `portfolio_service.go:519-550` (`realized += (-closeQty)*(fillPrice-avgEntry)` at :535); live reduce branch `:272-275`; close emit `:289-291` (currently `{user_id, symbol}` only); `UpsertPosition` is 7-arg → `$8` free (`portfolio_repo.go:55-63`); `ClosePosition` DELETE is NOT account-scoped (`:66-70`), single caller `:288`; the byte-for-byte `applyFill` test mirror is `portfolio_helpers_test.go:114-166`.
+  - Analysis: already dials indicators/ingest/marketdata/portfolio/ledger (`main.py:28,61,64,109-153`); screener compose to reuse `screener.py:301/333/344`; fundsignal boot-task pattern `fundsignal_loop.run_forever` registered `main.py:153`; config reads `self._cfg.get_int/get_float` (`servicer.py:36,156,316,410`); RPC shape `async def X(self, request, context)`; RPC auto-registered via `add_AnalysisServiceServicer_to_server` (`main.py:73`); C-13 home `tests/conftest.py` exists.
+  - Proto: analysis service block `analysis.proto:12`, last RPC `GetIndicatorSeries:46`; enum-with-UNSPECIFIED precedent `:545,565`. Ledger `sequence` comment `ledger.proto:29` is stale ("per stream_key") — fixed to global-sequence in-feature (comment-only).
+  - UI: nav is triple-sourced — `NAV_GROUPS` (`navGroups.tsx:41,60-66`, real rendered), legacy `PLATFORM_SUBNAV` (`PlatformHeader.tsx:72-84`), reachability `GROUPS` (`nav-reachability.spec.ts:21,69`); BFF forward one-liner `insightsBff.ts:53`; browser client auto-exposes new RPC (`analysisClient.ts:6`); no P&L-pattern fixture yet (new fixture + INVENTORY row needed).
+- Config correction carried from design: the four keys are namespaced to **analysis**
+  (`analysis.snapshot.indicator_timeout_ms`/`signal_timeout_ms`, `analysis.patterns.min_sample_count`/`indicator_bucket_count`),
+  replacing the product-spec's `trading.snapshot.*` and `analysis.patterns.pnl_bucket_size`.
+- Named v2 follow-up recorded for Step 14: **snapshot reconciliation** (rebuild an incomplete
+  open→close window from the ledger via `QueryEvents`) — do not leave vague (add-ikbr lesson).

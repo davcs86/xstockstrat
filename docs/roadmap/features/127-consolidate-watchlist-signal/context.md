@@ -154,3 +154,41 @@
 - [ ] Rebase onto the landed 085/094 agent cohort (ingest_signal/client.py/mcp-tools.md).
 - [ ] Name-constraint drop+recreate: verify no existing rows violate `WHERE NOT system_managed`.
 - [ ] Empty-but-undeletable system list is deliberate (document).
+
+## Session 2026-08-20 — sdd-spec
+
+- Generated implementation-spec.md with 10 steps. Status → implementation-ready.
+- Followed design.md's Chosen Approach (system_managed flag, EnsureSignalWatchlist RPC, delete guard,
+  per-entry source); recon.md's earlier reserved-name/config-key path was superseded by the design and
+  NOT used. recon Codebase Map reused for the agent side; portfolio proto/schema/handler/UI evidence
+  discovered fresh (recon predated the schema-changing design).
+- Key codebase findings:
+  - **Migration = 011** (not 010): confirmed local tip `009_bracket_order_ids`; a `git ls-remote` scan
+    of all origin heads shows no pushed portfolio migration above 009, but merge-order.md row 182 is
+    authoritative — 042 (design-approved) keeps `010`, 127 renumbers to `011` regardless of merge order.
+  - **Proto field numbers uncontested**: `WatchlistBinding` uses 1,2 → `source=3`
+    (`portfolio.proto:174-177`); `Watchlist` uses 1-8 → `system_managed=9` (`:180-191`). No existing
+    enum in the file. `DeleteWatchlist` RPC already at `:24`.
+  - **DeleteWatchlist guard site**: `portfolio_service.go:1311-1326` currently *discards* the loadOwned
+    result (`if _, err := s.loadOwned(...)`) — the guard captures it and returns FAILED_PRECONDITION on
+    `system_managed`. Mirrors the 063/115 C-10(c) pattern.
+  - **Repo column plumbing**: `scanWatchlist` (watchlist_repo.go:278) fed by GetByID SELECT (:63) +
+    ListByUser SELECT (:86); `listBindings` (:221) + `insertBindingsTx` (:266, ON CONFLICT DO NOTHING)
+    carry the new `source` column. EnsureSystemManaged repo method does the round-2 TOCTOU-free
+    `INSERT ... ON CONFLICT (user_id) WHERE system_managed DO NOTHING RETURNING` + SELECT-on-empty.
+  - **Agent**: `ingest_signal` (tools.py:258) takes NO `ctx: Context` today — must add it (non-breaking,
+    like emit_alert :336 / manage_formula :645). Second best-effort side effect mirrors the auto-alert
+    at :296-333, gated `direction=="watchlist" and not deduplicated`. New client.py methods mirror the
+    ephemeral-channel pattern (ingest_signal :151-188), forwarding `[*_metadata(), ("x-user-id", uid)]`
+    (pattern at client.py:281). `PORTFOLIO_ENDPOINT` absent from client.py constants (:20-26).
+  - **PORTFOLIO_ENDPOINT deploy-parity confirmed**: absent from the agent block in docker-compose.yml
+    (agent env :519-528), .do/app.yaml (agent block :265-290), .do/app.dev.yaml (agent block :269-...).
+    Present only in trading/analysis/ui blocks. Value `xstockstrat-portfolio:50052`, uniform across envs.
+  - **UI**: delete AlertDialog at WatchlistDetail.tsx:187-207 (gate on `!watchlist.systemManaged`);
+    per-symbol rows render in WatchlistReadiness.tsx (already imports Badge :5, Binding type :21 — add
+    `source`, badge on WATCHLIST_ENTRY_SOURCE_SIGNAL). BFF forwards unchanged (insightsBff.ts:90-95).
+    e2e mock is e2e/helpers/watchlistMock.ts (MockWatchlist :18, MockBinding :17), spec
+    e2e/insights/watchlists.spec.ts, INVENTORY row :25.
+  - Coverage note: portfolio EnsureSignalWatchlist/guard land in service/+repository/ packages, which
+    the Go coverpkg filter excludes — no threshold delta; targeted `go test` is the verification (C-08
+    paired test still required, P-06 red-first).
