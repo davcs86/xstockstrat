@@ -35,13 +35,15 @@ as an inert label.
 ## Functional Requirements
 
 FR-1. When `ingest_signal` is called with `direction="watchlist"` and the ingest succeeds
-(`IngestSignalResponse.deduplicated == false`), the agent automatically adds `symbol` to a portfolio
-watchlist via `xstockstrat-portfolio`'s `AddWatchlistSymbols` RPC, as an unbound
-`WatchlistBinding` (`strategy_id=""`) — mirroring the existing auto-alert side effect already in
-`ingest_signal` (`services/xstockstrat-agent/app/tools.py:294-330`).
+(`IngestSignalResponse.deduplicated == false`), the agent (deriving the caller's own id via
+`_caller_user_id(ctx, ...)`) automatically adds `symbol` to the caller's **system-managed signals
+watchlist** via `xstockstrat-portfolio`'s `AddWatchlistSymbols` RPC, as an unbound `WatchlistBinding`
+(`strategy_id=""`) tagged `source=SIGNAL` — mirroring the existing auto-alert side effect already in
+`ingest_signal` (`services/xstockstrat-agent/app/tools.py:296-333`).
 
-FR-2. If no target watchlist yet exists (see Open Questions — resolution owned by `/sdd-design`),
-the tool creates one via `CreateWatchlist` before adding the symbol.
+FR-2. The agent resolves the caller's system-managed signals watchlist via the new
+`EnsureSignalWatchlist` RPC (find-by-`system_managed`-flag, atomic create-if-absent) before adding —
+NOT by a reserved name (the list is identified by the flag and survives a user rename).
 
 FR-3. The watchlist auto-add is **best-effort and non-blocking**: a failure (e.g.
 `xstockstrat-portfolio` unavailable, `PERMISSION_DENIED`) must be logged but must **not** fail the
@@ -60,19 +62,41 @@ tool doc that drifts from the code is a repeat failure mode on this exact tool).
 FR-6. `direction` values other than `"watchlist"` (`buy`/`sell`/`hold`) are unaffected — no change
 to their ingest, scoring, or alerting behavior.
 
+FR-7. **System-managed watchlist (portfolio).** `xstockstrat-portfolio`'s `Watchlist` gains a
+`system_managed` boolean (additive proto field + schema column), and a new `EnsureSignalWatchlist`
+RPC that returns the caller's `system_managed=true` watchlist, atomically creating one (default
+display name a module constant, e.g. "Signals"; user-renamable) if absent. One system-managed
+watchlist per user (enforced by a partial unique index). The `system_managed=true` name is exempt
+from the existing `UNIQUE(user_id, name)` (which becomes `WHERE NOT system_managed`), so it coexists
+with a user's own same-named list.
+
+FR-8. **Delete guard (C-10(c)).** `DeleteWatchlist` must reject deleting a `system_managed` watchlist
+with `FAILED_PRECONDITION` (the caller owns it; it is refused on resource state, not authorization).
+`RemoveWatchlistSymbols`/`UpdateWatchlist` may still empty/rename it — deliberate ("anything but
+delete"); an empty system-managed list is fine (re-populated on the next signal).
+
+FR-9. **UI — undeletable (C-10(c) read-only-UI half).** `/insights/watchlists` hides/disables the
+delete affordance for a `system_managed` watchlist; rename/add/remove stay enabled.
+
+FR-10. **UI — per-entry provenance.** `WatchlistBinding` gains a `source` (`WatchlistEntrySource`
+enum: `SOURCE_UNSPECIFIED=0`, `MANUAL=1`, `SIGNAL=2`; consumers default unspecified→manual), and the
+UI badges `source=SIGNAL` entries. **Known limitation:** because `AddWatchlistSymbols` is
+`ON CONFLICT (watchlist_id, symbol) DO NOTHING`, `source` is first-writer-wins — a symbol added
+manually first then re-signaled stays `MANUAL` (and vice-versa); acceptable for a provenance hint.
+
 ## Out of Scope
 
-- No proto changes to `ExternalSignal`/`IngestSignalRequest`/`IngestSignalResponse` — the auto-add
-  is agent-tool-layer orchestration against the existing `AddWatchlistSymbols`/`CreateWatchlist`
-  RPCs (feature 058), not a new ingest-side field.
+- No `ingest`-side proto changes (`ExternalSignal`/`IngestSignalRequest`/`IngestSignalResponse`) — the
+  agent-tool orchestration is unchanged there. (Portfolio proto DOES change — see Proto Contract Changes.)
 - No change to `xstockstrat-analysis`'s treatment of `direction="watchlist"` as non-actionable for
   scoring — this feature only wires the *storage* side, not backtesting/scoring semantics.
-- No new `xstockstrat-ui` page or control — the existing `/insights/watchlists` page (feature 058)
-  already renders whatever `ListWatchlists` returns, so an auto-added symbol appears there
-  automatically. Whether the UI should visually distinguish agent-added symbols from manually-added
-  ones is explicitly deferred (see Open Questions).
+- No **new** `xstockstrat-ui` page or route — the changes are to the **existing** `/insights/watchlists`
+  page (feature 058): the `system_managed` undeletable affordance (FR-9) and the per-entry `source`
+  badge (FR-10). No new nav entry (the page already exists → C-10(a) already satisfied).
 - No retroactive backfill of existing `direction="watchlist"` rows already in
   `ingest.newsletter_signals` into a portfolio watchlist.
+- No manual UI affordance to add symbols specifically to the system-managed signals list (a user may
+  still add via the normal add-symbol control; the list is not read-only except for delete).
 
 ## Affected Services
 
@@ -86,57 +110,84 @@ to their ingest, scoring, or alerting behavior.
     **all three** of `docker-compose.yml`, `.do/app.yaml`, `.do/app.dev.yaml`, plus the agent's
     `CLAUDE.md` Environment Variables list. The value is the fixed, well-known internal endpoint —
     identical across every environment (no per-target divergence).
-- `xstockstrat-portfolio` — consumes `AddWatchlistSymbols`/`CreateWatchlist` (both RPCs already
-  exist, feature 058) from a new caller (the agent); **no proto or schema change**. Ownership is
-  derived server-side from the propagated `x-user-id` (never the request body), so the agent forwards
-  the caller's own `x-user-id`; a call with no verified user id is hard-rejected by portfolio
-  (`INVALID_ARGUMENT`), so the agent skips the auto-add best-effort in that case (see Open Questions).
+- `xstockstrat-portfolio` — **proto + schema + handler changes**: new `Watchlist.system_managed` field,
+  `WatchlistBinding.source` + `WatchlistEntrySource` enum, new `EnsureSignalWatchlist` RPC, a migration
+  (system_managed column + name-constraint rework + source column), and a `DeleteWatchlist` guard
+  (FR-8). Ownership stays header-derived (`x-user-id`, never the request body); a call with no verified
+  user id is hard-rejected (`INVALID_ARGUMENT`), so the agent skips the auto-add best-effort then.
+- `xstockstrat-ui` — **existing** `/insights/watchlists` page: the `system_managed` undeletable
+  affordance (FR-9) and the per-entry `source` badge (FR-10); `Watchlist.systemManaged` / `Binding.source`
+  flow through the existing `listWatchlists`/`getWatchlist` BFF forwards via regen (no new BFF route).
 
 ## Consumer Surface(s)
 
 - [x] **Agent** — `xstockstrat-agent` MCP tool(s): `ingest_signal` (changed side-effect/behavior —
   same tool name, params, and return shape; the new auto-add is a documented side effect, not a
-  contract change, per FR-5)
-- [ ] **UI** — none planned this feature (existing `/insights/watchlists` page already renders the
-  result; see Out of Scope)
-- [ ] **None**
+  contract change, per FR-5). Earns its own step(s).
+- [x] **UI** — `xstockstrat-ui` `/insights/watchlists` (existing page): the `system_managed`
+  undeletable affordance (FR-9) and the per-entry `source=SIGNAL` badge (FR-10). Earns its own
+  step(s) + e2e coverage (C-12 fixtures). No new page/route/nav.
 
 ## Proto Contract Changes
 
-- [x] No proto changes required (reuses `portfolio.v1.AddWatchlistSymbols` / `CreateWatchlist`,
-  both already defined — `packages/proto/portfolio/v1/portfolio.proto:20-26,195-247`)
+- [x] **Additive, non-breaking** (`packages/proto/portfolio/v1/portfolio.proto`; run `./scripts/buf-gen.sh`,
+  `buf lint` + `buf breaking` must pass):
+  - `Watchlist.system_managed` (new bool field — next free number confirmed at `/sdd-spec`).
+  - `WatchlistBinding.source` (new field) + a `WatchlistEntrySource` enum (`SOURCE_UNSPECIFIED=0`,
+    `MANUAL=1`, `SIGNAL=2` — mandatory zero-value sentinel per proto governance).
+  - New RPC `EnsureSignalWatchlist` (+ request/response messages) on `PortfolioService`.
+  - Still **reuses** `AddWatchlistSymbols`/`DeleteWatchlist` (the delete-guard is handler-side, no
+    proto change).
 
 ## Config Key Changes
 
-- [x] **No new config keys.** The reserved watchlist name is a **module constant** in the agent, not a
-  config key: no requirement needs a per-env-renamable name, and renaming a live value would orphan
-  every existing reserved watchlist (they'd stop matching → a duplicate is created). This is the
-  minimum-scope, footgun-free choice (a config key was considered and rejected at design time — see
-  design.md § Rejected Alternatives).
+- [x] **No new config keys.** The system-managed watchlist is identified by the `system_managed` flag,
+  not a name — so the default display name is a plain **module constant** (a config key would add
+  governance surface for no benefit; the "renaming orphans" concern is moot under find-by-flag).
 
 ## Database Changes
 
-- [ ] No schema changes (reuses feature 058's existing `xstockstrat-portfolio` watchlist tables)
+- [x] **One new `xstockstrat-portfolio` migration** (NNN re-derived across ALL remote branches at
+  `/sdd-spec` — do NOT hardcode; feature 042 (design-approved) also claims portfolio migration `010`,
+  so 127 likely lands on `011` — first to merge keeps `010`, ledger 081):
+  - `ALTER TABLE portfolio.watchlists ADD COLUMN system_managed BOOLEAN NOT NULL DEFAULT false`.
+  - Replace `UNIQUE (user_id, name)` with `UNIQUE (user_id, name) WHERE NOT system_managed` (system
+    list's name is cosmetic — coexists with a user's same-named list) + a partial unique index
+    `(user_id) WHERE system_managed` (one system list per user, race-safe).
+  - `ALTER TABLE portfolio.watchlist_symbols ADD COLUMN source SMALLINT NOT NULL DEFAULT 0` (the
+    `WatchlistEntrySource` enum value; `0`=unspecified→manual).
+  - `.down.sql` reverses all (restore the plain `UNIQUE(user_id,name)`, drop the columns/indexes).
 
 ## Feature Workflow Notes
 
 Branch to create: `feature/consolidate-watchlist-signal` (branch from `main-dev`)
-Approval gates required (per docs/runbooks/feature-workflow.md):
-- [x] 1 service owner approval (non-breaking proto or config change) — no proto change; a possible
-  new config key is additive and non-breaking
+Approval gates required (per docs/runbooks/feature-workflow.md) — **expanded by the design**:
+- [x] `xstockstrat-portfolio` service owner (new RPC + fields + handler guard)
+- [x] Proto reviewer (additive `Watchlist.system_managed`, `WatchlistBinding.source`, `WatchlistEntrySource`
+  enum, `EnsureSignalWatchlist` RPC — `buf breaking` passes; additive = non-breaking, 1-owner)
+- [x] DBA + service owner (portfolio migration — new columns + name-constraint rework)
+- [x] `xstockstrat-agent` reviewer (MCP tool side-effect + new portfolio client edge)
+- [x] `xstockstrat-ui` reviewer (the `/insights/watchlists` affordance + badge)
 
 ## Acceptance Criteria
 
-1. Calling `ingest_signal(direction="watchlist", ...)` for a symbol not already in the target
-   watchlist results in that symbol appearing in the target portfolio watchlist's `bindings` (or
-   deprecated `symbols` mirror) after the call returns.
+1. Calling `ingest_signal(direction="watchlist", ...)` for a symbol not already present results in that
+   symbol appearing in the caller's system-managed signals watchlist `bindings` (tagged `source=SIGNAL`)
+   after the call returns.
 2. Calling `ingest_signal(direction="buy"|"sell"|"hold", ...)` produces **no** watchlist mutation.
 3. A `deduplicated=true` ingest response produces **no** watchlist mutation (matches the existing
    auto-alert suppression behavior for the same condition).
-4. `xstockstrat-portfolio` being unreachable or rejecting the write does not cause `ingest_signal`
-   to raise or return an error — the signal is still ingested and `signal_id` is still returned.
+4. `xstockstrat-portfolio` being unreachable or rejecting the write (or the caller having no verified
+   user id) does not cause `ingest_signal` to raise or return an error — the signal is still ingested
+   and `signal_id` is still returned.
 5. `docs/runbooks/mcp-tools.md`'s `ingest_signal` entry documents the new side effect, in parity
-   with the tool's docstring.
+   with the tool's docstring (executable descriptor/parity-style assertion over both surfaces).
+6. `EnsureSignalWatchlist` is idempotent — repeated calls return the **same** watchlist id and create
+   exactly one `system_managed` row per user, coexisting with a user's own same-named manual list.
+7. `DeleteWatchlist` on a `system_managed` watchlist returns `FAILED_PRECONDITION` and the row survives;
+   the `/insights/watchlists` delete affordance is hidden/disabled for it (rename/add/remove stay).
+8. A `source=SIGNAL` entry renders a provenance badge in `/insights/watchlists`; a `MANUAL`
+   (or unspecified) entry does not.
 
 ## Open Questions
 
@@ -149,17 +200,14 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
   claims — `app/main.py` `_authorized`), so the auto-add is skipped best-effort with a `log.warning`
   in that case (the signal is still ingested). No system/owner-less watchlist concept is introduced
   (none exists; not needed — the list is user-owned, so no C-10(c) ownership sentinel is required).
-- [x] **Which watchlist? — RESOLVED:** a fixed, auto-created, well-known **reserved-named** watchlist
-  (a module constant, not a caller-supplied `watchlist_id` — no tool-contract change). The agent
-  resolves it by name via `ListWatchlists`, `CreateWatchlist`s it if absent, then `AddWatchlistSymbols`.
-  The exact reserved name + the behavior when a user already has a same-named list (`UNIQUE(user_id,
-  name)` merge) is a design detail decided in design.md § Chosen Approach (see the reserved-name note).
-- [ ] **UI distinction (C-14 override) — DEFERRAL, needs explicit sign-off in design.md/context.md:**
-  whether the `/insights/watchlists` view visually distinguishes an agent/signal-sourced entry from a
-  manually-added one is an **enhancement**, not part of this feature's consumer surface (the existing
-  page already renders the added symbol, so C-14 "name and reach the surface" is satisfied). Per C-14
-  it is resolved as **either** a named follow-up feature **or** explicitly left unscoped — recorded at
-  the design gate; it is no longer a vague "if yes."
+- [x] **Which watchlist? — RESOLVED (user, 2026-08-19):** a dedicated **`system_managed` watchlist**
+  identified by a new flag on the `Watchlist` (NOT by name), found/created via `EnsureSignalWatchlist`.
+  It is delete-protected (FR-8), so it persists; the display name is a cosmetic module-constant default
+  (user-renamable). This dissolves the name-collision footgun — a user's own same-named list is never
+  co-opted (the system name is exempt from `UNIQUE(user_id, name)`).
+- [x] **UI distinction — RESOLVED (user, 2026-08-19): IN SCOPE.** The `/insights/watchlists` view marks
+  the system-managed watchlist (undeletable affordance, FR-9) AND badges per-entry `source=SIGNAL`
+  provenance (FR-10). No longer deferred.
 - [x] **Idempotency — RESOLVED (recon):** `AddWatchlistSymbols` is natively idempotent —
   `INSERT ... ON CONFLICT (watchlist_id, symbol) DO NOTHING` (`watchlist_repo.go:266-275`), so a
   repeated non-deduplicated signal on the same symbol is a silent no-op (no error, no duplicate). No
