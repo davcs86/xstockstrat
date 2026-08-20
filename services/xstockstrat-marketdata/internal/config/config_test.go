@@ -2,12 +2,86 @@ package config
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
 )
+
+// stubConfigClient embeds the generated ConfigServiceClient (nil) and overrides only GetSecret,
+// so the other RPC methods are inherited without hand-stubbing their signatures.
+type stubConfigClient struct {
+	configv1.ConfigServiceClient
+	resp   *configv1.GetSecretResponse
+	err    error
+	gotReq *configv1.GetSecretRequest
+	gotMD  metadata.MD
+}
+
+func (s *stubConfigClient) GetSecret(ctx context.Context, in *configv1.GetSecretRequest, _ ...grpc.CallOption) (*configv1.GetSecretResponse, error) {
+	s.gotReq = in
+	s.gotMD, _ = metadata.FromOutgoingContext(ctx)
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.resp, nil
+}
+
+// AC-6: marketdata resolves a vendor credential from config via GetSecret (no env read), tagging
+// the request with its x-internal-caller identity and the correct namespace/key/environment.
+func TestResolveSecret_ReturnsDecryptedValue(t *testing.T) {
+	stub := &stubConfigClient{resp: &configv1.GetSecretResponse{Value: "alpaca-key-xyz", Found: true}}
+	w := &Watcher{
+		namespace:   "marketdata",
+		client:      stub,
+		environment: commonv1.Environment_ENVIRONMENT_PRODUCTION,
+	}
+	val, found, err := w.ResolveSecret(context.Background(), "alpaca.api_key")
+	if err != nil {
+		t.Fatalf("ResolveSecret error: %v", err)
+	}
+	if !found || val != "alpaca-key-xyz" {
+		t.Errorf("ResolveSecret = (%q, %v), want (alpaca-key-xyz, true)", val, found)
+	}
+	if stub.gotReq.GetNamespace() != "marketdata" || stub.gotReq.GetKey() != "alpaca.api_key" {
+		t.Errorf("GetSecret request scope wrong: %+v", stub.gotReq)
+	}
+	if stub.gotReq.GetEnvironment() != commonv1.Environment_ENVIRONMENT_PRODUCTION {
+		t.Errorf("GetSecret environment = %v, want PRODUCTION", stub.gotReq.GetEnvironment())
+	}
+	if got := stub.gotMD.Get("x-internal-caller"); len(got) != 1 || got[0] != "marketdata" {
+		t.Errorf("x-internal-caller metadata = %v, want [marketdata]", got)
+	}
+}
+
+// AC-7: an unset secret (found=false) resolves to empty, which the startup guard treats exactly
+// like the old empty env var — warn-and-start (looksLikePlaceholderCred("") is true, tested in
+// cmd/server/main_test.go).
+func TestResolveSecret_UnsetReturnsEmpty(t *testing.T) {
+	stub := &stubConfigClient{resp: &configv1.GetSecretResponse{Value: "", Found: false}}
+	w := &Watcher{namespace: "marketdata", client: stub, environment: commonv1.Environment_ENVIRONMENT_STAGING}
+	val, found, err := w.ResolveSecret(context.Background(), "fmp.api_key")
+	if err != nil {
+		t.Fatalf("ResolveSecret error: %v", err)
+	}
+	if found || val != "" {
+		t.Errorf("ResolveSecret unset = (%q, %v), want (\"\", false)", val, found)
+	}
+}
+
+// A GetSecret RPC failure surfaces as an error (the caller then treats the credential as unset).
+func TestResolveSecret_RPCErrorSurfaces(t *testing.T) {
+	stub := &stubConfigClient{err: errors.New("permission denied")}
+	w := &Watcher{namespace: "marketdata", client: stub, environment: commonv1.Environment_ENVIRONMENT_PRODUCTION}
+	if _, _, err := w.ResolveSecret(context.Background(), "alpaca.api_key"); err == nil {
+		t.Error("expected an error when GetSecret fails")
+	}
+}
 
 func TestLoadFromEnv_Defaults(t *testing.T) {
 	cfg := LoadFromEnv()
@@ -181,29 +255,23 @@ func TestWatcher_WaitForSnapshot_ContextCancelled(t *testing.T) {
 	}
 }
 
-// Feature 076: the FMP credential is delivered as a secret env var, the same
-// mechanism as the Alpaca keys — never through the config service, whose values
-// are plaintext and readable by every WatchConfig subscriber.
+// Feature 147: vendor credentials are no longer read from env vars — they are stored encrypted in
+// the config service and resolved at startup via Watcher.ResolveSecret (see TestResolveSecret_*).
+// LoadFromEnv must therefore leave FMPAPIKey empty even when the old FMP_API_KEY env var is set.
 //
-// The fixture below is deliberately a short, low-entropy placeholder held in a
-// named constant rather than an inline literal: gitleaks' generic-api-key rule
-// keys on a credential-ish keyword sitting next to a quoted value, so an inline
-// string beside FMP_API_KEY trips it even though no real secret is involved.
+// The fixture below is a short, low-entropy placeholder held in a named constant rather than an
+// inline literal: gitleaks' generic-api-key rule keys on a credential-ish keyword next to a quoted
+// value, so an inline string beside FMP_API_KEY trips it even though no real secret is involved.
 const fmpTestPlaceholder = "unset"
 
-func TestLoadFromEnv_FMPAPIKeyComesFromEnv(t *testing.T) {
+func TestLoadFromEnv_IgnoresVendorEnvVars(t *testing.T) {
 	t.Setenv("FMP_API_KEY", fmpTestPlaceholder)
+	t.Setenv("ALPACA_API_KEY", fmpTestPlaceholder)
+	t.Setenv("FINNHUB_API_KEY", fmpTestPlaceholder)
 	cfg := LoadFromEnv()
-	if cfg.FMPAPIKey != fmpTestPlaceholder {
-		t.Errorf("FMPAPIKey = %q, want %q", cfg.FMPAPIKey, fmpTestPlaceholder)
-	}
-}
-
-func TestLoadFromEnv_FMPAPIKeyDefaultsEmpty(t *testing.T) {
-	t.Setenv("FMP_API_KEY", "")
-	cfg := LoadFromEnv()
-	if cfg.FMPAPIKey != "" {
-		t.Errorf("FMPAPIKey = %q, want empty when unset", cfg.FMPAPIKey)
+	if cfg.FMPAPIKey != "" || cfg.AlpacaAPIKey != "" || cfg.FinnhubAPIKey != "" {
+		t.Errorf("vendor credentials must not come from env (feature 147): fmp=%q alpaca=%q finnhub=%q",
+			cfg.FMPAPIKey, cfg.AlpacaAPIKey, cfg.FinnhubAPIKey)
 	}
 }
 
@@ -216,9 +284,10 @@ func TestResolveEnvironment(t *testing.T) {
 		want commonv1.Environment
 	}{
 		{"production", commonv1.Environment_ENVIRONMENT_PRODUCTION},
-		{"development", commonv1.Environment_ENVIRONMENT_DEV},
-		{"", commonv1.Environment_ENVIRONMENT_DEV},
-		{"staging", commonv1.Environment_ENVIRONMENT_DEV},
+		// Feature 147: non-production maps to STAGING (the config server treats DEV as staging too).
+		{"development", commonv1.Environment_ENVIRONMENT_STAGING},
+		{"", commonv1.Environment_ENVIRONMENT_STAGING},
+		{"staging", commonv1.Environment_ENVIRONMENT_STAGING},
 	}
 	for _, tt := range tests {
 		if got := resolveEnvironment(tt.in); got != tt.want {

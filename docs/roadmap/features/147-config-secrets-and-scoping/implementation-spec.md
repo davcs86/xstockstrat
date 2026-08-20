@@ -152,7 +152,7 @@ assertions (feature-074 trap).
 
 ### Step 5 — service: marketdata resolves the 4 vendor keys via GetSecret
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/config/config.go` — modify (drop 4 env reads; drop trading_mode from the WatchConfig request builder)
@@ -177,7 +177,7 @@ assertions (feature-074 trap).
 
 ### Step 6 — test: marketdata GetSecret resolution + warn-and-start
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/cmd/server/main_test.go` — modify/create
