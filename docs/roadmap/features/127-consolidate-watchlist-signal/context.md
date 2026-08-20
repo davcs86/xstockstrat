@@ -92,3 +92,39 @@
   /insights/watchlists surface is already reached (C-14 met), so the visual distinction is an
   enhancement whose deferral needs explicit C-14 sign-off (named follow-up vs explicitly unscoped).
 - Round 1 complete; full mode mandates ≥2 rounds. Awaiting user steer before round 2.
+
+## Session 2026-08-19 — sdd-design (Phase 1 round 2 — EXPANDED scope)
+
+- **User decisions (round-1 gate) EXPANDED scope:** (1) a NEW FLAG on the watchlist definition marks
+  it system/agent-managed, undeletable (users can do anything but delete) — the agent finds its
+  signals watchlist by the FLAG, not a name (dissolves the name-collision footgun); (2) the UI
+  distinction is IN scope (not deferred). This grows 127 from agent-only (no proto/DB/UI) into
+  **agent + portfolio (proto + migration + delete-guard) + UI**.
+- Round-2 proposer designed it; round-2 adversary verdict REVISE, no Floor breach. Design shape
+  (settled): `Watchlist.system_managed` flag; dedicated `EnsureSignalWatchlist` RPC (find-by-flag,
+  atomic create — chosen over a forgeable `CreateWatchlistRequest.system_managed`); `DeleteWatchlist`
+  guard returns `FAILED_PRECONDITION` (C-10(c) — owner refused on resource state, not authz) + the UI
+  hides/disables delete when `system_managed`; agent `_caller_user_id` + best-effort
+  `EnsureSignalWatchlist`→`AddWatchlistSymbols`; `PORTFOLIO_ENDPOINT` wiring.
+- **Round-2 bake-in fixes:**
+  - [C-07/081] Migration-NNN collision with 042 CONFIRMED (both claim portfolio 010). Strike the
+    literal 010; re-derive across ALL remote branches at /sdd-spec (first-to-merge keeps 010, other→011).
+  - [C-01] The name-collision is NOT fixed by an index-only add — `UNIQUE(user_id,name)` still rejects
+    Ensure's insert of "Signals" if the user has a manual "Signals". Fix: migration DROPs+RECREATEs it
+    as `UNIQUE(user_id, name) WHERE NOT system_managed` (system name is cosmetic — found by flag), plus
+    the `(user_id) WHERE system_managed` one-row index. Make Ensure atomic:
+    `INSERT ... ON CONFLICT (user_id) WHERE system_managed DO NOTHING RETURNING *`, SELECT on empty.
+  - [write-minimum/C-04] DROP the per-entry `WatchlistBinding.source` enum + `watchlist_symbols.source`
+    column — the UI distinction is WATCHLIST-LEVEL (`system_managed` already marks the whole list as
+    the agent's; every entry is signal-sourced by construction; no manual-add-to-signals path in scope;
+    `ON CONFLICT DO NOTHING` makes per-entry source first-writer-wins/unreliable). Removes a proto field
+    AND a migration column. (Pending user confirm — faithful minimal reading of "distinguish entries".)
+  - [C-14/C-09/approval-flow] The expansion makes the product-spec's "no proto/no schema/no UI" FALSE
+    and pulls in new reviewers (proto owner, DBA, UI) — the product spec must be UPDATED and RE-RUN
+    through `/sdd-review product-spec`, not just patched. The config-key-rejection rationale (":111-115",
+    "renaming orphans lists") is moot under find-by-flag — remove it.
+  - Delete-guard residual: `RemoveWatchlistSymbols`/`UpdateWatchlist` can empty-but-not-delete the list
+    (acceptable, self-healing via Ensure) — state deliberately in design.md.
+- Round 2 complete. Two decisions to the user before finalizing: (a) confirm the per-entry-source DROP
+  (watchlist-level distinction) vs keep per-entry badges; (b) the process — update product spec for the
+  expanded scope + re-run /sdd-review product-spec, THEN finalize design.md/design-approved.
