@@ -66,7 +66,7 @@ assertions (feature-074 trap).
 
 ### Step 2 — migration: config 017 scope re-model + encryption columns + collapse
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/017_config_secrets_and_scoping.up.sql` — create
