@@ -75,6 +75,40 @@ A second asyncio background loop (`app/engine/fundsignal_loop.py`) runs a daily 
 - **Source registration**: the producer idempotently registers its source via ingest `ManageSignalSource` as `source_type='derived'` (a generic bucket for internally-produced, non-extraction signals — added by ingest migration `006_signal_source_type_derived`), `extractor_module='app.extractors.noop'`. This call is admin-scoped; the background path injects the admin bit, the RPC path forwards the caller's scope.
 - **Manual trigger**: the admin-scoped `RunFundamentalsScan` RPC invokes the same `run_once` code path (`force`, `dry_run`, explicit `symbols` override) so the scheduled loop and manual trigger never diverge.
 
+### P&L pattern consumer (feature 042)
+
+A third background task (`app/engine/pnl_pattern_consumer.py`, `PnLPatternConsumer.run_forever`,
+registered in `app/main.py`) drives order-snapshot capture and realized-P&L attribution off the
+ledger. It opens **one broad** `StreamEvents(from_sequence=cursor)` with **both filters null** so the
+ledger's **global** sequence order is preserved across stream keys (matching the fixed
+`LedgerEvent.sequence` contract). Per event, strictly in order: (1) short-circuit any
+`sequence <= cursor` before any mutation (kills replay phantom-opens); (2) never self-consume
+`analysis.*` emissions; (3) on `order.*` events (`order.created`/`filled`/`partially_filled`/
+`canceled` — note trading's American one-`l` `order.canceled`) compose the snapshot **before** the DB
+txn — best-effort gRPC reads to marketdata/indicators/ingest bounded by
+`analysis.snapshot.indicator_timeout_ms` / `signal_timeout_ms`; a timeout degrades to a **partial**
+snapshot (empty map/list), never an abort (FR-6); (4) in ONE txn, insert the snapshot, open/seal the
+`pnl_positions` window, and advance `ledger_stream_cursor` (atomic — a crash never advances past
+unwritten data); on `portfolio.position.closed`, seal the matching open window from the enriched
+payload's `realized_pnl` and write one `pnl_pattern_samples` row per factor; (5) after commit, emit
+best-effort `analysis.snapshot.captured` / `.degraded` / `analysis.pattern.sealed` audit events.
+`QueryPnLPatterns` reads `pnl_pattern_samples` and buckets **at query time** (indicator quantile
+buckets + signal-by-presence, `min_sample_count` drop, ranked positive/negative). Reuses the shared
+pool + existing gRPC stubs (**no new pool, no new edge, no new env var** — F-06).
+
+- **Migration-016 tables**: `order_snapshots` (Timescale hypertable on `event_ts`, dedup on
+  `(event_id, event_ts)`), `pnl_positions` (synthesized open→close window, one open per identity key),
+  `pnl_pattern_samples` (raw factor store — **no factor UNIQUE**, buckets computed at query time),
+  `ledger_stream_cursor` (per-consumer committed global sequence).
+- **Snapshot retention is v1-absent and MUST be position-lifecycle-keyed** when added — drop snapshots
+  only **after** their position seals, never a time-based Timescale retention policy (a time policy
+  would evict an entry snapshot before its position closes and silently corrupt attribution).
+- **Named v1 limitations**: the snapshot indicator set is the default `RSI`/`ATR` (strategy-component
+  resolution is the v2 refinement); `position_id` is synthesized from the identity key (`Order` has no
+  `position_id`), so multiple open→close cycles for one identity share a `position_id` — the v2
+  reconciliation (rebuild an incomplete window from the ledger via `QueryEvents`) is the tracked
+  follow-up in the feature's `context.md`.
+
 New dependency edges: **analysis → ingest write** (`IngestSignal` / `ManageSignalSource`, gRPC not DB) and **analysis → portfolio read** (watchlist universe; requires `PORTFOLIO_ENDPOINT`). The loop reuses the existing asyncpg pool (no new pool — budget stays 2).
 
 ### Decide-surface RPCs (feature 083, materialized by feature 097)

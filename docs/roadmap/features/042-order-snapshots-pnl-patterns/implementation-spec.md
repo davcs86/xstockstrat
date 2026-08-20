@@ -486,7 +486,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 
 ### Step 12 — service: /insights P&L Patterns view + hook + BFF forward + nav triple-registration
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/pnl-patterns/page.tsx` — create
@@ -525,7 +525,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 13 — test: UI P&L Patterns e2e render + nav reachability + fixture
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/pnlPatterns.ts` — create (new fixture)
@@ -564,7 +564,7 @@ Confirm the two specs pass, the mock/spec import fixtures (no inline domain lite
 
 ### Step 14 — docs: analysis consumer/retention + portfolio producer contract + named v2 follow-up
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` / service CLAUDE.md files
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify (consumer + retention note)

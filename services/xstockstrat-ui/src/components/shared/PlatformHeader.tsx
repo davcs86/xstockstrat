@@ -79,6 +79,7 @@ export const PLATFORM_SUBNAV: Record<PlatformSegment, SubNavItem[]> = {
     { label: 'Opportunities', href: '/insights/opportunities' },
     { label: 'Strategies', href: '/insights/strategies' },
     { label: 'Formulas', href: '/insights/formulas' },
+    { label: 'P&L Patterns', href: '/insights/pnl-patterns' },
     { label: 'Screener', href: '/insights/screener' },
     { label: 'Watchlists', href: '/insights/watchlists' },
   ],

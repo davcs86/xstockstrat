@@ -383,3 +383,31 @@ Executed on harness branch `claude/execute-020-042-127-pfa5cw` (single integrati
   full analysis suite 541 pass, coverage 82%.
 
 **Next:** Step 12 (UI view + nav), 13 (UI e2e), 14 (docs).
+
+## Session 2026-08-20 — sdd-execute (steps 12–14) — feature 042 COMPLETE
+
+### Step 12 — UI P&L Patterns view + nav [done]
+- insightsBff queryPnLPatterns forward (no admin gate); usePnLPatterns hook;
+  /insights/pnl-patterns/page.tsx (positive/negative factor cards + snapshot-timeline placeholder);
+  nav triple-registered (navGroups Engine + PLATFORM_SUBNAV + Step-13 GROUPS). Lint + build clean;
+  route compiled.
+
+### Step 13 — UI e2e [done]
+- e2e/fixtures/pnlPatterns.ts (PNL_PATTERNS_AAPL) + INVENTORY row; mock-backend queryPnLPatterns
+  handler; pnl-patterns.spec.ts (AC-4 ranked cards, distinct-value assertions); nav-reachability
+  GROUPS entry (AC-5). 5 e2e pass (incl. full-shell nav walk).
+
+### Step 14 — docs [done]
+- portfolio CLAUDE.md: portfolio.position.closed producer contract + realized_accum attribution-only
+  + named v1 scope limitation. analysis CLAUDE.md: consumer section + migration-016 tables +
+  position-lifecycle-keyed retention rule + v1 limitations.
+- **v2 snapshot reconciliation (tracked follow-up):** rebuild an incomplete open→close window from
+  the ledger via `QueryEvents` at seal time (v1 accepts a possibly-incomplete window and only logs a
+  WARN when the snapshot count is low). Also v2: resolve snapshot indicators from the order's
+  strategy-definition components (v1 captures the default RSI/ATR set) and disambiguate multi-cycle
+  `position_id`s (v1 synthesizes from the identity key).
+- **context-scrubber:** the context-forge plugin is NOT available in this session (not in the
+  SessionStart skills list); `/context-scrubber scan` could not be run — noted here and in the PR body
+  per the root CLAUDE.md Teardown rule.
+
+All 14 steps done. status.md → code-completed.
