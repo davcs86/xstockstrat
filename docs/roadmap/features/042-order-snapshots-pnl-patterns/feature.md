@@ -12,12 +12,15 @@
 |---|---|---|---|
 | 2026-05-26 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-19 | `draft` → `spec-ready` | /sdd-review | Product spec approved after fixing 6 review blockers (all scope-preserving): service rename `xstockstrat-insights`→`xstockstrat-ui`, migration strategy (016) + hypertable PK, nav registration, Consumer Surface section, partial-fill enum reconciliation, 2 open questions resolved from code. No scope reduced. 2 open questions remain as design-owned forks for /sdd-design. |
+| 2026-08-19 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full — hit the cap at ACCEPT-WITH-RISKS, no Floor breach) and approved; recon.md + design.md written. Both design-owned forks resolved: analysis-centric ledger-event-driven (analysis's first StreamEvents consumer; snapshots persisted in analysis) + async close trigger via the existing `portfolio.position.closed` event. User decisions: enrich the close event (portfolio migration 010, cumulative realized P&L via a shared `applyFill` helper) + raw-sample store bucketed at query time. 7 Open Risks carried to /sdd-spec. |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon](recon.md) — grounded 6-service codebase dossier (Phase 0)
+- [Design](design.md) — debated, approved architecture (analysis-centric, ledger-event-driven; portfolio-cumulative P&L; raw-sample store)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec order-snapshots-pnl-patterns`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -46,4 +49,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design order-snapshots-pnl-patterns` — ground and debate the design; must close the 2 remaining design-owned open questions (snapshot DB ownership; sync vs async pattern analysis)
+`/sdd-spec order-snapshots-pnl-patterns` — generate the implementation spec from the approved design (re-verify migration 016 vs feature 029 across all remote branches; carry the 7 Open Risks from design.md)

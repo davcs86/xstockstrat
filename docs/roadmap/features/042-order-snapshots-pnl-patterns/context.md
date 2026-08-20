@@ -224,3 +224,27 @@
   (repo sig + :288 call-site). Load-bearing invariant: insights view never shows a per-position
   realized P&L a user would reconcile vs the trader dashboard.
 - 5-round cap reached. Design validated (ACCEPT-WITH-RISKS, no Floor breach) → to the approval gate.
+
+## Session 2026-08-19 — sdd-design COMPLETION (approved)
+
+- User APPROVED at the 5-round cap. design.md written. Status: spec-ready → design-approved.
+- Chosen approach: analysis-centric, ledger-event-driven, no new synchronous edge/cycle/pool.
+  Portfolio migration 010 (`realized_accum` + shared `realizedDelta` helper + account-scoped
+  ClosePosition + enriched close payload). Analysis migration 016 (order_snapshots, pnl_positions,
+  pnl_pattern_samples, ledger_stream_cursor) + first StreamEvents consumer (single broad, in-order,
+  cursor-gated, compose-before-txn). QueryPnLPatterns buckets raw samples at query time. UI /insights
+  P&L Patterns view, nav triple-registered. 7 Open Risks + the no-user-facing-per-position-P&L
+  invariant recorded in design.md. Rejected alternatives (8) recorded in design.md.
+- Constitution rules touched: C-01/P-03, C-04, C-05, C-07/F-01, C-08/P-06, C-09, C-10/C-10(a)/C-10(b),
+  C-14, F-04, F-06, F-07 — all honored; no Floor breach across 5 rounds.
+- Next: /sdd-spec order-snapshots-pnl-patterns (re-verify migration 016 vs feature 029 across all
+  remote branches first).
+
+### Open Threads (carry to /sdd-spec)
+- [ ] Long/order-fill-originated attribution scope + named short understatement → portfolio test step.
+- [ ] Migration 016 vs feature 029 remote-branch NNN/proto re-scan → /sdd-spec boot.
+- [ ] Snapshot completeness WARN diagnostic + named v2 reconciliation follow-up → consumer step.
+- [ ] No v1 retention; future retention position-lifecycle-keyed → analysis CLAUDE.md.
+- [ ] existing==nil close-payload guard → portfolio step.
+- [ ] Real-GetPnL characterization pin + collapse the test mirror → portfolio test step.
+- [ ] ClosePosition account-scope (repo sig + :288 call-site) → portfolio step.
