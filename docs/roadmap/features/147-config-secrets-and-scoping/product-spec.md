@@ -50,8 +50,11 @@ FR-5. The vendor API credentials `ALPACA_API_KEY`, `ALPACA_API_SECRET`, `FMP_API
 `xstockstrat-marketdata` resolves them at runtime via `GetSecret` instead of reading the env vars.
 The `type: SECRET` env vars and their deploy-pipeline wiring for these four are removed.
 
-FR-6. When a required credential (Alpaca) resolves empty, marketdata fails its startup guard exactly
-as today; an optional credential (FMP/Finnhub) resolving empty stays a non-fatal off state.
+FR-6. When the Alpaca credential resolves empty/placeholder, marketdata logs the same
+`looksLikePlaceholderCred` warning and **still starts** (verified behavior today,
+`cmd/server/main.go:85-94` — it is warn-and-continue, not fatal); an optional credential
+(FMP/Finnhub) resolving empty stays a non-fatal off state. The resolved-via-`GetSecret` value flows
+into the same `Config` fields the existing guard reads, so the behavior is byte-for-byte preserved.
 
 **C. Remove MCP_AGENT_SECRET**
 

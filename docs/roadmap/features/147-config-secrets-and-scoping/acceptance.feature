@@ -48,10 +48,11 @@ Feature: config-secrets-and-scoping
     And marketdata makes no read of os environment variable "ALPACA_API_KEY"
 
   @AC-7 @FR-6
-  Scenario: A missing required credential still trips the marketdata startup guard
+  Scenario: A missing Alpaca credential warns but marketdata still starts
     Given environment "production" has no stored value for "marketdata.alpaca.api_key"
-    When marketdata starts
-    Then marketdata fails its Alpaca credential startup guard exactly as it did when the env var was empty
+    When marketdata starts and resolves the credential via GetSecret
+    Then marketdata logs the same looksLikePlaceholderCred warning it logged when the env var was empty
+    And marketdata still starts (cached reads and non-Alpaca paths keep working), exactly as today
 
   @AC-8 @FR-7
   Scenario: MCP_AGENT_SECRET is absent from the codebase and deploy surfaces
