@@ -274,3 +274,29 @@
   replacing the product-spec's `trading.snapshot.*` and `analysis.patterns.pnl_bucket_size`.
 - Named v2 follow-up recorded for Step 14: **snapshot reconciliation** (rebuild an incomplete
   open→close window from the ledger via `QueryEvents`) — do not leave vague (add-ikbr lesson).
+
+## Session 2026-08-20T06:16:48Z — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 3 warnings, several notes (advisory — did not block). Verdict PASS WITH WARNINGS.
+- Overlap: no FAIL-level collision. The portfolio migration `010` hard-class collision with 127 is
+  ALREADY RESOLVED (127 renumbered to `011`; merge-order.md:182). Remaining is soft disjoint-region
+  rebase on `services/xstockstrat-portfolio/internal/service/portfolio_service.go` (042 edits
+  ~lines 261-550; 127 edits ~1189-1353) and mechanical `packages/proto/gen/**` regen overlap.
+  Analysis migration `016`, the four `analysis.snapshot.*`/`analysis.patterns.*` config keys, and the
+  new `analysis.proto`/`ledger.proto` surface are all clean/next-free.
+- Unresolved ⚠ carried into execution:
+  - Step 8: matches `order.cancelled` (British) but trading EMITS `order.canceled` (one `l`,
+    `trading.go:828,1248`; `xstockstrat-trading/CLAUDE.md:117`). As written, cancel snapshots would
+    silently never capture (C-01). MUST correct the event string to `order.canceled` at the Step 8
+    execution and add the trading emit site to that step's Codebase Evidence. Also re-check the
+    `SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED` proto→event mapping consumes the correct live string.
+    — [ ] unaddressed (highest-priority fix before/at execution)
+  - Step 1: `buf breaking --against .git#branch=feature/order-snapshots-pnl-patterns` compares the
+    branch against itself; CI's real breaking gate runs against the merge base — local pre-check
+    won't catch a regression vs main-dev (CI still will). — [ ] unaddressed (informational)
+  - Step 8: 6-file step (>5) — consider splitting the three repos from the consumer. — [ ] unaddressed (advisory)
+  - Note: Step 4 "same trading-mode string form other portfolio payloads use" is loose — no existing
+    `portfolio.position.*` payload carries `trading_mode`; `mode.String()` (as UpsertPosition uses at
+    portfolio_repo.go:61) is the obvious form. — [ ] unaddressed (clarify at execute)
+  - Note: Step 12 cites Engine items at navGroups.tsx:60-66; actual `items` array is :62-67 — line
+    drift, symbol real. — [ ] unaddressed (log in Deviation Log if touched)

@@ -192,3 +192,20 @@
   - Coverage note: portfolio EnsureSignalWatchlist/guard land in service/+repository/ packages, which
     the Go coverpkg filter excludes — no threshold delta; targeted `go test` is the verification (C-08
     paired test still required, P-06 red-first).
+
+## Session 2026-08-20T06:16:48Z — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 2 warnings, 1 note (advisory — did not block). Verdict PASS WITH WARNINGS.
+- Overlap: no FAIL-level collision. Portfolio migration `011` and proto field numbers
+  (`Watchlist.system_managed=9`, `WatchlistBinding.source=3`, `WatchlistEntrySource` enum,
+  `EnsureSignalWatchlist` RPC) all confirmed next-free/uncontested. Remaining are file-level
+  rebase-only overlaps: `portfolio_service.go` vs 042 (disjoint regions), the three deploy specs vs
+  020 (agent block vs notify block — disjoint), and mechanical `packages/proto/gen/**` regen vs 042
+  (different source protos). merge-order.md:182 already covers 042↔127; no new hard row needed.
+- Unresolved ⚠ / NOTE carried into execution:
+  - Step 5: Go test step states no >=N% coverage assertion — justified because `service/` and
+    `repository/` are excluded from the coverpkg filter (no threshold delta); C-08 pairing still met
+    via the targeted `go test -race`. Reconfirm the coverpkg-exclusion claim at execute. — [ ] unaddressed
+  - Step 6: touches 6 files (>5) — acceptable (3 are the deploy-parity trio for PORTFOLIO_ENDPOINT). — [x] no action needed (accepted)
+  - Note: migration `011` deviates from strict last+1 (`010`) but is a coordinated reservation per
+    merge-order.md:182 (042 keeps `010`). Not an F-01 risk (new files). — [x] no action needed (by design)

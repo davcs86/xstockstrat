@@ -140,3 +140,19 @@
   deviation from design.md's 3-file wording; both credentials are OPTIONAL (empty = disabled channel).
 - HTTP timeout `FANOUT_HTTP_TIMEOUT_MS = 3000` stays a code constant, not a 6th config key (F-07 —
   not a tunable in disguise; inside AC-1's 5 s).
+
+## Session 2026-08-20T06:16:48Z — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 2 warnings, 1 note (advisory — did not block). Verdict PASS WITH WARNINGS.
+- Overlap: no FAIL-level collision. WARN-only shared-file overlaps — the three deploy specs
+  (`docker-compose.yml`, `.do/app.yaml`, `.do/app.dev.yaml`) vs 127 (notify block vs agent block —
+  disjoint) and `docs/patterns/config-governance.md` Per-Feature Registered Keys log vs 042
+  (both append). Reconcile on whichever branch merges second. merge-order.md needs no new hard row.
+- Unresolved ⚠ / ⓘ carried into execution:
+  - Step 6: touches 8 files (>5, B2 advisory) — one atomic credential-wiring surface; splitting
+    would break the C-10 compose↔DO parity guarantee, so keep together. — [x] no action needed (accepted)
+  - Step 2: reads SLACK_WEBHOOK_URL/SENDGRID_API_KEY but lists no deploy specs in its own Files —
+    intentionally deferred to Step 6 (lists all three). — [x] no action needed (by design)
+  - Note: `makeImpl` cited at notifyServiceImpl.test.ts:55/:56 but actually lives at :47-49
+    (makePool:38 correct) — line drift only, symbol/behavior accurate. — [ ] unaddressed (log in
+    Deviation Log if execution touches that line; do not edit the immutable step body, F-09)
