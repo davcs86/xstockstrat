@@ -302,7 +302,7 @@ assertions (feature-074 trap).
 
 ### Step 12 — docs: governance rewrite (Rule 6 / C-05 / reviewer-registry) + config-governance log
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` + root/service CLAUDE.md
 **Files**:
 - `CLAUDE.md` (root) — §Config Governance Rule 6, §Environment Variable Naming (removed-vars note), §Language table if needed

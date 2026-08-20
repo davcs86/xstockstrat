@@ -19,8 +19,8 @@ list — this drives AI review focus, not notifications.
 | `xstockstrat-ledger` | Append-only invariant (no deletes or updates), event ordering, hypertable partition safety |
 | `xstockstrat-identity` | JWT expiry and rotation, API key scoping, secret store integration (never plaintext secrets in config) |
 | `xstockstrat-notify` | Stream delivery guarantees, backpressure handling, alert deduplication |
-| `xstockstrat-config` | Config key naming (`<service>.<category>.<key>`), environment/trading_mode scoping, WatchConfig stream stability |
-| `xstockstrat-ui` | Trading UI correctness, analytics display accuracy, config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values rendered in UI, no direct DB access (except audit log) |
+| `xstockstrat-config` | Config key naming (`<service>.<category>.<key>`), environment (`production`/`staging`) / global-per-user scoping, secret encryption + redaction, WatchConfig stream stability |
+| `xstockstrat-ui` | Trading UI correctness, analytics display accuracy, config mutation safety, Connect-RPC call safety, environment (`production`/`staging`) scope correctness, no secret values rendered in UI, no direct DB access (except audit log) |
 | `xstockstrat-agent` | MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity; tool-count statements kept in sync across all six inventory surfaces; OAuth 2.1 edge-auth correctness and statelessness (no in-memory store — `instance_count > 1` must stay safe); admin `x-access-scope` forwarded only by the management tools; no secret values in tool output or the unauthenticated `GET /api/tools` catalog |
 | `packages/proto` | Field number uniqueness, backward compatibility (no field removal or type change without deprecation), naming conventions |
 
@@ -33,7 +33,7 @@ list — this drives AI review focus, not notifications.
 | Platform Lead | Cross-service architecture, new service additions, port assignments | Port uniqueness, service registry consistency, inter-service dependency graph correctness |
 | DBA | All database schema changes | Migration NNN numbering (no gaps, no conflicts), up+down pair present, hypertable partitioning strategy, index correctness, run-order compliance with `scripts/db-migrate.sh` |
 | Proto Reviewer | All `.proto` file changes | Field number uniqueness per message, no breaking changes without deprecation comment, `buf lint` passes, `buf breaking` passes against dev trunk, BSR publication readiness |
-| Security | Identity, API keys, secrets, auth scope | No secrets in config service state (a vendor credential is a `type: SECRET` deploy-pipeline env var, never a `secret.*` config key — see `docs/patterns/config-governance.md` Rule 6), JWT claims minimal, API key scoping correct, new credential wiring follows the full checklist in `docs/runbooks/add-data-source.md` § "Wiring a New Vendor Credential Through Deploy" |
+| Security | Identity, API keys, secrets, auth scope | Secrets in config MUST be encrypted at rest (`value_encrypted`, AES-256-GCM under `CONFIG_SECRETS_ENCRYPTION_KEY`), redacted at every read edge (`WatchConfig`/`GetConfig`/`ListKeys`, config-ui/agent), decryptable only via the `GetSecret` RPC gated by the `x-internal-caller` allow-list, and `is_secret` must be row-authoritative on write (feature 147 — the `secret.*` prefix is retired); `CONFIG_SECRETS_ENCRYPTION_KEY` remains a bootstrap env var. JWT claims minimal, API key scoping correct, new credential wiring follows `docs/runbooks/add-data-source.md` § "Wiring a New Vendor Credential Through Deploy" and `docs/patterns/config-governance.md` Rule 6 |
 
 ---
 

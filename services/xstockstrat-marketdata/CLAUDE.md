@@ -16,7 +16,7 @@ Go gRPC service that is the **sole integration point for Alpaca's market data AP
 
 **Timeframe vocabulary** (feature 053): bar intervals are stored as the canonical strings `15m`/`1h`/`1d` in `marketdata.ohlcv.timeframe`. The shared `common.v1.Timeframe` enum is the preferred field (`timeframe_enum`) on the request messages; the legacy string `timeframe` fields are deprecated for one release. `internal/timeframe` normalizes all known aliases (e.g. `"1Day"` → `"1d"`) so callers that historically disagreed now hit the same stored bars. `TIMEFRAME_1MIN`/`TIMEFRAME_5MIN` (and the `1m`/`5m` strings) are deprecated and no longer resolvable for *requests* — but `TIMEFRAME_1MIN` is not unused: it is the explicit `timeframe_enum` label the Alpaca WS stream path sets on live-streamed (never-persisted) 1-minute bars, describing already-produced data without making sub-15m intervals requestable again (feature 080). **Feature 143: `GetBars`/`BackfillBars` now reject any request timeframe other than `1d`** (InvalidArgument) — daily is the only requestable/fetchable interval going forward, since no trading-path consumer (live loop, screener technical criteria, default SMA strategy) evaluates anything but daily bars. `15m`/`1h` remain valid *canonical stored strings* for historical rows and for `GetDataCoverage`/`DeleteBackfilledData` (both stay deliberately permissive, so an operator can still inspect and delete those rows) — they are just no longer requestable/fetchable.
 
-**API boundary**: This service owns Alpaca's **market data APIs** (`data.alpaca.markets` — bars, quotes, streaming). No other service may call these. `xstockstrat-trading` separately owns Alpaca's **broker/order APIs** (`paper-api.alpaca.markets` / `api.alpaca.markets` — order submission and cancellation). Both services use the same `ALPACA_API_KEY` / `ALPACA_API_SECRET` credentials.
+**API boundary**: This service owns Alpaca's **market data APIs** (`data.alpaca.markets` — bars, quotes, streaming). No other service may call these. `xstockstrat-trading` separately owns Alpaca's **broker/order APIs** (`paper-api.alpaca.markets` / `api.alpaca.markets` — order submission and cancellation). Both services use the same Alpaca credentials, which (feature 147) are now the encrypted config secrets `marketdata.alpaca.api_key` / `marketdata.alpaca.api_secret`, resolved at startup via the `GetSecret` RPC (`Watcher.ResolveSecret`, `x-internal-caller: marketdata`) — no longer `ALPACA_API_KEY` / `ALPACA_API_SECRET` env vars.
 
 ## Language
 
@@ -51,6 +51,10 @@ Namespace: `marketdata`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
+| `marketdata.alpaca.api_key` | secret (`is_secret`) | _(NULL until set)_ | Alpaca API key (feature 147). Encrypted at rest; resolved at startup via `GetSecret` (`Watcher.ResolveSecret`, `x-internal-caller: marketdata`), never streamed via `WatchConfig`. |
+| `marketdata.alpaca.api_secret` | secret (`is_secret`) | _(NULL until set)_ | Alpaca API secret (feature 147). Same encrypted/`GetSecret` resolution as `api_key`. |
+| `marketdata.fmp.api_key` | secret (`is_secret`) | _(NULL until set)_ | FMP fundamentals API key (feature 147). Encrypted; resolved via `GetSecret`. |
+| `marketdata.finnhub.api_key` | secret (`is_secret`) | _(NULL until set)_ | Finnhub fundamentals API key (feature 147). Encrypted; resolved via `GetSecret`. |
 | `marketdata.alpaca.paper` | bool | `true` | Use paper trading endpoint |
 | `marketdata.alpaca.feed` | string | `iex` | Alpaca market-data feed for bar/quote requests (`iex`/`sip`/`otc`). The free/basic (paper) data plan only permits `iex`; omitting the param defaults Alpaca to SIP, which those plans reject with HTTP 403. Read at startup. |
 | `marketdata.alpaca.adjustment` | string | `all` | Corporate-action adjustment applied to historical bars (`raw`/`split`/`dividend`/`all`). Default `all` so splits/dividends do not distort backtest OHLCV. Sent as `adjustment=` on every bars request. Read at startup. |
@@ -114,12 +118,13 @@ with no external call. What differs per provider is the **quota-guard shape**
 fundamentals endpoints (`/stock/metric`, `/quote`, `/stock/profile2`) batch across symbols — every
 `GetFundamentalsMulti` call costs exactly 3 HTTP requests per symbol against Finnhub.
 
-Each provider's API key comes from its own env var — **`FMP_API_KEY`** / **`FINNHUB_API_KEY`**
-(`type: SECRET` in both DO app specs, `${FMP_API_KEY:-}` / `${FINNHUB_API_KEY:-}` in
-docker-compose) — and is never logged. Neither is a config key: config values are stored in
-plaintext and streamed to every `WatchConfig` subscriber, so credentials use the same
-secret-env-var mechanism as the Alpaca keys (feature 076). Every other knob (`enabled`, `base_url`,
-cache/quota settings) remains a config key.
+Each provider's API key is an **encrypted config secret** (feature 147) — **`marketdata.fmp.api_key`**
+/ **`marketdata.finnhub.api_key`** (`is_secret=true`, AES-256-GCM ciphertext, redacted at every
+config read edge) — resolved at startup via the `GetSecret` RPC (`Watcher.ResolveSecret`,
+`x-internal-caller: marketdata`) and never logged. This **reverses** the earlier feature-076 model
+where these were `FMP_API_KEY` / `FINNHUB_API_KEY` `type: SECRET` env vars; those env vars were
+removed. Every other knob (`enabled`, `base_url`, cache/quota settings) remains an ordinary config
+key.
 
 ## Alpaca Integration
 
@@ -127,7 +132,7 @@ cache/quota settings) remains a config key.
 - WebSocket: real-time quote stream + 1-minute bar stream — `internal/alpaca/stream.go`. A single shared connection (the free plan allows only one per account) is established lazily on the first `StreamBars`/`StreamQuotes` call; it authenticates, subscribes to the union of all subscribers' symbols, fans messages out, and reconnects with backoff (`marketdata.stream.reconnect_delay_ms` / `max_reconnects`). **Alpaca only streams 1-minute bars** — there is no 15m WS granularity — so streamed bars carry the canonical `1m` timeframe and are forwarded to live subscribers **only** (not persisted); the platform's continuously-ingested timeframe (`marketdata.stream.bar_ingest_timeframe`, default `1d` since feature 143) is owned by the always-on REST bar ingester. Historical `15m`/`1h` rows remain stored and inspectable, but are no longer fetchable/backfillable (feature 143 — `GetBars`/`BackfillBars` reject them).
 - All outbound REST calls go through a shared rate limiter (`marketdata.backfill.rate_limit_rps`) and set the auth headers centrally
 - Multi-symbol REST batching: `GetBarsMulti` / `GetLatestQuotesMulti` collapse the warm-quote poller and bar ingester's per-symbol fan-out into one request per cycle (one per configured ingest timeframe, for the bar ingester — see `bar_ingest_timeframe` above). The pollers type-assert the source to `source.MultiSymbolSource` and fall back to per-symbol calls when unsupported
-- Credentials sourced from env vars (never from config service — these are secrets). At startup the service logs a WARN if `ALPACA_API_KEY`/`ALPACA_API_SECRET` is empty or still set to a DO app-spec placeholder (`YOUR_*` / `*PLACEHOLDER*`) — a placeholder makes **every** Alpaca call fail with an opaque edge `401` (nginx "Authorization Required" page, not Alpaca JSON), so the check turns that into an unambiguous boot signal rather than a later warm-poller warning. The service still starts (cached reads keep working)
+- Credentials are resolved from **encrypted config** at startup via the `GetSecret` RPC (`Watcher.ResolveSecret`, `x-internal-caller: marketdata`) — `marketdata.alpaca.api_key` / `marketdata.alpaca.api_secret` (feature 147, replacing the old `ALPACA_API_KEY` / `ALPACA_API_SECRET` env vars; the config service decrypts server-side and returns plaintext only to this allow-listed caller). A seeded secret row has NULL ciphertext until an operator sets the real value post-deploy, so at startup the service logs a WARN if a resolved credential is empty — an empty credential makes **every** Alpaca call fail, so the check turns that into an unambiguous boot signal rather than a later warm-poller warning. **The service still starts** (cached reads keep working)
 - Bar/quote requests send `feed=<marketdata.alpaca.feed>` (default `iex`) — required by the free/basic data plan, which 403s the SIP default — and bars also send `adjustment=<marketdata.alpaca.adjustment>` (default `all`)
 - `GetLatestQuote` serves from the `marketdata.quotes` cache, falling back to a live Alpaca call (and caching the result). A background warm poller (`StartWarmQuotePoller`) keeps every queried symbol's latest quote fresh in the DB so per-position P&L reads avoid repeated live calls. It prefers one multi-symbol fetch per cycle (`GetLatestQuotesMulti`) and falls back to per-symbol calls; per-symbol fetch errors are aggregated into a single WARN per cycle (`failed`/`fetched`/`total` + a sample error) instead of being dropped silently, so a whole-feed failure (e.g. bad credentials, where every call 401s) is visible rather than hidden
 - `GetBars` serves from the `marketdata.ohlcv` table and (feature 143) rejects any non-`1d` timeframe with `InvalidArgument` before marking warm or fetching. **A request with no explicit range start** (the chart/screener "latest bars" read) returns the **newest** page via `QueryRecentBars` (`ORDER BY time DESC LIMIT pageSize`, reversed to ascending) — feature 140: the older `QueryBars` returns the *oldest* page of a `pageSize × interval × 3` window, so any symbol with more stored bars than one page rendered months-old data. A request **with** an explicit range start (backtest) keeps the oldest-page-forward pagination unchanged. Two first-page live-fallbacks (both routed through `fetchAndCacheBars` → live fetch → cache → re-read): (1) a DB **miss** (no stored bars) — populates a never-backfilled symbol on demand; (2) feature 140 **staleness** — on the implicit-window path, if the newest stored bar is older than one bar interval, refetch, rate-limited to one live fetch per `(symbol,timeframe)` per interval (`staleCheckDue`) so a weekend does not refetch every poll. A live-fetch/credential/feed failure is logged and yields an empty (but valid) response rather than an error. Querying a symbol also marks it "warm"
@@ -135,7 +140,7 @@ cache/quota settings) remains a config key.
 
 ## Environment Variables
 
-Source: hardcoded in docker-compose `environment:` unless noted. `APPLICATION_ENV` and `NODE_ENV` come from `.env.local` (committed). `DATABASE_URL` is constructed by docker-compose from `POSTGRES_PASSWORD` in `.env`. `ALPACA_API_KEY` and `ALPACA_API_SECRET` come from `.env` (see `.env.example`).
+Source: hardcoded in docker-compose `environment:` unless noted. `APPLICATION_ENV` and `NODE_ENV` come from `.env.local` (committed). `DATABASE_URL` is constructed by docker-compose from `POSTGRES_PASSWORD` in `.env`. **Alpaca / FMP / Finnhub API credentials are no longer env vars (feature 147)** — they are encrypted config secrets (`marketdata.alpaca.api_key`, `marketdata.alpaca.api_secret`, `marketdata.fmp.api_key`, `marketdata.finnhub.api_key`) resolved via `GetSecret` at startup. `ALPACA_API_KEY` / `ALPACA_API_SECRET` / `FMP_API_KEY` / `FINNHUB_API_KEY` were removed.
 
 ```text
 GRPC_PORT=50053
@@ -144,9 +149,7 @@ LEDGER_ENDPOINT=xstockstrat-ledger:50057
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
 DATABASE_URL=postgres://xstockstrat:${POSTGRES_PASSWORD}@timescaledb:5432/xstockstrat?sslmode=disable  # constructed by docker-compose from POSTGRES_PASSWORD in .env
 APPLICATION_ENV=development            # .env.local
-TRADING_MODE=paper                     # paper | live
-ALPACA_API_KEY=<secret>                # .env — alpaca.markets paper trading key
-ALPACA_API_SECRET=<secret>             # .env
+# TRADING_MODE is no longer used for config scope (feature 147 removed the trading_mode axis; paper/live is derived from environment)
 ALPACA_BASE_URL=https://paper-api.alpaca.markets
 ALPACA_DATA_URL=https://data.alpaca.markets
 ```

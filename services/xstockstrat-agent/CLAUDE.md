@@ -1,7 +1,7 @@
 # xstockstrat-agent — CLAUDE.md
 
 <!-- context-forge:constitution-pointer:start -->
-> **Constitution:** non-obvious local invariants (ephemeral per-call gRPC channels, lazy `gen.*` imports, caller-derived admin scope on management write tools, `MCP_AGENT_SECRET` OAuth-signing-only, `aud`-bound JWT) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (`namespace="agent"` hardcode, `MCP_TRANSPORT` stdio default) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+> **Constitution:** non-obvious local invariants (ephemeral per-call gRPC channels, lazy `gen.*` imports, caller-derived admin scope on management write tools, `JWT_SECRET` OAuth-txn-signing, `aud`-bound JWT) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (`namespace="agent"` hardcode, `MCP_TRANSPORT` stdio default) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
 <!-- context-forge:constitution-pointer:end -->
 
 ## Role
@@ -52,9 +52,9 @@ reference):
 | `cancel_backfill` | Cancel a queued/running backfill job (admin-scoped, feature 087) |
 | `test_formula` | Dry-run inline formula source in the sandbox, registers nothing (read-only, feature 087) |
 | `list_strategies` | List stored strategy definitions (read-only, feature 087) |
-| `get_config` | Read a namespace's current config values, secret values redacted (read-only, feature 073) |
+| `get_config` | Read a namespace's current config values, secret values redacted (read-only, feature 073); config scope is environment (`production`/`staging`) × optional per-user `user_id` (feature 147) |
 | `list_config_keys` | List a namespace's registered config keys, metadata only (read-only, feature 073) |
-| `set_config` | Write one non-secret config value (admin-scoped write, feature 073); a write to an unregistered key scope is refused `NOT_FOUND` unless `create_key=true` (feature 091) |
+| `set_config` | Write one non-secret config value (admin-scoped write, feature 073); takes an optional `user_id` (per-user override) — no `trading_mode` (feature 147); a write to an unregistered `(namespace,key,environment,user_id)` scope is refused `NOT_FOUND` unless `create_key=true` (feature 091) |
 | `get_user_metadata` | Fetch the calling user's own profile metadata (read-only, feature 130) |
 | `set_user_metadata` | Partial-update the calling user's own profile metadata (feature 130) |
 
@@ -97,13 +97,15 @@ transport guard. It must keep its current shape: back when both transports exist
 on the request object would *not* have told them apart — both handed a tool a Starlette `Request`
 carrying an `Authorization` header, so only the absence of verified claims distinguished them.
 
-`set_config` also refuses any `is_secret` key (checked by name prefix *and* by the flag from
-`ListKeys`): credentials are delivered as `type: SECRET` environment variables, never as config
-values.
+`set_config` also refuses any `is_secret` key (feature 147: the flag from `ListKeys` is now the sole
+signal — the `secret.*` name prefix is retired). Secret values are **managed by an operator via
+config-ui**, which encrypts them at rest; the agent never writes or reads secret plaintext (secrets
+are redacted in `get_config`, and only `xstockstrat-marketdata`-style internal callers resolve them
+via the config service's `GetSecret` RPC).
 
 **Key-creation gate (feature 091).** `set_config` forwards a `create_key` flag
 (`SetConfigRequest.create_key`, default false). `xstockstrat-config` refuses a write to a
-not-yet-registered `(namespace, key, environment, trading_mode)` scope with `NOT_FOUND` unless
+not-yet-registered `(namespace, key, environment, user_id)` scope with `NOT_FOUND` unless
 `create_key=true`, so a mistyped key can no longer silently mint an orphan row. The refusal is
 enforced **server-side** (the agent is a pure passthrough — no client-side existence check), and
 key creation is audited. This is purely additive to the secret-refusal and real-scope-forwarding
@@ -114,7 +116,8 @@ behavior above.
 The agent is the OAuth 2.1 **Resource Server + Authorization-Server HTTP facade** for its MCP
 endpoint, and is **stateless**: all durable OAuth state (clients, auth codes, refresh tokens) lives
 in `xstockstrat-identity`, reached over gRPC, with the only cross-request linkage an HMAC-signed
-`txn` blob carried in URLs — so `instance_count > 1` is safe. The MCP endpoint requires an
+`txn` blob carried in URLs (signed with `JWT_SECRET` since feature 147, which removed the dedicated
+`MCP_AGENT_SECRET`) — so `instance_count > 1` is safe. The MCP endpoint requires an
 **`aud`-bound JWT** (`aud` == `AGENT_PUBLIC_URL`). Full route table, the `aud`-binding contract, and
 the RFC 8414/9728 discovery path-insertion quirk live on-demand in this service's `docs/` folder
 (**`oauth.md`**).
@@ -135,7 +138,7 @@ its docstring for the read signature and oneof-stringify behavior.
 ```text
 MCP_TRANSPORT=http   # `sse` still accepted as a deprecated alias
 MCP_HTTP_PORT=9000   # `MCP_SSE_PORT` still accepted as a deprecated fallback
-MCP_AGENT_SECRET=<shared secret>   # HMAC-signs the OAuth txn blob only — not sent as an outbound header
+JWT_SECRET=<shared secret>   # HMAC-signs the OAuth txn blob (feature 147, replacing the removed MCP_AGENT_SECRET) — not sent as an outbound header
 INGEST_ENDPOINT=xstockstrat-ingest:50055
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
 ANALYSIS_ENDPOINT=xstockstrat-analysis:50056
