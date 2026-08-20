@@ -270,7 +270,7 @@ the substantive proof; coverage gate is still asserted on the module total.
 
 ### Step 6 — migration: analysis 016 order_snapshots + pnl_positions + pnl_pattern_samples + ledger_stream_cursor
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/016_order_snapshots_pnl_patterns.up.sql` — create
@@ -304,7 +304,7 @@ Read both: confirm every `CREATE TABLE`/`create_hypertable`/`CREATE INDEX` in `.
 
 ### Step 7 — config: declare the four analysis snapshot/pattern config keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify (declare defaults)
@@ -338,7 +338,7 @@ Confirm all four keys with their defaults are declared; confirm the governance l
 
 ### Step 8 — service: analysis ledger StreamEvents consumer (snapshot capture + position seal + pattern samples)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/order_snapshots.py` — create
@@ -389,7 +389,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 
 ### Step 9 — test: analysis consumer idempotency / ordering / timeout / seal / audit
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_pnl_pattern_consumer.py` — create

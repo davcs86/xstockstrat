@@ -343,3 +343,31 @@ Executed on harness branch `claude/execute-020-042-127-pfa5cw` (single integrati
 
 **Next:** Step 6 (analysis migration 016), 7 (config keys), 8 (analysis consumer), 9 (consumer test),
 10 (QueryPnLPatterns RPC), 11 (RPC test), 12 (UI), 13 (UI e2e), 14 (docs).
+
+## Session 2026-08-20 — sdd-execute (steps 6–9)
+
+### Step 6 — analysis migration 016 [done]
+- order_snapshots (hypertable on event_ts, PK+UNIQUE include event_ts), pnl_positions (partial
+  unique open index), pnl_pattern_samples (no factor UNIQUE), ledger_stream_cursor. Offline parity ok.
+
+### Step 7 — config keys [done]
+- analysis.snapshot.indicator_timeout_ms/signal_timeout_ms (500), analysis.patterns.min_sample_count
+  (5), analysis.patterns.indicator_bucket_count (5) in analysis CLAUDE.md + config-governance log.
+
+### Step 8 — analysis ledger consumer [done]
+- Three thin asyncpg repos (order_snapshots/pnl_positions/pnl_pattern_samples) + pnl_pattern_consumer.py
+  (SnapshotComposer + PnLPatternConsumer): single broad StreamEvents(from_sequence=cursor), replay
+  short-circuit, skip analysis.*, order.* → compose-before-txn (timeout→partial, FR-6) + open window +
+  atomic cursor advance; portfolio.position.closed → seal + pattern samples per factor; best-effort
+  captured/degraded/sealed audit emits. Registered as a boot task in main.py (reuses pool + stubs,
+  F-06). Deviation: v1 captures a default indicator set (RSI/ATR), strategy-component resolution is
+  the named v2 refinement; position_id synthesized from identity key (Order has no position_id).
+- Consumer constructor accepts injected repos (default = real) for unit-testability. ruff clean.
+
+### Step 9 — analysis consumer test [done]
+- tests/test_pnl_pattern_consumer.py with in-memory fakes: AC-1 (snapshot w/ indicator+signal),
+  AC-2 (seal + samples, incl partial-fill), AC-6 (indicator timeout → empty map + degraded) + teeth
+  control, AC-7 (captured + sealed audit), idempotency/ordering short-circuit, self-emission skip.
+  7 tests pass; full analysis suite 537 passed, coverage 82%.
+
+**Next:** Step 10 (QueryPnLPatterns RPC), 11 (RPC test), 12 (UI), 13 (UI e2e), 14 (docs).

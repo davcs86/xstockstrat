@@ -123,6 +123,20 @@ environment); config is scoped by `environment` (`production`/`staging`) × glob
 | `marketdata.fmp.api_key` | secret | _(NULL until set)_ | FMP fundamentals API key. `is_secret`, encrypted at rest; resolved via `GetSecret`. |
 | `marketdata.finnhub.api_key` | secret | _(NULL until set)_ | Finnhub fundamentals API key. `is_secret`, encrypted at rest; resolved via `GetSecret`. |
 
+### feature 042 — order-snapshots-pnl-patterns (`xstockstrat-analysis`)
+
+The snapshot-compose timeouts and the query-time bucketing knobs for the ledger-driven P&L pattern
+attribution. These **replace** the product spec's original `trading.snapshot.*` and
+`analysis.patterns.pnl_bucket_size` keys (the design moved capture into analysis and switched to
+query-time quantile bucketing). No credential keys.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.snapshot.indicator_timeout_ms` | int | `500` | Max ms to wait for indicator values composing a snapshot; timeout → empty indicators map (FR-6) |
+| `analysis.snapshot.signal_timeout_ms` | int | `500` | Max ms to wait for active signals; timeout → empty signals list (FR-6) |
+| `analysis.patterns.min_sample_count` | int | `5` | Minimum samples in a bucket before a factor appears in `QueryPnLPatterns` |
+| `analysis.patterns.indicator_bucket_count` | int | `5` | Quantile-bucket count for indicator-value factor grouping at query time |
+
 ### feature 020 — notify-external-fanout (`xstockstrat-notify`)
 
 Adds a best-effort external alert fanout (Slack incoming webhook + SendGrid v3) as a side-channel on

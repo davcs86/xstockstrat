@@ -153,6 +153,25 @@ async def serve():
         asyncio.get_event_loop().create_task(fundsignal_loop.run_forever())
         log.info("fundamentals signal producer loop started")
 
+        # ── Order-snapshot + P&L pattern consumer (feature 042) ──────────
+        # Single broad ledger StreamEvents subscription; captures order-event context and seals
+        # realized P&L into attribution samples. Reuses the existing pool + gRPC stubs (F-06);
+        # non-blocking, never delays server start.
+        from app.engine.pnl_pattern_consumer import PnLPatternConsumer, SnapshotComposer
+
+        pnl_pattern_consumer = PnLPatternConsumer(
+            db_pool=db_pool,
+            ledger_stub=servicer._ledger,
+            config_watcher=cfg_watcher,
+            composer=SnapshotComposer(
+                marketdata_stub=servicer._marketdata,
+                indicators_stub=servicer._indicators,
+                ingest_stub=servicer._ingest,
+            ),
+        )
+        asyncio.get_event_loop().create_task(pnl_pattern_consumer.run_forever())
+        log.info("pnl pattern consumer started")
+
         # ── Opportunity queue daily refresh (feature 097) ────────────────
         # A configured wall-clock daily pass that recomputes the materialized queue for the
         # known-user set (OR-E). Reuses the existing pool (F-06); best-effort per user.
