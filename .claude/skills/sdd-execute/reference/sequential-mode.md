@@ -144,9 +144,11 @@ warnings surface (the failure this mode is being fixed to prevent).
 
 ### 5.6 Per-feature integration PR
 After all of this feature's steps are done (the feature-end checkpoint has passed):
-- Run the merge-order gate (ALL-DONE PATH step 1), then `mcp__github__create_pull_request` (the
-  environment has no `gh`) with `base: main-dev`, `head: <dev-branch>`, body rendered from
-  `templates/integration-pr-body.md`. Print the URL.
+- Run the merge-order gate (ALL-DONE PATH step 1), then **promote acceptance scenarios into the
+  durable business-rule suites** (ALL-DONE PATH step 2.5, Constitution C-16 — confirm with the
+  operator, stage the suite files into this feature's integration PR), then
+  `mcp__github__create_pull_request` (the environment has no `gh`) with `base: main-dev`,
+  `head: <dev-branch>`, body rendered from `templates/integration-pr-body.md`. Print the URL.
 - This is the **only** PR sequential mode opens for a feature. Its diff is the full feature (every
   step's commit), which squash-merges cleanly into `main-dev`.
 

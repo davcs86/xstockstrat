@@ -60,11 +60,11 @@ done
 Single-slug resolve: `find docs/roadmap/features -maxdepth 1 -mindepth 1 -type d -name "*-$ARGUMENTS[0]"`.
 
 For each feature you will actually process, **detect non-standard artifacts** — anything in the dir
-that is not one of the seven known SDD files — and carry them into the Phase 4b extras gate:
+that is not one of the eight known SDD files — and carry them into the Phase 4b extras gate:
 
 ```bash
-ls -A "$FEATURE_DIR" | grep -vxF -e feature.md -e status.md -e product-spec.md -e recon.md -e design.md \
-  -e implementation-spec.md -e context.md
+ls -A "$FEATURE_DIR" | grep -vxF -e feature.md -e status.md -e product-spec.md -e acceptance.feature \
+  -e recon.md -e design.md -e implementation-spec.md -e context.md
 ```
 
 **`/sdd-sync` resurrection guard.** For each candidate, check whether its feature branch still exists:
@@ -209,6 +209,13 @@ if the context-forge plugin is unavailable, note that in the PR body rather than
   product-spec, implementation-spec, design, proto, or migrations. The rubric is the point of the skill.
 - **Deletion is a fixed allowlist** — `product-spec.md`, `recon.md`, `design.md`,
   `implementation-spec.md`. Never `git rm` any other file or subdir on the archiver's own judgment.
+- **`acceptance.feature` is deliberately NOT on the deletion allowlist (Constitution C-16).** Its
+  `@AC-*` scenarios were promoted into the durable per-service suites at launch; the per-feature copy
+  is retained as the provenance record. The archiver's business-rule role is **curation of the
+  per-service suites** (`services/xstockstrat-<svc>/acceptance/*.feature`, `docs/sdd/business-rules/
+  platform.feature`) — collapse near-duplicate scenarios, retire a scenario a rollback invalidated —
+  never deleting business rules. (Pruning a per-feature `acceptance.feature` is allowed only once its
+  scenarios are confirmed present in the suite, and only via the Phase-4b extras gate.)
 - **Any non-standard artifact requires the human's decision at the Phase-4b extras gate** before it
   is kept, relocated, or deleted. Only an explicit `Delete it` authorizes removing it.
 - **Dedup grep is literal fixed-string** on the full `NNN-slug` (`grep -Fn`), never a dash-bracketed

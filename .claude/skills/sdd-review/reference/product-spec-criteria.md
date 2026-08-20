@@ -1,9 +1,9 @@
 # sdd-review — product-spec review criteria (Mode A)
 
 These are the criteria a `spec-reviewer` subagent applies to a product spec. The agent reads
-this file itself, reads the spec, verifies code-checkable claims, and returns a structured
-verdict. Keeping the tables here (not in the router) means the orchestrator never loads them
-— it receives only the verdict.
+this file itself, reads the spec **and the sibling `acceptance.feature`** (Constitution **C-15**),
+verifies code-checkable claims, and returns a structured verdict. Keeping the tables here (not in the
+router) means the orchestrator never loads them — it receives only the verdict.
 
 For each criterion assign ✓ PASS / ⚠ WARN / ✗ FAIL. **WARN is advisory. FAIL blocks lifecycle
 advancement.**
@@ -24,7 +24,7 @@ the gate (**F-11**).
 | 5 | **Proto changes** | Proto changes listed but approval gate (additive vs. breaking) not flagged |
 | 6 | **Config keys** | Any config key listed that does not follow `<service>.<category>.<key>` format |
 | 7 | **DB changes** | Schema changes described but migration strategy (NNN naming, up+down, run order) not stated |
-| 8 | **Acceptance Criteria** | Missing or not verifiable (no observable outcome stated) |
+| 8 | **Acceptance scenarios (`C-15`)** | `acceptance.feature` is missing; OR any `FR-N` has no covering `@AC-*` scenario; OR any scenario is malformed (no `@AC-<n>` tag, no `@FR-<n>` tag, non-concrete example values, or a `Then` that states an implementation step rather than an observable outcome); OR two scenarios share an `@AC-*` ID. (The prose `## Acceptance Criteria` list is no longer expected — `acceptance.feature` is the single source; a spec that still inlines a numbered list instead of pointing at `acceptance.feature` is a WARN.) |
 | 9 | **Open Questions** | Any `- [ ]` items remain unchecked and unresolved |
 | 10 | **Integration completeness (`C-10`)** | Spec touches a shared/duplicated surface but omits completing it: (a) adds a new UI page/route without stating it will be registered in the shared nav (`PLATFORM_SUBNAV`) and reachable from it; (b) introduces a displayed value from an authoritative source (broker/mark-to-market) without requiring parity across **every** RPC/read path that surfaces it (e.g. `ListPositions` ↔ `ListPortfolios`); (c) seeds or depends on a shared resource other services use without a mutation-protection requirement (and, for any new ownership sentinel like `author="system"`, a governance note) |
 | 11 | **Consumer surface named (`C-14`)** | `## Consumer Surface(s)` section is missing or every box is unchecked; OR the spec changes backend behavior with an end-user-visible consequence (a new/changed RPC, response field, computed value, or stored state a user would act on) yet names no UI segment and no Agent tool AND does not justify `None — internal/platform-only`; OR a surface is marked deferred without pointing at a **named follow-up feature**. (Verify against `## Affected Services` + `## Functional Requirements`: a purely internal service-to-service change may legitimately be `None`; a change a trader/analyst/operator would observe may not.) |
@@ -32,7 +32,8 @@ the gate (**F-11**).
 WARN (advisory, does not block):
 - `## Consumer Surface(s)` names a surface but does not say *what* changes there (which is fine to firm up at design/spec time, but flag it)
 - `## Out of Scope` has items but they seem insufficiently explicit
-- Acceptance criteria exist but are qualitative rather than quantitative
+- Scenarios exist and are well-formed but are qualitative rather than quantitative where a number would be more testable
+- `product-spec.md` still inlines a numbered `## Acceptance Criteria` list instead of pointing at `acceptance.feature`
 
 ## A3b. Trading-domain consistency checks
 

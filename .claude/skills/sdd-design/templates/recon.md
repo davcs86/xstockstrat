@@ -32,6 +32,17 @@ For each affected service:
 - `<what to build>` → reuse `<existing pattern/helper/type>` at `path:line`
 - ...
 
+## Existing Business Rules (preserve / extend)
+
+<Constitution **C-16** — the behavioral counterpart to Patterns to REUSE. For each affected service,
+read `services/xstockstrat-<svc>/acceptance/*.feature` (surfaced by the `service-briefing` subagent)
+plus `docs/sdd/business-rules/platform.feature`, and list the existing guarantees this feature must
+not break, plus any it intends to extend or change.>
+- **PRESERVE** `@AC-<n>` "<scenario title>" (`services/xstockstrat-<svc>/acceptance/<file>.feature`) — this feature must not regress it
+- **EXTEND** `@AC-<n>` "<scenario title>" — this feature adds a new case alongside it
+- **CHANGE** `@AC-<n>` "<scenario title>" — this feature deliberately alters the guarantee (requires user sign-off recorded in `context.md`; carry into design.md)
+- <none found for a service → "no existing acceptance suite for xstockstrat-<svc> yet">
+
 ## Dependencies
 
 - Proto/RPC: <messages/RPCs touched; existing field numbers `path:line`> | none

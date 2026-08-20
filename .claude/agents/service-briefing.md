@@ -28,6 +28,11 @@ enough for the caller to make correct edits without reading the whole service.
 2. Note which root-level conventions apply (header propagation, config governance, DB pool
    budget, docker build) and pull the *service-specific* specifics, not the generic rule.
 3. If the caller named a task, read only the pattern/runbook docs that bear on it.
+4. **Business rules.** Glob `services/xstockstrat-<name>/acceptance/*.feature`. If present, list each
+   `@AC-*` scenario as a one-line guarantee (tag + `Scenario:` title only — do **not** paste full
+   Given/When/Then). These are the behaviors the caller must not regress (Constitution **C-16**); a
+   recon caller folds them into `recon.md` → Existing Business Rules. If the dir is absent, say
+   "no acceptance suite yet."
 
 ## Output format (always)
 
@@ -46,6 +51,9 @@ enough for the caller to make correct edits without reading the whole service.
 
 ## Config keys owned (with defaults)
 - `<service>.<category>.<key>` = <default> — <purpose>  (or "none documented")
+
+## Existing business rules (@AC-*, must not regress)
+- `@AC-<n>` "<scenario title>" — `acceptance/<file>.feature`  (or "no acceptance suite yet")
 
 ## Read these if you go deeper
 - `path` — <why>

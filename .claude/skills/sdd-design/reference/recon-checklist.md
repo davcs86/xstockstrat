@@ -15,7 +15,13 @@ Load this at the start of **Phase 0**. Recon owns discovery for the design phase
    (Constitution **F-04**, **P-03**).
 3. **Fold in the Ledger.** Cross-reference the relevant `docs/roadmap/ledger/insights.md` entries
    (reusable patterns) and `fails.md` entries (known traps) for these services.
-4. **Synthesize into `recon.md`** using `templates/recon.md`.
+4. **Load existing business rules (Constitution C-16).** For each affected service, read its durable
+   business-rule suite `services/xstockstrat-<svc>/acceptance/*.feature` plus the cross-cutting
+   `docs/sdd/business-rules/platform.feature`. The **`service-briefing`** subagent already surfaces a
+   service's `acceptance/` suite in its briefing, so you get these without extra orchestrator-window
+   cost when you brief the service. These are the guarantees the new design must not regress — carry
+   them into `recon.md` → **Existing Business Rules**.
+5. **Synthesize into `recon.md`** using `templates/recon.md`.
 
 ## What recon.md must capture (maps to the template sections)
 
