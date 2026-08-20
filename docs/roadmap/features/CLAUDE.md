@@ -45,8 +45,9 @@ Additional fields present in bug `feature.md` files:
 |---|---|---|
 | `status.md` | `/sdd-story` or `/sdd-triage` | **Canonical current lifecycle status** — a single line, plain string, nothing else (e.g. `design-approved`). No markdown formatting. This is the ONLY place current status is stored — **check this first**, and prefer a bulk `egrep` over all features' `status.md` files instead of reading them one at a time (see § Bulk Status Reads below) |
 | `feature.md` | `/sdd-story` or `/sdd-triage` | Status History audit log, Reviewers snapshot, links to all artifacts |
-| `product-spec.md` | `/sdd-story` or `/sdd-triage` | Requirements or bug description and fix scope; governance gates |
-| `recon.md` | `/sdd-design` (Phase 0) | Grounded codebase dossier — codebase map, **Patterns to REUSE**, dependencies, risks, recommended scope (only present once /sdd-design has run) |
+| `product-spec.md` | `/sdd-story` or `/sdd-triage` | Requirements or bug description and fix scope; governance gates. The `## Acceptance Criteria` section points at `acceptance.feature` rather than inlining a list (**C-15**) |
+| `acceptance.feature` | `/sdd-story` or `/sdd-triage` | Gherkin `@AC-*` scenarios — the single source of acceptance truth (**C-15**); each `FR-N` covered by ≥1 scenario, traced to test steps by `/sdd-spec`, promoted into the durable per-service business-rule suites at launch (**C-16**) |
+| `recon.md` | `/sdd-design` (Phase 0) | Grounded codebase dossier — codebase map, **Patterns to REUSE**, **Existing Business Rules** (the affected services' `@AC-*` guarantees, C-16), dependencies, risks, recommended scope (only present once /sdd-design has run) |
 | `design.md` | `/sdd-design` (Phase 1) | Debated, user-approved architecture — chosen approach, **rejected alternatives**, open risks, Constitution rules touched (only present once /sdd-design has run) |
 | `implementation-spec.md` | `/sdd-spec` | Numbered steps with exact file/symbol references, statuses, and per-step Reviewers |
 | `context.md` | All skills | Append-only session log — **ALWAYS read before touching feature files** |

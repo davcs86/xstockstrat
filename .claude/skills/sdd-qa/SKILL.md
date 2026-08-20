@@ -75,6 +75,13 @@ runs 4 services; the workflow runs 5).
 Where you show a proxy (test-file counts) rather than a measurement, label it `(proxy)`. An
 unlabelled proxy reads as a measurement.
 
+**Scenario coverage (Constitution C-15).** When `gaps` runs against a feature that has an
+`acceptance.feature` (or a service with a promoted `acceptance/*.feature` suite), also report any
+`@AC-*` scenario with **no covering test** — cross-reference the scenarios against the `**Covers**`
+lines in `implementation-spec.md` (in-flight) and the actual test files (landed). An uncovered
+scenario is a coverage gap of the highest priority: it is behavior the spec promised and nothing
+verifies.
+
 ### `flake` — force the conditions that reveal non-determinism
 
 Pass the flags per invocation; **never edit a config file**:

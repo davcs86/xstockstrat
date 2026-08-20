@@ -33,6 +33,15 @@ If the behavior already exists and no assertion can be made to fail first, that 
 characterization test — label it as such and say `red N/A — no behavior change` explicitly, never
 silently (**P-03**; mirrors `tdd-gate.md`'s escape hatch).
 
+## Scenarios drive the cases (Constitution C-15)
+
+When the target has an `acceptance.feature`, the `@AC-*` scenarios are the behaviors to test — one
+case per scenario, and the RED assertion is that scenario's `Then` failing today. The scenario's
+`Given/When/Then` already names the setup, action, and observable outcome, so the case writes itself:
+map `Given` → fixture/arrange, `When` → act, `Then` → the RED assertion. Name the covered scenario in
+the plan (`covers @AC-2`) so `/sdd-spec`'s `**Covers**` line and this plan agree. A behavior with no
+scenario, or a scenario with no case, is a gap to surface — not a case to invent silently.
+
 ## A green suite is not automatically coverage
 
 This is the rule with the most scar tissue behind it. From `docs/roadmap/ledger/fails.md`
