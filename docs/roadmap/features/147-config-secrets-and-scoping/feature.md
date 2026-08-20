@@ -14,6 +14,7 @@
 | 2026-08-20 | `draft` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written. Operator kept per-user overlay on WatchConfig. |
 | 2026-08-20 | `design-approved` → `implementation-ready` | /sdd-spec | 12-step implementation-spec.md written (evidence-cited, AC-mapped). |
 | 2026-08-20 | `implementation-ready` → `in-progress` | implementation | Implementing on `claude/config-secrets-environment-e0eue6`. |
+| 2026-08-20 | `in-progress` → `code-completed` | implementation | All 12 steps done: proto, migration 017 (DB-validated), config service (crypto/GetSecret/redaction/scope), marketdata GetSecret, agent JWT_SECRET, config-ui env/user scope, all client edges, deploy wiring, governance docs. Tests green per service. |
 
 ---
 

@@ -100,3 +100,30 @@ invariant (agent `context-constitution.md:21`) is rewritten.
 - Migration 017 lossy down (mitigated by premigration table) → migration step.
 - Post-deploy: operator sets real vendor creds via SetConfig (seed ciphertext NULL) → docs step.
 - JWT_SECRET agent blast radius → accepted/recorded, no further action.
+
+## Session 2026-08-20 — implementation (all 12 steps)
+
+Implemented on `claude/config-secrets-environment-e0eue6` (harness branch, PR → main-dev).
+
+- **Step 1 proto**: `ENVIRONMENT_STAGING`; deprecate `trading_mode` on all config messages + `ENVIRONMENT_DEV`; add `user_id` to Watch/Get/Set/ListKeys; new `GetSecret` RPC. Provisioned the codegen toolchain on the host (no Docker daemon) per `docs/runbooks/codegen-toolchain-host-setup.md`, validated an empty stub diff before editing, regenerated. `buf lint`+`buf breaking` pass.
+- **Step 2 migration 017**: validated end-to-end against a real ephemeral PostgreSQL (000→017 apply, down reverses, re-up clean). Collapse precedence, per-user scope, audit triggers verified live.
+- **Steps 3–4 config service**: `crypto.ts` (AES-256-GCM), `SECRET_CALLER_ALLOWLIST`, redaction in `buildConfigValue`, `GetSecret` (distinct found=false vs INTERNAL), row-authoritative encrypt-on-write, env×user_id scope + per-user overlay on GetConfig **and** WatchConfig. 80 tests, coverage 82%.
+- **Steps 5–6 marketdata**: `Watcher.ResolveSecret` (GetSecret at startup); warn-and-start preserved.
+- **Steps 7–9 agent + config-ui**: OAuth txn → `JWT_SECRET` (fail-closed); MCP_AGENT_SECRET deleted; tools drop trading_mode / add user_id; config-ui env production/staging + per-user ScopeControl; **fixed a real runtime break** — the config-ui audit route SELECTed the dropped `trading_mode` column. 47 config-ui e2e pass.
+- **Step 10 client edges**: Node/Go/Python config watchers → STAGING, drop trading_mode.
+- **Step 11 deploy**: `CONFIG_SECRETS_ENCRYPTION_KEY` added everywhere; `JWT_SECRET` into agent; 4 vendor keys + `MCP_AGENT_SECRET` scrubbed. Grep-verified.
+- **Step 12 docs**: rewrote the stale `secret.*` ban across root CLAUDE.md, config-governance, reviewer-registry, add-data-source, constitution C-05, and the config/marketdata/agent docs.
+
+### Consumer-surface decision (C-14)
+Operator chose (2026-08-20 `AskUserQuestion`) to do the **full config-ui modernization in this PR**
+(production/staging labels, remove the paper/live selector, add a global/per-user scope selector),
+not defer it. Done in Step 9b with all 8 config-ui e2e specs updated and passing.
+
+### Post-deploy operator action (required)
+The 4 vendor secret rows are seeded with NULL ciphertext. After deploy, set the real Alpaca/FMP/
+Finnhub credentials per environment via the config write path (an admin `SetConfig`), which encrypts
+them. Until set, marketdata resolves them empty and takes its warn-and-start path.
+
+### Teardown note
+`/context-scrubber` (context-forge plugin) is not available in this session, so the doc-drift scan
+was not run automatically; the governance docs were rewritten directly in Step 12 instead.
