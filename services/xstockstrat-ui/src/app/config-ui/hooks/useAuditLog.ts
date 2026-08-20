@@ -11,7 +11,7 @@ interface AuditEntry {
   reason: string;
   changedAt: string;
   environment: string;
-  tradingMode: string;
+  userId: string;
 }
 
 async function fetchAuditLog(): Promise<AuditEntry[]> {

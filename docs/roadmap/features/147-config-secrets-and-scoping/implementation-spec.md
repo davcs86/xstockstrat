@@ -241,7 +241,7 @@ assertions (feature-074 trap).
 
 ### Step 9 — service: agent + config-ui consumer-surface arg changes (C-14)
 
-**Status**: `done` (agent portion; config-ui in Step 9b)
+**Status**: `done`
 **Service**: `xstockstrat-agent`, `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py`, `app/client.py` — modify (drop trading_mode arg; environment production/staging; keep is_secret redaction; retire secret.* prefix check)

@@ -207,7 +207,7 @@ test.describe('POST /api/config — inline edit save flow', () => {
   test('SetConfig is rejected for a non-native environment (FailedPrecondition → 400)', async ({
     page,
   }) => {
-    // webServer.env sets APPLICATION_ENV=development (native scope = dev = Environment.DEV = 1).
+    // webServer.env sets APPLICATION_ENV=development (native scope = staging = Environment.STAGING = 3).
     // environment: 2 (PRODUCTION) is the non-native scope for this deployment.
     await addAdminCookie(page);
     await page.goto('/auth/login');
@@ -229,8 +229,8 @@ test.describe('validation field in ListKeysResponse', () => {
     await page.goto('/auth/login');
     const { status, body } = await callBff(page, CONFIG_BFF, {
       namespace: 'analysis',
-      environment: 1,
-      tradingMode: 0,
+      environment: 3,
+      userId: '',
     });
     expect(status).toBe(200);
     const keys = body.keys as Array<Record<string, unknown>>;

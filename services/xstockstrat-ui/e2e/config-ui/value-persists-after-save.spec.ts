@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { addAdminCookie } from '../helpers/auth';
 
-const PLATFORM_NAMESPACE_PAGE = '/config-ui/platform?env=dev&mode=paper';
+const PLATFORM_NAMESPACE_PAGE = '/config-ui/platform?env=staging';
 
 /**
  * Regression coverage for the config-ui "editing configs" bug: Save appeared to silently

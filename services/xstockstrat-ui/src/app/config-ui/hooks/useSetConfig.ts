@@ -5,12 +5,12 @@ import { ConnectError } from '@connectrpc/connect';
 
 type SetConfigInput = Parameters<typeof configClient.setConfig>[0];
 
-export function useSetConfig(namespace: string, env: string, mode: string) {
+export function useSetConfig(namespace: string, env: string, user: string) {
   const queryClient = useQueryClient();
   return useMutation<SetConfigResponse, Error, SetConfigInput>({
     mutationFn: (req) => configClient.setConfig(req),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['config-keys', namespace, env, mode] });
+      queryClient.invalidateQueries({ queryKey: ['config-keys', namespace, env, user] });
     },
     onError: (err) => {
       if (err instanceof ConnectError) return err;

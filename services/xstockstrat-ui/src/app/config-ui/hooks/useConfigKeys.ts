@@ -1,28 +1,25 @@
 import { useQuery } from '@tanstack/react-query';
 import { configClient } from '@/lib/browserClients/configClient';
 import type { ListKeysResponse } from '@xstockstrat/proto/config/v1/config_pb';
-import { Environment, TradingMode } from '@xstockstrat/proto/common/v1/common_pb';
+import { Environment } from '@xstockstrat/proto/common/v1/common_pb';
+
+// Feature 147: config is scoped by environment (production/staging) x optional per-user (user_id).
+export function envToProto(e: string): Environment {
+  return e === 'production' ? Environment.PRODUCTION : Environment.STAGING;
+}
 
 export function useConfigKeys(
   namespace: string,
   env: string,
-  mode: string,
+  user: string,
 ): { data: ListKeysResponse | undefined; isLoading: boolean; error: Error | null } {
-  function envToProto(e: string): Environment {
-    return e === 'production' ? Environment.PRODUCTION : Environment.DEV;
-  }
-  function modeToProto(m: string): TradingMode {
-    return m === 'live' ? TradingMode.LIVE
-      : m === 'paper' ? TradingMode.PAPER
-      : TradingMode.UNSPECIFIED;
-  }
   return useQuery({
-    queryKey: ['config-keys', namespace, env, mode],
+    queryKey: ['config-keys', namespace, env, user],
     queryFn: () =>
       configClient.listKeys({
         namespace,
         environment: envToProto(env),
-        tradingMode: modeToProto(mode),
+        userId: user,
       }),
   });
 }
