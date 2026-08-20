@@ -230,7 +230,7 @@ build check: `cd services/xstockstrat-notify && pnpm run build` — `tsc` compil
   40 node --test dist/__tests__/*.test.js` (threshold 40, matches CI).
 - Lint: `package.json` `lint` = `eslint src --ext .ts` (config `.eslintrc.json`).
 - A `ConfigWatcher` can be faked inline as `{ getInt: (_k,d)=>..., getFloat:..., getString:... }`
-  cast `as any` (mirrors `notifyServiceImpl.test.ts` `makeImpl(... {} as any)` at `:56`). Single
+  cast `as any` (mirrors `notifyServiceImpl.test.ts` `makeImpl(... {} as any)` at `:47`). Single
   consumer → inline fake is C-13-compliant; no `src/__tests__/fixtures/` home needed.
 
 **TDD**: `red-green required` — every assertion targets Step 2 behavior and fails against the
@@ -336,7 +336,7 @@ tree to confirm RED (module import fails / behavior absent), then GREEN after St
 **Reviewers**: xstockstrat-notify owner — stream delivery guarantees, alert deduplication
 
 **Codebase Evidence**:
-- Existing helpers to reuse: `makePool` (`notifyServiceImpl.test.ts:38`), `makeImpl` (`:55`) which
+- Existing helpers to reuse: `makePool` (`notifyServiceImpl.test.ts:38`), `makeImpl` (`:47`) which
   constructs `new NotifyServiceImpl(pool as any, {} as any)`. Extend `makeImpl` to accept and inject a
   fake/real `FanoutDispatcher` (third arg) so the wiring is exercised.
 - `emitAlert` success contract already asserted by the feature-092 metadata-less test (the suite must

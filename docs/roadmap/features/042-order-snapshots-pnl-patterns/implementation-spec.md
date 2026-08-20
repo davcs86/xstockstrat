@@ -113,7 +113,7 @@ nav-reachability). No Agent step is required — the product spec marks Agent `n
 
 **Verification**:
 ```
-cd packages/proto && buf lint && buf breaking --against ".git#branch=feature/order-snapshots-pnl-patterns"
+cd packages/proto && buf lint && buf breaking --against ".git#branch=main-dev"
 ```
 Expect `buf lint` clean and `buf breaking` to report no breaking changes (all additions are new messages/enums/RPC; the ledger edit is a comment). Then Step 2 regenerates and proves the stub diff.
 
@@ -211,7 +211,7 @@ Read both: confirm the `.up.sql` `ADD COLUMN` has its inverse `DROP COLUMN` in `
 2. Route `GetPnL`'s `applyFill` closure through `realizedDelta` (call it, add to `realized`), so `GetPnL`'s figure is provably unchanged.
 3. In `ConsumeOrderFills` (`:267-301`): compute `delta := realizedDelta(existing.Qty, existing.CostBasis, fill.Qty, fill.FillPrice)` when `existing != nil` (guard `existing == nil` → delta `0`, and a redelivered post-close sell must not nil-deref — design § 1).
    - Partial reduce branch (`newQty > 0`, `:292-301`): persist the delta by passing it as the new `$8` arg to `UpsertPosition` (see step 5 below), so `realized_accum` accumulates via `ON CONFLICT ... SET realized_accum = portfolio.positions.realized_accum + $8`.
-   - Full-close branch (`newQty <= 0`, `:287-291`): the row is DELETEd, so the cumulative goes into the **emitted payload only** — never persisted onto the deleted row. Enrich the `portfolio.position.closed` payload to `{"user_id": fill.UserID, "symbol": fill.Symbol, "account_id": acctID, "trading_mode": <mode string>, "realized_pnl": existing.RealizedAccum + delta}` (guard `existing == nil` → `realized_pnl` 0). Use the same trading-mode string form other portfolio payloads use.
+   - Full-close branch (`newQty <= 0`, `:287-291`): the row is DELETEd, so the cumulative goes into the **emitted payload only** — never persisted onto the deleted row. Enrich the `portfolio.position.closed` payload to `{"user_id": fill.UserID, "symbol": fill.Symbol, "account_id": acctID, "trading_mode": <mode string>, "realized_pnl": existing.RealizedAccum + delta}` (guard `existing == nil` → `realized_pnl` 0). For the trading-mode string use `mode.String()` (the same form `UpsertPosition` writes at `portfolio_repo.go:61`) — no existing `portfolio.position.*` payload carries `trading_mode` today, so this establishes the form; the Step 8 consumer's `position_id` synthesis and seal must read it back as `mode.String()`.
 4. In `portfolio_repo.go`: extend `UpsertPosition` to take a `realizedDelta float64` param and add `realized_accum = portfolio.positions.realized_accum + $8` to the `ON CONFLICT ... DO UPDATE SET` clause; on insert set `realized_accum` to the delta. Load `RealizedAccum` when reading a position (so `existing.RealizedAccum` is populated at `:261`'s `GetPosition`).
 5. Account-scope `ClosePosition`: change its SQL to `... AND trading_mode=$3 AND account_id=$4`, add an `accountID string` param to the signature, and pass `acctID` at the `:288` call-site. Grep-confirm no other caller of `ClosePosition` exists before changing the signature.
 
@@ -358,6 +358,7 @@ Confirm all four keys with their defaults are declared; confirm the governance l
 - Marketdata (OHLCV bar) already dialed: `self._marketdata` (`servicer.py:130`, `app/main.py:61`), with the feature-071 pagination helper for `GetBars` (`servicer.py:680`).
 - `StreamEvents` contract: `packages/proto/ledger/v1/ledger.proto:16,68-71` — `StreamEventsRequest{stream_key, event_type, from_sequence}`, both filters optional; `LedgerEvent.sequence` global monotonic (`:29`, comment fixed Step 1); `recorded_at` (`:26`) immutable server ts.
 - Best-effort ledger/DB norm: `try/except → log.warning` (`servicer.py:1982`, recon).
+- **Emitted `order.*` event strings (match exactly)**: trading emits `order.created` (`trading.go:578`), `order.filled` (`:1220`), `order.partially_filled` (`:1236`), and `order.canceled` (`:828,1248` — American one-`l` spelling; documented in `services/xstockstrat-trading/CLAUDE.md:117`). The consumer must match these literal strings.
 
 **TDD**: `red-green required`
 
@@ -368,7 +369,7 @@ Confirm all four keys with their defaults are declared; confirm the governance l
 2. New `pnl_pattern_consumer.py` with a `run_forever()` entry (mirror `fundsignal_loop.run_forever`): open **one** `StreamEvents(from_sequence=cursor.last_sequence)` with **both filters null** (preserves the ledger's global sequence order — design § 2). Per event:
    - (1) **short-circuit** if `event.sequence <= cursor.last_sequence` before any mutation (kills replay phantom-opens).
    - (2) skip analysis's own `analysis.*` emissions (never self-consume).
-   - (3) On `order.*` events (`order.created`/`order.filled`/`order.partially_filled`/`order.cancelled`): **compose the snapshot BEFORE opening the DB transaction** — gRPC reads to indicators/ingest/marketdata via the screener composition, indicators resolved from the order's `strategy_id`; wrap each read in best-effort `try/except` bounded by `analysis.snapshot.indicator_timeout_ms` / `analysis.snapshot.signal_timeout_ms` → on timeout/error, a **partial** snapshot (empty indicators map / empty signals list), never abort (FR-6). `position_id` is synthesized from `(user_id, account_id, symbol, trading_mode)` + open window (recon Risk — `Order` has no `position_id`; do not guess a nonexistent field).
+   - (3) On `order.*` events (`order.created`/`order.filled`/`order.partially_filled`/`order.canceled` — note the American one-`l` spelling: trading emits these exact strings at `services/xstockstrat-trading/internal/service/trading.go:578,1220,1236,828,1248`; matching the British `order.cancelled` would silently never capture cancels): **compose the snapshot BEFORE opening the DB transaction** — gRPC reads to indicators/ingest/marketdata via the screener composition, indicators resolved from the order's `strategy_id`; wrap each read in best-effort `try/except` bounded by `analysis.snapshot.indicator_timeout_ms` / `analysis.snapshot.signal_timeout_ms` → on timeout/error, a **partial** snapshot (empty indicators map / empty signals list), never abort (FR-6). `position_id` is synthesized from `(user_id, account_id, symbol, trading_mode)` + open window (recon Risk — `Order` has no `position_id`; do not guess a nonexistent field).
    - (4) In ONE DB transaction: insert `order_snapshots` (`ON CONFLICT (event_id, event_ts) DO NOTHING`), open/seal `pnl_positions`, and `UPDATE ledger_stream_cursor` — atomic so a crash never advances the cursor past unwritten data. On a `portfolio.position.closed` event: seal the matching open `pnl_positions` row (stamp `closed_at`/`realized_pnl` from the **enriched** payload's `realized_pnl` — Step 4 — /`close_event_id`, deduped on `close_event_id`), then write one `pnl_pattern_samples` row per factor present in that position's entry/exit snapshots (indicator value buckets deferred to query time — raw store). An empty-window close (pre-deploy open, no snapshots) **no-ops** (out-of-scope: no historical backfill, product spec § Out of Scope).
    - (5) After commit, emit best-effort audit events (FR-7): `analysis.snapshot.captured` per snapshot and `analysis.pattern.sealed` per sealed position via `AppendEvent`; on a degraded/partial snapshot emit a WARN-level `analysis.snapshot.degraded` (AC-6). Use the existing best-effort `try/except → log.warning` around `AppendEvent`.
 3. **Seal-time completeness diagnostic** (design Open Risk — v1 named limitation): at seal, log a WARN if the snapshot count for the position is lower than expected (a `QueryEvents` count check); v1 accepts a possibly-incomplete window. Name the v2 reconciliation (rebuild from ledger) as the tracked follow-up in the Step 14 docs.
@@ -500,7 +501,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 - Page pattern: `services/xstockstrat-ui/src/app/insights/strategies/page.tsx` (recon § UI); hook pattern `services/xstockstrat-ui/src/hooks/useOpportunities.ts:1,17-20` (`useQuery` + `analysisClient.<method>`).
 - Browser client auto-exposes the new method: `analysisClient = createClient(AnalysisService, transport)` (`src/lib/browserClients/analysisClient.ts:6`) — no edit needed; `queryPnLPatterns` appears once the stub (Step 2) declares the RPC.
 - BFF router: `router.service(AnalysisService, { ... })` (`src/lib/insightsBff.ts:26`), existing one-liner forward `listOpportunities: forward((req, opts) => analysisClient.listOpportunities(req, opts))` (`:53`) — add `queryPnLPatterns` the same way (a **read**, so no `requireAdminScope`).
-- **Nav is triple-sourced** (recon Risk / C-10(a)): the real rendered source `NAV_GROUPS` (`src/components/shared/navGroups.tsx:41`, entries under the "Engine" group `:60-66`), the legacy `PLATFORM_SUBNAV` (`src/components/shared/PlatformHeader.tsx:72-84`, insights block `:79-83`), and the reachability-spec `GROUPS` (Step 13). All three must gain the entry or the C-10(a) test / rendered nav drift.
+- **Nav is triple-sourced** (recon Risk / C-10(a)): the real rendered source `NAV_GROUPS` (`src/components/shared/navGroups.tsx:41`, entries under the "Engine" group `:62-67`), the legacy `PLATFORM_SUBNAV` (`src/components/shared/PlatformHeader.tsx:72-84`, insights block `:79-83`), and the reachability-spec `GROUPS` (Step 13). All three must gain the entry or the C-10(a) test / rendered nav drift.
 
 **TDD**: `red-green required`
 
@@ -511,7 +512,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 2. `usePnLPatterns.ts`: mirror `useOpportunities` — `useQuery` calling `analysisClient.queryPnLPatterns({ symbol, limit })`.
 3. `pnl-patterns/page.tsx`: mirror `insights/strategies/page.tsx` — render **top positive-contributing** and **top negative-contributing** factor cards from `positive_factors`/`negative_factors`, plus a per-order snapshot timeline placeholder (FR-5). Client component using the hook.
 4. Register the nav entry in **all three** sources:
-   - `navGroups.tsx` — add `{ label: 'P&L Patterns', href: '/insights/pnl-patterns' }` under the "Engine" insights group (`:60-66`).
+   - `navGroups.tsx` — add `{ label: 'P&L Patterns', href: '/insights/pnl-patterns' }` under the "Engine" insights group (`:62-67`).
    - `PlatformHeader.tsx` `PLATFORM_SUBNAV` — add the same `{ label: 'P&L Patterns', href: '/insights/pnl-patterns' }` to the insights block (`:79-83`).
    - (the reachability spec `GROUPS` entry is added in Step 13.)
 

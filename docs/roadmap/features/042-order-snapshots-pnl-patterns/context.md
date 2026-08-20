@@ -284,19 +284,31 @@
   ~lines 261-550; 127 edits ~1189-1353) and mechanical `packages/proto/gen/**` regen overlap.
   Analysis migration `016`, the four `analysis.snapshot.*`/`analysis.patterns.*` config keys, and the
   new `analysis.proto`/`ledger.proto` surface are all clean/next-free.
-- Unresolved ⚠ carried into execution:
-  - Step 8: matches `order.cancelled` (British) but trading EMITS `order.canceled` (one `l`,
-    `trading.go:828,1248`; `xstockstrat-trading/CLAUDE.md:117`). As written, cancel snapshots would
-    silently never capture (C-01). MUST correct the event string to `order.canceled` at the Step 8
-    execution and add the trading emit site to that step's Codebase Evidence. Also re-check the
-    `SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED` proto→event mapping consumes the correct live string.
-    — [ ] unaddressed (highest-priority fix before/at execution)
-  - Step 1: `buf breaking --against .git#branch=feature/order-snapshots-pnl-patterns` compares the
-    branch against itself; CI's real breaking gate runs against the merge base — local pre-check
-    won't catch a regression vs main-dev (CI still will). — [ ] unaddressed (informational)
-  - Step 8: 6-file step (>5) — consider splitting the three repos from the consumer. — [ ] unaddressed (advisory)
-  - Note: Step 4 "same trading-mode string form other portfolio payloads use" is loose — no existing
-    `portfolio.position.*` payload carries `trading_mode`; `mode.String()` (as UpsertPosition uses at
-    portfolio_repo.go:61) is the obvious form. — [ ] unaddressed (clarify at execute)
-  - Note: Step 12 cites Engine items at navGroups.tsx:60-66; actual `items` array is :62-67 — line
-    drift, symbol real. — [ ] unaddressed (log in Deviation Log if touched)
+- Warnings resolved in the 2026-08-20 spec-fix pass (see next session block):
+  - Step 8: matched `order.cancelled` (British) but trading EMITS `order.canceled` (one `l`,
+    verified `trading.go:578,1220,1236,828,1248`; `xstockstrat-trading/CLAUDE.md:117`). As written,
+    cancel snapshots would silently never capture (C-01). — [x] FIXED: event string corrected to
+    `order.canceled` in the Step 8 instruction + trading emit sites added to Step 8 Codebase Evidence.
+    The proto enum value keeps its name `SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED` (our own enum spelling);
+    only the matched live ledger string changed.
+  - Step 1: `buf breaking --against .git#branch=feature/order-snapshots-pnl-patterns` compared the
+    branch against itself. — [x] FIXED: changed to `--against ".git#branch=main-dev"` (the merge base).
+  - Step 4: "same trading-mode string form other portfolio payloads use" was loose — no existing
+    `portfolio.position.*` payload carries `trading_mode`. — [x] FIXED: pinned to `mode.String()`
+    (as `UpsertPosition` writes at `portfolio_repo.go:61`); Step 8 seal reads it back the same way.
+  - Step 12: cited Engine items at navGroups.tsx:60-66; actual `items` array is :62-67. — [x] FIXED
+    (both cite sites corrected; verified against the file).
+  - Step 8: 6-file step (>5, B2 advisory) — [x] no split (the three thin repos + consumer + boot-task
+    registration are one cohesive unit; splitting the repos from the consumer that is their only
+    caller adds ordering fragility for no benefit). Rationale accepted, spec unchanged.
+
+## Session 2026-08-20T06:16:48Z — spec-fix pass (resolve impl-spec review warnings)
+
+User directed "fix all warnings" after the advisory impl-spec review. Applied the four grounded
+corrections directly to implementation-spec.md (pre-execution; step bodies not yet immutable):
+- Step 8 `order.cancelled` → `order.canceled` (verified emit sites `trading.go:578,1220,1236,828,1248`).
+- Step 1 `buf breaking` base → `main-dev`.
+- Step 4 trading-mode string → `mode.String()` (portfolio_repo.go:61).
+- Step 12 navGroups Engine items cite → `:62-67` (verified).
+The 6-file Step 8 count is left as-is (cohesive unit; not split). No lifecycle change (stays
+implementation-ready).

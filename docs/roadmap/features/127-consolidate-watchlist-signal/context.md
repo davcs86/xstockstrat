@@ -205,7 +205,9 @@
 - Unresolved ⚠ / NOTE carried into execution:
   - Step 5: Go test step states no >=N% coverage assertion — justified because `service/` and
     `repository/` are excluded from the coverpkg filter (no threshold delta); C-08 pairing still met
-    via the targeted `go test -race`. Reconfirm the coverpkg-exclusion claim at execute. — [ ] unaddressed
+    via the targeted `go test -race`. — [x] CONFIRMED (2026-08-20): `ci.yml:244` excludes
+    `/(cmd|handler|repository|telemetry|service)/` from `-coverpkg`, so `EnsureSignalWatchlist`/the
+    delete guard (service/) and the repo change (repository/) are outside the threshold — claim accurate.
   - Step 6: touches 6 files (>5) — acceptable (3 are the deploy-parity trio for PORTFOLIO_ENDPOINT). — [x] no action needed (accepted)
   - Note: migration `011` deviates from strict last+1 (`010`) but is a coordinated reservation per
     merge-order.md:182 (042 keeps `010`). Not an F-01 risk (new files). — [x] no action needed (by design)

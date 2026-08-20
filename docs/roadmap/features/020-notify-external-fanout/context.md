@@ -153,6 +153,6 @@
     would break the C-10 compose↔DO parity guarantee, so keep together. — [x] no action needed (accepted)
   - Step 2: reads SLACK_WEBHOOK_URL/SENDGRID_API_KEY but lists no deploy specs in its own Files —
     intentionally deferred to Step 6 (lists all three). — [x] no action needed (by design)
-  - Note: `makeImpl` cited at notifyServiceImpl.test.ts:55/:56 but actually lives at :47-49
-    (makePool:38 correct) — line drift only, symbol/behavior accurate. — [ ] unaddressed (log in
-    Deviation Log if execution touches that line; do not edit the immutable step body, F-09)
+  - Note: `makeImpl` cited at notifyServiceImpl.test.ts:55/:56 but actually lives at :47
+    (makePool:38 correct) — line drift only, symbol/behavior accurate. — [x] FIXED in the 2026-08-20
+    spec-fix pass: both cites corrected to `:47` (verified against the test file).
