@@ -94,8 +94,9 @@ describe('SetConfig authorization over a real gRPC connection', () => {
     const recordingPool: any = {
       query: async (sql: string, params?: unknown[]) => {
         queries.push({ sql, params });
-        if (sql.includes('SELECT 1 FROM config.config_values')) {
-          return { rows: keyExists ? [{ '?column?': 1 }] : [] };
+        // Feature 147: the existence gate reads is_secret (row-authoritative encryption).
+        if (sql.includes('SELECT is_secret FROM config.config_values')) {
+          return { rows: keyExists ? [{ is_secret: false }] : [] };
         }
         return { rows: [] };
       },
@@ -166,8 +167,9 @@ describe('SetConfig authorization over a real gRPC connection', () => {
     // feature 091: the existence SELECT is now query 0; locate the INSERT by SQL.
     const insert = insertQuery();
     assert.ok(insert, 'the INSERT must run for an authorized, registered-key caller');
-    // params[4] is `updated_by` in the INSERT's parameter list.
-    assert.equal(insert!.params?.[4], 'tester');
+    // Feature 147 INSERT params: [namespace, key, value_type, value_data, value_encrypted,
+    // is_secret, updated_by, update_reason, environment, user_id, caller_identity].
+    assert.equal(insert!.params?.[6], 'tester');
   });
 
   it('falls back to the propagated x-user-id when no author is supplied', async () => {
@@ -177,7 +179,7 @@ describe('SetConfig authorization over a real gRPC connection', () => {
       author: '',
     });
     assert.equal(err, null);
-    assert.equal(insertQuery()!.params?.[4], 'u-42', 'updated_by falls back to the caller id');
+    assert.equal(insertQuery()!.params?.[6], 'u-42', 'updated_by falls back to the caller id');
   });
 
   it('refuses an unattributable write (no author, no x-user-id)', async () => {

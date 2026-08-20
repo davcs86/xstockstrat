@@ -35,7 +35,6 @@ describe('ListKeys over a real gRPC connection', () => {
         is_secret: true,
         consuming_service: 'xstockstrat-marketdata',
         environment: 'production',
-        trading_mode: 'live',
       },
       {
         key: 'analysis.signals.source_weights',
@@ -44,8 +43,7 @@ describe('ListKeys over a real gRPC connection', () => {
         value_data: '{"example_source": 0.5}',
         is_secret: false,
         consuming_service: 'xstockstrat-analysis',
-        environment: 'dev',
-        trading_mode: 'all',
+        environment: 'staging',
       },
     ];
     const pool: any = {
@@ -103,13 +101,13 @@ describe('ListKeys over a real gRPC connection', () => {
     assert.notEqual(plain.currentValue, plain.defaultValue);
   });
 
-  it('encodes environment and tradingMode as real enum values, not UNRECOGNIZED', async () => {
+  it('encodes environment as a real enum value, not UNRECOGNIZED', async () => {
+    // Feature 147: trading_mode is no longer emitted; environment is production/staging.
     const res = await listKeys();
     const secret = res.keys.find((k: any) => k.key === 'secret.example.api_key');
     const plain = res.keys.find((k: any) => k.key === 'analysis.signals.source_weights');
     assert.equal(secret.environment, 'ENVIRONMENT_PRODUCTION');
-    assert.equal(secret.tradingMode, 'TRADING_MODE_LIVE');
-    assert.equal(plain.environment, 'ENVIRONMENT_DEV');
+    assert.equal(plain.environment, 'ENVIRONMENT_STAGING');
   });
 
   it('populates the validation sub-message for a registered weight key', async () => {

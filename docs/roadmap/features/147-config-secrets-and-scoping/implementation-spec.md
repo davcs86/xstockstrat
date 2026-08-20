@@ -97,7 +97,7 @@ assertions (feature-074 trap).
 
 ### Step 3 — service: config crypto (AES-256-GCM) + master-key load
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/crypto.ts` — create
@@ -121,7 +121,7 @@ assertions (feature-074 trap).
 
 ### Step 4 — service: config redaction, GetSecret, scope re-model, encrypt-on-write
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify

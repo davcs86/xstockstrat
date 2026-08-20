@@ -1,19 +1,13 @@
 /**
- * environment / trading_mode scope resolution over a real gRPC connection (feature 078).
+ * environment / user scope resolution over a real gRPC connection.
  *
- * ts-proto is generated with stringEnums=true, so a decoded request carries the string
- * constant ('ENVIRONMENT_PRODUCTION') rather than the wire number, and carries `tradingMode`
- * rather than `trading_mode`. The old code looked the string up in a numeric map and read a
- * snake_case field that never existed on the decoded message, so BOTH dimensions silently
- * collapsed to their zero-values: every request resolved to ('dev', 'all').
+ * Feature 078 origin: ts-proto is generated with stringEnums=true, so a decoded request carries the
+ * string constant ('ENVIRONMENT_PRODUCTION') rather than the wire number. The old code looked the
+ * string up in a numeric map, so environment silently collapsed to its zero-value. These assertions
+ * inspect the SQL parameters the handler actually binds, driven over a real connection.
  *
- * Consequences that made this worth its own fix:
- *   - every production config row was unreachable over the RPC
- *   - every WatchConfig subscriber got dev config regardless of what it asked for
- *   - SetConfig wrote dev rows even when told production
- *
- * These assertions inspect the SQL parameters the handler actually binds, driven over a real
- * connection, because the bug lives entirely in decoding the request.
+ * Feature 147: trading_mode is no longer a config axis (deprecated, ignored). Scope is now
+ * environment (production/staging) x user_id (global/per-user). ENVIRONMENT_DEV maps to 'staging'.
  */
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -26,18 +20,16 @@ import { createConfigServiceDefinition } from '../grpc/serviceDefinition';
 describe('scope resolution over a real gRPC connection', () => {
   let server: grpc.Server;
   let client: any;
-  let readParams: any[] | undefined;
+  let listParams: any[] | undefined;
   let writeParams: any[] | undefined;
 
   before(async () => {
     const pool: any = {
       query: async (sql: string, params?: any[]) => {
-        // Feature 091: the setConfig existence gate SELECTs before the upsert; this scope
-        // case writes to a registered key, so return a row so the gate passes (and don't let
-        // it clobber readParams, which the ListKeys cases assert on).
-        if (sql.includes('SELECT 1 FROM config.config_values')) return { rows: [{ '?column?': 1 }] };
+        // Existence gate (feature 147: reads is_secret); registered non-secret key.
+        if (sql.includes('SELECT is_secret FROM config.config_values')) return { rows: [{ is_secret: false }] };
         if (sql.includes('INSERT INTO config.config_values')) writeParams = params;
-        else if (sql.includes('WHERE namespace')) readParams = params;
+        else if (sql.includes('DISTINCT ON (key)')) listParams = params;
         return { rows: [] };
       },
       connect: async () => ({ query: async () => {}, on: () => {} }),
@@ -67,30 +59,27 @@ describe('scope resolution over a real gRPC connection', () => {
     );
   }
 
-  it('ListKeys honors production/live instead of collapsing to dev/all', async () => {
-    await listKeys({
-      namespace: 'marketdata',
-      environment: 'ENVIRONMENT_PRODUCTION',
-      tradingMode: 'TRADING_MODE_LIVE',
-    });
-    assert.equal(readParams?.[1], 'production', 'environment must not collapse to dev');
-    assert.equal(readParams?.[2], 'live', 'trading_mode must not collapse to all');
+  it('ListKeys honors production instead of collapsing to staging', async () => {
+    await listKeys({ namespace: 'marketdata', environment: 'ENVIRONMENT_PRODUCTION' });
+    // listKeys params: [namespace, environment, user_id]
+    assert.equal(listParams?.[1], 'production', 'environment must not collapse to staging');
+    assert.equal(listParams?.[2], '', 'user_id defaults to global (empty)');
   });
 
-  it('ListKeys honors dev/paper', async () => {
-    await listKeys({
-      namespace: 'marketdata',
-      environment: 'ENVIRONMENT_DEV',
-      tradingMode: 'TRADING_MODE_PAPER',
-    });
-    assert.equal(readParams?.[1], 'dev');
-    assert.equal(readParams?.[2], 'paper');
+  it('ListKeys maps the deprecated ENVIRONMENT_DEV to staging', async () => {
+    await listKeys({ namespace: 'marketdata', environment: 'ENVIRONMENT_DEV' });
+    assert.equal(listParams?.[1], 'staging');
   });
 
-  it('an unspecified scope still defaults to dev/all', async () => {
+  it('ListKeys honors an explicit per-user scope', async () => {
+    await listKeys({ namespace: 'portfolio', environment: 'ENVIRONMENT_PRODUCTION', userId: 'u-123' });
+    assert.equal(listParams?.[1], 'production');
+    assert.equal(listParams?.[2], 'u-123');
+  });
+
+  it('an unspecified environment defaults to staging', async () => {
     await listKeys({ namespace: 'marketdata' });
-    assert.equal(readParams?.[1], 'dev');
-    assert.equal(readParams?.[2], 'all');
+    assert.equal(listParams?.[1], 'staging');
   });
 
   it('SetConfig writes the production row it was told to write', async () => {
@@ -105,14 +94,14 @@ describe('scope resolution over a real gRPC connection', () => {
           author: 'tester',
           reason: 'scope test',
           environment: 'ENVIRONMENT_PRODUCTION',
-          tradingMode: 'TRADING_MODE_LIVE',
         },
         md,
         (e: any) => (e ? reject(e) : resolve()),
       ),
     );
-    // params order: [namespace, key, value_type, value_data, author, reason, env, mode]
-    assert.equal(writeParams?.[6], 'production', 'a production write must not land in dev');
-    assert.equal(writeParams?.[7], 'live');
+    // INSERT params: [namespace, key, value_type, value_data, value_encrypted, is_secret,
+    //                 updated_by, update_reason, environment, user_id, caller_identity]
+    assert.equal(writeParams?.[8], 'production', 'a production write must not land in staging');
+    assert.equal(writeParams?.[9], null, 'a global write must have a null user_id');
   });
 });

@@ -4,40 +4,41 @@ import {
   ADMIN_SCOPE_ERROR,
   HEADER_INTERNAL_CALLER,
   MISSING_AUTHOR_ERROR,
+  SECRET_SCOPE_ERROR,
   first,
   hasAdminAccessScope,
   hasInternalCallerAuthority,
+  hasSecretCallerAuthority,
   userIdFrom,
 } from './authz';
 import { ConfigUpdateType, ValueType } from '@xstockstrat/proto/config/v1/config';
-import { Environment, TradingMode } from '@xstockstrat/proto/common/v1/common';
+import { Environment } from '@xstockstrat/proto/common/v1/common';
+import { decryptSecret, encryptSecret } from '../crypto';
 
 const log = getLogger('config:impl');
 
-// Canonical string values matching DB CHECK constraints
-type EnvStr = 'dev' | 'production';
-type ModeStr = 'paper' | 'live' | 'all';
+// Redaction sentinel — the value_data stored for a secret row and the value served at every
+// broadcast/read edge (feature 147). Secret plaintext lives only in value_encrypted and is served
+// only via GetSecret. Kept in sync with the migration-017 seed sentinel.
+const REDACTED = '[redacted]';
 
-// Proto enum values (wire numbers from generated stubs)
-const ENV_MAP: Record<number, EnvStr> = { 0: 'dev', 1: 'dev', 2: 'production' };
-const MODE_MAP: Record<number, ModeStr> = { 0: 'all', 1: 'paper', 2: 'live' };
+// Canonical environment string values matching the DB CHECK constraint (feature 147:
+// dev/production -> staging/production). paper/live is derived from environment, not a config axis.
+type EnvStr = 'staging' | 'production';
+
+// Proto enum wire numbers (buf.gen.yaml stringEnums=true, so a decoded request usually carries the
+// string constant; the numeric map is the fallback). ENVIRONMENT_DEV(1) is deprecated and treated
+// as 'staging'; ENVIRONMENT_STAGING(3) is the new value.
+const ENV_MAP: Record<number, EnvStr> = { 0: 'staging', 1: 'staging', 2: 'production', 3: 'staging' };
 
 // Convert the internal snapshot representation to a ts-proto-compatible object that
-// ConfigSnapshot.encode() can serialize correctly. Handles both legacy snake_case fields
-// (update_type, changed_keys, trading_mode) and the camelCase fields used in current
-// storage (updateType, changedKeys, tradingMode). ts-proto expects camelCase keys and
-// the enum string constants (e.g. ConfigUpdateType.CONFIG_UPDATE_TYPE_SNAPSHOT).
+// ConfigSnapshot.encode() can serialize correctly. Handles both legacy snake_case (update_type,
+// changed_keys) and camelCase (updateType, changedKeys). Values are already redacted by
+// buildConfigValue, so no plaintext secret can be present here.
 function toProtoSnapPayload(snap: any, overrideUpdateType?: ConfigUpdateType): any {
   const env = snap.environment === 'production'
     ? Environment.ENVIRONMENT_PRODUCTION
-    : Environment.ENVIRONMENT_DEV;
-
-  const modeStr = snap.trading_mode ?? snap.tradingMode;
-  const mode = modeStr === 'live'
-    ? TradingMode.TRADING_MODE_LIVE
-    : modeStr === 'paper'
-    ? TradingMode.TRADING_MODE_PAPER
-    : TradingMode.TRADING_MODE_UNSPECIFIED;
+    : Environment.ENVIRONMENT_STAGING;
 
   const rawType = snap.update_type ?? snap.updateType ?? 1;
   const updateType = overrideUpdateType ?? (
@@ -48,7 +49,7 @@ function toProtoSnapPayload(snap: any, overrideUpdateType?: ConfigUpdateType): a
 
   // Convert snake_case ConfigValue fields to the camelCase fields ts-proto encodes.
   // isSecret is carried through deliberately: it is how a consumer knows a value must not be
-  // displayed. It used to be dropped here, so every key looked non-secret on the wire (feature 075).
+  // displayed. buildConfigValue already replaced any secret's value with the redaction sentinel.
   const values: Record<string, any> = {};
   for (const [k, v] of Object.entries(snap.values ?? {})) {
     const cv = v as any;
@@ -67,52 +68,37 @@ function toProtoSnapPayload(snap: any, overrideUpdateType?: ConfigUpdateType): a
     updateType,
     changedKeys: snap.changed_keys ?? snap.changedKeys ?? [],
     environment: env,
-    tradingMode: mode,
   };
 }
 
 /**
- * Resolve the request's environment/trading-mode scope.
- *
- * These accept BOTH shapes on purpose (feature 078). ts-proto is generated with
- * `stringEnums=true` (packages/proto/buf.gen.yaml), so a decoded request carries the string
- * constant ('ENVIRONMENT_PRODUCTION'), not the wire number — and it carries `tradingMode`,
- * not `trading_mode`. The previous implementation looked up a numeric map with a string key
- * and read a snake_case field that never existed on the decoded message, so BOTH dimensions
- * silently collapsed to their zero-values: every request resolved to ('dev', 'all').
- *
- * That made every production config row unreachable over the RPC and gave every WatchConfig
- * subscriber dev config regardless of what it asked for.
+ * Resolve the request's environment scope. Accepts BOTH the ts-proto string constant
+ * ('ENVIRONMENT_PRODUCTION') and the numeric wire value (feature 078 scar — decode both shapes or
+ * every request silently collapses to a zero-value). ENVIRONMENT_DEV and ENVIRONMENT_STAGING both
+ * map to the 'staging' DB scope (feature 147).
  */
 function resolveEnv(v: number | string | undefined): EnvStr {
   if (typeof v === 'string') {
-    return v === 'ENVIRONMENT_PRODUCTION' ? 'production' : 'dev';
+    return v === 'ENVIRONMENT_PRODUCTION' ? 'production' : 'staging';
   }
-  return ENV_MAP[v ?? 0] ?? 'dev';
-}
-function resolveMode(v: number | string | undefined): ModeStr {
-  if (typeof v === 'string') {
-    if (v === 'TRADING_MODE_LIVE') return 'live';
-    if (v === 'TRADING_MODE_PAPER') return 'paper';
-    return 'all';
-  }
-  return MODE_MAP[v ?? 0] ?? 'all';
+  return ENV_MAP[v ?? 0] ?? 'staging';
 }
 
-/** The trading-mode field as ts-proto delivers it (camelCase), falling back to the legacy name. */
-function requestMode(req: any): number | string | undefined {
-  return req?.tradingMode ?? req?.trading_mode;
+/** The user_id scope field as ts-proto delivers it (camelCase), falling back to snake_case. '' = global. */
+function requestUserId(req: any): string {
+  return (req?.userId ?? req?.user_id ?? '') as string;
 }
 
-// Snapshot cache key: "namespace:env:mode"
-function snapKey(ns: string, env: EnvStr, mode: ModeStr): string {
-  return `${ns}:${env}:${mode}`;
+// Snapshot cache key for the GLOBAL snapshot of a namespace/environment: "namespace:env".
+// Per-user overlays are resolved on demand from the DB, never cached here.
+function snapKey(ns: string, env: EnvStr): string {
+  return `${ns}:${env}`;
 }
 
 interface Subscriber {
   namespace: string;
   environment: EnvStr;
-  trading_mode: ModeStr;
+  userId: string; // '' = global subscriber
   clientId: string;
   call: any;
   lastVersion: string;
@@ -126,7 +112,7 @@ const WEIGHT_KEY_REGISTRY: Record<string, { minValue: number; maxValue: number }
 
 export class ConfigServiceImpl {
   private subscribers: Map<string, Subscriber> = new Map();
-  // snapKey → ConfigSnapshot (keyed by "namespace:env:mode")
+  // snapKey → global snapshot (keyed by "namespace:env")
   private snapshots: Map<string, any> = new Map();
 
   constructor(private readonly pool: Pool) {}
@@ -137,32 +123,28 @@ export class ConfigServiceImpl {
     await pgClient.query('LISTEN config_changed');
     pgClient.on('notification', async (msg: any) => {
       if (!msg.payload) return;
-      const { namespace, environment, trading_mode } = JSON.parse(msg.payload);
-      const env = (environment ?? 'dev') as EnvStr;
-      const mode = (trading_mode ?? 'all') as ModeStr;
-      await this.reloadNamespace(namespace, env, mode);
-      this.broadcastToSubscribers(namespace, env, mode);
+      const { namespace, environment } = JSON.parse(msg.payload);
+      const env = (environment ?? 'staging') as EnvStr;
+      await this.reloadNamespace(namespace, env);
+      await this.broadcastToSubscribers(namespace, env);
     });
     log.info('Config service initialised, listening for config_changed notifications');
   }
 
   private async reloadAll() {
+    // Only global rows (user_id IS NULL) populate the shared snapshot cache; per-user overrides are
+    // overlaid on demand at read/subscribe time.
     const result = await this.pool.query(
-      `SELECT namespace, key, value_type, value_data, is_secret, description, default_value,
-              environment, trading_mode
-       FROM config.config_values`
+      `SELECT namespace, key, value_type, value_data, is_secret, description, default_value, environment
+       FROM config.config_values
+       WHERE user_id IS NULL`
     );
-    // Group by snapKey; rows with trading_mode='all' merge into paper, live, and all buckets
     const byKey: Record<string, any> = {};
     for (const row of result.rows) {
       const env = row.environment as EnvStr;
-      const rowMode = row.trading_mode as ModeStr;
-      const modes: ModeStr[] = rowMode === 'all' ? ['paper', 'live', 'all'] : [rowMode];
-      for (const m of modes) {
-        const k = snapKey(row.namespace, env, m);
-        if (!byKey[k]) byKey[k] = { namespace: row.namespace, environment: env, trading_mode: m, values: {} };
-        byKey[k].values[row.key] = buildConfigValue(row);
-      }
+      const k = snapKey(row.namespace, env);
+      if (!byKey[k]) byKey[k] = { namespace: row.namespace, environment: env, values: {} };
+      byKey[k].values[row.key] = buildConfigValue(row);
     }
     for (const [k, entry] of Object.entries(byKey)) {
       this.snapshots.set(k, {
@@ -173,24 +155,22 @@ export class ConfigServiceImpl {
         updateType: 1, // SNAPSHOT
         changedKeys: [],
         environment: entry.environment,
-        tradingMode: entry.trading_mode,
       });
     }
   }
 
-  private async reloadNamespace(namespace: string, env: EnvStr, mode: ModeStr) {
-    // Load rows matching env + (exact mode OR 'all')
+  private async reloadNamespace(namespace: string, env: EnvStr) {
     const result = await this.pool.query(
-      `SELECT key, value_type, value_data, is_secret, description, default_value, environment, trading_mode
+      `SELECT key, value_type, value_data, is_secret, description, default_value, environment
        FROM config.config_values
-       WHERE namespace = $1 AND environment = $2 AND (trading_mode = $3 OR trading_mode = 'all')`,
-      [namespace, env, mode]
+       WHERE namespace = $1 AND environment = $2 AND user_id IS NULL`,
+      [namespace, env]
     );
     const values: Record<string, any> = {};
     for (const row of result.rows) {
       values[row.key] = buildConfigValue(row);
     }
-    this.snapshots.set(snapKey(namespace, env, mode), {
+    this.snapshots.set(snapKey(namespace, env), {
       namespace,
       version: Date.now().toString(),
       updatedAt: new Date(),
@@ -198,44 +178,76 @@ export class ConfigServiceImpl {
       updateType: 2, // DELTA
       changedKeys: Object.keys(values),
       environment: env,
-      tradingMode: mode,
     });
   }
 
-  private broadcastToSubscribers(namespace: string, env: EnvStr, mode: ModeStr) {
-    const snap = this.snapshots.get(snapKey(namespace, env, mode));
-    if (!snap) return;
-    const payload = toProtoSnapPayload(snap);
+  /**
+   * Build the effective values map for a caller: the global snapshot overlaid with the caller's
+   * per-user rows (feature 147, FR-9). Secrets are global-scope only and already redacted by
+   * buildConfigValue, so a per-user overlay never carries secret plaintext (AC-14). Returns a plain
+   * values map suitable for toProtoSnapPayload. userId '' returns the global snapshot values as-is.
+   */
+  private async resolveOverlayValues(namespace: string, env: EnvStr, userId: string): Promise<Record<string, any>> {
+    const global = this.snapshots.get(snapKey(namespace, env));
+    const base: Record<string, any> = { ...(global?.values ?? {}) };
+    if (!userId) return base;
+    const result = await this.pool.query(
+      `SELECT key, value_type, value_data, is_secret, description, default_value, environment
+       FROM config.config_values
+       WHERE namespace = $1 AND environment = $2 AND user_id = $3`,
+      [namespace, env, userId]
+    );
+    for (const row of result.rows) {
+      base[row.key] = buildConfigValue(row);
+    }
+    return base;
+  }
+
+  private async snapshotForSubscriber(sub: Subscriber, updateType: ConfigUpdateType): Promise<any> {
+    const global = this.snapshots.get(snapKey(sub.namespace, sub.environment));
+    const values = await this.resolveOverlayValues(sub.namespace, sub.environment, sub.userId);
+    return toProtoSnapPayload(
+      {
+        namespace: sub.namespace,
+        version: global?.version ?? '0',
+        values,
+        changedKeys: Object.keys(values),
+        environment: sub.environment,
+      },
+      updateType,
+    );
+  }
+
+  private async broadcastToSubscribers(namespace: string, env: EnvStr) {
     let count = 0;
     for (const [id, sub] of this.subscribers) {
-      if (sub.namespace === namespace && sub.environment === env && sub.trading_mode === mode) {
-        try {
-          sub.call.write(payload);
-          count++;
-        } catch (err) {
-          log.warn('Failed to write to subscriber', { clientId: sub.clientId });
-          this.subscribers.delete(id);
-        }
+      if (sub.namespace !== namespace || sub.environment !== env) continue;
+      try {
+        const payload = await this.snapshotForSubscriber(sub, ConfigUpdateType.CONFIG_UPDATE_TYPE_DELTA);
+        sub.call.write(payload);
+        count++;
+      } catch (err) {
+        log.warn('Failed to write to subscriber', { clientId: sub.clientId });
+        this.subscribers.delete(id);
       }
     }
-    log.info(`Broadcast config update namespace=${namespace} env=${env} mode=${mode} subscribers=${count}`);
+    log.info(`Broadcast config update namespace=${namespace} env=${env} subscribers=${count}`);
   }
 
   /**
    * WatchConfig — server-streaming RPC.
    * Sends initial SNAPSHOT immediately, then streams DELTA updates as config changes.
-   * All services call this at startup and maintain the stream indefinitely.
+   * A request may carry user_id to receive the per-user overlay (global overlaid with the user's
+   * own values); an empty user_id yields the global snapshot (the common case for services).
    */
   watchConfig(call: any) {
     const req = call.request;
     const env = resolveEnv(req.environment);
-    const mode = resolveMode(requestMode(req));
-    const subId = `${req.namespace}:${env}:${mode}:${req.client_id}:${Date.now()}`;
+    const userId = requestUserId(req);
+    const subId = `${req.namespace}:${env}:${userId}:${req.client_id}:${Date.now()}`;
 
-    log.info('New WatchConfig subscriber', { namespace: req.namespace, clientId: req.client_id, env, mode });
+    log.info('New WatchConfig subscriber', { namespace: req.namespace, clientId: req.client_id, env, userId });
 
-    // Register lifecycle handlers BEFORE the initial write so that any error
-    // emitted during serialization has a listener and does not crash the process.
     call.on('cancelled', () => {
       log.info('Subscriber disconnected', { subId });
       this.subscribers.delete(subId);
@@ -244,59 +256,83 @@ export class ConfigServiceImpl {
       this.subscribers.delete(subId);
     });
 
-    const k = snapKey(req.namespace, env, mode);
-    const snap = this.snapshots.get(k) ?? {
-      namespace: req.namespace,
-      version: '0',
-      updatedAt: new Date(),
-      values: {},
-      updateType: 1,
-      changedKeys: [],
-      environment: env,
-      tradingMode: mode,
-    };
-    call.write(toProtoSnapPayload(snap, ConfigUpdateType.CONFIG_UPDATE_TYPE_SNAPSHOT));
-
-    this.subscribers.set(subId, {
+    const sub: Subscriber = {
       namespace: req.namespace,
       environment: env,
-      trading_mode: mode,
+      userId,
       clientId: req.client_id,
       call,
-      lastVersion: snap.version,
-    });
+      lastVersion: '0',
+    };
+
+    this.snapshotForSubscriber(sub, ConfigUpdateType.CONFIG_UPDATE_TYPE_SNAPSHOT)
+      .then((payload) => {
+        call.write(payload);
+        this.subscribers.set(subId, sub);
+      })
+      .catch((err) => {
+        log.warn('Failed to send initial snapshot', { subId, error: err?.message });
+      });
   }
 
   async getConfig(call: any, callback: any) {
     const env = resolveEnv(call.request.environment);
-    const mode = resolveMode(requestMode(call.request));
-    const snap = this.snapshots.get(snapKey(call.request.namespace, env, mode));
-    if (!snap) {
-      callback(null, toProtoSnapPayload({
-        namespace: call.request.namespace,
-        version: '0',
-        values: {},
-        updateType: 1,
-        changedKeys: [],
-        environment: env,
-        tradingMode: mode,
-      }));
+    const userId = requestUserId(call.request);
+    const namespace = call.request.namespace;
+    const values = await this.resolveOverlayValues(namespace, env, userId);
+    const global = this.snapshots.get(snapKey(namespace, env));
+    callback(null, toProtoSnapPayload({
+      namespace,
+      version: global?.version ?? '0',
+      values,
+      changedKeys: [],
+      environment: env,
+    }));
+  }
+
+  /**
+   * GetSecret — resolve a secret's decrypted plaintext (feature 147). Gated to allow-listed
+   * internal callers (x-internal-caller). Distinguishes an unset secret (row absent OR ciphertext
+   * NULL → found=false) from a decrypt failure (INTERNAL, never a partial value). Secrets are
+   * global-scope only, so this reads the user_id IS NULL row.
+   */
+  async getSecret(call: any, callback: any) {
+    const { namespace, key } = call.request;
+    if (!hasSecretCallerAuthority(call.metadata, namespace, key)) {
+      log.warn('GetSecret denied — caller not on the secret allow-list', { namespace, key });
+      callback(SECRET_SCOPE_ERROR);
       return;
     }
-    callback(null, toProtoSnapPayload(snap));
+    const env = resolveEnv(call.request.environment);
+    try {
+      const result = await this.pool.query(
+        `SELECT value_encrypted FROM config.config_values
+         WHERE namespace = $1 AND key = $2 AND environment = $3 AND user_id IS NULL LIMIT 1`,
+        [namespace, key, env]
+      );
+      const ciphertext: Buffer | null = result.rows[0]?.value_encrypted ?? null;
+      if (!ciphertext || ciphertext.length === 0) {
+        // Unset secret (never written, or seeded with NULL ciphertext).
+        callback(null, { value: '', found: false });
+        return;
+      }
+      let plaintext: string;
+      try {
+        plaintext = decryptSecret(ciphertext);
+      } catch (err: any) {
+        // A decrypt failure (wrong master key / corruption) must NOT masquerade as "unset".
+        log.error('GetSecret decrypt failed', { namespace, key, env });
+        callback({ code: 13 /* INTERNAL */, message: 'secret decrypt failed' });
+        return;
+      }
+      callback(null, { value: plaintext, found: true });
+    } catch (err: any) {
+      callback({ code: 13, message: err.message });
+    }
   }
 
   async setConfig(call: any, callback: any) {
-    // Admin gate FIRST — before any destructure or DB work — so a denied call reaches
-    // neither the INSERT below nor the pg_notify broadcast that follows it.
-    // Reads (GetConfig/ListKeys/WatchConfig) are deliberately NOT gated: every service
-    // boots over an unauthenticated WatchConfig whose first message is a full namespace
-    // snapshot, so gating GetConfig without WatchConfig would be incoherent and gating
-    // WatchConfig would break platform startup. See feature 074 design.md.
-    // Feature 102: an admin write OR an internal-caller-authorized write is accepted —
-    // additive, not a replacement (humans via config-ui are unaffected). The internal-caller
-    // channel is structurally separate from x-access-scope (see authz.ts's HEADER_INTERNAL_CALLER
-    // doc comment) and direction-restricted per-grant (e.g. never toward 'ACTIVE').
+    // Admin gate FIRST (feature 074/102) — an admin write OR an internal-caller-authorized write.
     const rawValue = call.request?.value?.string_val ?? call.request?.value?.stringVal ?? '';
     const internalCallerAuthorized = hasInternalCallerAuthority(
       call.metadata,
@@ -316,21 +352,16 @@ export class ConfigServiceImpl {
 
     const { namespace, key, value, reason } = call.request;
     const env = resolveEnv(call.request.environment);
-    const mode = resolveMode(requestMode(call.request));
+    const userId = requestUserId(call.request); // '' = global
+    const userIdParam = userId === '' ? null : userId;
 
-    // Attribution: an explicit author wins, else the propagated caller id. Matches the
-    // indicators servicer (request.author wins, x-user-id is the fallback). Refuse an
-    // unattributable write rather than landing a blank `updated_by` in config_audit.
     const author = call.request.author || userIdFrom(call.metadata);
     if (!author) {
       callback(MISSING_AUTHOR_ERROR);
       return;
     }
 
-    // Feature 100: platform.trading_state is a closed 3-literal string enum (C-04 deferred to
-    // a future proto enum once a second consumer exists — see design.md). Reject any write
-    // outside the known literals so a stale/typo'd caller can't mint a value the trading-side
-    // gate would otherwise read as an unrecognized-hence-HALTED string with no server-side signal.
+    // Feature 100: platform.trading_state is a closed 3-literal string enum.
     if (namespace === 'platform' && key === 'trading_state') {
       const raw = value?.string_val ?? value?.stringVal ?? '';
       const ALLOWED = ['ACTIVE', 'REDUCE_ONLY', 'HALTED'];
@@ -343,42 +374,66 @@ export class ConfigServiceImpl {
       }
     }
 
-    // Feature 091: existence gate. A write to a not-yet-registered (namespace,key,env,mode)
-    // scope is refused with NOT_FOUND unless the caller explicitly opts in with create_key —
-    // so a typo can't silently mint an orphan row no service reads. The SELECT is scoped
-    // EXACT to the upsert's ON CONFLICT key (namespace,key,environment,trading_mode); it must
-    // NOT broaden to `OR trading_mode='all'`, since the read paths resolve (mode OR 'all')
-    // with no precedence — a mode-broadening gate would let a per-mode write "find" an 'all'
-    // row and then INSERT a distinct mode-exact row, a nondeterministic read-shadow.
-    // ts-proto decodes the wire field as camelCase `createKey`; read snake_case too defensively.
+    // Feature 091 existence gate + feature 147 row-authoritative is_secret: read the exact-scope
+    // row's is_secret so encryption is decided by the STORED flag, never a request field (a request
+    // that omitted is_secret on a secret key must still encrypt — never land plaintext in value_data).
     const createKey = call.request.createKey ?? call.request.create_key ?? false;
     const existing = await this.pool.query(
-      `SELECT 1 FROM config.config_values
-       WHERE namespace = $1 AND key = $2 AND environment = $3 AND trading_mode = $4 LIMIT 1`,
-      [namespace, key, env, mode]
+      `SELECT is_secret FROM config.config_values
+       WHERE namespace = $1 AND key = $2 AND environment = $3 AND COALESCE(user_id,'') = COALESCE($4,'') LIMIT 1`,
+      [namespace, key, env, userIdParam]
     );
     if (existing.rows.length === 0 && !createKey) {
       callback({
         code: 5, // NOT_FOUND
-        message: `config key not registered: ${namespace}.${key} (env=${env}, mode=${mode}); pass create_key=true to register it`,
+        message: `config key not registered: ${namespace}.${key} (env=${env}, user=${userId || 'global'}); pass create_key=true to register it`,
       });
       return;
     }
 
+    // Row-authoritative secret flag: existing row's flag wins; on create, honor the request flag.
+    const requestIsSecret = (value?.is_secret ?? value?.isSecret) === true;
+    const isSecret = existing.rows.length > 0 ? existing.rows[0].is_secret === true : requestIsSecret;
+
+    // Secrets are global-scope only (feature 147). Reject a per-user secret write.
+    if (isSecret && userIdParam !== null) {
+      callback({ code: 3, message: 'secret keys are global-scope only; per-user secret overrides are not supported' });
+      return;
+    }
+
+    const plaintext = extractValueData(value);
+    let valueData: string;
+    let valueEncrypted: Buffer | null;
+    if (isSecret) {
+      try {
+        valueEncrypted = encryptSecret(plaintext);
+      } catch (err: any) {
+        callback({ code: 13, message: `secret encryption failed: ${err.message}` });
+        return;
+      }
+      valueData = REDACTED; // the sentinel is what audit + every read edge sees
+    } else {
+      valueData = plaintext;
+      valueEncrypted = null;
+    }
+
     try {
       await this.pool.query(
-        `INSERT INTO config.config_values (namespace, key, value_type, value_data, updated_by, update_reason, environment, trading_mode, caller_identity)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         ON CONFLICT (namespace, key, environment, trading_mode) DO UPDATE
+        `INSERT INTO config.config_values
+           (namespace, key, value_type, value_data, value_encrypted, is_secret, updated_by, update_reason, environment, user_id, caller_identity)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO UPDATE
            SET value_data = EXCLUDED.value_data,
+               value_encrypted = EXCLUDED.value_encrypted,
+               is_secret = EXCLUDED.is_secret,
                updated_by = EXCLUDED.updated_by,
                update_reason = EXCLUDED.update_reason,
                caller_identity = EXCLUDED.caller_identity,
                updated_at = NOW()`,
-        [namespace, key, inferValueType(value), extractValueData(value), author, reason, env, mode, callerIdentity]
+        [namespace, key, inferValueType(value), valueData, valueEncrypted, isSecret, author, reason, env, userIdParam, callerIdentity]
       );
       await this.pool.query(`SELECT pg_notify('config_changed', $1)`, [
-        JSON.stringify({ namespace, key, environment: env, trading_mode: mode }),
+        JSON.stringify({ namespace, key, environment: env, user_id: userId || null }),
       ]);
       const version = Date.now().toString();
       callback(null, { version, updatedAt: new Date() });
@@ -389,55 +444,35 @@ export class ConfigServiceImpl {
 
   async listKeys(call: any, callback: any) {
     const env = resolveEnv(call.request.environment);
-    const mode = resolveMode(requestMode(call.request));
+    const userId = requestUserId(call.request);
     try {
+      // Global keys, overlaid with the caller's per-user rows when user_id is set (per-user row
+      // wins over the global row for the same key).
       const result = await this.pool.query(
-        `SELECT key, description, default_value, value_data, is_secret, consuming_service, environment, trading_mode
+        `SELECT DISTINCT ON (key)
+                key, description, default_value, value_data, is_secret, consuming_service, environment
          FROM config.config_values
-         WHERE namespace = $1 AND environment = $2 AND (trading_mode = $3 OR trading_mode = 'all')`,
-        [call.request.namespace, env, mode]
+         WHERE namespace = $1 AND environment = $2 AND (user_id IS NULL OR user_id = $3)
+         ORDER BY key, (user_id = $3) DESC NULLS LAST`,
+        [call.request.namespace, env, userId]
       );
-      // A key can have both a trading_mode='all' row and a mode-exact shadow row for the same
-      // (namespace, key, environment) scope — see the setConfig existence-gate comment above.
-      // The WHERE clause above matches both, so resolve to one row per key here, preferring the
-      // mode-exact row over 'all', instead of surfacing the same key twice to callers.
-      const byKey = new Map<string, (typeof result.rows)[number]>();
-      for (const row of result.rows) {
-        const existing = byKey.get(row.key);
-        if (!existing || (row.trading_mode !== 'all' && existing.trading_mode === 'all')) {
-          byKey.set(row.key, row);
-        }
-      }
       callback(null, {
-        keys: Array.from(byKey.values()).map((r) => {
+        keys: result.rows.map((r) => {
           const weightBounds = WEIGHT_KEY_REGISTRY[r.key];
-          // ts-proto encodes camelCase field names and (buf.gen.yaml stringEnums=true)
-          // string enum constants. Emitting snake_case/numeric here meant ConfigKeyMeta.encode()
-          // read undefined for every one of these and wrote proto defaults, so the client saw
-          // isSecret=false, empty defaultValue/consumingService and UNRECOGNIZED enums on every
-          // key. Same defect toProtoSnapPayload fixes for ConfigSnapshot (feature 077).
+          const secret = r.is_secret === true;
           return {
             key: r.key,
             description: r.description ?? '',
             defaultValue: r.default_value ?? '',
-            // CONFIG-2: default_value is seed metadata only, never the live value — this is
-            // the row's actual value_data, what SetConfig writes and WatchConfig/GetConfig
-            // serve. config-ui's "Value" column and edit-prefill must read this, not defaultValue,
-            // or a save always appears to silently revert (the DB write succeeds; the display
-            // just keeps showing the unrelated seed default).
-            currentValue: r.value_data ?? '',
-            isSecret: r.is_secret === true,
+            // Secret rows never expose their value at this edge — the sentinel, not value_data
+            // (which is already the sentinel, but redact defensively).
+            currentValue: secret ? REDACTED : (r.value_data ?? ''),
+            isSecret: secret,
             consumingService: r.consuming_service ?? '',
             environment:
               r.environment === 'production'
                 ? Environment.ENVIRONMENT_PRODUCTION
-                : Environment.ENVIRONMENT_DEV,
-            tradingMode:
-              r.trading_mode === 'live'
-                ? TradingMode.TRADING_MODE_LIVE
-                : r.trading_mode === 'paper'
-                  ? TradingMode.TRADING_MODE_PAPER
-                  : TradingMode.TRADING_MODE_UNSPECIFIED,
+                : Environment.ENVIRONMENT_STAGING,
             validation: weightBounds
               ? {
                   valueType: ValueType.VALUE_TYPE_FLOAT_MAP,
@@ -455,24 +490,25 @@ export class ConfigServiceImpl {
 }
 
 function buildConfigValue(row: any): any {
-  // is_secret must ride along: ConfigValue.is_secret is the field consumers use to decide
-  // whether a value may be displayed. It was previously dropped here, so GetConfig and
-  // WatchConfig reported is_secret=false for every key including secret.* ones (feature 075).
+  // Redaction choke point (feature 147): a secret row never yields its value here, so plaintext
+  // never enters the in-memory broadcast cache or any snapshot. is_secret rides along so consumers
+  // know the value must not be displayed and must be resolved via GetSecret.
   const secret = row.is_secret === true;
+  if (secret) {
+    return { string_val: REDACTED, is_secret: true };
+  }
   switch (row.value_type) {
-    case 'int':     return { int_val: parseInt(row.value_data, 10), is_secret: secret };
-    case 'float':   return { float_val: parseFloat(row.value_data), is_secret: secret };
-    case 'bool':    return { bool_val: row.value_data === 'true', is_secret: secret };
+    case 'int':     return { int_val: parseInt(row.value_data, 10), is_secret: false };
+    case 'float':   return { float_val: parseFloat(row.value_data), is_secret: false };
+    case 'bool':    return { bool_val: row.value_data === 'true', is_secret: false };
     case 'string':
-    default:        return { string_val: row.value_data, is_secret: secret };
+    default:        return { string_val: row.value_data, is_secret: false };
   }
 }
 
 /**
- * Classify an inbound ConfigValue. ts-proto delivers camelCase fields over the wire
- * (stringVal/intVal/...), while the DB and the seed migrations use snake_case; accept both
- * so a write is typed correctly whichever shape the caller used. Previously this tested only
- * snake_case against a camelCase request, so every write was recorded as 'string' (feature 075).
+ * Classify an inbound ConfigValue. ts-proto delivers camelCase fields over the wire; accept both
+ * camelCase and snake_case so a write is typed correctly whichever shape the caller used.
  */
 function inferValueType(v: any): string {
   if (v == null) return 'string';
@@ -485,10 +521,8 @@ function inferValueType(v: any): string {
 }
 
 /**
- * Extract the bare scalar a ConfigValue carries, for storage in config_values.value_data.
- * The column holds bare scalars (that is what the seed migrations write and what
- * buildConfigValue parses back). Previously setConfig stored JSON.stringify(value) -- the whole
- * message -- so a write of "abc" round-tripped as the literal {"stringVal":"abc"} (feature 075).
+ * Extract the bare scalar a ConfigValue carries, for storage in config_values.value_data (or, for
+ * a secret, for encryption into value_encrypted before value_data is overwritten with the sentinel).
  */
 function extractValueData(v: any): string {
   if (v == null) return '';
