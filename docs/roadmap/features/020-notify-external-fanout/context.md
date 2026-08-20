@@ -186,3 +186,22 @@ as 127). Node/TS notify service — no proto/codegen.
   makeImpl + 4 direct constructors for the new 3rd arg. 37 tests pass, lint 0 errors.
 
 **Next:** Step 6 (deploy pipeline secrets), Step 7 (docs + context-scrubber).
+
+### Step 6 — deploy pipeline credentials [done]
+- SLACK_WEBHOOK_URL / SENDGRID_API_KEY (`type: SECRET`) wired through the full 8-file surface:
+  docker-compose.yml, .do/app.yaml (prod), .do/app.dev.yaml (dev), deploy.yml (workflow_call
+  secrets + substitute env + 4 content.replace lines), deploy-dev.yml, deploy-prod.yml, prod-up.yml,
+  scripts/do-inject-prod-secrets.py (OPTIONAL_PLACEHOLDER_KEYS). Both optional. Parity greps + yaml
+  + python syntax verified.
+
+### Step 7 — docs [done]
+- notify CLAUDE.md (5 config keys + 2 SECRET env vars + fanout narrative; min_severity WARNING
+  caveat), config-governance.md (feature-020 registered-keys block), digitalocean.md (Slack/SendGrid
+  secrets subsection + 4 GitHub Actions table rows), product-spec.md (full-pipeline note under Env
+  Var Changes).
+- **context-scrubber:** the context-forge plugin is NOT available in this session (not in the
+  SessionStart skills list), so `/context-scrubber scan` could not be run — noted here and in the PR
+  body per the root CLAUDE.md Teardown rule (say so rather than skip silently).
+
+## Session 2026-08-20 — sdd-execute — feature 020 COMPLETE
+All 7 steps done. status.md → code-completed.

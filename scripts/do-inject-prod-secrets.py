@@ -36,9 +36,13 @@ PLACEHOLDER_KEYS = (
     ("YOUR_PROD_CONFIG_SECRETS_ENCRYPTION_KEY", "CONFIG_SECRETS_ENCRYPTION_KEY"),
 )
 
-# No optional placeholders remain (feature 147 moved the vendor credentials into
-# encrypted config).
-OPTIONAL_PLACEHOLDER_KEYS = ()
+# Optional placeholder token -> env var name; off until set, so an unset key is a valid state
+# (no warning if empty). Feature 147 moved the data-source vendor credentials into encrypted config;
+# the notify fanout secrets (feature 020) remain app-level type: SECRET env vars.
+OPTIONAL_PLACEHOLDER_KEYS = (
+    ("YOUR_PROD_SLACK_WEBHOOK_URL", "SLACK_WEBHOOK_URL"),
+    ("YOUR_PROD_SENDGRID_API_KEY", "SENDGRID_API_KEY"),
+)
 
 
 def main():

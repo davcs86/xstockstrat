@@ -46,6 +46,9 @@ jobs:
           BROKER_ACCOUNTS_ENCRYPTION_KEY: ${{ secrets.PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY }}
           # Feature 147: config-secrets master key replaces the vendor keys + MCP_AGENT_SECRET here.
           CONFIG_SECRETS_ENCRYPTION_KEY: ${{ secrets.PROD_CONFIG_SECRETS_ENCRYPTION_KEY }}
+          # Feature 020: app-level notify fanout secrets (optional; off until set).
+          SLACK_WEBHOOK_URL: ${{ secrets.PROD_SLACK_WEBHOOK_URL }}
+          SENDGRID_API_KEY: ${{ secrets.PROD_SENDGRID_API_KEY }}
         run: |
           sed \
             -e "s|YOUR_GITHUB_ORG|${{ github.repository_owner }}|g" \

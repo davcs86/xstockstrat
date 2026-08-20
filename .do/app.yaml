@@ -391,6 +391,14 @@ services:
         value: "1"
       - key: SERVICE_NAME
         value: notify
+      - key: SLACK_WEBHOOK_URL
+        scope: RUN_TIME
+        value: YOUR_PROD_SLACK_WEBHOOK_URL
+        type: SECRET
+      - key: SENDGRID_API_KEY
+        scope: RUN_TIME
+        value: YOUR_PROD_SENDGRID_API_KEY
+        type: SECRET
 
   - name: xstockstrat-config
     image:

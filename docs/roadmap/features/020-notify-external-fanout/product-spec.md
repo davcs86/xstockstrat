@@ -72,6 +72,12 @@ block in `docker-compose.yml`, `.do/app.yaml`, and `.do/app.dev.yaml`:
 - `SLACK_WEBHOOK_URL` (`type: SECRET`) — Slack incoming webhook URL. Unset/empty ⇒ the Slack channel is disabled.
 - `SENDGRID_API_KEY` (`type: SECRET`) — SendGrid API key. Unset/empty ⇒ the email channel is disabled.
 
+> **Implemented (feature 020, Step 6):** both credentials are wired through the **full** eight-file
+> pipeline surface — `docker-compose.yml`, `.do/app.yaml`, `.do/app.dev.yaml`, the four deploy
+> workflows (`deploy.yml`/`deploy-dev.yml`/`deploy-prod.yml`/`prod-up.yml`), and
+> `scripts/do-inject-prod-secrets.py` — not just the three `.do`/compose specs (the
+> config-governance feature-129 defect of wiring "only 3 of 8" is avoided).
+
 ## Database Changes
 
 - [ ] No schema changes

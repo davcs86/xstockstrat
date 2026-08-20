@@ -123,6 +123,24 @@ environment); config is scoped by `environment` (`production`/`staging`) × glob
 | `marketdata.fmp.api_key` | secret | _(NULL until set)_ | FMP fundamentals API key. `is_secret`, encrypted at rest; resolved via `GetSecret`. |
 | `marketdata.finnhub.api_key` | secret | _(NULL until set)_ | Finnhub fundamentals API key. `is_secret`, encrypted at rest; resolved via `GetSecret`. |
 
+### feature 020 — notify-external-fanout (`xstockstrat-notify`)
+
+Adds a best-effort external alert fanout (Slack incoming webhook + SendGrid v3) as a side-channel on
+`EmitAlert`. The five keys below are the gate/dedup/email knobs, seeded by config migration `018` for
+`dev`+`production` (global scope — the `trading_mode` axis was removed by feature 147). The two
+credentials (`SLACK_WEBHOOK_URL`, `SENDGRID_API_KEY`) are **not** config keys — they are app-level
+`type: SECRET` deploy-pipeline env vars (like `JWT_SECRET`), distinct from the data-source vendor
+credentials feature 147 moved into encrypted config. `min_severity`'s default `2` (WARNING)
+deliberately excludes INFO fill confirmations; an operator lowers it to `1` to fan those out.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `notify.fanout.min_severity` | int | `2` | Minimum `AlertSeverity` ordinal (0–4, clamped) to fan out; default 2 (WARNING) excludes INFO fills |
+| `notify.fanout.min_confidence_threshold` | float | `0.7` | Minimum `context.conviction` to fan out, applied only when conviction is present (else severity-only) |
+| `notify.fanout.dedup_window_seconds` | int | `300` | Suppress a byte-identical alert within this content-hash window |
+| `notify.fanout.sendgrid_from_email` | string | `''` | Fanout email sender; email disabled until from/to set and `SENDGRID_API_KEY` present |
+| `notify.fanout.sendgrid_to_email` | string | `''` | Fanout email recipient; same enable condition |
+
 ### feature 141 — fix-opportunities-bars-fetch-oom (`xstockstrat-analysis`)
 
 Adds one process-lifetime singleton semaphore key bounding cross-request concurrency of

@@ -1,6 +1,6 @@
 # Implementation Spec: notify-external-fanout
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-08-20
 **Feature**: `docs/roadmap/features/020-notify-external-fanout/feature.md`
 **Total Steps**: 7
@@ -386,7 +386,7 @@ All cases pass, c8 `--lines 40` holds. RED before Step 4, GREEN after.
 
 ### Step 6 — service: wire `SLACK_WEBHOOK_URL` + `SENDGRID_API_KEY` (`type: SECRET`) through the deploy pipeline
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `docker-compose.yml` — modify
@@ -468,7 +468,7 @@ table (Step 7). Parity across the three deploy specs is the C-10 check (ledger: 
 
 ### Step 7 — docs: notify CLAUDE.md, config-governance log, digitalocean secrets, product-spec note; context-scrubber
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs`
 **Files**:
 - `services/xstockstrat-notify/CLAUDE.md` — modify

@@ -49,6 +49,8 @@ jobs:
       BROKER_ACCOUNTS_ENCRYPTION_KEY: ${{ secrets.DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY }}
       JWT_SECRET: ${{ secrets.DEV_JWT_SECRET }}
       CONFIG_SECRETS_ENCRYPTION_KEY: ${{ secrets.DEV_CONFIG_SECRETS_ENCRYPTION_KEY }}
+      SLACK_WEBHOOK_URL: ${{ secrets.DEV_SLACK_WEBHOOK_URL }}
+      SENDGRID_API_KEY: ${{ secrets.DEV_SENDGRID_API_KEY }}
     with:
       app_spec: .do/app.dev.yaml
       image_tag: ${{ needs.prepare.outputs.short_sha }}
