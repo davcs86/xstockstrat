@@ -67,3 +67,36 @@ invariant (agent `context-constitution.md:21`) is rewritten.
   re-base on `JWT_SECRET`).
 - Per-user scope key sentinel for the unique constraint (NULL vs `''` vs a literal `*`).
 - `trading_mode`-row collapse winner rule (FR-10).
+
+## Session 2026-08-20 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: config, marketdata, agent, ui, + all WatchConfig client
+  edges). Key reuse patterns: trading's AES-256-GCM helper (`account_repo.go:217`), the feature-102
+  internal-caller allow-list (`authz.ts`), redaction-on-read already wired at the agent/ui edges,
+  deprecate-don't-delete (`common.proto` Timeframe).
+- Phase 1 Grilling: 1 round (quick). Proposer → adversary (**NEEDS WORK**, no Floor breach). Chosen
+  approach: `value_encrypted BYTEA` + `[redacted]` sentinel double-guard, redaction at
+  `buildConfigValue`, `GetSecret` + `SECRET_CALLER_ALLOWLIST`, env×user_id scope with a deterministic
+  `trading_mode`-collapse migration. Rejected: base64-in-value_data; a fatal Alpaca guard;
+  GetSecret-sourced OAuth key; per-user overlay cut from WatchConfig.
+- **Adversary fixes folded in:** `is_secret` row-authoritative on write; `value_encrypted` never in
+  broadcast SELECTs; migration 017 rewrites both audit triggers + alters `config_audit`; GetSecret
+  distinguishes NULL-ciphertext (`found=false`) from decrypt-failure (`INTERNAL`); premigration
+  snapshot table for a faithful down; MCP_AGENT_SECRET removal gates on operative symbols (docs may
+  name it); JWT_SECRET fail-fast-if-unset + txn-only; security ACs RED-before-GREEN non-zero-assertion
+  (074 trap); `ENVIRONMENT_STAGING` handled in both the string branch and numeric ENV_MAP (078 scar).
+- **Operator gate (2026-08-20):** kept per-user resolution on **both** GetConfig and WatchConfig
+  (declined the recommended GetConfig-only narrowing). Added AC-13/AC-14 to test the WatchConfig
+  overlay + its redaction-safety; overlay composed from redacted values, secrets global-only.
+- **Verified factual assumptions:** the 4 vendor env vars are read **only** by marketdata
+  (`config.go:43-52`); Alpaca empty-credential behavior is **warn-and-start**, not fatal
+  (`main.go:85-95`) — corrected FR-6/AC-7.
+- Constitution rules touched: C-05/Rule-6 (overridden, sign-off), F-07, C-04, C-09, C-07/F-01,
+  C-08/P-06, C-10, C-14, F-06. Floor breaches: none.
+- Status: draft → design-approved.
+
+### Open Threads
+- WatchConfig per-user overlay redaction-safety + cache growth → config service step + test step.
+- Migration 017 lossy down (mitigated by premigration table) → migration step.
+- Post-deploy: operator sets real vendor creds via SetConfig (seed ciphertext NULL) → docs step.
+- JWT_SECRET agent blast radius → accepted/recorded, no further action.

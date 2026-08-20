@@ -6,10 +6,34 @@ Feature: config-secrets-and-scoping
   @AC-1 @FR-1 @FR-4
   Scenario: A secret written via SetConfig is persisted encrypted, not plaintext
     Given the config service holds the master key "CONFIG_SECRETS_ENCRYPTION_KEY"
-    And an admin caller writes SetConfig for key "marketdata.fmp.api_key" with is_secret=true and plaintext value "fmp-live-abc123"
+    And the key "marketdata.fmp.api_key" is registered with is_secret=true in the database
+    And an admin caller writes SetConfig for "marketdata.fmp.api_key" with plaintext value "fmp-live-abc123"
     When the row is read directly from config.config_values in the database
-    Then the stored ciphertext column does not contain the substring "fmp-live-abc123"
-    And decrypting the ciphertext with the master key yields exactly "fmp-live-abc123"
+    Then the value_encrypted column ciphertext does not contain the substring "fmp-live-abc123"
+    And the value_data column holds the sentinel "[redacted]", not "fmp-live-abc123"
+    And decrypting value_encrypted with the master key yields exactly "fmp-live-abc123"
+
+  @AC-1b @FR-1 @FR-4
+  Scenario: is_secret is row-authoritative on write, never trusted from the request
+    Given the key "marketdata.fmp.api_key" is registered with is_secret=true in the database
+    And an admin caller writes SetConfig for "marketdata.fmp.api_key" with plaintext "fmp-new-xyz" and no is_secret flag on the request
+    When the row is read directly from config.config_values
+    Then value_data still holds "[redacted]" and value_encrypted still decrypts to "fmp-new-xyz"
+    And no WatchConfig subscriber ever received the plaintext "fmp-new-xyz"
+
+  @AC-13 @FR-9
+  Scenario: A per-user override reaches a WatchConfig subscriber through the overlay
+    Given global "portfolio.watchlist.max_per_user" = 50 in environment "production"
+    And a per-user value of 200 for user "u-123" for the same key and environment
+    When a subscriber watches namespace "portfolio" in environment "production" with user_id "u-123"
+    Then its snapshot resolves "portfolio.watchlist.max_per_user" to 200
+    And a subscriber watching the same namespace with no user_id resolves it to 50
+
+  @AC-14 @FR-2 @FR-9
+  Scenario: A secret stays redacted even inside a per-user WatchConfig overlay
+    Given "marketdata.alpaca.api_key" is stored as a global encrypted secret with plaintext "alpaca-key-xyz"
+    When a subscriber watches namespace "marketdata" in environment "production" with user_id "u-123"
+    Then the overlaid snapshot value for "marketdata.alpaca.api_key" carries the redaction sentinel, not "alpaca-key-xyz"
 
   @AC-2 @FR-2
   Scenario: WatchConfig never streams secret plaintext
@@ -38,6 +62,15 @@ Feature: config-secrets-and-scoping
     When a caller without an allow-listed x-internal-caller grant calls GetSecret for "marketdata.fmp.api_key"
     Then the call is rejected with PERMISSION_DENIED
     And no plaintext is returned
+
+  @AC-16 @FR-3
+  Scenario: GetSecret distinguishes an unset secret from a decrypt failure
+    Given "marketdata.fmp.api_key" is registered but its ciphertext is NULL (never set)
+    When an allow-listed caller calls GetSecret for "marketdata.fmp.api_key"
+    Then the response has found=false and an empty value
+    But given a row whose ciphertext cannot be decrypted with the current master key
+    When an allow-listed caller calls GetSecret for that key
+    Then the call is rejected with INTERNAL and no partial plaintext is returned
 
   @AC-6 @FR-5
   Scenario: marketdata resolves a vendor credential from config, not the env var

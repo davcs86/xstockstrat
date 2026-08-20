@@ -1969,3 +1969,18 @@ reusing.
 - **Pattern**: fix a shared-SQL ambiguity at the *source fragment* (alias the projected column once — `updated_at AS intent_updated_at` on the shared `intentLateralJoinSQL` const) rather than at each consumer SELECT — a single-site rename forecloses the bug class for future callers, vs. N-site qualification any new caller can forget.
 - **Evidence**: `docs/roadmap/features/140-fix-listorders-ambiguous-updated-at/context.md` § Archive Synthesis; `services/xstockstrat-trading/internal/repository/trading_repo.go`.
 - **Rule it implies**: when a shared query fragment projects a column whose name can collide in a joined range, alias it at the fragment, not the call sites.
+
+### 2026-08-20 — config-secrets-and-scoping — design
+- **Pattern**: to store a secret safely inside a broadcast/streamed config table, three guards are
+  jointly necessary — (1) redact at the **single row→message choke point** so plaintext never enters
+  the in-memory broadcast cache, (2) keep the ciphertext column **out of every broadcast/reload/list
+  SELECT** (only a dedicated authenticated resolver RPC loads it), and (3) make `is_secret`
+  **row-authoritative on write** (read the stored flag, never trust the request), so an admin update
+  that omits the flag can't land plaintext. Any one missing → the exact plaintext-in-broadcast leak
+  feature 076 banned. Also: a secret-resolver RPC must distinguish "unset" (found=false) from
+  "decrypt failed" (INTERNAL) — collapsing them makes a key mismatch look like an empty credential.
+- **Evidence**: `docs/roadmap/features/147-config-secrets-and-scoping/design.md` §1–2;
+  `services/xstockstrat-config/src/grpc/configServiceImpl.ts:457` (buildConfigValue choke point);
+  reuses `services/xstockstrat-trading/internal/repository/account_repo.go:217` AES-256-GCM.
+- **Rule it implies**: reverses the "no secrets in config" ban (Rule 6 / C-05) **only** when all three
+  guards + the distinct-failure resolver are present and the override is sign-off-recorded in context.md.
