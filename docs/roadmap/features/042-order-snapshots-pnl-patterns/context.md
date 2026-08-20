@@ -164,3 +164,39 @@
   unbounded — v1 no retention (documented); snapshot retention must be POSITION-LIFECYCLE-keyed, never
   time-keyed (a wall-clock policy would drop a still-open long-held position's snapshots).
 - **User chose to RUN ANOTHER ROUND (round 4)** rather than approve at round 3.
+
+## Session 2026-08-19 — sdd-design (Phase 1 round 4 — ACCEPT-WITH-RISKS)
+
+- Round 4 hardened the design (proposer relaunched after the first attempt stopped). Round-4
+  adversary verdict **ACCEPT-WITH-RISKS, no Floor breach** — core mechanics hold under code
+  verification (the `applyFill` reduce branch `portfolio_service.go:529-548` is a pure function of
+  `(qty,costBasis,fillQty,fillPrice)`, extractable behavior-preserving; pure-reduce cost-basis math is
+  byte-identical live-path vs GetPnL; portfolio migration 010 / analysis 016 confirmed next-free
+  locally; no new inter-service cycle).
+- Hardening folded in: shared `realizedDelta` helper extracted from GetPnL's closure (ONE impl, both
+  paths — C-10(b)); exact `UpsertPosition` `ON CONFLICT DO UPDATE SET realized_accum = ... + $8` SQL;
+  cumulative into the EMITTED PAYLOAD only on full close (row is DELETEd); account-scope the
+  `ClosePosition` DELETE in-feature; `event_ts := recorded_at`; global-sequence ordering; fix stale
+  `ledger.proto:29` comment; compose BEFORE the txn.
+- **Round-4 items for /sdd-spec (design.md Open Risks):**
+  1. [C-10(b)/DRY] The existing GetPnL test `computeRealizedPnL` (`portfolio_helpers_test.go:106-166`)
+     is a byte-for-byte MIRROR of production `applyFill`, not a pin. The extraction must route BOTH
+     production and the mirror through the shared `realizedDelta` (else a 3rd DRY copy), + add a
+     CHARACTERIZATION test pinning real GetPnL on golden fills captured BEFORE the refactor.
+  2. [C-01/P-03] Enriched full-close payload nil-derefs when `existing == nil` (reachable via a
+     redelivered `order.filled` sell after close+DELETE; consume is not idempotent). Guard it (skip
+     emit, or emit `realized = finalLegDelta` only).
+  3. [C-01] Account-scoping `ClosePosition` needs BOTH the repo signature AND the `:288` call-site
+     (`ClosePosition(ctx, userID, symbol, mode)` → add acctID) + confirm no other caller.
+  4. [C-07/081] Analysis migration 016 may collide with in-flight feature 029 (also edits analysis
+     schema/proto); re-verify NNN + proto field numbers against ALL remote branches at /sdd-spec.
+  5. Parity test (`realized_accum == GetPnL.realized`) scope: holds only for the in-scope live
+     `order.filled` close path — broker-sync/partial-only closes don't fire it; state the scope.
+- **LOAD-BEARING INVARIANT (record in design.md):** the `/insights` P&L Patterns view must NEVER
+  present a per-position realized-P&L number a user would reconcile against the trader dashboard —
+  else the 056 dual-source (realized_accum vs GetPnL) fail returns in DURABLE form. `realized_accum`
+  is attribution-stats-only; GetPnL stays the single user-facing realized figure.
+- **Residuals (accept-for-v1):** (a) snapshot completeness = accept+doc + seal-time WARN diagnostic
+  (no v1 backfill; v2 reconciliation named as a concrete tracked follow-up, add-ikbr lesson);
+  (b) ClosePosition account-scoped in-feature (done, above); (c) no v1 retention, future snapshot
+  retention MUST be position-lifecycle-keyed not time-based.
