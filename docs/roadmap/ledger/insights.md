@@ -1900,6 +1900,75 @@ reusing.
 - **Evidence**: `docs/roadmap/features/135-shadcn-datatable-migration/context.md` § Archive Synthesis (Step 11; Step 29 deviation).
 - **Rule it implies**: under a `ColumnDef` migration, re-express per-row shared state per-cell — lean on query-key dedup for a shared fetch and an inner `<span>` for a conditional class.
 
+### 2026-08-19 — phase7-observability — design
+- **Pattern**: for time-windowed alerting (e.g. "only page during market hours"), keep the alert rule evaluating 24/7 and gate *paging* with a notification mute timing — off-hours signal stays on dashboards while only pages are suppressed.
+- **Evidence**: `packages/otel/alerts/mute-timings.yaml` (`outside-us-market-hours`); `docs/roadmap/phase7-deviations.md` §4.
+- **Rule it implies**: alert *visibility* and alert *paging* are separate concerns; encode the schedule in routing, not the rule expression.
+
+### 2026-08-19 — phase7-observability — ordering
+- **Pattern**: a roadmap/"phase" feature's product-spec can be largely already-delivered by a prior feature; grounding against current `main-dev` at design/execute time turned FR-1/2/5 from build into verify, shrinking real scope to one gap-fill + artifacts.
+- **Evidence**: `docs/roadmap/features/033-phase7-observability/context.md` § Archive Synthesis (feature 015 pre-shipped the OTel substrate); `docs/roadmap/phase7-deviations.md` § What already existed.
+- **Rule it implies**: re-ground every FR against HEAD before building; treat product-spec world-models as stale until verified (reinforces design gate C-11 grounding).
+
+### 2026-08-19 — fmp-key-to-secret-env — reuse
+- **Pattern**: before permitting a risky new path (plaintext secret) or building new infrastructure (a `secret://` resolver), exhaustively grep for an existing platform mechanism first — the `type: SECRET` env-var path already carried every other credential, making both unnecessary. The user's approval was explicitly conditional on this check.
+- **Evidence**: `docs/roadmap/features/076-fmp-key-to-secret-env/context.md` § Archive Synthesis.
+- **Rule it implies**: on any "no mechanism exists, so let me add one" fork, prove the negative by repo-wide search before building — the mechanism usually already exists under a different name.
+
+### 2026-08-19 — fix-listkeys-wire-encoding — design
+- **Pattern**: verify wire-serialization (encoding) fixes over a *real gRPC connection* — real server + real service definition + generated client, inspecting what the client actually receives — not against the handler's pre-encode object, which passes on exactly the bug it should catch.
+- **Evidence**: `docs/roadmap/features/077-fix-listkeys-wire-encoding/context.md` § Archive Synthesis; `services/xstockstrat-config/src/__tests__/listKeysWire.test.ts`.
+- **Rule it implies**: proto encoding assertions must run post-encode over the wire, never on the in-process message.
+
+### 2026-08-19 — fix-config-scope-resolution — design
+- **Pattern**: for wire *decoding* bugs, assert over a *real gRPC connection*, not hand-built request objects — the shape ts-proto produces (`stringEnums=true` string constants, camelCase names) differs from what handlers naively expect, and hand-built fixtures mask the exact fault under test.
+- **Evidence**: `docs/roadmap/features/078-fix-config-scope-resolution/context.md` § Archive Synthesis (a real `ListKeys` probe bound SQL params `["marketdata","dev","all"]`).
+- **Rule it implies**: a unit test that constructs the proto message in-process cannot validate a serialization/decoding contract — that class of test needs a live transport.
+
+### 2026-08-19 — mcp-python-sdk-v2-upgrade — design
+- **Pattern**: when a library-migration's only evidence is its own migration-guide prose and the environment has package-registry egress, install the real target version in a scratch venv and inspect the actual API (`inspect.signature`/`getsource`, live `uv lock` on a whole-project copy) *during the design phase* — converting a branching hedged design into one concrete diff and letting the adversarial round attack real facts.
+- **Evidence**: `docs/roadmap/features/085-mcp-python-sdk-v2-upgrade/context.md` § Archive Synthesis.
+- **Rule it implies**: if egress exists, a migration design must verify API shape against the installed package, not the changelog, before the design is approved.
+
+### 2026-08-19 — mcp-python-sdk-v2-upgrade — ordering
+- **Pattern**: combine import-coupled edits (`app.main`↔`app.tools`, both importing a renamed symbol) into a single step — any intermediate leaves the whole suite failing at collection and is unreviewable.
+- **Evidence**: `docs/roadmap/features/085-mcp-python-sdk-v2-upgrade/context.md` § Archive Synthesis (mirrors feature 079 Deviation D-1).
+- **Rule it implies**: reinforces existing 079 D-1 guidance — sequence import-coupled edits as one atomic step.
+
+### 2026-08-19 — fix-mcp-server-input-validation — design
+- **Pattern**: validate a float against a closed range with the inverted form `not (lo <= x <= hi)`, never `x < lo or x > hi` — the inverted form additionally rejects `NaN`. Mandatory when a downstream sentinel (`x > 0.0 else None`, coalesce-to-NULL) would silently coerce an out-of-range/NaN value instead of erroring.
+- **Evidence**: `docs/roadmap/features/094-fix-mcp-server-input-validation/context.md` § Archive Synthesis; `services/xstockstrat-ingest/app/handlers/servicer.py` conviction guard.
+- **Rule it implies**: float range guards use inverted-range comparison so NaN is rejected, not silently coerced.
+
+### 2026-08-19 — shadcn-migration-custom-composites — design
+- **Pattern**: a composition primitive whose control state is derived from children *registered inside its own Root* (shadcn `Questionnaire`: `Next`=`total>1 && !last`, `Submit`=`total>0 && last`, `Progress` from `total`) cannot be driven by an externally-owned index (a wizard's own `step` state) without adopting its controlled `item`/`onItemChange`/`FormData` model; use it Progress-only (zero-item Root) or keep your own buttons.
+- **Evidence**: `docs/roadmap/features/123-shadcn-migration-custom-composites/context.md` § Archive Synthesis (Steps 13–14; `StrategyWizard.tsx`).
+- **Rule it implies**: when a design proposes adopting a third-party primitive's built-in navigation/state, `/sdd-design` must confirm the primitive can model the *existing* ownership of that state from its actual compiled source, not from prose in its docs.
+
+### 2026-08-19 — shadcn-migration-custom-composites — reuse
+- **Pattern**: a dependency's declared `peerDependencies` range (`@shadcn/react@0.3.0` → `react >=19`) can be a demo-app default rather than a real runtime constraint; confirm by grepping the installed package's compiled dist for version-gated APIs (`use()`/`useActionState`/`useFormStatus`/`useOptimistic`) before treating the peer warning as a blocker or forced upgrade.
+- **Evidence**: `docs/roadmap/features/123-shadcn-migration-custom-composites/context.md` § Archive Synthesis (Step 12).
+- **Rule it implies**: a peer-dependency warning is a prompt to verify against compiled source, not automatic grounds to bump the host framework version.
+
+### 2026-08-19 — fix-signal-detail-readiness-rule — design
+- **Pattern**: when two surfaces must agree on a derived value, branch both on the *identical* upstream marker rather than parallel-but-equivalent signals — the UI's held-detection reuses the exact `provenance` contains `"position"` marker the analysis queue uses for `is_held → rule="exit"`, making header/panel disagreement structurally impossible.
+- **Evidence**: `docs/roadmap/features/138-fix-signal-detail-readiness-rule/context.md` § Archive Synthesis.
+- **Rule it implies**: a UI-derived state that must match a server-derived state should key off the server's own decision marker, not re-derive an equivalent one.
+
+### 2026-08-19 — fix-signal-detail-readiness-rule — design
+- **Pattern**: when one RPC serves multiple callers with conflicting needs (Signal-detail wants exit-rule, Watchlist wants entry-rule for the same held symbol), add an explicit additive request selector and keep the server default unchanged, instead of inferring behavior server-side.
+- **Evidence**: `docs/roadmap/features/138-fix-signal-detail-readiness-rule/context.md` § Archive Synthesis (`EvaluateReadiness` backs both surfaces).
+- **Rule it implies**: prefer additive caller opt-in over a server-side behavior flip when an RPC is shared by callers with divergent semantics.
+
+### 2026-08-19 — fix-listorders-ambiguous-updated-at — reuse
+- **Pattern**: for a Go repo package with no live-DB CI harness, extract a minimal `dbQuerier`/`queryRower` interface field (`db`, alongside the real `*pgxpool.Pool`; constructor sets `db: pool`) so `pgxmock` can assert the *emitted SQL text shape*; scope the interface to exactly the methods used (`QueryRow` only, or `+Query` for multi-row reads).
+- **Evidence**: `docs/roadmap/features/140-fix-listorders-ambiguous-updated-at/context.md` § Archive Synthesis; precedent `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go:18-24`.
+- **Rule it implies**: SQL-shape regression tests in Go repos go through a mockable `db` interface + pgxmock text assertion — but pair with a live-DB smoke test, because pgxmock cannot detect real SQL ambiguity.
+
+### 2026-08-19 — fix-listorders-ambiguous-updated-at — design
+- **Pattern**: fix a shared-SQL ambiguity at the *source fragment* (alias the projected column once — `updated_at AS intent_updated_at` on the shared `intentLateralJoinSQL` const) rather than at each consumer SELECT — a single-site rename forecloses the bug class for future callers, vs. N-site qualification any new caller can forget.
+- **Evidence**: `docs/roadmap/features/140-fix-listorders-ambiguous-updated-at/context.md` § Archive Synthesis; `services/xstockstrat-trading/internal/repository/trading_repo.go`.
+- **Rule it implies**: when a shared query fragment projects a column whose name can collide in a joined range, alias it at the fragment, not the call sites.
 ### 2026-08-19 — 042-order-snapshots-pnl-patterns — design
 - **Pattern**: Three reusable moves from a 5-round debate on an event-driven analytics feature. (1) **Incremental per-bucket aggregation is incompatible with data-dependent (quantile) bucket boundaries** — as data arrives the boundaries shift, so an UPSERT keyed on `value_range_*` fragments and the raw samples are gone; for correlation-only v1 store **raw `(value, outcome)` samples and bucket at QUERY time** (also dissolves the NULL-in-UNIQUE problem when some factors have no numeric range). (2) **A value with an authoritative computation must have exactly ONE implementation even across a durable second store** — don't add a parallel formula; extract a shared pure helper both call, add a characterization pin on the real producer (not a mirror test), and record the invariant that the new store is never surfaced to a user who'd reconcile it against the authoritative one (else 056 returns in *durable* form). (3) **Prefer an existing durable ledger event over a new synchronous reverse edge** — enrich the producer's already-emitted close event with the fields the consumer needs (mode/account_id/cumulative P&L) and consume via a persisted stream cursor (resume from `cursor+1`, not tip; `event_ts := recorded_at` for redelivery-stable ON-CONFLICT dedup; advance the cursor in the SAME txn as the writes; compose external reads BEFORE the txn so no pool slot is held across gRPC).
 - **Evidence**: `docs/roadmap/features/042-order-snapshots-pnl-patterns/design.md` (§ Chosen Approach, § Rejected Alternatives); context.md rounds 1-5; ledger global-sequence invariant #4 (`ledgerServiceImpl.test.ts:373-402`).

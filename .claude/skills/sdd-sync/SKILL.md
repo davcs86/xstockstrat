@@ -1,6 +1,6 @@
 ---
 name: sdd-sync
-description: Sync the seven per-feature SDD spec files between feature branches and main-dev via 3-way merge. Usage — /sdd-sync [feature-slug]. Auto-merges non-conflicting diffs in both directions (feature branches gain SDD progress; main-dev gains state flips like launched), stops only on real conflicts, opens a docs-only PR targeting main-dev, and offers to delete branches for launched features. Use this whenever feature.md, status.md, product-spec.md, implementation-spec.md, recon/design/context files look stale or divergent between a branch and main-dev, after a promotion flipped features to launched, or when the user asks to reconcile, sync, or tidy up SDD docs and leftover merged feature branches. Never touches service code.
+description: Sync the eight per-feature SDD spec files between feature branches and main-dev via 3-way merge. Usage — /sdd-sync [feature-slug]. Auto-merges non-conflicting diffs in both directions (feature branches gain SDD progress; main-dev gains state flips like launched), stops only on real conflicts, opens a docs-only PR targeting main-dev, and offers to delete branches for launched features. Use this whenever feature.md, status.md, product-spec.md, acceptance.feature, implementation-spec.md, recon/design/context files look stale or divergent between a branch and main-dev, after a promotion flipped features to launched, or when the user asks to reconcile, sync, or tidy up SDD docs and leftover merged feature branches. Never touches service code.
 argument-hint: [feature-slug]
 allowed-tools: Read Write AskUserQuestion Bash(ls *) Bash(find *) Bash(mkdir *) Bash(git *) Bash(gh pr *) Bash(diff *) Bash(grep *) Bash(egrep *) mcp__github__list_branches
 effort: low
@@ -16,17 +16,19 @@ You are syncing SDD spec files between feature branches and main-dev. Both sides
 
 ## SPEC FILES
 
-The seven SDD artifacts per feature (directory is `NNN-<slug>`, e.g. `001-add-ikbr-account-support`):
+The eight SDD artifacts per feature (directory is `NNN-<slug>`, e.g. `001-add-ikbr-account-support`):
 - `docs/roadmap/features/<NNN-slug>/feature.md`
 - `docs/roadmap/features/<NNN-slug>/status.md`
 - `docs/roadmap/features/<NNN-slug>/product-spec.md`
+- `docs/roadmap/features/<NNN-slug>/acceptance.feature`
 - `docs/roadmap/features/<NNN-slug>/recon.md`
 - `docs/roadmap/features/<NNN-slug>/design.md`
 - `docs/roadmap/features/<NNN-slug>/implementation-spec.md`
 - `docs/roadmap/features/<NNN-slug>/context.md`
 
-(`recon.md` and `design.md` exist only after `/sdd-design` has run; the per-file logic below already
-handles a file present on only one side, so absent artifacts simply skip.)
+(`acceptance.feature` exists from `/sdd-story` on; `recon.md` and `design.md` exist only after
+`/sdd-design` has run; the per-file logic below already handles a file present on only one side, so
+absent artifacts simply skip.)
 
 `origin/feature/<slug>` and `origin/main-dev` are merged 3-way per file using their common ancestor. Files that exist on only one side are taken as-is. The merged result is written to both sides:
 - main-dev → via a `claude/sync-specs-*` PR (existing flow)
@@ -86,7 +88,7 @@ BASE_COMMIT=$(git merge-base origin/main-dev origin/feature/<slug>)
 ```
 If `git merge-base` fails (unrelated histories): stop — "No common ancestor between origin/main-dev and origin/feature/<slug>. Investigate before re-running."
 
-**c.** For each file in `{feature.md, status.md, product-spec.md, recon.md, design.md, implementation-spec.md, context.md}`:
+**c.** For each file in `{feature.md, status.md, product-spec.md, acceptance.feature, recon.md, design.md, implementation-spec.md, context.md}`:
 
 1. Determine which sides have the file:
    ```bash

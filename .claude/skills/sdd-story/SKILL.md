@@ -1,6 +1,6 @@
 ---
 name: sdd-story
-description: Phase 1 of SDD — turn a user story into a feature's first artifacts. Usage — /sdd-story <feature-slug> [story text]. Allocates the next NNN, creates the feature directory with feature.md, product-spec.md, and context.md, and fills governance fields (reviewers, proto/config/DB gates, known traps) from docs/runbooks/feature-workflow.md, docs/runbooks/reviewer-registry.md, and the ledger. Use this at the very start of ANY new capability — a new UI page or route, endpoint, RPC, service behavior, agent tool, or config surface — including when the request arrives as a bare "implement X, commit and push", as a GitHub issue, or as a session instruction, because the root CLAUDE.md makes this the mandatory entry point before any code is written. Also triggers on "new feature", "I want it to…", "add support for…", "can we make it also…", "write a spec for…". Confirmed bug fixes go to sdd-triage instead.
+description: Phase 1 of SDD — turn a user story into a feature's first artifacts. Usage — /sdd-story <feature-slug> [story text]. Allocates the next NNN, creates the feature directory with feature.md, product-spec.md, acceptance.feature (Gherkin @AC-* scenarios), and context.md, and fills governance fields (reviewers, proto/config/DB gates, known traps) from docs/runbooks/feature-workflow.md, docs/runbooks/reviewer-registry.md, and the ledger. Use this at the very start of ANY new capability — a new UI page or route, endpoint, RPC, service behavior, agent tool, or config surface — including when the request arrives as a bare "implement X, commit and push", as a GitHub issue, or as a session instruction, because the root CLAUDE.md makes this the mandatory entry point before any code is written. Also triggers on "new feature", "I want it to…", "add support for…", "can we make it also…", "write a spec for…". Confirmed bug fixes go to sdd-triage instead.
 argument-hint: <feature-slug> [story text]
 allowed-tools: Read Write Bash(ls *) Bash(mkdir *) Bash(find *) Bash(printf *)
 effort: medium
@@ -118,6 +118,7 @@ Write `docs/roadmap/features/${FEATURE_DIRNAME}/feature.md` using this exact tem
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec <slug>`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -214,19 +215,61 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Acceptance Criteria
 
-1. ...
-2. ...
+See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance truth (Constitution
+**C-15**). Each `FR-N` above is covered by ≥1 tagged scenario there.
 
 ## Open Questions
 
 - [ ] <question>
 ```
 
+**Do not** write a numbered acceptance-criteria list here — the behavior lives in
+`acceptance.feature` (Step 8.5) so it can be traced to tests (**C-15**) and later promoted into the
+durable business-rule suites (**C-16**). Keep the `FR-N` Functional Requirements; they are what the
+scenarios cover.
+
 **Filling `## Consumer Surface(s)` (C-14):** infer the surface from the story, not from the
 backend. Ask "once this ships, where does a *user* see or invoke it?" If the story implies a UI
 view or an agent action, name that segment/tool — do not leave every box unchecked and do not
 default to "None" just because the story is phrased in backend terms. If it is genuinely unclear
 which surface, raise it in `## Open Questions` (behavior #1 — surface the fork, never guess).
+
+### 8.5. Write acceptance.feature (Constitution C-15)
+
+Write `docs/roadmap/features/${FEATURE_DIRNAME}/acceptance.feature` — the feature's acceptance
+scenarios in Gherkin, one `Scenario:` per behavior derived from the `FR-N` requirements and the user
+story. This replaces the old numbered acceptance-criteria list and is the single source of acceptance
+truth.
+
+```gherkin
+Feature: <slug>
+  As a <persona>, I want <capability>, so that <outcome>.
+
+  @AC-1 @FR-1
+  Scenario: <concrete behavior, named as an outcome>
+    Given <concrete precondition with real example values>
+    When <the action under test>
+    Then <observable outcome — a returned value, persisted row, rendered element, or emitted event>
+
+  @AC-2 @FR-2
+  Scenario: <the next behavior / an edge case or failure mode>
+    Given ...
+    When ...
+    Then ...
+```
+
+Authoring rules (the slop guard — enforced by `/sdd-review`):
+
+- Every `Scenario:` has a stable `@AC-<n>` tag **and** at least one `@FR-<n>` tag; every `FR-N` in
+  `product-spec.md` is covered by ≥1 scenario.
+- **Concrete example values only** — `252 days`, `"insufficient history"`, never "a valid input" or
+  "an appropriate error." An untestable `When`/`Then` is a review blocker.
+- `Then` clauses are **observable outcomes**, never implementation steps.
+- `@AC-*` IDs are **append-only** for this feature — never renumber them; `/sdd-spec` test steps and
+  `/sdd-execute` RED assertions cite them.
+
+If the story is a **bug fix** routed here in error, stop and use `/sdd-triage` instead (bug fixes get
+a regression scenario via that skill).
 
 ### 9. Write context.md
 
@@ -243,7 +286,7 @@ Write `docs/roadmap/features/${FEATURE_DIRNAME}/context.md`:
 
 ## Session <ISO timestamp> — sdd-story
 
-- Created feature.md (status: draft), product-spec.md, context.md from user story.
+- Created feature.md (status: draft), product-spec.md, acceptance.feature, context.md from user story.
 ```
 
 ### 10. Report to user
@@ -256,6 +299,7 @@ Status: draft
 Files written:
   feature.md          — lifecycle tracker
   product-spec.md     — requirements (review and edit before next step)
+  acceptance.feature  — Gherkin @AC-* scenarios (single source of acceptance truth)
   context.md          — session log
 
 Consumer surface(s) (C-14): <echo the boxes you checked — e.g. "UI /insights + Agent run_backtest", or "None (internal)">

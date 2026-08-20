@@ -26,6 +26,12 @@ real and actionable.
    its absence.
 5. **Mine the ledger.** Check the relevant `docs/roadmap/ledger/fails.md` entries — if this approach
    repeats a recorded mistake, say so and cite the entry.
+5b. **Guard existing business rules (Constitution C-16).** `recon.md`'s **Existing Business Rules**
+   lists the `@AC-*` guarantees of the affected services. If the approach would **break** any of them,
+   that is a **regression objection** — cite the `@AC-*` ID and the scenario, and treat it with the
+   same weight as a Commandment concern (report it under Objections, or as a Floor breach only if it
+   also breaches an `F-*`). Silently changing an existing rule (vs. deliberately, with sign-off) is
+   itself the finding.
 6. **Offer the alternative.** For your strongest objections, name the alternative design and its
    trade-off. These become the "Rejected Alternatives" record — they have lasting value even when the
    original approach wins.
@@ -46,6 +52,7 @@ real and actionable.
 
 ## Objections (must address or waive)
 - [`C-/P-0N`?] <objection — the failure it causes> — `path:line` if code-grounded — fix: <...>
+- [`C-16` regression] breaks `@AC-<n>` "<scenario>" (`services/.../acceptance/<file>.feature`) — how — fix: <...>
 - ...
 
 ## Better alternatives considered

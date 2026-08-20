@@ -1,57 +1,28 @@
-# Context Log: fmp-key-to-secret-env
+# Context: fmp-key-to-secret-env  (archived 2026-08-19)
 
-Append-only.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-08-19 — /sdd-archiver
 
-## Session 2026-07-29 — surfaced, decided, implemented
+**What**: A config key (`secret.marketdata.fmp.api_key`, seeded by feature 059's migration `007`) was documented as a `secret://` reference "resolved at deploy, never plaintext" — but no `secret://` resolver was ever built, and `marketdata` passed the value straight into `fmp.NewClient` as the literal API key. Making FMP work therefore required a real credential in plaintext in `config.config_values`, a table with no encryption whose rows stream to every `WatchConfig` subscriber. This feature deleted that row (migration `009`) and moved FMP onto the same DO App Platform `type: SECRET` env var mechanism every other credential already used. FMP was the platform's sole credential-in-config and its only `is_secret = TRUE` row.
 
-- Surfaced while resolving feature 073's third review blocker (whether `set_config` may write a real
-  plaintext secret). The user's answer was conditional: allow plaintext **only if** no existing
-  secret mechanism exists, and to triple-check that first.
-- The check found one, decisively: **DO App Platform `type: SECRET` env vars**, 10 per app spec,
-  covering `ALPACA_API_KEY`, `ALPACA_API_SECRET`, `JWT_SECRET`, `MCP_AGENT_SECRET` and
-  `BROKER_ACCOUNTS_ENCRYPTION_KEY` (the IBKR/broker-account credential key). All read via `getEnv`,
-  none through the config service. No `secret://` resolver exists anywhere in the codebase.
-- User confirmed: **"no, use the same existing mechanism used for ibkr and alpaca keys."**
-- Two credential patterns exist on the platform, both rooted in a `type: SECRET` env var:
-  (a) platform-wide vendor credential → plain env var (Alpaca);
-  (b) per-user broker credentials → AES-256-GCM blob in the DB, master key from env (IBKR,
-  `EncryptCredentials`/`DecryptCredentials` in trading's `account_repo.go`).
-  FMP is a single platform-wide vendor key, so pattern (a) applies.
+**Why (irrecoverable rationale)**: The user's decision was explicitly conditional — permit plaintext-in-config only if no existing secret mechanism existed, and triple-check that first. The check found the mechanism decisively (`type: SECRET` env vars already carrying ALPACA/JWT/MCP/broker keys), so the ruling was "use the same existing mechanism used for ibkr and alpaca keys" rather than build a `secret://` store. This is the rationale behind the one-line reversal note now in root CLAUDE.md; the root cause — that the promised resolver was pure aspiration in a migration comment — survives only here.
 
-### Changes
+**Rejected alternatives**:
+- Permit plaintext secret in `config.config_values` (feature 073's original fork) — lost because it exposes the credential to every `WatchConfig` subscriber via `GetConfig`/`ListKeys`.
+- Build a real `secret://` resolver / secret store — lost as out-of-scope; the existing `type: SECRET` env-var path already covered every other credential.
 
-- `internal/config/config.go` — `FMPAPIKey: getEnv("FMP_API_KEY", "")`, beside the Alpaca keys.
-- `cmd/server/main.go` — `APIKey: cfg.FMPAPIKey` instead of the `cfgWatcher.GetString` read.
-- `docker-compose.yml` — `FMP_API_KEY: ${FMP_API_KEY:-}` (optional: the pipeline is off by default,
-  so no `:?` required-guard, unlike the Alpaca keys).
-- `.env.example` — documented, empty by default.
-- `.do/app.yaml` / `.do/app.dev.yaml` — `FMP_API_KEY` `type: SECRET` in the marketdata block.
-- `migrations/009_drop_fmp_api_key_config.{up,down}.sql` — removes the seeded row. New migration
-  rather than editing `007` (Floor **F-01**). The `.down.sql` restores the placeholder only.
-- Docs: marketdata `CLAUDE.md` key table + FMP section, `docs/patterns/config-governance.md` row.
+**Scars & gotchas**: Any environment that already had a real key written into `secret.marketdata.fmp.api_key` must treat it as compromised and rotate at FMP — migration `009` deletes it, but it was plaintext in a broadcast table. `FMP_API_KEY` in `docker-compose.yml` uses the optional `${FMP_API_KEY:-}` form, deliberately not the `:?` required-guard the Alpaca keys use, because the FMP pipeline is off by default; an unset key fails as an empty-key client build, not at container start. The `.down.sql` restores only the placeholder string, never a real credential.
 
-### Verification
+**Permanent deviations**: none — no `design.md` existed (direct SDD-path bug fix); the shipped behavior is the fix itself.
 
-- `GOWORK=off go build ./...` — OK
-- `GOWORK=off go test ./internal/config/...` — OK, including two new cases asserting the key comes
-  from the env and defaults to empty
-- `yaml.safe_load` on both app specs and `docker-compose.yml` — all parse; `FMP_API_KEY` confirmed
-  inside the marketdata block, directly after the Alpaca keys
+**Cross-feature signal**: Closed a loop across features — 059 introduced the resolver-less config-secret pattern, 075 made `is_secret` trustworthy, 073 surfaced the plaintext question as a review blocker, 076 removed the last `is_secret` row — making 073's `set_config` `is_secret` rejection largely moot while keeping the guard as a forward tripwire. Confirms the two-pattern credential taxonomy: (a) platform-wide vendor key → plain `type: SECRET` env var (Alpaca, FMP); (b) per-user broker creds → AES-256-GCM DB blob with master key from env (IBKR). FMP is case (a).
 
-### Outstanding
+**Deferred follow-ons**: AC-6 operator step still open — `FMP_API_KEY` must be set in the DO dev/prod app env and local `.env` before flipping `marketdata.fmp.enabled` to true. Until then the FMP client builds with an empty key.
 
-- The operator must set `FMP_API_KEY` in the DO dev/prod app env and local `.env` before enabling
-  `marketdata.fmp.enabled`. Until then the FMP client builds with an empty key (same failure mode as
-  an unset Alpaca key).
-- If any environment already had a real key written into `secret.marketdata.fmp.api_key`, migration
-  `009` deletes that row — treat the value as compromised (it was plaintext in a table streamed to
-  all subscribers) and rotate it at FMP rather than reusing it.
+**Ledger entries written**: insights.md (1), fails.md (1) — see the 2026-08-19 `fmp-key-to-secret-env` entries.
 
-### Consequence for feature 073
+**Runtime-invariant recommendations (→ /context-constitution)**: none — the credential-handling convention (`type: SECRET` env vars, no config-stored secrets) is already captured in root CLAUDE.md § Config Governance Rules and `docs/runbooks/add-data-source.md`.
 
-`set_config` rejects `is_secret` keys. After this feature there are no `is_secret` rows left, so the
-question is now largely moot — but the guard stays, so the next person who adds one cannot write a
-credential through an MCP tool. `get_config`'s redaction (073 FR-1) also stays: it is cheap, and
-feature 075 made the `is_secret` field trustworthy.
+**Pruned artifacts**: product-spec.md — last present at 1d97c6c.

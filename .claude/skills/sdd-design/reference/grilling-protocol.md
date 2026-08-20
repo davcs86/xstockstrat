@@ -7,8 +7,10 @@ mediate every exchange so the two subagents never see each other's raw output (*
 
 ## Inputs you hold
 
-- `recon.md` (written in Phase 0) — the grounded facts.
+- `recon.md` (written in Phase 0) — the grounded facts, **including `## Existing Business Rules`**
+  (the `@AC-*` guarantees of the affected services, from their `acceptance/*.feature` suites).
 - `product-spec.md` — the requirements.
+- `acceptance.feature` — this feature's own `@AC-*` scenarios.
 - `docs/sdd/constitution.md` — the rules the adversary cites by ID.
 - relevant `docs/roadmap/ledger/fails.md` entries — known traps.
 
@@ -26,16 +28,22 @@ For each round `R`:
    objections you want addressed). **Never** hand it the adversary's raw output. It returns ONE
    concrete approach with `path:line`-cited evidence and an explicit assumptions list.
 
-2. **Adversary.** Spawn a **`design-adversary`** subagent. Give it: `recon.md`, the proposer's
-   approach (verbatim), the Constitution, and the relevant `fails.md` entries. It attacks the
-   approach — architectural flaws, security/data gaps, simpler alternatives, and **every `C-*`/`P-*`/
-   `F-*` the approach would violate, cited by ID**. It also names the trade-offs of the alternatives
-   it would reject.
+2. **Adversary.** Spawn a **`design-adversary`** subagent. Give it: `recon.md` (with its
+   **Existing Business Rules**), the proposer's approach (verbatim), the Constitution, and the
+   relevant `fails.md` entries. It attacks the approach — architectural flaws, security/data gaps,
+   simpler alternatives, and **every `C-*`/`P-*`/`F-*` the approach would violate, cited by ID**. It
+   also names the trade-offs of the alternatives it would reject. **Business-rule regression check
+   (C-16):** any way the approach would break an existing `@AC-*` guarantee from recon's Existing
+   Business Rules is a regression objection, cited by the `@AC-*` ID — treated as seriously as a
+   Constitution breach.
 
 3. **Synthesize (you).** Reconcile proposal + objections into:
    - **Current best approach** (what survives).
    - **Open objections** (unresolved points to carry into the next round, if any).
    - **Floor status** — list any `F-*` the adversary flagged as unresolved.
+   - **Business-rule impact** — which existing `@AC-*` guarantees the approach preserves, extends, or
+     changes. A **change** to an existing rule needs explicit user sign-off at the gate (record it in
+     `context.md`); an unintended **break** is a regression to resolve before approval (C-16).
 
 4. **Gate (you, via `AskUserQuestion` — Constitution P-04).** Present a tight synthesis (current
    approach, the strongest surviving objection, Floor status) and offer:
@@ -69,4 +77,7 @@ For each round `R`:
   with a target step.
 - **Constitution Rules Touched** — the `C-*`/`P-*`/`F-*` IDs the approach interacts with and how each
   is honored.
+- **Business Rules Touched (C-16)** — existing `@AC-*` guarantees the approach **preserves / extends /
+  changes** (a change carries its sign-off reference). Empty if the feature introduces net-new
+  behavior only.
 - **Rounds** — N, and the termination reason.
