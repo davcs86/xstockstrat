@@ -27,7 +27,9 @@ layer:
 - **Faster context (deeper integration, §2.3/§4.3)**: the accumulated scenarios become a durable,
   per-service map of *existing business rules* that the recon and design phases read directly — so a
   designer sees what the platform already guarantees without reconstructing it from specs and code,
-  and a design that would break an existing guarantee is caught as a regression at design time.
+  and a design that would break an existing guarantee is caught as a regression at design time. The
+  same suites later feed **Copilot code review** as path-scoped context (§8), catching the regression
+  again at the PR boundary.
 
 ---
 
@@ -297,3 +299,52 @@ scenario↔test coverage gate are enforced from the adoption PR onward.
 - **O-5** — Promotion mechanics: fully manual (the operator appends during the integration PR),
   assisted (a promotion helper/subagent dedups and appends), or a scripted check that CI enforces
   suite membership before `launched`? (Leaning assisted-but-manual for v1 to avoid new machinery.)
+
+---
+
+## 8. Future phase — feed business rules to Copilot code review
+
+**Not part of the binding adoption PR (§5).** A later phase, once the durable per-service suites
+(§2.3) exist and have content worth reviewing against. Recorded here so the artifact layout is chosen
+with it in mind — and it is, because the per-service co-location makes this nearly free.
+
+**Goal**: when Copilot reviews a PR, it should check the diff against the business rules of the
+services it touches and flag any change that would break an existing `@AC-*` guarantee — the same
+regression check the design-adversary does (C-16), now enforced again at the code-review boundary.
+
+**Mechanism (verified against GitHub docs, Aug 2026)** — GitHub Copilot code review honors two
+repository custom-instruction surfaces, both read from the PR's **head branch** (so a branch's own
+updated suites are what's consulted):
+
+- **Path-specific instructions** — `.github/instructions/<svc>.instructions.md` with
+  `applyTo: "services/xstockstrat-<svc>/**"` frontmatter. Path-specific instructions are explicitly
+  supported for Copilot code review. This is the load-bearing fit: one instruction file per service,
+  each telling Copilot: *"Review changes here against the acceptance scenarios in
+  `services/xstockstrat-<svc>/acceptance/*.feature`; flag any change that violates an existing
+  `@AC-*` scenario as a possible regression, naming the scenario."* The `applyTo` glob mirrors the
+  co-located suite, so the instruction fires exactly when the relevant service is in the diff.
+- **Repo-wide** — a short line in `.github/copilot-instructions.md` establishing the convention
+  (business rules live in per-service `acceptance/` suites; a diff must not break a listed `@AC-*`
+  guarantee without a corresponding scenario change).
+
+**Design notes / guard rails:**
+
+- **Reference, don't inline.** GitHub guidance favors short instruction files (~2 pages); do **not**
+  paste scenarios into the instruction files. Point Copilot at the suite path and let it read the
+  head-branch `.feature` in repo context. This also keeps the instruction files stable as suites grow.
+- **Generated, not hand-maintained.** The per-service `.instructions.md` files are boilerplate keyed
+  only on service name — generate them from the service list (a script or a one-line `/sdd` helper),
+  so adding a service adds its instruction file automatically and they never drift.
+- **`excludeAgent`** can scope an instruction to code review vs. the cloud agent if the two ever need
+  different phrasing.
+- **Optionally auto-request review** — `/sdd-execute` can call the GitHub *request Copilot review*
+  API on the step / integration PR so the check runs without a human clicking. Whether to wire that
+  is **O-6**.
+- **Trust boundary** — Copilot's finding is *advisory*, exactly like the design-adversary's: it
+  surfaces a suspected regression for the human/PR-steward to judge, it does not gate merge on its
+  own. The binding regression gate remains C-16 at design time.
+
+**Open question:**
+
+- **O-6** — Should `/sdd-execute` auto-request a Copilot review on the integration PR, or leave that
+  to the operator?
