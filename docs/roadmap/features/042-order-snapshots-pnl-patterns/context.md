@@ -371,3 +371,15 @@ Executed on harness branch `claude/execute-020-042-127-pfa5cw` (single integrati
   7 tests pass; full analysis suite 537 passed, coverage 82%.
 
 **Next:** Step 10 (QueryPnLPatterns RPC), 11 (RPC test), 12 (UI), 13 (UI e2e), 14 (docs).
+
+### Step 10 — QueryPnLPatterns RPC [done]
+- servicer.QueryPnLPatterns + module-level pure bucket_pnl_factors (indicator quantile buckets,
+  signal-by-presence, min-sample drop, positive/negative split ranked by |avg_pnl_impact|, limit).
+  self._pnl_samples_repo wired from db_pool (F-06). ruff clean.
+
+### Step 11 — RPC test [done]
+- tests/test_query_pnl_patterns.py: bucket_pnl_factors quantile+signal grouping, min-sample-drop
+  teeth, AC-3 ranked positive+negative via servicer with a fake samples repo, no-repo empty. 4 pass;
+  full analysis suite 541 pass, coverage 82%.
+
+**Next:** Step 12 (UI view + nav), 13 (UI e2e), 14 (docs).

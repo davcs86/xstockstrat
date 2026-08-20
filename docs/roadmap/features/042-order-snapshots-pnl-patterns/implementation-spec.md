@@ -423,7 +423,7 @@ Confirm coverage ≥ 40% and lint clean.
 
 ### Step 10 — service: analysis QueryPnLPatterns RPC (query-time quantile bucketing)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify (add the RPC)
@@ -457,7 +457,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 
 ### Step 11 — test: analysis QueryPnLPatterns ranked factors
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_query_pnl_patterns.py` — create
