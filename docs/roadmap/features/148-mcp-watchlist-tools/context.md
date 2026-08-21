@@ -81,3 +81,10 @@ Note: the context-forge `/context-scrubber` plugin is not available in this sess
 scan was done manually (tool-count consistency + no stale "twenty-four"); flagged in the PR body.
 
 Status: design-approved → code-completed.
+
+## Session 2026-08-21 (CI: feature status automation)
+
+- Promotion PR #1001 merged to main
+- Feature promoted and committed: bfa1995a3e5d36758f96ac8ef1ff97a31c68ef00
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-21

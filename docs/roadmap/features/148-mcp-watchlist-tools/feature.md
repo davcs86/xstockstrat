@@ -3,6 +3,8 @@
 **Development Branch**: `feature/mcp-watchlist-tools`
 **Created**: 2026-08-21
 **Last Updated**: 2026-08-21
+**Committed to main**: bfa1995a3e5d36758f96ac8ef1ff97a31c68ef00
+**Launched date**: 2026-08-21
 
 ---
 
@@ -14,6 +16,7 @@
 | 2026-08-21 | `draft` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written. Note: /sdd-review product-spec skipped (harness single-branch flow); update-contract fork user-approved |
 | 2026-08-21 | `design-approved` → `code-completed` | implementation | 4 agent tools + client wrappers + tests; 266 pass @78% cov, ruff clean, inventory synced to 28 tools |
 
+| 2026-08-21 | `code-completed` → `launched` | CI workflow | Promoted via PR #1001; committed bfa1995a3e5d36758f96ac8ef1ff97a31c68ef00 |
 ---
 
 ## Artifacts
