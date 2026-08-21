@@ -3,6 +3,8 @@
 **Development Branch**: `feature/notify-external-fanout`
 **Created**: 2026-05-26
 **Last Updated**: 2026-05-26
+**Committed to main**: d908f33dc3283b79b61b233d57542cd47014c4ab
+**Launched date**: 2026-08-21
 
 ---
 
@@ -16,6 +18,7 @@
 | 2026-08-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 7 steps. Config migration 017 (5 keys) + fanout module + emit-wiring (queueMicrotask post-callback) + full 8-file credential pipeline + docs. Deploy wiring expanded from design.md's 3 files to the full add-data-source credential checklist (C-10; config-governance.md:60 cites feature 129's incomplete 3-of-8 wiring as a defect). |
 | 2026-08-20 | `implementation-ready` → `code-completed` | /sdd-execute | All 7 steps done — config migration 017, FanoutDispatcher (Slack + SendGrid, gate/dedup/timeout), emitAlert queueMicrotask wiring, 37 notify tests pass (fanout 96% cov), full 8-file SECRET pipeline, docs. Executed on harness branch `claude/execute-020-042-127-pfa5cw`. context-forge plugin unavailable → /context-scrubber not run (noted). |
 
+| 2026-08-21 | `code-completed` → `launched` | CI workflow | Promoted via PR #997; committed d908f33dc3283b79b61b233d57542cd47014c4ab |
 ---
 
 ## Artifacts

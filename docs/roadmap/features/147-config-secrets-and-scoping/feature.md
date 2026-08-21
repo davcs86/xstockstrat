@@ -3,6 +3,8 @@
 **Development Branch**: `feature/config-secrets-and-scoping`
 **Created**: 2026-08-20
 **Last Updated**: 2026-08-20
+**Committed to main**: d908f33dc3283b79b61b233d57542cd47014c4ab
+**Launched date**: 2026-08-21
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-08-20 | `in-progress` → `code-completed` | implementation | All 12 steps done: proto, migration 017 (DB-validated), config service (crypto/GetSecret/redaction/scope), marketdata GetSecret, agent JWT_SECRET, config-ui env/user scope, all client edges, deploy wiring, governance docs. Tests green per service. |
 | 2026-08-21 | `code-completed` (unchanged) | PR #994 review | Addressed 4 operator review threads: (1) agent config env is deployment-bound (dropped caller `environment` param); (2) admin secret writes unblocked via MCP + config-ui; (3) per-user config authz = owner-only self-service (admins reach globals + own rows only, `PER_USER_SCOPE_ERROR`); (4) agent is an edge — forwards `x-user-id`+`x-access-scope`+`x-trace-id` (gen'd) on every outbound call via `CallerPropagationMiddleware`. Tests green (agent 237, config 83, config-ui 19 e2e). |
 
+| 2026-08-21 | `code-completed` → `launched` | CI workflow | Promoted via PR #997; committed d908f33dc3283b79b61b233d57542cd47014c4ab |
 ---
 
 ## Artifacts

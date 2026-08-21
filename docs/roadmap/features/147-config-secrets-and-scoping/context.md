@@ -171,3 +171,10 @@ No code change.
 
 Test status this round: agent 237 pass / ruff clean / 77% cov; config 83 pass; config-ui tsc clean +
 19 config-ui e2e pass (incl. new secret-editing spec).
+
+## Session 2026-08-21 (CI: feature status automation)
+
+- Promotion PR #997 merged to main
+- Feature promoted and committed: d908f33dc3283b79b61b233d57542cd47014c4ab
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-21

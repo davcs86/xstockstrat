@@ -291,3 +291,10 @@ diff on the unedited proto before editing — toolchain reproduces committed stu
 
 ## Session 2026-08-20 — sdd-execute — feature 127 COMPLETE
 All 10 steps done. status.md → code-completed.
+
+## Session 2026-08-21 (CI: feature status automation)
+
+- Promotion PR #997 merged to main
+- Feature promoted and committed: d908f33dc3283b79b61b233d57542cd47014c4ab
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-21

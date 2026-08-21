@@ -220,3 +220,10 @@ reflects post-147 reality):
 - config-governance.md feature-020 block updated to reference migration `018` and `staging`+`production`.
 - Deploy-pipeline conflicts resolved by keeping 147's side (which retired the Alpaca/FMP/Finnhub deploy
   secrets into encrypted config) plus the feature-020 Slack/SendGrid `type: SECRET` additions.
+
+## Session 2026-08-21 (CI: feature status automation)
+
+- Promotion PR #997 merged to main
+- Feature promoted and committed: d908f33dc3283b79b61b233d57542cd47014c4ab
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-21

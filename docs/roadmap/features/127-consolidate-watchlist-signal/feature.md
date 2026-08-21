@@ -3,6 +3,8 @@
 **Development Branch**: `feature/consolidate-watchlist-signal`
 **Created**: 2026-08-11
 **Last Updated**: 2026-08-11
+**Committed to main**: d908f33dc3283b79b61b233d57542cd47014c4ab
+**Launched date**: 2026-08-21
 
 ---
 
@@ -18,6 +20,7 @@
 | 2026-08-20 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1–5, 7 done (proto + codegen + migration 011 + portfolio repo/service/handler + tests + mcp-tools.md). Executed on harness branch `claude/execute-020-042-127-pfa5cw` (single integration PR model). Deviation: `normalizeBindings` now preserves `source`. |
 | 2026-08-20 | `in-progress` → `code-completed` | /sdd-execute | All 10 steps done — agent auto-add (steps 6,8; 227 agent tests pass) + UI undeletable affordance & signal badge (steps 9,10; watchlists e2e 11 pass). Portfolio build/lint/test green; proto stubs regenerate byte-clean. |
 
+| 2026-08-21 | `code-completed` → `launched` | CI workflow | Promoted via PR #997; committed d908f33dc3283b79b61b233d57542cd47014c4ab |
 ---
 
 ## Artifacts
