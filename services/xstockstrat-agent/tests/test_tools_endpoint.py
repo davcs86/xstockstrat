@@ -45,6 +45,10 @@ def test_list_tools_returns_all_registered_tools():
         "set_config",
         "get_user_metadata",
         "set_user_metadata",
+        "list_watchlists",
+        "get_watchlist",
+        "manage_watchlist",
+        "manage_watchlist_symbols",
     }
 
 

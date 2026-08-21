@@ -2031,3 +2031,16 @@ reusing.
   `services/xstockstrat-agent/app/client.py` `_metadata`/`set_caller`/`reset_caller`.
 - **Rule it implies**: outbound header propagation at an agent edge is a middleware concern, not
   per-tool boilerplate.
+
+### 2026-08-21 — mcp-watchlist-tools — reuse
+- **Pattern**: When wrapping a REPLACE-semantics backend mutation (delete-all-then-reinsert) as an
+  agent `manage_<noun> update` verb, implement the tool as a **read-modify-write merge** — fetch the
+  current resource, preserve every field the caller didn't supply, resend the full set — so a
+  partial update (e.g. rename) doesn't wipe the rest. This makes the agent tool feel like the
+  feature-070 `manage_strategy` partial merge even when the backend RPC is a full replace.
+- **Evidence**: `xstockstrat-portfolio` `WatchlistRepo.Update` (`internal/repository/watchlist_repo.go`)
+  DELETEs all `watchlist_symbols` then re-inserts the request bindings; the `manage_watchlist` agent
+  tool (`services/xstockstrat-agent/app/tools.py`) reads via `GetWatchlist` first.
+- **Rule it implies**: before wrapping a backend write as a partial-update tool, check whether the
+  RPC is replace-vs-merge at the DB layer; a replace RPC needs a read-modify-write shim or it silently
+  destroys omitted state (the F-12/RC-1 drift class).

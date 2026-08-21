@@ -316,6 +316,190 @@ async def add_watchlist_symbol(user_id: str, watchlist_id: str, symbol: str) -> 
         )
 
 
+# ── Watchlist management (feature 148) ───────────────────────────────────────
+# Thin wrappers over the existing PortfolioService watchlist RPCs (features 058/097/127) that back
+# the four `manage/list/get` watchlist MCP tools. Ownership is ALWAYS taken server-side from the
+# propagated `x-user-id` header (portfolio.proto:209-210) — no `user_id` is ever placed in a request
+# body. These curation tools stamp new entries `WATCHLIST_ENTRY_SOURCE_MANUAL`, distinct from the
+# `ingest_signal` `direction='watchlist'` path above, which stamps `SIGNAL`.
+
+
+def _watchlist_to_dict(wl) -> dict[str, Any]:
+    """Project a Watchlist proto to a snake_case dict (bindings + deprecated flat symbols kept)."""
+    return MessageToDict(wl, preserving_proto_field_name=True)
+
+
+def _watchlist_bindings_pb(symbols: list[str] | None, bindings: list[dict] | None, source):
+    """Build WatchlistBinding protos from tool inputs, stamping every entry with ``source``.
+
+    Both inputs are merged into one binding list (unlike the backend's either/or
+    `requestBindings`, which drops `symbols` when `bindings` is present): a caller may mix bound
+    `{symbol, strategy_id}` entries with bare unbound symbols in one call. No `strategy_id` means
+    the entry is unbound.
+    """
+    from gen.portfolio.v1 import portfolio_pb2  # noqa: PLC0415
+
+    out = []
+    for b in bindings or []:
+        out.append(
+            portfolio_pb2.WatchlistBinding(
+                symbol=b.get("symbol", ""),
+                strategy_id=b.get("strategy_id", "") or "",
+                source=source,
+            )
+        )
+    for s in symbols or []:
+        out.append(portfolio_pb2.WatchlistBinding(symbol=s, source=source))
+    return out
+
+
+async def list_watchlists(user_id: str, limit: int = 0, page_token: str = "") -> dict[str, Any]:
+    """List the caller's own watchlists via gRPC ListWatchlists (paginated)."""
+    from gen.common.v1 import common_pb2  # noqa: PLC0415
+    from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
+
+    req = portfolio_pb2.ListWatchlistsRequest(
+        page=common_pb2.PageRequest(page_size=limit, page_token=page_token)
+    )
+    async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+        stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
+        resp = await stub.ListWatchlists(req, metadata=_metadata(("x-user-id", user_id)))
+    return {
+        "watchlists": [_watchlist_to_dict(w) for w in resp.watchlists],
+        "next_page_token": resp.page.next_page_token,
+    }
+
+
+async def get_watchlist(user_id: str, watchlist_id: str) -> dict[str, Any]:
+    """Fetch one of the caller's watchlists (incl. bindings) via gRPC GetWatchlist."""
+    from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+        stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
+        resp = await stub.GetWatchlist(
+            portfolio_pb2.GetWatchlistRequest(watchlist_id=watchlist_id),
+            metadata=_metadata(("x-user-id", user_id)),
+        )
+    return {"watchlist": _watchlist_to_dict(resp.watchlist)}
+
+
+async def create_watchlist(
+    user_id: str,
+    name: str,
+    description: str = "",
+    symbols: list[str] | None = None,
+    bindings: list[dict] | None = None,
+) -> dict[str, Any]:
+    """Create a new watchlist for the caller via gRPC CreateWatchlist."""
+    from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
+
+    req = portfolio_pb2.CreateWatchlistRequest(
+        name=name,
+        description=description,
+        bindings=_watchlist_bindings_pb(
+            symbols, bindings, portfolio_pb2.WATCHLIST_ENTRY_SOURCE_MANUAL
+        ),
+    )
+    async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+        stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
+        resp = await stub.CreateWatchlist(req, metadata=_metadata(("x-user-id", user_id)))
+    return {"watchlist": _watchlist_to_dict(resp.watchlist)}
+
+
+async def update_watchlist(
+    user_id: str,
+    watchlist_id: str,
+    name: str | None = None,
+    description: str | None = None,
+    symbols: list[str] | None = None,
+    bindings: list[dict] | None = None,
+) -> dict[str, Any]:
+    """Update a watchlist via a READ-MODIFY-WRITE merge over the replace-only UpdateWatchlist RPC.
+
+    The backend UpdateWatchlist is replace-all — its repo DELETEs every symbol row then re-inserts
+    the request's bindings, and it requires a non-empty name (feature 058). So this fetches the
+    current watchlist first and preserves each field the caller did not supply: an omitted name /
+    description keeps the stored value, and an omitted symbol set (both ``symbols`` and ``bindings``
+    None) preserves the existing bindings verbatim (original ``source`` intact). Supplying either
+    ``symbols`` or ``bindings`` does an explicit full replace with MANUAL-sourced entries.
+
+    NOT atomic — a concurrent add between the read and the write could be lost by the resend;
+    acceptable for single-user agent curation.
+    """
+    from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
+
+    replace = None
+    if symbols is not None or bindings is not None:
+        replace = _watchlist_bindings_pb(
+            symbols, bindings, portfolio_pb2.WATCHLIST_ENTRY_SOURCE_MANUAL
+        )
+    meta = _metadata(("x-user-id", user_id))
+    async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+        stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
+        current = await stub.GetWatchlist(
+            portfolio_pb2.GetWatchlistRequest(watchlist_id=watchlist_id), metadata=meta
+        )
+        wl = current.watchlist
+        req = portfolio_pb2.UpdateWatchlistRequest(
+            watchlist_id=watchlist_id,
+            name=name if name is not None else wl.name,
+            description=description if description is not None else wl.description,
+            bindings=replace if replace is not None else list(wl.bindings),
+        )
+        resp = await stub.UpdateWatchlist(req, metadata=meta)
+    return {"watchlist": _watchlist_to_dict(resp.watchlist)}
+
+
+async def delete_watchlist(user_id: str, watchlist_id: str) -> dict[str, Any]:
+    """Delete a watchlist via gRPC DeleteWatchlist (system-managed lists are refused server-side).
+
+    Returns ``{"deleted": True, "watchlist_id": …}`` on success.
+    """
+    from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+        stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
+        await stub.DeleteWatchlist(
+            portfolio_pb2.DeleteWatchlistRequest(watchlist_id=watchlist_id),
+            metadata=_metadata(("x-user-id", user_id)),
+        )
+    return {"deleted": True, "watchlist_id": watchlist_id}
+
+
+async def add_watchlist_symbols(
+    user_id: str,
+    watchlist_id: str,
+    symbols: list[str] | None = None,
+    bindings: list[dict] | None = None,
+) -> dict[str, Any]:
+    """Add MANUAL-sourced symbols/bindings to a watchlist via gRPC AddWatchlistSymbols."""
+    from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
+
+    req = portfolio_pb2.AddWatchlistSymbolsRequest(
+        watchlist_id=watchlist_id,
+        bindings=_watchlist_bindings_pb(
+            symbols, bindings, portfolio_pb2.WATCHLIST_ENTRY_SOURCE_MANUAL
+        ),
+    )
+    async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+        stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
+        resp = await stub.AddWatchlistSymbols(req, metadata=_metadata(("x-user-id", user_id)))
+    return {"watchlist": _watchlist_to_dict(resp.watchlist)}
+
+
+async def remove_watchlist_symbols(
+    user_id: str, watchlist_id: str, symbols: list[str]
+) -> dict[str, Any]:
+    """Remove symbols from a watchlist via gRPC RemoveWatchlistSymbols."""
+    from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
+
+    req = portfolio_pb2.RemoveWatchlistSymbolsRequest(watchlist_id=watchlist_id, symbols=symbols)
+    async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+        stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
+        resp = await stub.RemoveWatchlistSymbols(req, metadata=_metadata(("x-user-id", user_id)))
+    return {"watchlist": _watchlist_to_dict(resp.watchlist)}
+
+
 async def run_backtest(
     user_id: str,
     strategy_id: str,

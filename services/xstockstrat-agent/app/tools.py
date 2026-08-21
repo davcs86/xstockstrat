@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Twenty-four tools:
+Twenty-eight tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -26,6 +26,10 @@ Twenty-four tools:
   set_config          — writes one config value incl. secrets (encrypted at rest; admin-scoped)
   get_user_metadata   — fetches the calling user's own profile metadata (read-only)
   set_user_metadata   — partial-updates the calling user's own profile metadata
+  list_watchlists     — lists the caller's own watchlists from portfolio, paginated (read-only)
+  get_watchlist       — reads one of the caller's watchlists incl. its stocks (read-only)
+  manage_watchlist    — create/update(read-modify-write merge)/delete a caller-owned watchlist
+  manage_watchlist_symbols — add/remove stocks on a caller-owned watchlist (add = MANUAL source)
 """
 
 import base64
@@ -1228,6 +1232,153 @@ def register_tools(server: MCPServer) -> None:
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="user not found")) from e
+
+    # ── xstockstrat-portfolio watchlist tools (feature 148) ──────────────────────────────────
+    # Thin ownership-gated wrappers over the existing PortfolioService watchlist RPCs. Each forwards
+    # ONLY the caller's own x-user-id (never an admin x-access-scope) — portfolio enforces ownership
+    # from the header and returns PERMISSION_DENIED for a non-owner, matching get_strategy (feature
+    # 133). No user_id is ever taken from a tool argument.
+
+    @server.tool()
+    async def list_watchlists(ctx: Context, limit: int = 0, page_token: str = "") -> dict:
+        """List the calling user's OWN watchlists from xstockstrat-portfolio (read-only).
+        limit: max lists to return; 0 = server default. Pagination is stable across pages.
+        page_token: opaque token from a prior call's next_page_token; "" starts at the first page.
+        Returns {"watchlists": [<watchlist>, ...], "next_page_token": <str>} where each watchlist is
+            snake_case with watchlist_id, name, description, bindings (each with
+            symbol/strategy_id/source), the deprecated flat symbols mirror, system_managed, and
+            created_at/updated_at timestamps. An empty next_page_token means no more pages.
+        Only the caller's own lists are ever returned."""
+        user_id = _caller_user_id(ctx, "list_watchlists")
+        try:
+            return await client.list_watchlists(user_id, limit=limit, page_token=page_token)
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
+
+    @server.tool()
+    async def get_watchlist(ctx: Context, watchlist_id: str) -> dict:
+        """Fetch one of the caller's watchlists, including its stocks, from xstockstrat-portfolio
+        (read-only).
+        watchlist_id: the list identifier (from list_watchlists).
+        Returns {"watchlist": <watchlist>} — snake_case, with the full bindings array (each entry's
+            symbol, strategy_id — "" means an unbound bare symbol — and source) plus the deprecated
+            flat symbols mirror, system_managed, and timestamps.
+        Fetching a list the caller does not own is rejected (permission denied); an unknown id is
+            "watchlist not found"."""
+        user_id = _caller_user_id(ctx, "get_watchlist")
+        try:
+            return await client.get_watchlist(user_id, watchlist_id)
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="watchlist not found")) from e
+
+    @server.tool()
+    async def manage_watchlist(
+        ctx: Context,
+        operation: str,
+        watchlist_id: str = "",
+        name: str | None = None,
+        description: str | None = None,
+        symbols: list[str] | None = None,
+        bindings: list[dict] | None = None,
+    ) -> dict:
+        """Create, update, or delete one of the caller's watchlists in xstockstrat-portfolio.
+        operation: 'create' | 'update' | 'delete'.
+        watchlist_id: required for update/delete; ignored for create.
+        name: list name. Required for create. On update, omit to keep the current name.
+        description: optional list description. On update, omit to keep the current description.
+        symbols: optional list of bare ticker symbols (unbound), e.g. ["NVDA","AAPL"].
+        bindings: optional list of {"symbol": <ticker>, "strategy_id": <id or "">} objects — a set
+            strategy_id makes the symbol a ready-made strategy candidate; "" (or omitted) is an
+            unbound bare symbol. symbols and bindings may be combined in one call.
+
+        CREATE: makes a new list owned by the caller from name (+ optional description/symbols/
+            bindings). New entries are recorded as MANUAL (user-curated).
+
+        UPDATE IS A READ-MODIFY-WRITE MERGE. The backend UpdateWatchlist is replace-all and requires
+            a name, so this tool fetches the current list first and preserves every field you do NOT
+            pass: an omitted name/description keeps the stored value, and omitting BOTH symbols and
+            bindings preserves the existing stocks exactly (so 'update' with only a new name renames
+            the list WITHOUT clearing its stocks). Passing symbols and/or bindings REPLACES the
+            whole stock set with those MANUAL entries. To add or remove individual stocks without
+            replacing the set, use manage_watchlist_symbols instead. (The read-then-write is not
+            atomic — a concurrent add between the two steps could be lost by the replace.)
+
+        DELETE: removes the list. The one system-managed signals watchlist per user is
+            delete-protected and its deletion is refused by the backend.
+
+        Returns {"watchlist": <watchlist>} for create/update (snake_case, as get_watchlist);
+            {"deleted": true, "watchlist_id": <id>} for delete.
+        Acting on a list the caller does not own is rejected (permission denied)."""
+        user_id = _caller_user_id(ctx, "manage_watchlist")
+        try:
+            if operation == "create":
+                if not name:
+                    raise ValueError("manage_watchlist(operation='create') requires a name")
+                return await client.create_watchlist(
+                    user_id,
+                    name=name,
+                    description=description or "",
+                    symbols=symbols,
+                    bindings=bindings,
+                )
+            if operation == "update":
+                if not watchlist_id:
+                    raise ValueError("manage_watchlist(operation='update') requires a watchlist_id")
+                return await client.update_watchlist(
+                    user_id,
+                    watchlist_id,
+                    name=name,
+                    description=description,
+                    symbols=symbols,
+                    bindings=bindings,
+                )
+            if operation == "delete":
+                if not watchlist_id:
+                    raise ValueError("manage_watchlist(operation='delete') requires a watchlist_id")
+                return await client.delete_watchlist(user_id, watchlist_id)
+            raise ValueError(f"unknown operation '{operation}' (expected create/update/delete)")
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="watchlist not found")) from e
+
+    @server.tool()
+    async def manage_watchlist_symbols(
+        ctx: Context,
+        operation: str,
+        watchlist_id: str,
+        symbols: list[str] | None = None,
+        bindings: list[dict] | None = None,
+    ) -> dict:
+        """Add or remove stocks on one of the caller's watchlists in xstockstrat-portfolio.
+        operation: 'add' | 'remove'.
+        watchlist_id: required — the list to mutate.
+        symbols: bare ticker symbols. For 'add' these are unbound entries; for 'remove' these are
+            the symbols to drop.
+        bindings: (add only) list of {"symbol": <ticker>, "strategy_id": <id or "">} objects to add
+            with a strategy binding. symbols and bindings may be combined in one add call.
+
+        ADD unions the given symbols/bindings into the list (an already-present symbol keeps its
+            stored binding — first-writer-wins) and records new entries as MANUAL (user-curated),
+            distinct from the SIGNAL entries the ingest_signal watchlist path adds. The per-list
+            symbol cap is enforced by the backend. REMOVE drops the given symbols; symbols not on
+            the list are ignored.
+
+        Returns {"watchlist": <watchlist>} — the updated list (snake_case, as get_watchlist).
+        Acting on a list the caller does not own is rejected (permission denied)."""
+        user_id = _caller_user_id(ctx, "manage_watchlist_symbols")
+        if not watchlist_id:
+            raise ValueError("manage_watchlist_symbols requires a watchlist_id")
+        try:
+            if operation == "add":
+                return await client.add_watchlist_symbols(
+                    user_id, watchlist_id, symbols=symbols, bindings=bindings
+                )
+            if operation == "remove":
+                return await client.remove_watchlist_symbols(
+                    user_id, watchlist_id, symbols=symbols or []
+                )
+            raise ValueError(f"unknown operation '{operation}' (expected add/remove)")
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="watchlist not found")) from e
 
 
 async def _get_source(source_slug: str) -> dict:

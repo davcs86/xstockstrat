@@ -33,7 +33,7 @@ Python 3.12 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
 
 ## MCP Tools
 
-The agent registers twenty-four tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
+The agent registers twenty-eight tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
 reference):
 
 | Tool | Purpose |
@@ -62,6 +62,10 @@ reference):
 | `set_config` | Write one config value **including secrets** (admin-scoped write, feature 073; secret values are encrypted at rest by the config service, PR #994); takes an optional `user_id` (per-user override; secrets are global-only) — no `trading_mode`, and no caller-facing `environment` (always the deployment env, PR #994); a write to an unregistered `(namespace,key,environment,user_id)` scope is refused `NOT_FOUND` unless `create_key=true` (feature 091) |
 | `get_user_metadata` | Fetch the calling user's own profile metadata (read-only, feature 130) |
 | `set_user_metadata` | Partial-update the calling user's own profile metadata (feature 130) |
+| `list_watchlists` | List the caller's own watchlists from portfolio, paginated (read-only, feature 148) |
+| `get_watchlist` | Read one of the caller's watchlists incl. its stocks (read-only, feature 148) |
+| `manage_watchlist` | Create/update/delete a caller-owned watchlist; `update` is a **read-modify-write merge** over the replace-only `UpdateWatchlist` RPC so a name-only edit never wipes the stocks (feature 148) |
+| `manage_watchlist_symbols` | Add/remove stocks on a caller-owned watchlist; `add` records `MANUAL`-sourced entries (feature 148) |
 
 ### Management-tool authorization
 
@@ -84,6 +88,17 @@ and a non-owner is rejected `PERMISSION_DENIED`. Both tools (and the read tools 
 `get_strategy`, `list_strategies`) forward the caller's own **`x-user-id`** — resolved via
 `_caller_user_id(ctx, tool)` — so analysis resolves ownership from the header (never the request
 body). They still also forward `x-access-scope` for defence-in-depth, but it is no longer the gate.
+
+**The watchlist tools are ownership-gated too (feature 148).** `list_watchlists`, `get_watchlist`,
+`manage_watchlist`, and `manage_watchlist_symbols` forward **only** the caller's own `x-user-id` (via
+`_caller_user_id` + `_metadata(("x-user-id", …))`) and never an admin `x-access-scope` —
+`xstockstrat-portfolio` resolves ownership from the header (`loadOwned`) and returns
+`PERMISSION_DENIED` for a non-owner. `manage_watchlist`'s `update` verb is a **read-modify-write
+merge**: because the backend `UpdateWatchlist` is replace-all (its repo clears then re-inserts the
+stock rows), the tool `GetWatchlist`s first and preserves every field the caller omitted, so a
+name-only update cannot wipe the list's stocks. New entries the curation tools add are stamped
+`WATCHLIST_ENTRY_SOURCE_MANUAL`, distinct from the `SIGNAL` entries the `ingest_signal`
+`direction='watchlist'` path adds.
 
 **`manage_formula` is different** — it forwards **no** admin scope (plain `_metadata()`); the
 indicators backend enforces an **author-ownership** check instead (admin is only an override there).
