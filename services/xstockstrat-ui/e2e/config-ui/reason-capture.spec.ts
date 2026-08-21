@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { addAdminCookie, BASE_URL } from '../helpers/auth';
 
-const PLATFORM_NAMESPACE_PAGE = `${BASE_URL}/config-ui/platform?env=dev&mode=paper`;
+const PLATFORM_NAMESPACE_PAGE = `${BASE_URL}/config-ui/platform?env=staging`;
 
 test.describe('Feature 100 — config-ui reason capture', () => {
   test('a typed reason for platform.log_level is forwarded instead of the hardcoded default', async ({

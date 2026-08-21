@@ -46,15 +46,38 @@ Newsletter / Signal feeds                 Market data feeds (REST/stream)
 
 # Wiring a New Vendor Credential Through Deploy
 
-Applies to **any** new external-vendor API key (OHLCV source, fundamentals source, or otherwise)
-regardless of which Part below you're following — a credential lives at the deployment layer, not
-the config layer (`secret.*` config keys are for admin-editable operational secrets; a vendor API
-key is delivered as a platform secret env var instead — see `docs/patterns/config-governance.md`
-and the `FMP_API_KEY`/`FINNHUB_API_KEY` precedent, feature 076 / feature 129).
+> **CURRENT PATH (feature 147): a vendor credential is an encrypted secret config row, not a deploy
+> env var.** Since feature 147, secrets live in `xstockstrat-config` encrypted at rest (AES-256-GCM
+> under `CONFIG_SECRETS_ENCRYPTION_KEY`), redacted at every read edge, and resolved only via the
+> `GetSecret` RPC by an allow-listed internal caller. To wire a new vendor credential:
+>
+> 1. **Seed a secret config row** (`is_secret=true`, global scope, per environment) with **NULL
+>    ciphertext** — the row exists but has no value yet. Follow
+>    `docs/patterns/config-governance.md` § "Registering a new vendor credential".
+> 2. **Set the real value post-deploy** via the config write path (config-ui / admin `SetConfig`),
+>    which encrypts it. Never commit the plaintext.
+> 3. **Add an allow-list grant** in `services/xstockstrat-config/src/grpc/authz.ts`
+>    `SECRET_CALLER_ALLOWLIST` (consuming service → the specific secret keys it may decrypt).
+> 4. **Resolve it in the consuming service** at startup via `GetSecret` (sending
+>    `x-internal-caller: <service>`), e.g. marketdata's `Watcher.ResolveSecret`.
+>
+> The only new **deploy secret** this requires is `CONFIG_SECRETS_ENCRYPTION_KEY` (hex 32 bytes) on
+> the config service — without it the config service will not boot. The four existing vendor
+> credentials (`marketdata.alpaca.api_key`, `marketdata.alpaca.api_secret`, `marketdata.fmp.api_key`,
+> `marketdata.finnhub.api_key`) already moved to this model, and their `ALPACA_API_KEY` /
+> `ALPACA_API_SECRET` / `FMP_API_KEY` / `FINNHUB_API_KEY` env vars were removed.
 
-A vendor credential touches **eight** files, not just the three most visible ones. Missing the
-last five is easy — feature 129 (adding Finnhub) initially wired only the first three and had to
-follow up in a separate PR once the gap was noticed. Use this checklist for every new credential:
+---
+
+**Historical (pre-feature-147):** the checklist below wired a credential as a DO App Platform
+`type: SECRET` env var through the deploy pipeline. This is **no longer the current path** — kept
+only as a record of how the removed env-var wiring worked. Feature 076 had banned config-stored
+secrets because no encryption/redaction/resolver existed; feature 147 built those guards and moved
+credentials into encrypted config.
+
+A vendor credential touched **eight** files, not just the three most visible ones. Missing the
+last five was easy — feature 129 (adding Finnhub) initially wired only the first three and had to
+follow up in a separate PR once the gap was noticed:
 
 | # | File | What to add |
 |---|---|---|
@@ -98,7 +121,13 @@ All source credentials and tuning parameters must live in `xstockstrat-config`, 
 | `marketdata.<source>.base_url` | string | `https://api.polygon.io` | all |
 | `marketdata.<source>.rate_limit_rps` | int | `100` | all |
 | `marketdata.<source>.backfill.batch_size` | int | `500` | all |
-| `secret.marketdata.<source>.api_key` | string | _(resolved from secret store)_ | all |
+| `marketdata.<source>.api_key` | secret (`is_secret=true`) | _(NULL ciphertext until an operator sets it post-deploy)_ | all |
+
+The API key is a **secret config row** (feature 147): `is_secret=true`, AES-256-GCM ciphertext in
+`value_encrypted`, redacted at every read edge, resolved by the service at startup via the
+`GetSecret` RPC after adding a `SECRET_CALLER_ALLOWLIST` grant in
+`services/xstockstrat-config/src/grpc/authz.ts` — see § "Wiring a New Vendor Credential Through
+Deploy" above. The `secret.*` name prefix is retired; secret-ness is the `is_secret` flag alone.
 
 Replace `<source>` with the lowercase provider identifier, e.g. `polygon`, `tiingo`, `yahoo`.
 

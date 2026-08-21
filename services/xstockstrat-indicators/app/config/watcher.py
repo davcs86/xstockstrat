@@ -16,12 +16,12 @@ log = logging.getLogger(__name__)
 
 def resolve_environment(application_env: str) -> int:
     """Map APPLICATION_ENV ("development" | "production") to the proto Environment enum.
-    Anything other than "production" resolves to dev, matching this service's own default.
+    Anything other than "production" resolves to staging (feature 147).
     """
     return (
         common_pb2.ENVIRONMENT_PRODUCTION
         if application_env == "production"
-        else common_pb2.ENVIRONMENT_DEV
+        else common_pb2.ENVIRONMENT_STAGING  # feature 147: non-production => staging
     )
 
 

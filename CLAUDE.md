@@ -77,6 +77,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 | Using or troubleshooting the agent MCP tools | `docs/runbooks/mcp-tools.md` |
 | Adding/refactoring a skill, subagent, or `CLAUDE.md`; how the AI tooling curates context (subagent delegation, progressive disclosure, structured `context.md` memory) | `docs/patterns/context-engineering.md` |
 | SDD binding rules — Constitution constraint IDs (`C-*`/`P-*`/`F-*`) cited by review/design/execute | `docs/sdd/constitution.md` |
+| Acceptance scenarios & business rules (Gherkin `@AC-*`) — per-feature `acceptance.feature`, durable per-service suites read by recon/design, C-15/C-16 | `docs/sdd/business-rules/CLAUDE.md`, `docs/sdd/constitution.md` |
 | Codebase/runtime invariants (`PLAT-*`/`<MODULE>-*`) — non-obvious patterns, cross-module contracts, and scars an agent would otherwise miss; plus the defects/doc-drift log | `docs/context-constitution.md`, `docs/context-constitution-findings.md` (per-module: `services/*/docs/`, `packages/*/docs/`) |
 | Cross-feature SDD memory — insights (patterns that worked) and fails (mistakes that recurred) | `docs/roadmap/ledger/insights.md`, `docs/roadmap/ledger/fails.md` |
 | Changing `run_backtest`, `manage_strategy`, `trigger_backfill`/`get_backfill_status` or `set_strategy_live` — this repo ships the `strat-lab` plugin (`plugins/strat-lab/`) whose `backtest` skill encodes these APIs' current quirks, and a change to them must update the skill in the **same** PR | `docs/patterns/strat-lab-plugin.md` |
@@ -172,7 +173,7 @@ See `docs/runbooks/approval-flow.md`. Breaking proto: 2 owners + platform lead. 
 
 ## Config Governance Rules
 
-Config served by `xstockstrat-config` via `WatchConfig` RPC (gRPC 50060). Key rules: no hardcoded values in source; naming is `<service>.<category>.<key>`; all services subscribe at startup; defaults declared in each service's `CLAUDE.md`. **A vendor API credential is never a config key** (the `secret.*`/`is_secret` mechanism was tried once and reversed — feature 076) — it's a `type: SECRET` env var wired through the deploy pipeline instead; see `docs/runbooks/add-data-source.md` § "Wiring a New Vendor Credential Through Deploy".
+Config served by `xstockstrat-config` via `WatchConfig` RPC (gRPC 50060). Key rules: no hardcoded values in source; naming is `<service>.<category>.<key>`; all services subscribe at startup; defaults declared in each service's `CLAUDE.md`. Config is scoped by **environment** (`production`/`staging`) × **global/per-user** (`user_id`, NULL = global); a per-user value overrides the global one. Paper/live is **derived** from environment (production = live, staging = paper) — the old `trading_mode` config axis was removed by feature 147. **Secrets now live in config, encrypted at rest** (feature 147, which built the encryption + redaction + resolver that feature 076 declined — an explicit operator override of the prior "never a config key" ban, recorded in the feature's `context.md`): a secret row (`is_secret=true`) stores AES-256-GCM ciphertext in `value_encrypted` under the `CONFIG_SECRETS_ENCRYPTION_KEY` master key, `value_data` holds the `[redacted]` sentinel, plaintext is **redacted at every read/broadcast edge** (`WatchConfig`/`GetConfig`/`ListKeys`, config-ui, agent tools), and is decrypted only by the authenticated `GetSecret` RPC for allow-listed internal callers (`x-internal-caller`). `is_secret` is row-authoritative on write. The `secret.*` name prefix is **retired** — secret-ness is the `is_secret` flag alone. See `docs/patterns/config-governance.md` and `docs/runbooks/add-data-source.md` § "Wiring a New Vendor Credential Through Deploy".
 
 **Full rules, global key table, and the per-feature registered-keys log** → `docs/patterns/config-governance.md`.
 
@@ -196,7 +197,8 @@ All inter-service connection env vars follow these patterns. **Never invent new 
 - No `XSTOCKSTRAT_` prefix on inter-service connection vars (the only historical exception, the nginx `PRIVATE_URL` vars, was removed with nginx — see above).
 - No `_URL` suffix on inter-service connection vars — always `_ENDPOINT`.
 - When a new service introduces connection env vars, check `docker-compose.yml` first — the var may already exist in another service's block and only needs to be added to the new service's block with the same value.
-- `N8N_WEBHOOK_SECRET` was removed by feature 011 (`remove-n8n-references`). Do not reference it. The MCP agent uses `MCP_AGENT_SECRET` solely to HMAC-sign its stateless OAuth `txn` blob (`app/oauth_server.py`) — it is not sent as an outbound header (removed by feature 097).
+- `N8N_WEBHOOK_SECRET` (removed by feature 011, `remove-n8n-references`) and `MCP_AGENT_SECRET` (removed by feature 147) are gone — do not reference either. The MCP agent now HMAC-signs its stateless OAuth `txn` blob with `JWT_SECRET` (`app/oauth_server.py`), newly injected into the agent env; there is no separate agent shared secret.
+- The vendor-credential env vars `ALPACA_API_KEY`, `ALPACA_API_SECRET`, `FMP_API_KEY`, and `FINNHUB_API_KEY` were removed by feature 147 — these four credentials are now encrypted config rows (`marketdata.alpaca.api_key`, `marketdata.alpaca.api_secret`, `marketdata.fmp.api_key`, `marketdata.finnhub.api_key`) resolved by `xstockstrat-marketdata` via the `GetSecret` RPC at startup. Do not reintroduce them as env vars.
 
 ---
 
@@ -406,6 +408,7 @@ Active and completed feature implementations are tracked under `docs/roadmap/fea
 - `status.md` — canonical current lifecycle status, a single-line plain string (see `docs/roadmap/features/CLAUDE.md` § Feature Lifecycle Statuses for the full enum)
 - `feature.md` — Status History audit log, links to all artifacts
 - `product-spec.md` — requirements, affected services, governance gates
+- `acceptance.feature` — Gherkin `@AC-*` acceptance scenarios; single source of acceptance truth (Constitution **C-15**), promoted into per-service business-rule suites at launch (**C-16**)
 - `implementation-spec.md` — numbered steps with concrete code references and statuses
 - `context.md` — append-only session log of decisions, deviations, files modified
 

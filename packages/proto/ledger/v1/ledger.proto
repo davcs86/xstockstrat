@@ -26,7 +26,7 @@ message LedgerEvent {
   google.protobuf.Timestamp recorded_at = 6; // server write time
   google.protobuf.Struct payload = 7;         // event body (JSON-like)
   map<string, string> metadata = 8;
-  int64 sequence = 9;           // monotonically increasing per stream_key
+  int64 sequence = 9;           // GLOBAL monotonic sequence (nextval('ledger.global_sequence')), ordered across all stream_keys
   string stream_key = 10;       // partition key (e.g. "order:uuid")
 }
 

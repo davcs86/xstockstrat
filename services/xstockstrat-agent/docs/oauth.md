@@ -6,8 +6,9 @@ flow, routes, or discovery metadata.
 The agent is the OAuth 2.1 **Resource Server + Authorization-Server HTTP facade** for its MCP
 endpoint, and is **stateless**: all durable OAuth state (clients, auth codes, refresh tokens) lives
 in `xstockstrat-identity` and is reached over gRPC (`app/client.py`). The only cross-request linkage
-is the HMAC-signed `txn` blob carried in URLs (`app/oauth_server.py`, signed with `MCP_AGENT_SECRET`),
-so there is **no in-memory store** and `instance_count > 1` is safe (FR-B13).
+is the HMAC-signed `txn` blob carried in URLs (`app/oauth_server.py`, signed with `JWT_SECRET` since
+feature 147, which removed the dedicated `MCP_AGENT_SECRET`), so there is **no in-memory store** and
+`instance_count > 1` is safe (FR-B13).
 
 ## Routes
 

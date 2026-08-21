@@ -20,7 +20,7 @@ interface AuditEntry {
   reason: string;
   changedAt: string;
   environment: string;
-  tradingMode: string;
+  userId: string;
 }
 
 export default function AuditPage() {
@@ -65,20 +65,17 @@ export default function AuditPage() {
         meta: { className: 'hidden md:table-cell w-[100px] text-muted-foreground' },
       },
       {
-        id: 'envMode',
-        header: 'Env / Mode',
-        accessorFn: (e) => `${e.environment} ${e.tradingMode}`,
+        id: 'envScope',
+        header: 'Env / Scope',
+        accessorFn: (e) => `${e.environment} ${e.userId || 'global'}`,
         meta: { className: 'hidden lg:table-cell w-[120px]' },
         cell: ({ row }) => (
           <div className="flex gap-1">
             <Badge variant="secondary" className="text-xs">
               {row.original.environment}
             </Badge>
-            <Badge
-              variant={row.original.tradingMode === 'paper' ? 'paper' : 'live'}
-              className="text-xs"
-            >
-              {row.original.tradingMode}
+            <Badge variant="outline" className="text-xs">
+              {row.original.userId ? `user:${row.original.userId}` : 'global'}
             </Badge>
           </div>
         ),

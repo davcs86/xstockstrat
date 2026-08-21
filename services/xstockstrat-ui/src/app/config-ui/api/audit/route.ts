@@ -31,10 +31,11 @@ export async function GET(req: NextRequest) {
 
   try {
     const db = getPool();
+    // Feature 147: config.config_audit dropped trading_mode and gained user_id (NULL = global).
     const query = namespace
-      ? `SELECT id, namespace, key, old_value, new_value, changed_by, reason, changed_at, environment, trading_mode
+      ? `SELECT id, namespace, key, old_value, new_value, changed_by, reason, changed_at, environment, user_id
          FROM config.config_audit WHERE namespace = $1 ORDER BY changed_at DESC LIMIT $2`
-      : `SELECT id, namespace, key, old_value, new_value, changed_by, reason, changed_at, environment, trading_mode
+      : `SELECT id, namespace, key, old_value, new_value, changed_by, reason, changed_at, environment, user_id
          FROM config.config_audit ORDER BY changed_at DESC LIMIT $1`;
     const params = namespace ? [namespace, limit] : [limit];
     const result = await db.query(query, params);
@@ -49,11 +50,14 @@ export async function GET(req: NextRequest) {
         changedBy: r.changed_by ?? '',
         reason: r.reason ?? '',
         changedAt: r.changed_at,
-        environment: r.environment ?? 'dev',
-        tradingMode: r.trading_mode ?? 'all',
+        environment: r.environment ?? 'staging',
+        userId: r.user_id ?? '',
       })),
     });
   } catch (err: unknown) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 });
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Unknown error' },
+      { status: 500 },
+    );
   }
 }

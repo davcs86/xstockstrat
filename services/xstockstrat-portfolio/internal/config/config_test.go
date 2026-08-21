@@ -163,9 +163,9 @@ func TestResolveEnvironment(t *testing.T) {
 		want commonv1.Environment
 	}{
 		{"production", commonv1.Environment_ENVIRONMENT_PRODUCTION},
-		{"development", commonv1.Environment_ENVIRONMENT_DEV},
-		{"", commonv1.Environment_ENVIRONMENT_DEV},
-		{"staging", commonv1.Environment_ENVIRONMENT_DEV},
+		{"development", commonv1.Environment_ENVIRONMENT_STAGING},
+		{"", commonv1.Environment_ENVIRONMENT_STAGING},
+		{"staging", commonv1.Environment_ENVIRONMENT_STAGING},
 	}
 	for _, tt := range tests {
 		if got := resolveEnvironment(tt.in); got != tt.want {

@@ -73,14 +73,19 @@ func (TradingMode) EnumDescriptor() ([]byte, []int) {
 	return file_common_v1_common_proto_rawDescGZIP(), []int{0}
 }
 
-// Environment distinguishes dev from production deployments.
-// Used by xstockstrat-config to scope config values per deployment environment.
+// Environment distinguishes deployment environments; used by xstockstrat-config to scope config
+// values. The platform's two environments are STAGING and PRODUCTION (feature 147). paper/live
+// trading mode is DERIVED from the environment (production=live, staging=paper), not a separate
+// config dimension. ENVIRONMENT_DEV is deprecated in favor of ENVIRONMENT_STAGING but retained for
+// wire compatibility; the config server treats DEV and STAGING as the same 'staging' scope.
 type Environment int32
 
 const (
 	Environment_ENVIRONMENT_UNSPECIFIED Environment = 0
-	Environment_ENVIRONMENT_DEV         Environment = 1
-	Environment_ENVIRONMENT_PRODUCTION  Environment = 2
+	// Deprecated: Marked as deprecated in common/v1/common.proto.
+	Environment_ENVIRONMENT_DEV        Environment = 1 // deprecated: use ENVIRONMENT_STAGING (feature 147)
+	Environment_ENVIRONMENT_PRODUCTION Environment = 2
+	Environment_ENVIRONMENT_STAGING    Environment = 3
 )
 
 // Enum value maps for Environment.
@@ -89,11 +94,13 @@ var (
 		0: "ENVIRONMENT_UNSPECIFIED",
 		1: "ENVIRONMENT_DEV",
 		2: "ENVIRONMENT_PRODUCTION",
+		3: "ENVIRONMENT_STAGING",
 	}
 	Environment_value = map[string]int32{
 		"ENVIRONMENT_UNSPECIFIED": 0,
 		"ENVIRONMENT_DEV":         1,
 		"ENVIRONMENT_PRODUCTION":  2,
+		"ENVIRONMENT_STAGING":     3,
 	}
 )
 
@@ -620,11 +627,12 @@ const file_common_v1_common_proto_rawDesc = "" +
 	"\vTradingMode\x12\x1c\n" +
 	"\x18TRADING_MODE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12TRADING_MODE_PAPER\x10\x01\x12\x15\n" +
-	"\x11TRADING_MODE_LIVE\x10\x02*[\n" +
+	"\x11TRADING_MODE_LIVE\x10\x02*x\n" +
 	"\vEnvironment\x12\x1b\n" +
-	"\x17ENVIRONMENT_UNSPECIFIED\x10\x00\x12\x13\n" +
-	"\x0fENVIRONMENT_DEV\x10\x01\x12\x1a\n" +
-	"\x16ENVIRONMENT_PRODUCTION\x10\x02*W\n" +
+	"\x17ENVIRONMENT_UNSPECIFIED\x10\x00\x12\x17\n" +
+	"\x0fENVIRONMENT_DEV\x10\x01\x1a\x02\b\x01\x12\x1a\n" +
+	"\x16ENVIRONMENT_PRODUCTION\x10\x02\x12\x17\n" +
+	"\x13ENVIRONMENT_STAGING\x10\x03*W\n" +
 	"\n" +
 	"BrokerType\x12\x1b\n" +
 	"\x17BROKER_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +

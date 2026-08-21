@@ -376,6 +376,7 @@ Write `docs/roadmap/features/${FEATURE_DIRNAME}/feature.md`:
 ## Artifacts
 
 - [Product Spec](product-spec.md) — bug description and fix scope
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec <slug>`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -433,15 +434,36 @@ Write `docs/roadmap/features/${FEATURE_DIRNAME}/product-spec.md` pre-populated f
 
 ## Acceptance Criteria
 
-- [ ] Observed behavior no longer occurs in reproduction steps
-- [ ] Existing tests pass
-- [ ] Affected service(s) smoke-tested on dev environment
+See `acceptance.feature` — the regression scenario(s) that must fail on the buggy behavior and pass
+after the fix (Constitution **C-15**). Plus: existing tests pass; affected service(s) smoke-tested on
+dev.
 
 ## Out of Scope
 
 - Refactoring unrelated to the bug
 - Performance improvements unrelated to the fix
 ```
+
+### C-4b. Write acceptance.feature (regression scenario — Constitution C-15/C-16)
+
+A bug fix **must** add a regression scenario so the defect can never silently return. Write
+`docs/roadmap/features/${FEATURE_DIRNAME}/acceptance.feature`:
+
+```gherkin
+Feature: <slug> (bug fix)
+  Regression guard for issue #<number>: <title>.
+
+  @AC-1 @regression
+  Scenario: <the bug no longer reproduces — named as the correct outcome>
+    Given <the reproduction precondition, concrete values from the issue>
+    When <the action that triggered the bug>
+    Then <the CORRECT observable outcome — what should happen, not the bug>
+```
+
+The paired `test` step (`/sdd-spec`) traces to `@AC-1` and is authored to **fail on the current buggy
+code** (red) and pass after the fix (green) — this is the red-before-green proof for the bug
+(`P-06`). If the root cause is still under investigation, write the scenario from the *expected*
+behavior in the issue and refine it once the cause is known.
 
 ### C-5. Write context.md
 
@@ -459,7 +481,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Bug reported via GitHub issue #<number>: <title>
 - Severity: <SEV-N>
 - Routed to SDD path (Track C)
-- Created: feature.md, product-spec.md, context.md
+- Created: feature.md, product-spec.md, acceptance.feature (regression scenario), context.md
 - Affected services (from issue): <list>
 - Root cause hypothesis: <from issue or "under investigation">
 - Recommended design depth: <skip | quick | full> → `<design-rec>` (rationale: <severity + scope signal>)

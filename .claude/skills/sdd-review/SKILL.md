@@ -71,13 +71,18 @@ If any found:
 
 ### A2. Criteria pass (delegate to `spec-reviewer`)
 First confirm `PRODUCT_SPEC` exists (`ls`); if absent stop — "No product-spec.md found. Run
-/sdd-story $ARGUMENTS[0] first." Then spawn a **`spec-reviewer`** subagent via Task:
-> "Review `$PRODUCT_SPEC` in mode `product-spec`. Apply every criterion in
+/sdd-story $ARGUMENTS[0] first." Also resolve `ACCEPTANCE`=`$FEATURE_DIR/acceptance.feature` (its
+absence is itself criterion-8 FAIL, per C-15 — pass the path either way). Then spawn a
+**`spec-reviewer`** subagent via Task:
+> "Review `$PRODUCT_SPEC` in mode `product-spec`, together with the sibling acceptance scenarios at
+> `$ACCEPTANCE`. Apply every criterion in
 > `.claude/skills/sdd-review/reference/product-spec-criteria.md` (core criteria + trading-domain
-> table). Verify code-checkable claims (service names vs CLAUDE.md registry, config-key format,
-> proto field numbers). Tag each finding with the Constitution ID it maps to
-> (`docs/sdd/constitution.md`); a Floor (`F-*`) breach is a blocking FAIL. Return the structured
-> per-criterion verdict and an overall PASS / PASS WITH WARNINGS / FAIL."
+> table) — criterion 8 checks `acceptance.feature` exists, every `FR-N` has a covering `@AC-*`
+> scenario, and each scenario is well-formed (tags, concrete values, observable `Then`). Verify
+> code-checkable claims (service names vs CLAUDE.md registry, config-key format, proto field
+> numbers). Tag each finding with the Constitution ID it maps to (`docs/sdd/constitution.md`); a
+> Floor (`F-*`) breach is a blocking FAIL. Return the structured per-criterion verdict and an overall
+> PASS / PASS WITH WARNINGS / FAIL."
 
 Hold the returned verdict — do not re-derive the criteria yourself.
 

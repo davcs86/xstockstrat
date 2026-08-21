@@ -39,6 +39,7 @@ from app.repositories.backtest_run_symbols import BacktestRunSymbolsRepository
 from app.repositories.backtest_runs import BacktestRunsRepository
 from app.repositories.opportunities import OpportunitiesRepository
 from app.repositories.opportunity_actions import OpportunityActionsRepository
+from app.repositories.pnl_pattern_samples import PnLPatternSamplesRepository
 from app.repositories.strategies import StrategiesRepository
 from app.repositories.strategy_scores import StrategyScoresRepository
 from app.services import scoring, warmup
@@ -111,6 +112,69 @@ _DEFAULT_OPP_PAGE_SIZE = 50
 
 class _BarFetchError(Exception):
     """Raised when bar pagination cannot complete safely (non-advancing cursor, page cap)."""
+
+
+def bucket_pnl_factors(samples, *, min_sample, bucket_count):
+    """Query-time bucketing for QueryPnLPatterns (feature 042, design § 3). Pure — no I/O.
+
+    ``samples`` are pnl_pattern_samples rows (dicts: factor_name, factor_type, indicator_value,
+    signal_present, realized_pnl). Indicator factors split into ``bucket_count`` quantile buckets
+    (data-dependent boundaries); signal factors are grouped by presence. A bucket/group with fewer
+    than ``min_sample`` samples is dropped. Returns a list of ``analysis_pb2.PnLPatternFactor``.
+    """
+    by_factor: dict[tuple, list[dict]] = {}
+    for s in samples:
+        by_factor.setdefault((s["factor_name"], s["factor_type"]), []).append(s)
+
+    factors = []
+    for (name, ftype), rows in by_factor.items():
+        if ftype == "indicator":
+            valued = sorted(
+                (r for r in rows if r.get("indicator_value") is not None),
+                key=lambda r: float(r["indicator_value"]),
+            )
+            if not valued:
+                continue
+            n_buckets = max(1, int(bucket_count))
+            size = max(1, len(valued) // n_buckets)
+            # Contiguous quantile buckets of ~equal count; the last bucket absorbs the remainder.
+            i = 0
+            while i < len(valued):
+                bucket = valued[i : i + size]
+                # Fold a trailing short bucket into the previous one to avoid a tiny tail bucket.
+                if 0 < len(valued) - (i + size) < size:
+                    bucket = valued[i:]
+                    i = len(valued)
+                else:
+                    i += size
+                if len(bucket) < min_sample:
+                    continue
+                vals = [float(b["indicator_value"]) for b in bucket]
+                pnls = [float(b["realized_pnl"]) for b in bucket]
+                factors.append(
+                    analysis_pb2.PnLPatternFactor(
+                        factor_name=name,
+                        factor_type=analysis_pb2.FACTOR_TYPE_INDICATOR,
+                        value_range_low=min(vals),
+                        value_range_high=max(vals),
+                        sample_count=len(bucket),
+                        avg_pnl_impact=sum(pnls) / len(pnls),
+                    )
+                )
+        else:  # signal
+            present = [r for r in rows if r.get("signal_present")]
+            if len(present) < min_sample:
+                continue
+            pnls = [float(r["realized_pnl"]) for r in present]
+            factors.append(
+                analysis_pb2.PnLPatternFactor(
+                    factor_name=name,
+                    factor_type=analysis_pb2.FACTOR_TYPE_SIGNAL,
+                    sample_count=len(present),
+                    avg_pnl_impact=sum(pnls) / len(pnls),
+                )
+            )
+    return factors
 
 
 class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
@@ -189,6 +253,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # of this table; lazy compute-on-read + stale-while-revalidate + a daily refresh keep it
         # fresh. Reuses db_pool (F-06); None in the no-DB test path.
         self._opportunities_repo = OpportunitiesRepository(db_pool) if db_pool else None
+        # P&L pattern attribution samples (feature 042). Written by the pnl_pattern_consumer;
+        # read here by QueryPnLPatterns with query-time quantile bucketing. Reuses db_pool (F-06).
+        self._pnl_samples_repo = PnLPatternSamplesRepository(db_pool) if db_pool else None
         # Per-user compute serialization (OR-A): a lazy asyncio.Lock so two tabs' cold reads
         # don't double-compute; a set marks users with a background recompute already in flight
         # (stale-while-revalidate) so a burst of stale reads kicks exactly one recompute.
@@ -2140,6 +2207,45 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             trace = await evaluator.evaluate_conditions_traced(definition, bars, symbol, rule=rule)
             readiness.append(_readiness_to_proto(trace))
         return analysis_pb2.EvaluateReadinessResponse(readiness=readiness)
+
+    async def QueryPnLPatterns(self, request, context):
+        """Ranked P&L-attribution factors (feature 042). Reads the raw pnl_pattern_samples for the
+        symbol (optionally narrowed by strategy/time) and buckets at QUERY time (design § 3):
+        indicator
+        factors into quantile buckets, signal factors by presence; drops buckets below
+        ``analysis.patterns.min_sample_count``; splits positive/negative by ``avg_pnl_impact``,
+        ranking each by |impact| desc under ``request.limit``. DB-only read."""
+        if self._pnl_samples_repo is None:
+            return analysis_pb2.QueryPnLPatternsResponse()
+
+        from_ts = request.from_ts.ToDatetime() if request.HasField("from_ts") else None
+        to_ts = request.to_ts.ToDatetime() if request.HasField("to_ts") else None
+        samples = await self._pnl_samples_repo.query(
+            symbol=request.symbol,
+            strategy_id=request.strategy_id,
+            from_ts=from_ts,
+            to_ts=to_ts,
+        )
+
+        min_sample = self._cfg.get_int("analysis.patterns.min_sample_count", 5)
+        bucket_count = self._cfg.get_int("analysis.patterns.indicator_bucket_count", 5)
+        factors = bucket_pnl_factors(samples, min_sample=min_sample, bucket_count=bucket_count)
+
+        positive = sorted(
+            (f for f in factors if f.avg_pnl_impact > 0),
+            key=lambda f: abs(f.avg_pnl_impact),
+            reverse=True,
+        )
+        negative = sorted(
+            (f for f in factors if f.avg_pnl_impact < 0),
+            key=lambda f: abs(f.avg_pnl_impact),
+            reverse=True,
+        )
+        limit = request.limit or len(factors)
+        return analysis_pb2.QueryPnLPatternsResponse(
+            positive_factors=positive[:limit],
+            negative_factors=negative[:limit],
+        )
 
     async def GetIndicatorSeries(self, request, context):
         """Per-component historical indicator series for a strategy over the caller's own bar window

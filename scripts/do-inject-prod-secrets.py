@@ -10,66 +10,39 @@ starts with no history — every required SECRET must be supplied at create time
 or the component comes up with an empty value. Since `.do/app.yaml` is checked
 into a public repo, those values live in GitHub Secrets and are injected here.
 
-Two injection styles:
-  * Placeholder secrets (JWT, broker key, Alpaca, FMP) already appear in the
-    spec as YOUR_PROD_* tokens — straight string replace, mirroring the
-    substitution in deploy.yml.
-  * SECRET envs with no placeholder (MCP agent secret) have a `value:` line
-    injected into their 3-line block.
+Placeholder secrets (JWT, broker key, config-secrets key) already appear in the
+spec as YOUR_PROD_* tokens — straight string replace, mirroring the substitution
+in deploy.yml.
+
+Feature 147: the vendor credentials (Alpaca/FMP/Finnhub) are no longer deploy
+secrets — they are stored encrypted in xstockstrat-config and set post-deploy via
+the config write path — and MCP_AGENT_SECRET is retired (the agent signs its
+OAuth txn with JWT_SECRET, injected into the agent block as a YOUR_PROD_JWT_SECRET
+placeholder). So no INJECT_KEYS remain.
 
 Any required secret whose env var is empty/unset is left untouched, so the
-workflow degrades gracefully (DO treats it as an unset SECRET) and logs a
-warning. FMP_API_KEY and FINNHUB_API_KEY are optional — their fundamentals
-pipelines are off by default (marketdata.fmp.enabled=false,
-marketdata.finnhub.enabled=false, feature 129) — so their warnings are
-suppressed when unset, matching deploy.yml.
+workflow degrades gracefully (DO treats it as an unset SECRET) and logs a warning.
 
 Reads the spec on stdin, writes the rendered spec to stdout.
 """
-import json
 import os
 import sys
-
-# SECRET envs that have no YOUR_PROD_* placeholder in the spec and therefore
-# need a `value:` line injected into their block. Keyed by env var name read
-# from the process environment (populated from GitHub Secrets in CI).
-INJECT_KEYS = ("MCP_AGENT_SECRET",)
 
 # Required placeholder token -> env var name, mirrors the substitution in
 # deploy.yml's prod path.
 PLACEHOLDER_KEYS = (
     ("YOUR_PROD_JWT_SECRET", "JWT_SECRET"),
     ("YOUR_PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY", "BROKER_ACCOUNTS_ENCRYPTION_KEY"),
-    ("YOUR_PROD_ALPACA_API_KEY", "ALPACA_API_KEY"),
-    ("YOUR_PROD_ALPACA_API_SECRET", "ALPACA_API_SECRET"),
+    ("YOUR_PROD_CONFIG_SECRETS_ENCRYPTION_KEY", "CONFIG_SECRETS_ENCRYPTION_KEY"),
 )
 
-# Optional placeholder token -> env var name. These fundamentals pipelines are
-# off by default, so an unset key is a valid state — no warning if empty.
+# Optional placeholder token -> env var name; off until set, so an unset key is a valid state
+# (no warning if empty). Feature 147 moved the data-source vendor credentials into encrypted config;
+# the notify fanout secrets (feature 020) remain app-level type: SECRET env vars.
 OPTIONAL_PLACEHOLDER_KEYS = (
-    ("YOUR_PROD_FMP_API_KEY", "FMP_API_KEY"),
-    ("YOUR_PROD_FINNHUB_API_KEY", "FINNHUB_API_KEY"),
+    ("YOUR_PROD_SLACK_WEBHOOK_URL", "SLACK_WEBHOOK_URL"),
+    ("YOUR_PROD_SENDGRID_API_KEY", "SENDGRID_API_KEY"),
 )
-
-
-def inject_block(content, key, value):
-    """Add a `value:` line to the `- key: <key>` SECRET block(s)."""
-    if not value:
-        sys.stderr.write(
-            "warning: %s is empty; leaving it as an unset SECRET\n" % key
-        )
-        return content
-    block = (
-        "      - key: %s\n"
-        "        scope: RUN_TIME\n"
-        "        type: SECRET" % key
-    )
-    if block not in content:
-        sys.stderr.write("warning: no SECRET block for %s found in spec\n" % key)
-        return content
-    # json.dumps yields a double-quoted scalar that is valid YAML for any value.
-    replacement = block + "\n        value: " + json.dumps(value)
-    return content.replace(block, replacement)
 
 
 def main():
@@ -86,9 +59,6 @@ def main():
         value = os.environ.get(env_key, "")
         if value:
             content = content.replace(placeholder, value)
-
-    for key in INJECT_KEYS:
-        content = inject_block(content, key, os.environ.get(key, ""))
 
     sys.stdout.write(content)
 

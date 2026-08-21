@@ -6,6 +6,7 @@
 **Severity**: SEV-2
 **Created**: 2026-08-16
 **Last Updated**: 2026-08-16
+**Archived**: 2026-08-19
 **Committed to main**: 6cd5572193b09a153c24e4cb90e3b65708846981
 **Launched date**: 2026-08-19
 
@@ -23,14 +24,12 @@
 | 2026-08-16 | `in-progress` → `code-completed` | /sdd-execute | Step 2 done: 3 pgxmock regression tests, red-before-green confirmed against real pre/post-rename SQL. go vet + golangci-lint clean; full suite passes. Live-DB smoke test unavailable (no docker daemon) — go vet/query-shape fallback used per spec. Both steps complete. |
 
 | 2026-08-19 | `code-completed` → `launched` | CI workflow | Promoted via PR #985; committed 6cd5572193b09a153c24e4cb90e3b65708846981 |
+| 2026-08-19 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(2); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Recon](recon.md) — grounded codebase dossier
-- [Design](design.md) — debated, approved architecture (single-site AS-alias rename)
-- [Implementation Spec](implementation-spec.md) — 2 steps (service + test)
+- _Product Spec, Recon, Design, Implementation Spec — pruned on archive (2026-08-19); recoverable via git history._
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

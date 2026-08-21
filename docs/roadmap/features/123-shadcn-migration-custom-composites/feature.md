@@ -2,7 +2,10 @@
 
 **Development Branch**: `feature/shadcn-migration-custom-composites`
 **Created**: 2026-08-08
-**Last Updated**: 2026-08-09
+**Last Updated**: 2026-08-19
+**Committed to main**: 1d97c6c78caa532a24265dae2fa79c674b3b69dd
+**Launched date**: 2026-08-19
+**Archived**: 2026-08-19
 
 ---
 
@@ -18,15 +21,14 @@
 | 2026-08-09 | `implementation-ready` (unchanged) | user override (Round 4) + this session | The user was asked directly about the two remaining self-run-session decisions (FR-2's recharts-version handling, and whether to fold the `insights/page.tsx` Deferred Item into scope) and **overrode both**: (1) bump `recharts` to v3 (`^3.8.0`) repo-wide instead of hand-authoring `ui/chart.tsx` against the installed v2.12.7; (2) fold `insights/page.tsx:176-199`'s second "Score Trend" chart into this feature now, as new **FR-12**. Recorded as `design.md` § Round 4 (rewrote Chosen Approach #2, added Chosen Approach #12/FR-12, updated Rejected Alternatives and Open Risks; **Rounds 3 → 4**), `product-spec.md` (new FR-12 with its own acceptance-criteria line, Affected Services and Consumer Surface updated to include `insights/page.tsx`, FR-2 text corrected for the v3 bump), and `implementation-spec.md` (new Step 2 — repo-wide `recharts` bump + minimal `CartesianGrid` `xAxisId`/`yAxisId` fix on `EquityCurveChart.tsx`/`insights/page.tsx` to keep `pnpm build` green; new Step 7 — FR-12's `insights/page.tsx` migration; every subsequent step renumbered; **Total Steps 13 → 15**; the former `## Deferred Item` section retained only as a superseded historical record). Recon (`design.md` § Round 4) confirmed `EquityCurveChart.tsx`'s `Scatter` usage never used the removed `points` prop and neither file uses `activeIndex`/`Customized`/`ref.current.current` — the only real v3-breaking-change code fix needed in either existing chart is the `CartesianGrid` `xAxisId`/`yAxisId` addition. FR-2 and FR-12 are now **fully resolved**; only **FR-9** (the `@shadcn/react` CLI-vendored install path/version pin) remains adversarially-vetted but not live-gated. |
 | 2026-08-09 | `implementation-ready` → `in-progress` | /sdd-execute sequential | Branch created (`feature/shadcn-migration-custom-composites`, stacked on `feature/shadcn-migration-low-confidence`). A live confirmation attempt for FR-9 (the one remaining unconfirmed item) did not yield an interactive answer in this execute session; execution proceeds on `design.md`'s own already-adversarially-vetted Chosen Approach #9, with Step 12's own live-registry re-verification as the concrete mitigation (see Next Action note above). Execution begins against all 15 steps. |
 | 2026-08-09 | `in-progress` → `code-completed` | /sdd-execute sequential | All 15 steps done. Step 13 (FR-10 Step 1 restructure) found a genuine `Questionnaire.Next`/`Previous` single-item-visibility mismatch (resolved via a plain-`Button` `IdentityNav` helper) and a pre-existing latent edit-mode bug the restructuring surfaced (hyphenated legacy strategy IDs permanently blocking Next — fixed, scoped to create-mode only); captured a genuine red state (10 failed/8 passed) before rewriting the e2e spec's Step-1 click sequencing, then 23/23 green. Step 14 (FR-11 step indicator) found the identical registered-item-architecture mismatch applies to `Questionnaire.Progress`/outer nav too — resolved via the implementation spec's own built-in escape hatch (Progress adopted via a zero-item Root driven entirely by `children`; outer nav Buttons kept, no shell wrap needed). Step 15's whole-feature pass: `pnpm lint`/`build` clean, 43/43 across the three required e2e specs, plus a temporary (never-committed) Playwright script standing in for the manual-verification checklist on the four files with no e2e coverage — all passed, no defects found. Draft PR [#914](https://github.com/davcs86/xstockstrat/pull/914) ready to flip to ready-for-review. |
+| 2026-08-19 | `code-completed` → `launched` | status reconciliation | Reconciled to launched: code in production (main==main-dev @ 1d97c6c7); CI status automation (ci-validate-feature-status.yml) missed the slug grep-match. PR #917. |
+| 2026-08-19 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(3); pruned 4 specs |
 
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Recon](recon.md) — grounded codebase dossier
-- [Design](design.md) — debated architecture (chosen approach, rejected alternatives, open risks — **FR-10 resolved via direct user override, § Round 3; FR-2 (recharts v3 bump) and FR-12 (insights/page.tsx second chart) resolved via direct user override, § Round 4; only FR-9 still flagged for user confirmation, see header note**)
-- [Implementation Spec](implementation-spec.md) — 15 steps (Step 11 split into Step 1's native-model restructure + Step 12's unchanged Steps 2-4 shell per the FR-10 override; new Step 2 — repo-wide `recharts` v3 bump — and new Step 7 — FR-12's `insights/page.tsx` migration — added per the Round 4 override; **Total Steps 13 → 15**), generated by `/sdd-spec`
+- _Product Spec, Recon, Design, Implementation Spec — pruned on archive (2026-08-19); recoverable via git history._
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

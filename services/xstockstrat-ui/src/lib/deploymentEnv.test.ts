@@ -15,36 +15,37 @@ describe('getNativeConfigEnv', () => {
     expect(getNativeConfigEnv()).toBe('production');
   });
 
-  it('normalizes "development" to "dev"', () => {
+  it('normalizes "development" to "staging" (feature 147)', () => {
     process.env.APPLICATION_ENV = 'development';
-    expect(getNativeConfigEnv()).toBe('dev');
+    expect(getNativeConfigEnv()).toBe('staging');
   });
 
-  it('falls back to "dev" when APPLICATION_ENV is unset', () => {
+  it('falls back to "staging" when APPLICATION_ENV is unset', () => {
     delete process.env.APPLICATION_ENV;
-    expect(getNativeConfigEnv()).toBe('dev');
+    expect(getNativeConfigEnv()).toBe('staging');
   });
 });
 
 describe('isNativeConfigEnvironment', () => {
-  it('matches DEV, not PRODUCTION, on a dev-native deployment', () => {
+  it('matches STAGING (and the deprecated DEV), not PRODUCTION, on a staging-native deployment', () => {
     process.env.APPLICATION_ENV = 'development';
-    expect(isNativeConfigEnvironment(Environment.DEV)).toBe(true);
+    expect(isNativeConfigEnvironment(Environment.STAGING)).toBe(true);
+    expect(isNativeConfigEnvironment(Environment.DEV)).toBe(true); // DEV maps to staging (feature 147)
     expect(isNativeConfigEnvironment(Environment.PRODUCTION)).toBe(false);
   });
 
-  it('matches PRODUCTION, not DEV, on a production-native deployment', () => {
+  it('matches PRODUCTION, not STAGING, on a production-native deployment', () => {
     process.env.APPLICATION_ENV = 'production';
     expect(isNativeConfigEnvironment(Environment.PRODUCTION)).toBe(true);
-    expect(isNativeConfigEnvironment(Environment.DEV)).toBe(false);
+    expect(isNativeConfigEnvironment(Environment.STAGING)).toBe(false);
   });
 
-  it('treats UNSPECIFIED as DEV on a dev-native deployment (matches)', () => {
+  it('treats UNSPECIFIED as STAGING on a staging-native deployment (matches)', () => {
     process.env.APPLICATION_ENV = 'development';
     expect(isNativeConfigEnvironment(Environment.UNSPECIFIED)).toBe(true);
   });
 
-  it('treats UNSPECIFIED as DEV on a production-native deployment (does not match)', () => {
+  it('treats UNSPECIFIED as STAGING on a production-native deployment (does not match)', () => {
     process.env.APPLICATION_ENV = 'production';
     expect(isNativeConfigEnvironment(Environment.UNSPECIFIED)).toBe(false);
   });

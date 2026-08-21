@@ -1,58 +1,29 @@
-# Context: phase7-observability
+# Context: phase7-observability  (archived 2026-08-19)
 
-**Feature**: `docs/roadmap/features/033-phase7-observability/feature.md`
-**Product Spec**: `docs/roadmap/features/033-phase7-observability/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/033-phase7-observability/implementation-spec.md`
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-08-19 — /sdd-archiver
 
-## Session 2026-05-26T00:00:00Z — sdd-story
+**What**: Scoped as "implement Phase 7 observability", it collapsed on contact with `main-dev` into a verify-and-gap-fill job: feature `015-fix-grafana-otel-variables` had already shipped the OTel collector, per-language stubs, DO/compose env wiring, and the runbook. Net new work was (a) filling the one workload 015 missed — `xstockstrat-agent` telemetry — and (b) delivering the four file-based dashboards (`packages/otel/dashboards/`) + alert rules (`packages/otel/alerts/`) + doc corrections. Nothing green-field was instrumented.
 
-- Created feature.md (status: draft), product-spec.md, context.md from brainstorming session.
-- Feature number assigned: 033.
-- Completes the Phase 7 implementation roadmap item (marked Pending in implementation-roadmap.md).
-- No proto or schema changes. Primarily DO app spec env var configuration + OTel Collector config + Grafana dashboard provisioning.
-- OTel stubs already exist in all services — must verify completeness at impl-spec time.
-- Two open questions deferred to impl-spec: Grafana Cloud plan limits, and dashboard provisioning method (file-based preferred).
-- Alerting integration with feature 020 (notify-external-fanout via Slack) noted as natural pairing.
+**Why (irrecoverable rationale)**: The 2026-05-30 story was one of a 4-feature batch (033/041/044/045) with open questions deliberately left for the review gate, and its FR-1 assumed the DO app specs wired OTEL only for the collector. Grounding at execute time found a global `envs:` block already covered every component, so most FRs became verify-not-build. The decisive move was checking current `main-dev` before building rather than trusting the spec's world-model.
 
-## Session 2026-05-30T00:00:00Z — sdd-story (regenerate)
+**Rejected alternatives**:
+- Ship the roadmap's FR-3 panel wishlist verbatim (open-position gauge, bracket-order counter, TimescaleDB pool gauge) — lost because no service emits those metrics; panels would render "No data". Approximated from the `rpc_server_duration_milliseconds` gRPC histogram + Loki matches instead.
+- Bake "market hours only" into the no-scoring alert rule expression — lost to a notification mute timing so the rule still evaluates 24/7 for dashboards and only paging is suppressed off-hours.
+- Implement the roadmap's `platform.otel.*` config-service keys — rejected; OTLP endpoint/creds stay infra env/secrets.
 
-- Product spec regenerated fresh as part of a 4-feature spec batch (033, 041, 045, 044), each
-  delivered as an independent PR off `main-dev`. Open questions deliberately left open for the
-  `/sdd-review product-spec` gate per the requesting story.
-- Grounded against current `main-dev`: confirmed `packages/otel/otel-collector-config.yaml`
-  exists, no `packages/otel/dashboards/` directory yet, and the DO app specs currently reference
-  OTEL vars only for the collector component (not the per-service workloads) — clarified in FR-1.
-- Expanded the open-questions set from two to four: added the per-service OTEL var injection
-  mechanism (global vs per-component) and the V1 alert routing target (email/OnCall/Slack-via-020).
-- Status unchanged at `draft`; next action is `/sdd-review phase7-observability product-spec`.
+**Scars & gotchas**: The agent is a gRPC *client* (`grpc.aio` dialer), so its telemetry uses `GrpcAioInstrumentorClient`, not the `GrpcAioInstrumentorServer` the other Python services use — copying the server pattern instruments the wrong side. Adding the three OTel deps + `uv lock` pulled the agent's `protobuf` from 7.x *down* to 6.33.x via the OTel proto constraint — it happened to align the agent with the other Python services, but an OTel dep now silently pins protobuf across Python services.
 
-## Session 2026-06-09 — harness `implement phase 7` (branch `claude/phase-7-jnruyq`)
+**Permanent deviations**: No `design.md` existed (harness `implement phase 7` session, not a standard /sdd-design→/sdd-spec run). All seven roadmap-vs-shipped divergences are recorded in the surviving `docs/roadmap/phase7-deviations.md`.
 
-- Discovery: the heavy lifting was already done by feature `015-fix-grafana-otel-variables` —
-  collector config, `otel-collector` compose service, per-language OTel stubs (Go/Python/Node/UI),
-  global `OTEL_*` envs in both DO specs, and `docs/setup/grafana-cloud.md` all pre-existed. So
-  FR-1, FR-2, FR-5 were **verified**, not re-built. (Note: the FR-1 product-spec claim that DO
-  specs only set OTEL for the collector is stale — a global `envs:` block already covers all
-  components.)
-- Resolved the four open questions with documented defaults (file-based dashboards; global env
-  injection; routing left per-env; free tier covers dev). See implementation-spec.md.
-- Gap found + filled: `xstockstrat-agent` had NO telemetry module. Added `app/telemetry.py`
-  (`GrpcAioInstrumentorClient`, since the agent is a `grpc.aio` client), wired `init_telemetry()`
-  into `app/main.py` `__main__`, added 3 OTel deps + re-ran `uv lock` (protobuf 7.x→6.33.x, now
-  matching the other Python services), added `SERVICE_NAME: agent` + collector endpoint to the
-  agent's docker-compose block and `SERVICE_NAME: agent` to both DO app specs.
-- FR-3: created `packages/otel/dashboards/` (service-health, signal-pipeline-throughput,
-  trading-service, infrastructure) + README. Panels use the `rpc_server_duration_milliseconds`
-  gRPC histogram + Loki log matches (signals that already flow); bespoke business metrics deferred
-  to V2 and flagged in the README. JSON validated.
-- FR-4: created `packages/otel/alerts/` — `alert-rules.yaml` (error>1%/5m, P99>2s/3m,
-  analysis-no-scoring/30m) + `mute-timings.yaml` (outside-us-market-hours) + README. YAML validated.
-- FR-6: refreshed `docs/setup/grafana-cloud.md` (dashboards/alerts now file-based; global-env
-  inheritance; added agent + corrected UI service.name; fixed "13 services").
-- Status bookkeeping: Phase 7 → DONE in root CLAUDE.md + roadmap; new `phase7-deviations.md`;
-  feature.md → `code-completed`.
-- NOTE for reviewers: the roadmap's old `platform.otel.*` config-key table is intentionally NOT
-  implemented — product spec mandates OTLP endpoint/creds stay infra env/secrets, not config keys.
+**Cross-feature signal**: 015 pre-shipped the OTel substrate but missed the agent; feature 020 (`notify-external-fanout`) is the intended V1 alert-routing target. A "phase" feature layered on prior features' work is where scope silently shrinks.
 
+**Deferred follow-ons**: Tempo distributed-trace dashboards (traces collected, unvisualized); bespoke business metrics (position counts, bracket-order success, TimescaleDB pool gauges); programmatic Terraform/Grafana-API provisioning (files import-ready) — all V2, flagged in dashboard/alert READMEs + phase7-deviations.md § Not done. Operator one-time steps at launch: import dashboards/alerts, set `OTEL_ENABLED=true` + endpoint/headers.
+
+**Ledger entries written**: insights.md (2), fails.md (1) — see the 2026-08-19 `phase7-observability` entries.
+
+**Runtime-invariant recommendations (→ /context-constitution)**: `<MODULE>-*` (xstockstrat-agent): the agent instruments as a gRPC client (`GrpcAioInstrumentorClient`) while other Python services instrument as servers, and the OTel exporter deps pin `protobuf` to 6.33.x across all Python services — candidate note for `services/xstockstrat-agent/docs/` so a future protobuf bump doesn't silently break the OTel constraint (borderline; both facts are grep-able in `app/telemetry.py`/`uv.lock` and recorded in phase7-deviations.md).
+
+**Pruned artifacts**: product-spec.md, implementation-spec.md — last present at 1d97c6c. (`docs/roadmap/phase7-deviations.md` survives and independently holds the deviation set.)

@@ -5,13 +5,16 @@
 //   protoc               unknown
 // source: portfolio/v1/portfolio.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PortfolioServiceClient = exports.PortfolioServiceService = exports.RemoveWatchlistSymbolsResponse = exports.RemoveWatchlistSymbolsRequest = exports.AddWatchlistSymbolsResponse = exports.AddWatchlistSymbolsRequest = exports.DeleteWatchlistResponse = exports.DeleteWatchlistRequest = exports.UpdateWatchlistResponse = exports.UpdateWatchlistRequest = exports.ListWatchlistsResponse = exports.ListWatchlistsRequest = exports.GetWatchlistResponse = exports.GetWatchlistRequest = exports.CreateWatchlistResponse = exports.CreateWatchlistRequest = exports.Watchlist = exports.WatchlistBinding = exports.ListPortfoliosResponse = exports.ListPortfoliosRequest = exports.StreamPortfolioUpdatesRequest = exports.GetSnapshotRequest = exports.GetPnLRequest = exports.ListPositionsResponse = exports.ListPositionsRequest = exports.GetPositionRequest = exports.GetPortfolioRequest = exports.PnLResponse = exports.PortfolioSnapshot = exports.Position = exports.Portfolio = exports.PositionSide = exports.PositionRiskFlag = exports.protobufPackage = void 0;
+exports.PortfolioServiceClient = exports.PortfolioServiceService = exports.EnsureSignalWatchlistResponse = exports.EnsureSignalWatchlistRequest = exports.RemoveWatchlistSymbolsResponse = exports.RemoveWatchlistSymbolsRequest = exports.AddWatchlistSymbolsResponse = exports.AddWatchlistSymbolsRequest = exports.DeleteWatchlistResponse = exports.DeleteWatchlistRequest = exports.UpdateWatchlistResponse = exports.UpdateWatchlistRequest = exports.ListWatchlistsResponse = exports.ListWatchlistsRequest = exports.GetWatchlistResponse = exports.GetWatchlistRequest = exports.CreateWatchlistResponse = exports.CreateWatchlistRequest = exports.Watchlist = exports.WatchlistBinding = exports.ListPortfoliosResponse = exports.ListPortfoliosRequest = exports.StreamPortfolioUpdatesRequest = exports.GetSnapshotRequest = exports.GetPnLRequest = exports.ListPositionsResponse = exports.ListPositionsRequest = exports.GetPositionRequest = exports.GetPortfolioRequest = exports.PnLResponse = exports.PortfolioSnapshot = exports.Position = exports.Portfolio = exports.WatchlistEntrySource = exports.PositionSide = exports.PositionRiskFlag = exports.protobufPackage = void 0;
 exports.positionRiskFlagFromJSON = positionRiskFlagFromJSON;
 exports.positionRiskFlagToJSON = positionRiskFlagToJSON;
 exports.positionRiskFlagToNumber = positionRiskFlagToNumber;
 exports.positionSideFromJSON = positionSideFromJSON;
 exports.positionSideToJSON = positionSideToJSON;
 exports.positionSideToNumber = positionSideToNumber;
+exports.watchlistEntrySourceFromJSON = watchlistEntrySourceFromJSON;
+exports.watchlistEntrySourceToJSON = watchlistEntrySourceToJSON;
+exports.watchlistEntrySourceToNumber = watchlistEntrySourceToNumber;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
@@ -134,6 +137,57 @@ function positionSideToNumber(object) {
         case PositionSide.POSITION_SIDE_SHORT:
             return 2;
         case PositionSide.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/** Provenance of a watchlist entry (feature 127). Consumers default UNSPECIFIED→MANUAL. */
+var WatchlistEntrySource;
+(function (WatchlistEntrySource) {
+    WatchlistEntrySource["WATCHLIST_ENTRY_SOURCE_UNSPECIFIED"] = "WATCHLIST_ENTRY_SOURCE_UNSPECIFIED";
+    WatchlistEntrySource["WATCHLIST_ENTRY_SOURCE_MANUAL"] = "WATCHLIST_ENTRY_SOURCE_MANUAL";
+    WatchlistEntrySource["WATCHLIST_ENTRY_SOURCE_SIGNAL"] = "WATCHLIST_ENTRY_SOURCE_SIGNAL";
+    WatchlistEntrySource["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(WatchlistEntrySource || (exports.WatchlistEntrySource = WatchlistEntrySource = {}));
+function watchlistEntrySourceFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "WATCHLIST_ENTRY_SOURCE_UNSPECIFIED":
+            return WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED;
+        case 1:
+        case "WATCHLIST_ENTRY_SOURCE_MANUAL":
+            return WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_MANUAL;
+        case 2:
+        case "WATCHLIST_ENTRY_SOURCE_SIGNAL":
+            return WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_SIGNAL;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return WatchlistEntrySource.UNRECOGNIZED;
+    }
+}
+function watchlistEntrySourceToJSON(object) {
+    switch (object) {
+        case WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED:
+            return "WATCHLIST_ENTRY_SOURCE_UNSPECIFIED";
+        case WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_MANUAL:
+            return "WATCHLIST_ENTRY_SOURCE_MANUAL";
+        case WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_SIGNAL:
+            return "WATCHLIST_ENTRY_SOURCE_SIGNAL";
+        case WatchlistEntrySource.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function watchlistEntrySourceToNumber(object) {
+    switch (object) {
+        case WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED:
+            return 0;
+        case WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_MANUAL:
+            return 1;
+        case WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_SIGNAL:
+            return 2;
+        case WatchlistEntrySource.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -1995,7 +2049,7 @@ exports.ListPortfoliosResponse = {
     },
 };
 function createBaseWatchlistBinding() {
-    return { symbol: "", strategyId: "" };
+    return { symbol: "", strategyId: "", source: WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED };
 }
 exports.WatchlistBinding = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -2004,6 +2058,9 @@ exports.WatchlistBinding = {
         }
         if (message.strategyId !== "") {
             writer.uint32(18).string(message.strategyId);
+        }
+        if (message.source !== WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED) {
+            writer.uint32(24).int32(watchlistEntrySourceToNumber(message.source));
         }
         return writer;
     },
@@ -2028,6 +2085,13 @@ exports.WatchlistBinding = {
                     message.strategyId = reader.string();
                     continue;
                 }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.source = watchlistEntrySourceFromJSON(reader.int32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -2044,6 +2108,9 @@ exports.WatchlistBinding = {
                 : isSet(object.strategy_id)
                     ? globalThis.String(object.strategy_id)
                     : "",
+            source: isSet(object.source)
+                ? watchlistEntrySourceFromJSON(object.source)
+                : WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED,
         };
     },
     toJSON(message) {
@@ -2054,6 +2121,9 @@ exports.WatchlistBinding = {
         if (message.strategyId !== "") {
             obj.strategyId = message.strategyId;
         }
+        if (message.source !== WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED) {
+            obj.source = watchlistEntrySourceToJSON(message.source);
+        }
         return obj;
     },
     create(base) {
@@ -2063,6 +2133,7 @@ exports.WatchlistBinding = {
         const message = createBaseWatchlistBinding();
         message.symbol = object.symbol ?? "";
         message.strategyId = object.strategyId ?? "";
+        message.source = object.source ?? WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED;
         return message;
     },
 };
@@ -2076,6 +2147,7 @@ function createBaseWatchlist() {
         createdAt: undefined,
         updatedAt: undefined,
         bindings: [],
+        systemManaged: false,
     };
 }
 exports.Watchlist = {
@@ -2103,6 +2175,9 @@ exports.Watchlist = {
         }
         for (const v of message.bindings) {
             exports.WatchlistBinding.encode(v, writer.uint32(66).fork()).join();
+        }
+        if (message.systemManaged !== false) {
+            writer.uint32(72).bool(message.systemManaged);
         }
         return writer;
     },
@@ -2169,6 +2244,13 @@ exports.Watchlist = {
                     message.bindings.push(exports.WatchlistBinding.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 9: {
+                    if (tag !== 72) {
+                        break;
+                    }
+                    message.systemManaged = reader.bool();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -2205,6 +2287,11 @@ exports.Watchlist = {
             bindings: globalThis.Array.isArray(object?.bindings)
                 ? object.bindings.map((e) => exports.WatchlistBinding.fromJSON(e))
                 : [],
+            systemManaged: isSet(object.systemManaged)
+                ? globalThis.Boolean(object.systemManaged)
+                : isSet(object.system_managed)
+                    ? globalThis.Boolean(object.system_managed)
+                    : false,
         };
     },
     toJSON(message) {
@@ -2233,6 +2320,9 @@ exports.Watchlist = {
         if (message.bindings?.length) {
             obj.bindings = message.bindings.map((e) => exports.WatchlistBinding.toJSON(e));
         }
+        if (message.systemManaged !== false) {
+            obj.systemManaged = message.systemManaged;
+        }
         return obj;
     },
     create(base) {
@@ -2248,6 +2338,7 @@ exports.Watchlist = {
         message.createdAt = object.createdAt ?? undefined;
         message.updatedAt = object.updatedAt ?? undefined;
         message.bindings = object.bindings?.map((e) => exports.WatchlistBinding.fromPartial(e)) || [];
+        message.systemManaged = object.systemManaged ?? false;
         return message;
     },
 };
@@ -3172,6 +3263,96 @@ exports.RemoveWatchlistSymbolsResponse = {
         return message;
     },
 };
+function createBaseEnsureSignalWatchlistRequest() {
+    return {};
+}
+exports.EnsureSignalWatchlistRequest = {
+    encode(_, writer = new wire_1.BinaryWriter()) {
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseEnsureSignalWatchlistRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(_) {
+        return {};
+    },
+    toJSON(_) {
+        const obj = {};
+        return obj;
+    },
+    create(base) {
+        return exports.EnsureSignalWatchlistRequest.fromPartial(base ?? {});
+    },
+    fromPartial(_) {
+        const message = createBaseEnsureSignalWatchlistRequest();
+        return message;
+    },
+};
+function createBaseEnsureSignalWatchlistResponse() {
+    return { watchlist: undefined };
+}
+exports.EnsureSignalWatchlistResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.watchlist !== undefined) {
+            exports.Watchlist.encode(message.watchlist, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseEnsureSignalWatchlistResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.watchlist = exports.Watchlist.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { watchlist: isSet(object.watchlist) ? exports.Watchlist.fromJSON(object.watchlist) : undefined };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.watchlist !== undefined) {
+            obj.watchlist = exports.Watchlist.toJSON(message.watchlist);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.EnsureSignalWatchlistResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseEnsureSignalWatchlistResponse();
+        message.watchlist = (object.watchlist !== undefined && object.watchlist !== null)
+            ? exports.Watchlist.fromPartial(object.watchlist)
+            : undefined;
+        return message;
+    },
+};
 exports.PortfolioServiceService = {
     getPortfolio: {
         path: "/xstockstrat.portfolio.v1.PortfolioService/GetPortfolio",
@@ -3302,6 +3483,19 @@ exports.PortfolioServiceService = {
         requestDeserialize: (value) => exports.RemoveWatchlistSymbolsRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.RemoveWatchlistSymbolsResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.RemoveWatchlistSymbolsResponse.decode(value),
+    },
+    /**
+     * Find-or-create the caller's system_managed=true watchlist (feature 127).
+     * Ownership is taken from the propagated x-user-id header; the request has no body (FR-2).
+     */
+    ensureSignalWatchlist: {
+        path: "/xstockstrat.portfolio.v1.PortfolioService/EnsureSignalWatchlist",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.EnsureSignalWatchlistRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.EnsureSignalWatchlistRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.EnsureSignalWatchlistResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.EnsureSignalWatchlistResponse.decode(value),
     },
 };
 exports.PortfolioServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.PortfolioServiceService, "xstockstrat.portfolio.v1.PortfolioService");

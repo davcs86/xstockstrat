@@ -333,6 +333,22 @@ corresponding `.enabled` key stays `false`.
 > Finnhub pair above is the reference instance of that checklist, and it's easy to wire the `.do/*.yaml`
 > placeholder but miss the GitHub Actions layer (the mistake that prompted writing the checklist).
 
+### External alert fanout credentials (Slack, SendGrid)
+Set on: `xstockstrat-notify`
+
+`xstockstrat-notify` can fan alerts out to a Slack channel and/or email (feature 020). Both channels
+are **optional and off until configured** — an empty key deploys fine and simply disables that
+channel (no `.enabled`-style guard, same as the fundamentals credentials above).
+
+- **Slack** — create a Slack incoming webhook (Slack → Apps → Incoming Webhooks) for the target
+  channel. Add `DEV_SLACK_WEBHOOK_URL` and `PROD_SLACK_WEBHOOK_URL` as GitHub Actions secrets (see
+  Step 9) — they substitute into the `YOUR_DEV_SLACK_WEBHOOK_URL` / `YOUR_PROD_SLACK_WEBHOOK_URL`
+  placeholders.
+- **SendGrid** — create a SendGrid API key with Mail Send permission. Add `DEV_SENDGRID_API_KEY`
+  and `PROD_SENDGRID_API_KEY` as GitHub Actions secrets — they substitute into the
+  `YOUR_DEV_SENDGRID_API_KEY` / `YOUR_PROD_SENDGRID_API_KEY` placeholders. Email additionally
+  requires the `notify.fanout.sendgrid_from_email` / `sendgrid_to_email` config keys to be set.
+
 ### JWT secret
 Set on: `xstockstrat-identity`
 
@@ -456,6 +472,10 @@ The CI/CD workflows need the following repository secrets. Go to:
 | `PROD_FMP_API_KEY` | FMP API key for production, optional (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
 | `DEV_FINNHUB_API_KEY` | Finnhub API key for staging, optional (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
 | `PROD_FINNHUB_API_KEY` | Finnhub API key for production, optional (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
+| `DEV_SLACK_WEBHOOK_URL` | Slack incoming webhook for staging alert fanout, optional (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
+| `PROD_SLACK_WEBHOOK_URL` | Slack incoming webhook for production alert fanout, optional (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
+| `DEV_SENDGRID_API_KEY` | SendGrid API key for staging email fanout, optional (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
+| `PROD_SENDGRID_API_KEY` | SendGrid API key for production email fanout, optional (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
 
 `GITHUB_TOKEN` is automatically provided by GitHub Actions for GHCR pushes — no setup needed.
 

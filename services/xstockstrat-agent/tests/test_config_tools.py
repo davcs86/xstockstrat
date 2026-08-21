@@ -81,69 +81,38 @@ class TestGetConfigRedaction:
         assert result["values"]["marketdata.fmp.enabled"]["value"] is True
 
 
-class TestSetConfigGuards:
-    @pytest.mark.asyncio
-    async def test_rejects_a_secret_prefixed_key_before_any_rpc(self):
-        server = _make_server()
-        with (
-            patch.object(client, "set_config", AsyncMock()) as write,
-            patch.object(client, "list_config_keys", AsyncMock()) as listing,
-        ):
-            with pytest.raises(RuntimeError, match="secret keys are not settable"):
-                await _tool_fn(server, "set_config")(
-                    ctx=_ctx(ADMIN),
-                    namespace="marketdata",
-                    key="secret.marketdata.fmp.api_key",
-                    value_type="string",
-                    value="abc",
-                    author="me",
-                    reason="r",
-                )
-        write.assert_not_awaited()
-        listing.assert_not_awaited()  # prong (b) runs before any network call
+class TestSetConfigSecretWrites:
+    """Feature 147 (PR #994 review): the agent NO LONGER client-side-refuses is_secret writes.
+
+    Secrets are encrypted at rest and row-authoritative on write in xstockstrat-config, and the
+    backend admin gate is what authorizes the write — so an admin may set a secret through the MCP.
+    The old client-side ListKeys pre-check + `flagged is_secret` refusal was removed; the tool no
+    longer calls ListKeys at all."""
 
     @pytest.mark.asyncio
-    async def test_rejects_a_flagged_key_that_is_not_prefixed(self):
+    async def test_forwards_a_secret_key_write_without_a_client_side_refusal(self):
         server = _make_server()
-        listing = {"keys": [{"key": "marketdata.vendor.token", "is_secret": True}]}
         with (
-            patch.object(client, "list_config_keys", AsyncMock(return_value=listing)),
-            patch.object(client, "set_config", AsyncMock()) as write,
+            # ListKeys must NOT be consulted any more — patch it to explode if it ever is.
+            patch.object(
+                client, "list_config_keys", AsyncMock(side_effect=AssertionError("ListKeys called"))
+            ),
+            patch.object(
+                client, "set_config", AsyncMock(return_value={"version": "1", "updated_at": "t"})
+            ) as write,
         ):
-            with pytest.raises(RuntimeError, match="flagged is_secret"):
-                await _tool_fn(server, "set_config")(
-                    ctx=_ctx(ADMIN),
-                    namespace="marketdata",
-                    key="marketdata.vendor.token",
-                    value_type="string",
-                    value="abc",
-                    author="me",
-                    reason="r",
-                )
-        write.assert_not_awaited()
-
-    @pytest.mark.asyncio
-    async def test_refuses_when_the_is_secret_lookup_fails(self):
-        """Fails CLOSED — otherwise prong (a) is decorative."""
-        import grpc
-
-        server = _make_server()
-        err = grpc.aio.AioRpcError(grpc.StatusCode.UNAVAILABLE, None, None, details="down")
-        with (
-            patch.object(client, "list_config_keys", AsyncMock(side_effect=err)),
-            patch.object(client, "set_config", AsyncMock()) as write,
-        ):
-            with pytest.raises(RuntimeError, match="cannot verify"):
-                await _tool_fn(server, "set_config")(
-                    ctx=_ctx(ADMIN),
-                    namespace="marketdata",
-                    key="marketdata.fmp.enabled",
-                    value_type="bool",
-                    value="true",
-                    author="me",
-                    reason="r",
-                )
-        write.assert_not_awaited()
+            await _tool_fn(server, "set_config")(
+                ctx=_ctx(ADMIN),
+                namespace="marketdata",
+                key="marketdata.alpaca.api_key",
+                value_type="string",
+                value="PKREALKEY",
+                author="me",
+                reason="rotate alpaca key",
+            )
+        # The write is forwarded to the backend (which encrypts it); no refusal, no ListKeys probe.
+        write.assert_awaited_once()
+        assert write.await_args.kwargs["key"] == "marketdata.alpaca.api_key"
 
     @pytest.mark.asyncio
     async def test_refuses_without_verified_claims(self):
@@ -153,10 +122,7 @@ class TestSetConfigGuards:
         without passing _authorized, so this guard is now defence in depth rather than the
         live gate. The assertion is unchanged -- the guard must still hold."""
         server = _make_server()
-        with (
-            patch.object(client, "list_config_keys", AsyncMock(return_value={"keys": []})),
-            patch.object(client, "set_config", AsyncMock()) as write,
-        ):
+        with patch.object(client, "set_config", AsyncMock()) as write:
             with pytest.raises(RuntimeError, match="Streamable HTTP"):
                 await _tool_fn(server, "set_config")(
                     ctx=_ctx(None),
@@ -174,12 +140,9 @@ class TestSetConfigForwardsRealScope:
     @pytest.mark.asyncio
     async def test_forwards_the_admin_scope_derived_from_roles(self):
         server = _make_server()
-        with (
-            patch.object(client, "list_config_keys", AsyncMock(return_value={"keys": []})),
-            patch.object(
-                client, "set_config", AsyncMock(return_value={"version": "1", "updated_at": "t"})
-            ) as write,
-        ):
+        with patch.object(
+            client, "set_config", AsyncMock(return_value={"version": "1", "updated_at": "t"})
+        ) as write:
             await _tool_fn(server, "set_config")(
                 ctx=_ctx(ADMIN),
                 namespace="marketdata",
@@ -196,12 +159,9 @@ class TestSetConfigForwardsRealScope:
         """The tool does not pre-judge: it forwards the real scope and lets the server's gate
         return PERMISSION_DENIED. Proves authorization is not silently escalated."""
         server = _make_server()
-        with (
-            patch.object(client, "list_config_keys", AsyncMock(return_value={"keys": []})),
-            patch.object(
-                client, "set_config", AsyncMock(return_value={"version": "1", "updated_at": "t"})
-            ) as write,
-        ):
+        with patch.object(
+            client, "set_config", AsyncMock(return_value={"version": "1", "updated_at": "t"})
+        ) as write:
             await _tool_fn(server, "set_config")(
                 ctx=_ctx(TRADER),
                 namespace="marketdata",
@@ -265,12 +225,9 @@ class TestSetConfigCreateKey:
     @pytest.mark.asyncio
     async def test_forwards_create_key_true(self):
         server = _make_server()
-        with (
-            patch.object(client, "list_config_keys", AsyncMock(return_value={"keys": []})),
-            patch.object(
-                client, "set_config", AsyncMock(return_value={"version": "1", "updated_at": "t"})
-            ) as write,
-        ):
+        with patch.object(
+            client, "set_config", AsyncMock(return_value={"version": "1", "updated_at": "t"})
+        ) as write:
             await _tool_fn(server, "set_config")(
                 ctx=_ctx(ADMIN),
                 namespace="marketdata",
@@ -286,12 +243,9 @@ class TestSetConfigCreateKey:
     @pytest.mark.asyncio
     async def test_defaults_create_key_false(self):
         server = _make_server()
-        with (
-            patch.object(client, "list_config_keys", AsyncMock(return_value={"keys": []})),
-            patch.object(
-                client, "set_config", AsyncMock(return_value={"version": "1", "updated_at": "t"})
-            ) as write,
-        ):
+        with patch.object(
+            client, "set_config", AsyncMock(return_value={"version": "1", "updated_at": "t"})
+        ) as write:
             await _tool_fn(server, "set_config")(
                 ctx=_ctx(ADMIN),
                 namespace="marketdata",
@@ -330,43 +284,58 @@ class TestSetConfigRequestParity:
             patch.object(config_pb2_grpc, "ConfigServiceStub", return_value=stub),
         ):
             mock_grpc.aio.insecure_channel.return_value = cm
-            # A distinct non-default value for every SetConfigRequest field so each appears in
-            # ListFields(): environment='production'/trading_mode='live' map to non-zero enums.
+            # A distinct non-default value for every SetConfigRequest field the builder sets so
+            # each appears in ListFields(): environment='production' maps to a non-zero enum,
+            # user_id is a per-user scope. trading_mode is deprecated (feature 147) and
+            # intentionally NOT set by the builder, so it is excluded from the expected set below.
             await client.set_config(
                 namespace="ns",
                 key="k",
                 value_type="string",
                 value="v",
                 environment="production",
-                trading_mode="live",
                 author="a",
                 reason="r",
                 access_scope=15,
                 create_key=True,
+                user_id="u-1",
             )
         built = {f.name for f, _ in captured["req"].ListFields()}
-        assert built == set(config_pb2.SetConfigRequest.DESCRIPTOR.fields_by_name)
+        expected = set(config_pb2.SetConfigRequest.DESCRIPTOR.fields_by_name) - {"trading_mode"}
+        assert built == expected
 
 
-class TestScopeDefaulting:
+class TestScopeIsDeploymentBound:
+    """Feature 147 (PR #994 review): the config environment is ALWAYS this agent deployment's own
+    environment (APPLICATION_ENV) — there is no caller-facing `environment` parameter to override
+    it. env is a deployment property, so a production agent can never read/write a staging row (or
+    vice versa)."""
+
     @pytest.mark.asyncio
-    async def test_defaults_to_the_agent_deployment_scope(self, monkeypatch):
-        """Never the proto zero-value: a production agent must not write a dev row."""
+    async def test_production_agent_binds_production(self, monkeypatch):
+        """Never the proto zero-value: a production agent must not read/write a staging row."""
         monkeypatch.setenv("APPLICATION_ENV", "production")
-        monkeypatch.setenv("TRADING_MODE", "live")
         server = _make_server()
         with patch.object(client, "get_config", AsyncMock(return_value={"values": {}})) as read:
             await _tool_fn(server, "get_config")(namespace="marketdata")
         assert read.await_args.kwargs["environment"] == "production"
-        assert read.await_args.kwargs["trading_mode"] == "live"
 
     @pytest.mark.asyncio
-    async def test_an_explicit_parameter_wins(self, monkeypatch):
-        monkeypatch.setenv("APPLICATION_ENV", "production")
+    async def test_staging_agent_binds_staging(self, monkeypatch):
+        monkeypatch.setenv("APPLICATION_ENV", "development")
         server = _make_server()
         with patch.object(client, "get_config", AsyncMock(return_value={"values": {}})) as read:
-            await _tool_fn(server, "get_config")(namespace="marketdata", environment="dev")
-        assert read.await_args.kwargs["environment"] == "dev"
+            await _tool_fn(server, "get_config")(namespace="marketdata")
+        assert read.await_args.kwargs["environment"] == "staging"
+
+    @pytest.mark.asyncio
+    async def test_config_tools_expose_no_environment_parameter(self):
+        """The `environment` arg was removed from the three config tools (thread 1): a caller
+        cannot select a different environment than the agent's own deployment."""
+        server = _make_server()
+        for tool in ("get_config", "list_config_keys", "set_config"):
+            props = server._tool_manager.get_tool(tool).parameters["properties"]
+            assert "environment" not in props, f"{tool} still exposes an environment parameter"
 
 
 class TestSdkWiring:

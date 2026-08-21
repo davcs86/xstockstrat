@@ -36,6 +36,7 @@ const (
 	AnalysisService_SetOpportunityAction_FullMethodName    = "/xstockstrat.analysis.v1.AnalysisService/SetOpportunityAction"
 	AnalysisService_GetStrategyAnalytics_FullMethodName    = "/xstockstrat.analysis.v1.AnalysisService/GetStrategyAnalytics"
 	AnalysisService_GetIndicatorSeries_FullMethodName      = "/xstockstrat.analysis.v1.AnalysisService/GetIndicatorSeries"
+	AnalysisService_QueryPnLPatterns_FullMethodName        = "/xstockstrat.analysis.v1.AnalysisService/QueryPnLPatterns"
 )
 
 // AnalysisServiceClient is the client API for AnalysisService service.
@@ -76,6 +77,9 @@ type AnalysisServiceClient interface {
 	// evaluator's own _compute_component per declared component in a dedicated handler loop — never
 	// the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
 	GetIndicatorSeries(ctx context.Context, in *GetIndicatorSeriesRequest, opts ...grpc.CallOption) (*GetIndicatorSeriesResponse, error)
+	// Ranked P&L-attribution factors (feature 042): which indicator value-ranges and signals
+	// correlate with positive vs negative realized P&L, scoped by symbol/strategy/time window.
+	QueryPnLPatterns(ctx context.Context, in *QueryPnLPatternsRequest, opts ...grpc.CallOption) (*QueryPnLPatternsResponse, error)
 }
 
 type analysisServiceClient struct {
@@ -256,6 +260,16 @@ func (c *analysisServiceClient) GetIndicatorSeries(ctx context.Context, in *GetI
 	return out, nil
 }
 
+func (c *analysisServiceClient) QueryPnLPatterns(ctx context.Context, in *QueryPnLPatternsRequest, opts ...grpc.CallOption) (*QueryPnLPatternsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(QueryPnLPatternsResponse)
+	err := c.cc.Invoke(ctx, AnalysisService_QueryPnLPatterns_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AnalysisServiceServer is the server API for AnalysisService service.
 // All implementations should embed UnimplementedAnalysisServiceServer
 // for forward compatibility.
@@ -294,6 +308,9 @@ type AnalysisServiceServer interface {
 	// evaluator's own _compute_component per declared component in a dedicated handler loop — never
 	// the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
 	GetIndicatorSeries(context.Context, *GetIndicatorSeriesRequest) (*GetIndicatorSeriesResponse, error)
+	// Ranked P&L-attribution factors (feature 042): which indicator value-ranges and signals
+	// correlate with positive vs negative realized P&L, scoped by symbol/strategy/time window.
+	QueryPnLPatterns(context.Context, *QueryPnLPatternsRequest) (*QueryPnLPatternsResponse, error)
 }
 
 // UnimplementedAnalysisServiceServer should be embedded to have
@@ -353,6 +370,9 @@ func (UnimplementedAnalysisServiceServer) GetStrategyAnalytics(context.Context, 
 }
 func (UnimplementedAnalysisServiceServer) GetIndicatorSeries(context.Context, *GetIndicatorSeriesRequest) (*GetIndicatorSeriesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetIndicatorSeries not implemented")
+}
+func (UnimplementedAnalysisServiceServer) QueryPnLPatterns(context.Context, *QueryPnLPatternsRequest) (*QueryPnLPatternsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method QueryPnLPatterns not implemented")
 }
 func (UnimplementedAnalysisServiceServer) testEmbeddedByValue() {}
 
@@ -680,6 +700,24 @@ func _AnalysisService_GetIndicatorSeries_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AnalysisService_QueryPnLPatterns_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryPnLPatternsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalysisServiceServer).QueryPnLPatterns(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalysisService_QueryPnLPatterns_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalysisServiceServer).QueryPnLPatterns(ctx, req.(*QueryPnLPatternsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AnalysisService_ServiceDesc is the grpc.ServiceDesc for AnalysisService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -754,6 +792,10 @@ var AnalysisService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetIndicatorSeries",
 			Handler:    _AnalysisService_GetIndicatorSeries_Handler,
+		},
+		{
+			MethodName: "QueryPnLPatterns",
+			Handler:    _AnalysisService_QueryPnLPatterns_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

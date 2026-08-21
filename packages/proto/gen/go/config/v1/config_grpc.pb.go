@@ -23,6 +23,7 @@ const (
 	ConfigService_GetConfig_FullMethodName   = "/xstockstrat.config.v1.ConfigService/GetConfig"
 	ConfigService_SetConfig_FullMethodName   = "/xstockstrat.config.v1.ConfigService/SetConfig"
 	ConfigService_ListKeys_FullMethodName    = "/xstockstrat.config.v1.ConfigService/ListKeys"
+	ConfigService_GetSecret_FullMethodName   = "/xstockstrat.config.v1.ConfigService/GetSecret"
 )
 
 // ConfigServiceClient is the client API for ConfigService service.
@@ -31,7 +32,10 @@ const (
 //
 // ConfigService — live configuration via server-streaming WatchConfig.
 // All services call WatchConfig at startup and stream config updates.
-// Config values are scoped by environment (dev/production) and trading_mode (paper/live/all).
+// Config values are scoped by environment (production/staging) and global/per-user (user_id),
+// feature 147. paper/live is derived from environment; the trading_mode fields below are
+// deprecated and ignored by the server. Secrets are stored encrypted at rest, redacted at every
+// broadcast/read edge, and resolved only via GetSecret by allow-listed internal callers.
 type ConfigServiceClient interface {
 	// Subscribe to config updates for a given namespace/service.
 	// Server streams updates as config changes; initial snapshot is the first message.
@@ -42,6 +46,11 @@ type ConfigServiceClient interface {
 	SetConfig(ctx context.Context, in *SetConfigRequest, opts ...grpc.CallOption) (*SetConfigResponse, error)
 	// Admin: list all keys for a namespace
 	ListKeys(ctx context.Context, in *ListKeysRequest, opts ...grpc.CallOption) (*ListKeysResponse, error)
+	// Resolve a secret's decrypted plaintext. Gated to allow-listed internal service callers
+	// (x-internal-caller); the value is decrypted server-side and never appears on WatchConfig,
+	// GetConfig, or ListKeys. Returns found=false for an absent/unset (NULL-ciphertext) secret;
+	// a decrypt failure is an INTERNAL error, never a partial/empty value (feature 147).
+	GetSecret(ctx context.Context, in *GetSecretRequest, opts ...grpc.CallOption) (*GetSecretResponse, error)
 }
 
 type configServiceClient struct {
@@ -101,13 +110,26 @@ func (c *configServiceClient) ListKeys(ctx context.Context, in *ListKeysRequest,
 	return out, nil
 }
 
+func (c *configServiceClient) GetSecret(ctx context.Context, in *GetSecretRequest, opts ...grpc.CallOption) (*GetSecretResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSecretResponse)
+	err := c.cc.Invoke(ctx, ConfigService_GetSecret_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ConfigServiceServer is the server API for ConfigService service.
 // All implementations should embed UnimplementedConfigServiceServer
 // for forward compatibility.
 //
 // ConfigService — live configuration via server-streaming WatchConfig.
 // All services call WatchConfig at startup and stream config updates.
-// Config values are scoped by environment (dev/production) and trading_mode (paper/live/all).
+// Config values are scoped by environment (production/staging) and global/per-user (user_id),
+// feature 147. paper/live is derived from environment; the trading_mode fields below are
+// deprecated and ignored by the server. Secrets are stored encrypted at rest, redacted at every
+// broadcast/read edge, and resolved only via GetSecret by allow-listed internal callers.
 type ConfigServiceServer interface {
 	// Subscribe to config updates for a given namespace/service.
 	// Server streams updates as config changes; initial snapshot is the first message.
@@ -118,6 +140,11 @@ type ConfigServiceServer interface {
 	SetConfig(context.Context, *SetConfigRequest) (*SetConfigResponse, error)
 	// Admin: list all keys for a namespace
 	ListKeys(context.Context, *ListKeysRequest) (*ListKeysResponse, error)
+	// Resolve a secret's decrypted plaintext. Gated to allow-listed internal service callers
+	// (x-internal-caller); the value is decrypted server-side and never appears on WatchConfig,
+	// GetConfig, or ListKeys. Returns found=false for an absent/unset (NULL-ciphertext) secret;
+	// a decrypt failure is an INTERNAL error, never a partial/empty value (feature 147).
+	GetSecret(context.Context, *GetSecretRequest) (*GetSecretResponse, error)
 }
 
 // UnimplementedConfigServiceServer should be embedded to have
@@ -138,6 +165,9 @@ func (UnimplementedConfigServiceServer) SetConfig(context.Context, *SetConfigReq
 }
 func (UnimplementedConfigServiceServer) ListKeys(context.Context, *ListKeysRequest) (*ListKeysResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListKeys not implemented")
+}
+func (UnimplementedConfigServiceServer) GetSecret(context.Context, *GetSecretRequest) (*GetSecretResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSecret not implemented")
 }
 func (UnimplementedConfigServiceServer) testEmbeddedByValue() {}
 
@@ -224,6 +254,24 @@ func _ConfigService_ListKeys_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ConfigService_GetSecret_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSecretRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConfigServiceServer).GetSecret(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConfigService_GetSecret_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConfigServiceServer).GetSecret(ctx, req.(*GetSecretRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ConfigService_ServiceDesc is the grpc.ServiceDesc for ConfigService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -242,6 +290,10 @@ var ConfigService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListKeys",
 			Handler:    _ConfigService_ListKeys_Handler,
+		},
+		{
+			MethodName: "GetSecret",
+			Handler:    _ConfigService_GetSecret_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

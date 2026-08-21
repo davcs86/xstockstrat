@@ -51,21 +51,44 @@ func (r *PortfolioRepo) Pool() *pgxpool.Pool {
 	return r.pool
 }
 
-// UpsertPosition inserts or updates a position row.
-func (r *PortfolioRepo) UpsertPosition(ctx context.Context, userID, symbol string, qty, avgEntry, costBasis float64, mode commonv1.TradingMode, accountID string) error {
+// UpsertPosition inserts or updates a position row. realizedDelta (feature 042) is the realized
+// P&L this fill contributed by reducing the position; it accumulates into realized_accum on
+// conflict (attribution-stats-only, never a user-facing figure).
+func (r *PortfolioRepo) UpsertPosition(ctx context.Context, userID, symbol string, qty, avgEntry, costBasis float64, mode commonv1.TradingMode, accountID string, realizedDelta float64) error {
 	const q = `
-		INSERT INTO portfolio.positions (user_id, symbol, qty, avg_entry_price, cost_basis, trading_mode, account_id, opened_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+		INSERT INTO portfolio.positions (user_id, symbol, qty, avg_entry_price, cost_basis, trading_mode, account_id, realized_accum, opened_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
 		ON CONFLICT (user_id, symbol, trading_mode, account_id) DO UPDATE
-		SET qty=$3, avg_entry_price=$4, cost_basis=$5, updated_at=NOW()`
-	_, err := r.pool.Exec(ctx, q, userID, symbol, qty, avgEntry, costBasis, mode.String(), accountID)
+		SET qty=$3, avg_entry_price=$4, cost_basis=$5, realized_accum=portfolio.positions.realized_accum + $8, updated_at=NOW()`
+	_, err := r.pool.Exec(ctx, q, userID, symbol, qty, avgEntry, costBasis, mode.String(), accountID, realizedDelta)
 	return err
 }
 
-// ClosePosition removes a position row (called when qty reaches zero).
-func (r *PortfolioRepo) ClosePosition(ctx context.Context, userID, symbol string, mode commonv1.TradingMode) error {
-	const q = `DELETE FROM portfolio.positions WHERE user_id=$1 AND symbol=$2 AND trading_mode=$3`
-	_, err := r.pool.Exec(ctx, q, userID, symbol, mode.String())
+// GetRealizedAccum returns the position's accumulated realized P&L (feature 042). 0 when the row
+// does not exist. Read just before a full close, so the sealed realized figure is accum + the
+// closing fill's delta without re-reading it onto the about-to-be-deleted row.
+func (r *PortfolioRepo) GetRealizedAccum(ctx context.Context, userID, symbol string, mode commonv1.TradingMode, accountID string) (float64, error) {
+	q := `SELECT COALESCE(realized_accum, 0) FROM portfolio.positions
+	      WHERE user_id=$1 AND symbol=$2 AND trading_mode=$3`
+	args := []any{userID, symbol, mode.String()}
+	if accountID != "" {
+		q += ` AND account_id=$4`
+		args = append(args, accountID)
+	}
+	q += ` ORDER BY opened_at DESC LIMIT 1`
+	var accum float64
+	err := r.db.QueryRow(ctx, q, args...).Scan(&accum)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, nil
+	}
+	return accum, err
+}
+
+// ClosePosition removes a position row (called when qty reaches zero). Account-scoped (feature 042)
+// so a multi-account user's other-account position for the same (user, symbol, mode) survives.
+func (r *PortfolioRepo) ClosePosition(ctx context.Context, userID, symbol string, mode commonv1.TradingMode, accountID string) error {
+	const q = `DELETE FROM portfolio.positions WHERE user_id=$1 AND symbol=$2 AND trading_mode=$3 AND account_id=$4`
+	_, err := r.pool.Exec(ctx, q, userID, symbol, mode.String(), accountID)
 	return err
 }
 

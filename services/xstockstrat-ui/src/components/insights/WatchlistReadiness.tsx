@@ -12,14 +12,28 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ConditionState } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import { WatchlistEntrySource } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { analysisClient } from '@/lib/browserClients/analysisClient';
 import { isFiring, rollupReadiness } from '@/lib/readinessRollup';
 import { UNBOUND, toApiStrategyId } from '@/hooks/useWatchlists';
 
 type EvaluateReadinessResult = Awaited<ReturnType<typeof analysisClient.evaluateReadiness>>;
 type Readiness = EvaluateReadinessResult['readiness'][number];
-type Binding = { symbol: string; strategyId: string };
+type Binding = { symbol: string; strategyId: string; source?: number };
 type StrategyDef = { strategyId: string; displayName?: string; liveEnabled: boolean };
+
+/**
+ * Provenance badge (feature 127, FR-10): a small "Signal" tag on an entry the agent auto-added
+ * from an ingest_signal(direction="watchlist"). Manual/unspecified entries render nothing.
+ */
+function SignalSourceBadge({ source }: { source?: number }) {
+  if (source !== WatchlistEntrySource.SIGNAL) return null;
+  return (
+    <Badge variant="info" data-testid="signal-source-badge">
+      Signal
+    </Badge>
+  );
+}
 
 const hasData = (r: Readiness) => r.totalConditions > 0;
 
@@ -76,7 +90,7 @@ function BindingRowControls({
       ? liveStrategies
       : [...liveStrategies, ...strategies.filter((s) => s.strategyId === strategyId)];
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex shrink-0 items-center gap-2">
       <Select
         value={strategyId || UNBOUND}
         onValueChange={(v) => onRebind(symbol, toApiStrategyId(v))}
@@ -201,8 +215,9 @@ export function WatchlistReadiness({
                   className="flex items-center gap-3 px-3 py-2 text-xs"
                   data-testid={`readiness-row-${binding.symbol}`}
                 >
-                  <span className="w-14 font-mono font-semibold">{r.symbol}</span>
-                  <div className="flex items-center gap-2">
+                  <span className="w-14 shrink-0 font-mono font-semibold">{r.symbol}</span>
+                  <SignalSourceBadge source={binding.source} />
+                  <div className="flex shrink-0 items-center gap-2">
                     <Progress
                       value={Math.round(r.conviction * 100)}
                       className="h-1.5 w-20"
@@ -221,12 +236,16 @@ export function WatchlistReadiness({
                       {stateLabel(r)}
                     </span>
                   </div>
-                  {queued && (
-                    <Badge variant="info" data-testid="in-queue">
-                      in queue
-                    </Badge>
-                  )}
-                  <span className="ml-auto truncate font-mono text-muted-foreground">
+                  {/* Reserve the badge column on every row so the blocking-condition and control
+                      columns start at the same x whether or not this symbol is in queue. */}
+                  <span className="w-20 shrink-0">
+                    {queued && (
+                      <Badge variant="info" data-testid="in-queue">
+                        in queue
+                      </Badge>
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">
                     {blockingCondition(r)}
                   </span>
                   <BindingRowControls
@@ -248,8 +267,12 @@ export function WatchlistReadiness({
               className="flex items-center gap-3 px-3 py-2 text-xs"
               data-testid={`readiness-row-${b.symbol}`}
             >
-              <span className="w-14 font-mono font-semibold">{b.symbol}</span>
-              <span className="text-muted-foreground/60" data-testid={`unbound-${b.symbol}`}>
+              <span className="w-14 shrink-0 font-mono font-semibold">{b.symbol}</span>
+              <SignalSourceBadge source={b.source} />
+              <span
+                className="min-w-0 flex-1 truncate text-muted-foreground/60"
+                data-testid={`unbound-${b.symbol}`}
+              >
                 not evaluated — bind a strategy
               </span>
               <BindingRowControls

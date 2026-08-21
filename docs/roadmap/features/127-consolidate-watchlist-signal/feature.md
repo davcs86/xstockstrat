@@ -11,13 +11,21 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-11 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-19 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS: 4 design-owned open questions + agent `PORTFOLIO_ENDPOINT` deploy-parity, both to close at /sdd-design and /sdd-spec) |
+| 2026-08-19 | `spec-ready` (unchanged) | /sdd-review | Re-reviewed after a design-driven scope expansion (agent-only → agent + portfolio proto/migration/delete-guard + UI). PASS WITH WARNINGS, no blockers/Floor breach; 1 warning (enum value prefix → `WATCHLIST_ENTRY_SOURCE_*`, fixed). Overlap: portfolio migration `010` collides with 042 → 127 renumbers to `011` (merge-order.md row added). |
+| 2026-08-19 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. Identity fork resolved to a per-user **system-managed watchlist** (new `Watchlist.system_managed` flag + `EnsureSignalWatchlist` RPC + `FAILED_PRECONDITION` delete-guard); user expanded scope to include the UI distinction (per-entry `source` enum + undeletable affordance). Product spec updated + re-reviewed for the expanded proto/DB/UI gates. |
+| 2026-08-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 10 steps (proto → proto-gen → migration 011 → portfolio service+test → agent service+docs+test → UI service+e2e). Migration confirmed `011` (042 keeps `010`, merge-order.md row 182); proto field numbers confirmed uncontested (`WatchlistBinding.source=3`, `Watchlist.system_managed=9`); `PORTFOLIO_ENDPOINT` confirmed absent from the agent block in all three deploy files. |
+| 2026-08-20 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1–5, 7 done (proto + codegen + migration 011 + portfolio repo/service/handler + tests + mcp-tools.md). Executed on harness branch `claude/execute-020-042-127-pfa5cw` (single integration PR model). Deviation: `normalizeBindings` now preserves `source`. |
+| 2026-08-20 | `in-progress` → `code-completed` | /sdd-execute | All 10 steps done — agent auto-add (steps 6,8; 227 agent tests pass) + UI undeletable affordance & signal badge (steps 9,10; watchlists e2e 11 pass). Portfolio build/lint/test green; proto stubs regenerate byte-clean. |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec consolidate-watchlist-signal`_
+- [Recon](recon.md) — grounded codebase dossier (agent + portfolio)
+- [Design](design.md) — debated, approved architecture (system-managed watchlist flag + delete-guard + UI distinction)
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -33,11 +41,17 @@ same-named concepts are actually linked instead of colliding only in vocabulary.
 
 ## Reviewers
 
-| Role | Review Focus |
-|---|---|
-| `xstockstrat-agent` | MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity; no secret values in tool output |
-| `xstockstrat-portfolio` | P&L calculation accuracy, position snapshot consistency, concurrent write safety |
+| Role | Review Focus | Steps |
+|---|---|---|
+| Proto Reviewer | Field-number uniqueness per message, no breaking change without deprecation, `buf lint`/`buf breaking` pass | 1, 2 |
+| `xstockstrat-portfolio` | P&L/snapshot consistency, concurrent write safety, watchlist ownership | 1, 3, 4, 5 |
+| DBA | Migration NNN numbering (no gap/conflict), up+down pair present, index correctness | 3 |
+| `xstockstrat-agent` | MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity; no secret values in tool output | 6, 8 |
+| Platform Lead | New agent→portfolio inter-service edge, dependency-graph correctness | 6 |
+| `xstockstrat-ui` | Analytics display accuracy, Connect-RPC call safety, no unsafe mutation affordance, e2e fixture discipline (C-12) | 9, 10 |
+
+_(Step 7 [docs] carries no reviewer per the governance matrix.)_
 
 ## Next Action
 
-`/sdd-review consolidate-watchlist-signal product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-review consolidate-watchlist-signal impl-spec` — validate the implementation spec, then `/sdd-execute consolidate-watchlist-signal`

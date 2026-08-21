@@ -55,6 +55,8 @@ router.service(AnalysisService, {
   getStrategyAnalytics: forward((req, opts) => analysisClient.getStrategyAnalytics(req, opts)),
   // feature 125 (FR-6): per-component indicator series for the Symbol page's overlay panels.
   getIndicatorSeries: forward((req, opts) => analysisClient.getIndicatorSeries(req, opts)),
+  // feature 042: ranked P&L-attribution factors. Read-only; no admin gate.
+  queryPnLPatterns: forward((req, opts) => analysisClient.queryPnLPatterns(req, opts)),
 });
 
 router.service(IngestService, {

@@ -133,22 +133,9 @@ services:
         value: postgresql://${xstockstrat.USERNAME}:${xstockstrat.PASSWORD}@${xstockstrat.HOSTNAME}:25061/staging?sslmode=require
       - key: DB_PGBOUNCER
         value: "true"
-      - key: ALPACA_API_KEY
-        scope: RUN_TIME
-        value: YOUR_DEV_ALPACA_API_KEY
-        type: SECRET
-      - key: ALPACA_API_SECRET
-        scope: RUN_TIME
-        value: YOUR_DEV_ALPACA_API_SECRET
-        type: SECRET
-      - key: FMP_API_KEY
-        scope: RUN_TIME
-        value: YOUR_DEV_FMP_API_KEY
-        type: SECRET
-      - key: FINNHUB_API_KEY
-        scope: RUN_TIME
-        value: YOUR_DEV_FINNHUB_API_KEY
-        type: SECRET
+      # Feature 147: Alpaca/FMP/Finnhub credentials are no longer deploy secrets. They are stored
+      # encrypted in xstockstrat-config and resolved at startup via the GetSecret RPC; set them
+      # once per environment after deploy through the config write path.
       # DB_POOL_MAX intentionally unset — pooled service, see trading above. Code default is 2.
       - key: SERVICE_NAME
         value: marketdata
@@ -261,10 +248,8 @@ services:
       # DB_POOL_MAX intentionally unset — pooled service, see trading above. Code default is 2.
       - key: SERVICE_NAME
         value: analysis
-      - key: FMP_API_KEY
-        scope: RUN_TIME
-        value: YOUR_DEV_FMP_API_KEY
-        type: SECRET
+      # Feature 147: FMP_API_KEY removed — vendor credentials live in encrypted config now, and
+      # only xstockstrat-marketdata consumes them.
 
   - name: xstockstrat-agent
     image:
@@ -288,6 +273,8 @@ services:
         value: ${xstockstrat-indicators.PRIVATE_DOMAIN}:50054
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
+      - key: PORTFOLIO_ENDPOINT
+        value: ${xstockstrat-portfolio.PRIVATE_DOMAIN}:50052
       - key: SERVICE_NAME
         value: agent
       - key: WAIT_FOR
@@ -296,8 +283,11 @@ services:
         value: http
       - key: MCP_HTTP_PORT
         value: "9000"
-      - key: MCP_AGENT_SECRET
+      # Feature 147: the agent HMAC-signs its OAuth txn blob with JWT_SECRET (MCP_AGENT_SECRET
+      # retired). Same shared platform JWT secret as identity/ui.
+      - key: JWT_SECRET
         scope: RUN_TIME
+        value: YOUR_DEV_JWT_SECRET
         type: SECRET
       - key: UI_BASE_URL
         value: ${APP_URL}
@@ -403,6 +393,14 @@ services:
         value: "1"
       - key: SERVICE_NAME
         value: notify
+      - key: SLACK_WEBHOOK_URL
+        scope: RUN_TIME
+        value: YOUR_DEV_SLACK_WEBHOOK_URL
+        type: SECRET
+      - key: SENDGRID_API_KEY
+        scope: RUN_TIME
+        value: YOUR_DEV_SENDGRID_API_KEY
+        type: SECRET
 
   - name: xstockstrat-config
     image:
@@ -426,6 +424,11 @@ services:
         value: ${xstockstrat.CA_CERT}
       - key: DB_POOL_MAX
         value: "2"
+      # Feature 147: master key for encrypting config secrets at rest (AES-256-GCM). Required.
+      - key: CONFIG_SECRETS_ENCRYPTION_KEY
+        scope: RUN_TIME
+        value: YOUR_DEV_CONFIG_SECRETS_ENCRYPTION_KEY
+        type: SECRET
       - key: SERVICE_NAME
         value: config
 

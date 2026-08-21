@@ -44,11 +44,11 @@ jobs:
         env:
           JWT_SECRET: ${{ secrets.PROD_JWT_SECRET }}
           BROKER_ACCOUNTS_ENCRYPTION_KEY: ${{ secrets.PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY }}
-          ALPACA_API_KEY: ${{ secrets.PROD_ALPACA_API_KEY }}
-          ALPACA_API_SECRET: ${{ secrets.PROD_ALPACA_API_SECRET }}
-          FMP_API_KEY: ${{ secrets.PROD_FMP_API_KEY }}
-          FINNHUB_API_KEY: ${{ secrets.PROD_FINNHUB_API_KEY }}
-          MCP_AGENT_SECRET: ${{ secrets.MCP_AGENT_SECRET }}
+          # Feature 147: config-secrets master key replaces the vendor keys + MCP_AGENT_SECRET here.
+          CONFIG_SECRETS_ENCRYPTION_KEY: ${{ secrets.PROD_CONFIG_SECRETS_ENCRYPTION_KEY }}
+          # Feature 020: app-level notify fanout secrets (optional; off until set).
+          SLACK_WEBHOOK_URL: ${{ secrets.PROD_SLACK_WEBHOOK_URL }}
+          SENDGRID_API_KEY: ${{ secrets.PROD_SENDGRID_API_KEY }}
         run: |
           sed \
             -e "s|YOUR_GITHUB_ORG|${{ github.repository_owner }}|g" \

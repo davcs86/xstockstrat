@@ -479,6 +479,13 @@ export type WatchlistBinding = Message<"xstockstrat.portfolio.v1.WatchlistBindin
      * @generated from field: string strategy_id = 2;
      */
     strategyId: string;
+    /**
+     * Entry provenance (feature 127); first-writer-wins under ON CONFLICT DO NOTHING.
+     * Unspecified on read → treat as MANUAL.
+     *
+     * @generated from field: xstockstrat.portfolio.v1.WatchlistEntrySource source = 3;
+     */
+    source: WatchlistEntrySource;
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.WatchlistBinding.
@@ -528,6 +535,13 @@ export type Watchlist = Message<"xstockstrat.portfolio.v1.Watchlist"> & {
      * @generated from field: repeated xstockstrat.portfolio.v1.WatchlistBinding bindings = 8;
      */
     bindings: WatchlistBinding[];
+    /**
+     * System-managed signals watchlist (feature 127), identified by this flag (not by name).
+     * Delete-protected (FR-7/FR-8); one per user.
+     *
+     * @generated from field: bool system_managed = 9;
+     */
+    systemManaged: boolean;
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.Watchlist.
@@ -781,6 +795,31 @@ export type RemoveWatchlistSymbolsResponse = Message<"xstockstrat.portfolio.v1.R
  */
 export declare const RemoveWatchlistSymbolsResponseSchema: GenMessage<RemoveWatchlistSymbolsResponse>;
 /**
+ * user_id intentionally absent — ownership from the x-user-id header (feature 127, FR-2).
+ *
+ * @generated from message xstockstrat.portfolio.v1.EnsureSignalWatchlistRequest
+ */
+export type EnsureSignalWatchlistRequest = Message<"xstockstrat.portfolio.v1.EnsureSignalWatchlistRequest"> & {};
+/**
+ * Describes the message xstockstrat.portfolio.v1.EnsureSignalWatchlistRequest.
+ * Use `create(EnsureSignalWatchlistRequestSchema)` to create a new message.
+ */
+export declare const EnsureSignalWatchlistRequestSchema: GenMessage<EnsureSignalWatchlistRequest>;
+/**
+ * @generated from message xstockstrat.portfolio.v1.EnsureSignalWatchlistResponse
+ */
+export type EnsureSignalWatchlistResponse = Message<"xstockstrat.portfolio.v1.EnsureSignalWatchlistResponse"> & {
+    /**
+     * @generated from field: xstockstrat.portfolio.v1.Watchlist watchlist = 1;
+     */
+    watchlist?: Watchlist | undefined;
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.EnsureSignalWatchlistResponse.
+ * Use `create(EnsureSignalWatchlistResponseSchema)` to create a new message.
+ */
+export declare const EnsureSignalWatchlistResponseSchema: GenMessage<EnsureSignalWatchlistResponse>;
+/**
  * A risk cue surfaced on the Exposure surface (feature 083). Closed set → enum (C-04).
  *
  * @generated from enum xstockstrat.portfolio.v1.PositionRiskFlag
@@ -844,6 +883,29 @@ export declare enum PositionSide {
  * Describes the enum xstockstrat.portfolio.v1.PositionSide.
  */
 export declare const PositionSideSchema: GenEnum<PositionSide>;
+/**
+ * Provenance of a watchlist entry (feature 127). Consumers default UNSPECIFIED→MANUAL.
+ *
+ * @generated from enum xstockstrat.portfolio.v1.WatchlistEntrySource
+ */
+export declare enum WatchlistEntrySource {
+    /**
+     * @generated from enum value: WATCHLIST_ENTRY_SOURCE_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: WATCHLIST_ENTRY_SOURCE_MANUAL = 1;
+     */
+    MANUAL = 1,
+    /**
+     * @generated from enum value: WATCHLIST_ENTRY_SOURCE_SIGNAL = 2;
+     */
+    SIGNAL = 2
+}
+/**
+ * Describes the enum xstockstrat.portfolio.v1.WatchlistEntrySource.
+ */
+export declare const WatchlistEntrySourceSchema: GenEnum<WatchlistEntrySource>;
 /**
  * @generated from service xstockstrat.portfolio.v1.PortfolioService
  */
@@ -962,5 +1024,16 @@ export declare const PortfolioService: GenService<{
         methodKind: "unary";
         input: typeof RemoveWatchlistSymbolsRequestSchema;
         output: typeof RemoveWatchlistSymbolsResponseSchema;
+    };
+    /**
+     * Find-or-create the caller's system_managed=true watchlist (feature 127).
+     * Ownership is taken from the propagated x-user-id header; the request has no body (FR-2).
+     *
+     * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.EnsureSignalWatchlist
+     */
+    ensureSignalWatchlist: {
+        methodKind: "unary";
+        input: typeof EnsureSignalWatchlistRequestSchema;
+        output: typeof EnsureSignalWatchlistResponseSchema;
     };
 }>;

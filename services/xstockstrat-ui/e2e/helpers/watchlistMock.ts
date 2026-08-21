@@ -14,7 +14,7 @@ import { type Page } from '@playwright/test';
  * existing binding on a bare re-add (dedupe-keep-first — the fails-080 reset guard), and the new
  * UpdateWatchlist route replaces the binding set (the per-symbol strategy editor's write path).
  */
-export type MockBinding = { symbol: string; strategyId: string };
+export type MockBinding = { symbol: string; strategyId: string; source?: number };
 export type MockWatchlist = {
   watchlistId: string;
   userId: string;
@@ -22,10 +22,15 @@ export type MockWatchlist = {
   description: string;
   symbols: string[];
   bindings: MockBinding[];
+  // feature 127 — system-managed signals watchlist (delete-protected, its entries source-tagged).
+  systemManaged?: boolean;
 };
 
-export async function mockWatchlists(page: Page): Promise<void> {
-  const state: { lists: MockWatchlist[]; seq: number } = { lists: [], seq: 0 };
+export async function mockWatchlists(page: Page, seed: MockWatchlist[] = []): Promise<void> {
+  const state: { lists: MockWatchlist[]; seq: number } = {
+    lists: seed.map((w) => ({ ...w, bindings: w.bindings.map((b) => ({ ...b })) })),
+    seq: seed.length,
+  };
 
   // Uppercase + de-dupe by symbol, keeping the FIRST occurrence (existing binding wins on re-add).
   const normBindings = (bindings: MockBinding[]): MockBinding[] => {
@@ -33,7 +38,7 @@ export async function mockWatchlists(page: Page): Promise<void> {
     for (const b of bindings) {
       const symbol = (b.symbol ?? '').trim().toUpperCase();
       if (symbol && !out.some((x) => x.symbol === symbol)) {
-        out.push({ symbol, strategyId: b.strategyId ?? '' });
+        out.push({ symbol, strategyId: b.strategyId ?? '', source: b.source });
       }
     }
     return out;

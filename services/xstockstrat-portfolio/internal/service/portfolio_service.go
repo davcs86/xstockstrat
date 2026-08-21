@@ -284,13 +284,28 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 		acctID = "alpaca-default"
 	}
 
+	// feature 042 — realized P&L this fill contributed by reducing the position (0 when opening/
+	// adding, or when no prior position exists — a redelivered post-close sell must not nil-deref).
+	var delta float64
+	if existing != nil {
+		delta = realizedDelta(existing.Qty, existing.CostBasis, fill.Qty, fill.FillPrice)
+	}
+
 	if newQty <= 0 {
-		_ = s.repo.ClosePosition(ctx, fill.UserID, fill.Symbol, mode)
+		// The row is about to be deleted, so the cumulative realized goes into the emitted payload
+		// only (never persisted onto the deleted row). Read the prior accum + this closing delta.
+		var sealed float64
+		if existing != nil {
+			priorAccum, _ := s.repo.GetRealizedAccum(ctx, fill.UserID, fill.Symbol, mode, acctID)
+			sealed = priorAccum + delta
+		}
+		_ = s.repo.ClosePosition(ctx, fill.UserID, fill.Symbol, mode, acctID)
 		s.emitEvent(ctx, "portfolio.position.closed", "portfolio:"+fill.UserID, map[string]interface{}{
-			"user_id": fill.UserID, "symbol": fill.Symbol,
+			"user_id": fill.UserID, "symbol": fill.Symbol, "account_id": acctID,
+			"trading_mode": mode.String(), "realized_pnl": sealed,
 		})
 	} else {
-		_ = s.repo.UpsertPosition(ctx, fill.UserID, fill.Symbol, newQty, newAvgEntry, newCost, mode, acctID)
+		_ = s.repo.UpsertPosition(ctx, fill.UserID, fill.Symbol, newQty, newAvgEntry, newCost, mode, acctID, delta)
 		eventType := "portfolio.position.opened"
 		if existing != nil {
 			eventType = "portfolio.position.updated"
@@ -497,6 +512,23 @@ func (s *PortfolioService) ListPositions(ctx context.Context, req *portfoliov1.L
 }
 
 // GetPnL computes realized + unrealized P&L for a user over a time range.
+// realizedDelta returns the realized P&L contributed by fillQty@fillPrice reducing a position of
+// accQty at average cost accCost/accQty. A non-reducing (opening/adding, or empty) fill returns 0.
+// This is the ONE realized-P&L reduce implementation (feature 042; C-10(b)) — GetPnL's applyFill
+// and ConsumeOrderFills' close-event enrichment both route through it, never a second formula.
+func realizedDelta(accQty, accCost, fillQty, fillPrice float64) float64 {
+	sameDirection := accQty == 0 || (fillQty > 0) == (accQty > 0)
+	if sameDirection {
+		return 0
+	}
+	avgEntry := accCost / accQty
+	closeQty := fillQty
+	if math.Abs(closeQty) > math.Abs(accQty) {
+		closeQty = -accQty
+	}
+	return (-closeQty) * (fillPrice - avgEntry)
+}
+
 func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRequest) (*portfoliov1.PnLResponse, error) {
 	positions, _, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
 	if err != nil {
@@ -527,12 +559,11 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 			acc.qty += qty
 			acc.costBasis += qty * fillPrice
 		} else {
-			avgEntry := acc.costBasis / acc.qty
+			realized += realizedDelta(acc.qty, acc.costBasis, qty, fillPrice)
 			closeQty := qty
 			if math.Abs(closeQty) > math.Abs(acc.qty) {
 				closeQty = -acc.qty
 			}
-			realized += (-closeQty) * (fillPrice - avgEntry)
 			oldQty := acc.qty
 			acc.qty += closeQty
 			if math.Abs(acc.qty) < 1e-9 {
@@ -1093,6 +1124,11 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 const (
 	defaultMaxWatchlistsPerUser = 50
 	defaultMaxSymbolsPerList    = 500
+	// signalWatchlistDefaultName is the cosmetic display name for a user's single
+	// system-managed signals watchlist (feature 127). It is not identity — the list
+	// is identified by the system_managed flag — so it may coexist with a user's own
+	// same-named manual list. Not a config key (fixed display string).
+	signalWatchlistDefaultName = "Signals"
 )
 
 // WatchlistStore is the persistence surface the watchlist RPCs depend on. The
@@ -1106,6 +1142,7 @@ type WatchlistStore interface {
 	AddSymbols(ctx context.Context, watchlistID string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error)
 	RemoveSymbols(ctx context.Context, watchlistID string, symbols []string) (*portfoliov1.Watchlist, error)
 	CountByUser(ctx context.Context, userID string) (int, error)
+	EnsureSystemManaged(ctx context.Context, userID, defaultName string) (*portfoliov1.Watchlist, error)
 }
 
 // watchlistConfig is the slice of the config watcher the watchlist caps read. Lets
@@ -1148,7 +1185,11 @@ func normalizeBindings(in []*portfoliov1.WatchlistBinding) []*portfoliov1.Watchl
 			continue
 		}
 		seen[sym] = struct{}{}
-		out = append(out, &portfoliov1.WatchlistBinding{Symbol: sym, StrategyId: strings.TrimSpace(b.GetStrategyId())})
+		out = append(out, &portfoliov1.WatchlistBinding{
+			Symbol:     sym,
+			StrategyId: strings.TrimSpace(b.GetStrategyId()),
+			Source:     b.GetSource(), // preserve provenance (feature 127) so SIGNAL survives to insert
+		})
 	}
 	return out
 }
@@ -1245,6 +1286,21 @@ func (s *PortfolioService) CreateWatchlist(ctx context.Context, req *portfoliov1
 	return &portfoliov1.CreateWatchlistResponse{Watchlist: wl}, nil
 }
 
+// EnsureSignalWatchlist find-or-creates the caller's single system-managed signals
+// watchlist (feature 127, FR-2). Ownership is taken from the propagated x-user-id
+// header — the request carries no body. Idempotent and race-safe (repo ON CONFLICT).
+func (s *PortfolioService) EnsureSignalWatchlist(ctx context.Context, _ *portfoliov1.EnsureSignalWatchlistRequest) (*portfoliov1.EnsureSignalWatchlistResponse, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	wl, err := s.watchlists.EnsureSystemManaged(ctx, userID, signalWatchlistDefaultName)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return &portfoliov1.EnsureSignalWatchlistResponse{Watchlist: wl}, nil
+}
+
 // GetWatchlist returns a single watchlist owned by the caller (FR-2).
 func (s *PortfolioService) GetWatchlist(ctx context.Context, req *portfoliov1.GetWatchlistRequest) (*portfoliov1.GetWatchlistResponse, error) {
 	userID, err := requireUserID(ctx)
@@ -1313,8 +1369,14 @@ func (s *PortfolioService) DeleteWatchlist(ctx context.Context, req *portfoliov1
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.loadOwned(ctx, userID, req.GetWatchlistId()); err != nil {
+	wl, err := s.loadOwned(ctx, userID, req.GetWatchlistId())
+	if err != nil {
 		return nil, err
+	}
+	// A system-managed signals watchlist is delete-protected (feature 127, FR-8):
+	// the caller owns it, so this is refused on resource state, not authorization.
+	if wl.GetSystemManaged() {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("cannot delete a system-managed watchlist"))
 	}
 	if err := s.watchlists.Delete(ctx, req.GetWatchlistId()); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)

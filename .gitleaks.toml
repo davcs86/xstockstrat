@@ -9,8 +9,15 @@ useDefault = true
 # The seeded value is a `secret://` placeholder reference (config invariant #5 — secret
 # values are never plaintext), not a real credential. Scoped to that exact line so any
 # real secret is still detected.
+#
+# False positive (feature 147): the crypto unit tests hardcode a deterministic, patterned,
+# obviously-fake 32-byte hex master key (`00112233...eeff`) to exercise the AES-256-GCM
+# roundtrip and the boot-time key load. It is a test constant committed on purpose, not a real
+# credential. Scoped to that exact literal so any real 32-byte hex secret is still detected.
+# Sites: services/xstockstrat-config/src/__tests__/{crypto,secretsAndScope}.test.ts.
 [allowlist]
 regexTarget = "line"
 regexes = [
   '''first seeded secret: is_secret=TRUE''',
+  '''00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff''',
 ]

@@ -18,6 +18,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { NotifyServiceImpl, rowToAlert } from '../grpc/notifyServiceImpl.js';
+import { FanoutDispatcher } from '../fanout/fanout.js';
 import { Alert } from '@xstockstrat/proto/notify/v1/notify';
 
 // ---------------------------------------------------------------------------
@@ -46,7 +47,41 @@ function makePool(rows: any[] = [], throws?: Error) {
 
 function makeImpl(rows: any[] = [], throws?: Error) {
   const pool = makePool(rows, throws);
-  return new NotifyServiceImpl(pool as any, {} as any);
+  return new NotifyServiceImpl(pool as any, {} as any, noopFanout());
+}
+
+// A no-op fanout for the existing (non-fanout) cases — dispatch resolves and records nothing.
+function noopFanout(): any {
+  return { dispatch: async () => {} };
+}
+
+// A recording fanout: captures the alerts EmitAlert hands it; can be made to hang (AC-4).
+function recordingFanout(opts: { hang?: boolean } = {}): { dispatched: any[]; obj: any } {
+  const dispatched: any[] = [];
+  return {
+    dispatched,
+    obj: {
+      dispatch: (alert: any) => {
+        dispatched.push(alert);
+        return opts.hang ? new Promise<void>(() => {}) : Promise.resolve();
+      },
+    },
+  };
+}
+
+// A config fake for the real FanoutDispatcher (gate/dedup/email knobs).
+function fanoutCfg(over: { minSev?: number; minConf?: number; dedup?: number; from?: string; to?: string } = {}): any {
+  return {
+    getInt: (k: string, d: number) =>
+      k === 'notify.fanout.min_severity' ? (over.minSev ?? 2)
+      : k === 'notify.fanout.dedup_window_seconds' ? (over.dedup ?? 300)
+      : d,
+    getFloat: (k: string, d: number) => (k === 'notify.fanout.min_confidence_threshold' ? (over.minConf ?? 0.7) : d),
+    getString: (k: string, d = '') =>
+      k === 'notify.fanout.sendgrid_from_email' ? (over.from ?? '')
+      : k === 'notify.fanout.sendgrid_to_email' ? (over.to ?? '')
+      : d,
+  };
 }
 
 // makeAlert produces fan-out alert objects (camelCase — proto field names)
@@ -127,7 +162,7 @@ describe('emitAlert', () => {
         return { rows: [] };
       },
     };
-    const impl = new NotifyServiceImpl(pool as any, {} as any);
+    const impl = new NotifyServiceImpl(pool as any, {} as any, noopFanout());
     const call = {
       request: {
         severity: 'ALERT_SEVERITY_WARNING',
@@ -179,7 +214,7 @@ describe('emitAlert', () => {
         return { rows: [] };
       },
     };
-    const impl = new NotifyServiceImpl(pool as any, {} as any);
+    const impl = new NotifyServiceImpl(pool as any, {} as any, noopFanout());
     // No `metadata` on the call object at all — the internal-caller shape.
     const call = {
       request: {
@@ -218,7 +253,7 @@ describe('emitAlert', () => {
           return { rows: [] };
         },
       };
-      const impl = new NotifyServiceImpl(pool as any, {} as any);
+      const impl = new NotifyServiceImpl(pool as any, {} as any, noopFanout());
       const call = { request: { severity: 'ALERT_SEVERITY_INFO', category: 'c', title, body, sourceService: 's' } };
 
       await new Promise<void>((resolve) => {
@@ -240,7 +275,7 @@ describe('emitAlert', () => {
         return { rows: [] };
       },
     };
-    const impl = new NotifyServiceImpl(pool as any, {} as any);
+    const impl = new NotifyServiceImpl(pool as any, {} as any, noopFanout());
     const call = {
       request: { severity: 'ALERT_SEVERITY_INFO', category: 'c', title: 't', body: 'b', sourceService: 's' },
     };
@@ -249,6 +284,140 @@ describe('emitAlert', () => {
       impl.emitAlert(call, (err: any) => (err ? reject(err) : resolve()));
     });
     assert.strictEqual(queried, true, 'a valid alert must reach the DB');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// emitAlert fanout wiring (feature 020)
+// ---------------------------------------------------------------------------
+
+// Register a broadcast subscriber that records what it is written.
+function registerSubscriber(impl: any): { received: any[] } {
+  const received: any[] = [];
+  impl.streamAlerts({
+    request: { userId: 'u-sub', categories: [], severities: [], includeAcknowledged: false },
+    on() {},
+    write(alert: any) { received.push(alert); },
+  });
+  return { received };
+}
+
+// Emit an alert and flush the queueMicrotask-deferred fanout + its async fetch.
+async function emitAndFlush(impl: any, request: any): Promise<void> {
+  await new Promise<void>((resolve, reject) =>
+    impl.emitAlert({ request }, (err: any) => (err ? reject(err) : resolve())),
+  );
+  // Let the deferred dispatch microtask and any awaited fetch settle.
+  await new Promise((r) => setTimeout(r, 0));
+  await new Promise((r) => setTimeout(r, 0));
+}
+
+function stubFetch(status = 200): { calls: any[]; restore: () => void } {
+  const calls: any[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (url: any, init: any) => {
+    calls.push({ url: String(url), init });
+    return { ok: status >= 200 && status < 300, status } as any;
+  }) as any;
+  return { calls, restore: () => { globalThis.fetch = original; } };
+}
+
+/** Build a real FanoutDispatcher with SLACK env set (constructor reads it once), then clear. */
+function realSlackFanout(cfg: any): FanoutDispatcher {
+  const prev = process.env.SLACK_WEBHOOK_URL;
+  process.env.SLACK_WEBHOOK_URL = 'https://hooks.slack.test/x';
+  const f = new FanoutDispatcher(cfg);
+  if (prev === undefined) delete process.env.SLACK_WEBHOOK_URL; else process.env.SLACK_WEBHOOK_URL = prev;
+  return f;
+}
+
+const REQ = (over: any = {}) => ({
+  severity: 'ALERT_SEVERITY_WARNING',
+  category: 'signal',
+  title: 'BUY AAPL',
+  body: 'fired',
+  sourceService: 'analysis',
+  context: { symbol: 'AAPL', conviction: 0.82 },
+  ...over,
+});
+
+describe('emitAlert fanout wiring', () => {
+  it('AC-1: dispatches the alert to fanout AND still delivers to the in-process subscriber', async () => {
+    const rec = recordingFanout();
+    const impl = new NotifyServiceImpl(makePool() as any, {} as any, rec.obj);
+    const sub = registerSubscriber(impl);
+    await emitAndFlush(impl, REQ());
+    assert.equal(rec.dispatched.length, 1, 'fanout received the alert');
+    assert.equal(rec.dispatched[0].title, 'BUY AAPL');
+    assert.equal(sub.received.length, 1, 'primary stream still delivered');
+  });
+
+  it('AC-4: a hanging fanout never delays the callback or drops the primary delivery', async () => {
+    const rec = recordingFanout({ hang: true });
+    const impl = new NotifyServiceImpl(makePool() as any, {} as any, rec.obj);
+    const sub = registerSubscriber(impl);
+    let ok = false;
+    await new Promise<void>((resolve, reject) =>
+      impl.emitAlert({ request: REQ() }, (err: any) => {
+        if (err) return reject(err);
+        ok = true;
+        resolve();
+      }),
+    );
+    // Callback fired with success (synchronously, before the deferred dispatch) and the subscriber
+    // got its write — neither waited on the hanging fanout.
+    assert.equal(ok, true);
+    assert.equal(sub.received.length, 1);
+    // Flush the microtask to confirm dispatch was actually scheduled (it just never resolves).
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(rec.dispatched.length, 1);
+  });
+
+  it('AC-3: no credentials → success + subscriber delivery + no outbound fetch; gate read live', async () => {
+    const f = stubFetch();
+    // Mutable config to prove the gate is read live (no restart): flip min_severity between emits.
+    const cfg = { minSev: 2 };
+    const dispatcher = new FanoutDispatcher(fanoutCfg(cfg)); // no SLACK/SENDGRID env → disabled
+    const impl = new NotifyServiceImpl(makePool() as any, {} as any, dispatcher);
+    const sub = registerSubscriber(impl);
+    await emitAndFlush(impl, REQ({ severity: 'ALERT_SEVERITY_INFO', context: {} }));
+    assert.equal(f.calls.length, 0, 'no credentials → nothing fans out');
+    assert.equal(sub.received.length, 1, 'primary delivery unaffected');
+    f.restore();
+  });
+
+  it('AC-5: two byte-identical alerts → exactly one outbound Slack POST (end-to-end dedup)', async () => {
+    const f = stubFetch();
+    const impl = new NotifyServiceImpl(makePool() as any, {} as any, realSlackFanout(fanoutCfg()));
+    await emitAndFlush(impl, REQ());
+    await emitAndFlush(impl, REQ());
+    assert.equal(f.calls.length, 1);
+    f.restore();
+  });
+
+  it('AC-6: a channel HTTP 500 does not turn EmitAlert into an RPC error', async () => {
+    const f = stubFetch(500);
+    const impl = new NotifyServiceImpl(makePool() as any, {} as any, realSlackFanout(fanoutCfg()));
+    let err: any = 'unset';
+    await new Promise<void>((resolve) =>
+      impl.emitAlert({ request: REQ({ title: 'x', body: 'y', context: {} }) }, (e: any) => {
+        err = e;
+        resolve();
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(err, null, 'EmitAlert returned success despite the 500 fanout');
+    assert.equal(f.calls.length, 1, 'the failing POST was attempted');
+    f.restore();
+  });
+
+  it('flat-Struct conviction: context.conviction gates (0.82 fans out, 0.55 does not)', async () => {
+    const f = stubFetch();
+    const impl = new NotifyServiceImpl(makePool() as any, {} as any, realSlackFanout(fanoutCfg({ minConf: 0.7 })));
+    await emitAndFlush(impl, REQ({ context: { symbol: 'AAPL', conviction: 0.82 } }));
+    await emitAndFlush(impl, REQ({ title: 'other', body: 'z', context: { symbol: 'MSFT', conviction: 0.55 } }));
+    assert.equal(f.calls.length, 1, 'only the >= threshold conviction fanned out');
+    f.restore();
   });
 });
 

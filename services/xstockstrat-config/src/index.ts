@@ -6,12 +6,19 @@ import { Pool } from 'pg';
 import { getLogger } from './services/logger';
 import { ConfigServiceImpl } from './grpc/configServiceImpl';
 import { createConfigServiceDefinition } from './grpc/serviceDefinition';
+import { loadMasterKey } from './crypto';
 
 const log = getLogger('config:server');
 
 async function main() {
   const grpcPort = process.env.GRPC_PORT ?? '50060';
   const databaseUrl = process.env.DATABASE_URL ?? '';
+
+  // Fail fast if the secret-encryption master key is missing/malformed — the config service is the
+  // only holder of the key and must never boot able to serve GetSecret with a zero/short key
+  // (feature 147). loadMasterKey throws unless CONFIG_SECRETS_ENCRYPTION_KEY is 32 bytes of hex.
+  loadMasterKey();
+  log.info('CONFIG_SECRETS_ENCRYPTION_KEY validated');
 
   // NOTE: xstockstrat-config does NOT subscribe to itself.
   // It is the config source of truth. All other services subscribe to it.

@@ -44,6 +44,9 @@ service AnalysisService {
   // evaluator's own _compute_component per declared component in a dedicated handler loop — never
   // the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
   rpc GetIndicatorSeries(GetIndicatorSeriesRequest) returns (GetIndicatorSeriesResponse);
+  // Ranked P&L-attribution factors (feature 042): which indicator value-ranges and signals
+  // correlate with positive vs negative realized P&L, scoped by symbol/strategy/time window.
+  rpc QueryPnLPatterns(QueryPnLPatternsRequest) returns (QueryPnLPatternsResponse);
 }
 
 message RunBacktestRequest {
@@ -623,4 +626,66 @@ message NamedSeries {
 // One point of an indicator series. `value` unset == a gap (warm-up head / NaN / None), never 0.0.
 message IndicatorValue {
   optional double value = 1;
+}
+
+// ── P&L pattern attribution (feature 042) ──────────────────────────────────────
+
+// The order-lifecycle event a snapshot was captured at.
+enum SnapshotEventType {
+  SNAPSHOT_EVENT_TYPE_UNSPECIFIED = 0;
+  SNAPSHOT_EVENT_TYPE_ORDER_CREATED = 1;
+  SNAPSHOT_EVENT_TYPE_ORDER_FILLED = 2;
+  SNAPSHOT_EVENT_TYPE_ORDER_PARTIALLY_FILLED = 3;
+  SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED = 4;
+}
+
+// Whether an attribution factor is an indicator value-range or a signal presence.
+enum FactorType {
+  FACTOR_TYPE_UNSPECIFIED = 0;
+  FACTOR_TYPE_INDICATOR = 1;
+  FACTOR_TYPE_SIGNAL = 2;
+}
+
+// One signal active for the symbol at snapshot time; `value` is the ingest conviction (0.0–1.0).
+message SignalEntry {
+  string name = 1;
+  double value = 2;
+  string source = 3;
+}
+
+// A point-in-time capture of the indicator/signal/market context at an order event.
+message OrderSnapshot {
+  string order_id = 1;
+  string position_id = 2;
+  string symbol = 3;
+  SnapshotEventType event_type = 4;
+  google.protobuf.Timestamp event_ts = 5;
+  string side = 6;
+  double quantity = 7;
+  double price = 8;
+  google.protobuf.Struct ohlcv_bar = 9;
+  map<string, double> indicator_values = 10;
+  repeated SignalEntry signals = 11;
+}
+
+// A ranked attribution factor: an indicator value-range or a signal, with its avg realized-P&L impact.
+message PnLPatternFactor {
+  string factor_name = 1;
+  FactorType factor_type = 2;
+  double value_range_low = 3;
+  double value_range_high = 4;
+  int32 sample_count = 5;
+  double avg_pnl_impact = 6;
+}
+
+message QueryPnLPatternsRequest {
+  string symbol = 1;
+  string strategy_id = 2;
+  google.protobuf.Timestamp from_ts = 3;
+  google.protobuf.Timestamp to_ts = 4;
+  int32 limit = 5;
+}
+message QueryPnLPatternsResponse {
+  repeated PnLPatternFactor positive_factors = 1;
+  repeated PnLPatternFactor negative_factors = 2;
 }

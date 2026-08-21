@@ -24,6 +24,9 @@ service PortfolioService {
   rpc DeleteWatchlist(DeleteWatchlistRequest) returns (DeleteWatchlistResponse);
   rpc AddWatchlistSymbols(AddWatchlistSymbolsRequest) returns (AddWatchlistSymbolsResponse);
   rpc RemoveWatchlistSymbols(RemoveWatchlistSymbolsRequest) returns (RemoveWatchlistSymbolsResponse);
+  // Find-or-create the caller's system_managed=true watchlist (feature 127).
+  // Ownership is taken from the propagated x-user-id header; the request has no body (FR-2).
+  rpc EnsureSignalWatchlist(EnsureSignalWatchlistRequest) returns (EnsureSignalWatchlistResponse);
 }
 
 message Portfolio {
@@ -170,10 +173,20 @@ message ListPortfoliosResponse {
   repeated Portfolio portfolios = 1;
 }
 
+// Provenance of a watchlist entry (feature 127). Consumers default UNSPECIFIED→MANUAL.
+enum WatchlistEntrySource {
+  WATCHLIST_ENTRY_SOURCE_UNSPECIFIED = 0;
+  WATCHLIST_ENTRY_SOURCE_MANUAL = 1;
+  WATCHLIST_ENTRY_SOURCE_SIGNAL = 2;
+}
+
 // A (symbol, strategy) binding — a ready-made Universe candidate (feature 097).
 message WatchlistBinding {
   string symbol = 1;
   string strategy_id = 2;  // "" = unbound (kept as a bare watched symbol)
+  // Entry provenance (feature 127); first-writer-wins under ON CONFLICT DO NOTHING.
+  // Unspecified on read → treat as MANUAL.
+  WatchlistEntrySource source = 3;
 }
 
 // Watchlist (feature 058) — a mode-agnostic, user-owned named set of symbols.
@@ -188,6 +201,9 @@ message Watchlist {
   google.protobuf.Timestamp updated_at = 7;
   // Authoritative (symbol, strategy) shape (feature 097); when present it supersedes `symbols`.
   repeated WatchlistBinding bindings = 8;
+  // System-managed signals watchlist (feature 127), identified by this flag (not by name).
+  // Delete-protected (FR-7/FR-8); one per user.
+  bool system_managed = 9;
 }
 
 // user_id is intentionally absent from all request messages — ownership is taken
@@ -251,5 +267,11 @@ message RemoveWatchlistSymbolsRequest {
   repeated string symbols = 2;
 }
 message RemoveWatchlistSymbolsResponse {
+  Watchlist watchlist = 1;
+}
+
+// user_id intentionally absent — ownership from the x-user-id header (feature 127, FR-2).
+message EnsureSignalWatchlistRequest {}
+message EnsureSignalWatchlistResponse {
   Watchlist watchlist = 1;
 }

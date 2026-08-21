@@ -2,6 +2,7 @@ import { Pool } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
 import { alertSeverityToNumber, alertSeverityFromJSON } from '@xstockstrat/proto/notify/v1/notify';
 import { ConfigWatcher } from '../services/configWatcher';
+import { FanoutDispatcher } from '../fanout/fanout';
 import { getLogger } from '../services/logger';
 
 const log = getLogger('notify:impl');
@@ -21,6 +22,7 @@ export class NotifyServiceImpl {
   constructor(
     private readonly pool: Pool,
     private readonly config: ConfigWatcher,
+    private readonly fanout: FanoutDispatcher,
   ) {}
 
   /**
@@ -96,6 +98,16 @@ export class NotifyServiceImpl {
         alertId,
         createdAt: now,
       });
+
+      // Best-effort external fanout (feature 020). queueMicrotask defers dispatch until AFTER the
+      // success callback has reported, so fanout can never turn a succeeded emit into an RPC error
+      // and never adds latency to the primary stream write (FR-6/AC-4). Both the floating-promise
+      // .catch here and the dispatcher's own full-body try/catch guard the unhandled-rejection path.
+      queueMicrotask(() =>
+        void this.fanout.dispatch(alert).catch((e: any) =>
+          log.warn('fanout dispatch rejected', { alertId, error: e?.message ?? String(e) }),
+        ),
+      );
     } catch (err: any) {
       log.error('emitAlert failed', { error: err.message });
       callback({ code: 13, message: err.message });

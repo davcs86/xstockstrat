@@ -3,6 +3,26 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-08-21
+
+### Features
+- notify-external-fanout: Adds HTTP fanout to the notify service so that platform alerts are delivered to Slack and/or email (SendGrid) in addition to the existing Connect-RPC stream, ensuring traders receive time-sensitive signal and fill notifications even when not viewing the UI.
+- order-snapshots-pnl-patterns: At every order event (creation, fill, cancellation), capture a snapshot of the active indicator values, signals, and market conditions for the traded symbol.
+- consolidate-watchlist-signal: Signals ingested via the MCP `ingest_signal` tool with `direction="watchlist"` are currently stored in `xstockstrat-ingest`'s `newsletter_signals` table as an inert label — `xstockstrat-analysis` treats them as non-actionable and nothing connects them to the platform's real, user-owned `xstockstrat-portfolio` `Watchlist` mechanism.
+- config-secrets-and-scoping: Store platform secrets encrypted at rest in `xstockstrat-config` (AES-256-GCM) and serve them only through a new authenticated `GetSecret` RPC — never broadcast on `WatchConfig` or rendered at any consumer edge — then migrate the vendor API credentials out of `type: SECRET` env vars into that store, and re-model config scoping into exactly two dimensions: **environment** (`production`/ `staging`) × **global/per-user**, with paper/live derived from environment.
+
+### Proto Changes
+- analysis/v1/analysis.proto
+- common/v1/common.proto
+- config/v1/config.proto
+- ledger/v1/ledger.proto
+- portfolio/v1/portfolio.proto
+
+### Summary
+9 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-08-19
 
 ### Features

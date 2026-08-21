@@ -38,8 +38,9 @@ describe('platform.trading_state write-time validation', () => {
     const recordingPool: any = {
       query: async (sql: string, params?: unknown[]) => {
         queries.push({ sql, params });
-        if (sql.includes('SELECT 1 FROM config.config_values')) {
-          return { rows: [{ '?column?': 1 }] };
+        // Feature 147: existence gate reads is_secret.
+        if (sql.includes('SELECT is_secret FROM config.config_values')) {
+          return { rows: [{ is_secret: false }] };
         }
         return { rows: [] };
       },

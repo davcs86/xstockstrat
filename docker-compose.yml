@@ -120,6 +120,10 @@ services:
       GRPC_PORT: "50060"
       SERVICE_NAME: config
       DB_POOL_MAX: "2"
+      # Feature 147: master key for encrypting config secrets at rest (AES-256-GCM). Same secret
+      # mechanism/format as BROKER_ACCOUNTS_ENCRYPTION_KEY (openssl rand -hex 32). The config
+      # service refuses to start without it.
+      CONFIG_SECRETS_ENCRYPTION_KEY: "${CONFIG_SECRETS_ENCRYPTION_KEY:?CONFIG_SECRETS_ENCRYPTION_KEY is required - copy .env.example to .env (run: openssl rand -hex 32)}"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "50060:50060"
@@ -217,6 +221,9 @@ services:
       SERVICE_NAME: notify
       DB_POOL_MAX: "1"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      # Feature 020 — external alert fanout credentials (optional; empty ⇒ channel disabled).
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
     ports:
       - "50059:50059"
     healthcheck:
@@ -247,16 +254,11 @@ services:
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
-      ALPACA_API_KEY: ${ALPACA_API_KEY:?ALPACA_API_KEY is required - set it in .env (see .env.example)}
-      ALPACA_API_SECRET: ${ALPACA_API_SECRET:?ALPACA_API_SECRET is required - set it in .env (see .env.example)}
+      # Feature 147: Alpaca/FMP/Finnhub credentials are no longer env vars. They are stored
+      # encrypted in xstockstrat-config and resolved at startup via the GetSecret RPC. Set them
+      # once per environment after deploy with the set_config path (an operator action).
       ALPACA_BASE_URL: https://paper-api.alpaca.markets
       ALPACA_DATA_URL: https://data.alpaca.markets
-      # Optional: only needed when marketdata.fmp.enabled is true (feature 059).
-      # Same secret mechanism as the Alpaca keys above — never stored in config.
-      FMP_API_KEY: ${FMP_API_KEY:-}
-      # Optional: only needed when marketdata.finnhub.enabled is true (feature 129).
-      # Same secret mechanism as the Alpaca/FMP keys above — never stored in config.
-      FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
       SERVICE_NAME: marketdata
       DB_POOL_MAX: "2"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
@@ -523,12 +525,14 @@ services:
       IDENTITY_ENDPOINT: xstockstrat-identity:50058
       INDICATORS_ENDPOINT: xstockstrat-indicators:50054
       CONFIG_ENDPOINT: xstockstrat-config:50060
+      PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
       SERVICE_NAME: agent
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-identity:50058"
       MCP_TRANSPORT: http
       MCP_HTTP_PORT: "9000"
-      MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}
+      # Feature 147: the OAuth txn blob is HMAC-signed with JWT_SECRET (MCP_AGENT_SECRET retired).
+      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET is required - copy .env.example to .env (run: openssl rand -hex 32)}"
       UI_BASE_URL: http://localhost:3000
       AGENT_PUBLIC_URL: http://localhost:9000
     ports:

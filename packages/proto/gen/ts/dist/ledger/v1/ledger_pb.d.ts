@@ -57,7 +57,7 @@ export type LedgerEvent = Message<"xstockstrat.ledger.v1.LedgerEvent"> & {
         [key: string]: string;
     };
     /**
-     * monotonically increasing per stream_key
+     * GLOBAL monotonic sequence (nextval('ledger.global_sequence')), ordered across all stream_keys
      *
      * @generated from field: int64 sequence = 9;
      */

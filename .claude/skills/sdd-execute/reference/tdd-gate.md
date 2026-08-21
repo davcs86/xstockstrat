@@ -18,7 +18,10 @@ A `service` step and its paired `test` step (Constitution **C-08**) form one red
 in this order, regardless of which step number you are technically executing:
 
 1. **Write/confirm the failing test first.** Author (or confirm already-authored) the paired test so
-   it asserts the *new* behavior — not a tautology.
+   it asserts the *new* behavior — not a tautology. The behavior it asserts is the `@AC-*` scenario
+   named in the step's `**Covers**` line (Constitution **C-15**); the test realizes that scenario's
+   `Given/When/Then`. If a code-bearing step has a `**Covers**` scenario, the RED assertion is that
+   scenario's `Then` failing today.
 
    **If the step is a `service` step mislabeled `TDD: N/A`** — the one hole named above, where no
    paired test and no RED assertion were specced — spawn the **`qa-tester`** subagent (read-only,
@@ -39,7 +42,8 @@ in this order, regardless of which step number you are technically executing:
    (including the coverage line where the threshold applies).
 5. **Record red→green.** Put both captures in:
    - the **PR body** (a short "TDD: red → green" block with the two command outputs), and
-   - the step's **`context.md`** entry (one line: "red: <assert> failed → green: passed").
+   - the step's **`context.md`** entry (one line, naming the scenario: "AC-2 red: <assert> failed →
+     green: passed").
    Do **not** record TDD evidence by editing the step body in `implementation-spec.md` — those fields
    are immutable (**F-09**). Evidence lives in the PR body and `context.md` only.
 

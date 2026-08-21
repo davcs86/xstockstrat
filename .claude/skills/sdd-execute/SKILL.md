@@ -173,6 +173,22 @@ When invoked and all steps are already complete (lifecycle `code-completed`):
    git pull origin <dev-branch>
    ```
 
+2.5. **Promote acceptance scenarios into the durable business-rule suites (Constitution C-16).**
+   The feature is about to land, so its behaviors become platform guarantees other features must not
+   regress. This is the v1 **assisted-but-manual** promotion:
+   - Read `$FEATURE_DIR/acceptance.feature`. For each service in the product spec's **Affected
+     Services**, append the scenarios that describe *that service's* behavior to
+     `services/xstockstrat-<svc>/acceptance/<slug>.feature` (create the `acceptance/` dir and file if
+     absent). A scenario whose guarantee spans services goes to `docs/sdd/business-rules/platform.feature`.
+   - **Preserve provenance**: add a `@feature-<NNN>` tag (the source feature number) to each promoted
+     scenario's tag line, keeping its `@AC-*`/`@FR-*` tags.
+   - **Dedup**: if an equivalent scenario already exists in the target suite (same behavior), skip it
+     rather than duplicating; note the skip.
+   - **Confirm before writing** (P-04): show the operator the promotion plan (which scenarios → which
+     suite files) and get a yes before staging. Stage the suite files into this same integration PR.
+   - If the feature is a pure refactor with no new guarantee, state "no scenarios to promote" and skip.
+   `/promote` is the backstop: if a feature reaches prod with un-promoted scenarios, it flags them.
+
 3. **Build the integration PR body** by rendering `.claude/skills/sdd-execute/templates/integration-pr-body.md`
    (title; per-step one-liners from implementation-spec.md; new migrations; new env vars; deviation
    summary from the Deviation Log; test-plan checklist).

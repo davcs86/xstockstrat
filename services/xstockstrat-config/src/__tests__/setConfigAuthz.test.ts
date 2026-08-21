@@ -94,8 +94,9 @@ describe('SetConfig authorization over a real gRPC connection', () => {
     const recordingPool: any = {
       query: async (sql: string, params?: unknown[]) => {
         queries.push({ sql, params });
-        if (sql.includes('SELECT 1 FROM config.config_values')) {
-          return { rows: keyExists ? [{ '?column?': 1 }] : [] };
+        // Feature 147: the existence gate reads is_secret (row-authoritative encryption).
+        if (sql.includes('SELECT is_secret FROM config.config_values')) {
+          return { rows: keyExists ? [{ is_secret: false }] : [] };
         }
         return { rows: [] };
       },
@@ -166,8 +167,9 @@ describe('SetConfig authorization over a real gRPC connection', () => {
     // feature 091: the existence SELECT is now query 0; locate the INSERT by SQL.
     const insert = insertQuery();
     assert.ok(insert, 'the INSERT must run for an authorized, registered-key caller');
-    // params[4] is `updated_by` in the INSERT's parameter list.
-    assert.equal(insert!.params?.[4], 'tester');
+    // Feature 147 INSERT params: [namespace, key, value_type, value_data, value_encrypted,
+    // is_secret, updated_by, update_reason, environment, user_id, caller_identity].
+    assert.equal(insert!.params?.[6], 'tester');
   });
 
   it('falls back to the propagated x-user-id when no author is supplied', async () => {
@@ -177,7 +179,7 @@ describe('SetConfig authorization over a real gRPC connection', () => {
       author: '',
     });
     assert.equal(err, null);
-    assert.equal(insertQuery()!.params?.[4], 'u-42', 'updated_by falls back to the caller id');
+    assert.equal(insertQuery()!.params?.[6], 'u-42', 'updated_by falls back to the caller id');
   });
 
   it('refuses an unattributable write (no author, no x-user-id)', async () => {
@@ -219,6 +221,42 @@ describe('SetConfig authorization over a real gRPC connection', () => {
     const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '7' }));
     assert.equal(err, null, 'a registered-key update must not require create_key');
     assert.ok(insertQuery(), 'the INSERT (upsert) must run for a registered key');
+  });
+
+  // ── PR #994: per-user config is self-service (owner-only; admins get NO override) ─────────
+  it('allows a NON-admin owner to write their OWN per-user row', async () => {
+    queries = [];
+    keyExists = true;
+    // A plain trader scope (no admin bit) whose propagated x-user-id matches the target user_id.
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '3', [HEADER_USER_ID]: 'u-9' }), {
+      userId: 'u-9',
+    });
+    assert.equal(err, null, 'the owner may write their own per-user row without admin');
+    const insert = insertQuery();
+    assert.ok(insert, 'the INSERT must run for an owner per-user write');
+    // INSERT params index 9 is user_id (see the param list above) — the target row.
+    assert.equal(insert!.params?.[9], 'u-9');
+  });
+
+  it("denies a per-user write to ANOTHER user's row — even for a full admin — and writes nothing", async () => {
+    queries = [];
+    keyExists = true;
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '7', [HEADER_USER_ID]: 'admin-1' }), {
+      userId: 'u-9', // someone else's per-user row
+    });
+    assert.ok(err, "an admin may not write another user's per-user row");
+    assert.equal(err.code, grpc.status.PERMISSION_DENIED);
+    assert.match(err.details ?? err.message, /self-service/);
+    assert.equal(queries.length, 0, 'no query may run on a denied per-user write');
+  });
+
+  it('denies a per-user write carrying no propagated x-user-id, and writes nothing', async () => {
+    queries = [];
+    keyExists = true;
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '7' }), { userId: 'u-9' });
+    assert.ok(err, 'a per-user write with no caller identity cannot be attributed to an owner');
+    assert.equal(err.code, grpc.status.PERMISSION_DENIED);
+    assert.equal(queries.length, 0);
   });
 
   // NOTE: these cases deliberately assert only on authz outcome, author resolution and

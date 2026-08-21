@@ -166,6 +166,28 @@ export declare enum OpportunityAction {
 export declare function opportunityActionFromJSON(object: any): OpportunityAction;
 export declare function opportunityActionToJSON(object: OpportunityAction): string;
 export declare function opportunityActionToNumber(object: OpportunityAction): number;
+/** The order-lifecycle event a snapshot was captured at. */
+export declare enum SnapshotEventType {
+    SNAPSHOT_EVENT_TYPE_UNSPECIFIED = "SNAPSHOT_EVENT_TYPE_UNSPECIFIED",
+    SNAPSHOT_EVENT_TYPE_ORDER_CREATED = "SNAPSHOT_EVENT_TYPE_ORDER_CREATED",
+    SNAPSHOT_EVENT_TYPE_ORDER_FILLED = "SNAPSHOT_EVENT_TYPE_ORDER_FILLED",
+    SNAPSHOT_EVENT_TYPE_ORDER_PARTIALLY_FILLED = "SNAPSHOT_EVENT_TYPE_ORDER_PARTIALLY_FILLED",
+    SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED = "SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function snapshotEventTypeFromJSON(object: any): SnapshotEventType;
+export declare function snapshotEventTypeToJSON(object: SnapshotEventType): string;
+export declare function snapshotEventTypeToNumber(object: SnapshotEventType): number;
+/** Whether an attribution factor is an indicator value-range or a signal presence. */
+export declare enum FactorType {
+    FACTOR_TYPE_UNSPECIFIED = "FACTOR_TYPE_UNSPECIFIED",
+    FACTOR_TYPE_INDICATOR = "FACTOR_TYPE_INDICATOR",
+    FACTOR_TYPE_SIGNAL = "FACTOR_TYPE_SIGNAL",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function factorTypeFromJSON(object: any): FactorType;
+export declare function factorTypeToJSON(object: FactorType): string;
+export declare function factorTypeToNumber(object: FactorType): number;
 export interface RunBacktestRequest {
     strategyId: string;
     range?: TimeRange | undefined;
@@ -710,6 +732,54 @@ export interface NamedSeries {
 export interface IndicatorValue {
     value?: number | undefined;
 }
+/** One signal active for the symbol at snapshot time; `value` is the ingest conviction (0.0–1.0). */
+export interface SignalEntry {
+    name: string;
+    value: number;
+    source: string;
+}
+/** A point-in-time capture of the indicator/signal/market context at an order event. */
+export interface OrderSnapshot {
+    orderId: string;
+    positionId: string;
+    symbol: string;
+    eventType: SnapshotEventType;
+    eventTs?: Date | undefined;
+    side: string;
+    quantity: number;
+    price: number;
+    ohlcvBar?: {
+        [key: string]: any;
+    } | undefined;
+    indicatorValues: {
+        [key: string]: number;
+    };
+    signals: SignalEntry[];
+}
+export interface OrderSnapshot_IndicatorValuesEntry {
+    key: string;
+    value: number;
+}
+/** A ranked attribution factor: an indicator value-range or a signal, with its avg realized-P&L impact. */
+export interface PnLPatternFactor {
+    factorName: string;
+    factorType: FactorType;
+    valueRangeLow: number;
+    valueRangeHigh: number;
+    sampleCount: number;
+    avgPnlImpact: number;
+}
+export interface QueryPnLPatternsRequest {
+    symbol: string;
+    strategyId: string;
+    fromTs?: Date | undefined;
+    toTs?: Date | undefined;
+    limit: number;
+}
+export interface QueryPnLPatternsResponse {
+    positiveFactors: PnLPatternFactor[];
+    negativeFactors: PnLPatternFactor[];
+}
 export declare const RunBacktestRequest: MessageFns<RunBacktestRequest>;
 export declare const CoverageGap: MessageFns<CoverageGap>;
 export declare const BacktestResult: MessageFns<BacktestResult>;
@@ -762,6 +832,12 @@ export declare const GetIndicatorSeriesResponse: MessageFns<GetIndicatorSeriesRe
 export declare const ComponentSeries: MessageFns<ComponentSeries>;
 export declare const NamedSeries: MessageFns<NamedSeries>;
 export declare const IndicatorValue: MessageFns<IndicatorValue>;
+export declare const SignalEntry: MessageFns<SignalEntry>;
+export declare const OrderSnapshot: MessageFns<OrderSnapshot>;
+export declare const OrderSnapshot_IndicatorValuesEntry: MessageFns<OrderSnapshot_IndicatorValuesEntry>;
+export declare const PnLPatternFactor: MessageFns<PnLPatternFactor>;
+export declare const QueryPnLPatternsRequest: MessageFns<QueryPnLPatternsRequest>;
+export declare const QueryPnLPatternsResponse: MessageFns<QueryPnLPatternsResponse>;
 export type AnalysisServiceService = typeof AnalysisServiceService;
 export declare const AnalysisServiceService: {
     readonly runBacktest: {
@@ -942,6 +1018,19 @@ export declare const AnalysisServiceService: {
         readonly responseSerialize: (value: GetIndicatorSeriesResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => GetIndicatorSeriesResponse;
     };
+    /**
+     * Ranked P&L-attribution factors (feature 042): which indicator value-ranges and signals
+     * correlate with positive vs negative realized P&L, scoped by symbol/strategy/time window.
+     */
+    readonly queryPnLPatterns: {
+        readonly path: "/xstockstrat.analysis.v1.AnalysisService/QueryPnLPatterns";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: QueryPnLPatternsRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => QueryPnLPatternsRequest;
+        readonly responseSerialize: (value: QueryPnLPatternsResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => QueryPnLPatternsResponse;
+    };
 };
 export interface AnalysisServiceServer extends UntypedServiceImplementation {
     runBacktest: handleUnaryCall<RunBacktestRequest, BacktestResult>;
@@ -986,6 +1075,11 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
      * the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
      */
     getIndicatorSeries: handleUnaryCall<GetIndicatorSeriesRequest, GetIndicatorSeriesResponse>;
+    /**
+     * Ranked P&L-attribution factors (feature 042): which indicator value-ranges and signals
+     * correlate with positive vs negative realized P&L, scoped by symbol/strategy/time window.
+     */
+    queryPnLPatterns: handleUnaryCall<QueryPnLPatternsRequest, QueryPnLPatternsResponse>;
 }
 export interface AnalysisServiceClient extends Client {
     runBacktest(request: RunBacktestRequest, callback: (error: ServiceError | null, response: BacktestResult) => void): ClientUnaryCall;
@@ -1064,6 +1158,13 @@ export interface AnalysisServiceClient extends Client {
     getIndicatorSeries(request: GetIndicatorSeriesRequest, callback: (error: ServiceError | null, response: GetIndicatorSeriesResponse) => void): ClientUnaryCall;
     getIndicatorSeries(request: GetIndicatorSeriesRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetIndicatorSeriesResponse) => void): ClientUnaryCall;
     getIndicatorSeries(request: GetIndicatorSeriesRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetIndicatorSeriesResponse) => void): ClientUnaryCall;
+    /**
+     * Ranked P&L-attribution factors (feature 042): which indicator value-ranges and signals
+     * correlate with positive vs negative realized P&L, scoped by symbol/strategy/time window.
+     */
+    queryPnLPatterns(request: QueryPnLPatternsRequest, callback: (error: ServiceError | null, response: QueryPnLPatternsResponse) => void): ClientUnaryCall;
+    queryPnLPatterns(request: QueryPnLPatternsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: QueryPnLPatternsResponse) => void): ClientUnaryCall;
+    queryPnLPatterns(request: QueryPnLPatternsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: QueryPnLPatternsResponse) => void): ClientUnaryCall;
 }
 export declare const AnalysisServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): AnalysisServiceClient;

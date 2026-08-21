@@ -52,12 +52,16 @@ enum TradingMode {
   TRADING_MODE_LIVE = 2;
 }
 
-// Environment distinguishes dev from production deployments.
-// Used by xstockstrat-config to scope config values per deployment environment.
+// Environment distinguishes deployment environments; used by xstockstrat-config to scope config
+// values. The platform's two environments are STAGING and PRODUCTION (feature 147). paper/live
+// trading mode is DERIVED from the environment (production=live, staging=paper), not a separate
+// config dimension. ENVIRONMENT_DEV is deprecated in favor of ENVIRONMENT_STAGING but retained for
+// wire compatibility; the config server treats DEV and STAGING as the same 'staging' scope.
 enum Environment {
   ENVIRONMENT_UNSPECIFIED = 0;
-  ENVIRONMENT_DEV = 1;
+  ENVIRONMENT_DEV = 1 [deprecated = true]; // deprecated: use ENVIRONMENT_STAGING (feature 147)
   ENVIRONMENT_PRODUCTION = 2;
+  ENVIRONMENT_STAGING = 3;
 }
 
 // BrokerType identifies the broker for a registered account.

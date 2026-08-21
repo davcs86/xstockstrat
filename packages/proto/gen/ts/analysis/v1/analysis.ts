@@ -830,6 +830,130 @@ export function opportunityActionToNumber(object: OpportunityAction): number {
   }
 }
 
+/** The order-lifecycle event a snapshot was captured at. */
+export enum SnapshotEventType {
+  SNAPSHOT_EVENT_TYPE_UNSPECIFIED = "SNAPSHOT_EVENT_TYPE_UNSPECIFIED",
+  SNAPSHOT_EVENT_TYPE_ORDER_CREATED = "SNAPSHOT_EVENT_TYPE_ORDER_CREATED",
+  SNAPSHOT_EVENT_TYPE_ORDER_FILLED = "SNAPSHOT_EVENT_TYPE_ORDER_FILLED",
+  SNAPSHOT_EVENT_TYPE_ORDER_PARTIALLY_FILLED = "SNAPSHOT_EVENT_TYPE_ORDER_PARTIALLY_FILLED",
+  SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED = "SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function snapshotEventTypeFromJSON(object: any): SnapshotEventType {
+  switch (object) {
+    case 0:
+    case "SNAPSHOT_EVENT_TYPE_UNSPECIFIED":
+      return SnapshotEventType.SNAPSHOT_EVENT_TYPE_UNSPECIFIED;
+    case 1:
+    case "SNAPSHOT_EVENT_TYPE_ORDER_CREATED":
+      return SnapshotEventType.SNAPSHOT_EVENT_TYPE_ORDER_CREATED;
+    case 2:
+    case "SNAPSHOT_EVENT_TYPE_ORDER_FILLED":
+      return SnapshotEventType.SNAPSHOT_EVENT_TYPE_ORDER_FILLED;
+    case 3:
+    case "SNAPSHOT_EVENT_TYPE_ORDER_PARTIALLY_FILLED":
+      return SnapshotEventType.SNAPSHOT_EVENT_TYPE_ORDER_PARTIALLY_FILLED;
+    case 4:
+    case "SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED":
+      return SnapshotEventType.SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return SnapshotEventType.UNRECOGNIZED;
+  }
+}
+
+export function snapshotEventTypeToJSON(object: SnapshotEventType): string {
+  switch (object) {
+    case SnapshotEventType.SNAPSHOT_EVENT_TYPE_UNSPECIFIED:
+      return "SNAPSHOT_EVENT_TYPE_UNSPECIFIED";
+    case SnapshotEventType.SNAPSHOT_EVENT_TYPE_ORDER_CREATED:
+      return "SNAPSHOT_EVENT_TYPE_ORDER_CREATED";
+    case SnapshotEventType.SNAPSHOT_EVENT_TYPE_ORDER_FILLED:
+      return "SNAPSHOT_EVENT_TYPE_ORDER_FILLED";
+    case SnapshotEventType.SNAPSHOT_EVENT_TYPE_ORDER_PARTIALLY_FILLED:
+      return "SNAPSHOT_EVENT_TYPE_ORDER_PARTIALLY_FILLED";
+    case SnapshotEventType.SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED:
+      return "SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED";
+    case SnapshotEventType.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function snapshotEventTypeToNumber(object: SnapshotEventType): number {
+  switch (object) {
+    case SnapshotEventType.SNAPSHOT_EVENT_TYPE_UNSPECIFIED:
+      return 0;
+    case SnapshotEventType.SNAPSHOT_EVENT_TYPE_ORDER_CREATED:
+      return 1;
+    case SnapshotEventType.SNAPSHOT_EVENT_TYPE_ORDER_FILLED:
+      return 2;
+    case SnapshotEventType.SNAPSHOT_EVENT_TYPE_ORDER_PARTIALLY_FILLED:
+      return 3;
+    case SnapshotEventType.SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED:
+      return 4;
+    case SnapshotEventType.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
+/** Whether an attribution factor is an indicator value-range or a signal presence. */
+export enum FactorType {
+  FACTOR_TYPE_UNSPECIFIED = "FACTOR_TYPE_UNSPECIFIED",
+  FACTOR_TYPE_INDICATOR = "FACTOR_TYPE_INDICATOR",
+  FACTOR_TYPE_SIGNAL = "FACTOR_TYPE_SIGNAL",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function factorTypeFromJSON(object: any): FactorType {
+  switch (object) {
+    case 0:
+    case "FACTOR_TYPE_UNSPECIFIED":
+      return FactorType.FACTOR_TYPE_UNSPECIFIED;
+    case 1:
+    case "FACTOR_TYPE_INDICATOR":
+      return FactorType.FACTOR_TYPE_INDICATOR;
+    case 2:
+    case "FACTOR_TYPE_SIGNAL":
+      return FactorType.FACTOR_TYPE_SIGNAL;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return FactorType.UNRECOGNIZED;
+  }
+}
+
+export function factorTypeToJSON(object: FactorType): string {
+  switch (object) {
+    case FactorType.FACTOR_TYPE_UNSPECIFIED:
+      return "FACTOR_TYPE_UNSPECIFIED";
+    case FactorType.FACTOR_TYPE_INDICATOR:
+      return "FACTOR_TYPE_INDICATOR";
+    case FactorType.FACTOR_TYPE_SIGNAL:
+      return "FACTOR_TYPE_SIGNAL";
+    case FactorType.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function factorTypeToNumber(object: FactorType): number {
+  switch (object) {
+    case FactorType.FACTOR_TYPE_UNSPECIFIED:
+      return 0;
+    case FactorType.FACTOR_TYPE_INDICATOR:
+      return 1;
+    case FactorType.FACTOR_TYPE_SIGNAL:
+      return 2;
+    case FactorType.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 export interface RunBacktestRequest {
   strategyId: string;
   range?: TimeRange | undefined;
@@ -1420,6 +1544,56 @@ export interface NamedSeries {
 /** One point of an indicator series. `value` unset == a gap (warm-up head / NaN / None), never 0.0. */
 export interface IndicatorValue {
   value?: number | undefined;
+}
+
+/** One signal active for the symbol at snapshot time; `value` is the ingest conviction (0.0–1.0). */
+export interface SignalEntry {
+  name: string;
+  value: number;
+  source: string;
+}
+
+/** A point-in-time capture of the indicator/signal/market context at an order event. */
+export interface OrderSnapshot {
+  orderId: string;
+  positionId: string;
+  symbol: string;
+  eventType: SnapshotEventType;
+  eventTs?: Date | undefined;
+  side: string;
+  quantity: number;
+  price: number;
+  ohlcvBar?: { [key: string]: any } | undefined;
+  indicatorValues: { [key: string]: number };
+  signals: SignalEntry[];
+}
+
+export interface OrderSnapshot_IndicatorValuesEntry {
+  key: string;
+  value: number;
+}
+
+/** A ranked attribution factor: an indicator value-range or a signal, with its avg realized-P&L impact. */
+export interface PnLPatternFactor {
+  factorName: string;
+  factorType: FactorType;
+  valueRangeLow: number;
+  valueRangeHigh: number;
+  sampleCount: number;
+  avgPnlImpact: number;
+}
+
+export interface QueryPnLPatternsRequest {
+  symbol: string;
+  strategyId: string;
+  fromTs?: Date | undefined;
+  toTs?: Date | undefined;
+  limit: number;
+}
+
+export interface QueryPnLPatternsResponse {
+  positiveFactors: PnLPatternFactor[];
+  negativeFactors: PnLPatternFactor[];
 }
 
 function createBaseRunBacktestRequest(): RunBacktestRequest {
@@ -8392,6 +8566,852 @@ export const IndicatorValue: MessageFns<IndicatorValue> = {
   },
 };
 
+function createBaseSignalEntry(): SignalEntry {
+  return { name: "", value: 0, source: "" };
+}
+
+export const SignalEntry: MessageFns<SignalEntry> = {
+  encode(message: SignalEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    if (message.value !== 0) {
+      writer.uint32(17).double(message.value);
+    }
+    if (message.source !== "") {
+      writer.uint32(26).string(message.source);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SignalEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSignalEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.value = reader.double();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.source = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SignalEntry {
+    return {
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      value: isSet(object.value) ? globalThis.Number(object.value) : 0,
+      source: isSet(object.source) ? globalThis.String(object.source) : "",
+    };
+  },
+
+  toJSON(message: SignalEntry): unknown {
+    const obj: any = {};
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.value !== 0) {
+      obj.value = message.value;
+    }
+    if (message.source !== "") {
+      obj.source = message.source;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SignalEntry>, I>>(base?: I): SignalEntry {
+    return SignalEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SignalEntry>, I>>(object: I): SignalEntry {
+    const message = createBaseSignalEntry();
+    message.name = object.name ?? "";
+    message.value = object.value ?? 0;
+    message.source = object.source ?? "";
+    return message;
+  },
+};
+
+function createBaseOrderSnapshot(): OrderSnapshot {
+  return {
+    orderId: "",
+    positionId: "",
+    symbol: "",
+    eventType: SnapshotEventType.SNAPSHOT_EVENT_TYPE_UNSPECIFIED,
+    eventTs: undefined,
+    side: "",
+    quantity: 0,
+    price: 0,
+    ohlcvBar: undefined,
+    indicatorValues: {},
+    signals: [],
+  };
+}
+
+export const OrderSnapshot: MessageFns<OrderSnapshot> = {
+  encode(message: OrderSnapshot, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.orderId !== "") {
+      writer.uint32(10).string(message.orderId);
+    }
+    if (message.positionId !== "") {
+      writer.uint32(18).string(message.positionId);
+    }
+    if (message.symbol !== "") {
+      writer.uint32(26).string(message.symbol);
+    }
+    if (message.eventType !== SnapshotEventType.SNAPSHOT_EVENT_TYPE_UNSPECIFIED) {
+      writer.uint32(32).int32(snapshotEventTypeToNumber(message.eventType));
+    }
+    if (message.eventTs !== undefined) {
+      Timestamp.encode(toTimestamp(message.eventTs), writer.uint32(42).fork()).join();
+    }
+    if (message.side !== "") {
+      writer.uint32(50).string(message.side);
+    }
+    if (message.quantity !== 0) {
+      writer.uint32(57).double(message.quantity);
+    }
+    if (message.price !== 0) {
+      writer.uint32(65).double(message.price);
+    }
+    if (message.ohlcvBar !== undefined) {
+      Struct.encode(Struct.wrap(message.ohlcvBar), writer.uint32(74).fork()).join();
+    }
+    globalThis.Object.entries(message.indicatorValues).forEach(([key, value]: [string, number]) => {
+      OrderSnapshot_IndicatorValuesEntry.encode({ key: key as any, value }, writer.uint32(82).fork()).join();
+    });
+    for (const v of message.signals) {
+      SignalEntry.encode(v!, writer.uint32(90).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OrderSnapshot {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseOrderSnapshot();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.orderId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.positionId = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.eventType = snapshotEventTypeFromJSON(reader.int32());
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.eventTs = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.side = reader.string();
+          continue;
+        }
+        case 7: {
+          if (tag !== 57) {
+            break;
+          }
+
+          message.quantity = reader.double();
+          continue;
+        }
+        case 8: {
+          if (tag !== 65) {
+            break;
+          }
+
+          message.price = reader.double();
+          continue;
+        }
+        case 9: {
+          if (tag !== 74) {
+            break;
+          }
+
+          message.ohlcvBar = Struct.unwrap(Struct.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          const entry10 = OrderSnapshot_IndicatorValuesEntry.decode(reader, reader.uint32());
+          if (entry10.value !== undefined) {
+            message.indicatorValues[entry10.key] = entry10.value;
+          }
+          continue;
+        }
+        case 11: {
+          if (tag !== 90) {
+            break;
+          }
+
+          message.signals.push(SignalEntry.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): OrderSnapshot {
+    return {
+      orderId: isSet(object.orderId)
+        ? globalThis.String(object.orderId)
+        : isSet(object.order_id)
+        ? globalThis.String(object.order_id)
+        : "",
+      positionId: isSet(object.positionId)
+        ? globalThis.String(object.positionId)
+        : isSet(object.position_id)
+        ? globalThis.String(object.position_id)
+        : "",
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      eventType: isSet(object.eventType)
+        ? snapshotEventTypeFromJSON(object.eventType)
+        : isSet(object.event_type)
+        ? snapshotEventTypeFromJSON(object.event_type)
+        : SnapshotEventType.SNAPSHOT_EVENT_TYPE_UNSPECIFIED,
+      eventTs: isSet(object.eventTs)
+        ? fromJsonTimestamp(object.eventTs)
+        : isSet(object.event_ts)
+        ? fromJsonTimestamp(object.event_ts)
+        : undefined,
+      side: isSet(object.side) ? globalThis.String(object.side) : "",
+      quantity: isSet(object.quantity) ? globalThis.Number(object.quantity) : 0,
+      price: isSet(object.price) ? globalThis.Number(object.price) : 0,
+      ohlcvBar: isObject(object.ohlcvBar) ? object.ohlcvBar : isObject(object.ohlcv_bar) ? object.ohlcv_bar : undefined,
+      indicatorValues: isObject(object.indicatorValues)
+        ? (globalThis.Object.entries(object.indicatorValues) as [string, any][]).reduce(
+          (acc: { [key: string]: number }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.Number(value);
+            return acc;
+          },
+          {},
+        )
+        : isObject(object.indicator_values)
+        ? (globalThis.Object.entries(object.indicator_values) as [string, any][]).reduce(
+          (acc: { [key: string]: number }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.Number(value);
+            return acc;
+          },
+          {},
+        )
+        : {},
+      signals: globalThis.Array.isArray(object?.signals)
+        ? object.signals.map((e: any) => SignalEntry.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: OrderSnapshot): unknown {
+    const obj: any = {};
+    if (message.orderId !== "") {
+      obj.orderId = message.orderId;
+    }
+    if (message.positionId !== "") {
+      obj.positionId = message.positionId;
+    }
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.eventType !== SnapshotEventType.SNAPSHOT_EVENT_TYPE_UNSPECIFIED) {
+      obj.eventType = snapshotEventTypeToJSON(message.eventType);
+    }
+    if (message.eventTs !== undefined) {
+      obj.eventTs = message.eventTs.toISOString();
+    }
+    if (message.side !== "") {
+      obj.side = message.side;
+    }
+    if (message.quantity !== 0) {
+      obj.quantity = message.quantity;
+    }
+    if (message.price !== 0) {
+      obj.price = message.price;
+    }
+    if (message.ohlcvBar !== undefined) {
+      obj.ohlcvBar = message.ohlcvBar;
+    }
+    if (message.indicatorValues) {
+      const entries = globalThis.Object.entries(message.indicatorValues) as [string, number][];
+      if (entries.length > 0) {
+        obj.indicatorValues = {};
+        entries.forEach(([k, v]) => {
+          obj.indicatorValues[k] = v;
+        });
+      }
+    }
+    if (message.signals?.length) {
+      obj.signals = message.signals.map((e) => SignalEntry.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<OrderSnapshot>, I>>(base?: I): OrderSnapshot {
+    return OrderSnapshot.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OrderSnapshot>, I>>(object: I): OrderSnapshot {
+    const message = createBaseOrderSnapshot();
+    message.orderId = object.orderId ?? "";
+    message.positionId = object.positionId ?? "";
+    message.symbol = object.symbol ?? "";
+    message.eventType = object.eventType ?? SnapshotEventType.SNAPSHOT_EVENT_TYPE_UNSPECIFIED;
+    message.eventTs = object.eventTs ?? undefined;
+    message.side = object.side ?? "";
+    message.quantity = object.quantity ?? 0;
+    message.price = object.price ?? 0;
+    message.ohlcvBar = object.ohlcvBar ?? undefined;
+    message.indicatorValues = (globalThis.Object.entries(object.indicatorValues ?? {}) as [string, number][]).reduce(
+      (acc: { [key: string]: number }, [key, value]: [string, number]) => {
+        if (value !== undefined) {
+          acc[key] = globalThis.Number(value);
+        }
+        return acc;
+      },
+      {},
+    );
+    message.signals = object.signals?.map((e) => SignalEntry.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseOrderSnapshot_IndicatorValuesEntry(): OrderSnapshot_IndicatorValuesEntry {
+  return { key: "", value: 0 };
+}
+
+export const OrderSnapshot_IndicatorValuesEntry: MessageFns<OrderSnapshot_IndicatorValuesEntry> = {
+  encode(message: OrderSnapshot_IndicatorValuesEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== 0) {
+      writer.uint32(17).double(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OrderSnapshot_IndicatorValuesEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseOrderSnapshot_IndicatorValuesEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.value = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): OrderSnapshot_IndicatorValuesEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.Number(object.value) : 0,
+    };
+  },
+
+  toJSON(message: OrderSnapshot_IndicatorValuesEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== 0) {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<OrderSnapshot_IndicatorValuesEntry>, I>>(
+    base?: I,
+  ): OrderSnapshot_IndicatorValuesEntry {
+    return OrderSnapshot_IndicatorValuesEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OrderSnapshot_IndicatorValuesEntry>, I>>(
+    object: I,
+  ): OrderSnapshot_IndicatorValuesEntry {
+    const message = createBaseOrderSnapshot_IndicatorValuesEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? 0;
+    return message;
+  },
+};
+
+function createBasePnLPatternFactor(): PnLPatternFactor {
+  return {
+    factorName: "",
+    factorType: FactorType.FACTOR_TYPE_UNSPECIFIED,
+    valueRangeLow: 0,
+    valueRangeHigh: 0,
+    sampleCount: 0,
+    avgPnlImpact: 0,
+  };
+}
+
+export const PnLPatternFactor: MessageFns<PnLPatternFactor> = {
+  encode(message: PnLPatternFactor, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.factorName !== "") {
+      writer.uint32(10).string(message.factorName);
+    }
+    if (message.factorType !== FactorType.FACTOR_TYPE_UNSPECIFIED) {
+      writer.uint32(16).int32(factorTypeToNumber(message.factorType));
+    }
+    if (message.valueRangeLow !== 0) {
+      writer.uint32(25).double(message.valueRangeLow);
+    }
+    if (message.valueRangeHigh !== 0) {
+      writer.uint32(33).double(message.valueRangeHigh);
+    }
+    if (message.sampleCount !== 0) {
+      writer.uint32(40).int32(message.sampleCount);
+    }
+    if (message.avgPnlImpact !== 0) {
+      writer.uint32(49).double(message.avgPnlImpact);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): PnLPatternFactor {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBasePnLPatternFactor();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.factorName = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.factorType = factorTypeFromJSON(reader.int32());
+          continue;
+        }
+        case 3: {
+          if (tag !== 25) {
+            break;
+          }
+
+          message.valueRangeLow = reader.double();
+          continue;
+        }
+        case 4: {
+          if (tag !== 33) {
+            break;
+          }
+
+          message.valueRangeHigh = reader.double();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.sampleCount = reader.int32();
+          continue;
+        }
+        case 6: {
+          if (tag !== 49) {
+            break;
+          }
+
+          message.avgPnlImpact = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): PnLPatternFactor {
+    return {
+      factorName: isSet(object.factorName)
+        ? globalThis.String(object.factorName)
+        : isSet(object.factor_name)
+        ? globalThis.String(object.factor_name)
+        : "",
+      factorType: isSet(object.factorType)
+        ? factorTypeFromJSON(object.factorType)
+        : isSet(object.factor_type)
+        ? factorTypeFromJSON(object.factor_type)
+        : FactorType.FACTOR_TYPE_UNSPECIFIED,
+      valueRangeLow: isSet(object.valueRangeLow)
+        ? globalThis.Number(object.valueRangeLow)
+        : isSet(object.value_range_low)
+        ? globalThis.Number(object.value_range_low)
+        : 0,
+      valueRangeHigh: isSet(object.valueRangeHigh)
+        ? globalThis.Number(object.valueRangeHigh)
+        : isSet(object.value_range_high)
+        ? globalThis.Number(object.value_range_high)
+        : 0,
+      sampleCount: isSet(object.sampleCount)
+        ? globalThis.Number(object.sampleCount)
+        : isSet(object.sample_count)
+        ? globalThis.Number(object.sample_count)
+        : 0,
+      avgPnlImpact: isSet(object.avgPnlImpact)
+        ? globalThis.Number(object.avgPnlImpact)
+        : isSet(object.avg_pnl_impact)
+        ? globalThis.Number(object.avg_pnl_impact)
+        : 0,
+    };
+  },
+
+  toJSON(message: PnLPatternFactor): unknown {
+    const obj: any = {};
+    if (message.factorName !== "") {
+      obj.factorName = message.factorName;
+    }
+    if (message.factorType !== FactorType.FACTOR_TYPE_UNSPECIFIED) {
+      obj.factorType = factorTypeToJSON(message.factorType);
+    }
+    if (message.valueRangeLow !== 0) {
+      obj.valueRangeLow = message.valueRangeLow;
+    }
+    if (message.valueRangeHigh !== 0) {
+      obj.valueRangeHigh = message.valueRangeHigh;
+    }
+    if (message.sampleCount !== 0) {
+      obj.sampleCount = Math.round(message.sampleCount);
+    }
+    if (message.avgPnlImpact !== 0) {
+      obj.avgPnlImpact = message.avgPnlImpact;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<PnLPatternFactor>, I>>(base?: I): PnLPatternFactor {
+    return PnLPatternFactor.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<PnLPatternFactor>, I>>(object: I): PnLPatternFactor {
+    const message = createBasePnLPatternFactor();
+    message.factorName = object.factorName ?? "";
+    message.factorType = object.factorType ?? FactorType.FACTOR_TYPE_UNSPECIFIED;
+    message.valueRangeLow = object.valueRangeLow ?? 0;
+    message.valueRangeHigh = object.valueRangeHigh ?? 0;
+    message.sampleCount = object.sampleCount ?? 0;
+    message.avgPnlImpact = object.avgPnlImpact ?? 0;
+    return message;
+  },
+};
+
+function createBaseQueryPnLPatternsRequest(): QueryPnLPatternsRequest {
+  return { symbol: "", strategyId: "", fromTs: undefined, toTs: undefined, limit: 0 };
+}
+
+export const QueryPnLPatternsRequest: MessageFns<QueryPnLPatternsRequest> = {
+  encode(message: QueryPnLPatternsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    if (message.strategyId !== "") {
+      writer.uint32(18).string(message.strategyId);
+    }
+    if (message.fromTs !== undefined) {
+      Timestamp.encode(toTimestamp(message.fromTs), writer.uint32(26).fork()).join();
+    }
+    if (message.toTs !== undefined) {
+      Timestamp.encode(toTimestamp(message.toTs), writer.uint32(34).fork()).join();
+    }
+    if (message.limit !== 0) {
+      writer.uint32(40).int32(message.limit);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): QueryPnLPatternsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseQueryPnLPatternsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.strategyId = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.fromTs = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.toTs = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.limit = reader.int32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): QueryPnLPatternsRequest {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      strategyId: isSet(object.strategyId)
+        ? globalThis.String(object.strategyId)
+        : isSet(object.strategy_id)
+        ? globalThis.String(object.strategy_id)
+        : "",
+      fromTs: isSet(object.fromTs)
+        ? fromJsonTimestamp(object.fromTs)
+        : isSet(object.from_ts)
+        ? fromJsonTimestamp(object.from_ts)
+        : undefined,
+      toTs: isSet(object.toTs)
+        ? fromJsonTimestamp(object.toTs)
+        : isSet(object.to_ts)
+        ? fromJsonTimestamp(object.to_ts)
+        : undefined,
+      limit: isSet(object.limit) ? globalThis.Number(object.limit) : 0,
+    };
+  },
+
+  toJSON(message: QueryPnLPatternsRequest): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.strategyId !== "") {
+      obj.strategyId = message.strategyId;
+    }
+    if (message.fromTs !== undefined) {
+      obj.fromTs = message.fromTs.toISOString();
+    }
+    if (message.toTs !== undefined) {
+      obj.toTs = message.toTs.toISOString();
+    }
+    if (message.limit !== 0) {
+      obj.limit = Math.round(message.limit);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<QueryPnLPatternsRequest>, I>>(base?: I): QueryPnLPatternsRequest {
+    return QueryPnLPatternsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<QueryPnLPatternsRequest>, I>>(object: I): QueryPnLPatternsRequest {
+    const message = createBaseQueryPnLPatternsRequest();
+    message.symbol = object.symbol ?? "";
+    message.strategyId = object.strategyId ?? "";
+    message.fromTs = object.fromTs ?? undefined;
+    message.toTs = object.toTs ?? undefined;
+    message.limit = object.limit ?? 0;
+    return message;
+  },
+};
+
+function createBaseQueryPnLPatternsResponse(): QueryPnLPatternsResponse {
+  return { positiveFactors: [], negativeFactors: [] };
+}
+
+export const QueryPnLPatternsResponse: MessageFns<QueryPnLPatternsResponse> = {
+  encode(message: QueryPnLPatternsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.positiveFactors) {
+      PnLPatternFactor.encode(v!, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.negativeFactors) {
+      PnLPatternFactor.encode(v!, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): QueryPnLPatternsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseQueryPnLPatternsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.positiveFactors.push(PnLPatternFactor.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.negativeFactors.push(PnLPatternFactor.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): QueryPnLPatternsResponse {
+    return {
+      positiveFactors: globalThis.Array.isArray(object?.positiveFactors)
+        ? object.positiveFactors.map((e: any) => PnLPatternFactor.fromJSON(e))
+        : globalThis.Array.isArray(object?.positive_factors)
+        ? object.positive_factors.map((e: any) => PnLPatternFactor.fromJSON(e))
+        : [],
+      negativeFactors: globalThis.Array.isArray(object?.negativeFactors)
+        ? object.negativeFactors.map((e: any) => PnLPatternFactor.fromJSON(e))
+        : globalThis.Array.isArray(object?.negative_factors)
+        ? object.negative_factors.map((e: any) => PnLPatternFactor.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: QueryPnLPatternsResponse): unknown {
+    const obj: any = {};
+    if (message.positiveFactors?.length) {
+      obj.positiveFactors = message.positiveFactors.map((e) => PnLPatternFactor.toJSON(e));
+    }
+    if (message.negativeFactors?.length) {
+      obj.negativeFactors = message.negativeFactors.map((e) => PnLPatternFactor.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<QueryPnLPatternsResponse>, I>>(base?: I): QueryPnLPatternsResponse {
+    return QueryPnLPatternsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<QueryPnLPatternsResponse>, I>>(object: I): QueryPnLPatternsResponse {
+    const message = createBaseQueryPnLPatternsResponse();
+    message.positiveFactors = object.positiveFactors?.map((e) => PnLPatternFactor.fromPartial(e)) || [];
+    message.negativeFactors = object.negativeFactors?.map((e) => PnLPatternFactor.fromPartial(e)) || [];
+    return message;
+  },
+};
+
 export type AnalysisServiceService = typeof AnalysisServiceService;
 export const AnalysisServiceService = {
   runBacktest: {
@@ -8594,6 +9614,21 @@ export const AnalysisServiceService = {
       Buffer.from(GetIndicatorSeriesResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): GetIndicatorSeriesResponse => GetIndicatorSeriesResponse.decode(value),
   },
+  /**
+   * Ranked P&L-attribution factors (feature 042): which indicator value-ranges and signals
+   * correlate with positive vs negative realized P&L, scoped by symbol/strategy/time window.
+   */
+  queryPnLPatterns: {
+    path: "/xstockstrat.analysis.v1.AnalysisService/QueryPnLPatterns" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: QueryPnLPatternsRequest): Buffer =>
+      Buffer.from(QueryPnLPatternsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): QueryPnLPatternsRequest => QueryPnLPatternsRequest.decode(value),
+    responseSerialize: (value: QueryPnLPatternsResponse): Buffer =>
+      Buffer.from(QueryPnLPatternsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): QueryPnLPatternsResponse => QueryPnLPatternsResponse.decode(value),
+  },
 } as const;
 
 export interface AnalysisServiceServer extends UntypedServiceImplementation {
@@ -8639,6 +9674,11 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
    * the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
    */
   getIndicatorSeries: handleUnaryCall<GetIndicatorSeriesRequest, GetIndicatorSeriesResponse>;
+  /**
+   * Ranked P&L-attribution factors (feature 042): which indicator value-ranges and signals
+   * correlate with positive vs negative realized P&L, scoped by symbol/strategy/time window.
+   */
+  queryPnLPatterns: handleUnaryCall<QueryPnLPatternsRequest, QueryPnLPatternsResponse>;
 }
 
 export interface AnalysisServiceClient extends Client {
@@ -8921,6 +9961,25 @@ export interface AnalysisServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: GetIndicatorSeriesResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Ranked P&L-attribution factors (feature 042): which indicator value-ranges and signals
+   * correlate with positive vs negative realized P&L, scoped by symbol/strategy/time window.
+   */
+  queryPnLPatterns(
+    request: QueryPnLPatternsRequest,
+    callback: (error: ServiceError | null, response: QueryPnLPatternsResponse) => void,
+  ): ClientUnaryCall;
+  queryPnLPatterns(
+    request: QueryPnLPatternsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: QueryPnLPatternsResponse) => void,
+  ): ClientUnaryCall;
+  queryPnLPatterns(
+    request: QueryPnLPatternsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: QueryPnLPatternsResponse) => void,
   ): ClientUnaryCall;
 }
 

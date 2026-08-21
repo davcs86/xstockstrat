@@ -8,14 +8,13 @@ from app import client
 
 
 def test_metadata_never_includes_secret():
-    """_metadata() never attaches a header — MCP_AGENT_SECRET is not forwarded (feature 097)."""
+    """_metadata() never attaches a header (feature 097; MCP_AGENT_SECRET gone in 147)."""
     assert client._metadata() == []
 
 
-def test_metadata_empty_when_no_secret(monkeypatch):
-    """When MCP_AGENT_SECRET is empty, _metadata returns empty list."""
-    monkeypatch.setattr(client, "MCP_AGENT_SECRET", "")
-    assert client._metadata() == []
+def test_client_module_has_no_mcp_agent_secret():
+    """Feature 147: MCP_AGENT_SECRET is fully removed from the client module."""
+    assert not hasattr(client, "MCP_AGENT_SECRET")
 
 
 def test_iso_to_timestamp_utc():
@@ -799,13 +798,13 @@ class TestGetConfigValueClient:
             mock_grpc.aio.insecure_channel.return_value = _channel_cm()
             with patch.object(config_pb2_grpc, "ConfigServiceStub", return_value=mock_stub):
                 out = await client.get_config_value(
-                    "k", namespace="marketdata", environment="production", trading_mode="live"
+                    "k", namespace="marketdata", environment="production", user_id="u-9"
                 )
         assert out == "v"
         req = mock_stub.GetConfig.call_args.args[0]
         assert req.namespace == "marketdata"
-        assert req.environment == common_pb2.ENVIRONMENT_PRODUCTION  # not the dev default
-        assert req.trading_mode == common_pb2.TRADING_MODE_LIVE
+        assert req.environment == common_pb2.ENVIRONMENT_PRODUCTION  # not the staging default
+        assert req.user_id == "u-9"
         assert not any(
             k == "x-mcp-secret" for k, _ in mock_stub.GetConfig.call_args.kwargs["metadata"]
         )

@@ -3,13 +3,16 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { ConfigSnapshot, GetConfigRequest, ListKeysRequest, ListKeysResponse, SetConfigRequest, SetConfigResponse, WatchConfigRequest } from "./config_pb.js";
+import { ConfigSnapshot, GetConfigRequest, GetSecretRequest, GetSecretResponse, ListKeysRequest, ListKeysResponse, SetConfigRequest, SetConfigResponse, WatchConfigRequest } from "./config_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
  * ConfigService — live configuration via server-streaming WatchConfig.
  * All services call WatchConfig at startup and stream config updates.
- * Config values are scoped by environment (dev/production) and trading_mode (paper/live/all).
+ * Config values are scoped by environment (production/staging) and global/per-user (user_id),
+ * feature 147. paper/live is derived from environment; the trading_mode fields below are
+ * deprecated and ignored by the server. Secrets are stored encrypted at rest, redacted at every
+ * broadcast/read edge, and resolved only via GetSecret by allow-listed internal callers.
  *
  * @generated from service xstockstrat.config.v1.ConfigService
  */
@@ -59,6 +62,20 @@ export const ConfigService = {
       name: "ListKeys",
       I: ListKeysRequest,
       O: ListKeysResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Resolve a secret's decrypted plaintext. Gated to allow-listed internal service callers
+     * (x-internal-caller); the value is decrypted server-side and never appears on WatchConfig,
+     * GetConfig, or ListKeys. Returns found=false for an absent/unset (NULL-ciphertext) secret;
+     * a decrypt failure is an INTERNAL error, never a partial/empty value (feature 147).
+     *
+     * @generated from rpc xstockstrat.config.v1.ConfigService.GetSecret
+     */
+    getSecret: {
+      name: "GetSecret",
+      I: GetSecretRequest,
+      O: GetSecretResponse,
       kind: MethodKind.Unary,
     },
   }

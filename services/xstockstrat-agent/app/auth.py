@@ -16,7 +16,6 @@ log = logging.getLogger(__name__)
 
 IDENTITY_ENDPOINT = os.environ.get("IDENTITY_ENDPOINT", "xstockstrat-identity:50058")
 AGENT_PUBLIC_URL = os.environ.get("AGENT_PUBLIC_URL", "http://localhost:9000")
-MCP_AGENT_SECRET = os.environ.get("MCP_AGENT_SECRET", "")
 
 
 def _metadata() -> list[tuple[str, str]]:
