@@ -97,8 +97,8 @@ SENDGRID_API_KEY=                   # type: SECRET (feature 020) — SendGrid v3
 ```
 
 > `SLACK_WEBHOOK_URL` / `SENDGRID_API_KEY` are vendor credentials delivered as DO App Platform
-> `type: SECRET` env vars through the full deploy pipeline (docker-compose + both `.do/app*.yaml`
-> + the four deploy workflows + `scripts/do-inject-prod-secrets.py`) — **never** config-service
+> `type: SECRET` env vars through the full deploy pipeline (docker-compose, both `.do/app*.yaml`,
+> the four deploy workflows, and `scripts/do-inject-prod-secrets.py`) — **never** config-service
 > rows (config governance / feature 076). Both are optional; an unset value simply disables that
 > fanout channel.
 
