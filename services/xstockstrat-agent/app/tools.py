@@ -1081,9 +1081,7 @@ def register_tools(server: MCPServer) -> None:
         counter, not a timestamp."""
         env = _resolve_scope("")
         try:
-            result = await client.get_config(
-                namespace=namespace, environment=env, user_id=user_id
-            )
+            result = await client.get_config(namespace=namespace, environment=env, user_id=user_id)
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="namespace not found")) from e
         # Redact on the is_secret flag, not on the key name: a flagged key need not be prefixed.

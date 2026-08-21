@@ -51,10 +51,10 @@ Namespace: `marketdata`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `marketdata.alpaca.api_key` | secret (`is_secret`) | _(NULL until set)_ | Alpaca API key (feature 147). Encrypted at rest; resolved at startup via `GetSecret` (`Watcher.ResolveSecret`, `x-internal-caller: marketdata`), never streamed via `WatchConfig`. |
-| `marketdata.alpaca.api_secret` | secret (`is_secret`) | _(NULL until set)_ | Alpaca API secret (feature 147). Same encrypted/`GetSecret` resolution as `api_key`. |
-| `marketdata.fmp.api_key` | secret (`is_secret`) | _(NULL until set)_ | FMP fundamentals API key (feature 147). Encrypted; resolved via `GetSecret`. |
-| `marketdata.finnhub.api_key` | secret (`is_secret`) | _(NULL until set)_ | Finnhub fundamentals API key (feature 147). Encrypted; resolved via `GetSecret`. |
+| `marketdata.alpaca.api_key` | secret (`is_secret`) | *(NULL until set)* | Alpaca API key (feature 147). Encrypted at rest; resolved at startup via `GetSecret` (`Watcher.ResolveSecret`, `x-internal-caller: marketdata`), never streamed via `WatchConfig`. |
+| `marketdata.alpaca.api_secret` | secret (`is_secret`) | *(NULL until set)* | Alpaca API secret (feature 147). Same encrypted/`GetSecret` resolution as `api_key`. |
+| `marketdata.fmp.api_key` | secret (`is_secret`) | *(NULL until set)* | FMP fundamentals API key (feature 147). Encrypted; resolved via `GetSecret`. |
+| `marketdata.finnhub.api_key` | secret (`is_secret`) | *(NULL until set)* | Finnhub fundamentals API key (feature 147). Encrypted; resolved via `GetSecret`. |
 | `marketdata.alpaca.paper` | bool | `true` | Use paper trading endpoint |
 | `marketdata.alpaca.feed` | string | `iex` | Alpaca market-data feed for bar/quote requests (`iex`/`sip`/`otc`). The free/basic (paper) data plan only permits `iex`; omitting the param defaults Alpaca to SIP, which those plans reject with HTTP 403. Read at startup. |
 | `marketdata.alpaca.adjustment` | string | `all` | Corporate-action adjustment applied to historical bars (`raw`/`split`/`dividend`/`all`). Default `all` so splits/dividends do not distort backtest OHLCV. Sent as `adjustment=` on every bars request. Read at startup. |

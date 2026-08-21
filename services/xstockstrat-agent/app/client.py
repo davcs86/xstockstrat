@@ -1024,9 +1024,7 @@ async def get_config_value(
         async with grpc.aio.insecure_channel(CONFIG_ENDPOINT) as channel:
             stub = config_pb2_grpc.ConfigServiceStub(channel)
             snapshot = await stub.GetConfig(
-                config_pb2.GetConfigRequest(
-                    namespace=namespace, environment=env, user_id=user_id
-                ),
+                config_pb2.GetConfigRequest(namespace=namespace, environment=env, user_id=user_id),
                 metadata=_metadata(),
             )
     except grpc.aio.AioRpcError:

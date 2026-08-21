@@ -36,13 +36,13 @@ type Config struct {
 // LoadFromEnv reads configuration from environment variables with sane defaults.
 func LoadFromEnv() *Config {
 	return &Config{
-		GRPCPort:        getEnv("GRPC_PORT", "50053"),
-		ConfigEndpoint:  getEnv("CONFIG_ENDPOINT", "xstockstrat-config:50060"),
-		LedgerEndpoint:  getEnv("LEDGER_ENDPOINT", "xstockstrat-ledger:50057"),
-		NotifyEndpoint:  getEnv("NOTIFY_ENDPOINT", "xstockstrat-notify:50059"),
-		DBConnStr:       getEnv("DATABASE_URL", ""),
-		AlpacaBaseURL:   getEnv("ALPACA_BASE_URL", "https://paper-api.alpaca.markets"),
-		AlpacaDataURL:   getEnv("ALPACA_DATA_URL", "https://data.alpaca.markets"),
+		GRPCPort:       getEnv("GRPC_PORT", "50053"),
+		ConfigEndpoint: getEnv("CONFIG_ENDPOINT", "xstockstrat-config:50060"),
+		LedgerEndpoint: getEnv("LEDGER_ENDPOINT", "xstockstrat-ledger:50057"),
+		NotifyEndpoint: getEnv("NOTIFY_ENDPOINT", "xstockstrat-notify:50059"),
+		DBConnStr:      getEnv("DATABASE_URL", ""),
+		AlpacaBaseURL:  getEnv("ALPACA_BASE_URL", "https://paper-api.alpaca.markets"),
+		AlpacaDataURL:  getEnv("ALPACA_DATA_URL", "https://data.alpaca.markets"),
 		// Vendor credentials (Alpaca key/secret, FMP, Finnhub) are no longer env vars (feature
 		// 147). They are stored ENCRYPTED in the config service and resolved at startup via
 		// Watcher.ResolveSecret (GetSecret RPC, gated to this service's x-internal-caller). The

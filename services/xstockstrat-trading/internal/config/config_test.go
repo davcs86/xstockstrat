@@ -101,10 +101,10 @@ func (f *fakeConfigServiceClient) ListKeys(ctx context.Context, in *configv1.Lis
 	panic("fakeConfigServiceClient.ListKeys not implemented")
 }
 
-
 func (f *fakeConfigServiceClient) GetSecret(ctx context.Context, in *configv1.GetSecretRequest, opts ...grpc.CallOption) (*configv1.GetSecretResponse, error) {
 	return &configv1.GetSecretResponse{}, nil
 }
+
 var _ configv1.ConfigServiceClient = (*fakeConfigServiceClient)(nil)
 
 func TestWatcher_SetConfig_AttachesMetadata(t *testing.T) {
