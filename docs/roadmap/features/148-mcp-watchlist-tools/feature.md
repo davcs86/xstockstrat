@@ -5,6 +5,7 @@
 **Last Updated**: 2026-08-21
 **Committed to main**: bfa1995a3e5d36758f96ac8ef1ff97a31c68ef00
 **Launched date**: 2026-08-21
+**Archived**: 2026-08-21
 
 ---
 
@@ -17,6 +18,7 @@
 | 2026-08-21 | `design-approved` → `code-completed` | implementation | 4 agent tools + client wrappers + tests; 266 pass @78% cov, ruff clean, inventory synced to 28 tools |
 
 | 2026-08-21 | `code-completed` → `launched` | CI workflow | Promoted via PR #1001; committed bfa1995a3e5d36758f96ac8ef1ff97a31c68ef00 |
+| 2026-08-21 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(0)/fails(0); promoted @AC-1..@AC-9 to agent suite; pruned 3 specs |
 ---
 
 ## Artifacts
