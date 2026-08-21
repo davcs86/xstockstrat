@@ -6,6 +6,16 @@ Each entry corresponds to one `main-dev → main` PR merge.
 ## 2026-08-21
 
 ### Features
+- mcp-watchlist-tools: Expose the existing `xstockstrat-portfolio` watchlist RPCs (feature 058/097/127) as new `xstockstrat-agent` MCP tools so an AI agent can list, read, create/update/delete watchlists and add/remove their symbols on behalf of the calling user.
+
+### Summary
+3 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-08-21
+
+### Features
 - notify-external-fanout: Adds HTTP fanout to the notify service so that platform alerts are delivered to Slack and/or email (SendGrid) in addition to the existing Connect-RPC stream, ensuring traders receive time-sensitive signal and fill notifications even when not viewing the UI.
 - order-snapshots-pnl-patterns: At every order event (creation, fill, cancellation), capture a snapshot of the active indicator values, signals, and market conditions for the traded symbol.
 - consolidate-watchlist-signal: Signals ingested via the MCP `ingest_signal` tool with `direction="watchlist"` are currently stored in `xstockstrat-ingest`'s `newsletter_signals` table as an inert label — `xstockstrat-analysis` treats them as non-actionable and nothing connects them to the platform's real, user-owned `xstockstrat-portfolio` `Watchlist` mechanism.
