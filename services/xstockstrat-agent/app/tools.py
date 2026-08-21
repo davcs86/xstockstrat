@@ -311,6 +311,7 @@ def register_tools(server: MCPServer) -> None:
 
     @server.tool()
     async def ingest_signal(
+        ctx: Context,
         source: str,
         symbol: str,
         direction: str,
@@ -333,10 +334,13 @@ def register_tools(server: MCPServer) -> None:
         SIDE EFFECT: on success this tool AUTO-EMITS an alert when conviction is present and >= the
             agent.signal.alert_threshold config value (default 0.6); an alert failure does not fail
             the ingest. Do NOT also call emit_alert for the same signal, or you will double-alert.
+        SIDE EFFECT: when direction='watchlist' and the signal is not deduplicated, the symbol is
+            added to your system-managed signals watchlist in xstockstrat-portfolio (best-effort; a
+            failure is logged and never fails the ingest).
         Returns {"signal_id": <int>, "deduplicated": <bool>} on success — deduplicated=true means
             this submission matched an existing signal within the dedup window and no new row was
-            inserted (the auto-alert above is suppressed in that case); raises on unknown source
-            slug (INVALID_ARGUMENT)."""
+            inserted (both the auto-alert and the watchlist auto-add above are suppressed in that
+            case); raises on unknown source slug (INVALID_ARGUMENT)."""
         result = await client.ingest_signal(
             source=source,
             symbol=symbol,
@@ -384,6 +388,19 @@ def register_tools(server: MCPServer) -> None:
             except Exception as e:
                 log.warning(
                     "Auto-alert failed after ingest_signal (signal already ingested): %s", e
+                )
+        # Auto-add to the caller's system-managed signals watchlist (feature 127) — post-commit,
+        # best-effort, structurally identical to the auto-alert above. Gated on
+        # direction='watchlist' and a non-deduplicated ingest (FR-4/FR-6). _caller_user_id raising
+        # on the unauthenticated stdio transport is caught here → add skipped, signal ingested.
+        if direction == "watchlist" and not result.get("deduplicated"):
+            try:
+                user_id = _caller_user_id(ctx, "ingest_signal")
+                wl_id = await client.ensure_signal_watchlist(user_id)
+                await client.add_watchlist_symbol(user_id, wl_id, symbol)
+            except Exception as e:
+                log.warning(
+                    "Watchlist auto-add failed after ingest_signal (signal already ingested): %s", e
                 )
         return result
 

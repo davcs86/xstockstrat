@@ -62,6 +62,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Strategies', href: '/insights/strategies' },
       { label: 'Formulas', href: '/insights/formulas' },
+      { label: 'P&L Patterns', href: '/insights/pnl-patterns' },
       { label: 'Signal sources', href: '/config-ui/sources' },
       { label: 'Backfills', href: '/insights/backfills', adminOnly: true },
     ],

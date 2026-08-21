@@ -221,6 +221,9 @@ services:
       SERVICE_NAME: notify
       DB_POOL_MAX: "1"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      # Feature 020 — external alert fanout credentials (optional; empty ⇒ channel disabled).
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
     ports:
       - "50059:50059"
     healthcheck:
@@ -522,6 +525,7 @@ services:
       IDENTITY_ENDPOINT: xstockstrat-identity:50058
       INDICATORS_ENDPOINT: xstockstrat-indicators:50054
       CONFIG_ENDPOINT: xstockstrat-config:50060
+      PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
       SERVICE_NAME: agent
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-identity:50058"

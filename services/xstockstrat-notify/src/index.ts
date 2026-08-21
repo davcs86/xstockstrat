@@ -5,6 +5,7 @@ import * as grpc from '@grpc/grpc-js';
 import { Pool } from 'pg';
 import { ConfigWatcher } from './services/configWatcher';
 import { NotifyServiceImpl } from './grpc/notifyServiceImpl';
+import { FanoutDispatcher } from './fanout/fanout';
 import { createNotifyServiceDefinition } from './grpc/serviceDefinition';
 import { getLogger } from './services/logger';
 
@@ -41,7 +42,8 @@ async function main() {
     },
   });
 
-  const notifyImpl = new NotifyServiceImpl(pool, configWatcher);
+  const fanout = new FanoutDispatcher(configWatcher);
+  const notifyImpl = new NotifyServiceImpl(pool, configWatcher, fanout);
 
   // ── gRPC server (internal service-to-service, port 50059) ──────────────
   const grpcServer = new grpc.Server();

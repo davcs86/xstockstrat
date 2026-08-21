@@ -5,8 +5,8 @@
 //   protoc               unknown
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionPassedEntry = exports.ScreenResult_CriterionRawValuesEntry = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.OpportunityAction = exports.ReadinessRule = exports.ConditionState = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.BacktestStatus = exports.protobufPackage = void 0;
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.IndicatorValue = exports.NamedSeries = exports.ComponentSeries = exports.GetIndicatorSeriesResponse = exports.GetIndicatorSeriesRequest = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = void 0;
+exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionPassedEntry = exports.ScreenResult_CriterionRawValuesEntry = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.FactorType = exports.SnapshotEventType = exports.OpportunityAction = exports.ReadinessRule = exports.ConditionState = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.BacktestStatus = exports.protobufPackage = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.QueryPnLPatternsResponse = exports.QueryPnLPatternsRequest = exports.PnLPatternFactor = exports.OrderSnapshot_IndicatorValuesEntry = exports.OrderSnapshot = exports.SignalEntry = exports.IndicatorValue = exports.NamedSeries = exports.ComponentSeries = exports.GetIndicatorSeriesResponse = exports.GetIndicatorSeriesRequest = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = exports.Opportunity = exports.FundamentalsScanSummary = void 0;
 exports.backtestStatusFromJSON = backtestStatusFromJSON;
 exports.backtestStatusToJSON = backtestStatusToJSON;
 exports.backtestStatusToNumber = backtestStatusToNumber;
@@ -43,6 +43,12 @@ exports.readinessRuleToNumber = readinessRuleToNumber;
 exports.opportunityActionFromJSON = opportunityActionFromJSON;
 exports.opportunityActionToJSON = opportunityActionToJSON;
 exports.opportunityActionToNumber = opportunityActionToNumber;
+exports.snapshotEventTypeFromJSON = snapshotEventTypeFromJSON;
+exports.snapshotEventTypeToJSON = snapshotEventTypeToJSON;
+exports.snapshotEventTypeToNumber = snapshotEventTypeToNumber;
+exports.factorTypeFromJSON = factorTypeFromJSON;
+exports.factorTypeToJSON = factorTypeToJSON;
+exports.factorTypeToNumber = factorTypeToNumber;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
@@ -808,6 +814,124 @@ function opportunityActionToNumber(object) {
         case OpportunityAction.OPPORTUNITY_ACTION_TAKE:
             return 3;
         case OpportunityAction.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/** The order-lifecycle event a snapshot was captured at. */
+var SnapshotEventType;
+(function (SnapshotEventType) {
+    SnapshotEventType["SNAPSHOT_EVENT_TYPE_UNSPECIFIED"] = "SNAPSHOT_EVENT_TYPE_UNSPECIFIED";
+    SnapshotEventType["SNAPSHOT_EVENT_TYPE_ORDER_CREATED"] = "SNAPSHOT_EVENT_TYPE_ORDER_CREATED";
+    SnapshotEventType["SNAPSHOT_EVENT_TYPE_ORDER_FILLED"] = "SNAPSHOT_EVENT_TYPE_ORDER_FILLED";
+    SnapshotEventType["SNAPSHOT_EVENT_TYPE_ORDER_PARTIALLY_FILLED"] = "SNAPSHOT_EVENT_TYPE_ORDER_PARTIALLY_FILLED";
+    SnapshotEventType["SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED"] = "SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED";
+    SnapshotEventType["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(SnapshotEventType || (exports.SnapshotEventType = SnapshotEventType = {}));
+function snapshotEventTypeFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "SNAPSHOT_EVENT_TYPE_UNSPECIFIED":
+            return SnapshotEventType.SNAPSHOT_EVENT_TYPE_UNSPECIFIED;
+        case 1:
+        case "SNAPSHOT_EVENT_TYPE_ORDER_CREATED":
+            return SnapshotEventType.SNAPSHOT_EVENT_TYPE_ORDER_CREATED;
+        case 2:
+        case "SNAPSHOT_EVENT_TYPE_ORDER_FILLED":
+            return SnapshotEventType.SNAPSHOT_EVENT_TYPE_ORDER_FILLED;
+        case 3:
+        case "SNAPSHOT_EVENT_TYPE_ORDER_PARTIALLY_FILLED":
+            return SnapshotEventType.SNAPSHOT_EVENT_TYPE_ORDER_PARTIALLY_FILLED;
+        case 4:
+        case "SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED":
+            return SnapshotEventType.SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return SnapshotEventType.UNRECOGNIZED;
+    }
+}
+function snapshotEventTypeToJSON(object) {
+    switch (object) {
+        case SnapshotEventType.SNAPSHOT_EVENT_TYPE_UNSPECIFIED:
+            return "SNAPSHOT_EVENT_TYPE_UNSPECIFIED";
+        case SnapshotEventType.SNAPSHOT_EVENT_TYPE_ORDER_CREATED:
+            return "SNAPSHOT_EVENT_TYPE_ORDER_CREATED";
+        case SnapshotEventType.SNAPSHOT_EVENT_TYPE_ORDER_FILLED:
+            return "SNAPSHOT_EVENT_TYPE_ORDER_FILLED";
+        case SnapshotEventType.SNAPSHOT_EVENT_TYPE_ORDER_PARTIALLY_FILLED:
+            return "SNAPSHOT_EVENT_TYPE_ORDER_PARTIALLY_FILLED";
+        case SnapshotEventType.SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED:
+            return "SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED";
+        case SnapshotEventType.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function snapshotEventTypeToNumber(object) {
+    switch (object) {
+        case SnapshotEventType.SNAPSHOT_EVENT_TYPE_UNSPECIFIED:
+            return 0;
+        case SnapshotEventType.SNAPSHOT_EVENT_TYPE_ORDER_CREATED:
+            return 1;
+        case SnapshotEventType.SNAPSHOT_EVENT_TYPE_ORDER_FILLED:
+            return 2;
+        case SnapshotEventType.SNAPSHOT_EVENT_TYPE_ORDER_PARTIALLY_FILLED:
+            return 3;
+        case SnapshotEventType.SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED:
+            return 4;
+        case SnapshotEventType.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/** Whether an attribution factor is an indicator value-range or a signal presence. */
+var FactorType;
+(function (FactorType) {
+    FactorType["FACTOR_TYPE_UNSPECIFIED"] = "FACTOR_TYPE_UNSPECIFIED";
+    FactorType["FACTOR_TYPE_INDICATOR"] = "FACTOR_TYPE_INDICATOR";
+    FactorType["FACTOR_TYPE_SIGNAL"] = "FACTOR_TYPE_SIGNAL";
+    FactorType["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(FactorType || (exports.FactorType = FactorType = {}));
+function factorTypeFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "FACTOR_TYPE_UNSPECIFIED":
+            return FactorType.FACTOR_TYPE_UNSPECIFIED;
+        case 1:
+        case "FACTOR_TYPE_INDICATOR":
+            return FactorType.FACTOR_TYPE_INDICATOR;
+        case 2:
+        case "FACTOR_TYPE_SIGNAL":
+            return FactorType.FACTOR_TYPE_SIGNAL;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return FactorType.UNRECOGNIZED;
+    }
+}
+function factorTypeToJSON(object) {
+    switch (object) {
+        case FactorType.FACTOR_TYPE_UNSPECIFIED:
+            return "FACTOR_TYPE_UNSPECIFIED";
+        case FactorType.FACTOR_TYPE_INDICATOR:
+            return "FACTOR_TYPE_INDICATOR";
+        case FactorType.FACTOR_TYPE_SIGNAL:
+            return "FACTOR_TYPE_SIGNAL";
+        case FactorType.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function factorTypeToNumber(object) {
+    switch (object) {
+        case FactorType.FACTOR_TYPE_UNSPECIFIED:
+            return 0;
+        case FactorType.FACTOR_TYPE_INDICATOR:
+            return 1;
+        case FactorType.FACTOR_TYPE_SIGNAL:
+            return 2;
+        case FactorType.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -7162,6 +7286,774 @@ exports.IndicatorValue = {
         return message;
     },
 };
+function createBaseSignalEntry() {
+    return { name: "", value: 0, source: "" };
+}
+exports.SignalEntry = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.name !== "") {
+            writer.uint32(10).string(message.name);
+        }
+        if (message.value !== 0) {
+            writer.uint32(17).double(message.value);
+        }
+        if (message.source !== "") {
+            writer.uint32(26).string(message.source);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSignalEntry();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.name = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 17) {
+                        break;
+                    }
+                    message.value = reader.double();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.source = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            name: isSet(object.name) ? globalThis.String(object.name) : "",
+            value: isSet(object.value) ? globalThis.Number(object.value) : 0,
+            source: isSet(object.source) ? globalThis.String(object.source) : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.name !== "") {
+            obj.name = message.name;
+        }
+        if (message.value !== 0) {
+            obj.value = message.value;
+        }
+        if (message.source !== "") {
+            obj.source = message.source;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SignalEntry.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSignalEntry();
+        message.name = object.name ?? "";
+        message.value = object.value ?? 0;
+        message.source = object.source ?? "";
+        return message;
+    },
+};
+function createBaseOrderSnapshot() {
+    return {
+        orderId: "",
+        positionId: "",
+        symbol: "",
+        eventType: SnapshotEventType.SNAPSHOT_EVENT_TYPE_UNSPECIFIED,
+        eventTs: undefined,
+        side: "",
+        quantity: 0,
+        price: 0,
+        ohlcvBar: undefined,
+        indicatorValues: {},
+        signals: [],
+    };
+}
+exports.OrderSnapshot = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.orderId !== "") {
+            writer.uint32(10).string(message.orderId);
+        }
+        if (message.positionId !== "") {
+            writer.uint32(18).string(message.positionId);
+        }
+        if (message.symbol !== "") {
+            writer.uint32(26).string(message.symbol);
+        }
+        if (message.eventType !== SnapshotEventType.SNAPSHOT_EVENT_TYPE_UNSPECIFIED) {
+            writer.uint32(32).int32(snapshotEventTypeToNumber(message.eventType));
+        }
+        if (message.eventTs !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.eventTs), writer.uint32(42).fork()).join();
+        }
+        if (message.side !== "") {
+            writer.uint32(50).string(message.side);
+        }
+        if (message.quantity !== 0) {
+            writer.uint32(57).double(message.quantity);
+        }
+        if (message.price !== 0) {
+            writer.uint32(65).double(message.price);
+        }
+        if (message.ohlcvBar !== undefined) {
+            struct_1.Struct.encode(struct_1.Struct.wrap(message.ohlcvBar), writer.uint32(74).fork()).join();
+        }
+        globalThis.Object.entries(message.indicatorValues).forEach(([key, value]) => {
+            exports.OrderSnapshot_IndicatorValuesEntry.encode({ key: key, value }, writer.uint32(82).fork()).join();
+        });
+        for (const v of message.signals) {
+            exports.SignalEntry.encode(v, writer.uint32(90).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseOrderSnapshot();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.orderId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.positionId = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 32) {
+                        break;
+                    }
+                    message.eventType = snapshotEventTypeFromJSON(reader.int32());
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.eventTs = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 50) {
+                        break;
+                    }
+                    message.side = reader.string();
+                    continue;
+                }
+                case 7: {
+                    if (tag !== 57) {
+                        break;
+                    }
+                    message.quantity = reader.double();
+                    continue;
+                }
+                case 8: {
+                    if (tag !== 65) {
+                        break;
+                    }
+                    message.price = reader.double();
+                    continue;
+                }
+                case 9: {
+                    if (tag !== 74) {
+                        break;
+                    }
+                    message.ohlcvBar = struct_1.Struct.unwrap(struct_1.Struct.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 10: {
+                    if (tag !== 82) {
+                        break;
+                    }
+                    const entry10 = exports.OrderSnapshot_IndicatorValuesEntry.decode(reader, reader.uint32());
+                    if (entry10.value !== undefined) {
+                        message.indicatorValues[entry10.key] = entry10.value;
+                    }
+                    continue;
+                }
+                case 11: {
+                    if (tag !== 90) {
+                        break;
+                    }
+                    message.signals.push(exports.SignalEntry.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            orderId: isSet(object.orderId)
+                ? globalThis.String(object.orderId)
+                : isSet(object.order_id)
+                    ? globalThis.String(object.order_id)
+                    : "",
+            positionId: isSet(object.positionId)
+                ? globalThis.String(object.positionId)
+                : isSet(object.position_id)
+                    ? globalThis.String(object.position_id)
+                    : "",
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            eventType: isSet(object.eventType)
+                ? snapshotEventTypeFromJSON(object.eventType)
+                : isSet(object.event_type)
+                    ? snapshotEventTypeFromJSON(object.event_type)
+                    : SnapshotEventType.SNAPSHOT_EVENT_TYPE_UNSPECIFIED,
+            eventTs: isSet(object.eventTs)
+                ? fromJsonTimestamp(object.eventTs)
+                : isSet(object.event_ts)
+                    ? fromJsonTimestamp(object.event_ts)
+                    : undefined,
+            side: isSet(object.side) ? globalThis.String(object.side) : "",
+            quantity: isSet(object.quantity) ? globalThis.Number(object.quantity) : 0,
+            price: isSet(object.price) ? globalThis.Number(object.price) : 0,
+            ohlcvBar: isObject(object.ohlcvBar) ? object.ohlcvBar : isObject(object.ohlcv_bar) ? object.ohlcv_bar : undefined,
+            indicatorValues: isObject(object.indicatorValues)
+                ? globalThis.Object.entries(object.indicatorValues).reduce((acc, [key, value]) => {
+                    acc[key] = globalThis.Number(value);
+                    return acc;
+                }, {})
+                : isObject(object.indicator_values)
+                    ? globalThis.Object.entries(object.indicator_values).reduce((acc, [key, value]) => {
+                        acc[key] = globalThis.Number(value);
+                        return acc;
+                    }, {})
+                    : {},
+            signals: globalThis.Array.isArray(object?.signals)
+                ? object.signals.map((e) => exports.SignalEntry.fromJSON(e))
+                : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.orderId !== "") {
+            obj.orderId = message.orderId;
+        }
+        if (message.positionId !== "") {
+            obj.positionId = message.positionId;
+        }
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.eventType !== SnapshotEventType.SNAPSHOT_EVENT_TYPE_UNSPECIFIED) {
+            obj.eventType = snapshotEventTypeToJSON(message.eventType);
+        }
+        if (message.eventTs !== undefined) {
+            obj.eventTs = message.eventTs.toISOString();
+        }
+        if (message.side !== "") {
+            obj.side = message.side;
+        }
+        if (message.quantity !== 0) {
+            obj.quantity = message.quantity;
+        }
+        if (message.price !== 0) {
+            obj.price = message.price;
+        }
+        if (message.ohlcvBar !== undefined) {
+            obj.ohlcvBar = message.ohlcvBar;
+        }
+        if (message.indicatorValues) {
+            const entries = globalThis.Object.entries(message.indicatorValues);
+            if (entries.length > 0) {
+                obj.indicatorValues = {};
+                entries.forEach(([k, v]) => {
+                    obj.indicatorValues[k] = v;
+                });
+            }
+        }
+        if (message.signals?.length) {
+            obj.signals = message.signals.map((e) => exports.SignalEntry.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.OrderSnapshot.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseOrderSnapshot();
+        message.orderId = object.orderId ?? "";
+        message.positionId = object.positionId ?? "";
+        message.symbol = object.symbol ?? "";
+        message.eventType = object.eventType ?? SnapshotEventType.SNAPSHOT_EVENT_TYPE_UNSPECIFIED;
+        message.eventTs = object.eventTs ?? undefined;
+        message.side = object.side ?? "";
+        message.quantity = object.quantity ?? 0;
+        message.price = object.price ?? 0;
+        message.ohlcvBar = object.ohlcvBar ?? undefined;
+        message.indicatorValues = globalThis.Object.entries(object.indicatorValues ?? {}).reduce((acc, [key, value]) => {
+            if (value !== undefined) {
+                acc[key] = globalThis.Number(value);
+            }
+            return acc;
+        }, {});
+        message.signals = object.signals?.map((e) => exports.SignalEntry.fromPartial(e)) || [];
+        return message;
+    },
+};
+function createBaseOrderSnapshot_IndicatorValuesEntry() {
+    return { key: "", value: 0 };
+}
+exports.OrderSnapshot_IndicatorValuesEntry = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.key !== "") {
+            writer.uint32(10).string(message.key);
+        }
+        if (message.value !== 0) {
+            writer.uint32(17).double(message.value);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseOrderSnapshot_IndicatorValuesEntry();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.key = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 17) {
+                        break;
+                    }
+                    message.value = reader.double();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            key: isSet(object.key) ? globalThis.String(object.key) : "",
+            value: isSet(object.value) ? globalThis.Number(object.value) : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.key !== "") {
+            obj.key = message.key;
+        }
+        if (message.value !== 0) {
+            obj.value = message.value;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.OrderSnapshot_IndicatorValuesEntry.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseOrderSnapshot_IndicatorValuesEntry();
+        message.key = object.key ?? "";
+        message.value = object.value ?? 0;
+        return message;
+    },
+};
+function createBasePnLPatternFactor() {
+    return {
+        factorName: "",
+        factorType: FactorType.FACTOR_TYPE_UNSPECIFIED,
+        valueRangeLow: 0,
+        valueRangeHigh: 0,
+        sampleCount: 0,
+        avgPnlImpact: 0,
+    };
+}
+exports.PnLPatternFactor = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.factorName !== "") {
+            writer.uint32(10).string(message.factorName);
+        }
+        if (message.factorType !== FactorType.FACTOR_TYPE_UNSPECIFIED) {
+            writer.uint32(16).int32(factorTypeToNumber(message.factorType));
+        }
+        if (message.valueRangeLow !== 0) {
+            writer.uint32(25).double(message.valueRangeLow);
+        }
+        if (message.valueRangeHigh !== 0) {
+            writer.uint32(33).double(message.valueRangeHigh);
+        }
+        if (message.sampleCount !== 0) {
+            writer.uint32(40).int32(message.sampleCount);
+        }
+        if (message.avgPnlImpact !== 0) {
+            writer.uint32(49).double(message.avgPnlImpact);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBasePnLPatternFactor();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.factorName = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.factorType = factorTypeFromJSON(reader.int32());
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 25) {
+                        break;
+                    }
+                    message.valueRangeLow = reader.double();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 33) {
+                        break;
+                    }
+                    message.valueRangeHigh = reader.double();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.sampleCount = reader.int32();
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 49) {
+                        break;
+                    }
+                    message.avgPnlImpact = reader.double();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            factorName: isSet(object.factorName)
+                ? globalThis.String(object.factorName)
+                : isSet(object.factor_name)
+                    ? globalThis.String(object.factor_name)
+                    : "",
+            factorType: isSet(object.factorType)
+                ? factorTypeFromJSON(object.factorType)
+                : isSet(object.factor_type)
+                    ? factorTypeFromJSON(object.factor_type)
+                    : FactorType.FACTOR_TYPE_UNSPECIFIED,
+            valueRangeLow: isSet(object.valueRangeLow)
+                ? globalThis.Number(object.valueRangeLow)
+                : isSet(object.value_range_low)
+                    ? globalThis.Number(object.value_range_low)
+                    : 0,
+            valueRangeHigh: isSet(object.valueRangeHigh)
+                ? globalThis.Number(object.valueRangeHigh)
+                : isSet(object.value_range_high)
+                    ? globalThis.Number(object.value_range_high)
+                    : 0,
+            sampleCount: isSet(object.sampleCount)
+                ? globalThis.Number(object.sampleCount)
+                : isSet(object.sample_count)
+                    ? globalThis.Number(object.sample_count)
+                    : 0,
+            avgPnlImpact: isSet(object.avgPnlImpact)
+                ? globalThis.Number(object.avgPnlImpact)
+                : isSet(object.avg_pnl_impact)
+                    ? globalThis.Number(object.avg_pnl_impact)
+                    : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.factorName !== "") {
+            obj.factorName = message.factorName;
+        }
+        if (message.factorType !== FactorType.FACTOR_TYPE_UNSPECIFIED) {
+            obj.factorType = factorTypeToJSON(message.factorType);
+        }
+        if (message.valueRangeLow !== 0) {
+            obj.valueRangeLow = message.valueRangeLow;
+        }
+        if (message.valueRangeHigh !== 0) {
+            obj.valueRangeHigh = message.valueRangeHigh;
+        }
+        if (message.sampleCount !== 0) {
+            obj.sampleCount = Math.round(message.sampleCount);
+        }
+        if (message.avgPnlImpact !== 0) {
+            obj.avgPnlImpact = message.avgPnlImpact;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.PnLPatternFactor.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBasePnLPatternFactor();
+        message.factorName = object.factorName ?? "";
+        message.factorType = object.factorType ?? FactorType.FACTOR_TYPE_UNSPECIFIED;
+        message.valueRangeLow = object.valueRangeLow ?? 0;
+        message.valueRangeHigh = object.valueRangeHigh ?? 0;
+        message.sampleCount = object.sampleCount ?? 0;
+        message.avgPnlImpact = object.avgPnlImpact ?? 0;
+        return message;
+    },
+};
+function createBaseQueryPnLPatternsRequest() {
+    return { symbol: "", strategyId: "", fromTs: undefined, toTs: undefined, limit: 0 };
+}
+exports.QueryPnLPatternsRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        if (message.strategyId !== "") {
+            writer.uint32(18).string(message.strategyId);
+        }
+        if (message.fromTs !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.fromTs), writer.uint32(26).fork()).join();
+        }
+        if (message.toTs !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.toTs), writer.uint32(34).fork()).join();
+        }
+        if (message.limit !== 0) {
+            writer.uint32(40).int32(message.limit);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseQueryPnLPatternsRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.strategyId = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.fromTs = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.toTs = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.limit = reader.int32();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            strategyId: isSet(object.strategyId)
+                ? globalThis.String(object.strategyId)
+                : isSet(object.strategy_id)
+                    ? globalThis.String(object.strategy_id)
+                    : "",
+            fromTs: isSet(object.fromTs)
+                ? fromJsonTimestamp(object.fromTs)
+                : isSet(object.from_ts)
+                    ? fromJsonTimestamp(object.from_ts)
+                    : undefined,
+            toTs: isSet(object.toTs)
+                ? fromJsonTimestamp(object.toTs)
+                : isSet(object.to_ts)
+                    ? fromJsonTimestamp(object.to_ts)
+                    : undefined,
+            limit: isSet(object.limit) ? globalThis.Number(object.limit) : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.strategyId !== "") {
+            obj.strategyId = message.strategyId;
+        }
+        if (message.fromTs !== undefined) {
+            obj.fromTs = message.fromTs.toISOString();
+        }
+        if (message.toTs !== undefined) {
+            obj.toTs = message.toTs.toISOString();
+        }
+        if (message.limit !== 0) {
+            obj.limit = Math.round(message.limit);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.QueryPnLPatternsRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseQueryPnLPatternsRequest();
+        message.symbol = object.symbol ?? "";
+        message.strategyId = object.strategyId ?? "";
+        message.fromTs = object.fromTs ?? undefined;
+        message.toTs = object.toTs ?? undefined;
+        message.limit = object.limit ?? 0;
+        return message;
+    },
+};
+function createBaseQueryPnLPatternsResponse() {
+    return { positiveFactors: [], negativeFactors: [] };
+}
+exports.QueryPnLPatternsResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.positiveFactors) {
+            exports.PnLPatternFactor.encode(v, writer.uint32(10).fork()).join();
+        }
+        for (const v of message.negativeFactors) {
+            exports.PnLPatternFactor.encode(v, writer.uint32(18).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseQueryPnLPatternsResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.positiveFactors.push(exports.PnLPatternFactor.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.negativeFactors.push(exports.PnLPatternFactor.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            positiveFactors: globalThis.Array.isArray(object?.positiveFactors)
+                ? object.positiveFactors.map((e) => exports.PnLPatternFactor.fromJSON(e))
+                : globalThis.Array.isArray(object?.positive_factors)
+                    ? object.positive_factors.map((e) => exports.PnLPatternFactor.fromJSON(e))
+                    : [],
+            negativeFactors: globalThis.Array.isArray(object?.negativeFactors)
+                ? object.negativeFactors.map((e) => exports.PnLPatternFactor.fromJSON(e))
+                : globalThis.Array.isArray(object?.negative_factors)
+                    ? object.negative_factors.map((e) => exports.PnLPatternFactor.fromJSON(e))
+                    : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.positiveFactors?.length) {
+            obj.positiveFactors = message.positiveFactors.map((e) => exports.PnLPatternFactor.toJSON(e));
+        }
+        if (message.negativeFactors?.length) {
+            obj.negativeFactors = message.negativeFactors.map((e) => exports.PnLPatternFactor.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.QueryPnLPatternsResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseQueryPnLPatternsResponse();
+        message.positiveFactors = object.positiveFactors?.map((e) => exports.PnLPatternFactor.fromPartial(e)) || [];
+        message.negativeFactors = object.negativeFactors?.map((e) => exports.PnLPatternFactor.fromPartial(e)) || [];
+        return message;
+    },
+};
 exports.AnalysisServiceService = {
     runBacktest: {
         path: "/xstockstrat.analysis.v1.AnalysisService/RunBacktest",
@@ -7340,6 +8232,19 @@ exports.AnalysisServiceService = {
         requestDeserialize: (value) => exports.GetIndicatorSeriesRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.GetIndicatorSeriesResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.GetIndicatorSeriesResponse.decode(value),
+    },
+    /**
+     * Ranked P&L-attribution factors (feature 042): which indicator value-ranges and signals
+     * correlate with positive vs negative realized P&L, scoped by symbol/strategy/time window.
+     */
+    queryPnLPatterns: {
+        path: "/xstockstrat.analysis.v1.AnalysisService/QueryPnLPatterns",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.QueryPnLPatternsRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.QueryPnLPatternsRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.QueryPnLPatternsResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.QueryPnLPatternsResponse.decode(value),
     },
 };
 exports.AnalysisServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.AnalysisServiceService, "xstockstrat.analysis.v1.AnalysisService");

@@ -34,7 +34,7 @@ type LedgerEvent struct {
 	RecordedAt    *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=recorded_at,json=recordedAt,proto3" json:"recorded_at,omitempty"` // server write time
 	Payload       *structpb.Struct       `protobuf:"bytes,7,opt,name=payload,proto3" json:"payload,omitempty"`                         // event body (JSON-like)
 	Metadata      map[string]string      `protobuf:"bytes,8,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Sequence      int64                  `protobuf:"varint,9,opt,name=sequence,proto3" json:"sequence,omitempty"`                    // monotonically increasing per stream_key
+	Sequence      int64                  `protobuf:"varint,9,opt,name=sequence,proto3" json:"sequence,omitempty"`                    // GLOBAL monotonic sequence (nextval('ledger.global_sequence')), ordered across all stream_keys
 	StreamKey     string                 `protobuf:"bytes,10,opt,name=stream_key,json=streamKey,proto3" json:"stream_key,omitempty"` // partition key (e.g. "order:uuid")
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

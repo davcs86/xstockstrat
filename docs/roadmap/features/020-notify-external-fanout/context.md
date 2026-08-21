@@ -156,3 +156,67 @@
   - Note: `makeImpl` cited at notifyServiceImpl.test.ts:55/:56 but actually lives at :47
     (makePool:38 correct) — line drift only, symbol/behavior accurate. — [x] FIXED in the 2026-08-20
     spec-fix pass: both cites corrected to `:47` (verified against the test file).
+
+## Session 2026-08-20 — sdd-execute (steps 1–5)
+
+Executed on harness branch `claude/execute-020-042-127-pfa5cw` (single integration PR model, same
+as 127). Node/TS notify service — no proto/codegen.
+
+### Step 1 — config migration 017 [done]
+- `017_notify_fanout.{up,down}.sql`: 5 keys × 2 envs (min_severity int 2, min_confidence_threshold
+  float 0.7, dedup_window_seconds int 300, sendgrid_from_email/to_email string ''). No credential
+  rows. Offline up/down parity verified; value_types match getInt/getFloat/getString.
+
+### Step 2 — FanoutDispatcher module [done]
+- `src/fanout/fanout.ts`: severity+conviction gate (live config read), content-hash dedup with
+  sweep, Slack + SendGrid v3 senders (AbortController 3s timeout), enable-iff-credential-set, full
+  best-effort try/catch. Node global fetch (first outbound HTTP; no new dep). Build clean.
+
+### Step 3 — fanout unit tests [done]
+- `src/__tests__/fanout.test.ts`: AC-2/3/5/6/7/8/9 + sendgrid-disabled-when-to-empty. fetch stubbed.
+  31 tests pass, fanout.js coverage 96%.
+
+### Step 4 — wire into emitAlert [done]
+- `src/index.ts`: construct + inject FanoutDispatcher. `notifyServiceImpl.ts`: 3rd ctor param;
+  `queueMicrotask(() => void fanout.dispatch(alert).catch(...))` AFTER the success callback so
+  fanout never affects the RPC result or primary stream latency (FR-6/AC-4).
+
+### Step 5 — emitAlert wiring tests [done]
+- Extended `notifyServiceImpl.test.ts`: AC-1/3/4/5/6 + flat-Struct conviction read. Fixed existing
+  makeImpl + 4 direct constructors for the new 3rd arg. 37 tests pass, lint 0 errors.
+
+**Next:** Step 6 (deploy pipeline secrets), Step 7 (docs + context-scrubber).
+
+### Step 6 — deploy pipeline credentials [done]
+- SLACK_WEBHOOK_URL / SENDGRID_API_KEY (`type: SECRET`) wired through the full 8-file surface:
+  docker-compose.yml, .do/app.yaml (prod), .do/app.dev.yaml (dev), deploy.yml (workflow_call
+  secrets + substitute env + 4 content.replace lines), deploy-dev.yml, deploy-prod.yml, prod-up.yml,
+  scripts/do-inject-prod-secrets.py (OPTIONAL_PLACEHOLDER_KEYS). Both optional. Parity greps + yaml
+  + python syntax verified.
+
+### Step 7 — docs [done]
+- notify CLAUDE.md (5 config keys + 2 SECRET env vars + fanout narrative; min_severity WARNING
+  caveat), config-governance.md (feature-020 registered-keys block), digitalocean.md (Slack/SendGrid
+  secrets subsection + 4 GitHub Actions table rows), product-spec.md (full-pipeline note under Env
+  Var Changes).
+- **context-scrubber:** the context-forge plugin is NOT available in this session (not in the
+  SessionStart skills list), so `/context-scrubber scan` could not be run — noted here and in the PR
+  body per the root CLAUDE.md Teardown rule (say so rather than skip silently).
+
+## Session 2026-08-20 — sdd-execute — feature 020 COMPLETE
+All 7 steps done. status.md → code-completed.
+
+## Session 2026-08-21 — rebase onto main-dev (feature 147 collision) — DEVIATION
+Rebasing the integration branch onto the advanced `main-dev` collided with feature 147
+(`config-secrets-and-scoping`), which re-modelled `config.config_values`. Two forced changes to the
+feature-020 config seed (design-time artifacts still say `017`/`dev`/`trading_mode`; the code now
+reflects post-147 reality):
+- **Migration renumbered `017_notify_fanout` → `018_notify_fanout`** (`.up`/`.down`) — 147 took `017`
+  (`017_config_secrets_and_scoping`). 018 is the next free number.
+- **INSERT rewritten for the post-147 schema**: `trading_mode` column dropped (removed by 147, both
+  from the column list and the `ON CONFLICT` target); environment seeds changed `dev` → `staging`
+  (147 renamed the env); `ON CONFLICT (namespace, key, environment, trading_mode)` →
+  `ON CONFLICT (namespace, key, environment, COALESCE(user_id, ''))`; rows are global (`user_id NULL`).
+- config-governance.md feature-020 block updated to reference migration `018` and `staging`+`production`.
+- Deploy-pipeline conflicts resolved by keeping 147's side (which retired the Alpaca/FMP/Finnhub deploy
+  secrets into encrypted config) plus the feature-020 Slack/SendGrid `type: SECRET` additions.

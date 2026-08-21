@@ -1,6 +1,6 @@
 # Implementation Spec: consolidate-watchlist-signal
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-08-20
 **Feature**: `docs/roadmap/features/127-consolidate-watchlist-signal/feature.md`
 **Total Steps**: 10
@@ -63,7 +63,7 @@ satisfied and no `PLATFORM_SUBNAV` change is required.
 
 ### Step 1 — proto: additive `Watchlist.system_managed`, `WatchlistBinding.source` + enum, `EnsureSignalWatchlist` RPC
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/portfolio/v1/portfolio.proto` — modify
@@ -119,7 +119,7 @@ Both must pass (all changes additive → `buf breaking` reports no breakage).
 
 ### Step 2 — proto-gen: regenerate Go/Python/TS stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/portfolio/v1/**` — modify (generated)
@@ -153,7 +153,7 @@ Exit 0 after staging = stubs reproduce byte-for-byte from the `.proto` source.
 
 ### Step 3 — migration: portfolio `011` — `system_managed` column, name-constraint rework, `source` column
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/migrations/011_watchlist_system_managed_source.up.sql` — create
@@ -199,7 +199,7 @@ Then read both: confirm every `ADD COLUMN`/`CREATE INDEX`/`DROP CONSTRAINT` in `
 
 ### Step 4 — service: portfolio repo/service/handler — `EnsureSignalWatchlist`, column plumbing, `DeleteWatchlist` guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/watchlist_repo.go` — modify
@@ -245,7 +245,7 @@ Build + lint clean. Behavioral coverage is in Step 5.
 
 ### Step 5 — test: portfolio — `EnsureSignalWatchlist` idempotency + `DeleteWatchlist` guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service_test.go` — modify or create (co-located with existing service tests)
@@ -277,7 +277,7 @@ Must fail before Step 4, pass after. New logic is in coverage-excluded packages 
 
 ### Step 6 — service: agent — portfolio client methods, `PORTFOLIO_ENDPOINT` wiring, `ingest_signal` auto-add side effect
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -333,7 +333,7 @@ Endpoint present in all three deploy files' agent blocks; ruff clean. Behavioral
 
 ### Step 7 — docs: `mcp-tools.md` — document the `ingest_signal` watchlist side effect (FR-5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify
@@ -362,7 +362,7 @@ Confirms the watchlist side-effect sentence exists in the `ingest_signal` entry.
 
 ### Step 8 — test: agent — auto-add behavior, non-blocking, dedup/direction gates, doc parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_ingest_signal_watchlist.py` — create (or extend the existing `ingest_signal` test module if present)
@@ -396,7 +396,7 @@ Targeted tests fail before Steps 6/7, pass after; suite-wide coverage stays ≥ 
 
 ### Step 9 — service: UI — undeletable affordance + per-entry signal badge on `/insights/watchlists`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/WatchlistDetail.tsx` — modify
@@ -429,7 +429,7 @@ types). Behavioral coverage in Step 10.
 
 ### Step 10 — test: UI e2e — undeletable system-managed list + signal-provenance badge
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/watchlists.spec.ts` — modify
@@ -461,4 +461,24 @@ New assertions fail before Step 9, pass after. Lint gate satisfied by Step 9 (`p
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Step 3 — offline migration verification
+- **Disposition**: offline migration check — live apply deferred to CI. Verified `011_*.up.sql`
+  and `011_*.down.sql` exist and the down reverses the up (ADD↔DROP COLUMN, CREATE↔DROP INDEX,
+  DROP↔ADD CONSTRAINT) by inspection. No DB spun up (HARD CONSTRAINT).
+
+### Step 4 — `normalizeBindings` must preserve `source`
+- The spec's Step 4 plumbed `source` through `insertBindingsTx` (repo) but the service-layer
+  `normalizeBindings` (`portfolio_service.go:1139`) reconstructs each binding as
+  `{Symbol, StrategyId}`, dropping `source`. Since every write path (`AddWatchlistSymbols`,
+  `CreateWatchlist`, `UpdateWatchlist`) funnels bindings through `requestBindings`→
+  `normalizeBindings` before the repo sees them, a `WATCHLIST_ENTRY_SOURCE_SIGNAL` binding from
+  the agent would be silently reset to `0` before insert — defeating FR-10 (per-entry provenance).
+- **Disposition**: in-scope fix — `normalizeBindings` now copies `Source: b.GetSource()`. This is
+  required for the spec's own persisted-`source` intent; no scope expansion. Companion fidelity
+  fix in the test double's `AddSymbols`.
+
+### Step 5 — test file location
+- Spec named `internal/service/portfolio_service_test.go`; the watchlist service tests actually
+  live in `internal/service/watchlist_service_test.go` (where `fakeWatchlistStore` is defined).
+  Added the AC-6/AC-7 cases and the `fakeWatchlistStore.EnsureSystemManaged` method there.
+- **Disposition**: path correction, same package — no behavior change.

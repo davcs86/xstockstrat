@@ -159,6 +159,60 @@ export function positionSideToNumber(object: PositionSide): number {
   }
 }
 
+/** Provenance of a watchlist entry (feature 127). Consumers default UNSPECIFIED→MANUAL. */
+export enum WatchlistEntrySource {
+  WATCHLIST_ENTRY_SOURCE_UNSPECIFIED = "WATCHLIST_ENTRY_SOURCE_UNSPECIFIED",
+  WATCHLIST_ENTRY_SOURCE_MANUAL = "WATCHLIST_ENTRY_SOURCE_MANUAL",
+  WATCHLIST_ENTRY_SOURCE_SIGNAL = "WATCHLIST_ENTRY_SOURCE_SIGNAL",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function watchlistEntrySourceFromJSON(object: any): WatchlistEntrySource {
+  switch (object) {
+    case 0:
+    case "WATCHLIST_ENTRY_SOURCE_UNSPECIFIED":
+      return WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED;
+    case 1:
+    case "WATCHLIST_ENTRY_SOURCE_MANUAL":
+      return WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_MANUAL;
+    case 2:
+    case "WATCHLIST_ENTRY_SOURCE_SIGNAL":
+      return WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_SIGNAL;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return WatchlistEntrySource.UNRECOGNIZED;
+  }
+}
+
+export function watchlistEntrySourceToJSON(object: WatchlistEntrySource): string {
+  switch (object) {
+    case WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED:
+      return "WATCHLIST_ENTRY_SOURCE_UNSPECIFIED";
+    case WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_MANUAL:
+      return "WATCHLIST_ENTRY_SOURCE_MANUAL";
+    case WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_SIGNAL:
+      return "WATCHLIST_ENTRY_SOURCE_SIGNAL";
+    case WatchlistEntrySource.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function watchlistEntrySourceToNumber(object: WatchlistEntrySource): number {
+  switch (object) {
+    case WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED:
+      return 0;
+    case WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_MANUAL:
+      return 1;
+    case WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_SIGNAL:
+      return 2;
+    case WatchlistEntrySource.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 export interface Portfolio {
   portfolioId: string;
   userId: string;
@@ -313,6 +367,11 @@ export interface WatchlistBinding {
   symbol: string;
   /** "" = unbound (kept as a bare watched symbol) */
   strategyId: string;
+  /**
+   * Entry provenance (feature 127); first-writer-wins under ON CONFLICT DO NOTHING.
+   * Unspecified on read → treat as MANUAL.
+   */
+  source: WatchlistEntrySource;
 }
 
 /** Watchlist (feature 058) — a mode-agnostic, user-owned named set of symbols. */
@@ -333,6 +392,11 @@ export interface Watchlist {
     | undefined;
   /** Authoritative (symbol, strategy) shape (feature 097); when present it supersedes `symbols`. */
   bindings: WatchlistBinding[];
+  /**
+   * System-managed signals watchlist (feature 127), identified by this flag (not by name).
+   * Delete-protected (FR-7/FR-8); one per user.
+   */
+  systemManaged: boolean;
 }
 
 /**
@@ -406,6 +470,14 @@ export interface RemoveWatchlistSymbolsRequest {
 }
 
 export interface RemoveWatchlistSymbolsResponse {
+  watchlist?: Watchlist | undefined;
+}
+
+/** user_id intentionally absent — ownership from the x-user-id header (feature 127, FR-2). */
+export interface EnsureSignalWatchlistRequest {
+}
+
+export interface EnsureSignalWatchlistResponse {
   watchlist?: Watchlist | undefined;
 }
 
@@ -2418,7 +2490,7 @@ export const ListPortfoliosResponse: MessageFns<ListPortfoliosResponse> = {
 };
 
 function createBaseWatchlistBinding(): WatchlistBinding {
-  return { symbol: "", strategyId: "" };
+  return { symbol: "", strategyId: "", source: WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED };
 }
 
 export const WatchlistBinding: MessageFns<WatchlistBinding> = {
@@ -2428,6 +2500,9 @@ export const WatchlistBinding: MessageFns<WatchlistBinding> = {
     }
     if (message.strategyId !== "") {
       writer.uint32(18).string(message.strategyId);
+    }
+    if (message.source !== WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED) {
+      writer.uint32(24).int32(watchlistEntrySourceToNumber(message.source));
     }
     return writer;
   },
@@ -2455,6 +2530,14 @@ export const WatchlistBinding: MessageFns<WatchlistBinding> = {
           message.strategyId = reader.string();
           continue;
         }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.source = watchlistEntrySourceFromJSON(reader.int32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2472,6 +2555,9 @@ export const WatchlistBinding: MessageFns<WatchlistBinding> = {
         : isSet(object.strategy_id)
         ? globalThis.String(object.strategy_id)
         : "",
+      source: isSet(object.source)
+        ? watchlistEntrySourceFromJSON(object.source)
+        : WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED,
     };
   },
 
@@ -2483,6 +2569,9 @@ export const WatchlistBinding: MessageFns<WatchlistBinding> = {
     if (message.strategyId !== "") {
       obj.strategyId = message.strategyId;
     }
+    if (message.source !== WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED) {
+      obj.source = watchlistEntrySourceToJSON(message.source);
+    }
     return obj;
   },
 
@@ -2493,6 +2582,7 @@ export const WatchlistBinding: MessageFns<WatchlistBinding> = {
     const message = createBaseWatchlistBinding();
     message.symbol = object.symbol ?? "";
     message.strategyId = object.strategyId ?? "";
+    message.source = object.source ?? WatchlistEntrySource.WATCHLIST_ENTRY_SOURCE_UNSPECIFIED;
     return message;
   },
 };
@@ -2507,6 +2597,7 @@ function createBaseWatchlist(): Watchlist {
     createdAt: undefined,
     updatedAt: undefined,
     bindings: [],
+    systemManaged: false,
   };
 }
 
@@ -2535,6 +2626,9 @@ export const Watchlist: MessageFns<Watchlist> = {
     }
     for (const v of message.bindings) {
       WatchlistBinding.encode(v!, writer.uint32(66).fork()).join();
+    }
+    if (message.systemManaged !== false) {
+      writer.uint32(72).bool(message.systemManaged);
     }
     return writer;
   },
@@ -2610,6 +2704,14 @@ export const Watchlist: MessageFns<Watchlist> = {
           message.bindings.push(WatchlistBinding.decode(reader, reader.uint32()));
           continue;
         }
+        case 9: {
+          if (tag !== 72) {
+            break;
+          }
+
+          message.systemManaged = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2647,6 +2749,11 @@ export const Watchlist: MessageFns<Watchlist> = {
       bindings: globalThis.Array.isArray(object?.bindings)
         ? object.bindings.map((e: any) => WatchlistBinding.fromJSON(e))
         : [],
+      systemManaged: isSet(object.systemManaged)
+        ? globalThis.Boolean(object.systemManaged)
+        : isSet(object.system_managed)
+        ? globalThis.Boolean(object.system_managed)
+        : false,
     };
   },
 
@@ -2676,6 +2783,9 @@ export const Watchlist: MessageFns<Watchlist> = {
     if (message.bindings?.length) {
       obj.bindings = message.bindings.map((e) => WatchlistBinding.toJSON(e));
     }
+    if (message.systemManaged !== false) {
+      obj.systemManaged = message.systemManaged;
+    }
     return obj;
   },
 
@@ -2692,6 +2802,7 @@ export const Watchlist: MessageFns<Watchlist> = {
     message.createdAt = object.createdAt ?? undefined;
     message.updatedAt = object.updatedAt ?? undefined;
     message.bindings = object.bindings?.map((e) => WatchlistBinding.fromPartial(e)) || [];
+    message.systemManaged = object.systemManaged ?? false;
     return message;
   },
 };
@@ -3729,6 +3840,111 @@ export const RemoveWatchlistSymbolsResponse: MessageFns<RemoveWatchlistSymbolsRe
   },
 };
 
+function createBaseEnsureSignalWatchlistRequest(): EnsureSignalWatchlistRequest {
+  return {};
+}
+
+export const EnsureSignalWatchlistRequest: MessageFns<EnsureSignalWatchlistRequest> = {
+  encode(_: EnsureSignalWatchlistRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): EnsureSignalWatchlistRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseEnsureSignalWatchlistRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(_: any): EnsureSignalWatchlistRequest {
+    return {};
+  },
+
+  toJSON(_: EnsureSignalWatchlistRequest): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<EnsureSignalWatchlistRequest>, I>>(base?: I): EnsureSignalWatchlistRequest {
+    return EnsureSignalWatchlistRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<EnsureSignalWatchlistRequest>, I>>(_: I): EnsureSignalWatchlistRequest {
+    const message = createBaseEnsureSignalWatchlistRequest();
+    return message;
+  },
+};
+
+function createBaseEnsureSignalWatchlistResponse(): EnsureSignalWatchlistResponse {
+  return { watchlist: undefined };
+}
+
+export const EnsureSignalWatchlistResponse: MessageFns<EnsureSignalWatchlistResponse> = {
+  encode(message: EnsureSignalWatchlistResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.watchlist !== undefined) {
+      Watchlist.encode(message.watchlist, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): EnsureSignalWatchlistResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseEnsureSignalWatchlistResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.watchlist = Watchlist.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): EnsureSignalWatchlistResponse {
+    return { watchlist: isSet(object.watchlist) ? Watchlist.fromJSON(object.watchlist) : undefined };
+  },
+
+  toJSON(message: EnsureSignalWatchlistResponse): unknown {
+    const obj: any = {};
+    if (message.watchlist !== undefined) {
+      obj.watchlist = Watchlist.toJSON(message.watchlist);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<EnsureSignalWatchlistResponse>, I>>(base?: I): EnsureSignalWatchlistResponse {
+    return EnsureSignalWatchlistResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<EnsureSignalWatchlistResponse>, I>>(
+    object: I,
+  ): EnsureSignalWatchlistResponse {
+    const message = createBaseEnsureSignalWatchlistResponse();
+    message.watchlist = (object.watchlist !== undefined && object.watchlist !== null)
+      ? Watchlist.fromPartial(object.watchlist)
+      : undefined;
+    return message;
+  },
+};
+
 export type PortfolioServiceService = typeof PortfolioServiceService;
 export const PortfolioServiceService = {
   getPortfolio: {
@@ -3879,6 +4095,21 @@ export const PortfolioServiceService = {
     responseDeserialize: (value: Buffer): RemoveWatchlistSymbolsResponse =>
       RemoveWatchlistSymbolsResponse.decode(value),
   },
+  /**
+   * Find-or-create the caller's system_managed=true watchlist (feature 127).
+   * Ownership is taken from the propagated x-user-id header; the request has no body (FR-2).
+   */
+  ensureSignalWatchlist: {
+    path: "/xstockstrat.portfolio.v1.PortfolioService/EnsureSignalWatchlist" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: EnsureSignalWatchlistRequest): Buffer =>
+      Buffer.from(EnsureSignalWatchlistRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): EnsureSignalWatchlistRequest => EnsureSignalWatchlistRequest.decode(value),
+    responseSerialize: (value: EnsureSignalWatchlistResponse): Buffer =>
+      Buffer.from(EnsureSignalWatchlistResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): EnsureSignalWatchlistResponse => EnsureSignalWatchlistResponse.decode(value),
+  },
 } as const;
 
 export interface PortfolioServiceServer extends UntypedServiceImplementation {
@@ -3900,6 +4131,11 @@ export interface PortfolioServiceServer extends UntypedServiceImplementation {
   deleteWatchlist: handleUnaryCall<DeleteWatchlistRequest, DeleteWatchlistResponse>;
   addWatchlistSymbols: handleUnaryCall<AddWatchlistSymbolsRequest, AddWatchlistSymbolsResponse>;
   removeWatchlistSymbols: handleUnaryCall<RemoveWatchlistSymbolsRequest, RemoveWatchlistSymbolsResponse>;
+  /**
+   * Find-or-create the caller's system_managed=true watchlist (feature 127).
+   * Ownership is taken from the propagated x-user-id header; the request has no body (FR-2).
+   */
+  ensureSignalWatchlist: handleUnaryCall<EnsureSignalWatchlistRequest, EnsureSignalWatchlistResponse>;
 }
 
 export interface PortfolioServiceClient extends Client {
@@ -4110,6 +4346,25 @@ export interface PortfolioServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: RemoveWatchlistSymbolsResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Find-or-create the caller's system_managed=true watchlist (feature 127).
+   * Ownership is taken from the propagated x-user-id header; the request has no body (FR-2).
+   */
+  ensureSignalWatchlist(
+    request: EnsureSignalWatchlistRequest,
+    callback: (error: ServiceError | null, response: EnsureSignalWatchlistResponse) => void,
+  ): ClientUnaryCall;
+  ensureSignalWatchlist(
+    request: EnsureSignalWatchlistRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: EnsureSignalWatchlistResponse) => void,
+  ): ClientUnaryCall;
+  ensureSignalWatchlist(
+    request: EnsureSignalWatchlistRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: EnsureSignalWatchlistResponse) => void,
   ): ClientUnaryCall;
 }
 

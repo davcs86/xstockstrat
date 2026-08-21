@@ -669,6 +669,112 @@ func (OpportunityAction) EnumDescriptor() ([]byte, []int) {
 	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{11}
 }
 
+// The order-lifecycle event a snapshot was captured at.
+type SnapshotEventType int32
+
+const (
+	SnapshotEventType_SNAPSHOT_EVENT_TYPE_UNSPECIFIED            SnapshotEventType = 0
+	SnapshotEventType_SNAPSHOT_EVENT_TYPE_ORDER_CREATED          SnapshotEventType = 1
+	SnapshotEventType_SNAPSHOT_EVENT_TYPE_ORDER_FILLED           SnapshotEventType = 2
+	SnapshotEventType_SNAPSHOT_EVENT_TYPE_ORDER_PARTIALLY_FILLED SnapshotEventType = 3
+	SnapshotEventType_SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED        SnapshotEventType = 4
+)
+
+// Enum value maps for SnapshotEventType.
+var (
+	SnapshotEventType_name = map[int32]string{
+		0: "SNAPSHOT_EVENT_TYPE_UNSPECIFIED",
+		1: "SNAPSHOT_EVENT_TYPE_ORDER_CREATED",
+		2: "SNAPSHOT_EVENT_TYPE_ORDER_FILLED",
+		3: "SNAPSHOT_EVENT_TYPE_ORDER_PARTIALLY_FILLED",
+		4: "SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED",
+	}
+	SnapshotEventType_value = map[string]int32{
+		"SNAPSHOT_EVENT_TYPE_UNSPECIFIED":            0,
+		"SNAPSHOT_EVENT_TYPE_ORDER_CREATED":          1,
+		"SNAPSHOT_EVENT_TYPE_ORDER_FILLED":           2,
+		"SNAPSHOT_EVENT_TYPE_ORDER_PARTIALLY_FILLED": 3,
+		"SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED":        4,
+	}
+)
+
+func (x SnapshotEventType) Enum() *SnapshotEventType {
+	p := new(SnapshotEventType)
+	*p = x
+	return p
+}
+
+func (x SnapshotEventType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SnapshotEventType) Descriptor() protoreflect.EnumDescriptor {
+	return file_analysis_v1_analysis_proto_enumTypes[12].Descriptor()
+}
+
+func (SnapshotEventType) Type() protoreflect.EnumType {
+	return &file_analysis_v1_analysis_proto_enumTypes[12]
+}
+
+func (x SnapshotEventType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SnapshotEventType.Descriptor instead.
+func (SnapshotEventType) EnumDescriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{12}
+}
+
+// Whether an attribution factor is an indicator value-range or a signal presence.
+type FactorType int32
+
+const (
+	FactorType_FACTOR_TYPE_UNSPECIFIED FactorType = 0
+	FactorType_FACTOR_TYPE_INDICATOR   FactorType = 1
+	FactorType_FACTOR_TYPE_SIGNAL      FactorType = 2
+)
+
+// Enum value maps for FactorType.
+var (
+	FactorType_name = map[int32]string{
+		0: "FACTOR_TYPE_UNSPECIFIED",
+		1: "FACTOR_TYPE_INDICATOR",
+		2: "FACTOR_TYPE_SIGNAL",
+	}
+	FactorType_value = map[string]int32{
+		"FACTOR_TYPE_UNSPECIFIED": 0,
+		"FACTOR_TYPE_INDICATOR":   1,
+		"FACTOR_TYPE_SIGNAL":      2,
+	}
+)
+
+func (x FactorType) Enum() *FactorType {
+	p := new(FactorType)
+	*p = x
+	return p
+}
+
+func (x FactorType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (FactorType) Descriptor() protoreflect.EnumDescriptor {
+	return file_analysis_v1_analysis_proto_enumTypes[13].Descriptor()
+}
+
+func (FactorType) Type() protoreflect.EnumType {
+	return &file_analysis_v1_analysis_proto_enumTypes[13]
+}
+
+func (x FactorType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use FactorType.Descriptor instead.
+func (FactorType) EnumDescriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{13}
+}
+
 type RunBacktestRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	StrategyId     string                 `protobuf:"bytes,1,opt,name=strategy_id,json=strategyId,proto3" json:"strategy_id,omitempty"`
@@ -4225,6 +4331,405 @@ func (x *IndicatorValue) GetValue() float64 {
 	return 0
 }
 
+// One signal active for the symbol at snapshot time; `value` is the ingest conviction (0.0–1.0).
+type SignalEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Value         float64                `protobuf:"fixed64,2,opt,name=value,proto3" json:"value,omitempty"`
+	Source        string                 `protobuf:"bytes,3,opt,name=source,proto3" json:"source,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SignalEntry) Reset() {
+	*x = SignalEntry{}
+	mi := &file_analysis_v1_analysis_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SignalEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SignalEntry) ProtoMessage() {}
+
+func (x *SignalEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_analysis_v1_analysis_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SignalEntry.ProtoReflect.Descriptor instead.
+func (*SignalEntry) Descriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *SignalEntry) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *SignalEntry) GetValue() float64 {
+	if x != nil {
+		return x.Value
+	}
+	return 0
+}
+
+func (x *SignalEntry) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+// A point-in-time capture of the indicator/signal/market context at an order event.
+type OrderSnapshot struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	OrderId         string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	PositionId      string                 `protobuf:"bytes,2,opt,name=position_id,json=positionId,proto3" json:"position_id,omitempty"`
+	Symbol          string                 `protobuf:"bytes,3,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	EventType       SnapshotEventType      `protobuf:"varint,4,opt,name=event_type,json=eventType,proto3,enum=xstockstrat.analysis.v1.SnapshotEventType" json:"event_type,omitempty"`
+	EventTs         *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=event_ts,json=eventTs,proto3" json:"event_ts,omitempty"`
+	Side            string                 `protobuf:"bytes,6,opt,name=side,proto3" json:"side,omitempty"`
+	Quantity        float64                `protobuf:"fixed64,7,opt,name=quantity,proto3" json:"quantity,omitempty"`
+	Price           float64                `protobuf:"fixed64,8,opt,name=price,proto3" json:"price,omitempty"`
+	OhlcvBar        *structpb.Struct       `protobuf:"bytes,9,opt,name=ohlcv_bar,json=ohlcvBar,proto3" json:"ohlcv_bar,omitempty"`
+	IndicatorValues map[string]float64     `protobuf:"bytes,10,rep,name=indicator_values,json=indicatorValues,proto3" json:"indicator_values,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"fixed64,2,opt,name=value"`
+	Signals         []*SignalEntry         `protobuf:"bytes,11,rep,name=signals,proto3" json:"signals,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *OrderSnapshot) Reset() {
+	*x = OrderSnapshot{}
+	mi := &file_analysis_v1_analysis_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OrderSnapshot) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OrderSnapshot) ProtoMessage() {}
+
+func (x *OrderSnapshot) ProtoReflect() protoreflect.Message {
+	mi := &file_analysis_v1_analysis_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OrderSnapshot.ProtoReflect.Descriptor instead.
+func (*OrderSnapshot) Descriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *OrderSnapshot) GetOrderId() string {
+	if x != nil {
+		return x.OrderId
+	}
+	return ""
+}
+
+func (x *OrderSnapshot) GetPositionId() string {
+	if x != nil {
+		return x.PositionId
+	}
+	return ""
+}
+
+func (x *OrderSnapshot) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
+func (x *OrderSnapshot) GetEventType() SnapshotEventType {
+	if x != nil {
+		return x.EventType
+	}
+	return SnapshotEventType_SNAPSHOT_EVENT_TYPE_UNSPECIFIED
+}
+
+func (x *OrderSnapshot) GetEventTs() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EventTs
+	}
+	return nil
+}
+
+func (x *OrderSnapshot) GetSide() string {
+	if x != nil {
+		return x.Side
+	}
+	return ""
+}
+
+func (x *OrderSnapshot) GetQuantity() float64 {
+	if x != nil {
+		return x.Quantity
+	}
+	return 0
+}
+
+func (x *OrderSnapshot) GetPrice() float64 {
+	if x != nil {
+		return x.Price
+	}
+	return 0
+}
+
+func (x *OrderSnapshot) GetOhlcvBar() *structpb.Struct {
+	if x != nil {
+		return x.OhlcvBar
+	}
+	return nil
+}
+
+func (x *OrderSnapshot) GetIndicatorValues() map[string]float64 {
+	if x != nil {
+		return x.IndicatorValues
+	}
+	return nil
+}
+
+func (x *OrderSnapshot) GetSignals() []*SignalEntry {
+	if x != nil {
+		return x.Signals
+	}
+	return nil
+}
+
+// A ranked attribution factor: an indicator value-range or a signal, with its avg realized-P&L impact.
+type PnLPatternFactor struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	FactorName     string                 `protobuf:"bytes,1,opt,name=factor_name,json=factorName,proto3" json:"factor_name,omitempty"`
+	FactorType     FactorType             `protobuf:"varint,2,opt,name=factor_type,json=factorType,proto3,enum=xstockstrat.analysis.v1.FactorType" json:"factor_type,omitempty"`
+	ValueRangeLow  float64                `protobuf:"fixed64,3,opt,name=value_range_low,json=valueRangeLow,proto3" json:"value_range_low,omitempty"`
+	ValueRangeHigh float64                `protobuf:"fixed64,4,opt,name=value_range_high,json=valueRangeHigh,proto3" json:"value_range_high,omitempty"`
+	SampleCount    int32                  `protobuf:"varint,5,opt,name=sample_count,json=sampleCount,proto3" json:"sample_count,omitempty"`
+	AvgPnlImpact   float64                `protobuf:"fixed64,6,opt,name=avg_pnl_impact,json=avgPnlImpact,proto3" json:"avg_pnl_impact,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *PnLPatternFactor) Reset() {
+	*x = PnLPatternFactor{}
+	mi := &file_analysis_v1_analysis_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PnLPatternFactor) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PnLPatternFactor) ProtoMessage() {}
+
+func (x *PnLPatternFactor) ProtoReflect() protoreflect.Message {
+	mi := &file_analysis_v1_analysis_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PnLPatternFactor.ProtoReflect.Descriptor instead.
+func (*PnLPatternFactor) Descriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *PnLPatternFactor) GetFactorName() string {
+	if x != nil {
+		return x.FactorName
+	}
+	return ""
+}
+
+func (x *PnLPatternFactor) GetFactorType() FactorType {
+	if x != nil {
+		return x.FactorType
+	}
+	return FactorType_FACTOR_TYPE_UNSPECIFIED
+}
+
+func (x *PnLPatternFactor) GetValueRangeLow() float64 {
+	if x != nil {
+		return x.ValueRangeLow
+	}
+	return 0
+}
+
+func (x *PnLPatternFactor) GetValueRangeHigh() float64 {
+	if x != nil {
+		return x.ValueRangeHigh
+	}
+	return 0
+}
+
+func (x *PnLPatternFactor) GetSampleCount() int32 {
+	if x != nil {
+		return x.SampleCount
+	}
+	return 0
+}
+
+func (x *PnLPatternFactor) GetAvgPnlImpact() float64 {
+	if x != nil {
+		return x.AvgPnlImpact
+	}
+	return 0
+}
+
+type QueryPnLPatternsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	StrategyId    string                 `protobuf:"bytes,2,opt,name=strategy_id,json=strategyId,proto3" json:"strategy_id,omitempty"`
+	FromTs        *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=from_ts,json=fromTs,proto3" json:"from_ts,omitempty"`
+	ToTs          *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=to_ts,json=toTs,proto3" json:"to_ts,omitempty"`
+	Limit         int32                  `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QueryPnLPatternsRequest) Reset() {
+	*x = QueryPnLPatternsRequest{}
+	mi := &file_analysis_v1_analysis_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryPnLPatternsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryPnLPatternsRequest) ProtoMessage() {}
+
+func (x *QueryPnLPatternsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_analysis_v1_analysis_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryPnLPatternsRequest.ProtoReflect.Descriptor instead.
+func (*QueryPnLPatternsRequest) Descriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *QueryPnLPatternsRequest) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
+func (x *QueryPnLPatternsRequest) GetStrategyId() string {
+	if x != nil {
+		return x.StrategyId
+	}
+	return ""
+}
+
+func (x *QueryPnLPatternsRequest) GetFromTs() *timestamppb.Timestamp {
+	if x != nil {
+		return x.FromTs
+	}
+	return nil
+}
+
+func (x *QueryPnLPatternsRequest) GetToTs() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ToTs
+	}
+	return nil
+}
+
+func (x *QueryPnLPatternsRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type QueryPnLPatternsResponse struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	PositiveFactors []*PnLPatternFactor    `protobuf:"bytes,1,rep,name=positive_factors,json=positiveFactors,proto3" json:"positive_factors,omitempty"`
+	NegativeFactors []*PnLPatternFactor    `protobuf:"bytes,2,rep,name=negative_factors,json=negativeFactors,proto3" json:"negative_factors,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *QueryPnLPatternsResponse) Reset() {
+	*x = QueryPnLPatternsResponse{}
+	mi := &file_analysis_v1_analysis_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryPnLPatternsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryPnLPatternsResponse) ProtoMessage() {}
+
+func (x *QueryPnLPatternsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_analysis_v1_analysis_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryPnLPatternsResponse.ProtoReflect.Descriptor instead.
+func (*QueryPnLPatternsResponse) Descriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *QueryPnLPatternsResponse) GetPositiveFactors() []*PnLPatternFactor {
+	if x != nil {
+		return x.PositiveFactors
+	}
+	return nil
+}
+
+func (x *QueryPnLPatternsResponse) GetNegativeFactors() []*PnLPatternFactor {
+	if x != nil {
+		return x.NegativeFactors
+	}
+	return nil
+}
+
 var File_analysis_v1_analysis_proto protoreflect.FileDescriptor
 
 const file_analysis_v1_analysis_proto_rawDesc = "" +
@@ -4589,7 +5094,48 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x06values\x18\x02 \x03(\v2'.xstockstrat.analysis.v1.IndicatorValueR\x06values\"5\n" +
 	"\x0eIndicatorValue\x12\x19\n" +
 	"\x05value\x18\x01 \x01(\x01H\x00R\x05value\x88\x01\x01B\b\n" +
-	"\x06_value*p\n" +
+	"\x06_value\"O\n" +
+	"\vSignalEntry\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x01R\x05value\x12\x16\n" +
+	"\x06source\x18\x03 \x01(\tR\x06source\"\xcd\x04\n" +
+	"\rOrderSnapshot\x12\x19\n" +
+	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
+	"\vposition_id\x18\x02 \x01(\tR\n" +
+	"positionId\x12\x16\n" +
+	"\x06symbol\x18\x03 \x01(\tR\x06symbol\x12I\n" +
+	"\n" +
+	"event_type\x18\x04 \x01(\x0e2*.xstockstrat.analysis.v1.SnapshotEventTypeR\teventType\x125\n" +
+	"\bevent_ts\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\aeventTs\x12\x12\n" +
+	"\x04side\x18\x06 \x01(\tR\x04side\x12\x1a\n" +
+	"\bquantity\x18\a \x01(\x01R\bquantity\x12\x14\n" +
+	"\x05price\x18\b \x01(\x01R\x05price\x124\n" +
+	"\tohlcv_bar\x18\t \x01(\v2\x17.google.protobuf.StructR\bohlcvBar\x12f\n" +
+	"\x10indicator_values\x18\n" +
+	" \x03(\v2;.xstockstrat.analysis.v1.OrderSnapshot.IndicatorValuesEntryR\x0findicatorValues\x12>\n" +
+	"\asignals\x18\v \x03(\v2$.xstockstrat.analysis.v1.SignalEntryR\asignals\x1aB\n" +
+	"\x14IndicatorValuesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\"\x94\x02\n" +
+	"\x10PnLPatternFactor\x12\x1f\n" +
+	"\vfactor_name\x18\x01 \x01(\tR\n" +
+	"factorName\x12D\n" +
+	"\vfactor_type\x18\x02 \x01(\x0e2#.xstockstrat.analysis.v1.FactorTypeR\n" +
+	"factorType\x12&\n" +
+	"\x0fvalue_range_low\x18\x03 \x01(\x01R\rvalueRangeLow\x12(\n" +
+	"\x10value_range_high\x18\x04 \x01(\x01R\x0evalueRangeHigh\x12!\n" +
+	"\fsample_count\x18\x05 \x01(\x05R\vsampleCount\x12$\n" +
+	"\x0eavg_pnl_impact\x18\x06 \x01(\x01R\favgPnlImpact\"\xce\x01\n" +
+	"\x17QueryPnLPatternsRequest\x12\x16\n" +
+	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12\x1f\n" +
+	"\vstrategy_id\x18\x02 \x01(\tR\n" +
+	"strategyId\x123\n" +
+	"\afrom_ts\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x06fromTs\x12/\n" +
+	"\x05to_ts\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x04toTs\x12\x14\n" +
+	"\x05limit\x18\x05 \x01(\x05R\x05limit\"\xc6\x01\n" +
+	"\x18QueryPnLPatternsResponse\x12T\n" +
+	"\x10positive_factors\x18\x01 \x03(\v2).xstockstrat.analysis.v1.PnLPatternFactorR\x0fpositiveFactors\x12T\n" +
+	"\x10negative_factors\x18\x02 \x03(\v2).xstockstrat.analysis.v1.PnLPatternFactorR\x0fnegativeFactors*p\n" +
 	"\x0eBacktestStatus\x12\x1f\n" +
 	"\x1bBACKTEST_STATUS_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12BACKTEST_STATUS_OK\x10\x01\x12%\n" +
@@ -4654,7 +5200,18 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x1eOPPORTUNITY_ACTION_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19OPPORTUNITY_ACTION_SNOOZE\x10\x01\x12\x1e\n" +
 	"\x1aOPPORTUNITY_ACTION_DISMISS\x10\x02\x12\x1b\n" +
-	"\x17OPPORTUNITY_ACTION_TAKE\x10\x032\xd9\x0f\n" +
+	"\x17OPPORTUNITY_ACTION_TAKE\x10\x03*\xde\x01\n" +
+	"\x11SnapshotEventType\x12#\n" +
+	"\x1fSNAPSHOT_EVENT_TYPE_UNSPECIFIED\x10\x00\x12%\n" +
+	"!SNAPSHOT_EVENT_TYPE_ORDER_CREATED\x10\x01\x12$\n" +
+	" SNAPSHOT_EVENT_TYPE_ORDER_FILLED\x10\x02\x12.\n" +
+	"*SNAPSHOT_EVENT_TYPE_ORDER_PARTIALLY_FILLED\x10\x03\x12'\n" +
+	"#SNAPSHOT_EVENT_TYPE_ORDER_CANCELLED\x10\x04*\\\n" +
+	"\n" +
+	"FactorType\x12\x1b\n" +
+	"\x17FACTOR_TYPE_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15FACTOR_TYPE_INDICATOR\x10\x01\x12\x16\n" +
+	"\x12FACTOR_TYPE_SIGNAL\x10\x022\xd2\x10\n" +
 	"\x0fAnalysisService\x12c\n" +
 	"\vRunBacktest\x12+.xstockstrat.analysis.v1.RunBacktestRequest\x1a'.xstockstrat.analysis.v1.BacktestResult\x12f\n" +
 	"\rScoreStrategy\x12-.xstockstrat.analysis.v1.ScoreStrategyRequest\x1a&.xstockstrat.analysis.v1.StrategyScore\x12q\n" +
@@ -4672,7 +5229,8 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x11EvaluateReadiness\x121.xstockstrat.analysis.v1.EvaluateReadinessRequest\x1a2.xstockstrat.analysis.v1.EvaluateReadinessResponse\x12\x83\x01\n" +
 	"\x14SetOpportunityAction\x124.xstockstrat.analysis.v1.SetOpportunityActionRequest\x1a5.xstockstrat.analysis.v1.SetOpportunityActionResponse\x12x\n" +
 	"\x14GetStrategyAnalytics\x124.xstockstrat.analysis.v1.GetStrategyAnalyticsRequest\x1a*.xstockstrat.analysis.v1.StrategyAnalytics\x12}\n" +
-	"\x12GetIndicatorSeries\x122.xstockstrat.analysis.v1.GetIndicatorSeriesRequest\x1a3.xstockstrat.analysis.v1.GetIndicatorSeriesResponseB@Z>github.com/xstockstrat/contracts/gen/go/analysis/v1;analysisv1b\x06proto3"
+	"\x12GetIndicatorSeries\x122.xstockstrat.analysis.v1.GetIndicatorSeriesRequest\x1a3.xstockstrat.analysis.v1.GetIndicatorSeriesResponse\x12w\n" +
+	"\x10QueryPnLPatterns\x120.xstockstrat.analysis.v1.QueryPnLPatternsRequest\x1a1.xstockstrat.analysis.v1.QueryPnLPatternsResponseB@Z>github.com/xstockstrat/contracts/gen/go/analysis/v1;analysisv1b\x06proto3"
 
 var (
 	file_analysis_v1_analysis_proto_rawDescOnce sync.Once
@@ -4686,8 +5244,8 @@ func file_analysis_v1_analysis_proto_rawDescGZIP() []byte {
 	return file_analysis_v1_analysis_proto_rawDescData
 }
 
-var file_analysis_v1_analysis_proto_enumTypes = make([]protoimpl.EnumInfo, 12)
-var file_analysis_v1_analysis_proto_msgTypes = make([]protoimpl.MessageInfo, 52)
+var file_analysis_v1_analysis_proto_enumTypes = make([]protoimpl.EnumInfo, 14)
+var file_analysis_v1_analysis_proto_msgTypes = make([]protoimpl.MessageInfo, 58)
 var file_analysis_v1_analysis_proto_goTypes = []any{
 	(BacktestStatus)(0),                     // 0: xstockstrat.analysis.v1.BacktestStatus
 	(BarAction)(0),                          // 1: xstockstrat.analysis.v1.BarAction
@@ -4701,176 +5259,196 @@ var file_analysis_v1_analysis_proto_goTypes = []any{
 	(ConditionState)(0),                     // 9: xstockstrat.analysis.v1.ConditionState
 	(ReadinessRule)(0),                      // 10: xstockstrat.analysis.v1.ReadinessRule
 	(OpportunityAction)(0),                  // 11: xstockstrat.analysis.v1.OpportunityAction
-	(*RunBacktestRequest)(nil),              // 12: xstockstrat.analysis.v1.RunBacktestRequest
-	(*CoverageGap)(nil),                     // 13: xstockstrat.analysis.v1.CoverageGap
-	(*BacktestResult)(nil),                  // 14: xstockstrat.analysis.v1.BacktestResult
-	(*TradeRecord)(nil),                     // 15: xstockstrat.analysis.v1.TradeRecord
-	(*BarDiagnostic)(nil),                   // 16: xstockstrat.analysis.v1.BarDiagnostic
-	(*SymbolDiagnostics)(nil),               // 17: xstockstrat.analysis.v1.SymbolDiagnostics
-	(*ScoreStrategyRequest)(nil),            // 18: xstockstrat.analysis.v1.ScoreStrategyRequest
-	(*StrategyScore)(nil),                   // 19: xstockstrat.analysis.v1.StrategyScore
-	(*StrategyReport)(nil),                  // 20: xstockstrat.analysis.v1.StrategyReport
-	(*ListBacktestsRequest)(nil),            // 21: xstockstrat.analysis.v1.ListBacktestsRequest
-	(*BacktestRunSummary)(nil),              // 22: xstockstrat.analysis.v1.BacktestRunSummary
-	(*ListBacktestsResponse)(nil),           // 23: xstockstrat.analysis.v1.ListBacktestsResponse
-	(*GetBacktestRequest)(nil),              // 24: xstockstrat.analysis.v1.GetBacktestRequest
-	(*ListStrategiesRequest)(nil),           // 25: xstockstrat.analysis.v1.ListStrategiesRequest
-	(*ListStrategiesResponse)(nil),          // 26: xstockstrat.analysis.v1.ListStrategiesResponse
-	(*GetStrategyReportRequest)(nil),        // 27: xstockstrat.analysis.v1.GetStrategyReportRequest
-	(*StrategyComponent)(nil),               // 28: xstockstrat.analysis.v1.StrategyComponent
-	(*StrategyDefinition)(nil),              // 29: xstockstrat.analysis.v1.StrategyDefinition
-	(*ManageStrategyRequest)(nil),           // 30: xstockstrat.analysis.v1.ManageStrategyRequest
-	(*GetStrategyRequest)(nil),              // 31: xstockstrat.analysis.v1.GetStrategyRequest
-	(*ListStrategyDefinitionsRequest)(nil),  // 32: xstockstrat.analysis.v1.ListStrategyDefinitionsRequest
-	(*ListStrategyDefinitionsResponse)(nil), // 33: xstockstrat.analysis.v1.ListStrategyDefinitionsResponse
-	(*SetStrategyLiveRequest)(nil),          // 34: xstockstrat.analysis.v1.SetStrategyLiveRequest
-	(*SetStrategyLiveResponse)(nil),         // 35: xstockstrat.analysis.v1.SetStrategyLiveResponse
-	(*ScreenCriterion)(nil),                 // 36: xstockstrat.analysis.v1.ScreenCriterion
-	(*ScreenResult)(nil),                    // 37: xstockstrat.analysis.v1.ScreenResult
-	(*ScreenSymbolsRequest)(nil),            // 38: xstockstrat.analysis.v1.ScreenSymbolsRequest
-	(*ScreenSymbolsResponse)(nil),           // 39: xstockstrat.analysis.v1.ScreenSymbolsResponse
-	(*RunFundamentalsScanRequest)(nil),      // 40: xstockstrat.analysis.v1.RunFundamentalsScanRequest
-	(*FundamentalsScanSummary)(nil),         // 41: xstockstrat.analysis.v1.FundamentalsScanSummary
-	(*Opportunity)(nil),                     // 42: xstockstrat.analysis.v1.Opportunity
-	(*ConditionEval)(nil),                   // 43: xstockstrat.analysis.v1.ConditionEval
-	(*SymbolReadiness)(nil),                 // 44: xstockstrat.analysis.v1.SymbolReadiness
-	(*StrategyAnalytics)(nil),               // 45: xstockstrat.analysis.v1.StrategyAnalytics
-	(*ListOpportunitiesRequest)(nil),        // 46: xstockstrat.analysis.v1.ListOpportunitiesRequest
-	(*ListOpportunitiesResponse)(nil),       // 47: xstockstrat.analysis.v1.ListOpportunitiesResponse
-	(*EvaluateReadinessRequest)(nil),        // 48: xstockstrat.analysis.v1.EvaluateReadinessRequest
-	(*EvaluateReadinessResponse)(nil),       // 49: xstockstrat.analysis.v1.EvaluateReadinessResponse
-	(*SetOpportunityActionRequest)(nil),     // 50: xstockstrat.analysis.v1.SetOpportunityActionRequest
-	(*SetOpportunityActionResponse)(nil),    // 51: xstockstrat.analysis.v1.SetOpportunityActionResponse
-	(*GetStrategyAnalyticsRequest)(nil),     // 52: xstockstrat.analysis.v1.GetStrategyAnalyticsRequest
-	(*GetIndicatorSeriesRequest)(nil),       // 53: xstockstrat.analysis.v1.GetIndicatorSeriesRequest
-	(*GetIndicatorSeriesResponse)(nil),      // 54: xstockstrat.analysis.v1.GetIndicatorSeriesResponse
-	(*ComponentSeries)(nil),                 // 55: xstockstrat.analysis.v1.ComponentSeries
-	(*NamedSeries)(nil),                     // 56: xstockstrat.analysis.v1.NamedSeries
-	(*IndicatorValue)(nil),                  // 57: xstockstrat.analysis.v1.IndicatorValue
-	nil,                                     // 58: xstockstrat.analysis.v1.BarDiagnostic.IndicatorsEntry
-	nil,                                     // 59: xstockstrat.analysis.v1.StrategyScore.ComponentScoresEntry
-	nil,                                     // 60: xstockstrat.analysis.v1.StrategyComponent.ParamsEntry
-	nil,                                     // 61: xstockstrat.analysis.v1.ScreenResult.CriterionScoresEntry
-	nil,                                     // 62: xstockstrat.analysis.v1.ScreenResult.CriterionRawValuesEntry
-	nil,                                     // 63: xstockstrat.analysis.v1.ScreenResult.CriterionPassedEntry
-	(*v1.TimeRange)(nil),                    // 64: xstockstrat.common.v1.TimeRange
-	(*structpb.Struct)(nil),                 // 65: google.protobuf.Struct
-	(v1.Timeframe)(0),                       // 66: xstockstrat.common.v1.Timeframe
-	(*timestamppb.Timestamp)(nil),           // 67: google.protobuf.Timestamp
-	(*v1.PageRequest)(nil),                  // 68: xstockstrat.common.v1.PageRequest
-	(*v1.PageResponse)(nil),                 // 69: xstockstrat.common.v1.PageResponse
-	(*fieldmaskpb.FieldMask)(nil),           // 70: google.protobuf.FieldMask
+	(SnapshotEventType)(0),                  // 12: xstockstrat.analysis.v1.SnapshotEventType
+	(FactorType)(0),                         // 13: xstockstrat.analysis.v1.FactorType
+	(*RunBacktestRequest)(nil),              // 14: xstockstrat.analysis.v1.RunBacktestRequest
+	(*CoverageGap)(nil),                     // 15: xstockstrat.analysis.v1.CoverageGap
+	(*BacktestResult)(nil),                  // 16: xstockstrat.analysis.v1.BacktestResult
+	(*TradeRecord)(nil),                     // 17: xstockstrat.analysis.v1.TradeRecord
+	(*BarDiagnostic)(nil),                   // 18: xstockstrat.analysis.v1.BarDiagnostic
+	(*SymbolDiagnostics)(nil),               // 19: xstockstrat.analysis.v1.SymbolDiagnostics
+	(*ScoreStrategyRequest)(nil),            // 20: xstockstrat.analysis.v1.ScoreStrategyRequest
+	(*StrategyScore)(nil),                   // 21: xstockstrat.analysis.v1.StrategyScore
+	(*StrategyReport)(nil),                  // 22: xstockstrat.analysis.v1.StrategyReport
+	(*ListBacktestsRequest)(nil),            // 23: xstockstrat.analysis.v1.ListBacktestsRequest
+	(*BacktestRunSummary)(nil),              // 24: xstockstrat.analysis.v1.BacktestRunSummary
+	(*ListBacktestsResponse)(nil),           // 25: xstockstrat.analysis.v1.ListBacktestsResponse
+	(*GetBacktestRequest)(nil),              // 26: xstockstrat.analysis.v1.GetBacktestRequest
+	(*ListStrategiesRequest)(nil),           // 27: xstockstrat.analysis.v1.ListStrategiesRequest
+	(*ListStrategiesResponse)(nil),          // 28: xstockstrat.analysis.v1.ListStrategiesResponse
+	(*GetStrategyReportRequest)(nil),        // 29: xstockstrat.analysis.v1.GetStrategyReportRequest
+	(*StrategyComponent)(nil),               // 30: xstockstrat.analysis.v1.StrategyComponent
+	(*StrategyDefinition)(nil),              // 31: xstockstrat.analysis.v1.StrategyDefinition
+	(*ManageStrategyRequest)(nil),           // 32: xstockstrat.analysis.v1.ManageStrategyRequest
+	(*GetStrategyRequest)(nil),              // 33: xstockstrat.analysis.v1.GetStrategyRequest
+	(*ListStrategyDefinitionsRequest)(nil),  // 34: xstockstrat.analysis.v1.ListStrategyDefinitionsRequest
+	(*ListStrategyDefinitionsResponse)(nil), // 35: xstockstrat.analysis.v1.ListStrategyDefinitionsResponse
+	(*SetStrategyLiveRequest)(nil),          // 36: xstockstrat.analysis.v1.SetStrategyLiveRequest
+	(*SetStrategyLiveResponse)(nil),         // 37: xstockstrat.analysis.v1.SetStrategyLiveResponse
+	(*ScreenCriterion)(nil),                 // 38: xstockstrat.analysis.v1.ScreenCriterion
+	(*ScreenResult)(nil),                    // 39: xstockstrat.analysis.v1.ScreenResult
+	(*ScreenSymbolsRequest)(nil),            // 40: xstockstrat.analysis.v1.ScreenSymbolsRequest
+	(*ScreenSymbolsResponse)(nil),           // 41: xstockstrat.analysis.v1.ScreenSymbolsResponse
+	(*RunFundamentalsScanRequest)(nil),      // 42: xstockstrat.analysis.v1.RunFundamentalsScanRequest
+	(*FundamentalsScanSummary)(nil),         // 43: xstockstrat.analysis.v1.FundamentalsScanSummary
+	(*Opportunity)(nil),                     // 44: xstockstrat.analysis.v1.Opportunity
+	(*ConditionEval)(nil),                   // 45: xstockstrat.analysis.v1.ConditionEval
+	(*SymbolReadiness)(nil),                 // 46: xstockstrat.analysis.v1.SymbolReadiness
+	(*StrategyAnalytics)(nil),               // 47: xstockstrat.analysis.v1.StrategyAnalytics
+	(*ListOpportunitiesRequest)(nil),        // 48: xstockstrat.analysis.v1.ListOpportunitiesRequest
+	(*ListOpportunitiesResponse)(nil),       // 49: xstockstrat.analysis.v1.ListOpportunitiesResponse
+	(*EvaluateReadinessRequest)(nil),        // 50: xstockstrat.analysis.v1.EvaluateReadinessRequest
+	(*EvaluateReadinessResponse)(nil),       // 51: xstockstrat.analysis.v1.EvaluateReadinessResponse
+	(*SetOpportunityActionRequest)(nil),     // 52: xstockstrat.analysis.v1.SetOpportunityActionRequest
+	(*SetOpportunityActionResponse)(nil),    // 53: xstockstrat.analysis.v1.SetOpportunityActionResponse
+	(*GetStrategyAnalyticsRequest)(nil),     // 54: xstockstrat.analysis.v1.GetStrategyAnalyticsRequest
+	(*GetIndicatorSeriesRequest)(nil),       // 55: xstockstrat.analysis.v1.GetIndicatorSeriesRequest
+	(*GetIndicatorSeriesResponse)(nil),      // 56: xstockstrat.analysis.v1.GetIndicatorSeriesResponse
+	(*ComponentSeries)(nil),                 // 57: xstockstrat.analysis.v1.ComponentSeries
+	(*NamedSeries)(nil),                     // 58: xstockstrat.analysis.v1.NamedSeries
+	(*IndicatorValue)(nil),                  // 59: xstockstrat.analysis.v1.IndicatorValue
+	(*SignalEntry)(nil),                     // 60: xstockstrat.analysis.v1.SignalEntry
+	(*OrderSnapshot)(nil),                   // 61: xstockstrat.analysis.v1.OrderSnapshot
+	(*PnLPatternFactor)(nil),                // 62: xstockstrat.analysis.v1.PnLPatternFactor
+	(*QueryPnLPatternsRequest)(nil),         // 63: xstockstrat.analysis.v1.QueryPnLPatternsRequest
+	(*QueryPnLPatternsResponse)(nil),        // 64: xstockstrat.analysis.v1.QueryPnLPatternsResponse
+	nil,                                     // 65: xstockstrat.analysis.v1.BarDiagnostic.IndicatorsEntry
+	nil,                                     // 66: xstockstrat.analysis.v1.StrategyScore.ComponentScoresEntry
+	nil,                                     // 67: xstockstrat.analysis.v1.StrategyComponent.ParamsEntry
+	nil,                                     // 68: xstockstrat.analysis.v1.ScreenResult.CriterionScoresEntry
+	nil,                                     // 69: xstockstrat.analysis.v1.ScreenResult.CriterionRawValuesEntry
+	nil,                                     // 70: xstockstrat.analysis.v1.ScreenResult.CriterionPassedEntry
+	nil,                                     // 71: xstockstrat.analysis.v1.OrderSnapshot.IndicatorValuesEntry
+	(*v1.TimeRange)(nil),                    // 72: xstockstrat.common.v1.TimeRange
+	(*structpb.Struct)(nil),                 // 73: google.protobuf.Struct
+	(v1.Timeframe)(0),                       // 74: xstockstrat.common.v1.Timeframe
+	(*timestamppb.Timestamp)(nil),           // 75: google.protobuf.Timestamp
+	(*v1.PageRequest)(nil),                  // 76: xstockstrat.common.v1.PageRequest
+	(*v1.PageResponse)(nil),                 // 77: xstockstrat.common.v1.PageResponse
+	(*fieldmaskpb.FieldMask)(nil),           // 78: google.protobuf.FieldMask
 }
 var file_analysis_v1_analysis_proto_depIdxs = []int32{
-	64, // 0: xstockstrat.analysis.v1.RunBacktestRequest.range:type_name -> xstockstrat.common.v1.TimeRange
-	65, // 1: xstockstrat.analysis.v1.RunBacktestRequest.strategy_params:type_name -> google.protobuf.Struct
-	29, // 2: xstockstrat.analysis.v1.RunBacktestRequest.inline_definition:type_name -> xstockstrat.analysis.v1.StrategyDefinition
-	66, // 3: xstockstrat.analysis.v1.CoverageGap.timeframe:type_name -> xstockstrat.common.v1.Timeframe
-	64, // 4: xstockstrat.analysis.v1.CoverageGap.requested_range:type_name -> xstockstrat.common.v1.TimeRange
-	64, // 5: xstockstrat.analysis.v1.CoverageGap.gap:type_name -> xstockstrat.common.v1.TimeRange
-	67, // 6: xstockstrat.analysis.v1.BacktestResult.completed_at:type_name -> google.protobuf.Timestamp
-	15, // 7: xstockstrat.analysis.v1.BacktestResult.trades:type_name -> xstockstrat.analysis.v1.TradeRecord
+	72, // 0: xstockstrat.analysis.v1.RunBacktestRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	73, // 1: xstockstrat.analysis.v1.RunBacktestRequest.strategy_params:type_name -> google.protobuf.Struct
+	31, // 2: xstockstrat.analysis.v1.RunBacktestRequest.inline_definition:type_name -> xstockstrat.analysis.v1.StrategyDefinition
+	74, // 3: xstockstrat.analysis.v1.CoverageGap.timeframe:type_name -> xstockstrat.common.v1.Timeframe
+	72, // 4: xstockstrat.analysis.v1.CoverageGap.requested_range:type_name -> xstockstrat.common.v1.TimeRange
+	72, // 5: xstockstrat.analysis.v1.CoverageGap.gap:type_name -> xstockstrat.common.v1.TimeRange
+	75, // 6: xstockstrat.analysis.v1.BacktestResult.completed_at:type_name -> google.protobuf.Timestamp
+	17, // 7: xstockstrat.analysis.v1.BacktestResult.trades:type_name -> xstockstrat.analysis.v1.TradeRecord
 	0,  // 8: xstockstrat.analysis.v1.BacktestResult.status:type_name -> xstockstrat.analysis.v1.BacktestStatus
-	13, // 9: xstockstrat.analysis.v1.BacktestResult.coverage_gaps:type_name -> xstockstrat.analysis.v1.CoverageGap
-	17, // 10: xstockstrat.analysis.v1.BacktestResult.diagnostics:type_name -> xstockstrat.analysis.v1.SymbolDiagnostics
-	67, // 11: xstockstrat.analysis.v1.TradeRecord.entry_time:type_name -> google.protobuf.Timestamp
-	67, // 12: xstockstrat.analysis.v1.TradeRecord.exit_time:type_name -> google.protobuf.Timestamp
-	67, // 13: xstockstrat.analysis.v1.BarDiagnostic.timestamp:type_name -> google.protobuf.Timestamp
-	58, // 14: xstockstrat.analysis.v1.BarDiagnostic.indicators:type_name -> xstockstrat.analysis.v1.BarDiagnostic.IndicatorsEntry
+	15, // 9: xstockstrat.analysis.v1.BacktestResult.coverage_gaps:type_name -> xstockstrat.analysis.v1.CoverageGap
+	19, // 10: xstockstrat.analysis.v1.BacktestResult.diagnostics:type_name -> xstockstrat.analysis.v1.SymbolDiagnostics
+	75, // 11: xstockstrat.analysis.v1.TradeRecord.entry_time:type_name -> google.protobuf.Timestamp
+	75, // 12: xstockstrat.analysis.v1.TradeRecord.exit_time:type_name -> google.protobuf.Timestamp
+	75, // 13: xstockstrat.analysis.v1.BarDiagnostic.timestamp:type_name -> google.protobuf.Timestamp
+	65, // 14: xstockstrat.analysis.v1.BarDiagnostic.indicators:type_name -> xstockstrat.analysis.v1.BarDiagnostic.IndicatorsEntry
 	1,  // 15: xstockstrat.analysis.v1.BarDiagnostic.action:type_name -> xstockstrat.analysis.v1.BarAction
-	16, // 16: xstockstrat.analysis.v1.SymbolDiagnostics.bars:type_name -> xstockstrat.analysis.v1.BarDiagnostic
+	18, // 16: xstockstrat.analysis.v1.SymbolDiagnostics.bars:type_name -> xstockstrat.analysis.v1.BarDiagnostic
 	2,  // 17: xstockstrat.analysis.v1.SymbolDiagnostics.no_trade_reason:type_name -> xstockstrat.analysis.v1.NoTradeReason
-	64, // 18: xstockstrat.analysis.v1.ScoreStrategyRequest.range:type_name -> xstockstrat.common.v1.TimeRange
-	59, // 19: xstockstrat.analysis.v1.StrategyScore.component_scores:type_name -> xstockstrat.analysis.v1.StrategyScore.ComponentScoresEntry
-	14, // 20: xstockstrat.analysis.v1.StrategyReport.latest_backtest:type_name -> xstockstrat.analysis.v1.BacktestResult
-	19, // 21: xstockstrat.analysis.v1.StrategyReport.score:type_name -> xstockstrat.analysis.v1.StrategyScore
-	65, // 22: xstockstrat.analysis.v1.StrategyReport.metadata:type_name -> google.protobuf.Struct
+	72, // 18: xstockstrat.analysis.v1.ScoreStrategyRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	66, // 19: xstockstrat.analysis.v1.StrategyScore.component_scores:type_name -> xstockstrat.analysis.v1.StrategyScore.ComponentScoresEntry
+	16, // 20: xstockstrat.analysis.v1.StrategyReport.latest_backtest:type_name -> xstockstrat.analysis.v1.BacktestResult
+	21, // 21: xstockstrat.analysis.v1.StrategyReport.score:type_name -> xstockstrat.analysis.v1.StrategyScore
+	73, // 22: xstockstrat.analysis.v1.StrategyReport.metadata:type_name -> google.protobuf.Struct
 	0,  // 23: xstockstrat.analysis.v1.BacktestRunSummary.status:type_name -> xstockstrat.analysis.v1.BacktestStatus
-	67, // 24: xstockstrat.analysis.v1.BacktestRunSummary.completed_at:type_name -> google.protobuf.Timestamp
-	67, // 25: xstockstrat.analysis.v1.BacktestRunSummary.range_start:type_name -> google.protobuf.Timestamp
-	67, // 26: xstockstrat.analysis.v1.BacktestRunSummary.range_end:type_name -> google.protobuf.Timestamp
-	22, // 27: xstockstrat.analysis.v1.ListBacktestsResponse.runs:type_name -> xstockstrat.analysis.v1.BacktestRunSummary
-	68, // 28: xstockstrat.analysis.v1.ListStrategiesRequest.page:type_name -> xstockstrat.common.v1.PageRequest
-	19, // 29: xstockstrat.analysis.v1.ListStrategiesResponse.strategies:type_name -> xstockstrat.analysis.v1.StrategyScore
-	69, // 30: xstockstrat.analysis.v1.ListStrategiesResponse.page:type_name -> xstockstrat.common.v1.PageResponse
+	75, // 24: xstockstrat.analysis.v1.BacktestRunSummary.completed_at:type_name -> google.protobuf.Timestamp
+	75, // 25: xstockstrat.analysis.v1.BacktestRunSummary.range_start:type_name -> google.protobuf.Timestamp
+	75, // 26: xstockstrat.analysis.v1.BacktestRunSummary.range_end:type_name -> google.protobuf.Timestamp
+	24, // 27: xstockstrat.analysis.v1.ListBacktestsResponse.runs:type_name -> xstockstrat.analysis.v1.BacktestRunSummary
+	76, // 28: xstockstrat.analysis.v1.ListStrategiesRequest.page:type_name -> xstockstrat.common.v1.PageRequest
+	21, // 29: xstockstrat.analysis.v1.ListStrategiesResponse.strategies:type_name -> xstockstrat.analysis.v1.StrategyScore
+	77, // 30: xstockstrat.analysis.v1.ListStrategiesResponse.page:type_name -> xstockstrat.common.v1.PageResponse
 	3,  // 31: xstockstrat.analysis.v1.StrategyComponent.kind:type_name -> xstockstrat.analysis.v1.ComponentKind
-	60, // 32: xstockstrat.analysis.v1.StrategyComponent.params:type_name -> xstockstrat.analysis.v1.StrategyComponent.ParamsEntry
-	28, // 33: xstockstrat.analysis.v1.StrategyDefinition.components:type_name -> xstockstrat.analysis.v1.StrategyComponent
-	65, // 34: xstockstrat.analysis.v1.StrategyDefinition.signal_params:type_name -> google.protobuf.Struct
+	67, // 32: xstockstrat.analysis.v1.StrategyComponent.params:type_name -> xstockstrat.analysis.v1.StrategyComponent.ParamsEntry
+	30, // 33: xstockstrat.analysis.v1.StrategyDefinition.components:type_name -> xstockstrat.analysis.v1.StrategyComponent
+	73, // 34: xstockstrat.analysis.v1.StrategyDefinition.signal_params:type_name -> google.protobuf.Struct
 	4,  // 35: xstockstrat.analysis.v1.ManageStrategyRequest.operation:type_name -> xstockstrat.analysis.v1.StrategyOperation
-	29, // 36: xstockstrat.analysis.v1.ManageStrategyRequest.definition:type_name -> xstockstrat.analysis.v1.StrategyDefinition
-	70, // 37: xstockstrat.analysis.v1.ManageStrategyRequest.update_mask:type_name -> google.protobuf.FieldMask
-	29, // 38: xstockstrat.analysis.v1.ListStrategyDefinitionsResponse.definitions:type_name -> xstockstrat.analysis.v1.StrategyDefinition
-	29, // 39: xstockstrat.analysis.v1.SetStrategyLiveResponse.definition:type_name -> xstockstrat.analysis.v1.StrategyDefinition
+	31, // 36: xstockstrat.analysis.v1.ManageStrategyRequest.definition:type_name -> xstockstrat.analysis.v1.StrategyDefinition
+	78, // 37: xstockstrat.analysis.v1.ManageStrategyRequest.update_mask:type_name -> google.protobuf.FieldMask
+	31, // 38: xstockstrat.analysis.v1.ListStrategyDefinitionsResponse.definitions:type_name -> xstockstrat.analysis.v1.StrategyDefinition
+	31, // 39: xstockstrat.analysis.v1.SetStrategyLiveResponse.definition:type_name -> xstockstrat.analysis.v1.StrategyDefinition
 	6,  // 40: xstockstrat.analysis.v1.ScreenCriterion.kind:type_name -> xstockstrat.analysis.v1.ScreenKind
-	28, // 41: xstockstrat.analysis.v1.ScreenCriterion.component:type_name -> xstockstrat.analysis.v1.StrategyComponent
+	30, // 41: xstockstrat.analysis.v1.ScreenCriterion.component:type_name -> xstockstrat.analysis.v1.StrategyComponent
 	5,  // 42: xstockstrat.analysis.v1.ScreenCriterion.op:type_name -> xstockstrat.analysis.v1.Comparator
-	61, // 43: xstockstrat.analysis.v1.ScreenResult.criterion_scores:type_name -> xstockstrat.analysis.v1.ScreenResult.CriterionScoresEntry
+	68, // 43: xstockstrat.analysis.v1.ScreenResult.criterion_scores:type_name -> xstockstrat.analysis.v1.ScreenResult.CriterionScoresEntry
 	7,  // 44: xstockstrat.analysis.v1.ScreenResult.status:type_name -> xstockstrat.analysis.v1.ScreenResultStatus
-	13, // 45: xstockstrat.analysis.v1.ScreenResult.gap:type_name -> xstockstrat.analysis.v1.CoverageGap
-	62, // 46: xstockstrat.analysis.v1.ScreenResult.criterion_raw_values:type_name -> xstockstrat.analysis.v1.ScreenResult.CriterionRawValuesEntry
-	63, // 47: xstockstrat.analysis.v1.ScreenResult.criterion_passed:type_name -> xstockstrat.analysis.v1.ScreenResult.CriterionPassedEntry
-	36, // 48: xstockstrat.analysis.v1.ScreenSymbolsRequest.criteria:type_name -> xstockstrat.analysis.v1.ScreenCriterion
-	64, // 49: xstockstrat.analysis.v1.ScreenSymbolsRequest.evaluation_window:type_name -> xstockstrat.common.v1.TimeRange
-	37, // 50: xstockstrat.analysis.v1.ScreenSymbolsResponse.results:type_name -> xstockstrat.analysis.v1.ScreenResult
-	13, // 51: xstockstrat.analysis.v1.ScreenSymbolsResponse.coverage_gaps:type_name -> xstockstrat.analysis.v1.CoverageGap
-	67, // 52: xstockstrat.analysis.v1.FundamentalsScanSummary.finished_at:type_name -> google.protobuf.Timestamp
+	15, // 45: xstockstrat.analysis.v1.ScreenResult.gap:type_name -> xstockstrat.analysis.v1.CoverageGap
+	69, // 46: xstockstrat.analysis.v1.ScreenResult.criterion_raw_values:type_name -> xstockstrat.analysis.v1.ScreenResult.CriterionRawValuesEntry
+	70, // 47: xstockstrat.analysis.v1.ScreenResult.criterion_passed:type_name -> xstockstrat.analysis.v1.ScreenResult.CriterionPassedEntry
+	38, // 48: xstockstrat.analysis.v1.ScreenSymbolsRequest.criteria:type_name -> xstockstrat.analysis.v1.ScreenCriterion
+	72, // 49: xstockstrat.analysis.v1.ScreenSymbolsRequest.evaluation_window:type_name -> xstockstrat.common.v1.TimeRange
+	39, // 50: xstockstrat.analysis.v1.ScreenSymbolsResponse.results:type_name -> xstockstrat.analysis.v1.ScreenResult
+	15, // 51: xstockstrat.analysis.v1.ScreenSymbolsResponse.coverage_gaps:type_name -> xstockstrat.analysis.v1.CoverageGap
+	75, // 52: xstockstrat.analysis.v1.FundamentalsScanSummary.finished_at:type_name -> google.protobuf.Timestamp
 	8,  // 53: xstockstrat.analysis.v1.Opportunity.action:type_name -> xstockstrat.analysis.v1.OpportunityActionTag
-	67, // 54: xstockstrat.analysis.v1.Opportunity.valid_until:type_name -> google.protobuf.Timestamp
+	75, // 54: xstockstrat.analysis.v1.Opportunity.valid_until:type_name -> google.protobuf.Timestamp
 	9,  // 55: xstockstrat.analysis.v1.ConditionEval.state:type_name -> xstockstrat.analysis.v1.ConditionState
-	43, // 56: xstockstrat.analysis.v1.SymbolReadiness.conditions:type_name -> xstockstrat.analysis.v1.ConditionEval
-	68, // 57: xstockstrat.analysis.v1.ListOpportunitiesRequest.page:type_name -> xstockstrat.common.v1.PageRequest
-	42, // 58: xstockstrat.analysis.v1.ListOpportunitiesResponse.opportunities:type_name -> xstockstrat.analysis.v1.Opportunity
-	69, // 59: xstockstrat.analysis.v1.ListOpportunitiesResponse.page:type_name -> xstockstrat.common.v1.PageResponse
+	45, // 56: xstockstrat.analysis.v1.SymbolReadiness.conditions:type_name -> xstockstrat.analysis.v1.ConditionEval
+	76, // 57: xstockstrat.analysis.v1.ListOpportunitiesRequest.page:type_name -> xstockstrat.common.v1.PageRequest
+	44, // 58: xstockstrat.analysis.v1.ListOpportunitiesResponse.opportunities:type_name -> xstockstrat.analysis.v1.Opportunity
+	77, // 59: xstockstrat.analysis.v1.ListOpportunitiesResponse.page:type_name -> xstockstrat.common.v1.PageResponse
 	10, // 60: xstockstrat.analysis.v1.EvaluateReadinessRequest.rule:type_name -> xstockstrat.analysis.v1.ReadinessRule
-	44, // 61: xstockstrat.analysis.v1.EvaluateReadinessResponse.readiness:type_name -> xstockstrat.analysis.v1.SymbolReadiness
+	46, // 61: xstockstrat.analysis.v1.EvaluateReadinessResponse.readiness:type_name -> xstockstrat.analysis.v1.SymbolReadiness
 	11, // 62: xstockstrat.analysis.v1.SetOpportunityActionRequest.action:type_name -> xstockstrat.analysis.v1.OpportunityAction
-	67, // 63: xstockstrat.analysis.v1.SetOpportunityActionRequest.snooze_until:type_name -> google.protobuf.Timestamp
-	67, // 64: xstockstrat.analysis.v1.GetIndicatorSeriesRequest.times:type_name -> google.protobuf.Timestamp
-	67, // 65: xstockstrat.analysis.v1.GetIndicatorSeriesResponse.times:type_name -> google.protobuf.Timestamp
-	55, // 66: xstockstrat.analysis.v1.GetIndicatorSeriesResponse.components:type_name -> xstockstrat.analysis.v1.ComponentSeries
+	75, // 63: xstockstrat.analysis.v1.SetOpportunityActionRequest.snooze_until:type_name -> google.protobuf.Timestamp
+	75, // 64: xstockstrat.analysis.v1.GetIndicatorSeriesRequest.times:type_name -> google.protobuf.Timestamp
+	75, // 65: xstockstrat.analysis.v1.GetIndicatorSeriesResponse.times:type_name -> google.protobuf.Timestamp
+	57, // 66: xstockstrat.analysis.v1.GetIndicatorSeriesResponse.components:type_name -> xstockstrat.analysis.v1.ComponentSeries
 	3,  // 67: xstockstrat.analysis.v1.ComponentSeries.kind:type_name -> xstockstrat.analysis.v1.ComponentKind
-	56, // 68: xstockstrat.analysis.v1.ComponentSeries.series:type_name -> xstockstrat.analysis.v1.NamedSeries
-	57, // 69: xstockstrat.analysis.v1.NamedSeries.values:type_name -> xstockstrat.analysis.v1.IndicatorValue
-	12, // 70: xstockstrat.analysis.v1.AnalysisService.RunBacktest:input_type -> xstockstrat.analysis.v1.RunBacktestRequest
-	18, // 71: xstockstrat.analysis.v1.AnalysisService.ScoreStrategy:input_type -> xstockstrat.analysis.v1.ScoreStrategyRequest
-	25, // 72: xstockstrat.analysis.v1.AnalysisService.ListStrategies:input_type -> xstockstrat.analysis.v1.ListStrategiesRequest
-	27, // 73: xstockstrat.analysis.v1.AnalysisService.GetStrategyReport:input_type -> xstockstrat.analysis.v1.GetStrategyReportRequest
-	21, // 74: xstockstrat.analysis.v1.AnalysisService.ListBacktests:input_type -> xstockstrat.analysis.v1.ListBacktestsRequest
-	24, // 75: xstockstrat.analysis.v1.AnalysisService.GetBacktest:input_type -> xstockstrat.analysis.v1.GetBacktestRequest
-	30, // 76: xstockstrat.analysis.v1.AnalysisService.ManageStrategy:input_type -> xstockstrat.analysis.v1.ManageStrategyRequest
-	31, // 77: xstockstrat.analysis.v1.AnalysisService.GetStrategy:input_type -> xstockstrat.analysis.v1.GetStrategyRequest
-	32, // 78: xstockstrat.analysis.v1.AnalysisService.ListStrategyDefinitions:input_type -> xstockstrat.analysis.v1.ListStrategyDefinitionsRequest
-	34, // 79: xstockstrat.analysis.v1.AnalysisService.SetStrategyLive:input_type -> xstockstrat.analysis.v1.SetStrategyLiveRequest
-	38, // 80: xstockstrat.analysis.v1.AnalysisService.ScreenSymbols:input_type -> xstockstrat.analysis.v1.ScreenSymbolsRequest
-	40, // 81: xstockstrat.analysis.v1.AnalysisService.RunFundamentalsScan:input_type -> xstockstrat.analysis.v1.RunFundamentalsScanRequest
-	46, // 82: xstockstrat.analysis.v1.AnalysisService.ListOpportunities:input_type -> xstockstrat.analysis.v1.ListOpportunitiesRequest
-	48, // 83: xstockstrat.analysis.v1.AnalysisService.EvaluateReadiness:input_type -> xstockstrat.analysis.v1.EvaluateReadinessRequest
-	50, // 84: xstockstrat.analysis.v1.AnalysisService.SetOpportunityAction:input_type -> xstockstrat.analysis.v1.SetOpportunityActionRequest
-	52, // 85: xstockstrat.analysis.v1.AnalysisService.GetStrategyAnalytics:input_type -> xstockstrat.analysis.v1.GetStrategyAnalyticsRequest
-	53, // 86: xstockstrat.analysis.v1.AnalysisService.GetIndicatorSeries:input_type -> xstockstrat.analysis.v1.GetIndicatorSeriesRequest
-	14, // 87: xstockstrat.analysis.v1.AnalysisService.RunBacktest:output_type -> xstockstrat.analysis.v1.BacktestResult
-	19, // 88: xstockstrat.analysis.v1.AnalysisService.ScoreStrategy:output_type -> xstockstrat.analysis.v1.StrategyScore
-	26, // 89: xstockstrat.analysis.v1.AnalysisService.ListStrategies:output_type -> xstockstrat.analysis.v1.ListStrategiesResponse
-	20, // 90: xstockstrat.analysis.v1.AnalysisService.GetStrategyReport:output_type -> xstockstrat.analysis.v1.StrategyReport
-	23, // 91: xstockstrat.analysis.v1.AnalysisService.ListBacktests:output_type -> xstockstrat.analysis.v1.ListBacktestsResponse
-	14, // 92: xstockstrat.analysis.v1.AnalysisService.GetBacktest:output_type -> xstockstrat.analysis.v1.BacktestResult
-	29, // 93: xstockstrat.analysis.v1.AnalysisService.ManageStrategy:output_type -> xstockstrat.analysis.v1.StrategyDefinition
-	29, // 94: xstockstrat.analysis.v1.AnalysisService.GetStrategy:output_type -> xstockstrat.analysis.v1.StrategyDefinition
-	33, // 95: xstockstrat.analysis.v1.AnalysisService.ListStrategyDefinitions:output_type -> xstockstrat.analysis.v1.ListStrategyDefinitionsResponse
-	35, // 96: xstockstrat.analysis.v1.AnalysisService.SetStrategyLive:output_type -> xstockstrat.analysis.v1.SetStrategyLiveResponse
-	39, // 97: xstockstrat.analysis.v1.AnalysisService.ScreenSymbols:output_type -> xstockstrat.analysis.v1.ScreenSymbolsResponse
-	41, // 98: xstockstrat.analysis.v1.AnalysisService.RunFundamentalsScan:output_type -> xstockstrat.analysis.v1.FundamentalsScanSummary
-	47, // 99: xstockstrat.analysis.v1.AnalysisService.ListOpportunities:output_type -> xstockstrat.analysis.v1.ListOpportunitiesResponse
-	49, // 100: xstockstrat.analysis.v1.AnalysisService.EvaluateReadiness:output_type -> xstockstrat.analysis.v1.EvaluateReadinessResponse
-	51, // 101: xstockstrat.analysis.v1.AnalysisService.SetOpportunityAction:output_type -> xstockstrat.analysis.v1.SetOpportunityActionResponse
-	45, // 102: xstockstrat.analysis.v1.AnalysisService.GetStrategyAnalytics:output_type -> xstockstrat.analysis.v1.StrategyAnalytics
-	54, // 103: xstockstrat.analysis.v1.AnalysisService.GetIndicatorSeries:output_type -> xstockstrat.analysis.v1.GetIndicatorSeriesResponse
-	87, // [87:104] is the sub-list for method output_type
-	70, // [70:87] is the sub-list for method input_type
-	70, // [70:70] is the sub-list for extension type_name
-	70, // [70:70] is the sub-list for extension extendee
-	0,  // [0:70] is the sub-list for field type_name
+	58, // 68: xstockstrat.analysis.v1.ComponentSeries.series:type_name -> xstockstrat.analysis.v1.NamedSeries
+	59, // 69: xstockstrat.analysis.v1.NamedSeries.values:type_name -> xstockstrat.analysis.v1.IndicatorValue
+	12, // 70: xstockstrat.analysis.v1.OrderSnapshot.event_type:type_name -> xstockstrat.analysis.v1.SnapshotEventType
+	75, // 71: xstockstrat.analysis.v1.OrderSnapshot.event_ts:type_name -> google.protobuf.Timestamp
+	73, // 72: xstockstrat.analysis.v1.OrderSnapshot.ohlcv_bar:type_name -> google.protobuf.Struct
+	71, // 73: xstockstrat.analysis.v1.OrderSnapshot.indicator_values:type_name -> xstockstrat.analysis.v1.OrderSnapshot.IndicatorValuesEntry
+	60, // 74: xstockstrat.analysis.v1.OrderSnapshot.signals:type_name -> xstockstrat.analysis.v1.SignalEntry
+	13, // 75: xstockstrat.analysis.v1.PnLPatternFactor.factor_type:type_name -> xstockstrat.analysis.v1.FactorType
+	75, // 76: xstockstrat.analysis.v1.QueryPnLPatternsRequest.from_ts:type_name -> google.protobuf.Timestamp
+	75, // 77: xstockstrat.analysis.v1.QueryPnLPatternsRequest.to_ts:type_name -> google.protobuf.Timestamp
+	62, // 78: xstockstrat.analysis.v1.QueryPnLPatternsResponse.positive_factors:type_name -> xstockstrat.analysis.v1.PnLPatternFactor
+	62, // 79: xstockstrat.analysis.v1.QueryPnLPatternsResponse.negative_factors:type_name -> xstockstrat.analysis.v1.PnLPatternFactor
+	14, // 80: xstockstrat.analysis.v1.AnalysisService.RunBacktest:input_type -> xstockstrat.analysis.v1.RunBacktestRequest
+	20, // 81: xstockstrat.analysis.v1.AnalysisService.ScoreStrategy:input_type -> xstockstrat.analysis.v1.ScoreStrategyRequest
+	27, // 82: xstockstrat.analysis.v1.AnalysisService.ListStrategies:input_type -> xstockstrat.analysis.v1.ListStrategiesRequest
+	29, // 83: xstockstrat.analysis.v1.AnalysisService.GetStrategyReport:input_type -> xstockstrat.analysis.v1.GetStrategyReportRequest
+	23, // 84: xstockstrat.analysis.v1.AnalysisService.ListBacktests:input_type -> xstockstrat.analysis.v1.ListBacktestsRequest
+	26, // 85: xstockstrat.analysis.v1.AnalysisService.GetBacktest:input_type -> xstockstrat.analysis.v1.GetBacktestRequest
+	32, // 86: xstockstrat.analysis.v1.AnalysisService.ManageStrategy:input_type -> xstockstrat.analysis.v1.ManageStrategyRequest
+	33, // 87: xstockstrat.analysis.v1.AnalysisService.GetStrategy:input_type -> xstockstrat.analysis.v1.GetStrategyRequest
+	34, // 88: xstockstrat.analysis.v1.AnalysisService.ListStrategyDefinitions:input_type -> xstockstrat.analysis.v1.ListStrategyDefinitionsRequest
+	36, // 89: xstockstrat.analysis.v1.AnalysisService.SetStrategyLive:input_type -> xstockstrat.analysis.v1.SetStrategyLiveRequest
+	40, // 90: xstockstrat.analysis.v1.AnalysisService.ScreenSymbols:input_type -> xstockstrat.analysis.v1.ScreenSymbolsRequest
+	42, // 91: xstockstrat.analysis.v1.AnalysisService.RunFundamentalsScan:input_type -> xstockstrat.analysis.v1.RunFundamentalsScanRequest
+	48, // 92: xstockstrat.analysis.v1.AnalysisService.ListOpportunities:input_type -> xstockstrat.analysis.v1.ListOpportunitiesRequest
+	50, // 93: xstockstrat.analysis.v1.AnalysisService.EvaluateReadiness:input_type -> xstockstrat.analysis.v1.EvaluateReadinessRequest
+	52, // 94: xstockstrat.analysis.v1.AnalysisService.SetOpportunityAction:input_type -> xstockstrat.analysis.v1.SetOpportunityActionRequest
+	54, // 95: xstockstrat.analysis.v1.AnalysisService.GetStrategyAnalytics:input_type -> xstockstrat.analysis.v1.GetStrategyAnalyticsRequest
+	55, // 96: xstockstrat.analysis.v1.AnalysisService.GetIndicatorSeries:input_type -> xstockstrat.analysis.v1.GetIndicatorSeriesRequest
+	63, // 97: xstockstrat.analysis.v1.AnalysisService.QueryPnLPatterns:input_type -> xstockstrat.analysis.v1.QueryPnLPatternsRequest
+	16, // 98: xstockstrat.analysis.v1.AnalysisService.RunBacktest:output_type -> xstockstrat.analysis.v1.BacktestResult
+	21, // 99: xstockstrat.analysis.v1.AnalysisService.ScoreStrategy:output_type -> xstockstrat.analysis.v1.StrategyScore
+	28, // 100: xstockstrat.analysis.v1.AnalysisService.ListStrategies:output_type -> xstockstrat.analysis.v1.ListStrategiesResponse
+	22, // 101: xstockstrat.analysis.v1.AnalysisService.GetStrategyReport:output_type -> xstockstrat.analysis.v1.StrategyReport
+	25, // 102: xstockstrat.analysis.v1.AnalysisService.ListBacktests:output_type -> xstockstrat.analysis.v1.ListBacktestsResponse
+	16, // 103: xstockstrat.analysis.v1.AnalysisService.GetBacktest:output_type -> xstockstrat.analysis.v1.BacktestResult
+	31, // 104: xstockstrat.analysis.v1.AnalysisService.ManageStrategy:output_type -> xstockstrat.analysis.v1.StrategyDefinition
+	31, // 105: xstockstrat.analysis.v1.AnalysisService.GetStrategy:output_type -> xstockstrat.analysis.v1.StrategyDefinition
+	35, // 106: xstockstrat.analysis.v1.AnalysisService.ListStrategyDefinitions:output_type -> xstockstrat.analysis.v1.ListStrategyDefinitionsResponse
+	37, // 107: xstockstrat.analysis.v1.AnalysisService.SetStrategyLive:output_type -> xstockstrat.analysis.v1.SetStrategyLiveResponse
+	41, // 108: xstockstrat.analysis.v1.AnalysisService.ScreenSymbols:output_type -> xstockstrat.analysis.v1.ScreenSymbolsResponse
+	43, // 109: xstockstrat.analysis.v1.AnalysisService.RunFundamentalsScan:output_type -> xstockstrat.analysis.v1.FundamentalsScanSummary
+	49, // 110: xstockstrat.analysis.v1.AnalysisService.ListOpportunities:output_type -> xstockstrat.analysis.v1.ListOpportunitiesResponse
+	51, // 111: xstockstrat.analysis.v1.AnalysisService.EvaluateReadiness:output_type -> xstockstrat.analysis.v1.EvaluateReadinessResponse
+	53, // 112: xstockstrat.analysis.v1.AnalysisService.SetOpportunityAction:output_type -> xstockstrat.analysis.v1.SetOpportunityActionResponse
+	47, // 113: xstockstrat.analysis.v1.AnalysisService.GetStrategyAnalytics:output_type -> xstockstrat.analysis.v1.StrategyAnalytics
+	56, // 114: xstockstrat.analysis.v1.AnalysisService.GetIndicatorSeries:output_type -> xstockstrat.analysis.v1.GetIndicatorSeriesResponse
+	64, // 115: xstockstrat.analysis.v1.AnalysisService.QueryPnLPatterns:output_type -> xstockstrat.analysis.v1.QueryPnLPatternsResponse
+	98, // [98:116] is the sub-list for method output_type
+	80, // [80:98] is the sub-list for method input_type
+	80, // [80:80] is the sub-list for extension type_name
+	80, // [80:80] is the sub-list for extension extendee
+	0,  // [0:80] is the sub-list for field type_name
 }
 
 func init() { file_analysis_v1_analysis_proto_init() }
@@ -4885,8 +5463,8 @@ func file_analysis_v1_analysis_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_analysis_v1_analysis_proto_rawDesc), len(file_analysis_v1_analysis_proto_rawDesc)),
-			NumEnums:      12,
-			NumMessages:   52,
+			NumEnums:      14,
+			NumMessages:   58,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -312,3 +312,102 @@ corrections directly to implementation-spec.md (pre-execution; step bodies not y
 - Step 12 navGroups Engine items cite → `:62-67` (verified).
 The 6-file Step 8 count is left as-is (cohesive unit; not split). No lifecycle change (stays
 implementation-ready).
+
+## Session 2026-08-20 — sdd-execute (steps 1–5)
+
+Executed on harness branch `claude/execute-020-042-127-pfa5cw` (single integration PR model).
+
+### Step 1 — proto [done]
+- analysis.proto: SnapshotEventType + FactorType enums, SignalEntry/OrderSnapshot/PnLPatternFactor/
+  QueryPnLPatternsRequest+Response messages, QueryPnLPatterns RPC. ledger.proto:29 comment fixed to
+  "GLOBAL monotonic sequence". buf lint + breaking (against main-dev) pass.
+
+### Step 2 — proto-gen [done]
+- buf-gen.sh regenerated Go/Python/TS stubs; diff limited to analysis + the ledger comment line.
+
+### Step 3 — portfolio migration 010 [done]
+- 010_positions_realized_accum.{up,down}.sql: ADD/DROP realized_accum NUMERIC NOT NULL DEFAULT 0.
+  Offline parity verified. (127 uses 011; both coexist on the branch.)
+
+### Step 4 — portfolio producer [done]
+- realizedDelta() package-level helper (the ONE reduce formula); GetPnL applyFill routed through it.
+- ConsumeOrderFills: compute delta; full-close emits enriched portfolio.position.closed
+  {user_id,symbol,account_id,trading_mode,realized_pnl=priorAccum+delta}; partial passes delta to
+  UpsertPosition ($8, accumulates realized_accum). ClosePosition account-scoped (AND account_id=$4).
+- New repo GetRealizedAccum (deviation — proto Position has no realized_accum field). Build+lint clean.
+
+### Step 5 — portfolio tests [done]
+- computeRealizedPnL mirror collapsed onto realizedDelta (DRY); TestRealizedDelta_Characterization
+  (long/short partial+full+oversell+add+empty) + TestRealizedDelta_MatchesGetPnLPath. Full suite
+  green, total coverage 55.9% (≥40). End-to-end ConsumeOrderFills/DB assertions deferred (deviation).
+
+**Next:** Step 6 (analysis migration 016), 7 (config keys), 8 (analysis consumer), 9 (consumer test),
+10 (QueryPnLPatterns RPC), 11 (RPC test), 12 (UI), 13 (UI e2e), 14 (docs).
+
+## Session 2026-08-20 — sdd-execute (steps 6–9)
+
+### Step 6 — analysis migration 016 [done]
+- order_snapshots (hypertable on event_ts, PK+UNIQUE include event_ts), pnl_positions (partial
+  unique open index), pnl_pattern_samples (no factor UNIQUE), ledger_stream_cursor. Offline parity ok.
+
+### Step 7 — config keys [done]
+- analysis.snapshot.indicator_timeout_ms/signal_timeout_ms (500), analysis.patterns.min_sample_count
+  (5), analysis.patterns.indicator_bucket_count (5) in analysis CLAUDE.md + config-governance log.
+
+### Step 8 — analysis ledger consumer [done]
+- Three thin asyncpg repos (order_snapshots/pnl_positions/pnl_pattern_samples) + pnl_pattern_consumer.py
+  (SnapshotComposer + PnLPatternConsumer): single broad StreamEvents(from_sequence=cursor), replay
+  short-circuit, skip analysis.*, order.* → compose-before-txn (timeout→partial, FR-6) + open window +
+  atomic cursor advance; portfolio.position.closed → seal + pattern samples per factor; best-effort
+  captured/degraded/sealed audit emits. Registered as a boot task in main.py (reuses pool + stubs,
+  F-06). Deviation: v1 captures a default indicator set (RSI/ATR), strategy-component resolution is
+  the named v2 refinement; position_id synthesized from identity key (Order has no position_id).
+- Consumer constructor accepts injected repos (default = real) for unit-testability. ruff clean.
+
+### Step 9 — analysis consumer test [done]
+- tests/test_pnl_pattern_consumer.py with in-memory fakes: AC-1 (snapshot w/ indicator+signal),
+  AC-2 (seal + samples, incl partial-fill), AC-6 (indicator timeout → empty map + degraded) + teeth
+  control, AC-7 (captured + sealed audit), idempotency/ordering short-circuit, self-emission skip.
+  7 tests pass; full analysis suite 537 passed, coverage 82%.
+
+**Next:** Step 10 (QueryPnLPatterns RPC), 11 (RPC test), 12 (UI), 13 (UI e2e), 14 (docs).
+
+### Step 10 — QueryPnLPatterns RPC [done]
+- servicer.QueryPnLPatterns + module-level pure bucket_pnl_factors (indicator quantile buckets,
+  signal-by-presence, min-sample drop, positive/negative split ranked by |avg_pnl_impact|, limit).
+  self._pnl_samples_repo wired from db_pool (F-06). ruff clean.
+
+### Step 11 — RPC test [done]
+- tests/test_query_pnl_patterns.py: bucket_pnl_factors quantile+signal grouping, min-sample-drop
+  teeth, AC-3 ranked positive+negative via servicer with a fake samples repo, no-repo empty. 4 pass;
+  full analysis suite 541 pass, coverage 82%.
+
+**Next:** Step 12 (UI view + nav), 13 (UI e2e), 14 (docs).
+
+## Session 2026-08-20 — sdd-execute (steps 12–14) — feature 042 COMPLETE
+
+### Step 12 — UI P&L Patterns view + nav [done]
+- insightsBff queryPnLPatterns forward (no admin gate); usePnLPatterns hook;
+  /insights/pnl-patterns/page.tsx (positive/negative factor cards + snapshot-timeline placeholder);
+  nav triple-registered (navGroups Engine + PLATFORM_SUBNAV + Step-13 GROUPS). Lint + build clean;
+  route compiled.
+
+### Step 13 — UI e2e [done]
+- e2e/fixtures/pnlPatterns.ts (PNL_PATTERNS_AAPL) + INVENTORY row; mock-backend queryPnLPatterns
+  handler; pnl-patterns.spec.ts (AC-4 ranked cards, distinct-value assertions); nav-reachability
+  GROUPS entry (AC-5). 5 e2e pass (incl. full-shell nav walk).
+
+### Step 14 — docs [done]
+- portfolio CLAUDE.md: portfolio.position.closed producer contract + realized_accum attribution-only
+  + named v1 scope limitation. analysis CLAUDE.md: consumer section + migration-016 tables +
+  position-lifecycle-keyed retention rule + v1 limitations.
+- **v2 snapshot reconciliation (tracked follow-up):** rebuild an incomplete open→close window from
+  the ledger via `QueryEvents` at seal time (v1 accepts a possibly-incomplete window and only logs a
+  WARN when the snapshot count is low). Also v2: resolve snapshot indicators from the order's
+  strategy-definition components (v1 captures the default RSI/ATR set) and disambiguate multi-cycle
+  `position_id`s (v1 synthesizes from the identity key).
+- **context-scrubber:** the context-forge plugin is NOT available in this session (not in the
+  SessionStart skills list); `/context-scrubber scan` could not be run — noted here and in the PR body
+  per the root CLAUDE.md Teardown rule.
+
+All 14 steps done. status.md → code-completed.

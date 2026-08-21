@@ -70,6 +70,19 @@ Namespace: `notify`
 | `notify.stream.max_subscribers` | int | `1000` | **Documented, not yet enforced** — intended connection cap; no code reads it |
 | `notify.alert.retention_days` | int | `30` | **Documented, not yet implemented** — intended history retention; no retention job reads it |
 | `notify.alert.max_body_bytes` | int | `4096` | **Documented, not yet enforced** — intended body-size check; no code reads it |
+| `notify.fanout.min_severity` | int | `2` | Primary external-fanout gate: minimum `AlertSeverity` ordinal to fan out (0=UNSPECIFIED,1=INFO,2=WARNING,3=ERROR,4=CRITICAL), clamped to [0,4]. **Default 2 (WARNING) excludes INFO fill confirmations — lower to `1` to fan out fills.** (feature 020) |
+| `notify.fanout.min_confidence_threshold` | float | `0.7` | Minimum `context.conviction` (analysis readiness ordinal) required to fan out — applied only when the alert carries a numeric `conviction`; conviction-less alerts are gated by `min_severity` alone (feature 020) |
+| `notify.fanout.dedup_window_seconds` | int | `300` | Suppress re-delivery of a byte-identical alert (content hash of category/source/title/body + signal context) within this window (feature 020) |
+| `notify.fanout.sendgrid_from_email` | string | `''` | Sender address for outbound fanout email; email disabled until both from/to are set **and** `SENDGRID_API_KEY` is present (feature 020) |
+| `notify.fanout.sendgrid_to_email` | string | `''` | Recipient address for outbound fanout email; email disabled until both from/to are set **and** `SENDGRID_API_KEY` is present (feature 020) |
+
+**External alert fanout (feature 020).** `src/fanout/fanout.ts` (`FanoutDispatcher`) POSTs qualifying
+alerts to a Slack incoming webhook and/or SendGrid v3 mail-send as a **best-effort side-channel**. It
+is dispatched via `queueMicrotask` *after* the `EmitAlert` success callback, so it never affects the
+primary in-process `StreamAlerts` delivery or the RPC result, and every failure is caught and logged
+at WARN. Channels are enabled independently: Slack iff `SLACK_WEBHOOK_URL` is set, email iff
+`SENDGRID_API_KEY` **and** both `notify.fanout.sendgrid_*_email` keys are non-empty. The five
+`notify.fanout.*` knobs are read live on every dispatch, so a change takes effect with no restart.
 
 ## Environment Variables
 
@@ -79,7 +92,15 @@ CONFIG_ENDPOINT=xstockstrat-config:50060
 DATABASE_URL=postgres://xstockstrat:${POSTGRES_PASSWORD}@timescaledb:5432/xstockstrat?sslmode=disable  # constructed by docker-compose from POSTGRES_PASSWORD in .env
 APPLICATION_ENV=development         # development | production
 TRADING_MODE=paper                     # paper | live
+SLACK_WEBHOOK_URL=                  # type: SECRET (feature 020) — Slack incoming webhook; empty ⇒ Slack fanout disabled; rotation requires redeploy, not a live config push
+SENDGRID_API_KEY=                   # type: SECRET (feature 020) — SendGrid v3 API key; empty ⇒ email fanout disabled; rotation requires redeploy
 ```
+
+> `SLACK_WEBHOOK_URL` / `SENDGRID_API_KEY` are vendor credentials delivered as DO App Platform
+> `type: SECRET` env vars through the full deploy pipeline (docker-compose, both `.do/app*.yaml`,
+> the four deploy workflows, and `scripts/do-inject-prod-secrets.py`) — **never** config-service
+> rows (config governance / feature 076). Both are optional; an unset value simply disables that
+> fanout channel.
 
 ## Running Locally
 

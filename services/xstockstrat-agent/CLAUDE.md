@@ -153,6 +153,7 @@ ANALYSIS_ENDPOINT=xstockstrat-analysis:50056
 INDICATORS_ENDPOINT=xstockstrat-indicators:50054
 IDENTITY_ENDPOINT=xstockstrat-identity:50058
 CONFIG_ENDPOINT=xstockstrat-config:50060
+PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052
 UI_BASE_URL=http://localhost:3000
 AGENT_PUBLIC_URL=http://localhost:9000   # ${APP_URL}/agent in DO
 ```

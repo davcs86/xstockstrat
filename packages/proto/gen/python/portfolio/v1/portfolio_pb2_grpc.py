@@ -104,6 +104,11 @@ class PortfolioServiceStub(object):
                 request_serializer=portfolio_dot_v1_dot_portfolio__pb2.RemoveWatchlistSymbolsRequest.SerializeToString,
                 response_deserializer=portfolio_dot_v1_dot_portfolio__pb2.RemoveWatchlistSymbolsResponse.FromString,
                 _registered_method=True)
+        self.EnsureSignalWatchlist = channel.unary_unary(
+                '/xstockstrat.portfolio.v1.PortfolioService/EnsureSignalWatchlist',
+                request_serializer=portfolio_dot_v1_dot_portfolio__pb2.EnsureSignalWatchlistRequest.SerializeToString,
+                response_deserializer=portfolio_dot_v1_dot_portfolio__pb2.EnsureSignalWatchlistResponse.FromString,
+                _registered_method=True)
 
 
 class PortfolioServiceServicer(object):
@@ -195,6 +200,14 @@ class PortfolioServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def EnsureSignalWatchlist(self, request, context):
+        """Find-or-create the caller's system_managed=true watchlist (feature 127).
+        Ownership is taken from the propagated x-user-id header; the request has no body (FR-2).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_PortfolioServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -267,6 +280,11 @@ def add_PortfolioServiceServicer_to_server(servicer, server):
                     servicer.RemoveWatchlistSymbols,
                     request_deserializer=portfolio_dot_v1_dot_portfolio__pb2.RemoveWatchlistSymbolsRequest.FromString,
                     response_serializer=portfolio_dot_v1_dot_portfolio__pb2.RemoveWatchlistSymbolsResponse.SerializeToString,
+            ),
+            'EnsureSignalWatchlist': grpc.unary_unary_rpc_method_handler(
+                    servicer.EnsureSignalWatchlist,
+                    request_deserializer=portfolio_dot_v1_dot_portfolio__pb2.EnsureSignalWatchlistRequest.FromString,
+                    response_serializer=portfolio_dot_v1_dot_portfolio__pb2.EnsureSignalWatchlistResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -647,6 +665,33 @@ class PortfolioService(object):
             '/xstockstrat.portfolio.v1.PortfolioService/RemoveWatchlistSymbols',
             portfolio_dot_v1_dot_portfolio__pb2.RemoveWatchlistSymbolsRequest.SerializeToString,
             portfolio_dot_v1_dot_portfolio__pb2.RemoveWatchlistSymbolsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def EnsureSignalWatchlist(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.portfolio.v1.PortfolioService/EnsureSignalWatchlist',
+            portfolio_dot_v1_dot_portfolio__pb2.EnsureSignalWatchlistRequest.SerializeToString,
+            portfolio_dot_v1_dot_portfolio__pb2.EnsureSignalWatchlistResponse.FromString,
             options,
             channel_credentials,
             insecure,
