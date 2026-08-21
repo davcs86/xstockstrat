@@ -27,7 +27,9 @@ real and actionable.
 5. **Mine the ledger.** Check the relevant `docs/roadmap/ledger/fails.md` entries — if this approach
    repeats a recorded mistake, say so and cite the entry.
 5b. **Guard existing business rules (Constitution C-16).** `recon.md`'s **Existing Business Rules**
-   lists the `@AC-*` guarantees of the affected services. If the approach would **break** any of them,
+   lists the `@AC-*` guarantees of the affected services + `platform.feature` (surfaced by the
+   `scenario-recon` subagent, classified PRESERVE / EXTEND / CHANGE). If the approach would **break**
+   any of them,
    that is a **regression objection** — cite the `@AC-*` ID and the scenario, and treat it with the
    same weight as a Commandment concern (report it under Objections, or as a Floor breach only if it
    also breaches an `F-*`). Silently changing an existing rule (vs. deliberately, with sign-off) is
