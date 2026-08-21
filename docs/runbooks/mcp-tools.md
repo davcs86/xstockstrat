@@ -1,6 +1,6 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the twenty-four tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the twenty-eight tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 ---
@@ -34,7 +34,7 @@ directly on port 9000.
 
 **Direct (local):** `http://localhost:9000`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same twenty-four tools' `name`,
+**Tool catalog (UI display).** `GET /api/tools` returns the same twenty-eight tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
 capabilities (the same data documented below), never user data or credentials. It powers the
 `xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
@@ -946,6 +946,107 @@ profile (same shape as `get_user_metadata`).
 **Errors:** `at least one field (phone, display_name, metadata) must be provided` → no fields given;
 `user not found` → identity returned `NOT_FOUND` for the calling user; `RuntimeError` → no verified
 caller claims on the request.
+
+---
+
+### `list_watchlists`
+
+List the calling user's **own** watchlists from `xstockstrat-portfolio` (read-only, paginated). Wraps
+`PortfolioService.ListWatchlists`. Ownership is taken from the caller's forwarded `x-user-id`; only
+the caller's own lists are ever returned.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `limit` | int | no | Max lists per page; `0` = server default |
+| `page_token` | string | no | Opaque token from a prior call's `next_page_token`; `""` = first page |
+
+Returns `{"watchlists": [<watchlist>, …], "next_page_token": <str>}`. Each `<watchlist>` is snake_case:
+`watchlist_id`, `user_id`, `name`, `description`, `bindings[]` (each `symbol` / `strategy_id` — `""` =
+unbound — / `source`), the deprecated flat `symbols[]` mirror, `system_managed`, `created_at`,
+`updated_at`. An empty `next_page_token` means no more pages.
+
+**Errors:** `RuntimeError` → no verified caller claims on the request.
+
+---
+
+### `get_watchlist`
+
+Fetch one of the caller's watchlists, including its stocks, from `xstockstrat-portfolio` (read-only).
+Wraps `PortfolioService.GetWatchlist`.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `watchlist_id` | string | yes | The list identifier (from `list_watchlists`) |
+
+Returns `{"watchlist": <watchlist>}` (snake_case, same shape as `list_watchlists` entries) with the
+full `bindings` array.
+
+**Errors:** `watchlist not found` → unknown id (`NOT_FOUND`); `permission denied` → the list is owned
+by another user (`PERMISSION_DENIED`); `RuntimeError` → no verified caller claims.
+
+---
+
+### `manage_watchlist`
+
+Create, update, or delete one of the caller's watchlists in `xstockstrat-portfolio`. Wraps
+`CreateWatchlist` / `UpdateWatchlist` / `DeleteWatchlist`. Ownership-gated on the caller's `x-user-id`
+(never an admin scope).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `operation` | string | yes | `create` \| `update` \| `delete` |
+| `watchlist_id` | string | for update/delete | The list to act on (ignored for `create`) |
+| `name` | string | for `create` | List name. On `update`, omit to keep the current name |
+| `description` | string | no | List description. On `update`, omit to keep the current value |
+| `symbols` | string[] | no | Bare (unbound) ticker symbols |
+| `bindings` | dict[] | no | `{"symbol": <ticker>, "strategy_id": <id or "">}` objects; may combine with `symbols` |
+
+- **create** — makes a new caller-owned list from `name` (+ optional `description`/`symbols`/
+  `bindings`); new entries are recorded as `MANUAL` (user-curated).
+- **update — READ-MODIFY-WRITE MERGE.** The backend `UpdateWatchlist` is replace-all (it clears then
+  re-inserts the list's stocks) and requires a name, so this tool fetches the current list first and
+  **preserves every field you do not pass**: an omitted `name`/`description` keeps the stored value,
+  and omitting **both** `symbols` and `bindings` preserves the existing stocks exactly — so an
+  `update` with only a new `name` renames the list **without** clearing its stocks. Passing `symbols`
+  and/or `bindings` **replaces** the whole stock set with those `MANUAL` entries. Use
+  `manage_watchlist_symbols` to add/remove individual stocks without a full replace. (The
+  read-then-write is **not atomic** — a concurrent add between the two steps could be lost.)
+- **delete** — removes the list. The one per-user **system-managed** signals watchlist is
+  delete-protected and its deletion is refused (`FAILED_PRECONDITION`).
+
+Returns `{"watchlist": <watchlist>}` for `create`/`update`; `{"deleted": true, "watchlist_id": <id>}`
+for `delete`.
+
+**Errors:** `unknown operation '<op>' (expected create/update/delete)`; `manage_watchlist(...) requires
+a name`/`a watchlist_id`; `watchlist not found`; `permission denied` (non-owner); `invalid argument`
+(e.g. per-user or per-list cap exceeded, empty name, or the system-list delete refusal);
+`RuntimeError` → no verified caller claims.
+
+---
+
+### `manage_watchlist_symbols`
+
+Add or remove stocks on one of the caller's watchlists in `xstockstrat-portfolio`. Wraps
+`AddWatchlistSymbols` / `RemoveWatchlistSymbols`. Ownership-gated on the caller's `x-user-id`.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `operation` | string | yes | `add` \| `remove` |
+| `watchlist_id` | string | yes | The list to mutate |
+| `symbols` | string[] | no | For `add`: unbound tickers to add. For `remove`: tickers to drop |
+| `bindings` | dict[] | `add` only | `{"symbol": <ticker>, "strategy_id": <id or "">}` objects to add; may combine with `symbols` |
+
+- **add** — unions the given symbols/bindings into the list (an already-present symbol keeps its
+  stored binding — first-writer-wins) and records new entries as `MANUAL`, distinct from the `SIGNAL`
+  entries `ingest_signal` (`direction='watchlist'`) adds. The per-list symbol cap is enforced by the
+  backend.
+- **remove** — drops the given `symbols`; symbols not on the list are ignored.
+
+Returns `{"watchlist": <watchlist>}` — the updated list.
+
+**Errors:** `unknown operation '<op>' (expected add/remove)`; `manage_watchlist_symbols requires a
+watchlist_id`; `watchlist not found`; `permission denied` (non-owner); `invalid argument` (per-list
+cap exceeded); `RuntimeError` → no verified caller claims.
 
 ---
 

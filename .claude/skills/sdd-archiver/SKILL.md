@@ -159,6 +159,31 @@ follow-up unless a target is given. Record each human choice for the rewritten `
 
 ---
 
+## PHASE 4c — PROMOTE ACCEPTANCE SCENARIOS (C-16 backfill, read-only planning)
+
+`acceptance.feature` is retained, but its `@AC-*` scenarios must be **promoted** into the durable
+business-rule suites at launch (**C-16**) — and a feature implemented outside the standard
+`/sdd-execute` loop (or launched before this step existed) may never have been promoted, leaving the
+per-service suites empty and the guarantees invisible to future recon. The archiver is a curation
+point for those suites, so before pruning it ensures the feature's scenarios are present.
+
+Spawn the **`scenario-promoter`** subagent via `Task` (read-only), passing: `slug`, source feature
+number `NNN`, the path to `acceptance.feature`, the **affected services** (from `feature.md`'s
+Reviewers table), and the existing suite paths to dedup against
+(`services/xstockstrat-<svc>/acceptance/*.feature` per affected service +
+`docs/sdd/business-rules/platform.feature`). It returns a **promotion plan**: per-`@AC-*` verdict
+(`NEW`/`DUP`/`OVERLAP`/`CONFLICT`), the target suite for each, and ready-to-write scenario blocks with
+`@feature-<NNN>` provenance tags. Hold the plan; the writes happen in Phase 5.
+
+- If every scenario is `DUP` (already promoted), there is nothing to write — note "scenarios already
+  promoted" and continue.
+- A `CONFLICT` (a launched feature contradicting a standing promoted rule) is surfaced to the user as
+  an Open Thread / PR note, never silently written over — do not resolve it in the archiver.
+- `acceptance.feature` may be pruned **only** once its scenarios are confirmed present in the suites
+  (it is not on the deletion allowlist anyway — this is the confirmation, not a licence to delete).
+
+---
+
 ## PHASE 5 — WRITE + PRUNE (orchestrator is the single writer)
 
 Read `reference/write-formats.md` for the exact blocks. On a `claude/archive-<slug>` branch (or
@@ -171,13 +196,18 @@ Read `reference/write-formats.md` for the exact blocks. On a `claude/archive-<sl
 3. **feature.md.** Add `**Archived**: <TODAY>` to the header and append one `## Status History`
    row. **Never touch `status.md`** — an archived `launched` feature's `status.md` still reads
    `launched`; `**Archived**` is orthogonal to lifecycle status.
-4. **Prune.** `git rm` the allowlist files present (`product-spec.md`, `recon.md`, `design.md`,
+4. **Promote scenarios (from the Phase-4c plan).** Append each `NEW` scenario block verbatim to its
+   target suite, creating a `services/xstockstrat-<svc>/acceptance/` dir + file header when the plan
+   says `CREATE`. Skip `DUP`/`OVERLAP`/`CONFLICT`. Never rewrite or delete an existing promoted
+   scenario. Nothing to do if the plan was all-`DUP`.
+5. **Prune.** `git rm` the allowlist files present (`product-spec.md`, `recon.md`, `design.md`,
    `implementation-spec.md`) **plus** any extra the human chose `Delete it` for at Phase 4b — and
    nothing else. Extras marked keep/relocate stay in place.
-5. **Stage nothing else.** `git add` only the ledger files, `context.md`, and `feature.md` (the
-   `git rm` already stages the deletions). F-08 staging scope.
+6. **Stage nothing else.** `git add` only the ledger files, `context.md`, `feature.md`, and any
+   promoted suite files (`services/*/acceptance/*.feature`, `docs/sdd/business-rules/platform.feature`)
+   — the `git rm` already stages the deletions. F-08 staging scope.
 
-Commit: `docs(archive): archive <slug> — synthesis to context.md + Ledger, prune specs`.
+Commit: `docs(archive): archive <slug> — synthesis to context.md + Ledger, promote scenarios, prune specs`.
 
 ---
 
@@ -210,12 +240,15 @@ if the context-forge plugin is unavailable, note that in the PR body rather than
 - **Deletion is a fixed allowlist** — `product-spec.md`, `recon.md`, `design.md`,
   `implementation-spec.md`. Never `git rm` any other file or subdir on the archiver's own judgment.
 - **`acceptance.feature` is deliberately NOT on the deletion allowlist (Constitution C-16).** Its
-  `@AC-*` scenarios were promoted into the durable per-service suites at launch; the per-feature copy
-  is retained as the provenance record. The archiver's business-rule role is **curation of the
-  per-service suites** (`services/xstockstrat-<svc>/acceptance/*.feature`, `docs/sdd/business-rules/
-  platform.feature`) — collapse near-duplicate scenarios, retire a scenario a rollback invalidated —
-  never deleting business rules. (Pruning a per-feature `acceptance.feature` is allowed only once its
-  scenarios are confirmed present in the suite, and only via the Phase-4b extras gate.)
+  `@AC-*` scenarios are promoted into the durable per-service suites at launch; the per-feature copy
+  is retained as the provenance record. **Phase 4c** ensures that promotion happened (via the
+  read-only `scenario-promoter` subagent) and Phase 5 writes any missing scenarios — closing the gap
+  for a feature that launched outside the standard `/sdd-execute` loop. The archiver's business-rule
+  role is otherwise **curation of the per-service suites** (`services/xstockstrat-<svc>/acceptance/*.feature`,
+  `docs/sdd/business-rules/platform.feature`) — collapse near-duplicate scenarios, retire a scenario a
+  rollback invalidated — never deleting business rules or rewriting an existing promoted scenario.
+  (Pruning a per-feature `acceptance.feature` is allowed only once its scenarios are confirmed present
+  in the suites — which Phase 4c does.)
 - **Any non-standard artifact requires the human's decision at the Phase-4b extras gate** before it
   is kept, relocated, or deleted. Only an explicit `Delete it` authorizes removing it.
 - **Dedup grep is literal fixed-string** on the full `NNN-slug` (`grep -Fn`), never a dash-bracketed

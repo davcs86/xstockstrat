@@ -1994,3 +1994,53 @@ reusing.
 - **Rule it implies**: reverses the "no secrets in config" ban (Rule 6 / C-05) **only** when all three
   guards + the distinct-failure resolver are present and the override is sign-off-recorded in context.md.
 
+### 2026-08-21 — config-secrets-and-scoping — design
+- **Pattern**: A config/tooling scope axis **derived from the deployment instance** (here config
+  `environment` ← `APPLICATION_ENV`, and paper/live ← environment) must be resolved server-side at
+  the edge and never exposed as a caller-selectable tool/RPC parameter. Shipping the agent config
+  tools with a caller-facing `environment` arg let a caller target a *different* environment's rows;
+  it was reversed in operator review — env is a deployment property, not a caller choice.
+- **Evidence**: `docs/roadmap/features/147-config-secrets-and-scoping/context.md` (PR #994 review,
+  item 1); shipped removal in `services/xstockstrat-agent/app/tools.py` (`get_config`/
+  `list_config_keys`/`set_config` no longer take `environment`, always `_resolve_scope("")`).
+- **Rule it implies**: a deployment-derived scope axis is resolved at the edge from the instance,
+  never accepted as a request param — candidate **P-\***.
+
+### 2026-08-21 — config-secrets-and-scoping — design
+- **Pattern**: When the backend authz is **owner-only self-service** (a per-user write is allowed
+  only when the propagated `x-user-id == target user_id`, with **no** admin override), the consumer
+  UI must not present a broader scope selector. Clamp the effective scope to the authenticated
+  session user **server-side**, so a hand-edited `?user=<other>` collapses to global instead of
+  rendering or targeting another user's rows. Shipping a free-form "enter any user id" control first
+  contradicted the backend rule and had to be clamped post-launch.
+- **Evidence**: `services/xstockstrat-ui/src/app/config-ui/scope.ts` +
+  `services/xstockstrat-ui/src/app/config-ui/ScopeControl.tsx` (PR #996); backend gate
+  `services/xstockstrat-config/src/grpc/configServiceImpl.ts` `setConfig` (`PER_USER_SCOPE_ERROR`).
+- **Rule it implies**: a UI affordance must never expose a scope the backend authz forbids; clamp
+  the scope server-side, never trust a client-supplied scope key.
+
+### 2026-08-21 — config-secrets-and-scoping — reuse
+- **Pattern**: Give an MCP agent **uniform** outbound propagation of the full header trio
+  (`x-user-id`/`x-access-scope`/`x-trace-id`) with **one** `ServerMiddleware` that binds a
+  per-request `contextvar` for the duration of each `tools/call`, instead of threading headers
+  through every tool. This works only because the MCP SDK's `ServerMiddleware` runs in the handler's
+  **own task** (verified `runner.py` `_make_context` → `_compose_server_middleware`), so the
+  contextvar reaches every `client.*` call; new tools inherit forwarding for free (no per-tool
+  plumbing).
+- **Evidence**: `services/xstockstrat-agent/app/tools.py` `CallerPropagationMiddleware`;
+  `services/xstockstrat-agent/app/client.py` `_metadata`/`set_caller`/`reset_caller`.
+- **Rule it implies**: outbound header propagation at an agent edge is a middleware concern, not
+  per-tool boilerplate.
+
+### 2026-08-21 — mcp-watchlist-tools — reuse
+- **Pattern**: When wrapping a REPLACE-semantics backend mutation (delete-all-then-reinsert) as an
+  agent `manage_<noun> update` verb, implement the tool as a **read-modify-write merge** — fetch the
+  current resource, preserve every field the caller didn't supply, resend the full set — so a
+  partial update (e.g. rename) doesn't wipe the rest. This makes the agent tool feel like the
+  feature-070 `manage_strategy` partial merge even when the backend RPC is a full replace.
+- **Evidence**: `xstockstrat-portfolio` `WatchlistRepo.Update` (`internal/repository/watchlist_repo.go`)
+  DELETEs all `watchlist_symbols` then re-inserts the request bindings; the `manage_watchlist` agent
+  tool (`services/xstockstrat-agent/app/tools.py`) reads via `GetWatchlist` first.
+- **Rule it implies**: before wrapping a backend write as a partial-update tool, check whether the
+  RPC is replace-vs-merge at the DB layer; a replace RPC needs a read-modify-write shim or it silently
+  destroys omitted state (the F-12/RC-1 drift class).

@@ -8,7 +8,9 @@ mediate every exchange so the two subagents never see each other's raw output (*
 ## Inputs you hold
 
 - `recon.md` (written in Phase 0) — the grounded facts, **including `## Existing Business Rules`**
-  (the `@AC-*` guarantees of the affected services, from their `acceptance/*.feature` suites).
+  (the `@AC-*` guarantees of the affected services + `platform.feature`, surfaced by the
+  `scenario-recon` subagent in Phase 0 and classified PRESERVE / EXTEND / CHANGE). This section is the
+  design-adversary's C-16 regression guard for every round below.
 - `product-spec.md` — the requirements.
 - `acceptance.feature` — this feature's own `@AC-*` scenarios.
 - `docs/sdd/constitution.md` — the rules the adversary cites by ID.

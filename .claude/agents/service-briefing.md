@@ -30,9 +30,11 @@ enough for the caller to make correct edits without reading the whole service.
 3. If the caller named a task, read only the pattern/runbook docs that bear on it.
 4. **Business rules.** Glob `services/xstockstrat-<name>/acceptance/*.feature`. If present, list each
    `@AC-*` scenario as a one-line guarantee (tag + `Scenario:` title only — do **not** paste full
-   Given/When/Then). These are the behaviors the caller must not regress (Constitution **C-16**); a
-   recon caller folds them into `recon.md` → Existing Business Rules. If the dir is absent, say
-   "no acceptance suite yet."
+   Given/When/Then). These are the behaviors the caller (a `/sdd-spec` or `/sdd-execute` step working
+   in this service) must not regress (Constitution **C-16**). If the dir is absent, say "no acceptance
+   suite yet." (For `/sdd-design` recon, the dedicated `scenario-recon` subagent surfaces these across
+   *all* affected services + `platform.feature` and classifies them — this briefing only covers the
+   one service you name.)
 
 ## Output format (always)
 

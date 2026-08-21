@@ -21,8 +21,13 @@ launched feature promotes a scenario into it, not ahead of demand.
 1. **Pending** — authored per feature in `docs/roadmap/features/<NNN-slug>/acceptance.feature`
    (`/sdd-story`), reviewed (`/sdd-review`, **C-15**), and traced to test steps (`/sdd-spec`).
 2. **Canonical** — on launch/integration the scenarios are **promoted** (deduped) into the affected
-   services' suites (`/sdd-execute` integration PR, `/promote` backstop). `/sdd-archiver` curates
-   these suites; it never deletes them.
+   services' suites. Promotion is planned by the read-only **`scenario-promoter`** subagent
+   (`.claude/agents/scenario-promoter.md`) — it maps each `@AC-*` to its owning suite (per-service or
+   cross-cutting `platform.feature`), dedups, and returns ready-to-write blocks with `@feature-<NNN>`
+   provenance tags; the invoking skill writes them (single-writer). Three invocation points, in order
+   of precedence: `/sdd-execute` at integration (primary), the `/promote` backstop (P7.5), and
+   `/sdd-archiver` Phase 4c (a final backfill before a launched feature's specs are pruned).
+   `/sdd-archiver` also curates these suites; it never deletes or rewrites a promoted scenario.
 
 ## Scenario conventions
 
@@ -36,8 +41,12 @@ launched feature promotes a scenario into it, not ahead of demand.
 
 ## What an agent needs to know
 
-- **Recon reads, never guesses.** `/sdd-design` Phase 0 loads the affected services' suites (+ this
-  `platform.feature`) into `recon.md` → `## Existing Business Rules`; the design-adversary blocks a
-  design that breaks an existing `@AC-*` (**C-16**).
+- **Recon reads, never guesses.** `/sdd-design` Phase 0 spawns the read-only **`scenario-recon`**
+  subagent (`.claude/agents/scenario-recon.md`, the read-side mirror of `scenario-promoter`) to load
+  the affected services' suites (+ this `platform.feature`), filter to the `@AC-*` guarantees the
+  feature could touch, and classify each PRESERVE / EXTEND / CHANGE; the orchestrator folds that
+  digest into `recon.md` → `## Existing Business Rules`, and the design-adversary blocks a design that
+  breaks an existing `@AC-*` (**C-16**). Promotion (`scenario-promoter`) writes rules *in*;
+  recon (`scenario-recon`) reads them *out* — one pair, opposite directions.
 - **Never hand-author a rule here to "document" behavior** — a rule enters only by promotion from a
   feature's reviewed `acceptance.feature`, so every guarantee is traceable to the feature that made it.
