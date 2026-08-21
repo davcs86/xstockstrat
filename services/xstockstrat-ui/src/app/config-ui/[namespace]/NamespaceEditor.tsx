@@ -290,10 +290,11 @@ export function NamespaceEditor({ namespace, env, user, nativeEnv }: Props) {
 
       {user && (
         <p className="text-xs text-muted-foreground border border-border rounded-md px-3 py-2 bg-muted/30">
-          Per-user config is <span className="font-medium">self-service</span>: you can save changes
-          only to your own account&apos;s overrides. Saving another user&apos;s{' '}
-          <span className="font-mono">user:{user}</span> row is rejected by the backend (admins
-          reach globals and their own rows only).
+          Editing <span className="font-medium">your own</span> per-user overrides for{' '}
+          <span className="font-mono">{env}</span>. Per-user config is self-service — you can only
+          edit your own account&apos;s overrides, never another user&apos;s. These layer over the
+          global value; switch to the <span className="font-medium">global</span> scope to change
+          the shared value.
         </p>
       )}
 
