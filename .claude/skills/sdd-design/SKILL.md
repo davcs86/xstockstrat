@@ -86,10 +86,18 @@ Read **`reference/recon-checklist.md`** and follow it. In short:
    feature's symbols, config keys, env vars, and ports. Each returns a `path:line` digest (+ a
    `## Not found` section). You never invent — an unfound thing stays in `## Not found` (**F-04**,
    **P-03**).
-2. Synthesize the digests + the relevant ledger entries into `$FEATURE_DIR/recon.md` using
+2. In the **same** parallel batch, spawn **one** **`scenario-recon`** subagent (the read-side mirror
+   of `scenario-promoter`), handing it the feature subject + the affected services. It reads the
+   affected services' `acceptance/*.feature` suites **and** the cross-cutting
+   `docs/sdd/business-rules/platform.feature`, filters to the existing `@AC-*` guarantees this feature
+   could touch, and returns a ready-to-fold **Existing Business Rules** digest (each rule classified
+   PRESERVE / EXTEND / CHANGE). This is the C-16 read side — the design-adversary enforces it in
+   Phase 1 (**C-16**).
+3. Synthesize the digests + the `scenario-recon` digest + the relevant ledger entries into
+   `$FEATURE_DIR/recon.md` using
    `templates/recon.md`. The **Patterns to REUSE** section is the anti-duplication core — list real,
    existing patterns the implementation should reuse rather than re-create.
-3. Present a 4–6 line recon summary to the user and continue to Phase 1 (no separate gate here — the
+4. Present a 4–6 line recon summary to the user and continue to Phase 1 (no separate gate here — the
    gate is at the end of the debate).
 
 **Write `recon.md` now** (this is the first write; it is allowed — the lifecycle flip happens only

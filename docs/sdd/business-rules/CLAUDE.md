@@ -41,8 +41,12 @@ launched feature promotes a scenario into it, not ahead of demand.
 
 ## What an agent needs to know
 
-- **Recon reads, never guesses.** `/sdd-design` Phase 0 loads the affected services' suites (+ this
-  `platform.feature`) into `recon.md` → `## Existing Business Rules`; the design-adversary blocks a
-  design that breaks an existing `@AC-*` (**C-16**).
+- **Recon reads, never guesses.** `/sdd-design` Phase 0 spawns the read-only **`scenario-recon`**
+  subagent (`.claude/agents/scenario-recon.md`, the read-side mirror of `scenario-promoter`) to load
+  the affected services' suites (+ this `platform.feature`), filter to the `@AC-*` guarantees the
+  feature could touch, and classify each PRESERVE / EXTEND / CHANGE; the orchestrator folds that
+  digest into `recon.md` → `## Existing Business Rules`, and the design-adversary blocks a design that
+  breaks an existing `@AC-*` (**C-16**). Promotion (`scenario-promoter`) writes rules *in*;
+  recon (`scenario-recon`) reads them *out* — one pair, opposite directions.
 - **Never hand-author a rule here to "document" behavior** — a rule enters only by promotion from a
   feature's reviewed `acceptance.feature`, so every guarantee is traceable to the feature that made it.

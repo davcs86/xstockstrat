@@ -34,10 +34,10 @@ For each affected service:
 
 ## Existing Business Rules (preserve / extend)
 
-<Constitution **C-16** — the behavioral counterpart to Patterns to REUSE. For each affected service,
-read `services/xstockstrat-<svc>/acceptance/*.feature` (surfaced by the `service-briefing` subagent)
-plus `docs/sdd/business-rules/platform.feature`, and list the existing guarantees this feature must
-not break, plus any it intends to extend or change.>
+<Constitution **C-16** — the behavioral counterpart to Patterns to REUSE. Folded from the
+`scenario-recon` subagent's digest, which reads `services/xstockstrat-<svc>/acceptance/*.feature` for
+each affected service plus `docs/sdd/business-rules/platform.feature` and lists the existing
+guarantees this feature must not break, plus any it intends to extend or change.>
 - **PRESERVE** `@AC-<n>` "<scenario title>" (`services/xstockstrat-<svc>/acceptance/<file>.feature`) — this feature must not regress it
 - **EXTEND** `@AC-<n>` "<scenario title>" — this feature adds a new case alongside it
 - **CHANGE** `@AC-<n>` "<scenario title>" — this feature deliberately alters the guarantee (requires user sign-off recorded in `context.md`; carry into design.md)
