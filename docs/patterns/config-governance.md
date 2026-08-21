@@ -141,7 +141,7 @@ query-time quantile bucketing). No credential keys.
 
 Adds a best-effort external alert fanout (Slack incoming webhook + SendGrid v3) as a side-channel on
 `EmitAlert`. The five keys below are the gate/dedup/email knobs, seeded by config migration `018` for
-`dev`+`production` (global scope — the `trading_mode` axis was removed by feature 147). The two
+`staging`+`production` (global scope — the `trading_mode` axis was removed by feature 147). The two
 credentials (`SLACK_WEBHOOK_URL`, `SENDGRID_API_KEY`) are **not** config keys — they are app-level
 `type: SECRET` deploy-pipeline env vars (like `JWT_SECRET`), distinct from the data-source vendor
 credentials feature 147 moved into encrypted config. `min_severity`'s default `2` (WARNING)

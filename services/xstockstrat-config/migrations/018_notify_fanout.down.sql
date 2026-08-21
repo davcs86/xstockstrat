@@ -1,6 +1,6 @@
--- Migration: 017_notify_fanout.down.sql
+-- Migration: 018_notify_fanout.down.sql
 -- Service: xstockstrat-config
--- Reverses 017_notify_fanout.up.sql — removes the seeded notify.fanout.* keys.
+-- Reverses 018_notify_fanout.up.sql — removes the seeded notify.fanout.* keys.
 
 DELETE FROM config.config_values
  WHERE namespace = 'notify'

@@ -205,3 +205,18 @@ as 127). Node/TS notify service — no proto/codegen.
 
 ## Session 2026-08-20 — sdd-execute — feature 020 COMPLETE
 All 7 steps done. status.md → code-completed.
+
+## Session 2026-08-21 — rebase onto main-dev (feature 147 collision) — DEVIATION
+Rebasing the integration branch onto the advanced `main-dev` collided with feature 147
+(`config-secrets-and-scoping`), which re-modelled `config.config_values`. Two forced changes to the
+feature-020 config seed (design-time artifacts still say `017`/`dev`/`trading_mode`; the code now
+reflects post-147 reality):
+- **Migration renumbered `017_notify_fanout` → `018_notify_fanout`** (`.up`/`.down`) — 147 took `017`
+  (`017_config_secrets_and_scoping`). 018 is the next free number.
+- **INSERT rewritten for the post-147 schema**: `trading_mode` column dropped (removed by 147, both
+  from the column list and the `ON CONFLICT` target); environment seeds changed `dev` → `staging`
+  (147 renamed the env); `ON CONFLICT (namespace, key, environment, trading_mode)` →
+  `ON CONFLICT (namespace, key, environment, COALESCE(user_id, ''))`; rows are global (`user_id NULL`).
+- config-governance.md feature-020 block updated to reference migration `018` and `staging`+`production`.
+- Deploy-pipeline conflicts resolved by keeping 147's side (which retired the Alpaca/FMP/Finnhub deploy
+  secrets into encrypted config) plus the feature-020 Slack/SendGrid `type: SECRET` additions.
