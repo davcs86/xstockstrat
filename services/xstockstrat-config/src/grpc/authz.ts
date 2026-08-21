@@ -59,6 +59,19 @@ export const ADMIN_SCOPE_ERROR = {
 };
 
 /**
+ * Denial for a per-user write whose target `user_id` is not the caller's own (PR #994). A per-user
+ * config row is **self-service**: only its owner may write it, and — unlike a global write — an
+ * ADMIN caller earns NO override for someone else's per-user row (admins reach only globals and
+ * their own per-user rows). The gate compares the propagated `x-user-id` against the request's
+ * `user_id`, so an edge that fails to propagate the caller id lands here rather than silently
+ * writing another user's row.
+ */
+export const PER_USER_SCOPE_ERROR = {
+  code: status.PERMISSION_DENIED,
+  message: 'per-user config is self-service: you may only write your own user_id',
+};
+
+/**
  * Denial when a write carries no attributable author at all — neither an explicit
  * `author` field nor a propagated `x-user-id`. Mirrors the indicators servicer, where
  * `request.author` wins and the propagated id is the fallback.

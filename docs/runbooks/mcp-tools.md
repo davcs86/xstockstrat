@@ -805,10 +805,14 @@ Read a namespace's current config values from `xstockstrat-config`. **Read-only.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `namespace` | string | yes | `marketdata`, `analysis`, `trading`, `platform`, … |
-| `environment` | string | no | `dev` or `production`. Omit to use the agent deployment's own `APPLICATION_ENV` |
-| `trading_mode` | string | no | `paper`, `live` or `all`. Omit to use the agent's own `TRADING_MODE` |
+| `user_id` | string | no | Per-user scope. Omit for the global values; pass a user id to see that user's per-user overrides layered over the global values |
 
-Returns `{namespace, version, environment, trading_mode, values}`, each value being
+The **environment is always this agent deployment's own** (`production`/`staging`, from
+`APPLICATION_ENV`) — it is a deployment property, not a caller choice, so there is no `environment`
+parameter and the tool cannot read another environment's rows (PR #994). `trading_mode` is gone
+(feature 147 — paper/live is derived from environment).
+
+Returns `{namespace, version, environment, user_id, values}`, each value being
 `{value, value_type, is_secret}`.
 
 **Any value flagged `is_secret` is returned as `"[redacted]"`.** Redaction keys on the flag, not on
@@ -827,10 +831,12 @@ nothing here can leak a secret.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `namespace` | string | yes | As above |
-| `environment` | string | no | Defaults to the agent's `APPLICATION_ENV` |
-| `trading_mode` | string | no | Defaults to the agent's `TRADING_MODE` |
+| `user_id` | string | no | Per-user scope. Omit for the global keys; pass a user id to see that user's per-user overrides layered over the global keys |
 
-Returns `{namespace, environment, trading_mode, keys[]}`; each key carries `key`, `description`,
+The environment is always the agent's own deployment env (from `APPLICATION_ENV`) — no `environment`
+parameter, no `trading_mode` (PR #994 / feature 147).
+
+Returns `{namespace, environment, user_id, keys[]}`; each key carries `key`, `description`,
 `default_value`, `is_secret`, `consuming_service`.
 
 Use it to discover what exists — and which keys are secret — before calling `set_config`.
@@ -839,7 +845,8 @@ Use it to discover what exists — and which keys are secret — before calling 
 
 ### `set_config`
 
-Write **one non-secret** config value. **Admin-scoped write. Streamable HTTP transport only.**
+Write **one** config value — **including `is_secret` keys** (PR #994). **Admin-scoped write.
+Streamable HTTP transport only.**
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -849,9 +856,11 @@ Write **one non-secret** config value. **Admin-scoped write. Streamable HTTP tra
 | `value` | string | yes | Converted according to `value_type` |
 | `author` | string | yes | Recorded in `config.config_audit` |
 | `reason` | string | yes | Recorded alongside `author` |
-| `environment` | string | no | Defaults to the agent's `APPLICATION_ENV` |
-| `trading_mode` | string | no | Defaults to the agent's `TRADING_MODE` |
-| `create_key` | bool | no | Default `false`. Set `true` **only** to deliberately register a brand-new key at this `(namespace, environment, trading_mode)` scope. Left false, a write to an unregistered scope is refused (see Errors) so a typo cannot mint an orphan key (feature 091). |
+| `user_id` | string | no | Per-user override. Omit to write the global value. Secret keys are **global-only** — a per-user secret write is rejected `INVALID_ARGUMENT` |
+| `create_key` | bool | no | Default `false`. Set `true` **only** to deliberately register a brand-new key at this `(namespace, key, environment, user_id)` scope. Left false, a write to an unregistered scope is refused (see Errors) so a typo cannot mint an orphan key (feature 091). |
+
+The **environment is always the agent's own deployment env** (`APPLICATION_ENV`) — no `environment`
+parameter, no `trading_mode` (PR #994 / feature 147).
 
 Returns `{version, updated_at}` — **never the value**.
 
@@ -861,17 +870,19 @@ calling user's derived `x-access-scope`, so `xstockstrat-config` rejects a non-a
 write tool works (it was `set_config`-only under feature 073); the hardcoded admin scope was removed
 (invariant **AGENT-3/AGENT-4**).
 
-**Secret keys cannot be written.** Rejected both by the `secret.` name prefix (checked before any
-RPC — the only thing that can stop a *new* secret key being created) and by the `is_secret` flag
-read from `ListKeys`. Credentials are delivered as `type: SECRET` environment variables. If the
-flag lookup fails, the write is refused rather than allowed through.
+**Secret keys ARE writable (PR #994).** The earlier client-side refusal was removed. The value is
+encrypted at rest by `xstockstrat-config` (AES-256-GCM, `is_secret` **row-authoritative on write**),
+so an admin can rotate a vendor credential through this tool; the plaintext is never echoed back or
+broadcast, `get_config` still redacts it, and only allow-listed internal services decrypt it via the
+`GetSecret` RPC. The backend admin gate is the authorization; the `secret.*` name prefix is retired
+(`is_secret` is the sole signal).
 
 **Transport.** Requires Streamable HTTP — since feature 079 the only remote transport the agent
 serves. The tool still refuses when no verified caller claims are on the request; that check is now
 defence in depth rather than the live transport guard.
 
 **Key creation is gated (feature 091).** A write to a not-yet-registered key at the exact
-`(namespace, environment, trading_mode)` scope is refused with `NOT_FOUND` unless you pass
+`(namespace, key, environment, user_id)` scope is refused with `NOT_FOUND` unless you pass
 `create_key=true`. This closes the old blind-upsert hole where a mistyped key silently created an
 orphan row no service reads. `list_config_keys` first and copy the key verbatim; use `create_key`
 only when you genuinely intend to register a new key. (The only key-creation paths are now migration

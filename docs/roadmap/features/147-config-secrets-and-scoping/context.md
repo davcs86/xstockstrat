@@ -127,3 +127,47 @@ them. Until set, marketdata resolves them empty and takes its warn-and-start pat
 ### Teardown note
 `/context-scrubber` (context-forge plugin) is not available in this session, so the doc-drift scan
 was not run automatically; the governance docs were rewritten directly in Step 12 instead.
+
+## Session 2026-08-21 — PR #994 review round (operator comments)
+
+The operator left four review threads on PR #994; all four were addressed on the same branch.
+
+1. **env tied to the deployment instance** (`tools.py`). Removed the caller-facing `environment`
+   parameter from the three agent config tools (`get_config`/`list_config_keys`/`set_config`) — env
+   is a deployment property, always resolved from `APPLICATION_ENV`; a caller can no longer select a
+   different environment. Tests + `mcp-tools.md` + agent CLAUDE.md updated.
+
+2. **unblock secret writes via MCP + UI** (`tools.py:1121`, "This also applies to the UI"). Removed
+   the agent's client-side `is_secret` refusal (+ its ListKeys pre-check) — an admin now sets a
+   secret through the MCP, relying on the backend admin gate + row-authoritative encryption.
+   config-ui `NamespaceEditor` now offers Edit for secret rows (masked `[secret]` display, editor
+   opens BLANK — never the redacted sentinel, password-masked input). New e2e `secret-editing.spec.ts`;
+   the stale `secret.`-prefixed fixture renamed to `marketdata.alpaca.api_key`.
+
+3. **per-user config authorization** (operator gate, `AskUserQuestion`). Operator chose **per-user
+   self-service**, with the constraint *"admins only have access to themselves and globals, not other
+   users."* So `SetConfig` is now scope-aware (`configServiceImpl.setConfig` + new
+   `PER_USER_SCOPE_ERROR`): a **global** write needs the ADMIN bit (or an authorized internal caller);
+   a **per-user** write is allowed only when the propagated `x-user-id` == the target `user_id` — an
+   admin earns NO override for another user's per-user row. Secrets stay global-only. New authz tests
+   in `setConfigAuthz.test.ts`; config CLAUDE.md invariant #5 + config-governance rewritten; config-ui
+   shows a self-service note. This relies on the agent now forwarding `x-user-id` (item 4).
+
+4. **all edge services forward all headers** (`context-constitution.md:19`, "the opposite of what I
+   wanted"). Operator chose **full uniform forwarding + a generated trace-id**. The agent is now an
+   edge that forwards the full trio (`x-user-id` + `x-access-scope` + `x-trace-id`) on EVERY outbound
+   backend gRPC, sourced from the verified OAuth claims (feature-111 anti-spoofing preserved), minting
+   a fresh `x-trace-id` at the edge when absent. Implemented with ONE `CallerPropagationMiddleware`
+   (`app/tools.py`) that binds `client`'s per-request contextvar for each `tools/call` — verified the
+   MCP SDK's `ServerMiddleware` runs in the handler's own task (`runner.py` `_make_context` →
+   `_compose_server_middleware`), so the contextvar propagates to every `client.*` call with no
+   per-tool plumbing. `client._metadata(*extra)` de-dups a legacy per-call header against the context
+   and stays empty on the pre-token OAuth path / stdio. AGENT-3/4 rewritten (AGENT-4 was the exact
+   line commented on). New `tests/test_header_propagation.py` (12 cases).
+
+**thread 4** (`main.go:82`, "globals or per user?") — answered on the PR thread: the four vendor
+credentials are **global** (resolved at startup with no `user_id`; secrets are global-only by design).
+No code change.
+
+Test status this round: agent 237 pass / ruff clean / 77% cov; config 83 pass; config-ui tsc clean +
+19 config-ui e2e pass (incl. new secret-editing spec).

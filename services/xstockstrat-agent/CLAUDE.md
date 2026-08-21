@@ -16,11 +16,16 @@ transport at `/sse` + `/messages` was **removed by feature 079**; those paths no
 naming the replacement URL. `MCP_TRANSPORT=sse` remains accepted as a deprecated alias for
 `http` (it logs a warning and starts the same server), as does `MCP_SSE_PORT` for
 `MCP_HTTP_PORT`. `MCP_TRANSPORT=stdio` is unaffected and stays for local use.
-Management **write** tools forward the **real caller's derived** `x-access-scope` so the backends'
-role checks *verify* admin (feature 092 generalized this from the feature-073 `set_config`-only case;
-the old hardcoded admin scope was removed). The strategy tools (`manage_strategy`/`set_strategy_live`)
-are the exception since feature 133 — they are **ownership**-gated on the forwarded `x-user-id`, not
-admin-gated. See § Management-tool authorization.
+The agent is a platform **edge** and forwards the full propagation trio — `x-user-id` +
+`x-access-scope` + `x-trace-id` — on **every** outbound backend gRPC (PR #994), sourced from the
+caller's verified OAuth claims with a fresh `x-trace-id` minted at the edge when absent. This is
+wired by one `CallerPropagationMiddleware` (`app/tools.py`) that binds the identity onto `client`'s
+per-request contextvar for each `tools/call`; there is **no per-tool plumbing** (see constitution
+**AGENT-4**). Backend role checks *verify* admin from the forwarded `x-access-scope` (feature 092
+generalized this from the feature-073 `set_config`-only case; the old hardcoded admin scope was
+removed). The strategy tools (`manage_strategy`/`set_strategy_live`) are the exception since feature
+133 — they are **ownership**-gated on the forwarded `x-user-id`, not admin-gated. See §
+Management-tool authorization.
 
 ## Language
 
@@ -52,9 +57,9 @@ reference):
 | `cancel_backfill` | Cancel a queued/running backfill job (admin-scoped, feature 087) |
 | `test_formula` | Dry-run inline formula source in the sandbox, registers nothing (read-only, feature 087) |
 | `list_strategies` | List stored strategy definitions (read-only, feature 087) |
-| `get_config` | Read a namespace's current config values, secret values redacted (read-only, feature 073); config scope is environment (`production`/`staging`) × optional per-user `user_id` (feature 147) |
-| `list_config_keys` | List a namespace's registered config keys, metadata only (read-only, feature 073) |
-| `set_config` | Write one non-secret config value (admin-scoped write, feature 073); takes an optional `user_id` (per-user override) — no `trading_mode` (feature 147); a write to an unregistered `(namespace,key,environment,user_id)` scope is refused `NOT_FOUND` unless `create_key=true` (feature 091) |
+| `get_config` | Read a namespace's current config values, secret values redacted (read-only, feature 073); scoped by an optional per-user `user_id` — the **environment is always this agent deployment's own** (`APPLICATION_ENV`, no caller override, PR #994) |
+| `list_config_keys` | List a namespace's registered config keys, metadata only (read-only, feature 073); environment is the agent's own deployment env (no caller override, PR #994) |
+| `set_config` | Write one config value **including secrets** (admin-scoped write, feature 073; secret values are encrypted at rest by the config service, PR #994); takes an optional `user_id` (per-user override; secrets are global-only) — no `trading_mode`, and no caller-facing `environment` (always the deployment env, PR #994); a write to an unregistered `(namespace,key,environment,user_id)` scope is refused `NOT_FOUND` unless `create_key=true` (feature 091) |
 | `get_user_metadata` | Fetch the calling user's own profile metadata (read-only, feature 130) |
 | `set_user_metadata` | Partial-update the calling user's own profile metadata (feature 130) |
 
@@ -97,11 +102,14 @@ transport guard. It must keep its current shape: back when both transports exist
 on the request object would *not* have told them apart — both handed a tool a Starlette `Request`
 carrying an `Authorization` header, so only the absence of verified claims distinguished them.
 
-`set_config` also refuses any `is_secret` key (feature 147: the flag from `ListKeys` is now the sole
-signal — the `secret.*` name prefix is retired). Secret values are **managed by an operator via
-config-ui**, which encrypts them at rest; the agent never writes or reads secret plaintext (secrets
-are redacted in `get_config`, and only `xstockstrat-marketdata`-style internal callers resolve them
-via the config service's `GetSecret` RPC).
+`set_config` **can write `is_secret` keys** (PR #994 lifted the earlier client-side refusal). The
+value is encrypted at rest by `xstockstrat-config` (AES-256-GCM, `is_secret` **row-authoritative on
+write**), so an admin may rotate a secret through the MCP just like any other key — the plaintext is
+never echoed back or broadcast, `get_config` still redacts it, and only `xstockstrat-marketdata`-style
+internal callers can decrypt it via the config service's `GetSecret` RPC. Secret writes are
+**global-scope only** (a per-user secret write is rejected `INVALID_ARGUMENT` by the backend), and the
+backend **admin gate** is what authorizes the write. The `secret.*` name prefix is retired — `is_secret`
+is the sole signal.
 
 **Key-creation gate (feature 091).** `set_config` forwards a `create_key` flag
 (`SetConfigRequest.create_key`, default false). `xstockstrat-config` refuses a write to a

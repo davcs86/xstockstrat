@@ -3,6 +3,7 @@ Shared async gRPC client for xstockstrat-agent.
 GetConfigValue() makes a one-shot gRPC call to xstockstrat-config to resolve config values.
 """
 
+import contextvars
 import logging
 import math
 import os
@@ -23,8 +24,65 @@ INDICATORS_ENDPOINT = os.environ.get("INDICATORS_ENDPOINT", "xstockstrat-indicat
 IDENTITY_ENDPOINT = os.environ.get("IDENTITY_ENDPOINT", "xstockstrat-identity:50058")
 
 
-def _metadata() -> list[tuple[str, str]]:
-    return []
+# ── Caller propagation context (PR #994) ─────────────────────────────────────
+# The agent is a platform EDGE and forwards ALL propagation headers — `x-user-id`,
+# `x-access-scope`, `x-trace-id` — on every outbound backend gRPC, sourced from the caller's
+# verified OAuth claims (reversing the old AGENT-4 "originates, forwards nothing" stance). The
+# tool layer sets this per request via `set_caller`; `_metadata()` reads it. It defaults to None
+# so calls made OUTSIDE a tool request (the pre-token OAuth handshake, stdio) forward nothing.
+_Caller = tuple[str, int, str]  # (user_id, access_scope, trace_id)
+_CALLER: contextvars.ContextVar[_Caller | None] = contextvars.ContextVar(
+    "agent_caller", default=None
+)
+
+
+def set_caller(user_id: str, access_scope: int, trace_id: str) -> contextvars.Token:
+    """Bind the current request's caller identity for outbound header propagation.
+
+    Returns the ``contextvars.Token`` to hand to ``reset_caller`` once the request finishes, so the
+    binding never leaks onto the next request that reuses this task."""
+    return _CALLER.set((user_id, access_scope, trace_id))
+
+
+def reset_caller(token: contextvars.Token) -> None:
+    """Undo a ``set_caller`` binding (call in a ``finally`` after the request handler returns)."""
+    _CALLER.reset(token)
+
+
+def clear_caller() -> None:
+    """Clear the caller identity (no verified claims / stdio) so nothing stale is forwarded."""
+    _CALLER.set(None)
+
+
+def _metadata(*extra: tuple[str, str]) -> list[tuple[str, str]]:
+    """Propagation metadata for an outbound backend gRPC call.
+
+    Emits the caller trio (`x-user-id` when non-empty, `x-access-scope`, `x-trace-id`) from the
+    per-request caller context set by `set_caller`, then any explicit ``extra`` headers whose name
+    the context did not already supply — the context is the source of truth, so a redundant extra
+    (e.g. a legacy per-call ``x-access-scope``) is de-duplicated rather than sent twice. When no
+    caller context is bound (stdio, the pre-token OAuth handshake, or a direct unit-test call), the
+    context contributes nothing and only ``extra`` is returned — preserving the pre-PR-#994 behavior
+    for those paths.
+    """
+    caller = _CALLER.get()
+    md: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    if caller is not None:
+        user_id, access_scope, trace_id = caller
+        if user_id:
+            md.append(("x-user-id", user_id))
+            seen.add("x-user-id")
+        md.append(("x-access-scope", str(access_scope)))
+        seen.add("x-access-scope")
+        if trace_id:
+            md.append(("x-trace-id", trace_id))
+            seen.add("x-trace-id")
+    for k, v in extra:
+        if k not in seen:
+            md.append((k, v))
+            seen.add(k)
+    return md
 
 
 def _iso_to_timestamp(iso_str: str) -> Timestamp:
@@ -275,7 +333,7 @@ async def run_backtest(
 
     async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
-        resp = await stub.RunBacktest(req, metadata=[*_metadata(), ("x-user-id", user_id)])
+        resp = await stub.RunBacktest(req, metadata=_metadata(("x-user-id", user_id)))
     # feature 064: return the full BacktestResult (including the per-bar `diagnostics`) so the
     # agent can reason over the day-by-day OHLCV/indicator/decision data and suggest strategy or
     # indicator changes. `preserving_proto_field_name` keeps the snake_case keys existing consumers
@@ -454,7 +512,7 @@ async def manage_strategy(
 
     # feature 092: forward the caller's REAL derived scope (was a hardcoded admin 7). Analysis
     # does the role check on the propagated x-access-scope (admin bit), so it rejects a non-admin.
-    meta = [*_metadata(), ("x-user-id", user_id), ("x-access-scope", str(access_scope))]
+    meta = _metadata(("x-user-id", user_id), ("x-access-scope", str(access_scope)))
     async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.ManageStrategy(req, metadata=meta)
@@ -479,7 +537,7 @@ async def get_strategy(user_id: str, strategy_id: str) -> dict[str, Any]:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.GetStrategy(
             analysis_pb2.GetStrategyRequest(strategy_id=strategy_id),
-            metadata=[*_metadata(), ("x-user-id", user_id)],
+            metadata=_metadata(("x-user-id", user_id)),
         )
     return MessageToDict(
         resp, preserving_proto_field_name=True, always_print_fields_with_no_presence=True
@@ -496,7 +554,7 @@ async def list_strategy_definitions(
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.ListStrategyDefinitions(
             analysis_pb2.ListStrategyDefinitionsRequest(include_inactive=include_inactive),
-            metadata=[*_metadata(), ("x-user-id", user_id)],
+            metadata=_metadata(("x-user-id", user_id)),
         )
     # Feature 087: snake_case to match get_strategy (avoids a third casing across list→get→manage).
     return [MessageToDict(d, preserving_proto_field_name=True) for d in resp.definitions]
@@ -555,7 +613,7 @@ async def cancel_backfill(job_id: str, access_scope: int = 0) -> dict[str, Any]:
         stub = ingest_pb2_grpc.IngestServiceStub(channel)
         resp = await stub.CancelBackfill(
             ingest_pb2.CancelBackfillRequest(job_id=job_id),
-            metadata=[*_metadata(), ("x-access-scope", str(access_scope))],
+            metadata=_metadata(("x-access-scope", str(access_scope))),
         )
     return {
         "job": MessageToDict(
@@ -719,7 +777,7 @@ async def manage_signal_source(
 
     # feature 092: forward the caller's REAL derived scope (was a hardcoded admin 7); ingest's
     # role check (x-access-scope & 0x04) rejects a non-admin.
-    meta = [*_metadata(), ("x-access-scope", str(access_scope))]
+    meta = _metadata(("x-access-scope", str(access_scope)))
     async with grpc.aio.insecure_channel(INGEST_ENDPOINT) as channel:
         stub = ingest_pb2_grpc.IngestServiceStub(channel)
         resp = await stub.ManageSignalSource(req, metadata=meta)
@@ -737,8 +795,9 @@ async def manage_signal_source(
 
 # ── OAuth 2.1 backend gRPC helpers (feature 049 Part B) ──────────────────────
 # These call identity's OAuth RPCs over gRPC. DCR + the OAuth handshake happen before any
-# inbound user context exists, so they carry only _metadata() (empty since feature 097) — there
-# is no x-user-id/x-access-scope to forward at the pre-token stage.
+# inbound user context exists and OUTSIDE a tools/call, so no caller context is bound: `_metadata()`
+# returns [] here (the PR-#994 edge propagation only binds during a tool call) — there is no
+# x-user-id/x-access-scope/x-trace-id to forward at the pre-token stage.
 
 
 async def register_oauth_client(redirect_uris: list[str], client_name: str) -> dict[str, Any]:
@@ -862,7 +921,7 @@ async def get_user_metadata(user_id: str) -> dict:
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
         resp = await stub.GetUserMetadata(
             identity_pb2.GetUserMetadataRequest(),
-            metadata=[*_metadata(), ("x-user-id", user_id)],
+            metadata=_metadata(("x-user-id", user_id)),
         )
     m = resp.user_metadata
     return {
@@ -901,7 +960,7 @@ async def update_user_metadata(
         stub = identity_pb2_grpc.IdentityServiceStub(channel)
         resp = await stub.UpdateUserMetadata(
             req,
-            metadata=[*_metadata(), ("x-user-id", user_id)],
+            metadata=_metadata(("x-user-id", user_id)),
         )
     m = resp.user_metadata
     return {
@@ -926,7 +985,7 @@ async def set_strategy_live(
     """
     from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
 
-    meta = [*_metadata(), ("x-user-id", user_id), ("x-access-scope", str(access_scope))]
+    meta = _metadata(("x-user-id", user_id), ("x-access-scope", str(access_scope)))
     async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.SetStrategyLive(
@@ -1055,7 +1114,7 @@ async def trigger_backfill(
 
     # feature 092: forward the caller's REAL derived scope (was a hardcoded admin 7); ingest's
     # new TriggerBackfill gate (x-access-scope & 0x04) rejects a non-admin.
-    meta = [*_metadata(), ("x-access-scope", str(access_scope))]
+    meta = _metadata(("x-access-scope", str(access_scope)))
     async with grpc.aio.insecure_channel(INGEST_ENDPOINT) as channel:
         stub = ingest_pb2_grpc.IngestServiceStub(channel)
         resp = await stub.TriggerBackfill(req, metadata=meta)
@@ -1253,6 +1312,6 @@ async def set_config(
             ),
             # The caller's real derived scope, so the server's gate decides (feature 092: every
             # management tool now does this; the hardcoded-admin path was removed).
-            metadata=[*_metadata(), ("x-access-scope", str(access_scope))],
+            metadata=_metadata(("x-access-scope", str(access_scope))),
         )
         return {"version": resp.version, "updated_at": resp.updated_at.ToDatetime().isoformat()}

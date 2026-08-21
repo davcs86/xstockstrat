@@ -15,6 +15,7 @@
 | 2026-08-20 | `design-approved` → `implementation-ready` | /sdd-spec | 12-step implementation-spec.md written (evidence-cited, AC-mapped). |
 | 2026-08-20 | `implementation-ready` → `in-progress` | implementation | Implementing on `claude/config-secrets-environment-e0eue6`. |
 | 2026-08-20 | `in-progress` → `code-completed` | implementation | All 12 steps done: proto, migration 017 (DB-validated), config service (crypto/GetSecret/redaction/scope), marketdata GetSecret, agent JWT_SECRET, config-ui env/user scope, all client edges, deploy wiring, governance docs. Tests green per service. |
+| 2026-08-21 | `code-completed` (unchanged) | PR #994 review | Addressed 4 operator review threads: (1) agent config env is deployment-bound (dropped caller `environment` param); (2) admin secret writes unblocked via MCP + config-ui; (3) per-user config authz = owner-only self-service (admins reach globals + own rows only, `PER_USER_SCOPE_ERROR`); (4) agent is an edge — forwards `x-user-id`+`x-access-scope`+`x-trace-id` (gen'd) on every outbound call via `CallerPropagationMiddleware`. Tests green (agent 237, config 83, config-ui 19 e2e). |
 
 ---
 

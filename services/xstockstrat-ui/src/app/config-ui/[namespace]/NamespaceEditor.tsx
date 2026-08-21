@@ -87,6 +87,11 @@ export function NamespaceEditor({ namespace, env, user, nativeEnv }: Props) {
 
   function handleSave(key: string) {
     const meta = keys.find((kk) => kk.key === key);
+    if (meta?.isSecret && user) {
+      // Secrets are global-scope only (feature 147) — the backend rejects a per-user secret write.
+      setValidationError('Secret keys are global-scope only; switch to the global scope to edit.');
+      return;
+    }
     if (meta?.validation?.valueType === 1) {
       const err = validateFloatMap(editValue, meta.validation.minValue, meta.validation.maxValue);
       if (err) {
@@ -140,6 +145,8 @@ export function NamespaceEditor({ namespace, env, user, nativeEnv }: Props) {
               <Input
                 className="h-7 text-xs w-40"
                 value={editValue}
+                type={k.isSecret ? 'password' : 'text'}
+                placeholder={k.isSecret ? 'Enter new secret value' : undefined}
                 onChange={(e) => setEditValue(e.target.value)}
                 onBlur={() => {
                   if (k.validation?.valueType === 1) {
@@ -150,6 +157,12 @@ export function NamespaceEditor({ namespace, env, user, nativeEnv }: Props) {
                 }}
                 autoFocus
               />
+              {k.isSecret && (
+                <p className="text-muted-foreground text-xs mt-0.5">
+                  Encrypted at rest; the current value is never shown. Saving stores exactly what
+                  you type as the new secret.
+                </p>
+              )}
               <Input
                 className="h-7 text-xs w-40 mt-1"
                 value={editReason}
@@ -181,7 +194,7 @@ export function NamespaceEditor({ namespace, env, user, nativeEnv }: Props) {
           const k = row.original;
           return (
             <div className="flex items-center gap-1">
-              {!k.isSecret && editingKey !== k.key && (
+              {editingKey !== k.key && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -199,7 +212,9 @@ export function NamespaceEditor({ namespace, env, user, nativeEnv }: Props) {
                     <DropdownMenuItem
                       onClick={() => {
                         setEditingKey(k.key);
-                        setEditValue(k.currentValue);
+                        // Never seed a secret's editor with its redacted placeholder — a secret
+                        // write is always a fresh plaintext the operator types (feature 147).
+                        setEditValue(k.isSecret ? '' : k.currentValue);
                         setEditReason('');
                       }}
                     >
@@ -270,6 +285,15 @@ export function NamespaceEditor({ namespace, env, user, nativeEnv }: Props) {
           <span className="font-mono">{nativeEnv}</span>. Viewing{' '}
           <span className="font-mono">{env}</span> config is read-only here — edits are rejected by
           the backend.
+        </p>
+      )}
+
+      {user && (
+        <p className="text-xs text-muted-foreground border border-border rounded-md px-3 py-2 bg-muted/30">
+          Per-user config is <span className="font-medium">self-service</span>: you can save changes
+          only to your own account&apos;s overrides. Saving another user&apos;s{' '}
+          <span className="font-mono">user:{user}</span> row is rejected by the backend (admins
+          reach globals and their own rows only).
         </p>
       )}
 

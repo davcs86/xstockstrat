@@ -4,6 +4,7 @@ import {
   ADMIN_SCOPE_ERROR,
   HEADER_INTERNAL_CALLER,
   MISSING_AUTHOR_ERROR,
+  PER_USER_SCOPE_ERROR,
   SECRET_SCOPE_ERROR,
   first,
   hasAdminAccessScope,
@@ -332,28 +333,46 @@ export class ConfigServiceImpl {
   }
 
   async setConfig(call: any, callback: any) {
-    // Admin gate FIRST (feature 074/102) — an admin write OR an internal-caller-authorized write.
-    const rawValue = call.request?.value?.string_val ?? call.request?.value?.stringVal ?? '';
-    const internalCallerAuthorized = hasInternalCallerAuthority(
-      call.metadata,
-      call.request?.namespace,
-      call.request?.key,
-      rawValue,
-    );
-    if (!hasAdminAccessScope(call.metadata) && !internalCallerAuthorized) {
-      log.warn('SetConfig denied — caller lacks admin scope and internal-caller authority', {
+    // Scope-aware authorization gate (feature 074/102 + PR #994).
+    //   • GLOBAL write (user_id empty): admin scope OR an internal-caller-authorized write.
+    //   • PER-USER write (user_id set): self-service — only the OWNER (propagated x-user-id ==
+    //     target user_id) may write their own row. Unlike a global write, an ADMIN caller earns NO
+    //     override for another user's per-user row (admins reach only globals + their own rows).
+    const userId = requestUserId(call.request); // '' = global
+    const userIdParam = userId === '' ? null : userId;
+    const callerUserId = userIdFrom(call.metadata); // propagated x-user-id (edge-injected)
+
+    if (userIdParam === null) {
+      const rawValue = call.request?.value?.string_val ?? call.request?.value?.stringVal ?? '';
+      const internalCallerAuthorized = hasInternalCallerAuthority(
+        call.metadata,
+        call.request?.namespace,
+        call.request?.key,
+        rawValue,
+      );
+      if (!hasAdminAccessScope(call.metadata) && !internalCallerAuthorized) {
+        log.warn('SetConfig denied — global write without admin scope or internal-caller authority', {
+          namespace: call.request?.namespace,
+          key: call.request?.key,
+        });
+        callback(ADMIN_SCOPE_ERROR);
+        return;
+      }
+    } else if (!callerUserId || callerUserId !== userId) {
+      // Per-user write to a row the caller does not own — refused even for an admin.
+      log.warn('SetConfig denied — per-user write must target the caller\'s own user_id', {
         namespace: call.request?.namespace,
         key: call.request?.key,
+        target_user_id: userId,
+        caller_user_id: callerUserId || null,
       });
-      callback(ADMIN_SCOPE_ERROR);
+      callback(PER_USER_SCOPE_ERROR);
       return;
     }
     const callerIdentity = first(call.metadata, HEADER_INTERNAL_CALLER) || null;
 
     const { namespace, key, value, reason } = call.request;
     const env = resolveEnv(call.request.environment);
-    const userId = requestUserId(call.request); // '' = global
-    const userIdParam = userId === '' ? null : userId;
 
     const author = call.request.author || userIdFrom(call.metadata);
     if (!author) {

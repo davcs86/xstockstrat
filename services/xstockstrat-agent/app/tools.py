@@ -23,7 +23,7 @@ Twenty-four tools:
   list_strategies     — lists stored strategy definitions (read-only)
   get_config          — reads a namespace's current config values, secrets redacted (read-only)
   list_config_keys    — lists a namespace's registered config keys, metadata only (read-only)
-  set_config          — writes one non-secret config value (admin-scoped write)
+  set_config          — writes one config value incl. secrets (encrypted at rest; admin-scoped)
   get_user_metadata   — fetches the calling user's own profile metadata (read-only)
   set_user_metadata   — partial-updates the calling user's own profile metadata
 """
@@ -31,6 +31,7 @@ Twenty-four tools:
 import base64
 import json
 import logging
+import uuid
 from typing import Literal
 
 import grpc
@@ -124,6 +125,56 @@ def _caller_user_id(ctx: Context, tool: str) -> str:
     return user_id
 
 
+def _new_trace_id() -> str:
+    """A fresh request trace id, minted at the agent edge when the caller carried none."""
+    return uuid.uuid4().hex
+
+
+def _claims_from_scope_state(request) -> dict | None:
+    """The verified caller claims app/main.py's `_authorized` stamped on the ASGI request scope.
+
+    Reads the same `scope["state"][MCP_CLAIMS_SCOPE_KEY]` that `_claims_from_context` reads, but
+    from the raw transport request the middleware receives (``ServerRequestContext.request``) rather
+    than a tool's `Context`. Returns None when absent (stdio has no request; an unauthenticated
+    message never set it)."""
+    scope = getattr(request, "scope", None) or {}
+    claims = (scope.get("state") or {}).get(MCP_CLAIMS_SCOPE_KEY)
+    return claims if isinstance(claims, dict) else None
+
+
+class CallerPropagationMiddleware:
+    """Forward ALL propagation headers on every backend gRPC a tool triggers (PR #994).
+
+    The agent is a platform **edge**, so it forwards the full trio — ``x-user-id`` +
+    ``x-access-scope`` + ``x-trace-id`` — on every outbound backend call (reversing the old AGENT-4
+    "the agent originates, forwards nothing" stance). This one `ServerMiddleware` binds the caller's
+    identity onto `client`'s per-request context for the duration of each `tools/call`, so every
+    `client.*` helper the tool awaits picks it up via `client._metadata()` — no per-tool plumbing.
+
+    Every header is sourced from the OAuth-verified claims (`app/main.py` `_authorized` stamped them
+    on the request scope) — never a caller-supplied parameter, so the feature-111 anti-spoofing
+    guarantees still hold — and a fresh ``x-trace-id`` is minted here when the claims carry none, so
+    a trace spans the agent edge. The middleware runs in the handler's own task (the binding
+    propagates via `contextvars`) and always resets in a `finally`, so nothing leaks across requests
+    or onto a stdio call that carries no verified claims."""
+
+    async def __call__(self, ctx, call_next):
+        token = None
+        if getattr(ctx, "method", None) == "tools/call":
+            claims = _claims_from_scope_state(getattr(ctx, "request", None))
+            if claims is not None:
+                token = client.set_caller(
+                    claims.get("user_id") or "",
+                    roles_to_access_scope(claims.get("roles")),
+                    claims.get("trace_id") or _new_trace_id(),
+                )
+        try:
+            return await call_next(ctx)
+        finally:
+            if token is not None:
+                client.reset_caller(token)
+
+
 def _grpc_error_message(exc: grpc.aio.AioRpcError, not_found: str = "not found") -> str:
     """Map a gRPC error to a concise, caller-facing message for an MCP tool."""
     code = exc.code()
@@ -151,6 +202,10 @@ _EXTRACTOR_TOOL_MAP: dict[str, str | None] = {
 
 
 def register_tools(server: MCPServer) -> None:
+    # Edge header propagation (PR #994): one middleware binds the caller's verified identity for the
+    # duration of each tools/call so every backend gRPC forwards x-user-id + x-access-scope +
+    # x-trace-id — no per-tool plumbing. Registered before the tools so it wraps all of them.
+    server.middleware.append(CallerPropagationMiddleware())
 
     @server.tool()
     async def list_signal_sources(
@@ -1008,12 +1063,14 @@ def register_tools(server: MCPServer) -> None:
         return resolve_scope(environment)
 
     @server.tool()
-    async def get_config(namespace: str, environment: str = "", user_id: str = "") -> dict:
+    async def get_config(namespace: str, user_id: str = "") -> dict:
         """Read the current config values for a namespace from xstockstrat-config (read-only).
         namespace: config namespace, e.g. 'marketdata', 'analysis', 'trading', 'platform'.
-        environment: 'production' or 'staging'. Omit to use this agent deployment's own environment.
         user_id: optional per-user scope. Omit (empty) for the global values; pass a user id to see
         that user's per-user overrides layered over the global values.
+        The config environment is always this agent deployment's own environment
+        (production/staging, from APPLICATION_ENV) — it is a deployment property, not a caller
+        choice, so this tool cannot read another environment's rows.
         Returns {namespace, version, environment, user_id, values} where each value is
         {value, value_type, is_secret}.
         Any key flagged is_secret has its value replaced with '[redacted]' — secret values are
@@ -1022,7 +1079,7 @@ def register_tools(server: MCPServer) -> None:
         Note: an unknown or empty namespace is NOT an error — it returns an empty `values` map, so
         an empty result does not confirm the namespace name. `version` is an opaque monotonic
         counter, not a timestamp."""
-        env = _resolve_scope(environment)
+        env = _resolve_scope("")
         try:
             result = await client.get_config(
                 namespace=namespace, environment=env, user_id=user_id
@@ -1036,21 +1093,20 @@ def register_tools(server: MCPServer) -> None:
         return result
 
     @server.tool()
-    async def list_config_keys(
-        namespace: str, environment: str = "", user_id: str = ""
-    ) -> dict:
+    async def list_config_keys(namespace: str, user_id: str = "") -> dict:
         """List the config keys registered for a namespace, with metadata only (read-only).
         namespace: config namespace, e.g. 'marketdata', 'analysis', 'trading', 'platform'.
-        environment: 'production' or 'staging'. Omit to use this agent deployment's own environment.
         user_id: optional per-user scope. Omit (empty) for the global keys; pass a user id to see
         that user's per-user overrides layered over the global keys.
+        The config environment is always this agent deployment's own environment
+        (production/staging, from APPLICATION_ENV) — a deployment property, not a caller choice.
         Returns {namespace, environment, user_id, keys[]} where each key carries key,
         description, default_value, is_secret and consuming_service.
         No values are returned by this RPC at all, so nothing here can leak a secret. Use it to
         discover what exists and which keys are secret before calling set_config.
         Note: an unknown or empty namespace is NOT an error — it returns an empty `keys` list, so
         an empty result does not confirm the namespace name."""
-        env = _resolve_scope(environment)
+        env = _resolve_scope("")
         try:
             return await client.list_config_keys(
                 namespace=namespace, environment=env, user_id=user_id
@@ -1067,11 +1123,10 @@ def register_tools(server: MCPServer) -> None:
         value: str,
         author: str,
         reason: str,
-        environment: str = "",
         user_id: str = "",
         create_key: bool = False,
     ) -> dict:
-        """Write one non-secret config value in xstockstrat-config (admin-scoped write).
+        """Write one config value in xstockstrat-config (admin-scoped write).
         namespace: config namespace, e.g. 'marketdata'.
         key: the config key, e.g. 'marketdata.fmp.enabled'. A write to a not-yet-registered key
           at this exact (namespace, environment, user_id) scope is REFUSED with NOT_FOUND
@@ -1083,43 +1138,28 @@ def register_tools(server: MCPServer) -> None:
         value: the new value, as a string; it is converted according to value_type.
         author: who is making the change — required, and recorded in config.config_audit.
         reason: why — required, and recorded alongside author.
-        environment: 'production' or 'staging'. Omit to use this agent deployment's own environment.
         user_id: optional per-user scope. Omit (empty) to write the global value; pass a user id to
-          set that user's per-user override (non-secret keys only).
+          set that user's per-user override. Secret keys are global-scope only — a per-user write to
+          a secret key is rejected INVALID_ARGUMENT by the backend.
         create_key: set true ONLY to deliberately register a brand-new key at this scope; leave
           false (the default) for every normal update so a mistyped key is rejected rather than
           created. Key creation is audited (config.config_audit) just like an update.
+        The config environment is always this agent deployment's own environment
+        (production/staging, from APPLICATION_ENV) — a deployment property, not a caller choice.
         Returns {version, updated_at}. Never echoes the value back.
 
-        Authorization uses YOUR role, not a service-wide admin override: the write is rejected
-        with 'admin scope required' unless your session has the admin role. Secret keys cannot be
-        set through this tool — they are encrypted at rest and managed by an operator via config-ui.
-        Requires the Streamable HTTP transport, the only remote transport the agent serves since
-        feature 079 removed the legacy SSE one."""
-        # feature 092: shared with the other management tools; still fails fast (before the
-        # ListKeys network call) when no verified claims are present.
+        Authorization uses YOUR role, not a service-wide admin override: a global write (and any
+        secret write) is rejected 'admin scope required' unless your session has the admin role.
+        Secret keys ARE writable through this tool — the value is encrypted at rest by the config
+        service (AES-256-GCM, row-authoritative is_secret) and is never echoed back or broadcast;
+        only the ciphertext is stored and only allow-listed internal services can decrypt it via
+        GetSecret. Requires the Streamable HTTP transport, the only remote transport the agent
+        serves since feature 079 removed the legacy SSE one."""
+        # feature 092: shared with the other management tools; fails fast when no verified claims
+        # are present. The backend admin gate is what actually authorizes the write.
         access_scope = _caller_access_scope(ctx, "set_config")
 
-        env = _resolve_scope(environment)
-
-        # Secret guard: refuse to write a key flagged is_secret (feature 147: secrets are encrypted
-        # at rest and set by an operator via config-ui, not through the MCP agent). Looked up at the
-        # SAME scope as the pending write and fails CLOSED — if the lookup errors we refuse.
-        try:
-            listing = await client.list_config_keys(
-                namespace=namespace, environment=env, user_id=user_id
-            )
-        except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
-                f"cannot verify whether '{key}' is a secret key, refusing the write: "
-                f"{_grpc_error_message(e)}"
-            ) from e
-        for meta in listing.get("keys", []):
-            if meta.get("key") == key and meta.get("is_secret"):
-                raise RuntimeError(
-                    f"refusing to write '{key}': it is flagged is_secret. Secrets are managed by "
-                    "an operator via config-ui, not through the MCP agent."
-                )
+        env = _resolve_scope("")
 
         try:
             return await client.set_config(

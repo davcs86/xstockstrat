@@ -223,6 +223,42 @@ describe('SetConfig authorization over a real gRPC connection', () => {
     assert.ok(insertQuery(), 'the INSERT (upsert) must run for a registered key');
   });
 
+  // ── PR #994: per-user config is self-service (owner-only; admins get NO override) ─────────
+  it('allows a NON-admin owner to write their OWN per-user row', async () => {
+    queries = [];
+    keyExists = true;
+    // A plain trader scope (no admin bit) whose propagated x-user-id matches the target user_id.
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '3', [HEADER_USER_ID]: 'u-9' }), {
+      userId: 'u-9',
+    });
+    assert.equal(err, null, 'the owner may write their own per-user row without admin');
+    const insert = insertQuery();
+    assert.ok(insert, 'the INSERT must run for an owner per-user write');
+    // INSERT params index 9 is user_id (see the param list above) — the target row.
+    assert.equal(insert!.params?.[9], 'u-9');
+  });
+
+  it("denies a per-user write to ANOTHER user's row — even for a full admin — and writes nothing", async () => {
+    queries = [];
+    keyExists = true;
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '7', [HEADER_USER_ID]: 'admin-1' }), {
+      userId: 'u-9', // someone else's per-user row
+    });
+    assert.ok(err, "an admin may not write another user's per-user row");
+    assert.equal(err.code, grpc.status.PERMISSION_DENIED);
+    assert.match(err.details ?? err.message, /self-service/);
+    assert.equal(queries.length, 0, 'no query may run on a denied per-user write');
+  });
+
+  it('denies a per-user write carrying no propagated x-user-id, and writes nothing', async () => {
+    queries = [];
+    keyExists = true;
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '7' }), { userId: 'u-9' });
+    assert.ok(err, 'a per-user write with no caller identity cannot be attributed to an owner');
+    assert.equal(err.code, grpc.status.PERMISSION_DENIED);
+    assert.equal(queries.length, 0);
+  });
+
   // NOTE: these cases deliberately assert only on authz outcome, author resolution and
   // query count. They must NOT assert on environment/trading_mode: over the real wire
   // ts-proto sends camelCase with string enums, while the impl reads

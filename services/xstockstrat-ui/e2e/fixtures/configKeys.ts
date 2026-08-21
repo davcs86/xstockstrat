@@ -70,13 +70,15 @@ export const CONFIG_KEY_FIXTURES = [
     tradingMode: 1,
   },
   {
-    key: 'secret.alpaca_api_key',
-    description: 'Alpaca API key for live trading',
+    // feature 147: the `secret.*` name prefix is retired — secret-ness is the is_secret flag
+    // alone. This is a real encrypted vendor-credential row; the value is redacted to '[secret]'
+    // at every read edge and only ciphertext is stored.
+    key: 'marketdata.alpaca.api_key',
+    description: 'Alpaca API key (encrypted at rest)',
     defaultValue: '[secret]',
     isSecret: true,
-    consumingService: 'trading',
-    environment: 2,
-    tradingMode: 2,
+    consumingService: 'xstockstrat-marketdata',
+    environment: 1,
   },
   {
     key: 'analysis.signals.source_weights',
