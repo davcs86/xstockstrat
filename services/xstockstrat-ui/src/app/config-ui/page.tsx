@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/components/ui/utils';
 import { getNativeConfigEnv } from '@/lib/deploymentEnv';
 import { ScopeControl } from './ScopeControl';
+import { resolveConfigScope } from './scope';
 
 const KNOWN_NAMESPACES = [
   'platform',
@@ -36,7 +37,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   // Feature 147: environment is production/staging (paper/live derives from it); the second axis
   // is global vs per-user (user_id), not trading_mode.
   const env = resolvedSearchParams.env === 'production' ? 'production' : 'staging';
-  const user = resolvedSearchParams.user ?? '';
+  // Per-user config is owner-only self-service: clamp the scope to the caller's own id (PR #994).
+  const { selfUserId, user } = await resolveConfigScope(resolvedSearchParams.user ?? '');
   const nativeEnv = getNativeConfigEnv();
 
   return (
@@ -49,7 +51,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           </p>
         </div>
         <EnvSwitcher env={env} user={user} nativeEnv={nativeEnv} />
-        <ScopeControl env={env} user={user} />
+        <ScopeControl env={env} user={user} selfUserId={selfUserId} />
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
