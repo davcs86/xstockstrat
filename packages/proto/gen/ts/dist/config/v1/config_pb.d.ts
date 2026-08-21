@@ -29,17 +29,25 @@ export type WatchConfigRequest = Message<"xstockstrat.config.v1.WatchConfigReque
      */
     version: string;
     /**
-     * dev or production; defaults to dev
+     * production or staging; defaults to staging
      *
      * @generated from field: xstockstrat.common.v1.Environment environment = 4;
      */
     environment: Environment;
     /**
-     * paper or live; 'all' rows included always
+     * deprecated (feature 147): ignored by the server; paper/live derives from environment
      *
-     * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 5;
+     * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 5 [deprecated = true];
+     * @deprecated
      */
     tradingMode: TradingMode;
+    /**
+     * Optional per-user scope. When set, the server overlays this user's per-user values on top of
+     * the global (user-unset) values for the resolved (namespace, environment). Empty = global.
+     *
+     * @generated from field: string user_id = 6;
+     */
+    userId: string;
 };
 /**
  * Describes the message xstockstrat.config.v1.WatchConfigRequest.
@@ -83,7 +91,10 @@ export type ConfigSnapshot = Message<"xstockstrat.config.v1.ConfigSnapshot"> & {
      */
     environment: Environment;
     /**
-     * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 8;
+     * deprecated (feature 147): always UNSPECIFIED
+     *
+     * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 8 [deprecated = true];
+     * @deprecated
      */
     tradingMode: TradingMode;
 };
@@ -192,15 +203,70 @@ export type GetConfigRequest = Message<"xstockstrat.config.v1.GetConfigRequest">
      */
     environment: Environment;
     /**
-     * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 3;
+     * deprecated (feature 147): ignored
+     *
+     * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 3 [deprecated = true];
+     * @deprecated
      */
     tradingMode: TradingMode;
+    /**
+     * optional per-user scope; empty = global
+     *
+     * @generated from field: string user_id = 4;
+     */
+    userId: string;
 };
 /**
  * Describes the message xstockstrat.config.v1.GetConfigRequest.
  * Use `create(GetConfigRequestSchema)` to create a new message.
  */
 export declare const GetConfigRequestSchema: GenMessage<GetConfigRequest>;
+/**
+ * @generated from message xstockstrat.config.v1.GetSecretRequest
+ */
+export type GetSecretRequest = Message<"xstockstrat.config.v1.GetSecretRequest"> & {
+    /**
+     * @generated from field: string namespace = 1;
+     */
+    namespace: string;
+    /**
+     * @generated from field: string key = 2;
+     */
+    key: string;
+    /**
+     * production or staging
+     *
+     * @generated from field: xstockstrat.common.v1.Environment environment = 3;
+     */
+    environment: Environment;
+};
+/**
+ * Describes the message xstockstrat.config.v1.GetSecretRequest.
+ * Use `create(GetSecretRequestSchema)` to create a new message.
+ */
+export declare const GetSecretRequestSchema: GenMessage<GetSecretRequest>;
+/**
+ * @generated from message xstockstrat.config.v1.GetSecretResponse
+ */
+export type GetSecretResponse = Message<"xstockstrat.config.v1.GetSecretResponse"> & {
+    /**
+     * decrypted plaintext; empty when found=false
+     *
+     * @generated from field: string value = 1;
+     */
+    value: string;
+    /**
+     * false when the secret is unset (row absent or ciphertext NULL)
+     *
+     * @generated from field: bool found = 2;
+     */
+    found: boolean;
+};
+/**
+ * Describes the message xstockstrat.config.v1.GetSecretResponse.
+ * Use `create(GetSecretResponseSchema)` to create a new message.
+ */
+export declare const GetSecretResponseSchema: GenMessage<GetSecretResponse>;
 /**
  * @generated from message xstockstrat.config.v1.SetConfigRequest
  */
@@ -230,17 +296,27 @@ export type SetConfigRequest = Message<"xstockstrat.config.v1.SetConfigRequest">
      */
     environment: Environment;
     /**
-     * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 7;
+     * deprecated (feature 147): ignored
+     *
+     * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 7 [deprecated = true];
+     * @deprecated
      */
     tradingMode: TradingMode;
     /**
      * When true, allow this write to CREATE a not-yet-registered key at the exact
-     * (namespace,key,environment,trading_mode) scope. Default false: a write to an
+     * (namespace,key,environment,user_id) scope. Default false: a write to an
      * unregistered scope is refused with NOT_FOUND, so a typo cannot mint an orphan key.
      *
      * @generated from field: bool create_key = 8;
      */
     createKey: boolean;
+    /**
+     * Optional per-user scope. Empty = the global value; a non-empty user_id writes/updates that
+     * user's per-user override. Secret keys (is_secret) are global-scope only (feature 147).
+     *
+     * @generated from field: string user_id = 9;
+     */
+    userId: string;
 };
 /**
  * Describes the message xstockstrat.config.v1.SetConfigRequest.
@@ -278,9 +354,18 @@ export type ListKeysRequest = Message<"xstockstrat.config.v1.ListKeysRequest"> &
      */
     environment: Environment;
     /**
-     * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 3;
+     * deprecated (feature 147): ignored
+     *
+     * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 3 [deprecated = true];
+     * @deprecated
      */
     tradingMode: TradingMode;
+    /**
+     * optional per-user scope; empty = global
+     *
+     * @generated from field: string user_id = 4;
+     */
+    userId: string;
 };
 /**
  * Describes the message xstockstrat.config.v1.ListKeysRequest.
@@ -333,7 +418,10 @@ export type ConfigKeyMeta = Message<"xstockstrat.config.v1.ConfigKeyMeta"> & {
      */
     environment: Environment;
     /**
-     * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 7;
+     * deprecated (feature 147): always UNSPECIFIED
+     *
+     * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 7 [deprecated = true];
+     * @deprecated
      */
     tradingMode: TradingMode;
     /**
@@ -406,7 +494,10 @@ export declare const ValueTypeSchema: GenEnum<ValueType>;
 /**
  * ConfigService — live configuration via server-streaming WatchConfig.
  * All services call WatchConfig at startup and stream config updates.
- * Config values are scoped by environment (dev/production) and trading_mode (paper/live/all).
+ * Config values are scoped by environment (production/staging) and global/per-user (user_id),
+ * feature 147. paper/live is derived from environment; the trading_mode fields below are
+ * deprecated and ignored by the server. Secrets are stored encrypted at rest, redacted at every
+ * broadcast/read edge, and resolved only via GetSecret by allow-listed internal callers.
  *
  * @generated from service xstockstrat.config.v1.ConfigService
  */
@@ -451,5 +542,18 @@ export declare const ConfigService: GenService<{
         methodKind: "unary";
         input: typeof ListKeysRequestSchema;
         output: typeof ListKeysResponseSchema;
+    };
+    /**
+     * Resolve a secret's decrypted plaintext. Gated to allow-listed internal service callers
+     * (x-internal-caller); the value is decrypted server-side and never appears on WatchConfig,
+     * GetConfig, or ListKeys. Returns found=false for an absent/unset (NULL-ciphertext) secret;
+     * a decrypt failure is an INTERNAL error, never a partial/empty value (feature 147).
+     *
+     * @generated from rpc xstockstrat.config.v1.ConfigService.GetSecret
+     */
+    getSecret: {
+        methodKind: "unary";
+        input: typeof GetSecretRequestSchema;
+        output: typeof GetSecretResponseSchema;
     };
 }>;

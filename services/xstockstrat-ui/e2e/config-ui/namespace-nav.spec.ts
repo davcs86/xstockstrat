@@ -11,8 +11,16 @@ import { addAuthCookie } from '../helpers/auth';
  */
 
 const KNOWN_NAMESPACES = [
-  'platform', 'trading', 'portfolio', 'marketdata', 'indicators',
-  'ingest', 'analysis', 'ledger', 'identity', 'notify',
+  'platform',
+  'trading',
+  'portfolio',
+  'marketdata',
+  'indicators',
+  'ingest',
+  'analysis',
+  'ledger',
+  'identity',
+  'notify',
 ];
 
 test.describe('Namespace dashboard', () => {
@@ -27,21 +35,21 @@ test.describe('Namespace dashboard', () => {
 
   test('each namespace card links to /<namespace> with env and mode params', async ({ page }) => {
     await addAuthCookie(page);
-    await page.goto('/config-ui?env=dev&mode=paper');
+    await page.goto('/config-ui?env=staging');
 
     // Click the first namespace card
     await page.getByText('platform').first().click();
 
-    await expect(page).toHaveURL(/\/platform\?env=dev&mode=paper/);
+    await expect(page).toHaveURL(/\/platform\?env=staging/);
   });
 
   test('env and mode params are preserved when clicking different namespaces', async ({ page }) => {
     await addAuthCookie(page);
-    await page.goto('/config-ui?env=production&mode=live');
+    await page.goto('/config-ui?env=production');
 
     await page.getByText('trading').first().click();
 
-    await expect(page).toHaveURL(/\/trading\?env=production&mode=live/);
+    await expect(page).toHaveURL(/\/trading\?env=production/);
   });
 
   test('"Configuration Namespaces" heading is visible', async ({ page }) => {

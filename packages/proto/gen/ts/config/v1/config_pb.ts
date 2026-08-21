@@ -14,7 +14,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file config/v1/config.proto.
  */
 export const file_config_v1_config: GenFile = /*@__PURE__*/
-  fileDesc("ChZjb25maWcvdjEvY29uZmlnLnByb3RvEhV4c3RvY2tzdHJhdC5jb25maWcudjEivgEKEldhdGNoQ29uZmlnUmVxdWVzdBIRCgluYW1lc3BhY2UYASABKAkSEQoJY2xpZW50X2lkGAIgASgJEg8KB3ZlcnNpb24YAyABKAkSNwoLZW52aXJvbm1lbnQYBCABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuRW52aXJvbm1lbnQSOAoMdHJhZGluZ19tb2RlGAUgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlIsEDCg5Db25maWdTbmFwc2hvdBIRCgluYW1lc3BhY2UYASABKAkSDwoHdmVyc2lvbhgCIAEoCRIuCgp1cGRhdGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBJBCgZ2YWx1ZXMYBCADKAsyMS54c3RvY2tzdHJhdC5jb25maWcudjEuQ29uZmlnU25hcHNob3QuVmFsdWVzRW50cnkSPAoLdXBkYXRlX3R5cGUYBSABKA4yJy54c3RvY2tzdHJhdC5jb25maWcudjEuQ29uZmlnVXBkYXRlVHlwZRIUCgxjaGFuZ2VkX2tleXMYBiADKAkSNwoLZW52aXJvbm1lbnQYByABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuRW52aXJvbm1lbnQSOAoMdHJhZGluZ19tb2RlGAggASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlGlEKC1ZhbHVlc0VudHJ5EgsKA2tleRgBIAEoCRIxCgV2YWx1ZRgCIAEoCzIiLnhzdG9ja3N0cmF0LmNvbmZpZy52MS5Db25maWdWYWx1ZToCOAEi1AEKC0NvbmZpZ1ZhbHVlEhQKCnN0cmluZ192YWwYASABKAlIABIRCgdpbnRfdmFsGAIgASgDSAASEwoJZmxvYXRfdmFsGAMgASgBSAASEgoIYm9vbF92YWwYBCABKAhIABIrCghqc29uX3ZhbBgFIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3RIABIRCglpc19zZWNyZXQYBiABKAgSEwoLZGVzY3JpcHRpb24YByABKAkSFQoNZGVmYXVsdF92YWx1ZRgIIAEoCUIHCgV2YWx1ZSJsCg5WYWxpZGF0aW9uUnVsZRI0Cgp2YWx1ZV90eXBlGAEgASgOMiAueHN0b2Nrc3RyYXQuY29uZmlnLnYxLlZhbHVlVHlwZRIRCgltaW5fdmFsdWUYAiABKAISEQoJbWF4X3ZhbHVlGAMgASgCIpgBChBHZXRDb25maWdSZXF1ZXN0EhEKCW5hbWVzcGFjZRgBIAEoCRI3CgtlbnZpcm9ubWVudBgCIAEoDjIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5FbnZpcm9ubWVudBI4Cgx0cmFkaW5nX21vZGUYAyABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuVHJhZGluZ01vZGUijAIKEFNldENvbmZpZ1JlcXVlc3QSEQoJbmFtZXNwYWNlGAEgASgJEgsKA2tleRgCIAEoCRIxCgV2YWx1ZRgDIAEoCzIiLnhzdG9ja3N0cmF0LmNvbmZpZy52MS5Db25maWdWYWx1ZRIOCgZhdXRob3IYBCABKAkSDgoGcmVhc29uGAUgASgJEjcKC2Vudmlyb25tZW50GAYgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLkVudmlyb25tZW50EjgKDHRyYWRpbmdfbW9kZRgHIAEoDjIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UcmFkaW5nTW9kZRISCgpjcmVhdGVfa2V5GAggASgIIlQKEVNldENvbmZpZ1Jlc3BvbnNlEg8KB3ZlcnNpb24YASABKAkSLgoKdXBkYXRlZF9hdBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAilwEKD0xpc3RLZXlzUmVxdWVzdBIRCgluYW1lc3BhY2UYASABKAkSNwoLZW52aXJvbm1lbnQYAiABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuRW52aXJvbm1lbnQSOAoMdHJhZGluZ19tb2RlGAMgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlIkYKEExpc3RLZXlzUmVzcG9uc2USMgoEa2V5cxgBIAMoCzIkLnhzdG9ja3N0cmF0LmNvbmZpZy52MS5Db25maWdLZXlNZXRhIrsCCg1Db25maWdLZXlNZXRhEgsKA2tleRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCRIVCg1kZWZhdWx0X3ZhbHVlGAMgASgJEhEKCWlzX3NlY3JldBgEIAEoCBIZChFjb25zdW1pbmdfc2VydmljZRgFIAEoCRI3CgtlbnZpcm9ubWVudBgGIAEoDjIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5FbnZpcm9ubWVudBI4Cgx0cmFkaW5nX21vZGUYByABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuVHJhZGluZ01vZGUSOQoKdmFsaWRhdGlvbhgIIAEoCzIlLnhzdG9ja3N0cmF0LmNvbmZpZy52MS5WYWxpZGF0aW9uUnVsZRIVCg1jdXJyZW50X3ZhbHVlGAkgASgJKpQBChBDb25maWdVcGRhdGVUeXBlEiIKHkNPTkZJR19VUERBVEVfVFlQRV9VTlNQRUNJRklFRBAAEh8KG0NPTkZJR19VUERBVEVfVFlQRV9TTkFQU0hPVBABEhwKGENPTkZJR19VUERBVEVfVFlQRV9ERUxUQRACEh0KGUNPTkZJR19VUERBVEVfVFlQRV9SRUxPQUQQAypBCglWYWx1ZVR5cGUSGgoWVkFMVUVfVFlQRV9VTlNQRUNJRklFRBAAEhgKFFZBTFVFX1RZUEVfRkxPQVRfTUFQEAEyjAMKDUNvbmZpZ1NlcnZpY2USYQoLV2F0Y2hDb25maWcSKS54c3RvY2tzdHJhdC5jb25maWcudjEuV2F0Y2hDb25maWdSZXF1ZXN0GiUueHN0b2Nrc3RyYXQuY29uZmlnLnYxLkNvbmZpZ1NuYXBzaG90MAESWwoJR2V0Q29uZmlnEicueHN0b2Nrc3RyYXQuY29uZmlnLnYxLkdldENvbmZpZ1JlcXVlc3QaJS54c3RvY2tzdHJhdC5jb25maWcudjEuQ29uZmlnU25hcHNob3QSXgoJU2V0Q29uZmlnEicueHN0b2Nrc3RyYXQuY29uZmlnLnYxLlNldENvbmZpZ1JlcXVlc3QaKC54c3RvY2tzdHJhdC5jb25maWcudjEuU2V0Q29uZmlnUmVzcG9uc2USWwoITGlzdEtleXMSJi54c3RvY2tzdHJhdC5jb25maWcudjEuTGlzdEtleXNSZXF1ZXN0GicueHN0b2Nrc3RyYXQuY29uZmlnLnYxLkxpc3RLZXlzUmVzcG9uc2VCPFo6Z2l0aHViLmNvbS94c3RvY2tzdHJhdC9jb250cmFjdHMvZ2VuL2dvL2NvbmZpZy92MTtjb25maWd2MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_google_protobuf_struct, file_common_v1_common]);
+  fileDesc("ChZjb25maWcvdjEvY29uZmlnLnByb3RvEhV4c3RvY2tzdHJhdC5jb25maWcudjEi0wEKEldhdGNoQ29uZmlnUmVxdWVzdBIRCgluYW1lc3BhY2UYASABKAkSEQoJY2xpZW50X2lkGAIgASgJEg8KB3ZlcnNpb24YAyABKAkSNwoLZW52aXJvbm1lbnQYBCABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuRW52aXJvbm1lbnQSPAoMdHJhZGluZ19tb2RlGAUgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlQgIYARIPCgd1c2VyX2lkGAYgASgJIsUDCg5Db25maWdTbmFwc2hvdBIRCgluYW1lc3BhY2UYASABKAkSDwoHdmVyc2lvbhgCIAEoCRIuCgp1cGRhdGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBJBCgZ2YWx1ZXMYBCADKAsyMS54c3RvY2tzdHJhdC5jb25maWcudjEuQ29uZmlnU25hcHNob3QuVmFsdWVzRW50cnkSPAoLdXBkYXRlX3R5cGUYBSABKA4yJy54c3RvY2tzdHJhdC5jb25maWcudjEuQ29uZmlnVXBkYXRlVHlwZRIUCgxjaGFuZ2VkX2tleXMYBiADKAkSNwoLZW52aXJvbm1lbnQYByABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuRW52aXJvbm1lbnQSPAoMdHJhZGluZ19tb2RlGAggASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlQgIYARpRCgtWYWx1ZXNFbnRyeRILCgNrZXkYASABKAkSMQoFdmFsdWUYAiABKAsyIi54c3RvY2tzdHJhdC5jb25maWcudjEuQ29uZmlnVmFsdWU6AjgBItQBCgtDb25maWdWYWx1ZRIUCgpzdHJpbmdfdmFsGAEgASgJSAASEQoHaW50X3ZhbBgCIAEoA0gAEhMKCWZsb2F0X3ZhbBgDIAEoAUgAEhIKCGJvb2xfdmFsGAQgASgISAASKwoIanNvbl92YWwYBSABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0SAASEQoJaXNfc2VjcmV0GAYgASgIEhMKC2Rlc2NyaXB0aW9uGAcgASgJEhUKDWRlZmF1bHRfdmFsdWUYCCABKAlCBwoFdmFsdWUibAoOVmFsaWRhdGlvblJ1bGUSNAoKdmFsdWVfdHlwZRgBIAEoDjIgLnhzdG9ja3N0cmF0LmNvbmZpZy52MS5WYWx1ZVR5cGUSEQoJbWluX3ZhbHVlGAIgASgCEhEKCW1heF92YWx1ZRgDIAEoAiKtAQoQR2V0Q29uZmlnUmVxdWVzdBIRCgluYW1lc3BhY2UYASABKAkSNwoLZW52aXJvbm1lbnQYAiABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuRW52aXJvbm1lbnQSPAoMdHJhZGluZ19tb2RlGAMgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlQgIYARIPCgd1c2VyX2lkGAQgASgJImsKEEdldFNlY3JldFJlcXVlc3QSEQoJbmFtZXNwYWNlGAEgASgJEgsKA2tleRgCIAEoCRI3CgtlbnZpcm9ubWVudBgDIAEoDjIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5FbnZpcm9ubWVudCIxChFHZXRTZWNyZXRSZXNwb25zZRINCgV2YWx1ZRgBIAEoCRINCgVmb3VuZBgCIAEoCCKhAgoQU2V0Q29uZmlnUmVxdWVzdBIRCgluYW1lc3BhY2UYASABKAkSCwoDa2V5GAIgASgJEjEKBXZhbHVlGAMgASgLMiIueHN0b2Nrc3RyYXQuY29uZmlnLnYxLkNvbmZpZ1ZhbHVlEg4KBmF1dGhvchgEIAEoCRIOCgZyZWFzb24YBSABKAkSNwoLZW52aXJvbm1lbnQYBiABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuRW52aXJvbm1lbnQSPAoMdHJhZGluZ19tb2RlGAcgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlQgIYARISCgpjcmVhdGVfa2V5GAggASgIEg8KB3VzZXJfaWQYCSABKAkiVAoRU2V0Q29uZmlnUmVzcG9uc2USDwoHdmVyc2lvbhgBIAEoCRIuCgp1cGRhdGVkX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKsAQoPTGlzdEtleXNSZXF1ZXN0EhEKCW5hbWVzcGFjZRgBIAEoCRI3CgtlbnZpcm9ubWVudBgCIAEoDjIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5FbnZpcm9ubWVudBI8Cgx0cmFkaW5nX21vZGUYAyABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuVHJhZGluZ01vZGVCAhgBEg8KB3VzZXJfaWQYBCABKAkiRgoQTGlzdEtleXNSZXNwb25zZRIyCgRrZXlzGAEgAygLMiQueHN0b2Nrc3RyYXQuY29uZmlnLnYxLkNvbmZpZ0tleU1ldGEivwIKDUNvbmZpZ0tleU1ldGESCwoDa2V5GAEgASgJEhMKC2Rlc2NyaXB0aW9uGAIgASgJEhUKDWRlZmF1bHRfdmFsdWUYAyABKAkSEQoJaXNfc2VjcmV0GAQgASgIEhkKEWNvbnN1bWluZ19zZXJ2aWNlGAUgASgJEjcKC2Vudmlyb25tZW50GAYgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLkVudmlyb25tZW50EjwKDHRyYWRpbmdfbW9kZRgHIAEoDjIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UcmFkaW5nTW9kZUICGAESOQoKdmFsaWRhdGlvbhgIIAEoCzIlLnhzdG9ja3N0cmF0LmNvbmZpZy52MS5WYWxpZGF0aW9uUnVsZRIVCg1jdXJyZW50X3ZhbHVlGAkgASgJKpQBChBDb25maWdVcGRhdGVUeXBlEiIKHkNPTkZJR19VUERBVEVfVFlQRV9VTlNQRUNJRklFRBAAEh8KG0NPTkZJR19VUERBVEVfVFlQRV9TTkFQU0hPVBABEhwKGENPTkZJR19VUERBVEVfVFlQRV9ERUxUQRACEh0KGUNPTkZJR19VUERBVEVfVFlQRV9SRUxPQUQQAypBCglWYWx1ZVR5cGUSGgoWVkFMVUVfVFlQRV9VTlNQRUNJRklFRBAAEhgKFFZBTFVFX1RZUEVfRkxPQVRfTUFQEAEy7AMKDUNvbmZpZ1NlcnZpY2USYQoLV2F0Y2hDb25maWcSKS54c3RvY2tzdHJhdC5jb25maWcudjEuV2F0Y2hDb25maWdSZXF1ZXN0GiUueHN0b2Nrc3RyYXQuY29uZmlnLnYxLkNvbmZpZ1NuYXBzaG90MAESWwoJR2V0Q29uZmlnEicueHN0b2Nrc3RyYXQuY29uZmlnLnYxLkdldENvbmZpZ1JlcXVlc3QaJS54c3RvY2tzdHJhdC5jb25maWcudjEuQ29uZmlnU25hcHNob3QSXgoJU2V0Q29uZmlnEicueHN0b2Nrc3RyYXQuY29uZmlnLnYxLlNldENvbmZpZ1JlcXVlc3QaKC54c3RvY2tzdHJhdC5jb25maWcudjEuU2V0Q29uZmlnUmVzcG9uc2USWwoITGlzdEtleXMSJi54c3RvY2tzdHJhdC5jb25maWcudjEuTGlzdEtleXNSZXF1ZXN0GicueHN0b2Nrc3RyYXQuY29uZmlnLnYxLkxpc3RLZXlzUmVzcG9uc2USXgoJR2V0U2VjcmV0EicueHN0b2Nrc3RyYXQuY29uZmlnLnYxLkdldFNlY3JldFJlcXVlc3QaKC54c3RvY2tzdHJhdC5jb25maWcudjEuR2V0U2VjcmV0UmVzcG9uc2VCPFo6Z2l0aHViLmNvbS94c3RvY2tzdHJhdC9jb250cmFjdHMvZ2VuL2dvL2NvbmZpZy92MTtjb25maWd2MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_google_protobuf_struct, file_common_v1_common]);
 
 /**
  * @generated from message xstockstrat.config.v1.WatchConfigRequest
@@ -42,18 +42,27 @@ export type WatchConfigRequest = Message<"xstockstrat.config.v1.WatchConfigReque
   version: string;
 
   /**
-   * dev or production; defaults to dev
+   * production or staging; defaults to staging
    *
    * @generated from field: xstockstrat.common.v1.Environment environment = 4;
    */
   environment: Environment;
 
   /**
-   * paper or live; 'all' rows included always
+   * deprecated (feature 147): ignored by the server; paper/live derives from environment
    *
-   * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 5;
+   * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 5 [deprecated = true];
+   * @deprecated
    */
   tradingMode: TradingMode;
+
+  /**
+   * Optional per-user scope. When set, the server overlays this user's per-user values on top of
+   * the global (user-unset) values for the resolved (namespace, environment). Empty = global.
+   *
+   * @generated from field: string user_id = 6;
+   */
+  userId: string;
 };
 
 /**
@@ -105,7 +114,10 @@ export type ConfigSnapshot = Message<"xstockstrat.config.v1.ConfigSnapshot"> & {
   environment: Environment;
 
   /**
-   * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 8;
+   * deprecated (feature 147): always UNSPECIFIED
+   *
+   * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 8 [deprecated = true];
+   * @deprecated
    */
   tradingMode: TradingMode;
 };
@@ -227,9 +239,19 @@ export type GetConfigRequest = Message<"xstockstrat.config.v1.GetConfigRequest">
   environment: Environment;
 
   /**
-   * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 3;
+   * deprecated (feature 147): ignored
+   *
+   * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 3 [deprecated = true];
+   * @deprecated
    */
   tradingMode: TradingMode;
+
+  /**
+   * optional per-user scope; empty = global
+   *
+   * @generated from field: string user_id = 4;
+   */
+  userId: string;
 };
 
 /**
@@ -238,6 +260,61 @@ export type GetConfigRequest = Message<"xstockstrat.config.v1.GetConfigRequest">
  */
 export const GetConfigRequestSchema: GenMessage<GetConfigRequest> = /*@__PURE__*/
   messageDesc(file_config_v1_config, 4);
+
+/**
+ * @generated from message xstockstrat.config.v1.GetSecretRequest
+ */
+export type GetSecretRequest = Message<"xstockstrat.config.v1.GetSecretRequest"> & {
+  /**
+   * @generated from field: string namespace = 1;
+   */
+  namespace: string;
+
+  /**
+   * @generated from field: string key = 2;
+   */
+  key: string;
+
+  /**
+   * production or staging
+   *
+   * @generated from field: xstockstrat.common.v1.Environment environment = 3;
+   */
+  environment: Environment;
+};
+
+/**
+ * Describes the message xstockstrat.config.v1.GetSecretRequest.
+ * Use `create(GetSecretRequestSchema)` to create a new message.
+ */
+export const GetSecretRequestSchema: GenMessage<GetSecretRequest> = /*@__PURE__*/
+  messageDesc(file_config_v1_config, 5);
+
+/**
+ * @generated from message xstockstrat.config.v1.GetSecretResponse
+ */
+export type GetSecretResponse = Message<"xstockstrat.config.v1.GetSecretResponse"> & {
+  /**
+   * decrypted plaintext; empty when found=false
+   *
+   * @generated from field: string value = 1;
+   */
+  value: string;
+
+  /**
+   * false when the secret is unset (row absent or ciphertext NULL)
+   *
+   * @generated from field: bool found = 2;
+   */
+  found: boolean;
+};
+
+/**
+ * Describes the message xstockstrat.config.v1.GetSecretResponse.
+ * Use `create(GetSecretResponseSchema)` to create a new message.
+ */
+export const GetSecretResponseSchema: GenMessage<GetSecretResponse> = /*@__PURE__*/
+  messageDesc(file_config_v1_config, 6);
 
 /**
  * @generated from message xstockstrat.config.v1.SetConfigRequest
@@ -274,18 +351,29 @@ export type SetConfigRequest = Message<"xstockstrat.config.v1.SetConfigRequest">
   environment: Environment;
 
   /**
-   * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 7;
+   * deprecated (feature 147): ignored
+   *
+   * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 7 [deprecated = true];
+   * @deprecated
    */
   tradingMode: TradingMode;
 
   /**
    * When true, allow this write to CREATE a not-yet-registered key at the exact
-   * (namespace,key,environment,trading_mode) scope. Default false: a write to an
+   * (namespace,key,environment,user_id) scope. Default false: a write to an
    * unregistered scope is refused with NOT_FOUND, so a typo cannot mint an orphan key.
    *
    * @generated from field: bool create_key = 8;
    */
   createKey: boolean;
+
+  /**
+   * Optional per-user scope. Empty = the global value; a non-empty user_id writes/updates that
+   * user's per-user override. Secret keys (is_secret) are global-scope only (feature 147).
+   *
+   * @generated from field: string user_id = 9;
+   */
+  userId: string;
 };
 
 /**
@@ -293,7 +381,7 @@ export type SetConfigRequest = Message<"xstockstrat.config.v1.SetConfigRequest">
  * Use `create(SetConfigRequestSchema)` to create a new message.
  */
 export const SetConfigRequestSchema: GenMessage<SetConfigRequest> = /*@__PURE__*/
-  messageDesc(file_config_v1_config, 5);
+  messageDesc(file_config_v1_config, 7);
 
 /**
  * @generated from message xstockstrat.config.v1.SetConfigResponse
@@ -315,7 +403,7 @@ export type SetConfigResponse = Message<"xstockstrat.config.v1.SetConfigResponse
  * Use `create(SetConfigResponseSchema)` to create a new message.
  */
 export const SetConfigResponseSchema: GenMessage<SetConfigResponse> = /*@__PURE__*/
-  messageDesc(file_config_v1_config, 6);
+  messageDesc(file_config_v1_config, 8);
 
 /**
  * @generated from message xstockstrat.config.v1.ListKeysRequest
@@ -332,9 +420,19 @@ export type ListKeysRequest = Message<"xstockstrat.config.v1.ListKeysRequest"> &
   environment: Environment;
 
   /**
-   * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 3;
+   * deprecated (feature 147): ignored
+   *
+   * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 3 [deprecated = true];
+   * @deprecated
    */
   tradingMode: TradingMode;
+
+  /**
+   * optional per-user scope; empty = global
+   *
+   * @generated from field: string user_id = 4;
+   */
+  userId: string;
 };
 
 /**
@@ -342,7 +440,7 @@ export type ListKeysRequest = Message<"xstockstrat.config.v1.ListKeysRequest"> &
  * Use `create(ListKeysRequestSchema)` to create a new message.
  */
 export const ListKeysRequestSchema: GenMessage<ListKeysRequest> = /*@__PURE__*/
-  messageDesc(file_config_v1_config, 7);
+  messageDesc(file_config_v1_config, 9);
 
 /**
  * @generated from message xstockstrat.config.v1.ListKeysResponse
@@ -359,7 +457,7 @@ export type ListKeysResponse = Message<"xstockstrat.config.v1.ListKeysResponse">
  * Use `create(ListKeysResponseSchema)` to create a new message.
  */
 export const ListKeysResponseSchema: GenMessage<ListKeysResponse> = /*@__PURE__*/
-  messageDesc(file_config_v1_config, 8);
+  messageDesc(file_config_v1_config, 10);
 
 /**
  * @generated from message xstockstrat.config.v1.ConfigKeyMeta
@@ -399,7 +497,10 @@ export type ConfigKeyMeta = Message<"xstockstrat.config.v1.ConfigKeyMeta"> & {
   environment: Environment;
 
   /**
-   * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 7;
+   * deprecated (feature 147): always UNSPECIFIED
+   *
+   * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 7 [deprecated = true];
+   * @deprecated
    */
   tradingMode: TradingMode;
 
@@ -424,7 +525,7 @@ export type ConfigKeyMeta = Message<"xstockstrat.config.v1.ConfigKeyMeta"> & {
  * Use `create(ConfigKeyMetaSchema)` to create a new message.
  */
 export const ConfigKeyMetaSchema: GenMessage<ConfigKeyMeta> = /*@__PURE__*/
-  messageDesc(file_config_v1_config, 9);
+  messageDesc(file_config_v1_config, 11);
 
 /**
  * @generated from enum xstockstrat.config.v1.ConfigUpdateType
@@ -487,7 +588,10 @@ export const ValueTypeSchema: GenEnum<ValueType> = /*@__PURE__*/
 /**
  * ConfigService — live configuration via server-streaming WatchConfig.
  * All services call WatchConfig at startup and stream config updates.
- * Config values are scoped by environment (dev/production) and trading_mode (paper/live/all).
+ * Config values are scoped by environment (production/staging) and global/per-user (user_id),
+ * feature 147. paper/live is derived from environment; the trading_mode fields below are
+ * deprecated and ignored by the server. Secrets are stored encrypted at rest, redacted at every
+ * broadcast/read edge, and resolved only via GetSecret by allow-listed internal callers.
  *
  * @generated from service xstockstrat.config.v1.ConfigService
  */
@@ -532,6 +636,19 @@ export const ConfigService: GenService<{
     methodKind: "unary";
     input: typeof ListKeysRequestSchema;
     output: typeof ListKeysResponseSchema;
+  },
+  /**
+   * Resolve a secret's decrypted plaintext. Gated to allow-listed internal service callers
+   * (x-internal-caller); the value is decrypted server-side and never appears on WatchConfig,
+   * GetConfig, or ListKeys. Returns found=false for an absent/unset (NULL-ciphertext) secret;
+   * a decrypt failure is an INTERNAL error, never a partial/empty value (feature 147).
+   *
+   * @generated from rpc xstockstrat.config.v1.ConfigService.GetSecret
+   */
+  getSecret: {
+    methodKind: "unary";
+    input: typeof GetSecretRequestSchema;
+    output: typeof GetSecretResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_config_v1_config, 0);

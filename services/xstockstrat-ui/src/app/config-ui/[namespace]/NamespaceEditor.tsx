@@ -20,10 +20,8 @@ import { useConfigKeys } from '@/app/config-ui/hooks/useConfigKeys';
 import { useSetConfig } from '@/app/config-ui/hooks/useSetConfig';
 
 function envToProto(env: string): number {
-  return env === 'production' ? 2 : 1;
-}
-function modeToProto(mode: string): number {
-  return mode === 'live' ? 2 : mode === 'paper' ? 1 : 0;
+  // Feature 147: production=2, staging=3 (Environment enum). trading_mode is no longer a config axis.
+  return env === 'production' ? 2 : 3;
 }
 function errMessage(err: unknown): string {
   return err instanceof ConnectError ? err.rawMessage : (err as Error).message;
@@ -49,9 +47,14 @@ function validateFloatMap(json: string, min: number, max: number): string | null
   return null;
 }
 
-type Props = { namespace: string; env: string; mode: string; nativeEnv: 'dev' | 'production' };
+type Props = {
+  namespace: string;
+  env: string;
+  user: string;
+  nativeEnv: 'staging' | 'production';
+};
 
-export function NamespaceEditor({ namespace, env, mode, nativeEnv }: Props) {
+export function NamespaceEditor({ namespace, env, user, nativeEnv }: Props) {
   const isNativeEnv = env === nativeEnv;
 
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -63,12 +66,12 @@ export function NamespaceEditor({ namespace, env, mode, nativeEnv }: Props) {
     data: keysData,
     isLoading: loading,
     error: keysError,
-  } = useConfigKeys(namespace, env, mode);
+  } = useConfigKeys(namespace, env, user);
   const {
     mutate: setConfigMutate,
     isPending: saving,
     error: saveError,
-  } = useSetConfig(namespace, env, mode);
+  } = useSetConfig(namespace, env, user);
 
   const keys = (keysData?.keys ?? []) as {
     key: string;
@@ -78,13 +81,17 @@ export function NamespaceEditor({ namespace, env, mode, nativeEnv }: Props) {
     isSecret: boolean;
     consumingService: string;
     environment: number;
-    tradingMode: number;
     validation?: { valueType: number; minValue: number; maxValue: number };
   }[];
   type ConfigKeyRow = (typeof keys)[number];
 
   function handleSave(key: string) {
     const meta = keys.find((kk) => kk.key === key);
+    if (meta?.isSecret && user) {
+      // Secrets are global-scope only (feature 147) — the backend rejects a per-user secret write.
+      setValidationError('Secret keys are global-scope only; switch to the global scope to edit.');
+      return;
+    }
     if (meta?.validation?.valueType === 1) {
       const err = validateFloatMap(editValue, meta.validation.minValue, meta.validation.maxValue);
       if (err) {
@@ -97,11 +104,9 @@ export function NamespaceEditor({ namespace, env, mode, nativeEnv }: Props) {
       return; // no SetConfig call when a required reason is missing
     }
     setValidationError(null);
-    // Target the row's own registered scope, not the page's viewed (env, mode) filter: a key
-    // registered only as trading_mode='all' still shows up while viewing a specific mode (the
-    // ListKeys query matches exact-mode OR 'all'), but setConfig's existence gate is exact-scope
-    // only — sending the viewed mode for an 'all' row gets refused NOT_FOUND. meta carries the
-    // scope ListKeys actually reported for this row, so Save always writes the row that exists.
+    // Target the row's own registered environment when ListKeys reported one, else the viewed env.
+    // The scope is (namespace, key, environment, user_id) — feature 147; the viewed per-user scope
+    // is carried on the request so a per-user override edits the user's row, not the global one.
     setConfigMutate(
       {
         namespace,
@@ -109,7 +114,7 @@ export function NamespaceEditor({ namespace, env, mode, nativeEnv }: Props) {
         value: { value: { case: 'stringVal', value: String(editValue) } },
         reason: editReason.trim() || 'Updated via config-ui',
         environment: meta?.environment ?? envToProto(env),
-        tradingMode: meta?.tradingMode ?? modeToProto(mode),
+        userId: user,
       },
       {
         onSuccess: () => {
@@ -140,6 +145,8 @@ export function NamespaceEditor({ namespace, env, mode, nativeEnv }: Props) {
               <Input
                 className="h-7 text-xs w-40"
                 value={editValue}
+                type={k.isSecret ? 'password' : 'text'}
+                placeholder={k.isSecret ? 'Enter new secret value' : undefined}
                 onChange={(e) => setEditValue(e.target.value)}
                 onBlur={() => {
                   if (k.validation?.valueType === 1) {
@@ -150,6 +157,12 @@ export function NamespaceEditor({ namespace, env, mode, nativeEnv }: Props) {
                 }}
                 autoFocus
               />
+              {k.isSecret && (
+                <p className="text-muted-foreground text-xs mt-0.5">
+                  Encrypted at rest; the current value is never shown. Saving stores exactly what
+                  you type as the new secret.
+                </p>
+              )}
               <Input
                 className="h-7 text-xs w-40 mt-1"
                 value={editReason}
@@ -181,7 +194,7 @@ export function NamespaceEditor({ namespace, env, mode, nativeEnv }: Props) {
           const k = row.original;
           return (
             <div className="flex items-center gap-1">
-              {!k.isSecret && editingKey !== k.key && (
+              {editingKey !== k.key && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -199,7 +212,9 @@ export function NamespaceEditor({ namespace, env, mode, nativeEnv }: Props) {
                     <DropdownMenuItem
                       onClick={() => {
                         setEditingKey(k.key);
-                        setEditValue(k.currentValue);
+                        // Never seed a secret's editor with its redacted placeholder — a secret
+                        // write is always a fresh plaintext the operator types (feature 147).
+                        setEditValue(k.isSecret ? '' : k.currentValue);
                         setEditReason('');
                       }}
                     >
@@ -247,7 +262,10 @@ export function NamespaceEditor({ namespace, env, mode, nativeEnv }: Props) {
         <PageBreadcrumb
           ariaLabel="Namespace path"
           items={[
-            { label: '← namespaces', href: `/config-ui?env=${env}&mode=${mode}` },
+            {
+              label: '← namespaces',
+              href: `/config-ui?env=${env}${user ? `&user=${encodeURIComponent(user)}` : ''}`,
+            },
             { label: namespace },
           ]}
         />
@@ -255,8 +273,8 @@ export function NamespaceEditor({ namespace, env, mode, nativeEnv }: Props) {
           <Badge variant="secondary" className="text-xs">
             {env}
           </Badge>
-          <Badge variant={mode === 'paper' ? 'paper' : 'live'} className="text-xs">
-            {mode}
+          <Badge variant="outline" className="text-xs">
+            {user ? `user:${user}` : 'global'}
           </Badge>
         </div>
       </div>
@@ -267,6 +285,15 @@ export function NamespaceEditor({ namespace, env, mode, nativeEnv }: Props) {
           <span className="font-mono">{nativeEnv}</span>. Viewing{' '}
           <span className="font-mono">{env}</span> config is read-only here — edits are rejected by
           the backend.
+        </p>
+      )}
+
+      {user && (
+        <p className="text-xs text-muted-foreground border border-border rounded-md px-3 py-2 bg-muted/30">
+          Per-user config is <span className="font-medium">self-service</span>: you can save changes
+          only to your own account&apos;s overrides. Saving another user&apos;s{' '}
+          <span className="font-mono">user:{user}</span> row is rejected by the backend (admins
+          reach globals and their own rows only).
         </p>
       )}
 

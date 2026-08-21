@@ -9,7 +9,7 @@ const wkt_1 = require("@bufbuild/protobuf/wkt");
 /**
  * Describes the file common/v1/common.proto.
  */
-exports.file_common_v1_common = (0, codegenv2_1.fileDesc)("ChZjb21tb24vdjEvY29tbW9uLnByb3RvEhV4c3RvY2tzdHJhdC5jb21tb24udjEiNAoLUGFnZVJlcXVlc3QSEQoJcGFnZV9zaXplGAEgASgFEhIKCnBhZ2VfdG9rZW4YAiABKAkiPAoMUGFnZVJlc3BvbnNlEhcKD25leHRfcGFnZV90b2tlbhgBIAEoCRITCgt0b3RhbF9jb3VudBgCIAEoBSKSAQoFRXJyb3ISDAoEY29kZRgBIAEoCRIPCgdtZXNzYWdlGAIgASgJEjoKB2RldGFpbHMYAyADKAsyKS54c3RvY2tzdHJhdC5jb21tb24udjEuRXJyb3IuRGV0YWlsc0VudHJ5Gi4KDERldGFpbHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIjkKB0RlY2ltYWwSDQoFdW5pdHMYASABKAMSDQoFbmFub3MYAiABKAUSEAoIY3VycmVuY3kYAyABKAkiPgoFQXNzZXQSDgoGc3ltYm9sGAEgASgJEhAKCGV4Y2hhbmdlGAIgASgJEhMKC2Fzc2V0X2NsYXNzGAMgASgJIl8KCVRpbWVSYW5nZRIpCgVzdGFydBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJwoDZW5kGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCpaCgtUcmFkaW5nTW9kZRIcChhUUkFESU5HX01PREVfVU5TUEVDSUZJRUQQABIWChJUUkFESU5HX01PREVfUEFQRVIQARIVChFUUkFESU5HX01PREVfTElWRRACKlsKC0Vudmlyb25tZW50EhsKF0VOVklST05NRU5UX1VOU1BFQ0lGSUVEEAASEwoPRU5WSVJPTk1FTlRfREVWEAESGgoWRU5WSVJPTk1FTlRfUFJPRFVDVElPThACKlcKCkJyb2tlclR5cGUSGwoXQlJPS0VSX1RZUEVfVU5TUEVDSUZJRUQQABIWChJCUk9LRVJfVFlQRV9BTFBBQ0EQARIUChBCUk9LRVJfVFlQRV9JQktSEAIqnAEKCVRpbWVmcmFtZRIZChVUSU1FRlJBTUVfVU5TUEVDSUZJRUQQABIXCg9USU1FRlJBTUVfMTVNSU4QBRoCCAESFwoPVElNRUZSQU1FXzFIT1VSEAMaAggBEhIKDlRJTUVGUkFNRV8xREFZEAQSFgoOVElNRUZSQU1FXzFNSU4QARoCCAESFgoOVElNRUZSQU1FXzVNSU4QAhoCCAFCPFo6Z2l0aHViLmNvbS94c3RvY2tzdHJhdC9jb250cmFjdHMvZ2VuL2dvL2NvbW1vbi92MTtjb21tb252MWIGcHJvdG8z", [wkt_1.file_google_protobuf_timestamp]);
+exports.file_common_v1_common = (0, codegenv2_1.fileDesc)("ChZjb21tb24vdjEvY29tbW9uLnByb3RvEhV4c3RvY2tzdHJhdC5jb21tb24udjEiNAoLUGFnZVJlcXVlc3QSEQoJcGFnZV9zaXplGAEgASgFEhIKCnBhZ2VfdG9rZW4YAiABKAkiPAoMUGFnZVJlc3BvbnNlEhcKD25leHRfcGFnZV90b2tlbhgBIAEoCRITCgt0b3RhbF9jb3VudBgCIAEoBSKSAQoFRXJyb3ISDAoEY29kZRgBIAEoCRIPCgdtZXNzYWdlGAIgASgJEjoKB2RldGFpbHMYAyADKAsyKS54c3RvY2tzdHJhdC5jb21tb24udjEuRXJyb3IuRGV0YWlsc0VudHJ5Gi4KDERldGFpbHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIjkKB0RlY2ltYWwSDQoFdW5pdHMYASABKAMSDQoFbmFub3MYAiABKAUSEAoIY3VycmVuY3kYAyABKAkiPgoFQXNzZXQSDgoGc3ltYm9sGAEgASgJEhAKCGV4Y2hhbmdlGAIgASgJEhMKC2Fzc2V0X2NsYXNzGAMgASgJIl8KCVRpbWVSYW5nZRIpCgVzdGFydBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJwoDZW5kGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCpaCgtUcmFkaW5nTW9kZRIcChhUUkFESU5HX01PREVfVU5TUEVDSUZJRUQQABIWChJUUkFESU5HX01PREVfUEFQRVIQARIVChFUUkFESU5HX01PREVfTElWRRACKngKC0Vudmlyb25tZW50EhsKF0VOVklST05NRU5UX1VOU1BFQ0lGSUVEEAASFwoPRU5WSVJPTk1FTlRfREVWEAEaAggBEhoKFkVOVklST05NRU5UX1BST0RVQ1RJT04QAhIXChNFTlZJUk9OTUVOVF9TVEFHSU5HEAMqVwoKQnJva2VyVHlwZRIbChdCUk9LRVJfVFlQRV9VTlNQRUNJRklFRBAAEhYKEkJST0tFUl9UWVBFX0FMUEFDQRABEhQKEEJST0tFUl9UWVBFX0lCS1IQAiqcAQoJVGltZWZyYW1lEhkKFVRJTUVGUkFNRV9VTlNQRUNJRklFRBAAEhcKD1RJTUVGUkFNRV8xNU1JThAFGgIIARIXCg9USU1FRlJBTUVfMUhPVVIQAxoCCAESEgoOVElNRUZSQU1FXzFEQVkQBBIWCg5USU1FRlJBTUVfMU1JThABGgIIARIWCg5USU1FRlJBTUVfNU1JThACGgIIAUI8WjpnaXRodWIuY29tL3hzdG9ja3N0cmF0L2NvbnRyYWN0cy9nZW4vZ28vY29tbW9uL3YxO2NvbW1vbnYxYgZwcm90bzM", [wkt_1.file_google_protobuf_timestamp]);
 /**
  * Describes the message xstockstrat.common.v1.PageRequest.
  * Use `create(PageRequestSchema)` to create a new message.
@@ -66,8 +66,11 @@ var TradingMode;
  */
 exports.TradingModeSchema = (0, codegenv2_1.enumDesc)(exports.file_common_v1_common, 0);
 /**
- * Environment distinguishes dev from production deployments.
- * Used by xstockstrat-config to scope config values per deployment environment.
+ * Environment distinguishes deployment environments; used by xstockstrat-config to scope config
+ * values. The platform's two environments are STAGING and PRODUCTION (feature 147). paper/live
+ * trading mode is DERIVED from the environment (production=live, staging=paper), not a separate
+ * config dimension. ENVIRONMENT_DEV is deprecated in favor of ENVIRONMENT_STAGING but retained for
+ * wire compatibility; the config server treats DEV and STAGING as the same 'staging' scope.
  *
  * @generated from enum xstockstrat.common.v1.Environment
  */
@@ -78,13 +81,20 @@ var Environment;
      */
     Environment[Environment["UNSPECIFIED"] = 0] = "UNSPECIFIED";
     /**
-     * @generated from enum value: ENVIRONMENT_DEV = 1;
+     * deprecated: use ENVIRONMENT_STAGING (feature 147)
+     *
+     * @generated from enum value: ENVIRONMENT_DEV = 1 [deprecated = true];
+     * @deprecated
      */
     Environment[Environment["DEV"] = 1] = "DEV";
     /**
      * @generated from enum value: ENVIRONMENT_PRODUCTION = 2;
      */
     Environment[Environment["PRODUCTION"] = 2] = "PRODUCTION";
+    /**
+     * @generated from enum value: ENVIRONMENT_STAGING = 3;
+     */
+    Environment[Environment["STAGING"] = 3] = "STAGING";
 })(Environment || (exports.Environment = Environment = {}));
 /**
  * Describes the enum xstockstrat.common.v1.Environment.

@@ -77,14 +77,23 @@ function tradingModeToNumber(object) {
     }
 }
 /**
- * Environment distinguishes dev from production deployments.
- * Used by xstockstrat-config to scope config values per deployment environment.
+ * Environment distinguishes deployment environments; used by xstockstrat-config to scope config
+ * values. The platform's two environments are STAGING and PRODUCTION (feature 147). paper/live
+ * trading mode is DERIVED from the environment (production=live, staging=paper), not a separate
+ * config dimension. ENVIRONMENT_DEV is deprecated in favor of ENVIRONMENT_STAGING but retained for
+ * wire compatibility; the config server treats DEV and STAGING as the same 'staging' scope.
  */
 var Environment;
 (function (Environment) {
     Environment["ENVIRONMENT_UNSPECIFIED"] = "ENVIRONMENT_UNSPECIFIED";
+    /**
+     * ENVIRONMENT_DEV - deprecated: use ENVIRONMENT_STAGING (feature 147)
+     *
+     * @deprecated
+     */
     Environment["ENVIRONMENT_DEV"] = "ENVIRONMENT_DEV";
     Environment["ENVIRONMENT_PRODUCTION"] = "ENVIRONMENT_PRODUCTION";
+    Environment["ENVIRONMENT_STAGING"] = "ENVIRONMENT_STAGING";
     Environment["UNRECOGNIZED"] = "UNRECOGNIZED";
 })(Environment || (exports.Environment = Environment = {}));
 function environmentFromJSON(object) {
@@ -98,6 +107,9 @@ function environmentFromJSON(object) {
         case 2:
         case "ENVIRONMENT_PRODUCTION":
             return Environment.ENVIRONMENT_PRODUCTION;
+        case 3:
+        case "ENVIRONMENT_STAGING":
+            return Environment.ENVIRONMENT_STAGING;
         case -1:
         case "UNRECOGNIZED":
         default:
@@ -112,6 +124,8 @@ function environmentToJSON(object) {
             return "ENVIRONMENT_DEV";
         case Environment.ENVIRONMENT_PRODUCTION:
             return "ENVIRONMENT_PRODUCTION";
+        case Environment.ENVIRONMENT_STAGING:
+            return "ENVIRONMENT_STAGING";
         case Environment.UNRECOGNIZED:
         default:
             return "UNRECOGNIZED";
@@ -125,6 +139,8 @@ function environmentToNumber(object) {
             return 1;
         case Environment.ENVIRONMENT_PRODUCTION:
             return 2;
+        case Environment.ENVIRONMENT_STAGING:
+            return 3;
         case Environment.UNRECOGNIZED:
         default:
             return -1;

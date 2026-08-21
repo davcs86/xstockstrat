@@ -1978,3 +1978,19 @@ reusing.
 - **Pattern**: To make an agent/system-managed instance of a strictly user-owned resource (here a per-user watchlist), identify it by a **`system_managed` boolean flag on the resource, not by a reserved name** — a name is not reserved at the DB layer (`UNIQUE(user_id, name)` lets a user co-opt it), and find-by-name is rename-fragile. Pair it with: an **atomic find-or-create RPC** (`INSERT ... ON CONFLICT (user_id) WHERE <flag> DO NOTHING RETURNING *`, no TOCTOU); a **partial-unique name constraint** `UNIQUE(user_id, name) WHERE NOT <flag>` so the system row's cosmetic name coexists with the user's own; and the **C-10(c) mutation guard as both an RPC check** (`DeleteWatchlist` → `FAILED_PRECONDITION`, since the caller *owns* it — resource-state refusal, not authz) **and a read-only UI half**. A dedicated create RPC beats a `CreateRequest.<flag>` boolean when the server cannot distinguish the privileged caller (the agent forwards the *user's own* `x-user-id`, indistinguishable from the UI BFF) — decide by atomicity/rename-survivability, not by the (weak) forgeability argument.
 - **Evidence**: `docs/roadmap/features/127-consolidate-watchlist-signal/design.md` (§ Chosen Approach, § Rejected Alternatives); ledger C-10(c) lineage 063/115.
 - **Rule it implies**: reinforces **C-10(c)** — an agent-managed instance of a user-owned resource gets a flag (not a magic name), an atomic find-or-create, a partial-unique carve-out for its cosmetic name, and a delete-guard at BOTH the RPC and the UI. No new ID.
+
+### 2026-08-20 — config-secrets-and-scoping — design
+- **Pattern**: to store a secret safely inside a broadcast/streamed config table, three guards are
+  jointly necessary — (1) redact at the **single row→message choke point** so plaintext never enters
+  the in-memory broadcast cache, (2) keep the ciphertext column **out of every broadcast/reload/list
+  SELECT** (only a dedicated authenticated resolver RPC loads it), and (3) make `is_secret`
+  **row-authoritative on write** (read the stored flag, never trust the request), so an admin update
+  that omits the flag can't land plaintext. Any one missing → the exact plaintext-in-broadcast leak
+  feature 076 banned. Also: a secret-resolver RPC must distinguish "unset" (found=false) from
+  "decrypt failed" (INTERNAL) — collapsing them makes a key mismatch look like an empty credential.
+- **Evidence**: `docs/roadmap/features/147-config-secrets-and-scoping/design.md` §1–2;
+  `services/xstockstrat-config/src/grpc/configServiceImpl.ts:457` (buildConfigValue choke point);
+  reuses `services/xstockstrat-trading/internal/repository/account_repo.go:217` AES-256-GCM.
+- **Rule it implies**: reverses the "no secrets in config" ban (Rule 6 / C-05) **only** when all three
+  guards + the distinct-failure resolver are present and the override is sign-off-recorded in context.md.
+

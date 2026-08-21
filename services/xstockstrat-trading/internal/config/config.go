@@ -106,7 +106,7 @@ func resolveEnvironment(applicationEnv string) commonv1.Environment {
 	if applicationEnv == "production" {
 		return commonv1.Environment_ENVIRONMENT_PRODUCTION
 	}
-	return commonv1.Environment_ENVIRONMENT_DEV
+	return commonv1.Environment_ENVIRONMENT_STAGING // feature 147: non-production => staging
 }
 
 // resolveTradingMode maps Config.TradingMode ("paper" | "live") to the proto TradingMode enum.

@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: config/v1/config.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ConfigServiceClient = exports.ConfigServiceService = exports.ConfigKeyMeta = exports.ListKeysResponse = exports.ListKeysRequest = exports.SetConfigResponse = exports.SetConfigRequest = exports.GetConfigRequest = exports.ValidationRule = exports.ConfigValue = exports.ConfigSnapshot_ValuesEntry = exports.ConfigSnapshot = exports.WatchConfigRequest = exports.ValueType = exports.ConfigUpdateType = exports.protobufPackage = void 0;
+exports.ConfigServiceClient = exports.ConfigServiceService = exports.ConfigKeyMeta = exports.ListKeysResponse = exports.ListKeysRequest = exports.SetConfigResponse = exports.SetConfigRequest = exports.GetSecretResponse = exports.GetSecretRequest = exports.GetConfigRequest = exports.ValidationRule = exports.ConfigValue = exports.ConfigSnapshot_ValuesEntry = exports.ConfigSnapshot = exports.WatchConfigRequest = exports.ValueType = exports.ConfigUpdateType = exports.protobufPackage = void 0;
 exports.configUpdateTypeFromJSON = configUpdateTypeFromJSON;
 exports.configUpdateTypeToJSON = configUpdateTypeToJSON;
 exports.configUpdateTypeToNumber = configUpdateTypeToNumber;
@@ -129,6 +129,7 @@ function createBaseWatchConfigRequest() {
         version: "",
         environment: common_1.Environment.ENVIRONMENT_UNSPECIFIED,
         tradingMode: common_1.TradingMode.TRADING_MODE_UNSPECIFIED,
+        userId: "",
     };
 }
 exports.WatchConfigRequest = {
@@ -147,6 +148,9 @@ exports.WatchConfigRequest = {
         }
         if (message.tradingMode !== common_1.TradingMode.TRADING_MODE_UNSPECIFIED) {
             writer.uint32(40).int32((0, common_1.tradingModeToNumber)(message.tradingMode));
+        }
+        if (message.userId !== "") {
+            writer.uint32(50).string(message.userId);
         }
         return writer;
     },
@@ -192,6 +196,13 @@ exports.WatchConfigRequest = {
                     message.tradingMode = (0, common_1.tradingModeFromJSON)(reader.int32());
                     continue;
                 }
+                case 6: {
+                    if (tag !== 50) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -217,6 +228,11 @@ exports.WatchConfigRequest = {
                 : isSet(object.trading_mode)
                     ? (0, common_1.tradingModeFromJSON)(object.trading_mode)
                     : common_1.TradingMode.TRADING_MODE_UNSPECIFIED,
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
         };
     },
     toJSON(message) {
@@ -236,6 +252,9 @@ exports.WatchConfigRequest = {
         if (message.tradingMode !== common_1.TradingMode.TRADING_MODE_UNSPECIFIED) {
             obj.tradingMode = (0, common_1.tradingModeToJSON)(message.tradingMode);
         }
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
         return obj;
     },
     create(base) {
@@ -248,6 +267,7 @@ exports.WatchConfigRequest = {
         message.version = object.version ?? "";
         message.environment = object.environment ?? common_1.Environment.ENVIRONMENT_UNSPECIFIED;
         message.tradingMode = object.tradingMode ?? common_1.TradingMode.TRADING_MODE_UNSPECIFIED;
+        message.userId = object.userId ?? "";
         return message;
     },
 };
@@ -816,6 +836,7 @@ function createBaseGetConfigRequest() {
         namespace: "",
         environment: common_1.Environment.ENVIRONMENT_UNSPECIFIED,
         tradingMode: common_1.TradingMode.TRADING_MODE_UNSPECIFIED,
+        userId: "",
     };
 }
 exports.GetConfigRequest = {
@@ -828,6 +849,9 @@ exports.GetConfigRequest = {
         }
         if (message.tradingMode !== common_1.TradingMode.TRADING_MODE_UNSPECIFIED) {
             writer.uint32(24).int32((0, common_1.tradingModeToNumber)(message.tradingMode));
+        }
+        if (message.userId !== "") {
+            writer.uint32(34).string(message.userId);
         }
         return writer;
     },
@@ -859,6 +883,13 @@ exports.GetConfigRequest = {
                     message.tradingMode = (0, common_1.tradingModeFromJSON)(reader.int32());
                     continue;
                 }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -878,6 +909,11 @@ exports.GetConfigRequest = {
                 : isSet(object.trading_mode)
                     ? (0, common_1.tradingModeFromJSON)(object.trading_mode)
                     : common_1.TradingMode.TRADING_MODE_UNSPECIFIED,
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
         };
     },
     toJSON(message) {
@@ -891,6 +927,9 @@ exports.GetConfigRequest = {
         if (message.tradingMode !== common_1.TradingMode.TRADING_MODE_UNSPECIFIED) {
             obj.tradingMode = (0, common_1.tradingModeToJSON)(message.tradingMode);
         }
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
         return obj;
     },
     create(base) {
@@ -901,6 +940,160 @@ exports.GetConfigRequest = {
         message.namespace = object.namespace ?? "";
         message.environment = object.environment ?? common_1.Environment.ENVIRONMENT_UNSPECIFIED;
         message.tradingMode = object.tradingMode ?? common_1.TradingMode.TRADING_MODE_UNSPECIFIED;
+        message.userId = object.userId ?? "";
+        return message;
+    },
+};
+function createBaseGetSecretRequest() {
+    return { namespace: "", key: "", environment: common_1.Environment.ENVIRONMENT_UNSPECIFIED };
+}
+exports.GetSecretRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.namespace !== "") {
+            writer.uint32(10).string(message.namespace);
+        }
+        if (message.key !== "") {
+            writer.uint32(18).string(message.key);
+        }
+        if (message.environment !== common_1.Environment.ENVIRONMENT_UNSPECIFIED) {
+            writer.uint32(24).int32((0, common_1.environmentToNumber)(message.environment));
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetSecretRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.namespace = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.key = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.environment = (0, common_1.environmentFromJSON)(reader.int32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            namespace: isSet(object.namespace) ? globalThis.String(object.namespace) : "",
+            key: isSet(object.key) ? globalThis.String(object.key) : "",
+            environment: isSet(object.environment)
+                ? (0, common_1.environmentFromJSON)(object.environment)
+                : common_1.Environment.ENVIRONMENT_UNSPECIFIED,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.namespace !== "") {
+            obj.namespace = message.namespace;
+        }
+        if (message.key !== "") {
+            obj.key = message.key;
+        }
+        if (message.environment !== common_1.Environment.ENVIRONMENT_UNSPECIFIED) {
+            obj.environment = (0, common_1.environmentToJSON)(message.environment);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetSecretRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetSecretRequest();
+        message.namespace = object.namespace ?? "";
+        message.key = object.key ?? "";
+        message.environment = object.environment ?? common_1.Environment.ENVIRONMENT_UNSPECIFIED;
+        return message;
+    },
+};
+function createBaseGetSecretResponse() {
+    return { value: "", found: false };
+}
+exports.GetSecretResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.value !== "") {
+            writer.uint32(10).string(message.value);
+        }
+        if (message.found !== false) {
+            writer.uint32(16).bool(message.found);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetSecretResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.value = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.found = reader.bool();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            value: isSet(object.value) ? globalThis.String(object.value) : "",
+            found: isSet(object.found) ? globalThis.Boolean(object.found) : false,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.value !== "") {
+            obj.value = message.value;
+        }
+        if (message.found !== false) {
+            obj.found = message.found;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetSecretResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetSecretResponse();
+        message.value = object.value ?? "";
+        message.found = object.found ?? false;
         return message;
     },
 };
@@ -914,6 +1107,7 @@ function createBaseSetConfigRequest() {
         environment: common_1.Environment.ENVIRONMENT_UNSPECIFIED,
         tradingMode: common_1.TradingMode.TRADING_MODE_UNSPECIFIED,
         createKey: false,
+        userId: "",
     };
 }
 exports.SetConfigRequest = {
@@ -941,6 +1135,9 @@ exports.SetConfigRequest = {
         }
         if (message.createKey !== false) {
             writer.uint32(64).bool(message.createKey);
+        }
+        if (message.userId !== "") {
+            writer.uint32(74).string(message.userId);
         }
         return writer;
     },
@@ -1007,6 +1204,13 @@ exports.SetConfigRequest = {
                     message.createKey = reader.bool();
                     continue;
                 }
+                case 9: {
+                    if (tag !== 74) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1035,6 +1239,11 @@ exports.SetConfigRequest = {
                 : isSet(object.create_key)
                     ? globalThis.Boolean(object.create_key)
                     : false,
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
         };
     },
     toJSON(message) {
@@ -1063,6 +1272,9 @@ exports.SetConfigRequest = {
         if (message.createKey !== false) {
             obj.createKey = message.createKey;
         }
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
         return obj;
     },
     create(base) {
@@ -1080,6 +1292,7 @@ exports.SetConfigRequest = {
         message.environment = object.environment ?? common_1.Environment.ENVIRONMENT_UNSPECIFIED;
         message.tradingMode = object.tradingMode ?? common_1.TradingMode.TRADING_MODE_UNSPECIFIED;
         message.createKey = object.createKey ?? false;
+        message.userId = object.userId ?? "";
         return message;
     },
 };
@@ -1160,6 +1373,7 @@ function createBaseListKeysRequest() {
         namespace: "",
         environment: common_1.Environment.ENVIRONMENT_UNSPECIFIED,
         tradingMode: common_1.TradingMode.TRADING_MODE_UNSPECIFIED,
+        userId: "",
     };
 }
 exports.ListKeysRequest = {
@@ -1172,6 +1386,9 @@ exports.ListKeysRequest = {
         }
         if (message.tradingMode !== common_1.TradingMode.TRADING_MODE_UNSPECIFIED) {
             writer.uint32(24).int32((0, common_1.tradingModeToNumber)(message.tradingMode));
+        }
+        if (message.userId !== "") {
+            writer.uint32(34).string(message.userId);
         }
         return writer;
     },
@@ -1203,6 +1420,13 @@ exports.ListKeysRequest = {
                     message.tradingMode = (0, common_1.tradingModeFromJSON)(reader.int32());
                     continue;
                 }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1222,6 +1446,11 @@ exports.ListKeysRequest = {
                 : isSet(object.trading_mode)
                     ? (0, common_1.tradingModeFromJSON)(object.trading_mode)
                     : common_1.TradingMode.TRADING_MODE_UNSPECIFIED,
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
         };
     },
     toJSON(message) {
@@ -1235,6 +1464,9 @@ exports.ListKeysRequest = {
         if (message.tradingMode !== common_1.TradingMode.TRADING_MODE_UNSPECIFIED) {
             obj.tradingMode = (0, common_1.tradingModeToJSON)(message.tradingMode);
         }
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
         return obj;
     },
     create(base) {
@@ -1245,6 +1477,7 @@ exports.ListKeysRequest = {
         message.namespace = object.namespace ?? "";
         message.environment = object.environment ?? common_1.Environment.ENVIRONMENT_UNSPECIFIED;
         message.tradingMode = object.tradingMode ?? common_1.TradingMode.TRADING_MODE_UNSPECIFIED;
+        message.userId = object.userId ?? "";
         return message;
     },
 };
@@ -1551,6 +1784,21 @@ exports.ConfigServiceService = {
         requestDeserialize: (value) => exports.ListKeysRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.ListKeysResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.ListKeysResponse.decode(value),
+    },
+    /**
+     * Resolve a secret's decrypted plaintext. Gated to allow-listed internal service callers
+     * (x-internal-caller); the value is decrypted server-side and never appears on WatchConfig,
+     * GetConfig, or ListKeys. Returns found=false for an absent/unset (NULL-ciphertext) secret;
+     * a decrypt failure is an INTERNAL error, never a partial/empty value (feature 147).
+     */
+    getSecret: {
+        path: "/xstockstrat.config.v1.ConfigService/GetSecret",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.GetSecretRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.GetSecretRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.GetSecretResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.GetSecretResponse.decode(value),
     },
 };
 exports.ConfigServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.ConfigServiceService, "xstockstrat.config.v1.ConfigService");

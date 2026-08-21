@@ -28,7 +28,10 @@ if _version_not_supported:
 class ConfigServiceStub(object):
     """ConfigService — live configuration via server-streaming WatchConfig.
     All services call WatchConfig at startup and stream config updates.
-    Config values are scoped by environment (dev/production) and trading_mode (paper/live/all).
+    Config values are scoped by environment (production/staging) and global/per-user (user_id),
+    feature 147. paper/live is derived from environment; the trading_mode fields below are
+    deprecated and ignored by the server. Secrets are stored encrypted at rest, redacted at every
+    broadcast/read edge, and resolved only via GetSecret by allow-listed internal callers.
     """
 
     def __init__(self, channel):
@@ -57,12 +60,20 @@ class ConfigServiceStub(object):
                 request_serializer=config_dot_v1_dot_config__pb2.ListKeysRequest.SerializeToString,
                 response_deserializer=config_dot_v1_dot_config__pb2.ListKeysResponse.FromString,
                 _registered_method=True)
+        self.GetSecret = channel.unary_unary(
+                '/xstockstrat.config.v1.ConfigService/GetSecret',
+                request_serializer=config_dot_v1_dot_config__pb2.GetSecretRequest.SerializeToString,
+                response_deserializer=config_dot_v1_dot_config__pb2.GetSecretResponse.FromString,
+                _registered_method=True)
 
 
 class ConfigServiceServicer(object):
     """ConfigService — live configuration via server-streaming WatchConfig.
     All services call WatchConfig at startup and stream config updates.
-    Config values are scoped by environment (dev/production) and trading_mode (paper/live/all).
+    Config values are scoped by environment (production/staging) and global/per-user (user_id),
+    feature 147. paper/live is derived from environment; the trading_mode fields below are
+    deprecated and ignored by the server. Secrets are stored encrypted at rest, redacted at every
+    broadcast/read edge, and resolved only via GetSecret by allow-listed internal callers.
     """
 
     def WatchConfig(self, request, context):
@@ -94,6 +105,16 @@ class ConfigServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetSecret(self, request, context):
+        """Resolve a secret's decrypted plaintext. Gated to allow-listed internal service callers
+        (x-internal-caller); the value is decrypted server-side and never appears on WatchConfig,
+        GetConfig, or ListKeys. Returns found=false for an absent/unset (NULL-ciphertext) secret;
+        a decrypt failure is an INTERNAL error, never a partial/empty value (feature 147).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_ConfigServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -117,6 +138,11 @@ def add_ConfigServiceServicer_to_server(servicer, server):
                     request_deserializer=config_dot_v1_dot_config__pb2.ListKeysRequest.FromString,
                     response_serializer=config_dot_v1_dot_config__pb2.ListKeysResponse.SerializeToString,
             ),
+            'GetSecret': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetSecret,
+                    request_deserializer=config_dot_v1_dot_config__pb2.GetSecretRequest.FromString,
+                    response_serializer=config_dot_v1_dot_config__pb2.GetSecretResponse.SerializeToString,
+            ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
             'xstockstrat.config.v1.ConfigService', rpc_method_handlers)
@@ -128,7 +154,10 @@ def add_ConfigServiceServicer_to_server(servicer, server):
 class ConfigService(object):
     """ConfigService — live configuration via server-streaming WatchConfig.
     All services call WatchConfig at startup and stream config updates.
-    Config values are scoped by environment (dev/production) and trading_mode (paper/live/all).
+    Config values are scoped by environment (production/staging) and global/per-user (user_id),
+    feature 147. paper/live is derived from environment; the trading_mode fields below are
+    deprecated and ignored by the server. Secrets are stored encrypted at rest, redacted at every
+    broadcast/read edge, and resolved only via GetSecret by allow-listed internal callers.
     """
 
     @staticmethod
@@ -229,6 +258,33 @@ class ConfigService(object):
             '/xstockstrat.config.v1.ConfigService/ListKeys',
             config_dot_v1_dot_config__pb2.ListKeysRequest.SerializeToString,
             config_dot_v1_dot_config__pb2.ListKeysResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetSecret(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.config.v1.ConfigService/GetSecret',
+            config_dot_v1_dot_config__pb2.GetSecretRequest.SerializeToString,
+            config_dot_v1_dot_config__pb2.GetSecretResponse.FromString,
             options,
             channel_credentials,
             insecure,

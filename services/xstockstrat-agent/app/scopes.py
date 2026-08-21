@@ -20,20 +20,16 @@ import os
 MCP_CLAIMS_SCOPE_KEY = "mcp_claims"
 
 
-def resolve_scope(environment: str, trading_mode: str) -> tuple[str, str]:
-    """Resolve the (environment, trading_mode) config scope for an outbound read/write.
+def resolve_scope(environment: str) -> str:
+    """Resolve the config `environment` scope ('production' | 'staging') for an outbound read/write.
 
-    Scope resolution: explicit parameter → this agent deployment's APPLICATION_ENV / TRADING_MODE →
-    those env vars' own defaults. Never the proto zero-value: environment/trading_mode are
-    deployment properties in env vars (confirmed with the user), so a production agent must not
-    read/write a dev row when the caller omits them. Lifted here (feature 092/093) from the
-    ``tools.py`` ``_resolve_scope`` closure so ``oauth_server.py`` can share it.
+    Scope resolution: explicit parameter → this agent deployment's APPLICATION_ENV → its default.
+    Never the proto zero-value: environment is a deployment property, so a production agent must
+    not read/write a staging row when the caller omits it. Feature 147 removed the trading_mode
+    axis (paper/live is derived from environment) and renamed dev→staging.
     """
     env = environment or os.environ.get("APPLICATION_ENV", "development")
-    env = "production" if env == "production" else "dev"
-    mode = trading_mode or os.environ.get("TRADING_MODE", "paper")
-    mode = mode if mode in ("paper", "live", "all") else "all"
-    return env, mode
+    return "production" if env == "production" else "staging"
 
 
 _READ = 0x01

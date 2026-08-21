@@ -35,8 +35,7 @@ describe('is_secret propagation on the read path', () => {
         is_secret: true,
         description: 'FMP key',
         default_value: '',
-        environment: 'dev',
-        trading_mode: 'all',
+        environment: 'staging',
       },
       {
         namespace: 'marketdata',
@@ -46,8 +45,7 @@ describe('is_secret propagation on the read path', () => {
         is_secret: false,
         description: 'toggle',
         default_value: 'false',
-        environment: 'dev',
-        trading_mode: 'all',
+        environment: 'staging',
       },
     ];
     const pool: any = {
@@ -55,12 +53,13 @@ describe('is_secret propagation on the read path', () => {
       connect: async () => ({ query: async () => {}, on: () => {} }),
     };
     const impl: any = new ConfigServiceImpl(pool);
-    // Populate the snapshot cache without opening a LISTEN connection.
-    await (impl as any).reloadNamespace('marketdata', 'dev', 'all');
+    // Populate the snapshot cache without opening a LISTEN connection (feature 147: env-only key).
+    await (impl as any).reloadNamespace('marketdata', 'staging');
 
     let result: any = null;
+    // ENVIRONMENT_STAGING=3; user_id unset (global).
     await impl.getConfig(
-      { request: { namespace: 'marketdata', environment: 1, trading_mode: 0 } },
+      { request: { namespace: 'marketdata', environment: 3 } },
       (_e: unknown, res: unknown) => {
         result = res;
       },
@@ -70,6 +69,8 @@ describe('is_secret propagation on the read path', () => {
     const secret = result.values['secret.marketdata.fmp.api_key'];
     const plain = result.values['marketdata.fmp.enabled'];
     assert.equal(secret.isSecret, true, 'a secret key must be flagged on the wire');
+    // Feature 147: the secret value is redacted, never the stored value.
+    assert.equal(secret.stringVal, '[redacted]', 'a secret must never expose its value at this edge');
     assert.equal(plain.isSecret, false, 'a non-secret key must not be flagged');
   });
 });
@@ -83,9 +84,9 @@ describe('SetConfig value round-trip over a real gRPC connection', () => {
     const pool: any = {
       query: async (sql: string, params?: unknown[]) => {
         if (sql.includes('INSERT INTO config.config_values')) lastInsert = params;
-        // Feature 091: the existence gate SELECTs before the upsert; these round-trip cases
-        // write to a registered key, so return a row so the gate passes.
-        if (sql.includes('SELECT 1 FROM config.config_values')) return { rows: [{ '?column?': 1 }] };
+        // Feature 147: the existence gate reads is_secret before the upsert; these round-trip
+        // cases write to a registered non-secret key, so return an is_secret=false row.
+        if (sql.includes('SELECT is_secret FROM config.config_values')) return { rows: [{ is_secret: false }] };
         return { rows: [] };
       },
       connect: async () => ({ query: async () => {}, on: () => {} }),

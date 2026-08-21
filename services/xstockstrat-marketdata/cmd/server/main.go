@@ -60,6 +60,27 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Feature 147: vendor credentials now live encrypted in the config service, not env vars.
+	// Resolve them via GetSecret on the already-open config connection, before building the
+	// vendor clients. A resolve failure or an unset secret leaves the field empty — the same
+	// warn-and-start behavior as the old empty env var (the Alpaca guard below still fires).
+	resolveSecret := func(key string) string {
+		v, found, err := cfgWatcher.ResolveSecret(ctx, key)
+		if err != nil {
+			slog.Warn("resolving vendor credential from config failed — treating as unset",
+				"key", key, "error", err)
+			return ""
+		}
+		if !found {
+			return ""
+		}
+		return v
+	}
+	cfg.AlpacaAPIKey = resolveSecret("alpaca.api_key")
+	cfg.AlpacaAPISecret = resolveSecret("alpaca.api_secret")
+	cfg.FMPAPIKey = resolveSecret("fmp.api_key")
+	cfg.FinnhubAPIKey = resolveSecret("finnhub.api_key")
+
 	// Alpaca client — this service is the sole Alpaca integration point
 	alpacaClient := alpaca.NewClient(alpaca.ClientConfig{
 		APIKey:    cfg.AlpacaAPIKey,

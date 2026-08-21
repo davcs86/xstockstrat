@@ -35,8 +35,9 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
     const recordingPool: any = {
       query: async (sql: string, params?: unknown[]) => {
         queries.push({ sql, params });
-        if (sql.includes('SELECT 1 FROM config.config_values')) {
-          return { rows: keyExists ? [{ '?column?': 1 }] : [] };
+        // Feature 147: existence gate reads is_secret.
+        if (sql.includes('SELECT is_secret FROM config.config_values')) {
+          return { rows: keyExists ? [{ is_secret: false }] : [] };
         }
         return { rows: [] };
       },
@@ -85,8 +86,9 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
     assert.equal(err, null, 'internal-caller write must succeed without admin scope');
     const insert = insertQuery();
     assert.ok(insert, 'the INSERT must run');
-    // params: [namespace, key, value_type, value_data, updated_by, reason, env, mode, caller_identity]
-    assert.equal(insert!.params?.[8], 'trading-reconciliation-poller');
+    // Feature 147 params: [namespace, key, value_type, value_data, value_encrypted, is_secret,
+    // updated_by, update_reason, environment, user_id, caller_identity].
+    assert.equal(insert!.params?.[10], 'trading-reconciliation-poller');
   });
 
   it('accepts the same caller writing HALTED', async () => {
@@ -137,6 +139,6 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
     assert.equal(err, null, 'admin write must succeed');
     const insert = insertQuery();
     assert.ok(insert);
-    assert.equal(insert!.params?.[8], null, 'a normal human write must not populate caller_identity');
+    assert.equal(insert!.params?.[10], null, 'a normal human write must not populate caller_identity');
   });
 });

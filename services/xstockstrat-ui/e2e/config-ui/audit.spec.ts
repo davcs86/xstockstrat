@@ -16,8 +16,8 @@ const AUDIT_ENTRIES = [
     changedBy: 'alice@example.com',
     reason: 'Reducing exposure ahead of earnings',
     changedAt: new Date('2026-08-10T12:00:00Z').toISOString(),
-    environment: 'dev',
-    tradingMode: 'paper',
+    environment: 'staging',
+    userId: '',
   },
   {
     id: '2',
@@ -28,8 +28,8 @@ const AUDIT_ENTRIES = [
     changedBy: 'bob@example.com',
     reason: 'Boost reliable source weight',
     changedAt: new Date('2026-08-12T09:30:00Z').toISOString(),
-    environment: 'dev',
-    tradingMode: 'all',
+    environment: 'staging',
+    userId: 'u-42',
   },
 ];
 
@@ -47,7 +47,7 @@ test.describe('/config-ui/audit table content and sorting', () => {
       'Old Value',
       'New Value',
       'By',
-      'Env / Mode',
+      'Env / Scope',
       'Reason',
     ]) {
       await expect(page.getByRole('columnheader', { name: header })).toBeVisible();
@@ -59,7 +59,7 @@ test.describe('/config-ui/audit table content and sorting', () => {
       await expect(row.getByText(entry.newValue)).toBeVisible();
       await expect(row.getByText(entry.changedBy)).toBeVisible();
       await expect(row.getByText(entry.environment)).toBeVisible();
-      await expect(row.getByText(entry.tradingMode)).toBeVisible();
+      await expect(row.getByText(entry.userId ? `user:${entry.userId}` : 'global')).toBeVisible();
       await expect(row.getByText(entry.reason)).toBeVisible();
     }
   });

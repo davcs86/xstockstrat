@@ -301,7 +301,7 @@ async def test_ingest_signal_auto_alert_above_threshold():
     # feature 093: the threshold read is env-scoped in the `agent` namespace (was env-blind).
     kw = mock_config.await_args.kwargs
     assert kw["namespace"] == "agent"
-    assert kw["environment"] in ("dev", "production")
+    assert kw["environment"] in ("staging", "production")
 
 
 @pytest.mark.asyncio

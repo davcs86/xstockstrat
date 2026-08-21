@@ -34,17 +34,18 @@ export class ConfigWatcher extends EventEmitter {
   }
 
   private startWatch() {
+    // Feature 147: config is scoped by environment (production/staging) x global/per-user.
+    // paper/live is derived from environment; trading_mode is deprecated and ignored by the server.
     const appEnv = process.env.APPLICATION_ENV ?? 'development';
-    const tradingModeEnv = process.env.TRADING_MODE ?? 'paper';
-    const environment = appEnv === 'production' ? Environment.ENVIRONMENT_PRODUCTION : Environment.ENVIRONMENT_DEV;
-    const tradingMode = tradingModeEnv === 'live' ? TradingMode.TRADING_MODE_LIVE : TradingMode.TRADING_MODE_PAPER;
+    const environment = appEnv === 'production' ? Environment.ENVIRONMENT_PRODUCTION : Environment.ENVIRONMENT_STAGING;
 
     const stream = this.stub.watchConfig({
       namespace: this.namespace,
       clientId: `node-${this.namespace}-${process.pid}`,
       version: '',
       environment,
-      tradingMode,
+      tradingMode: TradingMode.TRADING_MODE_UNSPECIFIED,
+      userId: '',
     });
 
     stream.on('data', (snap: ConfigSnapshot) => {

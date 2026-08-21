@@ -10,6 +10,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
@@ -35,21 +36,18 @@ type Config struct {
 // LoadFromEnv reads configuration from environment variables with sane defaults.
 func LoadFromEnv() *Config {
 	return &Config{
-		GRPCPort:        getEnv("GRPC_PORT", "50053"),
-		ConfigEndpoint:  getEnv("CONFIG_ENDPOINT", "xstockstrat-config:50060"),
-		LedgerEndpoint:  getEnv("LEDGER_ENDPOINT", "xstockstrat-ledger:50057"),
-		NotifyEndpoint:  getEnv("NOTIFY_ENDPOINT", "xstockstrat-notify:50059"),
-		DBConnStr:       getEnv("DATABASE_URL", ""),
-		AlpacaAPIKey:    getEnv("ALPACA_API_KEY", ""),
-		AlpacaAPISecret: getEnv("ALPACA_API_SECRET", ""),
-		AlpacaBaseURL:   getEnv("ALPACA_BASE_URL", "https://paper-api.alpaca.markets"),
-		AlpacaDataURL:   getEnv("ALPACA_DATA_URL", "https://data.alpaca.markets"),
-		// Vendor credentials — delivered as a DO App Platform `type: SECRET` env var, the
-		// same mechanism as the Alpaca keys above. Deliberately NOT read from the config
-		// service: config values are stored in plaintext and readable by any WatchConfig
-		// subscriber (feature 076). FinnhubAPIKey follows the identical pattern (feature 129).
-		FMPAPIKey:      getEnv("FMP_API_KEY", ""),
-		FinnhubAPIKey:  getEnv("FINNHUB_API_KEY", ""),
+		GRPCPort:       getEnv("GRPC_PORT", "50053"),
+		ConfigEndpoint: getEnv("CONFIG_ENDPOINT", "xstockstrat-config:50060"),
+		LedgerEndpoint: getEnv("LEDGER_ENDPOINT", "xstockstrat-ledger:50057"),
+		NotifyEndpoint: getEnv("NOTIFY_ENDPOINT", "xstockstrat-notify:50059"),
+		DBConnStr:      getEnv("DATABASE_URL", ""),
+		AlpacaBaseURL:  getEnv("ALPACA_BASE_URL", "https://paper-api.alpaca.markets"),
+		AlpacaDataURL:  getEnv("ALPACA_DATA_URL", "https://data.alpaca.markets"),
+		// Vendor credentials (Alpaca key/secret, FMP, Finnhub) are no longer env vars (feature
+		// 147). They are stored ENCRYPTED in the config service and resolved at startup via
+		// Watcher.ResolveSecret (GetSecret RPC, gated to this service's x-internal-caller). The
+		// four fields below start empty here and are populated in cmd/server/main.go after the
+		// config connection is established, before the Alpaca/FMP/Finnhub clients are built.
 		ApplicationEnv: getEnv("APPLICATION_ENV", "development"),
 		TradingMode:    getEnv("TRADING_MODE", "paper"),
 	}
@@ -91,13 +89,13 @@ func NewWatcher(endpoint, namespace, applicationEnv, tradingMode string) (*Watch
 }
 
 // resolveEnvironment maps Config.ApplicationEnv ("development" | "production") to the proto
-// Environment enum. Anything other than "production" resolves to dev, matching the default in
-// LoadFromEnv.
+// Environment enum. Anything other than "production" resolves to STAGING (feature 147: the config
+// scope is production/staging; the config server also treats the deprecated DEV as staging).
 func resolveEnvironment(applicationEnv string) commonv1.Environment {
 	if applicationEnv == "production" {
 		return commonv1.Environment_ENVIRONMENT_PRODUCTION
 	}
-	return commonv1.Environment_ENVIRONMENT_DEV
+	return commonv1.Environment_ENVIRONMENT_STAGING
 }
 
 // resolveTradingMode maps Config.TradingMode ("paper" | "live") to the proto TradingMode enum.
@@ -107,6 +105,31 @@ func resolveTradingMode(tradingMode string) commonv1.TradingMode {
 		return commonv1.TradingMode_TRADING_MODE_LIVE
 	}
 	return commonv1.TradingMode_TRADING_MODE_PAPER
+}
+
+// InternalCallerID is the identity this service presents to the config service's GetSecret
+// allow-list (feature 147). The config service grants it the marketdata.* vendor-credential keys.
+const InternalCallerID = "marketdata"
+
+// ResolveSecret fetches a decrypted secret from the config service via the GetSecret RPC. The
+// config service decrypts server-side and returns the plaintext only to an allow-listed
+// x-internal-caller (feature 147); secret plaintext is never on the WatchConfig stream. Returns
+// (value, found, error): found=false means the secret is unset (never written), which the caller
+// treats exactly like the old empty env var (warn-and-start); a non-nil error is an RPC/decrypt
+// failure.
+func (w *Watcher) ResolveSecret(ctx context.Context, key string) (string, bool, error) {
+	octx := metadata.NewOutgoingContext(ctx, metadata.New(map[string]string{
+		"x-internal-caller": InternalCallerID,
+	}))
+	resp, err := w.client.GetSecret(octx, &configv1.GetSecretRequest{
+		Namespace:   w.namespace,
+		Key:         key,
+		Environment: w.environment,
+	})
+	if err != nil {
+		return "", false, fmt.Errorf("GetSecret %s: %w", key, err)
+	}
+	return resp.GetValue(), resp.GetFound(), nil
 }
 
 // WaitForSnapshot blocks until the initial config snapshot has been received
@@ -197,7 +220,8 @@ func (w *Watcher) stream() error {
 		Namespace:   w.namespace,
 		ClientId:    fmt.Sprintf("go-marketdata-%d", os.Getpid()),
 		Environment: w.environment,
-		TradingMode: w.tradingMode,
+		// trading_mode is deprecated and ignored by the config server (feature 147); paper/live
+		// derives from environment. user_id is left empty — services subscribe at global scope.
 	}
 	stream, err := w.client.WatchConfig(ctx, req)
 	if err != nil {

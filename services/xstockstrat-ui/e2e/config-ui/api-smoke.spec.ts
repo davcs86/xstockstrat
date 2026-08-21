@@ -43,10 +43,10 @@ test.describe('GET /api/config — namespace config table data contract', () => 
    * [namespace]/NamespaceEditor.tsx accesses:
    *   data.keys                       → array iteration (data.keys ?? [])
    *   k.key                           → TableCell font-mono, row key prop
-   *   k.currentValue                  → displayed in Value column + edit-prefill (or '[secret]' if isSecret)
+   *   k.currentValue                  → displayed in Value column + edit-prefill (secrets show '[secret]' and the editor starts BLANK, feature 147)
    *   k.defaultValue                  → seed metadata only (CONFIG-2); NOT read for display
    *   k.description                   → Description column (hidden on mobile)
-   *   k.isSecret                      → boolean gate: hides value + disables Edit button
+   *   k.isSecret                      → masks the displayed value as '[secret]'; Edit IS allowed (admin-gated backend), the editor opens blank and stores a fresh encrypted value (feature 147)
    *   k.consumingService              → (not rendered, but part of ConfigKey interface)
    *   k.environment                   → number (not rendered in table, but part of ListKeys response)
    *   k.tradingMode                   → number (not rendered in table, but part of ListKeys response)
@@ -207,7 +207,7 @@ test.describe('POST /api/config — inline edit save flow', () => {
   test('SetConfig is rejected for a non-native environment (FailedPrecondition → 400)', async ({
     page,
   }) => {
-    // webServer.env sets APPLICATION_ENV=development (native scope = dev = Environment.DEV = 1).
+    // webServer.env sets APPLICATION_ENV=development (native scope = staging = Environment.STAGING = 3).
     // environment: 2 (PRODUCTION) is the non-native scope for this deployment.
     await addAdminCookie(page);
     await page.goto('/auth/login');
@@ -229,8 +229,8 @@ test.describe('validation field in ListKeysResponse', () => {
     await page.goto('/auth/login');
     const { status, body } = await callBff(page, CONFIG_BFF, {
       namespace: 'analysis',
-      environment: 1,
-      tradingMode: 0,
+      environment: 3,
+      userId: '',
     });
     expect(status).toBe(200);
     const keys = body.keys as Array<Record<string, unknown>>;

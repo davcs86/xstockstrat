@@ -59,6 +59,19 @@ export const ADMIN_SCOPE_ERROR = {
 };
 
 /**
+ * Denial for a per-user write whose target `user_id` is not the caller's own (PR #994). A per-user
+ * config row is **self-service**: only its owner may write it, and — unlike a global write — an
+ * ADMIN caller earns NO override for someone else's per-user row (admins reach only globals and
+ * their own per-user rows). The gate compares the propagated `x-user-id` against the request's
+ * `user_id`, so an edge that fails to propagate the caller id lands here rather than silently
+ * writing another user's row.
+ */
+export const PER_USER_SCOPE_ERROR = {
+  code: status.PERMISSION_DENIED,
+  message: 'per-user config is self-service: you may only write your own user_id',
+};
+
+/**
  * Denial when a write carries no attributable author at all — neither an explicit
  * `author` field nor a propagated `x-user-id`. Mirrors the indicators servicer, where
  * `request.author` wins and the propagated id is the fallback.
@@ -117,3 +130,51 @@ export function hasInternalCallerAuthority(
       grant.allowedTargetValues.includes(targetValue),
   );
 }
+
+/**
+ * GetSecret allow-list (feature 147). Structurally identical to the internal-caller write
+ * allow-list above, but for the READ direction: which internal service (`x-internal-caller`) may
+ * resolve a secret's decrypted plaintext for which (namespace, key). Secret plaintext is served
+ * only through this gate — never on WatchConfig/GetConfig/ListKeys — so an un-allow-listed caller
+ * can never read a credential. Fails closed on an absent/unlisted caller.
+ */
+interface SecretCallerGrant {
+  callerID: string;
+  namespace: string;
+  /** The exact keys (within namespace) this caller may resolve. */
+  keys: ReadonlyArray<string>;
+}
+
+const SECRET_CALLER_ALLOWLIST: ReadonlyArray<SecretCallerGrant> = [
+  {
+    callerID: 'marketdata',
+    namespace: 'marketdata',
+    keys: ['alpaca.api_key', 'alpaca.api_secret', 'fmp.api_key', 'finnhub.api_key'],
+  },
+];
+
+/**
+ * True when the propagated internal-caller identity is allow-listed to resolve the secret at
+ * (namespace, key) via GetSecret. Fails closed: an absent `x-internal-caller`, an unlisted
+ * callerID, or a key outside that caller's grant all return false.
+ */
+export function hasSecretCallerAuthority(
+  md: Metadata | undefined,
+  namespace: string,
+  key: string,
+): boolean {
+  const callerID = first(md, HEADER_INTERNAL_CALLER);
+  if (!callerID) return false;
+  return SECRET_CALLER_ALLOWLIST.some(
+    (grant) =>
+      grant.callerID === callerID &&
+      grant.namespace === namespace &&
+      grant.keys.includes(key),
+  );
+}
+
+/** Denial for a GetSecret caller not on the secret allow-list. */
+export const SECRET_SCOPE_ERROR = {
+  code: status.PERMISSION_DENIED,
+  message: 'not authorized to resolve this secret',
+};

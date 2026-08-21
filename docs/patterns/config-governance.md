@@ -6,28 +6,35 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 
 1. **No hardcoded config values** in service source code. All env-specific values must be registered in the config service.
 2. **Config key naming**: `<service-short-name>.<category>.<key>` — e.g., `indicators.sandbox.timeout_ms`
-3. **All services subscribe to xstockstrat-config at startup** before accepting traffic, passing `environment` and `trading_mode` in the WatchConfig request.
-4. **Config values are scoped** by `environment` (`dev`/`production`) and `trading_mode` (`paper`/`live`/`all`). Rows with `trading_mode='all'` apply to all modes.
+3. **All services subscribe to xstockstrat-config at startup** before accepting traffic, passing `environment` (and, where a per-user value is needed, an optional `user_id`) in the WatchConfig request. The `trading_mode` field is deprecated (feature 147) and ignored by the server.
+4. **Config values are scoped** by two dimensions (feature 147): `environment` (`production`/`staging`) × `global`/per-user (`user_id`, NULL = global). A per-user value overrides the global value on both `GetConfig` and `WatchConfig`. Paper/live is **derived** from environment (production = live, staging = paper) — the former `trading_mode` (`paper`/`live`/`all`) axis was removed. The deprecated `ENVIRONMENT_DEV` maps to the `staging` scope. **Write authorization is scope-aware (PR #994):** a **global** write requires the ADMIN bit (or an authorized internal caller); a **per-user** write is **self-service** — only the owner (propagated `x-user-id` == target `user_id`) may write their own row, and an admin earns **no** override for another user's per-user row (admins reach globals + their own rows only). Secrets stay global-only.
 5. **Config changes flow**: agent or webhook caller → config webhook handler → config service → WatchConfig stream → all subscribers.
-6. **A vendor API credential is never a config key — not even under `secret.*`.** The `secret.*`
-   prefix + `is_secret=TRUE` mechanism exists in the schema but has exactly one historical use
-   (`secret.marketdata.fmp.api_key`), and it was **removed** by feature 076 (migration
-   `009_drop_fmp_api_key_config.up.sql`): config values are plaintext, streamed to every
-   `WatchConfig` subscriber, and no `secret://` resolver was ever built, so a config-stored
-   "secret" was never actually secret. Every vendor credential on the platform (Alpaca, JWT,
-   broker-accounts encryption, MCP agent, FMP, Finnhub) is instead a DO App Platform `type: SECRET`
-   env var, delivered through the GitHub Actions deploy pipeline — see § "Registering a new vendor
-   credential" below, not this section. Only the non-secret *knobs* around a credential
-   (`<source>.enabled`, `.base_url`, cache/quota settings) are config keys.
+6. **Secrets ARE stored in config now, encrypted at rest (feature 147 — reversing feature 076's
+   ban, with explicit operator sign-off recorded in the feature's `context.md`).** Feature 076
+   removed the earlier `secret.*` mechanism because it built no encryption, redaction, or resolver —
+   values were plaintext, streamed to every `WatchConfig` subscriber, so a config-stored "secret"
+   was never actually secret. Feature 147 built exactly those three guards and re-permitted secrets:
+   a secret row (`is_secret=true`) stores AES-256-GCM ciphertext in a `value_encrypted BYTEA` column
+   (master key: the `CONFIG_SECRETS_ENCRYPTION_KEY` env var, hex 32 bytes, same custody as
+   `BROKER_ACCOUNTS_ENCRYPTION_KEY`; the config service fails to boot without it), `value_data`
+   holds the literal `[redacted]` sentinel, and plaintext is **redacted at every read/broadcast
+   edge** — `WatchConfig`/`GetConfig`/`ListKeys` and the config-ui/agent tools never expose it.
+   Plaintext is returned only by the authenticated **`GetSecret`** RPC, which decrypts server-side
+   and hands the value to an **allow-listed internal service caller** (the `x-internal-caller`
+   metadata channel, mirroring feature 102). `is_secret` is **row-authoritative on write** (read
+   from the stored row, never trusted from the request), so an admin update can never land
+   plaintext. The `secret.*` **name prefix is retired** — secret-ness is the `is_secret` flag alone,
+   not a name convention. The non-secret *knobs* around a credential (`<source>.enabled`,
+   `.base_url`, cache/quota settings) remain ordinary config keys.
 7. **Default values** must be declared in each service's `CLAUDE.md` under "Config Keys".
-8. **Config UI** at `http://localhost:3002` — manage config values by environment and trading mode.
+8. **Config UI** at `http://localhost:3002` — manage config values by environment (`production`/`staging`) and global/per-user scope.
 
 ## Global Config Keys
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `platform.maintenance_mode` | bool | false | Halts all trading operations |
-| `platform.trading_state` | string | ACTIVE | Richer halt state (`ACTIVE`/`REDUCE_ONLY`/`HALTED`), independent of `platform.maintenance_mode`; seeded per `trading_mode` |
+| `platform.trading_state` | string | ACTIVE | Richer halt state (`ACTIVE`/`REDUCE_ONLY`/`HALTED`), independent of `platform.maintenance_mode`; seeded per environment (one global row per environment since feature 147 collapsed the `trading_mode` axis) |
 | `platform.log_level` | string | info | Global log level override |
 
 > **Not real config keys (2026-08-07 audit):** this table previously also listed
@@ -49,17 +56,35 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 3. Approval: service owner + config team (see `docs/runbooks/approval-flow.md`).
 4. Add a row to the "Per-Feature Registered Keys" log below.
 
-## Registering a new vendor credential (not a config key)
+## Registering a new vendor credential (an encrypted secret config row)
 
-A vendor API key/secret is governed by a **separate, parallel** process — it never touches this
-service (Rule 6 above). Follow `docs/runbooks/add-data-source.md` § "Wiring a New Vendor
-Credential Through Deploy" — a 10-file checklist (`Config`/`LoadFromEnv`, `docker-compose.yml`,
-both `.do/*.yaml` files, all 4 GitHub Actions deploy workflows, `do-inject-prod-secrets.py`, and
-2 docs files). Approval: service owner + Security (per `docs/runbooks/reviewer-registry.md`'s
-Security role — API key scoping, secret-env-var convention followed). This checklist exists
-because feature 129 shipped `FINNHUB_API_KEY` wired into only 3 of the 8 required files — see
-`docs/roadmap/ledger/fails.md` 2026-08-13 for the full root-cause writeup. Skipping any wiring
-file doesn't fail loudly: the credential just deploys silently empty.
+Since feature 147 a vendor API key/secret **is** a config key — a secret row (`is_secret=true`)
+whose value is AES-256-GCM ciphertext in `value_encrypted`, redacted at every read edge and
+resolvable only via the `GetSecret` RPC (Rule 6 above). The wiring path is now:
+
+1. **Seed the secret row** in `xstockstrat-config` with **NULL ciphertext** (`is_secret=true`,
+   scope: global, per environment). The row exists but carries no value until an operator sets it.
+2. **Set the real value post-deploy** through the normal config **write path** (config-ui / the
+   admin-gated `SetConfig`), which encrypts it under `CONFIG_SECRETS_ENCRYPTION_KEY`. Never commit
+   the plaintext.
+3. **Grant the consuming service read access** by adding an `x-internal-caller` allow-list entry to
+   `SECRET_CALLER_ALLOWLIST` in `services/xstockstrat-config/src/grpc/authz.ts` (caller → the
+   specific secret keys it may decrypt).
+4. **Resolve it in the consuming service** at startup via `GetSecret` (sending
+   `x-internal-caller: <service>`), not from an env var.
+
+The one bootstrap env var this depends on is **`CONFIG_SECRETS_ENCRYPTION_KEY`** (hex 32 bytes) on
+the config service — without it the config service will not boot. Approval: service owner + Security
+(per `docs/runbooks/reviewer-registry.md`'s Security role — encryption at rest, redaction at every
+edge, `GetSecret` allow-list, `is_secret` row-authoritative on write).
+
+> **Historical:** before feature 147, a vendor credential was a DO App Platform `type: SECRET` env
+> var wired through the deploy pipeline (an 8-file checklist in
+> `docs/runbooks/add-data-source.md`). Feature 076 had banned config-stored secrets entirely because
+> no encryption/redaction/resolver existed. That is no longer the current path — the four vendor
+> credentials (`marketdata.alpaca.api_key`, `marketdata.alpaca.api_secret`, `marketdata.fmp.api_key`,
+> `marketdata.finnhub.api_key`) moved into encrypted config in feature 147 and their env vars were
+> removed.
 
 ## Author-sentinel conventions
 
@@ -76,6 +101,27 @@ without this convention, both look identical (fails.md 2026-07-01).
 ## Per-Feature Registered Keys
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
+
+### feature 147 — config-secrets-and-scoping (`xstockstrat-config`, `xstockstrat-marketdata`)
+
+Re-permits secrets in config, encrypted at rest, and re-models the config scope axes. The four
+vendor credentials below move from `type: SECRET` env vars (feature 076) into **encrypted secret
+config rows** (`is_secret=true`, global scope, per environment): the row stores AES-256-GCM
+ciphertext in `value_encrypted` under `CONFIG_SECRETS_ENCRYPTION_KEY`, `value_data` holds the
+`[redacted]` sentinel, and each is seeded with **NULL ciphertext until an operator sets the real
+value post-deploy** via the config write path. `xstockstrat-marketdata` resolves them at startup via
+the new `GetSecret` RPC (metadata `x-internal-caller: marketdata`, seeded allow-list grant:
+`marketdata` → these four keys). The `secret.*` name prefix is retired — secret-ness is `is_secret`
+alone. **Scope re-model:** the `trading_mode` axis is removed (paper/live now derived from
+environment); config is scoped by `environment` (`production`/`staging`) × global/per-user
+(`user_id`, NULL = global), with per-user overriding global.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `marketdata.alpaca.api_key` | secret | _(NULL until set)_ | Alpaca API key. `is_secret`, encrypted at rest; resolved by marketdata via `GetSecret`. |
+| `marketdata.alpaca.api_secret` | secret | _(NULL until set)_ | Alpaca API secret. `is_secret`, encrypted at rest; resolved via `GetSecret`. |
+| `marketdata.fmp.api_key` | secret | _(NULL until set)_ | FMP fundamentals API key. `is_secret`, encrypted at rest; resolved via `GetSecret`. |
+| `marketdata.finnhub.api_key` | secret | _(NULL until set)_ | Finnhub fundamentals API key. `is_secret`, encrypted at rest; resolved via `GetSecret`. |
 
 ### feature 141 — fix-opportunities-bars-fetch-oom (`xstockstrat-analysis`)
 
