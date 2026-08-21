@@ -286,6 +286,29 @@ Write the file back. Update `$FEATURE_DIR/context.md`:
 
 ---
 
+## P7.5. Promote acceptance scenarios (C-16 backstop)
+
+The durable business-rule suites must gain each launching feature's `@AC-*` scenarios (**C-16**). The
+primary promotion is `/sdd-execute` at integration; this is the backstop for a feature that reached
+`launched` without it (and `/sdd-archiver` is a third, later net). It is **idempotent** — an
+already-promoted feature yields an all-`DUP` plan and writes nothing.
+
+For each feature found at `code-completed` in P2 (i.e. flipping to `launched`):
+
+1. Spawn the **`scenario-promoter`** subagent via `Task` (read-only), passing its `slug`, feature
+   number `NNN`, the path to `$FEATURE_DIR/acceptance.feature`, the **affected services** (from
+   `feature.md`'s Reviewers table), and the existing suite paths to dedup against
+   (`services/xstockstrat-<svc>/acceptance/*.feature` + `docs/sdd/business-rules/platform.feature`).
+2. Apply its plan (orchestrator is the single writer, **P-01**): append each `NEW` scenario block
+   verbatim to its target suite, creating a `services/xstockstrat-<svc>/acceptance/` dir + file header
+   on `CREATE`. Skip `DUP`/`OVERLAP`; surface any `CONFLICT` (a launching feature contradicting a
+   standing promoted rule) to the user — never silently overwrite. Never rewrite/delete an existing
+   promoted scenario.
+3. Stage the promoted suite files with this promotion's other doc changes. If nothing was `NEW`,
+   note "scenarios already promoted" and move on.
+
+---
+
 ## P8. Announce result
 
 Print a summary:
