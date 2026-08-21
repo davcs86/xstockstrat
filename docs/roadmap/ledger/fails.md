@@ -1634,3 +1634,25 @@ ambiguity is logged here).
 - **Mistake**: A design gated alert fanout on `alert.context["confidence"]`, a Struct key **no alert producer writes**. A survey of all five `EmitAlert` callers found analysis writes a flat `context` of `{strategy_id, symbol, trigger_type, conviction}` (`conviction`, not `confidence`, and an ordinal not a probability — cf. 023), while trading/marketdata/portfolio set **no** context and ingest sets `{job_id, failed_symbols, error}`. Fail-closed on the missing key would have shipped a 100%-inert feature. Same family as 080 (absence-claim) / 023 & 081 (name+range ≠ producer contract) / 2026-08-02 F-10 (context-builder drift), now on the notify alert `context` Struct.
 - **Evidence**: `services/xstockstrat-analysis/app/engine/live_loop.py:567-575`; `services/xstockstrat-trading/internal/service/trading.go` (fill/approval/reconciliation alerts, no Context); `services/xstockstrat-ingest/app/handlers/servicer.py:295`; feature 020 design.md § Rejected Alternatives + context.md round 1.
 - **Rule it implies**: reinforces **P-03**/**C-01** — before gating or building a payload on a `context`/`Struct` key an "upstream" service supposedly sets, grep every producer's actual write site for that exact key; a plausible key name (`confidence`) and a persistence path (`JSON.stringify(context)`) prove neither that the key is written nor what it means.
+### 2026-08-21 — config-secrets-and-scoping — assumption
+- **Mistake**: The design duplicated a **write-authz decision on the client** — a client-side
+  `is_secret` write refusal in the agent `set_config` tool plus edit-suppression of secret rows in
+  config-ui — on the guess that operators shouldn't set secrets via MCP/UI. The backend admin gate +
+  row-authoritative encryption already guard the write, so the client-side refusal was redundant and
+  *blocked legitimate admin writes*; the operator reversed it in review (secrets are now writable via
+  both MCP and config-ui, encrypted server-side).
+- **Evidence**: `docs/roadmap/features/147-config-secrets-and-scoping/context.md` (PR #994 review,
+  item 2); reversal in `services/xstockstrat-agent/app/tools.py` `set_config` +
+  `services/xstockstrat-ui/src/app/config-ui/[namespace]/NamespaceEditor.tsx`.
+- **Rule it implies**: guard a write-authz decision **once**, at the backend edge; a client-side
+  re-refusal both drifts from the gate and blocks legitimate callers.
+
+### 2026-08-21 — config-secrets-and-scoping — migration
+- **Mistake**: Dropping the `trading_mode` column broke the **config-ui BFF audit route**, which
+  directly `SELECT`s the config service's audit table — a runtime break in a *different service*,
+  invisible to the migration and to CI, and beyond the two in-schema audit triggers the design's
+  completeness sweep already caught.
+- **Evidence**: `docs/roadmap/features/147-config-secrets-and-scoping/context.md` (Steps 7–9, audit
+  route fix); `services/xstockstrat-ui/src/app/config-ui/api/audit/route.ts`.
+- **Rule it implies**: a column-drop completeness sweep must grep **every** reader of the schema —
+  including cross-service / BFF direct queries — not just the owning service's code and its triggers.
