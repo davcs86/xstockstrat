@@ -65,6 +65,12 @@ parameter sweep and re-enable it at the end so it never evaluates at a config yo
 under this partial-merge contract — send only it to change it, and use `clear_fields` to revert it
 to the platform default.
 
+**Rule encoding.** `entry_rule`/`exit_rule` accept **either** a JSON string **or** a JSON object
+(dict) — an MCP client that pre-parses JSON arguments may pass the object directly; the tool
+serializes a dict to the canonical JSON string before sending. Passing a rule both as a value and
+naming it in `clear_fields` keeps the value (the clear is silently dropped); to erase, use
+`clear_fields` alone.
+
 **`denied_symbols` and `signal_eligible` (feature 132)** are two more partial-merge fields on
 `manage_strategy`. `denied_symbols` is an **entry-only deny list** — a normalized-uppercase symbol
 list the strategy must never evaluate *for entry*; a held position on a denied symbol still keeps

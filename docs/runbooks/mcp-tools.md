@@ -470,14 +470,14 @@ gate.
 | `strategy_id` | `string` | Yes | Lowercase/underscore identifier, e.g. `"sma_crossover"` |
 | `display_name` | `string` | No | Human-readable name |
 | `components` | `object[]` | No | `{ref_name, kind ("builtin"\|"formula"), indicator, formula_id, params}` |
-| `entry_rule` | `string` | No | JSON-encoded condition tree |
-| `exit_rule` | `string` | No | JSON-encoded condition tree |
+| `entry_rule` | `string` or `object` | No | Condition tree as a JSON string **or** a JSON object (dict) — a dict is serialized to the canonical JSON string before forwarding |
+| `exit_rule` | `string` or `object` | No | Condition tree as a JSON string **or** a JSON object (dict) — a dict is serialized to the canonical JSON string before forwarding |
 | `signal_params` | `object` | No | Optional signal-weighting params |
 | `cooldown_days` | `int` | No | Per-symbol re-entry cooldown in calendar days. Omit → platform default (31); `0` → no cooldown; negative rejected |
 | `exit_cooldown_days` | `int` | No | Per-symbol minimum holding period in calendar days before `exit_rule` may fire a sell. Omit → platform default (0, no minimum hold); `0` → no minimum hold (current behavior); negative rejected |
 | `denied_symbols` | `string[]` | No | **Entry-only** deny list (feature 132) — normalized-uppercase symbols the strategy never evaluates for entry; a held position on a denied symbol still exits. Omit to leave unchanged; pass `[]` (or `clear_fields`) to clear |
 | `signal_eligible` | `bool` | No | Whether the platform-wide active-signal term joins the strategy's live universe (feature 132; default `false`). `true` alongside a non-empty `signal_params.symbols` allowlist is rejected `INVALID_ARGUMENT` (the allowlist is already an explicit override) |
-| `clear_fields` | `string[]` | No | Field names to **erase** on `update`, e.g. `["exit_rule"]`. The only way to blank a rule or revert `cooldown_days` to the platform default |
+| `clear_fields` | `string[]` | No | Field names to **erase** on `update`, e.g. `["exit_rule"]`. The only way to blank a rule or revert `cooldown_days` to the platform default. If a field is **both** supplied a value and named here, the value wins and the clear is silently dropped — to erase, name it in `clear_fields` **alone** (a supplied empty-object rule `{}`/`"{}"` is not a clear; the server rejects a contentless rule `INVALID_ARGUMENT`) |
 
 **Return**
 
