@@ -1,6 +1,6 @@
 # Implementation Spec: backtest-next-bar-fill
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-08-23
 **Feature**: `docs/roadmap/features/151-backtest-next-bar-fill/feature.md`
 **Total Steps**: 10
@@ -564,7 +564,7 @@ Both files mention `next_bar_open`.
 
 ### Step 9 — service: UI fill-model label + Past Runs column + exhaustive enum map
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx` — modify
@@ -614,7 +614,7 @@ Both files mention `next_bar_open`.
 
 ### Step 10 — test: UI fill-model label e2e
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/` — add/modify a backtest-result spec

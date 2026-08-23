@@ -49,6 +49,10 @@ export function prefixGapRange(requested: Range): Range {
 export const SIZING_MODE_LEGACY = 1;
 export const SIZING_MODE_PORTFOLIO = 2;
 
+// Feature 151: FillModel enum wire values (packages/proto/analysis/v1/analysis.proto).
+export const FILL_MODEL_SAME_BAR_CLOSE = 1;
+export const FILL_MODEL_NEXT_BAR_OPEN = 2;
+
 /**
  * A distinct, non-empty portfolio-level equity curve (cash + Σ marked-to-market) for a
  * portfolio-mode run — the authoritative aggregate curve feature 150 renders separately from the

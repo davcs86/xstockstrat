@@ -18,7 +18,11 @@ import { useGetStrategy, useSetStrategyLiveInsights } from '@/hooks/useStrategyD
 import { useStrategyAnalytics } from '@/hooks/useOpportunities';
 import { useIsAdmin } from '@/hooks/useLiveStrategies';
 import { BacktestStatus, SizingMode } from '@xstockstrat/proto/analysis/v1/analysis_pb';
-import { BacktestDiagnostics, SIZING_MODE_LABEL } from '@/components/insights/BacktestDiagnostics';
+import {
+  BacktestDiagnostics,
+  SIZING_MODE_LABEL,
+  FILL_MODEL_LABEL,
+} from '@/components/insights/BacktestDiagnostics';
 import {
   EquityCurveChart,
   PortfolioEquityCurveChart,
@@ -148,6 +152,15 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
         accessorFn: (run) => SIZING_MODE_LABEL[run.sizingMode],
         meta: { className: 'py-1.5 pr-3 text-xs text-muted-foreground whitespace-nowrap' },
         cell: ({ row }) => SIZING_MODE_LABEL[row.original.sizingMode],
+      },
+      {
+        // feature 151: label the fill model so cross-mode history rows are visibly distinguished
+        // (a next-bar-open run is never silently compared against a legacy same-bar-close one).
+        id: 'fillModel',
+        header: 'Fill model',
+        accessorFn: (run) => FILL_MODEL_LABEL[run.fillModel],
+        meta: { className: 'py-1.5 pr-3 text-xs text-muted-foreground whitespace-nowrap' },
+        cell: ({ row }) => FILL_MODEL_LABEL[row.original.fillModel],
       },
       {
         id: 'range',
@@ -533,6 +546,11 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                         data-testid="sizing-mode-badge"
                       >
                         {SIZING_MODE_LABEL[result.sizingMode]}
+                      </Badge>
+                      {/* feature 151: label the fill model so a next-bar-open run is never silently
+                          compared against a legacy same-bar-close one. */}
+                      <Badge variant="secondary" data-testid="fill-model-badge">
+                        {FILL_MODEL_LABEL[result.fillModel]}
                       </Badge>
                     </CardTitle>
                   </CardHeader>

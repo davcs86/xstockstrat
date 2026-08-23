@@ -160,3 +160,19 @@ alongside feature 150 (which merged its proto/migration first, so 151 keeps the 
 - SKILL.md Phase 2 "Fill model" note (same-bar-close vs next-bar-open, not-comparable, decouple);
   reference/verification.md notes the oracle must fill at bars[i+1].open for a next-bar run.
 - Files: plugins/strat-lab/skills/backtest/SKILL.md, reference/verification.md
+### Step 9 — service: UI fill-model label + Past Runs column + enum map [done]
+- BacktestDiagnostics.tsx: exhaustive FILL_MODEL_LABEL: Record<FillModel,string> (ledger 067).
+  page.tsx: fill-model Badge on the results surface (beside the sizing-mode badge), "Fill model"
+  column in pastRunsColumns. BFF/hooks unchanged.
+- Verify: pnpm lint clean; tsc --noEmit exit 0.
+- Files: BacktestDiagnostics.tsx, strategies/[id]/page.tsx
+### Step 10 — test: UI fill-model e2e [done]
+- e2e/fixtures/backtests.ts: FILL_MODEL_{SAME_BAR_CLOSE,NEXT_BAR_OPEN}; INVENTORY.md row. mock:
+  HIST_RUN_METRICS/DETAIL fillModel (bt-hist-2 next-bar, bt-hist-1 legacy), runBacktest echoes
+  req.fillModel. New e2e/insights/backtest-fill-model.spec.ts asserts the Fill model column + badge.
+- Verify: backtest-fill-model 2/2 + backtest-sizing 3/3 + backtest-coverage 11/11 pass (single-worker).
+- Files: e2e/fixtures/backtests.ts, e2e/fixtures/INVENTORY.md, e2e/mock-backend.ts,
+  e2e/insights/backtest-fill-model.spec.ts
+
+## Session 2026-08-23 — feature 151 code-completed
+All 10 steps done on claude/xstockstrat-metrics-sweep-m070rf → PR #1004. status.md → code-completed.

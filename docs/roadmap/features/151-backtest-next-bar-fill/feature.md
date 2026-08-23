@@ -14,6 +14,7 @@
 | 2026-08-23 | `draft` → `design-approved` | /sdd-design | Design debated (7 rounds, full; cap raised 5→7) and approved; recon.md + design.md written. Terminal verdict APPROVABLE, no Floor breach. |
 | 2026-08-23 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 10 steps |
 | 2026-08-23 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1–3 (proto fill_model 9/20/18 + codegen + migration 018) done on claude/xstockstrat-metrics-sweep-m070rf |
+| 2026-08-23 | `in-progress` → `code-completed` | /sdd-execute | Steps 4–10 done on claude/xstockstrat-metrics-sweep-m070rf; _apply_fill engine + agent + strat-lab skill + UI all landed, tests green |
 
 ---
 
