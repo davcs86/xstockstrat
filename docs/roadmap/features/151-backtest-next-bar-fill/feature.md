@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-23 | `idea` → `draft` | /sdd-story | Product spec generated from metrics-sweep audit finding #3 |
+| 2026-08-23 | `draft` → `design-approved` | /sdd-design | Design debated (7 rounds, full; cap raised 5→7) and approved; recon.md + design.md written. Terminal verdict APPROVABLE, no Floor breach. |
 
 ---
 
@@ -41,4 +42,4 @@ _(Auto-populated from docs/runbooks/reviewer-registry.md; finalized at /sdd-spec
 
 ## Next Action
 
-`/sdd-design backtest-next-bar-fill quick` — ground and debate the design (operator chose story+design only; stop before /sdd-spec)
+`/sdd-spec backtest-next-bar-fill` — generate the implementation spec from the approved design (deferred per operator: story+design only this session)
