@@ -39,8 +39,17 @@ Feature: backtest-portfolio-sizing
     And the strategy's feature-065 derived headline grade is unchanged
 
   @AC-6 @FR-5
-  Scenario: Insufficient capital skips an entry with a diagnostic reason
+  Scenario: Insufficient capital skips an entry and is recorded as a capital skip
     Given a portfolio-mode run where the shared pool is fully committed to concurrent holdings
     When another symbol signals entry on the next bar
     Then no position is opened for that symbol on that bar
-    And the bar's diagnostic records an insufficient-capital reason rather than a zero-sized fill
+    And the run records a PortfolioCapitalSkip entry for that symbol and bar (not a zero-sized fill)
+    And the total trade count is lower than an uncapped run of the same inputs
+
+  @AC-7 @FR-6
+  Scenario: Portfolio mode honors the strategy's own cooldown windows
+    Given a strategy with a 31-day re-entry cooldown backtested in portfolio mode
+    And a symbol that exits and then re-signals entry within the cooldown window
+    When the engine evaluates the re-entry
+    Then no re-entry position is opened inside the cooldown window
+    And the cooldown is measured against the portfolio's own per-symbol exit/entry times, not analysis.strategy_cooldowns

@@ -87,3 +87,26 @@
 - Carried design Open Risks folded into steps: mid-series-gap fixture REQUIRED for the look-ahead RED
   (Step 6); stale-close drawdown-understatement + symbol-ASC-bias documented as v1 caveats;
   `BarDiagnostic.equity` stays per-symbol (portfolio curve lives only in `portfolio_equity_curve`).
+
+## Session 2026-08-23 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 2 warnings + notes (PASS WITH WARNINGS; no Floor breach). Overlap: numbers CLEAN.
+- Items addressed in-spec this session:
+  - Step 8 golden-compare tension (a legacy run now stamps sizing_mode=SIZING_MODE_LEGACY field 17, so
+    a naive full-message compare vs a pre-feature golden false-fails) — [x] fixed: Step 8 now clears
+    the three additive fields (sizing_mode/capital_skips/portfolio_equity_curve) alongside
+    backtest_id/completed_at, comparing the whole message minus those.
+  - FR-6 uncovered by any @AC (portfolio-mode cooldown parity) — [x] fixed: added @AC-7 @FR-6 to
+    acceptance.feature; coverage map + Step 6 Covers + a cooldown-parity test item (4b) added.
+  - AC-6 vocabulary ("bar's diagnostic reason" vs the dedicated PortfolioCapitalSkip list) — [x] fixed:
+    AC-6 reworded to a PortfolioCapitalSkip record + lower-trade-count assertion; coverage map updated.
+  - Step 1 buf breaking baseline was the feature branch — [x] fixed: now `--against main-dev` (merge
+    target), re-derive merge base at execute time.
+  - Step 2 codegen `gen/**` wildcards — [x] no change: intentional/defensible codegen exception
+    (never hand-edited; empty-rerun-diff is the gate).
+- Overlap (feature-overlap agent): proto field numbers, migration NNN, and config keys all CLEAN vs 151
+  and trunk. merge-order.md 150↔151 row ENHANCED to flag the three same-function source overlaps
+  (servicer.py, backtest_runs.py, backtest_view.py) as manual-merge for whichever lands second. [x]
+- Carried into /sdd-execute (no unaddressed ✗): the same-function merge burden above; the design Open
+  Risks already folded into steps (mid-series-gap look-ahead fixture, stale-close drawdown caveat,
+  symbol-ASC bias, per-symbol BarDiagnostic.equity).

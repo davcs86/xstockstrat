@@ -43,7 +43,8 @@ portfolio equity curve (Steps 12/13).
 | `@AC-3` (legacy default unchanged, byte-for-byte) | Step 6 (legacy simulator return unchanged) + **Step 8** (RunBacktest legacy default byte-for-byte, primary) |
 | `@AC-4` (sizing mode recorded on run + returned) | Step 8 (persisted + returned mode) |
 | `@AC-5` (derived grade unchanged by portfolio mode) | Step 8 (grade parity) |
-| `@AC-6` (insufficient capital skips an entry with a diagnostic reason) | Step 6 (capital-skip diagnostic) |
+| `@AC-6` (insufficient capital skips an entry, recorded as a PortfolioCapitalSkip; lower trade count) | Step 6 (capital-skip record) |
+| `@AC-7` (portfolio mode honors the strategy's cooldown windows against portfolio-local times — FR-6) | Step 6 (cooldown-parity unit) |
 
 ## Step Dependencies
 
@@ -133,10 +134,11 @@ portfolio equity curve (Steps 12/13).
 
 **Verification**:
 ```
-cd packages/proto && buf lint && buf breaking --against ".git#branch=feature/backtest-portfolio-sizing"
+cd packages/proto && buf lint && buf breaking --against ".git#branch=main-dev"
 ```
-Both must pass (additive-only; `buf breaking` green — C-09). If the feature branch has no prior
-commit to diff against, run `buf breaking --against ".git#branch=main-dev"`.
+Both must pass (additive-only; `buf breaking` green — C-09). The baseline is **`main-dev`** (the
+merge target) so the check proves the change is additive against trunk, not merely against the last
+feature-branch commit. At execute time, diff against the current merge base if `main-dev` has moved.
 
 ---
 
@@ -386,7 +388,7 @@ cd services/xstockstrat-analysis && ruff check app/handlers/servicer.py && ruff 
 
 **TDD**: `red-green required`
 
-**Covers**: `AC-1, AC-2, AC-6, AC-3` (the legacy-simulator-return-unchanged half of AC-3)
+**Covers**: `AC-1, AC-2, AC-6, AC-7, AC-3` (the legacy-simulator-return-unchanged half of AC-3)
 
 **Instructions**:
 1. **Look-ahead RED (design Open Risk — the most dangerous bug):** the AC-1/AC-2 fixtures MUST use a
@@ -402,8 +404,14 @@ cd services/xstockstrat-analysis && ruff check app/handlers/servicer.py && ruff 
    combined committed capital never exceeds the pool, and that each `EquityPoint.equity` equals
    `cash + Σ marked-to-market` (recompute independently in the test).
 4. **AC-6 (capital skip):** a fixture where the pool is fully committed to concurrent holdings when
-   another symbol signals entry — assert **no** position opens for it that bar and a
-   `PortfolioCapitalSkip` is recorded with the symbol + reason context (not a zero-sized fill).
+   another symbol signals entry — assert **no** position opens for it that bar, a
+   `PortfolioCapitalSkip` is recorded with the symbol + reason context (not a zero-sized fill), and
+   the run's total trade count is strictly lower than the same fixture run with `portfolio_max_concurrent`
+   raised so nothing is skipped.
+4b. **AC-7 (cooldown parity, FR-6):** a fixture where a symbol exits and re-signals entry inside its
+   31-day re-entry cooldown — assert `_simulate_portfolio` opens **no** re-entry inside the window and
+   that the gate reads the portfolio's own per-symbol exit/entry times (ephemeral locals), never
+   `analysis.strategy_cooldowns` (assert no read of that table).
 5. **AC-3 (legacy simulators unchanged):** assert `_backtest_symbol` and `_backtest_symbol_evaluated`
    still return their original 4 values identically (the 5th intent element is additive) — capture a
    fixture run's `trades`/`equity`/`daily_equity`/`diagnostics` and assert unchanged vs a pre-change
@@ -518,9 +526,14 @@ coverage threshold.
 
 **Instructions**:
 1. **AC-3 (legacy default byte-for-byte):** run a `RunBacktest` with `sizing_mode` **unset** and
-   assert its `total_return` (and the other aggregate metrics + per-symbol curve) equals a golden
-   captured from the pre-feature engine for the same fixed inputs. Use the `_canonical` pattern
-   (clear `backtest_id`/`completed_at`) so the comparison is exact, not a hand-picked subset. Add a
+   assert its `total_return` and the other aggregate metrics + per-symbol curve equal a golden
+   captured from the pre-feature engine for the same fixed inputs. Use the `_canonical` pattern to
+   normalize the always-varying `backtest_id`/`completed_at`, **and also clear the three fields this
+   feature adds** (`sizing_mode`, `capital_skips`, `portfolio_equity_curve`) before the compare — a
+   legacy run now stamps `sizing_mode = SIZING_MODE_LEGACY` (field 17), which a pre-feature golden
+   lacks, so a naive full-message equality would false-fail on the new field alone. The compare must
+   still cover the full metrics set + per-symbol curve + `trades` + `diagnostics` (i.e. it is the
+   whole message *minus the four additive/volatile fields*, not a hand-picked metric subset). Add a
    companion assertion that the portfolio branch **does** move the numbers (a "teeth" test, insights.md
    2026-07-27) so an inert routing patch cannot masquerade as a pass.
 2. **AC-4 (mode recorded + returned):** a portfolio-mode run → `result.sizing_mode == SIZING_MODE_PORTFOLIO`;

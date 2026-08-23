@@ -83,3 +83,22 @@
   the three extra behaviors in the Step 5 test body without an @AC tag. If they need first-class
   scenarios, that is a /sdd-story or /sdd-review touch on acceptance.feature (append-only, C-15) —
   not editable by /sdd-spec.
+
+## Session 2026-08-23 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 3 warnings + notes (PASS WITH WARNINGS; no Floor breach). Overlap: numbers CLEAN.
+- Items addressed in-spec this session:
+  - Step 1 buf breaking baseline was the feature branch — [x] fixed: now `--against main-dev` (merge
+    target), re-derive merge base at execute time.
+  - Acceptance/spec consistency (AC-7..AC-11 appended after spec gen) — [x] already reconciled earlier
+    this session: coverage map + Step 5 Covers cite AC-1..AC-11; reviewer confirmed C-15 holds.
+- Accepted as-is (advisory, no change):
+  - Directory-valued **Files** on Steps 2/5/10 (`packages/proto/gen/**`, `tests/`, `e2e/insights/`) —
+    inherent to codegen/test steps; reviewer flagged as acceptable. [x] acknowledged; executor names
+    the concrete module at write time.
+  - B2b trading-domain checks N/A (backtest simulation fill timing/price, not broker order-fill
+    status); user_id column already in backtest_runs.insert signature — informational only.
+- Overlap (feature-overlap agent): fill_model request=9 / result=20 / summary=18 / migration 018 all
+  CLEAN vs 150 and trunk. Same merge-order.md 150↔151 row ENHANCED with the same-function overlaps.[x]
+- Carried into /sdd-execute (no unaddressed ✗): the same-function merge burden with 150 (whichever
+  lands second reconciles servicer.py/backtest_runs.py/backtest_view.py manually + re-runs buf-gen).

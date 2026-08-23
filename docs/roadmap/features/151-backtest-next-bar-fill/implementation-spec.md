@@ -135,9 +135,12 @@ test body (AC-9 also by Steps 7/10). The design-confirm behaviors are no longer 
 
 **Verification**:
 ```
-cd packages/proto && buf lint && buf breaking --against ".git#branch=feature/backtest-next-bar-fill"
+cd packages/proto && buf lint && buf breaking --against ".git#branch=main-dev"
 ```
-Both pass (additive-only). Confirm no field number collides with 150's reserved 8/17/18/19.
+Both pass (additive-only; the baseline is **`main-dev`** — the merge target — so the check proves the
+change is additive against trunk, not merely against the last feature-branch commit; diff against the
+current merge base at execute time if `main-dev` has moved). Confirm no field number collides with
+150's reserved 8/17/18/19.
 
 ---
 
