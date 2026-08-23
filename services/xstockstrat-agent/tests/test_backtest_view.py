@@ -51,6 +51,8 @@ def _full_result(symbols: int = 1, bars: int = 50) -> dict:
         "total_trades": 42,
         "profit_factor": 1.8,
         "initial_capital": 100000.0,
+        # feature 151: the effective fill model (in _HEAD_KEYS → inline).
+        "fill_model": "FILL_MODEL_NEXT_BAR_OPEN",
         # feature 150: portfolio-mode fields. sizing_mode is in _HEAD_KEYS (inline); capital_skips
         # is surfaced as a count; portfolio_equity_curve rides the attachment only.
         "sizing_mode": "SIZING_MODE_PORTFOLIO",
@@ -112,6 +114,12 @@ def test_summary_surfaces_sizing_mode_and_capital_skip_count():
     assert s["sizing_mode"] == "SIZING_MODE_PORTFOLIO"
     assert s["capital_skips"] == 1  # the count, not the list
     assert "portfolio_equity_curve" not in s
+
+
+def test_summary_surfaces_fill_model():
+    """Feature 151: the effective fill model reaches the caller inline (compact head block)."""
+    s = summarize(_full_result())
+    assert s["fill_model"] == "FILL_MODEL_NEXT_BAR_OPEN"
 
 
 def test_summary_capital_skips_count_is_zero_for_empty_list():

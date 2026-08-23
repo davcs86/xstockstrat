@@ -36,7 +36,9 @@ _INTENTIONALLY_DROPPED = frozenset({"trades", "portfolio_equity_curve"})
 
 # feature 150: `sizing_mode` belongs in the compact head block so the mode always reaches the
 # caller (even with no attachment) — a portfolio-mode return is never silently read as a legacy one.
-_HEAD_KEYS = ("backtest_id", "strategy_id", "status", "completed_at", "sizing_mode")
+# feature 151: `fill_model` likewise — the effective fill model always reaches the caller inline, so
+# a next-bar-open run is never silently compared against a legacy same-bar-close one.
+_HEAD_KEYS = ("backtest_id", "strategy_id", "status", "completed_at", "sizing_mode", "fill_model")
 
 # FR-2's headline metric set.
 _METRIC_KEYS = (

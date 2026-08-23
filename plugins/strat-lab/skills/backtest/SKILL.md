@@ -91,6 +91,21 @@ tool-output token limit and is written to a file instead. **Do not read that fil
 only the summary fields and per-symbol trade counts with a small `python3` script (or a subagent).
 The exact save-and-parse recipe, including the JSON shape, is in `reference/output-handling.md`.
 
+### Fill model (feature 151)
+
+`run_backtest(..., fill_model="next_bar_open")` chooses when a signal fills:
+
+- **`same_bar_close`** (the default) fills a bar-`i` signal at bar `i`'s own close — optimistically
+  biased (a mild look-ahead: the close that produced the signal is also the fill price).
+- **`next_bar_open`** fills a bar-`i` signal at bar `(i+1)`'s open — the standard bias-free
+  convention.
+
+A next-bar run is **not** directly comparable to a legacy run — label which mode a report used (the
+summary echoes the effective `fill_model`). **Display-only action/conviction decouple:** in next-bar
+mode a diagnostics row can show an ENTER/EXIT on a bar whose `conviction` reads hold, because the
+action lands on the fill bar while conviction stays that bar's own value — the grade is unaffected
+(grade math ignores conviction).
+
 ## Phase 3 — Aggregate the basket
 
 There are now **three** baskets, not two — pick before you aggregate:

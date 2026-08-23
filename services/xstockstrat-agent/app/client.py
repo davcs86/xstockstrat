@@ -508,6 +508,7 @@ async def run_backtest(
     start: str | None = None,
     end: str | None = None,
     sizing_mode: str | None = None,
+    fill_model: str | None = None,
 ) -> dict[str, Any]:
     """Trigger a backtest via gRPC RunBacktest.
 
@@ -524,6 +525,10 @@ async def run_backtest(
     a real shared-capital portfolio (concurrent positions, one order-independent equity curve);
     ``"legacy"``/``None`` leaves the field unset so the server defaults to the legacy serial
     per-symbol compounding (the sequential-parlay footgun the strat-lab skill warns about).
+
+    ``fill_model`` (feature 151) selects the fill timing: ``"next_bar_open"`` → a bias-free fill of
+    a bar-i signal at bar (i+1)'s open; ``"same_bar_close"``/``"legacy"``/``None`` leaves the field
+    unset so the server defaults to the legacy same-bar-close (optimistically biased) fill.
     """
     from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
     from gen.common.v1 import common_pb2  # noqa: PLC0415
@@ -562,6 +567,12 @@ async def run_backtest(
         req.sizing_mode = analysis_pb2.SIZING_MODE_PORTFOLIO
     elif sizing_mode is not None and sizing_mode.lower() == "legacy":
         req.sizing_mode = analysis_pb2.SIZING_MODE_LEGACY
+
+    # feature 151: map the fill_model string to the proto enum; leave unset for legacy/None.
+    if fill_model is not None and fill_model.lower() == "next_bar_open":
+        req.fill_model = analysis_pb2.FILL_MODEL_NEXT_BAR_OPEN
+    elif fill_model is not None and fill_model.lower() in ("same_bar_close", "legacy"):
+        req.fill_model = analysis_pb2.FILL_MODEL_SAME_BAR_CLOSE
 
     async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)

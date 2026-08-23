@@ -421,7 +421,7 @@ Confirm ≥ 40% and every new assertion passes.
 
 ### Step 6 — service: agent run_backtest fill_model arg + summary surfacing
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -477,7 +477,7 @@ Confirm ≥ 40% and every new assertion passes.
 
 ### Step 7 — test: agent run_backtest fill_model + summary
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_client.py` — modify
@@ -520,7 +520,7 @@ Confirm ≥ 40% and the new assertions pass.
 
 ### Step 8 — docs: strat-lab backtest skill (same PR as Step 6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `plugins/strat-lab`
 **Files**:
 - `plugins/strat-lab/skills/backtest/SKILL.md` — modify

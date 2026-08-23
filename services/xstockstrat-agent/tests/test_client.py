@@ -1005,3 +1005,24 @@ class TestRunBacktestSizingMode:
         req = await self._built_request()
         # Unset → server defaults to legacy; the wire value is the 0 sentinel.
         assert req.sizing_mode == analysis_pb2.SIZING_MODE_UNSPECIFIED
+
+    @pytest.mark.asyncio
+    async def test_fill_model_next_bar_sets_enum(self):
+        from gen.analysis.v1 import analysis_pb2  # type: ignore
+
+        req = await self._built_request(fill_model="next_bar_open")
+        assert req.fill_model == analysis_pb2.FILL_MODEL_NEXT_BAR_OPEN
+
+    @pytest.mark.asyncio
+    async def test_fill_model_legacy_sets_enum(self):
+        from gen.analysis.v1 import analysis_pb2  # type: ignore
+
+        req = await self._built_request(fill_model="same_bar_close")
+        assert req.fill_model == analysis_pb2.FILL_MODEL_SAME_BAR_CLOSE
+
+    @pytest.mark.asyncio
+    async def test_fill_model_omitted_leaves_field_unset(self):
+        from gen.analysis.v1 import analysis_pb2  # type: ignore
+
+        req = await self._built_request()
+        assert req.fill_model == analysis_pb2.FILL_MODEL_UNSPECIFIED

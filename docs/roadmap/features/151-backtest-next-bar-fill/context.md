@@ -146,3 +146,17 @@ alongside feature 150 (which merged its proto/migration first, so 151 keeps the 
   single-consumer → inline.
 - Verify: ruff clean; 571 tests pass; coverage 82.95% (≥40). TDD: red-before-green.
 - Files: tests/test_fill_model.py
+### Step 6 — service: agent run_backtest fill_model arg + surfacing [done]
+- client.run_backtest gained fill_model (next_bar_open→NEXT, same_bar_close/legacy→SAME, None→unset);
+  tools.py run_backtest threads it + documents the decouple; backtest_view adds fill_model to
+  _HEAD_KEYS (inline, always reaches caller); CLAUDE.md run_backtest row updated. §B N/A.
+- Files: app/client.py, app/tools.py, app/backtest_view.py, CLAUDE.md
+### Step 7 — test: agent fill_model + summary [done]
+- test_client: fill_model next_bar/legacy/unset → req.fill_model; test_tools: passthrough+surfacing +
+  assert_called_once_with fill_model=None; test_backtest_view: fixture fill_model + summarize test
+  (descriptor-parity auto-balances since fill_model is in _HEAD_KEYS). 277 tests pass, cov 78.2%.
+- Files: tests/test_client.py, tests/test_tools.py, tests/test_backtest_view.py
+### Step 8 — docs: strat-lab backtest skill [done]
+- SKILL.md Phase 2 "Fill model" note (same-bar-close vs next-bar-open, not-comparable, decouple);
+  reference/verification.md notes the oracle must fill at bars[i+1].open for a next-bar run.
+- Files: plugins/strat-lab/skills/backtest/SKILL.md, reference/verification.md
