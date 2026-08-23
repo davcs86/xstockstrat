@@ -208,6 +208,8 @@ Namespace: `analysis`
 | `analysis.backtest.default_commission_pct` | float | `0.001` | Assumed commission per trade |
 | `analysis.backtest.default_slippage_pct` | float | `0.0005` | Assumed slippage |
 | `analysis.backtest.max_range_days` | int | `730` | Max backtest range span in days (≈2 years, feature 064); a request whose `range` exceeds it is rejected with `INVALID_ARGUMENT`, an unset bound is defaulted to the last `max_range_days`. Applies to all `RunBacktest` callers. |
+| `analysis.backtest.portfolio_position_weight` | float | `0.10` | Fraction of **initial** capital committed per concurrent position in portfolio sizing mode (feature 150). Read via `get_float` (zero-trap intended: a configured `0` disables the portfolio → falls back to `0.10`). A fixed fraction of *initial* capital (not live equity) keeps aggregate metrics order-independent. |
+| `analysis.backtest.portfolio_max_concurrent` | int | `9` | Max concurrently-held positions in portfolio sizing mode (feature 150). Read via `get_int` with a `max(1, …)` clamp (zero-trap intended: a configured `0` reads back as the default `9`; the clamp guards a negative). At the `0.10` weight this leaves a ≥10% cash buffer. |
 | `analysis.scoring.sharpe_weight` | float | `0.4` | Weight of Sharpe in overall score |
 | `analysis.scoring.drawdown_weight` | float | `0.3` | Weight of max drawdown |
 | `analysis.scoring.win_rate_weight` | float | `0.3` | Weight of win rate |

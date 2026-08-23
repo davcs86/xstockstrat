@@ -126,3 +126,9 @@ buf-gen verified byte-for-byte against checked-in stubs before any proto edit.
 ### Step 2 — proto-gen: regenerate stubs [done]
 - ./scripts/buf-gen.sh; diff scoped to analysis go/python/ts(+dist); re-run idempotent. TDD: N/A.
 - Files: packages/proto/gen/**
+### Step 3 — migration 017 backtest_runs sizing columns [done]
+- Additive nullable sizing_mode/position_weight/max_concurrent; up/down pair reverse-verified offline (no DB). TDD: N/A.
+- Files: services/xstockstrat-analysis/migrations/017_backtest_runs_sizing.{up,down}.sql
+### Step 4 — config keys declared [done]
+- analysis.backtest.portfolio_position_weight (0.10), portfolio_max_concurrent (9), zero-trap intended; code-default (no seed). TDD: N/A.
+- Files: services/xstockstrat-analysis/CLAUDE.md, docs/patterns/config-governance.md

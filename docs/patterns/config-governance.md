@@ -102,6 +102,20 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 150 — backtest-portfolio-sizing (`xstockstrat-analysis`)
+
+Adds an opt-in portfolio sizing model to the backtest engine. Two new **code-default** keys in the
+`analysis` namespace (no config seed migration — analysis keys fall through to their in-code defaults
+until an operator `SetConfig`s them):
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `analysis.backtest.portfolio_position_weight` | float | `0.10` | Fraction of **initial** capital per concurrent position in portfolio mode. `get_float` (zero-trap intended — a configured `0` disables the portfolio → default). |
+| `analysis.backtest.portfolio_max_concurrent` | int | `9` | Max concurrent positions in portfolio mode. `get_int` + `max(1, …)` clamp (zero-trap intended; clamp guards a negative). |
+
+A configured `0` for either is a no-op (zero-trap → default), matching the existing
+`analysis.scoring.shrinkage_days` precedent.
+
 ### feature 147 — config-secrets-and-scoping (`xstockstrat-config`, `xstockstrat-marketdata`)
 
 Re-permits secrets in config, encrypted at rest, and re-models the config scope axes. The four

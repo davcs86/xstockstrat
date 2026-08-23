@@ -178,7 +178,7 @@ verify — trust the empty-rerun-diff (root CLAUDE.md § Key File Paths).
 
 ### Step 3 — migration: 017 sizing columns on analysis.backtest_runs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/017_backtest_runs_sizing.up.sql` — create
@@ -228,7 +228,7 @@ Then read both: confirm each `ADD COLUMN` in `.up.sql` has a matching `DROP COLU
 
 ### Step 4 — config: declare the two portfolio sizing keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify (§ Config Keys Consumed table)
