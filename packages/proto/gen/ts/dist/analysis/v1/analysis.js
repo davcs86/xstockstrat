@@ -5,11 +5,14 @@
 //   protoc               unknown
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionPassedEntry = exports.ScreenResult_CriterionRawValuesEntry = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.FactorType = exports.SnapshotEventType = exports.OpportunityAction = exports.ReadinessRule = exports.ConditionState = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.BacktestStatus = exports.protobufPackage = void 0;
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.QueryPnLPatternsResponse = exports.QueryPnLPatternsRequest = exports.PnLPatternFactor = exports.OrderSnapshot_IndicatorValuesEntry = exports.OrderSnapshot = exports.SignalEntry = exports.IndicatorValue = exports.NamedSeries = exports.ComponentSeries = exports.GetIndicatorSeriesResponse = exports.GetIndicatorSeriesRequest = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = exports.Opportunity = exports.FundamentalsScanSummary = void 0;
+exports.ScreenResult_CriterionPassedEntry = exports.ScreenResult_CriterionRawValuesEntry = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.EquityPoint = exports.PortfolioCapitalSkip = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.FactorType = exports.SnapshotEventType = exports.OpportunityAction = exports.ReadinessRule = exports.ConditionState = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.SizingMode = exports.BacktestStatus = exports.protobufPackage = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.QueryPnLPatternsResponse = exports.QueryPnLPatternsRequest = exports.PnLPatternFactor = exports.OrderSnapshot_IndicatorValuesEntry = exports.OrderSnapshot = exports.SignalEntry = exports.IndicatorValue = exports.NamedSeries = exports.ComponentSeries = exports.GetIndicatorSeriesResponse = exports.GetIndicatorSeriesRequest = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = void 0;
 exports.backtestStatusFromJSON = backtestStatusFromJSON;
 exports.backtestStatusToJSON = backtestStatusToJSON;
 exports.backtestStatusToNumber = backtestStatusToNumber;
+exports.sizingModeFromJSON = sizingModeFromJSON;
+exports.sizingModeToJSON = sizingModeToJSON;
+exports.sizingModeToNumber = sizingModeToNumber;
 exports.barActionFromJSON = barActionFromJSON;
 exports.barActionToJSON = barActionToJSON;
 exports.barActionToNumber = barActionToNumber;
@@ -103,6 +106,64 @@ function backtestStatusToNumber(object) {
         case BacktestStatus.BACKTEST_STATUS_INSUFFICIENT_DATA:
             return 2;
         case BacktestStatus.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/**
+ * Backtest capital-allocation model (feature 150). Closed set → enum (C-04).
+ * A completed run records SIZING_MODE_LEGACY or SIZING_MODE_PORTFOLIO (never UNSPECIFIED);
+ * UNSPECIFIED is a request-side "unset → legacy" default only.
+ */
+var SizingMode;
+(function (SizingMode) {
+    /** SIZING_MODE_UNSPECIFIED - request default → the legacy serial per-symbol path */
+    SizingMode["SIZING_MODE_UNSPECIFIED"] = "SIZING_MODE_UNSPECIFIED";
+    /** SIZING_MODE_LEGACY - serial per-symbol compounding (the aggregate is Π(1+rᵢ)−1) */
+    SizingMode["SIZING_MODE_LEGACY"] = "SIZING_MODE_LEGACY";
+    /** SIZING_MODE_PORTFOLIO - one shared cash pool, concurrent positions, one equity curve */
+    SizingMode["SIZING_MODE_PORTFOLIO"] = "SIZING_MODE_PORTFOLIO";
+    SizingMode["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(SizingMode || (exports.SizingMode = SizingMode = {}));
+function sizingModeFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "SIZING_MODE_UNSPECIFIED":
+            return SizingMode.SIZING_MODE_UNSPECIFIED;
+        case 1:
+        case "SIZING_MODE_LEGACY":
+            return SizingMode.SIZING_MODE_LEGACY;
+        case 2:
+        case "SIZING_MODE_PORTFOLIO":
+            return SizingMode.SIZING_MODE_PORTFOLIO;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return SizingMode.UNRECOGNIZED;
+    }
+}
+function sizingModeToJSON(object) {
+    switch (object) {
+        case SizingMode.SIZING_MODE_UNSPECIFIED:
+            return "SIZING_MODE_UNSPECIFIED";
+        case SizingMode.SIZING_MODE_LEGACY:
+            return "SIZING_MODE_LEGACY";
+        case SizingMode.SIZING_MODE_PORTFOLIO:
+            return "SIZING_MODE_PORTFOLIO";
+        case SizingMode.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function sizingModeToNumber(object) {
+    switch (object) {
+        case SizingMode.SIZING_MODE_UNSPECIFIED:
+            return 0;
+        case SizingMode.SIZING_MODE_LEGACY:
+            return 1;
+        case SizingMode.SIZING_MODE_PORTFOLIO:
+            return 2;
+        case SizingMode.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -945,6 +1006,7 @@ function createBaseRunBacktestRequest() {
         strategyParams: undefined,
         strategyIdRef: "",
         inlineDefinition: undefined,
+        sizingMode: SizingMode.SIZING_MODE_UNSPECIFIED,
     };
 }
 exports.RunBacktestRequest = {
@@ -969,6 +1031,9 @@ exports.RunBacktestRequest = {
         }
         if (message.inlineDefinition !== undefined) {
             exports.StrategyDefinition.encode(message.inlineDefinition, writer.uint32(58).fork()).join();
+        }
+        if (message.sizingMode !== SizingMode.SIZING_MODE_UNSPECIFIED) {
+            writer.uint32(64).int32(sizingModeToNumber(message.sizingMode));
         }
         return writer;
     },
@@ -1028,6 +1093,13 @@ exports.RunBacktestRequest = {
                     message.inlineDefinition = exports.StrategyDefinition.decode(reader, reader.uint32());
                     continue;
                 }
+                case 8: {
+                    if (tag !== 64) {
+                        break;
+                    }
+                    message.sizingMode = sizingModeFromJSON(reader.int32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1065,6 +1137,11 @@ exports.RunBacktestRequest = {
                 : isSet(object.inline_definition)
                     ? exports.StrategyDefinition.fromJSON(object.inline_definition)
                     : undefined,
+            sizingMode: isSet(object.sizingMode)
+                ? sizingModeFromJSON(object.sizingMode)
+                : isSet(object.sizing_mode)
+                    ? sizingModeFromJSON(object.sizing_mode)
+                    : SizingMode.SIZING_MODE_UNSPECIFIED,
         };
     },
     toJSON(message) {
@@ -1090,6 +1167,9 @@ exports.RunBacktestRequest = {
         if (message.inlineDefinition !== undefined) {
             obj.inlineDefinition = exports.StrategyDefinition.toJSON(message.inlineDefinition);
         }
+        if (message.sizingMode !== SizingMode.SIZING_MODE_UNSPECIFIED) {
+            obj.sizingMode = sizingModeToJSON(message.sizingMode);
+        }
         return obj;
     },
     create(base) {
@@ -1108,6 +1188,7 @@ exports.RunBacktestRequest = {
         message.inlineDefinition = (object.inlineDefinition !== undefined && object.inlineDefinition !== null)
             ? exports.StrategyDefinition.fromPartial(object.inlineDefinition)
             : undefined;
+        message.sizingMode = object.sizingMode ?? SizingMode.SIZING_MODE_UNSPECIFIED;
         return message;
     },
 };
@@ -1278,6 +1359,9 @@ function createBaseBacktestResult() {
         diagnostics: [],
         initialCapital: 0,
         warnings: [],
+        sizingMode: SizingMode.SIZING_MODE_UNSPECIFIED,
+        capitalSkips: [],
+        portfolioEquityCurve: [],
     };
 }
 exports.BacktestResult = {
@@ -1329,6 +1413,15 @@ exports.BacktestResult = {
         }
         for (const v of message.warnings) {
             writer.uint32(130).string(v);
+        }
+        if (message.sizingMode !== SizingMode.SIZING_MODE_UNSPECIFIED) {
+            writer.uint32(136).int32(sizingModeToNumber(message.sizingMode));
+        }
+        for (const v of message.capitalSkips) {
+            exports.PortfolioCapitalSkip.encode(v, writer.uint32(146).fork()).join();
+        }
+        for (const v of message.portfolioEquityCurve) {
+            exports.EquityPoint.encode(v, writer.uint32(154).fork()).join();
         }
         return writer;
     },
@@ -1451,6 +1544,27 @@ exports.BacktestResult = {
                     message.warnings.push(reader.string());
                     continue;
                 }
+                case 17: {
+                    if (tag !== 136) {
+                        break;
+                    }
+                    message.sizingMode = sizingModeFromJSON(reader.int32());
+                    continue;
+                }
+                case 18: {
+                    if (tag !== 146) {
+                        break;
+                    }
+                    message.capitalSkips.push(exports.PortfolioCapitalSkip.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 19: {
+                    if (tag !== 154) {
+                        break;
+                    }
+                    message.portfolioEquityCurve.push(exports.EquityPoint.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1531,6 +1645,21 @@ exports.BacktestResult = {
             warnings: globalThis.Array.isArray(object?.warnings)
                 ? object.warnings.map((e) => globalThis.String(e))
                 : [],
+            sizingMode: isSet(object.sizingMode)
+                ? sizingModeFromJSON(object.sizingMode)
+                : isSet(object.sizing_mode)
+                    ? sizingModeFromJSON(object.sizing_mode)
+                    : SizingMode.SIZING_MODE_UNSPECIFIED,
+            capitalSkips: globalThis.Array.isArray(object?.capitalSkips)
+                ? object.capitalSkips.map((e) => exports.PortfolioCapitalSkip.fromJSON(e))
+                : globalThis.Array.isArray(object?.capital_skips)
+                    ? object.capital_skips.map((e) => exports.PortfolioCapitalSkip.fromJSON(e))
+                    : [],
+            portfolioEquityCurve: globalThis.Array.isArray(object?.portfolioEquityCurve)
+                ? object.portfolioEquityCurve.map((e) => exports.EquityPoint.fromJSON(e))
+                : globalThis.Array.isArray(object?.portfolio_equity_curve)
+                    ? object.portfolio_equity_curve.map((e) => exports.EquityPoint.fromJSON(e))
+                    : [],
         };
     },
     toJSON(message) {
@@ -1583,6 +1712,15 @@ exports.BacktestResult = {
         if (message.warnings?.length) {
             obj.warnings = message.warnings;
         }
+        if (message.sizingMode !== SizingMode.SIZING_MODE_UNSPECIFIED) {
+            obj.sizingMode = sizingModeToJSON(message.sizingMode);
+        }
+        if (message.capitalSkips?.length) {
+            obj.capitalSkips = message.capitalSkips.map((e) => exports.PortfolioCapitalSkip.toJSON(e));
+        }
+        if (message.portfolioEquityCurve?.length) {
+            obj.portfolioEquityCurve = message.portfolioEquityCurve.map((e) => exports.EquityPoint.toJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -1606,6 +1744,183 @@ exports.BacktestResult = {
         message.diagnostics = object.diagnostics?.map((e) => exports.SymbolDiagnostics.fromPartial(e)) || [];
         message.initialCapital = object.initialCapital ?? 0;
         message.warnings = object.warnings?.map((e) => e) || [];
+        message.sizingMode = object.sizingMode ?? SizingMode.SIZING_MODE_UNSPECIFIED;
+        message.capitalSkips = object.capitalSkips?.map((e) => exports.PortfolioCapitalSkip.fromPartial(e)) || [];
+        message.portfolioEquityCurve = object.portfolioEquityCurve?.map((e) => exports.EquityPoint.fromPartial(e)) || [];
+        return message;
+    },
+};
+function createBasePortfolioCapitalSkip() {
+    return { symbol: "", timestamp: undefined, intendedWeight: 0, availableCash: 0 };
+}
+exports.PortfolioCapitalSkip = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        if (message.timestamp !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.timestamp), writer.uint32(18).fork()).join();
+        }
+        if (message.intendedWeight !== 0) {
+            writer.uint32(25).double(message.intendedWeight);
+        }
+        if (message.availableCash !== 0) {
+            writer.uint32(33).double(message.availableCash);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBasePortfolioCapitalSkip();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.timestamp = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 25) {
+                        break;
+                    }
+                    message.intendedWeight = reader.double();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 33) {
+                        break;
+                    }
+                    message.availableCash = reader.double();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            timestamp: isSet(object.timestamp) ? fromJsonTimestamp(object.timestamp) : undefined,
+            intendedWeight: isSet(object.intendedWeight)
+                ? globalThis.Number(object.intendedWeight)
+                : isSet(object.intended_weight)
+                    ? globalThis.Number(object.intended_weight)
+                    : 0,
+            availableCash: isSet(object.availableCash)
+                ? globalThis.Number(object.availableCash)
+                : isSet(object.available_cash)
+                    ? globalThis.Number(object.available_cash)
+                    : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.timestamp !== undefined) {
+            obj.timestamp = message.timestamp.toISOString();
+        }
+        if (message.intendedWeight !== 0) {
+            obj.intendedWeight = message.intendedWeight;
+        }
+        if (message.availableCash !== 0) {
+            obj.availableCash = message.availableCash;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.PortfolioCapitalSkip.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBasePortfolioCapitalSkip();
+        message.symbol = object.symbol ?? "";
+        message.timestamp = object.timestamp ?? undefined;
+        message.intendedWeight = object.intendedWeight ?? 0;
+        message.availableCash = object.availableCash ?? 0;
+        return message;
+    },
+};
+function createBaseEquityPoint() {
+    return { timestamp: undefined, equity: 0 };
+}
+exports.EquityPoint = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.timestamp !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.timestamp), writer.uint32(10).fork()).join();
+        }
+        if (message.equity !== 0) {
+            writer.uint32(17).double(message.equity);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseEquityPoint();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.timestamp = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 17) {
+                        break;
+                    }
+                    message.equity = reader.double();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            timestamp: isSet(object.timestamp) ? fromJsonTimestamp(object.timestamp) : undefined,
+            equity: isSet(object.equity) ? globalThis.Number(object.equity) : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.timestamp !== undefined) {
+            obj.timestamp = message.timestamp.toISOString();
+        }
+        if (message.equity !== 0) {
+            obj.equity = message.equity;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.EquityPoint.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseEquityPoint();
+        message.timestamp = object.timestamp ?? undefined;
+        message.equity = object.equity ?? 0;
         return message;
     },
 };
@@ -2830,6 +3145,7 @@ function createBaseBacktestRunSummary() {
         completedAt: undefined,
         rangeStart: undefined,
         rangeEnd: undefined,
+        sizingMode: SizingMode.SIZING_MODE_UNSPECIFIED,
     };
 }
 exports.BacktestRunSummary = {
@@ -2881,6 +3197,9 @@ exports.BacktestRunSummary = {
         }
         if (message.rangeEnd !== undefined) {
             timestamp_1.Timestamp.encode(toTimestamp(message.rangeEnd), writer.uint32(130).fork()).join();
+        }
+        if (message.sizingMode !== SizingMode.SIZING_MODE_UNSPECIFIED) {
+            writer.uint32(136).int32(sizingModeToNumber(message.sizingMode));
         }
         return writer;
     },
@@ -3003,6 +3322,13 @@ exports.BacktestRunSummary = {
                     message.rangeEnd = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 17: {
+                    if (tag !== 136) {
+                        break;
+                    }
+                    message.sizingMode = sizingModeFromJSON(reader.int32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -3083,6 +3409,11 @@ exports.BacktestRunSummary = {
                 : isSet(object.range_end)
                     ? fromJsonTimestamp(object.range_end)
                     : undefined,
+            sizingMode: isSet(object.sizingMode)
+                ? sizingModeFromJSON(object.sizingMode)
+                : isSet(object.sizing_mode)
+                    ? sizingModeFromJSON(object.sizing_mode)
+                    : SizingMode.SIZING_MODE_UNSPECIFIED,
         };
     },
     toJSON(message) {
@@ -3135,6 +3466,9 @@ exports.BacktestRunSummary = {
         if (message.rangeEnd !== undefined) {
             obj.rangeEnd = message.rangeEnd.toISOString();
         }
+        if (message.sizingMode !== SizingMode.SIZING_MODE_UNSPECIFIED) {
+            obj.sizingMode = sizingModeToJSON(message.sizingMode);
+        }
         return obj;
     },
     create(base) {
@@ -3158,6 +3492,7 @@ exports.BacktestRunSummary = {
         message.completedAt = object.completedAt ?? undefined;
         message.rangeStart = object.rangeStart ?? undefined;
         message.rangeEnd = object.rangeEnd ?? undefined;
+        message.sizingMode = object.sizingMode ?? SizingMode.SIZING_MODE_UNSPECIFIED;
         return message;
     },
 };

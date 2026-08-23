@@ -66,7 +66,7 @@ portfolio equity curve (Steps 12/13).
 
 ### Step 1 — proto: add SizingMode enum + additive fields for portfolio sizing
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -144,7 +144,7 @@ feature-branch commit. At execute time, diff against the current merge base if `
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/**` — modify (generated)

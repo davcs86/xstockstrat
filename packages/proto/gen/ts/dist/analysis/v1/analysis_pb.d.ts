@@ -42,6 +42,13 @@ export type RunBacktestRequest = Message<"xstockstrat.analysis.v1.RunBacktestReq
      * @generated from field: xstockstrat.analysis.v1.StrategyDefinition inline_definition = 7;
      */
     inlineDefinition?: StrategyDefinition | undefined;
+    /**
+     * field 8 — capital-allocation model (feature 150); unset/UNSPECIFIED → legacy serial per-symbol
+     * path (no behavior change for existing callers).
+     *
+     * @generated from field: xstockstrat.analysis.v1.SizingMode sizing_mode = 8;
+     */
+    sizingMode: SizingMode;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.RunBacktestRequest.
@@ -169,12 +176,87 @@ export type BacktestResult = Message<"xstockstrat.analysis.v1.BacktestResult"> &
      * @generated from field: repeated string warnings = 16;
      */
     warnings: string[];
+    /**
+     * ── Portfolio sizing (feature 150) ── additive; empty/legacy for pre-150 and legacy-mode runs.
+     *
+     * the mode actually used (never UNSPECIFIED on a completed run)
+     *
+     * @generated from field: xstockstrat.analysis.v1.SizingMode sizing_mode = 17;
+     */
+    sizingMode: SizingMode;
+    /**
+     * portfolio mode only; empty in legacy
+     *
+     * @generated from field: repeated xstockstrat.analysis.v1.PortfolioCapitalSkip capital_skips = 18;
+     */
+    capitalSkips: PortfolioCapitalSkip[];
+    /**
+     * Portfolio-level daily equity curve (cash + Σ marked-to-market positions), portfolio mode only.
+     * NOTE: per-symbol BarDiagnostic.equity (field 15 there) stays per-symbol in portfolio mode — the
+     * portfolio contribution lives ONLY here; do not read per-symbol equity as portfolio contribution.
+     *
+     * @generated from field: repeated xstockstrat.analysis.v1.EquityPoint portfolio_equity_curve = 19;
+     */
+    portfolioEquityCurve: EquityPoint[];
 };
 /**
  * Describes the message xstockstrat.analysis.v1.BacktestResult.
  * Use `create(BacktestResultSchema)` to create a new message.
  */
 export declare const BacktestResultSchema: GenMessage<BacktestResult>;
+/**
+ * One entry that portfolio mode could not open because the shared pool was fully committed
+ * at the policy weight (feature 150, FR-5). Emitted instead of a silent zero-sized fill.
+ *
+ * @generated from message xstockstrat.analysis.v1.PortfolioCapitalSkip
+ */
+export type PortfolioCapitalSkip = Message<"xstockstrat.analysis.v1.PortfolioCapitalSkip"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * @generated from field: google.protobuf.Timestamp timestamp = 2;
+     */
+    timestamp?: Timestamp | undefined;
+    /**
+     * position_weight × initial_capital the entry would have needed
+     *
+     * @generated from field: double intended_weight = 3;
+     */
+    intendedWeight: number;
+    /**
+     * cash on hand in the shared pool at that bar
+     *
+     * @generated from field: double available_cash = 4;
+     */
+    availableCash: number;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.PortfolioCapitalSkip.
+ * Use `create(PortfolioCapitalSkipSchema)` to create a new message.
+ */
+export declare const PortfolioCapitalSkipSchema: GenMessage<PortfolioCapitalSkip>;
+/**
+ * One point of the portfolio-level daily equity curve (cash + Σ marked-to-market positions).
+ *
+ * @generated from message xstockstrat.analysis.v1.EquityPoint
+ */
+export type EquityPoint = Message<"xstockstrat.analysis.v1.EquityPoint"> & {
+    /**
+     * @generated from field: google.protobuf.Timestamp timestamp = 1;
+     */
+    timestamp?: Timestamp | undefined;
+    /**
+     * @generated from field: double equity = 2;
+     */
+    equity: number;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.EquityPoint.
+ * Use `create(EquityPointSchema)` to create a new message.
+ */
+export declare const EquityPointSchema: GenMessage<EquityPoint>;
 /**
  * @generated from message xstockstrat.analysis.v1.TradeRecord
  */
@@ -518,6 +600,12 @@ export type BacktestRunSummary = Message<"xstockstrat.analysis.v1.BacktestRunSum
      * @generated from field: google.protobuf.Timestamp range_end = 16;
      */
     rangeEnd?: Timestamp | undefined;
+    /**
+     * capital-allocation model the run used (feature 150); UNSPECIFIED on pre-150 rows
+     *
+     * @generated from field: xstockstrat.analysis.v1.SizingMode sizing_mode = 17;
+     */
+    sizingMode: SizingMode;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.BacktestRunSummary.
@@ -1770,6 +1858,37 @@ export declare enum BacktestStatus {
  * Describes the enum xstockstrat.analysis.v1.BacktestStatus.
  */
 export declare const BacktestStatusSchema: GenEnum<BacktestStatus>;
+/**
+ * Backtest capital-allocation model (feature 150). Closed set → enum (C-04).
+ * A completed run records SIZING_MODE_LEGACY or SIZING_MODE_PORTFOLIO (never UNSPECIFIED);
+ * UNSPECIFIED is a request-side "unset → legacy" default only.
+ *
+ * @generated from enum xstockstrat.analysis.v1.SizingMode
+ */
+export declare enum SizingMode {
+    /**
+     * request default → the legacy serial per-symbol path
+     *
+     * @generated from enum value: SIZING_MODE_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * serial per-symbol compounding (the aggregate is Π(1+rᵢ)−1)
+     *
+     * @generated from enum value: SIZING_MODE_LEGACY = 1;
+     */
+    LEGACY = 1,
+    /**
+     * one shared cash pool, concurrent positions, one equity curve
+     *
+     * @generated from enum value: SIZING_MODE_PORTFOLIO = 2;
+     */
+    PORTFOLIO = 2
+}
+/**
+ * Describes the enum xstockstrat.analysis.v1.SizingMode.
+ */
+export declare const SizingModeSchema: GenEnum<SizingMode>;
 /**
  * The engine's decision for a single bar. Closed set → enum (C-04).
  *

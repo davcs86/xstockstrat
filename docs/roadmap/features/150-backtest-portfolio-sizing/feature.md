@@ -13,6 +13,7 @@
 | 2026-08-23 | `idea` → `draft` | /sdd-story | Product spec generated from metrics-sweep audit finding #2 |
 | 2026-08-23 | `draft` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + design.md written. merge-order.md 150↔151 row added. |
 | 2026-08-23 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 13 steps |
+| 2026-08-23 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1–2 (proto + codegen) done on claude/xstockstrat-metrics-sweep-m070rf |
 
 ---
 

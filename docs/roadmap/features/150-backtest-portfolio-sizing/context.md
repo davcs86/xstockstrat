@@ -110,3 +110,19 @@
 - Carried into /sdd-execute (no unaddressed ✗): the same-function merge burden above; the design Open
   Risks already folded into steps (mid-series-gap look-ahead fixture, stale-close drawdown caveat,
   symbol-ASC bias, per-symbol BarDiagnostic.equity).
+
+## Session 2026-08-23 — sdd-execute (on claude/xstockstrat-metrics-sweep-m070rf)
+
+Branch deviation (C-06): executed on the session's designated harness branch, not a fresh
+feature/ branch, per the binding session constraint; all steps land in PR #1004. Codegen toolchain
+provisioned on host (buf + Go plugins v1.36.11/v1.6.2/v1.19.2 + TS plugins + grpcio-tools==1.80.0);
+buf-gen verified byte-for-byte against checked-in stubs before any proto edit.
+
+### Step 1 — proto: SizingMode enum + additive fields [done]
+- Added SizingMode enum, RunBacktestRequest.sizing_mode=8, PortfolioCapitalSkip + EquityPoint
+  messages, BacktestResult 17/18/19, BacktestRunSummary.sizing_mode=17. Additive only.
+- Verify: buf lint clean; buf breaking vs origin/main-dev clean (subdir ref). TDD: N/A (proto).
+- Files: packages/proto/analysis/v1/analysis.proto
+### Step 2 — proto-gen: regenerate stubs [done]
+- ./scripts/buf-gen.sh; diff scoped to analysis go/python/ts(+dist); re-run idempotent. TDD: N/A.
+- Files: packages/proto/gen/**

@@ -11,6 +11,23 @@ export declare enum BacktestStatus {
 export declare function backtestStatusFromJSON(object: any): BacktestStatus;
 export declare function backtestStatusToJSON(object: BacktestStatus): string;
 export declare function backtestStatusToNumber(object: BacktestStatus): number;
+/**
+ * Backtest capital-allocation model (feature 150). Closed set → enum (C-04).
+ * A completed run records SIZING_MODE_LEGACY or SIZING_MODE_PORTFOLIO (never UNSPECIFIED);
+ * UNSPECIFIED is a request-side "unset → legacy" default only.
+ */
+export declare enum SizingMode {
+    /** SIZING_MODE_UNSPECIFIED - request default → the legacy serial per-symbol path */
+    SIZING_MODE_UNSPECIFIED = "SIZING_MODE_UNSPECIFIED",
+    /** SIZING_MODE_LEGACY - serial per-symbol compounding (the aggregate is Π(1+rᵢ)−1) */
+    SIZING_MODE_LEGACY = "SIZING_MODE_LEGACY",
+    /** SIZING_MODE_PORTFOLIO - one shared cash pool, concurrent positions, one equity curve */
+    SIZING_MODE_PORTFOLIO = "SIZING_MODE_PORTFOLIO",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function sizingModeFromJSON(object: any): SizingMode;
+export declare function sizingModeToJSON(object: SizingMode): string;
+export declare function sizingModeToNumber(object: SizingMode): number;
 /** The engine's decision for a single bar. Closed set → enum (C-04). */
 export declare enum BarAction {
     BAR_ACTION_UNSPECIFIED = "BAR_ACTION_UNSPECIFIED",
@@ -200,6 +217,11 @@ export interface RunBacktestRequest {
     strategyIdRef: string;
     /** field 7 — inline definition; takes precedence over strategy_id_ref if both supplied */
     inlineDefinition?: StrategyDefinition | undefined;
+    /**
+     * field 8 — capital-allocation model (feature 150); unset/UNSPECIFIED → legacy serial per-symbol
+     * path (no behavior change for existing callers).
+     */
+    sizingMode: SizingMode;
 }
 export interface CoverageGap {
     symbol: string;
@@ -245,6 +267,33 @@ export interface BacktestResult {
      * definition. Empty on a clean run.
      */
     warnings: string[];
+    /** ── Portfolio sizing (feature 150) ── additive; empty/legacy for pre-150 and legacy-mode runs. */
+    sizingMode: SizingMode;
+    /** portfolio mode only; empty in legacy */
+    capitalSkips: PortfolioCapitalSkip[];
+    /**
+     * Portfolio-level daily equity curve (cash + Σ marked-to-market positions), portfolio mode only.
+     * NOTE: per-symbol BarDiagnostic.equity (field 15 there) stays per-symbol in portfolio mode — the
+     * portfolio contribution lives ONLY here; do not read per-symbol equity as portfolio contribution.
+     */
+    portfolioEquityCurve: EquityPoint[];
+}
+/**
+ * One entry that portfolio mode could not open because the shared pool was fully committed
+ * at the policy weight (feature 150, FR-5). Emitted instead of a silent zero-sized fill.
+ */
+export interface PortfolioCapitalSkip {
+    symbol: string;
+    timestamp?: Date | undefined;
+    /** position_weight × initial_capital the entry would have needed */
+    intendedWeight: number;
+    /** cash on hand in the shared pool at that bar */
+    availableCash: number;
+}
+/** One point of the portfolio-level daily equity curve (cash + Σ marked-to-market positions). */
+export interface EquityPoint {
+    timestamp?: Date | undefined;
+    equity: number;
 }
 export interface TradeRecord {
     symbol: string;
@@ -350,6 +399,8 @@ export interface BacktestRunSummary {
     /** Backtest range covered by this run (feature 065); unset on legacy rows. */
     rangeStart?: Date | undefined;
     rangeEnd?: Date | undefined;
+    /** capital-allocation model the run used (feature 150); UNSPECIFIED on pre-150 rows */
+    sizingMode: SizingMode;
 }
 export interface ListBacktestsResponse {
     runs: BacktestRunSummary[];
@@ -783,6 +834,8 @@ export interface QueryPnLPatternsResponse {
 export declare const RunBacktestRequest: MessageFns<RunBacktestRequest>;
 export declare const CoverageGap: MessageFns<CoverageGap>;
 export declare const BacktestResult: MessageFns<BacktestResult>;
+export declare const PortfolioCapitalSkip: MessageFns<PortfolioCapitalSkip>;
+export declare const EquityPoint: MessageFns<EquityPoint>;
 export declare const TradeRecord: MessageFns<TradeRecord>;
 export declare const BarDiagnostic: MessageFns<BarDiagnostic>;
 export declare const BarDiagnostic_IndicatorsEntry: MessageFns<BarDiagnostic_IndicatorsEntry>;
