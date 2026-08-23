@@ -5604,3 +5604,118 @@ class TestGetIndicatorSeries:
         )
         with pytest.raises(Exception, match="aborted"):
             await svc.GetIndicatorSeries(req, _owned_ctx())
+
+
+# ---------------------------------------------------------------------------
+# feature 150 — portfolio sizing routing (Steps 7/8): AC-3, AC-4, AC-5
+# ---------------------------------------------------------------------------
+
+
+def _canonical_pre150(result):
+    """`_canonical` PLUS the three fields feature 150 adds, so a legacy run compares equal to a
+    pre-feature golden. A legacy run now stamps sizing_mode=SIZING_MODE_LEGACY (field 17); a naive
+    full-message equality would false-fail on that new field alone (impl-spec Step 8)."""
+    copy = analysis_pb2.BacktestResult()
+    copy.CopyFrom(result)
+    copy.backtest_id = ""
+    copy.ClearField("completed_at")
+    copy.ClearField("sizing_mode")
+    copy.ClearField("capital_skips")
+    copy.ClearField("portfolio_equity_curve")
+    return copy.SerializeToString(deterministic=True)
+
+
+class TestPortfolioSizingRouting:
+    """RunBacktest routing by sizing_mode — the legacy default must stay byte-for-byte identical
+    (BacktestResult bytes are persisted verbatim, feature 068)."""
+
+    def _run(self, sizing_mode=None, symbols=("AAPL", "MSFT")):
+        svc = _wire_evaluated(make_servicer(), _series_bars(6, 12))
+        req = _windowed_req(_sma_def(), symbols=symbols)
+        if sizing_mode is not None:
+            req.sizing_mode = sizing_mode
+        return svc, req
+
+    @pytest.mark.asyncio
+    async def test_legacy_default_is_unchanged_and_portfolio_moves_numbers(self):
+        """@AC-3: unset sizing_mode == explicit LEGACY, byte-for-byte (minus the additive/volatile
+        fields); the portfolio branch has teeth (it moves the aggregate numbers)."""
+        svc_a, req_a = self._run(sizing_mode=None)  # UNSPECIFIED → legacy
+        unset = await svc_a.RunBacktest(req_a, context=_owned_ctx())
+
+        svc_b, req_b = self._run(sizing_mode=analysis_pb2.SIZING_MODE_LEGACY)
+        legacy = await svc_b.RunBacktest(req_b, context=_owned_ctx())
+
+        # UNSPECIFIED and explicit LEGACY take the identical path → identical whole-message bytes
+        # (minus backtest_id/completed_at/the three additive fields).
+        assert _canonical_pre150(unset) == _canonical_pre150(legacy)
+        # A legacy run stamps the mode; it never records UNSPECIFIED.
+        assert unset.sizing_mode == analysis_pb2.SIZING_MODE_LEGACY
+        assert not unset.portfolio_equity_curve and not unset.capital_skips
+
+        # Teeth: the portfolio branch produces a genuinely different aggregate.
+        svc_c, req_c = self._run(sizing_mode=analysis_pb2.SIZING_MODE_PORTFOLIO)
+        portfolio = await svc_c.RunBacktest(req_c, context=_owned_ctx())
+        assert portfolio.sizing_mode == analysis_pb2.SIZING_MODE_PORTFOLIO
+        assert portfolio.total_return != pytest.approx(legacy.total_return)
+
+    @pytest.mark.asyncio
+    async def test_portfolio_run_returns_and_persists_mode(self):
+        """@AC-4: a portfolio run returns PORTFOLIO, persists the mode name + resolved params."""
+        svc, req = self._run(sizing_mode=analysis_pb2.SIZING_MODE_PORTFOLIO)
+        svc._backtest_runs_repo = AsyncMock()
+        result = await svc.RunBacktest(req, context=_owned_ctx())
+
+        assert result.sizing_mode == analysis_pb2.SIZING_MODE_PORTFOLIO
+        assert result.portfolio_equity_curve  # non-empty portfolio curve
+        kwargs = svc._backtest_runs_repo.insert.await_args.kwargs
+        assert kwargs["sizing_mode"] == "SIZING_MODE_PORTFOLIO"
+        assert kwargs["position_weight"] == pytest.approx(0.10)
+        assert kwargs["max_concurrent"] == 9
+
+    @pytest.mark.asyncio
+    async def test_legacy_run_persists_mode_with_null_params(self):
+        """@AC-4: a legacy run persists SIZING_MODE_LEGACY but NULL portfolio params."""
+        svc, req = self._run(sizing_mode=None)
+        svc._backtest_runs_repo = AsyncMock()
+        await svc.RunBacktest(req, context=_owned_ctx())
+
+        kwargs = svc._backtest_runs_repo.insert.await_args.kwargs
+        assert kwargs["sizing_mode"] == "SIZING_MODE_LEGACY"
+        assert kwargs["position_weight"] is None
+        assert kwargs["max_concurrent"] is None
+
+    def test_row_to_summary_maps_sizing_mode(self):
+        """@AC-4: the summary projection maps the stored mode name; a null row → UNSPECIFIED."""
+        from app.handlers.servicer import _row_to_backtest_summary
+
+        portfolio = _row_to_backtest_summary(
+            {
+                "backtest_id": "b",
+                "status": "BACKTEST_STATUS_OK",
+                "sizing_mode": "SIZING_MODE_PORTFOLIO",
+            }
+        )
+        assert portfolio.sizing_mode == analysis_pb2.SIZING_MODE_PORTFOLIO
+        null_row = _row_to_backtest_summary({"backtest_id": "b", "status": "BACKTEST_STATUS_OK"})
+        assert null_row.sizing_mode == analysis_pb2.SIZING_MODE_UNSPECIFIED
+
+    @pytest.mark.asyncio
+    async def test_per_symbol_cells_identical_across_modes(self):
+        """@AC-5: the per-symbol evidence cells (the derived-grade inputs) are identical between
+        legacy and portfolio mode — portfolio aggregation never touches the per-symbol loop."""
+        svc_l, req_l = self._run(sizing_mode=None)
+        svc_l._backtest_run_symbols_repo = AsyncMock()
+        await svc_l.RunBacktest(req_l, context=_owned_ctx())
+        legacy_cells = svc_l._backtest_run_symbols_repo.insert_many.await_args.args[0]
+
+        svc_p, req_p = self._run(sizing_mode=analysis_pb2.SIZING_MODE_PORTFOLIO)
+        svc_p._backtest_run_symbols_repo = AsyncMock()
+        await svc_p.RunBacktest(req_p, context=_owned_ctx())
+        portfolio_cells = svc_p._backtest_run_symbols_repo.insert_many.await_args.args[0]
+
+        # Drop the run-varying backtest_id so the comparison is on the grade-bearing fields.
+        def _strip(cells):
+            return [{k: v for k, v in c.items() if k != "backtest_id"} for c in cells]
+
+        assert _strip(legacy_cells) == _strip(portfolio_cells)

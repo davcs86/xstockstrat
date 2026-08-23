@@ -156,3 +156,25 @@ buf-gen verified byte-for-byte against checked-in stubs before any proto edit.
 - Verify: ruff clean; 551 tests pass; coverage 82.91% (≥40). TDD: red-before-green (the referenced
   `_simulate_portfolio`/intent 5th element did not exist pre-Step-5).
 - Files: services/xstockstrat-analysis/tests/test_portfolio_sizing.py
+### Step 7 — service: route RunBacktest by sizing_mode; populate + persist [done]
+- RunBacktest resolves `sizing_mode` (UNSPECIFIED/LEGACY → legacy path unchanged; PORTFOLIO →
+  `_simulate_portfolio`). Portfolio branch resolves config params (portfolio_position_weight 0.10,
+  portfolio_max_concurrent 9, max(1,·) clamp) + strategy cooldown days, computes aggregate metrics
+  from the order-independent portfolio curve, sets result.sizing_mode/capital_skips/
+  portfolio_equity_curve. Legacy branch only additionally stamps sizing_mode=SIZING_MODE_LEGACY
+  (field 17) — no other field touched; per-symbol loop, evidence cells, and diagnostics run
+  identically in both modes (FR-4/AC-5). INSUFFICIENT_DATA gate stays on the per-symbol all_trades.
+- `_persist_backtest_run` + repo `insert` extended with sizing_mode name + position_weight +
+  max_concurrent (migration 017 columns; NULL on legacy). `_row_to_backtest_summary` maps
+  sizing_mode via the status name→enum pattern (null/legacy row → UNSPECIFIED).
+- §B header propagation: N/A (portfolio sim is in-process, no new outbound gRPC edge).
+- Files: services/xstockstrat-analysis/app/handlers/servicer.py, app/repositories/backtest_runs.py
+### Step 8 — test: legacy byte-for-byte + mode recorded + grade parity [done]
+- test_analysis_servicer.py TestPortfolioSizingRouting: UNSPECIFIED==explicit LEGACY byte-for-byte
+  (via `_canonical_pre150` clearing the 3 additive fields) + portfolio-branch teeth (@AC-3);
+  portfolio run returns + persists SIZING_MODE_PORTFOLIO with resolved params, legacy persists
+  NULL params, summary projection maps the mode (@AC-4); per-symbol evidence cells byte-identical
+  across modes (@AC-5). test_backtest_runs_repo.py: two new insert-kwargs round-trips (portfolio +
+  legacy-NULL).
+- Verify: ruff clean; 558 tests pass; coverage 82.95% (≥40). TDD: red-before-green.
+- Files: services/xstockstrat-analysis/tests/test_analysis_servicer.py, tests/test_backtest_runs_repo.py

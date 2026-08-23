@@ -77,6 +77,59 @@ async def test_insert_allows_null_score_for_insufficient_run():
 
 
 @pytest.mark.asyncio
+async def test_insert_binds_sizing_mode_and_params():
+    """Feature 150 (@AC-4): the three new sizing columns round-trip through the INSERT."""
+    db_pool = AsyncMock()
+    db_pool.fetchrow = AsyncMock(return_value={"backtest_id": "bt-3"})
+    repo = BacktestRunsRepository(db_pool)
+
+    await repo.insert(
+        backtest_id="bt-3",
+        strategy_id="s1",
+        status="BACKTEST_STATUS_OK",
+        metrics=_metrics(),
+        symbols=["AAPL"],
+        overall_score=0.5,
+        rating="C",
+        sizing_mode="SIZING_MODE_PORTFOLIO",
+        position_weight=0.10,
+        max_concurrent=9,
+    )
+
+    args = db_pool.fetchrow.call_args.args
+    sql = args[0]
+    assert "sizing_mode, position_weight, max_concurrent" in sql
+    # Positional binds 17/18/19 (after user_id at $16).
+    assert args[17] == "SIZING_MODE_PORTFOLIO"
+    assert args[18] == 0.10
+    assert args[19] == 9
+
+
+@pytest.mark.asyncio
+async def test_insert_sizing_params_null_on_legacy():
+    """Feature 150 (@AC-4): a legacy-mode run persists the mode name but NULL portfolio params."""
+    db_pool = AsyncMock()
+    db_pool.fetchrow = AsyncMock(return_value={"backtest_id": "bt-4"})
+    repo = BacktestRunsRepository(db_pool)
+
+    await repo.insert(
+        backtest_id="bt-4",
+        strategy_id="s1",
+        status="BACKTEST_STATUS_OK",
+        metrics=_metrics(),
+        symbols=["AAPL"],
+        overall_score=0.5,
+        rating="C",
+        sizing_mode="SIZING_MODE_LEGACY",
+    )
+
+    args = db_pool.fetchrow.call_args.args
+    assert args[17] == "SIZING_MODE_LEGACY"
+    assert args[18] is None  # position_weight
+    assert args[19] is None  # max_concurrent
+
+
+@pytest.mark.asyncio
 async def test_list_by_strategy_orders_and_limits():
     db_pool = AsyncMock()
     db_pool.fetch = AsyncMock(return_value=[{"backtest_id": "bt-2"}, {"backtest_id": "bt-1"}])

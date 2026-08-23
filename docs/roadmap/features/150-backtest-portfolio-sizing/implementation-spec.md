@@ -432,7 +432,7 @@ All new tests pass; coverage ≥ 40%.
 
 ### Step 7 — service: route RunBacktest by sizing_mode; populate result + persist
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -505,7 +505,7 @@ coverage threshold.
 
 ### Step 8 — test: RunBacktest legacy byte-for-byte + mode recorded + grade parity (AC-3, AC-4, AC-5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify

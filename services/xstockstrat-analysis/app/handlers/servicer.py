@@ -655,11 +655,77 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 log.warning("backtest symbol %s error: %s — skipping", symbol, e)
                 continue
 
-        # Compute aggregate metrics. Annualize over the real window span (request.range is
-        # already defaulted above), not the concatenated multi-symbol curve length (feature 149).
+        # feature 150: resolve the capital-allocation model. UNSPECIFIED/LEGACY → the legacy serial
+        # per-symbol path (unchanged); PORTFOLIO → the shared-pool simulator. A completed run always
+        # records LEGACY or PORTFOLIO, never UNSPECIFIED.
+        sizing_mode = (
+            analysis_pb2.SIZING_MODE_PORTFOLIO
+            if request.sizing_mode == analysis_pb2.SIZING_MODE_PORTFOLIO
+            else analysis_pb2.SIZING_MODE_LEGACY
+        )
+
+        # Annualize over the real window span (request.range is already defaulted above), not the
+        # concatenated multi-symbol curve length (feature 149). Order-independent (FR-2), so the
+        # portfolio path reuses the same span.
         _span_seconds = request.range.end.seconds - request.range.start.seconds
         _period_years = (_span_seconds / 86_400.0) / 365.25 if _span_seconds > 0 else None
-        metrics = _compute_metrics(daily_equity, all_trades, initial_equity, _period_years)
+
+        portfolio_equity_curve: list = []
+        capital_skips: list = []
+        resolved_position_weight: float | None = None
+        resolved_max_concurrent: int | None = None
+        if sizing_mode == analysis_pb2.SIZING_MODE_PORTFOLIO:
+            # Resolve sizing params once (zero-trap helpers: a stored 0 disables the portfolio →
+            # the default; max_concurrent additionally clamped ≥ 1 so a stored negative can't reach
+            # the sim). Keys declared in the service CLAUDE.md § Config Keys Consumed (feature 150).
+            resolved_position_weight = self._cfg.get_float(
+                "analysis.backtest.portfolio_position_weight", 0.10
+            )
+            resolved_max_concurrent = max(
+                1, self._cfg.get_int("analysis.backtest.portfolio_max_concurrent", 9)
+            )
+            # Cooldown days: strategy-level (uniform across symbols), resolved exactly as the
+            # evaluated serial path does (servicer cooldown block); SMA path has no cooldown → 0.
+            if active_definition is not None:
+                port_cooldown_days = effective_cooldown_days(
+                    active_definition.cooldown_days
+                    if active_definition.HasField("cooldown_days")
+                    else None,
+                    self._cfg.get_int("analysis.strategy.default_cooldown_days", 31),
+                )
+                port_exit_cooldown_days = effective_cooldown_days(
+                    active_definition.exit_cooldown_days
+                    if active_definition.HasField("exit_cooldown_days")
+                    else None,
+                    self._cfg.get_int_present("analysis.strategy.default_exit_cooldown_days", 0),
+                )
+            else:
+                port_cooldown_days = 0
+                port_exit_cooldown_days = 0
+            (
+                portfolio_equity_curve,
+                capital_skips,
+                portfolio_trades,
+            ) = await self._simulate_portfolio(
+                symbol_intents,
+                initial_capital=initial_equity,
+                position_weight=resolved_position_weight,
+                max_concurrent=resolved_max_concurrent,
+                commission=commission,
+                slippage=slippage,
+                cooldown_days=port_cooldown_days,
+                exit_cooldown_days=port_exit_cooldown_days,
+            )
+            # Aggregate metrics come from the order-independent portfolio curve (FR-1). The
+            # per-symbol evidence cells + diagnostics above stay byte-identical (FR-4/AC-5).
+            _port_curve_floats = [p.equity for p in portfolio_equity_curve]
+            metrics = _compute_metrics(
+                _port_curve_floats, portfolio_trades, initial_equity, _period_years
+            )
+            agg_trades = portfolio_trades
+        else:
+            metrics = _compute_metrics(daily_equity, all_trades, initial_equity, _period_years)
+            agg_trades = all_trades
 
         now = Timestamp()
         now.GetCurrentTime()
@@ -672,14 +738,22 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             sharpe_ratio=metrics["sharpe_ratio"],
             max_drawdown=metrics["max_drawdown"],
             win_rate=metrics["win_rate"],
-            total_trades=len(all_trades),
+            total_trades=len(agg_trades),
             profit_factor=metrics["profit_factor"],
             completed_at=now,
-            trades=all_trades,
+            trades=agg_trades,
             # feature 068: the effective seed (100k default when the request omitted it) —
             # required to interpret the persisted equity curve for a historical run.
             initial_capital=initial_equity,
+            # feature 150: the mode actually used (never UNSPECIFIED on a completed run).
+            sizing_mode=sizing_mode,
         )
+        # feature 150: portfolio-only outputs (empty in legacy mode — additive, so a legacy run's
+        # persisted bytes are unchanged apart from the new sizing_mode field 17).
+        if capital_skips:
+            result.capital_skips.extend(capital_skips)
+        if portfolio_equity_curve:
+            result.portfolio_equity_curve.extend(portfolio_equity_curve)
         # FR-2: if every symbol was insufficient (no trades, no usable bars beyond the seed
         # equity point), report INSUFFICIENT_DATA instead of a fabricated flat-equity success.
         # A partial multi-symbol backtest stays OK but still carries the per-symbol gaps.
@@ -741,6 +815,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             score,
             range_start=range_start_dt,
             range_end=range_end_dt,
+            # feature 150: record the resolved sizing model + params (None on the legacy branch).
+            position_weight=resolved_position_weight,
+            max_concurrent=resolved_max_concurrent,
         )
         # feature 068: persist the full result (trades + per-bar equity + diagnostics) for
         # OK runs only — INSUFFICIENT runs never get detail (permanent FR-6 state, mirrors
@@ -1777,7 +1854,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return score
 
     async def _persist_backtest_run(
-        self, result, symbols, score, range_start=None, range_end=None
+        self,
+        result,
+        symbols,
+        score,
+        range_start=None,
+        range_end=None,
+        position_weight=None,
+        max_concurrent=None,
     ) -> None:
         """Best-effort append of a completed backtest to the durable run-history table.
 
@@ -1785,6 +1869,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         the latest run per strategy and is lost on restart, so every run is also recorded
         here (summary metrics + the score it earned). No-op in the no-DB test path. The
         ``range_start``/``range_end`` (feature 065) record the window each run covered.
+
+        feature 150: the resolved sizing model + params are persisted so a run is reproducible
+        despite WatchConfig drift. ``sizing_mode`` is the enum **name** (mirrors the ``status``
+        column); ``position_weight``/``max_concurrent`` are None on the legacy branch (NULL rows).
         """
         if self._backtest_runs_repo is None:
             return
@@ -1807,6 +1895,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 rating=score.rating if score is not None else None,
                 range_start=range_start,
                 range_end=range_end,
+                sizing_mode=analysis_pb2.SizingMode.Name(result.sizing_mode),
+                position_weight=position_weight,
+                max_concurrent=max_concurrent,
             )
         except Exception as e:
             log.warning("failed to persist backtest run history: %s", e)
@@ -3662,6 +3753,11 @@ def _row_to_backtest_summary(row: dict) -> "analysis_pb2.BacktestRunSummary":
         status = analysis_pb2.BacktestStatus.Value(row.get("status") or "")
     except ValueError:
         status = analysis_pb2.BACKTEST_STATUS_UNSPECIFIED
+    # feature 150: sizing_mode stored as the enum name; a null/legacy row → UNSPECIFIED.
+    try:
+        sizing_mode = analysis_pb2.SizingMode.Value(row.get("sizing_mode") or "")
+    except ValueError:
+        sizing_mode = analysis_pb2.SIZING_MODE_UNSPECIFIED
     summary = analysis_pb2.BacktestRunSummary(
         backtest_id=row.get("backtest_id", ""),
         strategy_id=row.get("strategy_id", ""),
@@ -3676,6 +3772,7 @@ def _row_to_backtest_summary(row: dict) -> "analysis_pb2.BacktestRunSummary":
         symbols=list(row.get("symbols") or []),
         overall_score=float(row["overall_score"]) if row.get("overall_score") is not None else 0.0,
         rating=row.get("rating") or "",
+        sizing_mode=sizing_mode,  # feature 150
     )
     completed = row.get("completed_at")
     if completed is not None:
