@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-08-23 | `idea` → `draft` | /sdd-story | Product spec generated from metrics-sweep audit finding #3 |
 | 2026-08-23 | `draft` → `design-approved` | /sdd-design | Design debated (7 rounds, full; cap raised 5→7) and approved; recon.md + design.md written. Terminal verdict APPROVABLE, no Floor breach. |
+| 2026-08-23 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 10 steps |
 
 ---
 
@@ -19,7 +20,7 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec backtest-next-bar-fill`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -33,13 +34,18 @@ better predict live behavior.
 
 ## Reviewers
 
-_(Auto-populated from docs/runbooks/reviewer-registry.md; finalized at /sdd-spec.)_
+_(Finalized snapshot from docs/runbooks/reviewer-registry.md at /sdd-spec — stable unless /sdd-spec re-runs.)_
 
-| Role | Review Focus |
-|---|---|
-| xstockstrat-analysis owner | Backtest reproducibility, strategy scoring determinism, **no look-ahead bias** |
-| Proto owner (if a fill-model field is added) | Non-breaking additive field; enum→TS exhaustive-map coupling (ledger 067) |
+| Role | Review Focus | Steps |
+|---|---|---|
+| Proto Reviewer | Field number uniqueness, no breaking change, `buf lint`/`buf breaking` | 1, 2 |
+| xstockstrat-analysis owner | Backtest reproducibility, strategy scoring determinism, **no look-ahead bias** | 1, 2, 3, 4, 5 |
+| DBA | Migration NNN numbering, up+down pair, additive-only | 3 |
+| xstockstrat-agent owner | MCP tool contract stability (name, parameters, return shape) + `docs/runbooks/mcp-tools.md` parity | 6, 7 |
+| xstockstrat-ui owner | Analytics display accuracy, enum→TS exhaustive-map coupling (ledger 067) | 9, 10 |
+
+(Step 8 is docs — no reviewer per the governance matrix.)
 
 ## Next Action
 
-`/sdd-spec backtest-next-bar-fill` — generate the implementation spec from the approved design (deferred per operator: story+design only this session)
+`/sdd-review backtest-next-bar-fill impl-spec` — validate the implementation spec, then `/sdd-execute backtest-next-bar-fill`

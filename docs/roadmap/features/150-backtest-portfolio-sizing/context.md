@@ -44,3 +44,46 @@
   fixture); stale-close drawdown understatement; merge-order.md SPOF; symbol-ASC systematic bias;
   per-symbol BarDiagnostic.equity stays per-symbol.
 - Status: draft → design-approved. Operator decision: stop before /sdd-spec this session.
+
+## Session 2026-08-23 — sdd-spec
+
+- Generated implementation-spec.md with 13 steps. Status → implementation-ready.
+- Proto/migration numbers re-derived from the merged main-dev tree and confirmed to match the
+  merge-order.md 150↔151 reserved split exactly: `RunBacktestRequest` next-free field = **8**;
+  `BacktestResult` next-free = **17** (so 17/18/19 = sizing_mode/capital_skips/portfolio_equity_curve);
+  `BacktestRunSummary` next-free = **17**; last analysis migration on disk = `016_...` → next = **017**.
+  No drift from the design footprint — 151's slots (req 9, result 20, summary 18, migration 018) stay free.
+- Step structure: proto(1) → proto-gen(2) → migration 017(3) → config declaration(4) → analysis engine
+  in two service/test pairs (5/6 = additive intent-return + pure `_simulate_portfolio`; 7/8 = RunBacktest
+  routing + persistence + summary), guarding the byte-for-byte legacy invariant with a RED test before
+  any routing edit → agent surface(9/10) → strat-lab skill same-PR(11) → UI(12/13).
+- Key codebase findings (all evidence-cited in the spec):
+  - Both simulators compute per-bar intent BEFORE the position/capital gate — SMA `combined`
+    (`servicer.py:995`, gates `:1004`/`:1017`), evaluated `decision.entry/.exit`
+    (`servicer.py:1185`/`:1201`); intent-return is a clean additive 5th tuple element, legacy control
+    flow untouched. Serial loop + concatenation at `:522-571`; aggregate `_compute_metrics` at `:3617`
+    (reused for the portfolio curve, not forked — DRY).
+  - Per-symbol evidence cells (`servicer.py:557-569`) run unchanged in BOTH modes, so the feature-065
+    derived grade is byte-for-byte identical for free (FR-4/AC-5) — cells are relative to each symbol's
+    own `daily_eq[0]`, scale-invariant and order-independent.
+  - Cooldown parity (FR-6) reuses the pure `app/services/cooldown.py` helpers against portfolio-local
+    per-symbol anchors (never `analysis.strategy_cooldowns`).
+  - Persistence: `_persist_backtest_run` (`servicer.py:1546`) → `BacktestRunsRepository.insert`
+    (`backtest_runs.py:25-68`) + `_row_to_backtest_summary` (`servicer.py:3422`) get the three new
+    columns (mirrors the nullable `user_id` add in migration 015 / repo). Config keys use the
+    intended `get_float`/`get_int` zero-trap (a configured `0` disables → default), declared in
+    analysis CLAUDE.md (no config seed migration — analysis keys are code-default, verified).
+  - Agent: `client.run_backtest` returns `MessageToDict`, so new fields flow through automatically;
+    the descriptor-parity guard `test_backtest_view.py:157-173` fails-closed on the 3 new
+    `BacktestResult` fields until `backtest_view.py` accounts for each (the C-10 built-in red).
+  - strat-lab `backtest` skill Phase 3 + `reference/aggregation.md` already document the
+    sequential-compounding problem this feature fixes — updated in the SAME PR (root CLAUDE.md).
+  - UI: `SizingMode` render map is net-new (no pre-existing exhaustive Record → no 067 tsc break on
+    regen, but the new map must be exhaustive); BFF unchanged (forwards the full message).
+- Not trading-domain-relevant per step-constraints §A (no trading/portfolio service, no broker/order/
+  fill/TRADING_MODE surface — backtest-only accounting, live loop places no orders). No new outbound
+  gRPC edge (portfolio sim is in-process, reuses the simulators' existing GetBars) → §B header
+  propagation N/A on every service step.
+- Carried design Open Risks folded into steps: mid-series-gap fixture REQUIRED for the look-ahead RED
+  (Step 6); stale-close drawdown-understatement + symbol-ASC-bias documented as v1 caveats;
+  `BarDiagnostic.equity` stays per-symbol (portfolio curve lives only in `portfolio_equity_curve`).

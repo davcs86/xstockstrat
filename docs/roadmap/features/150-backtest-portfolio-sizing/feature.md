@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-08-23 | `idea` → `draft` | /sdd-story | Product spec generated from metrics-sweep audit finding #2 |
 | 2026-08-23 | `draft` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + design.md written. merge-order.md 150↔151 row added. |
+| 2026-08-23 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 13 steps |
 
 ---
 
@@ -19,7 +20,7 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec backtest-portfolio-sizing`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -33,13 +34,16 @@ meaningful portfolio return rather than an ordering-dependent artifact.
 
 ## Reviewers
 
-_(Auto-populated from docs/runbooks/reviewer-registry.md; finalized at /sdd-spec.)_
+_(Snapshot from docs/runbooks/reviewer-registry.md, finalized at /sdd-spec — deduped across all steps.)_
 
 | Role | Review Focus |
 |---|---|
-| xstockstrat-analysis owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias |
-| Proto owner (if a sizing-mode field is added) | Non-breaking additive field; enum→TS exhaustive-map coupling (ledger 067) |
+| Proto Reviewer | Field-number uniqueness per message, no breaking change (`buf breaking`), enum→TS exhaustive-map coupling (ledger 067) |
+| DBA | Migration 017 NNN numbering, up+down pair present, additive-nullable columns |
+| xstockstrat-analysis owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias; config key naming + declared defaults |
+| xstockstrat-agent owner | MCP tool contract stability (name, parameters, return shape) + `docs/runbooks/mcp-tools.md` / strat-lab skill parity |
+| xstockstrat-ui owner | Analytics display accuracy, enum→TS exhaustive-map coupling (ledger 067), test-data inventory (C-12) |
 
 ## Next Action
 
-`/sdd-spec backtest-portfolio-sizing` — generate the implementation spec from the approved design (deferred per operator: story+design only this session)
+`/sdd-review backtest-portfolio-sizing impl-spec` — validate the implementation spec, then `/sdd-execute backtest-portfolio-sizing`
