@@ -49,6 +49,14 @@ export type RunBacktestRequest = Message<"xstockstrat.analysis.v1.RunBacktestReq
      * @generated from field: xstockstrat.analysis.v1.SizingMode sizing_mode = 8;
      */
     sizingMode: SizingMode;
+    /**
+     * field 9 — fill model (feature 151); unset/UNSPECIFIED → server default (config
+     * analysis.backtest.default_fill_model, else legacy same-bar-close). No behavior change for
+     * existing callers.
+     *
+     * @generated from field: xstockstrat.analysis.v1.FillModel fill_model = 9;
+     */
+    fillModel: FillModel;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.RunBacktestRequest.
@@ -198,6 +206,12 @@ export type BacktestResult = Message<"xstockstrat.analysis.v1.BacktestResult"> &
      * @generated from field: repeated xstockstrat.analysis.v1.EquityPoint portfolio_equity_curve = 19;
      */
     portfolioEquityCurve: EquityPoint[];
+    /**
+     * Effective fill model the run actually used (feature 151); never UNSPECIFIED on a completed run.
+     *
+     * @generated from field: xstockstrat.analysis.v1.FillModel fill_model = 20;
+     */
+    fillModel: FillModel;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.BacktestResult.
@@ -606,6 +620,12 @@ export type BacktestRunSummary = Message<"xstockstrat.analysis.v1.BacktestRunSum
      * @generated from field: xstockstrat.analysis.v1.SizingMode sizing_mode = 17;
      */
     sizingMode: SizingMode;
+    /**
+     * fill model the run used (feature 151); UNSPECIFIED on pre-151 rows
+     *
+     * @generated from field: xstockstrat.analysis.v1.FillModel fill_model = 18;
+     */
+    fillModel: FillModel;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.BacktestRunSummary.
@@ -1889,6 +1909,37 @@ export declare enum SizingMode {
  * Describes the enum xstockstrat.analysis.v1.SizingMode.
  */
 export declare const SizingModeSchema: GenEnum<SizingMode>;
+/**
+ * Which bar/price a backtest fills a signal at (feature 151). Closed set → enum (C-04).
+ * A completed run records SAME_BAR_CLOSE or NEXT_BAR_OPEN (never UNSPECIFIED); UNSPECIFIED is a
+ * request/config "not chosen" sentinel the servicer normalizes to SAME_BAR_CLOSE (legacy).
+ *
+ * @generated from enum xstockstrat.analysis.v1.FillModel
+ */
+export declare enum FillModel {
+    /**
+     * caller/config did not choose → resolves to SAME_BAR_CLOSE (legacy)
+     *
+     * @generated from enum value: FILL_MODEL_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * legacy: fill at bar i's close ± slippage (optimistically biased)
+     *
+     * @generated from enum value: FILL_MODEL_SAME_BAR_CLOSE = 1;
+     */
+    SAME_BAR_CLOSE = 1,
+    /**
+     * bias-free: fill a bar-i signal at bar (i+1)'s open ± slippage
+     *
+     * @generated from enum value: FILL_MODEL_NEXT_BAR_OPEN = 2;
+     */
+    NEXT_BAR_OPEN = 2
+}
+/**
+ * Describes the enum xstockstrat.analysis.v1.FillModel.
+ */
+export declare const FillModelSchema: GenEnum<FillModel>;
 /**
  * The engine's decision for a single bar. Closed set → enum (C-04).
  *

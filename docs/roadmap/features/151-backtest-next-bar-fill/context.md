@@ -102,3 +102,17 @@
   CLEAN vs 150 and trunk. Same merge-order.md 150↔151 row ENHANCED with the same-function overlaps.[x]
 - Carried into /sdd-execute (no unaddressed ✗): the same-function merge burden with 150 (whichever
   lands second reconciles servicer.py/backtest_runs.py/backtest_view.py manually + re-runs buf-gen).
+
+## Session 2026-08-23 — sdd-execute (on claude/xstockstrat-metrics-sweep-m070rf)
+
+Branch deviation (C-06): executed on the session's designated harness branch, landing in PR #1004
+alongside feature 150 (which merged its proto/migration first, so 151 keeps the reserved split).
+
+### Step 1 — proto: FillModel enum + fill_model fields [done]
+- Added FillModel enum (UNSPECIFIED/SAME_BAR_CLOSE/NEXT_BAR_OPEN), RunBacktestRequest.fill_model=9,
+  BacktestResult.fill_model=20, BacktestRunSummary.fill_model=18 (reserved split honored — 150 took
+  8/17/18/19). Additive only. Verify: buf lint clean; buf breaking vs origin/main-dev clean.
+### Step 2 — proto-gen: regenerate stubs [done]
+- ./scripts/buf-gen.sh; 8 gen files changed; idempotent re-run leaves no further diff.
+### Step 3 — migration 018 fill_model column [done]
+- Additive nullable fill_model TEXT; up/down reverse-verified offline (no DB). NNN=018 (150 took 017).

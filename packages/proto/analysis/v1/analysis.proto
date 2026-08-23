@@ -62,6 +62,10 @@ message RunBacktestRequest {
   // field 8 — capital-allocation model (feature 150); unset/UNSPECIFIED → legacy serial per-symbol
   // path (no behavior change for existing callers).
   SizingMode sizing_mode = 8;
+  // field 9 — fill model (feature 151); unset/UNSPECIFIED → server default (config
+  // analysis.backtest.default_fill_model, else legacy same-bar-close). No behavior change for
+  // existing callers.
+  FillModel fill_model = 9;
 }
 
 enum BacktestStatus {
@@ -77,6 +81,15 @@ enum SizingMode {
   SIZING_MODE_UNSPECIFIED = 0;  // request default → the legacy serial per-symbol path
   SIZING_MODE_LEGACY = 1;       // serial per-symbol compounding (the aggregate is Π(1+rᵢ)−1)
   SIZING_MODE_PORTFOLIO = 2;    // one shared cash pool, concurrent positions, one equity curve
+}
+
+// Which bar/price a backtest fills a signal at (feature 151). Closed set → enum (C-04).
+// A completed run records SAME_BAR_CLOSE or NEXT_BAR_OPEN (never UNSPECIFIED); UNSPECIFIED is a
+// request/config "not chosen" sentinel the servicer normalizes to SAME_BAR_CLOSE (legacy).
+enum FillModel {
+  FILL_MODEL_UNSPECIFIED = 0;    // caller/config did not choose → resolves to SAME_BAR_CLOSE (legacy)
+  FILL_MODEL_SAME_BAR_CLOSE = 1; // legacy: fill at bar i's close ± slippage (optimistically biased)
+  FILL_MODEL_NEXT_BAR_OPEN = 2;  // bias-free: fill a bar-i signal at bar (i+1)'s open ± slippage
 }
 
 message CoverageGap {
@@ -123,6 +136,8 @@ message BacktestResult {
   // NOTE: per-symbol BarDiagnostic.equity (field 15 there) stays per-symbol in portfolio mode — the
   // portfolio contribution lives ONLY here; do not read per-symbol equity as portfolio contribution.
   repeated EquityPoint portfolio_equity_curve = 19;
+  // Effective fill model the run actually used (feature 151); never UNSPECIFIED on a completed run.
+  FillModel fill_model = 20;
 }
 
 // One entry that portfolio mode could not open because the shared pool was fully committed
@@ -253,6 +268,7 @@ message BacktestRunSummary {
   google.protobuf.Timestamp range_start = 15;
   google.protobuf.Timestamp range_end = 16;
   SizingMode sizing_mode = 17; // capital-allocation model the run used (feature 150); UNSPECIFIED on pre-150 rows
+  FillModel fill_model = 18;   // fill model the run used (feature 151); UNSPECIFIED on pre-151 rows
 }
 
 message ListBacktestsResponse {

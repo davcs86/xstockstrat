@@ -28,6 +28,23 @@ export declare enum SizingMode {
 export declare function sizingModeFromJSON(object: any): SizingMode;
 export declare function sizingModeToJSON(object: SizingMode): string;
 export declare function sizingModeToNumber(object: SizingMode): number;
+/**
+ * Which bar/price a backtest fills a signal at (feature 151). Closed set → enum (C-04).
+ * A completed run records SAME_BAR_CLOSE or NEXT_BAR_OPEN (never UNSPECIFIED); UNSPECIFIED is a
+ * request/config "not chosen" sentinel the servicer normalizes to SAME_BAR_CLOSE (legacy).
+ */
+export declare enum FillModel {
+    /** FILL_MODEL_UNSPECIFIED - caller/config did not choose → resolves to SAME_BAR_CLOSE (legacy) */
+    FILL_MODEL_UNSPECIFIED = "FILL_MODEL_UNSPECIFIED",
+    /** FILL_MODEL_SAME_BAR_CLOSE - legacy: fill at bar i's close ± slippage (optimistically biased) */
+    FILL_MODEL_SAME_BAR_CLOSE = "FILL_MODEL_SAME_BAR_CLOSE",
+    /** FILL_MODEL_NEXT_BAR_OPEN - bias-free: fill a bar-i signal at bar (i+1)'s open ± slippage */
+    FILL_MODEL_NEXT_BAR_OPEN = "FILL_MODEL_NEXT_BAR_OPEN",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function fillModelFromJSON(object: any): FillModel;
+export declare function fillModelToJSON(object: FillModel): string;
+export declare function fillModelToNumber(object: FillModel): number;
 /** The engine's decision for a single bar. Closed set → enum (C-04). */
 export declare enum BarAction {
     BAR_ACTION_UNSPECIFIED = "BAR_ACTION_UNSPECIFIED",
@@ -222,6 +239,12 @@ export interface RunBacktestRequest {
      * path (no behavior change for existing callers).
      */
     sizingMode: SizingMode;
+    /**
+     * field 9 — fill model (feature 151); unset/UNSPECIFIED → server default (config
+     * analysis.backtest.default_fill_model, else legacy same-bar-close). No behavior change for
+     * existing callers.
+     */
+    fillModel: FillModel;
 }
 export interface CoverageGap {
     symbol: string;
@@ -277,6 +300,8 @@ export interface BacktestResult {
      * portfolio contribution lives ONLY here; do not read per-symbol equity as portfolio contribution.
      */
     portfolioEquityCurve: EquityPoint[];
+    /** Effective fill model the run actually used (feature 151); never UNSPECIFIED on a completed run. */
+    fillModel: FillModel;
 }
 /**
  * One entry that portfolio mode could not open because the shared pool was fully committed
@@ -401,6 +426,8 @@ export interface BacktestRunSummary {
     rangeEnd?: Date | undefined;
     /** capital-allocation model the run used (feature 150); UNSPECIFIED on pre-150 rows */
     sizingMode: SizingMode;
+    /** fill model the run used (feature 151); UNSPECIFIED on pre-151 rows */
+    fillModel: FillModel;
 }
 export interface ListBacktestsResponse {
     runs: BacktestRunSummary[];

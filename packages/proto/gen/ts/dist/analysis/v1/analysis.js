@@ -5,14 +5,17 @@
 //   protoc               unknown
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ScreenResult_CriterionPassedEntry = exports.ScreenResult_CriterionRawValuesEntry = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.EquityPoint = exports.PortfolioCapitalSkip = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.FactorType = exports.SnapshotEventType = exports.OpportunityAction = exports.ReadinessRule = exports.ConditionState = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.SizingMode = exports.BacktestStatus = exports.protobufPackage = void 0;
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.QueryPnLPatternsResponse = exports.QueryPnLPatternsRequest = exports.PnLPatternFactor = exports.OrderSnapshot_IndicatorValuesEntry = exports.OrderSnapshot = exports.SignalEntry = exports.IndicatorValue = exports.NamedSeries = exports.ComponentSeries = exports.GetIndicatorSeriesResponse = exports.GetIndicatorSeriesRequest = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = void 0;
+exports.ScreenResult_CriterionRawValuesEntry = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.EquityPoint = exports.PortfolioCapitalSkip = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.FactorType = exports.SnapshotEventType = exports.OpportunityAction = exports.ReadinessRule = exports.ConditionState = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.FillModel = exports.SizingMode = exports.BacktestStatus = exports.protobufPackage = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.QueryPnLPatternsResponse = exports.QueryPnLPatternsRequest = exports.PnLPatternFactor = exports.OrderSnapshot_IndicatorValuesEntry = exports.OrderSnapshot = exports.SignalEntry = exports.IndicatorValue = exports.NamedSeries = exports.ComponentSeries = exports.GetIndicatorSeriesResponse = exports.GetIndicatorSeriesRequest = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionPassedEntry = void 0;
 exports.backtestStatusFromJSON = backtestStatusFromJSON;
 exports.backtestStatusToJSON = backtestStatusToJSON;
 exports.backtestStatusToNumber = backtestStatusToNumber;
 exports.sizingModeFromJSON = sizingModeFromJSON;
 exports.sizingModeToJSON = sizingModeToJSON;
 exports.sizingModeToNumber = sizingModeToNumber;
+exports.fillModelFromJSON = fillModelFromJSON;
+exports.fillModelToJSON = fillModelToJSON;
+exports.fillModelToNumber = fillModelToNumber;
 exports.barActionFromJSON = barActionFromJSON;
 exports.barActionToJSON = barActionToJSON;
 exports.barActionToNumber = barActionToNumber;
@@ -164,6 +167,64 @@ function sizingModeToNumber(object) {
         case SizingMode.SIZING_MODE_PORTFOLIO:
             return 2;
         case SizingMode.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/**
+ * Which bar/price a backtest fills a signal at (feature 151). Closed set → enum (C-04).
+ * A completed run records SAME_BAR_CLOSE or NEXT_BAR_OPEN (never UNSPECIFIED); UNSPECIFIED is a
+ * request/config "not chosen" sentinel the servicer normalizes to SAME_BAR_CLOSE (legacy).
+ */
+var FillModel;
+(function (FillModel) {
+    /** FILL_MODEL_UNSPECIFIED - caller/config did not choose → resolves to SAME_BAR_CLOSE (legacy) */
+    FillModel["FILL_MODEL_UNSPECIFIED"] = "FILL_MODEL_UNSPECIFIED";
+    /** FILL_MODEL_SAME_BAR_CLOSE - legacy: fill at bar i's close ± slippage (optimistically biased) */
+    FillModel["FILL_MODEL_SAME_BAR_CLOSE"] = "FILL_MODEL_SAME_BAR_CLOSE";
+    /** FILL_MODEL_NEXT_BAR_OPEN - bias-free: fill a bar-i signal at bar (i+1)'s open ± slippage */
+    FillModel["FILL_MODEL_NEXT_BAR_OPEN"] = "FILL_MODEL_NEXT_BAR_OPEN";
+    FillModel["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(FillModel || (exports.FillModel = FillModel = {}));
+function fillModelFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "FILL_MODEL_UNSPECIFIED":
+            return FillModel.FILL_MODEL_UNSPECIFIED;
+        case 1:
+        case "FILL_MODEL_SAME_BAR_CLOSE":
+            return FillModel.FILL_MODEL_SAME_BAR_CLOSE;
+        case 2:
+        case "FILL_MODEL_NEXT_BAR_OPEN":
+            return FillModel.FILL_MODEL_NEXT_BAR_OPEN;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return FillModel.UNRECOGNIZED;
+    }
+}
+function fillModelToJSON(object) {
+    switch (object) {
+        case FillModel.FILL_MODEL_UNSPECIFIED:
+            return "FILL_MODEL_UNSPECIFIED";
+        case FillModel.FILL_MODEL_SAME_BAR_CLOSE:
+            return "FILL_MODEL_SAME_BAR_CLOSE";
+        case FillModel.FILL_MODEL_NEXT_BAR_OPEN:
+            return "FILL_MODEL_NEXT_BAR_OPEN";
+        case FillModel.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function fillModelToNumber(object) {
+    switch (object) {
+        case FillModel.FILL_MODEL_UNSPECIFIED:
+            return 0;
+        case FillModel.FILL_MODEL_SAME_BAR_CLOSE:
+            return 1;
+        case FillModel.FILL_MODEL_NEXT_BAR_OPEN:
+            return 2;
+        case FillModel.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -1007,6 +1068,7 @@ function createBaseRunBacktestRequest() {
         strategyIdRef: "",
         inlineDefinition: undefined,
         sizingMode: SizingMode.SIZING_MODE_UNSPECIFIED,
+        fillModel: FillModel.FILL_MODEL_UNSPECIFIED,
     };
 }
 exports.RunBacktestRequest = {
@@ -1034,6 +1096,9 @@ exports.RunBacktestRequest = {
         }
         if (message.sizingMode !== SizingMode.SIZING_MODE_UNSPECIFIED) {
             writer.uint32(64).int32(sizingModeToNumber(message.sizingMode));
+        }
+        if (message.fillModel !== FillModel.FILL_MODEL_UNSPECIFIED) {
+            writer.uint32(72).int32(fillModelToNumber(message.fillModel));
         }
         return writer;
     },
@@ -1100,6 +1165,13 @@ exports.RunBacktestRequest = {
                     message.sizingMode = sizingModeFromJSON(reader.int32());
                     continue;
                 }
+                case 9: {
+                    if (tag !== 72) {
+                        break;
+                    }
+                    message.fillModel = fillModelFromJSON(reader.int32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1142,6 +1214,11 @@ exports.RunBacktestRequest = {
                 : isSet(object.sizing_mode)
                     ? sizingModeFromJSON(object.sizing_mode)
                     : SizingMode.SIZING_MODE_UNSPECIFIED,
+            fillModel: isSet(object.fillModel)
+                ? fillModelFromJSON(object.fillModel)
+                : isSet(object.fill_model)
+                    ? fillModelFromJSON(object.fill_model)
+                    : FillModel.FILL_MODEL_UNSPECIFIED,
         };
     },
     toJSON(message) {
@@ -1170,6 +1247,9 @@ exports.RunBacktestRequest = {
         if (message.sizingMode !== SizingMode.SIZING_MODE_UNSPECIFIED) {
             obj.sizingMode = sizingModeToJSON(message.sizingMode);
         }
+        if (message.fillModel !== FillModel.FILL_MODEL_UNSPECIFIED) {
+            obj.fillModel = fillModelToJSON(message.fillModel);
+        }
         return obj;
     },
     create(base) {
@@ -1189,6 +1269,7 @@ exports.RunBacktestRequest = {
             ? exports.StrategyDefinition.fromPartial(object.inlineDefinition)
             : undefined;
         message.sizingMode = object.sizingMode ?? SizingMode.SIZING_MODE_UNSPECIFIED;
+        message.fillModel = object.fillModel ?? FillModel.FILL_MODEL_UNSPECIFIED;
         return message;
     },
 };
@@ -1362,6 +1443,7 @@ function createBaseBacktestResult() {
         sizingMode: SizingMode.SIZING_MODE_UNSPECIFIED,
         capitalSkips: [],
         portfolioEquityCurve: [],
+        fillModel: FillModel.FILL_MODEL_UNSPECIFIED,
     };
 }
 exports.BacktestResult = {
@@ -1422,6 +1504,9 @@ exports.BacktestResult = {
         }
         for (const v of message.portfolioEquityCurve) {
             exports.EquityPoint.encode(v, writer.uint32(154).fork()).join();
+        }
+        if (message.fillModel !== FillModel.FILL_MODEL_UNSPECIFIED) {
+            writer.uint32(160).int32(fillModelToNumber(message.fillModel));
         }
         return writer;
     },
@@ -1565,6 +1650,13 @@ exports.BacktestResult = {
                     message.portfolioEquityCurve.push(exports.EquityPoint.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 20: {
+                    if (tag !== 160) {
+                        break;
+                    }
+                    message.fillModel = fillModelFromJSON(reader.int32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1660,6 +1752,11 @@ exports.BacktestResult = {
                 : globalThis.Array.isArray(object?.portfolio_equity_curve)
                     ? object.portfolio_equity_curve.map((e) => exports.EquityPoint.fromJSON(e))
                     : [],
+            fillModel: isSet(object.fillModel)
+                ? fillModelFromJSON(object.fillModel)
+                : isSet(object.fill_model)
+                    ? fillModelFromJSON(object.fill_model)
+                    : FillModel.FILL_MODEL_UNSPECIFIED,
         };
     },
     toJSON(message) {
@@ -1721,6 +1818,9 @@ exports.BacktestResult = {
         if (message.portfolioEquityCurve?.length) {
             obj.portfolioEquityCurve = message.portfolioEquityCurve.map((e) => exports.EquityPoint.toJSON(e));
         }
+        if (message.fillModel !== FillModel.FILL_MODEL_UNSPECIFIED) {
+            obj.fillModel = fillModelToJSON(message.fillModel);
+        }
         return obj;
     },
     create(base) {
@@ -1747,6 +1847,7 @@ exports.BacktestResult = {
         message.sizingMode = object.sizingMode ?? SizingMode.SIZING_MODE_UNSPECIFIED;
         message.capitalSkips = object.capitalSkips?.map((e) => exports.PortfolioCapitalSkip.fromPartial(e)) || [];
         message.portfolioEquityCurve = object.portfolioEquityCurve?.map((e) => exports.EquityPoint.fromPartial(e)) || [];
+        message.fillModel = object.fillModel ?? FillModel.FILL_MODEL_UNSPECIFIED;
         return message;
     },
 };
@@ -3146,6 +3247,7 @@ function createBaseBacktestRunSummary() {
         rangeStart: undefined,
         rangeEnd: undefined,
         sizingMode: SizingMode.SIZING_MODE_UNSPECIFIED,
+        fillModel: FillModel.FILL_MODEL_UNSPECIFIED,
     };
 }
 exports.BacktestRunSummary = {
@@ -3200,6 +3302,9 @@ exports.BacktestRunSummary = {
         }
         if (message.sizingMode !== SizingMode.SIZING_MODE_UNSPECIFIED) {
             writer.uint32(136).int32(sizingModeToNumber(message.sizingMode));
+        }
+        if (message.fillModel !== FillModel.FILL_MODEL_UNSPECIFIED) {
+            writer.uint32(144).int32(fillModelToNumber(message.fillModel));
         }
         return writer;
     },
@@ -3329,6 +3434,13 @@ exports.BacktestRunSummary = {
                     message.sizingMode = sizingModeFromJSON(reader.int32());
                     continue;
                 }
+                case 18: {
+                    if (tag !== 144) {
+                        break;
+                    }
+                    message.fillModel = fillModelFromJSON(reader.int32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -3414,6 +3526,11 @@ exports.BacktestRunSummary = {
                 : isSet(object.sizing_mode)
                     ? sizingModeFromJSON(object.sizing_mode)
                     : SizingMode.SIZING_MODE_UNSPECIFIED,
+            fillModel: isSet(object.fillModel)
+                ? fillModelFromJSON(object.fillModel)
+                : isSet(object.fill_model)
+                    ? fillModelFromJSON(object.fill_model)
+                    : FillModel.FILL_MODEL_UNSPECIFIED,
         };
     },
     toJSON(message) {
@@ -3469,6 +3586,9 @@ exports.BacktestRunSummary = {
         if (message.sizingMode !== SizingMode.SIZING_MODE_UNSPECIFIED) {
             obj.sizingMode = sizingModeToJSON(message.sizingMode);
         }
+        if (message.fillModel !== FillModel.FILL_MODEL_UNSPECIFIED) {
+            obj.fillModel = fillModelToJSON(message.fillModel);
+        }
         return obj;
     },
     create(base) {
@@ -3493,6 +3613,7 @@ exports.BacktestRunSummary = {
         message.rangeStart = object.rangeStart ?? undefined;
         message.rangeEnd = object.rangeEnd ?? undefined;
         message.sizingMode = object.sizingMode ?? SizingMode.SIZING_MODE_UNSPECIFIED;
+        message.fillModel = object.fillModel ?? FillModel.FILL_MODEL_UNSPECIFIED;
         return message;
     },
 };

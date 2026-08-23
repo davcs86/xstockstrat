@@ -147,6 +147,67 @@ export function sizingModeToNumber(object: SizingMode): number {
   }
 }
 
+/**
+ * Which bar/price a backtest fills a signal at (feature 151). Closed set → enum (C-04).
+ * A completed run records SAME_BAR_CLOSE or NEXT_BAR_OPEN (never UNSPECIFIED); UNSPECIFIED is a
+ * request/config "not chosen" sentinel the servicer normalizes to SAME_BAR_CLOSE (legacy).
+ */
+export enum FillModel {
+  /** FILL_MODEL_UNSPECIFIED - caller/config did not choose → resolves to SAME_BAR_CLOSE (legacy) */
+  FILL_MODEL_UNSPECIFIED = "FILL_MODEL_UNSPECIFIED",
+  /** FILL_MODEL_SAME_BAR_CLOSE - legacy: fill at bar i's close ± slippage (optimistically biased) */
+  FILL_MODEL_SAME_BAR_CLOSE = "FILL_MODEL_SAME_BAR_CLOSE",
+  /** FILL_MODEL_NEXT_BAR_OPEN - bias-free: fill a bar-i signal at bar (i+1)'s open ± slippage */
+  FILL_MODEL_NEXT_BAR_OPEN = "FILL_MODEL_NEXT_BAR_OPEN",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function fillModelFromJSON(object: any): FillModel {
+  switch (object) {
+    case 0:
+    case "FILL_MODEL_UNSPECIFIED":
+      return FillModel.FILL_MODEL_UNSPECIFIED;
+    case 1:
+    case "FILL_MODEL_SAME_BAR_CLOSE":
+      return FillModel.FILL_MODEL_SAME_BAR_CLOSE;
+    case 2:
+    case "FILL_MODEL_NEXT_BAR_OPEN":
+      return FillModel.FILL_MODEL_NEXT_BAR_OPEN;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return FillModel.UNRECOGNIZED;
+  }
+}
+
+export function fillModelToJSON(object: FillModel): string {
+  switch (object) {
+    case FillModel.FILL_MODEL_UNSPECIFIED:
+      return "FILL_MODEL_UNSPECIFIED";
+    case FillModel.FILL_MODEL_SAME_BAR_CLOSE:
+      return "FILL_MODEL_SAME_BAR_CLOSE";
+    case FillModel.FILL_MODEL_NEXT_BAR_OPEN:
+      return "FILL_MODEL_NEXT_BAR_OPEN";
+    case FillModel.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function fillModelToNumber(object: FillModel): number {
+  switch (object) {
+    case FillModel.FILL_MODEL_UNSPECIFIED:
+      return 0;
+    case FillModel.FILL_MODEL_SAME_BAR_CLOSE:
+      return 1;
+    case FillModel.FILL_MODEL_NEXT_BAR_OPEN:
+      return 2;
+    case FillModel.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 /** The engine's decision for a single bar. Closed set → enum (C-04). */
 export enum BarAction {
   BAR_ACTION_UNSPECIFIED = "BAR_ACTION_UNSPECIFIED",
@@ -1034,6 +1095,12 @@ export interface RunBacktestRequest {
    * path (no behavior change for existing callers).
    */
   sizingMode: SizingMode;
+  /**
+   * field 9 — fill model (feature 151); unset/UNSPECIFIED → server default (config
+   * analysis.backtest.default_fill_model, else legacy same-bar-close). No behavior change for
+   * existing callers.
+   */
+  fillModel: FillModel;
 }
 
 export interface CoverageGap {
@@ -1091,6 +1158,8 @@ export interface BacktestResult {
    * portfolio contribution lives ONLY here; do not read per-symbol equity as portfolio contribution.
    */
   portfolioEquityCurve: EquityPoint[];
+  /** Effective fill model the run actually used (feature 151); never UNSPECIFIED on a completed run. */
+  fillModel: FillModel;
 }
 
 /**
@@ -1227,6 +1296,8 @@ export interface BacktestRunSummary {
     | undefined;
   /** capital-allocation model the run used (feature 150); UNSPECIFIED on pre-150 rows */
   sizingMode: SizingMode;
+  /** fill model the run used (feature 151); UNSPECIFIED on pre-151 rows */
+  fillModel: FillModel;
 }
 
 export interface ListBacktestsResponse {
@@ -1709,6 +1780,7 @@ function createBaseRunBacktestRequest(): RunBacktestRequest {
     strategyIdRef: "",
     inlineDefinition: undefined,
     sizingMode: SizingMode.SIZING_MODE_UNSPECIFIED,
+    fillModel: FillModel.FILL_MODEL_UNSPECIFIED,
   };
 }
 
@@ -1737,6 +1809,9 @@ export const RunBacktestRequest: MessageFns<RunBacktestRequest> = {
     }
     if (message.sizingMode !== SizingMode.SIZING_MODE_UNSPECIFIED) {
       writer.uint32(64).int32(sizingModeToNumber(message.sizingMode));
+    }
+    if (message.fillModel !== FillModel.FILL_MODEL_UNSPECIFIED) {
+      writer.uint32(72).int32(fillModelToNumber(message.fillModel));
     }
     return writer;
   },
@@ -1812,6 +1887,14 @@ export const RunBacktestRequest: MessageFns<RunBacktestRequest> = {
           message.sizingMode = sizingModeFromJSON(reader.int32());
           continue;
         }
+        case 9: {
+          if (tag !== 72) {
+            break;
+          }
+
+          message.fillModel = fillModelFromJSON(reader.int32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1855,6 +1938,11 @@ export const RunBacktestRequest: MessageFns<RunBacktestRequest> = {
         : isSet(object.sizing_mode)
         ? sizingModeFromJSON(object.sizing_mode)
         : SizingMode.SIZING_MODE_UNSPECIFIED,
+      fillModel: isSet(object.fillModel)
+        ? fillModelFromJSON(object.fillModel)
+        : isSet(object.fill_model)
+        ? fillModelFromJSON(object.fill_model)
+        : FillModel.FILL_MODEL_UNSPECIFIED,
     };
   },
 
@@ -1884,6 +1972,9 @@ export const RunBacktestRequest: MessageFns<RunBacktestRequest> = {
     if (message.sizingMode !== SizingMode.SIZING_MODE_UNSPECIFIED) {
       obj.sizingMode = sizingModeToJSON(message.sizingMode);
     }
+    if (message.fillModel !== FillModel.FILL_MODEL_UNSPECIFIED) {
+      obj.fillModel = fillModelToJSON(message.fillModel);
+    }
     return obj;
   },
 
@@ -1904,6 +1995,7 @@ export const RunBacktestRequest: MessageFns<RunBacktestRequest> = {
       ? StrategyDefinition.fromPartial(object.inlineDefinition)
       : undefined;
     message.sizingMode = object.sizingMode ?? SizingMode.SIZING_MODE_UNSPECIFIED;
+    message.fillModel = object.fillModel ?? FillModel.FILL_MODEL_UNSPECIFIED;
     return message;
   },
 };
@@ -2090,6 +2182,7 @@ function createBaseBacktestResult(): BacktestResult {
     sizingMode: SizingMode.SIZING_MODE_UNSPECIFIED,
     capitalSkips: [],
     portfolioEquityCurve: [],
+    fillModel: FillModel.FILL_MODEL_UNSPECIFIED,
   };
 }
 
@@ -2151,6 +2244,9 @@ export const BacktestResult: MessageFns<BacktestResult> = {
     }
     for (const v of message.portfolioEquityCurve) {
       EquityPoint.encode(v!, writer.uint32(154).fork()).join();
+    }
+    if (message.fillModel !== FillModel.FILL_MODEL_UNSPECIFIED) {
+      writer.uint32(160).int32(fillModelToNumber(message.fillModel));
     }
     return writer;
   },
@@ -2314,6 +2410,14 @@ export const BacktestResult: MessageFns<BacktestResult> = {
           message.portfolioEquityCurve.push(EquityPoint.decode(reader, reader.uint32()));
           continue;
         }
+        case 20: {
+          if (tag !== 160) {
+            break;
+          }
+
+          message.fillModel = fillModelFromJSON(reader.int32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2410,6 +2514,11 @@ export const BacktestResult: MessageFns<BacktestResult> = {
         : globalThis.Array.isArray(object?.portfolio_equity_curve)
         ? object.portfolio_equity_curve.map((e: any) => EquityPoint.fromJSON(e))
         : [],
+      fillModel: isSet(object.fillModel)
+        ? fillModelFromJSON(object.fillModel)
+        : isSet(object.fill_model)
+        ? fillModelFromJSON(object.fill_model)
+        : FillModel.FILL_MODEL_UNSPECIFIED,
     };
   },
 
@@ -2472,6 +2581,9 @@ export const BacktestResult: MessageFns<BacktestResult> = {
     if (message.portfolioEquityCurve?.length) {
       obj.portfolioEquityCurve = message.portfolioEquityCurve.map((e) => EquityPoint.toJSON(e));
     }
+    if (message.fillModel !== FillModel.FILL_MODEL_UNSPECIFIED) {
+      obj.fillModel = fillModelToJSON(message.fillModel);
+    }
     return obj;
   },
 
@@ -2499,6 +2611,7 @@ export const BacktestResult: MessageFns<BacktestResult> = {
     message.sizingMode = object.sizingMode ?? SizingMode.SIZING_MODE_UNSPECIFIED;
     message.capitalSkips = object.capitalSkips?.map((e) => PortfolioCapitalSkip.fromPartial(e)) || [];
     message.portfolioEquityCurve = object.portfolioEquityCurve?.map((e) => EquityPoint.fromPartial(e)) || [];
+    message.fillModel = object.fillModel ?? FillModel.FILL_MODEL_UNSPECIFIED;
     return message;
   },
 };
@@ -4039,6 +4152,7 @@ function createBaseBacktestRunSummary(): BacktestRunSummary {
     rangeStart: undefined,
     rangeEnd: undefined,
     sizingMode: SizingMode.SIZING_MODE_UNSPECIFIED,
+    fillModel: FillModel.FILL_MODEL_UNSPECIFIED,
   };
 }
 
@@ -4094,6 +4208,9 @@ export const BacktestRunSummary: MessageFns<BacktestRunSummary> = {
     }
     if (message.sizingMode !== SizingMode.SIZING_MODE_UNSPECIFIED) {
       writer.uint32(136).int32(sizingModeToNumber(message.sizingMode));
+    }
+    if (message.fillModel !== FillModel.FILL_MODEL_UNSPECIFIED) {
+      writer.uint32(144).int32(fillModelToNumber(message.fillModel));
     }
     return writer;
   },
@@ -4241,6 +4358,14 @@ export const BacktestRunSummary: MessageFns<BacktestRunSummary> = {
           message.sizingMode = sizingModeFromJSON(reader.int32());
           continue;
         }
+        case 18: {
+          if (tag !== 144) {
+            break;
+          }
+
+          message.fillModel = fillModelFromJSON(reader.int32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -4327,6 +4452,11 @@ export const BacktestRunSummary: MessageFns<BacktestRunSummary> = {
         : isSet(object.sizing_mode)
         ? sizingModeFromJSON(object.sizing_mode)
         : SizingMode.SIZING_MODE_UNSPECIFIED,
+      fillModel: isSet(object.fillModel)
+        ? fillModelFromJSON(object.fillModel)
+        : isSet(object.fill_model)
+        ? fillModelFromJSON(object.fill_model)
+        : FillModel.FILL_MODEL_UNSPECIFIED,
     };
   },
 
@@ -4383,6 +4513,9 @@ export const BacktestRunSummary: MessageFns<BacktestRunSummary> = {
     if (message.sizingMode !== SizingMode.SIZING_MODE_UNSPECIFIED) {
       obj.sizingMode = sizingModeToJSON(message.sizingMode);
     }
+    if (message.fillModel !== FillModel.FILL_MODEL_UNSPECIFIED) {
+      obj.fillModel = fillModelToJSON(message.fillModel);
+    }
     return obj;
   },
 
@@ -4408,6 +4541,7 @@ export const BacktestRunSummary: MessageFns<BacktestRunSummary> = {
     message.rangeStart = object.rangeStart ?? undefined;
     message.rangeEnd = object.rangeEnd ?? undefined;
     message.sizingMode = object.sizingMode ?? SizingMode.SIZING_MODE_UNSPECIFIED;
+    message.fillModel = object.fillModel ?? FillModel.FILL_MODEL_UNSPECIFIED;
     return message;
   },
 };

@@ -92,7 +92,7 @@ test body (AC-9 also by Steps 7/10). The design-confirm behaviors are no longer 
 
 ### Step 1 — proto: FillModel enum + additive fill_model fields
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -146,7 +146,7 @@ current merge base at execute time if `main-dev` has moved). Confirm no field nu
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/**` — modify (generated; do not hand-edit)
@@ -180,7 +180,7 @@ Then `git diff packages/proto/gen/` shows only the new enum/fields (no unrelated
 
 ### Step 3 — migration: 018 fill_model column on analysis.backtest_runs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/018_backtest_runs_fill_model.up.sql` — create
