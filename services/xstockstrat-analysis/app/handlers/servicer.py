@@ -619,8 +619,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 log.warning("backtest symbol %s error: %s — skipping", symbol, e)
                 continue
 
-        # Compute aggregate metrics
-        metrics = _compute_metrics(daily_equity, all_trades, initial_equity)
+        # Compute aggregate metrics. Annualize over the real window span (request.range is
+        # already defaulted above), not the concatenated multi-symbol curve length (feature 149).
+        _span_seconds = request.range.end.seconds - request.range.start.seconds
+        _period_years = (_span_seconds / 86_400.0) / 365.25 if _span_seconds > 0 else None
+        metrics = _compute_metrics(daily_equity, all_trades, initial_equity, _period_years)
 
         now = Timestamp()
         now.GetCurrentTime()
@@ -3611,8 +3614,23 @@ def _unwrap_value(v):
 # the module-level alias near the imports preserves the old name for existing callers/tests.
 
 
-def _compute_metrics(daily_equity: list[float], trades: list, initial_equity: float) -> dict:
-    """Compute backtest performance metrics from daily equity curve and trade list."""
+def _compute_metrics(
+    daily_equity: list[float],
+    trades: list,
+    initial_equity: float,
+    period_years: float | None = None,
+) -> dict:
+    """Compute backtest performance metrics from daily equity curve and trade list.
+
+    ``period_years`` (feature 149): annualize ``annualized_return`` over the run's real
+    window span rather than the equity-curve length. The aggregate ``daily_equity`` is a
+    concatenation of N per-symbol curves (RunBacktest threads one running equity serially
+    through each symbol and extends the curve), so ``len(daily_equity)-1`` is ~N× the true
+    trading-day count and under-scaled the old ``252/n_days`` exponent by ~N. When
+    ``period_years`` is None (per-symbol evidence cells, which pass a single-symbol curve
+    whose length ≈ the window) the legacy curve-length behaviour is preserved, keeping the
+    feature-065 derived grade unchanged.
+    """
     if len(daily_equity) < 2:
         return {
             "total_return": 0.0,
@@ -3628,8 +3646,13 @@ def _compute_metrics(daily_equity: list[float], trades: list, initial_equity: fl
     returns = returns[np.isfinite(returns)]
 
     total_return = (equity[-1] - initial_equity) / initial_equity
-    n_days = len(daily_equity) - 1
-    annualized_return = (1 + total_return) ** (252.0 / max(n_days, 1)) - 1 if n_days > 0 else 0.0
+    if period_years is not None and period_years > 0:
+        annualized_return = (1 + total_return) ** (1.0 / period_years) - 1
+    else:
+        n_days = len(daily_equity) - 1
+        annualized_return = (
+            (1 + total_return) ** (252.0 / max(n_days, 1)) - 1 if n_days > 0 else 0.0
+        )
 
     mean_r = float(np.mean(returns)) if len(returns) > 0 else 0.0
     std_r = float(np.std(returns)) if len(returns) > 1 else 1e-9
