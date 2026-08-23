@@ -178,3 +178,24 @@ buf-gen verified byte-for-byte against checked-in stubs before any proto edit.
   legacy-NULL).
 - Verify: ruff clean; 558 tests pass; coverage 82.95% (≥40). TDD: red-before-green.
 - Files: services/xstockstrat-analysis/tests/test_analysis_servicer.py, tests/test_backtest_runs_repo.py
+### Step 9 — service: agent run_backtest sizing_mode arg + surfacing [done]
+- client.run_backtest gained `sizing_mode: str|None`; maps "portfolio"→SIZING_MODE_PORTFOLIO,
+  "legacy"→SIZING_MODE_LEGACY, None→unset (server default). tools.py run_backtest threads it +
+  documents the footgun. backtest_view: sizing_mode added to _HEAD_KEYS (inline), capital_skips
+  surfaced as a COUNT (mirrors coverage_gaps guard), portfolio_equity_curve added to
+  _INTENTIONALLY_DROPPED (attachment-only, O(bars)). CLAUDE.md run_backtest row updated. §B N/A
+  (reuses existing outbound edge).
+- Files: app/client.py, app/tools.py, app/backtest_view.py, CLAUDE.md
+### Step 10 — test: agent sizing_mode + descriptor-parity [done]
+- test_backtest_view: descriptor-parity `kept` literal += capital_skips (sizing_mode via _HEAD_KEYS,
+  portfolio_equity_curve via dropped); _full_result fixture carries the 3 new fields; new
+  summarize tests for the mode + skip-count (incl. []→0). test_client: TestRunBacktestSizingMode
+  (portfolio/legacy/unset → req.sizing_mode). test_tools: assert_called_once_with += sizing_mode=None,
+  + a passthrough+surfacing test.
+- Verify: ruff clean; 272 tests pass; coverage 78.13% (≥40). TDD: red-before-green.
+- Files: tests/test_backtest_view.py, tests/test_client.py, tests/test_tools.py
+### Step 11 — docs: strat-lab backtest skill [done]
+- SKILL.md Phase 3 now lists three baskets (portfolio mode / legacy sequential footgun /
+  independent-per-symbol); reference/aggregation.md adds portfolio mode and retires the "sequential
+  is the only in-engine portfolio" caveat. Same PR as the tool change (root CLAUDE.md § strat-lab).
+- Files: plugins/strat-lab/skills/backtest/SKILL.md, plugins/strat-lab/skills/backtest/reference/aggregation.md

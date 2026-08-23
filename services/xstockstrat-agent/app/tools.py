@@ -460,6 +460,7 @@ def register_tools(server: MCPServer) -> None:
         initial_capital: float = 100000.0,
         start: str | None = None,
         end: str | None = None,
+        sizing_mode: str | None = None,
     ) -> list:
         """Trigger a backtest via xstockstrat-analysis.
         strategy_id: identifies the strategy (e.g. 'sma_crossover'). Must be a REGISTERED strategy
@@ -491,7 +492,13 @@ def register_tools(server: MCPServer) -> None:
         tell the user detail exists even if your client shows no attachment affordance.
         Note: 64-bit integer fields in the attached full result (e.g. per-bar `volume`, and
         `bars_have`/`bars_need` inside `coverage_gaps`) are serialized as JSON STRINGS, not
-        numbers — parse them before arithmetic."""
+        numbers — parse them before arithmetic.
+        sizing_mode: capital-allocation model (feature 150). 'portfolio' runs a real shared-capital
+          portfolio — concurrent positions out of one pool, one order-independent equity curve, so
+          the aggregate metrics are directly comparable and need no manual per-symbol aggregation
+          (the summary shows the mode + a `capital_skips` count for entries the pool couldn't open).
+          Omitted/'legacy' (default) keeps the legacy serial per-symbol compounding, whose
+          multi-symbol aggregate is an ordering-dependent sequential parlay — the footgun."""
         # feature 133: forward the caller's own user id so analysis resolves ownership from the
         # header — a non-owner strategy_id_ref is rejected PERMISSION_DENIED there. Wrap the RPC so
         # that denial surfaces as a tool-level error, not an unwrapped AioRpcError (AC-6).
@@ -504,6 +511,7 @@ def register_tools(server: MCPServer) -> None:
                 initial_capital=initial_capital,
                 start=start,
                 end=end,
+                sizing_mode=sizing_mode,
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="strategy not found")) from e

@@ -28,11 +28,15 @@ _ATTACHMENT_MIME = "application/json"
 _URI_TEMPLATE = "xstockstrat:///backtest/{backtest_id}/result.json"
 _ATTACHMENT_PRIORITY = 0.1
 
-# The one BacktestResult field `summarize` drops on purpose. Named so the descriptor-parity test can
+# The BacktestResult fields `summarize` drops on purpose. Named so the descriptor-parity test can
 # assert `kept | dropped == fields_by_name` — a bare equality would be red by construction.
-_INTENTIONALLY_DROPPED = frozenset({"trades"})
+# feature 150: `portfolio_equity_curve` is O(bars) like `trades`, so it too is routed to the
+# attachment (dropped from the inline summary), while `capital_skips` is surfaced inline as a count.
+_INTENTIONALLY_DROPPED = frozenset({"trades", "portfolio_equity_curve"})
 
-_HEAD_KEYS = ("backtest_id", "strategy_id", "status", "completed_at")
+# feature 150: `sizing_mode` belongs in the compact head block so the mode always reaches the
+# caller (even with no attachment) — a portfolio-mode return is never silently read as a legacy one.
+_HEAD_KEYS = ("backtest_id", "strategy_id", "status", "completed_at", "sizing_mode")
 
 # FR-2's headline metric set.
 _METRIC_KEYS = (
@@ -72,6 +76,12 @@ def summarize(result: dict[str, Any]) -> dict[str, Any]:
     # and must reach the caller even on an INSUFFICIENT_DATA run with no attachment.
     if "warnings" in result:
         summary["warnings"] = result["warnings"]
+
+    # feature 150: surface a portfolio capital-skip COUNT inline (small, diagnostic) — the full
+    # PortfolioCapitalSkip list rides in the attachment via the verbatim `result` dump. Mirrors the
+    # coverage_gaps guard: present-key test, not truthiness, so a real `[]` collapses to 0.
+    if "capital_skips" in result:
+        summary["capital_skips"] = len(result["capital_skips"] or [])
 
     # Same key name as feature 064 so existing readers keep their path — only `bars` is dropped.
     if "diagnostics" in result:

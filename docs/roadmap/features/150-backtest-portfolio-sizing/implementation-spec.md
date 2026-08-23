@@ -557,7 +557,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check . \
 
 ### Step 9 — service: agent run_backtest sizing_mode arg + mode/skip surfacing
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -618,7 +618,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check . \
 
 ### Step 10 — test: agent run_backtest sizing_mode + descriptor-parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_backtest_view.py` — modify
@@ -656,7 +656,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . \
 
 ### Step 11 — docs: strat-lab backtest skill (same PR as the tool change)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `plugins/strat-lab`
 **Files**:
 - `plugins/strat-lab/skills/backtest/SKILL.md` — modify

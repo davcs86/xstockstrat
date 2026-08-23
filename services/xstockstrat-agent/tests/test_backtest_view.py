@@ -51,6 +51,14 @@ def _full_result(symbols: int = 1, bars: int = 50) -> dict:
         "total_trades": 42,
         "profit_factor": 1.8,
         "initial_capital": 100000.0,
+        # feature 150: portfolio-mode fields. sizing_mode is in _HEAD_KEYS (inline); capital_skips
+        # is surfaced as a count; portfolio_equity_curve rides the attachment only.
+        "sizing_mode": "SIZING_MODE_PORTFOLIO",
+        "capital_skips": [{"symbol": "MSFT", "intended_weight": 10000.0, "available_cash": 5000.0}],
+        "portfolio_equity_curve": [
+            {"timestamp": "2026-07-01T00:00:00Z", "equity": 100000.0},
+            {"timestamp": "2026-07-02T00:00:00Z", "equity": 100500.0},
+        ],
         "trades": [{"symbol": "AAPL", "side": "long", "pnl": 680.0}],
         # Exactly one, regardless of `symbols` — see property 2.
         "coverage_gaps": [
@@ -95,6 +103,22 @@ def test_summary_keeps_every_fr2_field():
     for key in _HEAD_KEYS + _METRIC_KEYS:
         assert key in s, f"FR-2 field {key} dropped from the summary"
     assert "coverage_gaps" in s
+
+
+def test_summary_surfaces_sizing_mode_and_capital_skip_count():
+    """Feature 150: the mode reaches the caller inline; capital_skips collapses to a count and the
+    O(bars) portfolio_equity_curve is dropped from the summary (attachment-only)."""
+    s = summarize(_full_result())
+    assert s["sizing_mode"] == "SIZING_MODE_PORTFOLIO"
+    assert s["capital_skips"] == 1  # the count, not the list
+    assert "portfolio_equity_curve" not in s
+
+
+def test_summary_capital_skips_count_is_zero_for_empty_list():
+    """A real portfolio run with no skips carries `[]` → the count collapses to 0 (present-key
+    guard, not truthiness — mirrors coverage_gaps)."""
+    s = summarize(_full_result() | {"capital_skips": []})
+    assert s["capital_skips"] == 0
 
 
 def test_summary_keeps_zero_valued_metrics():
@@ -165,7 +189,13 @@ def test_summary_key_set_covers_every_proto_field():
     """
     from gen.analysis.v1 import analysis_pb2  # in-function per AGENT-2 — the module stays pure
 
-    kept = set(_HEAD_KEYS) | set(_METRIC_KEYS) | {"coverage_gaps", "diagnostics", "warnings"}
+    # feature 150: `sizing_mode` is in _HEAD_KEYS; `capital_skips` is surfaced inline as a count;
+    # `portfolio_equity_curve` is in _INTENTIONALLY_DROPPED (attachment only).
+    kept = (
+        set(_HEAD_KEYS)
+        | set(_METRIC_KEYS)
+        | {"coverage_gaps", "diagnostics", "warnings", "capital_skips"}
+    )
     assert kept | set(_INTENTIONALLY_DROPPED) == set(
         analysis_pb2.BacktestResult.DESCRIPTOR.fields_by_name
     )

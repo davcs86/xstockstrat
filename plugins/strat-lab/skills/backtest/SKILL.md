@@ -93,11 +93,22 @@ The exact save-and-parse recipe, including the JSON shape, is in `reference/outp
 
 ## Phase 3 — Aggregate the basket
 
-The multi-symbol `run_backtest` (many symbols in one call) **compounds capital sequentially** — a
-different thing from the per-symbol-independent basket most reports mean (each symbol on its own
-capital, summed PnL / averaged return). To reproduce an independent basket, run **single-symbol**
-backtests and aggregate them yourself. `reference/aggregation.md` has the method and the
-sum-PnL/avg-return formulas.
+There are now **three** baskets, not two — pick before you aggregate:
+
+1. **Portfolio mode (feature 150)** — `run_backtest(..., sizing_mode="portfolio")`. A real
+   shared-capital portfolio: concurrent positions out of one pool, one **order-independent** equity
+   curve. Its aggregate metrics (`total_return`, `max_drawdown`, `sharpe_ratio`) are directly
+   comparable and need **no** manual per-symbol aggregation — read them straight off the result.
+   The summary also carries a `capital_skips` count (entries the pool could not open). Use this when
+   the request means "the real portfolio."
+2. **Legacy sequential (default)** — a multi-symbol `run_backtest` with `sizing_mode` omitted still
+   **compounds capital sequentially** in symbol order, so its multi-symbol aggregate is an
+   ordering-dependent parlay. This is the footgun; prefer portfolio mode for the portfolio view.
+3. **Independent-per-symbol** — run **single-symbol** backtests and aggregate them yourself (each on
+   its own full capital). Still the right choice to isolate each symbol's response to a swept
+   parameter, and what most sweep reports mean.
+
+`reference/aggregation.md` has all three, plus the sum-PnL/avg-return formulas for option 3.
 
 ## Phase 4 — Verify before trusting
 

@@ -964,3 +964,44 @@ class TestAdditiveClientFns:
         assert req.correlation_id == "corr-1"
         assert list(req.tags) == ["a", "b"]
         assert req.context["k"] == "v"
+
+
+# ── run_backtest sizing_mode (feature 150) ──────────────────────────────────
+
+
+class TestRunBacktestSizingMode:
+    async def _built_request(self, **kwargs):
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+
+        resp = analysis_pb2.BacktestResult(backtest_id="bt-1")
+        mock_stub = MagicMock()
+        mock_stub.RunBacktest = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
+                await client.run_backtest(
+                    user_id="u1", strategy_id="s1", symbols=["AAPL"], **kwargs
+                )
+        return mock_stub.RunBacktest.call_args.args[0]
+
+    @pytest.mark.asyncio
+    async def test_portfolio_sets_enum(self):
+        from gen.analysis.v1 import analysis_pb2  # type: ignore
+
+        req = await self._built_request(sizing_mode="portfolio")
+        assert req.sizing_mode == analysis_pb2.SIZING_MODE_PORTFOLIO
+
+    @pytest.mark.asyncio
+    async def test_legacy_sets_enum(self):
+        from gen.analysis.v1 import analysis_pb2  # type: ignore
+
+        req = await self._built_request(sizing_mode="legacy")
+        assert req.sizing_mode == analysis_pb2.SIZING_MODE_LEGACY
+
+    @pytest.mark.asyncio
+    async def test_omitted_leaves_field_unset(self):
+        from gen.analysis.v1 import analysis_pb2  # type: ignore
+
+        req = await self._built_request()
+        # Unset → server defaults to legacy; the wire value is the 0 sentinel.
+        assert req.sizing_mode == analysis_pb2.SIZING_MODE_UNSPECIFIED

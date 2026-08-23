@@ -1,18 +1,26 @@
 # Reference — Phase 3: aggregate the basket
 
-There are **two different "baskets"** and they give different numbers. Know which one the request
-means before you aggregate.
+There are **three "baskets"** and they give different numbers. Know which one the request means
+before you aggregate.
 
-## Sequential (multi-symbol call) vs independent (per-symbol)
+## Portfolio mode vs sequential vs independent
 
-- **Sequential-capital basket** — pass all symbols to one `run_backtest` call. The engine shares
-  and compounds one capital pool across symbols in time order, so a fill on symbol A changes the
-  capital available to symbol B. This is the "real" portfolio backtest, but its per-symbol returns
-  are entangled and **not** comparable to a per-symbol report.
+- **Portfolio mode (feature 150)** — `run_backtest(..., sizing_mode="portfolio")`. The engine now
+  produces a **genuine order-independent portfolio curve**: one shared cash pool, concurrent
+  positions sized by `analysis.backtest.portfolio_position_weight` (capped by
+  `analysis.backtest.portfolio_max_concurrent`), a single `portfolio_equity_curve`, and
+  `capital_skips` for entries the pool could not fund. Its aggregate metrics are read straight off
+  the result — **no manual aggregation**. This **replaces** the old "sequential is the only
+  in-engine portfolio" caveat: when you want the real portfolio view, ask for it explicitly.
+- **Sequential-capital basket (legacy, the default)** — pass all symbols to one `run_backtest` call
+  with `sizing_mode` omitted. The engine compounds one capital pool across symbols **in time/symbol
+  order**, so a fill on symbol A changes the capital available to symbol B and the aggregate is an
+  ordering-dependent parlay — entangled and **not** comparable to a per-symbol report. Prefer
+  portfolio mode over this for any "real portfolio" question.
 - **Independent-per-symbol basket** — run **one backtest per symbol**, each on its own full capital
   (default $100k), then combine. This is what parameter-sweep reports almost always mean, because it
-  isolates each symbol's response to the parameter. **Default to this** unless the caller asks for
-  the portfolio view.
+  isolates each symbol's response to the parameter. **Default to this** for a sweep unless the caller
+  asks for the portfolio view (then prefer portfolio mode).
 
 Per-symbol **trade counts** match between the two only when capital is never the binding
 constraint; **returns** generally do not. When reproducing a report, use independent runs.
