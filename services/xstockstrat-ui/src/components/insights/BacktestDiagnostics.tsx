@@ -5,7 +5,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/components/ui/utils';
 import type { SymbolDiagnostics } from '@xstockstrat/proto/analysis/v1/analysis_pb';
-import { BarAction, NoTradeReason } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import { BarAction, NoTradeReason, SizingMode } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+
+// feature 150: exhaustive Record<SizingMode,…> (ledger 067) — a new enum value fails `tsc` here.
+// UNSPECIFIED renders as "Legacy" because a null/legacy run row deserializes to the 0 sentinel and
+// the legacy path is exactly what UNSPECIFIED means on the request side.
+export const SIZING_MODE_LABEL: Record<SizingMode, string> = {
+  [SizingMode.UNSPECIFIED]: 'Legacy',
+  [SizingMode.LEGACY]: 'Legacy',
+  [SizingMode.PORTFOLIO]: 'Portfolio',
+};
 
 const ACTION_LABEL: Record<BarAction, string> = {
   [BarAction.UNSPECIFIED]: '—',

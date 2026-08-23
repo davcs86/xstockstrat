@@ -14,6 +14,7 @@
 | 2026-08-23 | `draft` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + design.md written. merge-order.md 150↔151 row added. |
 | 2026-08-23 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 13 steps |
 | 2026-08-23 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1–2 (proto + codegen) done on claude/xstockstrat-metrics-sweep-m070rf |
+| 2026-08-23 | `in-progress` → `code-completed` | /sdd-execute | Steps 3–13 done on claude/xstockstrat-metrics-sweep-m070rf; analysis engine + agent + strat-lab skill + UI all landed, tests green |
 
 ---
 

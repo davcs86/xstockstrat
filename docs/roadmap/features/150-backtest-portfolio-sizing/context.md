@@ -199,3 +199,26 @@ buf-gen verified byte-for-byte against checked-in stubs before any proto edit.
   independent-per-symbol); reference/aggregation.md adds portfolio mode and retires the "sequential
   is the only in-engine portfolio" caveat. Same PR as the tool change (root CLAUDE.md § strat-lab).
 - Files: plugins/strat-lab/skills/backtest/SKILL.md, plugins/strat-lab/skills/backtest/reference/aggregation.md
+### Step 12 — service: UI mode label + portfolio equity curve + Past Runs mode [done]
+- BacktestDiagnostics.tsx: exhaustive `SIZING_MODE_LABEL: Record<SizingMode,string>` (ledger 067 —
+  new enum value fails tsc; UNSPECIFIED→"Legacy"). EquityCurveChart.tsx: added sibling
+  `PortfolioEquityCurveChart` (single shared-pool line from EquityPoint[]). page.tsx: sizing-mode
+  Badge on the results surface, a "Mode" column in pastRunsColumns, and the portfolio curve rendered
+  when sizingMode===PORTFOLIO && curve non-empty. BFF/hooks unchanged (full message already flows).
+- Verify: pnpm lint clean (pre-existing warnings only); tsc --noEmit exit 0 (regenerated proto TS
+  types carry sizingMode/portfolioEquityCurve/capitalSkips).
+- Files: BacktestDiagnostics.tsx, EquityCurveChart.tsx, strategies/[id]/page.tsx
+### Step 13 — test: UI e2e mode label + fixtures + mock-backend branch [done]
+- e2e/fixtures/backtests.ts: PORTFOLIO_EQUITY_CURVE + SIZING_MODE_{LEGACY,PORTFOLIO}; INVENTORY.md
+  row (C-12). mock-backend: HIST_RUN_METRICS detailed=portfolio / legacy=legacy, HIST_RUN_DETAIL
+  gains sizingMode+portfolioEquityCurve, runBacktest echoes req.sizingMode (portfolio branch returns
+  a distinct OK result). New e2e/insights/backtest-sizing.spec.ts asserts the Past Runs Mode column
+  + the results-surface badge + the portfolio equity curve chart.
+- Verify: backtest-sizing.spec.ts 3/3 pass; backtest-coverage.spec.ts 11/11 pass single-worker (the
+  2 transient 2-worker failures were dev-server ECONNRESET flakiness on unrelated strat-high-001
+  tests, green on isolated re-run). TDD: red-before-green (spec fails against pre-Step-12 UI).
+- Files: e2e/fixtures/backtests.ts, e2e/fixtures/INVENTORY.md, e2e/mock-backend.ts,
+  e2e/insights/backtest-sizing.spec.ts
+
+## Session 2026-08-23 — feature 150 code-completed
+All 13 steps done on claude/xstockstrat-metrics-sweep-m070rf → PR #1004. status.md → code-completed.

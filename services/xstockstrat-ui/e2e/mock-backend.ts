@@ -38,6 +38,9 @@ import {
   STRATEGY_DEF_LIVE,
   STRATEGY_DEFINITIONS,
   insufficientDataResult,
+  PORTFOLIO_EQUITY_CURVE,
+  SIZING_MODE_LEGACY,
+  SIZING_MODE_PORTFOLIO,
   OPPORTUNITIES,
   symbolReadiness,
   exitReadiness,
@@ -518,6 +521,9 @@ export async function startMockBackend(): Promise<void> {
       completedAt: { seconds: BigInt(1717286400), nanos: 0 }, // 2024-06-02
       rangeStart: { seconds: BigInt(1704067200), nanos: 0 }, // 2024-01-01
       rangeEnd: { seconds: BigInt(1717200000), nanos: 0 }, // 2024-06-01
+      // feature 150: this run used the portfolio sizing model → the Past Runs "Mode" column and,
+      // once opened, the results-surface badge + portfolio equity curve.
+      sizingMode: SIZING_MODE_PORTFOLIO,
     },
     // bt-hist-1 — legacy run, no persisted detail (getBacktest answers NOT_FOUND).
     legacy: {
@@ -534,6 +540,7 @@ export async function startMockBackend(): Promise<void> {
       overallScore: 0.41,
       rating: 'D',
       completedAt: { seconds: BigInt(1717200000), nanos: 0 }, // 2024-06-01
+      sizingMode: SIZING_MODE_LEGACY, // feature 150: legacy-mode row → "Legacy" in the Mode column
     },
   };
   const histDay = (i: number) => ({ seconds: BigInt(1704067200 + i * 86400), nanos: 0 });
@@ -598,6 +605,9 @@ export async function startMockBackend(): Promise<void> {
         })),
       },
     ],
+    // feature 150: portfolio-mode detail — the badge + the separate portfolio equity curve chart.
+    sizingMode: SIZING_MODE_PORTFOLIO,
+    portfolioEquityCurve: PORTFOLIO_EQUITY_CURVE,
   };
 
   const insightsHandler = connectNodeAdapter({
@@ -759,6 +769,32 @@ export async function startMockBackend(): Promise<void> {
                   bars: [],
                 },
               ],
+            };
+          }
+          // feature 150: a portfolio-mode fresh run returns an OK result carrying the mode + a
+          // distinct portfolio equity curve; legacy (default) returns the pre-existing
+          // INSUFFICIENT_DATA gap fixture. The two branches differ in sizingMode so the assertion
+          // has teeth (insights.md 2026-07-27 — an all-equal fixture tests nothing).
+          if (req.sizingMode === SIZING_MODE_PORTFOLIO) {
+            return {
+              backtestId: 'bt-portfolio-1',
+              strategyId: req.strategyId,
+              status: 1, // BACKTEST_STATUS_OK
+              totalReturn: 0.016,
+              annualizedReturn: 0.05,
+              sharpeRatio: 1.1,
+              maxDrawdown: 0.04,
+              winRate: 0.6,
+              totalTrades: 2,
+              profitFactor: 1.5,
+              symbols: req.symbols,
+              initialCapital: 100000,
+              trades: [],
+              coverageGaps: [],
+              diagnostics: [],
+              sizingMode: SIZING_MODE_PORTFOLIO,
+              portfolioEquityCurve: PORTFOLIO_EQUITY_CURVE,
+              capitalSkips: [],
             };
           }
           // feature 071: the gap a windowed run reports is the PRE-window warm-up span, not

@@ -1,6 +1,6 @@
 # Implementation Spec: backtest-portfolio-sizing
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-08-23
 **Feature**: `docs/roadmap/features/150-backtest-portfolio-sizing/feature.md`
 **Total Steps**: 13
@@ -701,7 +701,7 @@ Both files mention `sizing_mode="portfolio"`.
 
 ### Step 12 — service: UI mode label + portfolio equity curve + Past Runs mode
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx` — modify
@@ -749,7 +749,7 @@ Both files mention `sizing_mode="portfolio"`.
 
 ### Step 13 — test: UI e2e mode label + fixtures + mock-backend branch
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/backtest-coverage.spec.ts` — modify (or a new
