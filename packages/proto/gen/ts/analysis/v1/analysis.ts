@@ -86,6 +86,128 @@ export function backtestStatusToNumber(object: BacktestStatus): number {
   }
 }
 
+/**
+ * Backtest capital-allocation model (feature 150). Closed set → enum (C-04).
+ * A completed run records SIZING_MODE_LEGACY or SIZING_MODE_PORTFOLIO (never UNSPECIFIED);
+ * UNSPECIFIED is a request-side "unset → legacy" default only.
+ */
+export enum SizingMode {
+  /** SIZING_MODE_UNSPECIFIED - request default → the legacy serial per-symbol path */
+  SIZING_MODE_UNSPECIFIED = "SIZING_MODE_UNSPECIFIED",
+  /** SIZING_MODE_LEGACY - serial per-symbol compounding (the aggregate is Π(1+rᵢ)−1) */
+  SIZING_MODE_LEGACY = "SIZING_MODE_LEGACY",
+  /** SIZING_MODE_PORTFOLIO - one shared cash pool, concurrent positions, one equity curve */
+  SIZING_MODE_PORTFOLIO = "SIZING_MODE_PORTFOLIO",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function sizingModeFromJSON(object: any): SizingMode {
+  switch (object) {
+    case 0:
+    case "SIZING_MODE_UNSPECIFIED":
+      return SizingMode.SIZING_MODE_UNSPECIFIED;
+    case 1:
+    case "SIZING_MODE_LEGACY":
+      return SizingMode.SIZING_MODE_LEGACY;
+    case 2:
+    case "SIZING_MODE_PORTFOLIO":
+      return SizingMode.SIZING_MODE_PORTFOLIO;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return SizingMode.UNRECOGNIZED;
+  }
+}
+
+export function sizingModeToJSON(object: SizingMode): string {
+  switch (object) {
+    case SizingMode.SIZING_MODE_UNSPECIFIED:
+      return "SIZING_MODE_UNSPECIFIED";
+    case SizingMode.SIZING_MODE_LEGACY:
+      return "SIZING_MODE_LEGACY";
+    case SizingMode.SIZING_MODE_PORTFOLIO:
+      return "SIZING_MODE_PORTFOLIO";
+    case SizingMode.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function sizingModeToNumber(object: SizingMode): number {
+  switch (object) {
+    case SizingMode.SIZING_MODE_UNSPECIFIED:
+      return 0;
+    case SizingMode.SIZING_MODE_LEGACY:
+      return 1;
+    case SizingMode.SIZING_MODE_PORTFOLIO:
+      return 2;
+    case SizingMode.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
+/**
+ * Which bar/price a backtest fills a signal at (feature 151). Closed set → enum (C-04).
+ * A completed run records SAME_BAR_CLOSE or NEXT_BAR_OPEN (never UNSPECIFIED); UNSPECIFIED is a
+ * request/config "not chosen" sentinel the servicer normalizes to SAME_BAR_CLOSE (legacy).
+ */
+export enum FillModel {
+  /** FILL_MODEL_UNSPECIFIED - caller/config did not choose → resolves to SAME_BAR_CLOSE (legacy) */
+  FILL_MODEL_UNSPECIFIED = "FILL_MODEL_UNSPECIFIED",
+  /** FILL_MODEL_SAME_BAR_CLOSE - legacy: fill at bar i's close ± slippage (optimistically biased) */
+  FILL_MODEL_SAME_BAR_CLOSE = "FILL_MODEL_SAME_BAR_CLOSE",
+  /** FILL_MODEL_NEXT_BAR_OPEN - bias-free: fill a bar-i signal at bar (i+1)'s open ± slippage */
+  FILL_MODEL_NEXT_BAR_OPEN = "FILL_MODEL_NEXT_BAR_OPEN",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function fillModelFromJSON(object: any): FillModel {
+  switch (object) {
+    case 0:
+    case "FILL_MODEL_UNSPECIFIED":
+      return FillModel.FILL_MODEL_UNSPECIFIED;
+    case 1:
+    case "FILL_MODEL_SAME_BAR_CLOSE":
+      return FillModel.FILL_MODEL_SAME_BAR_CLOSE;
+    case 2:
+    case "FILL_MODEL_NEXT_BAR_OPEN":
+      return FillModel.FILL_MODEL_NEXT_BAR_OPEN;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return FillModel.UNRECOGNIZED;
+  }
+}
+
+export function fillModelToJSON(object: FillModel): string {
+  switch (object) {
+    case FillModel.FILL_MODEL_UNSPECIFIED:
+      return "FILL_MODEL_UNSPECIFIED";
+    case FillModel.FILL_MODEL_SAME_BAR_CLOSE:
+      return "FILL_MODEL_SAME_BAR_CLOSE";
+    case FillModel.FILL_MODEL_NEXT_BAR_OPEN:
+      return "FILL_MODEL_NEXT_BAR_OPEN";
+    case FillModel.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function fillModelToNumber(object: FillModel): number {
+  switch (object) {
+    case FillModel.FILL_MODEL_UNSPECIFIED:
+      return 0;
+    case FillModel.FILL_MODEL_SAME_BAR_CLOSE:
+      return 1;
+    case FillModel.FILL_MODEL_NEXT_BAR_OPEN:
+      return 2;
+    case FillModel.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 /** The engine's decision for a single bar. Closed set → enum (C-04). */
 export enum BarAction {
   BAR_ACTION_UNSPECIFIED = "BAR_ACTION_UNSPECIFIED",
@@ -965,7 +1087,20 @@ export interface RunBacktestRequest {
   /** field 6 — resolve definition from DB; legacy strategy_params (field 5) remains supported */
   strategyIdRef: string;
   /** field 7 — inline definition; takes precedence over strategy_id_ref if both supplied */
-  inlineDefinition?: StrategyDefinition | undefined;
+  inlineDefinition?:
+    | StrategyDefinition
+    | undefined;
+  /**
+   * field 8 — capital-allocation model (feature 150); unset/UNSPECIFIED → legacy serial per-symbol
+   * path (no behavior change for existing callers).
+   */
+  sizingMode: SizingMode;
+  /**
+   * field 9 — fill model (feature 151); unset/UNSPECIFIED → server default (config
+   * analysis.backtest.default_fill_model, else legacy same-bar-close). No behavior change for
+   * existing callers.
+   */
+  fillModel: FillModel;
 }
 
 export interface CoverageGap {
@@ -1013,6 +1148,39 @@ export interface BacktestResult {
    * definition. Empty on a clean run.
    */
   warnings: string[];
+  /** ── Portfolio sizing (feature 150) ── additive; empty/legacy for pre-150 and legacy-mode runs. */
+  sizingMode: SizingMode;
+  /** portfolio mode only; empty in legacy */
+  capitalSkips: PortfolioCapitalSkip[];
+  /**
+   * Portfolio-level daily equity curve (cash + Σ marked-to-market positions), portfolio mode only.
+   * NOTE: per-symbol BarDiagnostic.equity (field 15 there) stays per-symbol in portfolio mode — the
+   * portfolio contribution lives ONLY here; do not read per-symbol equity as portfolio contribution.
+   */
+  portfolioEquityCurve: EquityPoint[];
+  /** Effective fill model the run actually used (feature 151); never UNSPECIFIED on a completed run. */
+  fillModel: FillModel;
+}
+
+/**
+ * One entry that portfolio mode could not open because the shared pool was fully committed
+ * at the policy weight (feature 150, FR-5). Emitted instead of a silent zero-sized fill.
+ */
+export interface PortfolioCapitalSkip {
+  symbol: string;
+  timestamp?:
+    | Date
+    | undefined;
+  /** position_weight × initial_capital the entry would have needed */
+  intendedWeight: number;
+  /** cash on hand in the shared pool at that bar */
+  availableCash: number;
+}
+
+/** One point of the portfolio-level daily equity curve (cash + Σ marked-to-market positions). */
+export interface EquityPoint {
+  timestamp?: Date | undefined;
+  equity: number;
 }
 
 export interface TradeRecord {
@@ -1123,7 +1291,13 @@ export interface BacktestRunSummary {
     | undefined;
   /** Backtest range covered by this run (feature 065); unset on legacy rows. */
   rangeStart?: Date | undefined;
-  rangeEnd?: Date | undefined;
+  rangeEnd?:
+    | Date
+    | undefined;
+  /** capital-allocation model the run used (feature 150); UNSPECIFIED on pre-150 rows */
+  sizingMode: SizingMode;
+  /** fill model the run used (feature 151); UNSPECIFIED on pre-151 rows */
+  fillModel: FillModel;
 }
 
 export interface ListBacktestsResponse {
@@ -1605,6 +1779,8 @@ function createBaseRunBacktestRequest(): RunBacktestRequest {
     strategyParams: undefined,
     strategyIdRef: "",
     inlineDefinition: undefined,
+    sizingMode: SizingMode.SIZING_MODE_UNSPECIFIED,
+    fillModel: FillModel.FILL_MODEL_UNSPECIFIED,
   };
 }
 
@@ -1630,6 +1806,12 @@ export const RunBacktestRequest: MessageFns<RunBacktestRequest> = {
     }
     if (message.inlineDefinition !== undefined) {
       StrategyDefinition.encode(message.inlineDefinition, writer.uint32(58).fork()).join();
+    }
+    if (message.sizingMode !== SizingMode.SIZING_MODE_UNSPECIFIED) {
+      writer.uint32(64).int32(sizingModeToNumber(message.sizingMode));
+    }
+    if (message.fillModel !== FillModel.FILL_MODEL_UNSPECIFIED) {
+      writer.uint32(72).int32(fillModelToNumber(message.fillModel));
     }
     return writer;
   },
@@ -1697,6 +1879,22 @@ export const RunBacktestRequest: MessageFns<RunBacktestRequest> = {
           message.inlineDefinition = StrategyDefinition.decode(reader, reader.uint32());
           continue;
         }
+        case 8: {
+          if (tag !== 64) {
+            break;
+          }
+
+          message.sizingMode = sizingModeFromJSON(reader.int32());
+          continue;
+        }
+        case 9: {
+          if (tag !== 72) {
+            break;
+          }
+
+          message.fillModel = fillModelFromJSON(reader.int32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1735,6 +1933,16 @@ export const RunBacktestRequest: MessageFns<RunBacktestRequest> = {
         : isSet(object.inline_definition)
         ? StrategyDefinition.fromJSON(object.inline_definition)
         : undefined,
+      sizingMode: isSet(object.sizingMode)
+        ? sizingModeFromJSON(object.sizingMode)
+        : isSet(object.sizing_mode)
+        ? sizingModeFromJSON(object.sizing_mode)
+        : SizingMode.SIZING_MODE_UNSPECIFIED,
+      fillModel: isSet(object.fillModel)
+        ? fillModelFromJSON(object.fillModel)
+        : isSet(object.fill_model)
+        ? fillModelFromJSON(object.fill_model)
+        : FillModel.FILL_MODEL_UNSPECIFIED,
     };
   },
 
@@ -1761,6 +1969,12 @@ export const RunBacktestRequest: MessageFns<RunBacktestRequest> = {
     if (message.inlineDefinition !== undefined) {
       obj.inlineDefinition = StrategyDefinition.toJSON(message.inlineDefinition);
     }
+    if (message.sizingMode !== SizingMode.SIZING_MODE_UNSPECIFIED) {
+      obj.sizingMode = sizingModeToJSON(message.sizingMode);
+    }
+    if (message.fillModel !== FillModel.FILL_MODEL_UNSPECIFIED) {
+      obj.fillModel = fillModelToJSON(message.fillModel);
+    }
     return obj;
   },
 
@@ -1780,6 +1994,8 @@ export const RunBacktestRequest: MessageFns<RunBacktestRequest> = {
     message.inlineDefinition = (object.inlineDefinition !== undefined && object.inlineDefinition !== null)
       ? StrategyDefinition.fromPartial(object.inlineDefinition)
       : undefined;
+    message.sizingMode = object.sizingMode ?? SizingMode.SIZING_MODE_UNSPECIFIED;
+    message.fillModel = object.fillModel ?? FillModel.FILL_MODEL_UNSPECIFIED;
     return message;
   },
 };
@@ -1963,6 +2179,10 @@ function createBaseBacktestResult(): BacktestResult {
     diagnostics: [],
     initialCapital: 0,
     warnings: [],
+    sizingMode: SizingMode.SIZING_MODE_UNSPECIFIED,
+    capitalSkips: [],
+    portfolioEquityCurve: [],
+    fillModel: FillModel.FILL_MODEL_UNSPECIFIED,
   };
 }
 
@@ -2015,6 +2235,18 @@ export const BacktestResult: MessageFns<BacktestResult> = {
     }
     for (const v of message.warnings) {
       writer.uint32(130).string(v!);
+    }
+    if (message.sizingMode !== SizingMode.SIZING_MODE_UNSPECIFIED) {
+      writer.uint32(136).int32(sizingModeToNumber(message.sizingMode));
+    }
+    for (const v of message.capitalSkips) {
+      PortfolioCapitalSkip.encode(v!, writer.uint32(146).fork()).join();
+    }
+    for (const v of message.portfolioEquityCurve) {
+      EquityPoint.encode(v!, writer.uint32(154).fork()).join();
+    }
+    if (message.fillModel !== FillModel.FILL_MODEL_UNSPECIFIED) {
+      writer.uint32(160).int32(fillModelToNumber(message.fillModel));
     }
     return writer;
   },
@@ -2154,6 +2386,38 @@ export const BacktestResult: MessageFns<BacktestResult> = {
           message.warnings.push(reader.string());
           continue;
         }
+        case 17: {
+          if (tag !== 136) {
+            break;
+          }
+
+          message.sizingMode = sizingModeFromJSON(reader.int32());
+          continue;
+        }
+        case 18: {
+          if (tag !== 146) {
+            break;
+          }
+
+          message.capitalSkips.push(PortfolioCapitalSkip.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 19: {
+          if (tag !== 154) {
+            break;
+          }
+
+          message.portfolioEquityCurve.push(EquityPoint.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 20: {
+          if (tag !== 160) {
+            break;
+          }
+
+          message.fillModel = fillModelFromJSON(reader.int32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2235,6 +2499,26 @@ export const BacktestResult: MessageFns<BacktestResult> = {
       warnings: globalThis.Array.isArray(object?.warnings)
         ? object.warnings.map((e: any) => globalThis.String(e))
         : [],
+      sizingMode: isSet(object.sizingMode)
+        ? sizingModeFromJSON(object.sizingMode)
+        : isSet(object.sizing_mode)
+        ? sizingModeFromJSON(object.sizing_mode)
+        : SizingMode.SIZING_MODE_UNSPECIFIED,
+      capitalSkips: globalThis.Array.isArray(object?.capitalSkips)
+        ? object.capitalSkips.map((e: any) => PortfolioCapitalSkip.fromJSON(e))
+        : globalThis.Array.isArray(object?.capital_skips)
+        ? object.capital_skips.map((e: any) => PortfolioCapitalSkip.fromJSON(e))
+        : [],
+      portfolioEquityCurve: globalThis.Array.isArray(object?.portfolioEquityCurve)
+        ? object.portfolioEquityCurve.map((e: any) => EquityPoint.fromJSON(e))
+        : globalThis.Array.isArray(object?.portfolio_equity_curve)
+        ? object.portfolio_equity_curve.map((e: any) => EquityPoint.fromJSON(e))
+        : [],
+      fillModel: isSet(object.fillModel)
+        ? fillModelFromJSON(object.fillModel)
+        : isSet(object.fill_model)
+        ? fillModelFromJSON(object.fill_model)
+        : FillModel.FILL_MODEL_UNSPECIFIED,
     };
   },
 
@@ -2288,6 +2572,18 @@ export const BacktestResult: MessageFns<BacktestResult> = {
     if (message.warnings?.length) {
       obj.warnings = message.warnings;
     }
+    if (message.sizingMode !== SizingMode.SIZING_MODE_UNSPECIFIED) {
+      obj.sizingMode = sizingModeToJSON(message.sizingMode);
+    }
+    if (message.capitalSkips?.length) {
+      obj.capitalSkips = message.capitalSkips.map((e) => PortfolioCapitalSkip.toJSON(e));
+    }
+    if (message.portfolioEquityCurve?.length) {
+      obj.portfolioEquityCurve = message.portfolioEquityCurve.map((e) => EquityPoint.toJSON(e));
+    }
+    if (message.fillModel !== FillModel.FILL_MODEL_UNSPECIFIED) {
+      obj.fillModel = fillModelToJSON(message.fillModel);
+    }
     return obj;
   },
 
@@ -2312,6 +2608,202 @@ export const BacktestResult: MessageFns<BacktestResult> = {
     message.diagnostics = object.diagnostics?.map((e) => SymbolDiagnostics.fromPartial(e)) || [];
     message.initialCapital = object.initialCapital ?? 0;
     message.warnings = object.warnings?.map((e) => e) || [];
+    message.sizingMode = object.sizingMode ?? SizingMode.SIZING_MODE_UNSPECIFIED;
+    message.capitalSkips = object.capitalSkips?.map((e) => PortfolioCapitalSkip.fromPartial(e)) || [];
+    message.portfolioEquityCurve = object.portfolioEquityCurve?.map((e) => EquityPoint.fromPartial(e)) || [];
+    message.fillModel = object.fillModel ?? FillModel.FILL_MODEL_UNSPECIFIED;
+    return message;
+  },
+};
+
+function createBasePortfolioCapitalSkip(): PortfolioCapitalSkip {
+  return { symbol: "", timestamp: undefined, intendedWeight: 0, availableCash: 0 };
+}
+
+export const PortfolioCapitalSkip: MessageFns<PortfolioCapitalSkip> = {
+  encode(message: PortfolioCapitalSkip, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    if (message.timestamp !== undefined) {
+      Timestamp.encode(toTimestamp(message.timestamp), writer.uint32(18).fork()).join();
+    }
+    if (message.intendedWeight !== 0) {
+      writer.uint32(25).double(message.intendedWeight);
+    }
+    if (message.availableCash !== 0) {
+      writer.uint32(33).double(message.availableCash);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): PortfolioCapitalSkip {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBasePortfolioCapitalSkip();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.timestamp = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 25) {
+            break;
+          }
+
+          message.intendedWeight = reader.double();
+          continue;
+        }
+        case 4: {
+          if (tag !== 33) {
+            break;
+          }
+
+          message.availableCash = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): PortfolioCapitalSkip {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      timestamp: isSet(object.timestamp) ? fromJsonTimestamp(object.timestamp) : undefined,
+      intendedWeight: isSet(object.intendedWeight)
+        ? globalThis.Number(object.intendedWeight)
+        : isSet(object.intended_weight)
+        ? globalThis.Number(object.intended_weight)
+        : 0,
+      availableCash: isSet(object.availableCash)
+        ? globalThis.Number(object.availableCash)
+        : isSet(object.available_cash)
+        ? globalThis.Number(object.available_cash)
+        : 0,
+    };
+  },
+
+  toJSON(message: PortfolioCapitalSkip): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.timestamp !== undefined) {
+      obj.timestamp = message.timestamp.toISOString();
+    }
+    if (message.intendedWeight !== 0) {
+      obj.intendedWeight = message.intendedWeight;
+    }
+    if (message.availableCash !== 0) {
+      obj.availableCash = message.availableCash;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<PortfolioCapitalSkip>, I>>(base?: I): PortfolioCapitalSkip {
+    return PortfolioCapitalSkip.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<PortfolioCapitalSkip>, I>>(object: I): PortfolioCapitalSkip {
+    const message = createBasePortfolioCapitalSkip();
+    message.symbol = object.symbol ?? "";
+    message.timestamp = object.timestamp ?? undefined;
+    message.intendedWeight = object.intendedWeight ?? 0;
+    message.availableCash = object.availableCash ?? 0;
+    return message;
+  },
+};
+
+function createBaseEquityPoint(): EquityPoint {
+  return { timestamp: undefined, equity: 0 };
+}
+
+export const EquityPoint: MessageFns<EquityPoint> = {
+  encode(message: EquityPoint, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.timestamp !== undefined) {
+      Timestamp.encode(toTimestamp(message.timestamp), writer.uint32(10).fork()).join();
+    }
+    if (message.equity !== 0) {
+      writer.uint32(17).double(message.equity);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): EquityPoint {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseEquityPoint();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.timestamp = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.equity = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): EquityPoint {
+    return {
+      timestamp: isSet(object.timestamp) ? fromJsonTimestamp(object.timestamp) : undefined,
+      equity: isSet(object.equity) ? globalThis.Number(object.equity) : 0,
+    };
+  },
+
+  toJSON(message: EquityPoint): unknown {
+    const obj: any = {};
+    if (message.timestamp !== undefined) {
+      obj.timestamp = message.timestamp.toISOString();
+    }
+    if (message.equity !== 0) {
+      obj.equity = message.equity;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<EquityPoint>, I>>(base?: I): EquityPoint {
+    return EquityPoint.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<EquityPoint>, I>>(object: I): EquityPoint {
+    const message = createBaseEquityPoint();
+    message.timestamp = object.timestamp ?? undefined;
+    message.equity = object.equity ?? 0;
     return message;
   },
 };
@@ -3659,6 +4151,8 @@ function createBaseBacktestRunSummary(): BacktestRunSummary {
     completedAt: undefined,
     rangeStart: undefined,
     rangeEnd: undefined,
+    sizingMode: SizingMode.SIZING_MODE_UNSPECIFIED,
+    fillModel: FillModel.FILL_MODEL_UNSPECIFIED,
   };
 }
 
@@ -3711,6 +4205,12 @@ export const BacktestRunSummary: MessageFns<BacktestRunSummary> = {
     }
     if (message.rangeEnd !== undefined) {
       Timestamp.encode(toTimestamp(message.rangeEnd), writer.uint32(130).fork()).join();
+    }
+    if (message.sizingMode !== SizingMode.SIZING_MODE_UNSPECIFIED) {
+      writer.uint32(136).int32(sizingModeToNumber(message.sizingMode));
+    }
+    if (message.fillModel !== FillModel.FILL_MODEL_UNSPECIFIED) {
+      writer.uint32(144).int32(fillModelToNumber(message.fillModel));
     }
     return writer;
   },
@@ -3850,6 +4350,22 @@ export const BacktestRunSummary: MessageFns<BacktestRunSummary> = {
           message.rangeEnd = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
           continue;
         }
+        case 17: {
+          if (tag !== 136) {
+            break;
+          }
+
+          message.sizingMode = sizingModeFromJSON(reader.int32());
+          continue;
+        }
+        case 18: {
+          if (tag !== 144) {
+            break;
+          }
+
+          message.fillModel = fillModelFromJSON(reader.int32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3931,6 +4447,16 @@ export const BacktestRunSummary: MessageFns<BacktestRunSummary> = {
         : isSet(object.range_end)
         ? fromJsonTimestamp(object.range_end)
         : undefined,
+      sizingMode: isSet(object.sizingMode)
+        ? sizingModeFromJSON(object.sizingMode)
+        : isSet(object.sizing_mode)
+        ? sizingModeFromJSON(object.sizing_mode)
+        : SizingMode.SIZING_MODE_UNSPECIFIED,
+      fillModel: isSet(object.fillModel)
+        ? fillModelFromJSON(object.fillModel)
+        : isSet(object.fill_model)
+        ? fillModelFromJSON(object.fill_model)
+        : FillModel.FILL_MODEL_UNSPECIFIED,
     };
   },
 
@@ -3984,6 +4510,12 @@ export const BacktestRunSummary: MessageFns<BacktestRunSummary> = {
     if (message.rangeEnd !== undefined) {
       obj.rangeEnd = message.rangeEnd.toISOString();
     }
+    if (message.sizingMode !== SizingMode.SIZING_MODE_UNSPECIFIED) {
+      obj.sizingMode = sizingModeToJSON(message.sizingMode);
+    }
+    if (message.fillModel !== FillModel.FILL_MODEL_UNSPECIFIED) {
+      obj.fillModel = fillModelToJSON(message.fillModel);
+    }
     return obj;
   },
 
@@ -4008,6 +4540,8 @@ export const BacktestRunSummary: MessageFns<BacktestRunSummary> = {
     message.completedAt = object.completedAt ?? undefined;
     message.rangeStart = object.rangeStart ?? undefined;
     message.rangeEnd = object.rangeEnd ?? undefined;
+    message.sizingMode = object.sizingMode ?? SizingMode.SIZING_MODE_UNSPECIFIED;
+    message.fillModel = object.fillModel ?? FillModel.FILL_MODEL_UNSPECIFIED;
     return message;
   },
 };

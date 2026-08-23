@@ -17,9 +17,16 @@ import { useRunBacktest, useTriggerBackfill } from '@/hooks/useBacktest';
 import { useGetStrategy, useSetStrategyLiveInsights } from '@/hooks/useStrategyDefinitions';
 import { useStrategyAnalytics } from '@/hooks/useOpportunities';
 import { useIsAdmin } from '@/hooks/useLiveStrategies';
-import { BacktestStatus } from '@xstockstrat/proto/analysis/v1/analysis_pb';
-import { BacktestDiagnostics } from '@/components/insights/BacktestDiagnostics';
-import { EquityCurveChart } from '@/components/insights/EquityCurveChart';
+import { BacktestStatus, SizingMode } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import {
+  BacktestDiagnostics,
+  SIZING_MODE_LABEL,
+  FILL_MODEL_LABEL,
+} from '@/components/insights/BacktestDiagnostics';
+import {
+  EquityCurveChart,
+  PortfolioEquityCurveChart,
+} from '@/components/insights/EquityCurveChart';
 import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
 
 // feature 064: cap the backtest range to 2 calendar years (matches the analysis service cap).
@@ -136,6 +143,24 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
         accessorFn: (run) => run.symbols.join(', '),
         meta: { className: 'py-1.5 pr-3 font-mono text-xs' },
         cell: ({ row }) => row.original.symbols.join(', ') || '—',
+      },
+      {
+        // feature 150: distinguish cross-mode rows so a portfolio return is never silently read
+        // against a legacy one (the product spec's minimum comparability guard — label, not block).
+        id: 'mode',
+        header: 'Mode',
+        accessorFn: (run) => SIZING_MODE_LABEL[run.sizingMode],
+        meta: { className: 'py-1.5 pr-3 text-xs text-muted-foreground whitespace-nowrap' },
+        cell: ({ row }) => SIZING_MODE_LABEL[row.original.sizingMode],
+      },
+      {
+        // feature 151: label the fill model so cross-mode history rows are visibly distinguished
+        // (a next-bar-open run is never silently compared against a legacy same-bar-close one).
+        id: 'fillModel',
+        header: 'Fill model',
+        accessorFn: (run) => FILL_MODEL_LABEL[run.fillModel],
+        meta: { className: 'py-1.5 pr-3 text-xs text-muted-foreground whitespace-nowrap' },
+        cell: ({ row }) => FILL_MODEL_LABEL[row.original.fillModel],
       },
       {
         id: 'range',
@@ -510,7 +535,24 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                 {/* Metrics grid */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Backtest Results</CardTitle>
+                    <CardTitle className="flex items-center gap-2">
+                      Backtest Results
+                      {/* feature 150: label the sizing mode so a portfolio-mode return is never
+                          silently compared against a legacy one. */}
+                      <Badge
+                        variant={
+                          result.sizingMode === SizingMode.PORTFOLIO ? 'default' : 'secondary'
+                        }
+                        data-testid="sizing-mode-badge"
+                      >
+                        {SIZING_MODE_LABEL[result.sizingMode]}
+                      </Badge>
+                      {/* feature 151: label the fill model so a next-bar-open run is never silently
+                          compared against a legacy same-bar-close one. */}
+                      <Badge variant="secondary" data-testid="fill-model-badge">
+                        {FILL_MODEL_LABEL[result.fillModel]}
+                      </Badge>
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -547,6 +589,13 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                 {/* Equity curve — time-based, per-symbol, with trade markers (feature 068).
                     Shared by the fresh-run and historical views (AC-5). */}
                 <EquityCurveChart diagnostics={result.diagnostics} trades={result.trades} />
+
+                {/* feature 150: in portfolio mode, also plot the shared-pool equity curve — the
+                    authoritative aggregate in that mode (per-symbol BarDiagnostic.equity is not). */}
+                {result.sizingMode === SizingMode.PORTFOLIO &&
+                  result.portfolioEquityCurve.length > 0 && (
+                    <PortfolioEquityCurveChart curve={result.portfolioEquityCurve} />
+                  )}
 
                 {/* Day-by-day debug diagnostics (feature 064) */}
                 <BacktestDiagnostics diagnostics={result.diagnostics} />

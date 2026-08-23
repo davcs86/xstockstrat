@@ -1,7 +1,12 @@
 'use client';
 import { useMemo } from 'react';
 import { CartesianGrid, ComposedChart, Line, Scatter, Tooltip, XAxis, YAxis } from 'recharts';
-import type { SymbolDiagnostics, TradeRecord } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import type {
+  EquityPoint,
+  SymbolDiagnostics,
+  TradeRecord,
+} from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import { timestampToDate } from '@/lib/protoTime';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import {
@@ -201,6 +206,87 @@ export function EquityCurveChart({
                     />
                   );
                 }}
+              />
+            </ComposedChart>
+          </ChartContainer>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Feature 150: the portfolio-mode equity curve — ONE shared-pool line (cash + Σ marked-to-market),
+ * distinct from the per-symbol {@link EquityCurveChart}. In portfolio mode this is the authoritative
+ * aggregate curve (the per-symbol `BarDiagnostic.equity` stays per-symbol); the two coexist so a
+ * reader can see both the pool and each symbol's own path. Absolute dollars — a single pool curve
+ * has no symbol-iteration-order ambiguity to normalize away.
+ */
+export function PortfolioEquityCurveChart({ curve }: { curve: EquityPoint[] | undefined }) {
+  const points = useMemo(
+    () =>
+      (curve ?? [])
+        .map((p) => ({ t: timestampToDate(p.timestamp)?.getTime() ?? 0, value: p.equity }))
+        .filter((p) => p.t > 0)
+        .sort((a, b) => a.t - b.t),
+    [curve],
+  );
+
+  if (points.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Portfolio Equity Curve</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p data-testid="portfolio-equity-empty" className="text-sm text-muted-foreground">
+            No portfolio equity curve data for this run.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const chartConfig: ChartConfig = { equity: { label: 'Portfolio', color: LINE_COLORS[0] } };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Portfolio Equity Curve</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div data-testid="portfolio-equity-curve-chart">
+          <ChartContainer config={chartConfig} className="aspect-auto h-[260px] w-full">
+            <ComposedChart>
+              <CartesianGrid
+                xAxisId={0}
+                yAxisId={0}
+                strokeDasharray="3 3"
+                stroke="hsl(222 20% 14%)"
+              />
+              <XAxis
+                dataKey="t"
+                type="number"
+                scale="time"
+                domain={['dataMin', 'dataMax']}
+                tick={AXIS_TICK}
+                tickFormatter={fmtDay}
+              />
+              <YAxis
+                tick={AXIS_TICK}
+                domain={['auto', 'auto']}
+                tickFormatter={(v: number) => `$${Math.round(v).toLocaleString()}`}
+              />
+              <Tooltip content={<CurveTooltip mode="absolute" />} />
+              <Line
+                data={points}
+                dataKey="value"
+                name="Portfolio"
+                type="monotone"
+                stroke={LINE_COLORS[0]}
+                dot={false}
+                strokeWidth={2}
+                isAnimationActive={false}
               />
             </ComposedChart>
           </ChartContainer>

@@ -97,13 +97,39 @@ tool-output token limit and is written to a file instead. **Do not read that fil
 only the summary fields and per-symbol trade counts with a small `python3` script (or a subagent).
 The exact save-and-parse recipe, including the JSON shape, is in `reference/output-handling.md`.
 
+### Fill model (feature 151)
+
+`run_backtest(..., fill_model="next_bar_open")` chooses when a signal fills:
+
+- **`same_bar_close`** (the default) fills a bar-`i` signal at bar `i`'s own close — optimistically
+  biased (a mild look-ahead: the close that produced the signal is also the fill price).
+- **`next_bar_open`** fills a bar-`i` signal at bar `(i+1)`'s open — the standard bias-free
+  convention.
+
+A next-bar run is **not** directly comparable to a legacy run — label which mode a report used (the
+summary echoes the effective `fill_model`). **Display-only action/conviction decouple:** in next-bar
+mode a diagnostics row can show an ENTER/EXIT on a bar whose `conviction` reads hold, because the
+action lands on the fill bar while conviction stays that bar's own value — the grade is unaffected
+(grade math ignores conviction).
+
 ## Phase 3 — Aggregate the basket
 
-The multi-symbol `run_backtest` (many symbols in one call) **compounds capital sequentially** — a
-different thing from the per-symbol-independent basket most reports mean (each symbol on its own
-capital, summed PnL / averaged return). To reproduce an independent basket, run **single-symbol**
-backtests and aggregate them yourself. `reference/aggregation.md` has the method and the
-sum-PnL/avg-return formulas.
+There are now **three** baskets, not two — pick before you aggregate:
+
+1. **Portfolio mode (feature 150)** — `run_backtest(..., sizing_mode="portfolio")`. A real
+   shared-capital portfolio: concurrent positions out of one pool, one **order-independent** equity
+   curve. Its aggregate metrics (`total_return`, `max_drawdown`, `sharpe_ratio`) are directly
+   comparable and need **no** manual per-symbol aggregation — read them straight off the result.
+   The summary also carries a `capital_skips` count (entries the pool could not open). Use this when
+   the request means "the real portfolio."
+2. **Legacy sequential (default)** — a multi-symbol `run_backtest` with `sizing_mode` omitted still
+   **compounds capital sequentially** in symbol order, so its multi-symbol aggregate is an
+   ordering-dependent parlay. This is the footgun; prefer portfolio mode for the portfolio view.
+3. **Independent-per-symbol** — run **single-symbol** backtests and aggregate them yourself (each on
+   its own full capital). Still the right choice to isolate each symbol's response to a swept
+   parameter, and what most sweep reports mean.
+
+`reference/aggregation.md` has all three, plus the sum-PnL/avg-return formulas for option 3.
 
 ## Phase 4 — Verify before trusting
 

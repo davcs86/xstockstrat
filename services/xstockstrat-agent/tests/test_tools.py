@@ -488,7 +488,60 @@ async def test_run_backtest_calls_grpc():
             # rolling default — the pre-071 behavior (FR-2).
             start=None,
             end=None,
+            # feature 150: omitted sizing_mode forwards as None → server default (legacy).
+            sizing_mode=None,
+            # feature 151: omitted fill_model forwards as None → server default (legacy).
+            fill_model=None,
         )
+
+
+@pytest.mark.asyncio
+async def test_run_backtest_forwards_sizing_mode_and_surfaces_it():
+    """feature 150: the tool threads sizing_mode to the client and surfaces the mode + a
+    capital-skip count in the inline summary."""
+    mock_backtest = AsyncMock(
+        return_value={
+            "backtest_id": "bt-1",
+            "strategy_id": "sma",
+            "sizing_mode": "SIZING_MODE_PORTFOLIO",
+            "capital_skips": [{"symbol": "MSFT"}, {"symbol": "TSLA"}],
+        }
+    )
+    with patch.object(client, "run_backtest", mock_backtest):
+        server = _make_server()
+        result = await _tool_fn(server, "run_backtest")(
+            ctx=_ctx(ADMIN),
+            strategy_id="sma",
+            symbols=["NVDA", "MSFT", "TSLA"],
+            sizing_mode="portfolio",
+        )
+    assert mock_backtest.call_args.kwargs["sizing_mode"] == "portfolio"
+    summary = json.loads(result[0].text)
+    assert summary["sizing_mode"] == "SIZING_MODE_PORTFOLIO"
+    assert summary["capital_skips"] == 2  # count, not the list
+
+
+@pytest.mark.asyncio
+async def test_run_backtest_forwards_fill_model_and_surfaces_it():
+    """feature 151: the tool threads fill_model to the client and surfaces the effective model."""
+    mock_backtest = AsyncMock(
+        return_value={
+            "backtest_id": "bt-1",
+            "strategy_id": "sma",
+            "fill_model": "FILL_MODEL_NEXT_BAR_OPEN",
+        }
+    )
+    with patch.object(client, "run_backtest", mock_backtest):
+        server = _make_server()
+        result = await _tool_fn(server, "run_backtest")(
+            ctx=_ctx(ADMIN),
+            strategy_id="sma",
+            symbols=["NVDA"],
+            fill_model="next_bar_open",
+        )
+    assert mock_backtest.call_args.kwargs["fill_model"] == "next_bar_open"
+    summary = json.loads(result[0].text)
+    assert summary["fill_model"] == "FILL_MODEL_NEXT_BAR_OPEN"
 
 
 @pytest.mark.asyncio

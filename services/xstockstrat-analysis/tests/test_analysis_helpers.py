@@ -81,6 +81,37 @@ class TestComputeMetrics:
         # gross_loss=0, gross_profit>0 → profit_factor=999.0
         assert result["profit_factor"] == pytest.approx(999.0)
 
+    # Feature 149 — annualized_return period fix. When period_years is supplied, the
+    # annualization must use the run's real window span, NOT the equity-curve length
+    # (which for the multi-symbol aggregate is a concatenation of N per-symbol curves,
+    # ~N× too long, and under-scaled the old 252/n_days exponent by ~N).
+    def test_annualized_matches_total_over_one_year(self):
+        # (total_return -> pre-fix ~30x-under-scaled annualized) pairs observed in staging:
+        #   -0.0650 -> -0.00207,  +0.2152 -> +0.00603,  -0.2126 -> -0.00735
+        # Over a ~1-year window annualized_return must ≈ total_return.
+        for total in (-0.0650, 0.2152, -0.2126):
+            # A long aggregate curve (many concatenated per-symbol points) that realizes
+            # exactly `total` — mirrors the multi-symbol aggregate shape that triggered the bug.
+            curve = [100_000.0] * 8000 + [100_000.0 * (1 + total)]
+            result = _compute_metrics(curve, [], curve[0], period_years=1.0)
+            assert result["annualized_return"] == pytest.approx(total, abs=1e-6)
+
+    def test_annualized_scales_geometrically_sub_year(self):
+        total = 0.2152
+        curve = [100_000.0, 100_000.0 * (1 + total)]
+        result = _compute_metrics(curve, [], curve[0], period_years=0.5)
+        # +21.52% over 6 months -> (1.2152)^2 - 1 ≈ +47.7%
+        assert result["annualized_return"] == pytest.approx((1 + total) ** 2 - 1, abs=1e-6)
+
+    def test_default_path_unchanged_without_period_years(self):
+        # No period_years -> legacy curve-length behaviour (per-symbol evidence cells rely on
+        # this; the fix must be grade-neutral). A 253-point ~1y single-symbol curve.
+        curve = [100_000.0] + [100_000.0 * (1 + 0.001 * i) for i in range(1, 253)]
+        result = _compute_metrics(curve, [], curve[0])
+        legacy_total = (curve[-1] - curve[0]) / curve[0]
+        legacy_annualized = (1 + legacy_total) ** (252.0 / (len(curve) - 1)) - 1
+        assert result["annualized_return"] == pytest.approx(legacy_annualized, abs=1e-9)
+
 
 # ---------------------------------------------------------------------------
 # _unwrap_value

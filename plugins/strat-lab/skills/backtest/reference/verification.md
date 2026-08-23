@@ -18,6 +18,11 @@ oracle **to the digit** on:
 Match → trustworthy in direction and magnitude. Mismatch → a finding to investigate and report, not
 something to round away.
 
+**Fill model (feature 151).** The `close`-based oracle above is the **same-bar-close** (legacy)
+case. When verifying a `fill_model="next_bar_open"` run, the offline oracle must fill a bar-`i`
+signal at `bars[i+1].open` (± slippage), not `bars[i].close` — otherwise a correct next-bar run
+looks like a mismatch. Check the run's echoed `fill_model` before picking which price to fill at.
+
 ## Reconstructing an indicator formula (when you must)
 
 If you had to rebuild a custom formula (e.g. after a definition was wiped), **validate the math
