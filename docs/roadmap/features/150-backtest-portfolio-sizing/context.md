@@ -132,3 +132,27 @@ buf-gen verified byte-for-byte against checked-in stubs before any proto edit.
 ### Step 4 — config keys declared [done]
 - analysis.backtest.portfolio_position_weight (0.10), portfolio_max_concurrent (9), zero-trap intended; code-default (no seed). TDD: N/A.
 - Files: services/xstockstrat-analysis/CLAUDE.md, docs/patterns/config-governance.md
+### Step 5 — service: additive per-bar intent return + `_simulate_portfolio` [done]
+- Added `BarIntent` frozen dataclass; both simulators (`_backtest_symbol`, `_backtest_symbol_evaluated`)
+  now return an additive 5th element (per-in-window-bar signal intent, computed before the
+  position/cooldown/capital gate — signal intent, not realized execution). The two RunBacktest call
+  sites unpack the 5th value into a `symbol_intents` buffer (consumed only by the portfolio path,
+  Step 7). Legacy 4-tuple output unchanged.
+- Added `_simulate_portfolio(...)`: union calendar, past-only forward-fill MTM, shared cash pool,
+  exits-first then symbol-ASC entries gated by max_concurrent + cash (else PortfolioCapitalSkip),
+  portfolio-local cooldown parity (effective_cooldown_days/is_cooldown_active on ephemeral per-symbol
+  anchors), per-bar EquityPoint, terminal force-close. No new gRPC/DB edge (§B N/A).
+- Arity ripple: existing tests that unpack the simulators' 4-tuple were updated — RunBacktest mocks
+  now return a 5th `[]`; the `_run_evaluated` and `TestTradeStartIndex._run` helpers slice `[:4]` so
+  their many 4-tuple callers stay valid. Verified: 267 pre-existing servicer tests still green.
+- Verify: ruff check + format clean on servicer.py. TDD: red-green (paired Step 6).
+- Files: services/xstockstrat-analysis/app/handlers/servicer.py
+### Step 6 — test: intent return + `_simulate_portfolio` [done]
+- New `tests/test_portfolio_sizing.py`: look-ahead RED on a mid-series gap (@AC-1/2), order-independence
+  + not-the-parlay (@AC-1), shared-pool per-bar equity (@AC-2), capital-skip + lower-trade-count (@AC-6),
+  cooldown parity in-window (@AC-7), no-repo-access (FR-6/7), and the additive-5th-element intent return
+  (@AC-3 half). C-13: synthetic BarIntent series are single-file helpers here (no second consumer) → stay
+  in this test module, not conftest.
+- Verify: ruff clean; 551 tests pass; coverage 82.91% (≥40). TDD: red-before-green (the referenced
+  `_simulate_portfolio`/intent 5th element did not exist pre-Step-5).
+- Files: services/xstockstrat-analysis/tests/test_portfolio_sizing.py

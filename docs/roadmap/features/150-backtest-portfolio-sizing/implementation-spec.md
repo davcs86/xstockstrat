@@ -276,7 +276,7 @@ Both keys present in both files.
 
 ### Step 5 — service: additive per-bar intent return + `_simulate_portfolio` helper
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -370,7 +370,7 @@ cd services/xstockstrat-analysis && ruff check app/handlers/servicer.py && ruff 
 
 ### Step 6 — test: intent return + `_simulate_portfolio` (AC-1, AC-2, AC-6, legacy-unchanged)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify (or a new

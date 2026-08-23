@@ -16,6 +16,7 @@ import json
 import logging
 import math
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import asyncpg
@@ -60,6 +61,23 @@ from app.services.screener import ScreenerEngine
 _compute_signal_score = scoring.compute_signal_score
 
 log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class BarIntent:
+    """Feature 150: per-in-window-bar SIGNAL intent for a symbol — the raw entry/exit signal
+    computed *before* any position/cooldown/capital gate, so the portfolio simulator can decide
+    execution against a shared pool. This is signal intent, NOT realized execution (a
+    capital-skipped entry has no realized action to replay — the reason ``_simulate_portfolio``
+    consumes intent rather than ``BarDiagnostic.action``). ``timestamp`` is a proto Timestamp;
+    ``close`` the bar close.
+    """
+
+    timestamp: Timestamp
+    close: float
+    entry_intent: bool
+    exit_intent: bool
+    conviction: float
 
 
 def _deleted_formula_warning(name: str, formula_id: str) -> str:
@@ -508,6 +526,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         formula_errors: int = 0
         # feature 065: one per-symbol evidence cell buffered per traded symbol; flushed on OK.
         symbol_cells: list[dict] = []
+        # feature 150: per-symbol signal-intent lists, buffered for the optional portfolio simulator
+        # (Step 7). Populated in both modes but only consumed on the portfolio branch; the legacy
+        # aggregate curve/metrics are unaffected.
+        symbol_intents: dict[str, list[BarIntent]] = {}
         # feature 064: declared formula warm-ups fetched once per run, reused across symbols.
         formula_warmup_cache: dict[str, int] = {}
         # feature 086: deleted-formula warnings captured during that same single fetch per formula.
@@ -522,7 +544,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         for symbol in request.symbols:
             try:
                 if active_definition is not None:
-                    trades, equity, daily_eq, sym_diag = await self._backtest_symbol_evaluated(
+                    (
+                        trades,
+                        equity,
+                        daily_eq,
+                        sym_diag,
+                        sym_intent,
+                    ) = await self._backtest_symbol_evaluated(
                         symbol=symbol,
                         range_msg=request.range,
                         definition=active_definition,
@@ -537,7 +565,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         warmup_prefix=start_set,
                     )
                 else:
-                    trades, equity, daily_eq, sym_diag = await self._backtest_symbol(
+                    (
+                        trades,
+                        equity,
+                        daily_eq,
+                        sym_diag,
+                        sym_intent,
+                    ) = await self._backtest_symbol(
                         symbol=symbol,
                         range_msg=request.range,
                         fast_period=fast_period,
@@ -549,6 +583,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         propagation_meta=propagation_meta,
                         warmup_prefix=start_set,
                     )
+                # feature 150: buffer intent for the optional portfolio simulator (Step 7).
+                symbol_intents[symbol] = sym_intent
                 # feature 065: buffer one evidence cell for this symbol before merging into the
                 # aggregate curve. daily_eq[0] is the symbol's own (compounded) starting equity,
                 # so the cell metrics are per-symbol, not aggregate. Symbols with no usable curve
@@ -959,6 +995,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # simulated bar IS bar k, so there is no separate seed row — otherwise the two lists would
         # differ in length by one and every per-bar equity stamp would shift.
         daily_equity = [equity] if trade_start_idx == 0 else []
+        # feature 150: per-in-window-bar signal intent (independent of position/capital), consumed
+        # only by the portfolio simulator; the legacy return/flow below is unchanged.
+        intents: list[BarIntent] = []
         buy_threshold = scoring.buy_threshold(min_conviction)
         sell_threshold = scoring.sell_threshold()
 
@@ -969,6 +1008,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             # Skip until both SMAs are available (these are warm-up bars — labelled below)
             if i not in fast_values or i not in slow_values:
                 daily_equity.append(equity + position * price)
+                intents.append(BarIntent(bar.time, price, False, False, 0.0))  # feature 150
                 continue
 
             prev_fast = fast_values.get(i - 1)
@@ -978,6 +1018,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
             if prev_fast is None or prev_slow is None:
                 daily_equity.append(equity + position * price)
+                intents.append(BarIntent(bar.time, price, False, False, 0.0))  # feature 150
                 continue
 
             # Technical signal: +1 (bullish crossover), -1 (bearish crossover), 0 (no change)
@@ -995,6 +1036,16 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             combined = tech_signal * 0.5 + 0.5
             diags[i - trade_start_idx].signal_score = 0.0
             diags[i - trade_start_idx].conviction = combined
+            # feature 150: signal intent, independent of the position/capital gate below
+            intents.append(
+                BarIntent(
+                    bar.time,
+                    price,
+                    combined >= buy_threshold,
+                    combined <= sell_threshold,
+                    combined,
+                )
+            )
             bar_action = (
                 analysis_pb2.BAR_ACTION_HOLD_LONG
                 if position > 0.0
@@ -1075,7 +1126,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             diags[-1].action = analysis_pb2.BAR_ACTION_EXIT_LONG
 
         symbol_diag = _finalize_symbol_diagnostics(symbol, diags, warmup_bars, trades, daily_equity)
-        return trades, equity, daily_equity, symbol_diag
+        # feature 150: intents is the additive 5th element; legacy callers ignore it.
+        return trades, equity, daily_equity, symbol_diag, intents
 
     async def _backtest_symbol_evaluated(
         self,
@@ -1153,6 +1205,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # simulated bar IS bar k, so there is no separate seed row — otherwise the two lists would
         # differ in length by one and every per-bar equity stamp would shift.
         daily_equity = [equity] if trade_start_idx == 0 else []
+        # feature 150: per-in-window-bar signal intent (independent of position/cooldown/capital),
+        # consumed only by the portfolio simulator; the legacy return/flow below is unchanged.
+        intents: list[BarIntent] = []
 
         # Re-entry cooldown (feature 069). Ephemeral per-RunBacktest state (FR-7): last_exit_time is
         # a plain local, never read from or written to analysis.strategy_cooldowns, so two runs of
@@ -1174,6 +1229,16 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             bar = bars[i]
             price = bar.close
             decision = decisions[i]
+            # feature 150: signal intent, independent of the position/cooldown/capital gate below
+            intents.append(
+                BarIntent(
+                    bar.time,
+                    price,
+                    decision.entry,
+                    decision.exit,
+                    decision.conviction,
+                )
+            )
             bar_action = (
                 analysis_pb2.BAR_ACTION_HOLD_LONG
                 if position > 0.0
@@ -1261,7 +1326,175 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             diags[-1].action = analysis_pb2.BAR_ACTION_EXIT_LONG
 
         symbol_diag = _finalize_symbol_diagnostics(symbol, diags, warmup_bars, trades, daily_equity)
-        return trades, equity, daily_equity, symbol_diag
+        # feature 150: intents is the additive 5th element; legacy callers ignore it.
+        return trades, equity, daily_equity, symbol_diag, intents
+
+    async def _simulate_portfolio(
+        self,
+        symbol_intents: dict[str, list["BarIntent"]],
+        initial_capital: float,
+        position_weight: float,
+        max_concurrent: int,
+        commission: float,
+        slippage: float,
+        cooldown_days: int,
+        exit_cooldown_days: int,
+    ):
+        """Feature 150: portfolio sizing — one shared cash pool, concurrent positions, one equity
+        curve. Consumes the per-symbol signal intent already built in-process by the simulators
+        (adds NO new gRPC/DB edge, reuses their fetched bars). Returns
+        ``(portfolio_equity_curve, capital_skips, portfolio_trades)``.
+
+        Design contract (design.md / implementation-spec Step 5):
+        - Shared calendar = union of every symbol's intent timestamps, ascending.
+        - Mark-to-market a symbol with no bar on a union date at its **last on-or-before** close
+          (forward-fill — provably past-only, no look-ahead). A terminal/held symbol freezes at its
+          last close; never a synthetic sell.
+        - Per union date, ascending: process EXITS first (free cash), then entry-intent symbols not
+          already held, ordered by **symbol ASC** (documented-arbitrary deterministic tiebreak given
+          binary conviction), opening each while ``len(positions) < max_concurrent`` AND
+          ``cash >= position_weight * initial_capital``; else record a ``PortfolioCapitalSkip`` and
+          open nothing (FR-5/AC-6 — never a zero-sized fill).
+        - Cooldown parity (FR-6): reuse ``effective_cooldown_days`` + ``is_cooldown_active`` against
+          **portfolio-local** ephemeral per-symbol last-exit / entry anchors (never touches
+          ``analysis.strategy_cooldowns``). Gate order per entry: cooldown first, capital second;
+          mutate anchors only on an actual fill.
+        - Per-bar equity = ``cash + Σ(shares × marked-to-market close)`` over open positions (AC-2).
+        - Terminal policy: on the final union date, force-close every open position at its
+          last-known close (realized semantics, matching the serial forced-close), one
+          ``TradeRecord`` per close.
+
+        v1 caveats (design Open Risks, kept as inline documentation):
+        - Forward-filling a halted/missing symbol holds equity flat then jumps, so a mid-gap
+          ``max_drawdown`` is understated — legacy-realized parity is chosen over gap fidelity here.
+        - The symbol-ASC entry tiebreak is a systematic bias, not neutral.
+        """
+        # Build per-symbol close/intent maps keyed by tz-aware-UTC datetime, and the union calendar.
+        close_maps: dict[str, dict[datetime, float]] = {}
+        intent_maps: dict[str, dict[datetime, BarIntent]] = {}
+        all_dts: set[datetime] = set()
+        for sym, sym_intents in symbol_intents.items():
+            cmap: dict[datetime, float] = {}
+            imap: dict[datetime, BarIntent] = {}
+            for it in sym_intents:
+                d = it.timestamp.ToDatetime(tzinfo=UTC)
+                cmap[d] = it.close
+                imap[d] = it
+                all_dts.add(d)
+            close_maps[sym] = cmap
+            intent_maps[sym] = imap
+        calendar = sorted(all_dts)
+
+        cash = float(initial_capital)
+        alloc = position_weight * initial_capital  # cash committed per concurrent position
+        positions: dict[str, dict] = {}  # symbol -> {shares, entry_price, entry_ts, entry_dt}
+        last_close: dict[str, float] = {}  # forward-fill state (updated on-or-before each date)
+        last_exit: dict[str, datetime] = {}  # portfolio-local re-entry anchor (FR-6)
+
+        equity_curve: list = []
+        capital_skips: list = []
+        trades: list = []
+
+        for idx, d in enumerate(calendar):
+            is_terminal = idx == len(calendar) - 1
+            ts_d = Timestamp()
+            ts_d.FromDatetime(d)
+
+            # 1. Advance forward-fill: any symbol with a bar exactly on d updates its last close.
+            for sym, cmap in close_maps.items():
+                if d in cmap:
+                    last_close[sym] = cmap[d]
+
+            # 2. Exits first (free cash). Only symbols with a bar (intent) on d can act.
+            for sym in sorted(positions.keys()):
+                intent = intent_maps[sym].get(d)
+                if intent is None or not intent.exit_intent:
+                    continue
+                if is_cooldown_active(positions[sym]["entry_dt"], d, exit_cooldown_days):
+                    continue  # min-hold not satisfied yet (feature 116 parity)
+                pos = positions.pop(sym)
+                fill_price = intent.close * (1 - slippage)
+                proceeds = pos["shares"] * fill_price * (1 - commission)
+                pnl = proceeds - (pos["shares"] * pos["entry_price"] * (1 + commission))
+                cash += proceeds
+                last_exit[sym] = d
+                exit_ts = Timestamp()
+                exit_ts.CopyFrom(intent.timestamp)
+                trades.append(
+                    analysis_pb2.TradeRecord(
+                        symbol=sym,
+                        side="long",
+                        qty=pos["shares"],
+                        entry_price=pos["entry_price"],
+                        exit_price=fill_price,
+                        pnl=pnl,
+                        entry_time=pos["entry_ts"],
+                        exit_time=exit_ts,
+                    )
+                )
+
+            # 3. Entries: symbols signaling entry, not held, symbol-ASC. Cooldown, then capital.
+            for sym in sorted(intent_maps.keys()):
+                intent = intent_maps[sym].get(d)
+                if intent is None or not intent.entry_intent or sym in positions:
+                    continue
+                if is_cooldown_active(last_exit.get(sym), d, cooldown_days):
+                    continue  # re-entry cooldown active (feature 069 parity); not a capital skip
+                if len(positions) >= max_concurrent or cash < alloc:
+                    capital_skips.append(
+                        analysis_pb2.PortfolioCapitalSkip(
+                            symbol=sym,
+                            timestamp=intent.timestamp,
+                            intended_weight=alloc,
+                            available_cash=cash,
+                        )
+                    )
+                    continue  # never a zero-sized fill (FR-5/AC-6)
+                fill_price = intent.close * (1 + slippage)
+                if fill_price <= 0.0:
+                    continue
+                shares = alloc / (fill_price * (1 + commission))
+                cost = shares * fill_price * (1 + commission)
+                cash -= cost
+                entry_ts = Timestamp()
+                entry_ts.CopyFrom(intent.timestamp)
+                positions[sym] = {
+                    "shares": shares,
+                    "entry_price": fill_price,
+                    "entry_ts": entry_ts,
+                    "entry_dt": d,
+                }
+
+            # 4. Terminal force-close (realized semantics; matches the serial forced-close).
+            if is_terminal:
+                for sym in sorted(positions.keys()):
+                    pos = positions.pop(sym)
+                    close_px = last_close.get(sym, pos["entry_price"])
+                    fill_price = close_px * (1 - slippage)
+                    proceeds = pos["shares"] * fill_price * (1 - commission)
+                    pnl = proceeds - (pos["shares"] * pos["entry_price"] * (1 + commission))
+                    cash += proceeds
+                    trades.append(
+                        analysis_pb2.TradeRecord(
+                            symbol=sym,
+                            side="long",
+                            qty=pos["shares"],
+                            entry_price=pos["entry_price"],
+                            exit_price=fill_price,
+                            pnl=pnl,
+                            entry_time=pos["entry_ts"],
+                            exit_time=ts_d,
+                        )
+                    )
+
+            # 5. Per-bar equity = cash + Σ marked-to-market open positions (AC-2).
+            mtm = sum(
+                pos["shares"] * last_close.get(sym, pos["entry_price"])
+                for sym, pos in positions.items()
+            )
+            equity_curve.append(analysis_pb2.EquityPoint(timestamp=ts_d, equity=cash + mtm))
+
+        return equity_curve, capital_skips, trades
 
     async def _compute_evaluated_warmup(
         self, definition, component_series, n, formula_warmup_cache, propagation_meta

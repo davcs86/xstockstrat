@@ -1766,9 +1766,11 @@ class TestRunBacktestCells:
         diag = analysis_pb2.SymbolDiagnostics()
 
         def fake_symbol(symbol=None, **kwargs):
+            # feature 150: simulators now return a 5th element (per-bar intent list); the legacy
+            # RunBacktest path ignores it, so an empty list is a faithful stand-in here.
             if symbol == "AAPL":
-                return ([trade, trade], 101_000.0, [100_000.0] * 11, diag)
-            return ([], 101_000.0, [101_000.0] * 6, diag)
+                return ([trade, trade], 101_000.0, [100_000.0] * 11, diag, [])
+            return ([], 101_000.0, [101_000.0] * 6, diag, [])
 
         return fake_symbol
 
@@ -1814,7 +1816,7 @@ class TestRunBacktestCells:
         diag = analysis_pb2.SymbolDiagnostics()
         curve = [100_000.0, 100_100.0, 100_200.0]
         svc._backtest_symbol_evaluated = AsyncMock(
-            side_effect=lambda symbol=None, **kw: ([], 100_000.0, curve, diag)
+            side_effect=lambda symbol=None, **kw: ([], 100_000.0, curve, diag, [])
         )
 
         req = self._req(strategy_id="s1", strategy_id_ref="s1", symbols=("AAPL",))
@@ -1841,7 +1843,7 @@ class TestRunBacktestCells:
         svc._strategies_repo.get_by_owner_and_id = svc._strategies_repo.get_by_id
         diag = analysis_pb2.SymbolDiagnostics()
         svc._backtest_symbol_evaluated = AsyncMock(
-            side_effect=lambda symbol=None, **kw: ([], 100_000.0, [100_000.0, 100_100.0], diag)
+            side_effect=lambda symbol=None, **kw: ([], 100_000.0, [100_000.0, 100_100.0], diag, [])
         )
         # strategy_id "s1" differs from strategy_id_ref "other" → cells carry no fingerprint.
         req = self._req(strategy_id="s1", strategy_id_ref="other", symbols=("AAPL",))
@@ -2042,7 +2044,7 @@ class TestHeadlineTriggers:
         svc._backtest_run_symbols_repo.insert_many = AsyncMock()
         diag = analysis_pb2.SymbolDiagnostics()
         svc._backtest_symbol_evaluated = AsyncMock(
-            side_effect=lambda symbol=None, **kw: ([], 100_000.0, [100_000.0, 100_050.0], diag)
+            side_effect=lambda symbol=None, **kw: ([], 100_000.0, [100_000.0, 100_050.0], diag, [])
         )
         req = MagicMock()
         req.strategy_id = "s1"
@@ -2531,9 +2533,12 @@ async def _run_evaluated(svc, definition, decisions, n_bars):
     fake_eval = MagicMock()
     fake_eval.evaluate_with_series = AsyncMock(return_value=(decisions, {}))
     with patch("app.handlers.servicer.StrategyEvaluator", return_value=fake_eval):
-        return await svc._backtest_symbol_evaluated(
+        # feature 150: drop the additive 5th (intent) element so these legacy tests keep their
+        # 4-tuple unpack — the intent return is covered directly in TestPortfolioSizing.
+        result = await svc._backtest_symbol_evaluated(
             "AAPL", common_pb2.TimeRange(), definition, 100_000.0, 0.0, 0.0
         )
+        return result[:4]
 
 
 def _decisions(n, entries=(), exits=()):
@@ -3202,7 +3207,9 @@ class TestTradeStartIndex:
         rng = common_pb2.TimeRange()
         rng.start.seconds = self.WINDOW_START
         rng.end.seconds = self.WINDOW_START + 10 * 86_400
-        return await svc._backtest_symbol(
+        # feature 150: drop the additive 5th (intent) element so these feature-071 tests keep
+        # their 4-tuple unpack — the intent return is covered directly in TestPortfolioSizing.
+        result = await svc._backtest_symbol(
             "AAPL",
             rng,
             fast_period=2,
@@ -3213,6 +3220,7 @@ class TestTradeStartIndex:
             slippage=0.0,
             warmup_prefix=warmup_prefix,
         )
+        return result[:4]
 
     @pytest.mark.asyncio
     async def test_without_prefix_every_bar_is_in_scope(self):
