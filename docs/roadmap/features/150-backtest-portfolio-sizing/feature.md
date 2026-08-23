@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-23 | `idea` → `draft` | /sdd-story | Product spec generated from metrics-sweep audit finding #2 |
+| 2026-08-23 | `draft` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + design.md written. merge-order.md 150↔151 row added. |
 
 ---
 
@@ -41,4 +42,4 @@ _(Auto-populated from docs/runbooks/reviewer-registry.md; finalized at /sdd-spec
 
 ## Next Action
 
-`/sdd-design backtest-portfolio-sizing quick` — ground and debate the design (operator chose story+design only; stop before /sdd-spec)
+`/sdd-spec backtest-portfolio-sizing` — generate the implementation spec from the approved design (deferred per operator: story+design only this session)

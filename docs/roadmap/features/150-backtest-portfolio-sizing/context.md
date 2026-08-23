@@ -23,3 +23,24 @@
   UI `/insights` backtest views (mode labeling). Scope to be pinned in design.
 - Development branch note: rides `claude/xstockstrat-metrics-sweep-m070rf` this session per the binding
   branch constraint rather than a fresh `feature/` branch.
+
+## Session 2026-08-23 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: analysis + agent + ui; reuse: _compute_metrics, per-symbol
+  cells, cooldown helpers, additive enum shape). Four recon subagents (analysis, agent, ui, scenario-recon).
+- Phase 1 Grilling: 5 rounds (full; user overrode the default and ran to the cap). Chosen approach:
+  dedicated _simulate_portfolio fed per-bar intent RETURNED additively by the existing simulators
+  (single fetch), shared cash pool + concurrent positions on a union calendar, cooldown applied
+  portfolio-locally, force-close-realized terminal policy, portfolio equity curve fed to existing
+  _compute_metrics; legacy path byte-for-byte, grade per-symbol-cell (FR-4). Config-only sizing params.
+- Rejected: diagnostics-replay (lossy), double-pass (2× fetch, feature-141 hazard), live-equity sizing
+  (order-dependent), request-override params (speculative), graded-conviction (binary conviction).
+- Constitution rules touched: C-04, C-05/F-07, C-08/P-06, C-09, C-10/C-14, C-16, F-01, F-06. Floor
+  breaches: none at any round.
+- Cross-feature field/migration coordination with 151 recorded in merge-order.md (150 owns
+  RunBacktestRequest.8, BacktestResult 17/18/19, BacktestRunSummary 17, migration 017; 151 takes the
+  next slots). Numbers re-derived from the merged tree at /sdd-spec time.
+- Open risks (carried): shared-calendar forward-fill look-ahead (AC (e) needs a mid-series-gap
+  fixture); stale-close drawdown understatement; merge-order.md SPOF; symbol-ASC systematic bias;
+  per-symbol BarDiagnostic.equity stays per-symbol.
+- Status: draft → design-approved. Operator decision: stop before /sdd-spec this session.
