@@ -38,6 +38,7 @@ class BacktestRunsRepository:
         sizing_mode: str | None = None,
         position_weight: float | None = None,
         max_concurrent: int | None = None,
+        fill_model: str | None = None,
     ) -> dict:
         # Feature 133: user_id is attribution-only and NULLABLE — an inline/legacy run with no
         # registered strategy legitimately has no owner (migration 015 left the column nullable).
@@ -45,15 +46,17 @@ class BacktestRunsRepository:
         # capital-allocation model each run used, so a run is reproducible despite WatchConfig
         # drift. All NULLABLE — a legacy-mode run persists sizing_mode="SIZING_MODE_LEGACY" but
         # leaves the two portfolio-only params NULL.
+        # Feature 151: fill_model (migration 018) records the effective fill model (enum name);
+        # NULLABLE — pre-151 rows have no value.
         row = await self._db.fetchrow(
             """
             INSERT INTO analysis.backtest_runs
                 (backtest_id, strategy_id, status, total_return, annualized_return,
                  sharpe_ratio, max_drawdown, win_rate, total_trades, profit_factor,
                  symbols, overall_score, rating, range_start, range_end, user_id,
-                 sizing_mode, position_weight, max_concurrent)
+                 sizing_mode, position_weight, max_concurrent, fill_model)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-                    $17, $18, $19)
+                    $17, $18, $19, $20)
             ON CONFLICT (backtest_id) DO NOTHING
             RETURNING *
             """,
@@ -76,6 +79,7 @@ class BacktestRunsRepository:
             sizing_mode,
             position_weight,
             max_concurrent,
+            fill_model,
         )
         return _to_dict(row)
 

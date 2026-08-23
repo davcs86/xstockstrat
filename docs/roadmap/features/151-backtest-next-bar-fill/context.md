@@ -116,3 +116,33 @@ alongside feature 150 (which merged its proto/migration first, so 151 keeps the 
 - ./scripts/buf-gen.sh; 8 gen files changed; idempotent re-run leaves no further diff.
 ### Step 3 — migration 018 fill_model column [done]
 - Additive nullable fill_model TEXT; up/down reverse-verified offline (no DB). NNN=018 (150 took 017).
+### Step 4 — service: shared _apply_fill deferred state machine + routing + persist [done]
+- Added SimState + _PendingFill + _set_pending + _apply_fill (module-level). Both simulators
+  (_backtest_symbol, _backtest_symbol_evaluated) refactored to the deferred-execution machine:
+  detect→_set_pending, then _apply_fill executes a due pending (same-bar: fill_idx=i executes same
+  iteration; next-bar: fill_idx=i+1 executes next iteration; the (A) top call runs before the SMA
+  warm-up continue so a deferral is never skipped). The loop stays sole writer of diags.action + sole
+  appender to daily_equity (071 1:1 invariant intact). Cooldown pinned to fill-bar time inside
+  _apply_fill (byte-identical legacy in same-bar). SMA path passes 0/0 cooldowns (it has none).
+- RunBacktest resolves effective_fill_model once (request > config default_fill_model > legacy;
+  get_int zero-trap intentional), threads it into both simulators, sets result.fill_model, persists
+  via _persist_backtest_run (reads result.fill_model → FillModel.Name). Repo insert + column
+  fill_model ($20); _row_to_backtest_summary maps it (null → UNSPECIFIED).
+- Config key analysis.backtest.default_fill_model (int 0=legacy) declared in service CLAUDE.md +
+  a "Backtest Fill Model (feature 151)" prose subsection (last-bar rule, fill-to-fill cooldown,
+  display-only action/conviction decouple).
+- v1 scope note: fill_model governs the per-symbol serial simulators (per-symbol curves/cells +
+  legacy aggregate). _simulate_portfolio (feature 150) still fills intents at close; a portfolio ×
+  next-bar run honors next-bar in the per-symbol cells but same-bar in the portfolio curve —
+  acceptable v1 limitation (151 spec scopes the serial simulators).
+- Byte-for-byte: all 558 pre-existing tests stay green after the refactor. §B header propagation N/A.
+- Files: app/handlers/servicer.py, app/repositories/backtest_runs.py, CLAUDE.md
+### Step 5 — test: engine golden parity + next-bar behavior + alignment [done]
+- New tests/test_fill_model.py: @AC-1 (entry next-bar open), @AC-2 (exit next-bar open), @AC-3
+  (last-bar no-fill/no-look-ahead), @AC-4 (unset≡explicit SAME byte-for-byte, both simulators; next-bar
+  teeth), @AC-5/@AC-9/@AC-10 (RunBacktest resolve+record+return+persist, config default routing,
+  request override, summary map), @AC-6/@AC-11 (ENTER on fill bar, daily_equity 1:1, conviction
+  decouple), @AC-7 (n-2 symmetry), @AC-8 (fill-to-fill exit cooldown). C-13: Bar/decision literals
+  single-consumer → inline.
+- Verify: ruff clean; 571 tests pass; coverage 82.95% (≥40). TDD: red-before-green.
+- Files: tests/test_fill_model.py

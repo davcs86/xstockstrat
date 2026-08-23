@@ -16,7 +16,7 @@ import json
 import logging
 import math
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 import asyncpg
@@ -78,6 +78,132 @@ class BarIntent:
     entry_intent: bool
     exit_intent: bool
     conviction: float
+
+
+@dataclass
+class _PendingFill:
+    """Feature 151: a signal committed on a prior/current bar, awaiting execution at ``fill_idx``.
+
+    ``fill_idx`` is the bar the fill lands on: the signal bar itself in same-bar-close mode, or the
+    *next* bar in next-bar-open mode. One slot per simulator — a new signal is never queued while a
+    fill is in flight (so a bar-i signal in next-bar mode can't be overwritten before it fills).
+    """
+
+    fill_idx: int
+    side: str  # "enter" | "exit"
+
+
+@dataclass
+class SimState:
+    """Feature 151: the per-symbol simulation state threaded through ``_apply_fill``.
+
+    Holds everything a fill mutates so the deferred-execution state machine is the single place that
+    opens/closes positions — the simulator loop stays the sole writer of ``diags[...].action`` and
+    the sole appender to ``daily_equity`` (the feature-071 1:1 ``daily_equity[j]↔diags[j]``
+    invariant). ``entry_time`` is a proto Timestamp (the fill bar's time); ``last_exit_time`` is
+    (the re-entry cooldown clock, feature 069).
+    """
+
+    equity: float
+    position: float = 0.0
+    entry_price: float = 0.0
+    entry_time: Timestamp | None = None
+    last_exit_time: datetime | None = None
+    pending: _PendingFill | None = None
+    trades: list = field(default_factory=list)
+
+
+def _set_pending(
+    state: SimState, i: int, entry_signal: bool, exit_signal: bool, fill_model
+) -> None:
+    """Feature 151: queue a fill from a bar-``i`` signal, if the slot is free and the signal is
+    actionable given the current position. ``fill_idx`` is ``i`` in same-bar mode, ``i+1`` in
+    next-bar mode. Never overwrites an in-flight pending (a next-bar deferral must fill first).
+    """
+    if state.pending is not None:
+        return
+    fill_idx = i + 1 if fill_model == analysis_pb2.FILL_MODEL_NEXT_BAR_OPEN else i
+    if state.position == 0.0 and entry_signal:
+        state.pending = _PendingFill(fill_idx, "enter")
+    elif state.position > 0.0 and exit_signal:
+        state.pending = _PendingFill(fill_idx, "exit")
+
+
+def _apply_fill(
+    state: SimState,
+    bars,
+    i: int,
+    fill_model,
+    commission: float,
+    slippage: float,
+    symbol: str,
+    cooldown_days: int,
+    exit_cooldown_days: int,
+):
+    """Feature 151: execute a pending fill scheduled for bar ``i`` (deferred-execution machine).
+
+    Returns the fill-bar ``BarAction`` (ENTER_LONG / EXIT_LONG) or ``None`` when nothing fills.
+    **Never touches ``diags``** — the caller loop applies the returned action, keeping the loop the
+    sole writer of ``diags[...].action`` and the sole appender to ``daily_equity``.
+
+    Fill price: bar ``i``'s close (same-bar-close, legacy) or open (next-bar-open), each ± slippage
+    with today's signs (buy ``*(1+slippage)``, sell ``*(1-slippage)``). Byte-identical to the legacy
+    inline blocks in same-bar mode (``fill_idx == signal bar``). Cooldown (feature 069/116) is
+    pinned to the **fill-bar** time; ``cooldown_days``/``exit_cooldown_days`` 0 disables its gate
+    (the SMA path, which has no cooldown, passes 0/0).
+    """
+    p = state.pending
+    if p is None or p.fill_idx != i:
+        return None
+    bar = bars[i]
+    px = bar.open if fill_model == analysis_pb2.FILL_MODEL_NEXT_BAR_OPEN else bar.close
+    state.pending = None
+    if p.side == "enter":
+        # Re-entry cooldown (feature 069), keyed on the fill-bar time.
+        if is_cooldown_active(state.last_exit_time, bar.time.ToDatetime(tzinfo=UTC), cooldown_days):
+            return None
+        fill_price = px * (1 + slippage)
+        shares = (state.equity * 0.95) / fill_price
+        cost = shares * fill_price * (1 + commission)
+        if cost <= state.equity:
+            state.position = shares
+            state.entry_price = fill_price
+            entry_ts = Timestamp()
+            entry_ts.CopyFrom(bar.time)
+            state.entry_time = entry_ts
+            state.equity -= cost
+            return analysis_pb2.BAR_ACTION_ENTER_LONG
+        return None
+    # exit
+    # Exit cooldown / min-hold (feature 116), keyed on the fill-bar time vs the entry-bar time.
+    entry_dt = state.entry_time.ToDatetime(tzinfo=UTC) if state.entry_time is not None else None
+    if is_cooldown_active(entry_dt, bar.time.ToDatetime(tzinfo=UTC), exit_cooldown_days):
+        return None
+    fill_price = px * (1 - slippage)
+    proceeds = state.position * fill_price * (1 - commission)
+    pnl = proceeds - (state.position * state.entry_price * (1 + commission))
+    exit_ts = Timestamp()
+    exit_ts.CopyFrom(bar.time)
+    entry_ts = Timestamp()
+    entry_ts.CopyFrom(state.entry_time)
+    state.trades.append(
+        analysis_pb2.TradeRecord(
+            symbol=symbol,
+            side="long",
+            qty=state.position,
+            entry_price=state.entry_price,
+            exit_price=fill_price,
+            pnl=pnl,
+            entry_time=entry_ts,
+            exit_time=exit_ts,
+        )
+    )
+    state.equity += proceeds
+    state.position = 0.0
+    state.entry_price = 0.0
+    state.entry_time = None
+    state.last_exit_time = bar.time.ToDatetime(tzinfo=UTC)  # feature 069: cooldown clock
+    return analysis_pb2.BAR_ACTION_EXIT_LONG
 
 
 def _deleted_formula_warning(name: str, formula_id: str) -> str:
@@ -400,6 +526,16 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         backtest_id = str(uuid.uuid4())
         commission = self._cfg.get_float("analysis.backtest.default_commission_pct", 0.001)
         slippage = self._cfg.get_float("analysis.backtest.default_slippage_pct", 0.0005)
+        # feature 151: resolve the effective fill model once (mirrors commission/slippage). Request
+        # value wins; else the config default; else legacy. The get_int zero-trap is INTENTIONAL —
+        # both an absent key and a configured 0 mean FILL_MODEL_UNSPECIFIED → legacy same-bar-close.
+        effective_fill_model = (
+            request.fill_model
+            if request.fill_model != analysis_pb2.FILL_MODEL_UNSPECIFIED
+            else self._cfg.get_int("analysis.backtest.default_fill_model", 0)
+        )
+        if effective_fill_model == analysis_pb2.FILL_MODEL_UNSPECIFIED:
+            effective_fill_model = analysis_pb2.FILL_MODEL_SAME_BAR_CLOSE
 
         log.info(
             "running backtest id=%s strategy=%s symbols=%s",
@@ -563,6 +699,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         # start. `start_set` is snapshotted before the defaulting block above
                         # mutates request.range in place and destroys the distinction.
                         warmup_prefix=start_set,
+                        fill_model=effective_fill_model,  # feature 151
                     )
                 else:
                     (
@@ -582,6 +719,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         slippage=slippage,
                         propagation_meta=propagation_meta,
                         warmup_prefix=start_set,
+                        fill_model=effective_fill_model,  # feature 151
                     )
                 # feature 150: buffer intent for the optional portfolio simulator (Step 7).
                 symbol_intents[symbol] = sym_intent
@@ -747,6 +885,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             initial_capital=initial_equity,
             # feature 150: the mode actually used (never UNSPECIFIED on a completed run).
             sizing_mode=sizing_mode,
+            # feature 151: the effective fill model the run used (never UNSPECIFIED — normalized
+            # above), so the echoed value always equals what routed the sim (AC-5).
+            fill_model=effective_fill_model,
         )
         # feature 150: portfolio-only outputs (empty in legacy mode — additive, so a legacy run's
         # persisted bytes are unchanged apart from the new sizing_mode field 17).
@@ -968,10 +1109,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         propagation_meta=(),
         *,
         warmup_prefix: bool = False,
+        fill_model=analysis_pb2.FILL_MODEL_SAME_BAR_CLOSE,
     ):
         """Run SMA crossover backtest for a single symbol.
 
-        Returns (trades, final_equity, daily_equity, diagnostics) — feature 064.
+        Returns (trades, final_equity, daily_equity, diagnostics, intents).
+        ``fill_model`` (feature 151) selects same-bar-close (legacy) vs next-bar-open execution;
+        it defaults to legacy so existing callers/tests are byte-for-byte unchanged.
         """
 
         # 1. Fetch OHLCV bars (feature 071: paged, plus a pre-window prefix when the caller
@@ -1061,17 +1205,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 )
             )
 
-        # 4. Simulate trades bar by bar
-        trades = []
-        equity = initial_equity
-        position = 0.0  # shares held
-        entry_price = 0.0
-        entry_time = None
+        # 4. Simulate trades bar by bar (feature 151: shared deferred-execution state machine;
+        # the SMA path has no cooldown, so it passes 0/0 gates — byte-identical to the legacy inline
+        # blocks in same-bar mode).
+        state = SimState(equity=initial_equity)
         # feature 071: daily_equity[j] pairs with diags[j]. On an unprefixed run (k == 0) index 0
         # is the seed point at bar 0, which is never simulated. With a pre-window prefix the first
         # simulated bar IS bar k, so there is no separate seed row — otherwise the two lists would
         # differ in length by one and every per-bar equity stamp would shift.
-        daily_equity = [equity] if trade_start_idx == 0 else []
+        daily_equity = [state.equity] if trade_start_idx == 0 else []
         # feature 150: per-in-window-bar signal intent (independent of position/capital), consumed
         # only by the portfolio simulator; the legacy return/flow below is unchanged.
         intents: list[BarIntent] = []
@@ -1082,9 +1224,20 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             bar = bars[i]
             price = bar.close
 
+            # feature 151 (A): execute any pending fill scheduled for THIS bar (a next-bar-open
+            # deferral from a prior iteration) BEFORE the warm-up continue, so a pending fill is
+            # never skipped (design invariant; practically unreachable since a post-signal bar has
+            # resolved SMAs). In same-bar mode `state.pending` is always None here (set+executed
+            # within one iteration below), so this call is inert and legacy stays byte-for-byte.
+            action = _apply_fill(state, bars, i, fill_model, commission, slippage, symbol, 0, 0)
+
             # Skip until both SMAs are available (these are warm-up bars — labelled below)
             if i not in fast_values or i not in slow_values:
-                daily_equity.append(equity + position * price)
+                if (
+                    action is not None
+                ):  # unreachable in practice; keep the loop the sole diag writer
+                    diags[i - trade_start_idx].action = action
+                daily_equity.append(state.equity + state.position * price)
                 intents.append(BarIntent(bar.time, price, False, False, 0.0))  # feature 150
                 continue
 
@@ -1094,7 +1247,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             curr_slow = slow_values[i]
 
             if prev_fast is None or prev_slow is None:
-                daily_equity.append(equity + position * price)
+                if action is not None:
+                    diags[i - trade_start_idx].action = action
+                daily_equity.append(state.equity + state.position * price)
                 intents.append(BarIntent(bar.time, price, False, False, 0.0))  # feature 150
                 continue
 
@@ -1123,88 +1278,60 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     combined,
                 )
             )
-            bar_action = (
-                analysis_pb2.BAR_ACTION_HOLD_LONG
-                if position > 0.0
-                else analysis_pb2.BAR_ACTION_HOLD_FLAT
+            # feature 151 (B): detect a new signal → queue a pending fill (slot-free-guarded), then
+            # (C) execute it if it is due this bar (same-bar mode → fill_idx == i). In next-bar mode
+            # this call is inert (fill_idx == i+1) and the fill lands at (A) next iteration.
+            _set_pending(
+                state, i, combined >= buy_threshold, combined <= sell_threshold, fill_model
             )
+            action2 = _apply_fill(state, bars, i, fill_model, commission, slippage, symbol, 0, 0)
+            if action2 is not None:
+                action = action2
 
-            if position == 0.0 and combined >= buy_threshold:
-                # Buy: use 95% of equity (keep 5% as buffer)
-                fill_price = price * (1 + slippage)
-                shares = (equity * 0.95) / fill_price
-                cost = shares * fill_price * (1 + commission)
-                if cost <= equity:
-                    position = shares
-                    entry_price = fill_price
-                    entry_time = bar.time
-                    equity -= cost
-                    # feature 064: label ENTER only when the fill actually happens
-                    bar_action = analysis_pb2.BAR_ACTION_ENTER_LONG
-
-            elif position > 0.0 and combined <= sell_threshold:
-                # Sell: close position
-                fill_price = price * (1 - slippage)
-                proceeds = position * fill_price * (1 - commission)
-                pnl = proceeds - (position * entry_price * (1 + commission))
-
-                exit_ts = Timestamp()
-                exit_ts.CopyFrom(bar.time)
-                entry_ts = Timestamp()
-                entry_ts.CopyFrom(entry_time)
-
-                trades.append(
-                    analysis_pb2.TradeRecord(
-                        symbol=symbol,
-                        side="long",
-                        qty=position,
-                        entry_price=entry_price,
-                        exit_price=fill_price,
-                        pnl=pnl,
-                        entry_time=entry_ts,
-                        exit_time=exit_ts,
-                    )
+            bar_action = (
+                action
+                if action is not None
+                else (
+                    analysis_pb2.BAR_ACTION_HOLD_LONG
+                    if state.position > 0.0
+                    else analysis_pb2.BAR_ACTION_HOLD_FLAT
                 )
-                equity += proceeds
-                position = 0.0
-                entry_price = 0.0
-                entry_time = None
-                bar_action = analysis_pb2.BAR_ACTION_EXIT_LONG
-
+            )
             diags[i - trade_start_idx].action = bar_action
-            portfolio_value = equity + position * price
-            daily_equity.append(portfolio_value)
+            daily_equity.append(state.equity + state.position * price)
 
         # Close any open position at last bar price
-        if position > 0.0 and bars:
+        if state.position > 0.0 and bars:
             last_bar = bars[-1]
             fill_price = last_bar.close * (1 - slippage)
-            proceeds = position * fill_price * (1 - commission)
-            pnl = proceeds - (position * entry_price * (1 + commission))
+            proceeds = state.position * fill_price * (1 - commission)
+            pnl = proceeds - (state.position * state.entry_price * (1 + commission))
             now_ts = Timestamp()
             now_ts.CopyFrom(last_bar.time)
             entry_ts2 = Timestamp()
-            entry_ts2.CopyFrom(entry_time)
-            trades.append(
+            entry_ts2.CopyFrom(state.entry_time)
+            state.trades.append(
                 analysis_pb2.TradeRecord(
                     symbol=symbol,
                     side="long",
-                    qty=position,
-                    entry_price=entry_price,
+                    qty=state.position,
+                    entry_price=state.entry_price,
                     exit_price=fill_price,
                     pnl=pnl,
                     entry_time=entry_ts2,
                     exit_time=now_ts,
                 )
             )
-            equity += proceeds
-            daily_equity[-1] = equity
+            state.equity += proceeds
+            daily_equity[-1] = state.equity
             # feature 064: the forced close labels the last bar an exit (AC-3)
             diags[-1].action = analysis_pb2.BAR_ACTION_EXIT_LONG
 
-        symbol_diag = _finalize_symbol_diagnostics(symbol, diags, warmup_bars, trades, daily_equity)
+        symbol_diag = _finalize_symbol_diagnostics(
+            symbol, diags, warmup_bars, state.trades, daily_equity
+        )
         # feature 150: intents is the additive 5th element; legacy callers ignore it.
-        return trades, equity, daily_equity, symbol_diag, intents
+        return state.trades, state.equity, daily_equity, symbol_diag, intents
 
     async def _backtest_symbol_evaluated(
         self,
@@ -1218,11 +1345,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         formula_warmup_cache=None,
         *,
         warmup_prefix: bool = False,
+        fill_model=analysis_pb2.FILL_MODEL_SAME_BAR_CLOSE,
     ):
         """Run a stored/inline StrategyDefinition for one symbol via the shared evaluator.
 
         Drives entry/exit from StrategyEvaluator decisions (backtest/live parity).
-        Returns (trades, final_equity, daily_equity, diagnostics) — feature 064.
+        Returns (trades, final_equity, daily_equity, diagnostics, intents).
+        ``fill_model`` (feature 151) selects same-bar-close (legacy) vs next-bar-open execution;
+        defaults to legacy so existing callers/tests are byte-for-byte unchanged.
         """
         # feature 071: paged, plus a pre-window prefix when the caller supplied an explicit
         # start. Declared (never observed) — see app/services/warmup.py.
@@ -1272,16 +1402,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 )
             )
 
-        trades = []
-        equity = initial_equity
-        position = 0.0
-        entry_price = 0.0
-        entry_time = None
+        # feature 151: shared deferred-execution state machine (byte-identical to the legacy inline
+        # blocks in same-bar mode). state.trades/equity/position/entry_*/last_exit_time replace the
+        # former locals; _apply_fill is the sole opener/closer.
+        state = SimState(equity=initial_equity)
         # feature 071: daily_equity[j] pairs with diags[j]. On an unprefixed run (k == 0) index 0
         # is the seed point at bar 0, which is never simulated. With a pre-window prefix the first
         # simulated bar IS bar k, so there is no separate seed row — otherwise the two lists would
         # differ in length by one and every per-bar equity stamp would shift.
-        daily_equity = [equity] if trade_start_idx == 0 else []
+        daily_equity = [state.equity] if trade_start_idx == 0 else []
         # feature 150: per-in-window-bar signal intent (independent of position/cooldown/capital),
         # consumed only by the portfolio simulator; the legacy return/flow below is unchanged.
         intents: list[BarIntent] = []
@@ -1300,7 +1429,6 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             definition.exit_cooldown_days if definition.HasField("exit_cooldown_days") else None,
             self._cfg.get_int_present("analysis.strategy.default_exit_cooldown_days", 0),
         )
-        last_exit_time = None
 
         for i in range(max(1, trade_start_idx), n):
             bar = bars[i]
@@ -1316,95 +1444,82 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     decision.conviction,
                 )
             )
-            bar_action = (
-                analysis_pb2.BAR_ACTION_HOLD_LONG
-                if position > 0.0
-                else analysis_pb2.BAR_ACTION_HOLD_FLAT
+            # feature 151 (A): execute a pending fill due this bar (a next-bar-open deferral from a
+            # prior iteration); inert in same-bar mode. Cooldown is pinned to the fill-bar time
+            # inside _apply_fill (byte-identical to legacy when signal==fill).
+            action = _apply_fill(
+                state,
+                bars,
+                i,
+                fill_model,
+                commission,
+                slippage,
+                symbol,
+                cooldown_days,
+                exit_cooldown_days,
             )
+            # feature 151 (B) detect this bar's signal → queue a pending fill; (C) execute it if due
+            # this bar (same-bar mode). The cooldown gate lives in _apply_fill, so detection queues
+            # on the raw signal + position and _apply_fill rejects a cooldown-blocked fill (same
+            # no-trade outcome to the legacy in-condition cooldown check, in same-bar mode).
+            _set_pending(state, i, decision.entry, decision.exit, fill_model)
+            action2 = _apply_fill(
+                state,
+                bars,
+                i,
+                fill_model,
+                commission,
+                slippage,
+                symbol,
+                cooldown_days,
+                exit_cooldown_days,
+            )
+            if action2 is not None:
+                action = action2
 
-            if (
-                position == 0.0
-                and decision.entry
-                and not is_cooldown_active(
-                    last_exit_time, bar.time.ToDatetime(tzinfo=UTC), cooldown_days
+            bar_action = (
+                action
+                if action is not None
+                else (
+                    analysis_pb2.BAR_ACTION_HOLD_LONG
+                    if state.position > 0.0
+                    else analysis_pb2.BAR_ACTION_HOLD_FLAT
                 )
-            ):
-                fill_price = price * (1 + slippage)
-                shares = (equity * 0.95) / fill_price
-                cost = shares * fill_price * (1 + commission)
-                if cost <= equity:
-                    position = shares
-                    entry_price = fill_price
-                    entry_time = bar.time
-                    equity -= cost
-                    bar_action = analysis_pb2.BAR_ACTION_ENTER_LONG
-            elif (
-                position > 0.0
-                and decision.exit
-                and not is_cooldown_active(
-                    entry_time.ToDatetime(tzinfo=UTC) if entry_time is not None else None,
-                    bar.time.ToDatetime(tzinfo=UTC),
-                    exit_cooldown_days,
-                )
-            ):
-                fill_price = price * (1 - slippage)
-                proceeds = position * fill_price * (1 - commission)
-                pnl = proceeds - (position * entry_price * (1 + commission))
-                exit_ts = Timestamp()
-                exit_ts.CopyFrom(bar.time)
-                entry_ts = Timestamp()
-                entry_ts.CopyFrom(entry_time)
-                trades.append(
-                    analysis_pb2.TradeRecord(
-                        symbol=symbol,
-                        side="long",
-                        qty=position,
-                        entry_price=entry_price,
-                        exit_price=fill_price,
-                        pnl=pnl,
-                        entry_time=entry_ts,
-                        exit_time=exit_ts,
-                    )
-                )
-                equity += proceeds
-                position = 0.0
-                entry_price = 0.0
-                entry_time = None
-                last_exit_time = bar.time.ToDatetime(tzinfo=UTC)  # feature 069: cooldown clock
-                bar_action = analysis_pb2.BAR_ACTION_EXIT_LONG
-
+            )
             diags[i - trade_start_idx].action = bar_action
-            daily_equity.append(equity + position * price)
+            daily_equity.append(state.equity + state.position * price)
 
         # Close any open position at the last bar price
-        if position > 0.0 and bars:
+        if state.position > 0.0 and bars:
             last_bar = bars[-1]
             fill_price = last_bar.close * (1 - slippage)
-            proceeds = position * fill_price * (1 - commission)
-            pnl = proceeds - (position * entry_price * (1 + commission))
+            proceeds = state.position * fill_price * (1 - commission)
+            pnl = proceeds - (state.position * state.entry_price * (1 + commission))
             now_ts = Timestamp()
             now_ts.CopyFrom(last_bar.time)
             entry_ts2 = Timestamp()
-            entry_ts2.CopyFrom(entry_time)
-            trades.append(
+            entry_ts2.CopyFrom(state.entry_time)
+            state.trades.append(
                 analysis_pb2.TradeRecord(
                     symbol=symbol,
                     side="long",
-                    qty=position,
-                    entry_price=entry_price,
+                    qty=state.position,
+                    entry_price=state.entry_price,
                     exit_price=fill_price,
                     pnl=pnl,
                     entry_time=entry_ts2,
                     exit_time=now_ts,
                 )
             )
-            equity += proceeds
-            daily_equity[-1] = equity
+            state.equity += proceeds
+            daily_equity[-1] = state.equity
             diags[-1].action = analysis_pb2.BAR_ACTION_EXIT_LONG
 
-        symbol_diag = _finalize_symbol_diagnostics(symbol, diags, warmup_bars, trades, daily_equity)
+        symbol_diag = _finalize_symbol_diagnostics(
+            symbol, diags, warmup_bars, state.trades, daily_equity
+        )
         # feature 150: intents is the additive 5th element; legacy callers ignore it.
-        return trades, equity, daily_equity, symbol_diag, intents
+        return state.trades, state.equity, daily_equity, symbol_diag, intents
 
     async def _simulate_portfolio(
         self,
@@ -1873,6 +1988,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         feature 150: the resolved sizing model + params are persisted so a run is reproducible
         despite WatchConfig drift. ``sizing_mode`` is the enum **name** (mirrors the ``status``
         column); ``position_weight``/``max_concurrent`` are None on the legacy branch (NULL rows).
+        feature 151: ``fill_model`` is likewise the effective enum **name** read from the result.
         """
         if self._backtest_runs_repo is None:
             return
@@ -1898,6 +2014,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 sizing_mode=analysis_pb2.SizingMode.Name(result.sizing_mode),
                 position_weight=position_weight,
                 max_concurrent=max_concurrent,
+                fill_model=analysis_pb2.FillModel.Name(result.fill_model),
             )
         except Exception as e:
             log.warning("failed to persist backtest run history: %s", e)
@@ -3758,6 +3875,11 @@ def _row_to_backtest_summary(row: dict) -> "analysis_pb2.BacktestRunSummary":
         sizing_mode = analysis_pb2.SizingMode.Value(row.get("sizing_mode") or "")
     except ValueError:
         sizing_mode = analysis_pb2.SIZING_MODE_UNSPECIFIED
+    # feature 151: fill_model stored as the enum name; a null/pre-151 row → UNSPECIFIED.
+    try:
+        fill_model = analysis_pb2.FillModel.Value(row.get("fill_model") or "")
+    except ValueError:
+        fill_model = analysis_pb2.FILL_MODEL_UNSPECIFIED
     summary = analysis_pb2.BacktestRunSummary(
         backtest_id=row.get("backtest_id", ""),
         strategy_id=row.get("strategy_id", ""),
@@ -3773,6 +3895,7 @@ def _row_to_backtest_summary(row: dict) -> "analysis_pb2.BacktestRunSummary":
         overall_score=float(row["overall_score"]) if row.get("overall_score") is not None else 0.0,
         rating=row.get("rating") or "",
         sizing_mode=sizing_mode,  # feature 150
+        fill_model=fill_model,  # feature 151
     )
     completed = row.get("completed_at")
     if completed is not None:

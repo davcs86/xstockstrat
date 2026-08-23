@@ -228,7 +228,7 @@ nullable).
 
 ### Step 4 — service: shared _apply_fill deferred state machine + fill_model routing + persist
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -348,7 +348,7 @@ nullable).
 
 ### Step 5 — test: engine golden parity + next-bar behavior + alignment
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/` — add/modify backtest engine test module(s)
