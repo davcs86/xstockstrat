@@ -1330,6 +1330,12 @@ export interface StrategyComponent {
   /** used when kind == COMPONENT_KIND_CUSTOM_FORMULA */
   formulaId: string;
   params: { [key: string]: number };
+  /**
+   * optional benchmark/reference symbol (feature 152): when non-empty the component is
+   * computed on this symbol's bars (e.g. "VOO") and its output series is aligned onto the
+   * evaluated symbol's bar timeline; empty = computed on the evaluated symbol (unchanged).
+   */
+  sourceSymbol: string;
 }
 
 export interface StrategyComponent_ParamsEntry {
@@ -4897,7 +4903,14 @@ export const GetStrategyReportRequest: MessageFns<GetStrategyReportRequest> = {
 };
 
 function createBaseStrategyComponent(): StrategyComponent {
-  return { refName: "", kind: ComponentKind.COMPONENT_KIND_UNSPECIFIED, indicator: "", formulaId: "", params: {} };
+  return {
+    refName: "",
+    kind: ComponentKind.COMPONENT_KIND_UNSPECIFIED,
+    indicator: "",
+    formulaId: "",
+    params: {},
+    sourceSymbol: "",
+  };
 }
 
 export const StrategyComponent: MessageFns<StrategyComponent> = {
@@ -4917,6 +4930,9 @@ export const StrategyComponent: MessageFns<StrategyComponent> = {
     globalThis.Object.entries(message.params).forEach(([key, value]: [string, number]) => {
       StrategyComponent_ParamsEntry.encode({ key: key as any, value }, writer.uint32(42).fork()).join();
     });
+    if (message.sourceSymbol !== "") {
+      writer.uint32(50).string(message.sourceSymbol);
+    }
     return writer;
   },
 
@@ -4970,6 +4986,14 @@ export const StrategyComponent: MessageFns<StrategyComponent> = {
           }
           continue;
         }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.sourceSymbol = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -5002,6 +5026,11 @@ export const StrategyComponent: MessageFns<StrategyComponent> = {
           {},
         )
         : {},
+      sourceSymbol: isSet(object.sourceSymbol)
+        ? globalThis.String(object.sourceSymbol)
+        : isSet(object.source_symbol)
+        ? globalThis.String(object.source_symbol)
+        : "",
     };
   },
 
@@ -5028,6 +5057,9 @@ export const StrategyComponent: MessageFns<StrategyComponent> = {
         });
       }
     }
+    if (message.sourceSymbol !== "") {
+      obj.sourceSymbol = message.sourceSymbol;
+    }
     return obj;
   },
 
@@ -5049,6 +5081,7 @@ export const StrategyComponent: MessageFns<StrategyComponent> = {
       },
       {},
     );
+    message.sourceSymbol = object.sourceSymbol ?? "";
     return message;
   },
 };

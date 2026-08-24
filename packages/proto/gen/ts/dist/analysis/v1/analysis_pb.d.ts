@@ -740,6 +740,14 @@ export type StrategyComponent = Message<"xstockstrat.analysis.v1.StrategyCompone
     params: {
         [key: string]: number;
     };
+    /**
+     * optional benchmark/reference symbol (feature 152): when non-empty the component is
+     * computed on this symbol's bars (e.g. "VOO") and its output series is aligned onto the
+     * evaluated symbol's bar timeline; empty = computed on the evaluated symbol (unchanged).
+     *
+     * @generated from field: string source_symbol = 6;
+     */
+    sourceSymbol: string;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.StrategyComponent.

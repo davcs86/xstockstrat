@@ -2064,3 +2064,19 @@ reusing.
   object too; validate at the schema edge and normalize at the tool edge, but keep grammar validation
   in the single backend owner. Candidate to fold into the `xstockstrat-agent` MCP-tool-contract review
   focus.
+
+### 2026-08-24 — market-regime-benchmark-operand — proto/fingerprint-stability
+- **Insight**: When adding an OPTIONAL field to a proto message whose serialized JSON feeds a
+  definition **fingerprint** (here `StrategyComponent.source_symbol=6` → `definition_json` →
+  `_definition_fingerprint`, `services/xstockstrat-analysis/app/handlers/servicer.py:3994`), use a
+  **plain** proto3 scalar, NEVER proto3 `optional`. `MessageToDict(preserving_proto_field_name=True)`
+  omits an unset plain scalar but EMITS an explicitly-set empty (`"source_symbol":""`) for an
+  `optional` field carrying presence — which silently shifts the fingerprint of every pre-existing
+  row, invalidating its accumulated evidence/derived grade and breaking a "byte-identical for empty"
+  back-compat guarantee. Branch on truthiness (`if comp.source_symbol:`) for the today-path.
+- **Evidence**: feature 152 design.md § Chosen Approach / Rejected Alternatives; write path
+  `servicer.py:2232-2234`; fingerprint `servicer.py:3991-3994`; caught by the design-adversary in R1.
+- **Rule it implies**: an additive proto field on a fingerprinted/hashed message must be plain (not
+  `optional`) unless the fingerprint explicitly excludes it; pair the addition with a fingerprint
+  byte-identity regression test. Sibling to the C-10 "shared-consumer" family — here the shared
+  consumer is the fingerprint.

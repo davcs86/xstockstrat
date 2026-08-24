@@ -65,6 +65,21 @@ parameter sweep and re-enable it at the end so it never evaluates at a config yo
 under this partial-merge contract — send only it to change it, and use `clear_fields` to revert it
 to the platform default.
 
+**Benchmark / market-regime operand (feature 152).** A component may carry an optional
+`source_symbol` (a fixed reference ticker, e.g. `"VOO"`). When set, that component is computed on the
+**benchmark's** bars instead of the evaluated symbol's, and its output series is aligned onto the
+evaluated symbol's bar timeline — so a rule can gate any symbol's entries/exits on the broad market.
+Example: buy dips only when VOO's 200-day is rising —
+`components=[{"ref_name":"mkt","kind":"formula","formula_id":"<sma_slope>","params":{"period":200,"lookback":20},"source_symbol":"VOO"}]`
+with an entry leaf `{"fn":">","lhs":"mkt","rhs":0}`. Omitted/empty `source_symbol` = computed on the
+evaluated symbol (unchanged, byte-identical). It is normalized (uppercase/trim) server-side and is
+**scoring-relevant** — changing a benchmark clears the strategy's derived grade (like any component
+edit). A bar the benchmark lacks (different halt/holiday calendar) makes that leaf read **hold/false**
+for that bar — no forward-fill, no look-ahead. If the benchmark lacks enough history to warm the
+component, the backtest returns `BACKTEST_STATUS_INSUFFICIENT_DATA` naming the **benchmark** symbol in
+`coverage_gaps` — `trigger_backfill` the benchmark and re-run. v1 covers a single reference symbol per
+component; true universe breadth (e.g. "% of a universe above its 200-day") is a deferred follow-on.
+
 **Rule encoding.** `entry_rule`/`exit_rule` accept **either** a JSON string **or** a JSON object
 (dict) — an MCP client that pre-parses JSON arguments may pass the object directly; the tool
 serializes a dict to the canonical JSON string before sending. Passing a rule both as a value and

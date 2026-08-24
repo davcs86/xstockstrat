@@ -677,7 +677,44 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 active_definition, formula_warmup_cache, propagation_meta, formula_deleted_cache
             )
 
-        for symbol in request.symbols:
+        # feature 152: preload benchmark (source_symbol) bars ONCE per run — a benchmark
+        # (e.g. VOO) is shared by every evaluated symbol, so it is fetched a single time
+        # (window + warmup) and reused across the per-symbol loop. A benchmark warmup
+        # shortfall is a run-wide coverage gap naming the benchmark (AC-4); the run then
+        # reports INSUFFICIENT_DATA rather than evaluating a gate it cannot resolve.
+        benchmark_bars = None
+        symbols_to_run = list(request.symbols)
+        if active_definition is not None:
+            try:
+                benchmark_bars = await self._load_benchmark_bars(
+                    active_definition,
+                    request.range,
+                    formula_warmup_cache,
+                    propagation_meta,
+                    warmup_prefix=start_set,
+                )
+            except _InsufficientData as ins:
+                log.warning(
+                    "backtest benchmark %s insufficient data: have %d, need %d",
+                    ins.symbol,
+                    ins.bars_have,
+                    ins.bars_need,
+                )
+                coverage_gaps.append(
+                    analysis_pb2.CoverageGap(
+                        symbol=ins.symbol,
+                        timeframe=common_pb2.Timeframe.TIMEFRAME_1DAY,
+                        requested_range=request.range,
+                        bars_have=ins.bars_have,
+                        bars_need=ins.bars_need,
+                        gap=ins.gap_range if ins.gap_range is not None else request.range,
+                    )
+                )
+                # No evaluated symbol can resolve the benchmark gate — skip the loop; the
+                # status gate below reports INSUFFICIENT_DATA.
+                symbols_to_run = []
+
+        for symbol in symbols_to_run:
             try:
                 if active_definition is not None:
                     (
@@ -700,6 +737,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         # mutates request.range in place and destroys the distinction.
                         warmup_prefix=start_set,
                         fill_model=effective_fill_model,  # feature 151
+                        benchmark_bars=benchmark_bars,  # feature 152
                     )
                 else:
                     (
@@ -1333,6 +1371,107 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # feature 150: intents is the additive 5th element; legacy callers ignore it.
         return state.trades, state.equity, daily_equity, symbol_diag, intents
 
+    async def _load_benchmark_bars(
+        self,
+        definition,
+        range_msg,
+        formula_warmup_cache,
+        propagation_meta,
+        warmup_prefix: bool,
+    ):
+        """Feature 152 — preload bars for every distinct ``source_symbol`` referenced by a
+        component, each fetched over the same window plus its own warmup prefix (so the
+        benchmark indicator/formula is warmed from before ``start`` exactly like the
+        evaluated symbol — the reproducible-window guarantee).
+
+        Returns ``{source_symbol: [bars]}`` or ``None`` when no component sets a
+        ``source_symbol`` (the common case — the evaluate path then skips all benchmark
+        work). A benchmark warmup shortfall propagates as ``_InsufficientData(source_symbol,
+        …)`` so the caller reports a ``CoverageGap`` naming the benchmark.
+        """
+        source_symbols = sorted({c.source_symbol for c in definition.components if c.source_symbol})
+        if not source_symbols:
+            return None
+        out: dict = {}
+        for sym in source_symbols:
+            # Slice the definition to just this symbol's components (keep the rules) so
+            # required_prefix_bars sizes warmup on the benchmark's own components. The
+            # ref-walk tolerates the missing non-benchmark refs (ref_to_comp.get→None).
+            sliced = analysis_pb2.StrategyDefinition()
+            sliced.CopyFrom(definition)
+            del sliced.components[:]
+            sliced.components.extend(c for c in definition.components if c.source_symbol == sym)
+            required_prefix = (
+                warmup.required_prefix_bars(sliced, formula_warmup_cache) if warmup_prefix else 0
+            )
+            bars, _trade_start_idx = await self._resolve_prefixed_bars(
+                sym, range_msg, required_prefix, propagation_meta
+            )
+            out[sym] = bars
+        return out
+
+    async def _load_benchmark_bars_windowed(
+        self, definition, range_msg, propagation_meta, *, cache=None, sem=None
+    ):
+        """Feature 152 — benchmark (source_symbol) bars for the readiness / opportunities
+        surfaces, fetched over the SAME fixed window as the evaluated symbol (those surfaces
+        use a plain lookback with no warm-up prefix, so the benchmark matches — no
+        prefix-widening here, unlike the backtest ``_load_benchmark_bars``).
+
+        ``cache`` dedups benchmark loads across an opportunities compute pass — one VOO fetch
+        for every evaluated symbol that references it. ``sem`` bounds fetch concurrency
+        (feature 141's ``_bars_fetch_sem``). A failed fetch caches ``[]`` (→ the benchmark
+        reads as a gap → hold), never raising. Returns ``{source_symbol: [bars]}`` or ``None``.
+        """
+        source_symbols = sorted({c.source_symbol for c in definition.components if c.source_symbol})
+        if not source_symbols:
+            return None
+        out: dict = {}
+        for sym in source_symbols:
+            if cache is not None and sym in cache:
+                bars = cache[sym]
+            else:
+                try:
+                    if sem is not None:
+                        async with sem:
+                            bars = await self._fetch_bars_paged(sym, range_msg, propagation_meta)
+                    else:
+                        bars = await self._fetch_bars_paged(sym, range_msg, propagation_meta)
+                except Exception as e:  # noqa: BLE001 — benchmark fetch is best-effort
+                    log.warning("benchmark bars fetch failed for %s: %s", sym, e)
+                    bars = []
+                if cache is not None:
+                    cache[sym] = bars
+            if bars:
+                out[sym] = bars
+        return out or None
+
+    async def _benchmark_series_bars(self, comp, times, evaluator, propagation_meta):
+        """Feature 152 — fetch a single benchmark component's bars for GetIndicatorSeries,
+        covering the caller's chart window (``times``) widened by that component's warmup
+        (builtin lookback or the declared formula ``warmup_period`` via
+        ``evaluator.declared_formula_warmups``). Best-effort: on any fetch error return ``[]``
+        so the chart degrades to a warm-up/gap head rather than failing the component."""
+        if not times:
+            return []
+        sliced = analysis_pb2.StrategyDefinition(
+            components=[comp],
+            entry_rule=json.dumps({"fn": ">", "lhs": comp.ref_name, "rhs": 0}),
+        )
+        formula_cache = await evaluator.declared_formula_warmups(sliced)
+        required_prefix = warmup.required_prefix_bars(sliced, formula_cache)
+        extra_days = warmup.prefix_calendar_days(required_prefix) if required_prefix else 0
+        range_msg = common_pb2.TimeRange()
+        range_msg.start.seconds = max(0, times[0].seconds - extra_days * 86_400)
+        range_msg.end.CopyFrom(times[-1])
+        try:
+            return await self._fetch_bars_paged(comp.source_symbol, range_msg, propagation_meta)
+        except Exception as e:  # noqa: BLE001 — chart benchmark fetch is best-effort
+            log.warning(
+                "GetIndicatorSeries benchmark fetch failed for %s: %s", comp.source_symbol, e
+            )
+            return []
+
     async def _backtest_symbol_evaluated(
         self,
         symbol,
@@ -1346,6 +1485,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         *,
         warmup_prefix: bool = False,
         fill_model=analysis_pb2.FILL_MODEL_SAME_BAR_CLOSE,
+        benchmark_bars=None,
     ):
         """Run a stored/inline StrategyDefinition for one symbol via the shared evaluator.
 
@@ -1368,7 +1508,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         evaluator = StrategyEvaluator(self._indicators, propagation_meta)
         # feature 064: also capture the computed component series for diagnostics.
-        decisions, component_series = await evaluator.evaluate_with_series(definition, bars, None)
+        # feature 152: benchmark_bars ({source_symbol: [bars]}) is preloaded once per run
+        # by the caller and shared across evaluated symbols; a source_symbol component
+        # resolves against those bars via the evaluator's _assemble_component_series.
+        decisions, component_series = await evaluator.evaluate_with_series(
+            definition, bars, None, benchmark_bars
+        )
 
         n = len(bars)
         warmup_bars_full = await self._compute_evaluated_warmup(
@@ -2209,6 +2354,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         definition = request.definition
         op = request.operation
 
+        # feature 152: normalize benchmark source_symbol server-side (uppercase/trim, empty →
+        # unset) on every write path, before REGISTER's MessageToDict and UPDATE's merge/replace
+        # both serialize this proto — never client-side (bypassable) and never two sites to drift.
+        _normalize_source_symbols(definition)
+
         if op == analysis_pb2.STRATEGY_OPERATION_REGISTER:
             await self._validate_definition_proto(definition, context)
             # Feature 133: the owner is server-authoritative — set from the header, never trusted
@@ -2630,6 +2780,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         rule = "exit" if request.rule == analysis_pb2.READINESS_RULE_EXIT else "entry"
         evaluator = StrategyEvaluator(self._indicators, propagation_meta)
         range_msg = _recent_range(_READINESS_LOOKBACK_DAYS)
+        # feature 152: one benchmark load for the whole request (shared across request.symbols).
+        benchmark_bars = await self._load_benchmark_bars_windowed(
+            definition, range_msg, propagation_meta
+        )
         readiness = []
         for symbol in request.symbols:
             fetch_ok = True
@@ -2648,7 +2802,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     symbol,
                     request.strategy_id,
                 )
-            trace = await evaluator.evaluate_conditions_traced(definition, bars, symbol, rule=rule)
+            trace = await evaluator.evaluate_conditions_traced(
+                definition, bars, symbol, rule=rule, benchmark_bars=benchmark_bars
+            )
             readiness.append(_readiness_to_proto(trace))
         return analysis_pb2.EvaluateReadinessResponse(readiness=readiness)
 
@@ -2726,10 +2882,29 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         component_series = []
         # Sequential loop (no gather) so the singleton semaphore bounds cross-request total
         # in-flight compute, not intra-request.
+        # feature 152: benchmark (source_symbol) components are computed on the benchmark's own
+        # bars (fetched server-side over the chart window + warmup) and aligned onto the caller's
+        # request.times; a plain component keeps the caller-supplied closes (no re-fetch).
+        eval_dates = (
+            [t.ToDatetime(tzinfo=UTC).date() for t in request.times]
+            if any(c.source_symbol for c in definition.components)
+            else None
+        )
         for comp in definition.components:
             try:
                 async with self._component_series_sem:
-                    series_map = await evaluator._compute_component(comp, closes)
+                    if comp.source_symbol:
+                        bench_bars = await self._benchmark_series_bars(
+                            comp, list(request.times), evaluator, propagation_meta
+                        )
+                        series_map = await evaluator._assemble_component_series(
+                            comp,
+                            closes,
+                            eval_dates,
+                            {comp.source_symbol: bench_bars} if bench_bars else {},
+                        )
+                    else:
+                        series_map = await evaluator._compute_component(comp, closes)
                 named = [
                     analysis_pb2.NamedSeries(
                         name=name,
@@ -3146,6 +3321,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Approach) — every candidate still resolves to a real trace or the 0/0 empty-readiness
         # fallback, never an unhandled exception.
         bars_by_symbol: dict[str, list] = {}
+        # feature 152: benchmark (source_symbol) bars deduped once per compute pass — one VOO
+        # fetch shared across every evaluated symbol/strategy, bounded by _bars_fetch_sem.
+        benchmark_bars_cache: dict[str, list] = {}
         session_end_seconds = 0
         window_hours = self._cfg.get_int("analysis.opportunity.valid_window_hours", 24)
 
@@ -3179,10 +3357,18 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     if bars:
                         newest = bars[-1].time.seconds
                         session_end_seconds = max(session_end_seconds, newest)
+                    # feature 152: benchmark bars for this definition, deduped once per pass.
+                    benchmark_bars = await self._load_benchmark_bars_windowed(
+                        definition,
+                        range_msg,
+                        propagation_meta,
+                        cache=benchmark_bars_cache,
+                        sem=self._bars_fetch_sem,
+                    )
                     # Held + attributed → exit-rule trace (FR-8); else entry-rule trace.
                     rule = "exit" if c["is_held"] else "entry"
                     readiness = await evaluator.evaluate_conditions_traced(
-                        definition, bars, sym, rule=rule
+                        definition, bars, sym, rule=rule, benchmark_bars=benchmark_bars
                     )
                     if c["is_held"]:
                         total = readiness["total_conditions"]
@@ -3567,6 +3753,19 @@ def _normalize_symbol(symbol: str) -> str:
     """Single canonicalizer (feature 097) feeding every Universe drain and the opportunity_key —
     uppercase + trim so `` aapl`` / ``AAPL`` collapse to one candidate/key."""
     return (symbol or "").strip().upper()
+
+
+def _normalize_source_symbols(definition) -> None:
+    """Feature 152 — canonicalize every component's ``source_symbol`` in place: trimmed +
+    uppercased, empty-after-trim collapses to ``""`` (unset → evaluated-symbol behavior).
+
+    Server-authoritative: applied on every ManageStrategy write path (REGISTER + UPDATE) so a
+    benchmark written as ``"voo "`` and ``"VOO"`` can never fingerprint as two different
+    strategies, and a whitespace-only value never persists as a bogus benchmark. Reuses the
+    ``_normalize_symbol`` canonicalizer so it stays identical to the universe/opportunity-key
+    normalization."""
+    for comp in definition.components:
+        comp.source_symbol = _normalize_symbol(comp.source_symbol)
 
 
 def _opportunity_key(user_id: str, symbol: str, strategy_id: str) -> str:

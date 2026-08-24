@@ -469,7 +469,7 @@ gate.
 | `operation` | `string` | Yes | `"register"`, `"update"`, `"deactivate"`, or `"reactivate"` |
 | `strategy_id` | `string` | Yes | Lowercase/underscore identifier, e.g. `"sma_crossover"` |
 | `display_name` | `string` | No | Human-readable name |
-| `components` | `object[]` | No | `{ref_name, kind ("builtin"\|"formula"), indicator, formula_id, params}` |
+| `components` | `object[]` | No | `{ref_name, kind ("builtin"\|"formula"), indicator, formula_id, params, source_symbol}`. `source_symbol` (optional, feature 152) — a fixed benchmark/reference ticker (e.g. `"VOO"`) the component is computed on instead of the evaluated symbol, aligned onto the evaluated symbol's timeline (cross-symbol "market-regime" gates); empty = evaluated symbol. Normalized uppercase/trim server-side; scoring-relevant (enters the definition fingerprint). |
 | `entry_rule` | `string` or `object` | No | Condition tree as a JSON string **or** a JSON object (dict) — a dict is serialized to the canonical JSON string before forwarding |
 | `exit_rule` | `string` or `object` | No | Condition tree as a JSON string **or** a JSON object (dict) — a dict is serialized to the canonical JSON string before forwarding |
 | `signal_params` | `object` | No | Optional signal-weighting params |

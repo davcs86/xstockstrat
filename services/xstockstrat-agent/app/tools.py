@@ -605,11 +605,19 @@ def register_tools(server: MCPServer) -> None:
         operation: 'register' | 'update' | 'deactivate' | 'reactivate'.
         strategy_id: lowercase/underscore identifier (e.g. 'sma_crossover').
         display_name: human-readable name.
-        components: list of {ref_name, kind ('builtin'|'formula'), indicator, formula_id, params}.
+        components: list of {ref_name, kind ('builtin'|'formula'), indicator, formula_id, params,
+            source_symbol}.
             kind='builtin': indicator must be one of the built-in enum ATR, BB, EMA, MACD, RSI,
             SMA, STOCH, VWAP (case-insensitive). For an indicator outside this set (e.g. a
             z-score or efficiency-ratio calculation), register a custom formula first via
             manage_formula and reference it here as kind='formula', formula_id=<id>.
+            source_symbol (optional, feature 152): a fixed benchmark/reference ticker (e.g.
+            'VOO'). When set, the component is computed on THAT symbol's bars and its output is
+            aligned onto the evaluated symbol's bar timeline — enabling cross-symbol
+            'market-regime' gates like "buy only when VOO's 200-day is rising" (mkt > 0 where
+            mkt is an SMA-slope on source_symbol='VOO'). Omitted/empty = computed on the
+            evaluated symbol (unchanged). Normalized (uppercase/trim) server-side; a bar the
+            benchmark lacks evaluates that leaf to hold/false (no forward-fill, no look-ahead).
 
         entry_rule / exit_rule: condition trees, accepted as EITHER a JSON string OR a JSON
             object (dict). A dict is serialized to the canonical JSON string (json.dumps) before
