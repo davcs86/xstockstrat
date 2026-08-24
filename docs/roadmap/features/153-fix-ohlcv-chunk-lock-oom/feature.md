@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-24 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report 2026-08-24-ohlcv-lock-table-exhaustion-recurrence-defect.md |
+| 2026-08-24 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings; overlap CLEAN). Consumer-surface warning fixed; other 2 deferred to design |
 
 ---
 
@@ -35,5 +36,6 @@ whose fix only covered `_compute_opportunities`; now also failing from `Evaluate
 
 ## Next Action
 
-`/sdd-design fix-ohlcv-chunk-lock-oom` — recommended design depth: **full** (DB migration + affected
-services ≥ 2). See context.md.
+`/sdd-design fix-ohlcv-chunk-lock-oom` (full mode) — recon + adversarial debate; must resolve the two
+deferred open questions (re-chunk existing vs. future-only; `max_locks_per_transaction` settability).
+See context.md.

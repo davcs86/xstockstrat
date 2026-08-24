@@ -52,3 +52,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   brief downtime?
 - Should the `EvaluateReadiness` (and live-loop) 400-day paths get 141's dedup/semaphore guard in the
   same fix, or is the migration + lock bump sufficient on its own?
+
+## Session 2026-08-24 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready. Verdict: PASS WITH WARNINGS (no blockers); overlap CLEAN.
+- Criteria pass (spec-reviewer): every cited file:line verified; both service names match the registry;
+  `max_locks_per_transaction` correctly characterized as a Postgres server parameter (not a WatchConfig
+  app key — no C-05/F-07 breach); new-migration-not-editing-001 respects F-01.
+- Overlap pass (feature-overlap): CLEAN — no in-flight collisions. marketdata migration **004** is the free
+  next number (trunk tops out at 003). Features 141 (`_bars_fetch_sem` guard) and 143 (daily-bars-only) are
+  **launched** reuse targets, not concurrent collisions; backtest 150/151 touch a disjoint servicer.py region.
+  No merge-order entry required. Re-derive the migration NNN from the merged tree at /sdd-spec time (ledger practice).
+- Warnings and disposition:
+  - [x] C-14 consumer surface — **FIXED**: added `## Consumer Surface(s): None — internal/platform-only` to product-spec.
+  - [ ] Criterion 9 — two unchecked Fix-Scope items + two open questions (re-chunk existing vs. future-only;
+        is `max_locks_per_transaction` settable via `db-cluster-update-psql-config`). **Deferred to /sdd-design (full)**
+        by design — the product→spec-ready gate precedes design; design MUST close both before /sdd-spec.
+  - [ ] C-15 — acceptance scenarios use qualitative phrasing (chunk counts / interval values) because the exact
+        target interval is a design decision; **/sdd-spec pins the concrete values** once design picks the interval.
