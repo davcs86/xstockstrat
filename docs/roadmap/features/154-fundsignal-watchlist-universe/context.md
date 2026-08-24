@@ -185,3 +185,23 @@
 - Covers AC-3..AC-9 (+ a C-03 metadata-append test): watchlists/both/explicit resolution, both+outage→CSV, watchlists-outage→empty, FMP-active cap w/ drop-log, non-FMP full union, unknown-provider conservative cap.
 - Files modified: `tests/test_fundsignal_loop.py`
 - Deviations: none.
+
+### Step 7 — docs: service CLAUDE.md deltas + governance records [done]
+- analysis `CLAUDE.md`: § Fundamentals Signal Producer gains a Universe bullet + corrected `universe_source`/`max_symbols_per_run` config rows (cross-user union; FMP-gated cap; 2nd marketdata watcher). No stale "falls back to explicit" claim remains.
+- portfolio `CLAUDE.md`: documents `ListAllWatchlistSymbols` + portfolio's first authz gate.
+- portfolio `docs/context-constitution.md`: new **PORTFOLIO-8** (first cross-user enumeration, x-internal-caller-gated, not admin bit).
+- `docs/patterns/config-governance.md`: feature-154 entry recording the analysis→marketdata cross-namespace boot-frozen WatchConfig subscription (first cross-namespace stream sub).
+- **Teardown**: `/context-scrubber` (context-forge plugin) is **not available** in this session — noted here and in the PR body per the root CLAUDE.md teardown rule (config `.agents/context-forge.json` exists, but no scrubber command/skill is loaded).
+- Files modified: 4 docs. Deviations: none.
+
+## Session 2026-08-24 — sdd-execute (sequential) — COMPLETE
+**Steps this session**: 1–7 (all)
+**Progress**: 7 done / 7 total
+**Stopped at**: all complete → status code-completed
+**Next**: merge PR #1009 into main-dev (CI green), then launch
+
+Accountability:
+- Out-of-scope changes: none.
+- Open questions / items: none.
+- Unaddressed review warnings: none (both impl-spec warnings fixed pre-execution).
+- Deviations: D-1 (host codegen toolchain — Docker daemon unavailable; CI-equivalent, versions match Dockerfile.codegen); context-scrubber plugin unavailable (teardown noted in PR).

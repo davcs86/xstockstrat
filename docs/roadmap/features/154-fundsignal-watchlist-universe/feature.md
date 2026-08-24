@@ -17,6 +17,7 @@
 | 2026-08-24 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (proto RPC) done |
 | 2026-08-24 | in-progress | /sdd-execute | Steps 2–4 done (codegen, portfolio RPC + authz gate + tests, red→green) |
 | 2026-08-24 | in-progress | /sdd-execute | Steps 5–6 done (analysis _resolve_universe + FMP-gating + 2nd watcher + tests, red→green) |
+| 2026-08-24 | `in-progress` → `code-completed` | /sdd-execute | Step 7 (docs + PORTFOLIO-8 + config-governance) done; all 7 steps complete |
 
 ---
 

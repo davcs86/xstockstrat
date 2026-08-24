@@ -1,6 +1,6 @@
 # Implementation Spec: fundsignal-watchlist-universe
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-08-24
 **Feature**: `docs/roadmap/features/154-fundsignal-watchlist-universe/feature.md`
 **Total Steps**: 7
@@ -367,7 +367,7 @@ All new cases pass; coverage ≥ 40%; lint + format clean.
 
 ### Step 7 — docs: service CLAUDE.md deltas + governance records
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` + service docs
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify (`universe_source` now resolves the real cross-user union; new boot-frozen `marketdata`-namespace `ConfigWatcher`; FMP-gated `max_symbols`)
