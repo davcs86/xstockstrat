@@ -68,7 +68,7 @@ recon.md:116-119):
 
 ### Step 1 — migration: widen the ohlcv chunk interval to 30 days (Piece B)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/migrations/004_widen_ohlcv_chunk_interval.up.sql` — create

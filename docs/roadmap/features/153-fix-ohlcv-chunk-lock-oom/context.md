@@ -187,3 +187,22 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   (implementation-ready) shares the marketdata dir but edits disjoint Go files (no migration/doc overlap).
   No merge-order entry required.
 - Unresolved ✗ / ⚠ carried into execution: none.
+
+## Session 2026-08-24 — sdd-execute (sequential)
+
+- Branch boot-correction (141 precedent): this harness session develops on `claude/do-logs-shared-memory-0o994w`
+  (task directive), NOT `feature/fix-ohlcv-chunk-lock-oom`. Steps commit directly to the claude branch; the
+  existing PR #1008 (claude/do-logs-shared-memory-0o994w → main-dev) is the integration PR.
+- Tooling setup: none required (migration verified offline; docs steps need no toolchain).
+
+### Step 1 — migration 004 widen ohlcv chunk interval to 30d [done]
+- Created 004_widen_ohlcv_chunk_interval.{up,down}.sql: up `set_chunk_time_interval('marketdata.ohlcv','30 days')`,
+  down resets to `'1 day'`. Metadata-only/future-only; no DO-block pre-flight, no remediation-log table (003 carried
+  those only because it moved rows). Mirrors 003's no-explicit-BEGIN/COMMIT convention.
+- Verified OFFLINE (HARD CONSTRAINT — never starts a DB): both files exist with correct next NNN=004; up sets 30d,
+  down reverses to 1d; neither file contains a real DO-block / CREATE TABLE / explicit BEGIN|COMMIT. Live
+  apply+rollback + dimension assert runs at the db-migrator PRE_DEPLOY job (.do/app.yaml) / CI.
+- Minor in-scope tidy: reworded an up.sql comment so it no longer contains the literal dollar-quote token in prose
+  (avoids a naive grep/parser false-positive) — no SQL/logic change.
+- Files modified: services/xstockstrat-marketdata/migrations/004_widen_ohlcv_chunk_interval.{up,down}.sql
+- Deviations: none. (Offline migration verification is the repo's F-05 bar, not a deviation.)
