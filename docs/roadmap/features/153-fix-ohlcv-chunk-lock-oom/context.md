@@ -227,3 +227,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Deviations: none.
 
 All 3 steps done. Status: in-progress → code-completed.
+
+## Session 2026-08-24 — sdd-execute (sequential) — session summary
+**Steps this session**: 1, 2, 3
+**Progress**: 3 done / 3 total
+**Stopped at**: all complete (code-completed)
+**Feature-end handling**: merge-order gate — no entry for 153, proceed. C-16 scenario promotion — SKIPPED with
+reason (internal reliability fix restoring existing GetBars/readiness behavior; AC-1 is an arithmetic lock-budget
+invariant living in the runbook, AC-2 is migration mechanics — neither is a durable business-rule scenario for the
+suites). Integration PR: existing PR #1008 (claude/do-logs-shared-memory-0o994w → main-dev) updated to the full
+integration PR body. `/context-scrubber` teardown unavailable this session (noted in the PR body).
+**Next**: merge PR #1008 when CI is green + reviewers (DBA + marketdata owner) approve; the fix rides the next
+/promote cycle to production. Migration 004 applies at the db-migrator PRE_DEPLOY job.
+
+Accountability:
+- Out-of-scope changes: none.
+- Open questions / items: full AC-1 staging confirmation (a 400-day readiness scan with 0 SQLSTATE 53200) pends the
+  next readiness cycle — Piece A is applied and holding; last 53200 was 19:51 UTC pre-change.
+- Unaddressed review warnings: none (impl-spec review PASSed, 0 warnings).
