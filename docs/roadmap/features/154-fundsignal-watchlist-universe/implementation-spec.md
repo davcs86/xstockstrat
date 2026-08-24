@@ -242,7 +242,7 @@ All new cases pass; lint clean. (New logic is in CI-coverage-excluded packages �
 
 ### Step 5 — service (analysis): `_resolve_universe` rewrite + FMP-gated truncation + marketdata config watcher
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/main.py` — modify (second boot-frozen `ConfigWatcher(namespace="marketdata")`; pass into `FundamentalsSignalLoop`)
@@ -329,7 +329,7 @@ grep -n 'list(metadata) + \[' app/engine/fundsignal_loop.py   # append-don't-rep
 
 ### Step 6 — test (analysis): universe resolution across all sources + provider gating + outage
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_fundsignal_loop.py` — modify (extend `_make_loop`/`_make_cfg`; add resolution + gating + outage tests)

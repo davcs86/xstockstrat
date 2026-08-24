@@ -21,6 +21,7 @@ import grpc
 from gen.ingest.v1 import ingest_pb2
 from gen.marketdata.v1 import marketdata_pb2
 from gen.notify.v1 import notify_pb2
+from gen.portfolio.v1 import portfolio_pb2
 from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
 
@@ -65,6 +66,7 @@ class FundamentalsSignalLoop:
         indicators_stub,
         notify_stub,
         ledger_stub,
+        md_config_watcher=None,
     ):
         self._cfg = config_watcher
         self._db = db_pool
@@ -76,6 +78,18 @@ class FundamentalsSignalLoop:
         self._ledger = ledger_stub
         self._lock = asyncio.Lock()
         self._source_registered = False
+        # FMP-gated truncation (feature 154): the max_symbols cap exists solely to protect FMP's
+        # daily request budget, so it applies ONLY when FMP is the active fundamentals provider.
+        # The provider is read boot-frozen from the marketdata namespace (marketdata itself freezes
+        # it at boot — never diverge mid-process), via a second ConfigWatcher. Unknown/absent
+        # provider selects the conservative capped path WITHOUT baking in a provider literal.
+        provider = (
+            md_config_watcher.get_str("marketdata.fundamentals.provider", "")
+            if md_config_watcher
+            else ""
+        )
+        self._fmp_active = provider == "fmp"
+        self._provider_known = provider != ""
 
     # ── scheduler ────────────────────────────────────────────────────────────
 
@@ -102,10 +116,10 @@ class FundamentalsSignalLoop:
         source_slug = self._cfg.get_str("analysis.fundsignal.source_slug", "fundamentals")
         as_of_date = datetime.now(UTC).date()
 
-        # Universe (dedup + cap).
+        # Universe (dedup, then FMP-gated cap — feature 154).
         max_symbols = self._cfg.get_int("analysis.fundsignal.max_symbols_per_run", default=200)
         universe = override_symbols or await self._resolve_universe(metadata)
-        universe = self._dedup(universe)[:max_symbols]
+        universe = self._apply_symbol_cap(self._dedup(universe), max_symbols)
 
         await self._db.execute(
             "INSERT INTO analysis.fundsignal_runs (run_id, status, symbols_total) "
@@ -201,21 +215,65 @@ class FundamentalsSignalLoop:
     # ── helpers (Step 8) ─────────────────────────────────────────────────────
 
     async def _resolve_universe(self, metadata):
-        """Distinct symbol universe per analysis.fundsignal.universe_source (FR-3).
+        """Distinct symbol universe per analysis.fundsignal.universe_source (FR-3, feature 154).
 
-        watchlists global-union is pending a global portfolio RPC (058's ListWatchlists is
-        user-scoped), so watchlists/both currently fall back to the explicit CSV and log it.
+        - explicit    → the explicit_symbols CSV only (the enumeration RPC is not called).
+        - watchlists  → the cross-user union of user watchlist symbols (portfolio
+                        ListAllWatchlistSymbols).
+        - both        → that union ∪ the explicit CSV.
+        A portfolio enumeration failure degrades to an empty union — never crashing the cycle
+        (FR-6); for `both` the explicit CSV is still returned.
         """
         source = self._cfg.get_str("analysis.fundsignal.universe_source", "watchlists")
         explicit = self._parse_csv(self._cfg.get_str("analysis.fundsignal.explicit_symbols", ""))
         if source == "explicit":
             return explicit
-        # watchlists | both — no global watchlist union available yet.
-        log.info(
-            "fundsignal: universe_source=%s but no global watchlist RPC — using explicit fallback",
-            source,
+        enumerated = await self._enumerate_watchlist_union(metadata)
+        if source == "both":
+            return enumerated + explicit  # run_once's _dedup collapses the union
+        return enumerated  # watchlists
+
+    async def _enumerate_watchlist_union(self, metadata):
+        """Cross-user union of watchlist symbols via portfolio's enumeration RPC (feature 154).
+
+        Appends (never replaces) the x-internal-caller grant so the manual RunFundamentalsScan path
+        keeps the caller's x-trace-id/x-user-id (C-03). Any RPC failure degrades to [] (FR-6/AC-7).
+        """
+        if self._portfolio is None:
+            return []
+        meta = list(metadata) + [("x-internal-caller", "analysis-fundsignal")]
+        try:
+            resp = await self._portfolio.ListAllWatchlistSymbols(
+                portfolio_pb2.ListAllWatchlistSymbolsRequest(), metadata=meta
+            )
+            return list(resp.symbols)
+        except Exception as e:  # noqa: BLE001 — never crash the cycle (FR-6)
+            log.warning("fundsignal: ListAllWatchlistSymbols failed: %s", e)
+            return []
+
+    def _apply_symbol_cap(self, deduped, max_symbols):
+        """FMP-gated max_symbols truncation (feature 154, FR-7).
+
+        The cap is purely an FMP daily-budget guard, so it applies only when FMP is the active
+        provider (or the provider is unknown → conservative). When it applies, the cut uses a
+        stateless rotating offset so no user's late-alphabet tickers are permanently starved
+        across cycles; the dropped count (computed from the full pre-cap union) is logged. When
+        FMP is not active, the whole union is scored — no truncation (AC-9).
+        """
+        apply_cap = self._fmp_active or not self._provider_known
+        if not apply_cap or len(deduped) <= max_symbols:
+            return deduped
+        offset = datetime.now(UTC).toordinal() % len(deduped)  # stateless rotating offset (R3)
+        rotated = deduped[offset:] + deduped[:offset]
+        kept = rotated[:max_symbols]
+        dropped = [s for s in deduped if s not in set(kept)]
+        log.warning(
+            "fundsignal: max_symbols cap dropped %d of %d symbols (FMP budget): %s",
+            len(dropped),
+            len(deduped),
+            ",".join(dropped),
         )
-        return explicit
+        return kept
 
     @staticmethod
     def _parse_csv(raw):

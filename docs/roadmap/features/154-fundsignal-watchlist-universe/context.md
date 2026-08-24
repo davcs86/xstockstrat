@@ -172,3 +172,16 @@
 - Covers AC-1, AC-2. New logic is in CI-coverage-excluded packages (service/repository/handler) — the test cases are the C-08 verification.
 - Files modified: `internal/service/watchlist_service_test.go`
 - Deviations: none.
+
+### Step 5 — service (analysis): _resolve_universe rewrite + FMP-gated truncation + marketdata watcher [done]
+- `main.py`: second boot-frozen `ConfigWatcher(namespace="marketdata")` (+ wait_for_snapshot), passed into the loop as `md_config_watcher`.
+- `fundsignal_loop.py`: `gen.portfolio` import; ctor `md_config_watcher` param → boot-frozen `_fmp_active`/`_provider_known`; `_resolve_universe` rewrite (explicit unchanged / watchlists = union / both = union∪CSV) + `_enumerate_watchlist_union` (append `x-internal-caller`, degrade-to-empty on failure); `_apply_symbol_cap` (FMP-gated rotating-offset truncation) replacing the unconditional `[:max_symbols]`.
+- Verification: greps (import / x-internal-caller / `list(metadata) + [`) pass; no pyproject/uv.lock change. TDD via Step 6.
+- Files modified: `app/main.py`, `app/engine/fundsignal_loop.py`
+- Deviations: none.
+
+### Step 6 — test (analysis): resolution + provider gating + outage [done]
+- **RED**: with Step-5 impl stashed, all 9 new tests failed (`unexpected keyword argument 'md_config_watcher'`). **GREEN**: after restore, 9/9 pass; full analysis suite 600 passed, coverage 83.27% (≥40 gate); ruff check + format clean.
+- Covers AC-3..AC-9 (+ a C-03 metadata-append test): watchlists/both/explicit resolution, both+outage→CSV, watchlists-outage→empty, FMP-active cap w/ drop-log, non-FMP full union, unknown-provider conservative cap.
+- Files modified: `tests/test_fundsignal_loop.py`
+- Deviations: none.
