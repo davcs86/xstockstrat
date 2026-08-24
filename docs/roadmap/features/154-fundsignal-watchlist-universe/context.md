@@ -94,3 +94,41 @@
 ## Next
 
 `/sdd-spec fundsignal-watchlist-universe` — implementation spec.
+
+## Session 2026-08-24 — sdd-spec
+
+- Generated implementation-spec.md with 7 steps. Status: design-approved → implementation-ready.
+- Step shape: (1) proto `ListAllWatchlistSymbols` + empty req / `repeated string symbols` resp;
+  (2) proto-gen; (3) portfolio service — repo `SELECT DISTINCT symbol`, first authz gate
+  (`internal/service/authz.go`), service method + Connect/grpc-adapter wiring; (4) portfolio Go test
+  (AC-1/AC-2); (5) analysis — `_resolve_universe` rewrite + FMP-gated cap + second boot-frozen
+  `ConfigWatcher(namespace="marketdata")`; (6) analysis pytest (AC-3..AC-9); (7) docs.
+- Every `@AC-*` covered (AC-1/2 → Step 4; AC-3..9 → Step 6). C-14: internal/platform-only, no
+  UI/Agent step (restated in Execution Summary).
+- Key codebase findings (grounded, resolving design open risks):
+  - **Return code (design Open Risk #1 resolved):** `toGRPCError` at `portfolio_handler.go:366-367`
+    maps `connect.CodePermissionDenied → codes.PermissionDenied`, so the gate returns a Connect
+    `CodePermissionDenied` at the service layer and the grpc adapter surfaces `PERMISSION_DENIED`.
+  - **Authz read path:** portfolio has NO existing authz gate (recon R1); the new gate reads
+    `metadata.FromIncomingContext(ctx)` (already the pattern at `propagation.go:28`), NOT
+    `connect.Request.Header()` (the grpc adapter's `connect.NewRequest(req)` fabricates empty
+    headers — design R2). Grant shape `{callerID, rpc}` mirrors config's `authz.ts:95-132`.
+  - **Repo:** cross-user `SELECT DISTINCT symbol FROM portfolio.watchlist_symbols ORDER BY symbol`
+    needs no join, no migration (symbols are flat rows; `user_id` is on `portfolio.watchlists`).
+    Highest portfolio migration is `011` — feature adds none.
+  - **`_resolve_universe` sole caller confirmed:** only `run_once` at `fundsignal_loop.py:107`
+    (grep clean — resolves the fails-080 absence-claim trap flagged in product-spec).
+  - **Provider key exists:** `marketdata.fundamentals.provider` (string, default `finnhub`) seeded
+    by config migration `015_marketdata_finnhub.up.sql:60`; marketdata reads it boot-frozen. Analysis
+    reads it via a NEW second `ConfigWatcher(namespace="marketdata")` (per-namespace WatchConfig) —
+    the design-phase insight at `insights.md:2087` sanctions this boot-frozen cross-namespace read.
+  - **Reuse (no new pool/channel/env var, F-06):** `self._portfolio` stub + `PORTFOLIO_ENDPOINT`
+    already wired (feature 062); metadata **append-don't-replace** (`list(metadata) + [(hdr,caller)]`)
+    preserves the manual path's `x-trace-id`/`x-user-id` (C-03), loop path presents internal-caller only.
+  - **Coverage note:** all new portfolio Go logic lands in CI-coverage-excluded packages
+    (`service`/`repository`/`handler`) — no coverage-threshold delta; the Go test cases are the
+    required C-08 verification. Analysis test enforces the 40% pytest threshold + ruff.
+
+## Next
+
+`/sdd-review fundsignal-watchlist-universe impl-spec`, then `/sdd-execute fundsignal-watchlist-universe`.
