@@ -237,3 +237,131 @@ class TestSourceRegistrationTolerance:
         await loop._ensure_source_registered("fundamentals", [])
         req = loop._ingest.ManageSignalSource.call_args[0][0]
         assert req.operation_enum == ingest_pb2.SIGNAL_SOURCE_OPERATION_REGISTER
+
+
+# ── Cross-user watchlist universe + FMP-gated truncation (feature 154) ──────────
+
+
+def _make_md_cfg(provider=""):
+    """A marketdata-namespace config watcher stub returning a fixed provider (feature 154)."""
+    md = MagicMock()
+    md.get_str = MagicMock(
+        side_effect=lambda key, default="": (
+            provider if key == "marketdata.fundamentals.provider" else default
+        )
+    )
+    return md
+
+
+def _make_loop_154(overrides=None, provider=""):
+    return FundamentalsSignalLoop(
+        config_watcher=_make_cfg(overrides),
+        db_pool=AsyncMock(),
+        marketdata_stub=AsyncMock(),
+        ingest_stub=AsyncMock(),
+        portfolio_stub=AsyncMock(),
+        indicators_stub=AsyncMock(),
+        notify_stub=AsyncMock(),
+        ledger_stub=AsyncMock(),
+        md_config_watcher=_make_md_cfg(provider),
+    )
+
+
+class TestWatchlistUniverse:
+    @pytest.mark.asyncio
+    async def test_watchlists_source_returns_enumerated_union(self):  # AC-3
+        loop = _make_loop_154(
+            {
+                "analysis.fundsignal.universe_source": "watchlists",
+                "analysis.fundsignal.explicit_symbols": "",
+            }
+        )
+        loop._portfolio.ListAllWatchlistSymbols = AsyncMock(
+            return_value=SimpleNamespace(symbols=["AAPL", "MSFT", "NVDA"])
+        )
+        got = await loop._resolve_universe(())
+        assert got == ["AAPL", "MSFT", "NVDA"]
+
+    @pytest.mark.asyncio
+    async def test_both_source_unions_enumeration_and_explicit(self):  # AC-4
+        loop = _make_loop_154(
+            {
+                "analysis.fundsignal.universe_source": "both",
+                "analysis.fundsignal.explicit_symbols": "TSLA, AAPL",
+            }
+        )
+        loop._portfolio.ListAllWatchlistSymbols = AsyncMock(
+            return_value=SimpleNamespace(symbols=["AAPL", "MSFT"])
+        )
+        got = await loop._resolve_universe(())
+        # _resolve_universe returns the raw union; run_once's _dedup collapses it.
+        assert loop._dedup(got) == ["AAPL", "MSFT", "TSLA"]
+
+    @pytest.mark.asyncio
+    async def test_explicit_source_ignores_enumeration(self):  # AC-5
+        loop = _make_loop_154(
+            {
+                "analysis.fundsignal.universe_source": "explicit",
+                "analysis.fundsignal.explicit_symbols": "IBM",
+            }
+        )
+        loop._portfolio.ListAllWatchlistSymbols = AsyncMock(
+            return_value=SimpleNamespace(symbols=["AAPL", "MSFT"])
+        )
+        got = await loop._resolve_universe(())
+        assert got == ["IBM"]
+        loop._portfolio.ListAllWatchlistSymbols.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_watchlists_outage_returns_empty(self, caplog):  # AC-7
+        loop = _make_loop_154({"analysis.fundsignal.universe_source": "watchlists"})
+        loop._portfolio.ListAllWatchlistSymbols = AsyncMock(side_effect=RuntimeError("UNAVAILABLE"))
+        with caplog.at_level("WARNING"):
+            got = await loop._resolve_universe(())
+        assert got == []
+        assert any("ListAllWatchlistSymbols failed" in r.message for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_both_outage_returns_explicit_csv(self):  # AC-8
+        loop = _make_loop_154(
+            {
+                "analysis.fundsignal.universe_source": "both",
+                "analysis.fundsignal.explicit_symbols": "TSLA, AAPL",
+            }
+        )
+        loop._portfolio.ListAllWatchlistSymbols = AsyncMock(side_effect=RuntimeError("UNAVAILABLE"))
+        got = await loop._resolve_universe(())
+        assert loop._dedup(got) == ["AAPL", "TSLA"]
+
+    @pytest.mark.asyncio
+    async def test_internal_caller_metadata_appended_not_replaced(self):  # C-03
+        loop = _make_loop_154({"analysis.fundsignal.universe_source": "watchlists"})
+        captured = {}
+
+        async def _capture(_req, metadata=()):
+            captured["meta"] = list(metadata)
+            return SimpleNamespace(symbols=["AAPL"])
+
+        loop._portfolio.ListAllWatchlistSymbols = AsyncMock(side_effect=_capture)
+        await loop._resolve_universe([("x-trace-id", "t-1"), ("x-user-id", "u-1")])
+        assert ("x-internal-caller", "analysis-fundsignal") in captured["meta"]
+        assert ("x-trace-id", "t-1") in captured["meta"]  # inbound trace preserved
+        assert ("x-user-id", "u-1") in captured["meta"]
+
+    def test_cap_applies_when_fmp_active(self, caplog):  # AC-6
+        loop = _make_loop_154(provider="fmp")
+        with caplog.at_level("WARNING"):
+            kept = loop._apply_symbol_cap(["AAA", "BBB", "CCC"], 2)
+        assert len(kept) == 2
+        assert set(kept) <= {"AAA", "BBB", "CCC"}
+        assert any("dropped 1 of 3" in r.message for r in caplog.records)
+
+    def test_no_cap_when_provider_not_fmp(self):  # AC-9
+        loop = _make_loop_154(provider="finnhub")
+        kept = loop._apply_symbol_cap(["AAA", "BBB", "CCC"], 2)
+        assert kept == ["AAA", "BBB", "CCC"]  # whole union, no truncation
+
+    def test_unknown_provider_caps_conservatively(self):  # FR-7 conservative default
+        loop = _make_loop_154(provider="")  # pre-snapshot / unknown
+        kept = loop._apply_symbol_cap(["AAA", "BBB", "CCC"], 2)
+        assert len(kept) == 2  # unknown → conservative capped path (no provider literal baked in)
