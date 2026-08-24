@@ -114,3 +114,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   → accepted; re-add app guard only if telemetry shows sustained high concurrency.
 - `max_connections≈25` is an assumed constant → confirm the DO plan value at /sdd-spec or /sdd-execute.
 - Re-derive migration NNN 004 against the merged tree at /sdd-spec time (stale-NNN trap).
+
+## Session 2026-08-24 — Piece A applied (operator action, user-authorized)
+
+- User authorized applying the immediate fix now. Raised DO cluster `xstockstrat`
+  (`1b5ad082-8145-4e09-bdcf-936adfc21f2a`) `max_locks_per_transaction` **64 → 1024** via
+  `db-cluster-update-psql-config`. Confirmed via `get-postgresql-config`: `max_locks_per_transaction: 1024`
+  (now shows as an explicit override).
+- Single-node cluster → the parameter change triggered a brief DB restart affecting both
+  `xstockstrat-staging` and `xstockstrat-production` DBs. Observed the expected transient ripple in
+  analysis RUN logs ~21:25 UTC (pnl-consumer/live-loop `StreamEvents` to ledger :50057 refused while
+  the directly-connected Node services reconnected to the restarted DB); self-healed by 21:25:37.
+  Post-change: all 12 app components HEALTHY 1/1; **0 `SQLSTATE 53200`** in the post-restart window.
+- Acceptance impact: the design's "Piece A applied + holding in staging" checkpoint is now **partially
+  met** — parameter set + cluster healthy. Full confirmation (a 400-day EvaluateReadiness/opportunity
+  scan completing with no 53200) will show on the next readiness cycle; last 53200 was 19:51 UTC,
+  pre-change.
+- **/sdd-execute impact:** the operator/infra step is now "verify max_locks=1024 is live," not "apply
+  it." Piece B (migration 004) still to be built via /sdd-spec → /sdd-execute.
