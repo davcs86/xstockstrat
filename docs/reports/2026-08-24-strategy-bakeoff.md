@@ -25,9 +25,15 @@
 - Each backtest is an **independent** `$100k` run; the `compounded` column chains the four annual
   results post-hoc, and there is a ~3-month gap between `Wbear` end (2023-05-31) and `W1` start
   (2023-08-01) — so it is a rough multi-year proxy, not one continuous equity curve.
-- `fundamentals_macd_blend` and `golden_cross_conviction` carry `signal_params`, but backtests are
-  **technical-only** (the signal blend does not affect backtest entries), so they run here as a plain
-  MACD-crossover and a plain SMA golden-cross respectively.
+- `fundamentals_macd_blend` and `golden_cross_conviction` carry `signal_params`, but the signal blend
+  (`scoring.combined_score` / `buy_threshold`) is **inert in both backtest and live entry decisions** —
+  the evaluator's `signals_map` is reserved/unused on both paths (feature 097 made scoring
+  technical-only), and the blend now survives only in the screener (`ScreenSymbols`). So these two run
+  here — and fire live — as a plain MACD-crossover and a plain SMA golden-cross respectively. The real
+  backtest↔live divergence is not signals but the **firing universe**: a backtest evaluates exactly the
+  symbols passed to `run_backtest`, whereas live evaluates `resolve_universe`
+  (`allowlist ∪ watchlist ∪ held ∪ signal-eligible`, minus denied), so a strategy that is neither
+  watchlist-bound nor signal-eligible only re-checks names already held.
 
 ---
 
@@ -141,3 +147,17 @@ per-symbol trend. Feature 152 works; this particular gate does not improve this 
 - **Kept live:** `fundamentals_macd_blend`, `dip_buyer_vol_stop`, `squeeze_breakout_trend`.
 - **Deactivated:** all other registered strategies (including the feature-152 experiment
   `dip_buyer_market_regime_voo` and the debug `dbg_regime_voo_inverted`).
+
+### Live-universe wiring (operator, 2026-08-24)
+
+To make the kept-live strategies actually evaluate live (rather than re-checking only held names —
+see the firing-universe note in Methodology):
+
+- **Schwab watchlist** re-bound: all 29 symbols now bind to `dip_buyer_vol_stop` (previously
+  `range_mean_reversion`/`_v3`). Watchlist membership feeds `resolve_universe` for every one of the
+  owner's live strategies (the live loop unions binding *symbols* regardless of the binding's
+  `strategy_id`), so this also puts the 29 names into `squeeze_breakout_trend`'s and
+  `fundamentals_macd_blend`'s universes.
+- **`fundamentals_macd_blend`** set `signal_eligible=true`, so the platform-wide active-signal term
+  additionally joins its universe (`resolve_universe` = `watchlist ∪ held ∪ signals`). Its
+  `signal_params` carry no `symbols` allowlist, so this passes the allowlist×eligibility guard.
