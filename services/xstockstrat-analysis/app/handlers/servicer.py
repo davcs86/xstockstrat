@@ -677,7 +677,44 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 active_definition, formula_warmup_cache, propagation_meta, formula_deleted_cache
             )
 
-        for symbol in request.symbols:
+        # feature 152: preload benchmark (source_symbol) bars ONCE per run — a benchmark
+        # (e.g. VOO) is shared by every evaluated symbol, so it is fetched a single time
+        # (window + warmup) and reused across the per-symbol loop. A benchmark warmup
+        # shortfall is a run-wide coverage gap naming the benchmark (AC-4); the run then
+        # reports INSUFFICIENT_DATA rather than evaluating a gate it cannot resolve.
+        benchmark_bars = None
+        symbols_to_run = list(request.symbols)
+        if active_definition is not None:
+            try:
+                benchmark_bars = await self._load_benchmark_bars(
+                    active_definition,
+                    request.range,
+                    formula_warmup_cache,
+                    propagation_meta,
+                    warmup_prefix=start_set,
+                )
+            except _InsufficientData as ins:
+                log.warning(
+                    "backtest benchmark %s insufficient data: have %d, need %d",
+                    ins.symbol,
+                    ins.bars_have,
+                    ins.bars_need,
+                )
+                coverage_gaps.append(
+                    analysis_pb2.CoverageGap(
+                        symbol=ins.symbol,
+                        timeframe=common_pb2.Timeframe.TIMEFRAME_1DAY,
+                        requested_range=request.range,
+                        bars_have=ins.bars_have,
+                        bars_need=ins.bars_need,
+                        gap=ins.gap_range if ins.gap_range is not None else request.range,
+                    )
+                )
+                # No evaluated symbol can resolve the benchmark gate — skip the loop; the
+                # status gate below reports INSUFFICIENT_DATA.
+                symbols_to_run = []
+
+        for symbol in symbols_to_run:
             try:
                 if active_definition is not None:
                     (
@@ -700,6 +737,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         # mutates request.range in place and destroys the distinction.
                         warmup_prefix=start_set,
                         fill_model=effective_fill_model,  # feature 151
+                        benchmark_bars=benchmark_bars,  # feature 152
                     )
                 else:
                     (
@@ -1333,6 +1371,51 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # feature 150: intents is the additive 5th element; legacy callers ignore it.
         return state.trades, state.equity, daily_equity, symbol_diag, intents
 
+    async def _load_benchmark_bars(
+        self,
+        definition,
+        range_msg,
+        formula_warmup_cache,
+        propagation_meta,
+        warmup_prefix: bool,
+    ):
+        """Feature 152 — preload bars for every distinct ``source_symbol`` referenced by a
+        component, each fetched over the same window plus its own warmup prefix (so the
+        benchmark indicator/formula is warmed from before ``start`` exactly like the
+        evaluated symbol — the reproducible-window guarantee).
+
+        Returns ``{source_symbol: [bars]}`` or ``None`` when no component sets a
+        ``source_symbol`` (the common case — the evaluate path then skips all benchmark
+        work). A benchmark warmup shortfall propagates as ``_InsufficientData(source_symbol,
+        …)`` so the caller reports a ``CoverageGap`` naming the benchmark.
+        """
+        source_symbols = sorted(
+            {c.source_symbol for c in definition.components if c.source_symbol}
+        )
+        if not source_symbols:
+            return None
+        out: dict = {}
+        for sym in source_symbols:
+            # Slice the definition to just this symbol's components (keep the rules) so
+            # required_prefix_bars sizes warmup on the benchmark's own components. The
+            # ref-walk tolerates the missing non-benchmark refs (ref_to_comp.get→None).
+            sliced = analysis_pb2.StrategyDefinition()
+            sliced.CopyFrom(definition)
+            del sliced.components[:]
+            sliced.components.extend(
+                c for c in definition.components if c.source_symbol == sym
+            )
+            required_prefix = (
+                warmup.required_prefix_bars(sliced, formula_warmup_cache)
+                if warmup_prefix
+                else 0
+            )
+            bars, _trade_start_idx = await self._resolve_prefixed_bars(
+                sym, range_msg, required_prefix, propagation_meta
+            )
+            out[sym] = bars
+        return out
+
     async def _backtest_symbol_evaluated(
         self,
         symbol,
@@ -1346,6 +1429,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         *,
         warmup_prefix: bool = False,
         fill_model=analysis_pb2.FILL_MODEL_SAME_BAR_CLOSE,
+        benchmark_bars=None,
     ):
         """Run a stored/inline StrategyDefinition for one symbol via the shared evaluator.
 
@@ -1368,7 +1452,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         evaluator = StrategyEvaluator(self._indicators, propagation_meta)
         # feature 064: also capture the computed component series for diagnostics.
-        decisions, component_series = await evaluator.evaluate_with_series(definition, bars, None)
+        # feature 152: benchmark_bars ({source_symbol: [bars]}) is preloaded once per run
+        # by the caller and shared across evaluated symbols; a source_symbol component
+        # resolves against those bars via the evaluator's _assemble_component_series.
+        decisions, component_series = await evaluator.evaluate_with_series(
+            definition, bars, None, benchmark_bars
+        )
 
         n = len(bars)
         warmup_bars_full = await self._compute_evaluated_warmup(
