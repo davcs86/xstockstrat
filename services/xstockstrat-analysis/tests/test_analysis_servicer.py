@@ -3519,17 +3519,17 @@ class TestBacktestLiveParityUnchanged:
     supplies, and that difference must stay visible rather than be quietly assumed away.
     """
 
-    def test_the_live_loop_still_uses_its_own_fixed_lookback(self):
-        """If someone later wires the prefix into the live loop, this fails and the FR-7
-        divergence documented in the service CLAUDE.md has to be revisited."""
+    def test_the_live_loop_evaluated_symbol_uses_fixed_lookback(self):
+        """The EVALUATED symbol's live window stays the fixed 365-day lookback. Feature 152
+        deliberately wires the warm-up prefix into the live loop for BENCHMARK (source_symbol)
+        components only (`_load_benchmark_bars`); the evaluated symbol's own `_recent_range()`
+        fetch is unchanged. See docs/warmup.md § Backtest/live divergence (FR-7, feature 152)."""
         from app.engine import live_loop
 
         assert live_loop._LOOKBACK_DAYS == 365
+        # The evaluated-symbol fetch in _eval_pair still uses the fixed _recent_range().
         source = Path(live_loop.__file__).read_text()
-        assert "warmup" not in source, (
-            "live_loop now references the warm-up prefix — FR-7's documented divergence "
-            "(design.md § OQ-4) is stale and the parity note must be updated"
-        )
+        assert "self._recent_range()" in source
 
     def test_the_evaluator_contract_takes_no_window_argument(self):
         """The prefix lives entirely in the servicer's fetch. The evaluator receives a plain

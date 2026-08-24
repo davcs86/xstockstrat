@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from datetime import UTC
 from typing import Any
 
+import grpc
 from gen.analysis.v1 import analysis_pb2
 from gen.indicators.v1 import indicators_pb2
 from google.protobuf.json_format import MessageToDict
@@ -342,6 +343,33 @@ class StrategyEvaluator:
                 )
             return series
         return {"value": [None] * n}
+
+    async def declared_formula_warmups(self, definition) -> dict[str, int]:
+        """Build ``{formula_id: declared warmup_period}`` for a definition's custom-formula
+        components via ``GetFormula`` (feature 152).
+
+        Used by the live loop to size a formula-*benchmark* component's warmup with
+        ``warmup.required_prefix_bars`` — the live path has no formula-warmup cache of its
+        own, so without this a custom-formula benchmark gate would silently under-warm on
+        live. An unreachable formula caches 0 (never fails evaluation). The backtest servicer
+        keeps its own cache variant (``_declared_formula_warmup``) that additionally records
+        soft-delete warnings (feature 086); this method is the live counterpart."""
+        cache: dict[str, int] = {}
+        for comp in definition.components:
+            if (
+                comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA
+                and comp.formula_id
+                and comp.formula_id not in cache
+            ):
+                try:
+                    formula = await self._indicators.GetFormula(
+                        indicators_pb2.GetFormulaRequest(formula_id=comp.formula_id),
+                        metadata=self._meta,
+                    )
+                    cache[comp.formula_id] = int(getattr(formula, "warmup_period", 0) or 0)
+                except grpc.RpcError:
+                    cache[comp.formula_id] = 0
+        return cache
 
     async def _assemble_component_series(
         self,

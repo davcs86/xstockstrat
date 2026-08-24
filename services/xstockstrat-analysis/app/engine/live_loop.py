@@ -24,6 +24,7 @@ from bisect import bisect_right
 from datetime import UTC, datetime, timedelta
 from typing import NamedTuple
 
+from gen.analysis.v1 import analysis_pb2
 from gen.common.v1 import common_pb2
 from gen.ingest.v1 import ingest_pb2
 from gen.marketdata.v1 import marketdata_pb2
@@ -36,6 +37,7 @@ from opentelemetry import metrics
 
 from app.handlers.servicer import _normalize_symbol, _row_to_strategy_definition
 from app.repositories.strategies import LIVE_ENABLED_PREDICATE_SQL
+from app.services import warmup
 from app.services.cooldown import effective_cooldown_days, is_cooldown_active
 
 log = logging.getLogger(__name__)
@@ -447,6 +449,54 @@ class LiveEvaluationLoop:
         start.FromDatetime(datetime.now(UTC) - timedelta(days=_LOOKBACK_DAYS))
         return common_pb2.TimeRange(start=start, end=end)
 
+    async def _load_benchmark_bars(self, definition):
+        """Feature 152 — preload bars for each distinct ``source_symbol`` a component
+        references, over the live window widened by that benchmark's own warmup (builtins via
+        ``builtin_lookback_bars``, custom formulas via the declared ``warmup_period``), so a
+        benchmark gate is actually warm on the live path (not the bare ``_LOOKBACK_DAYS``
+        window, which would silently never-warm a long-lookback gate → always-hold, P-03).
+
+        Degrades safely: a benchmark whose fetch fails or returns nothing is simply omitted
+        from the map, so the evaluator reads it as a gap (hold) rather than crashing the loop.
+        Returns ``{source_symbol: [bars]}`` or ``None`` when no component sets a
+        ``source_symbol``."""
+        source_symbols = sorted(
+            {c.source_symbol for c in definition.components if c.source_symbol}
+        )
+        if not source_symbols:
+            return None
+        out: dict = {}
+        for sym in source_symbols:
+            sliced = analysis_pb2.StrategyDefinition()
+            sliced.CopyFrom(definition)
+            del sliced.components[:]
+            sliced.components.extend(
+                c for c in definition.components if c.source_symbol == sym
+            )
+            formula_cache = await self._evaluator.declared_formula_warmups(sliced)
+            required_prefix = warmup.required_prefix_bars(sliced, formula_cache)
+            extra_days = warmup.prefix_calendar_days(required_prefix) if required_prefix else 0
+            rng = self._recent_range()
+            rng.start.FromDatetime(
+                datetime.now(UTC) - timedelta(days=_LOOKBACK_DAYS + extra_days)
+            )
+            try:
+                resp = await self._marketdata.GetBars(
+                    marketdata_pb2.GetBarsRequest(
+                        symbol=sym,
+                        timeframe="1d",
+                        timeframe_enum=common_pb2.Timeframe.TIMEFRAME_1DAY,
+                        range=rng,
+                    )
+                )
+                bench_bars = list(resp.bars)
+            except Exception as e:  # noqa: BLE001 — a benchmark fetch must never crash the loop
+                log.warning("live_loop: benchmark GetBars(%s) failed: %s", sym, e)
+                bench_bars = []
+            if bench_bars:
+                out[sym] = bench_bars
+        return out or None
+
     async def _eval_pair(self, definition, symbol, throttle, deny_entry=False):
         bars_resp = await self._marketdata.GetBars(
             marketdata_pb2.GetBarsRequest(
@@ -463,7 +513,13 @@ class LiveEvaluationLoop:
             # runtime logs, so a data-less live evaluation was previously silent.
             return _EVAL_NO_BARS
 
-        decisions = await self._evaluator.evaluate(definition, bars, None)
+        # feature 152: preload benchmark (source_symbol) bars for backtest/live parity. Keep
+        # the call shape unchanged when no component sets a source_symbol (the common case).
+        benchmark_bars = await self._load_benchmark_bars(definition)
+        if benchmark_bars:
+            decisions = await self._evaluator.evaluate(definition, bars, None, benchmark_bars)
+        else:
+            decisions = await self._evaluator.evaluate(definition, bars, None)
         if not decisions:
             return
 
