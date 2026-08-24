@@ -1416,6 +1416,46 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             out[sym] = bars
         return out
 
+    async def _load_benchmark_bars_windowed(
+        self, definition, range_msg, propagation_meta, *, cache=None, sem=None
+    ):
+        """Feature 152 — benchmark (source_symbol) bars for the readiness / opportunities
+        surfaces, fetched over the SAME fixed window as the evaluated symbol (those surfaces
+        use a plain lookback with no warm-up prefix, so the benchmark matches — no
+        prefix-widening here, unlike the backtest ``_load_benchmark_bars``).
+
+        ``cache`` dedups benchmark loads across an opportunities compute pass — one VOO fetch
+        for every evaluated symbol that references it. ``sem`` bounds fetch concurrency
+        (feature 141's ``_bars_fetch_sem``). A failed fetch caches ``[]`` (→ the benchmark
+        reads as a gap → hold), never raising. Returns ``{source_symbol: [bars]}`` or ``None``.
+        """
+        source_symbols = sorted(
+            {c.source_symbol for c in definition.components if c.source_symbol}
+        )
+        if not source_symbols:
+            return None
+        out: dict = {}
+        for sym in source_symbols:
+            if cache is not None and sym in cache:
+                bars = cache[sym]
+            else:
+                try:
+                    if sem is not None:
+                        async with sem:
+                            bars = await self._fetch_bars_paged(
+                                sym, range_msg, propagation_meta
+                            )
+                    else:
+                        bars = await self._fetch_bars_paged(sym, range_msg, propagation_meta)
+                except Exception as e:  # noqa: BLE001 — benchmark fetch is best-effort
+                    log.warning("benchmark bars fetch failed for %s: %s", sym, e)
+                    bars = []
+                if cache is not None:
+                    cache[sym] = bars
+            if bars:
+                out[sym] = bars
+        return out or None
+
     async def _backtest_symbol_evaluated(
         self,
         symbol,
@@ -2719,6 +2759,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         rule = "exit" if request.rule == analysis_pb2.READINESS_RULE_EXIT else "entry"
         evaluator = StrategyEvaluator(self._indicators, propagation_meta)
         range_msg = _recent_range(_READINESS_LOOKBACK_DAYS)
+        # feature 152: one benchmark load for the whole request (shared across request.symbols).
+        benchmark_bars = await self._load_benchmark_bars_windowed(
+            definition, range_msg, propagation_meta
+        )
         readiness = []
         for symbol in request.symbols:
             fetch_ok = True
@@ -2737,7 +2781,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     symbol,
                     request.strategy_id,
                 )
-            trace = await evaluator.evaluate_conditions_traced(definition, bars, symbol, rule=rule)
+            trace = await evaluator.evaluate_conditions_traced(
+                definition, bars, symbol, rule=rule, benchmark_bars=benchmark_bars
+            )
             readiness.append(_readiness_to_proto(trace))
         return analysis_pb2.EvaluateReadinessResponse(readiness=readiness)
 
@@ -3235,6 +3281,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Approach) — every candidate still resolves to a real trace or the 0/0 empty-readiness
         # fallback, never an unhandled exception.
         bars_by_symbol: dict[str, list] = {}
+        # feature 152: benchmark (source_symbol) bars deduped once per compute pass — one VOO
+        # fetch shared across every evaluated symbol/strategy, bounded by _bars_fetch_sem.
+        benchmark_bars_cache: dict[str, list] = {}
         session_end_seconds = 0
         window_hours = self._cfg.get_int("analysis.opportunity.valid_window_hours", 24)
 
@@ -3268,10 +3317,18 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     if bars:
                         newest = bars[-1].time.seconds
                         session_end_seconds = max(session_end_seconds, newest)
+                    # feature 152: benchmark bars for this definition, deduped once per pass.
+                    benchmark_bars = await self._load_benchmark_bars_windowed(
+                        definition,
+                        range_msg,
+                        propagation_meta,
+                        cache=benchmark_bars_cache,
+                        sem=self._bars_fetch_sem,
+                    )
                     # Held + attributed → exit-rule trace (FR-8); else entry-rule trace.
                     rule = "exit" if c["is_held"] else "entry"
                     readiness = await evaluator.evaluate_conditions_traced(
-                        definition, bars, sym, rule=rule
+                        definition, bars, sym, rule=rule, benchmark_bars=benchmark_bars
                     )
                     if c["is_held"]:
                         total = readiness["total_conditions"]
