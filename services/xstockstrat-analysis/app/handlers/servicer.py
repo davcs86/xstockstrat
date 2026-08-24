@@ -1456,6 +1456,32 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 out[sym] = bars
         return out or None
 
+    async def _benchmark_series_bars(self, comp, times, evaluator, propagation_meta):
+        """Feature 152 — fetch a single benchmark component's bars for GetIndicatorSeries,
+        covering the caller's chart window (``times``) widened by that component's warmup
+        (builtin lookback or the declared formula ``warmup_period`` via
+        ``evaluator.declared_formula_warmups``). Best-effort: on any fetch error return ``[]``
+        so the chart degrades to a warm-up/gap head rather than failing the component."""
+        if not times:
+            return []
+        sliced = analysis_pb2.StrategyDefinition(
+            components=[comp],
+            entry_rule=json.dumps({"fn": ">", "lhs": comp.ref_name, "rhs": 0}),
+        )
+        formula_cache = await evaluator.declared_formula_warmups(sliced)
+        required_prefix = warmup.required_prefix_bars(sliced, formula_cache)
+        extra_days = warmup.prefix_calendar_days(required_prefix) if required_prefix else 0
+        range_msg = common_pb2.TimeRange()
+        range_msg.start.seconds = max(0, times[0].seconds - extra_days * 86_400)
+        range_msg.end.CopyFrom(times[-1])
+        try:
+            return await self._fetch_bars_paged(comp.source_symbol, range_msg, propagation_meta)
+        except Exception as e:  # noqa: BLE001 — chart benchmark fetch is best-effort
+            log.warning(
+                "GetIndicatorSeries benchmark fetch failed for %s: %s", comp.source_symbol, e
+            )
+            return []
+
     async def _backtest_symbol_evaluated(
         self,
         symbol,
@@ -2861,10 +2887,29 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         component_series = []
         # Sequential loop (no gather) so the singleton semaphore bounds cross-request total
         # in-flight compute, not intra-request.
+        # feature 152: benchmark (source_symbol) components are computed on the benchmark's own
+        # bars (fetched server-side over the chart window + warmup) and aligned onto the caller's
+        # request.times; a plain component keeps the caller-supplied closes (no re-fetch).
+        eval_dates = (
+            [t.ToDatetime(tzinfo=UTC).date() for t in request.times]
+            if any(c.source_symbol for c in definition.components)
+            else None
+        )
         for comp in definition.components:
             try:
                 async with self._component_series_sem:
-                    series_map = await evaluator._compute_component(comp, closes)
+                    if comp.source_symbol:
+                        bench_bars = await self._benchmark_series_bars(
+                            comp, list(request.times), evaluator, propagation_meta
+                        )
+                        series_map = await evaluator._assemble_component_series(
+                            comp,
+                            closes,
+                            eval_dates,
+                            {comp.source_symbol: bench_bars} if bench_bars else {},
+                        )
+                    else:
+                        series_map = await evaluator._compute_component(comp, closes)
                 named = [
                     analysis_pb2.NamedSeries(
                         name=name,
