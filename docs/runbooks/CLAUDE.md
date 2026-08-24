@@ -15,4 +15,5 @@ Step-by-step procedures for recurring platform operations. Each file is self-con
 | `hotfix-log.md` | Append-only register of all production hotfixes (Track A); updated by `/sdd-triage` | After each hotfix is deployed |
 | `indicator-builder.md` | Build, test, register, and deploy custom Python formula indicators; sandbox constraints and limits | New custom indicator needed |
 | `mcp-tools.md` | MCP tool reference — the agent's MCP tools with parameter tables, return shapes, error cases, transport modes, and OAuth 2.1 edge auth | Using or troubleshooting the agent MCP server |
+| `ohlcv-lock-budget-tuning.md` | Diagnose + remediate TimescaleDB `out of shared memory` (SQLSTATE 53200) lock-table exhaustion on `marketdata.ohlcv` bars queries: the countable lock-budget invariant, the `max_locks_per_transaction` operator raise (Piece A), and its relationship to the chunk-interval migration (Piece B, `004`) | Recurring OHLCV `out of shared memory` / SQLSTATE 53200 on 400-day bars queries |
 | `proto-versioning.md` | v1→v2 proto migration workflow; when to create v2; parallel-feature safety | Breaking proto change required |

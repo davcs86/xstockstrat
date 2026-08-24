@@ -2080,3 +2080,8 @@ reusing.
   `optional`) unless the fingerprint explicitly excludes it; pair the addition with a fingerprint
   byte-identity regression test. Sibling to the C-10 "shared-consumer" family — here the shared
   consumer is the fingerprint.
+
+### 2026-08-24 — fix-ohlcv-chunk-lock-oom — design
+- **Pattern**: A DO managed-Postgres server parameter absent from the `db-cluster-get-postgresql-config` response is NOT proof it is unsettable — `get` returns only non-default/overridden values. Check the **`db-cluster-update-psql-config` accepted-config schema** (the real allow-list) before concluding a param can't be tuned. Here `max_locks_per_transaction` was missing from `get` (sat at default 64) yet is fully settable. Corollary for TimescaleDB "out of shared memory" (SQLSTATE 53200): it is **lock-table exhaustion** (chunks-scanned × relations-per-chunk vs `max_locks × (max_connections + max_prepared_transactions)`), and `set_chunk_time_interval` only widens **future** chunks — so raising `max_locks` is the immediate lever for existing chunks, chunk-widening is the durable structural one, and re-chunking existing data is additive-to-the-lock-bump (its copy step itself needs the headroom), never a substitute.
+- **Evidence**: `docs/roadmap/features/153-fix-ohlcv-chunk-lock-oom/design.md` (Chosen Approach + Rejected Alternatives); `services/xstockstrat-marketdata/migrations/001_marketdata_hypertables.up.sql:23-28`.
+- **Rule it implies**: When a cloud-managed config value looks unsettable, verify against the provider's *update* schema, not just its *get* output, before designing around the limitation (P-03 "exercise the producer, don't guess its advertised state").

@@ -1,0 +1,25 @@
+-- 004_widen_ohlcv_chunk_interval.up.sql
+-- Feature 153 (fix-ohlcv-chunk-lock-oom), SEV-2.
+-- Defect: docs/reports/2026-08-24-ohlcv-lock-table-exhaustion-recurrence-defect.md
+--
+-- Widens the marketdata.ohlcv hypertable's chunk_time_interval from 1 day to 30 days.
+--
+-- Why: analysis scans a 400-day window per symbol (_READINESS_LOOKBACK_DAYS), so a single
+-- QueryBars over 1-day chunks locks ~400 chunks × 4 relations (heap + PK + 2 indexes) ≈ 1,600
+-- AccessShareLocks in one transaction — enough to exhaust the shared lock table on the
+-- db-s-1vcpu-1gb cluster and raise `out of shared memory` (SQLSTATE 53200). At 30-day chunks a
+-- 400-day scan touches ~14 chunks (~56 locks). The immediate relief is the operator raise of
+-- max_locks_per_transaction (Piece A, docs/runbooks/ohlcv-lock-budget-tuning.md); this migration
+-- is the durable structural half.
+--
+-- METADATA-ONLY and FUTURE-ONLY: set_chunk_time_interval changes only the interval that NEW
+-- chunks are created at. It moves no existing rows and does NOT re-chunk the existing 1-day
+-- chunks — they age out over ~400 days while Piece A carries the transition. Because no rows
+-- move, this migration needs NEITHER a compressed-chunk pre-flight guard NOR a remediation-log
+-- table (both of which 003_canonicalize_ohlcv_timeframe carries ONLY because it UPDATE/DELETEs
+-- rows; marketdata.ohlcv has no compression either — see marketdata CLAUDE.md § Database).
+--
+-- No explicit BEGIN/COMMIT: migrate's postgres driver already wraps each migration file in its
+-- own transaction, and no other migration in this repo nests one — matched here.
+
+SELECT set_chunk_time_interval('marketdata.ohlcv', INTERVAL '30 days');
