@@ -84,7 +84,7 @@ Namespace: `marketdata`
 ## Database
 
 - Schema: `marketdata`
-- Hypertable `marketdata.ohlcv`: partition by `time`, chunk = 1 day (compression policy planned, not yet applied by any migration)
+- Hypertable `marketdata.ohlcv`: partition by `time`. **New chunks are 30 days wide** as of feature 153 (migration `004_widen_ohlcv_chunk_interval`, `set_chunk_time_interval` → `INTERVAL '30 days'`); chunks created before that migration stay 1 day wide until they age out. The widening cut the per-query chunk-lock count on the analysis 400-day bars scan (~400 → ~14 chunks) that was exhausting the cluster lock table (`out of shared memory`, SQLSTATE 53200) — see `docs/runbooks/ohlcv-lock-budget-tuning.md`. (Compression policy planned, not yet applied by any migration.)
 - Hypertable `marketdata.quotes`: partition by `time`, chunk = 1 hour (compression policy planned, not yet applied by any migration)
 - Table `marketdata.ohlcv_remediation_003`: **plain table, not a hypertable** — an audit log created
   by migration `003_canonicalize_ohlcv_timeframe.up.sql` (feature 080 FR-14) recording every
