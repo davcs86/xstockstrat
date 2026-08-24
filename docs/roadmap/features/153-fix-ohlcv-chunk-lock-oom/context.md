@@ -173,3 +173,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Acceptance not met until "Piece A applied + holding in staging" is verified (design Open Risk 1) —
   Step 2 owns the verification/gate; Piece A already applied and holding per prior context session.
 - Confirm the DO plan's `max_connections` at /sdd-execute (Open Risk 3); conclusion unchanged ~22–25.
+
+## Session 2026-08-24 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 0 warnings (advisory — did not block). Verdict: PASS. Overlap: CLEAN.
+- Criteria pass (spec-reviewer): all cited path:line verified against the merged tree; migration NNN=004
+  correct (marketdata tops out at 003); F-01/F-05 honored; C-08 N/A (no service step, stated explicitly);
+  C-14 internal-only; C-15 both AC covered (AC-1→Step2 arithmetic, AC-2→Step1 offline up/down + PRE_DEPLOY).
+  Two benign informational NOTEs, no action: (1) Step 2 incidentally matches the B2b "live" keyword but fires
+  none of the trading-domain checks (it documents a DO cluster param, not a service env var); (2) N/A test-step
+  pairing is correct.
+- Overlap pass (feature-overlap): CLEAN — no collision. marketdata migration 004 next-free; feature 142
+  (implementation-ready) shares the marketdata dir but edits disjoint Go files (no migration/doc overlap).
+  No merge-order entry required.
+- Unresolved ✗ / ⚠ carried into execution: none.
