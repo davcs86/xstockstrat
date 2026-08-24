@@ -460,9 +460,7 @@ class LiveEvaluationLoop:
         from the map, so the evaluator reads it as a gap (hold) rather than crashing the loop.
         Returns ``{source_symbol: [bars]}`` or ``None`` when no component sets a
         ``source_symbol``."""
-        source_symbols = sorted(
-            {c.source_symbol for c in definition.components if c.source_symbol}
-        )
+        source_symbols = sorted({c.source_symbol for c in definition.components if c.source_symbol})
         if not source_symbols:
             return None
         out: dict = {}
@@ -470,16 +468,12 @@ class LiveEvaluationLoop:
             sliced = analysis_pb2.StrategyDefinition()
             sliced.CopyFrom(definition)
             del sliced.components[:]
-            sliced.components.extend(
-                c for c in definition.components if c.source_symbol == sym
-            )
+            sliced.components.extend(c for c in definition.components if c.source_symbol == sym)
             formula_cache = await self._evaluator.declared_formula_warmups(sliced)
             required_prefix = warmup.required_prefix_bars(sliced, formula_cache)
             extra_days = warmup.prefix_calendar_days(required_prefix) if required_prefix else 0
             rng = self._recent_range()
-            rng.start.FromDatetime(
-                datetime.now(UTC) - timedelta(days=_LOOKBACK_DAYS + extra_days)
-            )
+            rng.start.FromDatetime(datetime.now(UTC) - timedelta(days=_LOOKBACK_DAYS + extra_days))
             try:
                 resp = await self._marketdata.GetBars(
                     marketdata_pb2.GetBarsRequest(

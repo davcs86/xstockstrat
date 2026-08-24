@@ -1389,9 +1389,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         work). A benchmark warmup shortfall propagates as ``_InsufficientData(source_symbol,
         …)`` so the caller reports a ``CoverageGap`` naming the benchmark.
         """
-        source_symbols = sorted(
-            {c.source_symbol for c in definition.components if c.source_symbol}
-        )
+        source_symbols = sorted({c.source_symbol for c in definition.components if c.source_symbol})
         if not source_symbols:
             return None
         out: dict = {}
@@ -1402,13 +1400,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             sliced = analysis_pb2.StrategyDefinition()
             sliced.CopyFrom(definition)
             del sliced.components[:]
-            sliced.components.extend(
-                c for c in definition.components if c.source_symbol == sym
-            )
+            sliced.components.extend(c for c in definition.components if c.source_symbol == sym)
             required_prefix = (
-                warmup.required_prefix_bars(sliced, formula_warmup_cache)
-                if warmup_prefix
-                else 0
+                warmup.required_prefix_bars(sliced, formula_warmup_cache) if warmup_prefix else 0
             )
             bars, _trade_start_idx = await self._resolve_prefixed_bars(
                 sym, range_msg, required_prefix, propagation_meta
@@ -1429,9 +1423,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         (feature 141's ``_bars_fetch_sem``). A failed fetch caches ``[]`` (→ the benchmark
         reads as a gap → hold), never raising. Returns ``{source_symbol: [bars]}`` or ``None``.
         """
-        source_symbols = sorted(
-            {c.source_symbol for c in definition.components if c.source_symbol}
-        )
+        source_symbols = sorted({c.source_symbol for c in definition.components if c.source_symbol})
         if not source_symbols:
             return None
         out: dict = {}
@@ -1442,9 +1434,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 try:
                     if sem is not None:
                         async with sem:
-                            bars = await self._fetch_bars_paged(
-                                sym, range_msg, propagation_meta
-                            )
+                            bars = await self._fetch_bars_paged(sym, range_msg, propagation_meta)
                     else:
                         bars = await self._fetch_bars_paged(sym, range_msg, propagation_meta)
                 except Exception as e:  # noqa: BLE001 — benchmark fetch is best-effort

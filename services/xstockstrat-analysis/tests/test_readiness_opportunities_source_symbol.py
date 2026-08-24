@@ -50,9 +50,7 @@ def _benchmark_strategy_row(threshold=100.0):
         "display_name": "S1",
         "active": True,
         "live_enabled": True,
-        "definition_json": json_format.MessageToDict(
-            definition, preserving_proto_field_name=True
-        ),
+        "definition_json": json_format.MessageToDict(definition, preserving_proto_field_name=True),
     }
 
 

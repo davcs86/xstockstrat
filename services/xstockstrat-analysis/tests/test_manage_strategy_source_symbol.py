@@ -74,9 +74,7 @@ def test_changing_source_symbol_changes_fingerprint():
 def test_empty_source_symbol_is_fingerprint_identical_to_no_benchmark():
     """AC-1/AC-6 byte-identity: an empty source_symbol leaves the fingerprint identical to a
     definition that never had the field — a pre-existing strategy's grade is not invalidated."""
-    with_empty = json_format.MessageToDict(
-        _def_with_source(""), preserving_proto_field_name=True
-    )
+    with_empty = json_format.MessageToDict(_def_with_source(""), preserving_proto_field_name=True)
     # A definition built without ever setting source_symbol.
     without = _def_with_source("VOO")
     without.components[0].ClearField("source_symbol")

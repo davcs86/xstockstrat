@@ -27,9 +27,7 @@ from .test_analysis_servicer import (
 
 
 def _sym_bars(symbol, n_prefix, n_window, base):
-    bars = [
-        _bar(_W_START + off * _DAY, base + off) for off in range(-n_prefix, n_window)
-    ]
+    bars = [_bar(_W_START + off * _DAY, base + off) for off in range(-n_prefix, n_window)]
     for b in bars:
         b.symbol = symbol
     return bars
@@ -143,10 +141,13 @@ async def test_voo_gated_dip_buy_backtests_and_fetches_benchmark():
             ),
         ],
         entry_rule=json.dumps(
-            {"op": "AND", "conditions": [
-                {"fn": "<", "lhs": "rsi", "rhs": 100},
-                {"fn": ">", "lhs": "mkt", "rhs": 0},
-            ]}
+            {
+                "op": "AND",
+                "conditions": [
+                    {"fn": "<", "lhs": "rsi", "rhs": 100},
+                    {"fn": ">", "lhs": "mkt", "rhs": 0},
+                ],
+            }
         ),
     )
     req = _windowed_req(definition, symbols=("AAPL",))
