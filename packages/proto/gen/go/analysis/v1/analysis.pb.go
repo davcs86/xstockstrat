@@ -2432,12 +2432,16 @@ func (x *GetStrategyReportRequest) GetStrategyId() string {
 }
 
 type StrategyComponent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RefName       string                 `protobuf:"bytes,1,opt,name=ref_name,json=refName,proto3" json:"ref_name,omitempty"`
-	Kind          ComponentKind          `protobuf:"varint,2,opt,name=kind,proto3,enum=xstockstrat.analysis.v1.ComponentKind" json:"kind,omitempty"`
-	Indicator     string                 `protobuf:"bytes,3,opt,name=indicator,proto3" json:"indicator,omitempty"`                  // used when kind == COMPONENT_KIND_BUILTIN_INDICATOR
-	FormulaId     string                 `protobuf:"bytes,4,opt,name=formula_id,json=formulaId,proto3" json:"formula_id,omitempty"` // used when kind == COMPONENT_KIND_CUSTOM_FORMULA
-	Params        map[string]float64     `protobuf:"bytes,5,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"fixed64,2,opt,name=value"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	RefName   string                 `protobuf:"bytes,1,opt,name=ref_name,json=refName,proto3" json:"ref_name,omitempty"`
+	Kind      ComponentKind          `protobuf:"varint,2,opt,name=kind,proto3,enum=xstockstrat.analysis.v1.ComponentKind" json:"kind,omitempty"`
+	Indicator string                 `protobuf:"bytes,3,opt,name=indicator,proto3" json:"indicator,omitempty"`                  // used when kind == COMPONENT_KIND_BUILTIN_INDICATOR
+	FormulaId string                 `protobuf:"bytes,4,opt,name=formula_id,json=formulaId,proto3" json:"formula_id,omitempty"` // used when kind == COMPONENT_KIND_CUSTOM_FORMULA
+	Params    map[string]float64     `protobuf:"bytes,5,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"fixed64,2,opt,name=value"`
+	// optional benchmark/reference symbol (feature 152): when non-empty the component is
+	// computed on this symbol's bars (e.g. "VOO") and its output series is aligned onto the
+	// evaluated symbol's bar timeline; empty = computed on the evaluated symbol (unchanged).
+	SourceSymbol  string `protobuf:"bytes,6,opt,name=source_symbol,json=sourceSymbol,proto3" json:"source_symbol,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2505,6 +2509,13 @@ func (x *StrategyComponent) GetParams() map[string]float64 {
 		return x.Params
 	}
 	return nil
+}
+
+func (x *StrategyComponent) GetSourceSymbol() string {
+	if x != nil {
+		return x.SourceSymbol
+	}
+	return ""
 }
 
 type StrategyDefinition struct {
@@ -5200,14 +5211,15 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x04page\x18\x02 \x01(\v2#.xstockstrat.common.v1.PageResponseR\x04page\";\n" +
 	"\x18GetStrategyReportRequest\x12\x1f\n" +
 	"\vstrategy_id\x18\x01 \x01(\tR\n" +
-	"strategyId\"\xb2\x02\n" +
+	"strategyId\"\xd7\x02\n" +
 	"\x11StrategyComponent\x12\x19\n" +
 	"\bref_name\x18\x01 \x01(\tR\arefName\x12:\n" +
 	"\x04kind\x18\x02 \x01(\x0e2&.xstockstrat.analysis.v1.ComponentKindR\x04kind\x12\x1c\n" +
 	"\tindicator\x18\x03 \x01(\tR\tindicator\x12\x1d\n" +
 	"\n" +
 	"formula_id\x18\x04 \x01(\tR\tformulaId\x12N\n" +
-	"\x06params\x18\x05 \x03(\v26.xstockstrat.analysis.v1.StrategyComponent.ParamsEntryR\x06params\x1a9\n" +
+	"\x06params\x18\x05 \x03(\v26.xstockstrat.analysis.v1.StrategyComponent.ParamsEntryR\x06params\x12#\n" +
+	"\rsource_symbol\x18\x06 \x01(\tR\fsourceSymbol\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\"\xe4\x04\n" +

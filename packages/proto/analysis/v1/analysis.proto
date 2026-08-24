@@ -303,6 +303,10 @@ message StrategyComponent {
   string indicator = 3;      // used when kind == COMPONENT_KIND_BUILTIN_INDICATOR
   string formula_id = 4;     // used when kind == COMPONENT_KIND_CUSTOM_FORMULA
   map<string, double> params = 5;
+  // optional benchmark/reference symbol (feature 152): when non-empty the component is
+  // computed on this symbol's bars (e.g. "VOO") and its output series is aligned onto the
+  // evaluated symbol's bar timeline; empty = computed on the evaluated symbol (unchanged).
+  string source_symbol = 6;
 }
 
 message StrategyDefinition {

@@ -456,6 +456,12 @@ export interface StrategyComponent {
     params: {
         [key: string]: number;
     };
+    /**
+     * optional benchmark/reference symbol (feature 152): when non-empty the component is
+     * computed on this symbol's bars (e.g. "VOO") and its output series is aligned onto the
+     * evaluated symbol's bar timeline; empty = computed on the evaluated symbol (unchanged).
+     */
+    sourceSymbol: string;
 }
 export interface StrategyComponent_ParamsEntry {
     key: string;

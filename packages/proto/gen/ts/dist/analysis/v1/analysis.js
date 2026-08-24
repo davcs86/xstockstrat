@@ -3931,7 +3931,14 @@ exports.GetStrategyReportRequest = {
     },
 };
 function createBaseStrategyComponent() {
-    return { refName: "", kind: ComponentKind.COMPONENT_KIND_UNSPECIFIED, indicator: "", formulaId: "", params: {} };
+    return {
+        refName: "",
+        kind: ComponentKind.COMPONENT_KIND_UNSPECIFIED,
+        indicator: "",
+        formulaId: "",
+        params: {},
+        sourceSymbol: "",
+    };
 }
 exports.StrategyComponent = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -3950,6 +3957,9 @@ exports.StrategyComponent = {
         globalThis.Object.entries(message.params).forEach(([key, value]) => {
             exports.StrategyComponent_ParamsEntry.encode({ key: key, value }, writer.uint32(42).fork()).join();
         });
+        if (message.sourceSymbol !== "") {
+            writer.uint32(50).string(message.sourceSymbol);
+        }
         return writer;
     },
     decode(input, length) {
@@ -3997,6 +4007,13 @@ exports.StrategyComponent = {
                     }
                     continue;
                 }
+                case 6: {
+                    if (tag !== 50) {
+                        break;
+                    }
+                    message.sourceSymbol = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -4025,6 +4042,11 @@ exports.StrategyComponent = {
                     return acc;
                 }, {})
                 : {},
+            sourceSymbol: isSet(object.sourceSymbol)
+                ? globalThis.String(object.sourceSymbol)
+                : isSet(object.source_symbol)
+                    ? globalThis.String(object.source_symbol)
+                    : "",
         };
     },
     toJSON(message) {
@@ -4050,6 +4072,9 @@ exports.StrategyComponent = {
                 });
             }
         }
+        if (message.sourceSymbol !== "") {
+            obj.sourceSymbol = message.sourceSymbol;
+        }
         return obj;
     },
     create(base) {
@@ -4067,6 +4092,7 @@ exports.StrategyComponent = {
             }
             return acc;
         }, {});
+        message.sourceSymbol = object.sourceSymbol ?? "";
         return message;
     },
 };
