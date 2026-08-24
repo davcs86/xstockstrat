@@ -40,14 +40,25 @@ FR-4. **Producer consumes it (`both`).** When `universe_source=both`, the univer
 union **∪** the parsed `explicit_symbols` CSV, de-duplicated. `explicit` remains explicit-CSV-only,
 byte-for-byte unchanged.
 
-FR-5. **Preserve existing pipeline invariants.** The resolved universe still flows through the existing
-`_dedup(...)[:max_symbols]` cap and the paced, budget-bounded `GetFundamentalsMulti` fetch — this
-feature changes only how the raw symbol list is *sourced*, never how it is capped, fetched, scored, or
-emitted.
+FR-5. **Preserve the fetch/score/emit pipeline.** The resolved universe still flows through the paced,
+budget-bounded `GetFundamentalsMulti` fetch, scoring, and idempotent emit unchanged — this feature
+changes only how the raw symbol list is *sourced* (and, per FR-7, when the `max_symbols` cap applies),
+never how it is fetched, scored, or emitted.
 
 FR-6. **Graceful degradation.** A portfolio enumeration failure (RPC error, portfolio outage) MUST NOT
-crash the producer cycle: it degrades to an empty/`explicit` universe and logs, consistent with the
-loop's existing "never let one bad cycle kill the loop" posture (`run_forever` try/except).
+crash the producer cycle: it degrades to an empty universe (`watchlists`) or the explicit CSV (`both`)
+and logs, consistent with the loop's existing "never let one bad cycle kill the loop" posture
+(`run_forever` try/except).
+
+FR-7. **FMP-gated `max_symbols` truncation (operator directive, 2026-08-24).** The
+`analysis.fundsignal.max_symbols_per_run` truncation exists solely to protect FMP's free-tier daily
+request budget. It therefore applies **only when FMP is the active fundamentals provider**
+(`marketdata.fundamentals.provider == "fmp"`, read boot-frozen); in that case the cut uses a stateless
+rotating offset so no user is permanently starved, and the dropped count is logged (computed from the
+full pre-cap union). When the active provider is **not** FMP, the whole cross-user union is processed
+with **no `max_symbols` truncation** — full coverage across cycles via the existing paced budget +
+deferred-resume, nothing permanently dropped. An unknown/absent provider value selects the conservative
+capped path without baking in a provider literal.
 
 ## Out of Scope
 
@@ -118,16 +129,14 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
   watchlists (any list they created). The narrower system-managed-"Signals"-only option (feature 127
   `Watchlist.system_managed`) was considered and declined. FR-1's enumeration therefore spans all
   watchlist rows regardless of `system_managed`.
-- [ ] **Enumeration scope vs. `WatchlistBinding`.** Watchlists carry `(symbol, strategy)` bindings
-  (feature 097). The producer scores per-symbol, so it needs distinct **symbols**; confirm the RPC
-  returns bare symbols (union across bindings + legacy flat `symbols`), not `(symbol, strategy)` pairs.
-- [ ] **Access-control mechanism:** admin `x-access-scope` bit (as the producer already self-injects for
-  `ManageSignalSource`) vs. the `x-internal-caller` allow-list (feature 102/147 pattern). `/sdd-design`
-  to choose; FR-2 is satisfied by either.
-- [ ] **Unbounded universe:** across all users the union could exceed `max_symbols_per_run` /
-  `daily_call_budget`. This is already handled by the existing cap+budget (FR-5), but confirm the
-  ordering/truncation is sensible (today `_dedup` sorts alphabetically before the cap — design should
-  note whether that biasing is acceptable or needs a fairer selection).
+- [x] **RESOLVED (design R2): bare symbols.** The RPC returns a distinct `repeated string symbols`
+  (`SELECT DISTINCT symbol …`), collapsing `(symbol, strategy)` bindings and the legacy flat list. See design.md.
+- [x] **RESOLVED (operator, design R1): `x-internal-caller` allow-list**, not the admin `x-access-scope`
+  bit. The admin bit is the wrong trust boundary for a cross-user read (PR #994; feature-092-removed
+  self-asserted-admin pattern). Grant `{callerID: "analysis-fundsignal", rpc: "ListAllWatchlistSymbols"}`. See design.md.
+- [x] **RESOLVED (operator, design R3+R4): FMP-gated truncation + rotating offset.** The `max_symbols`
+  cut applies only when FMP is the active provider, and then uses a stateless rotating offset so no user
+  is permanently starved; non-FMP takes the full union (FR-7). See design.md.
 
 ### Known traps (from the Ledger)
 

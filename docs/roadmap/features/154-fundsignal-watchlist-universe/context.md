@@ -59,3 +59,38 @@
 ## Next
 
 `/sdd-design fundsignal-watchlist-universe` (full mode — operator requested).
+
+## Session 2026-08-24 — sdd-design (full mode, 4 rounds)
+
+- recon.md + design.md written; status spec-ready → design-approved.
+- **Chosen approach:** additive `ListAllWatchlistSymbols` portfolio RPC (empty req, `repeated string symbols`),
+  `SELECT DISTINCT symbol FROM portfolio.watchlist_symbols ORDER BY symbol` (no migration), gated by a new
+  Go `x-internal-caller` allow-list (`internal/service/authz.go`, grant `analysis-fundsignal`); analysis
+  `_resolve_universe` rewrite consuming it.
+- **Round decisions (operator-gated each round):**
+  - R1 — authz = `x-internal-caller` allow-list, NOT the admin `x-access-scope` bit (PR #994; feature-092
+    self-asserted-admin removal; analysis "self-granted admin scope" recorded defect).
+  - R2 — Go gate reads `metadata.FromIncomingContext(ctx)` (NOT `connect.Request.Header()`, which the
+    grpc adapter fabricates empty); analysis APPENDS metadata (`list(metadata)+[(hdr,caller)]`) to keep
+    the manual-RPC path's `x-trace-id` (C-03); named the 5 fail-closed gate tests + a new incoming-metadata ctx builder.
+  - R3 — kept `{callerID, rpc}` grant (config least-privilege precedent); DISTINCT is sub-ms unindexed
+    (no migration); truncation uses a stateless rotating offset so no user is permanently starved.
+  - R4 — **operator directive:** truncation applies ONLY when FMP is the active provider
+    (`marketdata.fundamentals.provider == "fmp"`, read boot-frozen via a NEW second
+    `ConfigWatcher(namespace="marketdata")` — WatchConfig is per-namespace); non-FMP = full union, no
+    `max_symbols` cut, full coverage across cycles via existing deferral (NOT `budget=len`, which would
+    hide Finnhub rate-limit drops under a false `completed`). Unknown provider → conservative capped path,
+    no provider literal baked in (drift-guard, fails 2026-08-13).
+- **New requirement FR-7** (FMP-gated truncation) + **new scenarios AC-8** (both+outage→CSV), **AC-9**
+  (non-FMP full union). AC-6 conditioned on FMP-active.
+- **Governance:** analysis→marketdata cross-namespace WatchConfig subscription is unprecedented — to be
+  recorded as a config-governance note + a new `PORTFOLIO-*` invariant (first cross-user per-user-data read).
+- **Numbering:** feature is **154** (renumbered from 153 by the harness after the `153-fix-ohlcv-chunk-lock-oom`
+  collision). A stray untracked `153-fundsignal-watchlist-universe/` (a duplicate recon/design written before
+  the renumber was noticed) was removed; design.md moved onto 154.
+- **Branch:** work rides the harness branch `claude/fundamentals-signal-config-0jdfed` (harness mandate),
+  PRs target `main-dev`; the `feature/…` dev-branch name in feature.md is nominal (fails-082 divergence, accepted).
+
+## Next
+
+`/sdd-spec fundsignal-watchlist-universe` — implementation spec.
