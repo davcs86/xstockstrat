@@ -2044,3 +2044,39 @@ reusing.
 - **Rule it implies**: before wrapping a backend write as a partial-update tool, check whether the
   RPC is replace-vs-merge at the DB layer; a replace RPC needs a read-modify-write shim or it silently
   destroys omitted state (the F-12/RC-1 drift class).
+
+### 2026-08-22 — manage-strategy-accept-object-rules — design
+- **Pattern**: For an MCP tool param documented as a JSON-encoded string, accept `str | dict` (not just
+  `str`) and `json.dumps` a dict at the tool edge before forwarding. Some MCP clients pre-parse
+  JSON-object arguments and deliver a `dict`, which a strict `str` pydantic signature rejects outright
+  — the client then cannot call the tool at all. Widening to `str | dict` (a) makes the generated MCP
+  input schema `anyOf(string, object)` so lists/scalars are still rejected at the schema boundary, and
+  (b) keeps the existing string path byte-for-byte (bare `json.dumps`, no `sort_keys` — sorting would
+  make the dict path diverge from the untouched string path). Do NOT model the value as a `TypedDict`
+  when a backend service already owns its grammar (here `xstockstrat-analysis` validates the rule
+  tree) — that duplicates the grammar and drift-risks it (the F-12/RC-1 mirror class). The agent stays
+  a passthrough.
+- **Evidence**: `services/xstockstrat-agent/app/tools.py` `manage_strategy` (`entry_rule`/`exit_rule`
+  widened to `str | dict`, `json.dumps` before the `supplied`/`mask` build ~:666); feature 149
+  design.md § Chosen Approach; the boundary test mirrors `test_tools.py:540`
+  (`test_start_and_end_are_exposed_on_the_tool_schema`).
+- **Rule it implies**: a JSON-string tool param that real clients hand-encode should accept the parsed
+  object too; validate at the schema edge and normalize at the tool edge, but keep grammar validation
+  in the single backend owner. Candidate to fold into the `xstockstrat-agent` MCP-tool-contract review
+  focus.
+
+### 2026-08-24 — market-regime-benchmark-operand — proto/fingerprint-stability
+- **Insight**: When adding an OPTIONAL field to a proto message whose serialized JSON feeds a
+  definition **fingerprint** (here `StrategyComponent.source_symbol=6` → `definition_json` →
+  `_definition_fingerprint`, `services/xstockstrat-analysis/app/handlers/servicer.py:3994`), use a
+  **plain** proto3 scalar, NEVER proto3 `optional`. `MessageToDict(preserving_proto_field_name=True)`
+  omits an unset plain scalar but EMITS an explicitly-set empty (`"source_symbol":""`) for an
+  `optional` field carrying presence — which silently shifts the fingerprint of every pre-existing
+  row, invalidating its accumulated evidence/derived grade and breaking a "byte-identical for empty"
+  back-compat guarantee. Branch on truthiness (`if comp.source_symbol:`) for the today-path.
+- **Evidence**: feature 152 design.md § Chosen Approach / Rejected Alternatives; write path
+  `servicer.py:2232-2234`; fingerprint `servicer.py:3991-3994`; caught by the design-adversary in R1.
+- **Rule it implies**: an additive proto field on a fingerprinted/hashed message must be plain (not
+  `optional`) unless the fingerprint explicitly excludes it; pair the addition with a fingerprint
+  byte-identity regression test. Sibling to the C-10 "shared-consumer" family — here the shared
+  consumer is the fingerprint.

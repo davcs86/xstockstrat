@@ -5,7 +5,29 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/components/ui/utils';
 import type { SymbolDiagnostics } from '@xstockstrat/proto/analysis/v1/analysis_pb';
-import { BarAction, NoTradeReason } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import {
+  BarAction,
+  FillModel,
+  NoTradeReason,
+  SizingMode,
+} from '@xstockstrat/proto/analysis/v1/analysis_pb';
+
+// feature 150: exhaustive Record<SizingMode,…> (ledger 067) — a new enum value fails `tsc` here.
+// UNSPECIFIED renders as "Legacy" because a null/legacy run row deserializes to the 0 sentinel and
+// the legacy path is exactly what UNSPECIFIED means on the request side.
+export const SIZING_MODE_LABEL: Record<SizingMode, string> = {
+  [SizingMode.UNSPECIFIED]: 'Legacy',
+  [SizingMode.LEGACY]: 'Legacy',
+  [SizingMode.PORTFOLIO]: 'Portfolio',
+};
+
+// feature 151: exhaustive Record<FillModel,…> (ledger 067). UNSPECIFIED → "Legacy" (a null/pre-151
+// row deserializes to the 0 sentinel, which the server normalizes to same-bar-close).
+export const FILL_MODEL_LABEL: Record<FillModel, string> = {
+  [FillModel.UNSPECIFIED]: 'Legacy',
+  [FillModel.SAME_BAR_CLOSE]: 'Same-bar close',
+  [FillModel.NEXT_BAR_OPEN]: 'Next-bar open',
+};
 
 const ACTION_LABEL: Record<BarAction, string> = {
   [BarAction.UNSPECIFIED]: '—',

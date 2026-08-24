@@ -45,6 +45,26 @@ export function prefixGapRange(requested: Range): Range {
   };
 }
 
+// Feature 150: SizingMode enum wire values (packages/proto/analysis/v1/analysis.proto).
+export const SIZING_MODE_LEGACY = 1;
+export const SIZING_MODE_PORTFOLIO = 2;
+
+// Feature 151: FillModel enum wire values (packages/proto/analysis/v1/analysis.proto).
+export const FILL_MODEL_SAME_BAR_CLOSE = 1;
+export const FILL_MODEL_NEXT_BAR_OPEN = 2;
+
+/**
+ * A distinct, non-empty portfolio-level equity curve (cash + Σ marked-to-market) for a
+ * portfolio-mode run — the authoritative aggregate curve feature 150 renders separately from the
+ * per-symbol curve. Values rise then dip so the chart line is visibly non-flat.
+ */
+export const PORTFOLIO_EQUITY_CURVE = [
+  { timestamp: { seconds: BigInt(1704067200), nanos: 0 }, equity: 100000 }, // 2024-01-01
+  { timestamp: { seconds: BigInt(1704153600), nanos: 0 }, equity: 100800 },
+  { timestamp: { seconds: BigInt(1704240000), nanos: 0 }, equity: 100450 },
+  { timestamp: { seconds: BigInt(1704326400), nanos: 0 }, equity: 101600 },
+];
+
 /** A BACKTEST_STATUS_INSUFFICIENT_DATA result whose gap is the pre-window span. */
 export function insufficientDataResult(strategyId: string, symbols: string[], range: Range) {
   const symbol = symbols[0] ?? BACKTEST_GAP_SYMBOL;

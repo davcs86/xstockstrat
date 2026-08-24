@@ -65,6 +65,27 @@ parameter sweep and re-enable it at the end so it never evaluates at a config yo
 under this partial-merge contract — send only it to change it, and use `clear_fields` to revert it
 to the platform default.
 
+**Benchmark / market-regime operand (feature 152).** A component may carry an optional
+`source_symbol` (a fixed reference ticker, e.g. `"VOO"`). When set, that component is computed on the
+**benchmark's** bars instead of the evaluated symbol's, and its output series is aligned onto the
+evaluated symbol's bar timeline — so a rule can gate any symbol's entries/exits on the broad market.
+Example: buy dips only when VOO's 200-day is rising —
+`components=[{"ref_name":"mkt","kind":"formula","formula_id":"<sma_slope>","params":{"period":200,"lookback":20},"source_symbol":"VOO"}]`
+with an entry leaf `{"fn":">","lhs":"mkt","rhs":0}`. Omitted/empty `source_symbol` = computed on the
+evaluated symbol (unchanged, byte-identical). It is normalized (uppercase/trim) server-side and is
+**scoring-relevant** — changing a benchmark clears the strategy's derived grade (like any component
+edit). A bar the benchmark lacks (different halt/holiday calendar) makes that leaf read **hold/false**
+for that bar — no forward-fill, no look-ahead. If the benchmark lacks enough history to warm the
+component, the backtest returns `BACKTEST_STATUS_INSUFFICIENT_DATA` naming the **benchmark** symbol in
+`coverage_gaps` — `trigger_backfill` the benchmark and re-run. v1 covers a single reference symbol per
+component; true universe breadth (e.g. "% of a universe above its 200-day") is a deferred follow-on.
+
+**Rule encoding.** `entry_rule`/`exit_rule` accept **either** a JSON string **or** a JSON object
+(dict) — an MCP client that pre-parses JSON arguments may pass the object directly; the tool
+serializes a dict to the canonical JSON string before sending. Passing a rule both as a value and
+naming it in `clear_fields` keeps the value (the clear is silently dropped); to erase, use
+`clear_fields` alone.
+
 **`denied_symbols` and `signal_eligible` (feature 132)** are two more partial-merge fields on
 `manage_strategy`. `denied_symbols` is an **entry-only deny list** — a normalized-uppercase symbol
 list the strategy must never evaluate *for entry*; a held position on a denied symbol still keeps
@@ -91,13 +112,39 @@ tool-output token limit and is written to a file instead. **Do not read that fil
 only the summary fields and per-symbol trade counts with a small `python3` script (or a subagent).
 The exact save-and-parse recipe, including the JSON shape, is in `reference/output-handling.md`.
 
+### Fill model (feature 151)
+
+`run_backtest(..., fill_model="next_bar_open")` chooses when a signal fills:
+
+- **`same_bar_close`** (the default) fills a bar-`i` signal at bar `i`'s own close — optimistically
+  biased (a mild look-ahead: the close that produced the signal is also the fill price).
+- **`next_bar_open`** fills a bar-`i` signal at bar `(i+1)`'s open — the standard bias-free
+  convention.
+
+A next-bar run is **not** directly comparable to a legacy run — label which mode a report used (the
+summary echoes the effective `fill_model`). **Display-only action/conviction decouple:** in next-bar
+mode a diagnostics row can show an ENTER/EXIT on a bar whose `conviction` reads hold, because the
+action lands on the fill bar while conviction stays that bar's own value — the grade is unaffected
+(grade math ignores conviction).
+
 ## Phase 3 — Aggregate the basket
 
-The multi-symbol `run_backtest` (many symbols in one call) **compounds capital sequentially** — a
-different thing from the per-symbol-independent basket most reports mean (each symbol on its own
-capital, summed PnL / averaged return). To reproduce an independent basket, run **single-symbol**
-backtests and aggregate them yourself. `reference/aggregation.md` has the method and the
-sum-PnL/avg-return formulas.
+There are now **three** baskets, not two — pick before you aggregate:
+
+1. **Portfolio mode (feature 150)** — `run_backtest(..., sizing_mode="portfolio")`. A real
+   shared-capital portfolio: concurrent positions out of one pool, one **order-independent** equity
+   curve. Its aggregate metrics (`total_return`, `max_drawdown`, `sharpe_ratio`) are directly
+   comparable and need **no** manual per-symbol aggregation — read them straight off the result.
+   The summary also carries a `capital_skips` count (entries the pool could not open). Use this when
+   the request means "the real portfolio."
+2. **Legacy sequential (default)** — a multi-symbol `run_backtest` with `sizing_mode` omitted still
+   **compounds capital sequentially** in symbol order, so its multi-symbol aggregate is an
+   ordering-dependent parlay. This is the footgun; prefer portfolio mode for the portfolio view.
+3. **Independent-per-symbol** — run **single-symbol** backtests and aggregate them yourself (each on
+   its own full capital). Still the right choice to isolate each symbol's response to a swept
+   parameter, and what most sweep reports mean.
+
+`reference/aggregation.md` has all three, plus the sum-PnL/avg-return formulas for option 3.
 
 ## Phase 4 — Verify before trusting
 

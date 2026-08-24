@@ -460,6 +460,8 @@ def register_tools(server: MCPServer) -> None:
         initial_capital: float = 100000.0,
         start: str | None = None,
         end: str | None = None,
+        sizing_mode: str | None = None,
+        fill_model: str | None = None,
     ) -> list:
         """Trigger a backtest via xstockstrat-analysis.
         strategy_id: identifies the strategy (e.g. 'sma_crossover'). Must be a REGISTERED strategy
@@ -491,7 +493,19 @@ def register_tools(server: MCPServer) -> None:
         tell the user detail exists even if your client shows no attachment affordance.
         Note: 64-bit integer fields in the attached full result (e.g. per-bar `volume`, and
         `bars_have`/`bars_need` inside `coverage_gaps`) are serialized as JSON STRINGS, not
-        numbers — parse them before arithmetic."""
+        numbers — parse them before arithmetic.
+        sizing_mode: capital-allocation model (feature 150). 'portfolio' runs a real shared-capital
+          portfolio — concurrent positions out of one pool, one order-independent equity curve, so
+          the aggregate metrics are directly comparable and need no manual per-symbol aggregation
+          (the summary shows the mode + a `capital_skips` count for entries the pool couldn't open).
+          Omitted/'legacy' (default) keeps the legacy serial per-symbol compounding, whose
+          multi-symbol aggregate is an ordering-dependent sequential parlay — the footgun.
+        fill_model: fill timing (feature 151). 'next_bar_open' fills a bar-i signal at bar (i+1)'s
+          open — the standard bias-free convention. Omitted/'same_bar_close'/'legacy' (default)
+          fills at the signal bar's own close, an optimistically-biased fill. The effective model is
+          echoed in the summary. Note (display-only): in next-bar mode a diagnostics row can show an
+          ENTER/EXIT on a bar whose conviction reads hold — the action lands on the fill bar while
+          conviction stays that bar's own value; the grade is unaffected."""
         # feature 133: forward the caller's own user id so analysis resolves ownership from the
         # header — a non-owner strategy_id_ref is rejected PERMISSION_DENIED there. Wrap the RPC so
         # that denial surfaces as a tool-level error, not an unwrapped AioRpcError (AC-6).
@@ -504,6 +518,8 @@ def register_tools(server: MCPServer) -> None:
                 initial_capital=initial_capital,
                 start=start,
                 end=end,
+                sizing_mode=sizing_mode,
+                fill_model=fill_model,
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="strategy not found")) from e
@@ -576,8 +592,8 @@ def register_tools(server: MCPServer) -> None:
         strategy_id: str,
         display_name: str | None = None,
         components: list[dict] | None = None,
-        entry_rule: str | None = None,
-        exit_rule: str | None = None,
+        entry_rule: str | dict | None = None,
+        exit_rule: str | dict | None = None,
         signal_params: dict | None = None,
         cooldown_days: int | None = None,
         exit_cooldown_days: int | None = None,
@@ -589,13 +605,23 @@ def register_tools(server: MCPServer) -> None:
         operation: 'register' | 'update' | 'deactivate' | 'reactivate'.
         strategy_id: lowercase/underscore identifier (e.g. 'sma_crossover').
         display_name: human-readable name.
-        components: list of {ref_name, kind ('builtin'|'formula'), indicator, formula_id, params}.
+        components: list of {ref_name, kind ('builtin'|'formula'), indicator, formula_id, params,
+            source_symbol}.
             kind='builtin': indicator must be one of the built-in enum ATR, BB, EMA, MACD, RSI,
             SMA, STOCH, VWAP (case-insensitive). For an indicator outside this set (e.g. a
             z-score or efficiency-ratio calculation), register a custom formula first via
             manage_formula and reference it here as kind='formula', formula_id=<id>.
+            source_symbol (optional, feature 152): a fixed benchmark/reference ticker (e.g.
+            'VOO'). When set, the component is computed on THAT symbol's bars and its output is
+            aligned onto the evaluated symbol's bar timeline — enabling cross-symbol
+            'market-regime' gates like "buy only when VOO's 200-day is rising" (mkt > 0 where
+            mkt is an SMA-slope on source_symbol='VOO'). Omitted/empty = computed on the
+            evaluated symbol (unchanged). Normalized (uppercase/trim) server-side; a bar the
+            benchmark lacks evaluates that leaf to hold/false (no forward-fill, no look-ahead).
 
-        entry_rule / exit_rule: JSON-encoded condition trees (a JSON string, not a raw object).
+        entry_rule / exit_rule: condition trees, accepted as EITHER a JSON string OR a JSON
+            object (dict). A dict is serialized to the canonical JSON string (json.dumps) before
+            forwarding, so both forms store the same value; a string is forwarded unchanged.
             Two node shapes, nestable to arbitrary depth:
               - Combinator node: {"op": "AND"|"OR", "conditions": [<node>, ...]}. There is no NOT.
               - Leaf/comparison node: {"fn": <op>, "lhs": <operand>, "rhs": <operand>}, where
@@ -619,7 +645,8 @@ def register_tools(server: MCPServer) -> None:
                     {"fn": "<", "lhs": "er", "rhs": 0.25}
                   ]
                 }
-            (pass this dict JSON-encoded, e.g. json.dumps(...), as the entry_rule string.)
+            (pass this as the entry_rule directly as the dict, or as its json.dumps(...) string —
+            both are accepted.)
         signal_params: optional signal-weighting params.
         cooldown_days: optional per-symbol re-entry cooldown in calendar days — omit → platform
             default (31); 0 → no cooldown; negative → rejected (INVALID_ARGUMENT).
@@ -636,7 +663,10 @@ def register_tools(server: MCPServer) -> None:
             allowlist is already an explicit universe override).
         clear_fields: optional list of field names to ERASE, e.g. ['exit_rule']. Use this to
             blank a rule or to revert cooldown_days to the platform default — passing a field
-            with no value cannot express "erase" on its own.
+            with no value cannot express "erase" on its own. If a field is BOTH supplied a value
+            and named in clear_fields, the value wins and the clear is silently dropped — to erase,
+            name it in clear_fields ALONE. (A supplied empty-object rule {} / "{}" is not a clear;
+            the server rejects a contentless rule INVALID_ARGUMENT.)
 
         UPDATE IS A PARTIAL MERGE (feature 070). On operation='update' only the fields you
         actually pass are changed; everything else is preserved server-side. So updating one
@@ -648,6 +678,10 @@ def register_tools(server: MCPServer) -> None:
         Note: changing any scoring-relevant field (components, rules, cooldown_days,
         exit_cooldown_days, signal_params) changes the strategy's definition fingerprint, so its
         derived grade is cleared until a fresh backtest supplies new evidence. A rename does not.
+        A dict rule is serialized with json.dumps default separators, so it is NOT byte-identical
+        to the same rule hand-written as a differently-spaced JSON string; since the fingerprint is
+        content-sensitive, encode a given rule the same way each time to avoid needlessly clearing
+        its grade.
 
         LIFECYCLE (feature 089): 'deactivate' is reversible via 'reactivate' (sets active=true and
         re-validates the stored definition — a reactivate can fail INVALID_ARGUMENT if a referenced
@@ -663,6 +697,17 @@ def register_tools(server: MCPServer) -> None:
         # strategy_id=..., cooldown_days=45)` transmitted explicit-empty components and rules and
         # a blanked display_name — which is what wiped stored strategies. Generalizes the
         # `is not None` treatment `cooldown_days` already had to every optional field.
+        #
+        # feature 149: a rule may arrive as a JSON object (dict) from an MCP client whose transport
+        # pre-parses JSON arguments, or as a pre-encoded JSON string. Serialize a dict to the same
+        # JSON string a string-passing caller would send. Bare json.dumps (NO sort_keys) so the
+        # string path stays byte-for-byte; a str is never re-encoded. This runs BEFORE the mask
+        # below, so an omitted None still drops out and an empty dict {} → "{}" (non-None) enters
+        # the mask (the server then rejects a contentless rule, INVALID_ARGUMENT).
+        if isinstance(entry_rule, dict):
+            entry_rule = json.dumps(entry_rule)
+        if isinstance(exit_rule, dict):
+            exit_rule = json.dumps(exit_rule)
         definition: dict = {"strategy_id": strategy_id}
         supplied = {
             "display_name": display_name,

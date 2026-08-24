@@ -1766,9 +1766,11 @@ class TestRunBacktestCells:
         diag = analysis_pb2.SymbolDiagnostics()
 
         def fake_symbol(symbol=None, **kwargs):
+            # feature 150: simulators now return a 5th element (per-bar intent list); the legacy
+            # RunBacktest path ignores it, so an empty list is a faithful stand-in here.
             if symbol == "AAPL":
-                return ([trade, trade], 101_000.0, [100_000.0] * 11, diag)
-            return ([], 101_000.0, [101_000.0] * 6, diag)
+                return ([trade, trade], 101_000.0, [100_000.0] * 11, diag, [])
+            return ([], 101_000.0, [101_000.0] * 6, diag, [])
 
         return fake_symbol
 
@@ -1814,7 +1816,7 @@ class TestRunBacktestCells:
         diag = analysis_pb2.SymbolDiagnostics()
         curve = [100_000.0, 100_100.0, 100_200.0]
         svc._backtest_symbol_evaluated = AsyncMock(
-            side_effect=lambda symbol=None, **kw: ([], 100_000.0, curve, diag)
+            side_effect=lambda symbol=None, **kw: ([], 100_000.0, curve, diag, [])
         )
 
         req = self._req(strategy_id="s1", strategy_id_ref="s1", symbols=("AAPL",))
@@ -1841,7 +1843,7 @@ class TestRunBacktestCells:
         svc._strategies_repo.get_by_owner_and_id = svc._strategies_repo.get_by_id
         diag = analysis_pb2.SymbolDiagnostics()
         svc._backtest_symbol_evaluated = AsyncMock(
-            side_effect=lambda symbol=None, **kw: ([], 100_000.0, [100_000.0, 100_100.0], diag)
+            side_effect=lambda symbol=None, **kw: ([], 100_000.0, [100_000.0, 100_100.0], diag, [])
         )
         # strategy_id "s1" differs from strategy_id_ref "other" → cells carry no fingerprint.
         req = self._req(strategy_id="s1", strategy_id_ref="other", symbols=("AAPL",))
@@ -2042,7 +2044,7 @@ class TestHeadlineTriggers:
         svc._backtest_run_symbols_repo.insert_many = AsyncMock()
         diag = analysis_pb2.SymbolDiagnostics()
         svc._backtest_symbol_evaluated = AsyncMock(
-            side_effect=lambda symbol=None, **kw: ([], 100_000.0, [100_000.0, 100_050.0], diag)
+            side_effect=lambda symbol=None, **kw: ([], 100_000.0, [100_000.0, 100_050.0], diag, [])
         )
         req = MagicMock()
         req.strategy_id = "s1"
@@ -2531,9 +2533,12 @@ async def _run_evaluated(svc, definition, decisions, n_bars):
     fake_eval = MagicMock()
     fake_eval.evaluate_with_series = AsyncMock(return_value=(decisions, {}))
     with patch("app.handlers.servicer.StrategyEvaluator", return_value=fake_eval):
-        return await svc._backtest_symbol_evaluated(
+        # feature 150: drop the additive 5th (intent) element so these legacy tests keep their
+        # 4-tuple unpack — the intent return is covered directly in TestPortfolioSizing.
+        result = await svc._backtest_symbol_evaluated(
             "AAPL", common_pb2.TimeRange(), definition, 100_000.0, 0.0, 0.0
         )
+        return result[:4]
 
 
 def _decisions(n, entries=(), exits=()):
@@ -3202,7 +3207,9 @@ class TestTradeStartIndex:
         rng = common_pb2.TimeRange()
         rng.start.seconds = self.WINDOW_START
         rng.end.seconds = self.WINDOW_START + 10 * 86_400
-        return await svc._backtest_symbol(
+        # feature 150: drop the additive 5th (intent) element so these feature-071 tests keep
+        # their 4-tuple unpack — the intent return is covered directly in TestPortfolioSizing.
+        result = await svc._backtest_symbol(
             "AAPL",
             rng,
             fast_period=2,
@@ -3213,6 +3220,7 @@ class TestTradeStartIndex:
             slippage=0.0,
             warmup_prefix=warmup_prefix,
         )
+        return result[:4]
 
     @pytest.mark.asyncio
     async def test_without_prefix_every_bar_is_in_scope(self):
@@ -3511,17 +3519,17 @@ class TestBacktestLiveParityUnchanged:
     supplies, and that difference must stay visible rather than be quietly assumed away.
     """
 
-    def test_the_live_loop_still_uses_its_own_fixed_lookback(self):
-        """If someone later wires the prefix into the live loop, this fails and the FR-7
-        divergence documented in the service CLAUDE.md has to be revisited."""
+    def test_the_live_loop_evaluated_symbol_uses_fixed_lookback(self):
+        """The EVALUATED symbol's live window stays the fixed 365-day lookback. Feature 152
+        deliberately wires the warm-up prefix into the live loop for BENCHMARK (source_symbol)
+        components only (`_load_benchmark_bars`); the evaluated symbol's own `_recent_range()`
+        fetch is unchanged. See docs/warmup.md § Backtest/live divergence (FR-7, feature 152)."""
         from app.engine import live_loop
 
         assert live_loop._LOOKBACK_DAYS == 365
+        # The evaluated-symbol fetch in _eval_pair still uses the fixed _recent_range().
         source = Path(live_loop.__file__).read_text()
-        assert "warmup" not in source, (
-            "live_loop now references the warm-up prefix — FR-7's documented divergence "
-            "(design.md § OQ-4) is stale and the parity note must be updated"
-        )
+        assert "self._recent_range()" in source
 
     def test_the_evaluator_contract_takes_no_window_argument(self):
         """The prefix lives entirely in the servicer's fetch. The evaluator receives a plain
@@ -5596,3 +5604,118 @@ class TestGetIndicatorSeries:
         )
         with pytest.raises(Exception, match="aborted"):
             await svc.GetIndicatorSeries(req, _owned_ctx())
+
+
+# ---------------------------------------------------------------------------
+# feature 150 — portfolio sizing routing (Steps 7/8): AC-3, AC-4, AC-5
+# ---------------------------------------------------------------------------
+
+
+def _canonical_pre150(result):
+    """`_canonical` PLUS the three fields feature 150 adds, so a legacy run compares equal to a
+    pre-feature golden. A legacy run now stamps sizing_mode=SIZING_MODE_LEGACY (field 17); a naive
+    full-message equality would false-fail on that new field alone (impl-spec Step 8)."""
+    copy = analysis_pb2.BacktestResult()
+    copy.CopyFrom(result)
+    copy.backtest_id = ""
+    copy.ClearField("completed_at")
+    copy.ClearField("sizing_mode")
+    copy.ClearField("capital_skips")
+    copy.ClearField("portfolio_equity_curve")
+    return copy.SerializeToString(deterministic=True)
+
+
+class TestPortfolioSizingRouting:
+    """RunBacktest routing by sizing_mode — the legacy default must stay byte-for-byte identical
+    (BacktestResult bytes are persisted verbatim, feature 068)."""
+
+    def _run(self, sizing_mode=None, symbols=("AAPL", "MSFT")):
+        svc = _wire_evaluated(make_servicer(), _series_bars(6, 12))
+        req = _windowed_req(_sma_def(), symbols=symbols)
+        if sizing_mode is not None:
+            req.sizing_mode = sizing_mode
+        return svc, req
+
+    @pytest.mark.asyncio
+    async def test_legacy_default_is_unchanged_and_portfolio_moves_numbers(self):
+        """@AC-3: unset sizing_mode == explicit LEGACY, byte-for-byte (minus the additive/volatile
+        fields); the portfolio branch has teeth (it moves the aggregate numbers)."""
+        svc_a, req_a = self._run(sizing_mode=None)  # UNSPECIFIED → legacy
+        unset = await svc_a.RunBacktest(req_a, context=_owned_ctx())
+
+        svc_b, req_b = self._run(sizing_mode=analysis_pb2.SIZING_MODE_LEGACY)
+        legacy = await svc_b.RunBacktest(req_b, context=_owned_ctx())
+
+        # UNSPECIFIED and explicit LEGACY take the identical path → identical whole-message bytes
+        # (minus backtest_id/completed_at/the three additive fields).
+        assert _canonical_pre150(unset) == _canonical_pre150(legacy)
+        # A legacy run stamps the mode; it never records UNSPECIFIED.
+        assert unset.sizing_mode == analysis_pb2.SIZING_MODE_LEGACY
+        assert not unset.portfolio_equity_curve and not unset.capital_skips
+
+        # Teeth: the portfolio branch produces a genuinely different aggregate.
+        svc_c, req_c = self._run(sizing_mode=analysis_pb2.SIZING_MODE_PORTFOLIO)
+        portfolio = await svc_c.RunBacktest(req_c, context=_owned_ctx())
+        assert portfolio.sizing_mode == analysis_pb2.SIZING_MODE_PORTFOLIO
+        assert portfolio.total_return != pytest.approx(legacy.total_return)
+
+    @pytest.mark.asyncio
+    async def test_portfolio_run_returns_and_persists_mode(self):
+        """@AC-4: a portfolio run returns PORTFOLIO, persists the mode name + resolved params."""
+        svc, req = self._run(sizing_mode=analysis_pb2.SIZING_MODE_PORTFOLIO)
+        svc._backtest_runs_repo = AsyncMock()
+        result = await svc.RunBacktest(req, context=_owned_ctx())
+
+        assert result.sizing_mode == analysis_pb2.SIZING_MODE_PORTFOLIO
+        assert result.portfolio_equity_curve  # non-empty portfolio curve
+        kwargs = svc._backtest_runs_repo.insert.await_args.kwargs
+        assert kwargs["sizing_mode"] == "SIZING_MODE_PORTFOLIO"
+        assert kwargs["position_weight"] == pytest.approx(0.10)
+        assert kwargs["max_concurrent"] == 9
+
+    @pytest.mark.asyncio
+    async def test_legacy_run_persists_mode_with_null_params(self):
+        """@AC-4: a legacy run persists SIZING_MODE_LEGACY but NULL portfolio params."""
+        svc, req = self._run(sizing_mode=None)
+        svc._backtest_runs_repo = AsyncMock()
+        await svc.RunBacktest(req, context=_owned_ctx())
+
+        kwargs = svc._backtest_runs_repo.insert.await_args.kwargs
+        assert kwargs["sizing_mode"] == "SIZING_MODE_LEGACY"
+        assert kwargs["position_weight"] is None
+        assert kwargs["max_concurrent"] is None
+
+    def test_row_to_summary_maps_sizing_mode(self):
+        """@AC-4: the summary projection maps the stored mode name; a null row → UNSPECIFIED."""
+        from app.handlers.servicer import _row_to_backtest_summary
+
+        portfolio = _row_to_backtest_summary(
+            {
+                "backtest_id": "b",
+                "status": "BACKTEST_STATUS_OK",
+                "sizing_mode": "SIZING_MODE_PORTFOLIO",
+            }
+        )
+        assert portfolio.sizing_mode == analysis_pb2.SIZING_MODE_PORTFOLIO
+        null_row = _row_to_backtest_summary({"backtest_id": "b", "status": "BACKTEST_STATUS_OK"})
+        assert null_row.sizing_mode == analysis_pb2.SIZING_MODE_UNSPECIFIED
+
+    @pytest.mark.asyncio
+    async def test_per_symbol_cells_identical_across_modes(self):
+        """@AC-5: the per-symbol evidence cells (the derived-grade inputs) are identical between
+        legacy and portfolio mode — portfolio aggregation never touches the per-symbol loop."""
+        svc_l, req_l = self._run(sizing_mode=None)
+        svc_l._backtest_run_symbols_repo = AsyncMock()
+        await svc_l.RunBacktest(req_l, context=_owned_ctx())
+        legacy_cells = svc_l._backtest_run_symbols_repo.insert_many.await_args.args[0]
+
+        svc_p, req_p = self._run(sizing_mode=analysis_pb2.SIZING_MODE_PORTFOLIO)
+        svc_p._backtest_run_symbols_repo = AsyncMock()
+        await svc_p.RunBacktest(req_p, context=_owned_ctx())
+        portfolio_cells = svc_p._backtest_run_symbols_repo.insert_many.await_args.args[0]
+
+        # Drop the run-varying backtest_id so the comparison is on the grade-bearing fields.
+        def _strip(cells):
+            return [{k: v for k, v in c.items() if k != "backtest_id"} for c in cells]
+
+        assert _strip(legacy_cells) == _strip(portfolio_cells)

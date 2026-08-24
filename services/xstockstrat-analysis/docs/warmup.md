@@ -33,12 +33,17 @@ bars the seed still carries ~13.5% of the weight.
   paginate while marketdata caps a page at 500 bars ASC, so **max-range backtests were silently
   dropping their newest bars**; correcting this shifts `trading_days` on long runs (≈0.8%).
   Exhausting the page cap **raises** rather than returning a truncated series.
-- **Backtest/live divergence (FR-7).** This is a *backtest-path* change; `live_loop.py` keeps its
-  own 365-calendar-day window and no shortfall detection. The evaluator contract is unchanged —
-  *same bar series ⇒ same decisions* still holds exactly — but the series each caller supplies now
-  differs more than before for FIR indicators (and less, for EMA/MACD, thanks to the `3×`
-  multiple). Pinned by `TestBacktestLiveParityUnchanged`; revisit this note before wiring the
-  prefix into the live loop.
+- **Backtest/live divergence (FR-7), updated by feature 152.** For the **evaluated symbol** this is
+  still a *backtest-path* change; `live_loop.py` keeps its own 365-calendar-day window and no
+  shortfall detection for the evaluated symbol. **Feature 152 wires the warm-up prefix into the live
+  loop for BENCHMARK (`source_symbol`) components only**: `live_loop._load_benchmark_bars` sizes each
+  benchmark's fetch with `warmup.required_prefix_bars` (builtins via `builtin_lookback_bars`, custom
+  formulas via the declared `warmup_period` fetched by `StrategyEvaluator.declared_formula_warmups`)
+  and widens that benchmark's `GetBars` window by `prefix_calendar_days(...)` beyond `_LOOKBACK_DAYS`,
+  so a benchmark gate is actually warm on the live path (a missing/under-warmed benchmark degrades to
+  a gap → hold, never a crash). The evaluator contract is still unchanged — *same bar series ⇒ same
+  decisions* holds exactly. Pinned by `TestBacktestLiveParityUnchanged` (evaluated-symbol lookback
+  stays 365) and `test_live_source_symbol.py` (benchmark warmup widening).
 - Existing feature-065 evidence cells are **not invalidated** (OQ-3); they remain valid for the
   window they recorded, and the `trading_days` shift is immaterial against `k = 250` shrinkage.
 

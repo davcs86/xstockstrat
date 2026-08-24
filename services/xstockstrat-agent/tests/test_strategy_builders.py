@@ -131,12 +131,29 @@ class TestStrategyBuilderParity:
                 "indicator": "SMA",
                 "formula_id": "f1",
                 "params": {"period": 3.0},
+                # feature 152 — a benchmark component; the builder must carry source_symbol.
+                "source_symbol": "VOO",
             }
         )
         set_fields = {f.name for f, _ in comp.ListFields()}
         assert set_fields | _COMPONENT_INTENTIONALLY_UNSET == set(
             analysis_pb2.StrategyComponent.DESCRIPTOR.fields_by_name
         )
+
+    def test_build_component_maps_source_symbol_value(self):
+        """feature 152: the source_symbol value actually reaches the built proto (not just
+        present in the field set)."""
+        from gen.analysis.v1 import analysis_pb2  # type: ignore  # noqa: F401
+
+        comp = client._build_component(
+            {"kind": "builtin", "ref_name": "mkt", "indicator": "SMA", "source_symbol": "VOO"}
+        )
+        assert comp.source_symbol == "VOO"
+
+    def test_build_component_defaults_source_symbol_empty(self):
+        """A component dict without source_symbol yields an unset (empty) value."""
+        comp = client._build_component({"kind": "builtin", "ref_name": "f", "indicator": "SMA"})
+        assert comp.source_symbol == ""
 
     @pytest.mark.asyncio
     async def test_guard_has_teeth(self):

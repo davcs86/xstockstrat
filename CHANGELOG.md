@@ -3,6 +3,23 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-08-24
+
+### Features
+- fix-backtest-annualized-return: `RunBacktest`'s aggregate `annualized_return` is ~30× under-scaled because it annualizes over the length of the concatenated multi-symbol equity curve (≈ N_symbols × window_days) instead of the run's real window span.
+- manage-strategy-accept-object-rules: Widen the `manage_strategy` MCP tool's `entry_rule`/`exit_rule` params to accept a JSON **object** (dict) in addition to a JSON string, normalizing dicts to a JSON string in the agent wrapper, so any MCP client can register a strategy regardless of whether its transport pre-parses JSON-object arguments.
+- backtest-portfolio-sizing: Replace the backtest engine's serial per-symbol equity compounding (a Π(1+rᵢ) parlay across symbols) with an opt-in real portfolio model — one shared capital pool, concurrent positions, a defined allocation policy, and a single portfolio equity curve — so aggregate `total_return` becomes a meaningful portfolio return rather than an ordering-dependent artifact.
+- backtest-next-bar-fill: The backtest engine fills entries, exits, and the `vts` stop at the **same bar's close** — the very bar whose close produced the signal — a mild look-ahead / unrealistically-optimistic fill.
+- market-regime-benchmark-operand: A strategy component gains an optional `source_symbol` so an indicator/formula can be computed on a fixed reference/benchmark symbol (e.g.
+
+### Proto Changes
+- analysis/v1/analysis.proto
+
+### Summary
+4 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-08-21
 
 ### Features

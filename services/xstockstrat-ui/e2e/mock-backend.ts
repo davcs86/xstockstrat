@@ -38,6 +38,11 @@ import {
   STRATEGY_DEF_LIVE,
   STRATEGY_DEFINITIONS,
   insufficientDataResult,
+  PORTFOLIO_EQUITY_CURVE,
+  SIZING_MODE_LEGACY,
+  SIZING_MODE_PORTFOLIO,
+  FILL_MODEL_SAME_BAR_CLOSE,
+  FILL_MODEL_NEXT_BAR_OPEN,
   OPPORTUNITIES,
   symbolReadiness,
   exitReadiness,
@@ -518,6 +523,11 @@ export async function startMockBackend(): Promise<void> {
       completedAt: { seconds: BigInt(1717286400), nanos: 0 }, // 2024-06-02
       rangeStart: { seconds: BigInt(1704067200), nanos: 0 }, // 2024-01-01
       rangeEnd: { seconds: BigInt(1717200000), nanos: 0 }, // 2024-06-01
+      // feature 150: this run used the portfolio sizing model → the Past Runs "Mode" column and,
+      // once opened, the results-surface badge + portfolio equity curve.
+      sizingMode: SIZING_MODE_PORTFOLIO,
+      // feature 151: this run used next-bar-open fills → the Past Runs "Fill model" column.
+      fillModel: FILL_MODEL_NEXT_BAR_OPEN,
     },
     // bt-hist-1 — legacy run, no persisted detail (getBacktest answers NOT_FOUND).
     legacy: {
@@ -534,6 +544,8 @@ export async function startMockBackend(): Promise<void> {
       overallScore: 0.41,
       rating: 'D',
       completedAt: { seconds: BigInt(1717200000), nanos: 0 }, // 2024-06-01
+      sizingMode: SIZING_MODE_LEGACY, // feature 150: legacy-mode row → "Legacy" in the Mode column
+      fillModel: FILL_MODEL_SAME_BAR_CLOSE, // feature 151: → "Same-bar close" in the Fill model column
     },
   };
   const histDay = (i: number) => ({ seconds: BigInt(1704067200 + i * 86400), nanos: 0 });
@@ -598,6 +610,11 @@ export async function startMockBackend(): Promise<void> {
         })),
       },
     ],
+    // feature 150: portfolio-mode detail — the badge + the separate portfolio equity curve chart.
+    sizingMode: SIZING_MODE_PORTFOLIO,
+    portfolioEquityCurve: PORTFOLIO_EQUITY_CURVE,
+    // feature 151: next-bar-open fill model → the results-surface "Next-bar open" badge.
+    fillModel: FILL_MODEL_NEXT_BAR_OPEN,
   };
 
   const insightsHandler = connectNodeAdapter({
@@ -759,6 +776,34 @@ export async function startMockBackend(): Promise<void> {
                   bars: [],
                 },
               ],
+            };
+          }
+          // feature 150: a portfolio-mode fresh run returns an OK result carrying the mode + a
+          // distinct portfolio equity curve; legacy (default) returns the pre-existing
+          // INSUFFICIENT_DATA gap fixture. The two branches differ in sizingMode so the assertion
+          // has teeth (insights.md 2026-07-27 — an all-equal fixture tests nothing).
+          if (req.sizingMode === SIZING_MODE_PORTFOLIO) {
+            return {
+              backtestId: 'bt-portfolio-1',
+              strategyId: req.strategyId,
+              status: 1, // BACKTEST_STATUS_OK
+              totalReturn: 0.016,
+              annualizedReturn: 0.05,
+              sharpeRatio: 1.1,
+              maxDrawdown: 0.04,
+              winRate: 0.6,
+              totalTrades: 2,
+              profitFactor: 1.5,
+              symbols: req.symbols,
+              initialCapital: 100000,
+              trades: [],
+              coverageGaps: [],
+              diagnostics: [],
+              sizingMode: SIZING_MODE_PORTFOLIO,
+              portfolioEquityCurve: PORTFOLIO_EQUITY_CURVE,
+              capitalSkips: [],
+              // feature 151: echo the requested fill model (else legacy same-bar-close).
+              fillModel: req.fillModel || FILL_MODEL_SAME_BAR_CLOSE,
             };
           }
           // feature 071: the gap a windowed run reports is the PRE-window warm-up span, not

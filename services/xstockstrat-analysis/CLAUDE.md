@@ -170,6 +170,36 @@ Signal-weighted mode (set via `strategy_params`):
 - `technical_weight`: 0.0–1.0 (complement of signal_weight)
 - `min_conviction`: 0.0–1.0 (minimum combined score to enter a position)
 
+### Backtest Fill Model (feature 151)
+
+`RunBacktest` supports two fill models, selected by `RunBacktestRequest.fill_model` (else the
+`analysis.backtest.default_fill_model` config key, else legacy):
+
+- **`FILL_MODEL_SAME_BAR_CLOSE`** (legacy default) — a signal on bar `i` fills at bar `i`'s own
+  close ± slippage. Optimistically biased (a mild look-ahead: the close that produced the signal is
+  also the fill price).
+- **`FILL_MODEL_NEXT_BAR_OPEN`** (opt-in, bias-free) — a signal on bar `i` fills at bar `(i+1)`'s
+  open ± slippage. The standard bias-free convention.
+
+Mechanics (both simulators share one deferred-execution state machine, `_apply_fill` over a
+`SimState`; the loop stays the sole writer of `diags[...].action` and the sole appender to
+`daily_equity`, so the feature-071 `daily_equity[j]↔diags[j]` 1:1 invariant is preserved):
+
+- **Last-bar rule (no look-ahead):** a signal on the absolute last bar `n-1` schedules a fill for
+  bar `n`, which never runs — so it opens no position and references no bar outside the window. A
+  signal on `n-2` fills at `bars[n-1].open` then is force-closed at `bars[n-1].close` (one round
+  trip), so trade counts stay symmetric across modes.
+- **Cooldown is fill-to-fill:** the re-entry (feature 069) and exit/min-hold (feature 116) cooldowns
+  are keyed on the **fill-bar** time. Byte-identical to legacy in same-bar mode (`signal == fill`).
+- **Action/conviction decouple (display-only):** in next-bar mode a diagnostics row can show
+  ENTER/EXIT on bar `i+1` while that row's `conviction` is bar `i+1`'s own value (the action reflects
+  bar `i`'s signal). This is display-only — the derived grade math reads only
+  sharpe/drawdown/win-rate, never conviction, so the grade is unaffected.
+
+The effective model is recorded on `BacktestResult.fill_model`, `BacktestRunSummary.fill_model`, and
+the `analysis.backtest_runs.fill_model` column (enum name), so a run is reproducible despite config
+drift.
+
 ## Composable Strategy Rules — Operands & Output Series
 
 `StrategyDefinition.entry_rule` / `exit_rule` are JSON condition trees evaluated by
@@ -198,6 +228,38 @@ The runtime evaluate path skips this re-fetch (already validated at write time).
 both indicator and declared-formula series as dropdown operands via
 `services/xstockstrat-ui/src/lib/strategyCatalog.ts` (`operandRefs`).
 
+### Benchmark / reference-symbol operand (`source_symbol`, feature 152)
+
+A `StrategyComponent` carries an optional **`source_symbol`** (`analysis.proto` field 6). When
+non-empty, the component's indicator/formula is computed on **that** symbol's bars (e.g. `VOO`) and
+its output series is **left-joined onto the evaluated symbol's trading-day (date) timeline**; empty =
+computed on the evaluated symbol (byte-identical to pre-152, and — being a plain proto3 string — an
+unset value is omitted from `definition_json` so the definition fingerprint is unchanged). This
+enables cross-symbol "market-regime" gates (buy dips on any symbol only when `VOO`'s 200-day is
+rising) that per-symbol operands cannot express.
+
+- **One computation unit.** `StrategyEvaluator._assemble_component_series(comp, closes, eval_dates,
+  benchmark_bars)` is the single seam behind every StrategyComponent consumer — backtest
+  (`evaluate_with_series`), live (`evaluate`), readiness/opportunities (`evaluate_conditions_traced`),
+  and `GetIndicatorSeries`. A `source_symbol` component with no benchmark bars supplied → all-`None`
+  (safe hold), **never** computed on the evaluated closes.
+- **Compute-then-align, no look-ahead.** The indicator/formula runs on the benchmark's own contiguous
+  closes first, *then* the output is date-joined (`bar.time.ToDatetime(UTC).date()`); a date the
+  benchmark lacks → `None` (leaf reads hold/false) — no forward-fill, the evaluated symbol is never
+  reindexed, and a benchmark value at bar *t* uses only benchmark data ≤ *t*.
+- **Warmup / coverage.** Benchmark bars are loaded window+warmup like the evaluated symbol
+  (`_load_benchmark_bars`, deduped once per backtest run); a benchmark warmup shortfall raises
+  `_InsufficientData(source_symbol)` → a `CoverageGap` naming the **benchmark**, and the run reports
+  `BACKTEST_STATUS_INSUFFICIENT_DATA`. The **live loop** wires this too
+  (`live_loop._load_benchmark_bars`, builtin lookback + declared formula `warmup_period` via
+  `StrategyEvaluator.declared_formula_warmups`); the opportunities pass dedups each benchmark to one
+  fetch under `_bars_fetch_sem`.
+- **Write path.** `ManageStrategy` normalizes `source_symbol` server-side (uppercase/trim, empty →
+  unset) on both REGISTER and UPDATE (`_normalize_source_symbols`); it enters the fingerprint via
+  `definition_json`, so changing a benchmark clears the derived grade.
+- **Deferred:** `screen_symbols` `source_symbol` and a UI strategy-builder editor for it are follow-ons
+  (agent-authored strategies are fully functional now via `manage_strategy`).
+
 ## Config Keys Consumed
 
 Namespace: `analysis`
@@ -208,6 +270,9 @@ Namespace: `analysis`
 | `analysis.backtest.default_commission_pct` | float | `0.001` | Assumed commission per trade |
 | `analysis.backtest.default_slippage_pct` | float | `0.0005` | Assumed slippage |
 | `analysis.backtest.max_range_days` | int | `730` | Max backtest range span in days (≈2 years, feature 064); a request whose `range` exceeds it is rejected with `INVALID_ARGUMENT`, an unset bound is defaulted to the last `max_range_days`. Applies to all `RunBacktest` callers. |
+| `analysis.backtest.portfolio_position_weight` | float | `0.10` | Fraction of **initial** capital committed per concurrent position in portfolio sizing mode (feature 150). Read via `get_float` (zero-trap intended: a configured `0` disables the portfolio → falls back to `0.10`). A fixed fraction of *initial* capital (not live equity) keeps aggregate metrics order-independent. |
+| `analysis.backtest.portfolio_max_concurrent` | int | `9` | Max concurrently-held positions in portfolio sizing mode (feature 150). Read via `get_int` with a `max(1, …)` clamp (zero-trap intended: a configured `0` reads back as the default `9`; the clamp guards a negative). At the `0.10` weight this leaves a ≥10% cash buffer. |
+| `analysis.backtest.default_fill_model` | int | `0` | Default fill model when a `RunBacktest` request leaves `fill_model` unset (feature 151). `0` = `FILL_MODEL_UNSPECIFIED` → legacy `SAME_BAR_CLOSE`; `2` = `FILL_MODEL_NEXT_BAR_OPEN`. Read via `get_int` — the zero-trap is **intentional** here: both an absent key and a configured `0` mean legacy, so a future reader must NOT "fix" it to `get_int_present`. A request-supplied `fill_model` always overrides this. |
 | `analysis.scoring.sharpe_weight` | float | `0.4` | Weight of Sharpe in overall score |
 | `analysis.scoring.drawdown_weight` | float | `0.3` | Weight of max drawdown |
 | `analysis.scoring.win_rate_weight` | float | `0.3` | Weight of win rate |

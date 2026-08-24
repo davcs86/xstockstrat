@@ -2,6 +2,7 @@
 
 import base64
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -487,7 +488,60 @@ async def test_run_backtest_calls_grpc():
             # rolling default — the pre-071 behavior (FR-2).
             start=None,
             end=None,
+            # feature 150: omitted sizing_mode forwards as None → server default (legacy).
+            sizing_mode=None,
+            # feature 151: omitted fill_model forwards as None → server default (legacy).
+            fill_model=None,
         )
+
+
+@pytest.mark.asyncio
+async def test_run_backtest_forwards_sizing_mode_and_surfaces_it():
+    """feature 150: the tool threads sizing_mode to the client and surfaces the mode + a
+    capital-skip count in the inline summary."""
+    mock_backtest = AsyncMock(
+        return_value={
+            "backtest_id": "bt-1",
+            "strategy_id": "sma",
+            "sizing_mode": "SIZING_MODE_PORTFOLIO",
+            "capital_skips": [{"symbol": "MSFT"}, {"symbol": "TSLA"}],
+        }
+    )
+    with patch.object(client, "run_backtest", mock_backtest):
+        server = _make_server()
+        result = await _tool_fn(server, "run_backtest")(
+            ctx=_ctx(ADMIN),
+            strategy_id="sma",
+            symbols=["NVDA", "MSFT", "TSLA"],
+            sizing_mode="portfolio",
+        )
+    assert mock_backtest.call_args.kwargs["sizing_mode"] == "portfolio"
+    summary = json.loads(result[0].text)
+    assert summary["sizing_mode"] == "SIZING_MODE_PORTFOLIO"
+    assert summary["capital_skips"] == 2  # count, not the list
+
+
+@pytest.mark.asyncio
+async def test_run_backtest_forwards_fill_model_and_surfaces_it():
+    """feature 151: the tool threads fill_model to the client and surfaces the effective model."""
+    mock_backtest = AsyncMock(
+        return_value={
+            "backtest_id": "bt-1",
+            "strategy_id": "sma",
+            "fill_model": "FILL_MODEL_NEXT_BAR_OPEN",
+        }
+    )
+    with patch.object(client, "run_backtest", mock_backtest):
+        server = _make_server()
+        result = await _tool_fn(server, "run_backtest")(
+            ctx=_ctx(ADMIN),
+            strategy_id="sma",
+            symbols=["NVDA"],
+            fill_model="next_bar_open",
+        )
+    assert mock_backtest.call_args.kwargs["fill_model"] == "next_bar_open"
+    summary = json.loads(result[0].text)
+    assert summary["fill_model"] == "FILL_MODEL_NEXT_BAR_OPEN"
 
 
 @pytest.mark.asyncio
@@ -812,6 +866,146 @@ class TestManageStrategyTool:
         # feature 133: the caller's own verified user id is forwarded (ADMIN → "u-1") so analysis
         # resolves ownership from the header, not the request body.
         assert kwargs["user_id"] == "u-1"
+
+    # feature 149: entry_rule/exit_rule accept a JSON object (dict) as well as a JSON string.
+    # These are single-consumer scenario literals (Constitution C-13) — each rule object is used
+    # only by its own test, so they stay inline rather than moving to tests/conftest.py.
+
+    @pytest.mark.asyncio
+    async def test_entry_rule_object_is_serialized(self):
+        """@AC-1/FR-1: a rule supplied as a dict is JSON-encoded into the outbound definition."""
+        rule = {"op": "AND", "conditions": [{"fn": ">", "lhs": "mq", "rhs": 0.3}]}
+        server = _make_server()
+        with patch.object(
+            client, "manage_strategy", AsyncMock(return_value={"strategy_id": "obj_rule_demo"})
+        ) as m:
+            await _tool_fn(server, "manage_strategy")(
+                ctx=_ctx(ADMIN),
+                operation="register",
+                strategy_id="obj_rule_demo",
+                entry_rule=rule,
+            )
+        defn = m.call_args.kwargs["definition"]
+        assert defn["entry_rule"] == json.dumps(rule)
+        assert isinstance(defn["entry_rule"], str)
+
+    @pytest.mark.asyncio
+    async def test_string_rule_passes_through_byte_for_byte(self):
+        """@AC-2/FR-3: a rule supplied as a JSON string is forwarded unchanged (no re-encoding)."""
+        raw = '{"fn": "crosses_below", "lhs": "vts", "rhs": 0}'
+        server = _make_server()
+        with patch.object(
+            client, "manage_strategy", AsyncMock(return_value={"strategy_id": "str_rule_demo"})
+        ) as m:
+            await _tool_fn(server, "manage_strategy")(
+                ctx=_ctx(ADMIN),
+                operation="register",
+                strategy_id="str_rule_demo",
+                exit_rule=raw,
+            )
+        assert m.call_args.kwargs["definition"]["exit_rule"] == raw
+
+    @pytest.mark.asyncio
+    async def test_omitted_rules_absent_from_definition_and_mask(self):
+        """@AC-3/FR-2: omitted rules drop from the definition and update mask (partial merge)."""
+        server = _make_server()
+        with patch.object(
+            client, "manage_strategy", AsyncMock(return_value={"strategy_id": "partial_demo"})
+        ) as m:
+            await _tool_fn(server, "manage_strategy")(
+                ctx=_ctx(ADMIN),
+                operation="update",
+                strategy_id="partial_demo",
+                cooldown_days=45,
+            )
+        kwargs = m.call_args.kwargs
+        defn = kwargs["definition"]
+        assert "cooldown_days" in defn
+        assert "entry_rule" not in defn
+        assert "exit_rule" not in defn
+        assert kwargs["update_mask"] == ["cooldown_days"]
+
+    @pytest.mark.asyncio
+    async def test_both_rules_as_objects_each_serialized(self):
+        """@AC-4/FR-1: both rules supplied as dicts are each serialized and round-trip."""
+        entry = {"fn": "<", "lhs": "rsi", "rhs": 35}
+        exit_ = {"fn": "crosses_below", "lhs": "vts", "rhs": 0}
+        server = _make_server()
+        with patch.object(
+            client, "manage_strategy", AsyncMock(return_value={"strategy_id": "both_obj_demo"})
+        ) as m:
+            await _tool_fn(server, "manage_strategy")(
+                ctx=_ctx(ADMIN),
+                operation="register",
+                strategy_id="both_obj_demo",
+                entry_rule=entry,
+                exit_rule=exit_,
+            )
+        defn = m.call_args.kwargs["definition"]
+        assert isinstance(defn["entry_rule"], str) and isinstance(defn["exit_rule"], str)
+        assert json.loads(defn["entry_rule"]) == entry
+        assert json.loads(defn["exit_rule"]) == exit_
+
+    @pytest.mark.asyncio
+    async def test_empty_object_rule_serialized_and_in_mask(self):
+        """@AC-6/FR-1: an empty object {} → "{}" and enters the update mask (it is NOT a clear;
+        the server rejects a contentless rule INVALID_ARGUMENT)."""
+        server = _make_server()
+        with patch.object(
+            client, "manage_strategy", AsyncMock(return_value={"strategy_id": "empty_obj_demo"})
+        ) as m:
+            await _tool_fn(server, "manage_strategy")(
+                ctx=_ctx(ADMIN),
+                operation="update",
+                strategy_id="empty_obj_demo",
+                entry_rule={},
+            )
+        kwargs = m.call_args.kwargs
+        assert kwargs["definition"]["entry_rule"] == "{}"
+        assert "entry_rule" in kwargs["update_mask"]
+
+    def test_rule_params_schema_admits_object(self):
+        """@AC-1/FR-1 (boundary): the published tool inputSchema advertises that entry_rule and
+        exit_rule accept a JSON object, so a compliant MCP client's schema validation admits a dict
+        instead of rejecting it as an invalid argument type. The raw _tool_fn tests above bypass
+        pydantic, so this is the assertion that actually guards the annotation change."""
+        server = _make_server()
+        props = server._tool_manager.get_tool("manage_strategy").parameters["properties"]
+
+        def schema_types(prop: dict) -> set[str]:
+            types: set[str] = set()
+            t = prop.get("type")
+            if isinstance(t, str):
+                types.add(t)
+            for variant in prop.get("anyOf", []) + prop.get("oneOf", []):
+                vt = variant.get("type")
+                if isinstance(vt, str):
+                    types.add(vt)
+            return types
+
+        for field in ("entry_rule", "exit_rule"):
+            types = schema_types(props[field])
+            assert "object" in types, f"{field} schema must admit an object: {props[field]}"
+            assert "string" in types, f"{field} schema must still admit a string: {props[field]}"
+
+    def test_docs_surfaces_state_rule_string_or_object(self):
+        """@AC-5/FR-4: all three F-12 mirror surfaces state entry_rule/exit_rule accept a JSON
+        string or a JSON object — the tool docstring, docs/runbooks/mcp-tools.md, and the strat-lab
+        backtest skill."""
+        server = _make_server()
+        description = server._tool_manager.get_tool("manage_strategy").description or ""
+        normalized = " ".join(description.split())  # robust to line-wrapping in the docstring
+        assert "entry_rule / exit_rule" in normalized
+        assert "JSON string OR a JSON object" in normalized
+
+        repo_root = Path(__file__).resolve().parents[3]
+        mcp_tools = (repo_root / "docs" / "runbooks" / "mcp-tools.md").read_text()
+        assert mcp_tools.count("string` or `object") >= 2  # entry_rule + exit_rule rows
+
+        skill = (
+            repo_root / "plugins" / "strat-lab" / "skills" / "backtest" / "SKILL.md"
+        ).read_text()
+        assert "JSON string" in skill and "JSON object" in skill
 
     @pytest.mark.asyncio
     async def test_forwards_cooldown_days(self):
