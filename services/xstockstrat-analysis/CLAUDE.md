@@ -228,6 +228,38 @@ The runtime evaluate path skips this re-fetch (already validated at write time).
 both indicator and declared-formula series as dropdown operands via
 `services/xstockstrat-ui/src/lib/strategyCatalog.ts` (`operandRefs`).
 
+### Benchmark / reference-symbol operand (`source_symbol`, feature 152)
+
+A `StrategyComponent` carries an optional **`source_symbol`** (`analysis.proto` field 6). When
+non-empty, the component's indicator/formula is computed on **that** symbol's bars (e.g. `VOO`) and
+its output series is **left-joined onto the evaluated symbol's trading-day (date) timeline**; empty =
+computed on the evaluated symbol (byte-identical to pre-152, and — being a plain proto3 string — an
+unset value is omitted from `definition_json` so the definition fingerprint is unchanged). This
+enables cross-symbol "market-regime" gates (buy dips on any symbol only when `VOO`'s 200-day is
+rising) that per-symbol operands cannot express.
+
+- **One computation unit.** `StrategyEvaluator._assemble_component_series(comp, closes, eval_dates,
+  benchmark_bars)` is the single seam behind every StrategyComponent consumer — backtest
+  (`evaluate_with_series`), live (`evaluate`), readiness/opportunities (`evaluate_conditions_traced`),
+  and `GetIndicatorSeries`. A `source_symbol` component with no benchmark bars supplied → all-`None`
+  (safe hold), **never** computed on the evaluated closes.
+- **Compute-then-align, no look-ahead.** The indicator/formula runs on the benchmark's own contiguous
+  closes first, *then* the output is date-joined (`bar.time.ToDatetime(UTC).date()`); a date the
+  benchmark lacks → `None` (leaf reads hold/false) — no forward-fill, the evaluated symbol is never
+  reindexed, and a benchmark value at bar *t* uses only benchmark data ≤ *t*.
+- **Warmup / coverage.** Benchmark bars are loaded window+warmup like the evaluated symbol
+  (`_load_benchmark_bars`, deduped once per backtest run); a benchmark warmup shortfall raises
+  `_InsufficientData(source_symbol)` → a `CoverageGap` naming the **benchmark**, and the run reports
+  `BACKTEST_STATUS_INSUFFICIENT_DATA`. The **live loop** wires this too
+  (`live_loop._load_benchmark_bars`, builtin lookback + declared formula `warmup_period` via
+  `StrategyEvaluator.declared_formula_warmups`); the opportunities pass dedups each benchmark to one
+  fetch under `_bars_fetch_sem`.
+- **Write path.** `ManageStrategy` normalizes `source_symbol` server-side (uppercase/trim, empty →
+  unset) on both REGISTER and UPDATE (`_normalize_source_symbols`); it enters the fingerprint via
+  `definition_json`, so changing a benchmark clears the derived grade.
+- **Deferred:** `screen_symbols` `source_symbol` and a UI strategy-builder editor for it are follow-ons
+  (agent-authored strategies are fully functional now via `manage_strategy`).
+
 ## Config Keys Consumed
 
 Namespace: `analysis`
