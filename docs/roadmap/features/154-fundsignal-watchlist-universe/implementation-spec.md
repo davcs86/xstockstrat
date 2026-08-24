@@ -129,7 +129,7 @@ The diff contains only the new RPC/message additions; re-running produces no fur
 
 ### Step 3 — service (portfolio): repo `DISTINCT` query + first authz gate + RPC wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/watchlist_repo.go` — modify (add `ListAllSymbols`)
@@ -209,7 +209,7 @@ grep -n "connect.Request" internal/service/authz.go   # ABSENT — the gate must
 
 ### Step 4 — test (portfolio): authz fail-closed + DISTINCT enumeration
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go` — modify (extend `fakeWatchlistStore`; add `ListAllWatchlistSymbols` service + authz tests)

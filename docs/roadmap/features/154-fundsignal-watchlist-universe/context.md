@@ -160,3 +160,15 @@
 - Deviation D-1 addendum: the local buf 1.47.2 also re-emitted a newer doc-comment for the well-known `google/protobuf/timestamp.ts` (unrelated to feature 154; CI's buf emits the committed text). Reverted those 2 files with `git checkout` so the diff stays scoped to the intended service — logged in Deviation Log.
 - Files modified: `packages/proto/gen/{go,python,ts}/portfolio/v1/*`
 - Deviations: reverted spurious well-known-type drift (D-1).
+
+### Step 3 — service (portfolio): repo DISTINCT + first authz gate + RPC wiring [done]
+- `WatchlistRepo.ListAllSymbols` (`SELECT DISTINCT symbol … ORDER BY symbol`, shared pool, no migration); new `internal/service/authz.go` (`hasInternalCallerAuthority` reads `metadata.FromIncomingContext`, `{callerID,rpc}` allow-list `analysis-fundsignal`, fails closed, ignores admin bit); `WatchlistStore` interface + `PortfolioService.ListAllWatchlistSymbols` (PermissionDenied when ungated); `PortfolioHandler` + `grpcPortfolioAdapter` methods.
+- Verification: `go build ./...` OK (adapter satisfies the generated server interface); `golangci-lint` 0 issues; authz.go reads `FromIncomingContext`, no `connect.Request`.
+- Files modified: `internal/repository/watchlist_repo.go`, `internal/service/authz.go` (new), `internal/service/portfolio_service.go`, `internal/handler/portfolio_handler.go`
+- Deviations: none.
+
+### Step 4 — test (portfolio): authz fail-closed + DISTINCT enumeration [done]
+- **RED**: pre-Step-3 the tests failed to build (`svc.ListAllWatchlistSymbols undefined`). **GREEN**: after Step 3, `TestListAllWatchlistSymbols_Authorized` (AC-1) + `TestListAllWatchlistSymbols_FailClosed` (AC-2: no-md / no-header / unlisted-caller / admin-bit-only) all pass under `go test -race`.
+- Covers AC-1, AC-2. New logic is in CI-coverage-excluded packages (service/repository/handler) — the test cases are the C-08 verification.
+- Files modified: `internal/service/watchlist_service_test.go`
+- Deviations: none.
