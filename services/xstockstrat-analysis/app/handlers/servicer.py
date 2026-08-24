@@ -2364,6 +2364,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         definition = request.definition
         op = request.operation
 
+        # feature 152: normalize benchmark source_symbol server-side (uppercase/trim, empty →
+        # unset) on every write path, before REGISTER's MessageToDict and UPDATE's merge/replace
+        # both serialize this proto — never client-side (bypassable) and never two sites to drift.
+        _normalize_source_symbols(definition)
+
         if op == analysis_pb2.STRATEGY_OPERATION_REGISTER:
             await self._validate_definition_proto(definition, context)
             # Feature 133: the owner is server-authoritative — set from the header, never trusted
@@ -3758,6 +3763,19 @@ def _normalize_symbol(symbol: str) -> str:
     """Single canonicalizer (feature 097) feeding every Universe drain and the opportunity_key —
     uppercase + trim so `` aapl`` / ``AAPL`` collapse to one candidate/key."""
     return (symbol or "").strip().upper()
+
+
+def _normalize_source_symbols(definition) -> None:
+    """Feature 152 — canonicalize every component's ``source_symbol`` in place: trimmed +
+    uppercased, empty-after-trim collapses to ``""`` (unset → evaluated-symbol behavior).
+
+    Server-authoritative: applied on every ManageStrategy write path (REGISTER + UPDATE) so a
+    benchmark written as ``"voo "`` and ``"VOO"`` can never fingerprint as two different
+    strategies, and a whitespace-only value never persists as a bogus benchmark. Reuses the
+    ``_normalize_symbol`` canonicalizer so it stays identical to the universe/opportunity-key
+    normalization."""
+    for comp in definition.components:
+        comp.source_symbol = _normalize_symbol(comp.source_symbol)
 
 
 def _opportunity_key(user_id: str, symbol: str, strategy_id: str) -> str:
