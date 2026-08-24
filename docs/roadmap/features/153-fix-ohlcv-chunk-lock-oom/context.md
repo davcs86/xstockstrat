@@ -70,3 +70,47 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
         by design — the product→spec-ready gate precedes design; design MUST close both before /sdd-spec.
   - [ ] C-15 — acceptance scenarios use qualitative phrasing (chunk counts / interval values) because the exact
         target interval is a design decision; **/sdd-spec pins the concrete values** once design picks the interval.
+
+## Session 2026-08-24 — sdd-design (full, 3 rounds)
+
+- Phase 0 Recon: wrote recon.md from parallel codebase-discovery (marketdata + analysis) + scenario-recon.
+  Key facts: next marketdata migration = 004; 003 is the only prior ohlcv-touching migration (remediation-log
+  pattern, for a DATA-MOVING migration); no Timescale-admin-migration precedent; `set_chunk_time_interval`
+  affects only FUTURE chunks; full guarded-vs-unguarded map of the 400-day bars-fetch call sites; no promoted
+  @AC-* covers the bars path.
+- Phase 1 Grilling: 3 full rounds.
+  - R1: proposer = 3 pieces (future-only migration + max_locks runbook + app guard on EvaluateReadiness).
+    Adversary = NEEDS-WORK: deferred-relief gap; max_locks settability unproven (P-03 "exercise the producer");
+    app guard is a partial fix of 1 of 5 identical paths (C-10); proposed **client-side time-windowed fetch**
+    as the in-repo immediate lever.
+  - Between rounds: **confirmed `max_locks_per_transaction` IS settable** — it appears in the DO
+    `db-cluster-update-psql-config` accepted-config schema (absent from the `get` response only because it sits
+    at its default). This dissolved the adversary's core P-03 objection.
+  - R2: proposer = 2 pieces A+B (max_locks bump + migration 004), app guard DROPPED as over-build; interval 30d.
+    Adversary = NEEDS-WORK (no Floor breach): surfaced the out-of-repo/deferred-relief FORK (P-03/C-11) as a
+    user decision; AC-1 must name 2 assumptions (plan-time chunk exclusion; unbounded concurrency residual);
+    the DO$$ preflight is cargo-culted for a metadata-only call; the "30d preserves QueryRecentBars granularity"
+    rationale is FALSE (LIMIT query opens ~1 chunk regardless).
+  - **User gate after R2**: chose "run another round" to press re-chunk-existing + the concurrency residual.
+  - R3: proposer held A+B; REJECTED out-of-band re-chunk (additive to A, unverifiable pre-deploy, races the
+    live ingester, F-05); ACCEPTED the residual; fixed the 30d rationale to the sound one (finer pruning for
+    the BOUNDED-range QueryBars). Adversary = **APPROVE-READY**, converged, no Floor breach; must-land-in-design
+    items: 004-alone-doesn't-resolve-SEV-2 + acceptance gated on "Piece A applied & holding in staging"; the
+    max_connections≈25 basis for the lock arithmetic.
+- **User approval (2026-08-24)**: approved A+B **with max_locks = 1024** (over the debate's 512) to eliminate
+  the transition-window concurrency residual outright (~16 concurrent worst-case scans, ~7MB on the 1GB box).
+- Chosen approach: (A) raise cluster `max_locks_per_transaction` 64→1024 (immediate, global, user-gated
+  rolling restart, documented in a runbook); (B) marketdata migration 004 `set_chunk_time_interval('marketdata.ohlcv','30 days')`
+  — metadata-only, future-only, faithful down to 1 day, NO remediation-log/DO$$ preflight. No app-code change.
+- Rejected: out-of-band re-chunk; app-side time-windowing; extending 141's guard; max_locks 256/512; 90d interval;
+  quotes-hypertable widening.
+- Constitution rules touched: F-01/F-05/F-06/F-07 (honored), C-01/C-08/C-10/C-11/C-14/P-03, F-11 (no breach).
+- Status: spec-ready → design-approved.
+
+### Open Threads (carried from design.md Open Risks)
+- Immediate relief is 100% out-of-repo (Piece A restart); CI can't gate it → acceptance gates on "Piece A
+  applied + holding in staging". Target: /sdd-spec verification step + operator/infra step.
+- Transition concurrency residual largely eliminated at 1024 but not provably zero (EvaluateReadiness unguarded)
+  → accepted; re-add app guard only if telemetry shows sustained high concurrency.
+- `max_connections≈25` is an assumed constant → confirm the DO plan value at /sdd-spec or /sdd-execute.
+- Re-derive migration NNN 004 against the merged tree at /sdd-spec time (stale-NNN trap).
