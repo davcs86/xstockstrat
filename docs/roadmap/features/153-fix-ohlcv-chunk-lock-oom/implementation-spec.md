@@ -1,6 +1,6 @@
 # Implementation Spec: fix-ohlcv-chunk-lock-oom
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-08-24
 **Feature**: `docs/roadmap/features/153-fix-ohlcv-chunk-lock-oom/feature.md`
 **Total Steps**: 3
@@ -219,7 +219,7 @@ Confirm by reading the runbook that the AC-1 lock-budget invariant, the operator
 
 ### Step 3 — docs: keep the chunk-interval references consistent with migration 004
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns/` + `services/xstockstrat-marketdata/`
 **Files**:
 - `services/xstockstrat-marketdata/CLAUDE.md` — modify (§ Database)

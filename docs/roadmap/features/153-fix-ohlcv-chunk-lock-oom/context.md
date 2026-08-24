@@ -216,3 +216,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   added; bash is macOS-safe (no grep -P / bare pip).
 - Files modified: docs/runbooks/ohlcv-lock-budget-tuning.md, docs/runbooks/CLAUDE.md
 - Deviations: none.
+
+### Step 3 — docs: chunk-interval consistency [done]
+- Updated services/xstockstrat-marketdata/CLAUDE.md § Database (ohlcv now "new chunks 30d as of feature 153 /
+  migration 004; pre-existing 1-day chunks age out", + why + runbook pointer; kept compression note) and
+  docs/patterns/database.md § Schema & Hypertable Map (ohlcv row → 30-day, + an authoritative pointer paragraph
+  mirroring the ohlcv_remediation_003 style).
+- Verified: "30 day" present in both; feature 153 / 004 cross-ref present; no bare "chunk = 1 day" ohlcv assertion remains.
+- Files modified: services/xstockstrat-marketdata/CLAUDE.md, docs/patterns/database.md
+- Deviations: none.
+
+All 3 steps done. Status: in-progress → code-completed.

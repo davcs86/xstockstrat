@@ -18,6 +18,7 @@
 | 2026-08-24 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written. A+B: max_locks 64→1024 + ohlcv migration 004 (30d), no app-code change |
 | 2026-08-24 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 3 steps (migration 004 @ 30d; Piece A runbook + AC-1 invariant; chunk-interval doc consistency) |
 | 2026-08-24 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done — migration 004 widen ohlcv chunk interval to 30d (offline up/down verified) |
+| 2026-08-24 | `in-progress` → `code-completed` | /sdd-execute | All 3 steps done (migration 004; Piece A runbook; doc consistency). Piece A already applied to the live cluster |
 
 ---
 
