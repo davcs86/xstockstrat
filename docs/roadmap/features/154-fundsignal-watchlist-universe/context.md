@@ -1,8 +1,8 @@
 # Context: fundsignal-watchlist-universe
 
-**Feature**: `docs/roadmap/features/153-fundsignal-watchlist-universe/feature.md`
-**Product Spec**: `docs/roadmap/features/153-fundsignal-watchlist-universe/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/153-fundsignal-watchlist-universe/implementation-spec.md`
+**Feature**: `docs/roadmap/features/154-fundsignal-watchlist-universe/feature.md`
+**Product Spec**: `docs/roadmap/features/154-fundsignal-watchlist-universe/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/154-fundsignal-watchlist-universe/implementation-spec.md`
 
 ---
 
@@ -29,9 +29,17 @@
   system-managed "Signals" list; (2) enumeration returns bare symbols vs. `(symbol,strategy)` bindings;
   (3) admin `x-access-scope` bit vs. `x-internal-caller` allow-list for authz; (4) unbounded-union
   ordering/truncation fairness under the existing cap.
-- **Known traps flagged** (from ledger): feature-numbering-across-remotes (verified 153 free locally +
-  `git ls-remote`); harness-branch (`claude/fundamentals-signal-config-0jdfed`) vs. feature dev branch
-  divergence (fails.md 082) — must reconcile before /sdd-execute; absence-claim greps (fails.md 080).
+- **Known traps flagged** (from ledger): harness-branch (`claude/fundamentals-signal-config-0jdfed`)
+  vs. feature dev branch divergence (fails.md 082) — must reconcile before /sdd-execute; absence-claim
+  greps (fails.md 080).
+- **Feature-numbering collision HIT and corrected (2026-08-24):** originally allocated `153`, verified
+  free on the local tree + a `git ls-remote` name-grep — but that grep missed sibling branches that had
+  a `153-*` dir without a matching branch name. The operator flagged the collision. A proper all-remote
+  `git ls-tree docs/roadmap/features/` scan then found `153` taken twice (`153-fix-ohlcv-chunk-lock-oom`
+  on `claude/do-logs-shared-memory-0o994w`, and this feature). Renumbered **153 → 154** (next free across
+  all remotes) per the docs/runbooks/feature-workflow.md renumber-the-later-run rule. This is the exact
+  fails.md 2026-07-29/081 trap: the numbering scan must `git ls-tree` every remote branch's feature dir,
+  not grep branch names.
 
 - **Fork resolved (operator, 2026-08-24):** universe = **all watchlists across all users**, not only the
   system-managed "Signals" lists (Open Question #1 closed in product-spec). Enumeration spans all

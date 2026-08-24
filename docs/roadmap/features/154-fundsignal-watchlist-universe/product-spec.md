@@ -131,8 +131,10 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ### Known traps (from the Ledger)
 
-- **Feature numbering across remotes** (fails.md 2026-07-29/081): 153 was verified free on the local
-  tree **and** across `git ls-remote` branches before allocation.
+- **Feature numbering across remotes** (fails.md 2026-07-29/081): **collision hit** — `153` was taken on
+  a sibling branch (`153-fix-ohlcv-chunk-lock-oom`) that a `git ls-remote` name-grep missed; a proper
+  all-remote `git ls-tree docs/roadmap/features/` scan caught it and this feature was renumbered
+  **153 → 154**. Lesson reinforced: scan every remote branch's feature dir, not branch names.
 - **Harness branch vs. feature dev branch divergence** (fails.md 2026-07-30/082): this session is on the
   harness branch `claude/fundamentals-signal-config-0jdfed`, not `feature/fundsignal-watchlist-universe`.
   Reconcile the branch before `/sdd-execute` writes code, per that entry.
