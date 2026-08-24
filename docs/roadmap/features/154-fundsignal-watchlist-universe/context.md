@@ -153,3 +153,10 @@
 - Tooling note: Docker daemon unavailable → provisioned host codegen toolchain instead (buf 1.47.2 via `go install`; protoc-gen-go@v1.36.11 / -go-grpc@v1.6.2 / -connect-go@v1.19.2 via `go install`). CI-equivalent (Dockerfile.codegen pins the same). Deviation logged.
 - Files modified: `packages/proto/portfolio/v1/portfolio.proto`
 - Deviations: host-toolchain codegen fallback (Docker daemon down) — see Deviation Log.
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Ran `./scripts/buf-gen.sh` (host toolchain: buf 1.47.2 + go plugins + pnpm TS plugins + grpcio-tools==1.80.0 in a py3.12 venv). Regenerated Go/Python/TS stubs.
+- Verification: generated diff scoped to `portfolio/*` only (Go pb/grpc/connect, Python pb2/pb2_grpc, TS pb/connect + dist) — `git status packages/proto/gen | grep -v portfolio` empty. TDD: N/A (proto-gen).
+- Deviation D-1 addendum: the local buf 1.47.2 also re-emitted a newer doc-comment for the well-known `google/protobuf/timestamp.ts` (unrelated to feature 154; CI's buf emits the committed text). Reverted those 2 files with `git checkout` so the diff stays scoped to the intended service — logged in Deviation Log.
+- Files modified: `packages/proto/gen/{go,python,ts}/portfolio/v1/*`
+- Deviations: reverted spurious well-known-type drift (D-1).

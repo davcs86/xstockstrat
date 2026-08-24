@@ -820,6 +820,33 @@ export type EnsureSignalWatchlistResponse = Message<"xstockstrat.portfolio.v1.En
  */
 export declare const EnsureSignalWatchlistResponseSchema: GenMessage<EnsureSignalWatchlistResponse>;
 /**
+ * Empty — the enumeration spans all users; ownership/scoping does not apply (feature 154).
+ *
+ * @generated from message xstockstrat.portfolio.v1.ListAllWatchlistSymbolsRequest
+ */
+export type ListAllWatchlistSymbolsRequest = Message<"xstockstrat.portfolio.v1.ListAllWatchlistSymbolsRequest"> & {};
+/**
+ * Describes the message xstockstrat.portfolio.v1.ListAllWatchlistSymbolsRequest.
+ * Use `create(ListAllWatchlistSymbolsRequestSchema)` to create a new message.
+ */
+export declare const ListAllWatchlistSymbolsRequestSchema: GenMessage<ListAllWatchlistSymbolsRequest>;
+/**
+ * @generated from message xstockstrat.portfolio.v1.ListAllWatchlistSymbolsResponse
+ */
+export type ListAllWatchlistSymbolsResponse = Message<"xstockstrat.portfolio.v1.ListAllWatchlistSymbolsResponse"> & {
+    /**
+     * Distinct, sorted bare symbols across all users' watchlists (bindings collapsed).
+     *
+     * @generated from field: repeated string symbols = 1;
+     */
+    symbols: string[];
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.ListAllWatchlistSymbolsResponse.
+ * Use `create(ListAllWatchlistSymbolsResponseSchema)` to create a new message.
+ */
+export declare const ListAllWatchlistSymbolsResponseSchema: GenMessage<ListAllWatchlistSymbolsResponse>;
+/**
  * A risk cue surfaced on the Exposure surface (feature 083). Closed set → enum (C-04).
  *
  * @generated from enum xstockstrat.portfolio.v1.PositionRiskFlag
@@ -1035,5 +1062,19 @@ export declare const PortfolioService: GenService<{
         methodKind: "unary";
         input: typeof EnsureSignalWatchlistRequestSchema;
         output: typeof EnsureSignalWatchlistResponseSchema;
+    };
+    /**
+     * Cross-user enumeration (feature 154): the distinct union of watchlist symbols across
+     * ALL users' watchlists — NOT scoped to the caller's x-user-id. Privileged: gated by the
+     * x-internal-caller allow-list (grant `analysis-fundsignal`), not the admin x-access-scope
+     * bit (PR #994) — a non-allow-listed caller gets PERMISSION_DENIED. Read-only; intended for
+     * the fundamentals-signal producer's universe resolution.
+     *
+     * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.ListAllWatchlistSymbols
+     */
+    listAllWatchlistSymbols: {
+        methodKind: "unary";
+        input: typeof ListAllWatchlistSymbolsRequestSchema;
+        output: typeof ListAllWatchlistSymbolsResponseSchema;
     };
 }>;

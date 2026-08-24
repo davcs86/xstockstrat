@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: portfolio/v1/portfolio.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PortfolioServiceClient = exports.PortfolioServiceService = exports.EnsureSignalWatchlistResponse = exports.EnsureSignalWatchlistRequest = exports.RemoveWatchlistSymbolsResponse = exports.RemoveWatchlistSymbolsRequest = exports.AddWatchlistSymbolsResponse = exports.AddWatchlistSymbolsRequest = exports.DeleteWatchlistResponse = exports.DeleteWatchlistRequest = exports.UpdateWatchlistResponse = exports.UpdateWatchlistRequest = exports.ListWatchlistsResponse = exports.ListWatchlistsRequest = exports.GetWatchlistResponse = exports.GetWatchlistRequest = exports.CreateWatchlistResponse = exports.CreateWatchlistRequest = exports.Watchlist = exports.WatchlistBinding = exports.ListPortfoliosResponse = exports.ListPortfoliosRequest = exports.StreamPortfolioUpdatesRequest = exports.GetSnapshotRequest = exports.GetPnLRequest = exports.ListPositionsResponse = exports.ListPositionsRequest = exports.GetPositionRequest = exports.GetPortfolioRequest = exports.PnLResponse = exports.PortfolioSnapshot = exports.Position = exports.Portfolio = exports.WatchlistEntrySource = exports.PositionSide = exports.PositionRiskFlag = exports.protobufPackage = void 0;
+exports.PortfolioServiceClient = exports.PortfolioServiceService = exports.ListAllWatchlistSymbolsResponse = exports.ListAllWatchlistSymbolsRequest = exports.EnsureSignalWatchlistResponse = exports.EnsureSignalWatchlistRequest = exports.RemoveWatchlistSymbolsResponse = exports.RemoveWatchlistSymbolsRequest = exports.AddWatchlistSymbolsResponse = exports.AddWatchlistSymbolsRequest = exports.DeleteWatchlistResponse = exports.DeleteWatchlistRequest = exports.UpdateWatchlistResponse = exports.UpdateWatchlistRequest = exports.ListWatchlistsResponse = exports.ListWatchlistsRequest = exports.GetWatchlistResponse = exports.GetWatchlistRequest = exports.CreateWatchlistResponse = exports.CreateWatchlistRequest = exports.Watchlist = exports.WatchlistBinding = exports.ListPortfoliosResponse = exports.ListPortfoliosRequest = exports.StreamPortfolioUpdatesRequest = exports.GetSnapshotRequest = exports.GetPnLRequest = exports.ListPositionsResponse = exports.ListPositionsRequest = exports.GetPositionRequest = exports.GetPortfolioRequest = exports.PnLResponse = exports.PortfolioSnapshot = exports.Position = exports.Portfolio = exports.WatchlistEntrySource = exports.PositionSide = exports.PositionRiskFlag = exports.protobufPackage = void 0;
 exports.positionRiskFlagFromJSON = positionRiskFlagFromJSON;
 exports.positionRiskFlagToJSON = positionRiskFlagToJSON;
 exports.positionRiskFlagToNumber = positionRiskFlagToNumber;
@@ -3353,6 +3353,96 @@ exports.EnsureSignalWatchlistResponse = {
         return message;
     },
 };
+function createBaseListAllWatchlistSymbolsRequest() {
+    return {};
+}
+exports.ListAllWatchlistSymbolsRequest = {
+    encode(_, writer = new wire_1.BinaryWriter()) {
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListAllWatchlistSymbolsRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(_) {
+        return {};
+    },
+    toJSON(_) {
+        const obj = {};
+        return obj;
+    },
+    create(base) {
+        return exports.ListAllWatchlistSymbolsRequest.fromPartial(base ?? {});
+    },
+    fromPartial(_) {
+        const message = createBaseListAllWatchlistSymbolsRequest();
+        return message;
+    },
+};
+function createBaseListAllWatchlistSymbolsResponse() {
+    return { symbols: [] };
+}
+exports.ListAllWatchlistSymbolsResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.symbols) {
+            writer.uint32(10).string(v);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListAllWatchlistSymbolsResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbols.push(reader.string());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbols?.length) {
+            obj.symbols = message.symbols;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListAllWatchlistSymbolsResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListAllWatchlistSymbolsResponse();
+        message.symbols = object.symbols?.map((e) => e) || [];
+        return message;
+    },
+};
 exports.PortfolioServiceService = {
     getPortfolio: {
         path: "/xstockstrat.portfolio.v1.PortfolioService/GetPortfolio",
@@ -3496,6 +3586,22 @@ exports.PortfolioServiceService = {
         requestDeserialize: (value) => exports.EnsureSignalWatchlistRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.EnsureSignalWatchlistResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.EnsureSignalWatchlistResponse.decode(value),
+    },
+    /**
+     * Cross-user enumeration (feature 154): the distinct union of watchlist symbols across
+     * ALL users' watchlists — NOT scoped to the caller's x-user-id. Privileged: gated by the
+     * x-internal-caller allow-list (grant `analysis-fundsignal`), not the admin x-access-scope
+     * bit (PR #994) — a non-allow-listed caller gets PERMISSION_DENIED. Read-only; intended for
+     * the fundamentals-signal producer's universe resolution.
+     */
+    listAllWatchlistSymbols: {
+        path: "/xstockstrat.portfolio.v1.PortfolioService/ListAllWatchlistSymbols",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ListAllWatchlistSymbolsRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ListAllWatchlistSymbolsRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.ListAllWatchlistSymbolsResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.ListAllWatchlistSymbolsResponse.decode(value),
     },
 };
 exports.PortfolioServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.PortfolioServiceService, "xstockstrat.portfolio.v1.PortfolioService");
