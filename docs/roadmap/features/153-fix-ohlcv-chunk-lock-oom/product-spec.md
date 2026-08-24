@@ -54,6 +54,16 @@ and any concurrency across unguarded call sites tips it over.
 - **xstockstrat-analysis** — caller (`EvaluateReadiness` and other unguarded 400-day bars paths).
 - **DO managed PostgreSQL cluster `xstockstrat`** — `max_locks_per_transaction` tuning target.
 
+## Consumer Surface(s)
+
+**None — internal / platform-only (C-14).** This is a reliability/infrastructure fix: it widens a
+TimescaleDB hypertable chunk interval and raises a Postgres server parameter to clear resource
+exhaustion. It adds no new RPC, request/response field, computed value, config key, or UI/agent
+surface — it *restores* existing `GetBars` / `EvaluateReadiness` / `ListOpportunities` behavior that
+was intermittently failing, rather than adding a capability. The optional feature-141-style
+dedup/`_bars_fetch_sem` guard (if folded in at design) is likewise an internal resource-consumption
+bound with no observable surface change.
+
 ## Fix Scope
 
 - [x] No proto changes anticipated
