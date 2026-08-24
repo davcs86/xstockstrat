@@ -132,3 +132,44 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   pre-change.
 - **/sdd-execute impact:** the operator/infra step is now "verify max_locks=1024 is live," not "apply
   it." Piece B (migration 004) still to be built via /sdd-spec → /sdd-execute.
+
+## Session 2026-08-24 — sdd-spec
+
+- Generated implementation-spec.md with **3 steps**. Status → implementation-ready.
+- Shape: **no application-code change** (per design). Steps are 1× `migration` + 2× `docs`; there is
+  no `service` step, so no paired unit-`test` step (C-08 pairing is predicated on a service step).
+- Scenario coverage (C-15): **AC-2** → Step 1 (offline migration up/down inspection; real apply +
+  dimension assert at `db-migrator` PRE_DEPLOY); **AC-1** → Step 2 (countable lock-budget arithmetic
+  invariant documented in the runbook, per design's F-05-respecting plan — deliberately NOT a live
+  53200 reproduction). Both stated explicitly in the spec's `## Scenario Coverage` so /sdd-review
+  sees the non-code coverage was a design decision, not an omission.
+- Key codebase findings:
+  - **Migration NNN re-derived = 004** (stale-NNN trap, design Open Risk 4): `git ls-tree
+    origin/main-dev services/xstockstrat-marketdata/migrations/` tops out at `003_canonicalize_
+    ohlcv_timeframe`; every existing `004_*` file is in a **different** service (analysis/config/
+    identity/indicators/ingest), not marketdata. Confirmed on origin/main and the working tree too.
+  - `001_marketdata_hypertables.up.sql:23-28` sets `chunk_time_interval => INTERVAL '1 day'`; PK
+    `(symbol,timeframe,time)` `:20`, indexes `:31,:33` → 4 relations/chunk (the ×4 in the lock math).
+  - `003` pattern reuse-with-subtraction: its `DO $$` compressed-chunk pre-flight and
+    `ohlcv_remediation_003` audit table exist only because `003` moved rows — **both omitted** for the
+    metadata-only `set_chunk_time_interval` call (no rows move; no compression on this table).
+  - Piece A (max_locks 64→1024) is **already applied** (prior context session) — Step 2 documents +
+    verifies it (runbook `docs/runbooks/ohlcv-lock-budget-tuning.md` + index row in
+    `docs/runbooks/CLAUDE.md`), it does not re-apply it.
+  - Doc-drift caught for Teardown: `services/xstockstrat-marketdata/CLAUDE.md` § Database and
+    `docs/patterns/database.md:9` both say ohlcv "chunk = 1 day" → Step 3 updates them for the 30-day
+    future-chunk interval.
+- Reviewers snapshot written to feature.md: DBA + xstockstrat-marketdata (from the one migration
+  step); the two docs steps have none.
+- `max_connections ≈ 25` for `db-s-1vcpu-1gb` remains a **named assumption** for the AC-1 arithmetic
+  (design Open Risk 3) — flagged in Step 2 to confirm at execute time; conclusion insensitive ~22–25.
+
+### Decisions
+- No `service`/`test` code step: the fix is a hypertable chunk-interval metadata change (migration
+  004) + an out-of-repo Postgres server-parameter bump (Piece A, documented only). Acceptance is
+  arithmetic invariant (AC-1) + offline migration up/down (AC-2), never a live-53200 reproduction.
+
+### Open Threads (carried)
+- Acceptance not met until "Piece A applied + holding in staging" is verified (design Open Risk 1) —
+  Step 2 owns the verification/gate; Piece A already applied and holding per prior context session.
+- Confirm the DO plan's `max_connections` at /sdd-execute (Open Risk 3); conclusion unchanged ~22–25.
