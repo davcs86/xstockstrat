@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-08-23
 **Last Updated**: 2026-08-23
+**Committed to main**: 2c8c9d7cb563140384324b5e1f9ff6fdceb1a367
+**Launched date**: 2026-08-24
 
 ---
 
@@ -16,6 +18,7 @@
 | 2026-08-23 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report (Issues disabled; --from-report path) |
 | 2026-08-23 | `draft` → `code-completed` | claude | Fix implemented + red-before-green unit tests; 544 analysis tests pass (82.5% cov), ruff clean. Rides PR #1004. |
 
+| 2026-08-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #1006; committed 2c8c9d7cb563140384324b5e1f9ff6fdceb1a367 |
 ---
 
 ## Artifacts

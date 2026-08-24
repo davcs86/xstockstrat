@@ -3,6 +3,8 @@
 **Development Branch**: `feature/manage-strategy-accept-object-rules`
 **Created**: 2026-08-22
 **Last Updated**: 2026-08-22
+**Committed to main**: 2c8c9d7cb563140384324b5e1f9ff6fdceb1a367
+**Launched date**: 2026-08-24
 
 ---
 
@@ -15,6 +17,7 @@
 | 2026-08-22 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 3 steps |
 | 2026-08-22 | `implementation-ready` → `code-completed` | direct-impl | All 3 steps implemented on `claude/register-trading-strategies-uoqhuk`; 273 agent tests pass (78% cov), ruff clean, proto-parity guard green, red-before-green demonstrated. |
 
+| 2026-08-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #1006; committed 2c8c9d7cb563140384324b5e1f9ff6fdceb1a367 |
 ---
 
 ## Artifacts

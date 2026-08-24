@@ -44,3 +44,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   model (#3). Forward-only — historical `backtest_runs.annualized_return` rows unchanged.
 - AC-3 (grade-neutral) is covered by the unchanged 544-test suite (per-symbol cell metrics + derived
   grade tests all still pass) plus `test_default_path_unchanged_without_period_years`.
+
+## Session 2026-08-24 (CI: feature status automation)
+
+- Promotion PR #1006 merged to main
+- Feature promoted and committed: 2c8c9d7cb563140384324b5e1f9ff6fdceb1a367
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-24

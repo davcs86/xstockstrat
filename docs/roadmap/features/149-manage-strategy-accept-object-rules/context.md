@@ -96,3 +96,10 @@
 - **Fingerprint non-equivalence** (accepted, documented in design.md + the docstring note): a dict and
   a differently-spaced string of the same logical rule serialize differently → switching encodings
   clears the derived grade. No code mitigation in 149.
+
+## Session 2026-08-24 (CI: feature status automation)
+
+- Promotion PR #1006 merged to main
+- Feature promoted and committed: 2c8c9d7cb563140384324b5e1f9ff6fdceb1a367
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-24

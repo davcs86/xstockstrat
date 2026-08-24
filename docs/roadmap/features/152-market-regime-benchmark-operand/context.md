@@ -114,3 +114,10 @@
 - **First validation once shipped (spec §10):** re-run `dip_buyer_vol_stop` with a VOO-200d-rising
   gate across the three OOS years to confirm the −19% 2024-25 year is suppressed without gutting the
   others. Not run here (needs the live staging engine + backfilled data).
+
+## Session 2026-08-24 (CI: feature status automation)
+
+- Promotion PR #1006 merged to main
+- Feature promoted and committed: 2c8c9d7cb563140384324b5e1f9ff6fdceb1a367
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-24

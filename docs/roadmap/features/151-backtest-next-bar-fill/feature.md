@@ -3,6 +3,8 @@
 **Development Branch**: `feature/backtest-next-bar-fill` (this session's work rides `claude/xstockstrat-metrics-sweep-m070rf` per the harness branch constraint)
 **Created**: 2026-08-23
 **Last Updated**: 2026-08-23
+**Committed to main**: 2c8c9d7cb563140384324b5e1f9ff6fdceb1a367
+**Launched date**: 2026-08-24
 
 ---
 
@@ -16,6 +18,7 @@
 | 2026-08-23 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1–3 (proto fill_model 9/20/18 + codegen + migration 018) done on claude/xstockstrat-metrics-sweep-m070rf |
 | 2026-08-23 | `in-progress` → `code-completed` | /sdd-execute | Steps 4–10 done on claude/xstockstrat-metrics-sweep-m070rf; _apply_fill engine + agent + strat-lab skill + UI all landed, tests green |
 
+| 2026-08-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #1006; committed 2c8c9d7cb563140384324b5e1f9ff6fdceb1a367 |
 ---
 
 ## Artifacts

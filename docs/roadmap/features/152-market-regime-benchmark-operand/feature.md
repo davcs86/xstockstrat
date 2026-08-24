@@ -3,6 +3,8 @@
 **Development Branch**: `feature/market-regime-benchmark-operand`
 **Created**: 2026-08-24
 **Last Updated**: 2026-08-24
+**Committed to main**: 2c8c9d7cb563140384324b5e1f9ff6fdceb1a367
+**Launched date**: 2026-08-24
 
 ---
 
@@ -15,6 +17,7 @@
 | 2026-08-24 | `design-approved` → `implementation-ready` | /sdd-spec | implementation-spec.md written (9 steps) |
 | 2026-08-24 | `implementation-ready` → `code-completed` | implementation | All 9 steps landed; analysis 591 green, agent 286 green, buf clean |
 
+| 2026-08-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #1006; committed 2c8c9d7cb563140384324b5e1f9ff6fdceb1a367 |
 ---
 
 ## Artifacts

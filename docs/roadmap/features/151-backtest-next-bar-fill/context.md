@@ -176,3 +176,10 @@ alongside feature 150 (which merged its proto/migration first, so 151 keeps the 
 
 ## Session 2026-08-23 — feature 151 code-completed
 All 10 steps done on claude/xstockstrat-metrics-sweep-m070rf → PR #1004. status.md → code-completed.
+
+## Session 2026-08-24 (CI: feature status automation)
+
+- Promotion PR #1006 merged to main
+- Feature promoted and committed: 2c8c9d7cb563140384324b5e1f9ff6fdceb1a367
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-24
