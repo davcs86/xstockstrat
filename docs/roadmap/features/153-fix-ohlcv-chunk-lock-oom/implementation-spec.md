@@ -141,7 +141,7 @@ the execute loop.
 
 ### Step 2 — docs: Piece A runbook (max_locks 64→1024) + lock-budget invariant + staging verification
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/ohlcv-lock-budget-tuning.md` — create

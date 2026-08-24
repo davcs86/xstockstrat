@@ -206,3 +206,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   (avoids a naive grep/parser false-positive) — no SQL/logic change.
 - Files modified: services/xstockstrat-marketdata/migrations/004_widen_ohlcv_chunk_interval.{up,down}.sql
 - Deviations: none. (Offline migration verification is the repo's F-05 bar, not a deviation.)
+
+### Step 2 — docs: Piece A runbook + lock-budget invariant [done]
+- Created docs/runbooks/ohlcv-lock-budget-tuning.md (root cause; the countable lock-budget invariant AC-1 with
+  both named assumptions; the max_locks 64→1024 operator procedure incl. the single-node restart/downtime warning;
+  the "Piece A applied + holding in staging" acceptance gate, recording the 2026-08-24 apply; the future-only
+  relationship to migration 004). Added the alphabetical index row to docs/runbooks/CLAUDE.md.
+- Verified: runbook present; max_locks 64→1024 documented; AC-1 markers (1,600 / 25,600 / 53200) present; index row
+  added; bash is macOS-safe (no grep -P / bare pip).
+- Files modified: docs/runbooks/ohlcv-lock-budget-tuning.md, docs/runbooks/CLAUDE.md
+- Deviations: none.
