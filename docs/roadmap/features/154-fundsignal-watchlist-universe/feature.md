@@ -15,6 +15,7 @@
 | 2026-08-24 | `spec-ready` → `design-approved` | /sdd-design | Full-mode debate (4 rounds); operator-approved. recon.md + design.md written |
 | 2026-08-24 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 7 steps |
 | 2026-08-24 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (proto RPC) done |
+| 2026-08-24 | in-progress | /sdd-execute | Steps 2–4 done (codegen, portfolio RPC + authz gate + tests, red→green) |
 
 ---
 
