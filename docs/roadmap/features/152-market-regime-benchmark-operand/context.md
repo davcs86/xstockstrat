@@ -85,3 +85,32 @@
   regression). Target: live step.
 - OT-3: assert Opportunities benchmark fetch dedups to 1/pass. Target: readiness/opportunities step.
 - OT-4: join-sparsity threshold is a code constant (config-key tuning deferred).
+
+## Session 2026-08-24 — implementation (all 9 steps)
+
+- Provisioned the codegen toolchain on-host (no Docker/buf here): `go install buf` + go proto plugins
+  + npm ts-proto plugins + grpcio-tools, validated an EMPTY stub diff before editing the proto.
+- **Step 1 proto:** `string source_symbol = 6` (plain) on `StrategyComponent`; buf lint+breaking clean;
+  go/python/ts stubs regenerated.
+- **Step 2 evaluator:** `_assemble_component_series` (+ `_bar_date`), `benchmark_bars` kwarg on
+  evaluate/evaluate_with_series/evaluate_conditions_traced; `eval_dates` computed lazily only when a
+  source_symbol is present (preserves byte-identity + list-mock bars without `.time`).
+- **Step 3 backtest:** `_load_benchmark_bars` (once/run, dedup, warmup, → CoverageGap(benchmark)).
+- **Step 4 live:** `live_loop._load_benchmark_bars` (warmup-widened, safe degrade) +
+  `StrategyEvaluator.declared_formula_warmups` (formula warmup plumbed into live per operator
+  decision). Repurposed the FR-7 parity guard test + updated docs/warmup.md (D-3).
+- **Step 5 readiness/opportunities:** `_load_benchmark_bars_windowed` (dedup once/pass under
+  `_bars_fetch_sem`), wired into EvaluateReadiness + `_compute_opportunities`.
+- **Step 6 GetIndicatorSeries:** `_benchmark_series_bars`; aligns onto `request.times`; gap → UNSET
+  IndicatorValue.
+- **Step 7 write path:** `_normalize_source_symbols` (uppercase/trim, empty→unset) at ManageStrategy
+  top, covers REGISTER + UPDATE; fingerprint auto-enters via definition_json.
+- **Step 8 agent:** `_build_component` carries source_symbol; descriptor-parity test caught it RED then
+  covered it; tool docstring + strat-lab skill + mcp-tools.md updated (root same-PR rule).
+- **Step 9 docs:** analysis CLAUDE.md § Benchmark operand.
+- **Verification:** analysis suite 591 passed (cov 83%), agent suite 286 passed (cov 78%), ruff clean,
+  buf lint+breaking clean. Deviations D-1..D-4 in implementation-spec.md.
+- **Teardown:** context-forge plugin unavailable in session → manual scoped context audit instead.
+- **First validation once shipped (spec §10):** re-run `dip_buyer_vol_stop` with a VOO-200d-rising
+  gate across the three OOS years to confirm the −19% 2024-25 year is suppressed without gutting the
+  others. Not run here (needs the live staging engine + backfilled data).

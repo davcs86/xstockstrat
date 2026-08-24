@@ -12,6 +12,8 @@
 |---|---|---|---|
 | 2026-08-24 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-24 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
+| 2026-08-24 | `design-approved` → `implementation-ready` | /sdd-spec | implementation-spec.md written (9 steps) |
+| 2026-08-24 | `implementation-ready` → `code-completed` | implementation | All 9 steps landed; analysis 591 green, agent 286 green, buf clean |
 
 ---
 

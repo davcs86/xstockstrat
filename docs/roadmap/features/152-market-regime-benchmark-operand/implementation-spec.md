@@ -1,6 +1,6 @@
 # Implementation Spec: market-regime-benchmark-operand
 
-**Status**: `pending`
+**Status**: `complete` (all 9 steps landed 2026-08-24; analysis suite 591 green, agent suite 286 green, buf lint+breaking clean)
 **Created**: 2026-08-24
 **Feature**: `docs/roadmap/features/152-market-regime-benchmark-operand/feature.md`
 **Total Steps**: 9
@@ -221,4 +221,25 @@ follow-up `strategy-builder-source-symbol`.
 
 ## Deviation Log
 
-_Populated during execution._
+- **D-1 (Step 3):** benchmark bars are preloaded **once per RunBacktest run** (before the
+  per-symbol loop) rather than inside `_backtest_symbol_evaluated` per symbol — a benchmark (VOO)
+  is shared by every evaluated symbol, so a per-symbol fetch would re-fetch VOO N times and emit N
+  duplicate coverage gaps. `_backtest_symbol_evaluated` gained a `benchmark_bars` param; the run
+  loads them once and passes them in. Insufficient benchmark → one coverage gap, `symbols_to_run`
+  emptied → INSUFFICIENT_DATA.
+- **D-2 (Step 4):** rather than extract the servicer's `_declared_formula_warmup` (which also
+  records feature-086 soft-delete warnings and would risk backtest behavior), a self-contained
+  `StrategyEvaluator.declared_formula_warmups` was added for the live path to size a
+  custom-formula benchmark's warmup. Backtest servicer untouched (zero regression risk).
+- **D-3 (Step 4):** the pre-existing guard test `test_the_live_loop_still_uses_its_own_fixed_lookback`
+  (which asserted `"warmup" not in live_loop source`) was **intentionally** made obsolete by the
+  operator decision to wire warmup into live for benchmark components — its own docstring authorized
+  this. Repurposed to assert the **evaluated** symbol still uses the fixed 365-day lookback; the FR-7
+  divergence note in `docs/warmup.md` was updated.
+- **D-4 (Step 8):** the descriptor-parity test `test_build_component_covers_every_proto_field` caught
+  the new `source_symbol` field RED before the builder update (the RC-1/F-12 guard working as
+  designed); the test input was extended to cover it + a value round-trip.
+
+_All steps complete. Teardown: the context-forge/context-scrubber plugin was not available in this
+session, so a manual scoped audit of the touched context files (analysis CLAUDE.md, docs/warmup.md,
+strat-lab SKILL.md, mcp-tools.md) was done instead — noted in the PR body._
