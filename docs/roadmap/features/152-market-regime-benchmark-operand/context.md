@@ -50,3 +50,38 @@
   write-path persists it into `definition_json`.
 - **Nothing exists today** for per-component symbol override or cross-symbol alignment — must be built in
   `_compute_component`/the evaluate path plus a benchmark-bar loader mirroring `_resolve_prefixed_bars`.
+
+## Session 2026-08-24 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: packages/proto, xstockstrat-analysis, xstockstrat-agent;
+  reuse patterns: `_resolve_prefixed_bars`+`_InsufficientData`→CoverageGap, `_compute_component`,
+  positional `component_series`, `_definition_fingerprint` auto-enter).
+- Phase 1 Grilling: 2 rounds (full). R1 adversary = NEEDS-WORK (8 objections, no Floor breach). All
+  resolved in the converged R2 design.
+- **Chosen approach:** plain `string source_symbol = 6` (NOT optional — presence would break @AC-1
+  fingerprint byte-identity); one shared `_assemble_component_series(comp, closes, eval_dates,
+  benchmark_bars)` helper behind ALL FOUR StrategyComponent assembly sites; compute-on-benchmark's-own-
+  closes then date-keyed left-join (`bar.time.ToDatetime(UTC).date()`), gap→None→hold, no forward-fill,
+  no lookahead, no reindex of the evaluated symbol; benchmark preload per distinct source_symbol at each
+  site's fetch layer (backtest `_resolve_prefixed_bars`→CoverageGap(benchmark); live warmup-sized;
+  opportunities deduped once/pass under `_bars_fetch_sem`; GetIndicatorSeries aligns onto `request.times`);
+  server-authoritative normalization in both write paths; agent builder+parity-test+strat-lab same PR.
+- **Operator decisions (AskUserQuestion, recorded):**
+  1. Live-eval: **WIRE LIVE-EVAL TOO** (not backtest-only reject).
+  2. C-10 scope: **WIRE ALL FOUR SITES NOW** (backtest, live, readiness/opportunities, GetIndicatorSeries)
+     with a cross-site parity test — not backtest+live-only-safe-hold.
+  3. Live formula warmup: **PLUMB FORMULA-WARMUP INTO LIVE NOW** — extract
+     `_declared_formula_warmup`/`_prefetch_formula_warmups` (servicer.py:1721-1766) so
+     `warmup.required_prefix_bars` sizes a custom-formula benchmark on the live path too.
+- **C-14 override (recorded):** UI strategy-builder editing of source_symbol deferred to a NAMED
+  follow-up feature `strategy-builder-source-symbol`; agent-authored strategies fully functional now.
+- Constitution rules touched: C-01, C-08/P-06, C-09, C-10, C-14, C-15, F-04, F-07. Floor breaches: none.
+- Status: draft → design-approved.
+
+### Open Threads (carry into /sdd-spec + execution)
+- OT-1: pin exact `_backtest_symbol`→`evaluate_with_series` call line for benchmark threading (assumed
+  servicer.py:1371). Target: proto/evaluator/backtest steps.
+- OT-2: extract live formula-warmup helpers without changing backtest behavior (guard: byte-identity
+  regression). Target: live step.
+- OT-3: assert Opportunities benchmark fetch dedups to 1/pass. Target: readiness/opportunities step.
+- OT-4: join-sparsity threshold is a code constant (config-key tuning deferred).
