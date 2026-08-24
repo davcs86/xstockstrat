@@ -14,6 +14,7 @@ import json
 import logging
 import math
 from dataclasses import dataclass
+from datetime import UTC
 from typing import Any
 
 from gen.analysis.v1 import analysis_pb2
@@ -22,6 +23,24 @@ from google.protobuf.json_format import MessageToDict
 from google.protobuf.struct_pb2 import Struct
 
 log = logging.getLogger(__name__)
+
+# Feature 152 — below this in-window match ratio between a benchmark (source_symbol)
+# component's dates and the evaluated symbol's trading days, a WARN is logged so the
+# silent-sparsity degradation (a benchmark gate reading hold on most bars because the
+# calendars barely overlap) is observable rather than invisible.
+_SOURCE_JOIN_SPARSITY_WARN = 0.5
+
+
+def _bar_date(bar):
+    """Trading-day date key for a marketdata bar (feature 152).
+
+    Uses the same ``bar.time.ToDatetime(tzinfo=UTC)`` transform the live loop already
+    relies on (``live_loop.py``); the date component is the join key that aligns a
+    benchmark component's output series onto the evaluated symbol's timeline. Robust to
+    per-symbol intraday timestamp differences, and lookahead-safe (benchmark date D maps
+    only to evaluated date D — never a future bar). The real timestamp field is
+    ``bar.time`` (NOT ``bar.timestamp``)."""
+    return bar.time.ToDatetime(tzinfo=UTC).date()
 
 
 class FormulaExecutionError(Exception):
@@ -104,6 +123,7 @@ class StrategyEvaluator:
         definition,  # analysis_pb2.StrategyDefinition
         bars: list,  # list of OHLCV bar proto messages with .close, .timestamp
         signals_map: dict[str, list] | None = None,
+        benchmark_bars: dict | None = None,
     ) -> list[BarDecision]:
         """
         Compute per-bar entry/exit decisions for the given strategy definition.
@@ -111,8 +131,14 @@ class StrategyEvaluator:
         Thin back-compat wrapper: returns only the ``list[BarDecision]`` so existing callers
         (the feature-048 live loop, list-mocking tests) are unaffected. Diagnostics-bearing
         callers use ``evaluate_with_series`` for the computed component series (feature 064).
+
+        ``benchmark_bars`` (feature 152) maps a component's ``source_symbol`` to that
+        symbol's preloaded bars; a component with a ``source_symbol`` absent from the map
+        resolves to hold (see ``_assemble_component_series``).
         """
-        decisions, _ = await self.evaluate_with_series(definition, bars, signals_map)
+        decisions, _ = await self.evaluate_with_series(
+            definition, bars, signals_map, benchmark_bars
+        )
         return decisions
 
     async def evaluate_with_series(
@@ -120,6 +146,7 @@ class StrategyEvaluator:
         definition,  # analysis_pb2.StrategyDefinition
         bars: list,  # list of OHLCV bar proto messages with .close, .timestamp
         signals_map: dict[str, list] | None = None,
+        benchmark_bars: dict | None = None,
     ) -> tuple[list[BarDecision], dict[str, list]]:
         """
         Like ``evaluate`` but also returns the computed ``component_series`` dict (feature 064).
@@ -140,14 +167,26 @@ class StrategyEvaluator:
         _validate_definition(definition)
 
         closes = [b.close for b in bars]
+        # eval_dates is only needed to align a benchmark (source_symbol) component; compute
+        # it lazily so the no-source path never touches bar.time (preserves byte-identity and
+        # keeps list-mocked bars without a .time field working).
+        eval_dates = (
+            [_bar_date(b) for b in bars]
+            if any(c.source_symbol for c in definition.components)
+            else None
+        )
 
         # Step 2: compute component series
         # Each component may emit several series (e.g. Bollinger Bands → value/upper/lower).
         # A bare ref_name resolves to the primary "value" series; every emitted series is
         # also addressable in rules as "<ref_name>.<series>" (e.g. "bb.upper").
+        # A component with a source_symbol (feature 152) is computed on the benchmark's
+        # bars and aligned onto eval_dates via _assemble_component_series.
         component_series = {}
         for comp in definition.components:
-            series_map = await self._compute_component(comp, closes)
+            series_map = await self._assemble_component_series(
+                comp, closes, eval_dates, benchmark_bars
+            )
             primary = series_map.get("value", [None] * len(closes))
             component_series[comp.ref_name] = primary  # bare ref → primary series
             for series_name, series in series_map.items():
@@ -177,6 +216,7 @@ class StrategyEvaluator:
         | None = None,  # reserved (entry-rule leaves are component refs)
         *,
         rule: str = "entry",
+        benchmark_bars: dict | None = None,
     ) -> dict:
         """Additive sibling (feature 083). Trace the ``entry_rule`` (default) or, with
         ``rule="exit"`` (feature 097), the ``exit_rule`` condition leaves at the LAST bar —
@@ -203,9 +243,16 @@ class StrategyEvaluator:
             return _empty_readiness(symbol)
         _validate_definition(definition)
         closes = [b.close for b in bars]
+        eval_dates = (
+            [_bar_date(b) for b in bars]
+            if any(c.source_symbol for c in definition.components)
+            else None
+        )
         component_series: dict[str, list] = {}
         for comp in definition.components:
-            series_map = await self._compute_component(comp, closes)
+            series_map = await self._assemble_component_series(
+                comp, closes, eval_dates, benchmark_bars
+            )
             primary = series_map.get("value", [None] * len(closes))
             component_series[comp.ref_name] = primary
             for series_name, series in series_map.items():
@@ -295,6 +342,68 @@ class StrategyEvaluator:
                 )
             return series
         return {"value": [None] * n}
+
+    async def _assemble_component_series(
+        self,
+        comp,
+        closes: list[float],
+        eval_dates: list,
+        benchmark_bars: dict | None = None,
+    ) -> dict[str, list[float | None]]:
+        """Compute a component's output series, honoring an optional ``source_symbol``
+        benchmark operand (feature 152).
+
+        This is the single computation unit behind every StrategyComponent-consuming
+        site (backtest, live, readiness/opportunities, GetIndicatorSeries), so a
+        ``source_symbol`` component behaves identically everywhere.
+
+        - Empty ``source_symbol`` → delegates to ``_compute_component(comp, closes)``
+          unchanged (byte-identical to the pre-feature-152 path).
+        - Truthy ``source_symbol`` → computes the indicator/formula on the *benchmark's*
+          own contiguous closes (compute-then-align: ``align_indicator_points`` / the
+          formula ``len==n`` policy assume a contiguous warm-up head, so a gap-injected
+          input would misalign), then LEFT-JOINs each output series onto ``eval_dates``
+          keyed on the trading-day date. A missing benchmark date → ``None`` (the leaf
+          reads hold/false via ``_resolve_term``); no forward-fill; the evaluated symbol
+          is never reindexed; no lookahead (date D → date D only).
+        - Truthy ``source_symbol`` but no bars supplied for it → all-``None`` (safe hold),
+          NEVER computed on the evaluated ``closes``. Callers that do not preload a
+          benchmark therefore degrade to hold rather than to a wrong-symbol value.
+        """
+        n = len(closes)
+        source_symbol = comp.source_symbol
+        if not source_symbol:
+            return await self._compute_component(comp, closes)
+
+        bench_bars = (benchmark_bars or {}).get(source_symbol)
+        if not bench_bars:
+            return {"value": [None] * n}
+
+        bench_closes = [b.close for b in bench_bars]
+        bench_series = await self._compute_component(comp, bench_closes)
+
+        # date → benchmark index (last bar wins on a duplicate date — daily bars are unique)
+        idx_by_date: dict = {}
+        for i, b in enumerate(bench_bars):
+            idx_by_date[_bar_date(b)] = i
+
+        matched = sum(1 for d in eval_dates if d in idx_by_date)
+        if eval_dates and matched / len(eval_dates) < _SOURCE_JOIN_SPARSITY_WARN:
+            log.warning(
+                "benchmark source_symbol=%s ref=%s: only %d/%d evaluated bars matched a "
+                "benchmark trading day — benchmark gate reads hold on the rest",
+                source_symbol,
+                comp.ref_name,
+                matched,
+                len(eval_dates),
+            )
+
+        aligned: dict[str, list[float | None]] = {}
+        for name, series in bench_series.items():
+            aligned[name] = [
+                series[idx_by_date[d]] if d in idx_by_date else None for d in eval_dates
+            ]
+        return aligned
 
 
 def align_indicator_points(result_points, n: int) -> dict[str, list[float | None]]:
