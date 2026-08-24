@@ -132,3 +132,15 @@
 ## Next
 
 `/sdd-review fundsignal-watchlist-universe impl-spec`, then `/sdd-execute fundsignal-watchlist-universe`.
+
+## Session 2026-08-24 — sdd-review impl-spec (advisory)
+
+- Result: **0 failures, 2 warnings, 0 Floor risks** (PASS advisory); overlap CLEAN (no proto/migration/config/file collision; 142 is marketdata-only, disjoint). All load-bearing citations verified against the tree.
+- Both warnings **addressed before execution** (operator directive):
+  - Step 1 (C-09): `buf breaking` targeted the feature branch (no-op). — [x] fixed → now `--against "../../.git#branch=main-dev,subdir=packages/proto"`, matching `promote.yml`/`buf-gen.sh`.
+  - Step 5 (P-03): FMP-gated cap also governs the manual `RunFundamentalsScan` `override_symbols` path; semantics were implicit. — [x] fixed → spec now states explicitly the cap is a pure FMP-budget guard applied uniformly to resolver-derived and override universes (FMP-active → capped incl. override; non-FMP → whole list), a deliberate change from today's unconditional override cap.
+- Overlap findings: none.
+
+## Next
+
+`/sdd-execute fundsignal-watchlist-universe` — land the code (7 steps).

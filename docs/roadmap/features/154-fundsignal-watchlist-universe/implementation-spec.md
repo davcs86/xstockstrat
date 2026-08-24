@@ -91,7 +91,7 @@ observed through those already-shipped surfaces.
 
 **Verification**:
 ```bash
-cd packages/proto && buf lint && buf breaking --against ".git#branch=feature/fundsignal-watchlist-universe"
+cd packages/proto && buf lint && buf breaking --against "../../.git#branch=main-dev,subdir=packages/proto"
 ```
 Both pass (additive RPC + new messages introduce no breaking change).
 
@@ -316,7 +316,7 @@ All new cases pass; lint clean. (New logic is in CI-coverage-excluded packages �
    else:
        universe = deduped   # non-FMP: whole union, no max_symbols truncation (FR-7/AC-9)
    ```
-   Keep `override_symbols` behavior unchanged (an explicit override still flows through `_dedup`). Do **not** touch the `daily_call_budget`/`_paced_fetch` deferral — the non-FMP full union still rides the existing paced budget + deferred-resume (design: NOT `budget=len`).
+   **Override-path semantics (explicit — do not guess, P-03):** `deduped` is derived from `universe = override_symbols or await self._resolve_universe(metadata)`, so this single `apply_cap` branch governs **both** the resolver-derived union and a manual `RunFundamentalsScan` `override_symbols` list. This is intended: the `max_symbols` cap is purely an **FMP-budget guard**, not a universe-source policy — so under FMP-active an explicit override is capped (rotating, with the WARN), and under non-FMP the whole override list is scored. This is a deliberate change from today's unconditional `[:max_symbols]` cut on the override path (previously always capped); it is correct because the only reason to cap is FMP's daily budget, which does not exist for a non-FMP provider. Do **not** touch the `daily_call_budget`/`_paced_fetch` deferral — the non-FMP full universe (resolver or override) still rides the existing paced budget + deferred-resume (design: NOT `budget=len`).
 
 **Verification**: covered by Step 6's paired test run (pytest coverage + ruff). Additionally:
 ```bash
