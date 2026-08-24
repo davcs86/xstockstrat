@@ -607,6 +607,9 @@ def _build_component(c: dict[str, Any]):
         indicator=c.get("indicator", ""),
         formula_id=c.get("formula_id", ""),
         params={k: float(v) for k, v in (c.get("params") or {}).items()},
+        # feature 152: optional benchmark/reference symbol (e.g. "VOO"); empty = evaluated
+        # symbol. Normalized (uppercase/trim) server-side by analysis ManageStrategy.
+        source_symbol=c.get("source_symbol", ""),
     )
 
 
