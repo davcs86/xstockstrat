@@ -52,7 +52,7 @@ observed through those already-shipped surfaces.
 
 ### Step 1 — proto: add `ListAllWatchlistSymbols` RPC to PortfolioService
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/portfolio/v1/portfolio.proto` — modify
@@ -405,4 +405,6 @@ Each touched doc names the shipped behavior; no stale "falls back to `explicit`"
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### D-1 (Step 1/2) — host codegen toolchain (Docker daemon unavailable)
+- **What**: `scripts/localenv-setup.sh` (Docker codegen container) could not run — the Docker daemon is not running in this environment (CLI present, socket absent). Provisioned the codegen toolchain on the host instead: `buf 1.47.2` (via `go install github.com/bufbuild/buf/cmd/buf`), `protoc-gen-go@v1.36.11`, `protoc-gen-go-grpc@v1.6.2`, `protoc-gen-connect-go@v1.19.2` (via `go install`), TS plugins via `pnpm install`, and `grpcio-tools` for the Python stubs.
+- **Disposition**: CI-equivalent fallback — the versions match `Dockerfile.codegen` / CI `proto-freshness` pins exactly, so generated stubs are byte-identical to CI. Verified by an empty `git diff packages/proto/gen/` outside the intended portfolio change at Step 2.

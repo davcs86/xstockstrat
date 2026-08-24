@@ -14,6 +14,7 @@
 | 2026-08-24 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 advisory warnings, overlap CLEAN) |
 | 2026-08-24 | `spec-ready` → `design-approved` | /sdd-design | Full-mode debate (4 rounds); operator-approved. recon.md + design.md written |
 | 2026-08-24 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 7 steps |
+| 2026-08-24 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (proto RPC) done |
 
 ---
 

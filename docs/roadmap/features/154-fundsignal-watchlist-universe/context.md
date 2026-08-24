@@ -144,3 +144,12 @@
 ## Next
 
 `/sdd-execute fundsignal-watchlist-universe` — land the code (7 steps).
+
+## Session 2026-08-24 — sdd-execute (sequential)
+
+### Step 1 — proto: add ListAllWatchlistSymbols RPC [done]
+- Added additive `ListAllWatchlistSymbols` RPC + `ListAllWatchlistSymbolsRequest`/`Response` (`repeated string symbols = 1`) to `PortfolioService` after `EnsureSignalWatchlist`.
+- Verification: `buf lint` OK; `buf breaking --against main-dev` OK (additive, no breaking change). TDD: N/A (proto).
+- Tooling note: Docker daemon unavailable → provisioned host codegen toolchain instead (buf 1.47.2 via `go install`; protoc-gen-go@v1.36.11 / -go-grpc@v1.6.2 / -connect-go@v1.19.2 via `go install`). CI-equivalent (Dockerfile.codegen pins the same). Deviation logged.
+- Files modified: `packages/proto/portfolio/v1/portfolio.proto`
+- Deviations: host-toolchain codegen fallback (Docker daemon down) — see Deviation Log.
