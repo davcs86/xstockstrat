@@ -1143,6 +1143,9 @@ type WatchlistStore interface {
 	RemoveSymbols(ctx context.Context, watchlistID string, symbols []string) (*portfoliov1.Watchlist, error)
 	CountByUser(ctx context.Context, userID string) (int, error)
 	EnsureSystemManaged(ctx context.Context, userID, defaultName string) (*portfoliov1.Watchlist, error)
+	// ListAllSymbols returns the distinct union of watchlist symbols across ALL users
+	// (feature 154) — cross-user, not scoped to a caller.
+	ListAllSymbols(ctx context.Context) ([]string, error)
 }
 
 // watchlistConfig is the slice of the config watcher the watchlist caps read. Lets
@@ -1299,6 +1302,23 @@ func (s *PortfolioService) EnsureSignalWatchlist(ctx context.Context, _ *portfol
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return &portfoliov1.EnsureSignalWatchlistResponse{Watchlist: wl}, nil
+}
+
+// ListAllWatchlistSymbols returns the distinct union of watchlist symbols across ALL
+// users (feature 154) — the fundamentals-signal producer's universe source. This is a
+// cross-user read of per-user data, so it is gated by the x-internal-caller allow-list
+// (grant analysis-fundsignal), NOT the admin x-access-scope bit (PR #994). A caller
+// without that grant gets PERMISSION_DENIED (which the grpc adapter maps via toGRPCError).
+func (s *PortfolioService) ListAllWatchlistSymbols(ctx context.Context, _ *portfoliov1.ListAllWatchlistSymbolsRequest) (*portfoliov1.ListAllWatchlistSymbolsResponse, error) {
+	if !hasInternalCallerAuthority(ctx, "ListAllWatchlistSymbols") {
+		return nil, connect.NewError(connect.CodePermissionDenied,
+			errors.New("cross-user watchlist enumeration is internal-caller-gated"))
+	}
+	syms, err := s.watchlists.ListAllSymbols(ctx)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return &portfoliov1.ListAllWatchlistSymbolsResponse{Symbols: syms}, nil
 }
 
 // GetWatchlist returns a single watchlist owned by the caller (FR-2).

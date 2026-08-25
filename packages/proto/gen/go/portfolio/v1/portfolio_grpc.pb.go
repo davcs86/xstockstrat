@@ -19,21 +19,22 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	PortfolioService_GetPortfolio_FullMethodName           = "/xstockstrat.portfolio.v1.PortfolioService/GetPortfolio"
-	PortfolioService_GetPosition_FullMethodName            = "/xstockstrat.portfolio.v1.PortfolioService/GetPosition"
-	PortfolioService_ListPositions_FullMethodName          = "/xstockstrat.portfolio.v1.PortfolioService/ListPositions"
-	PortfolioService_GetPnL_FullMethodName                 = "/xstockstrat.portfolio.v1.PortfolioService/GetPnL"
-	PortfolioService_GetSnapshot_FullMethodName            = "/xstockstrat.portfolio.v1.PortfolioService/GetSnapshot"
-	PortfolioService_StreamPortfolioUpdates_FullMethodName = "/xstockstrat.portfolio.v1.PortfolioService/StreamPortfolioUpdates"
-	PortfolioService_ListPortfolios_FullMethodName         = "/xstockstrat.portfolio.v1.PortfolioService/ListPortfolios"
-	PortfolioService_CreateWatchlist_FullMethodName        = "/xstockstrat.portfolio.v1.PortfolioService/CreateWatchlist"
-	PortfolioService_GetWatchlist_FullMethodName           = "/xstockstrat.portfolio.v1.PortfolioService/GetWatchlist"
-	PortfolioService_ListWatchlists_FullMethodName         = "/xstockstrat.portfolio.v1.PortfolioService/ListWatchlists"
-	PortfolioService_UpdateWatchlist_FullMethodName        = "/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlist"
-	PortfolioService_DeleteWatchlist_FullMethodName        = "/xstockstrat.portfolio.v1.PortfolioService/DeleteWatchlist"
-	PortfolioService_AddWatchlistSymbols_FullMethodName    = "/xstockstrat.portfolio.v1.PortfolioService/AddWatchlistSymbols"
-	PortfolioService_RemoveWatchlistSymbols_FullMethodName = "/xstockstrat.portfolio.v1.PortfolioService/RemoveWatchlistSymbols"
-	PortfolioService_EnsureSignalWatchlist_FullMethodName  = "/xstockstrat.portfolio.v1.PortfolioService/EnsureSignalWatchlist"
+	PortfolioService_GetPortfolio_FullMethodName            = "/xstockstrat.portfolio.v1.PortfolioService/GetPortfolio"
+	PortfolioService_GetPosition_FullMethodName             = "/xstockstrat.portfolio.v1.PortfolioService/GetPosition"
+	PortfolioService_ListPositions_FullMethodName           = "/xstockstrat.portfolio.v1.PortfolioService/ListPositions"
+	PortfolioService_GetPnL_FullMethodName                  = "/xstockstrat.portfolio.v1.PortfolioService/GetPnL"
+	PortfolioService_GetSnapshot_FullMethodName             = "/xstockstrat.portfolio.v1.PortfolioService/GetSnapshot"
+	PortfolioService_StreamPortfolioUpdates_FullMethodName  = "/xstockstrat.portfolio.v1.PortfolioService/StreamPortfolioUpdates"
+	PortfolioService_ListPortfolios_FullMethodName          = "/xstockstrat.portfolio.v1.PortfolioService/ListPortfolios"
+	PortfolioService_CreateWatchlist_FullMethodName         = "/xstockstrat.portfolio.v1.PortfolioService/CreateWatchlist"
+	PortfolioService_GetWatchlist_FullMethodName            = "/xstockstrat.portfolio.v1.PortfolioService/GetWatchlist"
+	PortfolioService_ListWatchlists_FullMethodName          = "/xstockstrat.portfolio.v1.PortfolioService/ListWatchlists"
+	PortfolioService_UpdateWatchlist_FullMethodName         = "/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlist"
+	PortfolioService_DeleteWatchlist_FullMethodName         = "/xstockstrat.portfolio.v1.PortfolioService/DeleteWatchlist"
+	PortfolioService_AddWatchlistSymbols_FullMethodName     = "/xstockstrat.portfolio.v1.PortfolioService/AddWatchlistSymbols"
+	PortfolioService_RemoveWatchlistSymbols_FullMethodName  = "/xstockstrat.portfolio.v1.PortfolioService/RemoveWatchlistSymbols"
+	PortfolioService_EnsureSignalWatchlist_FullMethodName   = "/xstockstrat.portfolio.v1.PortfolioService/EnsureSignalWatchlist"
+	PortfolioService_ListAllWatchlistSymbols_FullMethodName = "/xstockstrat.portfolio.v1.PortfolioService/ListAllWatchlistSymbols"
 )
 
 // PortfolioServiceClient is the client API for PortfolioService service.
@@ -59,6 +60,12 @@ type PortfolioServiceClient interface {
 	// Find-or-create the caller's system_managed=true watchlist (feature 127).
 	// Ownership is taken from the propagated x-user-id header; the request has no body (FR-2).
 	EnsureSignalWatchlist(ctx context.Context, in *EnsureSignalWatchlistRequest, opts ...grpc.CallOption) (*EnsureSignalWatchlistResponse, error)
+	// Cross-user enumeration (feature 154): the distinct union of watchlist symbols across
+	// ALL users' watchlists — NOT scoped to the caller's x-user-id. Privileged: gated by the
+	// x-internal-caller allow-list (grant `analysis-fundsignal`), not the admin x-access-scope
+	// bit (PR #994) — a non-allow-listed caller gets PERMISSION_DENIED. Read-only; intended for
+	// the fundamentals-signal producer's universe resolution.
+	ListAllWatchlistSymbols(ctx context.Context, in *ListAllWatchlistSymbolsRequest, opts ...grpc.CallOption) (*ListAllWatchlistSymbolsResponse, error)
 }
 
 type portfolioServiceClient struct {
@@ -228,6 +235,16 @@ func (c *portfolioServiceClient) EnsureSignalWatchlist(ctx context.Context, in *
 	return out, nil
 }
 
+func (c *portfolioServiceClient) ListAllWatchlistSymbols(ctx context.Context, in *ListAllWatchlistSymbolsRequest, opts ...grpc.CallOption) (*ListAllWatchlistSymbolsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAllWatchlistSymbolsResponse)
+	err := c.cc.Invoke(ctx, PortfolioService_ListAllWatchlistSymbols_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PortfolioServiceServer is the server API for PortfolioService service.
 // All implementations should embed UnimplementedPortfolioServiceServer
 // for forward compatibility.
@@ -251,6 +268,12 @@ type PortfolioServiceServer interface {
 	// Find-or-create the caller's system_managed=true watchlist (feature 127).
 	// Ownership is taken from the propagated x-user-id header; the request has no body (FR-2).
 	EnsureSignalWatchlist(context.Context, *EnsureSignalWatchlistRequest) (*EnsureSignalWatchlistResponse, error)
+	// Cross-user enumeration (feature 154): the distinct union of watchlist symbols across
+	// ALL users' watchlists — NOT scoped to the caller's x-user-id. Privileged: gated by the
+	// x-internal-caller allow-list (grant `analysis-fundsignal`), not the admin x-access-scope
+	// bit (PR #994) — a non-allow-listed caller gets PERMISSION_DENIED. Read-only; intended for
+	// the fundamentals-signal producer's universe resolution.
+	ListAllWatchlistSymbols(context.Context, *ListAllWatchlistSymbolsRequest) (*ListAllWatchlistSymbolsResponse, error)
 }
 
 // UnimplementedPortfolioServiceServer should be embedded to have
@@ -304,6 +327,9 @@ func (UnimplementedPortfolioServiceServer) RemoveWatchlistSymbols(context.Contex
 }
 func (UnimplementedPortfolioServiceServer) EnsureSignalWatchlist(context.Context, *EnsureSignalWatchlistRequest) (*EnsureSignalWatchlistResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method EnsureSignalWatchlist not implemented")
+}
+func (UnimplementedPortfolioServiceServer) ListAllWatchlistSymbols(context.Context, *ListAllWatchlistSymbolsRequest) (*ListAllWatchlistSymbolsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListAllWatchlistSymbols not implemented")
 }
 func (UnimplementedPortfolioServiceServer) testEmbeddedByValue() {}
 
@@ -588,6 +614,24 @@ func _PortfolioService_EnsureSignalWatchlist_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PortfolioService_ListAllWatchlistSymbols_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAllWatchlistSymbolsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PortfolioServiceServer).ListAllWatchlistSymbols(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PortfolioService_ListAllWatchlistSymbols_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PortfolioServiceServer).ListAllWatchlistSymbols(ctx, req.(*ListAllWatchlistSymbolsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PortfolioService_ServiceDesc is the grpc.ServiceDesc for PortfolioService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -650,6 +694,10 @@ var PortfolioService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "EnsureSignalWatchlist",
 			Handler:    _PortfolioService_EnsureSignalWatchlist_Handler,
+		},
+		{
+			MethodName: "ListAllWatchlistSymbols",
+			Handler:    _PortfolioService_ListAllWatchlistSymbols_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

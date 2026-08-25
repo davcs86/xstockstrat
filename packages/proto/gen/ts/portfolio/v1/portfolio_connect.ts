@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AddWatchlistSymbolsRequest, AddWatchlistSymbolsResponse, CreateWatchlistRequest, CreateWatchlistResponse, DeleteWatchlistRequest, DeleteWatchlistResponse, EnsureSignalWatchlistRequest, EnsureSignalWatchlistResponse, GetPnLRequest, GetPortfolioRequest, GetPositionRequest, GetSnapshotRequest, GetWatchlistRequest, GetWatchlistResponse, ListPortfoliosRequest, ListPortfoliosResponse, ListPositionsRequest, ListPositionsResponse, ListWatchlistsRequest, ListWatchlistsResponse, PnLResponse, Portfolio, PortfolioSnapshot, Position, RemoveWatchlistSymbolsRequest, RemoveWatchlistSymbolsResponse, StreamPortfolioUpdatesRequest, UpdateWatchlistRequest, UpdateWatchlistResponse } from "./portfolio_pb.js";
+import { AddWatchlistSymbolsRequest, AddWatchlistSymbolsResponse, CreateWatchlistRequest, CreateWatchlistResponse, DeleteWatchlistRequest, DeleteWatchlistResponse, EnsureSignalWatchlistRequest, EnsureSignalWatchlistResponse, GetPnLRequest, GetPortfolioRequest, GetPositionRequest, GetSnapshotRequest, GetWatchlistRequest, GetWatchlistResponse, ListAllWatchlistSymbolsRequest, ListAllWatchlistSymbolsResponse, ListPortfoliosRequest, ListPortfoliosResponse, ListPositionsRequest, ListPositionsResponse, ListWatchlistsRequest, ListWatchlistsResponse, PnLResponse, Portfolio, PortfolioSnapshot, Position, RemoveWatchlistSymbolsRequest, RemoveWatchlistSymbolsResponse, StreamPortfolioUpdatesRequest, UpdateWatchlistRequest, UpdateWatchlistResponse } from "./portfolio_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -151,6 +151,21 @@ export const PortfolioService = {
       name: "EnsureSignalWatchlist",
       I: EnsureSignalWatchlistRequest,
       O: EnsureSignalWatchlistResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Cross-user enumeration (feature 154): the distinct union of watchlist symbols across
+     * ALL users' watchlists — NOT scoped to the caller's x-user-id. Privileged: gated by the
+     * x-internal-caller allow-list (grant `analysis-fundsignal`), not the admin x-access-scope
+     * bit (PR #994) — a non-allow-listed caller gets PERMISSION_DENIED. Read-only; intended for
+     * the fundamentals-signal producer's universe resolution.
+     *
+     * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.ListAllWatchlistSymbols
+     */
+    listAllWatchlistSymbols: {
+      name: "ListAllWatchlistSymbols",
+      I: ListAllWatchlistSymbolsRequest,
+      O: ListAllWatchlistSymbolsResponse,
       kind: MethodKind.Unary,
     },
   }

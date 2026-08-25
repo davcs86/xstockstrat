@@ -2085,3 +2085,15 @@ reusing.
 - **Pattern**: A DO managed-Postgres server parameter absent from the `db-cluster-get-postgresql-config` response is NOT proof it is unsettable — `get` returns only non-default/overridden values. Check the **`db-cluster-update-psql-config` accepted-config schema** (the real allow-list) before concluding a param can't be tuned. Here `max_locks_per_transaction` was missing from `get` (sat at default 64) yet is fully settable. Corollary for TimescaleDB "out of shared memory" (SQLSTATE 53200): it is **lock-table exhaustion** (chunks-scanned × relations-per-chunk vs `max_locks × (max_connections + max_prepared_transactions)`), and `set_chunk_time_interval` only widens **future** chunks — so raising `max_locks` is the immediate lever for existing chunks, chunk-widening is the durable structural one, and re-chunking existing data is additive-to-the-lock-bump (its copy step itself needs the headroom), never a substitute.
 - **Evidence**: `docs/roadmap/features/153-fix-ohlcv-chunk-lock-oom/design.md` (Chosen Approach + Rejected Alternatives); `services/xstockstrat-marketdata/migrations/001_marketdata_hypertables.up.sql:23-28`.
 - **Rule it implies**: When a cloud-managed config value looks unsettable, verify against the provider's *update* schema, not just its *get* output, before designing around the limitation (P-03 "exercise the producer, don't guess its advertised state").
+### 2026-08-24 — 154-fundsignal-watchlist-universe — design
+- **Insight**: When a consumer service must branch on a *frozen-at-boot* selection owned by a producer
+  service in a **different config namespace** (here: analysis gating FMP-budget behavior on
+  `marketdata.fundamentals.provider`), read it via a **second, boot-frozen `ConfigWatcher(namespace="<producer>")`**
+  gated by `wait_for_snapshot` — mirroring the producer's own freeze — rather than (a) a live read (re-creates
+  the exact producer/consumer divergence the producer froze against) or (b) a mirror key in the consumer's own
+  namespace (state duplication + drift + C-05). WatchConfig is strictly per-namespace, so the consumer's own
+  snapshot never carries the producer's keys — a second subscription is the only no-duplication path. Cross-namespace
+  subscription is novel (no service did it before this feature; the agent only read foreign namespaces via one-shot
+  `GetConfig`), so record it as a governance note.
+- **Evidence**: `docs/roadmap/features/154-fundsignal-watchlist-universe/design.md` (R4); `services/xstockstrat-analysis/app/main.py:42-43`, `app/config/watcher.py:35-65`; `services/xstockstrat-marketdata/internal/service/marketdata_service.go:56-60` + `CLAUDE.md:80` (boot-freeze).
+- **Rule it implies**: a consumer branching on a producer-owned, boot-frozen config value should consume it with matching freeze semantics; live-reading a value the producer never re-reads is a latent divergence bug.

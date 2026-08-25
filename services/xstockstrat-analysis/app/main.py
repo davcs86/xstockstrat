@@ -43,6 +43,13 @@ async def serve():
     await cfg_watcher.wait_for_snapshot(timeout_seconds=90)
     log.info("config snapshot received")
 
+    # Second, boot-frozen watcher on the marketdata namespace (feature 154): the fundamentals
+    # producer branches its FMP-budget cap on marketdata.fundamentals.provider, which marketdata
+    # itself freezes at boot. WatchConfig is per-namespace, so this read needs its own subscription.
+    md_cfg_watcher = ConfigWatcher(endpoint=CONFIG_ENDPOINT, namespace="marketdata")
+    await md_cfg_watcher.wait_for_snapshot(timeout_seconds=90)
+    log.info("marketdata config snapshot received")
+
     db_pool = None
     if DATABASE_URL:
         db_pool = await asyncpg.create_pool(
@@ -148,6 +155,7 @@ async def serve():
             indicators_stub=servicer._indicators,
             notify_stub=servicer._notify,
             ledger_stub=servicer._ledger,
+            md_config_watcher=md_cfg_watcher,
         )
         servicer._fundsignal_loop = fundsignal_loop
         asyncio.get_event_loop().create_task(fundsignal_loop.run_forever())

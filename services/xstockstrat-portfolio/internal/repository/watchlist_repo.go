@@ -244,6 +244,27 @@ func (r *WatchlistRepo) CountByUser(ctx context.Context, userID string) (int, er
 	return n, err
 }
 
+// ListAllSymbols returns the distinct union of watchlist symbols across ALL users
+// (feature 154). No user filter, no join — user_id lives on portfolio.watchlists, but
+// symbols are flat rows on portfolio.watchlist_symbols. Reuses the shared pool (F-06).
+func (r *WatchlistRepo) ListAllSymbols(ctx context.Context) ([]string, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT DISTINCT symbol FROM portfolio.watchlist_symbols ORDER BY symbol`)
+	if err != nil {
+		return nil, fmt.Errorf("list all symbols: %w", err)
+	}
+	defer rows.Close()
+	var syms []string
+	for rows.Next() {
+		var symbol string
+		if err := rows.Scan(&symbol); err != nil {
+			return nil, fmt.Errorf("scan symbol: %w", err)
+		}
+		syms = append(syms, symbol)
+	}
+	return syms, rows.Err()
+}
+
 func (r *WatchlistRepo) listBindings(ctx context.Context, watchlistID string) ([]*portfoliov1.WatchlistBinding, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT symbol, strategy_id, source FROM portfolio.watchlist_symbols WHERE watchlist_id = $1 ORDER BY symbol ASC`, watchlistID)

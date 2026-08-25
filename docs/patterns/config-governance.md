@@ -102,6 +102,23 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 154 — fundsignal-watchlist-universe (`xstockstrat-analysis` reads `marketdata` namespace)
+
+**No new keys.** Recorded here for a first-of-its-kind coupling: `xstockstrat-analysis` now holds a
+**second, boot-frozen `WatchConfig` subscription to the `marketdata` namespace** — the platform's
+**first cross-namespace stream subscription** (every other service subscribes only to its own
+namespace; the agent reads foreign namespaces via one-shot `GetConfig`, not a live stream). The
+fundamentals-signal producer branches its FMP-budget `max_symbols` cap on
+`marketdata.fundamentals.provider`, which marketdata itself reads **once at boot** (never re-read
+live). Analysis mirrors that freeze: it constructs a `ConfigWatcher(namespace="marketdata")` in
+`app/main.py`, awaits its snapshot, reads the provider once, and passes the frozen result into
+`FundamentalsSignalLoop`. Reading it **live** would re-introduce the exact producer/consumer
+divergence marketdata froze against; a **mirror key** in the `analysis` namespace would duplicate
+provider state and drift (see `docs/roadmap/ledger/insights.md`, 2026-08-24). A consumer that must
+branch on a producer-owned, boot-frozen config value in another namespace should consume it with
+matching freeze semantics, via its own namespace subscription — not a live read and not a duplicated
+key.
+
 ### feature 150 — backtest-portfolio-sizing (`xstockstrat-analysis`)
 
 Adds an opt-in portfolio sizing model to the backtest engine. Two new **code-default** keys in the
