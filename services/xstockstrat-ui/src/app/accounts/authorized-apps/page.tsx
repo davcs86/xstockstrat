@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { apiFetch } from '@/lib/authRedirect';
 import { KeyRound, Copy, Check, Plus } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -38,7 +39,7 @@ export default function AuthorizedAppsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/accounts/api/authorized-apps');
+      const res = await apiFetch('/accounts/api/authorized-apps');
       if (!res.ok) throw new Error(`Failed to load authorized apps (${res.status})`);
       const data = await res.json();
       setApps(data.apps ?? []);
@@ -71,7 +72,7 @@ export default function AuthorizedAppsPage() {
   async function handleDisconnect(app: AuthorizedApp) {
     setRevoking(app.clientId);
     try {
-      const res = await fetch('/accounts/api/authorized-apps', {
+      const res = await apiFetch('/accounts/api/authorized-apps', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'revoke', clientId: app.clientId }),

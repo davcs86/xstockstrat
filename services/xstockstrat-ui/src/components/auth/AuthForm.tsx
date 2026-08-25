@@ -13,6 +13,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field, FieldError } from '@/components/ui/field';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 
 /** Centered card shell used by both auth pages. */
 export function AuthCardShell({ title, children }: { title: string; children: React.ReactNode }) {
@@ -33,6 +35,9 @@ export function AuthCardShell({ title, children }: { title: string; children: Re
 const credentialsSchema = z.object({
   email: z.email('Enter a valid email address'),
   password: z.string().min(1, 'Password is required'),
+  // Extended session opt-in (feature 153). Sent in the login POST body; the login route persists
+  // the auth cookies (Max-Age) only when true. Rendered only when showRememberMe is set.
+  rememberMe: z.boolean(),
 });
 
 type CredentialsValues = z.infer<typeof credentialsSchema>;
@@ -42,10 +47,14 @@ export function CredentialsForm({
   submitLabel,
   loadingLabel,
   onSuccess,
+  showRememberMe = false,
 }: {
   submitLabel: string;
   loadingLabel: string;
   onSuccess: () => void;
+  // Opt-in: only the operator login page shows the extended-session checkbox (feature 153).
+  // The shared OAuth authorize page leaves it off (default), so no checkbox appears there.
+  showRememberMe?: boolean;
 }) {
   // Submit-level network/server error — not zod-expressible, kept as local state.
   const [error, setError] = useState('');
@@ -55,7 +64,7 @@ export function CredentialsForm({
     formState: { isSubmitting },
   } = useForm<CredentialsValues>({
     resolver: zodResolver(credentialsSchema),
-    defaultValues: { email: '', password: '' },
+    defaultValues: { email: '', password: '', rememberMe: false },
   });
 
   async function onSubmit(values: CredentialsValues) {
@@ -105,6 +114,25 @@ export function CredentialsForm({
           </Field>
         )}
       />
+      {showRememberMe && (
+        <Controller
+          control={control}
+          name="rememberMe"
+          render={({ field }) => (
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="rememberMe"
+                checked={field.value}
+                onCheckedChange={(checked) => field.onChange(checked === true)}
+                disabled={isSubmitting}
+              />
+              <Label htmlFor="rememberMe" className="text-sm font-normal">
+                Remember me for 14 days
+              </Label>
+            </div>
+          )}
+        />
+      )}
       {error && <p className="text-sm text-destructive">{error}</p>}
       <Button type="submit" className="w-full" disabled={isSubmitting}>
         {isSubmitting ? loadingLabel : submitLabel}

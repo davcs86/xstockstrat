@@ -1,6 +1,6 @@
 import { createClient } from '@connectrpc/connect';
-import { createConnectTransport } from '@connectrpc/connect-web';
+import { makeBrowserTransport } from '@/lib/browserClients/transport';
 import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
 
-const transport = createConnectTransport({ baseUrl: '/trader/api' });
+const transport = makeBrowserTransport('/trader/api');
 export const marketDataClient = createClient(MarketDataService, transport);

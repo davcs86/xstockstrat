@@ -1,6 +1,6 @@
 import { createClient } from '@connectrpc/connect';
-import { createConnectTransport } from '@connectrpc/connect-web';
+import { makeBrowserTransport } from '@/lib/browserClients/transport';
 import { LedgerService } from '@xstockstrat/proto/ledger/v1/ledger_pb';
 
-const transport = createConnectTransport({ baseUrl: '/trader/api' });
+const transport = makeBrowserTransport('/trader/api');
 export const ledgerClient = createClient(LedgerService, transport);

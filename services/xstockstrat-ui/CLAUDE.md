@@ -228,6 +228,16 @@ propagation in `docs/patterns/header-propagation.md`.
 component imports only the client for its segment; the call marshals to
 `POST /<segment>/api/<Service>/<Method>` and reaches that segment's BFF.
 
+**Transport factory (feature 153).** Every client is built on `makeBrowserTransport(baseUrl)`
+(`src/lib/browserClients/transport.ts`), **not** a bare `createConnectTransport` — the factory carries
+a shared interceptor that on a gRPC `Unauthenticated` (session expired/invalid) runs "refresh-first,
+then redirect to login": it attempts `POST /api/auth/refresh` once, retries the call on success, and
+otherwise sends the browser to `/auth/login?redirect=<path>`. The refresh/redirect core (deduped
+single-in-flight refresh, loop-guarded redirect, plus an `apiFetch` wrapper used by the `/accounts`
+REST pages) lives in `src/lib/authRedirect.ts` — **browser-only, never imported from
+`middleware.ts`/`auth.ts`** (Edge bundle). Add new clients via `makeBrowserTransport`, not
+`createConnectTransport`, so no data-call path is left unguarded.
+
 ## Database
 
 Only the **config-ui audit route** touches the DB: `src/app/config-ui/api/audit/route.ts` reads

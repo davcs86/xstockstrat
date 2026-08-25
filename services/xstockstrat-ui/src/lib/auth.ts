@@ -11,6 +11,17 @@ export interface JwtClaims {
 
 export const ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS = 60;
 
+// Extended-session ("Remember me") cookie lifetime. When the operator opts in at login, the auth
+// cookies are written as persistent cookies with this Max-Age instead of session cookies, so the
+// session survives a browser restart (feature 153).
+//
+// MUST stay <= identity's `identity.jwt.refresh_ttl_seconds` (default 2592000s / 30d) — otherwise a
+// persisted cookie could outlive the server-side refresh token it points at. The UI has no runtime
+// read of that config value, so this bound is a documented operational coupling, NOT a
+// runtime-enforced invariant: if an operator lowers `identity.jwt.refresh_ttl_seconds` below this,
+// lower this constant to match. 14 days is well under the 30-day default.
+export const REMEMBER_ME_MAX_AGE_SECONDS = 1_209_600; // 14 days
+
 export async function verifyAccessToken(token: string): Promise<JwtClaims | null> {
   try {
     const secret = process.env.JWT_SECRET;
@@ -52,19 +63,25 @@ export function setSessionCookies(
   res: NextResponse,
   accessToken: string,
   refreshToken: string,
+  opts?: { maxAge?: number },
 ): void {
   const isProduction = process.env.NODE_ENV === 'production';
+  // With no maxAge the cookies stay session cookies (cleared on browser close) — the default.
+  // When maxAge is supplied (extended session), both cookies become persistent (feature 153).
+  const persistence = opts?.maxAge ? { maxAge: opts.maxAge } : {};
   res.cookies.set('access_token', accessToken, {
     httpOnly: true,
     secure: isProduction,
     sameSite: 'lax',
     path: '/',
+    ...persistence,
   });
   res.cookies.set('refresh_token', refreshToken, {
     httpOnly: true,
     secure: isProduction,
     sameSite: 'lax',
     path: '/',
+    ...persistence,
   });
 }
 
