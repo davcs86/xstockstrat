@@ -61,7 +61,7 @@ to it (Steps 1–4) is the internal half.
 
 ### Step 1 — migration: create `019_fundsignal_schedule`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/019_fundsignal_schedule.up.sql` — create

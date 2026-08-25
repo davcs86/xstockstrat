@@ -152,3 +152,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "Feature number: 155" is left as the historical record.
 - Merged current `origin/main-dev` into the feature branch (union-resolved the `insights.md` append
   conflict — kept both the 155-watchlist and 156-fundsignal design insights).
+- Tooling setup (steps 1–9): python3.12 (uv) ✓ · uv ✓ 0.8.17 · ruff ✓ 0.15.8 · pytest ✓ (uv, analysis+agent synced) · node ✓ 22 · pnpm ✓ 9.15.0 (ui install running) · migration = offline (no DB started).
+
+### Step 1 — migration: create `019_fundsignal_schedule` [done]
+- Created `analysis.fundsignal_schedule (job_name PK, blocked_until_ms bigint NOT NULL, process_name text, updated_at timestamptz default now())` + its down migration. Offline-verified: up creates the table, down drops it (exact inverse), NNN 019 is next free.
+- Files modified: `services/xstockstrat-analysis/migrations/019_fundsignal_schedule.up.sql`, `.../019_fundsignal_schedule.down.sql`
+- Deviations: none. TDD: N/A (migration — offline structural check).

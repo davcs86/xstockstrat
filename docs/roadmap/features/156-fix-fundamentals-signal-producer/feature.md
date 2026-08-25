@@ -17,6 +17,7 @@
 | 2026-08-25 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, quick + operator-steered expansion) and approved; recon.md + design.md written. Scope expanded beyond bug fix: durable schedule migration 019, jitter + retry config keys, MCP + config-ui manual trigger |
 | 2026-08-25 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 | 2026-08-25 | `implementation-ready` | /sdd-execute | Renumbered 155 → 156 (NNN collision with `155-watchlist-opportunity-signal-cues`, merged to main-dev); merged main-dev into branch |
+| 2026-08-25 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (migration 019_fundsignal_schedule) done |
 
 ---
 
