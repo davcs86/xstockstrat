@@ -576,7 +576,7 @@ pre-Step-7 tree).
 
 ### Step 9 — service: Position-detail breadcrumb → unconditional Opportunities (FR-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
@@ -615,7 +615,7 @@ pre-Step-7 tree).
 
 ### Step 10 — test: e2e for the Opportunities breadcrumb (scoped, broad-swept)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify

@@ -208,6 +208,20 @@ baseline unit suite green (116 tests) before changes.
   **in-sandbox only** (`/trader/api` abort — pre-existing, reproduced on the untouched line-14 test);
   feature 155 touches no trading code. Covers @AC-13. Files: `e2e/trader/position-detail.spec.ts`.
 
+### Step 9 — Position-detail breadcrumb → unconditional Opportunities [done]
+- Changed the first crumb from `{Exposure,/trader/positions}` to
+  `{Opportunities,/insights/opportunities}` unconditionally (one line + comment). User-mandated
+  behavior change (signed off). Files: `src/app/trader/positions/[symbol]/page.tsx`. tsc+lint clean.
+
+### Step 10 — e2e for the Opportunities breadcrumb [done]
+- AC-7 (breadcrumb first crumb is Opportunities → /insights/opportunities, scoped inside the
+  "Position path" landmark so the global nav's Opportunities link doesn't collide) and AC-8 (same
+  crumb for a non-opportunity entry; no "Exposure" crumb). Broad sweep run
+  (`position-detail.spec.ts` + `breadcrumb.spec.ts`): **11 passed** including the breadcrumb.spec
+  collision guard (AAPL terminal-crumb count 1, Position-path landmark count 1 both still hold) —
+  no new link/label collision (ledger 2026-08-09). Covers @AC-7, @AC-8. Files:
+  `e2e/trader/position-detail.spec.ts` (breadcrumb.spec.ts needed no edit).
+
 ## Open Threads
 
 - FR-3 back-navigation regression for non-Opportunities entry points — deliberate, user-signed-off;
