@@ -3,6 +3,21 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-08-25
+
+### Features
+- fix-ohlcv-chunk-lock-oom: TimescaleDB "out of shared memory" (SQLSTATE 53200) recurs on `marketdata.ohlcv` bars queries: a 400-day analysis lookback against a hypertable chunked at 1 day locks ~400 chunks per query and exhausts the small lock table on the `db-s-1vcpu-1gb` cluster.
+- ui-auth-improvements: Two `xstockstrat-ui` auth UX improvements: (1) a "remember me" control on the login form that persists the session across browser restarts (extended session), and (2) an automatic redirect to the login page whenever a browser data call returns Unauthorized (401 / gRPC `Unauthenticated`).
+- fundsignal-watchlist-universe: Make the fundamentals signal producer's `analysis.fundsignal.universe_source=watchlists` (and `both`) resolve the real cross-user union of user watchlist symbols via a new admin/internal-scoped portfolio enumeration RPC, replacing the deferred-at-launch silent fallback to `explicit_symbols` (feature 062 FR-3).
+
+### Proto Changes
+- portfolio/v1/portfolio.proto
+
+### Summary
+4 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-08-24
 
 ### Features
