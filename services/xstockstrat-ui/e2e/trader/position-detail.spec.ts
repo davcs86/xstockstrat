@@ -690,6 +690,36 @@ test.describe('Single Position page', () => {
       panel.getByTestId('readiness-cue-firing').getByRole('img', { name: 'firing' }),
     ).toBeVisible();
   });
+
+  // feature 155 (FR-3) — the position-detail breadcrumb's first crumb is ALWAYS "Opportunities"
+  // (→ the Decide queue), never "Exposure", for every entry point. Assertions scope INSIDE the
+  // "Position path" landmark because the global nav also renders an "Opportunities" link (ledger
+  // 2026-08-09 collision class — the FIX C guard).
+  test('breadcrumb first crumb returns to the Opportunities queue (AC-7)', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/trader/positions/AAPL');
+    const crumb = page.getByLabel('Position path', { exact: true });
+    await expect(crumb).toBeVisible({ timeout: 30000 });
+    const opp = crumb.getByRole('link', { name: 'Opportunities', exact: true });
+    await expect(opp).toBeVisible();
+    await expect(opp).toHaveAttribute('href', '/insights/opportunities');
+  });
+
+  test('breadcrumb is Opportunities even for a non-opportunity entry, never Exposure (AC-8)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // A direct navigation stands in for any non-Opportunities origin (Exposure/Portfolio/Orders):
+    // the crumb is unconditional, so it must still read Opportunities and never "Exposure".
+    await page.goto('/trader/positions/MSFT');
+    const crumb = page.getByLabel('Position path', { exact: true });
+    await expect(crumb).toBeVisible({ timeout: 30000 });
+    await expect(crumb.getByRole('link', { name: 'Opportunities', exact: true })).toHaveAttribute(
+      'href',
+      '/insights/opportunities',
+    );
+    await expect(crumb.getByRole('link', { name: 'Exposure', exact: true })).toHaveCount(0);
+  });
 });
 
 /** Route the browser's ListWatchlists to a single watchlist containing `symbol` (bound to
