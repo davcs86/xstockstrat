@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { READINESS_CUE, IN_QUEUE_CUE } from './opportunityShared';
+import { READINESS_CUE, IN_QUEUE_CUE } from './readinessCue';
 import type { ReadinessState } from './readinessRollup';
 
 // Data-only contract for the shared readiness/queue cue maps (feature 155, FR-1). The rendered

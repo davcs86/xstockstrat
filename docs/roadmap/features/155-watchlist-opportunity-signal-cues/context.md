@@ -258,6 +258,20 @@ in CI's prebuilt bundle. Next: integration PR (the assigned `claude/*` branch PR
   Nothing routed to `docs/sdd/business-rules/platform.feature`. Staged onto this branch → lands in
   PR #1012, so `/promote`'s backstop finds no un-promoted scenarios at production.
 
+## Session 2026-08-25 — CI fix (PR #1012 Frontend E2E Build)
+
+- **Failure:** CI `Frontend E2E Build` red on the branch (green on base main-dev) —
+  `createContext is not a function` collecting page data for `/trader/api/[...connect]`.
+- **Root cause (mine):** the new phosphor **value** import in `opportunityShared.tsx` rode a server
+  import chain `traderBff.ts:24 → copilot.ts:7 → opportunityShared → @phosphor-icons/react`, pulling
+  a client-only lib (createContext at module scope) into the server bundle. Local `tsc`/lint/unit/
+  dev-server e2e all missed it; only `pnpm build` reproduces it.
+- **Fix:** moved `READINESS_CUE`/`IN_QUEUE_CUE` + the phosphor value import into a new client-reachable
+  leaf `src/lib/readinessCue.ts`; `opportunityShared.tsx` now imports phosphor **type-only** (`Icon`).
+  Consumers (WatchlistReadiness, opportunities/page, SignalReadiness, the unit test) import the cue
+  maps from `readinessCue`. Verified: `pnpm build` **EXIT 0** (page data + 39/39 static pages), tsc +
+  lint + 122 unit + the watchlists cue e2e (5) all green. Ledger fails.md entry added.
+
 ## Open Threads
 
 - FR-3 back-navigation regression for non-Opportunities entry points — deliberate, user-signed-off;

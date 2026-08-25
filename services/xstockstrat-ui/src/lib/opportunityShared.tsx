@@ -3,12 +3,14 @@
 // exhaustive `Record<Enum,…>` maps the C-10(a/d) trap requires: adding a proto enum value
 // without a map entry breaks `tsc` here (mirrors BacktestDiagnostics.tsx ACTION_LABEL).
 
-import { Lightning, Eye, Moon, Question, Stack, type Icon } from '@phosphor-icons/react';
+// Type-only phosphor import (erased at build) — the icon *values* live in `readinessCue.ts`, kept
+// out of this module because it is transitively imported by server code (traderBff → copilot), and a
+// runtime phosphor import there breaks the production build (createContext in the server bundle).
+import type { Icon } from '@phosphor-icons/react';
 import { OpportunityActionTag, ConditionState } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { PositionRiskFlag } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { SourceHealthStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { Badge } from '../components/ui/badge';
-import type { ReadinessState } from './readinessRollup';
 
 /** Semantic color role, aligned to the Nocturne gain/loss/paper tokens + a neutral + info. */
 export type SemanticRole = 'buy' | 'sell' | 'paper' | 'secondary' | 'info';
@@ -53,23 +55,6 @@ export const SOURCE_HEALTH: Record<SourceHealthStatus, EnumRender> = {
   [SourceHealthStatus.STALE]: { label: 'Stale', role: 'paper' },
   [SourceHealthStatus.DOWN]: { label: 'Down', role: 'sell' },
 };
-
-/**
- * The shared readiness-state cue map (feature 155, FR-1). Keyed by the `readinessState()`
- * discriminant so firing/watching/quiet/no-data render an identical icon + color everywhere
- * (Watchlists panel, Opportunities desktop/mobile, "Why this fired"). `label` is a fallback — the
- * Watchlists panel overrides it with the dynamic `"N away"` text. Exhaustive over `ReadinessState`
- * (the C-10(a/d) map-completeness guard this file's header describes).
- */
-export const READINESS_CUE: Record<ReadinessState, EnumRender> = {
-  firing: { label: 'firing', role: 'buy', icon: Lightning },
-  watching: { label: 'watching', role: 'paper', icon: Eye },
-  quiet: { label: 'quiet', role: 'secondary', icon: Moon },
-  nodata: { label: 'no data', role: 'secondary', icon: Question },
-};
-
-/** The shared "in queue" cue (feature 155, FR-1) — info color + a queue-stack glyph. */
-export const IN_QUEUE_CUE: EnumRender = { label: 'in queue', role: 'info', icon: Stack };
 
 /**
  * Render an EnumRender entry as a Badge (role is a valid Badge variant). When the render carries an

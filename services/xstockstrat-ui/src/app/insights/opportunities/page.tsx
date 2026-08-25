@@ -20,7 +20,8 @@ import {
   OpportunityAction,
 } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import type { Opportunity } from '@xstockstrat/proto/analysis/v1/analysis_pb';
-import { OPPORTUNITY_ACTION, IN_QUEUE_CUE, EnumBadge } from '@/lib/opportunityShared';
+import { OPPORTUNITY_ACTION, EnumBadge } from '@/lib/opportunityShared';
+import { IN_QUEUE_CUE } from '@/lib/readinessCue';
 import { readinessState } from '@/lib/readinessRollup';
 import { useOpportunities, useSetOpportunityAction } from '@/hooks/useOpportunities';
 import { insightsPortfolioClient } from '@/lib/browserClients/insightsPortfolioClient';

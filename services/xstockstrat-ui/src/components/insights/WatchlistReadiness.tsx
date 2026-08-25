@@ -15,7 +15,8 @@ import { ConditionState } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { WatchlistEntrySource } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { analysisClient } from '@/lib/browserClients/analysisClient';
 import { isFiring, rollupReadiness, readinessState } from '@/lib/readinessRollup';
-import { EnumBadge, READINESS_CUE, IN_QUEUE_CUE } from '@/lib/opportunityShared';
+import { EnumBadge } from '@/lib/opportunityShared';
+import { READINESS_CUE, IN_QUEUE_CUE } from '@/lib/readinessCue';
 import { UNBOUND, toApiStrategyId } from '@/hooks/useWatchlists';
 
 type EvaluateReadinessResult = Awaited<ReturnType<typeof analysisClient.evaluateReadiness>>;
