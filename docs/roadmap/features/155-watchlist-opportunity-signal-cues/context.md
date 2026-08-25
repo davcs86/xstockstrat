@@ -172,6 +172,27 @@ baseline unit suite green (116 tests) before changes.
   `--timeout=90000` (see Deviation Log for the env note). Covers @AC-1..@AC-6.
 - Files: `e2e/insights/watchlists.spec.ts`.
 
+### Step 5 — Opportunities desktop + mobile: cues, in-queue, mobile grouping + tags [done]
+- Desktop: `readinessVariant` collapsed onto the shared `readinessState` bucketer; added the shared
+  `IN_QUEUE_CUE` badge (`testId="opportunity-in-queue"`) to the `SymbolGroupCard` header (gated
+  `!allMuted`). Mobile: `mobileSections` rebuilt from `symbolGroups` as one `signalGroup` per symbol
+  carrying strategyId + provenance/source chips + expiry. `sections.ts` gained a `SignalItem`
+  interface (+ tags), a `signalGroup` kind, and the `signal` kind rebased on `SignalItem`.
+  `SectionRenderer` extracts a shared `SignalRow` (used by both `signal` and `signalGroup`),
+  preserving `mobile-muted-${symbol}`; its `readyVariant` also derives from `readinessState`.
+- Files: `src/app/insights/opportunities/page.tsx`, `src/components/mobile/sections.ts`,
+  `src/components/mobile/SectionRenderer.tsx`. Verify: tsc + lint clean.
+
+### Step 6 — e2e for Opportunities in-queue cue + mobile parity [done]
+- Added a `CAPR` pair to `OPPORTUNITIES` (strategies `quality-dip-buy`/`momentum`, source
+  `watchlist`, `14:30Z` expiry) + an `INVENTORY.md` catalog note (C-12). Tests: AC-3 (CAPR desktop
+  card shows the shared in-queue cue icon), AC-9 (mobile groups CAPR's two signals into one
+  `mobile-group-CAPR` card), AC-10 (mobile shows the strategy id + `watchlist` chip + `exp 14:30`).
+  Fixed a strict-mode locator (caption "Momentum building" also matched "momentum" → `exact:true`).
+- Verify: **13/13 opportunities tests pass** (3 new + 10 existing, no regression), Playwright-managed
+  server + chromium path + `--timeout=90000`. Covers @AC-3, @AC-9, @AC-10.
+- Files: `e2e/insights/opportunities.spec.ts`, `e2e/fixtures/opportunities.ts`, `e2e/fixtures/INVENTORY.md`.
+
 ## Open Threads
 
 - FR-3 back-navigation regression for non-Opportunities entry points — deliberate, user-signed-off;

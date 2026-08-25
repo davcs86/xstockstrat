@@ -361,7 +361,7 @@ text, the in-queue icon, and the firing-row jump link fail on the pre-Step-3 tre
 
 ### Step 5 — service: Opportunities desktop + mobile — cues, in-queue, mobile grouping + tags (FR-1, FR-4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx` — modify
@@ -435,7 +435,7 @@ Connect-RPC call safety
 
 ### Step 6 — test: e2e for Opportunities in-queue cue + mobile parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/opportunities.spec.ts` — modify

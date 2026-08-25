@@ -20,7 +20,8 @@ import {
   OpportunityAction,
 } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import type { Opportunity } from '@xstockstrat/proto/analysis/v1/analysis_pb';
-import { OPPORTUNITY_ACTION, EnumBadge } from '@/lib/opportunityShared';
+import { OPPORTUNITY_ACTION, IN_QUEUE_CUE, EnumBadge } from '@/lib/opportunityShared';
+import { readinessState } from '@/lib/readinessRollup';
 import { useOpportunities, useSetOpportunityAction } from '@/hooks/useOpportunities';
 import { insightsPortfolioClient } from '@/lib/browserClients/insightsPortfolioClient';
 import { SectionRenderer } from '@/components/mobile/SectionRenderer';
@@ -34,12 +35,19 @@ const NINETY_MIN_MS = 90 * 60 * 1000;
 // Persist the min-conviction floor so it survives a reload / navigation away and back.
 const MIN_CONVICTION_KEY = 'opportunities.minConviction';
 
-/** Readiness bar color: firing (all pass) = buy, partway = paper, none = sell, no data = muted. */
+/** Readiness bar color: firing (all pass) = buy, partway = paper, none = sell, no data = muted.
+ * Derived from the shared `readinessState` bucketer (feature 155) — one 4-way decision site. */
 function readinessVariant(passing: number, total: number): 'buy' | 'paper' | 'sell' | 'muted' {
-  if (total <= 0) return 'muted';
-  if (passing >= total) return 'buy';
-  if (passing > 0) return 'paper';
-  return 'sell';
+  switch (readinessState({ passingConditions: passing, totalConditions: total })) {
+    case 'firing':
+      return 'buy';
+    case 'watching':
+      return 'paper';
+    case 'quiet':
+      return 'sell';
+    case 'nodata':
+      return 'muted';
+  }
 }
 
 /** Distinct provenance/source chips for a row (Signal source + Live/Watchlist tags), de-duped. */
@@ -174,19 +182,6 @@ export default function OpportunitiesPage() {
       ? `/trader/positions/${o.symbol}?strategy=${o.strategyId}`
       : `/trader/positions/${o.symbol}`;
 
-  // Mobile 1:1 of the queue (FR-16) — the same rows as one `signal` section each, now carrying
-  // conviction + strategy readiness so the phone view matches the desktop card.
-  const mobileSections: Section[] = rows.map((o) => ({
-    kind: 'signal',
-    symbol: o.symbol,
-    badge: OPPORTUNITY_ACTION[o.action],
-    conviction: o.conviction,
-    readiness: { passing: o.passingConditions, total: o.totalConditions },
-    caption: o.thesis || o.source || undefined,
-    href: reviewHref(o),
-    muted: o.muted, // feature 132 — deny-listed row renders a "Muted" marker on mobile too
-  }));
-
   // Desktop: group the ranked rows by symbol into one card each (item 14). `rows` is already
   // sorted, so a symbol's card position follows its first (highest-ranked) row.
   const symbolGroups = useMemo(() => {
@@ -198,6 +193,27 @@ export default function OpportunitiesPage() {
     }
     return [...map.entries()].map(([symbol, opps]) => ({ symbol, opps }));
   }, [rows]);
+
+  // Mobile parity (FR-4, AC-9/10): one `signalGroup` per symbol — grouped like the desktop
+  // `SymbolGroupCard` — each signal now carrying the strategy id, provenance/source chips, and
+  // expiry the flat mobile row used to omit.
+  const mobileSections: Section[] = symbolGroups.map((g) => ({
+    kind: 'signalGroup',
+    symbol: g.symbol,
+    href: `/trader/positions/${g.symbol}`,
+    signals: g.opps.map((o) => ({
+      symbol: o.symbol,
+      badge: OPPORTUNITY_ACTION[o.action],
+      conviction: o.conviction,
+      readiness: { passing: o.passingConditions, total: o.totalConditions },
+      caption: o.thesis || undefined,
+      href: reviewHref(o),
+      muted: o.muted, // feature 132 — deny-listed row renders a "Muted" marker on mobile too
+      strategyId: o.strategyId || undefined,
+      chips: opportunityChips(o),
+      expiry: expiresLabel(o.validUntil),
+    })),
+  }));
 
   return (
     <AppShell>
@@ -391,12 +407,17 @@ function SymbolGroupCard({
       )}
     >
       <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5">
-        <Link
-          href={`/trader/positions/${symbol}`}
-          className="font-mono text-base font-semibold hover:underline"
-        >
-          {symbol}
-        </Link>
+        <div className="flex min-w-0 items-center gap-2">
+          <Link
+            href={`/trader/positions/${symbol}`}
+            className="font-mono text-base font-semibold hover:underline"
+          >
+            {symbol}
+          </Link>
+          {/* Every listed opportunity is in the ranked queue — the shared in-queue cue (icon + info
+              color + text), the same render the Watchlists panel uses (feature 155, FR-1/AC-3). */}
+          {!allMuted && <EnumBadge render={IN_QUEUE_CUE} testId="opportunity-in-queue" />}
+        </div>
         <span className="text-xs text-muted-foreground">
           {opps.length} {opps.length === 1 ? 'signal' : 'signals'}
         </span>
