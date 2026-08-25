@@ -162,7 +162,7 @@ Confirm both keys appear in both files with type `int` and defaults `30` / `300`
 
 ### Step 3 — service: rewrite `run_forever` with durable crash-safe schedule + jitter + retry
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/fundsignal_loop.py` — modify
@@ -246,7 +246,7 @@ completion), no look-ahead / determinism, no new pool (F-06)
 
 ### Step 4 — test: scheduler unit tests (red-before-green)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_fundsignal_loop.py` — modify (add a `TestScheduler` class)

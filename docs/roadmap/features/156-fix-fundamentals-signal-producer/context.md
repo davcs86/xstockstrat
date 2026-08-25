@@ -163,3 +163,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Added both keys (int, defaults 30/300, read presence-aware) to the analysis CLAUDE.md § Config Keys Consumed table and the config-governance.md feature-062 block. Verified both appear in both files.
 - Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `docs/patterns/config-governance.md`
 - Deviations: none. TDD: N/A (config docs).
+
+### Step 3 — service: rewrite run_forever (durable crash-safe schedule + jitter + retry) [done]
+- Rewrote `run_forever` around a testable `_tick()` seam + `_seed_schedule`/`_next_sleep_seconds`/`_advance_schedule`. Boot self-seeds `blocked_until_ms=0` (ON CONFLICT DO NOTHING); one-shot jitter `random.uniform(0, startup_jitter_seconds)`; compute-sleep-until-due (no polling); advance `blocked_until_ms` ONLY after a completed cycle (success → interval; caught error → retry_seconds). Disabled → no run, no advance, sleep one interval. `run_once` untouched (AC-6 by construction). Single Python clock source (`_now_ms`); `process_name` diagnostic. Added `import os/random/socket`. Reuses `self._db` (no new pool, F-06).
+- Files modified: `services/xstockstrat-analysis/app/engine/fundsignal_loop.py`
+- TDD (paired Step 4): RED — TestScheduler 7 fail (missing `_tick`/`_seed_schedule`/module `random`) against pre-Step-3 tree → GREEN — all pass after impl. AC-1 seeds+runs-on-boot; AC-2 remainder-not-reset; AC-3 crash-row-due-reruns; AC-4 retry_seconds advance; AC-5 disabled no-run/no-advance/no-spin; AC-7 jitter [0,N] + N=0 teeth. AC-6 held red→green (passed pre+post — the invariant to preserve).
+- Deviations: none. Clock source = single Python `datetime.now(UTC)` (spec-permitted alternative to SQL now(); safe at instance_count:1).
+
+### Step 4 — test: scheduler unit tests (red-before-green) [done]
+- Added `TestScheduler` (AC-1..7) to `tests/test_fundsignal_loop.py`, reusing `_make_loop`/`_make_cfg` (extended `_make_cfg` with `get_int_present`). Full analysis suite 608 passed; coverage 83.7% (≥40).
+- Files modified: `services/xstockstrat-analysis/tests/test_fundsignal_loop.py`
+- Deviations: none. Covers AC-1..AC-7.
