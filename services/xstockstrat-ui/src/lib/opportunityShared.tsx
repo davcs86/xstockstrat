@@ -3,17 +3,24 @@
 // exhaustive `Record<Enum,…>` maps the C-10(a/d) trap requires: adding a proto enum value
 // without a map entry breaks `tsc` here (mirrors BacktestDiagnostics.tsx ACTION_LABEL).
 
+import { Lightning, Eye, Moon, Question, Stack, type Icon } from '@phosphor-icons/react';
 import { OpportunityActionTag, ConditionState } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { PositionRiskFlag } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { SourceHealthStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { Badge } from '../components/ui/badge';
+import type { ReadinessState } from './readinessRollup';
 
-/** Semantic color role, aligned to the Nocturne gain/loss/paper tokens + a neutral. */
-export type SemanticRole = 'buy' | 'sell' | 'paper' | 'secondary';
+/** Semantic color role, aligned to the Nocturne gain/loss/paper tokens + a neutral + info. */
+export type SemanticRole = 'buy' | 'sell' | 'paper' | 'secondary' | 'info';
 
 export interface EnumRender {
   label: string;
   role: SemanticRole;
+  /**
+   * Optional leading icon (feature 155). A component *reference* (a Phosphor glyph), so the map
+   * stays pure data and node-env unit-testable; `EnumBadge` renders it as a direct Badge child.
+   */
+  icon?: Icon;
 }
 
 // ENTER/ADD are gain (buy); REDUCE is loss (sell); UNSPECIFIED is neutral.
@@ -47,7 +54,36 @@ export const SOURCE_HEALTH: Record<SourceHealthStatus, EnumRender> = {
   [SourceHealthStatus.DOWN]: { label: 'Down', role: 'sell' },
 };
 
-/** Render an EnumRender entry as a Badge (role is a valid Badge variant). */
-export function EnumBadge({ render }: { render: EnumRender }) {
-  return <Badge variant={render.role}>{render.label}</Badge>;
+/**
+ * The shared readiness-state cue map (feature 155, FR-1). Keyed by the `readinessState()`
+ * discriminant so firing/watching/quiet/no-data render an identical icon + color everywhere
+ * (Watchlists panel, Opportunities desktop/mobile, "Why this fired"). `label` is a fallback — the
+ * Watchlists panel overrides it with the dynamic `"N away"` text. Exhaustive over `ReadinessState`
+ * (the C-10(a/d) map-completeness guard this file's header describes).
+ */
+export const READINESS_CUE: Record<ReadinessState, EnumRender> = {
+  firing: { label: 'firing', role: 'buy', icon: Lightning },
+  watching: { label: 'watching', role: 'paper', icon: Eye },
+  quiet: { label: 'quiet', role: 'secondary', icon: Moon },
+  nodata: { label: 'no data', role: 'secondary', icon: Question },
+};
+
+/** The shared "in queue" cue (feature 155, FR-1) — info color + a queue-stack glyph. */
+export const IN_QUEUE_CUE: EnumRender = { label: 'in queue', role: 'info', icon: Stack };
+
+/**
+ * Render an EnumRender entry as a Badge (role is a valid Badge variant). When the render carries an
+ * `icon` (the readiness/queue cues, feature 155), it is drawn as a leading **direct child** svg —
+ * never `<span>`-wrapped, which would break the Badge `[&>svg]` icon slot. The icon carries
+ * `role="img"` + a distinct `aria-label` (the cue label) and an optional `data-testid` so the e2e
+ * has a queryable hook (Phosphor svgs have no accessible name by default).
+ */
+export function EnumBadge({ render, testId }: { render: EnumRender; testId?: string }) {
+  const Icon = render.icon;
+  return (
+    <Badge variant={render.role}>
+      {Icon && <Icon weight="fill" role="img" aria-label={render.label} data-testid={testId} />}
+      {render.label}
+    </Badge>
+  );
 }

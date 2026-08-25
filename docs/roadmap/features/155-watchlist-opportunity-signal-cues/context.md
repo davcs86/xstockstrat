@@ -103,6 +103,39 @@
 - Reviewers snapshot finalized in feature.md: sole reviewer `xstockstrat-ui` service owner (all
   steps are `service`/`test` on that service).
 
+## Session 2026-08-25 — sdd-execute (sequential)
+
+Developing on the assigned `claude/watchlists-firing-queue-labels-w33an5` branch (the feature's
+`<dev-branch>` for this harness session; no separate `feature/*` branch). One commit per step; the
+existing branch PR is the integration PR. Toolchain: Node 22.22 + pnpm 9.15.0, deps installed;
+baseline unit suite green (116 tests) before changes.
+
+### Step 1 — Shared readiness state → cue derivation [done]
+- Added `ReadinessState` type + pure `readinessState(r)` bucketer to `readinessRollup.ts` (the single
+  4-way decision site). In `opportunityShared.tsx`: widened `SemanticRole` with `'info'`, added
+  `icon?: Icon` to `EnumRender`, added `READINESS_CUE`/`IN_QUEUE_CUE`, and taught `EnumBadge` to
+  render a leading `role="img"`/`aria-label`/`data-testid` icon.
+- TDD (P-06): RED first — `pnpm test:unit` failed with 6 errors (`readinessState is not a function`,
+  `READINESS_CUE` undefined) against the pre-impl tree. GREEN after — 122 tests pass. tsc `--noEmit`
+  clean (confirms the 4 exhaustive `Record<Enum,EnumRender>` maps still compile after the
+  `SemanticRole`/`icon?` widening). `pnpm run lint` exit 0, no errors in touched files.
+- Deviation (minor, in-step intent): typed `icon?` as Phosphor's `Icon` type (not the spec's
+  literal `React.ComponentType<{className?}>`) so `EnumBadge` can pass `role`/`aria-label`/
+  `data-testid` through to the svg — faithful to the "component reference" intent; no behavior change.
+- Files: `src/lib/readinessRollup.ts`, `src/lib/opportunityShared.tsx`.
+
+### Step 2 — Unit tests for the bucketer + cue map data [done]
+- Extended `readinessRollup.test.ts` (`readinessState` classification + total===0→nodata) and created
+  `opportunityShared.test.ts` (READINESS_CUE exhaustive keys/roles/icons; IN_QUEUE_CUE info+icon).
+  Data-only (icon is an unrendered component ref) — node-env `.test.ts`, C-12/13 compliant (pure
+  logic literals, not mocked domain objects). Covered by the Step-1 RED→GREEN above.
+- Files: `src/lib/readinessRollup.test.ts`, `src/lib/opportunityShared.test.ts`.
+
+### sdd-review impl-spec (advisory) — findings folded in below (## Open Threads / this session)
+- Overlap scan: CLEAN (UI-only; no migration/proto/config; only 095-draft conditionally names
+  `opportunityShared.tsx`, orthogonal — coordinate whichever merges second, no action now).
+- Criteria review: (recorded when the spec-reviewer subagent returns; applied to Steps 3–12).
+
 ## Open Threads
 
 - FR-3 back-navigation regression for non-Opportunities entry points — deliberate, user-signed-off;

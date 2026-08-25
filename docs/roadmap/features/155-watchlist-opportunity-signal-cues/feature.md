@@ -13,6 +13,7 @@
 | 2026-08-25 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-25 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, quick + 1 user round) and approved; recon.md + design.md written |
 | 2026-08-25 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
+| 2026-08-25 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (shared cue spine) started |
 
 ---
 

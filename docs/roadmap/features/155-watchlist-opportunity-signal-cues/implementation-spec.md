@@ -1,6 +1,6 @@
 # Implementation Spec: watchlist-opportunity-signal-cues
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-08-25
 **Feature**: `docs/roadmap/features/155-watchlist-opportunity-signal-cues/feature.md`
 **Total Steps**: 12
@@ -76,7 +76,7 @@ Surfaces → steps: Watchlists → Steps 3/4; Opportunities desktop+mobile → S
 
 ### Step 1 — service: Shared readiness state → cue derivation (the DRY spine)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/readinessRollup.ts` — modify
