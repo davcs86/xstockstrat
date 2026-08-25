@@ -15,6 +15,19 @@
 |---|---|---|---|
 | 2026-08-25 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-08-25-fundsignal-first-cycle-resets-on-redeploy-defect.md` |
 | 2026-08-25 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, quick + operator-steered expansion) and approved; recon.md + design.md written. Scope expanded beyond bug fix: durable schedule migration 019, jitter + retry config keys, MCP + config-ui manual trigger |
+| 2026-08-25 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
+
+---
+
+## Reviewers
+
+| Role | Applies to steps | Focus |
+|---|---|---|
+| DBA | 1 | Migration NNN numbering (no gaps), up+down pair present, index correctness |
+| `xstockstrat-analysis` owner | 1–4 | Scheduler crash-safety (advance after completion), no look-ahead/determinism, config key naming (`<service>.<category>.<key>`), no new pool (F-06) |
+| `xstockstrat-agent` owner | 5–6 | MCP tool contract (name/params/return shape), admin `x-access-scope` forwarded only by management tools, tool-count parity across inventory surfaces |
+| `xstockstrat-ui` owner | 8–9 | Config mutation safety, Connect-RPC call safety, admin-gate correctness, no secret values rendered |
+| (none — docs) | 7 | — |
 
 ---
 
@@ -24,7 +37,7 @@
 - [Acceptance Scenarios](acceptance.feature) — `@AC-1..9` scenarios (C-15)
 - [Recon](recon.md) — grounded codebase dossier (Phase 0)
 - [Design](design.md) — debated, approved architecture (Phase 1)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-fundamentals-signal-producer`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -39,4 +52,4 @@ promptly and survives restarts.
 
 ## Next Action
 
-`/sdd-spec fix-fundamentals-signal-producer` — generate the implementation spec from the approved design
+`/sdd-review fix-fundamentals-signal-producer impl-spec` — validate implementation spec, then `/sdd-execute fix-fundamentals-signal-producer`

@@ -90,3 +90,38 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - **Scope note:** this is now a multi-service *feature* (analysis migration + 2 config keys + agent
   MCP + config-ui), well beyond the original Track-C bug fix, on explicit operator direction.
 - Status: draft → design-approved.
+
+## Session 2026-08-25 (/sdd-spec)
+
+- Generated implementation-spec.md with **9 steps**. Status: design-approved → implementation-ready.
+- Step map: (1) migration `019_fundsignal_schedule`, (2) config-key registration (jitter/retry),
+  (3) analysis `run_forever` rewrite, (4) analysis scheduler tests (AC-1..7 + AC-6), (5) agent
+  `run_fundamentals_scan` tool + client wrapper, (6) agent tests (AC-8), (7) agent tool-doc surfaces,
+  (8) config-ui admin card + BFF + nav (AC-9 impl), (9) config-ui e2e (AC-9).
+- Key codebase findings verified for the zero-assumption rule (C-01):
+  - Last applied analysis migration is `018_backtest_runs_fill_model`, so `019` is the free NNN.
+  - `run_forever` bug confirmed at `fundsignal_loop.py:96-110` (sleeps `:100` before `run_once`
+    `:108`; `enabled` gate `:101` after the sleep). Self-seed precedent: `pnl_pattern_consumer.py:397`
+    (`ON CONFLICT ... DO`). Reuse `self._db` (`:72`) — no new pool (F-06).
+  - **Design Open Risk resolved:** `RunFundamentalsScan` returns `FundamentalsScanSummary`
+    (`analysis.proto:508-516`: run_id, symbols_processed, signals_emitted, calls_spent,
+    deferred_count, status, finished_at) — a clean flat projection for the MCP tool + UI card.
+    `servicer.RunFundamentalsScan` (`servicer.py:2717`) calls `run_once` directly and never
+    reads/writes `fundsignal_schedule`, so AC-6 (manual scan doesn't contaminate cadence) holds by
+    construction.
+  - `get_int_present` at `watcher.py:103` is the correct getter for jitter/retry (0 = legitimate).
+  - Agent: `ANALYSIS_ENDPOINT` already wired for the agent (docker-compose + both `.do` specs) and the
+    agent CI python-test matrix enforces `--cov=app --cov-fail-under=40`. New tool mirrors
+    `trigger_backfill`/`set_strategy_live` (`tools.py:978`, `client.py:1224`), forwarding derived scope
+    via `_caller_access_scope` + `_metadata` (C-03). `test_tools_endpoint.py` name-set is the C-10(a)
+    reachability guard.
+  - UI: config-ui BFF `analysisClient` dials `ANALYSIS_ENDPOINT`, which in e2e is **9092** (insights
+    mock, `playwright.config.ts:174`) — so the e2e `runFundamentalsScan` mock handler goes on the
+    port-9092 `AnalysisService` block (`mock-backend.ts:622`), NOT the 9093 config-ui block. Register
+    only `runFundamentalsScan` via `forwardAdmin` (`bffShared.ts:75`); new browser client mirrors
+    `traderAnalysisClient.ts`; nav via `PLATFORM_SUBNAV` config-ui array (`PlatformHeader.tsx:87-89`).
+- **No new env vars / ports / proto changes** — confirmed. Two new config keys only; one migration.
+- **Branch caveat (fails.md 2026-07-30 / feature 082):** this /sdd-spec session ran on the
+  harness branch `claude/fundamentals-signal-config-0jdfed`, NOT the feature's
+  `**Development Branch**: feature/fix-fundamentals-signal-producer`. /sdd-execute's boot sequence
+  must reconcile (the two should share the design-approved artifacts) before executing.
