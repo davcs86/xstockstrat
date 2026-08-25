@@ -247,6 +247,17 @@ tests fail **in-sandbox only** (pre-existing `/trader/api` `createContext` bundl
 `traderBff.ts:15`, reproduced on the untouched line-14 test) — not a feature-155 regression; they pass
 in CI's prebuilt bundle. Next: integration PR (the assigned `claude/*` branch PR to `main-dev`).
 
+## Session 2026-08-25 — C-16 scenario promotion + PR watch
+
+- **PR watch:** subscribed this session to davcs86/xstockstrat#1012 (`subscribe_pr_activity`) — CI /
+  review / comment events wake the session; will drive it to green + address review threads.
+- **C-16 promotion:** all 13 `@AC-*` scenarios are single-service (`xstockstrat-ui`) and UI-observable
+  (none cross-cutting), so promoted verbatim into the new durable suite
+  `services/xstockstrat-ui/acceptance/watchlist-opportunity-signal-cues.feature` (first suite for this
+  service — no dedup needed), each tagged `@feature-155` for provenance alongside its `@AC-*`/`@FR-*`.
+  Nothing routed to `docs/sdd/business-rules/platform.feature`. Staged onto this branch → lands in
+  PR #1012, so `/promote`'s backstop finds no un-promoted scenarios at production.
+
 ## Open Threads
 
 - FR-3 back-navigation regression for non-Opportunities entry points — deliberate, user-signed-off;
