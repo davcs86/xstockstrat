@@ -2098,7 +2098,7 @@ reusing.
 - **Evidence**: `docs/roadmap/features/154-fundsignal-watchlist-universe/design.md` (R4); `services/xstockstrat-analysis/app/main.py:42-43`, `app/config/watcher.py:35-65`; `services/xstockstrat-marketdata/internal/service/marketdata_service.go:56-60` + `CLAUDE.md:80` (boot-freeze).
 - **Rule it implies**: a consumer branching on a producer-owned, boot-frozen config value should consume it with matching freeze semantics; live-reading a value the producer never re-reads is a latent divergence bug.
 
-### 2026-08-25 — 155-fix-fundamentals-signal-producer — design
+### 2026-08-25 — 156-fix-fundamentals-signal-producer — design
 - **Insight**: For a **single-instance** background scheduler that must survive restarts, a durable
   **"next-due" row written AFTER a cycle completes** beats a distributed **lease** (CAS-claim +
   `process_name` + `LEASE_HOLD` ceiling taken *before* running). At `instance_count:1` the lease's only
@@ -2110,7 +2110,7 @@ reusing.
   compute-sleep-until-due (not poll-the-lease-row), or a zero-DB-traffic `asyncio.sleep` becomes
   perpetual write-churn. Keep the requested `process_name`/`blocked_until_ms` columns as diagnostics/
   forward fence fields, but don't let the design *rely* on fencing nothing uses.
-- **Evidence**: `docs/roadmap/features/155-fix-fundamentals-signal-producer/design.md` (R2 Rejected
+- **Evidence**: `docs/roadmap/features/156-fix-fundamentals-signal-producer/design.md` (R2 Rejected
   Alternatives); `.do/app.yaml:219` (`instance_count: 1`); `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:79` (in-process `_lock`); `pnl_pattern_consumer.py:397` (`ledger_stream_cursor` self-seed precedent).
 - **Rule it implies**: don't build multi-instance mutual-exclusion machinery on an `instance_count:1`
   service; the load-bearing requirement is usually a *durable schedule*, and a lease taken before the

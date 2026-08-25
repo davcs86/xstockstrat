@@ -2,7 +2,7 @@
 
 **Status**: `pending`
 **Created**: 2026-08-25
-**Feature**: `docs/roadmap/features/155-fix-fundamentals-signal-producer/feature.md`
+**Feature**: `docs/roadmap/features/156-fix-fundamentals-signal-producer/feature.md`
 **Total Steps**: 9
 **Feature Branch**: `feature/fix-fundamentals-signal-producer`
 
@@ -85,8 +85,8 @@ to it (Steps 1–4) is the internal half.
 **Covers**: —
 
 **Instructions**:
-1. Create `019_fundsignal_schedule.up.sql` with the standard migration comment header (Feature 155)
-   (`-- 019_fundsignal_schedule.up.sql` / `-- Service: xstockstrat-analysis` / `-- Feature 155
+1. Create `019_fundsignal_schedule.up.sql` with the standard migration comment header (Feature 156)
+   (`-- 019_fundsignal_schedule.up.sql` / `-- Service: xstockstrat-analysis` / `-- Feature 156
    (fix-fundamentals-signal-producer): durable, crash-safe schedule for the fundamentals producer
    loop.`), then:
    ```sql
@@ -145,10 +145,10 @@ default declared in service CLAUDE.md (C-05)
 **Instructions**:
 1. Add two rows to the analysis CLAUDE.md § Config Keys Consumed table (after
    `analysis.fundsignal.valid_days` at `:307`):
-   - `| \`analysis.fundsignal.startup_jitter_seconds\` | int | \`30\` | One-shot random delay [0, N] seconds applied once at producer loop entry to stagger concurrent redeploys (feature 155); read presence-aware (\`get_int_present\`) — \`0\` disables jitter. |`
-   - `| \`analysis.fundsignal.retry_seconds\` | int | \`300\` | On a caught cycle error, \`blocked_until_ms\` advances by this many seconds (not a full \`run_interval_hours\`), so a transient failure retries in minutes (feature 155); read presence-aware. |`
+   - `| \`analysis.fundsignal.startup_jitter_seconds\` | int | \`30\` | One-shot random delay [0, N] seconds applied once at producer loop entry to stagger concurrent redeploys (feature 156); read presence-aware (\`get_int_present\`) — \`0\` disables jitter. |`
+   - `| \`analysis.fundsignal.retry_seconds\` | int | \`300\` | On a caught cycle error, \`blocked_until_ms\` advances by this many seconds (not a full \`run_interval_hours\`), so a transient failure retries in minutes (feature 156); read presence-aware. |`
 2. Add the same two rows to the feature-062 block table in `docs/patterns/config-governance.md`
-   (after its `analysis.fundsignal.valid_days` row), noting `(feature 155)` in the description.
+   (after its `analysis.fundsignal.valid_days` row), noting `(feature 156)` in the description.
 3. Do NOT change any existing key's `value_type` (fails.md 2026-08-06 — value_type is immutable once
    read); these are net-new keys.
 
@@ -457,7 +457,7 @@ matrix). Red captured against the pre-Step-5 tree first (P-06).
 **Instructions**:
 1. `services/xstockstrat-agent/CLAUDE.md`: bump "twenty-eight" → "twenty-nine" (`:36`), add a
    `run_fundamentals_scan` row to the tool table (admin-scoped manual fundamentals producer trigger,
-   feature 155).
+   feature 156).
 2. `docs/runbooks/mcp-tools.md`: bump both "twenty-eight" occurrences (`:3`, `:37`) → "twenty-nine";
    add a `### run_fundamentals_scan` section mirroring `### trigger_backfill` (`:681`) with the param
    table (`force`, `dry_run`, `symbols`), the `FundamentalsScanSummary` return shape, and the

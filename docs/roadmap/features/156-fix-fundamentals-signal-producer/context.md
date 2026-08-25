@@ -139,3 +139,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Step 3 line-ref drift `_has_admin_scope` cited `:2725`, actual `:2723`; Step 1 "feature-062-style
     header" label — [x] fixed in impl-spec (symbols/paths already resolved; cosmetic accuracy only).
 - No blockers; spec is evidence-grounded (every path:line verified by the reviewer). Ready for /sdd-execute.
+
+## Session 2026-08-25 (/sdd-execute sequential — boot reconciliation)
+
+- **Feature renumbered 155 → 156.** While this feature was in design/spec, another feature
+  `155-watchlist-opportunity-signal-cues` was created and merged to `main-dev` also claiming NNN 155.
+  Per the numbering rule (renumber the *later*/unmerged one to the next free NNN), and since the
+  watchlist feature is already on `main-dev` (immutable), this feature moved to **156**. The git
+  branch/slug are unaffected (`feature/fix-fundamentals-signal-producer` uses the slug only).
+  Renamed the dir `155-… → 156-…`, updated the `implementation-spec.md` "Feature 155"/config-key
+  descriptions and the `insights.md` entry to 156. The earlier `## Session` note above that reads
+  "Feature number: 155" is left as the historical record.
+- Merged current `origin/main-dev` into the feature branch (union-resolved the `insights.md` append
+  conflict — kept both the 155-watchlist and 156-fundsignal design insights).
