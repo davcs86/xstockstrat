@@ -81,8 +81,8 @@ export const IN_QUEUE_CUE: EnumRender = { label: 'in queue', role: 'info', icon:
 export function EnumBadge({ render, testId }: { render: EnumRender; testId?: string }) {
   const Icon = render.icon;
   return (
-    <Badge variant={render.role}>
-      {Icon && <Icon weight="fill" role="img" aria-label={render.label} data-testid={testId} />}
+    <Badge variant={render.role} data-testid={testId}>
+      {Icon && <Icon weight="fill" role="img" aria-label={render.label} />}
       {render.label}
     </Badge>
   );

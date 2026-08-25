@@ -131,10 +131,46 @@ baseline unit suite green (116 tests) before changes.
   logic literals, not mocked domain objects). Covered by the Step-1 RED→GREEN above.
 - Files: `src/lib/readinessRollup.test.ts`, `src/lib/opportunityShared.test.ts`.
 
-### sdd-review impl-spec (advisory) — findings folded in below (## Open Threads / this session)
-- Overlap scan: CLEAN (UI-only; no migration/proto/config; only 095-draft conditionally names
+## Session 2026-08-25 — sdd-review impl-spec (advisory)
+
+- Result: **PASS WITH WARNINGS** — 0 failures, 2 warnings, 0 blockers, no Floor (F-*) risk (advisory
+  — did not block). Every cited path:line symbol resolved; C-14 surfaces + C-15 scenario coverage
+  fully mapped.
+- Overlap scan: **CLEAN** (UI-only; no migration/proto/config; only 095-draft conditionally names
   `opportunityShared.tsx`, orthogonal — coordinate whichever merges second, no action now).
-- Criteria review: (recorded when the spec-reviewer subagent returns; applied to Steps 3–12).
+- Warnings carried into execution:
+  - Steps 1–2: W1/W2 RED-integrity + line-drift — [x] addressed. Root cause: the reviewer scanned
+    the tree *while* Step 1's `readinessRollup.ts` half was already applied, so it saw
+    `readinessState` present. The true RED **was** captured before implementing (6 failing unit tests:
+    `readinessState is not a function` ×2 **and** the 4 `READINESS_CUE`/`IN_QUEUE_CUE` import failures),
+    then GREEN after (122 pass). Line-drift (`rollupReadiness` now at :54-74) is the same artifact, no
+    invented symbol. No action needed — recorded here per the reviewer's suggestion.
+- Notes (no action): FR-3 is a signed-off behavior CHANGE (no C-16 suite exists → no regression);
+  B2b trading-domain checks N/A (`paper`/`live` are Badge/Progress color tokens, not the trading-mode
+  axis); design's Phosphor-glyph open risk **RESOLVED** — `Eye/Lightning/Moon/Question/Stack` all
+  resolve from `@phosphor-icons/react@^2.1.7`. (Doc nit, not a spec defect: `impl-spec-criteria.md`
+  B3's frontend list still names the pre-consolidation frontends, omitting `xstockstrat-ui`.)
+
+### Step 3 — Watchlists readiness panel cues + firing-row jump [done]
+- Rewrote `barVariant`/`stateLabel` onto the shared `readinessState` bucketer (removed the duplicate
+  `hasData`/`isFiring` branch and the now-unused `cn` import); `stateLabel` emits "quiet" (FIX B).
+  Replaced the plain state-label span with `EnumBadge` (icon + color + dynamic text,
+  `testId=readiness-cue-<state>`); replaced the literal in-queue Badge with the shared `IN_QUEUE_CUE`
+  via `EnumBadge` (`testId="in-queue"`); added the `isFiring`-gated jump `Link` to
+  `/trader/positions/${symbol}?strategy=${strategyId}` (`data-testid=jump-<symbol>`, distinct
+  aria-label). Deviation: refined `EnumBadge` testId placement (see Deviation Log).
+- Files: `src/components/insights/WatchlistReadiness.tsx`, `src/lib/opportunityShared.tsx` (EnumBadge).
+- Verify: tsc `--noEmit` + `pnpm run lint` clean (no issues in touched files).
+
+### Step 4 — e2e for Watchlists cues + firing jump [done]
+- Added 3 Playwright tests to `watchlists.spec.ts`: AC-1/2/4 (firing/watching/quiet/no-data icon +
+  color + text via the READY1/WATCH1/QUIET1/NODATA1 bucket overrides), AC-3 (AAPL in-queue cue icon),
+  AC-5/6 (firing READY1 jump → `/trader/positions/READY1?strategy=strat-live-001`; non-firing WATCH1
+  no jump). Reused existing fixtures/helpers (no new fixture symbols → no INVENTORY change).
+- Verify: **14/14 watchlists tests pass** (3 new + 11 existing, no regression), run with a
+  Playwright-managed dev server + `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium` +
+  `--timeout=90000` (see Deviation Log for the env note). Covers @AC-1..@AC-6.
+- Files: `e2e/insights/watchlists.spec.ts`.
 
 ## Open Threads
 

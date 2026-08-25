@@ -226,7 +226,7 @@ consumer surfaces in Steps 4/6/8/10/12)
 
 ### Step 3 — service: Watchlists readiness panel — state cues + firing-row jump (FR-1, FR-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/WatchlistReadiness.tsx` — modify
@@ -297,7 +297,7 @@ Connect-RPC call safety
 
 ### Step 4 — test: e2e for Watchlists cues + firing-row jump
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/watchlists.spec.ts` — modify
@@ -770,4 +770,22 @@ no-active-pill state — before the fix makes it green; AC-11 already passes and
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Step 1/3 — `EnumBadge` icon `testId` placement (in-step-intent refinement)
+- **What**: Step 1 committed `EnumBadge` with the `testId` on the *icon*; Step 3 (its first consumer)
+  revealed the in-queue badge needs the testid on the *Badge* so `getByTestId('in-queue')` still
+  resolves to the badge (as the existing e2e expects) while the readiness-cue badges expose a queryable
+  hook too. Moved `data-testid={testId}` to the `Badge` element and kept `role="img"`+`aria-label` on
+  the icon. One line in `src/lib/opportunityShared.tsx` (a Step-1 file), staged with Step 3.
+- **Disposition**: in-step-intent refinement of the shared render helper Step 3 consumes; unit tests
+  (data-only) unaffected; tsc/lint green. Not a behavior change to the four pre-existing enum maps.
+
+### Step 4 — e2e verification environment
+- **What**: The sandbox's pre-installed Chromium is build 1194 (Playwright pins 1217) and a cold
+  `next dev` compile exceeds the 10s non-CI per-test timeout; `pnpm build` also hits a pre-existing,
+  unrelated page-data-collection error in `/trader/api/[...connect]` (a connect-RPC route this feature
+  does not touch). Ran the suite with `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium`,
+  a Playwright-managed dev server, and `--timeout=90000`.
+- **Disposition**: CI-equivalent — **all 14 watchlists tests passed** (the 3 new AC-1/2/4, AC-3,
+  AC-5/6 + 11 existing, no regression). RED-before-green: the shared-spine RED was captured at the unit
+  layer (Step 1/2); the e2e RED is reasoned (the `readiness-cue-*` / `jump-*` / in-queue-icon hooks did
+  not exist on the pre-Step-3 tree), since Steps 3+4 were implemented together before the first e2e run.
