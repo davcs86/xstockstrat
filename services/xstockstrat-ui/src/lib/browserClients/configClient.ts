@@ -1,6 +1,6 @@
 import { createClient } from '@connectrpc/connect';
-import { createConnectTransport } from '@connectrpc/connect-web';
+import { makeBrowserTransport } from '@/lib/browserClients/transport';
 import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
 
-const transport = createConnectTransport({ baseUrl: '/config-ui/api' });
+const transport = makeBrowserTransport('/config-ui/api');
 export const configClient = createClient(ConfigService, transport);

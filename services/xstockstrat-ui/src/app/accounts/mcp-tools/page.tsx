@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { apiFetch } from '@/lib/authRedirect';
 import { Wrench } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -65,7 +66,7 @@ export default function McpToolsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/accounts/api/mcp-tools');
+      const res = await apiFetch('/accounts/api/mcp-tools');
       if (!res.ok) throw new Error(`Failed to load MCP tools (${res.status})`);
       const data = await res.json();
       setTools(data.tools ?? []);

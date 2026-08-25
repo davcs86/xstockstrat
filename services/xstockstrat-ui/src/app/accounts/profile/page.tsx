@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { apiFetch } from '@/lib/authRedirect';
 import { UserCircle } from '@phosphor-icons/react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -34,7 +35,7 @@ export default function ProfilePage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/accounts/api/profile');
+      const res = await apiFetch('/accounts/api/profile');
       if (!res.ok) throw new Error(`Failed to load profile (${res.status})`);
       const data: ProfileData = await res.json();
       setUserId(data.userId);
@@ -70,7 +71,7 @@ export default function ProfilePage() {
 
     setSaving(true);
     try {
-      const res = await fetch('/accounts/api/profile', {
+      const res = await apiFetch('/accounts/api/profile', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({

@@ -1,6 +1,6 @@
 import { createClient } from '@connectrpc/connect';
-import { createConnectTransport } from '@connectrpc/connect-web';
+import { makeBrowserTransport } from '@/lib/browserClients/transport';
 import { NotifyService } from '@xstockstrat/proto/notify/v1/notify_pb';
 
-const transport = createConnectTransport({ baseUrl: '/trader/api' });
+const transport = makeBrowserTransport('/trader/api');
 export const notifyClient = createClient(NotifyService, transport);

@@ -25,6 +25,7 @@ function LoginForm() {
       <CredentialsForm
         submitLabel="Sign in"
         loadingLabel="Signing in…"
+        showRememberMe
         onSuccess={() => router.push(safeRedirect(searchParams.get('redirect')))}
       />
     </AuthCardShell>

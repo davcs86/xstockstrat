@@ -11,6 +11,9 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-25 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-25 | `draft` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written |
+| 2026-08-25 | `design-approved` → `implementation-ready` | /sdd-spec | implementation-spec.md written (9 steps) |
+| 2026-08-25 | `implementation-ready` → `code-completed` | /sdd-execute | All steps implemented + verified (unit 116/116, lint clean, build exit 0) |
 
 ---
 
@@ -18,6 +21,8 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon Dossier](recon.md) — Phase 0 codebase map + patterns to reuse
+- [Design](design.md) — approved architecture, rejected alternatives, open risks
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec ui-auth-improvements`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -41,4 +46,5 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review ui-auth-improvements product-spec` — AI review of product spec before running /sdd-spec
+Open the integration PR into `main-dev` (this feature was implemented on the harness branch
+`claude/ui-auth-improvements-apn1ya`); after merge, `/promote` flips it to `launched`.

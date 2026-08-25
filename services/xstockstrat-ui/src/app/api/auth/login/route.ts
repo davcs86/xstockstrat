@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ConnectError, Code } from '@connectrpc/connect';
 import { identityClient } from '@/lib/connectClients';
-import { setSessionCookies } from '@/lib/auth';
+import { setSessionCookies, REMEMBER_ME_MAX_AGE_SECONDS } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
@@ -14,10 +14,12 @@ export async function POST(req: NextRequest) {
       password: body.password,
     });
     const response = NextResponse.json({ ok: true });
+    // Extended session ("Remember me"): persistent cookies when opted in, else session cookies.
     setSessionCookies(
       response,
       data.accessToken,
       data.refreshToken,
+      body.rememberMe ? { maxAge: REMEMBER_ME_MAX_AGE_SECONDS } : undefined,
     );
     return response;
   } catch (err) {
@@ -35,4 +37,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-
