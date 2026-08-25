@@ -139,6 +139,19 @@ export default function OpportunitiesPage() {
     [opportunities],
   );
 
+  // feature 155 (FR-5): the *effective* source filter is the stored selection intersected with the
+  // sources that still exist in the current (possibly refetched) queue. `sources` is derived from the
+  // live `opportunities`, and `useOpportunities` refetches on an interval — so a selected source that
+  // vanishes from a later fetch would otherwise leave `activeSources` referencing a source with no
+  // visible pill, silently filtering the queue to empty. Intersecting at render time drops that stale
+  // constraint (falling back to showing the available rows) while leaving the *stored* selection
+  // untouched, so a vanished-then-returning source re-activates. No mutating `useEffect` (design.md
+  // Rejected Alternatives — an effect loops on the refetch and wipes the selection on a transient empty).
+  const effectiveSources = useMemo(
+    () => activeSources.filter((s) => sources.includes(s)),
+    [activeSources, sources],
+  );
+
   const rows = useMemo(() => {
     const filtered = opportunities.filter(
       (o) =>
@@ -146,7 +159,7 @@ export default function OpportunitiesPage() {
         // filtered out by the min-conviction slider — the mute is the signal, not a low score
         // (mirrors the backend read-filter exemption; FR-5 "must not silently disappear").
         (o.muted || o.conviction >= minConviction) &&
-        (activeSources.length === 0 || activeSources.includes(o.source)) &&
+        (effectiveSources.length === 0 || effectiveSources.includes(o.source)) &&
         (actionFilter === 'any' || String(o.action) === actionFilter),
     );
     const sorted = [...filtered];
@@ -158,7 +171,7 @@ export default function OpportunitiesPage() {
       );
     }
     return sorted;
-  }, [opportunities, minConviction, activeSources, actionFilter, sortKey]);
+  }, [opportunities, minConviction, effectiveSources, actionFilter, sortKey]);
 
   // Stat-row values (handoff framing), all computed from real queue data.
   const expiringSoon = rows.filter((o) => {
@@ -265,8 +278,8 @@ export default function OpportunitiesPage() {
             <button
               type="button"
               onClick={() => setActiveSources([])}
-              aria-pressed={activeSources.length === 0}
-              className={sourceFilterPillClass(activeSources.length === 0)}
+              aria-pressed={effectiveSources.length === 0}
+              className={sourceFilterPillClass(effectiveSources.length === 0)}
             >
               All sources
             </button>

@@ -14,6 +14,7 @@
 | 2026-08-25 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, quick + 1 user round) and approved; recon.md + design.md written |
 | 2026-08-25 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
 | 2026-08-25 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (shared cue spine) started |
+| 2026-08-25 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps done; unit + e2e green (watchlists 14/14, opportunities 15/15, breadcrumb sweep 11) |
 
 ---
 

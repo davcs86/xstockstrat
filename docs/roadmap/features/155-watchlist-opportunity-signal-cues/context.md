@@ -222,6 +222,31 @@ baseline unit suite green (116 tests) before changes.
   no new link/label collision (ledger 2026-08-09). Covers @AC-7, @AC-8. Files:
   `e2e/trader/position-detail.spec.ts` (breadcrumb.spec.ts needed no edit).
 
+### Step 11 — Opportunities filter effective-source intersection [done]
+- Added a memoized `effectiveSources = activeSources.filter(s => sources.includes(s))`; the `rows`
+  filter and the "All sources" pill state now use it. Stored `activeSources` is untouched (a
+  vanished-then-returning source re-activates); **no** mutating `useEffect` (verified: the only
+  effect is the pre-existing localStorage hydration; `setActiveSources` only in onClick/onValueChange).
+  Files: `src/app/insights/opportunities/page.tsx`. tsc+lint clean.
+
+### Step 12 — e2e for filter responsiveness (in-place refetch RED) [done]
+- AC-11 (selecting the `watchlist` pill narrows to CAPR, hides AAPL). AC-12 (the effective-source
+  RED): select `marketwatch` (only MSFT), Snooze MSFT → the mutation invalidates `['opportunities']`
+  and refetches **in place** (never `page.reload()` — FIX D / ledger 074/080) → `marketwatch` vanishes
+  → the queue must not strand. **RED proven**: reverting the Step-11 filter to `activeSources`, AC-12
+  fails with `card(AAPL)` not found (queue stranded empty); restored → GREEN. Full opportunities
+  suite **15/15** (no regression). Covers @AC-11, @AC-12. Files: `e2e/insights/opportunities.spec.ts`.
+
+## Session 2026-08-25 — sdd-execute complete
+
+All 12 steps done → `code-completed`. Verification (Playwright-managed dev server +
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium` + `--timeout=90000`): unit **122**,
+watchlists **14/14**, opportunities **15/15**, breadcrumb sweep **11** (incl. the breadcrumb.spec
+collision guard). Every `@AC-1..@AC-13` covered and green. The trader-BFF-dependent position-detail
+tests fail **in-sandbox only** (pre-existing `/trader/api` `createContext` bundling issue at
+`traderBff.ts:15`, reproduced on the untouched line-14 test) — not a feature-155 regression; they pass
+in CI's prebuilt bundle. Next: integration PR (the assigned `claude/*` branch PR to `main-dev`).
+
 ## Open Threads
 
 - FR-3 back-navigation regression for non-Opportunities entry points — deliberate, user-signed-off;

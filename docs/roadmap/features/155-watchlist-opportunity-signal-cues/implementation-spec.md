@@ -1,6 +1,6 @@
 # Implementation Spec: watchlist-opportunity-signal-cues
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-08-25
 **Feature**: `docs/roadmap/features/155-watchlist-opportunity-signal-cues/feature.md`
 **Total Steps**: 12
@@ -666,7 +666,7 @@ fails on the pre-Step-9 tree, where it is "Exposure" → `/trader/positions`).
 
 ### Step 11 — service: Opportunities filter — effective-source intersection (FR-5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx` — modify
@@ -719,7 +719,7 @@ Connect-RPC call safety
 
 ### Step 12 — test: e2e for filter responsiveness (in-place refetch RED)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/opportunities.spec.ts` — modify
