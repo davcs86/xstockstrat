@@ -284,7 +284,12 @@ export default function OpportunitiesPage() {
             >
               All sources
             </button>
-            <ToggleGroup type="multiple" value={activeSources} onValueChange={setActiveSources}>
+            <ToggleGroup
+              type="multiple"
+              value={activeSources}
+              onValueChange={setActiveSources}
+              className="max-w-full flex-wrap"
+            >
               {sources.map((s) => (
                 <ToggleGroupItem
                   key={s}

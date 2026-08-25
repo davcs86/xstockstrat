@@ -699,7 +699,9 @@ test.describe('Single Position page', () => {
     await addAuthCookie(page);
     await page.goto('/trader/positions/AAPL');
     const crumb = page.getByLabel('Position path', { exact: true });
-    await expect(crumb).toBeVisible({ timeout: 30000 });
+    // Poll until exactly one landmark matches — the SSR→hydration transient can briefly render two
+    // "Position path" navs, which trips strict mode inside a bare toBeVisible().
+    await expect(crumb).toHaveCount(1, { timeout: 30000 });
     const opp = crumb.getByRole('link', { name: 'Opportunities', exact: true });
     await expect(opp).toBeVisible();
     await expect(opp).toHaveAttribute('href', '/insights/opportunities');
@@ -713,7 +715,8 @@ test.describe('Single Position page', () => {
     // the crumb is unconditional, so it must still read Opportunities and never "Exposure".
     await page.goto('/trader/positions/MSFT');
     const crumb = page.getByLabel('Position path', { exact: true });
-    await expect(crumb).toBeVisible({ timeout: 30000 });
+    // Poll until exactly one landmark matches (see AC-7) before scoping link assertions inside it.
+    await expect(crumb).toHaveCount(1, { timeout: 30000 });
     await expect(crumb.getByRole('link', { name: 'Opportunities', exact: true })).toHaveAttribute(
       'href',
       '/insights/opportunities',
