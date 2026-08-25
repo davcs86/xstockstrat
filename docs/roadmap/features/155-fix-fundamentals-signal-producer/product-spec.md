@@ -47,14 +47,26 @@ CI/CD cadence, may never fire.
 
 ## Affected Services
 
-- `xstockstrat-analysis` (fundamentals signal producer)
+- `xstockstrat-analysis` (fundamentals signal producer + durable schedule + config keys)
+- `xstockstrat-agent` (MCP tool wrapping the existing `RunFundamentalsScan` RPC)
+- `xstockstrat-ui` (config-ui admin trigger control)
 
-## Fix Scope
+## Consumer Surface(s) (C-14)
 
-- [x] No proto changes anticipated
-- [x] No database migrations anticipated (reuse existing `analysis.fundsignal_runs` table if
-  option 2 is chosen)
-- [x] No config key changes anticipated (the stopgap changed a config *value*, not a key)
+- **MCP agent tool** `run_fundamentals_scan` (`xstockstrat-agent`) — admin-scoped manual trigger.
+- **UI control** — an admin-only "Run fundamentals scan" card in the **/config-ui** segment.
+- The scheduled producer itself remains internal/platform (background loop, no direct surface).
+
+## Fix Scope (operator-expanded 2026-08-25 — see context.md steer; was a minimal bug fix)
+
+- [x] No proto changes — `RunFundamentalsScan` (req `force`/`dry_run`/`symbols`, resp fields) already
+  exists; both surfaces wrap it.
+- [ ] **One new database migration** — `019_fundsignal_schedule` creates
+  `analysis.fundsignal_schedule (job_name PK, blocked_until_ms, process_name, updated_at)`, the durable
+  crash-safe schedule row. Reuses the existing analysis pool (budget stays 2).
+- [ ] **Two new config keys** — `analysis.fundsignal.startup_jitter_seconds` (default 30) and
+  `analysis.fundsignal.retry_seconds` (default 300), both `get_int_present`. (The staging stopgap that
+  changed `run_interval_hours`'s *value* is separate and reverts to 24 after launch.)
 
 ## Acceptance Criteria
 

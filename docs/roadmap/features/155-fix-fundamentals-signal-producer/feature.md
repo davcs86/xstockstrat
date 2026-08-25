@@ -14,13 +14,16 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-25 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-08-25-fundsignal-first-cycle-resets-on-redeploy-defect.md` |
+| 2026-08-25 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, quick + operator-steered expansion) and approved; recon.md + design.md written. Scope expanded beyond bug fix: durable schedule migration 019, jitter + retry config keys, MCP + config-ui manual trigger |
 
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Product Spec](product-spec.md) — bug description and (operator-expanded) fix scope
+- [Acceptance Scenarios](acceptance.feature) — `@AC-1..9` scenarios (C-15)
+- [Recon](recon.md) — grounded codebase dossier (Phase 0)
+- [Design](design.md) — debated, approved architecture (Phase 1)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-fundamentals-signal-producer`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -36,4 +39,4 @@ promptly and survives restarts.
 
 ## Next Action
 
-`/sdd-design fix-fundamentals-signal-producer quick` — recommended design depth (quick) from triage; see context.md
+`/sdd-spec fix-fundamentals-signal-producer` — generate the implementation spec from the approved design
