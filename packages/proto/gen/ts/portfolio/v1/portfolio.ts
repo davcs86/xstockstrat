@@ -481,6 +481,15 @@ export interface EnsureSignalWatchlistResponse {
   watchlist?: Watchlist | undefined;
 }
 
+/** Empty — the enumeration spans all users; ownership/scoping does not apply (feature 154). */
+export interface ListAllWatchlistSymbolsRequest {
+}
+
+export interface ListAllWatchlistSymbolsResponse {
+  /** Distinct, sorted bare symbols across all users' watchlists (bindings collapsed). */
+  symbols: string[];
+}
+
 function createBasePortfolio(): Portfolio {
   return {
     portfolioId: "",
@@ -3945,6 +3954,111 @@ export const EnsureSignalWatchlistResponse: MessageFns<EnsureSignalWatchlistResp
   },
 };
 
+function createBaseListAllWatchlistSymbolsRequest(): ListAllWatchlistSymbolsRequest {
+  return {};
+}
+
+export const ListAllWatchlistSymbolsRequest: MessageFns<ListAllWatchlistSymbolsRequest> = {
+  encode(_: ListAllWatchlistSymbolsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListAllWatchlistSymbolsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListAllWatchlistSymbolsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(_: any): ListAllWatchlistSymbolsRequest {
+    return {};
+  },
+
+  toJSON(_: ListAllWatchlistSymbolsRequest): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListAllWatchlistSymbolsRequest>, I>>(base?: I): ListAllWatchlistSymbolsRequest {
+    return ListAllWatchlistSymbolsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListAllWatchlistSymbolsRequest>, I>>(_: I): ListAllWatchlistSymbolsRequest {
+    const message = createBaseListAllWatchlistSymbolsRequest();
+    return message;
+  },
+};
+
+function createBaseListAllWatchlistSymbolsResponse(): ListAllWatchlistSymbolsResponse {
+  return { symbols: [] };
+}
+
+export const ListAllWatchlistSymbolsResponse: MessageFns<ListAllWatchlistSymbolsResponse> = {
+  encode(message: ListAllWatchlistSymbolsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.symbols) {
+      writer.uint32(10).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListAllWatchlistSymbolsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListAllWatchlistSymbolsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbols.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ListAllWatchlistSymbolsResponse {
+    return {
+      symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+    };
+  },
+
+  toJSON(message: ListAllWatchlistSymbolsResponse): unknown {
+    const obj: any = {};
+    if (message.symbols?.length) {
+      obj.symbols = message.symbols;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListAllWatchlistSymbolsResponse>, I>>(base?: I): ListAllWatchlistSymbolsResponse {
+    return ListAllWatchlistSymbolsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListAllWatchlistSymbolsResponse>, I>>(
+    object: I,
+  ): ListAllWatchlistSymbolsResponse {
+    const message = createBaseListAllWatchlistSymbolsResponse();
+    message.symbols = object.symbols?.map((e) => e) || [];
+    return message;
+  },
+};
+
 export type PortfolioServiceService = typeof PortfolioServiceService;
 export const PortfolioServiceService = {
   getPortfolio: {
@@ -4110,6 +4224,25 @@ export const PortfolioServiceService = {
       Buffer.from(EnsureSignalWatchlistResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): EnsureSignalWatchlistResponse => EnsureSignalWatchlistResponse.decode(value),
   },
+  /**
+   * Cross-user enumeration (feature 154): the distinct union of watchlist symbols across
+   * ALL users' watchlists — NOT scoped to the caller's x-user-id. Privileged: gated by the
+   * x-internal-caller allow-list (grant `analysis-fundsignal`), not the admin x-access-scope
+   * bit (PR #994) — a non-allow-listed caller gets PERMISSION_DENIED. Read-only; intended for
+   * the fundamentals-signal producer's universe resolution.
+   */
+  listAllWatchlistSymbols: {
+    path: "/xstockstrat.portfolio.v1.PortfolioService/ListAllWatchlistSymbols" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListAllWatchlistSymbolsRequest): Buffer =>
+      Buffer.from(ListAllWatchlistSymbolsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListAllWatchlistSymbolsRequest => ListAllWatchlistSymbolsRequest.decode(value),
+    responseSerialize: (value: ListAllWatchlistSymbolsResponse): Buffer =>
+      Buffer.from(ListAllWatchlistSymbolsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListAllWatchlistSymbolsResponse =>
+      ListAllWatchlistSymbolsResponse.decode(value),
+  },
 } as const;
 
 export interface PortfolioServiceServer extends UntypedServiceImplementation {
@@ -4136,6 +4269,14 @@ export interface PortfolioServiceServer extends UntypedServiceImplementation {
    * Ownership is taken from the propagated x-user-id header; the request has no body (FR-2).
    */
   ensureSignalWatchlist: handleUnaryCall<EnsureSignalWatchlistRequest, EnsureSignalWatchlistResponse>;
+  /**
+   * Cross-user enumeration (feature 154): the distinct union of watchlist symbols across
+   * ALL users' watchlists — NOT scoped to the caller's x-user-id. Privileged: gated by the
+   * x-internal-caller allow-list (grant `analysis-fundsignal`), not the admin x-access-scope
+   * bit (PR #994) — a non-allow-listed caller gets PERMISSION_DENIED. Read-only; intended for
+   * the fundamentals-signal producer's universe resolution.
+   */
+  listAllWatchlistSymbols: handleUnaryCall<ListAllWatchlistSymbolsRequest, ListAllWatchlistSymbolsResponse>;
 }
 
 export interface PortfolioServiceClient extends Client {
@@ -4365,6 +4506,28 @@ export interface PortfolioServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: EnsureSignalWatchlistResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Cross-user enumeration (feature 154): the distinct union of watchlist symbols across
+   * ALL users' watchlists — NOT scoped to the caller's x-user-id. Privileged: gated by the
+   * x-internal-caller allow-list (grant `analysis-fundsignal`), not the admin x-access-scope
+   * bit (PR #994) — a non-allow-listed caller gets PERMISSION_DENIED. Read-only; intended for
+   * the fundamentals-signal producer's universe resolution.
+   */
+  listAllWatchlistSymbols(
+    request: ListAllWatchlistSymbolsRequest,
+    callback: (error: ServiceError | null, response: ListAllWatchlistSymbolsResponse) => void,
+  ): ClientUnaryCall;
+  listAllWatchlistSymbols(
+    request: ListAllWatchlistSymbolsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListAllWatchlistSymbolsResponse) => void,
+  ): ClientUnaryCall;
+  listAllWatchlistSymbols(
+    request: ListAllWatchlistSymbolsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListAllWatchlistSymbolsResponse) => void,
   ): ClientUnaryCall;
 }
 

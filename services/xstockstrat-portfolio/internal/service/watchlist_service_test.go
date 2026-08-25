@@ -26,10 +26,19 @@ import (
 type fakeWatchlistStore struct {
 	byID map[string]*portfoliov1.Watchlist
 	seq  int
+	// feature 154: cross-user enumeration return (the store/SQL layer owns the
+	// DISTINCT dedup; the service just passes this through).
+	allSymbols    []string
+	allSymbolsErr error
 }
 
 func newFakeStore() *fakeWatchlistStore {
 	return &fakeWatchlistStore{byID: map[string]*portfoliov1.Watchlist{}}
+}
+
+// ListAllSymbols returns the configured cross-user union (feature 154).
+func (f *fakeWatchlistStore) ListAllSymbols(_ context.Context) ([]string, error) {
+	return f.allSymbols, f.allSymbolsErr
 }
 
 func clone(wl *portfoliov1.Watchlist) *portfoliov1.Watchlist {
@@ -206,6 +215,76 @@ func ctxWithUser(t *testing.T, userID string) context.Context {
 		t.Fatalf("interceptor: %v", err)
 	}
 	return captured
+}
+
+// ctxWithIncoming builds a context carrying raw incoming gRPC metadata (feature 154).
+// The x-internal-caller gate reads FromIncomingContext directly, so tests inject the
+// header straight into incoming metadata rather than through the interceptor.
+func ctxWithIncoming(pairs ...string) context.Context {
+	return metadata.NewIncomingContext(context.Background(), metadata.Pairs(pairs...))
+}
+
+// ─── feature 154: ListAllWatchlistSymbols (cross-user enumeration + authz gate) ──
+
+// AC-1: an authorized internal caller gets the store's distinct union passed through.
+func TestListAllWatchlistSymbols_Authorized(t *testing.T) {
+	store := newFakeStore()
+	// alice {AAPL,MSFT} ∪ bob {MSFT,NVDA} → the store/SQL DISTINCT collapses to this set.
+	store.allSymbols = []string{"AAPL", "MSFT", "NVDA"}
+	svc := newSvc(store, wideCaps(), nil)
+
+	resp, err := svc.ListAllWatchlistSymbols(
+		ctxWithIncoming("x-internal-caller", "analysis-fundsignal"),
+		&portfoliov1.ListAllWatchlistSymbolsRequest{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := resp.GetSymbols()
+	want := []string{"AAPL", "MSFT", "NVDA"}
+	if len(got) != len(want) {
+		t.Fatalf("symbols = %v, want %v", got, want)
+	}
+	seen := map[string]int{}
+	for i, s := range got {
+		if s != want[i] {
+			t.Errorf("symbols[%d] = %q, want %q", i, s, want[i])
+		}
+		seen[s]++
+	}
+	if seen["MSFT"] != 1 {
+		t.Errorf("MSFT appeared %d times, want exactly 1", seen["MSFT"])
+	}
+}
+
+// AC-2: the gate fails closed for every non-privileged caller, and ignores the admin bit.
+func TestListAllWatchlistSymbols_FailClosed(t *testing.T) {
+	cases := []struct {
+		name string
+		ctx  context.Context
+	}{
+		{"no incoming metadata", context.Background()},
+		{"metadata without x-internal-caller", ctxWithIncoming("x-user-id", "u1")},
+		{"unlisted callerID", ctxWithIncoming("x-internal-caller", "someone-else")},
+		{"admin-bit-only, no internal-caller", ctxWithIncoming("x-access-scope", "4")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newFakeStore()
+			store.allSymbols = []string{"AAPL"} // would leak if the gate let it through
+			svc := newSvc(store, wideCaps(), nil)
+
+			resp, err := svc.ListAllWatchlistSymbols(tc.ctx, &portfoliov1.ListAllWatchlistSymbolsRequest{})
+			if err == nil {
+				t.Fatalf("expected PermissionDenied, got nil (resp=%v)", resp)
+			}
+			if connect.CodeOf(err) != connect.CodePermissionDenied {
+				t.Fatalf("code = %v, want PermissionDenied", connect.CodeOf(err))
+			}
+			if resp != nil {
+				t.Fatalf("resp = %v, want nil", resp)
+			}
+		})
+	}
 }
 
 func wideCaps() *fakeConfig {

@@ -6,7 +6,7 @@
 
 | Service | Schema | Hypertable | Partition By |
 |---|---|---|---|
-| xstockstrat-marketdata | marketdata | ohlcv | time (1 day chunks) |
+| xstockstrat-marketdata | marketdata | ohlcv | time (30 day chunks; pre-feature-153 chunks stay 1 day — see below) |
 | xstockstrat-marketdata | marketdata | quotes | time (1 hour chunks) |
 | xstockstrat-ledger | ledger | events | time (1 day chunks) |
 | xstockstrat-trading | trading | orders | time (1 day chunks) |
@@ -16,6 +16,12 @@
 This map is hypertables only; each service's `CLAUDE.md` § Database is authoritative for plain
 tables (e.g. `marketdata.ohlcv_remediation_003`, a one-shot audit table added by feature 080's
 `003_canonicalize_ohlcv_timeframe` migration — see `services/xstockstrat-marketdata/CLAUDE.md`).
+
+The `marketdata.ohlcv` chunk interval was widened from 1 day to **30 days** by feature 153's
+`004_widen_ohlcv_chunk_interval` migration (`set_chunk_time_interval`, future-only — pre-existing
+1-day chunks age out); `services/xstockstrat-marketdata/CLAUDE.md` § Database and
+`docs/runbooks/ohlcv-lock-budget-tuning.md` are authoritative for the why (lock-table budget on the
+400-day bars scan).
 
 ## Migration tooling
 
