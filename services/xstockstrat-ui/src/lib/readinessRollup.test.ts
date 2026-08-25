@@ -1,5 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { isFiring, rollupReadiness } from './readinessRollup';
+import { isFiring, rollupReadiness, readinessState } from './readinessRollup';
+
+describe('readinessState', () => {
+  it('classifies each of firing / watching / quiet / nodata', () => {
+    expect(readinessState({ passingConditions: 3, totalConditions: 3 })).toBe('firing');
+    expect(readinessState({ passingConditions: 1, totalConditions: 3 })).toBe('watching');
+    expect(readinessState({ passingConditions: 0, totalConditions: 3 })).toBe('quiet');
+    expect(readinessState({ passingConditions: 0, totalConditions: 0 })).toBe('nodata');
+  });
+
+  it('maps any total===0 row to nodata regardless of passing', () => {
+    expect(readinessState({ passingConditions: 3, totalConditions: 0 })).toBe('nodata');
+  });
+});
 
 describe('isFiring', () => {
   it('is true only when there is at least one condition and all pass', () => {

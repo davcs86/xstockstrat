@@ -176,7 +176,7 @@ Connect-RPC call safety
 
 ### Step 2 — test: Unit tests for the state bucketer + cue map data
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/readinessRollup.test.ts` — modify
