@@ -125,3 +125,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   harness branch `claude/fundamentals-signal-config-0jdfed`, NOT the feature's
   `**Development Branch**: feature/fix-fundamentals-signal-producer`. /sdd-execute's boot sequence
   must reconcile (the two should share the design-approved artifacts) before executing.
+
+## Session 2026-08-25 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 2 advisory warnings + 3 informational notes across 9 steps (advisory — did not block).
+- Overlap scan: **CLEAN** — no migration/config-key/proto/file collision with any in-flight feature
+  (only other live feature is 142-fix-fundamentals-upsert-invalid-json, marketdata-only). Migration
+  `019`, both config keys, and the `run_fundamentals_scan` tool name are unclaimed. No merge-order entry needed.
+- Warnings carried into execution:
+  - Step 9: Playwright e2e step states no `--cov-fail-under` threshold — [x] no change needed
+    (inapplicable to e2e; the UI Vitest gate is `src/lib/**`-scoped and this feature's logic lives in
+    page.tsx/hook/BFF, exercised by the e2e).
+  - Step 3 line-ref drift `_has_admin_scope` cited `:2725`, actual `:2723`; Step 1 "feature-062-style
+    header" label — [x] fixed in impl-spec (symbols/paths already resolved; cosmetic accuracy only).
+- No blockers; spec is evidence-grounded (every path:line verified by the reviewer). Ready for /sdd-execute.

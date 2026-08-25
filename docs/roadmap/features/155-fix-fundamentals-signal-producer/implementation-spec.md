@@ -85,7 +85,7 @@ to it (Steps 1–4) is the internal half.
 **Covers**: —
 
 **Instructions**:
-1. Create `019_fundsignal_schedule.up.sql` with the feature-062-style comment header
+1. Create `019_fundsignal_schedule.up.sql` with the standard migration comment header (Feature 155)
    (`-- 019_fundsignal_schedule.up.sql` / `-- Service: xstockstrat-analysis` / `-- Feature 155
    (fix-fundamentals-signal-producer): durable, crash-safe schedule for the fundamentals producer
    loop.`), then:
@@ -327,7 +327,7 @@ the red run against the pre-Step-3 tree first — P-06.)
   `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:_finish` returning
   `analysis_pb2.FundamentalsScanSummary(...)`).
 - Backend admin gate: `services/xstockstrat-analysis/app/handlers/servicer.py:2717` `RunFundamentalsScan`
-  calls `self._has_admin_scope(context)` (`:2725`) → `abort(PERMISSION_DENIED, "admin scope required")`;
+  calls `self._has_admin_scope(context)` (`:2723`) → `abort(PERMISSION_DENIED, "admin scope required")`;
   `_has_admin_scope` at `:417-431` reads `int(x-access-scope) & 0x04`. The tool must forward the
   caller's DERIVED scope, never fabricate admin.
 - Client wrapper precedent: `app/client.py:1224` `async def set_strategy_live(...)` — imports
