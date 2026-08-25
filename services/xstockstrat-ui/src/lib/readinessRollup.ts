@@ -12,6 +12,26 @@ export function isFiring(r: { passingConditions: number; totalConditions: number
   return r.totalConditions > 0 && r.passingConditions === r.totalConditions;
 }
 
+/** The four readiness states a symbol can be in against its strategy (feature 155). */
+export type ReadinessState = 'firing' | 'watching' | 'quiet' | 'nodata';
+
+/**
+ * The single 4-way readiness bucketer (feature 155). This is the ONE source of the
+ * firing/watching/quiet/no-data decision — `rollupReadiness`'s counts, every `Progress` variant
+ * picker, the row's text label, and the `READINESS_CUE` icon/color lookup all derive from it, rather
+ * than each re-branching `isFiring`/`passingConditions` in-line. `nodata` (`totalConditions === 0`)
+ * is an un-evaluable symbol, never folded into `quiet`.
+ */
+export function readinessState(r: {
+  passingConditions: number;
+  totalConditions: number;
+}): ReadinessState {
+  if (r.totalConditions === 0) return 'nodata';
+  if (isFiring(r)) return 'firing';
+  if (r.passingConditions > 0) return 'watching';
+  return 'quiet';
+}
+
 export interface ReadinessCounts {
   ready: number; // all conditions pass (firing)
   watching: number; // some conditions pass, not all

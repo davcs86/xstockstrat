@@ -340,7 +340,10 @@ test.describe('Watchlists (insights)', () => {
     await expect(page.getByRole('heading', { name: 'Watchlists' })).toBeVisible({ timeout: 5000 });
 
     // Select the seeded system list from the master column.
-    await page.getByTestId('watchlist-master').getByRole('button', { name: /Signals/ }).click();
+    await page
+      .getByTestId('watchlist-master')
+      .getByRole('button', { name: /Signals/ })
+      .click();
     await expect(page.getByRole('heading', { name: 'Signals' })).toBeVisible({ timeout: 5000 });
 
     // AC-7 (UI half): the destructive delete affordance is absent, while rename + add-symbol +
@@ -356,6 +359,90 @@ test.describe('Watchlists (insights)', () => {
     ).toBeVisible();
     await expect(
       page.getByTestId('readiness-row-MSFT').getByTestId('signal-source-badge'),
+    ).toHaveCount(0);
+  });
+
+  // feature 155 (FR-1/FR-2) — color + icon state cues, the in-queue cue, and the firing-row jump.
+  test('readiness rows show icon + color + text state cues (AC-1/2/4)', async ({ page }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page);
+    await page.goto('/insights/watchlists');
+
+    await createList(page, 'Cues');
+    await addSymbols(page, 'READY1 WATCH1 QUIET1 NODATA1');
+    for (const sym of ['READY1', 'WATCH1', 'QUIET1', 'NODATA1']) {
+      await bindStrategy(page, sym);
+    }
+
+    const readiness = page.getByTestId('watchlist-readiness');
+
+    // AC-1 firing (3/3): buy/green cue icon + "firing" text (icon never the sole differentiator).
+    const ready = readiness.getByTestId('readiness-row-READY1');
+    await expect(ready.getByTestId('readiness-cue-firing')).toBeVisible({ timeout: 5000 });
+    await expect(
+      ready.getByTestId('readiness-cue-firing').getByRole('img', { name: 'firing' }),
+    ).toBeVisible();
+    await expect(ready.getByTestId('readiness-cue-firing')).toContainText('firing');
+
+    // AC-2 watching (1/3): paper/amber cue icon + the dynamic "2 away" text.
+    const watch = readiness.getByTestId('readiness-row-WATCH1');
+    await expect(watch.getByTestId('readiness-cue-watching')).toBeVisible();
+    await expect(watch.getByTestId('readiness-cue-watching')).toContainText('2 away');
+
+    // AC-4 quiet (0/3): FIX B — a 0-passing evaluated row now reads "quiet" (icon + text), not
+    // "N away", so watching and quiet are distinguishable by text, not only icon/color.
+    const quiet = readiness.getByTestId('readiness-row-QUIET1');
+    await expect(quiet.getByTestId('readiness-cue-quiet')).toBeVisible();
+    await expect(quiet.getByTestId('readiness-cue-quiet')).toContainText('quiet');
+    await expect(
+      quiet.getByTestId('readiness-cue-quiet').getByRole('img', { name: 'quiet' }),
+    ).toBeVisible();
+
+    // AC-4 no-data (0/0): cue icon + "no data" text.
+    const nodata = readiness.getByTestId('readiness-row-NODATA1');
+    await expect(nodata.getByTestId('readiness-cue-nodata')).toBeVisible();
+    await expect(nodata.getByTestId('readiness-cue-nodata')).toContainText('no data');
+  });
+
+  test('in-queue rows carry the shared in-queue cue icon (AC-3)', async ({ page }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page);
+    await page.goto('/insights/watchlists');
+
+    await createList(page, 'Queue');
+    await addSymbols(page, 'AAPL'); // AAPL is on the opportunity queue (OPPORTUNITIES fixture)
+    await bindStrategy(page, 'AAPL');
+
+    const badge = page
+      .getByTestId('watchlist-readiness')
+      .getByTestId('readiness-row-AAPL')
+      .getByTestId('in-queue');
+    await expect(badge).toBeVisible({ timeout: 5000 });
+    await expect(badge).toContainText('in queue');
+    // Same IN_QUEUE_CUE render the Opportunities surface uses (Step 6) — the icon is present.
+    await expect(badge.getByRole('img', { name: 'in queue' })).toBeVisible();
+  });
+
+  test('firing row jumps to the symbol detail; non-firing does not (AC-5/6)', async ({ page }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page);
+    await page.goto('/insights/watchlists');
+
+    await createList(page, 'Jump');
+    await addSymbols(page, 'READY1 WATCH1');
+    await bindStrategy(page, 'READY1');
+    await bindStrategy(page, 'WATCH1');
+
+    const readiness = page.getByTestId('watchlist-readiness');
+
+    // AC-5: the firing READY1 row exposes a jump straight to its order/position detail.
+    const jump = readiness.getByTestId('readiness-row-READY1').getByTestId('jump-READY1');
+    await expect(jump).toBeVisible({ timeout: 5000 });
+    await expect(jump).toHaveAttribute('href', '/trader/positions/READY1?strategy=strat-live-001');
+
+    // AC-6: the non-firing WATCH1 row shows no jump.
+    await expect(
+      readiness.getByTestId('readiness-row-WATCH1').getByTestId('jump-WATCH1'),
     ).toHaveCount(0);
   });
 });

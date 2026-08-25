@@ -372,11 +372,13 @@ function PositionDetailInner() {
   return (
     <AppShell>
       <div className="p-4 sm:p-6 space-y-4">
-        {/* FR-10b: replaces the prior ad hoc "← Exposure" Button asChild back-link — keeping
-            both would duplicate an identically-labeled "Exposure" link on the page. */}
+        {/* feature 155 (FR-3): the first crumb always returns to the Opportunities queue — never
+            "Exposure" — for every entry point (Exposure/Portfolio/Orders/watchlist-jump alike). A
+            user-mandated behavior change (design.md § FR-3 / context.md sign-off): it trades the
+            "back to where I came from" affordance for a single, consistent return-to-Decide crumb. */}
         <PageBreadcrumb
           ariaLabel="Position path"
-          items={[{ label: 'Exposure', href: '/trader/positions' }, { label: symbol }]}
+          items={[{ label: 'Opportunities', href: '/insights/opportunities' }, { label: symbol }]}
         />
 
         {/* Minimal always-on page title (feature 125): an unheld symbol has no position header, so

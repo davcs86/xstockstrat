@@ -5,6 +5,8 @@ import { Eyebrow } from '@/components/shared/Eyebrow';
 import { Progress } from '@/components/ui/progress';
 import { ReadinessRule } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { CONDITION_STATE, EnumBadge } from '@/lib/opportunityShared';
+import { READINESS_CUE } from '@/lib/readinessCue';
+import { readinessState } from '@/lib/readinessRollup';
 import { StrategyPicker } from '@/components/insights/StrategyPicker';
 import { useOpportunities, useReadiness, useStrategyAnalytics } from '@/hooks/useOpportunities';
 
@@ -92,6 +94,11 @@ export function SignalReadiness({
               <span className="font-mono tabular-nums text-sm">
                 {readiness.passingConditions}/{readiness.totalConditions} conditions
               </span>
+              {/* feature 155 (FR-1, AC-13) — the same firing cue (icon + buy/green) the Watchlists
+                  and Opportunities surfaces use, when all conditions pass (3/3-style trace). */}
+              {readinessState(readiness) === 'firing' && (
+                <EnumBadge render={READINESS_CUE.firing} testId="readiness-cue-firing" />
+              )}
               {isHeld && (
                 <span
                   data-testid="readiness-exit-rule"
