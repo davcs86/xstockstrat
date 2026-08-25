@@ -2115,3 +2115,9 @@ reusing.
 - **Rule it implies**: don't build multi-instance mutual-exclusion machinery on an `instance_count:1`
   service; the load-bearing requirement is usually a *durable schedule*, and a lease taken before the
   guarded work pessimizes crash recovery — write the durable marker on completion, not on claim.
+
+### 2026-08-25 — 155-watchlist-opportunity-signal-cues — design
+- **Insight**: A state→visual encoding shown on several surfaces (readiness firing/watching/quiet/no-data) should have **one bucketer** (`readinessState(r)` in `readinessRollup.ts`) feeding **all** derived outputs — the roll-up counts, every `Progress` variant picker, the text label, and the icon/color cue map — not a per-component copy. Recon found the 4-way branch already duplicated in 4 places (`readinessRollup.rollupReadiness`, `WatchlistReadiness.barVariant`, `opportunities/page.readinessVariant`, `SectionRenderer` inline); a "readiness cue" feature that mirrors the buckets a 5th time is a DRY regression the design must consolidate, and it structurally guarantees icon↔text agreement (AC-4). Store the cue's icon as a **component reference** in the render map (not JSX) so the map stays node-env unit-testable; give the rendered Phosphor svg a `data-testid` + `role="img"`/`aria-label` since Phosphor icons have no accessible name by default (else the "shows the X icon" scenario has no RED-able hook — C-15).
+- **Evidence**: `docs/roadmap/features/155-watchlist-opportunity-signal-cues/design.md` (FR-1); `services/xstockstrat-ui/src/lib/readinessRollup.ts:43-51`, `src/lib/opportunityShared.tsx:14-53`.
+- **Rule it implies**: consolidate an N-way state classifier into one helper before layering a new render (icon/color) on top of it; a component-reference icon in a pure map keeps the "which cue" logic unit-testable while the "is the icon rendered" check stays an e2e concern.
+

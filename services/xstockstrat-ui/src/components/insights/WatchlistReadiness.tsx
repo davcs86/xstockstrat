@@ -1,7 +1,7 @@
 'use client';
+import Link from 'next/link';
 import { useQueries } from '@tanstack/react-query';
 import { X } from 'lucide-react';
-import { cn } from '@/components/ui/utils';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import {
@@ -14,7 +14,9 @@ import {
 import { ConditionState } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { WatchlistEntrySource } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { analysisClient } from '@/lib/browserClients/analysisClient';
-import { isFiring, rollupReadiness } from '@/lib/readinessRollup';
+import { isFiring, rollupReadiness, readinessState } from '@/lib/readinessRollup';
+import { EnumBadge } from '@/lib/opportunityShared';
+import { READINESS_CUE, IN_QUEUE_CUE } from '@/lib/readinessCue';
 import { UNBOUND, toApiStrategyId } from '@/hooks/useWatchlists';
 
 type EvaluateReadinessResult = Awaited<ReturnType<typeof analysisClient.evaluateReadiness>>;
@@ -35,14 +37,19 @@ function SignalSourceBadge({ source }: { source?: number }) {
   );
 }
 
-const hasData = (r: Readiness) => r.totalConditions > 0;
-
-/** Green = firing (all pass), paper = partway, sell = none pass, muted = no data (feature 083/097). */
+/** Green = firing (all pass), paper = partway, sell = none pass, muted = no data (feature 083/097).
+ * Derived from the shared `readinessState` bucketer (feature 155) — one 4-way decision site. */
 function barVariant(r: Readiness): 'buy' | 'paper' | 'sell' | 'muted' {
-  if (!hasData(r)) return 'muted';
-  if (isFiring(r)) return 'buy';
-  if (r.passingConditions > 0) return 'paper';
-  return 'sell';
+  switch (readinessState(r)) {
+    case 'firing':
+      return 'buy';
+    case 'watching':
+      return 'paper';
+    case 'quiet':
+      return 'sell';
+    case 'nodata':
+      return 'muted';
+  }
 }
 
 /** The first not-yet-passing condition — what's holding the signal back. */
@@ -52,11 +59,20 @@ function blockingCondition(r: Readiness): string {
   return `${c.refName} ${c.fn} ${c.threshold.toFixed(2)}`;
 }
 
-/** Per-symbol state label: firing / N away / no data (an un-evaluable symbol). */
+/** Per-symbol state label: firing / N away / quiet / no data. Derived from the shared
+ * `readinessState` bucketer so the text always agrees with the cue icon (feature 155, FIX B — a
+ * 0-passing evaluated row now reads "quiet", not "N away"). */
 function stateLabel(r: Readiness): string {
-  if (!hasData(r)) return 'no data';
-  if (isFiring(r)) return 'firing';
-  return `${r.totalConditions - r.passingConditions} away`;
+  switch (readinessState(r)) {
+    case 'firing':
+      return 'firing';
+    case 'watching':
+      return `${r.totalConditions - r.passingConditions} away`;
+    case 'quiet':
+      return 'quiet';
+    case 'nodata':
+      return 'no data';
+  }
 }
 
 /**
@@ -209,6 +225,8 @@ export function WatchlistReadiness({
             .sort((a, b) => b.r.conviction - a.r.conviction)
             .map(({ binding, r }) => {
               const queued = inQueue?.has(r.symbol.toUpperCase()) ?? false;
+              const state = readinessState(r);
+              const firing = isFiring(r);
               return (
                 <li
                   key={binding.symbol}
@@ -223,31 +241,33 @@ export function WatchlistReadiness({
                       className="h-1.5 w-20"
                       variant={barVariant(r)}
                     />
-                    <span
-                      className={cn(
-                        'w-16 font-mono tabular-nums',
-                        isFiring(r)
-                          ? 'text-buy'
-                          : hasData(r)
-                            ? 'text-muted-foreground'
-                            : 'text-muted-foreground/60',
-                      )}
-                    >
-                      {stateLabel(r)}
-                    </span>
+                    {/* Icon + color + text state cue (feature 155, FR-1) — the dynamic "N away"
+                        label overrides the map's fallback; icon is never the sole differentiator. */}
+                    <EnumBadge
+                      render={{ ...READINESS_CUE[state], label: stateLabel(r) }}
+                      testId={`readiness-cue-${state}`}
+                    />
                   </div>
                   {/* Reserve the badge column on every row so the blocking-condition and control
                       columns start at the same x whether or not this symbol is in queue. */}
                   <span className="w-20 shrink-0">
-                    {queued && (
-                      <Badge variant="info" data-testid="in-queue">
-                        in queue
-                      </Badge>
-                    )}
+                    {queued && <EnumBadge render={IN_QUEUE_CUE} testId="in-queue" />}
                   </span>
                   <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">
                     {blockingCondition(r)}
                   </span>
+                  {/* FR-2: a firing row jumps straight to the symbol's order/position detail
+                      (same target as Opportunities "Review & add"); non-firing rows show nothing. */}
+                  {firing && (
+                    <Link
+                      href={`/trader/positions/${r.symbol}?strategy=${binding.strategyId}`}
+                      aria-label={`Open ${r.symbol} detail`}
+                      data-testid={`jump-${binding.symbol}`}
+                      className="shrink-0 font-medium text-primary hover:underline"
+                    >
+                      Review
+                    </Link>
+                  )}
                   <BindingRowControls
                     symbol={binding.symbol}
                     strategyId={binding.strategyId}

@@ -628,6 +628,101 @@ test.describe('Single Position page', () => {
     // Neither Backtests nor Indicators shows the no-strategy dead-end.
     await expect(page.getByText(/No strategy resolves for AMZN/)).toHaveCount(0);
   });
+
+  // feature 155 (FR-1, AC-13) — the "Why this fired" panel carries the same firing cue (icon +
+  // buy/green) the Watchlists and Opportunities surfaces use, when the (symbol, strategy) trace is
+  // 3/3. READY1 is the firing bucket override in the shared EvaluateReadiness mock.
+  test('the "Why this fired" panel shows the firing cue (AC-13)', async ({ page }) => {
+    await addAuthCookie(page);
+    // The panel is watchlist-gated; AAPL is a real position that resolves cleanly (cf. the
+    // 2/3-conditions test above). Force a firing (3/3) trace via a per-page EvaluateReadiness route
+    // (the spec's isolated-mock pattern) so the cue's firing branch is exercised deterministically.
+    await watchlist(page, 'AAPL', 'strat-live-001');
+    await page.route('**/xstockstrat.analysis.v1.AnalysisService/EvaluateReadiness', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          readiness: [
+            {
+              symbol: 'AAPL',
+              conviction: 1,
+              passingConditions: 3,
+              totalConditions: 3,
+              conditions: [
+                {
+                  refName: 'sma_fast',
+                  lhsValue: 152.3,
+                  threshold: 150,
+                  fn: '>',
+                  state: 1,
+                  distanceToThreshold: 0.015,
+                },
+                {
+                  refName: 'rsi',
+                  lhsValue: 45,
+                  threshold: 40,
+                  fn: '>',
+                  state: 1,
+                  distanceToThreshold: 0.1,
+                },
+                {
+                  refName: 'vol',
+                  lhsValue: 2,
+                  threshold: 1,
+                  fn: '>',
+                  state: 1,
+                  distanceToThreshold: 0.5,
+                },
+              ],
+            },
+          ],
+        }),
+      }),
+    );
+    await page.goto('/trader/positions/AAPL?strategy=strat-live-001');
+
+    const panel = readinessCard(page);
+    await expect(panel).toBeVisible({ timeout: 30000 });
+    await expect(panel.getByText('3/3 conditions')).toBeVisible({ timeout: 30000 });
+    await expect(panel.getByTestId('readiness-cue-firing')).toBeVisible();
+    await expect(
+      panel.getByTestId('readiness-cue-firing').getByRole('img', { name: 'firing' }),
+    ).toBeVisible();
+  });
+
+  // feature 155 (FR-3) — the position-detail breadcrumb's first crumb is ALWAYS "Opportunities"
+  // (→ the Decide queue), never "Exposure", for every entry point. Assertions scope INSIDE the
+  // "Position path" landmark because the global nav also renders an "Opportunities" link (ledger
+  // 2026-08-09 collision class — the FIX C guard).
+  test('breadcrumb first crumb returns to the Opportunities queue (AC-7)', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/trader/positions/AAPL');
+    const crumb = page.getByLabel('Position path', { exact: true });
+    // Poll until exactly one landmark matches — the SSR→hydration transient can briefly render two
+    // "Position path" navs, which trips strict mode inside a bare toBeVisible().
+    await expect(crumb).toHaveCount(1, { timeout: 30000 });
+    const opp = crumb.getByRole('link', { name: 'Opportunities', exact: true });
+    await expect(opp).toBeVisible();
+    await expect(opp).toHaveAttribute('href', '/insights/opportunities');
+  });
+
+  test('breadcrumb is Opportunities even for a non-opportunity entry, never Exposure (AC-8)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // A direct navigation stands in for any non-Opportunities origin (Exposure/Portfolio/Orders):
+    // the crumb is unconditional, so it must still read Opportunities and never "Exposure".
+    await page.goto('/trader/positions/MSFT');
+    const crumb = page.getByLabel('Position path', { exact: true });
+    // Poll until exactly one landmark matches (see AC-7) before scoping link assertions inside it.
+    await expect(crumb).toHaveCount(1, { timeout: 30000 });
+    await expect(crumb.getByRole('link', { name: 'Opportunities', exact: true })).toHaveAttribute(
+      'href',
+      '/insights/opportunities',
+    );
+    await expect(crumb.getByRole('link', { name: 'Exposure', exact: true })).toHaveCount(0);
+  });
 });
 
 /** Route the browser's ListWatchlists to a single watchlist containing `symbol` (bound to

@@ -6,6 +6,7 @@ import { OpportunityActionTag } from '@xstockstrat/proto/analysis/v1/analysis_pb
  * opportunities e2e. Enum fields carry numeric values; validUntil is a protobuf-es Timestamp.
  */
 const VALID_UNTIL = { seconds: BigInt(1_893_456_000), nanos: 0 }; // 2030-01-01
+const CAPR_VALID_UNTIL = { seconds: BigInt(1_893_508_200), nanos: 0 }; // 2030-01-01T14:30:00Z
 
 export const OPPORTUNITIES = [
   {
@@ -118,6 +119,35 @@ export const OPPORTUNITIES = [
     validUntil: VALID_UNTIL,
     opportunityKey: 'u1|AMZN|strat-001',
     provenance: ['live_strategy'],
+  },
+  // feature 155 (FR-4, AC-9/10) — CAPR carries TWO strategies (quality-dip-buy + momentum), a
+  // 'watchlist' source, and a 14:30Z expiry: exercises mobile symbol-grouping and the strategy id /
+  // source chip / expiry tags the flat mobile row used to omit.
+  {
+    symbol: 'CAPR',
+    action: OpportunityActionTag.ENTER,
+    conviction: 0.7,
+    passingConditions: 2,
+    totalConditions: 3,
+    thesis: 'Quality dip — accumulate',
+    strategyId: 'quality-dip-buy',
+    source: 'watchlist',
+    validUntil: CAPR_VALID_UNTIL,
+    opportunityKey: 'u1|CAPR|quality-dip-buy',
+    provenance: ['watchlist'],
+  },
+  {
+    symbol: 'CAPR',
+    action: OpportunityActionTag.ADD,
+    conviction: 0.5,
+    passingConditions: 1,
+    totalConditions: 3,
+    thesis: 'Momentum building',
+    strategyId: 'momentum',
+    source: 'watchlist',
+    validUntil: CAPR_VALID_UNTIL,
+    opportunityKey: 'u1|CAPR|momentum',
+    provenance: ['watchlist'],
   },
 ];
 

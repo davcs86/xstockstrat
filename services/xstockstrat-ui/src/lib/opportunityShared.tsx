@@ -3,17 +3,26 @@
 // exhaustive `Record<Enum,…>` maps the C-10(a/d) trap requires: adding a proto enum value
 // without a map entry breaks `tsc` here (mirrors BacktestDiagnostics.tsx ACTION_LABEL).
 
+// Type-only phosphor import (erased at build) — the icon *values* live in `readinessCue.ts`, kept
+// out of this module because it is transitively imported by server code (traderBff → copilot), and a
+// runtime phosphor import there breaks the production build (createContext in the server bundle).
+import type { Icon } from '@phosphor-icons/react';
 import { OpportunityActionTag, ConditionState } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { PositionRiskFlag } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { SourceHealthStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { Badge } from '../components/ui/badge';
 
-/** Semantic color role, aligned to the Nocturne gain/loss/paper tokens + a neutral. */
-export type SemanticRole = 'buy' | 'sell' | 'paper' | 'secondary';
+/** Semantic color role, aligned to the Nocturne gain/loss/paper tokens + a neutral + info. */
+export type SemanticRole = 'buy' | 'sell' | 'paper' | 'secondary' | 'info';
 
 export interface EnumRender {
   label: string;
   role: SemanticRole;
+  /**
+   * Optional leading icon (feature 155). A component *reference* (a Phosphor glyph), so the map
+   * stays pure data and node-env unit-testable; `EnumBadge` renders it as a direct Badge child.
+   */
+  icon?: Icon;
 }
 
 // ENTER/ADD are gain (buy); REDUCE is loss (sell); UNSPECIFIED is neutral.
@@ -47,7 +56,19 @@ export const SOURCE_HEALTH: Record<SourceHealthStatus, EnumRender> = {
   [SourceHealthStatus.DOWN]: { label: 'Down', role: 'sell' },
 };
 
-/** Render an EnumRender entry as a Badge (role is a valid Badge variant). */
-export function EnumBadge({ render }: { render: EnumRender }) {
-  return <Badge variant={render.role}>{render.label}</Badge>;
+/**
+ * Render an EnumRender entry as a Badge (role is a valid Badge variant). When the render carries an
+ * `icon` (the readiness/queue cues, feature 155), it is drawn as a leading **direct child** svg —
+ * never `<span>`-wrapped, which would break the Badge `[&>svg]` icon slot. The icon carries
+ * `role="img"` + a distinct `aria-label` (the cue label) and an optional `data-testid` so the e2e
+ * has a queryable hook (Phosphor svgs have no accessible name by default).
+ */
+export function EnumBadge({ render, testId }: { render: EnumRender; testId?: string }) {
+  const Icon = render.icon;
+  return (
+    <Badge variant={render.role} data-testid={testId}>
+      {Icon && <Icon weight="fill" role="img" aria-label={render.label} />}
+      {render.label}
+    </Badge>
+  );
 }
