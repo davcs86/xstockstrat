@@ -116,7 +116,7 @@ database (the real apply/rollback runs in CI/deploy).
 
 ### Step 2 — config: register `startup_jitter_seconds` + `retry_seconds`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify (§ Config Keys Consumed table)

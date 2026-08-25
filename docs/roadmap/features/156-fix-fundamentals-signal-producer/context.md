@@ -158,3 +158,8 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Created `analysis.fundsignal_schedule (job_name PK, blocked_until_ms bigint NOT NULL, process_name text, updated_at timestamptz default now())` + its down migration. Offline-verified: up creates the table, down drops it (exact inverse), NNN 019 is next free.
 - Files modified: `services/xstockstrat-analysis/migrations/019_fundsignal_schedule.up.sql`, `.../019_fundsignal_schedule.down.sql`
 - Deviations: none. TDD: N/A (migration — offline structural check).
+
+### Step 2 — config: register startup_jitter_seconds + retry_seconds [done]
+- Added both keys (int, defaults 30/300, read presence-aware) to the analysis CLAUDE.md § Config Keys Consumed table and the config-governance.md feature-062 block. Verified both appear in both files.
+- Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `docs/patterns/config-governance.md`
+- Deviations: none. TDD: N/A (config docs).
