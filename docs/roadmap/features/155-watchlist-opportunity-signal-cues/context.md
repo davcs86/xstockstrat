@@ -70,6 +70,39 @@
   `main-dev`) per the session directive; per-step PR mechanics of `/sdd-execute` adapted to this
   single branch.
 
+## Session 2026-08-25 — sdd-spec
+
+- Generated implementation-spec.md with **12 steps** (6 `service` + 6 paired `test`). Status →
+  `implementation-ready`. Consumed recon.md + design.md as authoritative; every step cites grounded
+  `path:line` evidence (read the actual edit-site files, not just recon).
+- Step map: (1/2) shared spine — `readinessState()` bucketer in `readinessRollup.ts` +
+  `READINESS_CUE`/`IN_QUEUE_CUE` icon maps in `opportunityShared.tsx`, with vitest unit tests;
+  (3/4) Watchlists cues + firing-row jump (FR-1/FR-2); (5/6) Opportunities desktop+mobile cues +
+  `signalGroup` mobile kind + tags (FR-1/FR-4); (7/8) SignalReadiness "Why this fired" firing cue
+  (FR-1/AC-13); (9/10) unconditional Opportunities breadcrumb (FR-3); (11/12) filter
+  effective-source intersection (FR-5). All 13 `@AC-*` mapped to a covering step (C-15 table in
+  the spec).
+- Key codebase findings (grounded):
+  - The 4-way readiness branch is **duplicated 4×** today (`readinessRollup.rollupReadiness:43-51`,
+    `WatchlistReadiness.barVariant:41-46`, `opportunities/page.readinessVariant:38-43`,
+    `SectionRenderer` inline `readyVariant:60-66`) — Step 1 collapses them onto one `readinessState`
+    (design's "no 5th copy" DRY mandate), not adds a parallel bucketer.
+  - `SemanticRole` (`opportunityShared.tsx:12`) currently `'buy'|'sell'|'paper'|'secondary'`; the
+    four `Record<Enum,EnumRender>` maps gain **no** key when widened to add `'info'`, so `tsc` stays
+    green (design round-1 adversary confirmed). `Badge` already has `info` (`badge.tsx:26`) + a
+    direct-child svg icon slot (`badge.tsx:8`) — icon passed as a Badge child, never `<span>`-wrapped.
+  - Vitest `include` is **`src/**/*.test.ts` (`.ts` only)** (`vitest.config.ts:20`) — the cue-map
+    unit test must be `.test.ts` (data-only, `icon` is an unrendered component ref). `readinessRollup.test.ts`
+    already exists to extend; `all:false` scope (feature 065) means the new files count toward the 40% floor.
+  - Fixture reality: `READINESS_BUCKET_OVERRIDE` (`mock-backend.ts:72-80`, `READY1/WATCH1/QUIET1/NODATA1`)
+    and `OPPORTUNITIES` (`e2e/fixtures/opportunities.ts`, incl. an `AMZN` two-strategy grouping
+    precedent) are the extension points; a `CAPR` pair (strategies `quality-dip-buy`+`momentum`,
+    source `watchlist`, expiry `14:30`) is added in Step 6 with an `INVENTORY.md` row (C-12).
+  - `xstockstrat-ui` has **no CI coverage threshold** (spec-template Next.js row) — test steps use
+    `pnpm test:e2e` (+ vitest unit for the pure spine) + the `pnpm run lint` code-quality gate.
+- Reviewers snapshot finalized in feature.md: sole reviewer `xstockstrat-ui` service owner (all
+  steps are `service`/`test` on that service).
+
 ## Open Threads
 
 - FR-3 back-navigation regression for non-Opportunities entry points — deliberate, user-signed-off;
