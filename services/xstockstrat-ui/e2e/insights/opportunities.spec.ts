@@ -151,6 +151,37 @@ test.describe('Opportunities queue', () => {
     await expect(badge).toContainText('in queue');
     await expect(badge.getByRole('img', { name: 'in queue' })).toBeVisible();
   });
+
+  // feature 155 (FR-5) — the source filter reflects and applies the current selection.
+  test('selecting a source pill narrows the queue immediately (AC-11)', async ({ page }) => {
+    await page.getByRole('button', { name: 'watchlist' }).click();
+    await expect(card(page, 'CAPR')).toBeVisible(); // CAPR is the watchlist-sourced symbol
+    await expect(card(page, 'AAPL')).toBeHidden(); // unusual_whales — filtered out
+  });
+
+  // AC-12 — the effective-source intersection RED (design.md FIX D, ledger 074/080): the refetch is
+  // driven IN PLACE by the Snooze mutation's ['opportunities'] invalidation, NEVER page.reload()
+  // (a reload remounts and resets activeSources, so the stuck state could never form → vacuous green).
+  test('a source that vanishes on an in-place refetch does not strand the queue (AC-12)', async ({
+    page,
+  }) => {
+    // marketwatch has exactly one row (MSFT). Select it → only MSFT remains.
+    await page.getByRole('button', { name: 'marketwatch' }).click();
+    await expect(card(page, 'MSFT')).toBeVisible();
+    await expect(card(page, 'AAPL')).toBeHidden();
+    // Snooze MSFT → the mutation invalidates ['opportunities'] and refetches in place; MSFT is now
+    // hidden, so 'marketwatch' vanishes from the queue's sources while activeSources still holds it.
+    await page.getByTestId('snooze-MSFT').click();
+    // Without the fix this strands the queue (every remaining row is filtered by the now-orphaned
+    // 'marketwatch' selection, and no marketwatch pill renders to clear it). With the effective-source
+    // intersection the stale source is dropped and the available rows show again.
+    await expect(card(page, 'AAPL')).toBeVisible({ timeout: 8000 });
+    await expect(page.getByRole('button', { name: 'marketwatch' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'All sources' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
 });
 
 // feature 155 (FR-4) — mobile Opportunities parity: signals grouped by symbol like the desktop, and
