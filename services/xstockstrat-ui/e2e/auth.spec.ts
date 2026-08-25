@@ -37,6 +37,62 @@ test.describe('Unified auth — POST /api/auth/login', () => {
   });
 });
 
+test.describe('Extended session — "Remember me" (feature 153)', () => {
+  // AC-2/AC-4: opting in writes persistent cookies (Max-Age = 14 days), within the 30-day server TTL.
+  test('rememberMe=true sets access_token + refresh_token with Max-Age=1209600', async ({
+    page,
+  }) => {
+    const res = await page.request.post('/api/auth/login', {
+      data: { email: 'test@example.com', password: 'test-password', rememberMe: true },
+    });
+    expect(res.status()).toBe(200);
+    const cookies = res
+      .headersArray()
+      .filter((h) => h.name.toLowerCase() === 'set-cookie')
+      .map((h) => h.value);
+    const access = cookies.find((v) => v.startsWith('access_token='));
+    const refresh = cookies.find((v) => v.startsWith('refresh_token='));
+    expect(access).toBeTruthy();
+    expect(refresh).toBeTruthy();
+    expect(access!.toLowerCase()).toContain('max-age=1209600');
+    expect(refresh!.toLowerCase()).toContain('max-age=1209600');
+  });
+
+  // AC-3: default (no opt-in) keeps session cookies — no Max-Age / Expires.
+  test('without rememberMe the cookies carry no Max-Age (session cookies)', async ({ page }) => {
+    const res = await page.request.post('/api/auth/login', {
+      data: { email: 'test@example.com', password: 'test-password' },
+    });
+    expect(res.status()).toBe(200);
+    const cookies = res
+      .headersArray()
+      .filter((h) => h.name.toLowerCase() === 'set-cookie')
+      .map((h) => h.value.toLowerCase());
+    const access = cookies.find((v) => v.startsWith('access_token='));
+    const refresh = cookies.find((v) => v.startsWith('refresh_token='));
+    expect(access).toBeTruthy();
+    expect(refresh).toBeTruthy();
+    expect(access).not.toContain('max-age');
+    expect(access).not.toContain('expires=');
+    expect(refresh).not.toContain('max-age');
+    expect(refresh).not.toContain('expires=');
+  });
+
+  // AC-1: the operator login page shows an unchecked Remember me control by default.
+  test('operator login page shows an unchecked Remember me checkbox', async ({ page }) => {
+    await page.goto('/auth/login');
+    const checkbox = page.getByRole('checkbox', { name: /remember me/i });
+    await expect(checkbox).toBeVisible();
+    await expect(checkbox).not.toBeChecked();
+  });
+
+  // The shared OAuth authorize page must NOT show the checkbox (opt-in prop only on operator login).
+  test('OAuth login page does not show the Remember me checkbox', async ({ page }) => {
+    await page.goto('/auth/oauth-login');
+    await expect(page.getByRole('checkbox', { name: /remember me/i })).toHaveCount(0);
+  });
+});
+
 test.describe('Unified auth — login pages are not edge-cacheable', () => {
   // Regression guard: the login pages must render dynamically (Cache-Control: no-store),
   // NOT be statically prerendered with `s-maxage=31536000`. When they were static, the

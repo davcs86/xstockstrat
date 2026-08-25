@@ -154,6 +154,14 @@ func (h *PortfolioHandler) ListWatchlists(ctx context.Context, req *connect.Requ
 	return connect.NewResponse(resp), nil
 }
 
+func (h *PortfolioHandler) ListAllWatchlistSymbols(ctx context.Context, req *connect.Request[portfoliov1.ListAllWatchlistSymbolsRequest]) (*connect.Response[portfoliov1.ListAllWatchlistSymbolsResponse], error) {
+	resp, err := h.svc.ListAllWatchlistSymbols(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
 func (h *PortfolioHandler) UpdateWatchlist(ctx context.Context, req *connect.Request[portfoliov1.UpdateWatchlistRequest]) (*connect.Response[portfoliov1.UpdateWatchlistResponse], error) {
 	resp, err := h.svc.UpdateWatchlist(ctx, req.Msg)
 	if err != nil {
@@ -293,6 +301,14 @@ func (a *grpcPortfolioAdapter) GetWatchlist(ctx context.Context, req *portfoliov
 
 func (a *grpcPortfolioAdapter) ListWatchlists(ctx context.Context, req *portfoliov1.ListWatchlistsRequest) (*portfoliov1.ListWatchlistsResponse, error) {
 	resp, err := a.h.ListWatchlists(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcPortfolioAdapter) ListAllWatchlistSymbols(ctx context.Context, req *portfoliov1.ListAllWatchlistSymbolsRequest) (*portfoliov1.ListAllWatchlistSymbolsResponse, error) {
+	resp, err := a.h.ListAllWatchlistSymbols(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, toGRPCError(err)
 	}

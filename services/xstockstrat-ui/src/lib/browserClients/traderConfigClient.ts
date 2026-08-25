@@ -1,5 +1,5 @@
 import { createClient } from '@connectrpc/connect';
-import { createConnectTransport } from '@connectrpc/connect-web';
+import { makeBrowserTransport } from '@/lib/browserClients/transport';
 import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
 
 // Trader-segment ConfigService client (feature 102) — reads platform.trading_state for the
@@ -7,5 +7,5 @@ import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
 // configClient.ts is bound to /config-ui/api; this is the trader segment's own client bound to
 // /trader/api, mirroring the insightsPortfolioClient/insightsMarketDataClient naming precedent
 // for a service consumed from more than one segment.
-const transport = createConnectTransport({ baseUrl: '/trader/api' });
+const transport = makeBrowserTransport('/trader/api');
 export const traderConfigClient = createClient(ConfigService, transport);

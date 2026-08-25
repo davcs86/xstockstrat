@@ -27,6 +27,12 @@ service PortfolioService {
   // Find-or-create the caller's system_managed=true watchlist (feature 127).
   // Ownership is taken from the propagated x-user-id header; the request has no body (FR-2).
   rpc EnsureSignalWatchlist(EnsureSignalWatchlistRequest) returns (EnsureSignalWatchlistResponse);
+  // Cross-user enumeration (feature 154): the distinct union of watchlist symbols across
+  // ALL users' watchlists — NOT scoped to the caller's x-user-id. Privileged: gated by the
+  // x-internal-caller allow-list (grant `analysis-fundsignal`), not the admin x-access-scope
+  // bit (PR #994) — a non-allow-listed caller gets PERMISSION_DENIED. Read-only; intended for
+  // the fundamentals-signal producer's universe resolution.
+  rpc ListAllWatchlistSymbols(ListAllWatchlistSymbolsRequest) returns (ListAllWatchlistSymbolsResponse);
 }
 
 message Portfolio {
@@ -274,4 +280,11 @@ message RemoveWatchlistSymbolsResponse {
 message EnsureSignalWatchlistRequest {}
 message EnsureSignalWatchlistResponse {
   Watchlist watchlist = 1;
+}
+
+// Empty — the enumeration spans all users; ownership/scoping does not apply (feature 154).
+message ListAllWatchlistSymbolsRequest {}
+message ListAllWatchlistSymbolsResponse {
+  // Distinct, sorted bare symbols across all users' watchlists (bindings collapsed).
+  repeated string symbols = 1;
 }

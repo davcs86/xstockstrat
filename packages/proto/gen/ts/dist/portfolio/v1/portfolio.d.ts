@@ -272,6 +272,13 @@ export interface EnsureSignalWatchlistRequest {
 export interface EnsureSignalWatchlistResponse {
     watchlist?: Watchlist | undefined;
 }
+/** Empty — the enumeration spans all users; ownership/scoping does not apply (feature 154). */
+export interface ListAllWatchlistSymbolsRequest {
+}
+export interface ListAllWatchlistSymbolsResponse {
+    /** Distinct, sorted bare symbols across all users' watchlists (bindings collapsed). */
+    symbols: string[];
+}
 export declare const Portfolio: MessageFns<Portfolio>;
 export declare const Position: MessageFns<Position>;
 export declare const PortfolioSnapshot: MessageFns<PortfolioSnapshot>;
@@ -303,6 +310,8 @@ export declare const RemoveWatchlistSymbolsRequest: MessageFns<RemoveWatchlistSy
 export declare const RemoveWatchlistSymbolsResponse: MessageFns<RemoveWatchlistSymbolsResponse>;
 export declare const EnsureSignalWatchlistRequest: MessageFns<EnsureSignalWatchlistRequest>;
 export declare const EnsureSignalWatchlistResponse: MessageFns<EnsureSignalWatchlistResponse>;
+export declare const ListAllWatchlistSymbolsRequest: MessageFns<ListAllWatchlistSymbolsRequest>;
+export declare const ListAllWatchlistSymbolsResponse: MessageFns<ListAllWatchlistSymbolsResponse>;
 export type PortfolioServiceService = typeof PortfolioServiceService;
 export declare const PortfolioServiceService: {
     readonly getPortfolio: {
@@ -448,6 +457,22 @@ export declare const PortfolioServiceService: {
         readonly responseSerialize: (value: EnsureSignalWatchlistResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => EnsureSignalWatchlistResponse;
     };
+    /**
+     * Cross-user enumeration (feature 154): the distinct union of watchlist symbols across
+     * ALL users' watchlists — NOT scoped to the caller's x-user-id. Privileged: gated by the
+     * x-internal-caller allow-list (grant `analysis-fundsignal`), not the admin x-access-scope
+     * bit (PR #994) — a non-allow-listed caller gets PERMISSION_DENIED. Read-only; intended for
+     * the fundamentals-signal producer's universe resolution.
+     */
+    readonly listAllWatchlistSymbols: {
+        readonly path: "/xstockstrat.portfolio.v1.PortfolioService/ListAllWatchlistSymbols";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ListAllWatchlistSymbolsRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ListAllWatchlistSymbolsRequest;
+        readonly responseSerialize: (value: ListAllWatchlistSymbolsResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => ListAllWatchlistSymbolsResponse;
+    };
 };
 export interface PortfolioServiceServer extends UntypedServiceImplementation {
     getPortfolio: handleUnaryCall<GetPortfolioRequest, Portfolio>;
@@ -473,6 +498,14 @@ export interface PortfolioServiceServer extends UntypedServiceImplementation {
      * Ownership is taken from the propagated x-user-id header; the request has no body (FR-2).
      */
     ensureSignalWatchlist: handleUnaryCall<EnsureSignalWatchlistRequest, EnsureSignalWatchlistResponse>;
+    /**
+     * Cross-user enumeration (feature 154): the distinct union of watchlist symbols across
+     * ALL users' watchlists — NOT scoped to the caller's x-user-id. Privileged: gated by the
+     * x-internal-caller allow-list (grant `analysis-fundsignal`), not the admin x-access-scope
+     * bit (PR #994) — a non-allow-listed caller gets PERMISSION_DENIED. Read-only; intended for
+     * the fundamentals-signal producer's universe resolution.
+     */
+    listAllWatchlistSymbols: handleUnaryCall<ListAllWatchlistSymbolsRequest, ListAllWatchlistSymbolsResponse>;
 }
 export interface PortfolioServiceClient extends Client {
     getPortfolio(request: GetPortfolioRequest, callback: (error: ServiceError | null, response: Portfolio) => void): ClientUnaryCall;
@@ -527,6 +560,16 @@ export interface PortfolioServiceClient extends Client {
     ensureSignalWatchlist(request: EnsureSignalWatchlistRequest, callback: (error: ServiceError | null, response: EnsureSignalWatchlistResponse) => void): ClientUnaryCall;
     ensureSignalWatchlist(request: EnsureSignalWatchlistRequest, metadata: Metadata, callback: (error: ServiceError | null, response: EnsureSignalWatchlistResponse) => void): ClientUnaryCall;
     ensureSignalWatchlist(request: EnsureSignalWatchlistRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: EnsureSignalWatchlistResponse) => void): ClientUnaryCall;
+    /**
+     * Cross-user enumeration (feature 154): the distinct union of watchlist symbols across
+     * ALL users' watchlists — NOT scoped to the caller's x-user-id. Privileged: gated by the
+     * x-internal-caller allow-list (grant `analysis-fundsignal`), not the admin x-access-scope
+     * bit (PR #994) — a non-allow-listed caller gets PERMISSION_DENIED. Read-only; intended for
+     * the fundamentals-signal producer's universe resolution.
+     */
+    listAllWatchlistSymbols(request: ListAllWatchlistSymbolsRequest, callback: (error: ServiceError | null, response: ListAllWatchlistSymbolsResponse) => void): ClientUnaryCall;
+    listAllWatchlistSymbols(request: ListAllWatchlistSymbolsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListAllWatchlistSymbolsResponse) => void): ClientUnaryCall;
+    listAllWatchlistSymbols(request: ListAllWatchlistSymbolsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListAllWatchlistSymbolsResponse) => void): ClientUnaryCall;
 }
 export declare const PortfolioServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): PortfolioServiceClient;
