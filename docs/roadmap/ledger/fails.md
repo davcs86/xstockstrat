@@ -1656,3 +1656,8 @@ ambiguity is logged here).
   route fix); `services/xstockstrat-ui/src/app/config-ui/api/audit/route.ts`.
 - **Rule it implies**: a column-drop completeness sweep must grep **every** reader of the schema —
   including cross-service / BFF direct queries — not just the owning service's code and its triggers.
+
+### 2026-08-25 — 155-watchlist-opportunity-signal-cues — testing (design-caught)
+- **Mistake (caught in design, not shipped)**: The proposed RED for a "stale filter" fix drove the second fetch via `page.reload()` with a swapped mock payload. A reload **remounts** the page and resets the `useState` filter selection (`activeSources` → `[]`), so the stuck-empty-list state the bug depends on can never form — the test would pass **green against unfixed code**, proving nothing (same vacuous-green family as 2026-07-29/074 and 2026-07-30/080). The defect is a *mount-persistent* state (`activeSources`) never reconciled against an *in-place* refetch (`refetchInterval`), so the repro must keep the component mounted.
+- **Evidence**: `docs/roadmap/features/155-watchlist-opportunity-signal-cues/design.md` (FR-5, FIX D); `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx:90,129-153`, `src/hooks/useOpportunities.ts:17-23`.
+- **Rule it implies**: to reproduce a bug in state that survives a refetch, trigger the refetch **in place** (window `focus` / `refetchQueries`), never a `reload()`/remount — a remount resets the very state under test and yields a vacuous green (P-06 red-before-green must be proven on the mounted component).

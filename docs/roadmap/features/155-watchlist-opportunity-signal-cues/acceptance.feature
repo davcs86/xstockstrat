@@ -41,15 +41,15 @@ Feature: watchlist-opportunity-signal-cues
 
   @AC-7 @FR-3
   Scenario: Position detail reached from Opportunities returns to the Opportunities queue
-    Given the trader opened "/trader/positions/CAPR?from=opportunities" by activating an opportunity
+    Given the trader opened "/trader/positions/CAPR" by activating an opportunity
     When the position-detail page renders its breadcrumb
-    Then the first breadcrumb crumb is labeled "Opportunities" and links to "/insights/opportunities"
+    Then within the "Position path" breadcrumb, the first crumb is labeled "Opportunities" and links to "/insights/opportunities"
 
   @AC-8 @FR-3
-  Scenario: Position detail reached from Exposure keeps the Exposure breadcrumb
-    Given the trader opened "/trader/positions/CAPR" from the Exposure table with no opportunities origin
+  Scenario: Position detail always breadcrumbs back to Opportunities, even from Exposure
+    Given the trader opened "/trader/positions/CAPR" from the Exposure table
     When the position-detail page renders its breadcrumb
-    Then the first breadcrumb crumb is labeled "Exposure" and links to "/trader/positions"
+    Then within the "Position path" breadcrumb, the first crumb is labeled "Opportunities" and links to "/insights/opportunities", not "Exposure"
 
   @AC-9 @FR-4
   Scenario: Mobile Opportunities groups signals by symbol
@@ -70,7 +70,13 @@ Feature: watchlist-opportunity-signal-cues
     Then the "watchlist" pill shows as active and only "watchlist"-sourced rows remain visible
 
   @AC-12 @FR-5
-  Scenario: Clearing filters restores the full queue without stale pills
-    Given the trader has the "screener" source pill and the "Reduce" action filter active
-    When the trader clicks "All sources" and sets the action filter back to "Any action"
-    Then no source pill shows as active, the action filter reads "Any action", and every unmuted row is visible again
+  Scenario: A source that vanishes on refetch does not silently strand the queue
+    Given the trader has selected only the "screener" source pill and rows are visible
+    When a background refetch returns a queue that no longer contains any "screener"-sourced rows
+    Then the queue does not become stuck empty with no active pill — the view falls back to showing the available rows and no phantom "screener" filter remains applied
+
+  @AC-13 @FR-1
+  Scenario: The "Why this fired" panel shows the same firing state cue
+    Given the trader opens "/trader/positions/HYLN?strategy=quality-dip-buy" whose 3 of 3 entry conditions pass
+    When the "Why this fired" (SignalReadiness) panel renders its summary line
+    Then it shows the firing state cue — the same firing icon and buy/green color used on the Watchlists and Opportunities surfaces — alongside its "3/3 conditions" text
