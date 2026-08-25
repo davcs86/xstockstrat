@@ -3,6 +3,8 @@
 **Development Branch**: `feature/fundsignal-watchlist-universe`
 **Created**: 2026-08-24
 **Last Updated**: 2026-08-24
+**Committed to main**: d1dd9e749e789c25f48ea86acf12ddf6ed97bd8b
+**Launched date**: 2026-08-25
 
 ---
 
@@ -19,6 +21,7 @@
 | 2026-08-24 | in-progress | /sdd-execute | Steps 5–6 done (analysis _resolve_universe + FMP-gating + 2nd watcher + tests, red→green) |
 | 2026-08-24 | `in-progress` → `code-completed` | /sdd-execute | Step 7 (docs + PORTFOLIO-8 + config-governance) done; all 7 steps complete |
 
+| 2026-08-25 | `code-completed` → `launched` | CI workflow | Promoted via PR #1011; committed d1dd9e749e789c25f48ea86acf12ddf6ed97bd8b |
 ---
 
 ## Artifacts

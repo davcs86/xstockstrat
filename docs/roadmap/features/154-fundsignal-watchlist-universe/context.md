@@ -205,3 +205,10 @@ Accountability:
 - Open questions / items: none.
 - Unaddressed review warnings: none (both impl-spec warnings fixed pre-execution).
 - Deviations: D-1 (host codegen toolchain — Docker daemon unavailable; CI-equivalent, versions match Dockerfile.codegen); context-scrubber plugin unavailable (teardown noted in PR).
+
+## Session 2026-08-25 (CI: feature status automation)
+
+- Promotion PR #1011 merged to main
+- Feature promoted and committed: d1dd9e749e789c25f48ea86acf12ddf6ed97bd8b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-25

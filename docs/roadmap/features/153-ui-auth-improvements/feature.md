@@ -3,6 +3,8 @@
 **Development Branch**: `feature/ui-auth-improvements`
 **Created**: 2026-08-25
 **Last Updated**: 2026-08-25
+**Committed to main**: d1dd9e749e789c25f48ea86acf12ddf6ed97bd8b
+**Launched date**: 2026-08-25
 
 ---
 
@@ -15,6 +17,7 @@
 | 2026-08-25 | `design-approved` → `implementation-ready` | /sdd-spec | implementation-spec.md written (9 steps) |
 | 2026-08-25 | `implementation-ready` → `code-completed` | /sdd-execute | All steps implemented + verified (unit 116/116, lint clean, build exit 0) |
 
+| 2026-08-25 | `code-completed` → `launched` | CI workflow | Promoted via PR #1011; committed d1dd9e749e789c25f48ea86acf12ddf6ed97bd8b |
 ---
 
 ## Artifacts

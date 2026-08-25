@@ -245,3 +245,10 @@ Accountability:
 - Open questions / items: full AC-1 staging confirmation (a 400-day readiness scan with 0 SQLSTATE 53200) pends the
   next readiness cycle — Piece A is applied and holding; last 53200 was 19:51 UTC pre-change.
 - Unaddressed review warnings: none (impl-spec review PASSed, 0 warnings).
+
+## Session 2026-08-25 (CI: feature status automation)
+
+- Promotion PR #1011 merged to main
+- Feature promoted and committed: d1dd9e749e789c25f48ea86acf12ddf6ed97bd8b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-25
