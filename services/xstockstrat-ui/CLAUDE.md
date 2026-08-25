@@ -154,9 +154,11 @@ The physical routes/segments above are **unchanged**; feature 083 layers an oppo
   `event_type=copilot.message` server-side from the verified session, so the browser never learns
   the user id and can only touch its own thread. No agent DB, no LLM, no new pool (F-06).
 - **Mobile companion** — one shared `src/components/mobile/SectionRenderer.tsx` (section kinds
-  `head/stat/signal/chart/row/form/note/action`, ≥44px tap targets) drawn behind `sm:hidden`
-  beside the desktop layout, plus a fixed `BottomTabBar` (mobile-only) mounted globally in
-  `PlatformHeader`. Content wrappers add `pb-20 sm:pb-0` clearance.
+  `head/stat/signal/signalGroup/chart/row/form/note/action`, ≥44px tap targets) drawn behind
+  `sm:hidden` beside the desktop layout, plus a fixed `BottomTabBar` (mobile-only) mounted globally in
+  `PlatformHeader`. Content wrappers add `pb-20 sm:pb-0` clearance. The flat `signal` kind and the
+  per-symbol `signalGroup` card (feature 155, FR-4 — mirrors the desktop `SymbolGroupCard`) both
+  render through one shared `SignalRow`, which carries the strategy id / source chips / expiry tags.
 - **Non-happy states** — shared `src/components/ui/skeleton.tsx` (`Skeleton`) +
   `src/components/shared/EmptyState.tsx`; per-card errors reuse the existing `CardNotice` /
   `QueryStateMessages` (DRY).
