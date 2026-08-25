@@ -489,7 +489,7 @@ and the opportunities in-queue icon all fail on the pre-Step-5 tree — mobile c
 
 ### Step 7 — service: "Why this fired" (SignalReadiness) firing cue (FR-1, AC-13)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/SignalReadiness.tsx` — modify
@@ -532,7 +532,7 @@ Connect-RPC call safety
 
 ### Step 8 — test: e2e for the "Why this fired" firing cue
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify
@@ -789,3 +789,16 @@ no-active-pill state — before the fix makes it green; AC-11 already passes and
   AC-5/6 + 11 existing, no regression). RED-before-green: the shared-spine RED was captured at the unit
   layer (Step 1/2); the e2e RED is reasoned (the `readiness-cue-*` / `jump-*` / in-queue-icon hooks did
   not exist on the pre-Step-3 tree), since Steps 3+4 were implemented together before the first e2e run.
+
+### Step 8 — AC-13 mock + the trader-BFF sandbox environment failure
+- **What**: (a) The `EvaluateReadiness` for a non-position symbol (READY1) hangs on "Evaluating…" in
+  this sandbox's `next dev`, so AC-13 uses **AAPL** (a real position that resolves) with a per-page
+  `page.route` returning a deterministic 3/3 firing trace (the spec's own isolated-mock pattern) —
+  AC-13 **passes**. (b) The broader `position-detail.spec.ts` tests that assert the trading "Risk &
+  exit" sidebar fail in-sandbox with `[Error: aborted]` on `/trader/api` RPCs (`GetTradingEnvironment`/
+  `GetPosition`) — the **same** `/trader/api/[...connect]` bundling breakage noted in Step 4. Proven
+  environmental: the **untouched** pre-existing line-14 test (`renders the risk-framed header…`) fails
+  identically, and feature 155 touches no trading/portfolio code.
+- **Disposition**: CI-equivalent — AC-13 green; the trader-BFF failures are a pre-existing sandbox
+  infra issue (not a feature-155 regression) and pass in CI's prebuilt bundle. RED-before-green:
+  reasoned (the `readiness-cue-firing` cue did not exist on the pre-Step-7 tree).

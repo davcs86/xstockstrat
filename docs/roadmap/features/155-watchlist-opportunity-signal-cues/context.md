@@ -193,6 +193,21 @@ baseline unit suite green (116 tests) before changes.
   server + chromium path + `--timeout=90000`. Covers @AC-3, @AC-9, @AC-10.
 - Files: `e2e/insights/opportunities.spec.ts`, `e2e/fixtures/opportunities.ts`, `e2e/fixtures/INVENTORY.md`.
 
+### Step 7 — "Why this fired" (SignalReadiness) firing cue [done]
+- Added the shared firing cue (`READINESS_CUE.firing`, `testId="readiness-cue-firing"`) to the
+  SignalReadiness summary line, rendered only when `readinessState(readiness) === 'firing'` (3/3
+  trace) — the 4th cue surface (user-confirmed). Single additive line; no change to the non-firing
+  render, exit-rule badge, condition list, or track-record block. Files: `SignalReadiness.tsx`.
+  Verify: tsc + lint clean.
+
+### Step 8 — e2e for the "Why this fired" firing cue [done]
+- Added the AC-13 test to `position-detail.spec.ts`: AAPL watchlisted + a per-page EvaluateReadiness
+  route returning a 3/3 firing trace → asserts `3/3 conditions` + the `readiness-cue-firing` cue icon.
+  **Passes.** (READY1/bucket-override hangs on a non-position symbol in this sandbox — used AAPL +
+  route mock instead; see Deviation Log.) The broader trader-BFF-dependent position-detail tests fail
+  **in-sandbox only** (`/trader/api` abort — pre-existing, reproduced on the untouched line-14 test);
+  feature 155 touches no trading code. Covers @AC-13. Files: `e2e/trader/position-detail.spec.ts`.
+
 ## Open Threads
 
 - FR-3 back-navigation regression for non-Opportunities entry points — deliberate, user-signed-off;
