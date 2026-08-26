@@ -41,13 +41,8 @@ Feature: durable-loop-scheduler
     And after a crash mid-cycle (the due time still in the past) the next boot re-runs within the jitter window
     And a manual "RunFundamentalsScan" does not move the scheduled "blocked_until_ms"
 
-  @AC-6 @FR-4
-  Scenario: The live evaluation loop reads its persisted interval schedule across a redeploy
-    Given the live evaluation loop schedules via the shared helper as a global interval job
-    And it previously completed a cycle and persisted a "blocked_until_ms" 2 hours in the future
-    When the process is redeployed 10 minutes after that cycle
-    Then it reads the persisted schedule and next fires at approximately the persisted due time, not a fresh full interval later
-    And on a first-ever boot with no prior schedule it runs its first cycle within the bounded jitter window
+  # @AC-6 (live evaluation loop) retired: FR-4 was descoped at design (operator decision, 2026-08-26).
+  # The ID is not reused (C-15 append-only); live_loop keeps its in-process asyncio.sleep in v1.
 
   @AC-7 @FR-5
   Scenario: A migrated loop's jitter and retry cadence are configuration-driven, not hardcoded
@@ -64,3 +59,10 @@ Feature: durable-loop-scheduler
     When the process is redeployed the same afternoon
     Then it reads the persisted schedule and next fires at approximately 08:00 UTC tomorrow, not 24h after the redeploy
     And on a first-ever boot before 08:00 UTC it schedules its first run for 08:00 UTC today
+
+  @AC-9 @FR-6
+  Scenario: The opportunity refresh retries soon after a user-enumeration failure instead of skipping the day
+    Given the opportunity refresh schedules via the shared helper in wall-clock mode with "analysis.opportunity.retry_seconds" of 300
+    When the user-enumeration step of a due pass raises an error
+    Then the helper advances "blocked_until_ms" by approximately 300 seconds (retry soon), not to the next wall-clock hour
+    And when instead the pass completes with only some per-user evaluations failing it advances to the next wall-clock hour, treating those swallowed per-user errors as a completed pass

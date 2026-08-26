@@ -46,9 +46,8 @@ FR-3. The **fundamentals producer** is migrated onto the shared helper/table (in
 behavioral regression**: feature 156's `@AC-1..7` (prompt-on-boot, redeploy-safe, crash-safe, retry
 cadence, disabled-no-advance, no-manual-contamination, bounded jitter) continue to hold.
 
-FR-4. The **live evaluation loop** (`app/engine/live_loop.py`) is migrated onto the shared scheduler as
-a **global interval** job: it fires promptly on boot and keeps a redeploy-/crash-safe cadence instead
-of the in-process `asyncio.sleep` it uses today.
+_(FR-4 — migrating the live evaluation loop — was **descoped at design** by operator decision; see Out
+of Scope. The FR number is retired for this feature, not reused.)_
 
 FR-5. Each migrated loop's operational tunables (interval/refresh-hour already exist per loop;
 **startup jitter** and **retry cadence**) are configuration-driven per the config-governance
@@ -62,6 +61,16 @@ in-process sleep loop it uses today. Its output (the opportunity queue) is uncha
 
 ## Out of Scope
 
+- **The live evaluation loop (`app/engine/live_loop.py`) — descoped from v1 at design (operator
+  decision, 2026-08-26; sign-off recorded in `context.md`).** Its interval is ~60s
+  (`analysis.engine.eval_interval_seconds`, default 60), so a durable per-cycle schedule row would write
+  ~1440 rows/day to protect at most ~60s of cadence across a redeploy — the payoff a durable schedule
+  gives an hours/daily loop does not exist here, and a blanket retry cadence would slow its recovery.
+  `live_loop` keeps its current in-process `asyncio.sleep`. A small **prompt-on-boot** fix
+  (run-then-sleep + bounded jitter, no persistence) could be filed as a separate follow-up if desired;
+  it is deliberately **not** bundled into this durable-schedule feature. This leaves the shared helper
+  proven on two loops (fundsignal interval + opportunity wall-clock), which is a genuine two-mode
+  generalization.
 - **Event-stream cursor consumers** that are already restart-durable — `pnl_pattern_consumer` (its
   `analysis.ledger_stream_cursor` already survives restarts). Not a recurring timer loop; do not touch.
 - **Boot-once tasks** — `entry_backfill` (runs once at boot, no recurring schedule).
@@ -73,8 +82,8 @@ in-process sleep loop it uses today. Its output (the opportunity queue) is uncha
 ## Affected Services
 
 - `xstockstrat-analysis` — owns the shared helper, the generalized schedule table + migration, and the
-  three loops being migrated (`fundsignal_loop`, `live_loop`, and the opportunity refresh
-  `run_opportunity_refresh_forever`).
+  **two** loops being migrated in v1 (`fundsignal_loop`, interval; and the opportunity refresh
+  `run_opportunity_refresh_forever`, wall-clock). `live_loop` is descoped (see Out of Scope).
 
 ## Consumer Surface(s)
 
@@ -94,21 +103,28 @@ _Constitution **C-14**._
 
 ## Config Key Changes
 
-- Decided at design (FR-5). Likely a shared jitter/retry default or per-loop
-  `analysis.<loop>.startup_jitter_seconds` / `.retry_seconds` keys (mirroring
-  `analysis.fundsignal.startup_jitter_seconds` / `.retry_seconds` from feature 156). The opportunity
-  refresh's wall-clock anchor reuses the **existing** `analysis.opportunity.refresh_hour_utc` key — no
-  new anchor key. No key is removed; the feature-156 keys stay.
+Decided at design (FR-5) — **two new keys**, both read presence-aware via `get_int_present` (F-07),
+with declared defaults added to `services/xstockstrat-analysis/CLAUDE.md` (C-05):
+
+- `analysis.opportunity.startup_jitter_seconds` (default 30)
+- `analysis.opportunity.retry_seconds` (default 300)
+
+These mirror feature 156's `analysis.fundsignal.startup_jitter_seconds` / `.retry_seconds`. The
+opportunity refresh's wall-clock anchor reuses the **existing** `analysis.opportunity.refresh_hour_utc`
+key — no new anchor key. `fundsignal`'s three existing keys are unchanged. No key is removed.
 
 ## Database Changes
 
-- One new migration in `services/xstockstrat-analysis/migrations/` — `020_*` (next free NNN; `019` is
-  the latest). It introduces the generalized `(job_name, user_id)`-keyed schedule table and migrates
-  the feature-156 `fundsignal_schedule` data onto it. Ship the paired `020_*.up.sql` **and**
-  `020_*.down.sql` per the migration convention. **Never edit the applied `019_fundsignal_schedule`
-  migration** (F-01) — the `020` migration is additive (fresh generalized table + data copy, or an
-  additive `ALTER` that adds `user_id` and generalizes `fundsignal_schedule`; design decides). Reuses
-  the existing analysis pool — no new pool (F-06).
+- One new migration `020_job_schedule.{up,down}.sql` in `services/xstockstrat-analysis/migrations/`
+  (next free NNN; `019` is the latest). **Design decided the additive-`ALTER` strategy** (over a
+  fresh-table + data-copy): `ALTER TABLE analysis.fundsignal_schedule RENAME TO job_schedule`, add
+  `user_id text NOT NULL DEFAULT ''`, and re-key the PK to `(job_name, user_id)` — preserving the
+  persisted `fundsignal` row with no data copy and leaving no orphaned table. The paired `.down.sql`
+  reverses it (drop composite PK → drop `user_id` → restore bare PK → rename back), reversible under the
+  v1 single-global-row invariant (a comment in the `.down.sql` records that assumption). **Never edit
+  the applied `019_fundsignal_schedule` migration** (F-01) — `020` is a new numbered migration that
+  renames the table `019` created, which is allowed. Reuses the existing analysis pool — no new pool
+  (F-06).
 
 ## Feature Workflow Notes
 
@@ -135,15 +151,25 @@ draft; recorded here so the FRs above are internally consistent:
   even though no v1 loop is yet per-user-scheduled (the per-user half is deliberately forward-looking
   schema the operator signed off on, not a silent guess). This is the accepted, recorded exception to
   principle #2 for this feature.
+- **`live_loop` descoped (design, 2026-08-26 — operator).** During the design debate the adversary
+  showed a durable schedule row buys `live_loop` (a ~60s loop) almost nothing (protects ≤60s of cadence
+  for ~1440 writes/day) and a blanket retry cadence would slow its recovery. The operator chose to
+  **exclude `live_loop` from v1** rather than half-migrate it; FR-4 is retired (see Out of Scope).
+- **Shared unit shape (design).** A **thin `DurableSchedule` class** owns only the mode-branched
+  timing/persistence seams (`seed`/`next_sleep_seconds`/`advance`); each migrated loop keeps its own
+  `_tick`/`run_forever` (disabled-gate, overlap lock, config reads, cycle body) — not a wide "god
+  driver" — so feature 156's `@AC-1..7` behavior stays local to `fundsignal_loop`.
+- **Opportunity error semantics (design).** Enumeration failure raises → helper retries after
+  `retry_seconds`; per-user failures are swallowed exactly as today → the pass counts as complete and
+  advances to the next wall-clock hour. This changes enumeration-failure recovery from today's
+  skip-to-tomorrow to retry-soon — a deliberate improvement, guarded by new scenario `@AC-9` and
+  recorded here.
 
-## Open Questions (design-scoped — non-blocking)
+## Open Questions (resolved at design)
 
-These are implementation-shape choices for `/sdd-design`, not scope questions:
-
-- [ ] **Table strategy:** new generalized table + data copy vs. additive `ALTER` of
-  `fundsignal_schedule` (rename + add `user_id`). Design decides; F-01 forbids editing the applied
-  `019` migration either way.
-- [ ] **Known trap (ledger, 2026-08-25 / feature 156):** do **not** rebuild multi-instance
-  mutual-exclusion machinery (lease/CAS/process_name-fencing) on an `instance_count:1` service — the
-  load-bearing requirement is the durable schedule; write the marker on completion, not on claim. The
-  generalized helper must keep 156's crash-safe write-after-completion shape, not regress to a lease.
+- [x] **Table strategy** → **additive `ALTER`** (rename `fundsignal_schedule` → `job_schedule`, add
+  `user_id`, re-key PK). Chosen over fresh-table + data-copy: preserves the row with no copy, no orphan.
+  See Database Changes.
+- [x] **Known trap (ledger, 2026-08-25 / feature 156)** → **honored.** The `DurableSchedule` helper
+  keeps 156's write-**after**-completion shape; `process_name` stays a diagnostic last-runner column;
+  **no** lease/CAS/process_name-fencing is rebuilt (correct for the `instance_count:1` service).

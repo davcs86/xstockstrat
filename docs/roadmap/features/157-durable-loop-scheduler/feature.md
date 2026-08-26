@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-08-26 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 advisory warnings addressed; 2 scope OQs resolved with operator → include wall-clock mode + ship per-user key) |
+| 2026-08-26 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. Thin DurableSchedule class + additive ALTER migration; live_loop descoped (operator); @AC-6 retired, @AC-9 added |
 
 ---
 
@@ -19,6 +20,8 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon](recon.md) — grounded codebase dossier (Phase 0)
+- [Design](design.md) — debated, approved architecture (Phase 1)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec durable-loop-scheduler`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -43,4 +46,4 @@ Override as needed. Snapshot finalized at /sdd-spec time — re-run /sdd-spec if
 
 ## Next Action
 
-`/sdd-design durable-loop-scheduler` — recon + adversarial design debate before running /sdd-spec
+`/sdd-spec durable-loop-scheduler` — generate implementation spec from the approved design
