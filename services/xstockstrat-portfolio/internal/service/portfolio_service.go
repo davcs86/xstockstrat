@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -468,13 +469,21 @@ func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.Ge
 		totalValue += p.MarketValue
 	}
 
-	return &portfoliov1.Portfolio{
+	portfolio := &portfoliov1.Portfolio{
 		PortfolioId: req.UserId,
 		UserId:      req.UserId,
 		Equity:      totalValue,
 		UpdatedAt:   timestamppb.Now(),
 		Positions:   positions,
-	}, nil
+		AccountId:   req.GetAccountId(),
+	}
+	// Account-grain realized P&L for offline accounts (feature 157) — set with proto3 presence so an
+	// offline $0 is distinguishable from a broker unset. Populated on BOTH read paths (this one and
+	// buildAccountPortfolio) for parity (@AC-7 / C-10(b)).
+	if v, ok, err := s.repo.GetOfflineRealized(ctx, req.GetAccountId()); err == nil && ok {
+		portfolio.RealizedPnl = proto.Float64(v)
+	}
+	return portfolio, nil
 }
 
 // GetPosition returns a single position with live price.
@@ -835,12 +844,58 @@ type positionSyncPayload struct {
 		DayPnl    float64 `json:"day_pnl"`
 		DayPnlPct float64 `json:"day_pnl_pct"`
 	} `json:"positions"`
+	// RealizedPnl is the account-grain cumulative realized P&L, set ONLY by an offline
+	// ConfirmOrder recompute (feature 157). A broker position sync never carries the key, so this
+	// stays nil for broker syncs — the pointer's presence is exactly the offline/broker disjointness.
+	RealizedPnl *float64 `json:"realized_pnl"`
 }
 
 // ConsumePositionSyncs subscribes to ledger StreamEvents filtered on "account.positions.synced"
 // and upserts positions from broker snapshots.
 func (s *PortfolioService) ConsumePositionSyncs(ctx context.Context) {
 	s.consumeEventStream(ctx, "position sync", "account.positions.synced", s.processPositionSync)
+}
+
+// accountDeregisteredPayload is the shape of trading's account.deregistered event (feature 157).
+type accountDeregisteredPayload struct {
+	AccountID string `json:"account_id"`
+	UserID    string `json:"user_id"`
+}
+
+// ConsumeAccountDeregistrations subscribes to "account.deregistered" and purges the account's
+// positions + account-grain realized P&L when an offline account is deregistered (feature 157) —
+// no broker sync will ever reconcile it away, so the purge must be event-driven.
+func (s *PortfolioService) ConsumeAccountDeregistrations(ctx context.Context) {
+	s.consumeEventStream(ctx, "account deregistration", "account.deregistered", s.processAccountDeregistered)
+}
+
+func (s *PortfolioService) processAccountDeregistered(ctx context.Context, event *ledgerv1.LedgerEvent) {
+	if event.Payload == nil {
+		return
+	}
+	raw, err := event.Payload.MarshalJSON()
+	if err != nil {
+		return
+	}
+	var payload accountDeregisteredPayload
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		slog.Warn("parse account deregistered payload", "error", err)
+		return
+	}
+	if payload.AccountID == "" {
+		return
+	}
+	userID := payload.UserID
+	if userID == "" {
+		userID = "default"
+	}
+	// Purge all positions for the account (empty present-set deletes every row) and its realized row.
+	if err := s.repo.DeletePositionsNotInSync(ctx, payload.AccountID, userID, []string{}); err != nil {
+		slog.Warn("deregister: delete positions failed", "account_id", payload.AccountID, "error", err)
+	}
+	if err := s.repo.DeleteOfflineRealized(ctx, payload.AccountID); err != nil {
+		slog.Warn("deregister: delete offline realized failed", "account_id", payload.AccountID, "error", err)
+	}
 }
 
 func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledgerv1.LedgerEvent) {
@@ -884,6 +939,16 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 	}
 	if err := s.repo.DeletePositionsNotInSync(ctx, sync.AccountID, userID, presentSymbols); err != nil {
 		slog.Warn("delete positions not in sync failed", "account_id", sync.AccountID, "error", err)
+	}
+
+	// Account-grain realized P&L (feature 157) — set ONLY by offline ConfirmOrder recomputes. The
+	// upsert lands OUTSIDE the positions loop and AFTER DeletePositionsNotInSync so a flat/full-close
+	// recompute (positions: []) still records realized; gated on the pointer so broker syncs (nil)
+	// never touch the table (@AC-13/@AC-14 disjointness).
+	if sync.RealizedPnl != nil {
+		if err := s.repo.UpsertOfflineRealized(ctx, sync.AccountID, userID, sync.TradingMode, *sync.RealizedPnl); err != nil {
+			slog.Warn("upsert offline realized failed", "account_id", sync.AccountID, "error", err)
+		}
 	}
 }
 
@@ -1022,6 +1087,12 @@ func (s *PortfolioService) buildAccountPortfolio(ctx context.Context, accountID 
 		if bal.LastEquity > 0 {
 			portfolio.DayPnlPct = portfolio.DayPnl / bal.LastEquity
 		}
+	}
+	// Account-grain realized P&L for offline accounts (feature 157). Set with proto3 presence so an
+	// offline $0 differs from a broker unset; populated identically in GetPortfolio for read-path
+	// parity (@AC-7 / C-10(b)). Broker accounts have no row → left unset.
+	if v, ok, err := s.repo.GetOfflineRealized(ctx, accountID); err == nil && ok {
+		portfolio.RealizedPnl = proto.Float64(v)
 	}
 	return portfolio, nil
 }
