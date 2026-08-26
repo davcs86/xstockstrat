@@ -150,7 +150,7 @@ reaches users through the agent `screen_symbols` MCP tool and the `/insights` sc
 
 ### Step 2 — test: `ScreenerEngine.screen()` signal-weighted seam returns OK, not a crash (`@AC-1` RED)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_screener.py` — modify

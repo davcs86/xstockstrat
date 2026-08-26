@@ -124,3 +124,22 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   in-scope, own changed lines).
 - Files modified: `services/xstockstrat-analysis/tests/test_analysis_helpers.py`
 - Deviations: none.
+
+### Step 2 — ScreenerEngine.screen() signal-weighted seam RED (@AC-1) [done]
+- Added `from gen.ingest.v1 import ingest_pb2` + `from datetime import datetime` and
+  `test_signal_weighted_screen_returns_ok_not_crash` (with a local `_timed_bar` helper) to
+  `tests/test_screener.py`. Two time-set bars (clears the `INSUFFICIENT_DATA` short-circuit),
+  `md.GetBars`/`ind.ExecuteFormula`/`ind.ComputeIndicator`/`ingest.QuerySignals` wired via AsyncMock;
+  request `symbols=["AARD","BABA","WLTH"], signal_sources=["fundamentals"], signal_weight=1,
+  technical_weight=0`, in-window buy@0.8 straddling the last bar's time.
+- **TDD RED (captured, pre-Step-3):** `pytest tests/test_screener.py -k signal_weighted_screen_returns_ok`
+  → **1 failed** with `AttributeError: timestamp. Did you mean: 'timeframe'?` at `scoring.py:17`,
+  propagating unwrapped out of `screen()` — the exact staging repro. GREEN lands at Step 3.
+- **Positive "blend actually ran" assertion (design round-2):** with `signal_weight=1`/
+  `technical_weight=0`, `combine_score` returns `signal_score` verbatim and `signal_sub` is **not**
+  universe-normalized, so the in-window buy@0.8 blends to a final `score == 0.9` (off the 0.5 neutral
+  default). Asserted on all 3 results — a future earlier-return that never reaches `scoring.py` would
+  leave 0.5 and fail this, so the test can't pass without exercising the fixed line.
+- Lint: `ruff check`/`ruff format --check` pass (one own-line reflow applied by `ruff format`).
+- Files modified: `services/xstockstrat-analysis/tests/test_screener.py`
+- Deviations: none.

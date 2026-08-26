@@ -1,12 +1,14 @@
 """Engine unit tests for the screener (feature 060)."""
 
 import logging
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import grpc
 import pytest
 from gen.analysis.v1 import analysis_pb2
+from gen.ingest.v1 import ingest_pb2
 from gen.marketdata.v1 import marketdata_pb2
 from google.protobuf.struct_pb2 import Struct
 
@@ -550,3 +552,66 @@ async def test_single_symbol_criterion_raw_values_and_passed():
     assert "f_skip" not in r.criterion_raw_values
     assert "f_skip" not in r.criterion_passed
     assert "f_skip" not in r.criterion_scores
+
+
+# ── feature 159 (@AC-1): signal-weighted screen returns OK, not a bar-time crash ──────────────
+# The exact staging repro: compute_signal_score read `bar.timestamp`, but the marketdata Bar proto
+# field is `time` — so any signal-weighted ScreenSymbols (signal_sources set AND signal_weight > 0)
+# crashed with `AttributeError: timestamp` propagating unwrapped out of screen() (no per-symbol
+# try/except). The bare `bars()` helper leaves `time` unset, so this test builds its own
+# time-stamped bars (≥2 to clear the INSUFFICIENT_DATA short-circuit before the signal blend).
+
+
+def _timed_bar(close, when):
+    bar = marketdata_pb2.Bar(close=close)
+    bar.time.FromDatetime(when)
+    return bar
+
+
+async def test_signal_weighted_screen_returns_ok_not_crash():
+    """@AC-1: a signal-weighted screen (fundamentals source, signal_weight=1) returns OK for every
+    symbol instead of crashing on the bar-time field-name bug (feature 159)."""
+    last_bar_time = datetime(2024, 1, 2, 0, 0, 0)
+    md = AsyncMock()
+    md.GetBars = AsyncMock(
+        return_value=SimpleNamespace(
+            bars=[
+                _timed_bar(10.0, datetime(2024, 1, 1, 0, 0, 0)),
+                _timed_bar(11.0, last_bar_time),
+            ]
+        )
+    )
+    ind = AsyncMock()
+    ind.ExecuteFormula = AsyncMock(return_value=formula_resp([0.5]))
+    # RSI/ATR display reads (_latest_indicator) are best-effort; a `.result` that iterates empty.
+    ind.ComputeIndicator = AsyncMock(return_value=SimpleNamespace(result=[]))
+
+    # An in-window buy at conviction 0.8 whose validity window straddles the last bar's time, so
+    # the blend actually contributes (compute_signal_score → (0.8+1)/2 = 0.9).
+    sig = ingest_pb2.ExternalSignal(source="fundamentals", direction="buy", conviction=0.8)
+    sig.valid_from.FromDatetime(datetime(2023, 12, 1, 0, 0, 0))
+    sig.valid_until.FromDatetime(datetime(2024, 2, 1, 0, 0, 0))
+    ingest = AsyncMock()
+    ingest.QuerySignals = AsyncMock(return_value=ingest_pb2.QuerySignalsResponse(signals=[sig]))
+
+    engine = make_engine(md, ind, ingest=ingest)
+    req = analysis_pb2.ScreenSymbolsRequest(
+        symbols=["AARD", "BABA", "WLTH"],
+        criteria=[formula_criterion("f1", "fid", analysis_pb2.COMPARATOR_GT, 0.0)],
+        signal_sources=["fundamentals"],
+        signal_weight=1.0,
+        technical_weight=0.0,
+    )
+
+    resp = await engine.screen(req)  # RED pre-fix: AttributeError: timestamp escapes here.
+
+    assert len(resp.results) == 3
+    for r in resp.results:
+        assert r.status == analysis_pb2.SCREEN_RESULT_STATUS_OK
+    # Positive "blend actually ran" assertion (design round-2 constraint): with signal_weight=1 and
+    # technical_weight=0, combine_score returns the signal_score verbatim, so an in-window buy at
+    # 0.8 lands the final score at 0.9 — materially off the 0.5 neutral default the blend falls back
+    # to when no signal is in-window. A future earlier-return that never reached scoring.py would
+    # leave 0.5 here, failing this assertion (so it can't pass without exercising the fixed line).
+    for r in resp.results:
+        assert r.score == pytest.approx(0.9)
