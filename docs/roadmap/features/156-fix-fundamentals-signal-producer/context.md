@@ -190,3 +190,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Bumped tool count twenty-eight→twenty-nine in agent CLAUDE.md + mcp-tools.md (both occurrences); added a CLAUDE.md tool-table row and a `### run_fundamentals_scan` mcp-tools.md section (params/return/errors, admin gate, no-schedule-contamination note). Count now consistent across docstring + CLAUDE.md + mcp-tools.md + the /api/tools name-set.
 - Files modified: `services/xstockstrat-agent/CLAUDE.md`, `docs/runbooks/mcp-tools.md`
 - Deviations: none. TDD: N/A (docs).
+
+### Step 8 — service: config-ui "Run fundamentals scan" admin card + BFF + nav [done]
+- Registered ONLY `runFundamentalsScan` on the config-ui BFF via `forwardAdmin` (`analysisClient` already dials ANALYSIS_ENDPOINT server-side); new `configUiAnalysisClient.ts` (baseUrl `/config-ui/api`); `useRunFundamentalsScan` mutation hook; `config-ui/fundamentals-scan/page.tsx` admin card (force/dry_run switches, symbols input, result summary, testids); added the `Fundamentals Scan` PLATFORM_SUBNAV entry (C-10(a) nav reachability).
+- Files modified/created: `src/lib/configUiBff.ts`, `src/lib/browserClients/configUiAnalysisClient.ts`, `src/app/config-ui/hooks/useRunFundamentalsScan.ts`, `src/app/config-ui/fundamentals-scan/page.tsx`, `src/components/shared/PlatformHeader.tsx`
+- TDD (paired Step 9): red→green via `tsc --noEmit` (missing page/hook/client/BFF → type errors before; exit 0 after) + `next lint` clean. Playwright deferred to CI (D-2).
+- Deviations: D-1 (no cosmetic admin-hide — BFF gate authoritative, matches sources page).
+
+### Step 9 — test: config-ui e2e (admin gate + nav-reachability) + mock handler [done]
+- Added `e2e/config-ui/fundamentals-scan.spec.ts` (nav-reachability; admin render; non-admin BFF reject; admin BFF accept) and the `runFundamentalsScan` mock handler on the port-9092 AnalysisService block (distinct non-echoed fields). Auth via `helpers/auth` (C-12, no inline JWT). Covers AC-9.
+- Files modified/created: `e2e/config-ui/fundamentals-scan.spec.ts`, `e2e/mock-backend.ts`
+- Deviations: D-2 (e2e not run locally — pinned browser absent; verified via lint+tsc+structural; CI runs Playwright).

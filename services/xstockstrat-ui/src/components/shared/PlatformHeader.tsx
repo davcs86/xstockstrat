@@ -87,6 +87,7 @@ export const PLATFORM_SUBNAV: Record<PlatformSegment, SubNavItem[]> = {
     { label: 'Namespaces', href: '/config-ui', match: 'exact' },
     { label: 'Audit Log', href: '/config-ui/audit' },
     { label: 'Sources', href: '/config-ui/sources' },
+    { label: 'Fundamentals Scan', href: '/config-ui/fundamentals-scan' },
   ],
   accounts: [
     { label: 'Profile', href: '/accounts/profile', match: 'exact' },

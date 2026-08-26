@@ -1,6 +1,6 @@
 # Implementation Spec: fix-fundamentals-signal-producer
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-08-25
 **Feature**: `docs/roadmap/features/156-fix-fundamentals-signal-producer/feature.md`
 **Total Steps**: 9
@@ -475,7 +475,7 @@ Confirm the count is updated and the tool is documented in both files.
 
 ### Step 8 — service: config-ui "Run fundamentals scan" admin card + BFF + nav
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/configUiBff.ts` — modify (register `AnalysisService` with only
@@ -551,7 +551,7 @@ correctness, no secret values rendered
 
 ### Step 9 — test: config-ui e2e (admin gate + nav-reachability) + mock handler
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify (add `runFundamentalsScan` to the insights-port
@@ -608,4 +608,21 @@ and the non-admin path asserts rejection. Red captured against the pre-Step-8 tr
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+**D-1 (Step 8) — cosmetic admin-hide skipped; BFF gate is authoritative.** The spec's Step-8
+instruction 4 suggested cosmetically gating the card behind `hasAdminScope` (defense-in-depth).
+config-ui has no client-side claims/roles reader, and the sibling admin write page
+(`config-ui/sources`) does **not** cosmetically gate either — it relies solely on the BFF
+`forwardAdmin` gate, surfacing a `ConnectError` on a non-admin submit. Adding a client roles reader
+would be net-new infra out of proportion to the task (principle #2). Kept the authoritative
+`forwardAdmin` gate (AC-9) and matched the `sources`-page precedent; a non-admin sees the error on
+submit. **Disposition**: in-scope simplification, matches precedent.
+
+**D-2 (Step 9) — Playwright e2e not run locally; CI-equivalent fallback.** The pinned Playwright
+browser is not installed in this environment (`/opt/pw-browsers/...chrome-headless-shell` absent) and
+the environment note forbids `playwright install`. Per the Step-9 documented fallback + fails.md
+2026-08-05 + the sequential-mode verification fallback, verified via `next lint` (clean for the new
+files) + `tsc --noEmit` (exit 0) + structural checks: the spec exists and imports
+`addAdminCookie`/`addAuthCookie`, the `runFundamentalsScan` mock handler is registered on the
+port-9092 `AnalysisService` block, the config-ui BFF registers only that one method via
+`forwardAdmin`, the nav entry and the page route exist. The real Playwright run executes in CI.
+**Disposition**: CI-equivalent fallback.
