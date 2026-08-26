@@ -8,6 +8,7 @@
 **Last Updated**: 2026-08-23
 **Committed to main**: 2c8c9d7cb563140384324b5e1f9ff6fdceb1a367
 **Launched date**: 2026-08-24
+**Archived**: 2026-08-26
 
 ---
 
@@ -19,6 +20,7 @@
 | 2026-08-23 | `draft` → `code-completed` | claude | Fix implemented + red-before-green unit tests; 544 analysis tests pass (82.5% cov), ruff clean. Rides PR #1004. |
 
 | 2026-08-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #1006; committed 2c8c9d7cb563140384324b5e1f9ff6fdceb1a367 |
+| 2026-08-26 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); promoted 3 scenarios → analysis suite; pruned product-spec.md |
 ---
 
 ## Artifacts

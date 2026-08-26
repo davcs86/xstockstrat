@@ -2315,3 +2315,17 @@ reusing.
 - **Evidence**: feature 146 context.md 2026-08-19 CI fix; `services/xstockstrat-ui/src/hooks/useCandlestickChart.ts`.
 - **Rule it implies**: for any canvas-chart hover/crosshair e2e, call `fitContent()` after data-set; a
   hover test that "passes" without it may be asserting on a readout that never rendered.
+
+### 2026-08-26 — fix-backtest-annualized-return — design
+- **Pattern**: When a metric annualizes/normalizes by a *period*, derive that period from wall-clock
+  time (the request `range` span), never from `len(series)` — array length silently lies whenever the
+  series is a *concatenation* of sub-series (per-symbol curves) rather than a single continuous timeline.
+- **Evidence**: feature 149 `services/xstockstrat-analysis/app/handlers/servicer.py` `_compute_metrics` + aggregate call; confirmed by back-solving observed pairs to a constant `n_days≈8170`.
+- **Rule it implies**: time-window normalization inputs come from timestamps, not container length.
+
+### 2026-08-26 — fix-backtest-annualized-return — design
+- **Pattern**: A metrics bug can be root-caused empirically *without a debugger* by back-solving
+  several observed input→output pairs to a single hidden constant — a constant fit confirms the cause
+  before any code change.
+- **Evidence**: feature 149 three `total→annualized` pairs → constant `n_days≈8170` (retained defect report `docs/reports/2026-08-23-backtest-annualized-return-underscaled-defect.md`).
+- **Rule it implies**: prefer a closed-form confirmation of the suspected divisor before patching.

@@ -1844,3 +1844,12 @@ ambiguity is logged here).
 - **Rule it implies**: when promoting existing content into a `SymbolPanelGroup` panel, grep the whole
   e2e suite for unscoped `getByText`/`getByLabel` on that text and rescope to `getByRole('heading'|'radio')`
   before closing — the collision surfaces on a spec you didn't touch.
+
+### 2026-08-26 — fix-backtest-annualized-return — assumption
+- **Mistake**: `_compute_metrics` assumed `daily_equity` was one continuous daily curve, but the
+  *aggregate* backtest path passes N concatenated per-symbol curves, under-scaling the annualization
+  exponent ~N×. The assumption held for single-symbol callers and only broke on multi-symbol runs —
+  invisible until the numbers looked wrong in staging.
+- **Evidence**: feature 149 `servicer.py:522,525-529,571` (concat), `:3630-3632` (consumer); retained defect report.
+- **Rule it implies**: a helper that assumes a specific series shape must assert/validate that shape, or
+  the caller must pass the semantic quantity (`period_years`) explicitly.
