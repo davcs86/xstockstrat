@@ -18,6 +18,12 @@ governance.
 | **Non-admin users still see a functional config-ui Edit/Save affordance.** Since feature 074, `SetConfig` is admin-gated at both the BFF and the RPC, but the namespace editor gates the Edit/Save buttons only on `isSecret` — a viewer/trader can still open the editor and only learns on submit, via a raw `Save error: Admin scope required`. `useIsAdmin()` exists and is unused in this segment. Same class as the audit-route row above. **Moved 2026-08-09**: the logic that was `src/app/config-ui/[namespace]/page.tsx` lives in the new `NamespaceEditor.tsx` component (feature 119/120 shadcn migration) — page.tsx is now a thin wrapper. Confirmed the gap still reproduces there (no `useIsAdmin` import). | Misleading affordance; poor error UX, not an authorization hole | `src/app/config-ui/[namespace]/NamespaceEditor.tsx`; `src/hooks/useLiveStrategies.ts` (`useIsAdmin`) |
 | The `/accounts` REST routes re-implement `backendHeaders` locally (dup of `bffShared.ts:41-47`) | A live DRY divergence — the header builder can drift from the canonical one | `src/app/accounts/api/authorized-apps/route.ts:11-17` |
 
+## Dead / orphaned code
+
+| What | Why it looks dead | Evidence |
+|---|---|---|
+| `PortfolioPanel.tsx`'s multi-account/combined fall-through (`:117-160`) | `AccountContext` auto-selects the first active account (`AccountContext.tsx:36-40`), so `selectedAccountId` is virtually always set and the `if (selectedAccountId)` early-return (`:21`) wins — the combined branch is effectively unreachable in normal operation. The authoritative combined "Book" surface is `src/app/trader/portfolio/page.tsx` (`usePortfolios(null)`, `:28-29`). Edit the page, not the dead branch. (surfaced 2026-08-26, feature 159 archive) | `src/components/trader/PortfolioPanel.tsx:21,117-160`; `src/context/AccountContext.tsx:36-40`; `src/app/trader/portfolio/page.tsx:28-29` |
+
 ## Open questions (unresolved *why* — needs a maintainer)
 
 - `config-ui/api/audit/route.ts` returns `{ entries: [] }` (200) silently when `DATABASE_URL` is unset — is a silent empty audit log the intended dev-mode behavior, or should it signal misconfiguration? `src/app/config-ui/api/audit/route.ts:28-30` — status: **open**
