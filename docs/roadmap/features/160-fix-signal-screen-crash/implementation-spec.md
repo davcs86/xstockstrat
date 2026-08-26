@@ -2,7 +2,7 @@
 
 **Status**: `pending`
 **Created**: 2026-08-26
-**Feature**: `docs/roadmap/features/159-fix-signal-screen-crash/feature.md`
+**Feature**: `docs/roadmap/features/160-fix-signal-screen-crash/feature.md`
 **Total Steps**: 3
 **Feature Branch**: `feature/fix-signal-screen-crash`
 
@@ -95,7 +95,7 @@ reaches users through the agent `screen_symbols` MCP tool and the `/insights` sc
    reusing `_seconds_to_datetime`:
    ```python
    def _make_bar(timestamp_seconds: int = 1704067200) -> marketdata_pb2.Bar:
-       """Real marketdata Bar with its candle time set (feature 159).
+       """Real marketdata Bar with its candle time set (feature 160).
        Was a MagicMock, which auto-vivified `.timestamp` and hid the bar.timestamp/bar.time
        field-name bug; a real proto fails that typo class closed."""
        bar = marketdata_pb2.Bar()

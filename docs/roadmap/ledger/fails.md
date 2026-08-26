@@ -1678,7 +1678,7 @@ ambiguity is logged here).
 - **Evidence**: `docs/reports/2026-08-26-signal-screen-bar-timestamp-crash-defect.md`;
   `services/xstockstrat-analysis/app/services/scoring.py:17` (`bar.time = 2`, no `timestamp`, per
   `packages/proto/marketdata/v1/marketdata.proto:44`); `tests/test_analysis_helpers.py:163-167`
-  (`_make_bar` MagicMock); fix feature 159 (`bar.time` + real-`Bar` reshape of `_make_bar`).
+  (`_make_bar` MagicMock); fix feature 160 (`bar.time` + real-`Bar` reshape of `_make_bar`).
 - **Rule it implies**: when a function that reads proto fields is **extracted/copied into a new module**,
   the "real proto instance, not `MagicMock`" rule (2026-08-06) must follow it — audit the NEW module's
   test fixtures for `MagicMock` proto stand-ins, not just the origin's. A field-name typo re-hides in

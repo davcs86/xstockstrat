@@ -554,7 +554,7 @@ async def test_single_symbol_criterion_raw_values_and_passed():
     assert "f_skip" not in r.criterion_scores
 
 
-# ── feature 159 (@AC-1): signal-weighted screen returns OK, not a bar-time crash ──────────────
+# ── feature 160 (@AC-1): signal-weighted screen returns OK, not a bar-time crash ──────────────
 # The exact staging repro: compute_signal_score read `bar.timestamp`, but the marketdata Bar proto
 # field is `time` — so any signal-weighted ScreenSymbols (signal_sources set AND signal_weight > 0)
 # crashed with `AttributeError: timestamp` propagating unwrapped out of screen() (no per-symbol
@@ -570,7 +570,7 @@ def _timed_bar(close, when):
 
 async def test_signal_weighted_screen_returns_ok_not_crash():
     """@AC-1: a signal-weighted screen (fundamentals source, signal_weight=1) returns OK for every
-    symbol instead of crashing on the bar-time field-name bug (feature 159)."""
+    symbol instead of crashing on the bar-time field-name bug (feature 160)."""
     last_bar_time = datetime(2024, 1, 2, 0, 0, 0)
     md = AsyncMock()
     md.GetBars = AsyncMock(

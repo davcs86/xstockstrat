@@ -176,3 +176,20 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   doc changed, and no behavior those files describe changed — the fix restores the documented
   `bar.time` convention (evaluator.py:43 already warned against `bar.timestamp`). No scan needed.
 - Integration PR opened: feature/fix-signal-screen-crash → main-dev.
+
+### Session 2026-08-26 — feature renumber 159 → 160 (collision)
+- **Collision found on merge:** merging the advanced `main-dev` (PR #1022) into this branch revealed
+  that the already-merged `fix-offline-account-ui-gaps` feature ALSO took NNN **159**, so two `159-*`
+  dirs existed. Per the root CLAUDE.md numbering rule ("renumber the not-yet-merged one" on a race),
+  the merged one keeps 159 and **this feature is renumbered to 160** (160 was free = max+1).
+- Renamed `docs/roadmap/features/159-fix-signal-screen-crash/` → `160-fix-signal-screen-crash/`
+  (`git mv`, history preserved). Corrected the now-live references to the new number: the
+  `implementation-spec.md` `**Feature**` path pointer; the promoted acceptance suite's title/desc and
+  its provenance tags (`@feature-159` → **`@feature-160`**) in
+  `services/xstockstrat-analysis/acceptance/fix-signal-screen-crash.feature`; the `feature 159` code
+  comments in `tests/test_analysis_helpers.py` + `tests/test_screener.py`; the `feature 159` code
+  sketches in this dir's `design.md`/`implementation-spec.md`; and my `fails.md` entry's `fix feature
+  159` → `160`. Left untouched: the OTHER feature's `159-fix-offline-account-ui-gaps` references (it
+  keeps 159), and the two historical mentions above (context.md § NNN note and § C-16 promotion —
+  they record what happened under the old number; this entry supersedes them).
+- The renumber is docs/tests-only — no service behavior change; analysis suite re-verified GREEN.

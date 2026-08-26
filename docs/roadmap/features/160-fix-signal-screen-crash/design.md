@@ -61,7 +61,7 @@ out of `screen()` (no per-symbol try/except at `screener.py:119-129`), reproduci
 `(timestamp_seconds=1704067200) -> Bar` preserved:
 ```python
 def _make_bar(timestamp_seconds: int = 1704067200) -> marketdata_pb2.Bar:
-    """Real marketdata Bar with its candle time set (feature 159).
+    """Real marketdata Bar with its candle time set (feature 160).
     Was a MagicMock, which auto-vivified `.timestamp` and hid the bar.timestamp/bar.time
     field-name bug; a real proto fails that typo class closed."""
     bar = marketdata_pb2.Bar()
