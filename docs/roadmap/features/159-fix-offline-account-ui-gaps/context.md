@@ -314,3 +314,16 @@ Branch: `claude/features-157-158-impl-ulk0l2` (task-mandated harness branch, in 
   `next dev` is flaky-then-green (documented cold-compile behavior; CI prebuilt+retries is stable). tsc 0,
   lint 0. C-12/C-13: fixtures + auth from canonical homes; INVENTORY.md untouched (no new fixture).
 - Deviations: none (Step 6 expansion + run-mechanics notes are in the Deviation Log).
+
+### Step 8 — trading + portfolio CLAUDE.md [done]
+- Trading CLAUDE.md: added an "Offline (manually-tracked) accounts" note — PlaceOrder authoritative
+  union routing + CancelOrder offline reject (distinct from the halt gate, which stays "CancelOrder
+  never halt-gated"). Portfolio CLAUDE.md: documented the offline_account_realized marker and that
+  ListPortfolios' all-accounts view enumerates account_balances ∪ offline accounts (C-10(b) parity).
+- Files modified: `services/xstockstrat-trading/CLAUDE.md`, `services/xstockstrat-portfolio/CLAUDE.md`
+- Verification: greps confirm both notes. context-scrubber: the context-forge plugin's
+  `/context-scrubber` skill is NOT available in this session (no skill dir; not in the skills list) —
+  noted here and in the PR body per the teardown norm.
+- TDD: N/A (docs). Deviations: none.
+
+Status: in-progress → code-completed. All 8 steps done.

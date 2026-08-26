@@ -494,7 +494,7 @@ backend routing guard (Step 1) still guarantees FR-2 there, and Step 7 asserts t
 
 ### Step 8 — docs: keep trading + portfolio CLAUDE.md accurate for the two new backend behaviors
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (`services/xstockstrat-trading/CLAUDE.md`, `services/xstockstrat-portfolio/CLAUDE.md`)
 **Files**:
 - `services/xstockstrat-trading/CLAUDE.md` — modify
