@@ -78,6 +78,10 @@ Defect 2:
 
 - `xstockstrat-ui` (`/trader` — `OrderForm.tsx`, `PortfolioPanel.tsx`)
 - `xstockstrat-trading` — possibly, for defect 1's CANCELED root cause (offline order routing)
+- `xstockstrat-portfolio` — for FR-3/FR-4 read-path parity (`ListPositions` ↔ `ListPortfolios` /
+  `GetPortfolio` offline-account balance shape, C-10). Confirm at design whether a portfolio code
+  change is required or feature-157's offline parity already holds and FR-3/FR-4 are UI-only in
+  `PortfolioPanel.tsx`.
 
 ## Consumer Surface(s)
 

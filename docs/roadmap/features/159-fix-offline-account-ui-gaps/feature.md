@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-26 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report (offline-account UI gaps found on staging) |
+| 2026-08-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 advisory warnings addressed: FR-N/@FR tags/Consumer Surface(s) added, portfolio added to Affected Services) |
 
 ---
 
@@ -36,4 +37,5 @@ offline accounts) was already fixed inline on the 157 branch (commit `dcd2fe5`).
 
 ## Next Action
 
-`/sdd-design fix-offline-account-ui-gaps quick` — recommended design depth (quick); see context.md.
+`/sdd-spec fix-offline-account-ui-gaps` — after `/sdd-design fix-offline-account-ui-gaps quick`
+(recommended design depth; see context.md).

@@ -35,3 +35,30 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   before it merges, or lands as its own `feature/fix-offline-account-ui-gaps` PR after 157 merges to
   main-dev. Folding-in avoids shipping the known gaps to production; a separate PR keeps 157 mergeable
   now. (The "Edit keys" sibling fix was already folded into the 157 branch.)
+
+---
+
+## Session 2026-08-26 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- First criteria pass: FAIL — 3 blockers: (C-15) no numbered FR-N requirements; (C-15) @AC-*
+  scenarios missing @FR-* trace tags; (C-14) no `## Consumer Surface(s)` section.
+- Addressed all blockers + trading-domain warnings:
+  - Added FR-1..FR-4 (order-ticket gate + Record-order affordance; offline order persisted NEW
+    never CANCELED; offline card hides broker-only fields; combined header excludes offline from
+    broker aggregates). Folded in C-2/C-3/C-4/C-5 notes (broker accounts unaffected; offline
+    bypasses broker regardless of environment; all order types identical; broker fill lifecycle
+    unchanged).
+  - Tagged @AC-1(@FR-1,@FR-2) / @AC-2(@FR-3) / @AC-3(@FR-4); concrete values Schwab 4737 / HONA
+    BUY 1 / Alpaca Paper.
+  - Added `## Consumer Surface(s)` (/trader, agent record_order, ListPositions↔ListPortfolios
+    read-path parity, C-10/C-14).
+- Re-review: PASS WITH WARNINGS — all blockers cleared; one advisory (portfolio named in Consumer
+  Surface(s) but not Affected Services). Addressed by adding `xstockstrat-portfolio` to Affected
+  Services with a design-time note to confirm whether FR-3/FR-4 need a portfolio code change or are
+  UI-only (feature-157 parity may already hold).
+- Overlap scan: no FAIL-class collision (159 declares no proto/config/migration). Only same-file
+  overlap is with parent feature 157 (OrderForm.tsx, PortfolioPanel.tsx, trading offline path) —
+  but 157 already merged to main-dev (PR #1020 → c5052fe), so 159 branches on top of it; the
+  build-order dependency is already satisfied. No merge-order.md row needed.
+- Next: /sdd-design fix-offline-account-ui-gaps quick.
