@@ -17,6 +17,7 @@
 | 2026-08-26 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. One-line fix + window-discriminating RED tests + ledger-mandated _make_bar reshape |
 | 2026-08-26 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 3 steps |
 | 2026-08-26 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (test: _make_bar reshaped to real Bar + @AC-2 anchor; RED captured, greens at Step 3) |
+| 2026-08-26 | `in-progress` → `code-completed` | /sdd-execute | Steps 2 (@AC-1 screener seam RED) & 3 (scoring.py `bar.timestamp`→`bar.time` fix) done; full suite GREEN (624 passed, 84.78% cov). Manual dev smoke deferred to post-deploy |
 
 ---
 

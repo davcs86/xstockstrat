@@ -235,7 +235,7 @@ reaches users through the agent `screen_symbols` MCP tool and the `/insights` sc
 
 ### Step 3 — service: fix the bar-time field name in `compute_signal_score` (GREEN)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/scoring.py` — modify

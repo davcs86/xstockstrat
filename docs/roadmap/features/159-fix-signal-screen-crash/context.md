@@ -143,3 +143,24 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Lint: `ruff check`/`ruff format --check` pass (one own-line reflow applied by `ruff format`).
 - Files modified: `services/xstockstrat-analysis/tests/test_screener.py`
 - Deviations: none.
+
+### Step 3 — scoring.py bar.timestamp → bar.time (GREEN) [done]
+- One-line fix at `app/services/scoring.py:17`: `bar_ts = bar.timestamp.ToDatetime()` →
+  `bar_ts = bar.time.ToDatetime()`. That line only; every `sig.*` read was already correct.
+- **TDD GREEN (full suite + C-08 coverage gate):** `pytest --cov=app --cov-fail-under=40` →
+  **624 passed, total coverage 84.78%** (≥40). Step 1's @AC-2 anchor + reshaped collateral tests and
+  Step 2's @AC-1 engine seam all green; no other test regressed.
+- Grep guard: `grep -rn "bar\.timestamp" app/` → the only source hit is the `evaluator.py:43`
+  docstring that *warns against* this exact bug ("`bar.time` (NOT `bar.timestamp`)"); no residual
+  reader. Lint clean.
+- **Required manual dev smoke (design build-order step 7 / open risk) — DEFERRED to post-deploy:**
+  a live signal-weighted `screen_symbols` (signal_sources set, signal_weight>0) returning
+  `SCREEN_RESULT_STATUS_OK` on dev/staging cannot be exercised until this fix is deployed. Recorded
+  here as REQUIRED and still-outstanding; to be run after the integration PR merges and rides to dev.
+- Files modified: `services/xstockstrat-analysis/app/services/scoring.py`
+- Deviations: none.
+
+### Feature code-completed
+- All 3 steps done. status.md → `code-completed`. Next: integration PR
+  (`feature/fix-signal-screen-crash` → `main-dev`) + C-16 scenario promotion (both @AC-* are net-new
+  guarantees — recon § Existing Business Rules found none to regress).
