@@ -402,7 +402,27 @@ export class ConfigServiceImpl {
        WHERE namespace = $1 AND key = $2 AND environment = $3 AND COALESCE(user_id,'') = COALESCE($4,'') LIMIT 1`,
       [namespace, key, env, userIdParam]
     );
-    if (existing.rows.length === 0 && !createKey) {
+
+    // A per-user override of an already-registered GLOBAL key is not minting a new key, so it must
+    // not trip the feature-091 typo guard. That gate was scope-exact on (ns,key,env,<mode>) when the
+    // second axis was trading_mode; feature 147 swapped that axis for user_id, which mechanically
+    // made every FIRST per-user write of a registered key fail NOT_FOUND (no exact per-user row
+    // exists yet). Fix: when the exact per-user row is absent, fall back to the global
+    // (user_id IS NULL) row — if the key is registered there, the override is legitimate. create_key
+    // stays the escape hatch for a genuinely unregistered key (absent at BOTH the exact and the
+    // global scope).
+    let globalRow: any = null;
+    if (existing.rows.length === 0 && userIdParam !== null) {
+      const globalExisting = await this.pool.query(
+        `SELECT is_secret FROM config.config_values
+         WHERE namespace = $1 AND key = $2 AND environment = $3 AND user_id IS NULL LIMIT 1`,
+        [namespace, key, env]
+      );
+      globalRow = globalExisting.rows[0] ?? null;
+    }
+
+    const keyRegistered = existing.rows.length > 0 || globalRow !== null;
+    if (!keyRegistered && !createKey) {
       callback({
         code: 5, // NOT_FOUND
         message: `config key not registered: ${namespace}.${key} (env=${env}, user=${userId || 'global'}); pass create_key=true to register it`,
@@ -410,9 +430,17 @@ export class ConfigServiceImpl {
       return;
     }
 
-    // Row-authoritative secret flag: existing row's flag wins; on create, honor the request flag.
+    // Row-authoritative secret flag: the exact-scope row wins; for a first per-user override it comes
+    // from the global row (so a per-user write to a secret key is still caught by the global-only
+    // guard below, not silently treated as a non-secret create); on a genuine create, honor the
+    // request flag.
     const requestIsSecret = (value?.is_secret ?? value?.isSecret) === true;
-    const isSecret = existing.rows.length > 0 ? existing.rows[0].is_secret === true : requestIsSecret;
+    const isSecret =
+      existing.rows.length > 0
+        ? existing.rows[0].is_secret === true
+        : globalRow !== null
+          ? globalRow.is_secret === true
+          : requestIsSecret;
 
     // Secrets are global-scope only (feature 147). Reject a per-user secret write.
     if (isSecret && userIdParam !== null) {
