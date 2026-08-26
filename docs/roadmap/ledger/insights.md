@@ -2261,3 +2261,22 @@ reusing.
   without raising real concurrent work.
 - **Evidence**: feature 141 design.md §64-69,140-142.
 - **Rule it implies**: match a limiter's ceiling to the narrowest downstream bottleneck, not to convention.
+
+### 2026-08-26 — daily-bars-only — ordering
+- **Pattern**: When removing support for a value across a proto→backend→UI stack, close the
+  *authoritative* RPC layer first (not last). Fanning out from consumer surfaces first leaves the RPC
+  open longest to callers the feature doesn't enumerate (scripts, `grpcurl`, internal tools) and ignores
+  always-on background writers (the poller). Pull any dependent fix (here, the retry-loop guard) forward
+  to land no later than the authoritative step.
+- **Evidence**: feature 143 context.md Session 2026-08-16 sdd-design Phase 1; design.md §Rejected Alternatives (step-order).
+- **Rule it implies**: value-removal step order should be authoritative-RPC-first, with dependent guards
+  pulled forward — not consumer-surface-first.
+
+### 2026-08-26 — daily-bars-only — design
+- **Pattern**: Before adding a permanent (`INVALID_ARGUMENT`) rejection to a service, audit callers'
+  error handling. A broad `except Exception: retry` (ingest's chunk-retry) treats a permanent rejection
+  as transient and storms it 3×-with-backoff. The fix is a non-retryable-code branch, sequenced no later
+  than the rejection itself.
+- **Evidence**: feature 143 context.md Session 2026-08-16 sdd-design Phase 1; design.md §Chosen Approach pt3 (`servicer.py:555` retry loop).
+- **Rule it implies**: introducing a permanent error code requires auditing every caller's retry loop
+  for a broad-except transient assumption in the same PR.

@@ -1806,3 +1806,21 @@ ambiguity is logged here).
 - **Evidence**: feature 141 design.md Open Risks 1-2; context.md sdd-design + execute summary.
 - **Rule it implies**: when root cause is unconfirmed, name the substitute proof explicitly in-test and
   pre-commit to an escalation path if the incident recurs.
+
+### 2026-08-26 — daily-bars-only — assumption
+- **Mistake**: A TDD "red" test that narrows a validation set can silently be a false-green.
+  `pytest.raises(match=...)` is `re.search`, so a narrowed error substring still matches the old message;
+  and probing a value invalid under *both* old and new rules (`"1w"`) exercises nothing. Only probing a
+  value that flipped accepted→rejected (`15m`/`1h`) yields a genuine red→green.
+- **Evidence**: feature 143 implementation-spec.md Deviation Log D-5; `services/xstockstrat-agent/tests/test_client.py`.
+- **Rule it implies**: when testing a narrowed validation set, the RED must probe a previously-accepted
+  (boundary-flipped) value, never a `match=` substring or a value invalid under both sets.
+
+### 2026-08-26 — daily-bars-only — assumption
+- **Mistake**: A ChartPanel e2e that captures the component's *mount* `GetBars` is flaky — the mount
+  fetch races the async lightweight-charts series init and is never retried because `seriesRef` is not a
+  `fetchBars` effect dependency. The bug only surfaced under a real prebuilt/CI e2e run, not `pnpm dev`.
+- **Evidence**: feature 143 implementation-spec.md Deviation Log D-6; context.md Session sdd-execute Step 10 follow-up; `services/xstockstrat-ui/e2e/trader/chart-panel.spec.ts`.
+- **Rule it implies**: to assert an outbound `GetBars` in a ChartPanel e2e, wait for `.tv-lightweight-charts`
+  readiness then change a real `fetchBars` effect dep (bar-count) as the trigger; don't rely on the mount
+  fetch, and run the prebuilt harness not the dev server.
