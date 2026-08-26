@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CancelOrderRequest, CancelOrderResponse, DeregisterBrokerAccountRequest, DeregisterBrokerAccountResponse, GetOrderRequest, GetTradingEnvironmentRequest, GetTradingEnvironmentResponse, ListBrokerAccountsRequest, ListBrokerAccountsResponse, ListOrdersRequest, ListOrdersResponse, Order, PlaceOrderRequest, RegisterBrokerAccountRequest, RegisterBrokerAccountResponse, ReplaceOrderRequest, StreamOrderUpdatesRequest, UpdateBrokerAccountCredentialsRequest, UpdateBrokerAccountCredentialsResponse } from "./trading_pb.js";
+import { CancelOrderRequest, CancelOrderResponse, ConfirmOrderRequest, DeregisterBrokerAccountRequest, DeregisterBrokerAccountResponse, GetOrderRequest, GetTradingEnvironmentRequest, GetTradingEnvironmentResponse, ListBrokerAccountsRequest, ListBrokerAccountsResponse, ListOrdersRequest, ListOrdersResponse, Order, PlaceOrderRequest, RegisterBrokerAccountRequest, RegisterBrokerAccountResponse, ReplaceOrderRequest, StreamOrderUpdatesRequest, UpdateBrokerAccountCredentialsRequest, UpdateBrokerAccountCredentialsResponse } from "./trading_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -68,6 +68,20 @@ export const TradingService = {
     replaceOrder: {
       name: "ReplaceOrder",
       I: ReplaceOrderRequest,
+      O: Order,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * ConfirmOrder is OFFLINE-only (feature 157): it writes the fill fields a broker would
+     * otherwise report (filled_qty/filled_avg_price/filled_at, and a server-derived status)
+     * onto an order belonging to an offline account, then recomputes the account's positions.
+     * It never contacts a broker and is rejected with FailedPrecondition for broker accounts.
+     *
+     * @generated from rpc xstockstrat.trading.v1.TradingService.ConfirmOrder
+     */
+    confirmOrder: {
+      name: "ConfirmOrder",
+      I: ConfirmOrderRequest,
       O: Order,
       kind: MethodKind.Unary,
     },

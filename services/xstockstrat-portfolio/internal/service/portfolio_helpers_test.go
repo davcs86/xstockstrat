@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
+	"github.com/xstockstrat/contracts/pnl"
 )
 
 // TestPositionMath replicates the core position calculation logic from
@@ -103,55 +104,22 @@ func TestPositionMath_OverSell(t *testing.T) {
 	}
 }
 
-// computeRealizedPnL mirrors the two-pass GetPnL algorithm for dependency-free unit testing.
-// completeFills use fill.Qty (order.filled events); partialFills use fill.FilledQty
-// (order.partially_filled events, deduplicated by OrderID keeping the last per ID).
+// computeRealizedPnL mirrors the two-pass GetPnL fill collection for dependency-free unit testing,
+// then folds through the ONE production helper (pnl.Fold) so this mirror can never drift from
+// GetPnL's math (feature 042/157 — the shared-fold DRY collapse). completeFills use fill.Qty
+// (order.filled events); partialFills use fill.FilledQty (order.partially_filled events,
+// deduplicated by OrderID keeping the last per ID, applied only for non-completed orders).
 func computeRealizedPnL(completeFills, partialFills []orderFillPayload) float64 {
-	var realized float64
-	accs := make(map[string]*fillAccumulator)
+	var fills []pnl.Fill
 	filledOrderIDs := make(map[string]bool)
 
-	applyFill := func(qty, fillPrice float64, symbol string) {
-		acc := accs[symbol]
-		if acc == nil {
-			acc = &fillAccumulator{}
-			accs[symbol] = acc
-		}
-		sameDirection := acc.qty == 0 || (qty > 0) == (acc.qty > 0)
-		if sameDirection {
-			acc.qty += qty
-			acc.costBasis += qty * fillPrice
-		} else {
-			// feature 042: route the realized computation through the ONE production helper so this
-			// mirror can never drift from GetPnL's math (DRY collapse — design Open Risk).
-			realized += realizedDelta(acc.qty, acc.costBasis, qty, fillPrice)
-			closeQty := qty
-			if math.Abs(closeQty) > math.Abs(acc.qty) {
-				closeQty = -acc.qty
-			}
-			oldQty := acc.qty
-			acc.qty += closeQty
-			if math.Abs(acc.qty) < 1e-9 {
-				acc.qty = 0
-				acc.costBasis = 0
-			} else {
-				acc.costBasis = acc.costBasis * acc.qty / oldQty
-			}
-			remainder := qty - closeQty
-			if math.Abs(remainder) > 1e-9 {
-				acc.qty += remainder
-				acc.costBasis += remainder * fillPrice
-			}
-		}
-	}
-
-	// Pass 1: apply complete fills.
+	// Pass 1: collect complete fills.
 	for _, fill := range completeFills {
 		filledOrderIDs[fill.OrderID] = true
-		applyFill(fill.Qty, fill.FillPrice, fill.Symbol)
+		fills = append(fills, pnl.Fill{Symbol: fill.Symbol, Qty: fill.Qty, Price: fill.FillPrice})
 	}
 
-	// Pass 2: deduplicate partial fills by OrderID (last wins), apply for non-completed orders.
+	// Pass 2: deduplicate partial fills by OrderID (last wins), collect for non-completed orders.
 	latestPartials := make(map[string]orderFillPayload)
 	for _, fill := range partialFills {
 		latestPartials[fill.OrderID] = fill
@@ -160,10 +128,10 @@ func computeRealizedPnL(completeFills, partialFills []orderFillPayload) float64 
 		if filledOrderIDs[orderID] {
 			continue
 		}
-		applyFill(fill.FilledQty, fill.FillPrice, fill.Symbol)
+		fills = append(fills, pnl.Fill{Symbol: fill.Symbol, Qty: fill.FilledQty, Price: fill.FillPrice})
 	}
 
-	return realized
+	return pnl.Fold(fills).Realized
 }
 
 func TestRealizedPnL_NoFills(t *testing.T) {
@@ -455,7 +423,7 @@ func TestRealizedDelta_Characterization(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := realizedDelta(tc.accQty, tc.accCost, tc.fillQty, tc.fillPx)
+			got := pnl.RealizedDelta(tc.accQty, tc.accCost, tc.fillQty, tc.fillPx)
 			if math.Abs(got-tc.want) > 1e-9 {
 				t.Fatalf("realizedDelta(%v,%v,%v,%v) = %v, want %v",
 					tc.accQty, tc.accCost, tc.fillQty, tc.fillPx, got, tc.want)
@@ -479,8 +447,8 @@ func TestRealizedDelta_MatchesGetPnLPath(t *testing.T) {
 		t.Fatalf("computeRealizedPnL = %v, want 800 (via realizedDelta)", got)
 	}
 	// And the sum of per-reducing-fill realizedDelta calls equals the same total (the payload math).
-	d1 := realizedDelta(100, 1000, -40, 15) // 200
-	d2 := realizedDelta(60, 600, -60, 20)   // remaining 60 @ avg 10 (cost 600), sell 60@20 → 600
+	d1 := pnl.RealizedDelta(100, 1000, -40, 15) // 200
+	d2 := pnl.RealizedDelta(60, 600, -60, 20)   // remaining 60 @ avg 10 (cost 600), sell 60@20 → 600
 	if math.Abs((d1+d2)-800) > 1e-9 {
 		t.Fatalf("sum of realizedDelta reduce steps = %v, want 800", d1+d2)
 	}

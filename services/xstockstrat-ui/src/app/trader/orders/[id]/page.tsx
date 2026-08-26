@@ -6,10 +6,11 @@ import { ConnectError } from '@connectrpc/connect';
 import { AppShell } from '@/components/trader/AppShell';
 import { BackToDashboardButton } from '@/components/trader/BackToDashboardButton';
 import { EditOrderDialog } from '@/components/trader/EditOrderDialog';
+import { ConfirmFillDialog } from '@/components/trader/ConfirmFillDialog';
 import { useOrder } from '@/hooks/useOrders';
 import { useCancelOrder } from '@/hooks/useCancelOrder';
 import { OrderType, OrderStatus, IntentState } from '@xstockstrat/proto/trading/v1/trading_pb';
-import { TradingMode } from '@xstockstrat/proto/common/v1/common_pb';
+import { BrokerType, TradingMode } from '@xstockstrat/proto/common/v1/common_pb';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Eyebrow } from '@/components/shared/Eyebrow';
 import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
@@ -44,10 +45,14 @@ export default function OrderDetailPage() {
   const { data: order, error, isLoading } = useOrder(orderId);
   const { mutate: cancelOrder, isPending: canceling } = useCancelOrder();
   const [editOpen, setEditOpen] = useState(false);
+  const [confirmFillOpen, setConfirmFillOpen] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [actionError, setActionError] = useState('');
 
   const working = order ? isWorking(order.status, order.intentState) : false;
+  // Offline orders (feature 157) are hand-confirmed: the fill can be set or re-edited at any time
+  // (recompute-from-all-orders is idempotent), so the control is not gated on working state.
+  const isOffline = order ? order.brokerType === BrokerType.OFFLINE : false;
   // Order preview figures — all derived from the order's own fields (no new data source).
   const refPrice = order ? Number(order.limitPrice || order.filledAvgPrice || 0) : 0;
   const notional = order ? Number(order.qty ?? 0) * refPrice : 0;
@@ -106,7 +111,19 @@ export default function OrderDetailPage() {
                 </div>
                 <p className="font-mono text-xs text-muted-foreground">{order.orderId}</p>
               </div>
-              {working && (
+              {isOffline && (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="min-h-[44px]"
+                    onClick={() => setConfirmFillOpen(true)}
+                  >
+                    Confirm fill
+                  </Button>
+                </div>
+              )}
+              {!isOffline && working && (
                 <div className="flex flex-wrap gap-2">
                   <Button
                     variant="outline"
@@ -204,6 +221,11 @@ export default function OrderDetailPage() {
             </div>
 
             <EditOrderDialog order={order} open={editOpen} onOpenChange={setEditOpen} />
+            <ConfirmFillDialog
+              order={order}
+              open={confirmFillOpen}
+              onOpenChange={setConfirmFillOpen}
+            />
           </>
         )}
       </div>

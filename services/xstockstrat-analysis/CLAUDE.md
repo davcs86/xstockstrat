@@ -76,6 +76,19 @@ A second asyncio background loop (`app/engine/fundsignal_loop.py`) runs a daily 
 - **Source registration**: the producer idempotently registers its source via ingest `ManageSignalSource` as `source_type='derived'` (a generic bucket for internally-produced, non-extraction signals — added by ingest migration `006_signal_source_type_derived`), `extractor_module='app.extractors.noop'`. This call is admin-scoped; the background path injects the admin bit, the RPC path forwards the caller's scope.
 - **Manual trigger**: the admin-scoped `RunFundamentalsScan` RPC invokes the same `run_once` code path (`force`, `dry_run`, explicit `symbols` override) so the scheduled loop and manual trigger never diverge.
 
+### Shared durable scheduler (feature 158)
+
+The durable, crash-safe schedule (seed-at-boot, compute-sleep-until-due, advance-**after**-completion,
+bounded one-shot startup jitter, retry cadence) that feature 156 introduced inline now lives in the
+shared **`app/engine/durable_schedule.py`** (`DurableSchedule`, **interval** + **wall-clock** modes;
+plus the relocated `seconds_until_hour_utc`) backed by the `(job_name, user_id)`-keyed
+`analysis.job_schedule` table (migration `020`, renamed from feature 156's `fundsignal_schedule`).
+It is consumed by `fundsignal_loop` (interval) and `run_opportunity_refresh_forever` (wall-clock,
+anchored to `analysis.opportunity.refresh_hour_utc`). Each loop keeps its own `_tick`/`run_forever`
+(disabled gate, overlap lock, config reads); the helper owns only the timing/persistence seams.
+**`live_loop` is NOT migrated** (feature 158 Out of Scope — a ~60s loop gains almost nothing from a
+durable per-cycle row). No lease/CAS fencing is added (`instance_count:1` trap, ledger 2026-08-25).
+
 ### P&L pattern consumer (feature 042)
 
 A third background task (`app/engine/pnl_pattern_consumer.py`, `PnLPatternConsumer.run_forever`,
@@ -311,7 +324,9 @@ Namespace: `analysis`
 | `analysis.opportunity.valid_window_hours` | int | `24` | `valid_until` = the compute's session date + this window (feature 097). |
 | `analysis.opportunity.snooze_default_hours` | int | `24` | Default bounded "snooze until" when a SNOOZE carries no explicit timestamp (feature 097). |
 | `analysis.opportunity.signal_rank_weight` | float | `0.3` | Weight `w ∈ [0,1]` of the independent signal axis in the queue ORDER BY (feature 097, OR-G); `rank = (1−w)·conviction + w·signal_axis`. This is a distinct scalar from the (feature-134-superseded) `analysis.signals.source_weights` — not a re-purpose. |
-| `analysis.opportunity.refresh_hour_utc` | int | `0` | Hour (UTC) of the **configured daily refresh** pass (feature 097) — a wall-clock refresh, **not** market close (holiday/DST/early-close drift is expected; a calendar-aligned refresh is a future feature). Read **presence-aware** (mirror `get_bool`'s `HasField`), never `get_int` — `0` = midnight is legitimate and the `get_int` zero-trap would swallow it. |
+| `analysis.opportunity.refresh_hour_utc` | int | `0` | Hour (UTC) of the **configured daily refresh** pass (feature 097) — a wall-clock refresh, **not** market close (holiday/DST/early-close drift is expected; a calendar-aligned refresh is a future feature). Read **presence-aware** (mirror `get_bool`'s `HasField`), never `get_int` — `0` = midnight is legitimate and the `get_int` zero-trap would swallow it. Also the wall-clock anchor for the DurableSchedule-backed opportunity refresh (feature 158). |
+| `analysis.opportunity.startup_jitter_seconds` | int | `30` | One-shot random delay `[0, N]` seconds applied once at the opportunity refresh loop entry to stagger concurrent redeploys (feature 158); read presence-aware (`get_int_present`) — `0` disables jitter. Mirrors `analysis.fundsignal.startup_jitter_seconds`. |
+| `analysis.opportunity.retry_seconds` | int | `300` | On a caught enumeration error the wall-clock `blocked_until_ms` advances by this many seconds (retry soon), not to the next wall-clock hour (feature 158); read presence-aware, clamped `max(1, …)` at the read site. Mirrors `analysis.fundsignal.retry_seconds`. |
 | `analysis.opportunity.max_live_strategies_per_symbol` | int | `5` | Per-symbol cap (feature 131): how many live-enabled strategies may **newly** attribute to one symbol via live-coverage. Enforced only at the two candidate-**creation** sites (`_capped_live`); tagging an already-existing curated row (a watchlist-bound or held strategy that is also live) is uncapped. Tiebreak is `created_at` ascending. AC-7. |
 | `analysis.opportunity.max_live_only_symbols_per_compute` | int | `20` | Cap (feature 131) on distinct **non-held** signal+live-covered symbols that get a new candidate row per compute pass (design step 6). Ranked by max active-signal conviction descending. Composes **multiplicatively** with the per-symbol cap. AC-8. |
 | `analysis.opportunity.max_live_held_symbols_per_compute` | int | `20` | Cap (feature 131) on distinct **held** symbols that may receive a new live-only strategy attribution per compute pass (ranked by held market value descending); does **not** bound the held-row count itself — every held symbol still yields ≥1 row. AC-9. |

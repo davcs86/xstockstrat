@@ -50,6 +50,7 @@ def test_list_tools_returns_all_registered_tools():
         "get_watchlist",
         "manage_watchlist",
         "manage_watchlist_symbols",
+        "manage_offline_account",
     }
 
 

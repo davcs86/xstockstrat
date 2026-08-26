@@ -116,6 +116,12 @@ export interface Order {
     brokerType: BrokerType;
     /** intent_state is set by every write path and read via a cross-intent LATERAL join on other reads; see design.md. */
     intentState: IntentState;
+    /**
+     * filled_at is the confirmed/observed fill time: broker fills use the broker's timestamp;
+     * offline confirmations (feature 157) use the operator-supplied time (server-defaulted to now
+     * when unset). NULL for a NEW/unconfirmed order and every historical order.
+     */
+    filledAt?: Date | undefined;
 }
 export interface PlaceOrderRequest {
     symbol: string;
@@ -164,6 +170,20 @@ export interface CancelOrderResponse {
 }
 export interface GetOrderRequest {
     orderId: string;
+}
+/**
+ * ConfirmOrder writes the fill a broker would otherwise report onto an OFFLINE order.
+ * status is server-derived from filled_qty vs qty (never client-supplied). Rejected with
+ * FailedPrecondition for broker (Alpaca/IBKR) accounts (FR-8/@AC-9).
+ */
+export interface ConfirmOrderRequest {
+    orderId: string;
+    filledQty: number;
+    filledAvgPrice: number;
+    /** optional; server defaults to now when unset */
+    filledAt?: Date | undefined;
+    /** caller identity (ownership guard) */
+    userId: string;
 }
 export interface ListOrdersRequest {
     userId: string;
@@ -283,6 +303,7 @@ export declare const PlaceOrderRequest: MessageFns<PlaceOrderRequest>;
 export declare const CancelOrderRequest: MessageFns<CancelOrderRequest>;
 export declare const CancelOrderResponse: MessageFns<CancelOrderResponse>;
 export declare const GetOrderRequest: MessageFns<GetOrderRequest>;
+export declare const ConfirmOrderRequest: MessageFns<ConfirmOrderRequest>;
 export declare const ListOrdersRequest: MessageFns<ListOrdersRequest>;
 export declare const ListOrdersResponse: MessageFns<ListOrdersResponse>;
 export declare const StreamOrderUpdatesRequest: MessageFns<StreamOrderUpdatesRequest>;
@@ -360,6 +381,21 @@ export declare const TradingServiceService: {
         readonly responseSerialize: (value: Order) => Buffer;
         readonly responseDeserialize: (value: Buffer) => Order;
     };
+    /**
+     * ConfirmOrder is OFFLINE-only (feature 157): it writes the fill fields a broker would
+     * otherwise report (filled_qty/filled_avg_price/filled_at, and a server-derived status)
+     * onto an order belonging to an offline account, then recomputes the account's positions.
+     * It never contacts a broker and is rejected with FailedPrecondition for broker accounts.
+     */
+    readonly confirmOrder: {
+        readonly path: "/xstockstrat.trading.v1.TradingService/ConfirmOrder";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ConfirmOrderRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ConfirmOrderRequest;
+        readonly responseSerialize: (value: Order) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => Order;
+    };
     readonly registerBrokerAccount: {
         readonly path: "/xstockstrat.trading.v1.TradingService/RegisterBrokerAccount";
         readonly requestStream: false;
@@ -427,6 +463,13 @@ export interface TradingServiceServer extends UntypedServiceImplementation {
      * while the order is NEW or PARTIALLY_FILLED.
      */
     replaceOrder: handleUnaryCall<ReplaceOrderRequest, Order>;
+    /**
+     * ConfirmOrder is OFFLINE-only (feature 157): it writes the fill fields a broker would
+     * otherwise report (filled_qty/filled_avg_price/filled_at, and a server-derived status)
+     * onto an order belonging to an offline account, then recomputes the account's positions.
+     * It never contacts a broker and is rejected with FailedPrecondition for broker accounts.
+     */
+    confirmOrder: handleUnaryCall<ConfirmOrderRequest, Order>;
     registerBrokerAccount: handleUnaryCall<RegisterBrokerAccountRequest, RegisterBrokerAccountResponse>;
     listBrokerAccounts: handleUnaryCall<ListBrokerAccountsRequest, ListBrokerAccountsResponse>;
     deregisterBrokerAccount: handleUnaryCall<DeregisterBrokerAccountRequest, DeregisterBrokerAccountResponse>;
@@ -465,6 +508,15 @@ export interface TradingServiceClient extends Client {
     replaceOrder(request: ReplaceOrderRequest, callback: (error: ServiceError | null, response: Order) => void): ClientUnaryCall;
     replaceOrder(request: ReplaceOrderRequest, metadata: Metadata, callback: (error: ServiceError | null, response: Order) => void): ClientUnaryCall;
     replaceOrder(request: ReplaceOrderRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: Order) => void): ClientUnaryCall;
+    /**
+     * ConfirmOrder is OFFLINE-only (feature 157): it writes the fill fields a broker would
+     * otherwise report (filled_qty/filled_avg_price/filled_at, and a server-derived status)
+     * onto an order belonging to an offline account, then recomputes the account's positions.
+     * It never contacts a broker and is rejected with FailedPrecondition for broker accounts.
+     */
+    confirmOrder(request: ConfirmOrderRequest, callback: (error: ServiceError | null, response: Order) => void): ClientUnaryCall;
+    confirmOrder(request: ConfirmOrderRequest, metadata: Metadata, callback: (error: ServiceError | null, response: Order) => void): ClientUnaryCall;
+    confirmOrder(request: ConfirmOrderRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: Order) => void): ClientUnaryCall;
     registerBrokerAccount(request: RegisterBrokerAccountRequest, callback: (error: ServiceError | null, response: RegisterBrokerAccountResponse) => void): ClientUnaryCall;
     registerBrokerAccount(request: RegisterBrokerAccountRequest, metadata: Metadata, callback: (error: ServiceError | null, response: RegisterBrokerAccountResponse) => void): ClientUnaryCall;
     registerBrokerAccount(request: RegisterBrokerAccountRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: RegisterBrokerAccountResponse) => void): ClientUnaryCall;

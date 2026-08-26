@@ -168,3 +168,41 @@ _All five design-time spec guards were resolved into concrete step instructions:
   to Resolved: Yes. Confirmed `019` is still the highest analysis migration → `020` remains next-free.
 - Rebase conflict on `insights.md` (append-only; `157-offline-account-portfolios` added its own entry)
   resolved by keeping both entries.
+
+## Session 2026-08-26T05:21Z — sdd-review impl-spec (advisory, re-run vs current tree)
+
+- Re-ran the impl-spec review against the current branch (156 merged to main-dev; 019 present) to
+  confirm the earlier advisory review still holds. Result: 0 failures, 1 warning, 4 notes (advisory —
+  did not block). No Floor breach; F-01 respected (020 adds a new migration, never edits 019).
+  Overlap scan: CLEAN (migration 020, both analysis.opportunity.* config keys, durable_schedule.py,
+  and servicer.py all uncontested; only 156 shares resources and is already merged).
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 1: `DROP CONSTRAINT fundsignal_schedule_pkey` relies on Postgres's auto-derived PK name,
+    unverifiable offline. `<table>_pkey` is the correct default for 019's inline `text PRIMARY KEY`.
+    If an apply-time `\d` shows a different name, substitute it and record the substitution in the
+    `## Deviation Log` (F-09) — do not edit the step body. — [ ] carried (apply-time only)
+- Overlap findings: none new (156 dependency already resolved; 156 launched).
+
+## Session 2026-08-26 — sdd-execute (implementation)
+
+- Implemented all 8 steps on branch `claude/features-157-158-impl-ulk0l2` (harness-assigned single
+  branch for 157+158; not the per-feature `feature/durable-loop-scheduler`).
+- Step 1 apply-time PK-name note (carried warning): `019`'s inline `job_name text PRIMARY KEY`
+  auto-names `fundsignal_schedule_pkey` (confirmed by reading `019_fundsignal_schedule.up.sql`), so
+  `020.up`'s `DROP CONSTRAINT fundsignal_schedule_pkey` is correct; no apply-time substitution was
+  needed. [x] resolved.
+- Steps 2-4: `app/engine/durable_schedule.py` (`DurableSchedule` interval+wallclock + relocated
+  `seconds_until_hour_utc`); `fundsignal_loop` delegates its three seams to it (behavior-preserving —
+  `TestScheduler`'s @AC-1..7 stay green, SQL-text assertions retargeted `fundsignal_schedule` →
+  `job_schedule`; the shared AsyncMock db object makes the delegation transparent to the tests).
+- Steps 5+8: two new `analysis.opportunity.startup_jitter_seconds`/`.retry_seconds` config keys +
+  the shared-scheduler module note in the analysis CLAUDE.md.
+- Step 6: `run_opportunity_refresh_forever` rewritten as `_opportunity_refresh_tick`/`run_forever`
+  on `DurableSchedule` (wallclock); stored `self._db_pool` in `__init__`; deleted the orphaned
+  `servicer._seconds_until_hour_utc` (grep-confirmed zero refs after). Enumeration failure now
+  retries after `retry_seconds` (clamped ≥1) instead of skip-to-tomorrow (@AC-9); per-user failures
+  stay swallowed → the completed pass advances to the next wall-clock hour.
+- Step 7: `tests/test_opportunity_refresh.py` (@AC-7/8/9) — net-new coverage (the loop had none).
+
+Verified: ruff check/format clean, pytest 621 passed, coverage 84.52% (>=40%). No uv.lock change
+(no new deps). Migration 020 verified offline (up/down inverse pairs).

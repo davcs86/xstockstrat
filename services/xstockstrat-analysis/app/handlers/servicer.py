@@ -15,6 +15,7 @@ import hashlib
 import json
 import logging
 import math
+import random
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -35,6 +36,7 @@ from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.config.watcher import ConfigWatcher
+from app.engine.durable_schedule import DurableSchedule, seconds_until_hour_utc
 from app.repositories.backtest_details import BacktestDetailsRepository
 from app.repositories.backtest_run_symbols import BacktestRunSymbolsRepository
 from app.repositories.backtest_runs import BacktestRunsRepository
@@ -335,6 +337,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         trading_channel=None,
     ):
         self._cfg = config_watcher
+        # Raw asyncpg pool (feature 158) — the servicer otherwise keeps db_pool only inside its
+        # repos; DurableSchedule (the opportunity refresh's wall-clock schedule) needs the raw pool.
+        # Same F-06 shared pool, no new pool. None in the no-DB test path.
+        self._db_pool = db_pool
         self._marketdata = marketdata_pb2_grpc.MarketDataServiceStub(marketdata_channel)
         self._indicators = indicators_pb2_grpc.IndicatorsServiceStub(indicators_channel)
         self._ingest = ingest_pb2_grpc.IngestServiceStub(ingest_channel)
@@ -3463,34 +3469,70 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 break
         return out
 
+    def _opportunity_refresh_hour(self) -> int:
+        """The wall-clock anchor hour for the daily opportunity refresh (read presence-aware —
+        `0` = midnight is legitimate). Passed as DurableSchedule's zero-arg anchor callable."""
+        return self._cfg.get_int_present("analysis.opportunity.refresh_hour_utc", 0)
+
+    async def _opportunity_refresh_tick(self, schedule: DurableSchedule) -> float:
+        """One scheduler iteration for the opportunity refresh. Returns the seconds run_forever
+        should sleep afterward. When due, runs one pass and advances the wall-clock schedule.
+
+        Enumeration failure raises → retry soon (feature 158, @AC-9 — the deliberate change from the
+        old skip-to-tomorrow `continue`). Per-user failures stay swallowed, so a completed pass
+        (even with some users failing) advances to the next wall-clock hour.
+        """
+        sleep_s = await schedule.next_sleep_seconds()
+        if sleep_s > 0:
+            return sleep_s
+        # Due. Enumerate the known-user set; a failure retries after retry_seconds (clamped ≥ 1).
+        try:
+            user_ids = await self._opportunities_repo.distinct_user_ids()
+        except Exception as e:
+            log.warning("opportunity daily refresh: user enumeration failed: %s", e)
+            retry = max(1, self._cfg.get_int_present("analysis.opportunity.retry_seconds", 300))
+            await schedule.advance(retry)
+            return 0.0
+        for uid in user_ids:
+            # Background path: synthesize the propagation header from the user id so the
+            # per-user portfolio/ingest reads resolve ownership (C-03).
+            meta = [("x-user-id", uid)]
+            try:
+                async with self._opportunity_lock(uid):
+                    rows = await self._compute_opportunities(uid, meta)
+                    await self._opportunities_repo.replace_for_user(uid, rows)
+            except Exception as e:  # one bad user never kills the pass
+                log.warning("opportunity daily refresh failed for user=%s: %s", uid, e)
+            await asyncio.sleep(0)  # cooperative pacing point
+        # A completed pass advances to the next wall-clock hour.
+        await schedule.advance(seconds_until_hour_utc(self._opportunity_refresh_hour()))
+        return 0.0
+
     async def run_opportunity_refresh_forever(self):
         """Configured **daily** refresh pass (feature 097, OR-C) — a wall-clock refresh at
         ``analysis.opportunity.refresh_hour_utc``, NOT market close (holiday/DST/early-close
         drift is expected). Recomputes the OR-E known-user set (``opportunities`` ∪
         ``opportunity_actions``); a watchlist-only user who never reads is never materialized here
         (accepted — the live loop owns alerting). Call as a ``create_task`` on this coroutine.
+
+        Feature 158: the schedule is now durable (compute-sleep-until-due, re-anchor across
+        redeploys, prompt re-run after a crash) via the shared DurableSchedule (wall-clock mode),
+        with a bounded one-shot startup jitter. `instance_count:1` → no lease/CAS fencing.
         """
         if self._opportunities_repo is None:
             return
+        schedule = DurableSchedule(
+            self._db_pool,
+            "opportunity",
+            "wallclock",
+            anchor_hour=self._opportunity_refresh_hour,
+        )
+        await schedule.seed()
+        # One-shot bounded startup jitter to stagger concurrent redeploys (mirror fundsignal_loop).
+        jitter = self._cfg.get_int_present("analysis.opportunity.startup_jitter_seconds", 30)
+        await asyncio.sleep(random.uniform(0, max(0, jitter)))
         while True:
-            hour = self._cfg.get_int_present("analysis.opportunity.refresh_hour_utc", 0)
-            await asyncio.sleep(_seconds_until_hour_utc(hour))
-            try:
-                user_ids = await self._opportunities_repo.distinct_user_ids()
-            except Exception as e:
-                log.warning("opportunity daily refresh: user enumeration failed: %s", e)
-                continue
-            for uid in user_ids:
-                # Background path: synthesize the propagation header from the user id so the
-                # per-user portfolio/ingest reads resolve ownership (C-03).
-                meta = [("x-user-id", uid)]
-                try:
-                    async with self._opportunity_lock(uid):
-                        rows = await self._compute_opportunities(uid, meta)
-                        await self._opportunities_repo.replace_for_user(uid, rows)
-                except Exception as e:  # one bad user never kills the pass
-                    log.warning("opportunity daily refresh failed for user=%s: %s", uid, e)
-                await asyncio.sleep(0)  # cooperative pacing point
+            await asyncio.sleep(await self._opportunity_refresh_tick(schedule))
 
     async def SetOpportunityAction(self, request, context):
         """Persist a per-user disposition (snooze/dismiss/take) for a queued opportunity
@@ -3836,18 +3878,6 @@ def _row_to_opportunity(row: dict) -> "analysis_pb2.Opportunity":
     if valid_until is not None:
         opp.valid_until.FromDatetime(valid_until)
     return opp
-
-
-def _seconds_until_hour_utc(hour: int) -> float:
-    """Seconds from now until the next occurrence of ``hour``:00 UTC (feature 097 daily refresh).
-    Always returns a positive delay (a full day when we're already at/past the hour today), so the
-    refresh fires once per calendar day."""
-    hour = hour % 24
-    now = datetime.now(UTC)
-    target = now.replace(hour=hour, minute=0, second=0, microsecond=0)
-    if target <= now:
-        target = target + timedelta(days=1)
-    return (target - now).total_seconds()
 
 
 def _expectancy_from_metrics(win_rate: float, profit_factor: float) -> float:

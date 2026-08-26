@@ -492,6 +492,12 @@ export interface Order {
   brokerType: BrokerType;
   /** intent_state is set by every write path and read via a cross-intent LATERAL join on other reads; see design.md. */
   intentState: IntentState;
+  /**
+   * filled_at is the confirmed/observed fill time: broker fills use the broker's timestamp;
+   * offline confirmations (feature 157) use the operator-supplied time (server-defaulted to now
+   * when unset). NULL for a NEW/unconfirmed order and every historical order.
+   */
+  filledAt?: Date | undefined;
 }
 
 export interface PlaceOrderRequest {
@@ -544,6 +550,23 @@ export interface CancelOrderResponse {
 
 export interface GetOrderRequest {
   orderId: string;
+}
+
+/**
+ * ConfirmOrder writes the fill a broker would otherwise report onto an OFFLINE order.
+ * status is server-derived from filled_qty vs qty (never client-supplied). Rejected with
+ * FailedPrecondition for broker (Alpaca/IBKR) accounts (FR-8/@AC-9).
+ */
+export interface ConfirmOrderRequest {
+  orderId: string;
+  filledQty: number;
+  filledAvgPrice: number;
+  /** optional; server defaults to now when unset */
+  filledAt?:
+    | Date
+    | undefined;
+  /** caller identity (ownership guard) */
+  userId: string;
 }
 
 export interface ListOrdersRequest {
@@ -701,6 +724,7 @@ function createBaseOrder(): Order {
     accountId: "",
     brokerType: BrokerType.BROKER_TYPE_UNSPECIFIED,
     intentState: IntentState.INTENT_STATE_UNSPECIFIED,
+    filledAt: undefined,
   };
 }
 
@@ -768,6 +792,9 @@ export const Order: MessageFns<Order> = {
     }
     if (message.intentState !== IntentState.INTENT_STATE_UNSPECIFIED) {
       writer.uint32(168).int32(intentStateToNumber(message.intentState));
+    }
+    if (message.filledAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.filledAt), writer.uint32(178).fork()).join();
     }
     return writer;
   },
@@ -947,6 +974,14 @@ export const Order: MessageFns<Order> = {
           message.intentState = intentStateFromJSON(reader.int32());
           continue;
         }
+        case 22: {
+          if (tag !== 178) {
+            break;
+          }
+
+          message.filledAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1047,6 +1082,11 @@ export const Order: MessageFns<Order> = {
         : isSet(object.intent_state)
         ? intentStateFromJSON(object.intent_state)
         : IntentState.INTENT_STATE_UNSPECIFIED,
+      filledAt: isSet(object.filledAt)
+        ? fromJsonTimestamp(object.filledAt)
+        : isSet(object.filled_at)
+        ? fromJsonTimestamp(object.filled_at)
+        : undefined,
     };
   },
 
@@ -1115,6 +1155,9 @@ export const Order: MessageFns<Order> = {
     if (message.intentState !== IntentState.INTENT_STATE_UNSPECIFIED) {
       obj.intentState = intentStateToJSON(message.intentState);
     }
+    if (message.filledAt !== undefined) {
+      obj.filledAt = message.filledAt.toISOString();
+    }
     return obj;
   },
 
@@ -1144,6 +1187,7 @@ export const Order: MessageFns<Order> = {
     message.accountId = object.accountId ?? "";
     message.brokerType = object.brokerType ?? BrokerType.BROKER_TYPE_UNSPECIFIED;
     message.intentState = object.intentState ?? IntentState.INTENT_STATE_UNSPECIFIED;
+    message.filledAt = object.filledAt ?? undefined;
     return message;
   },
 };
@@ -1733,6 +1777,150 @@ export const GetOrderRequest: MessageFns<GetOrderRequest> = {
   fromPartial<I extends Exact<DeepPartial<GetOrderRequest>, I>>(object: I): GetOrderRequest {
     const message = createBaseGetOrderRequest();
     message.orderId = object.orderId ?? "";
+    return message;
+  },
+};
+
+function createBaseConfirmOrderRequest(): ConfirmOrderRequest {
+  return { orderId: "", filledQty: 0, filledAvgPrice: 0, filledAt: undefined, userId: "" };
+}
+
+export const ConfirmOrderRequest: MessageFns<ConfirmOrderRequest> = {
+  encode(message: ConfirmOrderRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.orderId !== "") {
+      writer.uint32(10).string(message.orderId);
+    }
+    if (message.filledQty !== 0) {
+      writer.uint32(17).double(message.filledQty);
+    }
+    if (message.filledAvgPrice !== 0) {
+      writer.uint32(25).double(message.filledAvgPrice);
+    }
+    if (message.filledAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.filledAt), writer.uint32(34).fork()).join();
+    }
+    if (message.userId !== "") {
+      writer.uint32(42).string(message.userId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ConfirmOrderRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseConfirmOrderRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.orderId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.filledQty = reader.double();
+          continue;
+        }
+        case 3: {
+          if (tag !== 25) {
+            break;
+          }
+
+          message.filledAvgPrice = reader.double();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.filledAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ConfirmOrderRequest {
+    return {
+      orderId: isSet(object.orderId)
+        ? globalThis.String(object.orderId)
+        : isSet(object.order_id)
+        ? globalThis.String(object.order_id)
+        : "",
+      filledQty: isSet(object.filledQty)
+        ? globalThis.Number(object.filledQty)
+        : isSet(object.filled_qty)
+        ? globalThis.Number(object.filled_qty)
+        : 0,
+      filledAvgPrice: isSet(object.filledAvgPrice)
+        ? globalThis.Number(object.filledAvgPrice)
+        : isSet(object.filled_avg_price)
+        ? globalThis.Number(object.filled_avg_price)
+        : 0,
+      filledAt: isSet(object.filledAt)
+        ? fromJsonTimestamp(object.filledAt)
+        : isSet(object.filled_at)
+        ? fromJsonTimestamp(object.filled_at)
+        : undefined,
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
+    };
+  },
+
+  toJSON(message: ConfirmOrderRequest): unknown {
+    const obj: any = {};
+    if (message.orderId !== "") {
+      obj.orderId = message.orderId;
+    }
+    if (message.filledQty !== 0) {
+      obj.filledQty = message.filledQty;
+    }
+    if (message.filledAvgPrice !== 0) {
+      obj.filledAvgPrice = message.filledAvgPrice;
+    }
+    if (message.filledAt !== undefined) {
+      obj.filledAt = message.filledAt.toISOString();
+    }
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ConfirmOrderRequest>, I>>(base?: I): ConfirmOrderRequest {
+    return ConfirmOrderRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ConfirmOrderRequest>, I>>(object: I): ConfirmOrderRequest {
+    const message = createBaseConfirmOrderRequest();
+    message.orderId = object.orderId ?? "";
+    message.filledQty = object.filledQty ?? 0;
+    message.filledAvgPrice = object.filledAvgPrice ?? 0;
+    message.filledAt = object.filledAt ?? undefined;
+    message.userId = object.userId ?? "";
     return message;
   },
 };
@@ -3359,6 +3547,21 @@ export const TradingServiceService = {
     responseSerialize: (value: Order): Buffer => Buffer.from(Order.encode(value).finish()),
     responseDeserialize: (value: Buffer): Order => Order.decode(value),
   },
+  /**
+   * ConfirmOrder is OFFLINE-only (feature 157): it writes the fill fields a broker would
+   * otherwise report (filled_qty/filled_avg_price/filled_at, and a server-derived status)
+   * onto an order belonging to an offline account, then recomputes the account's positions.
+   * It never contacts a broker and is rejected with FailedPrecondition for broker accounts.
+   */
+  confirmOrder: {
+    path: "/xstockstrat.trading.v1.TradingService/ConfirmOrder" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ConfirmOrderRequest): Buffer => Buffer.from(ConfirmOrderRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ConfirmOrderRequest => ConfirmOrderRequest.decode(value),
+    responseSerialize: (value: Order): Buffer => Buffer.from(Order.encode(value).finish()),
+    responseDeserialize: (value: Buffer): Order => Order.decode(value),
+  },
   registerBrokerAccount: {
     path: "/xstockstrat.trading.v1.TradingService/RegisterBrokerAccount" as const,
     requestStream: false as const,
@@ -3440,6 +3643,13 @@ export interface TradingServiceServer extends UntypedServiceImplementation {
    * while the order is NEW or PARTIALLY_FILLED.
    */
   replaceOrder: handleUnaryCall<ReplaceOrderRequest, Order>;
+  /**
+   * ConfirmOrder is OFFLINE-only (feature 157): it writes the fill fields a broker would
+   * otherwise report (filled_qty/filled_avg_price/filled_at, and a server-derived status)
+   * onto an order belonging to an offline account, then recomputes the account's positions.
+   * It never contacts a broker and is rejected with FailedPrecondition for broker accounts.
+   */
+  confirmOrder: handleUnaryCall<ConfirmOrderRequest, Order>;
   registerBrokerAccount: handleUnaryCall<RegisterBrokerAccountRequest, RegisterBrokerAccountResponse>;
   listBrokerAccounts: handleUnaryCall<ListBrokerAccountsRequest, ListBrokerAccountsResponse>;
   deregisterBrokerAccount: handleUnaryCall<DeregisterBrokerAccountRequest, DeregisterBrokerAccountResponse>;
@@ -3539,6 +3749,27 @@ export interface TradingServiceClient extends Client {
   ): ClientUnaryCall;
   replaceOrder(
     request: ReplaceOrderRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: Order) => void,
+  ): ClientUnaryCall;
+  /**
+   * ConfirmOrder is OFFLINE-only (feature 157): it writes the fill fields a broker would
+   * otherwise report (filled_qty/filled_avg_price/filled_at, and a server-derived status)
+   * onto an order belonging to an offline account, then recomputes the account's positions.
+   * It never contacts a broker and is rejected with FailedPrecondition for broker accounts.
+   */
+  confirmOrder(
+    request: ConfirmOrderRequest,
+    callback: (error: ServiceError | null, response: Order) => void,
+  ): ClientUnaryCall;
+  confirmOrder(
+    request: ConfirmOrderRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: Order) => void,
+  ): ClientUnaryCall;
+  confirmOrder(
+    request: ConfirmOrderRequest,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: Order) => void,

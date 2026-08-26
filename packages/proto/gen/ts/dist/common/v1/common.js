@@ -152,6 +152,11 @@ var BrokerType;
     BrokerType["BROKER_TYPE_UNSPECIFIED"] = "BROKER_TYPE_UNSPECIFIED";
     BrokerType["BROKER_TYPE_ALPACA"] = "BROKER_TYPE_ALPACA";
     BrokerType["BROKER_TYPE_IBKR"] = "BROKER_TYPE_IBKR";
+    /**
+     * BROKER_TYPE_OFFLINE - A manually-tracked account with no broker credentials and no broker client
+     * (feature 157). Its fills are hand-confirmed via ConfirmOrder; broker pollers skip it.
+     */
+    BrokerType["BROKER_TYPE_OFFLINE"] = "BROKER_TYPE_OFFLINE";
     BrokerType["UNRECOGNIZED"] = "UNRECOGNIZED";
 })(BrokerType || (exports.BrokerType = BrokerType = {}));
 function brokerTypeFromJSON(object) {
@@ -165,6 +170,9 @@ function brokerTypeFromJSON(object) {
         case 2:
         case "BROKER_TYPE_IBKR":
             return BrokerType.BROKER_TYPE_IBKR;
+        case 3:
+        case "BROKER_TYPE_OFFLINE":
+            return BrokerType.BROKER_TYPE_OFFLINE;
         case -1:
         case "UNRECOGNIZED":
         default:
@@ -179,6 +187,8 @@ function brokerTypeToJSON(object) {
             return "BROKER_TYPE_ALPACA";
         case BrokerType.BROKER_TYPE_IBKR:
             return "BROKER_TYPE_IBKR";
+        case BrokerType.BROKER_TYPE_OFFLINE:
+            return "BROKER_TYPE_OFFLINE";
         case BrokerType.UNRECOGNIZED:
         default:
             return "UNRECOGNIZED";
@@ -192,6 +202,8 @@ function brokerTypeToNumber(object) {
             return 1;
         case BrokerType.BROKER_TYPE_IBKR:
             return 2;
+        case BrokerType.BROKER_TYPE_OFFLINE:
+            return 3;
         case BrokerType.UNRECOGNIZED:
         default:
             return -1;

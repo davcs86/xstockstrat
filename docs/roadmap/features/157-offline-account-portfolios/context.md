@@ -180,3 +180,48 @@ branch and PR) is unchanged; only the `NNN` prefix and the self-referential path
     per-call channel pattern :293-311; six tool-count surfaces 28→29; env absent from docker-compose.yml
     /.do/app.yaml/.do/app.dev.yaml/agent CLAUDE.md.
 - Every `@AC-1..@AC-15` mapped to a covering test step (see § Scenario Coverage in the spec).
+
+## Session 2026-08-26T05:21Z — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 3 warning classes, 2 notes (advisory — did not block). No Floor (`F-*`) risk;
+  F-01 and F-07 explicitly honored. Overlap scan: CLEAN (trading 008 / portfolio 012 next-free; proto
+  field numbers BrokerType=3, Order.filled_at=22, Portfolio.realized_pnl=12 all uncontested; no shared
+  source path with in-flight features 158/142). This gate had been skipped before execution began;
+  run now after steps 1–4 (proto + migrations, all additive) were committed.
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 13: agent tool-count baseline is drifted — `app/tools.py` docstring already reads
+    "Twenty-nine tools" but only 28 `@server.tool()` decorators exist (pre-existing docstring drift,
+    NOT feature 158, which does not touch the agent). At execute time, count actual tools and
+    reconcile ALL six inventory surfaces (docstring, decorators, agent CLAUDE.md table, mcp-tools.md,
+    test_tools_endpoint.py name-set, GET /api/tools) to the true post-add count. — [ ] unaddressed
+  - Step 7: add an explicit "other order types unaffected" note to satisfy the B2b order-type
+    exhaustiveness check (offline record path is order-type-agnostic; no broker branch). — [ ] unaddressed
+  - Steps 2/6/8/9/13/14: wildcard/dir `Files` entries (`gen/**`, `*_test.go`, `internal/service/*`,
+    `tests/test_*.py`) trip the B2 exact-paths criterion; defensible for generated/test output —
+    name concrete files where known. — [ ] advisory, low priority
+- Overlap findings: none.
+
+## Session 2026-08-26 — sdd-execute (implementation)
+
+- Implemented all 15 steps on branch `claude/features-157-158-impl-ulk0l2` (harness-assigned; the
+  designated single branch for features 157+158, per the task's branch requirement — not the
+  per-feature `feature/offline-account-portfolios` branch the spec header names).
+- Tool-count reconciliation (carried warning from the impl-spec review): the true agent baseline was
+  **29** registered tools (the docstring/CLAUDE.md/name-set all said 29; the earlier "28" was a bad
+  `@server.tool()` grep that missed one decorator form). Adding `manage_offline_account` → **30**;
+  all six inventory surfaces updated to 30. [x] resolved.
+- Step 7 order-type note (carried warning): the offline record path is order-type-agnostic (no broker
+  branch); documented in `recordOfflineOrder`. [x] resolved.
+- E2E note: the Playwright suite's shared `warmup.setup.ts` SSR pre-warm times out on cold start in
+  the CI-less sandbox; the offline spec was verified with `--no-deps` (3/3 green). CI runs the full
+  suite with a prebuilt bundle.
+
+### Named follow-ups (C-14 — not vague "later")
+
+- **`offline-broker-card-realized`** — surface realized P&L on **broker** account cards too. Requires
+  fixing `GetPnL`'s account-blindness (it aggregates across all of a user's accounts rather than
+  scoping to one `account_id`). Offline-only realized is the deliberate v1 scope; the offline path
+  uses the account-grain `offline_account_realized` table, which broker accounts do not populate.
+- **Offline crash-recovery resync** — offline positions self-heal only on a ConfirmOrder recompute
+  (there is no poller for offline accounts). A resync path (e.g. a boot-time recompute from confirmed
+  orders) is a possible follow-up if staleness after a mid-confirm crash proves material in practice.

@@ -43,6 +43,8 @@ export const EMPTY_CREDENTIALS: CredentialState = {
 
 /** Builds the broker-type-specific credentials_json blob from form state. */
 export function buildCredentialsJson(brokerType: BrokerType, creds: CredentialState): string {
+  // Offline accounts (feature 157) have no broker credentials — register with an empty blob.
+  if (brokerType === BrokerType.OFFLINE) return '';
   return brokerType === BrokerType.IBKR
     ? JSON.stringify({
         consumer_key: creds.consumerKey,
@@ -60,6 +62,17 @@ export function buildCredentialsJson(brokerType: BrokerType, creds: CredentialSt
 // the full `CredentialState` shape.
 export function credentialSchema(brokerType: BrokerType) {
   const requiredMsg = 'This field is required';
+  // Offline accounts (feature 157) have no credentials — every field is unconstrained.
+  if (brokerType === BrokerType.OFFLINE) {
+    return z.object({
+      apiKey: z.string(),
+      apiSecret: z.string(),
+      consumerKey: z.string(),
+      accessToken: z.string(),
+      accessTokenSecret: z.string(),
+      ibkrAccountId: z.string(),
+    });
+  }
   return brokerType === BrokerType.IBKR
     ? z.object({
         apiKey: z.string(),
@@ -90,6 +103,11 @@ export function CredentialFields({
   onChange: (next: CredentialState) => void;
 }) {
   const set = (patch: Partial<CredentialState>) => onChange({ ...creds, ...patch });
+
+  // Offline accounts (feature 157) have no credentials — render no secret inputs.
+  if (brokerType === BrokerType.OFFLINE) {
+    return null;
+  }
 
   if (brokerType === BrokerType.IBKR) {
     return (
@@ -458,6 +476,7 @@ export function AddAccountForm({
             <SelectContent>
               <SelectItem value="1">Alpaca</SelectItem>
               <SelectItem value="2">IBKR</SelectItem>
+              <SelectItem value="3">Offline</SelectItem>
             </SelectContent>
           </Select>
         )}

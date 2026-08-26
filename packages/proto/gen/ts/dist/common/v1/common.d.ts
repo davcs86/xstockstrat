@@ -40,6 +40,11 @@ export declare enum BrokerType {
     BROKER_TYPE_UNSPECIFIED = "BROKER_TYPE_UNSPECIFIED",
     BROKER_TYPE_ALPACA = "BROKER_TYPE_ALPACA",
     BROKER_TYPE_IBKR = "BROKER_TYPE_IBKR",
+    /**
+     * BROKER_TYPE_OFFLINE - A manually-tracked account with no broker credentials and no broker client
+     * (feature 157). Its fills are hand-confirmed via ConfirmOrder; broker pollers skip it.
+     */
+    BROKER_TYPE_OFFLINE = "BROKER_TYPE_OFFLINE",
     UNRECOGNIZED = "UNRECOGNIZED"
 }
 export declare function brokerTypeFromJSON(object: any): BrokerType;

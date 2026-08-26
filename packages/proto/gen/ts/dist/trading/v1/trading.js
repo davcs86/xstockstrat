@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: trading/v1/trading.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TradingServiceClient = exports.TradingServiceService = exports.DeregisterBrokerAccountResponse = exports.DeregisterBrokerAccountRequest = exports.ListBrokerAccountsResponse = exports.ListBrokerAccountsRequest = exports.GetTradingEnvironmentResponse = exports.GetTradingEnvironmentRequest = exports.UpdateBrokerAccountCredentialsResponse = exports.UpdateBrokerAccountCredentialsRequest = exports.RegisterBrokerAccountResponse = exports.RegisterBrokerAccountRequest = exports.BrokerAccount = exports.ReplaceOrderRequest = exports.StreamOrderUpdatesRequest = exports.ListOrdersResponse = exports.ListOrdersRequest = exports.GetOrderRequest = exports.CancelOrderResponse = exports.CancelOrderRequest = exports.PlaceOrderRequest = exports.Order = exports.HaltSource = exports.IntentState = exports.CredentialStatus = exports.OrderStatus = exports.OrderType = exports.OrderSide = exports.protobufPackage = void 0;
+exports.TradingServiceClient = exports.TradingServiceService = exports.DeregisterBrokerAccountResponse = exports.DeregisterBrokerAccountRequest = exports.ListBrokerAccountsResponse = exports.ListBrokerAccountsRequest = exports.GetTradingEnvironmentResponse = exports.GetTradingEnvironmentRequest = exports.UpdateBrokerAccountCredentialsResponse = exports.UpdateBrokerAccountCredentialsRequest = exports.RegisterBrokerAccountResponse = exports.RegisterBrokerAccountRequest = exports.BrokerAccount = exports.ReplaceOrderRequest = exports.StreamOrderUpdatesRequest = exports.ListOrdersResponse = exports.ListOrdersRequest = exports.ConfirmOrderRequest = exports.GetOrderRequest = exports.CancelOrderResponse = exports.CancelOrderRequest = exports.PlaceOrderRequest = exports.Order = exports.HaltSource = exports.IntentState = exports.CredentialStatus = exports.OrderStatus = exports.OrderType = exports.OrderSide = exports.protobufPackage = void 0;
 exports.orderSideFromJSON = orderSideFromJSON;
 exports.orderSideToJSON = orderSideToJSON;
 exports.orderSideToNumber = orderSideToNumber;
@@ -466,6 +466,7 @@ function createBaseOrder() {
         accountId: "",
         brokerType: common_1.BrokerType.BROKER_TYPE_UNSPECIFIED,
         intentState: IntentState.INTENT_STATE_UNSPECIFIED,
+        filledAt: undefined,
     };
 }
 exports.Order = {
@@ -532,6 +533,9 @@ exports.Order = {
         }
         if (message.intentState !== IntentState.INTENT_STATE_UNSPECIFIED) {
             writer.uint32(168).int32(intentStateToNumber(message.intentState));
+        }
+        if (message.filledAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.filledAt), writer.uint32(178).fork()).join();
         }
         return writer;
     },
@@ -689,6 +693,13 @@ exports.Order = {
                     message.intentState = intentStateFromJSON(reader.int32());
                     continue;
                 }
+                case 22: {
+                    if (tag !== 178) {
+                        break;
+                    }
+                    message.filledAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -788,6 +799,11 @@ exports.Order = {
                 : isSet(object.intent_state)
                     ? intentStateFromJSON(object.intent_state)
                     : IntentState.INTENT_STATE_UNSPECIFIED,
+            filledAt: isSet(object.filledAt)
+                ? fromJsonTimestamp(object.filledAt)
+                : isSet(object.filled_at)
+                    ? fromJsonTimestamp(object.filled_at)
+                    : undefined,
         };
     },
     toJSON(message) {
@@ -855,6 +871,9 @@ exports.Order = {
         if (message.intentState !== IntentState.INTENT_STATE_UNSPECIFIED) {
             obj.intentState = intentStateToJSON(message.intentState);
         }
+        if (message.filledAt !== undefined) {
+            obj.filledAt = message.filledAt.toISOString();
+        }
         return obj;
     },
     create(base) {
@@ -883,6 +902,7 @@ exports.Order = {
         message.accountId = object.accountId ?? "";
         message.brokerType = object.brokerType ?? common_1.BrokerType.BROKER_TYPE_UNSPECIFIED;
         message.intentState = object.intentState ?? IntentState.INTENT_STATE_UNSPECIFIED;
+        message.filledAt = object.filledAt ?? undefined;
         return message;
     },
 };
@@ -1427,6 +1447,139 @@ exports.GetOrderRequest = {
     fromPartial(object) {
         const message = createBaseGetOrderRequest();
         message.orderId = object.orderId ?? "";
+        return message;
+    },
+};
+function createBaseConfirmOrderRequest() {
+    return { orderId: "", filledQty: 0, filledAvgPrice: 0, filledAt: undefined, userId: "" };
+}
+exports.ConfirmOrderRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.orderId !== "") {
+            writer.uint32(10).string(message.orderId);
+        }
+        if (message.filledQty !== 0) {
+            writer.uint32(17).double(message.filledQty);
+        }
+        if (message.filledAvgPrice !== 0) {
+            writer.uint32(25).double(message.filledAvgPrice);
+        }
+        if (message.filledAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.filledAt), writer.uint32(34).fork()).join();
+        }
+        if (message.userId !== "") {
+            writer.uint32(42).string(message.userId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseConfirmOrderRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.orderId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 17) {
+                        break;
+                    }
+                    message.filledQty = reader.double();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 25) {
+                        break;
+                    }
+                    message.filledAvgPrice = reader.double();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.filledAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            orderId: isSet(object.orderId)
+                ? globalThis.String(object.orderId)
+                : isSet(object.order_id)
+                    ? globalThis.String(object.order_id)
+                    : "",
+            filledQty: isSet(object.filledQty)
+                ? globalThis.Number(object.filledQty)
+                : isSet(object.filled_qty)
+                    ? globalThis.Number(object.filled_qty)
+                    : 0,
+            filledAvgPrice: isSet(object.filledAvgPrice)
+                ? globalThis.Number(object.filledAvgPrice)
+                : isSet(object.filled_avg_price)
+                    ? globalThis.Number(object.filled_avg_price)
+                    : 0,
+            filledAt: isSet(object.filledAt)
+                ? fromJsonTimestamp(object.filledAt)
+                : isSet(object.filled_at)
+                    ? fromJsonTimestamp(object.filled_at)
+                    : undefined,
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.orderId !== "") {
+            obj.orderId = message.orderId;
+        }
+        if (message.filledQty !== 0) {
+            obj.filledQty = message.filledQty;
+        }
+        if (message.filledAvgPrice !== 0) {
+            obj.filledAvgPrice = message.filledAvgPrice;
+        }
+        if (message.filledAt !== undefined) {
+            obj.filledAt = message.filledAt.toISOString();
+        }
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ConfirmOrderRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseConfirmOrderRequest();
+        message.orderId = object.orderId ?? "";
+        message.filledQty = object.filledQty ?? 0;
+        message.filledAvgPrice = object.filledAvgPrice ?? 0;
+        message.filledAt = object.filledAt ?? undefined;
+        message.userId = object.userId ?? "";
         return message;
     },
 };
@@ -2895,6 +3048,21 @@ exports.TradingServiceService = {
         responseStream: false,
         requestSerialize: (value) => Buffer.from(exports.ReplaceOrderRequest.encode(value).finish()),
         requestDeserialize: (value) => exports.ReplaceOrderRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.Order.encode(value).finish()),
+        responseDeserialize: (value) => exports.Order.decode(value),
+    },
+    /**
+     * ConfirmOrder is OFFLINE-only (feature 157): it writes the fill fields a broker would
+     * otherwise report (filled_qty/filled_avg_price/filled_at, and a server-derived status)
+     * onto an order belonging to an offline account, then recomputes the account's positions.
+     * It never contacts a broker and is rejected with FailedPrecondition for broker accounts.
+     */
+    confirmOrder: {
+        path: "/xstockstrat.trading.v1.TradingService/ConfirmOrder",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ConfirmOrderRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ConfirmOrderRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.Order.encode(value).finish()),
         responseDeserialize: (value) => exports.Order.decode(value),
     },
