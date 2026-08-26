@@ -401,11 +401,9 @@ class TestScheduler:
         run_once.assert_awaited_once()
         assert sleep_s == 0.0
         sql = _executed_sql(loop)
-        assert any(
-            "INSERT INTO analysis.fundsignal_schedule" in s and "ON CONFLICT" in s for s in sql
-        )
+        assert any("INSERT INTO analysis.job_schedule" in s and "ON CONFLICT" in s for s in sql)
         # And it advanced the schedule after the successful run.
-        assert any("UPDATE analysis.fundsignal_schedule" in s for s in sql)
+        assert any("UPDATE analysis.job_schedule" in s for s in sql)
 
     @pytest.mark.asyncio
     async def test_ac2_redeploy_within_interval_does_not_reset(self, monkeypatch):
@@ -452,7 +450,7 @@ class TestScheduler:
         advance = [
             c
             for c in loop._db.execute.await_args_list
-            if c.args and "UPDATE analysis.fundsignal_schedule" in c.args[0]
+            if c.args and "UPDATE analysis.job_schedule" in c.args[0]
         ]
         assert advance, "expected a schedule advance after a caught error"
         new_blocked = advance[-1].args[1]
@@ -471,7 +469,7 @@ class TestScheduler:
         sleep_s = await loop._tick()
         run_once.assert_not_awaited()
         # No schedule advance while disabled.
-        assert not any("UPDATE analysis.fundsignal_schedule" in s for s in _executed_sql(loop))
+        assert not any("UPDATE analysis.job_schedule" in s for s in _executed_sql(loop))
         # Not a busy-spin: a positive sleep is returned (one interval).
         assert sleep_s == 24 * 3600
 
@@ -480,8 +478,8 @@ class TestScheduler:
         # The manual RPC path calls run_once directly — it must never move the scheduled cadence.
         loop = _sched_loop({}, blocked_until_ms=0)
         await loop.run_once(override_symbols=["AAPL", "MSFT"])
-        assert not any("fundsignal_schedule" in s for s in _executed_sql(loop)), (
-            "run_once must not read or write analysis.fundsignal_schedule (AC-6)"
+        assert not any("job_schedule" in s for s in _executed_sql(loop)), (
+            "run_once must not read or write analysis.job_schedule (AC-6)"
         )
 
     @pytest.mark.asyncio

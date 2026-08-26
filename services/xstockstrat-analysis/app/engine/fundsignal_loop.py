@@ -14,9 +14,7 @@ The same ``run_once`` path backs both the scheduled loop and the manual
 
 import asyncio
 import logging
-import os
 import random
-import socket
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -27,6 +25,8 @@ from gen.notify.v1 import notify_pb2
 from gen.portfolio.v1 import portfolio_pb2
 from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
+
+from app.engine.durable_schedule import DurableSchedule
 
 log = logging.getLogger(__name__)
 
@@ -73,6 +73,11 @@ class FundamentalsSignalLoop:
     ):
         self._cfg = config_watcher
         self._db = db_pool
+        # Feature 158: the durable, crash-safe schedule now lives in the shared DurableSchedule
+        # helper (interval mode) backed by analysis.job_schedule — the three private seams below
+        # delegate to it, keeping this loop's _tick/run_forever (disabled gate, overlap lock,
+        # config reads) local so feature 156's @AC-1..7 behavior stays here.
+        self._schedule = DurableSchedule(self._db, self._SCHEDULE_JOB, "interval")
         self._marketdata = marketdata_stub
         self._ingest = ingest_stub
         self._portfolio = portfolio_stub
@@ -106,45 +111,22 @@ class FundamentalsSignalLoop:
 
     _SCHEDULE_JOB = "fundsignal"
 
-    def _now_ms(self):
-        return int(datetime.now(UTC).timestamp() * 1000)
-
-    def _process_name(self):
-        return os.environ.get("HOSTNAME") or socket.gethostname()
-
     async def _seed_schedule(self):
-        """Ensure the schedule row exists. A fresh deploy seeds blocked_until_ms=0 (immediately
-        due → prompt first cycle); an existing row keeps its future due-time (redeploy no-op)."""
-        await self._db.execute(
-            "INSERT INTO analysis.fundsignal_schedule (job_name, blocked_until_ms) "
-            "VALUES ($1, 0) ON CONFLICT DO NOTHING",
-            self._SCHEDULE_JOB,
-        )
+        """Ensure the schedule row exists (delegates to the shared DurableSchedule, feature 158). A
+        fresh deploy seeds blocked_until_ms=0 (immediately due → prompt first cycle); an existing
+        row keeps its future due-time (redeploy no-op)."""
+        await self._schedule.seed()
 
     async def _next_sleep_seconds(self):
         """Seconds to wait until the schedule is due; 0.0 if due now (compute-sleep-until-due,
-        no polling). A single Python clock source (safe at instance_count:1)."""
-        blocked_until_ms = await self._db.fetchval(
-            "SELECT blocked_until_ms FROM analysis.fundsignal_schedule WHERE job_name = $1",
-            self._SCHEDULE_JOB,
-        )
-        blocked_until_ms = int(blocked_until_ms) if blocked_until_ms is not None else 0
-        now_ms = self._now_ms()
-        if now_ms < blocked_until_ms:
-            return (blocked_until_ms - now_ms) / 1000.0
-        return 0.0
+        no polling; delegates to DurableSchedule)."""
+        return await self._schedule.next_sleep_seconds()
 
     async def _advance_schedule(self, seconds):
-        """Push the next-due time forward. Called ONLY after a cycle finishes (success → interval;
-        caught error → retry_seconds), never before running — that is the crash-safety property."""
-        await self._db.execute(
-            "UPDATE analysis.fundsignal_schedule "
-            "SET blocked_until_ms = $1, process_name = $2, updated_at = now() "
-            "WHERE job_name = $3",
-            self._now_ms() + int(seconds * 1000),
-            self._process_name(),
-            self._SCHEDULE_JOB,
-        )
+        """Push the next-due time forward (delegates to DurableSchedule). Called ONLY after a cycle
+        finishes (success → interval; caught error → retry_seconds), never before running — the
+        crash-safety property."""
+        await self._schedule.advance(seconds)
 
     async def _tick(self):
         """One scheduler iteration. Returns the seconds run_forever should sleep afterward.
