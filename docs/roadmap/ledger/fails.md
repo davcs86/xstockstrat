@@ -1666,3 +1666,25 @@ ambiguity is logged here).
 - **Mistake**: Added a **value** import of `@phosphor-icons/react` (which calls `React.createContext` at module scope) to `services/xstockstrat-ui/src/lib/opportunityShared.tsx` for the new cue maps. That module is transitively imported by **server** code — `src/lib/traderBff.ts:24` imports copilot stream constants from `src/lib/copilot.ts`, which imports `OPPORTUNITY_ACTION` from `opportunityShared` — so the icon lib landed in the `/trader/api/[...connect]` route's server bundle. `tsc`, lint, unit, and the dev-server e2e all passed; only the **production build** caught it: `TypeError: (0 , d.createContext) is not a function` while "Collecting page data" (CI `Frontend E2E Build`, green on the base branch). Same "shipped it to the client surface, forgot it also rides a server import chain" family as the C-10 shared-consumer entries, specialized to a client-only lib crossing the RSC boundary.
 - **Evidence**: `services/xstockstrat-ui/src/lib/opportunityShared.tsx` (phosphor value import, now type-only); `src/lib/copilot.ts:7` → `src/lib/traderBff.ts:24`; fix `src/lib/readinessCue.ts` (the phosphor value import + cue maps, imported only by `'use client'` cue consumers); PR #1012 CI run 32908124461.
 - **Rule it implies**: a module imported (even transitively) by a route handler / server plumbing must not statically import a **client-only** library that evaluates React (`createContext`, hooks) at module scope. Keep such value imports in a leaf only client components reach, and verify with a real `next build` (not just tsc/lint/dev-server e2e) — `pnpm build` is the only local check that exercises server-bundle "collect page data". Grep the server import chain (`traderBff`/`*Bff`/`route.ts` → its `@/lib/*` imports) before adding a client lib to a shared `lib/` module.
+
+### 2026-08-26 — 159-fix-offline-account-ui-gaps — assumption
+- **Mistake**: A design (and its recon) asserted a status-transition path was "guarded" by reading only
+  the *broker-call* precondition next to it, not the *local state write*. `CancelOrder` skips the broker
+  cancel when `broker_order_id == ""` (`trading.go:1036`) but then sets `order.Status = ORDER_STATUS_CANCELED`
+  **unconditionally** (`:1079`) — no offline / terminal-state / empty-`broker_order_id` guard on the local
+  transition. So an OFFLINE NEW order (which by design has an empty `broker_order_id` and no broker client)
+  can be flipped to CANCELED with no broker involved, silently violating the "offline orders are recorded
+  NEW, never broker-CANCELED" guarantee (feature 159 FR-2). The recon's premise ("CANCELED requires a
+  non-empty broker_order_id + non-offline client") was true of the broker cancel but false of the local
+  write beside it — caught only by a dedicated code-trace after the design-adversary refused the UI-only
+  closure. Same shape as the routing half: `PlaceOrder` decides offline solely from the in-memory pool tag
+  (`:388`) and never re-reads the persisted account `broker_type`, so a pool/DB divergence misroutes.
+- **Evidence**: `services/xstockstrat-trading/internal/service/trading.go:1036,1079` (guarded broker cancel
+  vs unguarded local transition); `:285-317,388` (pool-tag-only routing); feature 159 `design.md` § Chosen
+  Approach A (both guards), `context.md` § root-cause investigation (trading trace).
+- **Rule it implies**: reinforces **C-10(b)**/**P-03** — when auditing whether a state transition is
+  "guarded," read the precondition on the **state write itself**, not on an adjacent side-effect (a broker
+  call, a notification) that happens to share the branch. A skipped side-effect is not a skipped transition.
+  And a routing/authorization decision that reads an in-memory cache (broker pool) must be checked against
+  the case where the cache diverges from the authoritative store — prefer reading the persisted value, or
+  prove the cache cannot diverge, before calling the path safe.
