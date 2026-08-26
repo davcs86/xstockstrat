@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-26 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report (2026-08-26-signal-screen-bar-timestamp-crash) |
+| 2026-08-26 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. One-line fix + window-discriminating RED tests + ledger-mandated _make_bar reshape |
 
 ---
 
@@ -21,6 +22,8 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon](recon.md) — grounded codebase dossier (Phase 0)
+- [Design](design.md) — debated, approved architecture (Phase 1)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-signal-screen-crash`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -35,4 +38,4 @@ fundamentals producer.
 
 ## Next Action
 
-`/sdd-design fix-signal-screen-crash quick` — recommended design depth (quick) from triage; see context.md
+`/sdd-spec fix-signal-screen-crash` — generate implementation spec from the approved design
