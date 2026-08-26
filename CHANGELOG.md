@@ -6,6 +6,24 @@ Each entry corresponds to one `main-dev → main` PR merge.
 ## 2026-08-26
 
 ### Features
+- offline-account-portfolios: Adds **offline accounts** — a manually-tracked account variant with no broker credentials and no broker client — that reuses the existing per-`account_id` portfolio integrations (position tracking, P&L, portfolio cards, orders/positions pages).
+- durable-loop-scheduler: Generalize feature 156's durable, crash-safe schedule (used only by the fundamentals producer today) into a reusable scheduler + a schedule table keyed by `(job_name, user_id)`, and migrate the other interval background loops onto it so every loop fires promptly on boot and keeps a redeploy-/crash-safe cadence.
+- fix-offline-account-ui-gaps: Two UI-correctness gaps in the shipped-to-staging feature 157 (offline-account-portfolios): the `/trader` broker order ticket accepts orders on an offline account (one landed CANCELED instead of a recorded NEW offline order), and the portfolio surface shows broker-only equity/cash/buying-power/ day-P&L fields that don't apply to an offline account (misleading).
+- fix-signal-screen-crash: Signal-weighted `ScreenSymbols` crashes with `AttributeError: timestamp` because `app/services/scoring.py` reads `bar.timestamp` while the marketdata `Bar` proto field is `time`.
+
+### Proto Changes
+- common/v1/common.proto
+- portfolio/v1/portfolio.proto
+- trading/v1/trading.proto
+
+### Summary
+5 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-08-26
+
+### Features
 - watchlist-opportunity-signal-cues: Make firing/ready and in-queue states visually distinguishable with consistent color + icon coding across the Watchlists readiness panel and Opportunities cards/mobile view, add a "firing"-row jump to the symbol's order/position page, and fix three UX defects (Opportunities-origin breadcrumb, mobile Opportunities grouping/tags, and stale filter tags).
 - fix-fundamentals-signal-producer: The fundamentals signal producer schedules its cycles with an in-process `asyncio.sleep` placed *before* the first run and keeps no persisted schedule, so every redeploy (CI/CD fires on every `main-dev` push) restarts a fresh full-interval sleep and the first cycle can be deferred indefinitely — the producer effectively never emits.
 
