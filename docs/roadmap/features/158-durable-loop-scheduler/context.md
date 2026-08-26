@@ -206,3 +206,10 @@ _All five design-time spec guards were resolved into concrete step instructions:
 
 Verified: ruff check/format clean, pytest 621 passed, coverage 84.52% (>=40%). No uv.lock change
 (no new deps). Migration 020 verified offline (up/down inverse pairs).
+
+## Session 2026-08-26 (CI: feature status automation)
+
+- Promotion PR #1027 merged to main
+- Feature promoted and committed: 65aeaa4c5bb7c000dfb4e30d5b788d6c39352234
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-26

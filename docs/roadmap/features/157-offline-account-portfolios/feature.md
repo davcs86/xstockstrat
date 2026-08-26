@@ -3,6 +3,8 @@
 **Development Branch**: `feature/offline-account-portfolios`
 **Created**: 2026-08-26
 **Last Updated**: 2026-08-26
+**Committed to main**: 65aeaa4c5bb7c000dfb4e30d5b788d6c39352234
+**Launched date**: 2026-08-26
 
 ---
 
@@ -14,6 +16,7 @@
 | 2026-08-26 | `draft` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + design.md written; @AC-7 amended + realized/shorts scenarios added |
 | 2026-08-26 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 15 steps |
 
+| 2026-08-26 | `code-completed` → `launched` | CI workflow | Promoted via PR #1027; committed 65aeaa4c5bb7c000dfb4e30d5b788d6c39352234 |
 ---
 
 ## Artifacts

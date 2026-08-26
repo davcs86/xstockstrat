@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-08-26
 **Last Updated**: 2026-08-26
+**Committed to main**: 65aeaa4c5bb7c000dfb4e30d5b788d6c39352234
+**Launched date**: 2026-08-26
 
 ---
 
@@ -20,6 +22,7 @@
 | 2026-08-26 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Step 1: trading guards) |
 | 2026-08-26 | `in-progress` → `code-completed` | /sdd-execute | All 8 steps done (trading dual guards + test, portfolio enumeration + test, UI record control + PortfolioPanel/Book-page gating, e2e @AC-1..4, docs); ready for integration PR |
 
+| 2026-08-26 | `code-completed` → `launched` | CI workflow | Promoted via PR #1027; committed 65aeaa4c5bb7c000dfb4e30d5b788d6c39352234 |
 ---
 
 ## Artifacts

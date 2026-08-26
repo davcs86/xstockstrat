@@ -214,3 +214,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - The exact staging failure mode is fixed on the live edge the mocked tests couldn't reach. **Step 3's
   REQUIRED manual dev smoke is now satisfied.** Feature 160 fix fully verified end-to-end (unit RED→GREEN,
   engine-seam RED→GREEN, live post-deploy smoke).
+
+## Session 2026-08-26 (CI: feature status automation)
+
+- Promotion PR #1027 merged to main
+- Feature promoted and committed: 65aeaa4c5bb7c000dfb4e30d5b788d6c39352234
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-26

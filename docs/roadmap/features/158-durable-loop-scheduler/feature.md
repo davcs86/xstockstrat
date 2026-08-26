@@ -3,6 +3,8 @@
 **Development Branch**: `feature/durable-loop-scheduler`
 **Created**: 2026-08-26
 **Last Updated**: 2026-08-26
+**Committed to main**: 65aeaa4c5bb7c000dfb4e30d5b788d6c39352234
+**Launched date**: 2026-08-26
 
 ---
 
@@ -15,6 +17,7 @@
 | 2026-08-26 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. Thin DurableSchedule class + additive ALTER migration; live_loop descoped (operator); @AC-6 retired, @AC-9 added |
 | 2026-08-26 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps |
 
+| 2026-08-26 | `code-completed` → `launched` | CI workflow | Promoted via PR #1027; committed 65aeaa4c5bb7c000dfb4e30d5b788d6c39352234 |
 ---
 
 ## Artifacts

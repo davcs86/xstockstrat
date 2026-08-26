@@ -340,3 +340,10 @@ Status: in-progress → code-completed. All 8 steps done.
 
 - Integration PR opened: https://github.com/davcs86/xstockstrat/pull/1025 (claude/features-157-158-impl-ulk0l2 → main-dev, ready for review).
 - SESSION-END: 8/8 steps done; lifecycle code-completed. Accountability — out-of-scope changes: none silent (1 user-approved Step 6 scope expansion to the Book page); open items: none blocking (PortfolioPanel combined-branch reachability noted); unaddressed review warnings: none.
+
+## Session 2026-08-26 (CI: feature status automation)
+
+- Promotion PR #1027 merged to main
+- Feature promoted and committed: 65aeaa4c5bb7c000dfb4e30d5b788d6c39352234
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-26

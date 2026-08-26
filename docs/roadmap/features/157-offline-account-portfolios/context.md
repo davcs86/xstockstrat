@@ -225,3 +225,10 @@ branch and PR) is unchanged; only the `NNN` prefix and the self-referential path
 - **Offline crash-recovery resync** — offline positions self-heal only on a ConfirmOrder recompute
   (there is no poller for offline accounts). A resync path (e.g. a boot-time recompute from confirmed
   orders) is a possible follow-up if staleness after a mid-confirm crash proves material in practice.
+
+## Session 2026-08-26 (CI: feature status automation)
+
+- Promotion PR #1027 merged to main
+- Feature promoted and committed: 65aeaa4c5bb7c000dfb4e30d5b788d6c39352234
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-26
