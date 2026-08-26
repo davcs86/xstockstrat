@@ -1806,3 +1806,35 @@ class TestManageSignalSourceVerbsTool:
             )
         assert m.call_args.kwargs["operation"] == "reactivate"
         assert m.call_args.kwargs["update_mask"] is None
+
+
+class TestRunFundamentalsScanTool:
+    """feature 156 / AC-8: the tool forwards the caller's DERIVED scope (never fabricates admin);
+    the backend admin gate is what rejects a non-admin, surfacing as a RuntimeError."""
+
+    @pytest.mark.asyncio
+    async def test_admin_forwards_derived_scope(self):
+        server = _make_server()
+        fn = _tool_fn(server, "run_fundamentals_scan")
+        with patch.object(
+            client, "run_fundamentals_scan", AsyncMock(return_value={"status": "completed"})
+        ) as m:
+            out = await fn(_ctx(ADMIN), force=True, dry_run=False, symbols=["AAPL"])
+        assert out["status"] == "completed"
+        # ADMIN derives access-scope 15 (carries the 0x04 admin bit) and forwards it.
+        assert m.await_args.kwargs["access_scope"] == 15
+        assert m.await_args.kwargs["force"] is True
+        assert m.await_args.kwargs["symbols"] == ["AAPL"]
+
+    @pytest.mark.asyncio
+    async def test_backend_permission_denied_surfaces_as_runtime_error(self):
+        import grpc
+
+        server = _make_server()
+        fn = _tool_fn(server, "run_fundamentals_scan")
+        err = grpc.aio.AioRpcError(
+            grpc.StatusCode.PERMISSION_DENIED, None, None, details="admin scope required"
+        )
+        with patch.object(client, "run_fundamentals_scan", AsyncMock(side_effect=err)):
+            with pytest.raises(RuntimeError, match="admin scope required"):
+                await fn(_ctx(ADMIN), force=False)

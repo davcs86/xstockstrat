@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Twenty-eight tools:
+Twenty-nine tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -16,6 +16,7 @@ Twenty-eight tools:
   list_formulas       — lists formula definitions, soft-deleted excluded (read-only)
   manage_signal_source — registers/updates/reactivates/deactivates signal sources in ingest
   set_strategy_live   — enables/disables live alert evaluation for a strategy
+  run_fundamentals_scan — manually triggers the fundamentals signal producer (admin-scoped)
   trigger_backfill    — triggers an OHLCV history backfill via gRPC TriggerBackfill (admin-scoped)
   get_backfill_status — checks a backfill job / lists recent jobs (read-only)
   cancel_backfill     — cancels a queued/running backfill job (admin-scoped)
@@ -1007,6 +1008,28 @@ def register_tools(server: MCPServer) -> None:
                 overwrite=overwrite,
                 fill_mode=fill_mode,
                 access_scope=access_scope,
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
+
+    @server.tool()
+    async def run_fundamentals_scan(
+        ctx: Context,
+        force: bool = False,
+        dry_run: bool = False,
+        symbols: list[str] | None = None,
+    ) -> dict:
+        """Manually trigger the fundamentals signal producer scan (admin-scoped write, feature 156).
+        force: re-emit today's signals even if already emitted (clears the day's idempotency rows).
+        dry_run: score + report what WOULD be scanned without emitting or spending cache calls.
+        symbols: optional explicit universe override; omitted = the configured universe.
+        Returns the FundamentalsScanSummary: {"run_id", "symbols_processed", "signals_emitted",
+            "calls_spent", "deferred_count", "status", "finished_at"}. Admin-scoped — a non-admin
+            caller is rejected PERMISSION_DENIED by the analysis backend gate."""
+        access_scope = _caller_access_scope(ctx, "run_fundamentals_scan")  # feature 156
+        try:
+            return await client.run_fundamentals_scan(
+                force=force, dry_run=dry_run, symbols=symbols, access_scope=access_scope
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e)) from e

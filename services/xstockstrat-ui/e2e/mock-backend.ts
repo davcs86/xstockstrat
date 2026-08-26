@@ -626,6 +626,19 @@ export async function startMockBackend(): Promise<void> {
           if (callerUserId(ctx) !== TEST_USER_ID) return { strategies: [] };
           return { strategies: STRATEGY_SCORES };
         },
+        // feature 156 — the config-ui admin "Run fundamentals scan" card dials this via the
+        // config-ui BFF, whose analysisClient targets ANALYSIS_ENDPOINT (=9092 in e2e). Distinct,
+        // non-echoed fields so the spec's summary assertions have teeth.
+        async runFundamentalsScan() {
+          return {
+            runId: 'run-fs-e2e',
+            symbolsProcessed: 3,
+            signalsEmitted: 1,
+            callsSpent: 2,
+            deferredCount: 0,
+            status: 'completed',
+          };
+        },
         // feature 083 — ranked opportunity queue; honors the min_conviction filter.
         async listOpportunities(req) {
           const min = req.minConviction ?? 0;

@@ -2097,3 +2097,50 @@ reusing.
   `GetConfig`), so record it as a governance note.
 - **Evidence**: `docs/roadmap/features/154-fundsignal-watchlist-universe/design.md` (R4); `services/xstockstrat-analysis/app/main.py:42-43`, `app/config/watcher.py:35-65`; `services/xstockstrat-marketdata/internal/service/marketdata_service.go:56-60` + `CLAUDE.md:80` (boot-freeze).
 - **Rule it implies**: a consumer branching on a producer-owned, boot-frozen config value should consume it with matching freeze semantics; live-reading a value the producer never re-reads is a latent divergence bug.
+
+### 2026-08-25 — 156-fix-fundamentals-signal-producer — design
+- **Insight**: For a **single-instance** background scheduler that must survive restarts, a durable
+  **"next-due" row written AFTER a cycle completes** beats a distributed **lease** (CAS-claim +
+  `process_name` + `LEASE_HOLD` ceiling taken *before* running). At `instance_count:1` the lease's only
+  benefit (cross-process fencing) is unreachable — the in-process `asyncio.Lock` already prevents
+  overlap — while its cost is real and backwards: leasing before the run means a hard crash (OOM/
+  SIGKILL/redeploy mid-cycle) leaves the schedule blocked for the full `LEASE_HOLD` (~1h), the exact
+  failure mode a scheduler must recover from. Writing next-due only on completion leaves a crashed
+  schedule in the past → the restarted process is immediately due and re-runs promptly. Also:
+  compute-sleep-until-due (not poll-the-lease-row), or a zero-DB-traffic `asyncio.sleep` becomes
+  perpetual write-churn. Keep the requested `process_name`/`blocked_until_ms` columns as diagnostics/
+  forward fence fields, but don't let the design *rely* on fencing nothing uses.
+- **Evidence**: `docs/roadmap/features/156-fix-fundamentals-signal-producer/design.md` (R2 Rejected
+  Alternatives); `.do/app.yaml:219` (`instance_count: 1`); `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:79` (in-process `_lock`); `pnl_pattern_consumer.py:397` (`ledger_stream_cursor` self-seed precedent).
+- **Rule it implies**: don't build multi-instance mutual-exclusion machinery on an `instance_count:1`
+  service; the load-bearing requirement is usually a *durable schedule*, and a lease taken before the
+  guarded work pessimizes crash recovery — write the durable marker on completion, not on claim.
+
+### 2026-08-25 — 155-watchlist-opportunity-signal-cues — design
+- **Insight**: A state→visual encoding shown on several surfaces (readiness firing/watching/quiet/no-data) should have **one bucketer** (`readinessState(r)` in `readinessRollup.ts`) feeding **all** derived outputs — the roll-up counts, every `Progress` variant picker, the text label, and the icon/color cue map — not a per-component copy. Recon found the 4-way branch already duplicated in 4 places (`readinessRollup.rollupReadiness`, `WatchlistReadiness.barVariant`, `opportunities/page.readinessVariant`, `SectionRenderer` inline); a "readiness cue" feature that mirrors the buckets a 5th time is a DRY regression the design must consolidate, and it structurally guarantees icon↔text agreement (AC-4). Store the cue's icon as a **component reference** in the render map (not JSX) so the map stays node-env unit-testable; give the rendered Phosphor svg a `data-testid` + `role="img"`/`aria-label` since Phosphor icons have no accessible name by default (else the "shows the X icon" scenario has no RED-able hook — C-15).
+- **Evidence**: `docs/roadmap/features/155-watchlist-opportunity-signal-cues/design.md` (FR-1); `services/xstockstrat-ui/src/lib/readinessRollup.ts:43-51`, `src/lib/opportunityShared.tsx:14-53`.
+- **Rule it implies**: consolidate an N-way state classifier into one helper before layering a new render (icon/color) on top of it; a component-reference icon in a pure map keeps the "which cue" logic unit-testable while the "is the icon rendered" check stays an e2e concern.
+### 2026-08-26 — 157-offline-account-portfolios — design
+- **Insight**: When a downstream position/state pipeline is only *tolerable* because a periodic **absolute snapshot** self-heals an upstream **incremental, non-idempotent fold** (here portfolio's `order.filled`→`processOrderFill` fold, corrected every 300s by the broker `account.positions.synced` snapshot + `DeletePositionsNotInSync`), any new producer that **removes the snapshot** (a manually-tracked "offline" account with no poller) must NOT reuse the incremental fold — an *editable* input re-runs the fold and double-counts / mis-signs with nothing to correct it. Instead have the new producer **recompute the absolute state from its own source of truth on every edit** and emit the *snapshot* event (the self-healing one), never the incremental one. Guard rails that make this safe: a **per-account lock** across persist→recompute→emit (request-driven writes lack the poller's one-goroutine-per-account serialization → lost-update reorder), **emit nothing on a failed recompute** (an empty snapshot makes `DeleteNotInSync` wipe the account — indistinguishable from a legitimate flat), fold in **economic order** (`filled_at`, not insert order — BUY/SELL/BUY is non-commutative), and keep any account-grain accumulator (realized P&L) in a **separate table**, because a per-row accumulator dies when the snapshot legitimately drops that row on close.
+- **Evidence**: `docs/roadmap/features/157-offline-account-portfolios/design.md` (Chosen Approach + Rejected Alternatives, R1–R3); `services/xstockstrat-portfolio/internal/service/portfolio_service.go:268` (incremental fold), `:887,:930` (snapshot consumer + `DeletePositionsNotInSync`), `:508-581` (signed `applyFill`/`realizedDelta`).
+- **Rule it implies**: before reusing an existing event/consumer for a new producer, ask "what *other* mechanism currently corrects this path's errors, and does my producer still have it?" If the corrector (a reconciling snapshot) is gone, an incremental/non-idempotent consumer is unsafe — switch that producer to absolute-recompute-and-emit-the-snapshot. And when a second service needs a fold that lived as a private func in the first, extract it to a shared `packages/` Go module (both services already `replace` the contracts module) but **host its golden/parity tests in a CI-executed service module** — no CI job runs `go test` under `packages/proto/`.
+=======
+
+### 2026-08-26 — 158-durable-loop-scheduler — design
+- **Insight**: When generalizing a durable mechanism across N loops, extract only the **narrow
+  timing/persistence seams** into a thin helper (`DurableSchedule`: `seed`/`next_sleep_seconds`/
+  `advance` over the schedule table) and leave each loop's own `_tick`/`run_forever` (disabled-gate,
+  overlap lock, config reads, cycle body) in the loop. A wide "god driver" that injects the enable-gate,
+  cycle, retry, and jitter as callables cannot cleanly express structurally-different disabled/guard
+  shapes (fundsignal config-gate+full-interval-sleep vs. opportunity startup-None-guard vs. live_loop
+  none) and risks regressing the very `@AC-*` it inherits. Also: **not every recurring loop earns a
+  durable row** — a ~60s interval loop (`live_loop`) gains nothing from persistence (protects ≤60s of
+  cadence for ~1440 writes/day) and a blanket retry cadence slows its recovery; scope it out rather than
+  half-migrate it. A wall-clock loop is already largely redeploy-safe via next-hour math — durability
+  there only closes the narrow crash-in-fire-window skipped-day gap.
+- **Evidence**: `docs/roadmap/features/158-durable-loop-scheduler/design.md` (Chosen Approach + Rejected
+  Alternatives); `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:107-186` (the seams);
+  `servicer.py:3841-3850` (`_seconds_until_hour_utc`); builds on the 156 no-lease insight above.
+- **Rule it implies**: generalize the seams, not the control flow; and pressure-test each candidate
+  loop's *actual* interval before granting it a durable schedule — persistence that protects less than
+  one redeploy's worth of cadence is churn, not reliability.

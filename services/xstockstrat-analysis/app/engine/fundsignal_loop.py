@@ -14,6 +14,9 @@ The same ``run_once`` path backs both the scheduled loop and the manual
 
 import asyncio
 import logging
+import os
+import random
+import socket
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -93,21 +96,94 @@ class FundamentalsSignalLoop:
 
     # ── scheduler ────────────────────────────────────────────────────────────
 
+    # The schedule lives in analysis.fundsignal_schedule (feature 156): a durable, crash-safe
+    # "next-due" row that survives redeploys. blocked_until_ms is advanced ONLY after a cycle
+    # completes, so a crash before the advance leaves the row due and the restarted process
+    # re-runs promptly (never a fresh full-interval sleep on every restart, the original bug).
+    # run_once itself never reads/writes this row, so a manual RunFundamentalsScan cannot move
+    # the scheduled cadence. At instance_count:1 the in-process _lock guards overlap; process_name
+    # is a diagnostic last-runner column, not a fencing token this design relies on.
+
+    _SCHEDULE_JOB = "fundsignal"
+
+    def _now_ms(self):
+        return int(datetime.now(UTC).timestamp() * 1000)
+
+    def _process_name(self):
+        return os.environ.get("HOSTNAME") or socket.gethostname()
+
+    async def _seed_schedule(self):
+        """Ensure the schedule row exists. A fresh deploy seeds blocked_until_ms=0 (immediately
+        due → prompt first cycle); an existing row keeps its future due-time (redeploy no-op)."""
+        await self._db.execute(
+            "INSERT INTO analysis.fundsignal_schedule (job_name, blocked_until_ms) "
+            "VALUES ($1, 0) ON CONFLICT DO NOTHING",
+            self._SCHEDULE_JOB,
+        )
+
+    async def _next_sleep_seconds(self):
+        """Seconds to wait until the schedule is due; 0.0 if due now (compute-sleep-until-due,
+        no polling). A single Python clock source (safe at instance_count:1)."""
+        blocked_until_ms = await self._db.fetchval(
+            "SELECT blocked_until_ms FROM analysis.fundsignal_schedule WHERE job_name = $1",
+            self._SCHEDULE_JOB,
+        )
+        blocked_until_ms = int(blocked_until_ms) if blocked_until_ms is not None else 0
+        now_ms = self._now_ms()
+        if now_ms < blocked_until_ms:
+            return (blocked_until_ms - now_ms) / 1000.0
+        return 0.0
+
+    async def _advance_schedule(self, seconds):
+        """Push the next-due time forward. Called ONLY after a cycle finishes (success → interval;
+        caught error → retry_seconds), never before running — that is the crash-safety property."""
+        await self._db.execute(
+            "UPDATE analysis.fundsignal_schedule "
+            "SET blocked_until_ms = $1, process_name = $2, updated_at = now() "
+            "WHERE job_name = $3",
+            self._now_ms() + int(seconds * 1000),
+            self._process_name(),
+            self._SCHEDULE_JOB,
+        )
+
+    async def _tick(self):
+        """One scheduler iteration. Returns the seconds run_forever should sleep afterward.
+        The seam that makes scheduling unit-testable without a real interval sleep."""
+        sleep_s = await self._next_sleep_seconds()
+        if sleep_s > 0:
+            return sleep_s
+        # Due. A disabled producer neither runs nor advances the schedule — it re-checks after one
+        # interval (the manual RunFundamentalsScan trigger is the immediate "enable then run" path).
+        if not self._cfg.get_bool("analysis.fundsignal.enabled", default=False):
+            interval_hours = self._cfg.get_int("analysis.fundsignal.run_interval_hours", default=24)
+            return max(1, interval_hours) * 3600
+        if self._lock.locked():
+            log.info("fundsignal: previous cycle still running — skipping")
+            # Back off without advancing the persisted schedule (no completed run to record).
+            return max(
+                1, self._cfg.get_int_present("analysis.fundsignal.retry_seconds", default=300)
+            )
+        async with self._lock:
+            try:
+                await self.run_once(force=False, dry_run=False, override_symbols=None)
+                interval_hours = self._cfg.get_int(
+                    "analysis.fundsignal.run_interval_hours", default=24
+                )
+                await self._advance_schedule(max(1, interval_hours) * 3600)
+            except Exception as e:  # never let one bad cycle kill the loop
+                log.error("fundsignal: cycle error: %s", e)
+                retry = max(1, self._cfg.get_int_present("analysis.fundsignal.retry_seconds", 300))
+                await self._advance_schedule(retry)
+        return 0.0  # loop re-reads; the schedule is now in the future so the next tick sleeps
+
     async def run_forever(self):
         """Entry point — runs indefinitely. Call as asyncio.create_task(loop.run_forever())."""
+        await self._seed_schedule()
+        # One-shot startup jitter to stagger concurrent redeploys off the schedule row / marketdata.
+        jitter = self._cfg.get_int_present("analysis.fundsignal.startup_jitter_seconds", default=30)
+        await asyncio.sleep(random.uniform(0, max(0, jitter)))
         while True:
-            interval_hours = self._cfg.get_int("analysis.fundsignal.run_interval_hours", default=24)
-            await asyncio.sleep(max(1, interval_hours) * 3600)
-            if not self._cfg.get_bool("analysis.fundsignal.enabled", default=False):
-                continue
-            if self._lock.locked():
-                log.info("fundsignal: previous cycle still running — skipping")
-                continue
-            async with self._lock:
-                try:
-                    await self.run_once(force=False, dry_run=False, override_symbols=None)
-                except Exception as e:  # never let one bad cycle kill the loop
-                    log.error("fundsignal: cycle error: %s", e)
+            await asyncio.sleep(await self._tick())
 
     # ── single run (shared by the loop and the RPC) ──────────────────────────
 

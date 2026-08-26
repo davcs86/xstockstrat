@@ -3,6 +3,17 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-08-26
+
+### Features
+- watchlist-opportunity-signal-cues: Make firing/ready and in-queue states visually distinguishable with consistent color + icon coding across the Watchlists readiness panel and Opportunities cards/mobile view, add a "firing"-row jump to the symbol's order/position page, and fix three UX defects (Opportunities-origin breadcrumb, mobile Opportunities grouping/tags, and stale filter tags).
+- fix-fundamentals-signal-producer: The fundamentals signal producer schedules its cycles with an in-process `asyncio.sleep` placed *before* the first run and keeps no persisted schedule, so every redeploy (CI/CD fires on every `main-dev` push) restarts a fresh full-interval sleep and the first cycle can be deferred indefinitely — the producer effectively never emits.
+
+### Summary
+5 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-08-25
 
 ### Features

@@ -35,6 +35,7 @@ def test_list_tools_returns_all_registered_tools():
         "list_formulas",
         "manage_signal_source",
         "set_strategy_live",
+        "run_fundamentals_scan",
         "trigger_backfill",
         "get_backfill_status",
         "cancel_backfill",

@@ -305,6 +305,8 @@ Namespace: `analysis`
 | `analysis.fundsignal.sell_quantile` | float | `0.20` | Cross-sectional score quantile ≤ → `sell` |
 | `analysis.fundsignal.min_conviction_to_emit` | float | `0.0` | Drop symbols whose score is below this before emitting |
 | `analysis.fundsignal.valid_days` | int | `90` | Emitted signal validity window (`valid_until` = run date + this) |
+| `analysis.fundsignal.startup_jitter_seconds` | int | `30` | One-shot random delay [0, N] seconds applied once at producer loop entry to stagger concurrent redeploys (feature 156); read presence-aware (`get_int_present`) — `0` disables jitter. |
+| `analysis.fundsignal.retry_seconds` | int | `300` | On a caught cycle error, `blocked_until_ms` advances by this many seconds (not a full `run_interval_hours`), so a transient failure retries in minutes (feature 156); read presence-aware. |
 | `analysis.opportunity.max_universe_size` | int | `100` | Max candidates traced per opportunity compute (feature 097); watchlist/held rank **above the cut** so a curated symbol is never truncated — only the speculative signal tail is dropped (FR-1). |
 | `analysis.opportunity.valid_window_hours` | int | `24` | `valid_until` = the compute's session date + this window (feature 097). |
 | `analysis.opportunity.snooze_default_hours` | int | `24` | Default bounded "snooze until" when a SNOOZE carries no explicit timestamp (feature 097). |

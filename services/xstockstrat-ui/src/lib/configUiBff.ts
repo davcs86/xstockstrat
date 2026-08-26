@@ -1,7 +1,8 @@
 import { ConnectError, Code } from '@connectrpc/connect';
 import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
 import { IngestService } from '@xstockstrat/proto/ingest/v1/ingest_pb';
-import { configClient, ingestClient } from '@/lib/connectClients';
+import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import { configClient, ingestClient, analysisClient } from '@/lib/connectClients';
 import { getNativeConfigEnv, isNativeConfigEnvironment } from '@/lib/deploymentEnv';
 import {
   createBffRouter,
@@ -10,6 +11,7 @@ import {
   requireAdminScope,
   backendHeaders,
   forward,
+  forwardAdmin,
 } from '@/lib/bffShared';
 
 const router = createBffRouter();
@@ -44,6 +46,12 @@ router.service(ConfigService, {
 router.service(IngestService, {
   listSignalSources: forward((req, opts) => ingestClient.listSignalSources(req, opts)),
   manageSignalSource: forward((req, opts) => ingestClient.manageSignalSource(req, opts)),
+});
+
+// Only the admin-scoped manual producer trigger is exposed here (feature 156) — connect-node leaves
+// every other AnalysisService method unimplemented, so this does not widen the config-ui surface.
+router.service(AnalysisService, {
+  runFundamentalsScan: forwardAdmin((req, opts) => analysisClient.runFundamentalsScan(req, opts)),
 });
 
 // In the consolidated app there is no basePath — the full URL /config-ui/api/<service>/<method>
