@@ -2223,3 +2223,20 @@ reusing.
   user's proposed grouping.
 - **Evidence**: feature 139 implementation-spec.md (archived, D-4); design.md §174-178.
 - **Rule it implies**: a tab/panel group is valid only if all members can be simultaneously present in the DOM.
+
+### 2026-08-26 — chart-data-freshness — design
+- **Pattern**: To add missing-data WARN visibility to a shared evaluator that is *also* driven by a
+  large background bulk loop, log at the **call sites** with one summarized, sample-bounded WARN per
+  cycle/scan and exclude already-logged error symbols — do **not** log inside the shared/parity-frozen
+  function (floods + double-logs) and do **not** thread a `symbol` kwarg through a contract-frozen signature.
+- **Evidence**: feature 140 design.md (archived) §67-82; implementation-spec.md §55-67 (`live_loop._run_cycle`, `screener.py`, `EvaluateReadiness`).
+- **Rule it implies**: observability added to a hot shared path belongs at the discriminated call site as
+  an aggregated/sampled emission, not in the shared function.
+
+### 2026-08-26 — chart-data-freshness — design
+- **Pattern**: Prefer a **time-cooldown self-healing guard** over a value-changed guard for "is this
+  stale enough to refetch" checks — a value-guard ("skip while stored value unchanged") deadlocks and
+  re-freezes when the upstream producer is paused; a cooldown recovers on its own once the producer resumes.
+- **Evidence**: feature 140 design.md §91-92; context.md 2026-08-18 round 1; shipped `staleCheckDue`.
+- **Rule it implies**: staleness/refetch throttles should be driven by elapsed-time cooldowns, not by
+  observing a value change that a stalled producer will never deliver.

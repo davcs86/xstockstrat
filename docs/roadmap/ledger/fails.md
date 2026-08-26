@@ -1781,3 +1781,11 @@ ambiguity is logged here).
 - **Evidence**: feature 139 implementation-spec.md (archived) :508-511; context.md:194-199.
 - **Rule it implies**: any CSS grid holding variable-width children needs `min-w-0` on the items, and
   every layout change must be re-run against the 390px overflow guard.
+
+### 2026-08-26 — chart-data-freshness — config
+- **Mistake**: A merge/promotion commit whose message did not contain the feature slug caused
+  `ci-validate-feature-status.yml` to silently skip flipping the feature to `launched`; it sat at
+  `code-completed` despite being live in production, needing manual status reconciliation.
+- **Evidence**: feature 140 context.md 2026-08-19; feature.md Status History row 2026-08-19 (PR #981).
+- **Rule it implies**: the squash/merge commit for a feature must include its `NNN-slug` (or the status
+  automation won't detect promotion) — verify `launched` after promotion rather than assuming CI set it.
