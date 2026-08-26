@@ -1861,3 +1861,19 @@ ambiguity is logged here).
 - **Evidence**: feature 149 context.md 2026-08-22; design.md (archived) §15-20.
 - **Rule it implies**: for any MCP tool param that can be a structured value, accept `str | dict` — a
   JSON-pre-parsing transport will hand you a dict.
+
+### 2026-08-26 — backtest-portfolio-sizing — assumption
+- **Mistake**: A look-ahead/forward-fill RED test built on *ragged start/end* calendars passes green
+  while the real look-ahead bug (using a future close to mark a *mid-series* gap) ships. The dangerous
+  case is a mid-series gap, not ragged edges.
+- **Evidence**: feature 150 design.md (archived) §91-93; Step 6.
+- **Rule it implies**: any forward-fill/MTM feature must assert past-only marking with a mid-series-gap
+  fixture, not merely ragged calendars.
+
+### 2026-08-26 — backtest-portfolio-sizing — assumption
+- **Mistake**: Changing a simulator's return-tuple arity silently breaks every unpacking call site and
+  test repo-wide; discovered only when 267 existing tests failed to unpack. Papered with `[:4]` slicing
+  helpers + a 5th-`[]` in mocks.
+- **Evidence**: feature 150 Step 5 (both per-symbol simulators grew a 5th intent element).
+- **Rule it implies**: widening a returned tuple's shape is a cross-cutting signature change — audit all
+  unpack sites (or return a named struct) before editing.

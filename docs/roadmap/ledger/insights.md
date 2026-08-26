@@ -2353,3 +2353,20 @@ reusing.
 - **Evidence**: feature 149 implementation-spec.md (archived) §37-46, 89-103.
 - **Rule it implies**: order steps so an assertion sees all surfaces it reads, and place value transforms
   relative to filters by intended semantics.
+
+### 2026-08-26 — backtest-portfolio-sizing — design
+- **Pattern**: To add an alternate computation mode to an engine, have the existing simulator
+  *additively return* the extra signal it already computes (an extra tuple element) and feed the new
+  path into the **existing** aggregate metrics function — no parallel/second pass, no forked metrics.
+  Single fetch, DRY, divergence-free.
+- **Evidence**: feature 150 `servicer.py:995,1004,1017 / 1185,1201`; `_compute_metrics` reused at `:3617`.
+- **Rule it implies**: prefer additive intent-return over a second data-fetch pass when a new mode needs
+  the same source data (avoids the feature-141 fetch-cap/OOM class).
+
+### 2026-08-26 — backtest-portfolio-sizing — ordering
+- **Pattern**: When adding fields to a message whose bytes are persisted verbatim and compared against
+  banked goldens, add a canonical-clearing helper (clear the new additive fields) and write the legacy
+  byte-for-byte RED *before* the routing edit.
+- **Evidence**: feature 150 `_canonical_pre150` helper (clears fields 17/18/19); design.md (archived) §149-154.
+- **Rule it implies**: additive-but-persisted proto changes must ship a golden-normalization shim in the
+  same step, or every historical run false-fails/mis-renders (extends the feature-068 verbatim-bytes invariant).
