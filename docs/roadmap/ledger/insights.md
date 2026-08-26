@@ -2439,3 +2439,12 @@ reusing.
 - **Evidence**: feature 153 design.md (archived) §50-64,106-108 (14 inline `createConnectTransport` sites → one factory; `/accounts` REST + swallowing streams needed separate handling).
 - **Rule it implies**: shared-consumer refactors ship with a parity/reachability test; audit for mixed
   protocols (REST/unary/stream) before declaring coverage (reinforces the C-10 family).
+
+### 2026-08-26 — fundsignal-watchlist-universe — reuse
+- **Pattern**: When `scripts/localenv-setup.sh` (Docker codegen) is unavailable and codegen runs on a
+  host `buf` ≠ CI's pin, `buf-gen` re-emits fresh doc-comments on `google/protobuf/*` well-known types;
+  scope the commit to your service's `gen/` subtree and `git checkout`-revert the rest, or the
+  `proto-freshness` diff carries unrelated noise.
+- **Evidence**: feature 154 context.md:160; implementation-spec.md (archived) §409-411 (host buf 1.47.2 re-emitted `google/protobuf/timestamp.ts`).
+- **Rule it implies**: pin the host codegen toolchain to `Dockerfile.codegen`'s exact versions and verify
+  an empty `git diff packages/proto/gen/` outside the intended service before committing.
