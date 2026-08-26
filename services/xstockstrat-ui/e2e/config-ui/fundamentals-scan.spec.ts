@@ -30,9 +30,13 @@ async function postBff(page: Page, url: string): Promise<{ status: number }> {
 
 test.describe('config-ui fundamentals scan', () => {
   test('nav: the Fundamentals Scan sub-nav item is reachable', async ({ page }) => {
+    // The shell renders NAV_GROUPS (navGroups.tsx); /config-ui resolves to the Settings group, whose
+    // Section (Row 2) nav carries the Fundamentals Scan link. Scope to the "Section" nav landmark
+    // (mirrors nav-reachability.spec.ts) so the desktop link is unambiguous.
     await addAdminCookie(page);
     await page.goto(`${BASE_URL}/config-ui`);
-    const link = page.getByRole('link', { name: 'Fundamentals Scan' });
+    const section = page.getByRole('navigation', { name: 'Section' });
+    const link = section.getByRole('link', { name: 'Fundamentals Scan', exact: true });
     await expect(link).toHaveAttribute('href', '/config-ui/fundamentals-scan');
     await link.click();
     await expect(page).toHaveURL(PAGE);

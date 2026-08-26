@@ -216,3 +216,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 **Deviations**: D-1 (config-ui no cosmetic admin-hide — BFF forwardAdmin authoritative), D-2 (Playwright e2e via CI-equivalent lint+tsc+structural; browser absent locally).
 **Post-merge action still pending**: revert staging `analysis.fundsignal.run_interval_hours` 1 → 24.
 **Next**: review/merge PR #1014 when CI is green.
+
+### CI fix (post-integration) — nav-reachability e2e [done]
+- CI e2e shard 1 failed only the nav-reachability case: `PLATFORM_SUBNAV` (spec-cited) is legacy/ignored — `PlatformHeader` renders `NAV_GROUPS`. Moved the nav entry to the Settings group in `navGroups.tsx`, reverted the inert `PLATFORM_SUBNAV` edit, and scoped the nav-test locator to the "Section" nav (exact). The other 3 e2e cases (BFF admin-gate accept/reject, admin render) passed. Recorded as D-3. lint + tsc clean.
+- Files: `src/components/shared/navGroups.tsx`, `src/components/shared/PlatformHeader.tsx`, `e2e/config-ui/fundamentals-scan.spec.ts`

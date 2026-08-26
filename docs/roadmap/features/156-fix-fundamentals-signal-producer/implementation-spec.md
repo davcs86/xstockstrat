@@ -626,3 +626,15 @@ files) + `tsc --noEmit` (exit 0) + structural checks: the spec exists and import
 port-9092 `AnalysisService` block, the config-ui BFF registers only that one method via
 `forwardAdmin`, the nav entry and the page route exist. The real Playwright run executes in CI.
 **Disposition**: CI-equivalent fallback.
+
+**D-3 (Step 8) — nav entry belongs in `NAV_GROUPS`, not the legacy `PLATFORM_SUBNAV`.** The spec's
+Step-8 evidence pointed at `PLATFORM_SUBNAV` in `PlatformHeader.tsx`, but that map and the `subNav`
+prop are **legacy and ignored** — `PlatformHeader` renders the active `NAV_GROUPS` group's items
+(`src/components/shared/navGroups.tsx`; Row 2 maps `activeItems`). The initial edit to
+`PLATFORM_SUBNAV.config` therefore never rendered, and the CI e2e nav-reachability case failed
+("Fundamentals Scan" link not found). Fix: added `{ label: 'Fundamentals Scan', href:
+'/config-ui/fundamentals-scan' }` to the **Settings** group in `navGroups.tsx` (the group active on
+`/config-ui`, alongside Config/Audit log), reverted the inert `PLATFORM_SUBNAV` edit, and scoped the
+nav-test locator to the "Section" nav landmark with `exact` (mirrors `nav-reachability.spec.ts`). Not
+`adminOnly` — consistent with D-1 (BFF gate authoritative; no cosmetic hide). **Disposition**:
+spec-evidence correction (legacy symbol); the 3 BFF/render e2e cases passed unchanged.
