@@ -301,3 +301,16 @@ Branch: `claude/features-157-158-impl-ulk0l2` (task-mandated harness branch, in 
   approved the Step 6 scope expansion at the checkpoint.
 - Files modified: `src/app/trader/portfolio/page.tsx`
 - Verification: tsc 0; lint 0 (pre-existing accountName warning only). Deviation logged (Step 6 expansion).
+
+### Step 7 — offline-accounts e2e extension [done]
+- Added 4 feature-159 e2e tests to `e2e/trader/offline-accounts.spec.ts`: @AC-1 (offline /trader shows
+  Record-order control, not the broker ticket), @AC-2 (offline card hides Cash/Buying Power/Day P&L,
+  shows Equity+Realized), @AC-3/@AC-4 (Book page /trader/portfolio combined view: offline card visible
+  with meaningful-only fields; broker card still shows broker figures), and @AC-1 insights-exclusion
+  (SignalOrderTicket keeps the broker ticket for an offline account — allowOfflineRecord={false}).
+- Files modified: `e2e/trader/offline-accounts.spec.ts` (reused BROKER_ACCOUNT_ALPACA/OFFLINE,
+  PORTFOLIO_ALPACA/OFFLINE fixtures + addAuthCookie; scenario-one-off inline overrides only).
+- Verification: all 4 pass under Playwright (chromium, --retries=2); first-hit route compilation under
+  `next dev` is flaky-then-green (documented cold-compile behavior; CI prebuilt+retries is stable). tsc 0,
+  lint 0. C-12/C-13: fixtures + auth from canonical homes; INVENTORY.md untouched (no new fixture).
+- Deviations: none (Step 6 expansion + run-mechanics notes are in the Deviation Log).

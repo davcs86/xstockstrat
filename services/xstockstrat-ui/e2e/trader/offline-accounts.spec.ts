@@ -1,6 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
-import { BROKER_ACCOUNT_ALPACA, BROKER_ACCOUNT_OFFLINE, PORTFOLIO_OFFLINE } from '../fixtures';
+import {
+  BROKER_ACCOUNT_ALPACA,
+  BROKER_ACCOUNT_OFFLINE,
+  PORTFOLIO_ALPACA,
+  PORTFOLIO_OFFLINE,
+} from '../fixtures';
 
 /**
  * E2E for offline-account portfolios (feature 157). Offline-specific responses are injected via
@@ -160,5 +165,111 @@ test.describe('Offline account portfolios (feature 157)', () => {
     // The detail page reflects the confirmed fill (server-derived FILLED status badge + fill fields).
     await expect(page.getByText('FILLED', { exact: true })).toBeVisible({ timeout: 5000 });
     await expect(page.getByText('190.25').first()).toBeVisible();
+  });
+});
+
+/**
+ * E2E for the offline-account UI gaps (feature 159 — @AC-1/@AC-2/@AC-3/@AC-4). Same page.route()
+ * + fixtures + auth pattern as above. The "persisted NEW, never CANCELED" half of @AC-1 is a Go
+ * assertion (the mock placeOrder hardcodes FILLED); here we assert the UI affordance only.
+ */
+test.describe('Offline account UI gaps (feature 159)', () => {
+  const routeAccounts = async (page: import('@playwright/test').Page, accounts: unknown[]) => {
+    await page.route(LIST_ACCOUNTS, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ accounts }),
+      });
+    });
+  };
+  const routePortfolios = async (page: import('@playwright/test').Page, portfolios: unknown[]) => {
+    await page.route(LIST_PORTFOLIOS, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ portfolios }),
+      });
+    });
+  };
+
+  test('@AC-1 offline account shows the Record-order control on /trader, not the broker ticket', async ({
+    page,
+  }) => {
+    await routeAccounts(page, [BROKER_ACCOUNT_ALPACA, BROKER_ACCOUNT_OFFLINE]);
+    await routePortfolios(page, [PORTFOLIO_OFFLINE]);
+    await addAuthCookie(page);
+    await page.goto('/trader');
+
+    // Select the offline account, then the order ticket switches to record mode.
+    await page.getByRole('combobox').first().click();
+    await page.getByRole('option', { name: /Offline Book/ }).click();
+
+    await expect(page.getByText('Record Offline Order')).toBeVisible({ timeout: 5000 });
+    // The broker ticket title and its order-type control are gone in record mode.
+    await expect(page.getByText('Place Order')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Record (BUY|SELL)/ })).toBeVisible();
+  });
+
+  test('@AC-2 offline portfolio card hides Cash / Buying Power / Day P&L', async ({ page }) => {
+    await routeAccounts(page, [BROKER_ACCOUNT_ALPACA, BROKER_ACCOUNT_OFFLINE]);
+    await routePortfolios(page, [PORTFOLIO_OFFLINE]);
+    await addAuthCookie(page);
+    await page.goto('/trader');
+
+    await page.getByRole('combobox').first().click();
+    await page.getByRole('option', { name: /Offline Book/ }).click();
+
+    // The single-account portfolio card for the offline book.
+    const card = page.locator('[data-slot="card"]', { hasText: 'Offline Book' });
+    await expect(card.getByText('Realized P&L')).toBeVisible({ timeout: 5000 });
+    await expect(card.getByText('Equity')).toBeVisible();
+    // Broker-only fields must not render on an offline card.
+    await expect(card.getByText('Cash')).toHaveCount(0);
+    await expect(card.getByText('Buying Power')).toHaveCount(0);
+    await expect(card.getByText('Day P&L')).toHaveCount(0);
+  });
+
+  test('@AC-3 @AC-4 Book combined view shows the offline card with only meaningful fields', async ({
+    page,
+  }) => {
+    await routeAccounts(page, [BROKER_ACCOUNT_ALPACA, BROKER_ACCOUNT_OFFLINE]);
+    // The Book page always requests the combined (all-accounts) view.
+    await routePortfolios(page, [PORTFOLIO_ALPACA, PORTFOLIO_OFFLINE]);
+    await addAuthCookie(page);
+    await page.goto('/trader/portfolio');
+
+    const offlineCard = page.locator('[data-slot="card"]', { hasText: 'Offline Book' });
+    const brokerCard = page.locator('[data-slot="card"]', { hasText: 'Alpaca Paper' });
+
+    // @AC-4: the offline account is visible in the combined view as its own card…
+    await expect(offlineCard).toBeVisible({ timeout: 8000 });
+    await expect(offlineCard.getByText('Equity')).toBeVisible();
+    // …showing only meaningful fields (broker-only fields hidden).
+    await expect(offlineCard.getByText('Cash')).toHaveCount(0);
+    await expect(offlineCard.getByText('Buying power')).toHaveCount(0);
+    await expect(offlineCard.getByText('Day P&L')).toHaveCount(0);
+    // @AC-3: the broker card still shows its broker figures — the gate is per-account, not global.
+    await expect(brokerCard.getByText('Buying power')).toBeVisible();
+    await expect(brokerCard.getByText('Day P&L')).toBeVisible();
+  });
+
+  test('@AC-1 the insights Signal-detail ticket keeps the broker ticket for an offline account', async ({
+    page,
+  }) => {
+    // Only an offline account registered → AccountContext auto-selects it. The insights mount passes
+    // allowOfflineRecord={false}, so the broker ticket (not the Record-order control) must render there.
+    await routeAccounts(page, [BROKER_ACCOUNT_OFFLINE]);
+    await addAuthCookie(page);
+    // The Signal-detail page polls several data sources, so `load` may never settle — wait only for the
+    // DOM, then let the order-ticket column (SignalOrderTicket → OrderForm) hydrate on its own.
+    await page.goto('/insights/market/AAPL', { waitUntil: 'domcontentloaded' });
+
+    // The OrderForm renders its title as a card heading — scope to the heading role so we don't collide
+    // with the page's "Place order" toggle button.
+    await expect(page.getByRole('heading', { name: 'Place Order' })).toBeVisible({
+      timeout: 15000,
+    });
+    await expect(page.getByRole('heading', { name: 'Record Offline Order' })).toHaveCount(0);
   });
 });

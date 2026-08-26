@@ -432,7 +432,7 @@ backend routing guard (Step 1) still guarantees FR-2 there, and Step 7 asserts t
 
 ### Step 7 — test: xstockstrat-ui — extend offline-accounts e2e for the record control + field gating
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/offline-accounts.spec.ts` — modify
@@ -585,3 +585,13 @@ backend routing guard (Step 1) still guarantees FR-2 there, and Step 7 asserts t
   `src/app/trader/portfolio/page.tsx`; tsc + lint clean; e2e assertion added in Step 7.
 - **Reachability note (P-03)**: `PortfolioPanel`'s own combined branch remains gated but is effectively
   a no-account-selected fallback (auto-select makes it rare); the Book page is the real combined surface.
+
+### Step 7 — e2e run mechanics (not a deviation, environmental note)
+- The @AC-3/@AC-4 combined-view assertions run against the **Book page** (`/trader/portfolio`,
+  `usePortfolios(null)`), not `PortfolioPanel`'s combined branch, per the reachability finding above.
+- All four feature-159 e2e tests pass, but under `next dev` in this sandbox each first navigation to an
+  uncompiled route times out once and passes on retry (`--retries=2`) — the documented cold-compile
+  flakiness; CI uses a prebuilt bundle (`E2E_PREBUILT`) + retries, where it is stable. Not a logic
+  failure. The insights-exclusion test uses `waitUntil: 'domcontentloaded'` (the Signal-detail page polls
+  and never settles `load`) and a role-scoped heading locator (`getByRole('heading', { name: 'Place
+  Order' })`) to disambiguate the OrderForm card title from the page's "Place order" toggle button.
