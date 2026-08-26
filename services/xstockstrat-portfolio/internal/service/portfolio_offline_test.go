@@ -48,6 +48,28 @@ func TestPositionSyncPayload_RealizedPnlDisjointness(t *testing.T) {
 	}
 }
 
+// TestOfflineIDsToAppend (feature 159, @AC-3/@AC-4) proves the combined-view union+dedup that adds
+// offline accounts (which have no account_balances row) into ListPortfolios: an offline id already
+// present in the balances set is not re-added, and repeats within the offline set collapse — so no
+// account is built twice, and the summed broker aggregates are unaffected by the offline additions.
+// ListPortfolios itself uses a concrete *PortfolioRepo with no live-DB test harness (see
+// TestPositionSyncPayload_RealizedPnlDisjointness), so the enumeration logic is factored into this pure
+// helper and asserted directly.
+func TestOfflineIDsToAppend(t *testing.T) {
+	// balances {brk-1}; offline {off-1, brk-1} → only off-1 is new (brk-1 already represented).
+	if got := offlineIDsToAppend([]string{"brk-1"}, []string{"off-1", "brk-1"}); len(got) != 1 || got[0] != "off-1" {
+		t.Errorf("offlineIDsToAppend = %v, want [off-1] (a broker id already present must be skipped)", got)
+	}
+	// no offline accounts → nothing to append.
+	if got := offlineIDsToAppend([]string{"brk-1"}, nil); len(got) != 0 {
+		t.Errorf("offlineIDsToAppend with no offline ids = %v, want empty", got)
+	}
+	// duplicate offline ids collapse to one.
+	if got := offlineIDsToAppend(nil, []string{"off-1", "off-1"}); len(got) != 1 || got[0] != "off-1" {
+		t.Errorf("offlineIDsToAppend dedup = %v, want [off-1]", got)
+	}
+}
+
 // TestAccountDeregisteredPayload_Parse proves the deregister purge consumer reads account_id/user_id
 // (feature 157, @AC-15).
 func TestAccountDeregisteredPayload_Parse(t *testing.T) {

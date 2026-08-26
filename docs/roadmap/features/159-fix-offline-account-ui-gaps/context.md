@@ -169,3 +169,174 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Acceptance: added @AC-4 (@FR-4) for the offline account visible in the combined view with
   meaningful-only fields; refined product-spec FR-4 accordingly.
 - Status: spec-ready → design-approved. Next: /sdd-spec fix-offline-account-ui-gaps.
+
+## Session 2026-08-26 — sdd-spec
+
+- Generated implementation-spec.md with 8 steps. Status → implementation-ready.
+- Step map: (1) trading service — PlaceOrder authoritative offline routing (union of pool tag +
+  persisted `GetBrokerAccount` type) + CancelOrder offline guard; (2) trading Go tests; (3) portfolio
+  service — new `ListOfflineAccountIdsByUser` repo read + `ListPortfolios` union enumeration
+  (account_balances ∪ offline_account_realized); (4) portfolio Go tests; (5) UI OrderForm Record-order
+  control; (6) UI PortfolioPanel `!isOffline` field gating (single + combined); (7) UI e2e; (8) docs.
+- Scenario coverage (159's own AC IDs, not 157's): @AC-1 → Steps 2 (Go NEW/never-CANCELED) + 7 (UI
+  affordance); @AC-2 → Step 7; @AC-3 → Steps 4 + 7; @AC-4 → Steps 4 (ListPositions↔ListPortfolios
+  parity) + 7.
+- Key codebase findings (grep-verified):
+  - CancelOrder flips to CANCELED **unconditionally** at `trading.go:1079` (no offline precondition);
+    guard placed after order load (`:985`), keyed on authoritative `order.BrokerType == OFFLINE`
+    (NOT empty broker_order_id — that would false-reject a broker order pre-`broker_order_id`).
+  - PlaceOrder offline branch at `trading.go:388` keys only on the in-memory pool entry; guard B reads
+    `s.accountRepo.GetBrokerAccount` (`account_repo.go:104`) and routes offline on a **union** so a
+    pool/DB divergence can't misroute (broker_type is immutable post-create — prior investigation).
+  - `recordOfflineOrder` (`trading.go:744`) already records NEW, empty `broker_order_id`,
+    `LimitPrice: req.LimitPrice`, order-type-agnostic — so the UI Record control sends orderType=MARKET
+    + optional fill price → limitPrice.
+  - OrderForm has **four** mounts; two `/trader` mounts (positions/[symbol], and dashboard) — the
+    positions one passes `initialSymbol` just like insights, so `initialSymbol` can't distinguish
+    insights. Pinned an explicit `allowOfflineRecord` prop (default true; SignalOrderTicket passes
+    false) to exclude insights per C-10(a).
+  - Portfolio combined branch (`portfolio_service.go:1125`) enumerates `account_balances` only; offline
+    accounts are marked by `portfolio.offline_account_realized` rows (`GetOfflineRealized`,
+    `portfolio_repo.go:420`) — chose that as the offline-exclusive union source. Surfaced (P-03) that a
+    zero-activity offline account with no realized row / no positions is not yet known to portfolio
+    (no account-creation signal) — out of scope, consistent with @AC-4 (account with positions).
+  - Test homes all exist: trading `internal/service/trading_offline_test.go` +
+    `internal/testdata/order_rows.go` (C-13 Go home); portfolio
+    `internal/service/portfolio_offline_test.go` (no `internal/testdata/` — none required); UI fixtures
+    `BROKER_ACCOUNT_OFFLINE`/`PORTFOLIO_OFFLINE` + `e2e/trader/offline-accounts.spec.ts`.
+  - No proto/migration/config change (trading last migration 008, portfolio last 012). Added a docs
+    step (8) to keep trading + portfolio CLAUDE.md accurate for the two new backend behaviors.
+
+## Session 2026-08-26 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 0 warnings, 6 NOTEs (advisory — did not block). Every code-checkable claim
+  resolves; C-08/P-06 pairing, C-10(a)/(b), C-14, C-15 traceability all satisfied; no Floor risk
+  (no proto/migration/config, no new DB pool, no new outbound gRPC — GetBrokerAccount is a DB read).
+- Overlap: CLEAN — no proto/migration/config collisions (159 declares none); no same-file overlap
+  with any in-flight feature (142 = marketdata only; 158/084 disjoint; 157 = merged trunk baseline).
+  No merge-order.md entry needed.
+- Non-material NOTEs carried into execution (execution re-greps live anchors, so these self-correct):
+  - Step 1: Codebase Evidence cites resolveAccount at `:371`; actual is `trading.go:377` (6-line
+    drift). Load-bearing `:388/:389` offline-branch anchors are exact. — [ ] cosmetic
+  - Step 5: Evidence says "two /trader mounts pass initialSymbol"; only `positions/[symbol]/page.tsx`
+    does. Design conclusion (need explicit allowOfflineRecord prop) still holds. — [ ] cosmetic
+  - Steps 2/4/7: trading+portfolio `internal/service` branch logic is behaviorally tested but NOT
+    Go-coverage-gated (ci.yml:244 COVERPKGS excludes cmd|handler|repository|telemetry|service) — spec
+    is transparent about this; matches repo CI. Not a gap. — [ ] acknowledged
+- No blockers. Cleared to run /sdd-execute.
+
+---
+
+## Session 2026-08-26 — sdd-execute (sequential)
+
+Branch: `claude/features-157-158-impl-ulk0l2` (task-mandated harness branch, in place of
+`feature/fix-offline-account-ui-gaps`); one commit per step; single integration PR → main-dev at end.
+
+### Step 1 — trading guards [done]
+- Guard B (PlaceOrder): after `resolveAccount`, read authoritative persisted `broker_type` via
+  `s.accountRepo.GetBrokerAccount` and route offline when pool tag OR persisted type is OFFLINE (union;
+  best-effort — DB error or nil repo falls back to pool tag). Guard A (CancelOrder): reject an offline
+  order (`order.BrokerType == OFFLINE`) with `FailedPrecondition` before the unconditional CANCELED
+  transition at `:1079`.
+- Files modified: `services/xstockstrat-trading/internal/service/trading.go`
+- Deviations: nil-`accountRepo` defensive fallback (Deviation Log Step 1) — in `trading.go`, unblocks
+  existing halt tests; behavior-preserving.
+- TDD: covered by Step 2 (red->green below).
+
+### Step 2 — trading tests [done]
+- `TestCancelOrder_RejectsOfflineOrder` (@AC-1): red — pre-fix CancelOrder returned code OK and the
+  offline order's status became CANCELED -> green — guard A returns FailedPrecondition, status stays
+  NEW. `TestPlaceOrder_RoutesAuthoritativeOfflineToRecord` (@AC-1): red — a divergent account (pool
+  ALPACA / persisted OFFLINE) recorded no offline order (broker path) -> green — guard B routes it to
+  recordOfflineOrder (NEW, empty broker_order_id). Both use recover() for the un-fakeable concrete
+  `*repository.TradingRepo` UpsertOrder panic and assert on `s.orders`.
+- Files modified: `services/xstockstrat-trading/internal/service/trading_offline_test.go`
+- Verification: `go build` OK; full service package green; coverage total 62.9% >= 40%; golangci-lint
+  0 issues; C-13 single-consumer inline literals compliant.
+- Deviations: none.
+
+### Step 3 — portfolio combined-view offline enumeration [done]
+- Added `PortfolioRepo.ListOfflineAccountIdsByUser` (SELECT account_id FROM offline_account_realized
+  WHERE user_id, the offline-exclusive marker). `ListPortfolios` all-accounts branch now appends offline
+  accounts not already in the balances set via the pure helper `offlineIDsToAppend` (union+dedup);
+  `buildAccountPortfolio(ctx, id, nil)` yields Cash/BP/DayPnl=0 + Equity=positions MV, so summed broker
+  aggregates exclude offline while offline equity may contribute. Lookup failure is non-fatal (warn+skip).
+- Files modified: `internal/repository/portfolio_repo.go`, `internal/service/portfolio_service.go`
+- Deviations: none for Step 3 (the pure-helper factoring is recorded under Step 4).
+
+### Step 4 — portfolio offline enumeration test [done]
+- `TestOfflineIDsToAppend` (@AC-3/@AC-4): red (helper stubbed to return nil -> [] for both the
+  skip-present and dedup cases) -> green (real helper). Deviation: pure-helper unit test in place of the
+  specced repository-double ListPortfolios test (concrete un-fakeable *PortfolioRepo; no DB per TDD gate)
+  — user-approved at checkpoint; @AC-3/@AC-4 also covered by Step 7 e2e.
+- Files modified: `internal/service/portfolio_offline_test.go`
+- Verification: build OK; full service + repository packages green; coverage total 55.9% >= 40%;
+  golangci-lint 0 issues.
+
+### Step 5 — UI offline Record-order control [done]
+- Added `allowOfflineRecord?: boolean` (default true) to OrderForm; derived `isRecordMode` from the
+  selected account's `brokerType === BrokerType.OFFLINE` (via useAccountContext.accounts). In record
+  mode the broker order-type/limit/stop/trailing inputs are hidden, replaced by symbol/side/qty + an
+  optional fill price; submit forces MARKET, maps fill price → limitPrice, sends the explicit offline
+  accountId (backend records NEW). Title "Record Offline Order", button "Record …". SignalOrderTicket
+  passes allowOfflineRecord={false} (insights mount deliberately excluded, C-10(a)).
+- Files modified: `src/components/trader/OrderForm.tsx`, `src/components/insights/SignalOrderTicket.tsx`
+- Verification: tsc --noEmit exit 0; pnpm lint exit 0 (no new warnings in changed files); greps confirm.
+- TDD: e2e pairing in Step 7. Deviations: none.
+
+### Step 6 — PortfolioPanel !isOffline field gating [done]
+- Single-account branch: derived `isOffline`, wrapped Cash / Buying Power / Day P&L / Total P&L in
+  `{!isOffline && ...}` (kept Equity, positions+unrealized, and the already-gated Realized P&L).
+  Combined branch: gated the per-card Day P&L on `!isOffline` (kept Equity + position count). Offline
+  cards now show only meaningful fields (FR-3 / FR-4 / @AC-2 / @AC-4).
+- Files modified: `src/components/trader/PortfolioPanel.tsx`
+- Verification: tsc --noEmit exit 0; pnpm lint exit 0 (no findings in the file); greps confirm both branches.
+- TDD: e2e pairing in Step 7. Deviations: none.
+
+### Step 6 (expansion) — Book page /trader/portfolio/page.tsx offline gating [done]
+- Discovery at Step 7 found the real combined "Book" surface is `src/app/trader/portfolio/page.tsx`
+  (not PortfolioPanel's rarely-reached combined branch — AccountContext auto-selects the first active
+  account). Gated its per-account card Cash / Buying power / Day P&L / Total P&L on `!isOffline` (kept
+  Equity + Positions). Combined StatTile aggregates already correct (offline contributes 0). User
+  approved the Step 6 scope expansion at the checkpoint.
+- Files modified: `src/app/trader/portfolio/page.tsx`
+- Verification: tsc 0; lint 0 (pre-existing accountName warning only). Deviation logged (Step 6 expansion).
+
+### Step 7 — offline-accounts e2e extension [done]
+- Added 4 feature-159 e2e tests to `e2e/trader/offline-accounts.spec.ts`: @AC-1 (offline /trader shows
+  Record-order control, not the broker ticket), @AC-2 (offline card hides Cash/Buying Power/Day P&L,
+  shows Equity+Realized), @AC-3/@AC-4 (Book page /trader/portfolio combined view: offline card visible
+  with meaningful-only fields; broker card still shows broker figures), and @AC-1 insights-exclusion
+  (SignalOrderTicket keeps the broker ticket for an offline account — allowOfflineRecord={false}).
+- Files modified: `e2e/trader/offline-accounts.spec.ts` (reused BROKER_ACCOUNT_ALPACA/OFFLINE,
+  PORTFOLIO_ALPACA/OFFLINE fixtures + addAuthCookie; scenario-one-off inline overrides only).
+- Verification: all 4 pass under Playwright (chromium, --retries=2); first-hit route compilation under
+  `next dev` is flaky-then-green (documented cold-compile behavior; CI prebuilt+retries is stable). tsc 0,
+  lint 0. C-12/C-13: fixtures + auth from canonical homes; INVENTORY.md untouched (no new fixture).
+- Deviations: none (Step 6 expansion + run-mechanics notes are in the Deviation Log).
+
+### Step 8 — trading + portfolio CLAUDE.md [done]
+- Trading CLAUDE.md: added an "Offline (manually-tracked) accounts" note — PlaceOrder authoritative
+  union routing + CancelOrder offline reject (distinct from the halt gate, which stays "CancelOrder
+  never halt-gated"). Portfolio CLAUDE.md: documented the offline_account_realized marker and that
+  ListPortfolios' all-accounts view enumerates account_balances ∪ offline accounts (C-10(b) parity).
+- Files modified: `services/xstockstrat-trading/CLAUDE.md`, `services/xstockstrat-portfolio/CLAUDE.md`
+- Verification: greps confirm both notes. context-scrubber: the context-forge plugin's
+  `/context-scrubber` skill is NOT available in this session (no skill dir; not in the skills list) —
+  noted here and in the PR body per the teardown norm.
+- TDD: N/A (docs). Deviations: none.
+
+Status: in-progress → code-completed. All 8 steps done.
+
+## Session 2026-08-26 — sdd-execute completion (integration PR)
+
+- Merge-order gate: no feature-159 entry in merge-order.md; parent 157 already merged to main-dev.
+  No blocker.
+- C-16 promotion (operator-approved): wrote
+  `services/xstockstrat-ui/acceptance/fix-offline-account-ui-gaps.feature` (@AC-1/2/3/4, @feature-159
+  provenance). Backend guarantees (trading routing/cancel; portfolio combined enumeration) stay guarded
+  by the Step 2/4 Go tests those services own — not duplicated into trading/portfolio suites.
+- Opening the single integration PR: claude/features-157-158-impl-ulk0l2 → main-dev.
+
+- Integration PR opened: https://github.com/davcs86/xstockstrat/pull/1025 (claude/features-157-158-impl-ulk0l2 → main-dev, ready for review).
+- SESSION-END: 8/8 steps done; lifecycle code-completed. Accountability — out-of-scope changes: none silent (1 user-approved Step 6 scope expansion to the Book page); open items: none blocking (PortfolioPanel combined-branch reachability noted); unaddressed review warnings: none.

@@ -9,7 +9,7 @@ import {
   OrderType as PbOrderType,
   OrderStatus,
 } from '@xstockstrat/proto/trading/v1/trading_pb';
-import { TradingMode as PbTradingMode } from '@xstockstrat/proto/common/v1/common_pb';
+import { TradingMode as PbTradingMode, BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
 import { ConnectError } from '@connectrpc/connect';
 // BASE_PATH no longer needed — calls go through the typed Connect client.
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
@@ -43,10 +43,21 @@ interface OrderFormProps {
   // Optional caller-supplied symbol (feature 083 FR-6 — the Signal-detail order ticket is
   // pinned to the signal's symbol, which arrives as a route param, not the ?symbol deep link).
   initialSymbol?: string;
+  // Feature 159: when true (the default, all /trader mounts), an OFFLINE account swaps the broker
+  // ticket for a minimal "Record order" control. The insights Signal-detail mount passes false —
+  // a signal→order ticket is broker-execution context, and the trading-side routing guard still
+  // guarantees an offline account is never broker-routed there. An explicit prop is required because
+  // a /trader mount (positions/[symbol]) also passes initialSymbol, so initialSymbol can't distinguish
+  // the insights mount.
+  allowOfflineRecord?: boolean;
 }
 
-export function OrderForm({ mode, initialSymbol }: OrderFormProps) {
-  const { selectedAccountId } = useAccountContext();
+export function OrderForm({ mode, initialSymbol, allowOfflineRecord = true }: OrderFormProps) {
+  const { selectedAccountId, accounts } = useAccountContext();
+  // Offline detection reuses the canonical pattern (accountShared.tsx / PortfolioPanel showRealized):
+  // key on the selected account's broker type, since the portfolio contract carries no offline marker.
+  const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
+  const isRecordMode = allowOfflineRecord && selectedAccount?.brokerType === BrokerType.OFFLINE;
   // Quick-trade deep link: the positions table links here as /trader?symbol=SYM so the
   // ticket opens pre-filled. An explicit initialSymbol (Signal detail) takes precedence over
   // the ?symbol param. Seed the initial value, then keep it in sync if it changes (without
@@ -68,6 +79,11 @@ export function OrderForm({ mode, initialSymbol }: OrderFormProps) {
   const [qty, setQty] = useState('');
   const [limitPrice, setLimitPrice] = useState('');
   const [stopPrice, setStopPrice] = useState('');
+  // Optional recorded fill price for an offline "Record order" (feature 159) — mapped to limitPrice on
+  // submit; an offline order records req.OrderType/req.LimitPrice verbatim (no broker), so MARKET + this
+  // price is sufficient. Broker order types / TIF / stop / trailing inputs are deliberately not shown in
+  // record mode (the broker trailing-stop validation runs before the offline branch).
+  const [fillPrice, setFillPrice] = useState('');
   const [message, setMessage] = useState('');
   const [isErrorMsg, setIsErrorMsg] = useState(false);
   // Client-side idempotency nonce (feature 101, FR-1/FR-2): a stable ID per logical
@@ -86,10 +102,18 @@ export function OrderForm({ mode, initialSymbol }: OrderFormProps) {
       {
         symbol: symbol.toUpperCase(),
         side: side === 'buy' ? PbOrderSide.BUY : PbOrderSide.SELL,
-        orderType: ORDER_TYPE_ENUM[orderType],
+        // Record mode forces MARKET and maps the optional fill price to limit_price; the explicit
+        // offline accountId makes the backend record a NEW offline order (no broker submit).
+        orderType: isRecordMode ? PbOrderType.MARKET : ORDER_TYPE_ENUM[orderType],
         qty: parseFloat(qty),
-        limitPrice: limitPrice ? parseFloat(limitPrice) : 0,
-        stopPrice: stopPrice ? parseFloat(stopPrice) : 0,
+        limitPrice: isRecordMode
+          ? fillPrice
+            ? parseFloat(fillPrice)
+            : 0
+          : limitPrice
+            ? parseFloat(limitPrice)
+            : 0,
+        stopPrice: isRecordMode ? 0 : stopPrice ? parseFloat(stopPrice) : 0,
         tradingMode: mode === 'live' ? PbTradingMode.LIVE : PbTradingMode.PAPER,
         accountId: selectedAccountId ?? '',
         clientOrderId,
@@ -104,12 +128,15 @@ export function OrderForm({ mode, initialSymbol }: OrderFormProps) {
           // market/limit order would be noise.
           const stopInfo = order.stopPrice > 0 ? `, stop ${order.stopPrice}` : '';
           setMessage(
-            `Order placed: ${order.orderId} (${OrderStatus[order.status] ?? 'UNKNOWN'}) — qty ${order.qty}${stopInfo}`,
+            isRecordMode
+              ? `Order recorded: ${order.orderId} (${OrderStatus[order.status] ?? 'UNKNOWN'}) — qty ${order.qty}`
+              : `Order placed: ${order.orderId} (${OrderStatus[order.status] ?? 'UNKNOWN'}) — qty ${order.qty}${stopInfo}`,
           );
           setSymbol(symbolLocked ? prefillSymbol : '');
           setQty('');
           setLimitPrice('');
           setStopPrice('');
+          setFillPrice('');
           setClientOrderId(crypto.randomUUID());
         },
         onError: (err) => {
@@ -129,7 +156,7 @@ export function OrderForm({ mode, initialSymbol }: OrderFormProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Place Order</CardTitle>
+        <CardTitle>{isRecordMode ? 'Record Offline Order' : 'Place Order'}</CardTitle>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -159,18 +186,22 @@ export function OrderForm({ mode, initialSymbol }: OrderFormProps) {
             </ToggleGroupItem>
           </ToggleGroup>
 
-          <Select value={orderType} onValueChange={(v) => setOrderType(v as OrderType)}>
-            <SelectTrigger>
-              <SelectValue placeholder="Order type">{ORDER_TYPE_LABEL[orderType]}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="market">Market</SelectItem>
-              <SelectItem value="limit">Limit</SelectItem>
-              <SelectItem value="stop">Stop</SelectItem>
-              <SelectItem value="stop_limit">Stop Limit</SelectItem>
-              <SelectItem value="trailing_stop">Trailing Stop</SelectItem>
-            </SelectContent>
-          </Select>
+          {/* Broker order type is meaningless for an offline record — hidden in record mode so a
+              broker-only type (e.g. Trailing Stop, validated before the offline branch) can't be sent. */}
+          {!isRecordMode && (
+            <Select value={orderType} onValueChange={(v) => setOrderType(v as OrderType)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Order type">{ORDER_TYPE_LABEL[orderType]}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="market">Market</SelectItem>
+                <SelectItem value="limit">Limit</SelectItem>
+                <SelectItem value="stop">Stop</SelectItem>
+                <SelectItem value="stop_limit">Stop Limit</SelectItem>
+                <SelectItem value="trailing_stop">Trailing Stop</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
 
           <Input
             type="number"
@@ -182,7 +213,19 @@ export function OrderForm({ mode, initialSymbol }: OrderFormProps) {
             required
           />
 
-          {needsLimitPrice && (
+          {/* Record mode: a single optional fill price (mapped to limit_price). */}
+          {isRecordMode && (
+            <Input
+              type="number"
+              min="0"
+              step="any"
+              placeholder="Fill price (optional)"
+              value={fillPrice}
+              onChange={(e) => setFillPrice(e.target.value)}
+            />
+          )}
+
+          {!isRecordMode && needsLimitPrice && (
             <Input
               type="number"
               min="0"
@@ -194,7 +237,7 @@ export function OrderForm({ mode, initialSymbol }: OrderFormProps) {
             />
           )}
 
-          {needsStopPrice && (
+          {!isRecordMode && needsStopPrice && (
             <Input
               type="number"
               min="0"
@@ -212,7 +255,13 @@ export function OrderForm({ mode, initialSymbol }: OrderFormProps) {
             disabled={isPending || !selectedAccountId}
             className="w-full"
           >
-            {isPending ? 'Placing…' : `${side.toUpperCase()} ${symbol || '—'}`}
+            {isRecordMode
+              ? isPending
+                ? 'Recording…'
+                : `Record ${side.toUpperCase()} ${symbol || '—'}`
+              : isPending
+                ? 'Placing…'
+                : `${side.toUpperCase()} ${symbol || '—'}`}
           </Button>
 
           {message && (

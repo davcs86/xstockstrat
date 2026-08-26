@@ -13,6 +13,7 @@ import { DataTable } from '@/components/ui/data-table';
 import { useAccountContext } from '@/context/AccountContext';
 import { usePortfolios, usePositions } from '@/hooks/usePortfolio';
 import { brokerLabel } from '@/lib/brokers';
+import { BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
 import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
 
 /**
@@ -160,6 +161,10 @@ export default function PortfolioPage() {
             <div className="grid gap-4 md:grid-cols-2">
               {portfolios.map((p) => {
                 const acct = accounts.find((a) => a.id === p.accountId);
+                // Offline accounts have no account_balances row (feature 157), so Cash / Buying power /
+                // Day P&L / Total P&L are broker-only concepts that misrepresent them as $0 (feature 159 /
+                // FR-3). Show only the meaningful fields on an offline account's card.
+                const isOffline = acct?.brokerType === BrokerType.OFFLINE;
                 return (
                   <Card key={p.portfolioId || p.accountId}>
                     <CardContent className="pt-5 space-y-3">
@@ -173,21 +178,25 @@ export default function PortfolioPage() {
                       </div>
                       <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
                         <Field label="Equity" value={fmtUsd(p.equity)} />
-                        <Field label="Cash" value={fmtUsd(p.cash)} />
-                        <Field
-                          label="Buying power"
-                          value={p.buyingPower ? fmtUsd(p.buyingPower) : '—'}
-                        />
-                        <Field
-                          label="Day P&L"
-                          value={`${fmtSignedUsd(p.dayPnl)} (${fmtPct(p.dayPnlPct)})`}
-                          valueClass={pnlClass(p.dayPnl)}
-                        />
-                        <Field
-                          label="Total P&L"
-                          value={fmtSignedUsd(p.totalPnl)}
-                          valueClass={pnlClass(p.totalPnl)}
-                        />
+                        {!isOffline && (
+                          <>
+                            <Field label="Cash" value={fmtUsd(p.cash)} />
+                            <Field
+                              label="Buying power"
+                              value={p.buyingPower ? fmtUsd(p.buyingPower) : '—'}
+                            />
+                            <Field
+                              label="Day P&L"
+                              value={`${fmtSignedUsd(p.dayPnl)} (${fmtPct(p.dayPnlPct)})`}
+                              valueClass={pnlClass(p.dayPnl)}
+                            />
+                            <Field
+                              label="Total P&L"
+                              value={fmtSignedUsd(p.totalPnl)}
+                              valueClass={pnlClass(p.totalPnl)}
+                            />
+                          </>
+                        )}
                         <Field
                           label="Positions"
                           value={

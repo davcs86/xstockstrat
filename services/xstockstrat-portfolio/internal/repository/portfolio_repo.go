@@ -471,6 +471,29 @@ func (r *PortfolioRepo) ListAccountBalancesByUser(ctx context.Context, userID st
 	return result, rows.Err()
 }
 
+// ListOfflineAccountIdsByUser returns the account IDs of a user's offline accounts — those with a
+// portfolio.offline_account_realized row (feature 159). That row is the offline-exclusive marker
+// (broker accounts never get one), so unioning this set with ListAccountBalancesByUser introduces no
+// false broker entries and closes the ListPositions↔ListPortfolios combined-view parity gap.
+func (r *PortfolioRepo) ListOfflineAccountIdsByUser(ctx context.Context, userID string) ([]string, error) {
+	const q = `SELECT account_id FROM portfolio.offline_account_realized WHERE user_id=$1 ORDER BY account_id ASC`
+	rows, err := r.pool.Query(ctx, q, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list offline account ids by user: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan offline account id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 // ListPositionsByAccount returns all positions for a given account, optionally filtered by tradingMode.
 func (r *PortfolioRepo) ListPositionsByAccount(ctx context.Context, accountID string, tradingMode string) ([]*portfoliov1.Position, error) {
 	var (

@@ -24,6 +24,8 @@ Go gRPC service responsible for order execution and trade lifecycle management. 
 
 **Automatic stop-loss/take-profit brackets** (feature 030): whenever an auto-sized (`ComputePositionSize`) `MARKET`/`LIMIT` entry fills, `maybeSubmitBracket` opens a persisted bracket (`trading.order_brackets`) protecting it — Alpaca attaches the stop/take-profit atomically at entry `SubmitOrder`; IBKR submits them as a follow-up linked pair (`SubmitBracketLegs`, `isSingleGroup`+`parentId`) after the fill is confirmed, since IBKR's Client Portal Web API has no client-settable OCA group field. A per-account **protection-window watchdog** (`StartBracketProtectionWatchdog`, piggybacking on the fill-poller tick) flattens the position and halts the account (`trading.risk.max_unprotected_seconds`) if no bracket confirms in time. The halt is **persisted** on `trading.broker_accounts` (`halted`/`halted_at`/`halt_reason`, boot-hydrated) and blocks `PlaceOrder`/`ReplaceOrder` — never `CancelOrder`, the operator's sole remaining manual de-risk tool. `trading.risk.bracket_orders_enabled` seeds `false` in production (pending feature 103 or a documented manual verification) — a deliberate override of the default `true`, see `docs/roadmap/features/030-stop-loss-bracket-orders/context.md` § Archive Synthesis (Rejected alternatives).
 
+**Offline (manually-tracked) accounts** (feature 157, hardened by feature 159): a `BROKER_TYPE_OFFLINE` account has no broker client — its orders are recorded, not routed. `PlaceOrder` routes to `recordOfflineOrder` (persists `NEW`, empty `broker_order_id`, no broker submit) whenever **either** the in-memory pool tag **or** the **authoritative persisted** `broker_type` (`accountRepo.GetBrokerAccount`) is OFFLINE — a divergence-safe union, so an offline account can never fall through to a broker path even if its pool entry is stale (best-effort: a DB read error falls back to the pool tag). `CancelOrder` **rejects** an offline order with `FailedPrecondition` (offline orders are un-placed via `ConfirmOrder` edits, never a broker cancel) — this is an offline-**type** guard, orthogonal to the halt gating above: `CancelOrder` remains **never halt-gated** (the operator's manual de-risk tool for *broker* accounts).
+
 ## Language
 
 Go 1.25
@@ -92,7 +94,7 @@ never wedge the sync loop. Likewise every ledger `AppendEvent` is bounded (`ledg
 
 ## Webhooks
 
-_No webhooks. Call the gRPC RPCs on port 50051 directly._
+*No webhooks. Call the gRPC RPCs on port 50051 directly.*
 
 ## Database
 
@@ -149,10 +151,10 @@ the new total/remaining per its adapter. A successful replace persists the order
 | `qty` | `qty` | `quantity` |
 | `limit_price` | `limit_price` | `price` |
 | `stop_price` | `stop_price` | `auxPrice` |
-| `trail` | `trail` | _(not mapped — IBKR ignores)_ |
+| `trail` | `trail` | *(not mapped — IBKR ignores)* |
 | `time_in_force` | `time_in_force` | `tif` |
 
-The IBKR **netting-mode** assumption documented in _Known Limitations_ applies to replace as
+The IBKR **netting-mode** assumption documented in *Known Limitations* applies to replace as
 well: a replaced quantity is the new total order quantity (no hedged-mode lot semantics).
 
 ## Order Status Reconciliation

@@ -293,6 +293,95 @@ func TestOfflineRecompute_FromConfirmedOrders(t *testing.T) {
 	}
 }
 
+// TestCancelOrder_RejectsOfflineOrder (feature 159, @AC-1) proves guard A: CancelOrder rejects an
+// offline order with FailedPrecondition and never flips it to CANCELED. Pre-fix, CancelOrder set
+// order.Status = CANCELED unconditionally at trading.go:1079 (the broker cancel above it is gated on a
+// non-empty broker_order_id, but the local transition was not), so an offline NEW order — which has an
+// empty broker_order_id by design — was silently canceled. The nil concrete *repository.TradingRepo
+// panics at the post-transition UpsertOrder (the same un-fakeable-repo constraint the bracket tests
+// document); we recover and assert the observable pre-panic state.
+func TestCancelOrder_RejectsOfflineOrder(t *testing.T) {
+	svc := &TradingService{
+		cfgW:            &config.Watcher{},
+		orderIntentRepo: &fakeOrderIntentRepo{},
+		orders: map[string]*tradingv1.Order{
+			"off-ord-1": {
+				OrderId:    "off-ord-1",
+				AccountId:  "off-1",
+				BrokerType: commonv1.BrokerType_BROKER_TYPE_OFFLINE,
+				Status:     tradingv1.OrderStatus_ORDER_STATUS_NEW,
+				// no broker_order_id — an unconfirmed offline order never has one.
+			},
+		},
+	}
+
+	var err error
+	func() {
+		// Pre-fix, this reaches the unconditional CANCELED transition and then panics at the nil-repo
+		// UpsertOrder; post-fix, guard A returns before any repo access (no panic).
+		defer func() { _ = recover() }()
+		_, err = svc.CancelOrder(context.Background(), &tradingv1.CancelOrderRequest{OrderId: "off-ord-1"})
+	}()
+
+	if grpcstatus.Code(err) != codes.FailedPrecondition {
+		t.Errorf("CancelOrder on an offline order: got code %v, want FailedPrecondition", grpcstatus.Code(err))
+	}
+	if got := svc.orders["off-ord-1"].Status; got != tradingv1.OrderStatus_ORDER_STATUS_NEW {
+		t.Errorf("offline order status after CancelOrder = %v, want NEW (must never become CANCELED)", got)
+	}
+}
+
+// TestPlaceOrder_RoutesAuthoritativeOfflineToRecord (feature 159, @AC-1) proves guard B: PlaceOrder
+// routes on the authoritative persisted broker_type (union with the in-memory pool tag), so an offline
+// account can never fall through to a broker path even when the pool entry diverges. The divergence case
+// (pool entry tagged ALPACA, persisted record OFFLINE) is the sharp one: pre-fix the pool tag alone
+// decides and the order takes the broker path (no offline order is recorded); post-fix the union routes
+// it to recordOfflineOrder, which records a NEW offline order before the nil-repo UpsertOrder panic.
+func TestPlaceOrder_RoutesAuthoritativeOfflineToRecord(t *testing.T) {
+	repo := &offlineAccountRepo{getRec: &repository.BrokerAccountRecord{
+		ID: "acct-1", UserID: "user-1", BrokerType: int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE),
+	}}
+	svc := &TradingService{
+		cfg:             &config.Config{TradingMode: "paper"},
+		cfgW:            &config.Watcher{},
+		accountRepo:     repo,
+		orderIntentRepo: &fakeOrderIntentRepo{},
+		ledger:          &fakeLedgerClient{},
+		// Pool entry diverges from the persisted record: tagged ALPACA with a broker client. Pre-fix this
+		// routes to the broker path; post-fix guard B's authoritative read overrides it to offline.
+		brokers: map[string]brokerPoolEntry{
+			"acct-1": {client: &fakeBroker{}, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA), userID: "user-1"},
+		},
+		orders: map[string]*tradingv1.Order{},
+		halted: map[string]bool{},
+	}
+
+	func() {
+		defer func() { _ = recover() }() // offline record path panics at the nil-repo UpsertOrder
+		_, _ = svc.PlaceOrder(context.Background(), &tradingv1.PlaceOrderRequest{
+			Symbol: "HONA", Side: tradingv1.OrderSide_ORDER_SIDE_BUY, OrderType: tradingv1.OrderType_ORDER_TYPE_MARKET,
+			Qty: 1, ClientOrderId: "c-159-b", AccountId: "acct-1",
+		})
+	}()
+
+	var recorded *tradingv1.Order
+	for _, o := range svc.orders {
+		recorded = o
+	}
+	if recorded == nil {
+		t.Fatal("PlaceOrder on a persisted-offline account recorded no order — it was not routed to the offline branch")
+	}
+	if recorded.BrokerType != commonv1.BrokerType_BROKER_TYPE_OFFLINE {
+		t.Errorf("recorded order broker_type = %v, want OFFLINE (authoritative routing must win over the pool tag)", recorded.BrokerType)
+	}
+	if recorded.Status != tradingv1.OrderStatus_ORDER_STATUS_NEW {
+		t.Errorf("recorded order status = %v, want NEW", recorded.Status)
+	}
+	if recorded.BrokerOrderId != "" {
+		t.Errorf("recorded offline order broker_order_id = %q, want empty (no broker submit)", recorded.BrokerOrderId)
+	}
+}
+
 // TestConfirmOrder_Validation covers the input guards that run before any repo access.
 func TestConfirmOrder_Validation(t *testing.T) {
 	svc := &TradingService{}
