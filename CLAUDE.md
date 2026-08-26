@@ -53,6 +53,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 |---|---|
 | Building or modifying a Next.js frontend | `docs/patterns/frontend-auth.md` |
 | Other Next.js patterns (basePath, BFF connect-web call chain + handler-map basePath gotcha, browser typed-client data shape, BFF route verification, Suspense fallbacks, Radix hydration, middleware matcher, app icons) | `docs/patterns/nextjs-frontends.md` |
+| UI/UX consistency (design tokens + no-hardcoded-color rule, shadcn component/variant governance, shared shell/nav contract, loading/empty/error state primitives, accessibility baseline, durable-acceptance coverage audit + deviation backlog) | `docs/patterns/ui-ux-governance.md` |
 | Nginx routing pattern (deprecated — nginx removed) | `docs/patterns/nginx-routing.md` (historical reference) |
 | Adding a new backend service (any language) | `docs/patterns/header-propagation.md` |
 | Docker build patterns (Node.js, Next.js, Python, Go) | `docs/patterns/docker-build.md` |
@@ -471,6 +472,7 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon
 | DO prod app spec | `.do/app.yaml` |
 | DO dev app spec | `.do/app.dev.yaml` |
 | Frontend auth pattern | `docs/patterns/frontend-auth.md` — required for all Next.js services |
+| UI/UX governance | `docs/patterns/ui-ux-governance.md` — tokens, components, shell/nav, state primitives, a11y baseline (Constitution C-17) |
 | Backend propagation pattern | `docs/patterns/header-propagation.md` — required for all backend services |
 | Nginx routing pattern (deprecated) | `docs/patterns/nginx-routing.md` — historical reference; nginx removed by feature 045 |
 | Local env setup script | `scripts/localenv-setup.sh` |
