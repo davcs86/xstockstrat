@@ -168,3 +168,17 @@ _All five design-time spec guards were resolved into concrete step instructions:
   to Resolved: Yes. Confirmed `019` is still the highest analysis migration → `020` remains next-free.
 - Rebase conflict on `insights.md` (append-only; `157-offline-account-portfolios` added its own entry)
   resolved by keeping both entries.
+
+## Session 2026-08-26T05:21Z — sdd-review impl-spec (advisory, re-run vs current tree)
+
+- Re-ran the impl-spec review against the current branch (156 merged to main-dev; 019 present) to
+  confirm the earlier advisory review still holds. Result: 0 failures, 1 warning, 4 notes (advisory —
+  did not block). No Floor breach; F-01 respected (020 adds a new migration, never edits 019).
+  Overlap scan: CLEAN (migration 020, both analysis.opportunity.* config keys, durable_schedule.py,
+  and servicer.py all uncontested; only 156 shares resources and is already merged).
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 1: `DROP CONSTRAINT fundsignal_schedule_pkey` relies on Postgres's auto-derived PK name,
+    unverifiable offline. `<table>_pkey` is the correct default for 019's inline `text PRIMARY KEY`.
+    If an apply-time `\d` shows a different name, substitute it and record the substitution in the
+    `## Deviation Log` (F-09) — do not edit the step body. — [ ] carried (apply-time only)
+- Overlap findings: none new (156 dependency already resolved; 156 launched).
