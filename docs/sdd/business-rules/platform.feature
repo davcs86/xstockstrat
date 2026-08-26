@@ -39,3 +39,9 @@ Feature: Platform-wide guarantees
     And the watchlist still exists
     And on /insights/watchlists the delete affordance for that watchlist is hidden or disabled
     And its rename, add-symbol, and remove-symbol affordances remain enabled
+
+  @AC-5 @FR-4 @feature-149
+  Scenario: Every documentation surface reflects the widened manage_strategy input type
+    Given the manage_strategy change has been applied
+    When the manage_strategy docstring, docs/runbooks/mcp-tools.md, and the strat-lab backtest skill are read
+    Then each states that entry_rule/exit_rule accept a JSON string or a JSON object (dict)

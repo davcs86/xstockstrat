@@ -1853,3 +1853,11 @@ ambiguity is logged here).
 - **Evidence**: feature 149 `servicer.py:522,525-529,571` (concat), `:3630-3632` (consumer); retained defect report.
 - **Rule it implies**: a helper that assumes a specific series shape must assert/validate that shape, or
   the caller must pass the semantic quantity (`period_years`) explicitly.
+
+### 2026-08-26 — manage-strategy-accept-object-rules — assumption
+- **Mistake**: An MCP tool's strict `str` signature assumed clients send JSON as a *string*, but the
+  Claude Code harness pre-parses JSON-object args and delivers a `dict`, so valid strategy registrations
+  were rejected at the pydantic boundary — surfaced only by a live 4-strategy registration attempt against staging.
+- **Evidence**: feature 149 context.md 2026-08-22; design.md (archived) §15-20.
+- **Rule it implies**: for any MCP tool param that can be a structured value, accept `str | dict` — a
+  JSON-pre-parsing transport will hand you a dict.

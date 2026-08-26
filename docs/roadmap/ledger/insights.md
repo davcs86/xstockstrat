@@ -2329,3 +2329,27 @@ reusing.
   before any code change.
 - **Evidence**: feature 149 three `total→annualized` pairs → constant `n_days≈8170` (retained defect report `docs/reports/2026-08-23-backtest-annualized-return-underscaled-defect.md`).
 - **Rule it implies**: prefer a closed-form confirmation of the suspected divisor before patching.
+
+### 2026-08-26 — manage-strategy-accept-object-rules — design
+- **Pattern**: For an MCP passthrough tool, widen a param to a union (`str | dict`) rather than model a
+  `TypedDict` when the real grammar is owned by a downstream service — the union admits objects at the
+  schema edge while still rejecting scalars, and avoids duplicating a recursive grammar that would drift
+  against the doc-mirror trio (F-12).
+- **Evidence**: feature 149 `services/xstockstrat-agent/app/tools.py` annotation widening.
+- **Rule it implies**: don't re-model a downstream service's contract in a passthrough tool; widen the type minimally and coerce.
+
+### 2026-08-26 — manage-strategy-accept-object-rules — design
+- **Pattern**: When adding a new input encoding that funnels into an existing serialization path, keep
+  the legacy path byte-for-byte identical — coerce the new form (bare `json.dumps`, no `sort_keys`) and
+  never canonicalize the pre-existing form, or you silently alter values the backend already tolerates.
+- **Evidence**: feature 149 design.md (archived) §29-32,67-69; the coercion in `tools.py`.
+- **Rule it implies**: new-encoding coercion must be additive and byte-preserving for the existing path;
+  document *why* a canonicalization flag is deliberately absent.
+
+### 2026-08-26 — manage-strategy-accept-object-rules — ordering
+- **Pattern**: Sequence doc-mirror edits before the docs-consistency test, and place field coercion
+  before the None-mask filter so omitted-vs-empty semantics stay correct (`{}`→`"{}"` enters the mask;
+  an omitted `None` still drops).
+- **Evidence**: feature 149 implementation-spec.md (archived) §37-46, 89-103.
+- **Rule it implies**: order steps so an assertion sees all surfaces it reads, and place value transforms
+  relative to filters by intended semantics.

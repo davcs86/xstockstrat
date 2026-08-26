@@ -5,6 +5,7 @@
 **Last Updated**: 2026-08-22
 **Committed to main**: 2c8c9d7cb563140384324b5e1f9ff6fdceb1a367
 **Launched date**: 2026-08-24
+**Archived**: 2026-08-26
 
 ---
 
@@ -18,6 +19,7 @@
 | 2026-08-22 | `implementation-ready` → `code-completed` | direct-impl | All 3 steps implemented on `claude/register-trading-strategies-uoqhuk`; 273 agent tests pass (78% cov), ruff clean, proto-parity guard green, red-before-green demonstrated. |
 
 | 2026-08-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #1006; committed 2c8c9d7cb563140384324b5e1f9ff6fdceb1a367 |
+| 2026-08-26 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(3)/fails(1); promoted 6 scenarios → agent+platform suites; pruned 4 specs |
 ---
 
 ## Artifacts
