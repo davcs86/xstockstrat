@@ -568,3 +568,20 @@ backend routing guard (Step 1) still guarantees FR-2 there, and Step 7 asserts t
   DB-backed service). @AC-3 (offline excluded from summed cash/BP) and @AC-4 (offline visible in
   combined) are additionally covered end-to-end by the Step 7 e2e.
 - **Disposition**: sanctioned deviation (user-approved); no DB started; stays within Steps 3/4 files.
+
+### Step 6 — scope expanded to /trader/portfolio/page.tsx (the real Book combined surface)
+- **What**: Recon/design scoped the FR-3/FR-4 UI gating to `PortfolioPanel.tsx`, but discovery at Step 7
+  found `PortfolioPanel`'s combined branch is not normally reached (AccountContext auto-selects the first
+  active account), and the actual Book combined surface is `src/app/trader/portfolio/page.tsx`
+  (`usePortfolios(null)`, a combined StatTile aggregate + one `<Field>` card per account) — the likely
+  locus of defect 2's misleading "$594k Buying Power". Its per-account offline card showed Cash / Buying
+  power / Day P&L / Total P&L unconditionally. Added that file to Step 6 and gated those four `<Field>`s on
+  `!isOffline` (kept Equity + Positions), matching the PortfolioPanel change. The combined StatTile row is
+  already correct — an offline account contributes 0 cash/BP/dayPnl to the reduce, so the aggregates
+  exclude it (FR-4/@AC-3) with no code change there.
+- **Why (P-03, surfaced not buried)**: gating only PortfolioPanel would have shipped FR-3 incomplete on
+  the surface users actually see. Operator approved expanding Step 6 at the Step-7 checkpoint.
+- **Disposition**: sanctioned deviation (user-approved); Step 6 Files expanded by
+  `src/app/trader/portfolio/page.tsx`; tsc + lint clean; e2e assertion added in Step 7.
+- **Reachability note (P-03)**: `PortfolioPanel`'s own combined branch remains gated but is effectively
+  a no-account-selected fallback (auto-select makes it rare); the Book page is the real combined surface.

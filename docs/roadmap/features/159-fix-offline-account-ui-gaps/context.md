@@ -292,3 +292,12 @@ Branch: `claude/features-157-158-impl-ulk0l2` (task-mandated harness branch, in 
 - Files modified: `src/components/trader/PortfolioPanel.tsx`
 - Verification: tsc --noEmit exit 0; pnpm lint exit 0 (no findings in the file); greps confirm both branches.
 - TDD: e2e pairing in Step 7. Deviations: none.
+
+### Step 6 (expansion) — Book page /trader/portfolio/page.tsx offline gating [done]
+- Discovery at Step 7 found the real combined "Book" surface is `src/app/trader/portfolio/page.tsx`
+  (not PortfolioPanel's rarely-reached combined branch — AccountContext auto-selects the first active
+  account). Gated its per-account card Cash / Buying power / Day P&L / Total P&L on `!isOffline` (kept
+  Equity + Positions). Combined StatTile aggregates already correct (offline contributes 0). User
+  approved the Step 6 scope expansion at the checkpoint.
+- Files modified: `src/app/trader/portfolio/page.tsx`
+- Verification: tsc 0; lint 0 (pre-existing accountName warning only). Deviation logged (Step 6 expansion).
