@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-08-26 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-26 | `draft` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written. Operator overrode "no proto changes" for enforced bounds; server-side bounds fail-open bug caught in round 3 |
+| 2026-08-26 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
 
 ---
 
@@ -21,7 +22,7 @@
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Recon Dossier](recon.md) — grounded codebase map (sdd-design Phase 0)
 - [Design](design.md) — debated architecture, rejected alternatives, open risks (sdd-design Phase 1)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec surface-signal-weight-decay-config`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -50,4 +51,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec surface-signal-weight-decay-config` — generate the implementation spec from the approved design
+`/sdd-review surface-signal-weight-decay-config impl-spec` — validate the implementation spec, then `/sdd-execute surface-signal-weight-decay-config`

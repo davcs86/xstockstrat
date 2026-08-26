@@ -57,7 +57,8 @@ class TestCallerIdentityHelpers:
             tools_mod._caller_access_scope(_ctx(None), "manage_strategy")
 
 
-# Shared source list used by many tests
+# Shared source list used by many tests. Shape mirrors client.list_signal_sources, which always
+# projects reliability_weight (client.py; feature 134/161) — the tool relies on that key.
 _SOURCES = [
     {
         "slug": "s1",
@@ -65,6 +66,7 @@ _SOURCES = [
         "source_type": "mediated_email_attachment",
         "config_json": {},
         "has_credentials": False,
+        "reliability_weight": 1.0,
     },
     {
         "slug": "s2",
@@ -72,6 +74,7 @@ _SOURCES = [
         "source_type": "mediated_simple_email",
         "config_json": {},
         "has_credentials": False,
+        "reliability_weight": 1.0,
     },
     {
         "slug": "s3",
@@ -79,6 +82,7 @@ _SOURCES = [
         "source_type": "mediated_simple_website",
         "config_json": {"url": "https://example.com"},
         "has_credentials": False,
+        "reliability_weight": 1.0,
     },
 ]
 

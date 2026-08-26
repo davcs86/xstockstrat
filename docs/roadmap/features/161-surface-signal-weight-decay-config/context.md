@@ -69,10 +69,48 @@
   rejection); updated `@AC-6`/`@AC-7` for enforced bounds.
 - Status: draft → design-approved.
 
+## Session 2026-08-26 — sdd-spec
+
+- Generated implementation-spec.md with 12 steps. Status → implementation-ready.
+- Consumed recon.md + design.md (design-approved happy path); reused recon's Codebase Map directly
+  and verified the load-bearing/open-thread references against the live tree.
+- Key codebase findings:
+  - **Migration numbering resolved (open thread):** config migrations max at `018_notify_fanout`
+    **both locally and across every `origin` head** (verified via `git ls-remote --heads` + `git
+    ls-tree` sweep) — so `019` (register decay) / `020` (remove dead key) are correct and collision-free.
+  - **FR-7 sharpened — the real parity gap:** the agent already ships `test_signal_source_builder.py`
+    and `test_signal_source_projection.py`. The *projection* test guards the client `list_signal_sources`
+    dict (which already carries `reliability_weight`, `client.py:195`), so it passes today. The
+    *builder* test asserts `ManageSignalSourceRequest` top-level fields but **does not recurse into the
+    `source` sub-message** — so it never caught the dropped `SignalSource.reliability_weight` on the
+    write path (the F-6/RC-1 site). Step 2 extends the builder test with a `req.source.ListFields()`
+    descriptor-parity assertion (opt-out set = server-set/read-only fields). This is the concrete AC-9.
+  - **Two projection layers, not one:** the tool `list_signal_sources` (`tools.py:232-240`) is a
+    deliberately-slim re-projection that drops `reliability_weight` (and `active`/`health`/…); FR-1 is
+    a one-line add there. The client layer already carries it.
+  - **Server-bounds enforcement point + the round-3 fail-open:** `setConfig` (`configServiceImpl.ts:335`);
+    parse via all-oneof-shape `extractValueData` (`:574-585`, `??`-chained so `float_val:0`→`'0'`, no
+    zero-trap) + `Number(...)`; mirror the `platform.trading_state` guard *placement* (`:383-394`) but
+    NOT its string-only read (`:385`) which would coerce the agent's `float_val` to `0` and pass. `0`
+    is valid (min inclusive).
+  - **Dead-key blast radius confirmed:** `WEIGHT_KEY_REGISTRY` sole entry (`:110-112`); FLOAT_MAP
+    emit branch (`listKeys :507-530`); config-service tests (`listKeysWire.test.ts:40,117`,
+    `configServiceImpl.test.ts:40-66`); config-ui `validateFloatMap` (`NamespaceEditor.tsx:31,95-99,152-154`);
+    e2e fixtures/specs (`configKeys.ts:84,91`, `api-smoke.spec.ts:225-243`, `audit.spec.ts:25`,
+    `value-persists-after-save.spec.ts:16`). All reworked to the scalar decay key in Steps 6/7/10/11.
+  - **Proto:** `config.v1.ValueType` has only `UNSPECIFIED=0`/`FLOAT_MAP=1` (`config.proto:80-83`);
+    add `VALUE_TYPE_FLOAT_SCALAR=2` (additive → `buf breaking` passes) + `[deprecated]` on FLOAT_MAP
+    + `ValidationRule` doc-comment scalar semantics.
+- Not trading-domain-relevant → skipped the trading-domain survey/constraints. No new env vars/ports →
+  no docker-compose/`.do` deployment-file changes.
+- Reviewers snapshot in feature.md left as the sdd-design finalization (config/agent/ui/analysis
+  owners + Proto Reviewer + DBA) — a correct superset of the per-step reviewers.
+
 ## Open Threads
 
 - [ ] Migration numbering 019/020 derived from local tree — re-scan `origin/*` config migrations at
       /sdd-spec / /sdd-execute before writing the numbers (target: config-migration steps).
+      **[/sdd-spec: re-verified — 018 is max on local + all origin heads; 019/020 free.]**
 - [ ] `8760` upper bound is a unit-typo guard, not a math limit — revisit if a legitimate >1yr
       half-life is ever needed (target: config-service registry step).
 - [ ] 020 down-restore clobbers any live operator edit to the dead key's `value_data` — documented in
