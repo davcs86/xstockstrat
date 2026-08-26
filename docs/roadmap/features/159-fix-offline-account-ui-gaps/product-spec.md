@@ -27,6 +27,29 @@ context. Feature 157 gives offline accounts no `account_balances` row (equity is
 market values only), so cash / buying power / broker day-P&L are meaningless for them — presenting
 those fields (or blending an offline account into combined broker aggregates) misrepresents the book.
 
+## Functional Requirements
+
+- **FR-1** — With an offline account selected in `/trader`, the broker order ticket must not submit a
+  broker-routed order. The broker ticket is gated (hidden/disabled) for offline accounts and replaced
+  by an offline-specific "Record order" affordance that calls the offline record path
+  (`manage_offline_account` `record_order` behavior). All `OrderType` values are treated identically
+  for offline accounts — none reaches a broker.
+- **FR-2** — Any order recorded against an offline account is persisted **NEW** (awaiting a
+  hand-confirmed fill), never **CANCELED** by a broker path. This holds regardless of environment
+  (paper/staging vs live/production) because an offline order never touches a broker. Broker accounts
+  (`ALPACA`, `IBKR`) are unaffected — their order routing, order types, and fill lifecycle
+  (`ORDER_STATUS_PARTIALLY_FILLED` / `ORDER_STATUS_FILLED`) stay as-is.
+- **FR-3** — The per-account portfolio card for an offline account must not present broker-only fields
+  (Cash, Buying Power, broker Day P&L) as if they were real. It shows only the fields meaningful for an
+  offline account: positions market value, unrealized P&L, and the account-grain Realized P&L feature
+  157 already surfaces.
+- **FR-4** — The combined/all-accounts portfolio header must exclude offline accounts from broker-only
+  aggregates (Cash, Buying Power). Combined equity is not misrepresented by an offline account's absent
+  `account_balances` row; the offline account's position market value may contribute to combined
+  equity, but its (nonexistent) cash/buying-power must not be blended in.
+
+Each `FR-N` above is covered by ≥1 `@AC-*` scenario in `acceptance.feature` (Constitution **C-15**).
+
 ## Reproduction Steps
 
 Defect 1:
@@ -55,6 +78,19 @@ Defect 2:
 
 - `xstockstrat-ui` (`/trader` — `OrderForm.tsx`, `PortfolioPanel.tsx`)
 - `xstockstrat-trading` — possibly, for defect 1's CANCELED root cause (offline order routing)
+
+## Consumer Surface(s)
+
+- [x] **`/trader` web UI** (`xstockstrat-ui`) — the order ticket (`OrderForm.tsx`) and the portfolio
+  card/header (`PortfolioPanel.tsx`) are the primary surfaces changed. This is the reach of both
+  defects.
+- [x] **MCP agent** (`xstockstrat-agent`) — `manage_offline_account` `record_order` is the existing
+  offline-order write path; the new UI "Record order" affordance (FR-1) mirrors it. No agent-tool
+  signature change anticipated — the UI reaches the same underlying trading RPC.
+- [x] **Backend read-path parity** (`xstockstrat-portfolio`) — the offline-account balance shape must
+  stay consistent across `ListPositions` ↔ `ListPortfolios` / `GetPortfolio` so the UI card (FR-3) and
+  combined header (FR-4) render the same offline-account fields no matter which read path feeds them
+  (Constitution **C-10**).
 
 ## Fix Scope
 
