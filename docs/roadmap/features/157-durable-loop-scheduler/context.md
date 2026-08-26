@@ -88,10 +88,66 @@
 - **Constitution:** F-01/F-06/F-07 honored; C-05/C-07/C-08/C-11/C-14/C-15 addressed. No Floor breach.
 - Status: spec-ready → design-approved. Next: `/sdd-spec durable-loop-scheduler`.
 
+## Session 2026-08-26 — sdd-spec
+
+- Generated implementation-spec.md with **8 steps**. Status → implementation-ready.
+- Grounded on the `spec-grounding-157` working branch (156's landed code merged into the tree, same
+  approach the design session used) so every `path:line` is verified against real code, not the clean
+  `main-dev`-based PR branch which lacks 156.
+- Step map: (1) migration `020_job_schedule` additive-ALTER; (2) `durable_schedule.py` shared helper +
+  relocated `seconds_until_hour_utc`; (3) helper unit test (@AC-1/2/3); (4) fundsignal migration onto
+  the helper + its promoted 156 suite stays green (@AC-4/5/7); (5) two new config keys + CLAUDE.md
+  defaults; (6) opportunity refresh wall-clock rewrite (@AC-7/8/9); (7) opportunity test; (8) CLAUDE.md
+  module doc. Config (5) ordered before the opportunity consumer (6).
+- Scenario coverage (C-15): all live scenarios mapped — @AC-1/2/3→step 3, @AC-4/5→step 4, @AC-7→steps
+  4 & 7, @AC-8/9→step 7. @AC-6 is retired (FR-4 descoped), not a live scenario.
+- Key codebase findings:
+  - **Feature-156 seams confirmed** at `app/engine/fundsignal_loop.py`: `_now_ms`/`_process_name` `:109-113`,
+    `_seed_schedule` `:115-122`, `_next_sleep_seconds` `:124-135`, `_advance_schedule` `:137-147`,
+    `_tick` `:149-177`, `run_forever` `:179-186` — the exact code the shared helper extracts.
+  - **Last migration = `019_fundsignal_schedule`** → next free `020`. `019` up is an inline
+    `job_name text PRIMARY KEY` → auto-named constraint `fundsignal_schedule_pkey` (the ALTER target).
+  - **`seconds_until_hour_utc` single-caller confirmed**: `grep -rn` over `app/ tests/` shows only the
+    def (`servicer.py:3841`) + one call (`servicer.py:3477`) — the opportunity rewrite (step 6) removes
+    that call, so the servicer copy is deleted, no re-export shim needed.
+  - **Opportunity loop shape** `servicer.py:3466-3493`: `_opportunities_repo is None` guard `:3473-3474`
+    (only bail-out), `get_int_present(refresh_hour_utc)` `:3476`, enumeration `distinct_user_ids()`
+    `try/except continue` `:3478-3482`, per-user `try/except log.warning` `:3487-3492`.
+  - **Config getter** `watcher.py:103-114` `get_int_present` (HasField, 0 legitimate) — the F-07 read for
+    both new keys, mirroring fundsignal's jitter/retry keys.
+  - **Regression guard** `tests/test_fundsignal_loop.py` `TestScheduler` `:391-519` — 156's promoted
+    @AC-1..7; step 4 retargets its SQL-text assertions from `fundsignal_schedule` → `job_schedule` with
+    unchanged behavioral intent.
+  - Reviewers per registry: `migration` → DBA + analysis owner; `service`/`config`/`test` → analysis owner;
+    `docs` → none.
+
 ## Open Threads
 
-- [ ] Verify `019` PK constraint name (`fundsignal_schedule_pkey`) at /sdd-spec — target step 1 (migration).
-- [ ] Grep-confirm `seconds_until_hour_utc` single caller before deleting from servicer — target step 4.
-- [ ] Spell out `max(1, retry_seconds)` clamp at the opportunity error site — target step 4.
-- [ ] Comment the single-global-row invariant in `020.down.sql` — target step 1.
-- [ ] Preserve `_opportunities_repo is None` early return in the rewritten opportunity `run_forever` — target step 4.
+_All five design-time spec guards were resolved into concrete step instructions:_
+- [x] `019` PK constraint name `fundsignal_schedule_pkey` — spelled out in step 1 (with an apply-time `\d`
+  fallback note); derivation is the Postgres `<table>_pkey` default for the inline PK.
+- [x] `seconds_until_hour_utc` single caller — grep-confirmed (only def + 1 call); step 6 deletes the
+  servicer copy, verified by a post-edit `grep` expecting zero matches. No shim.
+- [x] `max(1, retry_seconds)` clamp at the opportunity error site — required explicitly in step 6.
+- [x] Single-global-row invariant comment in `020.down.sql` — required in step 1.
+- [x] Preserve `_opportunities_repo is None` early return in the rewritten `run_forever` — required in step 6.
+
+## Session 2026-08-26 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 3 warnings (advisory — did not block). PASS WITH WARNINGS. No Floor breach.
+- **Two grounding warnings fixed in the spec this session** (pre-execution, so the fix is a re-spec
+  correction, not an F-09 during-execution edit):
+  - Step 6: `[x]` FIXED — spec said `DurableSchedule(self._db_pool, …)` but `AnalysisServicer.__init__`
+    (`servicer.py:325-332`) stores `db_pool` only inside repos (`:358-402`), never as `self._db_pool`
+    (would have hit F-04/C-01 at execute). Added an explicit Instruction to `self._db_pool = db_pool`
+    in `__init__` first, plus a Codebase-Evidence note.
+  - Step 7: `[x]` FIXED — Codebase Evidence overstated that `test_analysis_servicer.py` "already
+    references `run_opportunity_refresh_forever`" (grep: zero matches; only a `distinct_user_ids` fake
+    stub at `:3915`). Corrected to "net-new coverage; `distinct_user_ids` stub exists, loop untested".
+  - Step 1 (NOTE, not fixed): migration up/down inverse check is prose, not a runnable command —
+    acceptable for an un-applied offline migration (reviewer agreed). `[x]` acknowledged, no change.
+- **Overlap scan: COLLISIONS FOUND but all with 156** (already the recorded hard dependency): shared
+  `app/engine/fundsignal_loop.py` and `services/xstockstrat-analysis/CLAUDE.md` config-table rows.
+  Migration `020`, both `analysis.opportunity.*` config keys, `durable_schedule.py`, and `servicer.py`
+  are otherwise CLEAN vs all other in-flight features. No new merge-order row required.
+- Unresolved ✗ / ⚠ carried into execution: **none** (both C-01 warnings fixed above).
