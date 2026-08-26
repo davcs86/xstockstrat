@@ -164,3 +164,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - All 3 steps done. status.md → `code-completed`. Next: integration PR
   (`feature/fix-signal-screen-crash` → `main-dev`) + C-16 scenario promotion (both @AC-* are net-new
   guarantees — recon § Existing Business Rules found none to regress).
+
+### Session 2026-08-26 — integration PR + C-16 promotion
+- **C-16 promotion (operator-confirmed):** both @AC-* scenarios describe xstockstrat-analysis
+  behavior → promoted to `services/xstockstrat-analysis/acceptance/fix-signal-screen-crash.feature`
+  (new file), each tagged `@feature-159` for provenance. No dedup needed — recon confirmed no existing
+  ScreenSymbols/signal-weighted guarantee in the suite to merge with.
+- Merge-order gate: no `fix-signal-screen-crash` row in merge-order.md → clear. Branch already current
+  with origin/main-dev (includes 157+158, PR #1020).
+- Context-scrubber (CLAUDE.md Teardown): no CLAUDE.md / constitution / findings / scrubberExtraTargets
+  doc changed, and no behavior those files describe changed — the fix restores the documented
+  `bar.time` convention (evaluator.py:43 already warned against `bar.timestamp`). No scan needed.
+- Integration PR opened: feature/fix-signal-screen-crash → main-dev.
