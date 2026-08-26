@@ -1,6 +1,6 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the twenty-eight tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the twenty-nine tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 ---
@@ -34,7 +34,7 @@ directly on port 9000.
 
 **Direct (local):** `http://localhost:9000`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same twenty-eight tools' `name`,
+**Tool catalog (UI display).** `GET /api/tools` returns the same twenty-nine tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
 capabilities (the same data documented below), never user data or credentials. It powers the
 `xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
@@ -675,6 +675,40 @@ gate.
 | `update` masking `active`/`slug`, or update with no fields | `invalid argument` (INVALID_ARGUMENT) |
 | `authenticated_website` / `mediated_authenticated_website` with no (merged) credential | `invalid argument` (INVALID_ARGUMENT) |
 | `credentials_ref` exposure | **Never** — `credentials_ref` is intentionally omitted from the return and never exposed to Claude (FR-12) |
+
+---
+
+### `run_fundamentals_scan`
+
+Manually triggers the fundamentals signal producer via `xstockstrat-analysis` `RunFundamentalsScan`
+(feature 156; the RPC itself predates this — the tool surfaces it to the MCP). **Admin-scoped
+write** — forwards the **caller's real derived** `x-access-scope`; the analysis backend gate rejects
+a non-admin caller `PERMISSION_DENIED` ("admin scope required"). The scheduled producer loop and this
+manual trigger share the same `run_once` path, and this call never touches the durable schedule row
+(`analysis.fundsignal_schedule`), so a manual scan cannot move the next scheduled cycle.
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `force` | `bool` | No | `false` default; `true` re-emits today's signals (clears the day's `fundsignal_emitted` idempotency rows first) |
+| `dry_run` | `bool` | No | `false` default; `true` scores + reports what *would* be scanned without emitting or spending cache calls |
+| `symbols` | `string[]` | No | Optional explicit universe override; omitted = the configured `analysis.fundsignal.universe_source` |
+
+**Return** — the `FundamentalsScanSummary`:
+
+```json
+{ "run_id": "…", "symbols_processed": 42, "signals_emitted": 7, "calls_spent": 3, "deferred_count": 0, "status": "completed", "finished_at": "2026-08-26T05:06:00+00:00" }
+```
+
+`status` is `"completed"` | `"budget_deferred"` | `"failed"`.
+
+**Errors**
+
+| Condition | Error |
+|---|---|
+| Non-admin caller | `PERMISSION_DENIED` ("admin scope required"), surfaced as the tool's `RuntimeError` |
+| Analysis unreachable / producer not running | gRPC error propagated (`UNAVAILABLE`) |
 
 ---
 

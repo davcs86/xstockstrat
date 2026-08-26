@@ -7,6 +7,7 @@ defer path (FR-4 / Acceptance #4), and deterministic score→direction mapping (
 """
 
 import inspect
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -20,6 +21,7 @@ def _make_cfg(overrides=None):
     overrides = overrides or {}
     cfg = MagicMock()
     cfg.get_int = MagicMock(side_effect=lambda key, default=0: overrides.get(key, default))
+    cfg.get_int_present = MagicMock(side_effect=lambda key, default=0: overrides.get(key, default))
     cfg.get_float = MagicMock(side_effect=lambda key, default=0.0: overrides.get(key, default))
     cfg.get_bool = MagicMock(side_effect=lambda key, default=False: overrides.get(key, default))
     cfg.get_str = MagicMock(side_effect=lambda key, default="": overrides.get(key, default))
@@ -365,3 +367,153 @@ class TestWatchlistUniverse:
         loop = _make_loop_154(provider="")  # pre-snapshot / unknown
         kept = loop._apply_symbol_cap(["AAA", "BBB", "CCC"], 2)
         assert len(kept) == 2  # unknown → conservative capped path (no provider literal baked in)
+
+
+# ── Durable crash-safe scheduler (feature 156: AC-1..AC-7) ──────────────────────
+
+
+class _StopLoop(Exception):
+    """Sentinel to break run_forever's infinite loop in a test after N iterations."""
+
+
+def _sched_loop(overrides=None, blocked_until_ms=None):
+    """A loop wired for scheduler tests: schedule read via fetchval is controllable and
+    every _db.execute SQL is recorded on loop._db.execute.await_args_list."""
+    loop = _make_loop(overrides)
+    loop._db.fetchval = AsyncMock(return_value=blocked_until_ms)
+    return loop
+
+
+def _executed_sql(loop):
+    return [c.args[0] for c in loop._db.execute.await_args_list if c.args]
+
+
+class TestScheduler:
+    @pytest.mark.asyncio
+    async def test_ac1_seeds_and_runs_promptly_on_fresh_deploy(self, monkeypatch):
+        # Fresh deploy: no row yet → fetchval None (seed treats as due=0), enabled.
+        loop = _sched_loop({"analysis.fundsignal.enabled": True}, blocked_until_ms=None)
+        run_once = AsyncMock()
+        monkeypatch.setattr(loop, "run_once", run_once)
+        await loop._seed_schedule()
+        sleep_s = await loop._tick()
+        # Due immediately — the first cycle runs without a full-interval wait.
+        run_once.assert_awaited_once()
+        assert sleep_s == 0.0
+        sql = _executed_sql(loop)
+        assert any(
+            "INSERT INTO analysis.fundsignal_schedule" in s and "ON CONFLICT" in s for s in sql
+        )
+        # And it advanced the schedule after the successful run.
+        assert any("UPDATE analysis.fundsignal_schedule" in s for s in sql)
+
+    @pytest.mark.asyncio
+    async def test_ac2_redeploy_within_interval_does_not_reset(self, monkeypatch):
+        # An existing row with a future due-time → sleep only the remainder, do not run.
+        now_ms = int(datetime.now(UTC).timestamp() * 1000)
+        future = now_ms + 6 * 3600 * 1000  # 6h out
+        loop = _sched_loop(
+            {"analysis.fundsignal.enabled": True, "analysis.fundsignal.run_interval_hours": 24},
+            blocked_until_ms=future,
+        )
+        run_once = AsyncMock()
+        monkeypatch.setattr(loop, "run_once", run_once)
+        sleep_s = await loop._tick()
+        run_once.assert_not_awaited()
+        # ≈ remaining 6h, NOT a fresh 24h interval.
+        assert 6 * 3600 - 60 <= sleep_s <= 6 * 3600 + 60
+
+    @pytest.mark.asyncio
+    async def test_ac3_hard_crash_row_still_due_reruns_promptly(self, monkeypatch):
+        # Row left in the past (a crash never advanced it) → due → runs now.
+        now_ms = int(datetime.now(UTC).timestamp() * 1000)
+        past = now_ms - 3600 * 1000
+        loop = _sched_loop({"analysis.fundsignal.enabled": True}, blocked_until_ms=past)
+        run_once = AsyncMock()
+        monkeypatch.setattr(loop, "run_once", run_once)
+        sleep_s = await loop._tick()
+        run_once.assert_awaited_once()
+        assert sleep_s == 0.0
+
+    @pytest.mark.asyncio
+    async def test_ac4_caught_error_retries_after_retry_seconds(self, monkeypatch):
+        loop = _sched_loop(
+            {
+                "analysis.fundsignal.enabled": True,
+                "analysis.fundsignal.retry_seconds": 300,
+                "analysis.fundsignal.run_interval_hours": 24,
+            },
+            blocked_until_ms=0,  # due
+        )
+        monkeypatch.setattr(loop, "run_once", AsyncMock(side_effect=RuntimeError("boom")))
+        before_ms = int(datetime.now(UTC).timestamp() * 1000)
+        await loop._tick()
+        # The advance UPDATE set blocked_until_ms ~ now + retry_seconds*1000, not a full interval.
+        advance = [
+            c
+            for c in loop._db.execute.await_args_list
+            if c.args and "UPDATE analysis.fundsignal_schedule" in c.args[0]
+        ]
+        assert advance, "expected a schedule advance after a caught error"
+        new_blocked = advance[-1].args[1]
+        assert before_ms + 300_000 - 5000 <= new_blocked <= before_ms + 300_000 + 5000
+        # Definitely not the 24h interval advance.
+        assert new_blocked < before_ms + 3600 * 1000
+
+    @pytest.mark.asyncio
+    async def test_ac5_disabled_neither_runs_nor_advances_nor_spins(self, monkeypatch):
+        loop = _sched_loop(
+            {"analysis.fundsignal.enabled": False, "analysis.fundsignal.run_interval_hours": 24},
+            blocked_until_ms=0,  # due, but disabled
+        )
+        run_once = AsyncMock()
+        monkeypatch.setattr(loop, "run_once", run_once)
+        sleep_s = await loop._tick()
+        run_once.assert_not_awaited()
+        # No schedule advance while disabled.
+        assert not any("UPDATE analysis.fundsignal_schedule" in s for s in _executed_sql(loop))
+        # Not a busy-spin: a positive sleep is returned (one interval).
+        assert sleep_s == 24 * 3600
+
+    @pytest.mark.asyncio
+    async def test_ac6_manual_run_once_does_not_touch_schedule(self):
+        # The manual RPC path calls run_once directly — it must never move the scheduled cadence.
+        loop = _sched_loop({}, blocked_until_ms=0)
+        await loop.run_once(override_symbols=["AAPL", "MSFT"])
+        assert not any("fundsignal_schedule" in s for s in _executed_sql(loop)), (
+            "run_once must not read or write analysis.fundsignal_schedule (AC-6)"
+        )
+
+    @pytest.mark.asyncio
+    async def test_ac7_startup_jitter_is_bounded(self, monkeypatch):
+        captured = {}
+
+        def fake_uniform(a, b):
+            captured["args"] = (a, b)
+            return b
+
+        monkeypatch.setattr(fundsignal_module.random, "uniform", fake_uniform)
+        monkeypatch.setattr(fundsignal_module.asyncio, "sleep", AsyncMock())
+
+        loop = _sched_loop({"analysis.fundsignal.startup_jitter_seconds": 45}, blocked_until_ms=0)
+        monkeypatch.setattr(loop, "_seed_schedule", AsyncMock())
+        # Break out of the infinite loop right after the one-shot jitter sleep.
+        monkeypatch.setattr(loop, "_tick", AsyncMock(side_effect=_StopLoop))
+        with pytest.raises(_StopLoop):
+            await loop.run_forever()
+        assert captured["args"] == (0, 45)  # bound is [0, N]
+
+    @pytest.mark.asyncio
+    async def test_ac7_zero_jitter_is_zero(self, monkeypatch):
+        # Teeth: N=0 must yield exactly 0 (bound not vacuous).
+        captured = {}
+        monkeypatch.setattr(
+            fundsignal_module.random, "uniform", lambda a, b: captured.setdefault("v", (a, b)) or 0
+        )
+        monkeypatch.setattr(fundsignal_module.asyncio, "sleep", AsyncMock())
+        loop = _sched_loop({"analysis.fundsignal.startup_jitter_seconds": 0}, blocked_until_ms=0)
+        monkeypatch.setattr(loop, "_seed_schedule", AsyncMock())
+        monkeypatch.setattr(loop, "_tick", AsyncMock(side_effect=_StopLoop))
+        with pytest.raises(_StopLoop):
+            await loop.run_forever()
+        assert captured["v"] == (0, 0)

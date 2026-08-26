@@ -1,0 +1,222 @@
+# Context Log: fix-fundamentals-signal-producer
+
+Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+
+---
+
+## Session 2026-08-25 (/sdd-triage)
+
+- Bug reported via defect report `docs/reports/2026-08-25-fundsignal-first-cycle-resets-on-redeploy-defect.md`
+  (GitHub Issues disabled on this repo — filed as a report, no issue number to close).
+- Severity: SEV-2. Config-only fix possible: no. Impact type: behavior-correctness.
+  Environment: dev / staging (and production under promotion-driven redeploys).
+- Routed to SDD path (Track C): SEV-2 with environment dev/staging → Track C.
+- Created: status.md (`draft`), feature.md, product-spec.md, acceptance.feature (2 regression
+  scenarios), context.md.
+- Affected services (from report): xstockstrat-analysis (fundamentals signal producer, feature 062 / 154).
+- Root cause hypothesis: `fundsignal_loop.py:98-100` sleeps before the first `run_once` and keeps no
+  persisted schedule; `deploy-dev.yml` redeploys the whole app on every `main-dev` push, so each
+  restart resets the sleep and the first cycle is deferred indefinitely.
+- Recommended design depth: **quick** → `/sdd-design fix-fundamentals-signal-producer quick`
+  (rationale: SEV-2, single service, no proto/migration/config-key change; too small to debate in
+  full, too risky — a scheduling change to a live producer — to skip design entirely).
+- Development branch: feature/fix-fundamentals-signal-producer.
+- Feature number: 155 (max existing NNN = 154 + 1; note 153 is a duplicated prefix in the tree
+  — `153-fix-ohlcv-chunk-lock-oom` and `153-ui-auth-improvements` — but max is still 154).
+
+### Related operational state (carried from the discovery session, not part of the fix code)
+
+- Stopgap already applied in **staging**: `analysis.fundsignal.run_interval_hours` set to `1`
+  (config version `1787692710368`, 2026-08-25) so each fresh process fires within ~1h of startup
+  despite deploy churn. This is a mitigation, not the fix. **Revert to `24` once the fix lands**
+  (a config action, tracked here — out of scope for the code change).
+
+## Session 2026-08-25 (/sdd-design quick — round 1 + operator steer)
+
+- Phase 0 Recon written (recon.md): single service (xstockstrat-analysis), boot-timing bug in
+  `fundsignal_loop.run_forever`. Key reuse: persisted-column + boot-hydration precedent
+  (`hydrate_cooldowns`/`hydrate_scores`); existing `fundsignal_emitted` PK idempotency guard makes an
+  eager boot run a no-op.
+- Round 1 debate: proposer chose Option B (persisted `MAX(finished_at)` catch-up + `_tick()` seam);
+  adversary returned NEEDS WORK — no Floor breach, but flagged (a) dry_run/manual-scan contamination of
+  `finished_at` (schedule can't tell a real emitting cycle from a dry-run), (b) an unsafe "return 0 on
+  any exception → hot-loop" branch, (c) transient-failure defers a full interval (no short retry),
+  (d) preferred Option A (run-then-sleep) as the minimal fix since the idempotency guard already
+  prevents duplicate emission. C-16 gap noted: analysis has no acceptance suite (no regression net).
+- **OPERATOR STEER (expands scope beyond the bug fix — recorded per C-11/principle #2):** the user
+  directed adding, on top of the boot-timing fix:
+  1. a **DB-backed distributed lock layer** (`process_name`, `blocked_until_ms`) — a lease/lock row so
+     only one instance runs a cycle and the schedule is durable + contamination-free (the scheduler
+     owns next-due, independent of `run_once`'s `finished_at`);
+  2. **startup jitter** to stagger concurrent boots;
+  3. **manual override/trigger of runs via UI and MCP**.
+  This turns the change from a single-service bug fix into a multi-surface feature (new migration for
+  the lock table; likely a new `analysis.fundsignal.*` config key for jitter; consumer surfaces on
+  `xstockstrat-agent` (MCP tool) and `xstockstrat-ui` (trigger control), C-14). Running targeted recon
+  on the manual-trigger surfaces + a distributed-lock precedent scan, then round 2 on the expanded design.
+
+## Session 2026-08-25 (/sdd-design — round 2 + approval)
+
+- Targeted recon (2 subagents): manual-trigger surfaces + distributed-lock precedent.
+  - `RunFundamentalsScan` RPC **already exists** (admin-scoped, `force`/`dry_run`/`symbols`) → MCP/UI
+    are wrapper-only, **no proto change**. No MCP tool / UI control exists yet (both greenfield).
+  - **No lock/lease pattern exists anywhere** in the platform (greenfield). Analysis is
+    `instance_count: 1` (both `.do` specs, single compose container) → a *distributed* lock is not
+    required for correctness; in-process `asyncio.Lock` already prevents overlap. Closest durable
+    precedent: `analysis.ledger_stream_cursor` self-seed upsert. New migration = `019`.
+- Round 2 debate on the expanded design (proposer: CAS lease + `LEASE_HOLD` + polling; adversary:
+  NEEDS WORK — no Floor breach, but the lease is YAGNI at instance-count-1 AND *worsens* crash
+  recovery (~1h wedge because it leases before running), plus undefined poll floor = write-churn).
+- **Gate decisions (operator, via AskUserQuestion):**
+  1. **Lock scope → "Durable schedule, crash-safe"**: keep the requested `blocked_until_ms` +
+     `process_name` columns (migration `019 analysis.fundsignal_schedule`), but write next-due
+     **only after a run completes** (crash leaves it due → restart re-runs immediately), compute-
+     sleep-until-due (no polling), drop the CAS/`LEASE_HOLD`. In-process `_lock` retained;
+     `process_name` kept as a diagnostic / forward fence field, not relied on.
+  2. **Retry cadence → config key**: `analysis.fundsignal.retry_seconds` (default 300), `get_int_present`.
+- Chosen approach (design.md): durable crash-safe schedule row + startup jitter
+  (`analysis.fundsignal.startup_jitter_seconds`, default 30) + retry config key; surface the existing
+  `RunFundamentalsScan` via a new agent MCP tool (`run_fundamentals_scan`, forwards derived caller
+  scope, backend admin gate) and a new **/config-ui** admin card (register only that one RPC on
+  `configUiBff.ts` via `forwardAdmin`; nav-reachable, C-10(a)).
+- Rejected: full CAS lease (crash-worsening, unused fencing); `MAX(finished_at)` catch-up
+  (dry-run/manual contamination); no-table run-then-sleep (sufficient for the bug but the operator
+  wanted a durable row); UI in /insights (owner-scoped surface, wrong trust boundary).
+- Constitution: C-05/C-07/C-08/C-13/C-14/F-01/F-06/F-07/P-03 touched, all honored. **No Floor breach.**
+- Business rules (C-16): analysis has no acceptance suite → net-new `@AC-1..9`, no regression; promote
+  into a new `services/xstockstrat-analysis/acceptance/fundsignal.feature` at launch.
+- Open risks carried: disabled-window re-check latency; `_finish`→`RunFundamentalsScanResponse` field
+  mapping; clock-source consistency (all → `/sdd-spec`).
+- **Scope note:** this is now a multi-service *feature* (analysis migration + 2 config keys + agent
+  MCP + config-ui), well beyond the original Track-C bug fix, on explicit operator direction.
+- Status: draft → design-approved.
+
+## Session 2026-08-25 (/sdd-spec)
+
+- Generated implementation-spec.md with **9 steps**. Status: design-approved → implementation-ready.
+- Step map: (1) migration `019_fundsignal_schedule`, (2) config-key registration (jitter/retry),
+  (3) analysis `run_forever` rewrite, (4) analysis scheduler tests (AC-1..7 + AC-6), (5) agent
+  `run_fundamentals_scan` tool + client wrapper, (6) agent tests (AC-8), (7) agent tool-doc surfaces,
+  (8) config-ui admin card + BFF + nav (AC-9 impl), (9) config-ui e2e (AC-9).
+- Key codebase findings verified for the zero-assumption rule (C-01):
+  - Last applied analysis migration is `018_backtest_runs_fill_model`, so `019` is the free NNN.
+  - `run_forever` bug confirmed at `fundsignal_loop.py:96-110` (sleeps `:100` before `run_once`
+    `:108`; `enabled` gate `:101` after the sleep). Self-seed precedent: `pnl_pattern_consumer.py:397`
+    (`ON CONFLICT ... DO`). Reuse `self._db` (`:72`) — no new pool (F-06).
+  - **Design Open Risk resolved:** `RunFundamentalsScan` returns `FundamentalsScanSummary`
+    (`analysis.proto:508-516`: run_id, symbols_processed, signals_emitted, calls_spent,
+    deferred_count, status, finished_at) — a clean flat projection for the MCP tool + UI card.
+    `servicer.RunFundamentalsScan` (`servicer.py:2717`) calls `run_once` directly and never
+    reads/writes `fundsignal_schedule`, so AC-6 (manual scan doesn't contaminate cadence) holds by
+    construction.
+  - `get_int_present` at `watcher.py:103` is the correct getter for jitter/retry (0 = legitimate).
+  - Agent: `ANALYSIS_ENDPOINT` already wired for the agent (docker-compose + both `.do` specs) and the
+    agent CI python-test matrix enforces `--cov=app --cov-fail-under=40`. New tool mirrors
+    `trigger_backfill`/`set_strategy_live` (`tools.py:978`, `client.py:1224`), forwarding derived scope
+    via `_caller_access_scope` + `_metadata` (C-03). `test_tools_endpoint.py` name-set is the C-10(a)
+    reachability guard.
+  - UI: config-ui BFF `analysisClient` dials `ANALYSIS_ENDPOINT`, which in e2e is **9092** (insights
+    mock, `playwright.config.ts:174`) — so the e2e `runFundamentalsScan` mock handler goes on the
+    port-9092 `AnalysisService` block (`mock-backend.ts:622`), NOT the 9093 config-ui block. Register
+    only `runFundamentalsScan` via `forwardAdmin` (`bffShared.ts:75`); new browser client mirrors
+    `traderAnalysisClient.ts`; nav via `PLATFORM_SUBNAV` config-ui array (`PlatformHeader.tsx:87-89`).
+- **No new env vars / ports / proto changes** — confirmed. Two new config keys only; one migration.
+- **Branch caveat (fails.md 2026-07-30 / feature 082):** this /sdd-spec session ran on the
+  harness branch `claude/fundamentals-signal-config-0jdfed`, NOT the feature's
+  `**Development Branch**: feature/fix-fundamentals-signal-producer`. /sdd-execute's boot sequence
+  must reconcile (the two should share the design-approved artifacts) before executing.
+
+## Session 2026-08-25 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 2 advisory warnings + 3 informational notes across 9 steps (advisory — did not block).
+- Overlap scan: **CLEAN** — no migration/config-key/proto/file collision with any in-flight feature
+  (only other live feature is 142-fix-fundamentals-upsert-invalid-json, marketdata-only). Migration
+  `019`, both config keys, and the `run_fundamentals_scan` tool name are unclaimed. No merge-order entry needed.
+- Warnings carried into execution:
+  - Step 9: Playwright e2e step states no `--cov-fail-under` threshold — [x] no change needed
+    (inapplicable to e2e; the UI Vitest gate is `src/lib/**`-scoped and this feature's logic lives in
+    page.tsx/hook/BFF, exercised by the e2e).
+  - Step 3 line-ref drift `_has_admin_scope` cited `:2725`, actual `:2723`; Step 1 "feature-062-style
+    header" label — [x] fixed in impl-spec (symbols/paths already resolved; cosmetic accuracy only).
+- No blockers; spec is evidence-grounded (every path:line verified by the reviewer). Ready for /sdd-execute.
+
+## Session 2026-08-25 (/sdd-execute sequential — boot reconciliation)
+
+- **Feature renumbered 155 → 156.** While this feature was in design/spec, another feature
+  `155-watchlist-opportunity-signal-cues` was created and merged to `main-dev` also claiming NNN 155.
+  Per the numbering rule (renumber the *later*/unmerged one to the next free NNN), and since the
+  watchlist feature is already on `main-dev` (immutable), this feature moved to **156**. The git
+  branch/slug are unaffected (`feature/fix-fundamentals-signal-producer` uses the slug only).
+  Renamed the dir `155-… → 156-…`, updated the `implementation-spec.md` "Feature 155"/config-key
+  descriptions and the `insights.md` entry to 156. The earlier `## Session` note above that reads
+  "Feature number: 155" is left as the historical record.
+- Merged current `origin/main-dev` into the feature branch (union-resolved the `insights.md` append
+  conflict — kept both the 155-watchlist and 156-fundsignal design insights).
+- Tooling setup (steps 1–9): python3.12 (uv) ✓ · uv ✓ 0.8.17 · ruff ✓ 0.15.8 · pytest ✓ (uv, analysis+agent synced) · node ✓ 22 · pnpm ✓ 9.15.0 (ui install running) · migration = offline (no DB started).
+
+### Step 1 — migration: create `019_fundsignal_schedule` [done]
+- Created `analysis.fundsignal_schedule (job_name PK, blocked_until_ms bigint NOT NULL, process_name text, updated_at timestamptz default now())` + its down migration. Offline-verified: up creates the table, down drops it (exact inverse), NNN 019 is next free.
+- Files modified: `services/xstockstrat-analysis/migrations/019_fundsignal_schedule.up.sql`, `.../019_fundsignal_schedule.down.sql`
+- Deviations: none. TDD: N/A (migration — offline structural check).
+
+### Step 2 — config: register startup_jitter_seconds + retry_seconds [done]
+- Added both keys (int, defaults 30/300, read presence-aware) to the analysis CLAUDE.md § Config Keys Consumed table and the config-governance.md feature-062 block. Verified both appear in both files.
+- Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `docs/patterns/config-governance.md`
+- Deviations: none. TDD: N/A (config docs).
+
+### Step 3 — service: rewrite run_forever (durable crash-safe schedule + jitter + retry) [done]
+- Rewrote `run_forever` around a testable `_tick()` seam + `_seed_schedule`/`_next_sleep_seconds`/`_advance_schedule`. Boot self-seeds `blocked_until_ms=0` (ON CONFLICT DO NOTHING); one-shot jitter `random.uniform(0, startup_jitter_seconds)`; compute-sleep-until-due (no polling); advance `blocked_until_ms` ONLY after a completed cycle (success → interval; caught error → retry_seconds). Disabled → no run, no advance, sleep one interval. `run_once` untouched (AC-6 by construction). Single Python clock source (`_now_ms`); `process_name` diagnostic. Added `import os/random/socket`. Reuses `self._db` (no new pool, F-06).
+- Files modified: `services/xstockstrat-analysis/app/engine/fundsignal_loop.py`
+- TDD (paired Step 4): RED — TestScheduler 7 fail (missing `_tick`/`_seed_schedule`/module `random`) against pre-Step-3 tree → GREEN — all pass after impl. AC-1 seeds+runs-on-boot; AC-2 remainder-not-reset; AC-3 crash-row-due-reruns; AC-4 retry_seconds advance; AC-5 disabled no-run/no-advance/no-spin; AC-7 jitter [0,N] + N=0 teeth. AC-6 held red→green (passed pre+post — the invariant to preserve).
+- Deviations: none. Clock source = single Python `datetime.now(UTC)` (spec-permitted alternative to SQL now(); safe at instance_count:1).
+
+### Step 4 — test: scheduler unit tests (red-before-green) [done]
+- Added `TestScheduler` (AC-1..7) to `tests/test_fundsignal_loop.py`, reusing `_make_loop`/`_make_cfg` (extended `_make_cfg` with `get_int_present`). Full analysis suite 608 passed; coverage 83.7% (≥40).
+- Files modified: `services/xstockstrat-analysis/tests/test_fundsignal_loop.py`
+- Deviations: none. Covers AC-1..AC-7.
+
+### Step 5 — service: run_fundamentals_scan MCP tool + client wrapper [done]
+- Added `client.run_fundamentals_scan(force, dry_run, symbols, access_scope)` (mirrors `set_strategy_live`; forwards derived scope via `_metadata`, projects `FundamentalsScanSummary` via `_ts_to_iso`) and registered the `run_fundamentals_scan` MCP tool next to `trigger_backfill` (derives scope via `_caller_access_scope`, wraps AioRpcError). Bumped module docstring 28→29 + enumeration line. No proto change.
+- Files modified: `services/xstockstrat-agent/app/client.py`, `app/tools.py`
+- TDD (paired Step 6): RED — 4 fail (missing client fn / unregistered tool / name-set mismatch) → GREEN. Covers AC-8.
+- Deviations: none.
+
+### Step 6 — test: agent tool + client tests [done]
+- Added `TestRunFundamentalsScanClient` (endpoint + forwarded scope + 7-key projection) and `TestRunFundamentalsScanTool` (admin forwards derived scope 15; backend PERMISSION_DENIED → RuntimeError), and added the tool to the `/api/tools` catalog name-set (C-10 reachability). Full agent suite 289 passed; coverage 78.5% (≥40).
+- Files modified: `services/xstockstrat-agent/tests/test_client.py`, `tests/test_tools.py`, `tests/test_tools_endpoint.py`
+- Deviations: none. Covers AC-8.
+
+### Step 7 — docs: agent tool-doc surfaces [done]
+- Bumped tool count twenty-eight→twenty-nine in agent CLAUDE.md + mcp-tools.md (both occurrences); added a CLAUDE.md tool-table row and a `### run_fundamentals_scan` mcp-tools.md section (params/return/errors, admin gate, no-schedule-contamination note). Count now consistent across docstring + CLAUDE.md + mcp-tools.md + the /api/tools name-set.
+- Files modified: `services/xstockstrat-agent/CLAUDE.md`, `docs/runbooks/mcp-tools.md`
+- Deviations: none. TDD: N/A (docs).
+
+### Step 8 — service: config-ui "Run fundamentals scan" admin card + BFF + nav [done]
+- Registered ONLY `runFundamentalsScan` on the config-ui BFF via `forwardAdmin` (`analysisClient` already dials ANALYSIS_ENDPOINT server-side); new `configUiAnalysisClient.ts` (baseUrl `/config-ui/api`); `useRunFundamentalsScan` mutation hook; `config-ui/fundamentals-scan/page.tsx` admin card (force/dry_run switches, symbols input, result summary, testids); added the `Fundamentals Scan` PLATFORM_SUBNAV entry (C-10(a) nav reachability).
+- Files modified/created: `src/lib/configUiBff.ts`, `src/lib/browserClients/configUiAnalysisClient.ts`, `src/app/config-ui/hooks/useRunFundamentalsScan.ts`, `src/app/config-ui/fundamentals-scan/page.tsx`, `src/components/shared/PlatformHeader.tsx`
+- TDD (paired Step 9): red→green via `tsc --noEmit` (missing page/hook/client/BFF → type errors before; exit 0 after) + `next lint` clean. Playwright deferred to CI (D-2).
+- Deviations: D-1 (no cosmetic admin-hide — BFF gate authoritative, matches sources page).
+
+### Step 9 — test: config-ui e2e (admin gate + nav-reachability) + mock handler [done]
+- Added `e2e/config-ui/fundamentals-scan.spec.ts` (nav-reachability; admin render; non-admin BFF reject; admin BFF accept) and the `runFundamentalsScan` mock handler on the port-9092 AnalysisService block (distinct non-echoed fields). Auth via `helpers/auth` (C-12, no inline JWT). Covers AC-9.
+- Files modified/created: `e2e/config-ui/fundamentals-scan.spec.ts`, `e2e/mock-backend.ts`
+- Deviations: D-2 (e2e not run locally — pinned browser absent; verified via lint+tsc+structural; CI runs Playwright).
+
+### C-16 scenario promotion (feature-end) [done]
+- Promoted acceptance scenarios into durable per-service suites (operator-confirmed): AC-1..7 →
+  `services/xstockstrat-analysis/acceptance/fix-fundamentals-signal-producer.feature` (analysis's first
+  acceptance suite), AC-8 → `services/xstockstrat-agent/acceptance/...`, AC-9 →
+  `services/xstockstrat-ui/acceptance/...`, each tagged `@feature-156`. Staged into the integration PR.
+
+## Session 2026-08-25 — sdd-execute (sequential) — feature complete
+**Steps this session**: 1–9 (all) + C-16 promotion
+**Progress**: 9 done / 9 total → code-completed
+**Integration PR**: #1014 (feature/fix-fundamentals-signal-producer → main-dev). Superseded docs-only PR #1013 (closed).
+**Renumber**: 155 → 156 (NNN collision with 155-watchlist-opportunity-signal-cues on main-dev).
+**Deviations**: D-1 (config-ui no cosmetic admin-hide — BFF forwardAdmin authoritative), D-2 (Playwright e2e via CI-equivalent lint+tsc+structural; browser absent locally).
+**Post-merge action still pending**: revert staging `analysis.fundsignal.run_interval_hours` 1 → 24.
+**Next**: review/merge PR #1014 when CI is green.
+
+### CI fix (post-integration) — nav-reachability e2e [done]
+- CI e2e shard 1 failed only the nav-reachability case: `PLATFORM_SUBNAV` (spec-cited) is legacy/ignored — `PlatformHeader` renders `NAV_GROUPS`. Moved the nav entry to the Settings group in `navGroups.tsx`, reverted the inert `PLATFORM_SUBNAV` edit, and scoped the nav-test locator to the "Section" nav (exact). The other 3 e2e cases (BFF admin-gate accept/reject, admin render) passed. Recorded as D-3. lint + tsc clean.
+- Files: `src/components/shared/navGroups.tsx`, `src/components/shared/PlatformHeader.tsx`, `e2e/config-ui/fundamentals-scan.spec.ts`

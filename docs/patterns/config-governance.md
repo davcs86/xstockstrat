@@ -398,6 +398,8 @@ A daily background loop reads cached fundamentals via marketdata `GetFundamental
 | `analysis.fundsignal.sell_quantile` | float | `0.20` | Cross-sectional quantile ≤ → `sell` |
 | `analysis.fundsignal.min_conviction_to_emit` | float | `0.0` | Drop symbols below this score before emitting |
 | `analysis.fundsignal.valid_days` | int | `90` | Emitted signal validity window in days |
+| `analysis.fundsignal.startup_jitter_seconds` | int | `30` | One-shot `[0, N]`s jitter at producer loop entry to stagger concurrent redeploys (feature 156); presence-aware (`0` disables) |
+| `analysis.fundsignal.retry_seconds` | int | `300` | Caught-cycle-error retry backoff for the durable schedule's `blocked_until_ms` (feature 156); presence-aware |
 
 ### feature 059 — fundamentals data source (`xstockstrat-marketdata`)
 

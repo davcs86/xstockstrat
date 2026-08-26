@@ -89,6 +89,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: 'Accounts', href: '/trader/accounts' },
       { label: 'Config', href: '/config-ui', match: 'exact' },
       { label: 'Audit log', href: '/config-ui/audit' },
+      { label: 'Fundamentals Scan', href: '/config-ui/fundamentals-scan' },
       { label: 'Authorized apps', href: '/accounts/authorized-apps' },
       { label: 'MCP tools', href: '/accounts/mcp-tools' },
     ],
