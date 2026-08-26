@@ -142,7 +142,7 @@ backend routing guard (Step 1) still guarantees FR-2 there, and Step 7 asserts t
 
 ### Step 2 — test: trading — PlaceOrder authoritative-offline routing + CancelOrder offline guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_offline_test.go` — modify
