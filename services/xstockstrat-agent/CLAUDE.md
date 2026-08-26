@@ -33,7 +33,7 @@ Python 3.12 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
 
 ## MCP Tools
 
-The agent registers twenty-eight tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
+The agent registers twenty-nine tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
 reference):
 
 | Tool | Purpose |
@@ -52,6 +52,7 @@ reference):
 | `list_formulas` | List formula definitions, soft-deleted excluded (read-only, feature 086) |
 | `manage_signal_source` | Register/update/reactivate/deactivate signal sources (honest verbs — feature 088) |
 | `set_strategy_live` | Enable/disable continuous live evaluation + alerting for a strategy (feature 048) |
+| `run_fundamentals_scan` | Manually trigger the fundamentals signal producer scan (admin-scoped write, feature 156); wraps the existing `RunFundamentalsScan` RPC — `force`/`dry_run`/`symbols` |
 | `trigger_backfill` | Trigger an OHLCV history backfill via xstockstrat-ingest (admin-scoped write, feature 066) |
 | `get_backfill_status` | Check one backfill job or list recent jobs (read-only, feature 066) |
 | `cancel_backfill` | Cancel a queued/running backfill job (admin-scoped, feature 087) |
