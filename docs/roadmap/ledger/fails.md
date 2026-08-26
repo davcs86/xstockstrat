@@ -1941,3 +1941,13 @@ ambiguity is logged here).
 - **Rule it implies**: verify an inventory count by the authoritative source-of-truth surface (the
   registered name-set / running `GET /api/tools`), never a single decorator grep — decorator forms vary
   and a grep undercounts silently.
+
+### 2026-08-26 — durable-loop-scheduler — assumption
+- **Mistake**: The impl-spec assumed `AnalysisServicer` exposed `self._db_pool` (it stores `db_pool`
+  only inside repos), which would have hit F-04/C-01 at execute; and its Step-7 Codebase-Evidence
+  overstated that a test "already references `run_opportunity_refresh_forever`" (grep: zero matches).
+  Both were spec-grounding claims not verified against the tree until the impl-spec review caught them.
+- **Evidence**: feature 158 context.md 2026-08-26 sdd-review impl-spec.
+- **Rule it implies**: a spec's "already exists / already stored" claims must be grep-confirmed against
+  the exact execution tree, not assumed from a sibling helper's shape — an advisory impl-spec review is
+  the last cheap place to catch it before F-04 bites at execute.

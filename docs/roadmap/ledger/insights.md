@@ -2459,3 +2459,14 @@ reusing.
 - **Evidence**: feature 157 design.md (archived) §19-28; context.md:158-163 (every `s.brokers` site enumerated).
 - **Rule it implies**: when adding a null-client member to a shared pool, enumerate every pool-iteration
   site and guard each explicitly — a nil-deref is one un-audited ranging loop away.
+
+### 2026-08-26 — durable-loop-scheduler — ordering
+- **Pattern**: When feature B refactors feature A's just-landed code but A isn't merged yet, ground
+  B's recon/design/spec on a throwaway local branch that merges A's landed code into the tree, and
+  cherry-pick only B's doc commits back to the clean PR branch — so every `path:line` in B's
+  artifacts is verified against real code, never against a `main-dev` that lacks A. Re-run grounding
+  after A merges.
+- **Evidence**: feature 158 context.md 2026-08-26 sdd-design ("design-grounding-157"), sdd-spec
+  ("spec-grounding-157") — repeated three times until 156 merged.
+- **Rule it implies**: for a stacked/dependent feature, never spec against a base that lacks the
+  dependency — build a grounding branch (a workflow tactic, not a binding gate).
