@@ -12,7 +12,7 @@ import { FilterToolbar } from '../shared/FilterToolbar';
 import { FormDialog } from '../shared/FormDialog';
 import { AccountRow, AddAccountForm } from './accountShared';
 
-type BrokerFilter = 'all' | 'alpaca' | 'ibkr';
+type BrokerFilter = 'all' | 'alpaca' | 'ibkr' | 'offline';
 type ActiveFilter = 'all' | 'active' | 'disabled';
 type StatusFilter = 'all' | 'ok' | 'unknown' | 'invalid';
 
@@ -32,6 +32,7 @@ export function AccountsModule() {
     if (search && !a.displayName.toLowerCase().includes(search.toLowerCase())) return false;
     if (brokerFilter === 'alpaca' && a.brokerType !== BrokerType.ALPACA) return false;
     if (brokerFilter === 'ibkr' && a.brokerType !== BrokerType.IBKR) return false;
+    if (brokerFilter === 'offline' && a.brokerType !== BrokerType.OFFLINE) return false;
     if (activeFilter === 'active' && !a.isActive) return false;
     if (activeFilter === 'disabled' && a.isActive) return false;
     if (statusFilter === 'ok' && a.credentialStatus !== CredentialStatus.OK) return false;
@@ -119,6 +120,7 @@ export function AccountsModule() {
                   { value: 'all', label: 'All brokers' },
                   { value: 'alpaca', label: 'Alpaca' },
                   { value: 'ibkr', label: 'IBKR' },
+                  { value: 'offline', label: 'Offline' },
                 ],
                 ariaLabel: 'Broker',
                 className: 'w-[110px] h-8 text-sm',

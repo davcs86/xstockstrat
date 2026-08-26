@@ -69,6 +69,9 @@ enum BrokerType {
   BROKER_TYPE_UNSPECIFIED = 0;
   BROKER_TYPE_ALPACA = 1;
   BROKER_TYPE_IBKR = 2;
+  // A manually-tracked account with no broker credentials and no broker client
+  // (feature 157). Its fills are hand-confirmed via ConfirmOrder; broker pollers skip it.
+  BROKER_TYPE_OFFLINE = 3;
 }
 
 // Timeframe is the canonical OHLCV bar interval, shared by marketdata + analysis + ingest.

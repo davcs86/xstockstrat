@@ -50,6 +50,15 @@ router.service(TradingService, {
       { headers: backendHeaders(claims, ctx) },
     );
   },
+  async confirmOrder(req, ctx) {
+    const claims = await requireSession(ctx);
+    // Inject the verified session user so a client cannot confirm another user's offline order
+    // (feature 157). The trading service enforces the offline-only + ownership guard server-side.
+    return tradingClient.confirmOrder(
+      { ...req, userId: claims.user_id },
+      { headers: backendHeaders(claims, ctx) },
+    );
+  },
   async *streamOrderUpdates(req, ctx) {
     const claims = await requireSession(ctx);
     yield* tradingClient.streamOrderUpdates(

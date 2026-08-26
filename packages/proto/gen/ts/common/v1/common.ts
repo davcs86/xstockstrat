@@ -145,6 +145,11 @@ export enum BrokerType {
   BROKER_TYPE_UNSPECIFIED = "BROKER_TYPE_UNSPECIFIED",
   BROKER_TYPE_ALPACA = "BROKER_TYPE_ALPACA",
   BROKER_TYPE_IBKR = "BROKER_TYPE_IBKR",
+  /**
+   * BROKER_TYPE_OFFLINE - A manually-tracked account with no broker credentials and no broker client
+   * (feature 157). Its fills are hand-confirmed via ConfirmOrder; broker pollers skip it.
+   */
+  BROKER_TYPE_OFFLINE = "BROKER_TYPE_OFFLINE",
   UNRECOGNIZED = "UNRECOGNIZED",
 }
 
@@ -159,6 +164,9 @@ export function brokerTypeFromJSON(object: any): BrokerType {
     case 2:
     case "BROKER_TYPE_IBKR":
       return BrokerType.BROKER_TYPE_IBKR;
+    case 3:
+    case "BROKER_TYPE_OFFLINE":
+      return BrokerType.BROKER_TYPE_OFFLINE;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -174,6 +182,8 @@ export function brokerTypeToJSON(object: BrokerType): string {
       return "BROKER_TYPE_ALPACA";
     case BrokerType.BROKER_TYPE_IBKR:
       return "BROKER_TYPE_IBKR";
+    case BrokerType.BROKER_TYPE_OFFLINE:
+      return "BROKER_TYPE_OFFLINE";
     case BrokerType.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
@@ -188,6 +198,8 @@ export function brokerTypeToNumber(object: BrokerType): number {
       return 1;
     case BrokerType.BROKER_TYPE_IBKR:
       return 2;
+    case BrokerType.BROKER_TYPE_OFFLINE:
+      return 3;
     case BrokerType.UNRECOGNIZED:
     default:
       return -1;

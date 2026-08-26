@@ -403,6 +403,42 @@ func (r *PortfolioRepo) GetAccountBalance(ctx context.Context, accountID string)
 	return &b, nil
 }
 
+// UpsertOfflineRealized records an offline account's account-grain cumulative realized P&L
+// (feature 157). account_id is the PK, so this survives the position-row wipe on a full close.
+func (r *PortfolioRepo) UpsertOfflineRealized(ctx context.Context, accountID, userID, tradingMode string, realizedPnl float64) error {
+	const q = `
+		INSERT INTO portfolio.offline_account_realized (account_id, user_id, trading_mode, realized_pnl, updated_at)
+		VALUES ($1, $2, $3, $4, NOW())
+		ON CONFLICT (account_id) DO UPDATE
+		SET user_id=$2, trading_mode=$3, realized_pnl=$4, updated_at=NOW()`
+	_, err := r.pool.Exec(ctx, q, accountID, userID, tradingMode, realizedPnl)
+	return err
+}
+
+// GetOfflineRealized returns an offline account's realized P&L. The bool is false (not an error)
+// when no row exists — a broker account, or an offline account with no confirmed orders yet.
+func (r *PortfolioRepo) GetOfflineRealized(ctx context.Context, accountID string) (float64, bool, error) {
+	if accountID == "" {
+		return 0, false, nil
+	}
+	const q = `SELECT realized_pnl FROM portfolio.offline_account_realized WHERE account_id=$1`
+	var v float64
+	err := r.db.QueryRow(ctx, q, accountID).Scan(&v)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, false, nil
+		}
+		return 0, false, fmt.Errorf("get offline realized: %w", err)
+	}
+	return v, true, nil
+}
+
+// DeleteOfflineRealized removes an offline account's realized row (feature 157 deregister purge).
+func (r *PortfolioRepo) DeleteOfflineRealized(ctx context.Context, accountID string) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM portfolio.offline_account_realized WHERE account_id=$1`, accountID)
+	return err
+}
+
 // UserAccountBalance pairs an account_id with its latest balance snapshot.
 type UserAccountBalance struct {
 	AccountID string
@@ -433,6 +469,29 @@ func (r *PortfolioRepo) ListAccountBalancesByUser(ctx context.Context, userID st
 		result = append(result, ab)
 	}
 	return result, rows.Err()
+}
+
+// ListOfflineAccountIdsByUser returns the account IDs of a user's offline accounts — those with a
+// portfolio.offline_account_realized row (feature 159). That row is the offline-exclusive marker
+// (broker accounts never get one), so unioning this set with ListAccountBalancesByUser introduces no
+// false broker entries and closes the ListPositions↔ListPortfolios combined-view parity gap.
+func (r *PortfolioRepo) ListOfflineAccountIdsByUser(ctx context.Context, userID string) ([]string, error) {
+	const q = `SELECT account_id FROM portfolio.offline_account_realized WHERE user_id=$1 ORDER BY account_id ASC`
+	rows, err := r.pool.Query(ctx, q, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list offline account ids by user: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan offline account id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 // ListPositionsByAccount returns all positions for a given account, optionally filtered by tradingMode.

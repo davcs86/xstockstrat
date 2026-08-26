@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +18,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -27,6 +27,7 @@ import (
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
+	"github.com/xstockstrat/contracts/pnl"
 	"github.com/xstockstrat/portfolio/internal/config"
 	"github.com/xstockstrat/portfolio/internal/middleware"
 	"github.com/xstockstrat/portfolio/internal/repository"
@@ -288,7 +289,7 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 	// adding, or when no prior position exists — a redelivered post-close sell must not nil-deref).
 	var delta float64
 	if existing != nil {
-		delta = realizedDelta(existing.Qty, existing.CostBasis, fill.Qty, fill.FillPrice)
+		delta = pnl.RealizedDelta(existing.Qty, existing.CostBasis, fill.Qty, fill.FillPrice)
 	}
 
 	if newQty <= 0 {
@@ -468,13 +469,21 @@ func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.Ge
 		totalValue += p.MarketValue
 	}
 
-	return &portfoliov1.Portfolio{
+	portfolio := &portfoliov1.Portfolio{
 		PortfolioId: req.UserId,
 		UserId:      req.UserId,
 		Equity:      totalValue,
 		UpdatedAt:   timestamppb.Now(),
 		Positions:   positions,
-	}, nil
+		AccountId:   req.GetAccountId(),
+	}
+	// Account-grain realized P&L for offline accounts (feature 157) — set with proto3 presence so an
+	// offline $0 is distinguishable from a broker unset. Populated on BOTH read paths (this one and
+	// buildAccountPortfolio) for parity (@AC-7 / C-10(b)).
+	if v, ok, err := s.repo.GetOfflineRealized(ctx, req.GetAccountId()); err == nil && ok {
+		portfolio.RealizedPnl = proto.Float64(v)
+	}
+	return portfolio, nil
 }
 
 // GetPosition returns a single position with live price.
@@ -512,23 +521,12 @@ func (s *PortfolioService) ListPositions(ctx context.Context, req *portfoliov1.L
 }
 
 // GetPnL computes realized + unrealized P&L for a user over a time range.
-// realizedDelta returns the realized P&L contributed by fillQty@fillPrice reducing a position of
-// accQty at average cost accCost/accQty. A non-reducing (opening/adding, or empty) fill returns 0.
-// This is the ONE realized-P&L reduce implementation (feature 042; C-10(b)) — GetPnL's applyFill
-// and ConsumeOrderFills' close-event enrichment both route through it, never a second formula.
-func realizedDelta(accQty, accCost, fillQty, fillPrice float64) float64 {
-	sameDirection := accQty == 0 || (fillQty > 0) == (accQty > 0)
-	if sameDirection {
-		return 0
-	}
-	avgEntry := accCost / accQty
-	closeQty := fillQty
-	if math.Abs(closeQty) > math.Abs(accQty) {
-		closeQty = -accQty
-	}
-	return (-closeQty) * (fillPrice - avgEntry)
-}
-
+//
+// Realized P&L uses the signed average-cost fold in the shared pnl package
+// (github.com/xstockstrat/contracts/pnl) — the ONE realized-P&L implementation (feature 042/157;
+// C-10(b)). GetPnL folds its collected fills through pnl.Fold; ConsumeOrderFills' close-event
+// enrichment routes through pnl.RealizedDelta; xstockstrat-trading's ConfirmOrder recompute uses
+// the same pnl.Fold. No second formula lives in this tree (the feature-056 dual-source fix).
 func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRequest) (*portfoliov1.PnLResponse, error) {
 	positions, _, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
 	if err != nil {
@@ -543,42 +541,12 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 		}
 	}
 
-	var realized float64
-	accs := make(map[string]*fillAccumulator)
+	// Collect fills in application order and fold once through the shared pnl package (the ONE
+	// realized-P&L implementation — feature 056 dual-source fix). accs state is never read between
+	// passes, so batching the fold is behavior-identical to the former incremental applyFill.
+	var fills []pnl.Fill
 	filledOrderIDs := make(map[string]bool)
 	latestPartials := make(map[string]orderFillPayload)
-
-	applyFill := func(qty, fillPrice float64, symbol string) {
-		acc := accs[symbol]
-		if acc == nil {
-			acc = &fillAccumulator{}
-			accs[symbol] = acc
-		}
-		sameDirection := acc.qty == 0 || (qty > 0) == (acc.qty > 0)
-		if sameDirection {
-			acc.qty += qty
-			acc.costBasis += qty * fillPrice
-		} else {
-			realized += realizedDelta(acc.qty, acc.costBasis, qty, fillPrice)
-			closeQty := qty
-			if math.Abs(closeQty) > math.Abs(acc.qty) {
-				closeQty = -acc.qty
-			}
-			oldQty := acc.qty
-			acc.qty += closeQty
-			if math.Abs(acc.qty) < 1e-9 {
-				acc.qty = 0
-				acc.costBasis = 0
-			} else {
-				acc.costBasis = acc.costBasis * acc.qty / oldQty
-			}
-			remainder := qty - closeQty
-			if math.Abs(remainder) > 1e-9 {
-				acc.qty += remainder
-				acc.costBasis += remainder * fillPrice
-			}
-		}
-	}
 
 	// Pass 1 — query order.filled events; accumulate realized P&L and track completed order IDs.
 	var pageToken string
@@ -617,7 +585,7 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 				}
 			}
 			filledOrderIDs[fill.OrderID] = true
-			applyFill(fill.Qty, fill.FillPrice, fill.Symbol)
+			fills = append(fills, pnl.Fill{Symbol: fill.Symbol, Qty: fill.Qty, Price: fill.FillPrice})
 		}
 		if resp.GetPage().GetNextPageToken() == "" {
 			break
@@ -674,8 +642,10 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 		if filledOrderIDs[orderID] {
 			continue
 		}
-		applyFill(fill.FilledQty, fill.FillPrice, fill.Symbol)
+		fills = append(fills, pnl.Fill{Symbol: fill.Symbol, Qty: fill.FilledQty, Price: fill.FillPrice})
 	}
+
+	realized := pnl.Fold(fills).Realized
 
 	return &portfoliov1.PnLResponse{
 		RealizedPnl:   realized,
@@ -853,12 +823,6 @@ func (s *PortfolioService) emitEvent(ctx context.Context, eventType, streamKey s
 	slog.Warn("ledger append failed", "event_type", eventType, "error", err)
 }
 
-// fillAccumulator tracks signed average-cost-basis state per symbol for realized P&L computation.
-type fillAccumulator struct {
-	qty       float64 // signed: positive = long, negative = short
-	costBasis float64 // signed: qty × avg_entry_price
-}
-
 // positionSyncPayload is the expected shape of the account.positions.synced event payload.
 type positionSyncPayload struct {
 	AccountID   string `json:"account_id"`
@@ -880,12 +844,58 @@ type positionSyncPayload struct {
 		DayPnl    float64 `json:"day_pnl"`
 		DayPnlPct float64 `json:"day_pnl_pct"`
 	} `json:"positions"`
+	// RealizedPnl is the account-grain cumulative realized P&L, set ONLY by an offline
+	// ConfirmOrder recompute (feature 157). A broker position sync never carries the key, so this
+	// stays nil for broker syncs — the pointer's presence is exactly the offline/broker disjointness.
+	RealizedPnl *float64 `json:"realized_pnl"`
 }
 
 // ConsumePositionSyncs subscribes to ledger StreamEvents filtered on "account.positions.synced"
 // and upserts positions from broker snapshots.
 func (s *PortfolioService) ConsumePositionSyncs(ctx context.Context) {
 	s.consumeEventStream(ctx, "position sync", "account.positions.synced", s.processPositionSync)
+}
+
+// accountDeregisteredPayload is the shape of trading's account.deregistered event (feature 157).
+type accountDeregisteredPayload struct {
+	AccountID string `json:"account_id"`
+	UserID    string `json:"user_id"`
+}
+
+// ConsumeAccountDeregistrations subscribes to "account.deregistered" and purges the account's
+// positions + account-grain realized P&L when an offline account is deregistered (feature 157) —
+// no broker sync will ever reconcile it away, so the purge must be event-driven.
+func (s *PortfolioService) ConsumeAccountDeregistrations(ctx context.Context) {
+	s.consumeEventStream(ctx, "account deregistration", "account.deregistered", s.processAccountDeregistered)
+}
+
+func (s *PortfolioService) processAccountDeregistered(ctx context.Context, event *ledgerv1.LedgerEvent) {
+	if event.Payload == nil {
+		return
+	}
+	raw, err := event.Payload.MarshalJSON()
+	if err != nil {
+		return
+	}
+	var payload accountDeregisteredPayload
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		slog.Warn("parse account deregistered payload", "error", err)
+		return
+	}
+	if payload.AccountID == "" {
+		return
+	}
+	userID := payload.UserID
+	if userID == "" {
+		userID = "default"
+	}
+	// Purge all positions for the account (empty present-set deletes every row) and its realized row.
+	if err := s.repo.DeletePositionsNotInSync(ctx, payload.AccountID, userID, []string{}); err != nil {
+		slog.Warn("deregister: delete positions failed", "account_id", payload.AccountID, "error", err)
+	}
+	if err := s.repo.DeleteOfflineRealized(ctx, payload.AccountID); err != nil {
+		slog.Warn("deregister: delete offline realized failed", "account_id", payload.AccountID, "error", err)
+	}
 }
 
 func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledgerv1.LedgerEvent) {
@@ -929,6 +939,16 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 	}
 	if err := s.repo.DeletePositionsNotInSync(ctx, sync.AccountID, userID, presentSymbols); err != nil {
 		slog.Warn("delete positions not in sync failed", "account_id", sync.AccountID, "error", err)
+	}
+
+	// Account-grain realized P&L (feature 157) — set ONLY by offline ConfirmOrder recomputes. The
+	// upsert lands OUTSIDE the positions loop and AFTER DeletePositionsNotInSync so a flat/full-close
+	// recompute (positions: []) still records realized; gated on the pointer so broker syncs (nil)
+	// never touch the table (@AC-13/@AC-14 disjointness).
+	if sync.RealizedPnl != nil {
+		if err := s.repo.UpsertOfflineRealized(ctx, sync.AccountID, userID, sync.TradingMode, *sync.RealizedPnl); err != nil {
+			slog.Warn("upsert offline realized failed", "account_id", sync.AccountID, "error", err)
+		}
 	}
 }
 
@@ -1068,6 +1088,12 @@ func (s *PortfolioService) buildAccountPortfolio(ctx context.Context, accountID 
 			portfolio.DayPnlPct = portfolio.DayPnl / bal.LastEquity
 		}
 	}
+	// Account-grain realized P&L for offline accounts (feature 157). Set with proto3 presence so an
+	// offline $0 differs from a broker unset; populated identically in GetPortfolio for read-path
+	// parity (@AC-7 / C-10(b)). Broker accounts have no row → left unset.
+	if v, ok, err := s.repo.GetOfflineRealized(ctx, accountID); err == nil && ok {
+		portfolio.RealizedPnl = proto.Float64(v)
+	}
 	return portfolio, nil
 }
 
@@ -1101,6 +1127,7 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 		return nil, err
 	}
 	portfolios := make([]*portfoliov1.Portfolio, 0, len(accounts))
+	balanceIDs := make([]string, 0, len(accounts))
 	for _, acct := range accounts {
 		bal := acct.Balance
 		portfolio, err := s.buildAccountPortfolio(ctx, acct.AccountID, &bal)
@@ -1109,8 +1136,48 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 			continue
 		}
 		portfolios = append(portfolios, portfolio)
+		balanceIDs = append(balanceIDs, acct.AccountID)
+	}
+
+	// Include offline accounts (feature 159): they have no account_balances row, so the balances-sourced
+	// enumeration above omits them entirely — breaking the ListPositions↔ListPortfolios combined-view
+	// parity (C-10(b), fails.md 056). Append every offline account not already present; passing a nil
+	// balance yields Cash/BuyingPower/DayPnl = 0 and Equity = summed position market value, so the summed
+	// broker aggregates naturally exclude offline accounts while their equity may still contribute. A
+	// lookup failure is non-fatal — it must not break the existing broker-accounts view.
+	if offlineIDs, err := s.repo.ListOfflineAccountIdsByUser(ctx, userID); err != nil {
+		slog.Warn("ListPortfolios: list offline account ids failed", "user_id", userID, "error", err)
+	} else {
+		for _, id := range offlineIDsToAppend(balanceIDs, offlineIDs) {
+			portfolio, err := s.buildAccountPortfolio(ctx, id, nil)
+			if err != nil {
+				slog.Warn("ListPortfolios: build offline account portfolio failed", "account_id", id, "error", err)
+				continue
+			}
+			portfolios = append(portfolios, portfolio)
+		}
 	}
 	return &portfoliov1.ListPortfoliosResponse{Portfolios: portfolios}, nil
+}
+
+// offlineIDsToAppend returns the offline account IDs not already represented in the balances-sourced
+// set — the additive offline accounts the combined ListPortfolios view must include (feature 159).
+// Dedup covers both an offline id that also has a balances row and repeats within offlineIDs, so an
+// account is never built twice.
+func offlineIDsToAppend(balanceAccountIDs, offlineIDs []string) []string {
+	seen := make(map[string]struct{}, len(balanceAccountIDs))
+	for _, id := range balanceAccountIDs {
+		seen[id] = struct{}{}
+	}
+	var out []string
+	for _, id := range offlineIDs {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
 }
 
 // ─── Watchlists (feature 058) ────────────────────────────────────────────────

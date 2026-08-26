@@ -526,6 +526,7 @@ services:
       INDICATORS_ENDPOINT: xstockstrat-indicators:50054
       CONFIG_ENDPOINT: xstockstrat-config:50060
       PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
+      TRADING_ENDPOINT: xstockstrat-trading:50051
       SERVICE_NAME: agent
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-identity:50058"

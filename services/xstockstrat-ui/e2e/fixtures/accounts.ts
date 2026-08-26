@@ -40,5 +40,18 @@ export const BROKER_ACCOUNT_NEW = {
   credentialStatus: CREDENTIAL_STATUS_VALID,
 };
 
+/** CREDENTIAL_STATUS_UNSPECIFIED — offline accounts have no credentials to validate. */
+const CREDENTIAL_STATUS_UNSPECIFIED = 0;
+
+/** An offline (manually-tracked) account (feature 157): broker_type OFFLINE, no credentials. */
+export const BROKER_ACCOUNT_OFFLINE = {
+  id: 'offline-001',
+  displayName: 'Offline Book',
+  brokerType: 3, // BROKER_TYPE_OFFLINE
+  isPaper: true,
+  isActive: true,
+  credentialStatus: CREDENTIAL_STATUS_UNSPECIFIED,
+};
+
 /** The default two-account universe (Alpaca + IBKR paper). */
 export const BROKER_ACCOUNTS = [BROKER_ACCOUNT_ALPACA, BROKER_ACCOUNT_IBKR];

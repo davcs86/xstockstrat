@@ -33,7 +33,7 @@ Python 3.12 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
 
 ## MCP Tools
 
-The agent registers twenty-nine tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
+The agent registers thirty tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
 reference):
 
 | Tool | Purpose |
@@ -67,6 +67,7 @@ reference):
 | `get_watchlist` | Read one of the caller's watchlists incl. its stocks (read-only, feature 148) |
 | `manage_watchlist` | Create/update/delete a caller-owned watchlist; `update` is a **read-modify-write merge** over the replace-only `UpdateWatchlist` RPC so a name-only edit never wipes the stocks (feature 148) |
 | `manage_watchlist_symbols` | Add/remove stocks on a caller-owned watchlist; `add` records `MANUAL`-sourced entries (feature 148) |
+| `manage_offline_account` | Create a caller-owned OFFLINE account, record its orders, confirm their fills (recomputes positions + realized P&L), and read its orders/positions — the manual-book reconciliation surface (feature 157) |
 
 ### Management-tool authorization
 
@@ -170,6 +171,7 @@ INDICATORS_ENDPOINT=xstockstrat-indicators:50054
 IDENTITY_ENDPOINT=xstockstrat-identity:50058
 CONFIG_ENDPOINT=xstockstrat-config:50060
 PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052
+TRADING_ENDPOINT=xstockstrat-trading:50051
 UI_BASE_URL=http://localhost:3000
 AGENT_PUBLIC_URL=http://localhost:9000   # ${APP_URL}/agent in DO
 ```

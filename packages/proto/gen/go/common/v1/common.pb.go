@@ -138,6 +138,9 @@ const (
 	BrokerType_BROKER_TYPE_UNSPECIFIED BrokerType = 0
 	BrokerType_BROKER_TYPE_ALPACA      BrokerType = 1
 	BrokerType_BROKER_TYPE_IBKR        BrokerType = 2
+	// A manually-tracked account with no broker credentials and no broker client
+	// (feature 157). Its fills are hand-confirmed via ConfirmOrder; broker pollers skip it.
+	BrokerType_BROKER_TYPE_OFFLINE BrokerType = 3
 )
 
 // Enum value maps for BrokerType.
@@ -146,11 +149,13 @@ var (
 		0: "BROKER_TYPE_UNSPECIFIED",
 		1: "BROKER_TYPE_ALPACA",
 		2: "BROKER_TYPE_IBKR",
+		3: "BROKER_TYPE_OFFLINE",
 	}
 	BrokerType_value = map[string]int32{
 		"BROKER_TYPE_UNSPECIFIED": 0,
 		"BROKER_TYPE_ALPACA":      1,
 		"BROKER_TYPE_IBKR":        2,
+		"BROKER_TYPE_OFFLINE":     3,
 	}
 )
 
@@ -632,12 +637,13 @@ const file_common_v1_common_proto_rawDesc = "" +
 	"\x17ENVIRONMENT_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x0fENVIRONMENT_DEV\x10\x01\x1a\x02\b\x01\x12\x1a\n" +
 	"\x16ENVIRONMENT_PRODUCTION\x10\x02\x12\x17\n" +
-	"\x13ENVIRONMENT_STAGING\x10\x03*W\n" +
+	"\x13ENVIRONMENT_STAGING\x10\x03*p\n" +
 	"\n" +
 	"BrokerType\x12\x1b\n" +
 	"\x17BROKER_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12BROKER_TYPE_ALPACA\x10\x01\x12\x14\n" +
-	"\x10BROKER_TYPE_IBKR\x10\x02*\x9c\x01\n" +
+	"\x10BROKER_TYPE_IBKR\x10\x02\x12\x17\n" +
+	"\x13BROKER_TYPE_OFFLINE\x10\x03*\x9c\x01\n" +
 	"\tTimeframe\x12\x19\n" +
 	"\x15TIMEFRAME_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x0fTIMEFRAME_15MIN\x10\x05\x1a\x02\b\x01\x12\x17\n" +

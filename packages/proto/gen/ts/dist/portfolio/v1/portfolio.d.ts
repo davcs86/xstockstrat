@@ -55,6 +55,12 @@ export interface Portfolio {
     updatedAt?: Date | undefined;
     positions: Position[];
     accountId: string;
+    /**
+     * realized_pnl is the account-grain cumulative realized P&L. Set only for OFFLINE accounts
+     * (feature 157); `optional` for proto3 explicit presence so an offline account's genuine $0
+     * is distinguishable from a broker account's unset. Broker cards leave it unset.
+     */
+    realizedPnl?: number | undefined;
 }
 export interface Position {
     symbol: string;

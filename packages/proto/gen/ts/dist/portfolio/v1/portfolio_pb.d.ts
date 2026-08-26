@@ -54,6 +54,14 @@ export type Portfolio = Message<"xstockstrat.portfolio.v1.Portfolio"> & {
      * @generated from field: string account_id = 11;
      */
     accountId: string;
+    /**
+     * realized_pnl is the account-grain cumulative realized P&L. Set only for OFFLINE accounts
+     * (feature 157); `optional` for proto3 explicit presence so an offline account's genuine $0
+     * is distinguishable from a broker account's unset. Broker cards leave it unset.
+     *
+     * @generated from field: optional double realized_pnl = 12;
+     */
+    realizedPnl?: number | undefined;
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.Portfolio.

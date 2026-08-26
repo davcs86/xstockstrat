@@ -61,13 +61,13 @@ func (r *TradingRepo) UpsertOrder(ctx context.Context, o *tradingv1.Order) error
 			status, qty, filled_qty, limit_price, stop_price, filled_avg_price,
 			time_in_force, strategy_id, user_id, trading_mode,
 			requires_approval, created_at, updated_at,
-			account_id, broker_type
+			account_id, broker_type, filled_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6,
 			$7, $8, $9, $10, $11, $12,
 			$13, $14, $15, $16,
 			$17, $18, $19,
-			$20, $21
+			$20, $21, $22
 		)
 		ON CONFLICT (order_id, created_at) DO UPDATE SET
 			broker_order_id   = EXCLUDED.broker_order_id,
@@ -76,7 +76,8 @@ func (r *TradingRepo) UpsertOrder(ctx context.Context, o *tradingv1.Order) error
 			filled_avg_price  = EXCLUDED.filled_avg_price,
 			updated_at        = EXCLUDED.updated_at,
 			account_id        = EXCLUDED.account_id,
-			broker_type       = EXCLUDED.broker_type
+			broker_type       = EXCLUDED.broker_type,
+			filled_at         = EXCLUDED.filled_at
 	`,
 		o.OrderId, o.ClientOrderId, o.BrokerOrderId,
 		o.Symbol, sideStr(o.Side), typeStr(o.OrderType),
@@ -84,7 +85,7 @@ func (r *TradingRepo) UpsertOrder(ctx context.Context, o *tradingv1.Order) error
 		nullableFloat(o.LimitPrice), nullableFloat(o.StopPrice), nullableFloat(o.FilledAvgPrice),
 		o.TimeInForce, o.StrategyId, o.UserId, modeStr(o.TradingMode),
 		false, createdAt, updatedAt,
-		o.AccountId, int32(o.BrokerType),
+		o.AccountId, int32(o.BrokerType), nullableTime(o.FilledAt),
 	)
 	return err
 }
@@ -106,7 +107,7 @@ func (r *TradingRepo) GetOrder(ctx context.Context, orderID string) (*tradingv1.
 		SELECT order_id, client_order_id, broker_order_id, symbol, side, order_type,
 		       status, qty, filled_qty, limit_price, stop_price, filled_avg_price,
 		       time_in_force, strategy_id, user_id, trading_mode, created_at, updated_at,
-		       account_id, broker_type, li.state
+		       account_id, broker_type, filled_at, li.state
 		FROM trading.orders
 		`+intentLateralJoinSQL+`
 		WHERE order_id = $1
@@ -134,7 +135,7 @@ func (r *TradingRepo) ListOrders(
 		SELECT order_id, client_order_id, broker_order_id, symbol, side, order_type,
 		       status, qty, filled_qty, limit_price, stop_price, filled_avg_price,
 		       time_in_force, strategy_id, user_id, trading_mode, created_at, updated_at,
-		       account_id, broker_type, li.state
+		       account_id, broker_type, filled_at, li.state
 		FROM trading.orders
 		` + intentLateralJoinSQL + `
 		WHERE 1=1
@@ -220,7 +221,7 @@ func (r *TradingRepo) ListSubmittedOrders(ctx context.Context) ([]*tradingv1.Ord
 		SELECT order_id, client_order_id, broker_order_id, symbol, side, order_type,
 		       status, qty, filled_qty, limit_price, stop_price, filled_avg_price,
 		       time_in_force, strategy_id, user_id, trading_mode, created_at, updated_at,
-		       account_id, broker_type, li.state
+		       account_id, broker_type, filled_at, li.state
 		FROM trading.orders
 		`+intentLateralJoinSQL+`
 		WHERE status IN ('new', 'partially_filled')
@@ -228,6 +229,39 @@ func (r *TradingRepo) ListSubmittedOrders(ctx context.Context) ([]*tradingv1.Ord
 		  AND broker_order_id != ''
 		ORDER BY created_at DESC
 	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var orders []*tradingv1.Order
+	for rows.Next() {
+		o, err := scanOrder(rows)
+		if err != nil {
+			return nil, err
+		}
+		orders = append(orders, o)
+	}
+	return orders, rows.Err()
+}
+
+// ListConfirmedOfflineOrdersByAccount returns an offline account's confirmed orders — those with a
+// recorded fill (status PARTIALLY_FILLED or FILLED, filled_qty > 0) — ordered economically by fill
+// time (feature 157). ConfirmOrder rebuilds the account's absolute net positions from this set, so
+// re-editing one order's fill produces the same fold as if it had been confirmed once (idempotent).
+func (r *TradingRepo) ListConfirmedOfflineOrdersByAccount(ctx context.Context, accountID string) ([]*tradingv1.Order, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT order_id, client_order_id, broker_order_id, symbol, side, order_type,
+		       status, qty, filled_qty, limit_price, stop_price, filled_avg_price,
+		       time_in_force, strategy_id, user_id, trading_mode, created_at, updated_at,
+		       account_id, broker_type, filled_at, li.state
+		FROM trading.orders
+		`+intentLateralJoinSQL+`
+		WHERE account_id = $1
+		  AND status IN ('partially_filled', 'filled')
+		  AND filled_qty > 0
+		ORDER BY filled_at ASC NULLS LAST, created_at ASC
+	`, accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -259,7 +293,8 @@ func scanOrder(row scanner) (*tradingv1.Order, error) {
 		createdAt, updatedAt                  time.Time
 		accountID                             string
 		brokerType                            int32
-		intentState                           *int16 // NULL when the order has no intents yet
+		filledAt                              *time.Time // NULL for a NEW/unconfirmed or historical order
+		intentState                           *int16     // NULL when the order has no intents yet
 	)
 	err := row.Scan(
 		&orderID, &clientOrderID, &brokerOrderID,
@@ -267,7 +302,7 @@ func scanOrder(row scanner) (*tradingv1.Order, error) {
 		&qty, &filledQty, &limitPrice, &stopPrice, &filledAvgPrice,
 		&timeInForce, &strategyID, &userID, &mode,
 		&createdAt, &updatedAt,
-		&accountID, &brokerType, &intentState,
+		&accountID, &brokerType, &filledAt, &intentState,
 	)
 	if err != nil {
 		return nil, err
@@ -291,6 +326,9 @@ func scanOrder(row scanner) (*tradingv1.Order, error) {
 		UpdatedAt:     timestamppb.New(updatedAt),
 		AccountId:     accountID,
 		BrokerType:    commonv1.BrokerType(brokerType),
+	}
+	if filledAt != nil {
+		o.FilledAt = timestamppb.New(*filledAt)
 	}
 	if intentState != nil {
 		o.IntentState = tradingv1.IntentState(*intentState)
@@ -362,6 +400,15 @@ func nullableFloat(f float64) interface{} {
 		return nil
 	}
 	return f
+}
+
+// nullableTime maps a proto Timestamp to a nullable SQL TIMESTAMPTZ arg: nil (SQL NULL) when
+// unset, else the Go time. Offline orders carry filled_at only after ConfirmOrder.
+func nullableTime(ts *timestamppb.Timestamp) interface{} {
+	if ts == nil {
+		return nil
+	}
+	return ts.AsTime()
 }
 
 func parseSide(s string) tradingv1.OrderSide {

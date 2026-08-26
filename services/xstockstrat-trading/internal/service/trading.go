@@ -30,6 +30,7 @@ import (
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
 	tradingv1 "github.com/xstockstrat/contracts/gen/go/trading/v1"
+	"github.com/xstockstrat/contracts/pnl"
 	"github.com/xstockstrat/trading/internal/broker"
 	"github.com/xstockstrat/trading/internal/config"
 	"github.com/xstockstrat/trading/internal/middleware"
@@ -140,6 +141,12 @@ type TradingService struct {
 	// (defensive — a future caller from another goroutine must not silently race).
 	reconcileCandidates   map[string]int
 	reconcileCandidatesMu sync.Mutex
+	// confirmLocks serializes ConfirmOrder's persist→recompute→emit per offline account
+	// (feature 157). Request-driven confirm lacks the poller's one-goroutine-per-account
+	// serialization, so two concurrent edits on the same account would otherwise lost-update
+	// the recomputed position snapshot. Keyed by account_id.
+	confirmLocks   map[string]*sync.Mutex
+	confirmLocksMu sync.Mutex
 }
 
 // clientKeepAlive prevents silent connection drops on idle inter-service links.
@@ -197,6 +204,7 @@ func NewTradingService(
 		haltedLastPolled:    make(map[string]time.Time),
 		flattenInFlight:     make(map[string]bool),
 		reconcileCandidates: make(map[string]int),
+		confirmLocks:        make(map[string]*sync.Mutex),
 	}, nil
 }
 
@@ -212,6 +220,14 @@ func (s *TradingService) LoadBrokerPool(ctx context.Context) error {
 	defer s.brokersMu.Unlock()
 
 	for _, rec := range accounts {
+		// Offline accounts (feature 157) have no credentials and no broker client. Load them into
+		// the pool with a nil client (tagged OFFLINE) so PlaceOrder/ConfirmOrder resolve them after
+		// a restart; every broker poller skips OFFLINE entries.
+		if rec.BrokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) {
+			s.brokers[rec.ID] = brokerPoolEntry{client: nil, brokerType: rec.BrokerType, userID: rec.UserID}
+			slog.Info("LoadBrokerPool: loaded offline account", "account_id", rec.ID, "user_id", rec.UserID)
+			continue
+		}
 		plaintext, err := repository.DecryptCredentials(s.encKey, rec.CredentialsEnc)
 		if err != nil {
 			slog.Warn("LoadBrokerPool: decrypt failed, skipping account", "account_id", rec.ID, "error", err)
@@ -278,12 +294,23 @@ func (s *TradingService) resolveAccount(accountID string) (resolvedID string, en
 		return accountID, e, nil
 	}
 
-	if len(s.brokers) == 1 {
-		for id, e := range s.brokers {
-			return id, e, nil
+	// Sole-account fallback: auto-select only when exactly one BROKER account is registered.
+	// Offline accounts (feature 157) are never the implicit account for a broker-routed order —
+	// an offline PlaceOrder names its account_id and takes its own branch before this is reached.
+	var soleID string
+	var soleEntry brokerPoolEntry
+	brokerCount := 0
+	for id, e := range s.brokers {
+		if e.brokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) {
+			continue
 		}
+		brokerCount++
+		soleID, soleEntry = id, e
 	}
-	if len(s.brokers) == 0 {
+	if brokerCount == 1 {
+		return soleID, soleEntry, nil
+	}
+	if brokerCount == 0 {
 		return "", brokerPoolEntry{}, grpcstatus.Errorf(codes.FailedPrecondition, "no broker accounts registered; call RegisterBrokerAccount first")
 	}
 	return "", brokerPoolEntry{}, grpcstatus.Errorf(codes.InvalidArgument, "multiple broker accounts registered; account_id is required")
@@ -350,6 +377,32 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 	resolvedAccountID, accountEntry, err := s.resolveAccount(req.AccountId)
 	if err != nil {
 		return nil, err
+	}
+
+	// Guard B (feature 159): route on the authoritative persisted broker_type as well as the
+	// in-memory pool tag. broker_type is immutable post-create, so the two normally agree; reading
+	// the persisted record makes the offline decision divergence-safe — an offline account can never
+	// fall through to a broker path even if its pool entry is stale or mistyped. A DB read error is
+	// non-fatal: fall back to the pool-tag-only decision (best-effort, mirroring the service's other
+	// non-blocking reads) so a transient DB blip never fails a legitimate broker order open.
+	persistedOffline := false
+	if s.accountRepo != nil {
+		if rec, gErr := s.accountRepo.GetBrokerAccount(ctx, resolvedAccountID); gErr != nil {
+			slog.Warn("placeorder: could not read authoritative broker_type; falling back to pool tag",
+				"account_id", resolvedAccountID, "error", gErr)
+		} else if rec != nil {
+			persistedOffline = rec.BrokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE)
+		}
+	}
+
+	// Offline account (feature 157): record the order as manual bookkeeping — this branch
+	// precedes every broker-routing path below. It deliberately skips broker submit,
+	// ComputePositionSize, bracket submission, and the halt/trading-state gates (there is no
+	// broker to protect, no live position to size against, and no bracket to arm — a NEW offline
+	// order becomes real only when ConfirmOrder writes its fill). resolveAccount already tagged
+	// the entry OFFLINE, so no broker call is ever constructed for it (@AC-4/@AC-8).
+	if accountEntry.brokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) || persistedOffline {
+		return s.recordOfflineOrder(ctx, req, resolvedAccountID, accountEntry.userID)
 	}
 
 	// Resolve trading mode: request field takes precedence; fall back to live config, then env.
@@ -699,6 +752,235 @@ func (s *TradingService) submitOrder(
 	return order, nil
 }
 
+// recordOfflineOrder persists a manually-entered order for an offline account (feature 157). It
+// never contacts a broker: it reuses feature 101's client_order_id dedup for idempotent record
+// (a retried record with the same nonce returns the stored order) but finalizes the intent
+// synchronously — there is no broker call to await. The order lands NEW with filled_qty = 0 and an
+// empty broker_order_id; it becomes economically real only when ConfirmOrder writes its fill.
+func (s *TradingService) recordOfflineOrder(ctx context.Context, req *tradingv1.PlaceOrderRequest, accountID, userID string) (*tradingv1.Order, error) {
+	mode := s.resolveTradingMode(req.TradingMode)
+
+	hashDigest, err := placeOrderRequestHash(req)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "compute request hash: %v", err)
+	}
+	requestHashHex := hex.EncodeToString(hashDigest)
+	orderID := uuid.New().String()
+	intentID := req.ClientOrderId
+
+	ok, err := s.orderIntentRepo.InsertIntent(ctx, &repository.OrderIntentRecord{
+		IntentID: intentID, OrderID: orderID, RequestHash: requestHashHex, BrokerAccountID: accountID,
+	})
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "insert order intent: %v", err)
+	}
+	if !ok {
+		existing, getErr := s.orderIntentRepo.GetIntentByID(ctx, intentID)
+		if getErr != nil || existing == nil {
+			return nil, grpcstatus.Errorf(codes.Internal, "load existing order intent: %v", getErr)
+		}
+		action, _ := classifyIntentLookup(existing, requestHashHex, time.Now(), staleThreshold(s.cfgW))
+		switch action {
+		case intentActionRejectHashMismatch:
+			return nil, grpcstatus.Errorf(codes.FailedPrecondition,
+				"client_order_id %q was already used with different order content", intentID)
+		case intentActionReturnStored:
+			var stored tradingv1.Order
+			if err := proto.Unmarshal(existing.LatestResponse, &stored); err != nil {
+				return nil, grpcstatus.Errorf(codes.Internal, "unmarshal stored intent response: %v", err)
+			}
+			return &stored, nil
+		default:
+			// An offline record finalizes its intent synchronously below, so a PENDING/UNKNOWN
+			// here means a concurrent in-flight record of the same nonce — reject as duplicate.
+			return nil, grpcstatus.Errorf(codes.FailedPrecondition, "order intent %q is already in progress", intentID)
+		}
+	}
+
+	order := &tradingv1.Order{
+		OrderId:       orderID,
+		ClientOrderId: req.ClientOrderId,
+		Symbol:        req.Symbol,
+		Side:          req.Side,
+		OrderType:     req.OrderType,
+		Status:        tradingv1.OrderStatus_ORDER_STATUS_NEW,
+		Qty:           req.Qty,
+		FilledQty:     0,
+		LimitPrice:    req.LimitPrice,
+		StopPrice:     req.StopPrice,
+		TimeInForce:   req.TimeInForce,
+		StrategyId:    req.StrategyId,
+		UserId:        req.UserId,
+		TradingMode:   mode,
+		AccountId:     accountID,
+		BrokerType:    commonv1.BrokerType_BROKER_TYPE_OFFLINE,
+		CreatedAt:     timestamppb.New(time.Now()),
+		UpdatedAt:     timestamppb.New(time.Now()),
+		// no broker_order_id and no filled_at — an offline order is unconfirmed until ConfirmOrder.
+	}
+
+	s.mu.Lock()
+	s.orders[orderID] = order
+	s.mu.Unlock()
+
+	if err := s.repo.UpsertOrder(ctx, order); err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "persist offline order: %v", err)
+	}
+	if marshaled, mErr := proto.Marshal(order); mErr == nil {
+		if fErr := s.orderIntentRepo.FinalizeIntent(ctx, intentID, orderID, repository.IntentStateCompleted, marshaled); fErr != nil {
+			slog.Warn("finalize offline order intent failed", "intent_id", intentID, "error", fErr)
+		}
+	}
+
+	go s.emitLedgerEvent(context.Background(), "order.created", orderID, map[string]interface{}{
+		"symbol": order.Symbol, "side": order.Side.String(), "qty": order.Qty,
+		"status": order.Status.String(), "trading_mode": mode.String(), "account_id": accountID,
+	})
+	return order, nil
+}
+
+// confirmLock returns the per-account mutex serializing ConfirmOrder's persist→recompute→emit.
+func (s *TradingService) confirmLock(accountID string) *sync.Mutex {
+	s.confirmLocksMu.Lock()
+	defer s.confirmLocksMu.Unlock()
+	lk, ok := s.confirmLocks[accountID]
+	if !ok {
+		lk = &sync.Mutex{}
+		s.confirmLocks[accountID] = lk
+	}
+	return lk
+}
+
+// deriveOfflineStatus maps a confirmed fill quantity to an order status server-side (never
+// client-supplied): 0 → NEW, 0 < filled < qty → PARTIALLY_FILLED, filled >= qty → FILLED.
+func deriveOfflineStatus(filledQty, qty float64) tradingv1.OrderStatus {
+	switch {
+	case filledQty <= 0:
+		return tradingv1.OrderStatus_ORDER_STATUS_NEW
+	case filledQty < qty:
+		return tradingv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED
+	default:
+		return tradingv1.OrderStatus_ORDER_STATUS_FILLED
+	}
+}
+
+// offlineFillsFromOrders maps an offline account's confirmed orders to the signed fills the pnl fold
+// consumes: a BUY contributes +filled_qty, a SELL −filled_qty, at each order's filled_avg_price.
+func offlineFillsFromOrders(orders []*tradingv1.Order) []pnl.Fill {
+	fills := make([]pnl.Fill, 0, len(orders))
+	for _, o := range orders {
+		signed := o.FilledQty
+		if o.Side == tradingv1.OrderSide_ORDER_SIDE_SELL {
+			signed = -signed
+		}
+		fills = append(fills, pnl.Fill{Symbol: o.Symbol, Qty: signed, Price: o.FilledAvgPrice})
+	}
+	return fills
+}
+
+// ConfirmOrder writes the fill a broker would otherwise report onto an OFFLINE order (feature 157),
+// then recomputes the account's absolute net positions from ALL its confirmed orders and emits the
+// self-healing account.positions.synced event — never order.filled (the invariant that keeps
+// portfolio's incremental fold from double-counting). It is order-sourced and never contacts a
+// broker: it rejects broker accounts and non-owners from the persisted order alone.
+func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.ConfirmOrderRequest) (*tradingv1.Order, error) {
+	if req.OrderId == "" {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "order_id is required")
+	}
+	if req.FilledQty < 0 {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "filled_qty must be >= 0")
+	}
+
+	order, err := s.repo.GetOrder(ctx, req.OrderId)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "load order: %v", err)
+	}
+	if order == nil {
+		return nil, grpcstatus.Errorf(codes.NotFound, "order %q not found", req.OrderId)
+	}
+	// Order-sourced guard — GetOrder already selects broker_type + user_id, so no broker call is
+	// needed to reject a broker account (@AC-9) or a non-owner.
+	if order.BrokerType != commonv1.BrokerType_BROKER_TYPE_OFFLINE {
+		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "ConfirmOrder applies only to offline accounts")
+	}
+	if req.UserId != "" && order.UserId != req.UserId {
+		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "order %q does not belong to caller", req.OrderId)
+	}
+
+	// Serialize persist→recompute→emit per account — request-driven confirm lacks the pollers'
+	// one-goroutine-per-account serialization (@AC-10 idempotency depends on a consistent recompute).
+	lock := s.confirmLock(order.AccountId)
+	lock.Lock()
+	defer lock.Unlock()
+
+	// Server-derived status from filled_qty vs qty (never client-supplied).
+	order.FilledQty = req.FilledQty
+	order.FilledAvgPrice = req.FilledAvgPrice
+	order.Status = deriveOfflineStatus(req.FilledQty, order.Qty)
+	filledAt := time.Now()
+	if req.FilledAt != nil {
+		filledAt = req.FilledAt.AsTime()
+	}
+	order.FilledAt = timestamppb.New(filledAt)
+	order.UpdatedAt = timestamppb.New(time.Now())
+
+	if err := s.repo.UpsertOrder(ctx, order); err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "persist confirmed order: %v", err)
+	}
+	s.mu.Lock()
+	s.orders[order.OrderId] = order
+	s.mu.Unlock()
+
+	// Recompute the account's absolute net positions from ALL its confirmed offline orders, so a
+	// re-edit of one order's fill replaces (not accumulates) — the @AC-10 idempotency guarantee.
+	confirmed, err := s.repo.ListConfirmedOfflineOrdersByAccount(ctx, order.AccountId)
+	if err != nil {
+		// A failed recompute emits nothing: an empty snapshot would make portfolio's
+		// DeletePositionsNotInSync wipe the account. The order edit itself is already persisted.
+		slog.Warn("ConfirmOrder: recompute query failed; skipping positions.synced emit",
+			"account_id", order.AccountId, "error", err)
+		return order, nil
+	}
+	result := pnl.Fold(offlineFillsFromOrders(confirmed))
+
+	// trading_mode is environment-derived (offline has no client.IsPaper()).
+	tradingMode := "TRADING_MODE_LIVE"
+	if s.environmentIsPaper() {
+		tradingMode = "TRADING_MODE_PAPER"
+	}
+	posEntries := make([]interface{}, 0, len(result.Positions))
+	for sym, lot := range result.Positions {
+		avgCost := 0.0
+		if lot.Qty != 0 {
+			avgCost = lot.CostBasis / lot.Qty
+		}
+		posEntries = append(posEntries, map[string]interface{}{
+			"symbol":   sym,
+			"qty":      lot.Qty,
+			"avg_cost": avgCost,
+			// Offline positions carry no broker mark-to-market — portfolio enriches from mid-quotes.
+			"current_price":   0.0,
+			"market_value":    0.0,
+			"unrealized_pl":   0.0,
+			"unrealized_plpc": 0.0,
+			"day_pnl":         0.0,
+			"day_pnl_pct":     0.0,
+		})
+	}
+	// Emit account.positions.synced ONLY (never order.filled) — the disjointness invariant that
+	// keeps portfolio's ConsumeOrderFills/GetPnL from double-folding. realized_pnl carries the
+	// account-grain cumulative realized; broker syncs never set the key (nil on the portfolio side).
+	// Run on the inbound request ctx (C-03 header propagation).
+	s.emitLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", order.AccountId), map[string]interface{}{
+		"account_id":   order.AccountId,
+		"user_id":      order.UserId,
+		"trading_mode": tradingMode,
+		"positions":    posEntries,
+		"realized_pnl": result.Realized,
+	})
+	return order, nil
+}
+
 // CancelOrder is deliberately NOT gated by platform.trading_state (feature 100) — mirrors
 // feature 030's identical decision on its own per-account halt: cancellation is the
 // operator's sole remaining manual de-risk tool and must work even when trading is halted.
@@ -716,6 +998,17 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 		s.mu.Lock()
 		s.orders[order.OrderId] = order
 		s.mu.Unlock()
+	}
+
+	// Guard A (feature 159): an offline order is manual bookkeeping — it never reaches a broker, so
+	// CancelOrder must not flip it to CANCELED (the local transition below is otherwise unconditional).
+	// Offline orders are un-placed by ConfirmOrder edits, not a broker cancel. Keyed on the authoritative
+	// persisted order.BrokerType (GetOrder already selects broker_type), not an empty broker_order_id — a
+	// broker order that has not yet received its broker_order_id also has an empty one and must stay
+	// cancelable (the broker-cancel branch below already gates on a non-empty id).
+	if order.BrokerType == commonv1.BrokerType_BROKER_TYPE_OFFLINE {
+		return nil, grpcstatus.Errorf(codes.FailedPrecondition,
+			"offline order %s is managed via ConfirmOrder, not broker cancel", req.OrderId)
 	}
 
 	// Dedup insert (feature 101): server-derived intent ID (a content-identical cancel
@@ -1134,10 +1427,14 @@ func (s *TradingService) StartFillPoller(ctx context.Context) {
 }
 
 func (s *TradingService) pollFills(ctx context.Context) {
-	// Snapshot the broker pool under read lock.
+	// Snapshot the broker pool under read lock. Offline accounts (feature 157) have a nil client
+	// and never reach a broker, so skip them — a fill is only ever confirmed via ConfirmOrder.
 	s.brokersMu.RLock()
 	brokerMap := make(map[string]brokerPoolEntry, len(s.brokers))
 	for id, e := range s.brokers {
+		if e.brokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) {
+			continue
+		}
 		brokerMap[id] = e
 	}
 	s.brokersMu.RUnlock()
@@ -1394,6 +1691,10 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 	s.brokersMu.RLock()
 	brokerMap := make(map[string]brokerPoolEntry, len(s.brokers))
 	for id, e := range s.brokers {
+		// Offline accounts (feature 157) have no broker to reconcile against — skip them.
+		if e.brokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) {
+			continue
+		}
 		brokerMap[id] = e
 	}
 	s.brokersMu.RUnlock()
@@ -1736,6 +2037,11 @@ func (s *TradingService) syncPositions(ctx context.Context) (synced, skipped, fa
 	s.brokersMu.RLock()
 	accounts := make(map[string]syncAccount, len(s.brokers))
 	for id, e := range s.brokers {
+		// Offline accounts (feature 157) have a nil client — their positions self-heal from
+		// ConfirmOrder's account.positions.synced emit, never from a broker snapshot. Skip.
+		if e.brokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) {
+			continue
+		}
 		accounts[id] = syncAccount{client: e.client, userID: e.userID}
 	}
 	s.brokersMu.RUnlock()
@@ -1883,6 +2189,30 @@ func (s *TradingService) warnCredSkip(accountID string) {
 // Paper vs. live is derived from the deployment environment (req.IsPaper is ignored)
 // so users cannot register an account in a mode the environment does not allow.
 func (s *TradingService) RegisterBrokerAccount(ctx context.Context, req *tradingv1.RegisterBrokerAccountRequest, userID string) (*tradingv1.BrokerAccount, error) {
+	// Offline account (feature 157): no broker credentials, no broker client. Skip the
+	// json.Valid/EncryptCredentials/instantiateBrokerLocked/validateAndRecordCredential path
+	// entirely and persist with credentials_enc = NULL (migration 008 made the column nullable).
+	if req.BrokerType == commonv1.BrokerType_BROKER_TYPE_OFFLINE {
+		accountID := uuid.NewString()
+		rec := &repository.BrokerAccountRecord{
+			ID:          accountID,
+			DisplayName: req.DisplayName,
+			BrokerType:  int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE),
+			IsPaper:     s.environmentIsPaper(),
+			IsActive:    true,
+			UserID:      userID,
+			// CredentialsEnc left nil → SQL NULL; CredentialStatus stays UNSPECIFIED.
+		}
+		if err := s.accountRepo.CreateBrokerAccount(ctx, rec); err != nil {
+			return nil, grpcstatus.Errorf(codes.Internal, "create offline account: %v", err)
+		}
+		// Pool entry with a nil client tags this account OFFLINE so every broker poller skips it.
+		s.brokersMu.Lock()
+		s.brokers[accountID] = brokerPoolEntry{client: nil, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE), userID: userID}
+		s.brokersMu.Unlock()
+		return recordToProtoAccount(rec), nil
+	}
+
 	if !json.Valid([]byte(req.CredentialsJson)) {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "credentials_json is not valid JSON")
 	}
@@ -1933,6 +2263,10 @@ func (s *TradingService) UpdateBrokerAccountCredentials(ctx context.Context, acc
 	}
 	if rec.UserID != callerUserID {
 		return nil, grpcstatus.Errorf(codes.PermissionDenied, "account %s does not belong to caller", accountID)
+	}
+	// Offline accounts (feature 157) have no credentials to update.
+	if rec.BrokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) {
+		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "offline accounts have no broker credentials to update")
 	}
 
 	encCreds, err := repository.EncryptCredentials(s.encKey, []byte(credentialsJSON))
@@ -2063,6 +2397,11 @@ func (s *TradingService) checkCredentialHealth(ctx context.Context) {
 	s.brokersMu.RLock()
 	brokerMap := make(map[string]broker.Broker, len(s.brokers))
 	for id, e := range s.brokers {
+		// Offline accounts (feature 157) have no credentials and a nil client — skip them so the
+		// health poller never dereferences nil or reports a spurious credential status.
+		if e.brokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) {
+			continue
+		}
 		brokerMap[id] = e.client
 	}
 	s.brokersMu.RUnlock()
@@ -2178,6 +2517,12 @@ func (s *TradingService) flattenAndHalt(ctx context.Context, bracket *repository
 	s.brokersMu.RUnlock()
 	if !ok {
 		slog.Warn("flattenAndHalt: no broker for account", "account_id", bracket.AccountID, "order_id", bracket.OrderID)
+		return
+	}
+	// Offline accounts (feature 157) never arm a bracket, so this is naturally unreachable for
+	// them; guard explicitly anyway so a nil client can never be dereferenced below.
+	if accountEntry.brokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) {
+		slog.Warn("flattenAndHalt: offline account has no broker to flatten", "account_id", bracket.AccountID, "order_id", bracket.OrderID)
 		return
 	}
 
@@ -2405,6 +2750,17 @@ func (s *TradingService) DeregisterBrokerAccountSvc(ctx context.Context, account
 	s.credStatusMu.Lock()
 	delete(s.credStatus, accountID)
 	s.credStatusMu.Unlock()
+
+	// Offline accounts (feature 157): emit account.deregistered so xstockstrat-portfolio purges
+	// the account's positions and its account-grain realized P&L (no broker sync ever will).
+	// Broker accounts keep their existing deregister behavior — offline has no live position
+	// source to reconcile against, so the purge must be event-driven.
+	if rec.BrokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) {
+		s.emitLedgerEvent(ctx, "account.deregistered", fmt.Sprintf("account:%s", accountID), map[string]interface{}{
+			"account_id": accountID,
+			"user_id":    rec.UserID,
+		})
+	}
 	return nil
 }
 

@@ -179,18 +179,22 @@ func (WatchlistEntrySource) EnumDescriptor() ([]byte, []int) {
 }
 
 type Portfolio struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PortfolioId   string                 `protobuf:"bytes,1,opt,name=portfolio_id,json=portfolioId,proto3" json:"portfolio_id,omitempty"`
-	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Equity        float64                `protobuf:"fixed64,3,opt,name=equity,proto3" json:"equity,omitempty"`
-	Cash          float64                `protobuf:"fixed64,4,opt,name=cash,proto3" json:"cash,omitempty"`
-	BuyingPower   float64                `protobuf:"fixed64,5,opt,name=buying_power,json=buyingPower,proto3" json:"buying_power,omitempty"`
-	DayPnl        float64                `protobuf:"fixed64,6,opt,name=day_pnl,json=dayPnl,proto3" json:"day_pnl,omitempty"`
-	DayPnlPct     float64                `protobuf:"fixed64,7,opt,name=day_pnl_pct,json=dayPnlPct,proto3" json:"day_pnl_pct,omitempty"`
-	TotalPnl      float64                `protobuf:"fixed64,8,opt,name=total_pnl,json=totalPnl,proto3" json:"total_pnl,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	Positions     []*Position            `protobuf:"bytes,10,rep,name=positions,proto3" json:"positions,omitempty"`
-	AccountId     string                 `protobuf:"bytes,11,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	PortfolioId string                 `protobuf:"bytes,1,opt,name=portfolio_id,json=portfolioId,proto3" json:"portfolio_id,omitempty"`
+	UserId      string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Equity      float64                `protobuf:"fixed64,3,opt,name=equity,proto3" json:"equity,omitempty"`
+	Cash        float64                `protobuf:"fixed64,4,opt,name=cash,proto3" json:"cash,omitempty"`
+	BuyingPower float64                `protobuf:"fixed64,5,opt,name=buying_power,json=buyingPower,proto3" json:"buying_power,omitempty"`
+	DayPnl      float64                `protobuf:"fixed64,6,opt,name=day_pnl,json=dayPnl,proto3" json:"day_pnl,omitempty"`
+	DayPnlPct   float64                `protobuf:"fixed64,7,opt,name=day_pnl_pct,json=dayPnlPct,proto3" json:"day_pnl_pct,omitempty"`
+	TotalPnl    float64                `protobuf:"fixed64,8,opt,name=total_pnl,json=totalPnl,proto3" json:"total_pnl,omitempty"`
+	UpdatedAt   *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Positions   []*Position            `protobuf:"bytes,10,rep,name=positions,proto3" json:"positions,omitempty"`
+	AccountId   string                 `protobuf:"bytes,11,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	// realized_pnl is the account-grain cumulative realized P&L. Set only for OFFLINE accounts
+	// (feature 157); `optional` for proto3 explicit presence so an offline account's genuine $0
+	// is distinguishable from a broker account's unset. Broker cards leave it unset.
+	RealizedPnl   *float64 `protobuf:"fixed64,12,opt,name=realized_pnl,json=realizedPnl,proto3,oneof" json:"realized_pnl,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -300,6 +304,13 @@ func (x *Portfolio) GetAccountId() string {
 		return x.AccountId
 	}
 	return ""
+}
+
+func (x *Portfolio) GetRealizedPnl() float64 {
+	if x != nil && x.RealizedPnl != nil {
+		return *x.RealizedPnl
+	}
+	return 0
 }
 
 type Position struct {
@@ -2292,7 +2303,7 @@ var File_portfolio_v1_portfolio_proto protoreflect.FileDescriptor
 
 const file_portfolio_v1_portfolio_proto_rawDesc = "" +
 	"\n" +
-	"\x1cportfolio/v1/portfolio.proto\x12\x18xstockstrat.portfolio.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16common/v1/common.proto\"\x88\x03\n" +
+	"\x1cportfolio/v1/portfolio.proto\x12\x18xstockstrat.portfolio.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16common/v1/common.proto\"\xc1\x03\n" +
 	"\tPortfolio\x12!\n" +
 	"\fportfolio_id\x18\x01 \x01(\tR\vportfolioId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x16\n" +
@@ -2307,7 +2318,9 @@ const file_portfolio_v1_portfolio_proto_rawDesc = "" +
 	"\tpositions\x18\n" +
 	" \x03(\v2\".xstockstrat.portfolio.v1.PositionR\tpositions\x12\x1d\n" +
 	"\n" +
-	"account_id\x18\v \x01(\tR\taccountId\"\xa7\x06\n" +
+	"account_id\x18\v \x01(\tR\taccountId\x12&\n" +
+	"\frealized_pnl\x18\f \x01(\x01H\x00R\vrealizedPnl\x88\x01\x01B\x0f\n" +
+	"\r_realized_pnl\"\xa7\x06\n" +
 	"\bPosition\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12\x10\n" +
 	"\x03qty\x18\x02 \x01(\x01R\x03qty\x12&\n" +
@@ -2635,6 +2648,7 @@ func file_portfolio_v1_portfolio_proto_init() {
 	if File_portfolio_v1_portfolio_proto != nil {
 		return
 	}
+	file_portfolio_v1_portfolio_proto_msgTypes[0].OneofWrappers = []any{}
 	file_portfolio_v1_portfolio_proto_msgTypes[4].OneofWrappers = []any{}
 	file_portfolio_v1_portfolio_proto_msgTypes[5].OneofWrappers = []any{}
 	file_portfolio_v1_portfolio_proto_msgTypes[6].OneofWrappers = []any{}

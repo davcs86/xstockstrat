@@ -8,3 +8,11 @@ The single source of truth for all gRPC/Protobuf contracts. Governance (enum-ove
 `_UNSPECIFIED=0`, PR + `buf lint`/`buf breaking`, `./scripts/buf-gen.sh`, the `proto-freshness` CI
 gate) is documented in the root `CLAUDE.md` §Proto Contract Governance and `docs/runbooks/proto-versioning.md`.
 Never Read/Grep the generated stubs under `gen/` — read the `.proto` source instead.
+
+**Non-generated helper carve-out (`pnl/`, feature 157):** this module also hosts one small,
+hand-written, non-generated Go package — `pnl/` (`github.com/xstockstrat/contracts/pnl`), the
+float-math signed average-cost realized-P&L fold shared by `xstockstrat-trading` and
+`xstockstrat-portfolio` (the feature-056 dual-source fix). It is dependency-free (no proto/DB
+imports). Its unit + cross-service golden-vector tests live in the **consuming service** test
+modules because no CI job runs `go test` inside `packages/proto/`; the `proto-freshness` gate only
+diffs `gen/`, so it never touches `pnl/`.

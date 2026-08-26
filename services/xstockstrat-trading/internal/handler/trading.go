@@ -66,6 +66,21 @@ func (h *TradingHandler) ReplaceOrder(ctx context.Context, req *connect.Request[
 	return connect.NewResponse(order), nil
 }
 
+func (h *TradingHandler) ConfirmOrder(ctx context.Context, req *connect.Request[tradingv1.ConfirmOrderRequest]) (*connect.Response[tradingv1.Order], error) {
+	if req.Msg.OrderId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("order_id is required"))
+	}
+	// Ownership is enforced from the trusted x-user-id metadata the edge injects — never a
+	// client-supplied request field (feature 157; the offline-only guard is order-sourced in the service).
+	req.Msg.UserId = extractUserID(ctx)
+	order, err := h.svc.ConfirmOrder(ctx, req.Msg)
+	if err != nil {
+		// Preserve the service's gRPC status code (NotFound / FailedPrecondition / InvalidArgument).
+		return nil, connect.NewError(connectCodeFromErr(err), err)
+	}
+	return connect.NewResponse(order), nil
+}
+
 func (h *TradingHandler) GetOrder(ctx context.Context, req *connect.Request[tradingv1.GetOrderRequest]) (*connect.Response[tradingv1.Order], error) {
 	if req.Msg.OrderId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("order_id is required"))
@@ -134,6 +149,14 @@ func (a *grpcTradingAdapter) CancelOrder(ctx context.Context, req *tradingv1.Can
 
 func (a *grpcTradingAdapter) ReplaceOrder(ctx context.Context, req *tradingv1.ReplaceOrderRequest) (*tradingv1.Order, error) {
 	resp, err := a.h.ReplaceOrder(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcTradingAdapter) ConfirmOrder(ctx context.Context, req *tradingv1.ConfirmOrderRequest) (*tradingv1.Order, error) {
+	resp, err := a.h.ConfirmOrder(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, toGRPCError(err)
 	}

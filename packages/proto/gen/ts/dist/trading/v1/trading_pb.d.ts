@@ -98,6 +98,14 @@ export type Order = Message<"xstockstrat.trading.v1.Order"> & {
      * @generated from field: xstockstrat.trading.v1.IntentState intent_state = 21;
      */
     intentState: IntentState;
+    /**
+     * filled_at is the confirmed/observed fill time: broker fills use the broker's timestamp;
+     * offline confirmations (feature 157) use the operator-supplied time (server-defaulted to now
+     * when unset). NULL for a NEW/unconfirmed order and every historical order.
+     *
+     * @generated from field: google.protobuf.Timestamp filled_at = 22;
+     */
+    filledAt?: Timestamp | undefined;
 };
 /**
  * Describes the message xstockstrat.trading.v1.Order.
@@ -244,6 +252,44 @@ export type GetOrderRequest = Message<"xstockstrat.trading.v1.GetOrderRequest"> 
  * Use `create(GetOrderRequestSchema)` to create a new message.
  */
 export declare const GetOrderRequestSchema: GenMessage<GetOrderRequest>;
+/**
+ * ConfirmOrder writes the fill a broker would otherwise report onto an OFFLINE order.
+ * status is server-derived from filled_qty vs qty (never client-supplied). Rejected with
+ * FailedPrecondition for broker (Alpaca/IBKR) accounts (FR-8/@AC-9).
+ *
+ * @generated from message xstockstrat.trading.v1.ConfirmOrderRequest
+ */
+export type ConfirmOrderRequest = Message<"xstockstrat.trading.v1.ConfirmOrderRequest"> & {
+    /**
+     * @generated from field: string order_id = 1;
+     */
+    orderId: string;
+    /**
+     * @generated from field: double filled_qty = 2;
+     */
+    filledQty: number;
+    /**
+     * @generated from field: double filled_avg_price = 3;
+     */
+    filledAvgPrice: number;
+    /**
+     * optional; server defaults to now when unset
+     *
+     * @generated from field: google.protobuf.Timestamp filled_at = 4;
+     */
+    filledAt?: Timestamp | undefined;
+    /**
+     * caller identity (ownership guard)
+     *
+     * @generated from field: string user_id = 5;
+     */
+    userId: string;
+};
+/**
+ * Describes the message xstockstrat.trading.v1.ConfirmOrderRequest.
+ * Use `create(ConfirmOrderRequestSchema)` to create a new message.
+ */
+export declare const ConfirmOrderRequestSchema: GenMessage<ConfirmOrderRequest>;
 /**
  * @generated from message xstockstrat.trading.v1.ListOrdersRequest
  */
@@ -867,6 +913,19 @@ export declare const TradingService: GenService<{
     replaceOrder: {
         methodKind: "unary";
         input: typeof ReplaceOrderRequestSchema;
+        output: typeof OrderSchema;
+    };
+    /**
+     * ConfirmOrder is OFFLINE-only (feature 157): it writes the fill fields a broker would
+     * otherwise report (filled_qty/filled_avg_price/filled_at, and a server-derived status)
+     * onto an order belonging to an offline account, then recomputes the account's positions.
+     * It never contacts a broker and is rejected with FailedPrecondition for broker accounts.
+     *
+     * @generated from rpc xstockstrat.trading.v1.TradingService.ConfirmOrder
+     */
+    confirmOrder: {
+        methodKind: "unary";
+        input: typeof ConfirmOrderRequestSchema;
         output: typeof OrderSchema;
     };
     /**
