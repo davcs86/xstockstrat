@@ -2394,3 +2394,20 @@ reusing.
 - **Evidence**: feature 151 (150 took req.8/result 17-19; 151 took req.9/result 20/summary 18, migration 018).
 - **Rule it implies**: for concurrent features touching one proto message, reserve the field split up
   front and make second-to-land renumber only the order-sensitive migration.
+
+### 2026-08-26 — market-regime-benchmark-operand — reuse
+- **Pattern**: For a cross-symbol/benchmark operand, route **every** component-assembly site through one
+  shared per-component compute helper (`_assemble_component_series`) and prove coverage with a
+  cross-site parity test — internal compute sites are a "shared consumer" family just like the agent surface.
+- **Evidence**: feature 152 implementation-spec.md (archived) steps 2-6; context.md 2026-08-24 execute.
+- **Rule it implies**: extends **C-10** beyond the agent request/response surface to internal multi-site
+  compute paths (backtest/live/readiness/chart) — a new operand lands behind one shared unit + a parity
+  test, not copied per site.
+
+### 2026-08-26 — market-regime-benchmark-operand — design
+- **Pattern**: Cross-series indicators must **compute on the source series' own contiguous bars, then
+  date-key left-join** onto the consumer timeline (gap→None→hold, no forward-fill, no reindex) — never
+  align raw values then compute, because tail-alignment helpers assume a contiguous warm-up head.
+- **Evidence**: feature 152 design.md (archived) §19-32,83-84.
+- **Rule it implies**: any future multi-symbol/multi-series operand aligns compute-then-join on the
+  trading-day date; lookahead-safety and rolling-window integrity are preserved by construction.

@@ -1,123 +1,39 @@
-# Context: market-regime-benchmark-operand
+# Context: market-regime-benchmark-operand  (archived 2026-08-26)
 
-**Feature**: `docs/roadmap/features/152-market-regime-benchmark-operand/feature.md`
-**Product Spec**: `docs/roadmap/features/152-market-regime-benchmark-operand/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/152-market-regime-benchmark-operand/implementation-spec.md`
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-08-26 — /sdd-archiver
 
-## Session 2026-08-24 — sdd-story
+**What**: Shipped a `source_symbol` operand on `StrategyComponent` so a strategy rule can gate on a benchmark/reference symbol (e.g. "VOO 200d rising") computed on the *benchmark's own* bars and date-joined onto the evaluated symbol's timeline. It went in as v1 (reference-symbol only; true breadth and `screen_symbols` source deferred) but was wired through **all four** component-assembly sites — backtest, live, readiness/opportunities, and GetIndicatorSeries — plus both write paths, per an explicit operator scope-expansion. The first real payoff validation (re-running `dip_buyer_vol_stop` with a VOO-200d gate to confirm the −19% 2024-25 OOS year is suppressed) was **never run** — it needs the live staging engine + backfilled data.
 
-- Created feature.md (status: draft), product-spec.md, acceptance.feature, context.md from the
-  user-supplied SDD (`Market-Regime / Benchmark Operand for Strategy Rules`).
-- Allocated NNN=152 (max existing 151 + 1).
-- Scope decision recorded: **v1 = benchmark/reference-symbol operand only**; v2 true breadth deferred;
-  `screen_symbols` source_symbol deferred.
-- Consumer surface (C-14): **Agent** (`manage_strategy` / `run_backtest` / `set_strategy_live`); UI
-  strategy-builder editing deferred to a named follow-up.
-- Ledger traps folded into Open Questions: F-12/RC-1 (agent dict→proto builders drop new fields +
-  strat-lab skill drift) and the `bar.time`/real-`Bar`-fixture trap (2026-08-06 backtest-debug-info).
-- **Live-eval decision — RESOLVED 2026-08-24 (operator via AskUserQuestion): WIRE LIVE-EVAL TOO.**
-  The benchmark load+align path is implemented in `live_loop.py` as well as the backtest engine.
-  `set_strategy_live` is not a hard reject; live must load+align the benchmark safely (gap→hold/false
-  on missing live-window history). Alerting-behavior changes touching `xstockstrat-notify` still need
-  sign-off. FR-6 and AC-7 updated accordingly.
+**Why (irrecoverable) — why a benchmark operand at all, not another per-symbol gate**: OOS validation of `dip_buyer_vol_stop` showed a per-symbol rising-200-day gate removed only **1 of 64 entries**, "because each name's own 200-day was still rising while the *market* chopped" (the strategy lost −19.23% / −1.26 Sharpe over the 2024-08→2025-08 OOS year). A per-symbol gate was tried and empirically insufficient — that is the decisive reason the fix is a **cross-symbol** benchmark operand, not another per-symbol indicator.
 
-## Discovery digest (codebase-discovery, 2026-08-24) — analysis engine touchpoints
+**Why (irrecoverable rationale)**:
+- The field is plain `string`, **not** proto3 `optional`, because presence-tracking would emit `"source_symbol":""` into `definition_json` and shift `_definition_fingerprint` for every pre-existing strategy, breaking @AC-1 byte-identity and invalidating the strategy evidence base. Branch on truthiness for the today-path.
+- **Compute-then-align, never align-then-compute**: `align_indicator_points` tail-aligns assuming a contiguous warm-up head, so aligning raw benchmark closes first corrupts rolling windows across gaps. The join is keyed on **trading-day date** (`bar.time.ToDatetime(UTC).date()`), not `time.seconds`, because exact timestamps are brittle to per-symbol intraday differences; both are equally lookahead-safe. Missing date → None → leaf false → hold, no forward-fill, evaluated symbol never reindexed.
+- Scope was operator-driven, not spec-driven: two AskUserQuestion gates chose "wire all four sites" (over backtest+live-only) and "plumb formula-warmup into live now" (over builtins-only). Absent these recorded decisions, the extra surface area reads as gold-plating.
 
-- Proto message is **`StrategyComponent`** (not `Component`), `packages/proto/analysis/v1/analysis.proto:300`;
-  fields `ref_name=1, kind=2, indicator=3, formula_id=4, params=5`; **next free tag = 6**. Container
-  `StrategyDefinition.components` (`analysis.proto:308`, next free def field 13). `ComponentKind` at :294.
-- Backtest bar-load + warmup prefix: `servicer.py:1336 _backtest_symbol_evaluated` → `servicer.py:1059
-  _resolve_prefixed_bars` (prefix start = `range.start - prefix_days*86400`, :1078; returns
-  `bars[available-required_prefix:], trade_start_idx`, :1097). Paged fetch `servicer.py:1003
-  _fetch_bars_paged` → `self._marketdata.GetBars(...)`. Window math `warmup.py:166 prefix_calendar_days`.
-- Operand resolver / series[t] model: `evaluator.py:148-154` builds `component_series[ref_name]` (positional
-  list, 1:1 with bars) + dotted multi-output; loop `evaluator.py:162`; `_eval_condition` (:483),
-  `_resolve_term` (:531, `s[i] if i<len(s) else None`); crossovers read `i-1` (:515-524).
-- Compute path: `evaluator.py:220 _compute_component(comp, closes)` — the ONLY spot a component becomes a
-  series, from `closes = [b.close for b in bars]` of the evaluated symbol only (no symbol identity carried).
-  builtin → `ComputeIndicator(values=closes, params=...)` + `align_indicator_points` (:300); formula →
-  `ExecuteFormula(input_data={"close": closes})`.
-- Coverage/INSUFFICIENT_DATA: `_InsufficientData(symbol, available, required_prefix, gap_range)` raised at
-  `servicer.py:1090`; caught → `CoverageGap(symbol=ins.symbol, ...)` `servicer.py:747-766`; status gate
-  `servicer.py:905-906`; attach `:909-910`.
-- Live eval: `live_loop.py:450 _eval_pair` → single fixed `GetBars(range=_recent_range())` (365d, :443/:451-457)
-  → `self._evaluator.evaluate(definition, bars, None)` (:466). **No warmup-prefix on live path.**
-- Fingerprint: `servicer.py:3994 _definition_fingerprint(definition_json)` hashes `definition_json` minus
-  `_FINGERPRINT_EXCLUDED_KEYS={"display_name","active","live_enabled"}` (:3991). A `source_symbol` inside a
-  component's JSON **automatically enters the fingerprint** — no separate wiring needed, just confirm the
-  write-path persists it into `definition_json`.
-- **Nothing exists today** for per-component symbol override or cross-symbol alignment — must be built in
-  `_compute_component`/the evaluate path plus a benchmark-bar loader mirroring `_resolve_prefixed_bars`.
+**Rejected alternatives**:
+- `optional string source_symbol` — lost: presence emits an empty-string key → fingerprint shift → @AC-1 break.
+- A per-definition (not per-component) helper — lost: GetIndicatorSeries consumes raw `series_map` while backtest/live flatten to bare+dotted keys; a per-component unit gives all three the identical computation to parity-test.
+- Exact `time.seconds` join key — lost: brittle to intraday timestamp drift.
+- Client-side normalization in the agent tool — lost: bypassable by the UI/any other ManageStrategy caller → mixed-case persisted → `"voo"`≠`"VOO"` fingerprint split; done server-authoritative in both write paths.
 
-## Session 2026-08-24 — sdd-design
+**Scars & gotchas**:
+- `eval_dates` must be computed **lazily**, only when a `source_symbol` is present, or you break byte-identity AND list-mock bars that lack a `.time` attribute (unit tests pass plain lists).
+- The benchmark (VOO) is shared by every evaluated symbol → it must be fetched **once per run/pass**, not per (symbol, strategy), or you re-fetch N times and emit N duplicate coverage gaps. Backtest loads once before the per-symbol loop (D-1); Opportunities dedups under the feature-141 `_bars_fetch_sem` + `bars_by_symbol`.
+- Insufficient benchmark coverage names the **benchmark** in `coverage_gaps` (not the evaluated symbol) and empties `symbols_to_run` → INSUFFICIENT_DATA (@AC-4).
 
-- Phase 0 Recon: wrote recon.md (services: packages/proto, xstockstrat-analysis, xstockstrat-agent;
-  reuse patterns: `_resolve_prefixed_bars`+`_InsufficientData`→CoverageGap, `_compute_component`,
-  positional `component_series`, `_definition_fingerprint` auto-enter).
-- Phase 1 Grilling: 2 rounds (full). R1 adversary = NEEDS-WORK (8 objections, no Floor breach). All
-  resolved in the converged R2 design.
-- **Chosen approach:** plain `string source_symbol = 6` (NOT optional — presence would break @AC-1
-  fingerprint byte-identity); one shared `_assemble_component_series(comp, closes, eval_dates,
-  benchmark_bars)` helper behind ALL FOUR StrategyComponent assembly sites; compute-on-benchmark's-own-
-  closes then date-keyed left-join (`bar.time.ToDatetime(UTC).date()`), gap→None→hold, no forward-fill,
-  no lookahead, no reindex of the evaluated symbol; benchmark preload per distinct source_symbol at each
-  site's fetch layer (backtest `_resolve_prefixed_bars`→CoverageGap(benchmark); live warmup-sized;
-  opportunities deduped once/pass under `_bars_fetch_sem`; GetIndicatorSeries aligns onto `request.times`);
-  server-authoritative normalization in both write paths; agent builder+parity-test+strat-lab same PR.
-- **Operator decisions (AskUserQuestion, recorded):**
-  1. Live-eval: **WIRE LIVE-EVAL TOO** (not backtest-only reject).
-  2. C-10 scope: **WIRE ALL FOUR SITES NOW** (backtest, live, readiness/opportunities, GetIndicatorSeries)
-     with a cross-site parity test — not backtest+live-only-safe-hold.
-  3. Live formula warmup: **PLUMB FORMULA-WARMUP INTO LIVE NOW** — extract
-     `_declared_formula_warmup`/`_prefetch_formula_warmups` (servicer.py:1721-1766) so
-     `warmup.required_prefix_bars` sizes a custom-formula benchmark on the live path too.
-- **C-14 override (recorded):** UI strategy-builder editing of source_symbol deferred to a NAMED
-  follow-up feature `strategy-builder-source-symbol`; agent-authored strategies fully functional now.
-- Constitution rules touched: C-01, C-08/P-06, C-09, C-10, C-14, C-15, F-04, F-07. Floor breaches: none.
-- Status: draft → design-approved.
+**Permanent deviations**:
+- Design said extract the servicer's shared `_declared_formula_warmup`/`_prefetch_formula_warmups` for live reuse → shipped a self-contained `StrategyEvaluator.declared_formula_warmups` for the live path, servicer untouched → because the servicer helper also records feature-086 soft-delete warnings and extracting it would risk backtest byte-identity regression for zero benefit (D-2).
+- Design left live warmup semantics implicit → shipped so the **benchmark** component warms via warmup on live, but the **evaluated** symbol still uses its fixed 365-day lookback; the pre-existing guard test `test_the_live_loop_still_uses_its_own_fixed_lookback` was intentionally repurposed (its own docstring authorized it) and the FR-7 divergence note in `docs/warmup.md` updated (D-3).
 
-### Open Threads (carry into /sdd-spec + execution)
-- OT-1: pin exact `_backtest_symbol`→`evaluate_with_series` call line for benchmark threading (assumed
-  servicer.py:1371). Target: proto/evaluator/backtest steps.
-- OT-2: extract live formula-warmup helpers without changing backtest behavior (guard: byte-identity
-  regression). Target: live step.
-- OT-3: assert Opportunities benchmark fetch dedups to 1/pass. Target: readiness/opportunities step.
-- OT-4: join-sparsity threshold is a code constant (config-key tuning deferred).
+**Cross-feature signal**: Third+ recurrence of the F-12/RC-1 "agent dict→proto builder silently drops a new field" class — here the descriptor-parity test `test_build_component_covers_every_proto_field` caught it RED before the builder update (the ledger antidote at insights.md:469 worked as designed, D-4). Reinforces the C-10 "forgot the shared consumer" family for *internal compute sites*, not just the agent surface: one `_assemble_component_series` helper behind all four assembly sites + a cross-site parity test.
 
-## Session 2026-08-24 — implementation (all 9 steps)
+**Deferred follow-ons**: Named follow-up feature `strategy-builder-source-symbol` (UI strategy-builder editing of `source_symbol`; C-14 override recorded; agent-authored strategies fully functional without it). The join-sparsity threshold is a module constant, not a config key (WatchConfig tuning deliberately deferred). v2 true market-breadth operand and `screen_symbols` source_symbol both deferred out of v1. The post-launch validation re-run of `dip_buyer_vol_stop` with the VOO-200d gate across the three OOS years is still outstanding.
 
-- Provisioned the codegen toolchain on-host (no Docker/buf here): `go install buf` + go proto plugins
-  + npm ts-proto plugins + grpcio-tools, validated an EMPTY stub diff before editing the proto.
-- **Step 1 proto:** `string source_symbol = 6` (plain) on `StrategyComponent`; buf lint+breaking clean;
-  go/python/ts stubs regenerated.
-- **Step 2 evaluator:** `_assemble_component_series` (+ `_bar_date`), `benchmark_bars` kwarg on
-  evaluate/evaluate_with_series/evaluate_conditions_traced; `eval_dates` computed lazily only when a
-  source_symbol is present (preserves byte-identity + list-mock bars without `.time`).
-- **Step 3 backtest:** `_load_benchmark_bars` (once/run, dedup, warmup, → CoverageGap(benchmark)).
-- **Step 4 live:** `live_loop._load_benchmark_bars` (warmup-widened, safe degrade) +
-  `StrategyEvaluator.declared_formula_warmups` (formula warmup plumbed into live per operator
-  decision). Repurposed the FR-7 parity guard test + updated docs/warmup.md (D-3).
-- **Step 5 readiness/opportunities:** `_load_benchmark_bars_windowed` (dedup once/pass under
-  `_bars_fetch_sem`), wired into EvaluateReadiness + `_compute_opportunities`.
-- **Step 6 GetIndicatorSeries:** `_benchmark_series_bars`; aligns onto `request.times`; gap → UNSET
-  IndicatorValue.
-- **Step 7 write path:** `_normalize_source_symbols` (uppercase/trim, empty→unset) at ManageStrategy
-  top, covers REGISTER + UPDATE; fingerprint auto-enters via definition_json.
-- **Step 8 agent:** `_build_component` carries source_symbol; descriptor-parity test caught it RED then
-  covered it; tool docstring + strat-lab skill + mcp-tools.md updated (root same-PR rule).
-- **Step 9 docs:** analysis CLAUDE.md § Benchmark operand.
-- **Verification:** analysis suite 591 passed (cov 83%), agent suite 286 passed (cov 78%), ruff clean,
-  buf lint+breaking clean. Deviations D-1..D-4 in implementation-spec.md.
-- **Teardown:** context-forge plugin unavailable in session → manual scoped context audit instead.
-- **First validation once shipped (spec §10):** re-run `dip_buyer_vol_stop` with a VOO-200d-rising
-  gate across the three OOS years to confirm the −19% 2024-25 year is suppressed without gutting the
-  others. Not run here (needs the live staging engine + backfilled data).
-
-## Session 2026-08-24 (CI: feature status automation)
-
-- Promotion PR #1006 merged to main
-- Feature promoted and committed: 2c8c9d7cb563140384324b5e1f9ff6fdceb1a367
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-08-24
+**Ledger entries written**: insights.md (2), fails.md (0) — see the 2026-08-26 entries. (The plain-vs-`optional` fingerprint-stability rule, the descriptor-parity antidote, and the F-12 field-drop class were already recorded at insights.md:2068 / insights.md:469 / fails.md:307.)
+**Runtime-invariant recommendations (→ /context-constitution)**: none new (the additive-field-auto-enters-fingerprint rule is already in context-constitution territory + captured by the DUP insight at 2068).
+**Scenario promotion (C-16)**: 8 `@AC-*` → `services/xstockstrat-analysis/acceptance/market-regime-benchmark-operand.feature` (new suite).
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 996210e4.
