@@ -17,6 +17,7 @@
 | 2026-08-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 advisory warnings addressed: FR-N/@FR tags/Consumer Surface(s) added, portfolio added to Affected Services) |
 | 2026-08-26 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 quick round + root-cause investigation + 2 user gates) and approved; recon.md + design.md written. Scope: UI record control + trading dual guards + portfolio combined-view offline card |
 | 2026-08-26 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps (trading guards + test, portfolio enumeration + test, UI record control, UI field gating, UI e2e, docs) |
+| 2026-08-26 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Step 1: trading guards) |
 
 ---
 

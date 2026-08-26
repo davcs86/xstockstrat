@@ -72,7 +72,7 @@ backend routing guard (Step 1) still guarantees FR-2 there, and Step 7 asserts t
 
 ### Step 1 — service: trading — authoritative offline routing (PlaceOrder) + offline cancel guard (CancelOrder)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -542,4 +542,14 @@ backend routing guard (Step 1) still guarantees FR-2 there, and Step 7 asserts t
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Step 1 — nil `accountRepo` defensive fallback in guard B
+- **What**: Guard B reads `s.accountRepo.GetBrokerAccount`. Several existing service tests (e.g.
+  `trading_bracket_test.go:510` `TestIsAccountHalted_GateBlocksPlaceOrderAndReplaceOrder`) construct a
+  `TradingService` literal with **no** `accountRepo` and call `PlaceOrder`; since guard B runs before the
+  halt gate, a nil `accountRepo` panicked. Wrapped the authoritative read in `if s.accountRepo != nil`,
+  falling back to the pool-tag-only decision — the same best-effort behavior the guard already applies on
+  a DB read error.
+- **Why in scope**: change stays in the step's only file (`trading.go`); it makes the step's own new code
+  robust to a partially-constructed service. In production `NewTradingService` always wires `accountRepo`,
+  so the nil branch is test-only and behavior-preserving.
+- **Disposition**: in-step fix (Phase 3 clear-fix path); no scope expansion, no other file touched.

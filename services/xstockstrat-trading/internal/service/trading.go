@@ -379,13 +379,29 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		return nil, err
 	}
 
+	// Guard B (feature 159): route on the authoritative persisted broker_type as well as the
+	// in-memory pool tag. broker_type is immutable post-create, so the two normally agree; reading
+	// the persisted record makes the offline decision divergence-safe — an offline account can never
+	// fall through to a broker path even if its pool entry is stale or mistyped. A DB read error is
+	// non-fatal: fall back to the pool-tag-only decision (best-effort, mirroring the service's other
+	// non-blocking reads) so a transient DB blip never fails a legitimate broker order open.
+	persistedOffline := false
+	if s.accountRepo != nil {
+		if rec, gErr := s.accountRepo.GetBrokerAccount(ctx, resolvedAccountID); gErr != nil {
+			slog.Warn("placeorder: could not read authoritative broker_type; falling back to pool tag",
+				"account_id", resolvedAccountID, "error", gErr)
+		} else if rec != nil {
+			persistedOffline = rec.BrokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE)
+		}
+	}
+
 	// Offline account (feature 157): record the order as manual bookkeeping — this branch
 	// precedes every broker-routing path below. It deliberately skips broker submit,
 	// ComputePositionSize, bracket submission, and the halt/trading-state gates (there is no
 	// broker to protect, no live position to size against, and no bracket to arm — a NEW offline
 	// order becomes real only when ConfirmOrder writes its fill). resolveAccount already tagged
 	// the entry OFFLINE, so no broker call is ever constructed for it (@AC-4/@AC-8).
-	if accountEntry.brokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) {
+	if accountEntry.brokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) || persistedOffline {
 		return s.recordOfflineOrder(ctx, req, resolvedAccountID, accountEntry.userID)
 	}
 
@@ -982,6 +998,17 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 		s.mu.Lock()
 		s.orders[order.OrderId] = order
 		s.mu.Unlock()
+	}
+
+	// Guard A (feature 159): an offline order is manual bookkeeping — it never reaches a broker, so
+	// CancelOrder must not flip it to CANCELED (the local transition below is otherwise unconditional).
+	// Offline orders are un-placed by ConfirmOrder edits, not a broker cancel. Keyed on the authoritative
+	// persisted order.BrokerType (GetOrder already selects broker_type), not an empty broker_order_id — a
+	// broker order that has not yet received its broker_order_id also has an empty one and must stay
+	// cancelable (the broker-cancel branch below already gates on a non-empty id).
+	if order.BrokerType == commonv1.BrokerType_BROKER_TYPE_OFFLINE {
+		return nil, grpcstatus.Errorf(codes.FailedPrecondition,
+			"offline order %s is managed via ConfirmOrder, not broker cancel", req.OrderId)
 	}
 
 	// Dedup insert (feature 101): server-derived intent ID (a content-identical cancel

@@ -224,3 +224,33 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     Go-coverage-gated (ci.yml:244 COVERPKGS excludes cmd|handler|repository|telemetry|service) — spec
     is transparent about this; matches repo CI. Not a gap. — [ ] acknowledged
 - No blockers. Cleared to run /sdd-execute.
+
+---
+
+## Session 2026-08-26 — sdd-execute (sequential)
+
+Branch: `claude/features-157-158-impl-ulk0l2` (task-mandated harness branch, in place of
+`feature/fix-offline-account-ui-gaps`); one commit per step; single integration PR → main-dev at end.
+
+### Step 1 — trading guards [done]
+- Guard B (PlaceOrder): after `resolveAccount`, read authoritative persisted `broker_type` via
+  `s.accountRepo.GetBrokerAccount` and route offline when pool tag OR persisted type is OFFLINE (union;
+  best-effort — DB error or nil repo falls back to pool tag). Guard A (CancelOrder): reject an offline
+  order (`order.BrokerType == OFFLINE`) with `FailedPrecondition` before the unconditional CANCELED
+  transition at `:1079`.
+- Files modified: `services/xstockstrat-trading/internal/service/trading.go`
+- Deviations: nil-`accountRepo` defensive fallback (Deviation Log Step 1) — in `trading.go`, unblocks
+  existing halt tests; behavior-preserving.
+- TDD: covered by Step 2 (red->green below).
+
+### Step 2 — trading tests [done]
+- `TestCancelOrder_RejectsOfflineOrder` (@AC-1): red — pre-fix CancelOrder returned code OK and the
+  offline order's status became CANCELED -> green — guard A returns FailedPrecondition, status stays
+  NEW. `TestPlaceOrder_RoutesAuthoritativeOfflineToRecord` (@AC-1): red — a divergent account (pool
+  ALPACA / persisted OFFLINE) recorded no offline order (broker path) -> green — guard B routes it to
+  recordOfflineOrder (NEW, empty broker_order_id). Both use recover() for the un-fakeable concrete
+  `*repository.TradingRepo` UpsertOrder panic and assert on `s.orders`.
+- Files modified: `services/xstockstrat-trading/internal/service/trading_offline_test.go`
+- Verification: `go build` OK; full service package green; coverage total 62.9% >= 40%; golangci-lint
+  0 issues; C-13 single-consumer inline literals compliant.
+- Deviations: none.
