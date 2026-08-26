@@ -94,6 +94,24 @@ test.describe('Offline account portfolios (feature 157)', () => {
     await expect(page.getByText('$97.50')).toBeVisible();
   });
 
+  test('offline account row has no "Edit keys" action (no credentials)', async ({ page }) => {
+    await page.route(LIST_ACCOUNTS, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ accounts: [BROKER_ACCOUNT_ALPACA, BROKER_ACCOUNT_OFFLINE] }),
+      });
+    });
+
+    await addAuthCookie(page);
+    await page.goto('/trader/accounts');
+
+    // The Alpaca row still offers "Edit keys"; the offline row does not (it has no credentials).
+    await page.getByRole('button', { name: 'Actions for Offline Book' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Remove' })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('menuitem', { name: 'Edit keys' })).toHaveCount(0);
+  });
+
   test('@AC-5 confirming an offline order flips it to FILLED (server-derived status)', async ({
     page,
   }) => {

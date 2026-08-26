@@ -1683,3 +1683,25 @@ ambiguity is logged here).
   the "real proto instance, not `MagicMock`" rule (2026-08-06) must follow it — audit the NEW module's
   test fixtures for `MagicMock` proto stand-ins, not just the origin's. A field-name typo re-hides in
   every `MagicMock`-fixtured suite the rule didn't reach.
+
+### 2026-08-26 — 159-fix-offline-account-ui-gaps — assumption
+- **Mistake**: A design (and its recon) asserted a status-transition path was "guarded" by reading only
+  the *broker-call* precondition next to it, not the *local state write*. `CancelOrder` skips the broker
+  cancel when `broker_order_id == ""` (`trading.go:1036`) but then sets `order.Status = ORDER_STATUS_CANCELED`
+  **unconditionally** (`:1079`) — no offline / terminal-state / empty-`broker_order_id` guard on the local
+  transition. So an OFFLINE NEW order (which by design has an empty `broker_order_id` and no broker client)
+  can be flipped to CANCELED with no broker involved, silently violating the "offline orders are recorded
+  NEW, never broker-CANCELED" guarantee (feature 159 FR-2). The recon's premise ("CANCELED requires a
+  non-empty broker_order_id + non-offline client") was true of the broker cancel but false of the local
+  write beside it — caught only by a dedicated code-trace after the design-adversary refused the UI-only
+  closure. Same shape as the routing half: `PlaceOrder` decides offline solely from the in-memory pool tag
+  (`:388`) and never re-reads the persisted account `broker_type`, so a pool/DB divergence misroutes.
+- **Evidence**: `services/xstockstrat-trading/internal/service/trading.go:1036,1079` (guarded broker cancel
+  vs unguarded local transition); `:285-317,388` (pool-tag-only routing); feature 159 `design.md` § Chosen
+  Approach A (both guards), `context.md` § root-cause investigation (trading trace).
+- **Rule it implies**: reinforces **C-10(b)**/**P-03** — when auditing whether a state transition is
+  "guarded," read the precondition on the **state write itself**, not on an adjacent side-effect (a broker
+  call, a notification) that happens to share the branch. A skipped side-effect is not a skipped transition.
+  And a routing/authorization decision that reads an in-memory cache (broker pool) must be checked against
+  the case where the cache diverges from the authoritative store — prefer reading the persisted value, or
+  prove the cache cannot diverge, before calling the path safe.
