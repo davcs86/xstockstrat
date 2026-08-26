@@ -2197,3 +2197,13 @@ reusing.
 - **Evidence**: feature 125 context.md:963 (Step 30).
 - **Rule it implies**: at execute time, re-read the actual anchor before copying a spec-quoted skeleton;
   assume any handler cited from recon may have been owner-scoped/hardened by a feature merged since.
+
+### 2026-08-26 — consolidate-watchlist-signal — ordering
+- **Pattern**: When a design-phase debate expands scope beyond boundaries the product spec explicitly
+  asserted (here "no proto / no schema / no UI"), the product spec must be **updated and RE-RUN through
+  `/sdd-review product-spec`** — not patched in place — because the expansion pulls in newly-required
+  reviewers (proto owner, DBA, UI) and can moot earlier documented rationale (the config-key-rejection
+  reasoning became void under find-by-flag).
+- **Evidence**: feature 127 context.md §Session 2026-08-19 (round 2) and §COMPLETION (spec updated + re-run → PASS WITH WARNINGS).
+- **Rule it implies**: a scope expansion that falsifies a product-spec governance claim re-enters
+  `/sdd-review product-spec`; reinforces C-14/C-09.

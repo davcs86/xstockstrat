@@ -1753,3 +1753,23 @@ ambiguity is logged here).
 - **Rule it implies**: when executing on a harness branch that will squash-merge, advance
   `status.md`/step statuses explicitly during execution — do not rely on CI auto-promotion, which only
   fires for features already at `code-completed`.
+
+### 2026-08-26 — consolidate-watchlist-signal — assumption
+- **Mistake**: The product spec named `form4-enhanced-ingest` as the *motivating* flow, but form4 scores
+  `direction="watchlist"` signals at conviction 0.30 (< the 0.6 gate) → they land in `skipped_signals`
+  and **never call `ingest_signal`** — so form4 triggers this feature exactly zero times. The stated
+  driver was recoverable only by reading the skill; grounding (P-03) corrected it at design and the real
+  trigger (any explicit `direction="watchlist"` caller) replaced it.
+- **Evidence**: `.claude/skills/form4-enhanced-ingest/SKILL.md:59-61`; feature 127 context.md §Session 2026-08-19 (Phase 1 round 1 "PREMISE CORRECTION").
+- **Rule it implies**: verify the cited motivating/producer flow actually reaches the code path before
+  designing on it (P-03) — a plausible-sounding trigger in a product spec is not evidence.
+
+### 2026-08-26 — consolidate-watchlist-signal — assumption
+- **Mistake**: A new proto field on `WatchlistBinding` (`source`) was silently zeroed at insert despite a
+  correct migration + insert path, because every portfolio watchlist write funnels through a central
+  `normalizeBindings` (`portfolio_service.go:1139`) that reconstructs each binding field-by-field and
+  never learned the new field — a runtime data-loss, not a compile error, found only by an execute-phase test.
+- **Evidence**: feature 127 implementation-spec.md Step 4 (normalizeBindings preserve source); `services/xstockstrat-portfolio/internal/service/portfolio_service.go:1139`.
+- **Rule it implies**: when adding a field to a proto message that passes through a hand-rolled
+  normalizer/reconstructor, grep every normalizer on that type's write path and extend it in the same
+  change — a field-by-field rebuild silently drops unknown fields.
