@@ -2306,3 +2306,12 @@ reusing.
 - **Evidence**: feature 145 design.md (archived) §27-31,91-92; implementation-spec.md Step 1.
 - **Rule it implies**: a component's home is decided by what it imports, not where it's used; a
   data-coupled picker/widget is not `shared/`.
+
+### 2026-08-26 — unify-symbol-chart-libraries — design
+- **Pattern**: A Playwright hover/crosshair assertion against a lightweight-charts canvas silently never
+  fires if the mock bars are sparse enough to sit off the visible time range — the hovered time has no
+  bar. `chart.timeScale().fitContent()` after `setData` puts every bar on-screen (hoverable), and it is
+  simultaneously a real UX improvement.
+- **Evidence**: feature 146 context.md 2026-08-19 CI fix; `services/xstockstrat-ui/src/hooks/useCandlestickChart.ts`.
+- **Rule it implies**: for any canvas-chart hover/crosshair e2e, call `fitContent()` after data-set; a
+  hover test that "passes" without it may be asserting on a readout that never rendered.
