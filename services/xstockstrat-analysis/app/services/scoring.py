@@ -14,7 +14,7 @@ def compute_signal_score(
     if not signals_map or not signal_sources:
         return 0.5
 
-    bar_ts = bar.timestamp.ToDatetime()
+    bar_ts = bar.time.ToDatetime()
     buy_conviction = 0.0
     sell_conviction = 0.0
     count = 0

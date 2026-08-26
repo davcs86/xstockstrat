@@ -1667,6 +1667,23 @@ ambiguity is logged here).
 - **Evidence**: `services/xstockstrat-ui/src/lib/opportunityShared.tsx` (phosphor value import, now type-only); `src/lib/copilot.ts:7` → `src/lib/traderBff.ts:24`; fix `src/lib/readinessCue.ts` (the phosphor value import + cue maps, imported only by `'use client'` cue consumers); PR #1012 CI run 32908124461.
 - **Rule it implies**: a module imported (even transitively) by a route handler / server plumbing must not statically import a **client-only** library that evaluates React (`createContext`, hooks) at module scope. Keep such value imports in a leaf only client components reach, and verify with a real `next build` (not just tsc/lint/dev-server e2e) — `pnpm build` is the only local check that exercises server-bundle "collect page data". Grep the server import chain (`traderBff`/`*Bff`/`route.ts` → its `@/lib/*` imports) before adding a client lib to a shared `lib/` module.
 
+### 2026-08-26 — fix-signal-screen-crash — assumption (recurrence of 2026-08-06/backtest-debug-info)
+- **Mistake**: The exact `bar.timestamp`-does-not-exist / `MagicMock`-hides-it fail recorded on
+  2026-08-06 recurred. Feature 064 fixed the six `servicer.py` sites and added real-`Bar` fixtures there,
+  but the signal-blend scorer had been **extracted** to `app/services/scoring.py` (feature 060) with its
+  own `MagicMock` bar builder (`tests/test_analysis_helpers.py:_make_bar`), so `scoring.py:17`'s
+  `bar.timestamp.ToDatetime()` kept shipping — crashing every signal-weighted `ScreenSymbols` with
+  `AttributeError: timestamp`, surfaced only on staging during the feature-154 fundamentals first-cycle
+  check. The 2026-08-06 rule was right; it just wasn't applied to the code that moved.
+- **Evidence**: `docs/reports/2026-08-26-signal-screen-bar-timestamp-crash-defect.md`;
+  `services/xstockstrat-analysis/app/services/scoring.py:17` (`bar.time = 2`, no `timestamp`, per
+  `packages/proto/marketdata/v1/marketdata.proto:44`); `tests/test_analysis_helpers.py:163-167`
+  (`_make_bar` MagicMock); fix feature 160 (`bar.time` + real-`Bar` reshape of `_make_bar`).
+- **Rule it implies**: when a function that reads proto fields is **extracted/copied into a new module**,
+  the "real proto instance, not `MagicMock`" rule (2026-08-06) must follow it — audit the NEW module's
+  test fixtures for `MagicMock` proto stand-ins, not just the origin's. A field-name typo re-hides in
+  every `MagicMock`-fixtured suite the rule didn't reach.
+
 ### 2026-08-26 — 159-fix-offline-account-ui-gaps — assumption
 - **Mistake**: A design (and its recon) asserted a status-transition path was "guarded" by reading only
   the *broker-call* precondition next to it, not the *local state write*. `CancelOrder` skips the broker
