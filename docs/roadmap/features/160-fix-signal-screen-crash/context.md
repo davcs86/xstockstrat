@@ -193,3 +193,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   keeps 159), and the two historical mentions above (context.md § NNN note and § C-16 promotion —
   they record what happened under the old number; this entry supersedes them).
 - The renumber is docs/tests-only — no service behavior change; analysis suite re-verified GREEN.
+
+### Session 2026-08-26 — pre-deploy smoke baseline (required smoke, part 1 of 2)
+- Ran the live staging smoke **before** deploy to capture the baseline:
+  `mcp__xstockstrat_staging__screen_symbols(symbols=["AAPL","NVDA","MSFT"], signal_sources=["fundamentals"],
+  signal_weight=1, technical_weight=0)` → **still crashes** with
+  `StatusCode.UNKNOWN "Unexpected <class 'AttributeError'>: timestamp"` — the exact defect, confirming
+  the fix (PR #1023) is not yet deployed to staging. This is the "before" for the required post-deploy
+  smoke.
+- **Still-required (part 2):** re-run the SAME call after PR #1023 merges to main-dev and rides to
+  dev/staging; the acceptance is `SCREEN_RESULT_STATUS_OK` per symbol (no AttributeError). Record the
+  "after" result here to close Step 3's required manual dev smoke.
