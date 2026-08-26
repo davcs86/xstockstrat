@@ -207,3 +207,12 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `services/xstockstrat-analysis/acceptance/fix-fundamentals-signal-producer.feature` (analysis's first
   acceptance suite), AC-8 → `services/xstockstrat-agent/acceptance/...`, AC-9 →
   `services/xstockstrat-ui/acceptance/...`, each tagged `@feature-156`. Staged into the integration PR.
+
+## Session 2026-08-25 — sdd-execute (sequential) — feature complete
+**Steps this session**: 1–9 (all) + C-16 promotion
+**Progress**: 9 done / 9 total → code-completed
+**Integration PR**: #1014 (feature/fix-fundamentals-signal-producer → main-dev). Superseded docs-only PR #1013 (closed).
+**Renumber**: 155 → 156 (NNN collision with 155-watchlist-opportunity-signal-cues on main-dev).
+**Deviations**: D-1 (config-ui no cosmetic admin-hide — BFF forwardAdmin authoritative), D-2 (Playwright e2e via CI-equivalent lint+tsc+structural; browser absent locally).
+**Post-merge action still pending**: revert staging `analysis.fundsignal.run_interval_hours` 1 → 24.
+**Next**: review/merge PR #1014 when CI is green.
