@@ -2280,3 +2280,20 @@ reusing.
 - **Evidence**: feature 143 context.md Session 2026-08-16 sdd-design Phase 1; design.md §Chosen Approach pt3 (`servicer.py:555` retry loop).
 - **Rule it implies**: introducing a permanent error code requires auditing every caller's retry loop
   for a broad-except transient assumption in the same PR.
+
+### 2026-08-26 — fix-screener-soft-criterion — design
+- **Pattern**: When "data absent" must be distinguished from a legitimate in-range value, add an
+  **orthogonal additive bool** (`score_unavailable`) rather than overloading an existing status enum —
+  especially when that enum triggers behavioral side-effects (here a UI re-poll loop) whose semantics
+  (transient/retry-eligible) don't fit the new case (permanent absence). Preserve visibility with a
+  rank-last sort instead of excluding the row.
+- **Evidence**: feature 144 context.md 2026-08-17 implementation session; product-spec.md (archived) :100-102.
+- **Rule it implies**: a missing-data marker must not reuse a status whose consumers attach retry/polling
+  behavior unless the new case is also genuinely transient.
+
+### 2026-08-26 — fix-screener-soft-criterion — design
+- **Pattern**: Before overloading an existing enum/status value, grep its **consumers** (here
+  `useScreenSymbolsPoll`/`pendingRows`) and its **pinned tests** — a value's real contract is the
+  behavior downstream code hangs off it, not its name.
+- **Evidence**: feature 144 context.md:60-66 (the pinned `test_fundamental_hard_filter_missing_for_one_symbol_fails_closed` would have flipped).
+- **Rule it implies**: verify a status value's downstream behavioral contract before reusing it for a new case.

@@ -1,117 +1,31 @@
-# Context Log: fix-screener-soft-criterion
+# Context Log: fix-screener-soft-criterion  (archived 2026-08-26)
 
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; `product-spec.md` pruned (recoverable via git history). This bug fix never had recon/design/impl-spec files.
 
----
+## Archive Synthesis — 2026-08-26 — /sdd-archiver
 
-## Session 2026-08-17 (/sdd-triage)
+**What**: The screener's soft/weighted scoring emitted a hardcoded `0.5` "neutral" `technical_score` whenever a candidate had zero usable data for every configured soft criterion (the `weight_total == 0` division-guard fallback), making a data-less ETF like QQQ look like a real mid-range result and outrank symbols with genuine, worse P/E data. The shipped fix added an additive `ScreenResult.score_unavailable` bool set only when criteria were configured but all were skipped for that candidate, plus a server-side rank-last sort — the data-less case stays visible/actionable but can never outrank a genuinely-scored candidate. This is the soft-criterion sibling of the hard-filter null-as-zero bug fixed earlier in PR #971 (which only touched the `passed` boolean, never the ranking `score`).
 
-- Bug surfaced via a user screenshot of the dev screener (`xstockstrat-staging`,
-  `tau95.ondigitalocean.app`) showing QQQ (no P/E data) scoring `0.500` on a `pe_ratio < 20`
-  soft/weighted criterion — outranking MSFT/AAPL, which have real, worse-looking P/E data.
-- User's hypothesis ("no chance QQQ was cached") prompted investigation before assuming it was a
-  recurrence of the just-fixed null-as-zero hard-filter bug (PR #971) — it is not; root cause is a
-  distinct fallback in the **soft/weighted** scoring path, confirmed via a `codebase-discovery`
-  subagent then independently re-verified (exact line numbers re-grepped, not trusted from the
-  subagent report alone, per the repo's absence-claim discipline).
-- Filed `docs/reports/2026-08-17-screener-missing-data-neutral-score-defect.md` (GitHub Issues are
-  disabled on this repo — `docs/runbooks/bug-triage.md` / `.claude/skills/sdd-qa/reference/
-  defect-filing.md` convention) after confirming with the user (P-04) via `AskUserQuestion`.
-- Severity: SEV-2. Environment: dev (main-dev). Config-only: no. Routed to **Track C (SDD path)**
-  per `docs/runbooks/bug-triage.md` Quick-Start table ("Bug only in main-dev... → Track C").
-- Created: feature.md, product-spec.md, status.md (`draft`), context.md.
-- Affected services (from report): `xstockstrat-analysis` (scoring), `packages/proto` (likely — no
-  field distinguishes a data-less fallback score today), `xstockstrat-ui` (rendering, once the
-  backend signal exists).
-- Root cause hypothesis: `ScreenerEngine._build_result`'s `weight_total > 0` guard
-  (`screener.py:474`) picked an arbitrary `0.5` literal as its zero-division fallback and never
-  distinguished "no criteria configured" from "this candidate had no usable data for any
-  configured criterion" — the latter case should fail closed like the hard-filter path already
-  does, not emit a plausible-looking neutral score.
-- Recommended design depth: **quick** (`/sdd-design fix-screener-soft-criterion quick`) — rationale:
-  severity is SEV-2 (triggers quick per the C-0 rule) and the actual fix approach (exclude / rank
-  last / add an explicit proto field) is a real design fork worth one adversarial round, even
-  though scope is single-service and no proto/migration change is yet confirmed necessary (which
-  would otherwise push toward `full`).
-- Development branch: `feature/fix-screener-soft-criterion`.
+**Why (irrecoverable rationale)**: The fix deliberately did **not** reuse the existing `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA` status for two reasons that no longer live in code once the spec is gone: (1) that status drives an **active UI re-poll loop** (`useScreenSymbolsPoll` filters `pendingRows` on `status === INSUFFICIENT_DATA`) intended for genuinely-transient absences (bars catching up, fundamentals source recovering); an ETF having no P/E is **permanent**, so reusing it would have mis-signaled "retry-eligible / Fundamentals pending" forever and driven pointless polling. (2) Reusing it would have flipped a **pinned** hard-filter test (`test_fundamental_hard_filter_missing_for_one_symbol_fails_closed`) that asserts `status == OK` for the same `weight_total == 0` condition reached via the hard-filter path. So `status` was kept `OK` and a new orthogonal bool carries the signal instead.
 
-## Session 2026-08-17 (implementation)
+**Rejected alternatives**:
+- Reuse `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA` — lost: mis-signals a permanent absence as transient/retry-eligible and would break the pinned hard-filter test.
+- Exclude the data-less candidate from `results` entirely — lost as more destructive than needed; discards caller visibility (e.g. manually watchlisting QQQ anyway).
+- Just change the fallback constant `0.5 → 0.0` — lost: a real candidate can legitimately score `0.000` (AAPL did in the original repro), so it stays indistinguishable from genuine data, merely at the other end of the range.
 
-- **Branch note (deviation):** this session was harness-assigned `claude/bug-144-zzhvpv` (a
-  `claude/*` session branch per root CLAUDE.md § Branch Strategy), not `feature/fix-screener-soft-
-  criterion`. The branch started stale (10 commits behind `main-dev`, predating this feature's own
-  PR #975 triage scaffold) and was fast-forwarded to `origin/main-dev` before any edits — zero
-  divergent commits existed, so this was a plain fast-forward, not a rebase/merge. PR opens from
-  `claude/bug-144-zzhvpv` → `main-dev`, matching this repo's established precedent for
-  harness-driven bug-fix sessions (PRs #971/#973/#975 all did the same).
-- Did not run the interactive `/sdd-design quick` skill (no human present to grill/approve a
-  proposer-vs-adversary debate in this harness session). Performed the equivalent grounded design
-  reasoning inline instead — documented below for audit, per the Constitution's design-gate intent
-  even though the skill itself didn't run.
-- **Design decision — resolves the product-spec's Open Question:**
-  - Read `_build_result` and the existing `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA` handling
-    end-to-end first. Found an **existing, pinned test**
-    (`test_fundamental_hard_filter_missing_for_one_symbol_fails_closed`) that explicitly asserts
-    `status == SCREEN_RESULT_STATUS_OK` for a candidate whose only configured (hard-filter)
-    criterion has no data — i.e. the exact `weight_total == 0` condition this bug also hits, just
-    via the hard-filter path. Reusing `INSUFFICIENT_DATA` for the new bug would have flipped that
-    pinned assertion.
-  - Also read the UI's polling mechanism (`useScreenSymbolsPoll`, `pendingRows` filtered on
-    `status === INSUFFICIENT_DATA`): that status drives an active background re-check loop,
-    correct for its two existing causes (bars catching up, fundamentals source recovering — both
-    genuinely transient). QQQ's missing P/E is very likely **permanent** (an ETF has no P/E ratio,
-    full stop) — reusing `INSUFFICIENT_DATA` would have silently mis-signaled it as retry-eligible
-    and could have shown "Fundamentals pending" (implying it'll resolve) forever, or driven
-    pointless repeat polling. That would be a new, self-inflicted bug (surfaced as a tradeoff
-    rather than picked silently).
-  - **Chosen fix:** an additive `ScreenResult.score_unavailable: bool` field (proto field 14,
-    non-breaking — `buf breaking` verified clean against `main-dev`). Set true in `_build_result`
-    exactly when `weight_total <= 0 and len(criteria) > 0` (criteria were configured, but every
-    one of them was skipped for this candidate specifically — distinct from a scan configured with
-    zero criteria at all, which stays a harmless no-op, unchanged). `status` stays `OK`
-    (preserves the pinned hard-filter test unmodified); `technical_score`'s internal `0.5`
-    fallback is **left in place** (still feeds `combine_score` unchanged, so a real independent
-    signal-weighted blend for the same candidate is untouched — out of scope per the spec's "no
-    refactoring the scoring math beyond the missing-data fallback"). Ranking is fixed at the
-    `screen()` sort step: `results.sort(key=lambda r: (r.score_unavailable, -r.score))` — a
-    flagged candidate can never outrank a genuinely-scored one, regardless of its own internal
-    number, without excluding it from the response entirely (still visible/actionable to the
-    caller, per the product-spec's least-destructive framing of the three original options).
-  - Rejected alternatives: (a) reuse `INSUFFICIENT_DATA` — rejected per the two points above; (b)
-    exclude the candidate from `results` entirely — rejected as more destructive than necessary
-    (discards visibility the caller may still want, e.g. manually watchlisting QQQ anyway); (c)
-    just change the fallback constant (e.g. `0.5` → `0.0`) — rejected because a real candidate can
-    also legitimately score `0.000` (AAPL did, in the original repro), so it would still be
-    indistinguishable from genuine data, just at the other end of the range.
-  - Swept for the same pattern elsewhere in `xstockstrat-analysis` (per the spec's Open Question):
-    found `app/engine/fundsignal_loop.py:294`'s `_builtin_score` has the identical shape. Left
-    unfixed — different subsystem/blast radius, outside this spec's acceptance criteria — and
-    flagged in `product-spec.md`'s Open Questions as a candidate follow-up rather than silently
-    fixed or silently dropped.
-- **Files changed:** `packages/proto/analysis/v1/analysis.proto` (+ regenerated Go/Python/TS
-  stubs via a host-provisioned codegen toolchain — Docker daemon unavailable in this sandbox, so
-  followed `docs/runbooks/codegen-toolchain-host-setup.md`, validated an empty stub diff first);
-  `services/xstockstrat-analysis/app/services/screener.py` (`score_unavailable` computation +
-  sort); `services/xstockstrat-analysis/tests/test_screener.py` (new QQQ-repro test + strengthened
-  the two existing hard-filter tests with `score_unavailable` assertions);
-  `services/xstockstrat-ui/src/app/insights/screener/page.tsx` (Score cell → dash, Status cell →
-  new "No criteria data" badge, both gated on `scoreUnavailable`); `e2e/fixtures/screenResults.ts`
-  + `INVENTORY.md` (new `noCriteriaDataRow` fixture) + `e2e/insights/screener.spec.ts` (new e2e
-  case).
-- **Verification:** `xstockstrat-analysis` — 524/524 pytest pass, ruff clean. `xstockstrat-ui` —
-  `tsc --noEmit` clean, `next lint` clean (pre-existing unrelated warnings only), 97/97 vitest
-  pass, Playwright `screener.spec.ts` 18/21 pass; the 3 failures (global-mock-backend-dependent
-  tests unrelated to this change: "runs a scan and renders a ranked results table", "renders the
-  feature-083 raw columns", "the 10-column results table does not overflow the phone frame")
-  reproduce identically on the pristine pre-fix baseline (verified via `git stash` + re-run) —
-  a pre-existing sandbox/mock-backend timing issue, not a regression from this fix. Go: the
-  regenerated `packages/proto/gen/go` package builds clean; no Go service imports
-  `analysis/v1` today, so no further Go-side verification applies.
-- Status: `code-completed`.
+**Scars & gotchas**:
+- Proto stubs had to be regenerated via the **host-provisioned** codegen toolchain (Docker daemon unavailable in the sandbox) per `codegen-toolchain-host-setup.md`, validating an empty stub diff first.
+- 3 of 21 Playwright `screener.spec.ts` tests fail in-sandbox, but they are **pre-existing global-mock-backend timing failures**, not a regression — proven by `git stash` + re-run on the pristine pre-fix baseline. Don't chase them as this fix's breakage.
+- The internal `technical_score` `0.5` fallback was **left in place** (still feeds `combine_score`) as an explicit scope boundary — not an oversight.
 
-## Session 2026-08-19 (CI: feature status automation)
+**Permanent deviations**: None — no `design.md` existed (a lightweight bug fix; grounded design reasoning was performed inline here in lieu of running `/sdd-design quick`, because no human was present to drive the adversarial debate in the harness session).
 
-- Promotion PR #985 merged to main
-- Feature promoted and committed: 6cd5572193b09a153c24e4cb90e3b65708846981
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-08-19
+**Cross-feature signal**: The "magic neutral fallback for missing data" anti-pattern (`x / n if n else 0.5`) recurs across subsystems: PR #971 (hard-filter path, `passed`), this fix (soft-criterion `score`), and an **unfixed twin** at `app/engine/fundsignal_loop.py:294` (`_builtin_score`, `sum(parts)/len(parts) if parts else 0.5`). Same shape, different blast radius.
+
+**Deferred follow-ons**: `app/engine/fundsignal_loop.py:294` `_builtin_score` has the identical neutral-fallback shape, feeding the fundamentals signal producer's cross-sectional buy/sell/hold quantile. Consciously left unfixed (different subsystem, out of this spec's acceptance scope) and flagged for a human to rate/track — **not** filed as a formal defect. The next `/sdd-story` or triage should not rediscover this from scratch.
+
+**Ledger entries written**: insights.md (2), fails.md (1) — see the 2026-08-26 entries.
+**Runtime-invariant recommendations (→ /context-constitution)**: ANALYSIS-* / UI-* — `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA` is behaviorally load-bearing: the UI (`useScreenSymbolsPoll` → `pendingRows`) treats it as an active retry/re-poll signal. It must only ever mark **genuinely transient** data absence (bars catching up, fundamentals source recovering), never a permanent absence. This cross-module contract between `xstockstrat-analysis` scoring and the `xstockstrat-ui` screener poll loop is non-obvious and easily violated by a future author reaching for the "nearest" status enum.
+**Scenario promotion (C-16)**: none — this bug fix has no `acceptance.feature` file.
+**Pruned artifacts**: product-spec.md — last present at 996210e4. (Defect report retained at `docs/reports/2026-08-17-screener-missing-data-neutral-score-defect.md`; this context.md retained.)

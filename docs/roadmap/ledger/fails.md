@@ -1824,3 +1824,12 @@ ambiguity is logged here).
 - **Rule it implies**: to assert an outbound `GetBars` in a ChartPanel e2e, wait for `.tv-lightweight-charts`
   readiness then change a real `fetchBars` effect dep (bar-count) as the trigger; don't rely on the mount
   fetch, and run the prebuilt harness not the dev server.
+
+### 2026-08-26 — fix-screener-soft-criterion — duplication
+- **Mistake**: The `x / n if n else 0.5` magic-neutral-fallback for missing data recurred across three
+  sites (PR #971 hard-filter, this feature's soft-criterion, and the still-unfixed
+  `fundsignal_loop.py:294`). Fixing one instance does not clear the platform-wide pattern; the same
+  defect keeps resurfacing per code path.
+- **Evidence**: feature 144 context.md:86-90; unfixed twin `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:294` (`_builtin_score`).
+- **Rule it implies**: when fixing a "neutral default masks missing data" bug, sweep the whole service
+  for the identical fallback shape and either fix or explicitly file each sibling.
