@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +26,7 @@ import (
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
+	"github.com/xstockstrat/contracts/pnl"
 	"github.com/xstockstrat/portfolio/internal/config"
 	"github.com/xstockstrat/portfolio/internal/middleware"
 	"github.com/xstockstrat/portfolio/internal/repository"
@@ -288,7 +288,7 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 	// adding, or when no prior position exists — a redelivered post-close sell must not nil-deref).
 	var delta float64
 	if existing != nil {
-		delta = realizedDelta(existing.Qty, existing.CostBasis, fill.Qty, fill.FillPrice)
+		delta = pnl.RealizedDelta(existing.Qty, existing.CostBasis, fill.Qty, fill.FillPrice)
 	}
 
 	if newQty <= 0 {
@@ -512,23 +512,12 @@ func (s *PortfolioService) ListPositions(ctx context.Context, req *portfoliov1.L
 }
 
 // GetPnL computes realized + unrealized P&L for a user over a time range.
-// realizedDelta returns the realized P&L contributed by fillQty@fillPrice reducing a position of
-// accQty at average cost accCost/accQty. A non-reducing (opening/adding, or empty) fill returns 0.
-// This is the ONE realized-P&L reduce implementation (feature 042; C-10(b)) — GetPnL's applyFill
-// and ConsumeOrderFills' close-event enrichment both route through it, never a second formula.
-func realizedDelta(accQty, accCost, fillQty, fillPrice float64) float64 {
-	sameDirection := accQty == 0 || (fillQty > 0) == (accQty > 0)
-	if sameDirection {
-		return 0
-	}
-	avgEntry := accCost / accQty
-	closeQty := fillQty
-	if math.Abs(closeQty) > math.Abs(accQty) {
-		closeQty = -accQty
-	}
-	return (-closeQty) * (fillPrice - avgEntry)
-}
-
+//
+// Realized P&L uses the signed average-cost fold in the shared pnl package
+// (github.com/xstockstrat/contracts/pnl) — the ONE realized-P&L implementation (feature 042/157;
+// C-10(b)). GetPnL folds its collected fills through pnl.Fold; ConsumeOrderFills' close-event
+// enrichment routes through pnl.RealizedDelta; xstockstrat-trading's ConfirmOrder recompute uses
+// the same pnl.Fold. No second formula lives in this tree (the feature-056 dual-source fix).
 func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRequest) (*portfoliov1.PnLResponse, error) {
 	positions, _, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
 	if err != nil {
@@ -543,42 +532,12 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 		}
 	}
 
-	var realized float64
-	accs := make(map[string]*fillAccumulator)
+	// Collect fills in application order and fold once through the shared pnl package (the ONE
+	// realized-P&L implementation — feature 056 dual-source fix). accs state is never read between
+	// passes, so batching the fold is behavior-identical to the former incremental applyFill.
+	var fills []pnl.Fill
 	filledOrderIDs := make(map[string]bool)
 	latestPartials := make(map[string]orderFillPayload)
-
-	applyFill := func(qty, fillPrice float64, symbol string) {
-		acc := accs[symbol]
-		if acc == nil {
-			acc = &fillAccumulator{}
-			accs[symbol] = acc
-		}
-		sameDirection := acc.qty == 0 || (qty > 0) == (acc.qty > 0)
-		if sameDirection {
-			acc.qty += qty
-			acc.costBasis += qty * fillPrice
-		} else {
-			realized += realizedDelta(acc.qty, acc.costBasis, qty, fillPrice)
-			closeQty := qty
-			if math.Abs(closeQty) > math.Abs(acc.qty) {
-				closeQty = -acc.qty
-			}
-			oldQty := acc.qty
-			acc.qty += closeQty
-			if math.Abs(acc.qty) < 1e-9 {
-				acc.qty = 0
-				acc.costBasis = 0
-			} else {
-				acc.costBasis = acc.costBasis * acc.qty / oldQty
-			}
-			remainder := qty - closeQty
-			if math.Abs(remainder) > 1e-9 {
-				acc.qty += remainder
-				acc.costBasis += remainder * fillPrice
-			}
-		}
-	}
 
 	// Pass 1 — query order.filled events; accumulate realized P&L and track completed order IDs.
 	var pageToken string
@@ -617,7 +576,7 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 				}
 			}
 			filledOrderIDs[fill.OrderID] = true
-			applyFill(fill.Qty, fill.FillPrice, fill.Symbol)
+			fills = append(fills, pnl.Fill{Symbol: fill.Symbol, Qty: fill.Qty, Price: fill.FillPrice})
 		}
 		if resp.GetPage().GetNextPageToken() == "" {
 			break
@@ -674,8 +633,10 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 		if filledOrderIDs[orderID] {
 			continue
 		}
-		applyFill(fill.FilledQty, fill.FillPrice, fill.Symbol)
+		fills = append(fills, pnl.Fill{Symbol: fill.Symbol, Qty: fill.FilledQty, Price: fill.FillPrice})
 	}
+
+	realized := pnl.Fold(fills).Realized
 
 	return &portfoliov1.PnLResponse{
 		RealizedPnl:   realized,
@@ -851,12 +812,6 @@ func (s *PortfolioService) emitEvent(ctx context.Context, eventType, streamKey s
 		backoff *= 2
 	}
 	slog.Warn("ledger append failed", "event_type", eventType, "error", err)
-}
-
-// fillAccumulator tracks signed average-cost-basis state per symbol for realized P&L computation.
-type fillAccumulator struct {
-	qty       float64 // signed: positive = long, negative = short
-	costBasis float64 // signed: qty × avg_entry_price
 }
 
 // positionSyncPayload is the expected shape of the account.positions.synced event payload.
