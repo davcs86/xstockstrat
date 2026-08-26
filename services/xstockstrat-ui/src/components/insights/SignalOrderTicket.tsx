@@ -16,7 +16,10 @@ import { OrderForm } from '@/components/trader/OrderForm';
 function TicketBody({ symbol }: { symbol: string }) {
   const { environmentMode } = useAccountContext();
   const mode = environmentMode ?? 'paper';
-  return <OrderForm mode={mode} initialSymbol={symbol} />;
+  // Deliberately broker-execution context (feature 159, C-10(a)): the offline "Record order" affordance
+  // is a /trader concern, so it is excluded here. The trading routing guard still guarantees an offline
+  // account is never broker-routed if one is somehow selected.
+  return <OrderForm mode={mode} initialSymbol={symbol} allowOfflineRecord={false} />;
 }
 
 export function SignalOrderTicket({ symbol }: { symbol: string }) {

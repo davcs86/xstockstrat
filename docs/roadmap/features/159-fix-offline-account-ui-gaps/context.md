@@ -272,3 +272,14 @@ Branch: `claude/features-157-158-impl-ulk0l2` (task-mandated harness branch, in 
 - Files modified: `internal/service/portfolio_offline_test.go`
 - Verification: build OK; full service + repository packages green; coverage total 55.9% >= 40%;
   golangci-lint 0 issues.
+
+### Step 5 — UI offline Record-order control [done]
+- Added `allowOfflineRecord?: boolean` (default true) to OrderForm; derived `isRecordMode` from the
+  selected account's `brokerType === BrokerType.OFFLINE` (via useAccountContext.accounts). In record
+  mode the broker order-type/limit/stop/trailing inputs are hidden, replaced by symbol/side/qty + an
+  optional fill price; submit forces MARKET, maps fill price → limitPrice, sends the explicit offline
+  accountId (backend records NEW). Title "Record Offline Order", button "Record …". SignalOrderTicket
+  passes allowOfflineRecord={false} (insights mount deliberately excluded, C-10(a)).
+- Files modified: `src/components/trader/OrderForm.tsx`, `src/components/insights/SignalOrderTicket.tsx`
+- Verification: tsc --noEmit exit 0; pnpm lint exit 0 (no new warnings in changed files); greps confirm.
+- TDD: e2e pairing in Step 7. Deviations: none.
