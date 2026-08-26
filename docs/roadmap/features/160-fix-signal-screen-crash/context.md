@@ -204,3 +204,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - **Still-required (part 2):** re-run the SAME call after PR #1023 merges to main-dev and rides to
   dev/staging; the acceptance is `SCREEN_RESULT_STATUS_OK` per symbol (no AttributeError). Record the
   "after" result here to close Step 3's required manual dev smoke.
+
+### Session 2026-08-26 — post-deploy smoke PASS (required smoke, part 2 of 2) — CLOSED
+- PR #1023 merged to main-dev and deployed to dev/staging. Re-ran the SAME live smoke:
+  `mcp__xstockstrat_staging__screen_symbols(symbols=["AAPL","NVDA","MSFT"], signal_sources=["fundamentals"],
+  signal_weight=1, technical_weight=0)` → **all three return `SCREEN_RESULT_STATUS_OK`** (score 0.5
+  neutral — no in-window fundamentals signals for these symbols right now, which is fine; the point is
+  it returns instead of crashing), `coverage_gaps: []`, **no `AttributeError: timestamp`**.
+- The exact staging failure mode is fixed on the live edge the mocked tests couldn't reach. **Step 3's
+  REQUIRED manual dev smoke is now satisfied.** Feature 160 fix fully verified end-to-end (unit RED→GREEN,
+  engine-seam RED→GREEN, live post-deploy smoke).
