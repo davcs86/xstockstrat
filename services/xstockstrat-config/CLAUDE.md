@@ -71,8 +71,12 @@ Service startup
               └── Subsequent messages: update_type=DELTA (carries the FULL namespace — `changedKeys=Object.keys(values)` — a wholesale replace, not just changed keys)
 
 Config change (via SetConfig RPC)
-  └── existence gate (feature 091): a write to an unregistered (namespace,key,environment,
-        user_id) scope is refused NOT_FOUND unless the request sets create_key=true
+  └── existence gate (feature 091): a write to an unregistered key is refused NOT_FOUND unless
+        the request sets create_key=true. "Registered" is scope-aware: a GLOBAL write needs the
+        global (user_id IS NULL) row; a PER-USER write is registered if EITHER its own exact
+        (namespace,key,environment,user_id) row OR the global row for that key exists — a first
+        per-user override of an already-registered global key is not minting a new key, so it does
+        NOT need create_key. Only a key absent at BOTH the exact and the global scope needs it.
   └── INSERT/UPDATE config.config_values
         └── audit trigger fires → config.config_audit row written
               ├── UPDATE: config_value_audit (BEFORE UPDATE, on a value change) — old→new

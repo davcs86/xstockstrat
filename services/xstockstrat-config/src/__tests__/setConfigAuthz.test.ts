@@ -79,8 +79,12 @@ describe('SetConfig authorization over a real gRPC connection', () => {
   let queries: { sql: string; params?: unknown[] }[] = [];
   // Feature 091: steer the existence-gate SELECT per case. Default: the key is registered
   // (one row), so the pre-existing authz cases keep asserting on the write. Set to false
-  // to simulate an unregistered (namespace,key,env,mode) scope.
+  // to simulate an unregistered (namespace,key,env,user_id) exact scope.
   let keyExists = true;
+  // Existence of the GLOBAL (user_id IS NULL) row, consulted only when the exact per-user row is
+  // absent. Default true so a first per-user override of a registered global key is allowed without
+  // create_key (the min_conviction_to_emit bug). Set false to simulate a key absent at BOTH scopes.
+  let globalKeyExists = true;
 
   /** Locate the recorded INSERT (feature 091: the existence SELECT is now query 0). */
   function insertQuery() {
@@ -96,6 +100,10 @@ describe('SetConfig authorization over a real gRPC connection', () => {
         queries.push({ sql, params });
         // Feature 147: the existence gate reads is_secret (row-authoritative encryption).
         if (sql.includes('SELECT is_secret FROM config.config_values')) {
+          // The global-scope fallback SELECT is distinguished by its `user_id IS NULL` clause.
+          if (sql.includes('user_id IS NULL')) {
+            return { rows: globalKeyExists ? [{ is_secret: false }] : [] };
+          }
           return { rows: keyExists ? [{ is_secret: false }] : [] };
         }
         return { rows: [] };
@@ -257,6 +265,53 @@ describe('SetConfig authorization over a real gRPC connection', () => {
     assert.ok(err, 'a per-user write with no caller identity cannot be attributed to an owner');
     assert.equal(err.code, grpc.status.PERMISSION_DENIED);
     assert.equal(queries.length, 0);
+  });
+
+  // ── Existence gate x per-user scope: a FIRST override of a registered global key ─────────
+  // Regression guard: feature 147 swapped the gate's second axis from trading_mode to user_id,
+  // which made a user's first per-user override of an already-registered GLOBAL key fail NOT_FOUND
+  // (e.g. analysis.fundsignal.min_conviction_to_emit in staging). It must now succeed without
+  // create_key by falling back to the global (user_id IS NULL) row.
+  it('allows a FIRST per-user override of a registered GLOBAL key without create_key', async () => {
+    queries = [];
+    keyExists = false; // no exact per-user row yet (this is the first override)
+    globalKeyExists = true; // but the key IS registered at the global scope
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '3', [HEADER_USER_ID]: 'u-9' }), {
+      userId: 'u-9',
+    });
+    assert.equal(err, null, 'a first per-user override of a registered global key must not need create_key');
+    const insert = insertQuery();
+    assert.ok(insert, 'the INSERT (per-user upsert) must run when the global key is registered');
+    assert.equal(insert!.params?.[9], 'u-9', 'the write targets the caller\'s own per-user row');
+  });
+
+  it('refuses a per-user write to a key absent at BOTH the exact and global scope (NOT_FOUND)', async () => {
+    queries = [];
+    keyExists = false; // no exact per-user row
+    globalKeyExists = false; // and not registered globally either → genuinely unregistered
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '3', [HEADER_USER_ID]: 'u-9' }), {
+      userId: 'u-9',
+    });
+    assert.ok(err, 'a per-user write to an unregistered key must still be refused');
+    assert.equal(err.code, grpc.status.NOT_FOUND);
+    assert.match(err.details ?? err.message, /not registered/);
+    assert.equal(insertQuery(), undefined, 'no INSERT may run for a genuinely unregistered key');
+    assert.ok(
+      !queries.some((q) => q.sql.includes('pg_notify')),
+      'no pg_notify may run for a refused write',
+    );
+  });
+
+  it('creates a genuinely-unregistered per-user key when create_key=true', async () => {
+    queries = [];
+    keyExists = false;
+    globalKeyExists = false;
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '3', [HEADER_USER_ID]: 'u-9' }), {
+      userId: 'u-9',
+      createKey: true,
+    });
+    assert.equal(err, null, 'create_key=true remains the escape hatch for a brand-new per-user key');
+    assert.ok(insertQuery(), 'the INSERT must run when create_key=true');
   });
 
   // NOTE: these cases deliberately assert only on authz outcome, author resolution and
