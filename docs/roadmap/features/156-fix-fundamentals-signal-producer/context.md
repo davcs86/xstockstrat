@@ -201,3 +201,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Added `e2e/config-ui/fundamentals-scan.spec.ts` (nav-reachability; admin render; non-admin BFF reject; admin BFF accept) and the `runFundamentalsScan` mock handler on the port-9092 AnalysisService block (distinct non-echoed fields). Auth via `helpers/auth` (C-12, no inline JWT). Covers AC-9.
 - Files modified/created: `e2e/config-ui/fundamentals-scan.spec.ts`, `e2e/mock-backend.ts`
 - Deviations: D-2 (e2e not run locally — pinned browser absent; verified via lint+tsc+structural; CI runs Playwright).
+
+### C-16 scenario promotion (feature-end) [done]
+- Promoted acceptance scenarios into durable per-service suites (operator-confirmed): AC-1..7 →
+  `services/xstockstrat-analysis/acceptance/fix-fundamentals-signal-producer.feature` (analysis's first
+  acceptance suite), AC-8 → `services/xstockstrat-agent/acceptance/...`, AC-9 →
+  `services/xstockstrat-ui/acceptance/...`, each tagged `@feature-156`. Staged into the integration PR.
