@@ -206,3 +206,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     `BROKER_ACCOUNT_OFFLINE`/`PORTFOLIO_OFFLINE` + `e2e/trader/offline-accounts.spec.ts`.
   - No proto/migration/config change (trading last migration 008, portfolio last 012). Added a docs
     step (8) to keep trading + portfolio CLAUDE.md accurate for the two new backend behaviors.
+
+## Session 2026-08-26 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 0 warnings, 6 NOTEs (advisory — did not block). Every code-checkable claim
+  resolves; C-08/P-06 pairing, C-10(a)/(b), C-14, C-15 traceability all satisfied; no Floor risk
+  (no proto/migration/config, no new DB pool, no new outbound gRPC — GetBrokerAccount is a DB read).
+- Overlap: CLEAN — no proto/migration/config collisions (159 declares none); no same-file overlap
+  with any in-flight feature (142 = marketdata only; 158/084 disjoint; 157 = merged trunk baseline).
+  No merge-order.md entry needed.
+- Non-material NOTEs carried into execution (execution re-greps live anchors, so these self-correct):
+  - Step 1: Codebase Evidence cites resolveAccount at `:371`; actual is `trading.go:377` (6-line
+    drift). Load-bearing `:388/:389` offline-branch anchors are exact. — [ ] cosmetic
+  - Step 5: Evidence says "two /trader mounts pass initialSymbol"; only `positions/[symbol]/page.tsx`
+    does. Design conclusion (need explicit allowOfflineRecord prop) still holds. — [ ] cosmetic
+  - Steps 2/4/7: trading+portfolio `internal/service` branch logic is behaviorally tested but NOT
+    Go-coverage-gated (ci.yml:244 COVERPKGS excludes cmd|handler|repository|telemetry|service) — spec
+    is transparent about this; matches repo CI. Not a gap. — [ ] acknowledged
+- No blockers. Cleared to run /sdd-execute.
