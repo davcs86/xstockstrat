@@ -1903,3 +1903,20 @@ ambiguity is logged here).
 - **Rule it implies**: when fixing a resource-exhaustion bug, enumerate ALL structurally identical call
   sites and fix at the widest shared layer (schema/cluster/global guard) — a fix scoped to the one
   observed-failing site invites recurrence through its siblings (C-10 blast-radius).
+
+### 2026-08-26 — ui-auth-improvements — assumption
+- **Mistake**: The user-reported "not staying signed in" was initially framed as a token-TTL problem;
+  recon found the true cause was cookies written with **no `maxAge`** (session cookies dropped on browser
+  close), while the server refresh token already lived 30 days. Chasing the reported symptom would have
+  driven a needless identity/proto/config change.
+- **Evidence**: feature 153 recon.md (archived) §20-22; design.md §12-13.
+- **Rule it implies**: for "session doesn't persist" symptoms, verify cookie `maxAge`/expiry *before*
+  assuming a server token-lifetime issue — the persistence knob is usually client-side.
+
+### 2026-08-26 — ui-auth-improvements — assumption
+- **Mistake**: A proposed FR acceptance test (`604800 ≤ 2592000`) compared two source literals and
+  enforced nothing at runtime — a tautological test that would pass forever regardless of behavior;
+  caught by the design-adversary and downgraded to a documented coupling comment.
+- **Evidence**: feature 153 design.md (archived) §81-82.
+- **Rule it implies**: a test asserting a relationship between two compile-time constants is not a test;
+  encode such cross-system ceilings as a documented coupling, not a green tautology.

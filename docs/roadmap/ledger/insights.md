@@ -2420,3 +2420,22 @@ reusing.
 - **Evidence**: feature 153 context.md:118-128 (ripple self-healed 21:25→21:25:37, all 12 components HEALTHY).
 - **Rule it implies**: treat any server-parameter change on a single-node managed cluster as a
   shared-blast-radius restart across all its databases; gate and schedule accordingly.
+
+### 2026-08-26 — ui-auth-improvements — design
+- **Pattern**: For client-side auth-failure handling, "refresh-first, then redirect" (attempt one shared
+  `/api/auth/refresh`, redirect only on failure) mirrors what the server middleware already does for
+  navigations, so client data-calls and navigations behave identically and a refreshable session is
+  never bounced to full re-login on the ~15-min access-TTL boundary.
+- **Evidence**: feature 153 design.md (archived) §36-48,74-76.
+- **Rule it implies**: client 401/`Unauthenticated` handling must reuse the middleware's refresh+redirect
+  contract, not re-implement redirect-only.
+
+### 2026-08-26 — ui-auth-improvements — reuse
+- **Pattern**: When N inline transport/client constructions exist, consolidate onto one factory carrying
+  the cross-cutting concern (the 401 interceptor) AND add a parity guard test asserting every consumer
+  routes through the factory — the test is what closes the "forgot a client" gap, not the factory alone.
+  Also grep for protocol divergence *within* the surface (REST vs connect-web vs streaming) — a single
+  factory does not cover a consumer speaking a different protocol.
+- **Evidence**: feature 153 design.md (archived) §50-64,106-108 (14 inline `createConnectTransport` sites → one factory; `/accounts` REST + swallowing streams needed separate handling).
+- **Rule it implies**: shared-consumer refactors ship with a parity/reachability test; audit for mixed
+  protocols (REST/unary/stream) before declaring coverage (reinforces the C-10 family).
