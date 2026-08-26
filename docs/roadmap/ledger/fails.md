@@ -1715,3 +1715,13 @@ ambiguity is logged here).
 - **Rule it implies**: a config/DB-seed feature that will sit in a queue behind an in-flight
   schema-reshaping feature should treat migration number, env labels, and conflict-target columns as
   bind-at-rebase, not design-time constants — reconfirm them against `main-dev` immediately before execute.
+
+### 2026-08-26 — order-snapshots-pnl-patterns — assumption
+- **Mistake**: A cross-service event-string consumer was written matching an *assumed* spelling
+  (`order.cancelled`, British) instead of the producer's actual emitted literal (`order.canceled`,
+  American). No unit test catches a non-matching event string — the handler simply never fires, so
+  cancel snapshots would have silently gone uncaptured. Only grep-verifying the producer's emit sites caught it.
+- **Evidence**: producer emits at `services/xstockstrat-trading/internal/handler/trading.go:578,1220,1236,828,1248`; feature 042 context.md 2026-08-20 impl-spec review.
+- **Rule it implies**: a consumer's hardcoded event/topic string must be copied from (or asserted
+  against) the producer's actual emit site, and a producer↔consumer parity test should pin it — a
+  spelling mismatch is invisible to normal tests.

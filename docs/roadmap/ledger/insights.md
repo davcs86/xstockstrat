@@ -2161,3 +2161,13 @@ reusing.
   reconciliation/approval/fill alerts) into one suppressed key.
 - **Evidence**: `services/xstockstrat-notify/src/fanout/fanout.ts` dedup key; feature 020 context.md round 2.
 - **Rule it implies**: size a dedup key against the lowest-context producer in the set, not the richest.
+
+### 2026-08-26 — order-snapshots-pnl-patterns — ordering
+- **Pattern**: A single broad `StreamEvents` subscription (both filters null) is deliberately chosen
+  over N narrow subscriptions when cross-event **ordering** is a correctness requirement — here it
+  guarantees the closing `order.filled` snapshot commits before `portfolio.position.closed` seals,
+  because the ledger global sequence (`nextval('ledger.global_sequence')`, invariant #4) is monotonic
+  only across the *whole* stream, not per stream_key. Narrow per-type subscriptions lose that ordering.
+- **Evidence**: feature 042 design.md §2 (archived); context.md round 3; ledger CLAUDE.md invariant #4.
+- **Rule it implies**: when an event consumer's correctness depends on inter-event-type ordering,
+  subscribe once broadly and gate on the global sequence — do not split by type.
