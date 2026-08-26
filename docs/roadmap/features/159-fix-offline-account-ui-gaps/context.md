@@ -283,3 +283,12 @@ Branch: `claude/features-157-158-impl-ulk0l2` (task-mandated harness branch, in 
 - Files modified: `src/components/trader/OrderForm.tsx`, `src/components/insights/SignalOrderTicket.tsx`
 - Verification: tsc --noEmit exit 0; pnpm lint exit 0 (no new warnings in changed files); greps confirm.
 - TDD: e2e pairing in Step 7. Deviations: none.
+
+### Step 6 — PortfolioPanel !isOffline field gating [done]
+- Single-account branch: derived `isOffline`, wrapped Cash / Buying Power / Day P&L / Total P&L in
+  `{!isOffline && ...}` (kept Equity, positions+unrealized, and the already-gated Realized P&L).
+  Combined branch: gated the per-card Day P&L on `!isOffline` (kept Equity + position count). Offline
+  cards now show only meaningful fields (FR-3 / FR-4 / @AC-2 / @AC-4).
+- Files modified: `src/components/trader/PortfolioPanel.tsx`
+- Verification: tsc --noEmit exit 0; pnpm lint exit 0 (no findings in the file); greps confirm both branches.
+- TDD: e2e pairing in Step 7. Deviations: none.

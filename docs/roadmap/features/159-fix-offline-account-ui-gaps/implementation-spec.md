@@ -382,7 +382,7 @@ backend routing guard (Step 1) still guarantees FR-2 there, and Step 7 asserts t
 
 ### Step 6 — service: xstockstrat-ui — gate broker-only fields on !isOffline in PortfolioPanel (single + combined)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/PortfolioPanel.tsx` — modify
