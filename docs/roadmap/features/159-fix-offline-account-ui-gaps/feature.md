@@ -16,6 +16,7 @@
 | 2026-08-26 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report (offline-account UI gaps found on staging) |
 | 2026-08-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 advisory warnings addressed: FR-N/@FR tags/Consumer Surface(s) added, portfolio added to Affected Services) |
 | 2026-08-26 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 quick round + root-cause investigation + 2 user gates) and approved; recon.md + design.md written. Scope: UI record control + trading dual guards + portfolio combined-view offline card |
+| 2026-08-26 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps (trading guards + test, portfolio enumeration + test, UI record control, UI field gating, UI e2e, docs) |
 
 ---
 
@@ -25,8 +26,21 @@
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
 - [Recon Dossier](recon.md) — grounded codebase map, patterns to reuse, risks (/sdd-design Phase 0)
 - [Design](design.md) — chosen approach, rejected alternatives, Constitution rules touched (/sdd-design Phase 1)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-offline-account-ui-gaps`_
+- [Implementation Spec](implementation-spec.md) — 8 numbered steps with grep-cited evidence (/sdd-spec)
 - [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Reviewers
+
+Snapshot from `docs/runbooks/reviewer-registry.md` at `/sdd-spec` time (deduped across all steps).
+
+| Step category · service | Reviewers |
+|---|---|
+| `service`/`test` · xstockstrat-trading (Steps 1–2) | xstockstrat-trading — Order execution correctness, broker API safety, fill detection, paper-only dev invariant |
+| `service`/`test` · xstockstrat-portfolio (Steps 3–4) | xstockstrat-portfolio — P&L calculation accuracy, position snapshot consistency, concurrent write safety |
+| `service`/`test` · xstockstrat-ui (Steps 5–7) | xstockstrat-ui — Trading UI correctness, analytics display accuracy, Connect-RPC call safety |
+| `docs` (Step 8) | none |
 
 ---
 
@@ -40,4 +54,4 @@ offline accounts) was already fixed inline on the 157 branch (commit `dcd2fe5`).
 
 ## Next Action
 
-`/sdd-spec fix-offline-account-ui-gaps` — generate the implementation spec from the approved design.
+`/sdd-review fix-offline-account-ui-gaps impl-spec` — validate the implementation spec, then `/sdd-execute fix-offline-account-ui-gaps`.

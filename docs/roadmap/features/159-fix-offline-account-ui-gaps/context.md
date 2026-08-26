@@ -169,3 +169,40 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Acceptance: added @AC-4 (@FR-4) for the offline account visible in the combined view with
   meaningful-only fields; refined product-spec FR-4 accordingly.
 - Status: spec-ready → design-approved. Next: /sdd-spec fix-offline-account-ui-gaps.
+
+## Session 2026-08-26 — sdd-spec
+
+- Generated implementation-spec.md with 8 steps. Status → implementation-ready.
+- Step map: (1) trading service — PlaceOrder authoritative offline routing (union of pool tag +
+  persisted `GetBrokerAccount` type) + CancelOrder offline guard; (2) trading Go tests; (3) portfolio
+  service — new `ListOfflineAccountIdsByUser` repo read + `ListPortfolios` union enumeration
+  (account_balances ∪ offline_account_realized); (4) portfolio Go tests; (5) UI OrderForm Record-order
+  control; (6) UI PortfolioPanel `!isOffline` field gating (single + combined); (7) UI e2e; (8) docs.
+- Scenario coverage (159's own AC IDs, not 157's): @AC-1 → Steps 2 (Go NEW/never-CANCELED) + 7 (UI
+  affordance); @AC-2 → Step 7; @AC-3 → Steps 4 + 7; @AC-4 → Steps 4 (ListPositions↔ListPortfolios
+  parity) + 7.
+- Key codebase findings (grep-verified):
+  - CancelOrder flips to CANCELED **unconditionally** at `trading.go:1079` (no offline precondition);
+    guard placed after order load (`:985`), keyed on authoritative `order.BrokerType == OFFLINE`
+    (NOT empty broker_order_id — that would false-reject a broker order pre-`broker_order_id`).
+  - PlaceOrder offline branch at `trading.go:388` keys only on the in-memory pool entry; guard B reads
+    `s.accountRepo.GetBrokerAccount` (`account_repo.go:104`) and routes offline on a **union** so a
+    pool/DB divergence can't misroute (broker_type is immutable post-create — prior investigation).
+  - `recordOfflineOrder` (`trading.go:744`) already records NEW, empty `broker_order_id`,
+    `LimitPrice: req.LimitPrice`, order-type-agnostic — so the UI Record control sends orderType=MARKET
+    + optional fill price → limitPrice.
+  - OrderForm has **four** mounts; two `/trader` mounts (positions/[symbol], and dashboard) — the
+    positions one passes `initialSymbol` just like insights, so `initialSymbol` can't distinguish
+    insights. Pinned an explicit `allowOfflineRecord` prop (default true; SignalOrderTicket passes
+    false) to exclude insights per C-10(a).
+  - Portfolio combined branch (`portfolio_service.go:1125`) enumerates `account_balances` only; offline
+    accounts are marked by `portfolio.offline_account_realized` rows (`GetOfflineRealized`,
+    `portfolio_repo.go:420`) — chose that as the offline-exclusive union source. Surfaced (P-03) that a
+    zero-activity offline account with no realized row / no positions is not yet known to portfolio
+    (no account-creation signal) — out of scope, consistent with @AC-4 (account with positions).
+  - Test homes all exist: trading `internal/service/trading_offline_test.go` +
+    `internal/testdata/order_rows.go` (C-13 Go home); portfolio
+    `internal/service/portfolio_offline_test.go` (no `internal/testdata/` — none required); UI fixtures
+    `BROKER_ACCOUNT_OFFLINE`/`PORTFOLIO_OFFLINE` + `e2e/trader/offline-accounts.spec.ts`.
+  - No proto/migration/config change (trading last migration 008, portfolio last 012). Added a docs
+    step (8) to keep trading + portfolio CLAUDE.md accurate for the two new backend behaviors.
