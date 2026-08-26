@@ -2489,3 +2489,14 @@ reusing.
 - **Evidence**: feature 159 context.md Step 6 expansion.
 - **Rule it implies**: confirm the live render path of a named surface (which branch/route users
   actually hit) during recon, not the first component that name-matches.
+
+### 2026-08-26 — fix-signal-screen-crash — design
+- **Pattern**: When writing a RED regression test that must exercise the signal-blend path in
+  `ScreenerEngine.screen()`, supply ≥2 bars with `.time` set on at least the last AND assert the
+  in-window signal moves the final score off the 0.5 neutral default. Otherwise `_eval_symbol`
+  short-circuits to INSUFFICIENT_DATA before the blend (`screener.py:243-251`) and the test passes on
+  buggy code, guarding nothing.
+- **Evidence**: feature 160 design.md:49-56; context.md sdd-execute Step 2 (screener.py:243-251,265).
+- **Rule it implies**: a regression test for a guarded/short-circuiting engine must first prove it
+  clears the guard, then assert a discriminating (non-neutral-default) outcome — a "returns OK"
+  assertion alone can be satisfied by the very short-circuit that skips the code under test.
