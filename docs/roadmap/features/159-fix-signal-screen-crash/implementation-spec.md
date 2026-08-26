@@ -50,7 +50,7 @@ reaches users through the agent `screen_symbols` MCP tool and the `/insights` sc
 
 ### Step 1 — test: reshape `_make_bar` to a real Bar and add the `compute_signal_score` field anchor (`@AC-2` RED)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_helpers.py` — modify

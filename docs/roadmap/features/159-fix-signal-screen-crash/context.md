@@ -109,3 +109,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     `test_future_signal_is_ignored` (`:221`) and `test_zero_conviction_uses_default_half` (`:229`) to the
     named collateral-RED tests, and noted the two neutral short-circuit tests that stay GREEN.
 - Unresolved ✗ / ⚠ carried into execution: **none**.
+
+## Session 2026-08-26 — sdd-execute (sequential)
+
+### Step 1 — reshape _make_bar to a real Bar + @AC-2 anchor [done]
+- Reshaped `_make_bar` (MagicMock → real `marketdata_pb2.Bar` with `bar.time` set) and added the
+  `@AC-2` window-discriminating anchor (`test_reads_bar_time_field_in_window` → 0.9 in-window;
+  `test_out_of_window_bar_time_excludes_signal` → 0.5) in `tests/test_analysis_helpers.py`.
+- **TDD RED (captured, pre-Step-3):** `pytest -k TestComputeSignalScore` → **15 failed, 2 passed** —
+  all failures `AttributeError: timestamp` at `scoring.py:17` (the right reason). The 2 passing are the
+  neutral short-circuit tests (`test_empty_signals_map_returns_neutral`/`test_no_sources_returns_neutral`)
+  as the spec predicted. GREEN lands at Step 3 (the fix).
+- Lint: `ruff check`/`ruff format --check` pass (ruff --fix reorganized the two new proto imports —
+  in-scope, own changed lines).
+- Files modified: `services/xstockstrat-analysis/tests/test_analysis_helpers.py`
+- Deviations: none.

@@ -16,6 +16,7 @@
 | 2026-08-26 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report (2026-08-26-signal-screen-bar-timestamp-crash) |
 | 2026-08-26 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. One-line fix + window-discriminating RED tests + ledger-mandated _make_bar reshape |
 | 2026-08-26 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 3 steps |
+| 2026-08-26 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (test: _make_bar reshaped to real Bar + @AC-2 anchor; RED captured, greens at Step 3) |
 
 ---
 

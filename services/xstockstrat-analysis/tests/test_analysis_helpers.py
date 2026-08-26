@@ -9,6 +9,8 @@ from datetime import UTC
 from unittest.mock import MagicMock
 
 import pytest
+from gen.ingest.v1 import ingest_pb2
+from gen.marketdata.v1 import marketdata_pb2
 from google.protobuf.struct_pb2 import ListValue, Struct, Value
 
 from app.handlers.servicer import _compute_metrics, _compute_signal_score, _unwrap_value
@@ -160,10 +162,14 @@ class TestUnwrapValue:
 # ---------------------------------------------------------------------------
 
 
-def _make_bar(timestamp_seconds: int = 1704067200) -> MagicMock:
-    """Return a MagicMock bar with a Timestamp-like object."""
-    bar = MagicMock()
-    bar.timestamp.ToDatetime.return_value = _seconds_to_datetime(timestamp_seconds)
+def _make_bar(timestamp_seconds: int = 1704067200) -> marketdata_pb2.Bar:
+    """Real marketdata Bar with its candle time set (feature 159).
+
+    Was a MagicMock, which auto-vivified `.timestamp` and hid the bar.timestamp/bar.time
+    field-name bug; a real proto fails that typo class closed.
+    """
+    bar = marketdata_pb2.Bar()
+    bar.time.FromDatetime(_seconds_to_datetime(timestamp_seconds))
     return bar
 
 
@@ -231,6 +237,37 @@ class TestComputeSignalScore:
         sig = _make_signal("buy", 0.0)  # zero conviction → uses 0.5
         result = _compute_signal_score({"uw": [sig]}, bar, ["uw"])
         assert result > 0.5  # buy with default conviction 0.5 → score > 0.5
+
+    def test_reads_bar_time_field_in_window(self):
+        """@AC-2: compute_signal_score reads the bar's `time` field (not `timestamp`).
+
+        Proven by the score flipping with the bar's time relative to the signal's
+        [valid_from, valid_until] window (see the paired out-of-window case). A real
+        `Bar` + real `ExternalSignal` are required — a MagicMock bar auto-vivifies
+        `.timestamp` and reproduces nothing (P-06). Feature 159.
+        """
+        t = 1704067200  # 2024-01-01T00:00:00Z
+        bar = _make_bar(t)  # bar.time == t (in window)
+        sig = ingest_pb2.ExternalSignal(source="uw", direction="buy", conviction=0.8)
+        sig.valid_from.FromDatetime(_seconds_to_datetime(t - 3600))  # 1h before t
+        sig.valid_until.FromDatetime(_seconds_to_datetime(t + 3600))  # 1h after t
+        # Single in-window buy at conviction 0.8 → net=0.8 → (0.8+1)/2 = 0.9.
+        # Hard-coded 0.9 (not a bare `in [0,1]`) also catches a silent change to the
+        # (net+1)/2 mapping.
+        assert _compute_signal_score({"uw": [sig]}, bar, ["uw"]) == pytest.approx(0.9)
+
+    def test_out_of_window_bar_time_excludes_signal(self):
+        """@AC-2 paired case: same signal, bar.time OUTSIDE the window → 0.5 (excluded).
+
+        The outcome flips vs. `test_reads_bar_time_field_in_window` purely on the bar's
+        time value, which is what proves `bar.time` is the field actually read.
+        """
+        t = 1704067200
+        sig = ingest_pb2.ExternalSignal(source="uw", direction="buy", conviction=0.8)
+        sig.valid_from.FromDatetime(_seconds_to_datetime(t - 3600))
+        sig.valid_until.FromDatetime(_seconds_to_datetime(t + 3600))
+        far_bar = _make_bar(t + 86400)  # one day after valid_until → excluded
+        assert _compute_signal_score({"uw": [sig]}, far_bar, ["uw"]) == 0.5
 
 
 class TestComputeSignalScoreWithWeights:
