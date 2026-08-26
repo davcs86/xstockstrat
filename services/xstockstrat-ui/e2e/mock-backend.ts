@@ -219,6 +219,15 @@ export async function startMockBackend(): Promise<void> {
           // as still NEW so the UI reflects the amendment.
           return { ...orderForId(req.orderId), status: 1 };
         },
+        async confirmOrder(req) {
+          // Offline order fill confirmation (feature 157). Status is genuinely DERIVED from
+          // filled_qty vs qty (NEW=1 / PARTIALLY_FILLED=2 / FILLED=3), never echoed from the request.
+          const order = orderForId(req.orderId);
+          const qty = Number(order.qty ?? 0);
+          const filled = Number(req.filledQty ?? 0);
+          const status = filled <= 0 ? 1 : filled < qty ? 2 : 3;
+          return { ...order, filledQty: req.filledQty, filledAvgPrice: req.filledAvgPrice, status };
+        },
         async listOrders(req) {
           // Server-side symbol filter (feature 096): the per-symbol Orders & fills table on the
           // Position page issues ListOrders with a symbol; the unfiltered Orders list omits it.

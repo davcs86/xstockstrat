@@ -7,6 +7,7 @@ import { Badge } from '../ui/badge';
 import { Stat } from '../shared/Stat';
 import { CardNotice } from '../shared/CardNotice';
 import { brokerLabel } from '@/lib/brokers';
+import { BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
 
 export function PortfolioPanel() {
   const { accounts, selectedAccountId } = useAccountContext();
@@ -21,6 +22,10 @@ export function PortfolioPanel() {
     const portfolio = portfolios[0];
     const account = accounts.find((a) => a.id === selectedAccountId);
     const pnlPositive = portfolio ? Number(portfolio.dayPnl) >= 0 : true;
+    // Realized P&L is offline-only (feature 157): the account-type gate is the primary guard against
+    // a fake $0 on broker cards; the proto `optional` presence (realizedPnl !== undefined) is secondary.
+    const showRealized =
+      account?.brokerType === BrokerType.OFFLINE && portfolio?.realizedPnl !== undefined;
 
     return (
       <Card>
@@ -55,6 +60,13 @@ export function PortfolioPanel() {
                 valueClass={pnlPositive ? 'text-buy' : 'text-destructive'}
               />
               <Stat label="Total P&L" value={`$${Number(portfolio.totalPnl).toFixed(2)}`} />
+              {showRealized && (
+                <Stat
+                  label="Realized P&L"
+                  value={`$${Number(portfolio.realizedPnl).toFixed(2)}`}
+                  valueClass={Number(portfolio.realizedPnl) >= 0 ? 'text-buy' : 'text-destructive'}
+                />
+              )}
             </div>
             {portfolio.positions?.length > 0 && (
               <div>

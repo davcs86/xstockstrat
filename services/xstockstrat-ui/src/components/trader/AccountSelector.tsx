@@ -5,15 +5,11 @@ import Link from 'next/link';
 import { Settings, AlertTriangle } from 'lucide-react';
 import { useAccountContext } from '@/context/AccountContext';
 import { CredentialStatusBadge } from './CredentialStatusBadge';
-import { BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
 import { CredentialStatus } from '@xstockstrat/proto/trading/v1/trading_pb';
+import { brokerLabel } from '@/lib/brokers';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-
-function brokerLabel(brokerType: BrokerType): string {
-  return brokerType === BrokerType.IBKR ? 'IBKR' : 'Alpaca';
-}
 
 export function AccountSelector() {
   const { accounts, selectedAccountId, setSelectedAccountId } = useAccountContext();
