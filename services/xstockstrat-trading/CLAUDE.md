@@ -94,7 +94,7 @@ never wedge the sync loop. Likewise every ledger `AppendEvent` is bounded (`ledg
 
 ## Webhooks
 
-_No webhooks. Call the gRPC RPCs on port 50051 directly._
+*No webhooks. Call the gRPC RPCs on port 50051 directly.*
 
 ## Database
 
@@ -151,10 +151,10 @@ the new total/remaining per its adapter. A successful replace persists the order
 | `qty` | `qty` | `quantity` |
 | `limit_price` | `limit_price` | `price` |
 | `stop_price` | `stop_price` | `auxPrice` |
-| `trail` | `trail` | _(not mapped — IBKR ignores)_ |
+| `trail` | `trail` | *(not mapped — IBKR ignores)* |
 | `time_in_force` | `time_in_force` | `tif` |
 
-The IBKR **netting-mode** assumption documented in _Known Limitations_ applies to replace as
+The IBKR **netting-mode** assumption documented in *Known Limitations* applies to replace as
 well: a replaced quantity is the new total order quantity (no hedged-mode lot semantics).
 
 ## Order Status Reconciliation
