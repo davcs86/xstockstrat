@@ -2144,3 +2144,20 @@ reusing.
 - **Rule it implies**: generalize the seams, not the control flow; and pressure-test each candidate
   loop's *actual* interval before granting it a durable schedule — persistence that protects less than
   one redeploy's worth of cadence is churn, not reliability.
+
+### 2026-08-26 — notify-external-fanout — design
+- **Pattern**: A best-effort side-channel bolted onto an RPC handler must be dispatched *after* the
+  handler's success callback (here via `queueMicrotask`), not merely wrapped in try/catch — the
+  side-channel's synchronous prefix (gate read, Map sweep, dedup insert, payload build) can otherwise
+  throw an error onto an already-succeeded response and convert a success into an RPC failure.
+- **Evidence**: `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts:95`; feature 020 context.md round 2 ("O-ordering").
+- **Rule it implies**: isolate a post-commit side effect past the success boundary, not just inside a
+  catch — extends the best-effort/verify norm **PLAT-N1**.
+
+### 2026-08-26 — notify-external-fanout — design
+- **Pattern**: A content-hash dedup key for heterogeneous events must include the human-facing
+  title/body when a subset of producers write no structured context — for those producers title/body
+  is the only identity, so excluding it collapses genuinely distinct events (distinct CRITICAL
+  reconciliation/approval/fill alerts) into one suppressed key.
+- **Evidence**: `services/xstockstrat-notify/src/fanout/fanout.ts` dedup key; feature 020 context.md round 2.
+- **Rule it implies**: size a dedup key against the lowest-context producer in the set, not the richest.

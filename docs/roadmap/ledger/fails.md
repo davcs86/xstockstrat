@@ -1705,3 +1705,13 @@ ambiguity is logged here).
   And a routing/authorization decision that reads an in-memory cache (broker pool) must be checked against
   the case where the cache diverges from the authoritative store — prefer reading the persisted value, or
   prove the cache cannot diverge, before calling the path safe.
+
+### 2026-08-26 — notify-external-fanout — migration
+- **Mistake**: Feature 020's design artifacts hardcoded a concrete migration number (017), env name
+  (`dev`), and `ON CONFLICT` target (`…,trading_mode`); because a schema-reshaping feature (147)
+  landed first, the config seed had to be renumbered to 018, re-pointed to `staging`, and rewritten to
+  drop `trading_mode` at rebase — churn the artifacts guaranteed the moment they pinned volatile schema facts.
+- **Evidence**: `services/xstockstrat-config/migrations/018_notify_fanout.up.sql`; feature 147 `017_config_secrets_and_scoping`; feature 020 context.md 2026-08-21 DEVIATION.
+- **Rule it implies**: a config/DB-seed feature that will sit in a queue behind an in-flight
+  schema-reshaping feature should treat migration number, env labels, and conflict-target columns as
+  bind-at-rebase, not design-time constants — reconfirm them against `main-dev` immediately before execute.

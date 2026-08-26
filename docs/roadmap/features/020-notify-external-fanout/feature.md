@@ -5,6 +5,7 @@
 **Last Updated**: 2026-05-26
 **Committed to main**: d908f33dc3283b79b61b233d57542cd47014c4ab
 **Launched date**: 2026-08-21
+**Archived**: 2026-08-26
 
 ---
 
@@ -19,6 +20,7 @@
 | 2026-08-20 | `implementation-ready` → `code-completed` | /sdd-execute | All 7 steps done — config migration 017, FanoutDispatcher (Slack + SendGrid, gate/dedup/timeout), emitAlert queueMicrotask wiring, 37 notify tests pass (fanout 96% cov), full 8-file SECRET pipeline, docs. Executed on harness branch `claude/execute-020-042-127-pfa5cw`. context-forge plugin unavailable → /context-scrubber not run (noted). |
 
 | 2026-08-21 | `code-completed` → `launched` | CI workflow | Promoted via PR #997; committed d908f33dc3283b79b61b233d57542cd47014c4ab |
+| 2026-08-26 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); promoted 9 scenarios → notify suite; pruned 4 specs |
 ---
 
 ## Artifacts
