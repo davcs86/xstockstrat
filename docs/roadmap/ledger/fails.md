@@ -1920,3 +1920,13 @@ ambiguity is logged here).
 - **Evidence**: feature 153 design.md (archived) §81-82.
 - **Rule it implies**: a test asserting a relationship between two compile-time constants is not a test;
   encode such cross-system ceilings as a documented coupling, not a green tautology.
+
+### 2026-08-26 — fix-fundamentals-signal-producer — assumption
+- **Mistake**: The impl-spec (and the standing ledger note at fails.md:69-70) cited `PLATFORM_SUBNAV` as
+  the config-ui shared-nav registration point, but that array is legacy/inert — `PlatformHeader` renders
+  `NAV_GROUPS`. Registering there produced an unreachable page that passed local lint+tsc and failed only
+  the CI nav-reachability e2e shard.
+- **Evidence**: feature 156 context.md:220-222 (D-3); `services/xstockstrat-ui/src/components/shared/navGroups.tsx`, `PlatformHeader.tsx`; supersedes the stale `PLATFORM_SUBNAV` evidence in fails.md:70.
+- **Rule it implies**: register new config-ui nav entries in `NAV_GROUPS` (`navGroups.tsx`), not
+  `PLATFORM_SUBNAV`; C-10(a)'s reachability test must run in CI because it's the only gate that catches a
+  wrong/dead nav surface.
