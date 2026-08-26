@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-26 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 advisory warnings addressed; 2 scope OQs resolved with operator → include wall-clock mode + ship per-user key) |
 
 ---
 
@@ -42,4 +43,4 @@ Override as needed. Snapshot finalized at /sdd-spec time — re-run /sdd-spec if
 
 ## Next Action
 
-`/sdd-review durable-loop-scheduler product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design durable-loop-scheduler` — recon + adversarial design debate before running /sdd-spec
