@@ -8,6 +8,7 @@
 **Last Updated**: 2026-08-26
 **Committed to main**: 65aeaa4c5bb7c000dfb4e30d5b788d6c39352234
 **Launched date**: 2026-08-26
+**Archived**: 2026-08-26
 
 ---
 
@@ -23,6 +24,7 @@
 | 2026-08-26 | `in-progress` → `code-completed` | /sdd-execute | All 8 steps done (trading dual guards + test, portfolio enumeration + test, UI record control + PortfolioPanel/Book-page gating, e2e @AC-1..4, docs); ready for integration PR |
 
 | 2026-08-26 | `code-completed` → `launched` | CI workflow | Promoted via PR #1027; committed 65aeaa4c5bb7c000dfb4e30d5b788d6c39352234 |
+| 2026-08-26 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(0); scenarios already promoted (all DUP); pruned 4 specs |
 ---
 
 ## Artifacts

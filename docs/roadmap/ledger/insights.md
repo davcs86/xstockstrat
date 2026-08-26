@@ -2470,3 +2470,22 @@ reusing.
   ("spec-grounding-157") — repeated three times until 156 merged.
 - **Rule it implies**: for a stacked/dependent feature, never spec against a base that lacks the
   dependency — build a grounding branch (a workflow tactic, not a binding gate).
+
+### 2026-08-26 — fix-offline-account-ui-gaps — design
+- **Pattern**: When a defect spans a shared multi-mount UI component, gate the behavior with an
+  explicit intent prop, not an incidentally-shared one. `OrderForm` has 4 mounts; `initialSymbol`
+  could NOT distinguish the insights mount from the `/trader` positions mount (both pass it), so an
+  explicit `allowOfflineRecord` prop (default true; `SignalOrderTicket` passes false) was required to
+  scope the offline Record affordance to `/trader` and satisfy C-10(a).
+- **Evidence**: feature 159 context.md 2026-08-26 sdd-spec + Step 5.
+- **Rule it implies**: gate cross-mount behavior on a purpose-named prop and enumerate every mount
+  before shipping; never overload a data prop (`initialSymbol`) as an implicit surface discriminator.
+
+### 2026-08-26 — fix-offline-account-ui-gaps — design
+- **Pattern**: Before gating a "combined/all-accounts" view, verify which component actually renders
+  it. `PortfolioPanel`'s combined branch is effectively dead because `AccountContext` auto-selects the
+  first active account; the real combined surface is `src/app/trader/portfolio/page.tsx`. Gating only
+  the design-named component would have shipped a no-op.
+- **Evidence**: feature 159 context.md Step 6 expansion.
+- **Rule it implies**: confirm the live render path of a named surface (which branch/route users
+  actually hit) during recon, not the first component that name-matches.
