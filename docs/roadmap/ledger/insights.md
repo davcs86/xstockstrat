@@ -2411,3 +2411,12 @@ reusing.
 - **Evidence**: feature 152 design.md (archived) §19-32,83-84.
 - **Rule it implies**: any future multi-symbol/multi-series operand aligns compute-then-join on the
   trading-day date; lookahead-safety and rolling-window integrity are preserved by construction.
+
+### 2026-08-26 — fix-ohlcv-chunk-lock-oom — ordering
+- **Pattern**: On a **single-node** DO managed-Postgres cluster, a `db-cluster-update-psql-config` change
+  restarts **every database on the node at once** (staging + production together), producing a brief
+  cross-environment reconnect ripple — not an isolated, per-environment change. Sequence such a bump into
+  a low-traffic window and expect transient `StreamEvents`/reconnect churn on directly-connected services.
+- **Evidence**: feature 153 context.md:118-128 (ripple self-healed 21:25→21:25:37, all 12 components HEALTHY).
+- **Rule it implies**: treat any server-parameter change on a single-node managed cluster as a
+  shared-blast-radius restart across all its databases; gate and schedule accordingly.

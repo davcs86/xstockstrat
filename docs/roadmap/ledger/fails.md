@@ -1893,3 +1893,13 @@ ambiguity is logged here).
 - **Evidence**: feature 151 design.md (archived) §86-88; Step 4.
 - **Rule it implies**: an int config whose `0` means "unset" must keep `0 ≡ absent ≡ legacy`, and the
   intentional zero-trap must be commented so it isn't "fixed."
+
+### 2026-08-26 — fix-ohlcv-chunk-lock-oom — duplication
+- **Mistake**: Feature 141 fixed the ohlcv-bars OOM at only one of several structurally identical
+  400-day bars-fetch call sites (`_compute_opportunities`), leaving `EvaluateReadiness` and other sibling
+  paths unguarded; the SEV-2 recurred from an unguarded sibling four days later (141 launched 08-19 →
+  153 triaged 08-24). 141's own design had named this recurrence as Open Risk 1.
+- **Evidence**: feature 153 context.md:22-27; recon.md (archived) §49-58; relates to insights.md:2244 (141 dedup/semaphore).
+- **Rule it implies**: when fixing a resource-exhaustion bug, enumerate ALL structurally identical call
+  sites and fix at the widest shared layer (schema/cluster/global guard) — a fix scoped to the one
+  observed-failing site invites recurrence through its siblings (C-10 blast-radius).
