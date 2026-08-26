@@ -327,3 +327,13 @@ Branch: `claude/features-157-158-impl-ulk0l2` (task-mandated harness branch, in 
 - TDD: N/A (docs). Deviations: none.
 
 Status: in-progress → code-completed. All 8 steps done.
+
+## Session 2026-08-26 — sdd-execute completion (integration PR)
+
+- Merge-order gate: no feature-159 entry in merge-order.md; parent 157 already merged to main-dev.
+  No blocker.
+- C-16 promotion (operator-approved): wrote
+  `services/xstockstrat-ui/acceptance/fix-offline-account-ui-gaps.feature` (@AC-1/2/3/4, @feature-159
+  provenance). Backend guarantees (trading routing/cancel; portfolio combined enumeration) stay guarded
+  by the Step 2/4 Go tests those services own — not duplicated into trading/portfolio suites.
+- Opening the single integration PR: claude/features-157-158-impl-ulk0l2 → main-dev.
