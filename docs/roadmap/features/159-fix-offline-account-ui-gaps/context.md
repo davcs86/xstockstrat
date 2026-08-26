@@ -112,3 +112,60 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   in-memory-pool-brokerType vs persisted-broker_type divergence + every CANCELED-reachable path for a
   nominally-offline account, and (b) asking the operator for the order row.
 - Status stays spec-ready (design not approved); round 2 after investigation.
+
+## Session 2026-08-26 — sdd-design, root-cause investigation (trading trace)
+
+- **Tooling:** confirmed I cannot pull the staging order row (no order-query MCP tool; DO db tools are
+  cluster-mgmt only). Asked operator for the row. Ran a deep trading code trace instead.
+- **New finding (recon missed it): `CancelOrder` (`trading.go:1079`) sets `ORDER_STATUS_CANCELED`
+  UNCONDITIONALLY** — no offline / terminal-state / empty-broker_order_id guard. The broker cancel
+  above it is gated on `broker_order_id != ""` (`:1036`), but the local transition is not. So an
+  OFFLINE NEW order (empty broker_order_id) reaching CancelOrder skips the broker call yet still flips
+  to CANCELED, persists (`:1087`), emits `order.canceled` (`:1094`). This is a real, latent FR-2
+  violation regardless of the staging incident.
+- **broker_type is immutable post-create** (only the CreateBrokerAccount INSERT writes it; no UPDATE
+  anywhere; account_repo.go). Pool is DB-seeded at boot only (`main.go:100`), mutated consistently by
+  Register/Update/Deregister. So a pool-vs-DB brokerType divergence is NOT reachable via any RPC — only
+  via an out-of-band DB edit or a pre-boot registration state.
+- **PlaceOrder routes solely on the in-memory pool tag** (`resolveAccount` reads only `s.brokers`,
+  `:285-317`; offline decision `:388` reads `accountEntry.brokerType`); neither PlaceOrder nor
+  recordOfflineOrder ever reads the persisted account broker_type. An authoritative guard would call
+  `s.accountRepo.GetBrokerAccount(resolvedAccountID)` (`account_repo.go:47,104-117`) right after
+  resolveAccount (~:377) and route on `rec.BrokerType`.
+- **Two live hypotheses for the staging CANCELED, disambiguated by the order row:**
+  - A: recorded NEW-offline, then a CancelOrder RPC flipped it → tell: broker_order_id empty, order
+    broker_type=OFFLINE, created→canceled delta.
+  - B: routed to a broker (pool entry non-OFFLINE / account not truly offline) → Alpaca canceled →
+    pollFills → CANCELED → tell: broker_order_id set, order broker_type≠OFFLINE. (pollFills excludes
+    OFFLINE entries `:1408`, so a truly-offline-tagged order cannot reach it.)
+- **Design implication:** both hypotheses are code-reachable and each has a clean in-scope guard
+  (PlaceOrder authoritative route-on-persisted-type for B; CancelOrder offline/terminal guard for A).
+  A "robust both-guards" trading change makes FR-2 hold regardless of which fired on staging, without
+  blocking on the row — at the cost of expanding scope to trading (Go + paired tests, per adversary
+  obj #2/#6). To be put to the operator at the round-2 gate.
+
+## Session 2026-08-26 — sdd-design COMPLETION (design-approved)
+
+- **User gate decisions (round 2, P-04):**
+  1. Trading fix → **Harden both guards now.** PlaceOrder reads the authoritative persisted broker_type
+     (GetBrokerAccount) and routes offline on it (guard B); CancelOrder rejects/no-ops an offline order
+     with no broker_order_id (guard A). + paired Go tests. Makes FR-2 hold regardless of which staging
+     hypothesis fired — unblocks without the row.
+  2. Record UI → **Dedicated minimal control, /trader only.** Replace the broker ticket (offline
+     selected) with symbol/side/qty/±fill-price control; no order-type/TIF/limit/stop/trailing inputs;
+     exclude the insights SignalOrderTicket surface (tested).
+- Chosen approach (design.md): UI (dedicated Record-order control + PortfolioPanel !isOffline gating +
+  combined-view offline card) + trading (authoritative PlaceOrder routing guard + CancelOrder offline
+  guard + Go tests) + portfolio (ListPortfolios enumerates account_balances ∪ offline account ids so
+  offline appears in combined with meaningful-only fields + ListPositions↔ListPortfolios parity test).
+  No proto/migration/config.
+- Rejected: reuse full OrderForm in record mode (trailing-stop mis-submit); UI-gate-only (can't
+  guarantee FR-2); route on pool tag only (divergence misroute); FR-4 assert-only / offline absent.
+- Constitution touched: C-08/P-06 (paired Go + e2e), C-10(a) (both OrderForm mounts decided),
+  C-10(b) (ListPositions↔ListPortfolios offline parity fixed + test), C-14 (surfaces named, insights
+  excluded), C-12/C-13 (fixtures). No proto/migration/config Floor items triggered. No Floor breach.
+- C-16: no durable suites yet (157 un-promoted); this EXTENDS 157's offline behavior; promote
+  @AC-1/2/3/4 into trading+portfolio+ui suites at launch.
+- Acceptance: added @AC-4 (@FR-4) for the offline account visible in the combined view with
+  meaningful-only fields; refined product-spec FR-4 accordingly.
+- Status: spec-ready → design-approved. Next: /sdd-spec fix-offline-account-ui-gaps.

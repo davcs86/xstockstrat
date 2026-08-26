@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-08-26 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report (offline-account UI gaps found on staging) |
 | 2026-08-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 advisory warnings addressed: FR-N/@FR tags/Consumer Surface(s) added, portfolio added to Affected Services) |
+| 2026-08-26 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 quick round + root-cause investigation + 2 user gates) and approved; recon.md + design.md written. Scope: UI record control + trading dual guards + portfolio combined-view offline card |
 
 ---
 
@@ -22,6 +23,8 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon Dossier](recon.md) — grounded codebase map, patterns to reuse, risks (/sdd-design Phase 0)
+- [Design](design.md) — chosen approach, rejected alternatives, Constitution rules touched (/sdd-design Phase 1)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-offline-account-ui-gaps`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -37,5 +40,4 @@ offline accounts) was already fixed inline on the 157 branch (commit `dcd2fe5`).
 
 ## Next Action
 
-`/sdd-spec fix-offline-account-ui-gaps` — after `/sdd-design fix-offline-account-ui-gaps quick`
-(recommended design depth; see context.md).
+`/sdd-spec fix-offline-account-ui-gaps` — generate the implementation spec from the approved design.

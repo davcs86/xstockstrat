@@ -43,10 +43,13 @@ those fields (or blending an offline account into combined broker aggregates) mi
   (Cash, Buying Power, broker Day P&L) as if they were real. It shows only the fields meaningful for an
   offline account: positions market value, unrealized P&L, and the account-grain Realized P&L feature
   157 already surfaces.
-- **FR-4** — The combined/all-accounts portfolio header must exclude offline accounts from broker-only
+- **FR-4** — The combined/all-accounts portfolio view must exclude offline accounts from broker-only
   aggregates (Cash, Buying Power). Combined equity is not misrepresented by an offline account's absent
   `account_balances` row; the offline account's position market value may contribute to combined
-  equity, but its (nonexistent) cash/buying-power must not be blended in.
+  equity, but its (nonexistent) cash/buying-power must not be blended in. The offline account is
+  **shown** in the combined view as its own card presenting only meaningful fields (positions market
+  value, unrealized P&L, account-grain Realized P&L) — resolved at design: it must be visible, not
+  silently absent, which also closes the `ListPositions`↔`ListPortfolios` read-path parity gap (C-10(b)).
 
 Each `FR-N` above is covered by ≥1 `@AC-*` scenario in `acceptance.feature` (Constitution **C-15**).
 

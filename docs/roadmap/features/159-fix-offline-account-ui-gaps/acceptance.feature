@@ -22,3 +22,11 @@ Feature: fix-offline-account-ui-gaps (bug fix)
     Given a user holds both a broker account "Alpaca Paper" and an offline account "Schwab 4737"
     Then the combined Cash / Buying Power aggregates exclude the offline account (which has none)
     And the combined figures are not misrepresented by the offline account's absent balance
+
+  @AC-4 @FR-4 @regression
+  Scenario: the offline account is visible in the combined view with only meaningful fields
+    Given a user holds both a broker account "Alpaca Paper" and an offline account "Schwab 4737"
+    When they view the combined / all-accounts portfolio
+    Then the offline account appears as its own card showing only positions market value, unrealized
+      P&L, and account-grain Realized P&L
+    And that card does not present Cash, Buying Power, or broker Day P&L
