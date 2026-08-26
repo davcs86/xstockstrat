@@ -200,7 +200,7 @@ backend routing guard (Step 1) still guarantees FR-2 there, and Step 7 asserts t
 
 ### Step 3 — service: portfolio — include offline accounts in the combined ListPortfolios enumeration
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go` — modify
@@ -265,7 +265,7 @@ backend routing guard (Step 1) still guarantees FR-2 there, and Step 7 asserts t
 
 ### Step 4 — test: portfolio — offline account surfaces in combined ListPortfolios; excluded from cash/BP aggregate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_offline_test.go` — modify
@@ -553,3 +553,18 @@ backend routing guard (Step 1) still guarantees FR-2 there, and Step 7 asserts t
   robust to a partially-constructed service. In production `NewTradingService` always wires `accountRepo`,
   so the nil branch is test-only and behavior-preserving.
 - **Disposition**: in-step fix (Phase 3 clear-fix path); no scope expansion, no other file touched.
+
+### Step 4 — pure-helper test instead of a repository-double ListPortfolios test
+- **What**: The spec instructed testing `ListPortfolios` via a repository double. Portfolio's `s.repo` is
+  a concrete `*repository.PortfolioRepo` (no interface, no fake), and the TDD gate forbids starting a DB,
+  so a service-level `ListPortfolios` call is untestable here — the same un-fakeable-repo constraint the
+  existing `TestPositionSyncPayload_RealizedPnlDisjointness` documents. Step 3's union+dedup was therefore
+  factored into a pure helper `offlineIDsToAppend(balanceAccountIDs, offlineIDs)`, and Step 4 unit-tests
+  that helper red→green (balances {brk-1} + offline {off-1, brk-1} → {off-1}; empty offline → none; repeats
+  collapse). The SQL `ListOfflineAccountIdsByUser` (in the coverage-excluded `repository` package) and the
+  `bal == nil` → Cash/BP/DayPnl=0 behavior are verified by build + grep + inspection.
+- **Why**: operator-approved at the checkpoint (context.md); matches the service's established
+  pure-helper testability pattern (feature 157's own offline tests assert on parsed inputs, not the
+  DB-backed service). @AC-3 (offline excluded from summed cash/BP) and @AC-4 (offline visible in
+  combined) are additionally covered end-to-end by the Step 7 e2e.
+- **Disposition**: sanctioned deviation (user-approved); no DB started; stays within Steps 3/4 files.

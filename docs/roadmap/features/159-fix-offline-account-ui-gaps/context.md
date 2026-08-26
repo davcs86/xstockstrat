@@ -254,3 +254,21 @@ Branch: `claude/features-157-158-impl-ulk0l2` (task-mandated harness branch, in 
 - Verification: `go build` OK; full service package green; coverage total 62.9% >= 40%; golangci-lint
   0 issues; C-13 single-consumer inline literals compliant.
 - Deviations: none.
+
+### Step 3 — portfolio combined-view offline enumeration [done]
+- Added `PortfolioRepo.ListOfflineAccountIdsByUser` (SELECT account_id FROM offline_account_realized
+  WHERE user_id, the offline-exclusive marker). `ListPortfolios` all-accounts branch now appends offline
+  accounts not already in the balances set via the pure helper `offlineIDsToAppend` (union+dedup);
+  `buildAccountPortfolio(ctx, id, nil)` yields Cash/BP/DayPnl=0 + Equity=positions MV, so summed broker
+  aggregates exclude offline while offline equity may contribute. Lookup failure is non-fatal (warn+skip).
+- Files modified: `internal/repository/portfolio_repo.go`, `internal/service/portfolio_service.go`
+- Deviations: none for Step 3 (the pure-helper factoring is recorded under Step 4).
+
+### Step 4 — portfolio offline enumeration test [done]
+- `TestOfflineIDsToAppend` (@AC-3/@AC-4): red (helper stubbed to return nil -> [] for both the
+  skip-present and dedup cases) -> green (real helper). Deviation: pure-helper unit test in place of the
+  specced repository-double ListPortfolios test (concrete un-fakeable *PortfolioRepo; no DB per TDD gate)
+  — user-approved at checkpoint; @AC-3/@AC-4 also covered by Step 7 e2e.
+- Files modified: `internal/service/portfolio_offline_test.go`
+- Verification: build OK; full service + repository packages green; coverage total 55.9% >= 40%;
+  golangci-lint 0 issues.

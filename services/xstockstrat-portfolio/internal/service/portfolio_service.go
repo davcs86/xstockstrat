@@ -1127,6 +1127,7 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 		return nil, err
 	}
 	portfolios := make([]*portfoliov1.Portfolio, 0, len(accounts))
+	balanceIDs := make([]string, 0, len(accounts))
 	for _, acct := range accounts {
 		bal := acct.Balance
 		portfolio, err := s.buildAccountPortfolio(ctx, acct.AccountID, &bal)
@@ -1135,8 +1136,48 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 			continue
 		}
 		portfolios = append(portfolios, portfolio)
+		balanceIDs = append(balanceIDs, acct.AccountID)
+	}
+
+	// Include offline accounts (feature 159): they have no account_balances row, so the balances-sourced
+	// enumeration above omits them entirely — breaking the ListPositions↔ListPortfolios combined-view
+	// parity (C-10(b), fails.md 056). Append every offline account not already present; passing a nil
+	// balance yields Cash/BuyingPower/DayPnl = 0 and Equity = summed position market value, so the summed
+	// broker aggregates naturally exclude offline accounts while their equity may still contribute. A
+	// lookup failure is non-fatal — it must not break the existing broker-accounts view.
+	if offlineIDs, err := s.repo.ListOfflineAccountIdsByUser(ctx, userID); err != nil {
+		slog.Warn("ListPortfolios: list offline account ids failed", "user_id", userID, "error", err)
+	} else {
+		for _, id := range offlineIDsToAppend(balanceIDs, offlineIDs) {
+			portfolio, err := s.buildAccountPortfolio(ctx, id, nil)
+			if err != nil {
+				slog.Warn("ListPortfolios: build offline account portfolio failed", "account_id", id, "error", err)
+				continue
+			}
+			portfolios = append(portfolios, portfolio)
+		}
 	}
 	return &portfoliov1.ListPortfoliosResponse{Portfolios: portfolios}, nil
+}
+
+// offlineIDsToAppend returns the offline account IDs not already represented in the balances-sourced
+// set — the additive offline accounts the combined ListPortfolios view must include (feature 159).
+// Dedup covers both an offline id that also has a balances row and repeats within offlineIDs, so an
+// account is never built twice.
+func offlineIDsToAppend(balanceAccountIDs, offlineIDs []string) []string {
+	seen := make(map[string]struct{}, len(balanceAccountIDs))
+	for _, id := range balanceAccountIDs {
+		seen[id] = struct{}{}
+	}
+	var out []string
+	for _, id := range offlineIDs {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
 }
 
 // ─── Watchlists (feature 058) ────────────────────────────────────────────────
