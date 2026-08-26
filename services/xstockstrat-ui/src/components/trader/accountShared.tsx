@@ -277,6 +277,9 @@ export function AccountRow({
     useAccountContext();
   const [editing, setEditing] = React.useState(false);
   const [removing, setRemoving] = React.useState(false);
+  // Offline accounts (feature 157) have no broker credentials — hide the "Edit keys" action and its
+  // dialog (the backend rejects UpdateBrokerAccountCredentials for offline with FailedPrecondition).
+  const isOffline = account.brokerType === BrokerType.OFFLINE;
 
   async function handleRemove() {
     setRemoving(true);
@@ -316,7 +319,7 @@ export function AccountRow({
             <RowActionsMenu
               triggerLabel={`Actions for ${account.displayName}`}
               actions={[
-                { label: 'Edit keys', onSelect: () => setEditing(true) },
+                ...(isOffline ? [] : [{ label: 'Edit keys', onSelect: () => setEditing(true) }]),
                 {
                   label: 'Remove',
                   destructive: true,
@@ -338,8 +341,8 @@ export function AccountRow({
         )}
       </div>
 
-      {/* Edit-credentials modal, opened from the row's actions menu. */}
-      {account.isActive && (
+      {/* Edit-credentials modal, opened from the row's actions menu. Offline accounts have no keys. */}
+      {account.isActive && !isOffline && (
         <FormDialog
           open={editing}
           onOpenChange={setEditing}
