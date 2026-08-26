@@ -2,7 +2,7 @@
 
 **Status**: `pending`
 **Created**: 2026-08-26
-**Feature**: `docs/roadmap/features/156-offline-account-portfolios/feature.md`
+**Feature**: `docs/roadmap/features/157-offline-account-portfolios/feature.md`
 **Total Steps**: 15
 **Feature Branch**: `feature/offline-account-portfolios`
 
@@ -609,7 +609,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify (header count 28 → 29 + a per-tool block for the new tool)
-- `docs/roadmap/features/156-offline-account-portfolios/context.md` — modify (record the two named C-14 follow-ups)
+- `docs/roadmap/features/157-offline-account-portfolios/context.md` — modify (record the two named C-14 follow-ups)
 
 **Reviewers**: none
 

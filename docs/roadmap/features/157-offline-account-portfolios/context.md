@@ -1,8 +1,8 @@
 # Context: offline-account-portfolios
 
-**Feature**: `docs/roadmap/features/156-offline-account-portfolios/feature.md`
-**Product Spec**: `docs/roadmap/features/156-offline-account-portfolios/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/156-offline-account-portfolios/implementation-spec.md`
+**Feature**: `docs/roadmap/features/157-offline-account-portfolios/feature.md`
+**Product Spec**: `docs/roadmap/features/157-offline-account-portfolios/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/157-offline-account-portfolios/implementation-spec.md`
 
 ---
 
@@ -93,7 +93,7 @@ capability, not a waiver of the pipeline.
 - Monthly statement reconciliation = **a Claude task that corrects drift via order edits** using this
   feature's tools (no dedicated set-positions capability). Ultimate goal: a scheduled email-processing
   task (record/confirm orders) + a monthly statement-sync task. **I am building the platform capability
-  only** — not setting up the scheduled Routines (operator will wire them after 156 ships).
+  only** — not setting up the scheduled Routines (operator will wire them after 157 ships).
 - Approval = **"fix all review warnings, then approved"** — all round-4 adversary objections folded in.
 
 ### C-15 / C-16 sign-off — @AC-7 amended (recorded per C-16)
@@ -137,6 +137,15 @@ wipe + shown on card, broker P&L unaffected, deregister purge). `@AC-*` IDs rema
 - `packages/proto/go.mod` = `github.com/xstockstrat/contracts`, in `go.work`, `replace`d by both
   trading and portfolio `go.mod` → a sibling `pnl/` package resolves under `GOWORK=off` with no new
   wiring; `proto-freshness` only diffs `gen/`.
+
+### Renumber 156 → 157 (2026-08-26)
+
+This feature was scaffolded as `156` before `156-fix-fundamentals-signal-producer` (PR #1014) merged
+to `main-dev` and claimed that number. Per `docs/runbooks/feature-workflow.md` § Feature Numbering
+(collision → renumber the later one to the next free NNN), the branch was rebased onto the new
+`main-dev` and the directory renamed to `157-offline-account-portfolios`. The slug (and thus the git
+branch and PR) is unchanged; only the `NNN` prefix and the self-referential path lines in this file,
+`implementation-spec.md`, and the `insights.md` ledger entry were updated.
 
 ---
 
