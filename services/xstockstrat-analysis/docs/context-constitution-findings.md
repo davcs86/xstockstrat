@@ -9,6 +9,7 @@ recorded at the root (they are cross-cutting).
 | Issue | Impact | Evidence |
 |---|---|---|
 | **`ConfigWatcher` carries indicators identity**: module docstring "Config watcher for xstockstrat-**indicators**" and `client_id=f"indicators-{id(self)}"` | analysis registers with the config service under an "indicators-…" client id (copy-paste from the indicators template) | `app/config/watcher.py:2` (docstring), `:61` (`client_id`) |
+| **`ScreenerEngine.screen()` has no per-symbol error isolation** (surfaced 2026-08-26, feature 160 archive): the loop calls `_eval_symbol` with no surrounding `try/except`, and `_eval_symbol` catches only `grpc.RpcError` at each RPC site — so any *non-*`RpcError` (arithmetic, `float()`, `scoring.compute_signal_score`) in one symbol propagates unwrapped and fails the whole `ScreenSymbols` RPC as gRPC UNKNOWN. Feature 160 fixed the specific `bar.time` typo that triggered it but did not add the isolation. Fix: wrap the per-symbol call so one symbol's failure degrades that row (e.g. to INSUFFICIENT_DATA / skipped) instead of killing the scan. | One bad symbol takes down the entire screen instead of degrading a single row. | `app/services/screener.py:119-129` |
 
 ## Open questions (unresolved *why* — needs a maintainer)
 
