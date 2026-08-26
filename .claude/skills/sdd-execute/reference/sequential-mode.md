@@ -202,7 +202,9 @@ In `sequential` mode, when the sanctioned verification tool is unavailable, use 
 fallback and log a `## Deviation Log` entry (`**Disposition**: CI-equivalent fallback`). In the
 default modes, surface these as a deviation question instead of auto-applying.
 
-- **Proto codegen container blocked** (e.g. Docker Hub rate limit): install the codegen toolchain on
+- **Proto codegen — go host-native, never via Docker.** The execute environment has no Docker
+  daemon, so do **not** attempt `scripts/localenv-setup.sh` / the `Dockerfile.codegen` container
+  (it always fails and wastes the run). Install the codegen toolchain on
   the host pinned to the **CI `proto-freshness` job versions** in `.github/workflows/ci.yml` — `buf`,
   `protoc-gen-go` / `protoc-gen-go-grpc` / `protoc-gen-connect-go` (the exact pinned versions),
   `grpcio-tools` + a `protobuf` runtime matching the committed stubs, and the TS plugins from the
