@@ -15,6 +15,15 @@
 |---|---|---|---|
 | 2026-08-26 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report (2026-08-26-signal-screen-bar-timestamp-crash) |
 | 2026-08-26 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. One-line fix + window-discriminating RED tests + ledger-mandated _make_bar reshape |
+| 2026-08-26 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 3 steps |
+
+---
+
+## Reviewers
+
+| Step category(s) | Reviewer | Focus |
+|---|---|---|
+| `test`, `service` (Steps 1–3) | xstockstrat-analysis owner | Strategy scoring determinism, no look-ahead bias |
 
 ---
 
@@ -24,7 +33,7 @@
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
 - [Recon](recon.md) — grounded codebase dossier (Phase 0)
 - [Design](design.md) — debated, approved architecture (Phase 1)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-signal-screen-crash`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -38,4 +47,4 @@ fundamentals producer.
 
 ## Next Action
 
-`/sdd-spec fix-signal-screen-crash` — generate implementation spec from the approved design
+`/sdd-review fix-signal-screen-crash impl-spec` — validate implementation spec, then `/sdd-execute fix-signal-screen-crash`
