@@ -337,3 +337,6 @@ Status: in-progress → code-completed. All 8 steps done.
   provenance). Backend guarantees (trading routing/cancel; portfolio combined enumeration) stay guarded
   by the Step 2/4 Go tests those services own — not duplicated into trading/portfolio suites.
 - Opening the single integration PR: claude/features-157-158-impl-ulk0l2 → main-dev.
+
+- Integration PR opened: https://github.com/davcs86/xstockstrat/pull/1025 (claude/features-157-158-impl-ulk0l2 → main-dev, ready for review).
+- SESSION-END: 8/8 steps done; lifecycle code-completed. Accountability — out-of-scope changes: none silent (1 user-approved Step 6 scope expansion to the Book page); open items: none blocking (PortfolioPanel combined-branch reachability noted); unaddressed review warnings: none.
