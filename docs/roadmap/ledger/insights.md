@@ -2124,3 +2124,23 @@ reusing.
 - **Insight**: When a downstream position/state pipeline is only *tolerable* because a periodic **absolute snapshot** self-heals an upstream **incremental, non-idempotent fold** (here portfolio's `order.filled`→`processOrderFill` fold, corrected every 300s by the broker `account.positions.synced` snapshot + `DeletePositionsNotInSync`), any new producer that **removes the snapshot** (a manually-tracked "offline" account with no poller) must NOT reuse the incremental fold — an *editable* input re-runs the fold and double-counts / mis-signs with nothing to correct it. Instead have the new producer **recompute the absolute state from its own source of truth on every edit** and emit the *snapshot* event (the self-healing one), never the incremental one. Guard rails that make this safe: a **per-account lock** across persist→recompute→emit (request-driven writes lack the poller's one-goroutine-per-account serialization → lost-update reorder), **emit nothing on a failed recompute** (an empty snapshot makes `DeleteNotInSync` wipe the account — indistinguishable from a legitimate flat), fold in **economic order** (`filled_at`, not insert order — BUY/SELL/BUY is non-commutative), and keep any account-grain accumulator (realized P&L) in a **separate table**, because a per-row accumulator dies when the snapshot legitimately drops that row on close.
 - **Evidence**: `docs/roadmap/features/157-offline-account-portfolios/design.md` (Chosen Approach + Rejected Alternatives, R1–R3); `services/xstockstrat-portfolio/internal/service/portfolio_service.go:268` (incremental fold), `:887,:930` (snapshot consumer + `DeletePositionsNotInSync`), `:508-581` (signed `applyFill`/`realizedDelta`).
 - **Rule it implies**: before reusing an existing event/consumer for a new producer, ask "what *other* mechanism currently corrects this path's errors, and does my producer still have it?" If the corrector (a reconciling snapshot) is gone, an incremental/non-idempotent consumer is unsafe — switch that producer to absolute-recompute-and-emit-the-snapshot. And when a second service needs a fold that lived as a private func in the first, extract it to a shared `packages/` Go module (both services already `replace` the contracts module) but **host its golden/parity tests in a CI-executed service module** — no CI job runs `go test` under `packages/proto/`.
+=======
+
+### 2026-08-26 — 158-durable-loop-scheduler — design
+- **Insight**: When generalizing a durable mechanism across N loops, extract only the **narrow
+  timing/persistence seams** into a thin helper (`DurableSchedule`: `seed`/`next_sleep_seconds`/
+  `advance` over the schedule table) and leave each loop's own `_tick`/`run_forever` (disabled-gate,
+  overlap lock, config reads, cycle body) in the loop. A wide "god driver" that injects the enable-gate,
+  cycle, retry, and jitter as callables cannot cleanly express structurally-different disabled/guard
+  shapes (fundsignal config-gate+full-interval-sleep vs. opportunity startup-None-guard vs. live_loop
+  none) and risks regressing the very `@AC-*` it inherits. Also: **not every recurring loop earns a
+  durable row** — a ~60s interval loop (`live_loop`) gains nothing from persistence (protects ≤60s of
+  cadence for ~1440 writes/day) and a blanket retry cadence slows its recovery; scope it out rather than
+  half-migrate it. A wall-clock loop is already largely redeploy-safe via next-hour math — durability
+  there only closes the narrow crash-in-fire-window skipped-day gap.
+- **Evidence**: `docs/roadmap/features/158-durable-loop-scheduler/design.md` (Chosen Approach + Rejected
+  Alternatives); `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:107-186` (the seams);
+  `servicer.py:3841-3850` (`_seconds_until_hour_utc`); builds on the 156 no-lease insight above.
+- **Rule it implies**: generalize the seams, not the control flow; and pressure-test each candidate
+  loop's *actual* interval before granting it a durable schedule — persistence that protects less than
+  one redeploy's worth of cadence is churn, not reliability.
