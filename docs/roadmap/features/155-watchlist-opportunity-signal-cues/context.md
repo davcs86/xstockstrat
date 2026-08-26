@@ -281,3 +281,10 @@ in CI's prebuilt bundle. Next: integration PR (the assigned `claude/*` branch PR
 - Fixture additions (CAPR pair, bucket overrides) — confirm at the test steps (C-12/C-13).
 - Broad e2e `-g`/full scope for breadcrumb + mobile before those steps are marked done (ledger
   2026-08-09).
+
+## Session 2026-08-26 (CI: feature status automation)
+
+- Promotion PR #1019 merged to main
+- Feature promoted and committed: c5a4eb3859ac271ceaa1946a4cb6a9835762a789
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-26

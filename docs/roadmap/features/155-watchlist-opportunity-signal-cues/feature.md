@@ -3,6 +3,8 @@
 **Development Branch**: `feature/watchlist-opportunity-signal-cues`
 **Created**: 2026-08-25
 **Last Updated**: 2026-08-25
+**Committed to main**: c5a4eb3859ac271ceaa1946a4cb6a9835762a789
+**Launched date**: 2026-08-26
 
 ---
 
@@ -16,6 +18,7 @@
 | 2026-08-25 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (shared cue spine) started |
 | 2026-08-25 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps done; unit + e2e green (watchlists 14/14, opportunities 15/15, breadcrumb sweep 11) |
 
+| 2026-08-26 | `code-completed` → `launched` | CI workflow | Promoted via PR #1019; committed c5a4eb3859ac271ceaa1946a4cb6a9835762a789 |
 ---
 
 ## Artifacts

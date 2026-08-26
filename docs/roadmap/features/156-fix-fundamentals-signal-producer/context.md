@@ -220,3 +220,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ### CI fix (post-integration) — nav-reachability e2e [done]
 - CI e2e shard 1 failed only the nav-reachability case: `PLATFORM_SUBNAV` (spec-cited) is legacy/ignored — `PlatformHeader` renders `NAV_GROUPS`. Moved the nav entry to the Settings group in `navGroups.tsx`, reverted the inert `PLATFORM_SUBNAV` edit, and scoped the nav-test locator to the "Section" nav (exact). The other 3 e2e cases (BFF admin-gate accept/reject, admin render) passed. Recorded as D-3. lint + tsc clean.
 - Files: `src/components/shared/navGroups.tsx`, `src/components/shared/PlatformHeader.tsx`, `e2e/config-ui/fundamentals-scan.spec.ts`
+
+## Session 2026-08-26 (CI: feature status automation)
+
+- Promotion PR #1019 merged to main
+- Feature promoted and committed: c5a4eb3859ac271ceaa1946a4cb6a9835762a789
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-26
