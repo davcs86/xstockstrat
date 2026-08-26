@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Twenty-nine tools:
+Thirty tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -31,6 +31,7 @@ Twenty-nine tools:
   get_watchlist       — reads one of the caller's watchlists incl. its stocks (read-only)
   manage_watchlist    — create/update(read-modify-write merge)/delete a caller-owned watchlist
   manage_watchlist_symbols — add/remove stocks on a caller-owned watchlist (add = MANUAL source)
+  manage_offline_account — offline-account create/record/confirm + read orders/positions
 """
 
 import base64
@@ -1447,6 +1448,87 @@ def register_tools(server: MCPServer) -> None:
             raise ValueError(f"unknown operation '{operation}' (expected add/remove)")
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="watchlist not found")) from e
+
+    @server.tool()
+    async def manage_offline_account(
+        ctx: Context,
+        operation: str,
+        account_id: str = "",
+        display_name: str = "",
+        symbol: str = "",
+        side: str = "",
+        order_type: str = "market",
+        qty: float = 0.0,
+        order_id: str = "",
+        client_order_id: str = "",
+        filled_qty: float = 0.0,
+        filled_avg_price: float = 0.0,
+        filled_at: str = "",
+    ) -> dict:
+        """Manage a manually-tracked OFFLINE account and its orders (feature 157).
+
+        An offline account has no broker: orders are recorded by hand and their fills confirmed via
+        ConfirmOrder, which recomputes the account's positions and P&L. All operations act on the
+        CALLER's own account (ownership from the verified identity); broker accounts are rejected.
+
+        operation:
+          'create_account'  — create a new offline account. Requires display_name. Returns
+              {"account": …}.
+          'record_order'    — record a NEW order (no broker submit). Requires account_id, symbol,
+              side ('buy'|'sell'), qty; order_type defaults 'market'. client_order_id is an optional
+              idempotency nonce (auto-generated when omitted). Returns {"order": …} (status NEW,
+              filled_qty 0).
+          'confirm_order'   — write a fill. Requires order_id, filled_qty, filled_avg_price;
+              filled_at is an optional ISO-8601 time (defaults to now). Status is derived
+              server-side (NEW/PARTIALLY_FILLED/FILLED). Returns {"order": …}. Re-confirming
+              replaces the fill (idempotent recompute from all confirmed orders); brokers rejected.
+          'get_order'       — read one order. Requires order_id. Returns {"order": …}.
+          'list_orders'     — list an account's orders (reconciliation). Requires account_id.
+              Returns {"orders": [...]}.
+          'list_positions'  — list an account's positions (reconciliation). Requires account_id.
+              Returns {"positions": [...]}.
+
+        This is the platform capability behind the monthly statement-reconciliation task: correct
+        drift by recording/confirming orders (no separate set-positions path)."""
+        user_id = _caller_user_id(ctx, "manage_offline_account")
+        try:
+            if operation == "create_account":
+                if not display_name:
+                    raise ValueError("create_account requires a display_name")
+                return await client.register_offline_account(user_id, display_name)
+            if operation == "record_order":
+                if not account_id or not symbol or not side or qty <= 0:
+                    raise ValueError("record_order requires account_id, symbol, side, and qty > 0")
+                nonce = client_order_id or f"agent-{uuid.uuid4()}"
+                return await client.record_offline_order(
+                    user_id, account_id, symbol, side, order_type, qty, nonce
+                )
+            if operation == "confirm_order":
+                if not order_id:
+                    raise ValueError("confirm_order requires an order_id")
+                return await client.confirm_offline_order(
+                    user_id, order_id, filled_qty, filled_avg_price, filled_at or None
+                )
+            if operation == "get_order":
+                if not order_id:
+                    raise ValueError("get_order requires an order_id")
+                return await client.get_order(user_id, order_id)
+            if operation == "list_orders":
+                if not account_id:
+                    raise ValueError("list_orders requires an account_id")
+                return await client.list_account_orders(user_id, account_id)
+            if operation == "list_positions":
+                if not account_id:
+                    raise ValueError("list_positions requires an account_id")
+                return await client.list_account_positions(user_id, account_id)
+            raise ValueError(
+                f"unknown operation '{operation}' (expected create_account/record_order/"
+                "confirm_order/get_order/list_orders/list_positions)"
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(
+                _grpc_error_message(e, not_found="account or order not found")
+            ) from e
 
 
 async def _get_source(source_slug: str) -> dict:

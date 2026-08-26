@@ -200,3 +200,28 @@ branch and PR) is unchanged; only the `NNN` prefix and the self-referential path
     `tests/test_*.py`) trip the B2 exact-paths criterion; defensible for generated/test output —
     name concrete files where known. — [ ] advisory, low priority
 - Overlap findings: none.
+
+## Session 2026-08-26 — sdd-execute (implementation)
+
+- Implemented all 15 steps on branch `claude/features-157-158-impl-ulk0l2` (harness-assigned; the
+  designated single branch for features 157+158, per the task's branch requirement — not the
+  per-feature `feature/offline-account-portfolios` branch the spec header names).
+- Tool-count reconciliation (carried warning from the impl-spec review): the true agent baseline was
+  **29** registered tools (the docstring/CLAUDE.md/name-set all said 29; the earlier "28" was a bad
+  `@server.tool()` grep that missed one decorator form). Adding `manage_offline_account` → **30**;
+  all six inventory surfaces updated to 30. [x] resolved.
+- Step 7 order-type note (carried warning): the offline record path is order-type-agnostic (no broker
+  branch); documented in `recordOfflineOrder`. [x] resolved.
+- E2E note: the Playwright suite's shared `warmup.setup.ts` SSR pre-warm times out on cold start in
+  the CI-less sandbox; the offline spec was verified with `--no-deps` (3/3 green). CI runs the full
+  suite with a prebuilt bundle.
+
+### Named follow-ups (C-14 — not vague "later")
+
+- **`offline-broker-card-realized`** — surface realized P&L on **broker** account cards too. Requires
+  fixing `GetPnL`'s account-blindness (it aggregates across all of a user's accounts rather than
+  scoping to one `account_id`). Offline-only realized is the deliberate v1 scope; the offline path
+  uses the account-grain `offline_account_realized` table, which broker accounts do not populate.
+- **Offline crash-recovery resync** — offline positions self-heal only on a ConfirmOrder recompute
+  (there is no poller for offline accounts). A resync path (e.g. a boot-time recompute from confirmed
+  orders) is a possible follow-up if staleness after a mid-confirm crash proves material in practice.

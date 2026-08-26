@@ -23,6 +23,7 @@ CONFIG_ENDPOINT = os.environ.get("CONFIG_ENDPOINT", "xstockstrat-config:50060")
 INDICATORS_ENDPOINT = os.environ.get("INDICATORS_ENDPOINT", "xstockstrat-indicators:50054")
 IDENTITY_ENDPOINT = os.environ.get("IDENTITY_ENDPOINT", "xstockstrat-identity:50058")
 PORTFOLIO_ENDPOINT = os.environ.get("PORTFOLIO_ENDPOINT", "xstockstrat-portfolio:50052")
+TRADING_ENDPOINT = os.environ.get("TRADING_ENDPOINT", "xstockstrat-trading:50051")
 
 
 # ── Caller propagation context (PR #994) ─────────────────────────────────────
@@ -1593,3 +1594,152 @@ async def set_config(
             metadata=_metadata(("x-access-scope", str(access_scope))),
         )
         return {"version": resp.version, "updated_at": resp.updated_at.ToDatetime().isoformat()}
+
+
+# ── Offline account management (feature 157) ─────────────────────────────────
+# Thin wrappers over TradingService backing the single `manage_offline_account` MCP tool. An
+# offline account is manually tracked (no broker), so orders are recorded and their fills
+# hand-confirmed via ConfirmOrder — the trading service enforces the offline-only + ownership
+# guard server-side. Ownership is always taken from the forwarded `x-user-id`; the request never
+# carries a caller-chosen user id for the account/positions reads.
+
+_OFFLINE_SIDE = {"buy": 1, "sell": 2}  # common.v1.OrderSide
+_OFFLINE_ORDER_TYPE = {"market": 1, "limit": 2, "stop": 3, "stop_limit": 4, "trailing_stop": 5}
+
+
+def _order_to_dict(order: Any) -> dict[str, Any]:
+    """Shape a trading.v1.Order proto into a compact JSON-safe dict for tool output."""
+    return MessageToDict(order, preserving_proto_field_name=True)
+
+
+async def register_offline_account(user_id: str, display_name: str) -> dict[str, Any]:
+    """Register a new OFFLINE broker account (no credentials) via RegisterBrokerAccount.
+
+    broker_type is BROKER_TYPE_OFFLINE (3); credentials_json is empty. Ownership is set server-side
+    from the forwarded x-user-id.
+    """
+    from gen.trading.v1 import trading_pb2, trading_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+        stub = trading_pb2_grpc.TradingServiceStub(channel)
+        resp = await stub.RegisterBrokerAccount(
+            trading_pb2.RegisterBrokerAccountRequest(
+                display_name=display_name,
+                broker_type=3,  # common.v1.BROKER_TYPE_OFFLINE
+                credentials_json="",
+            ),
+            metadata=_metadata(("x-user-id", user_id)),
+        )
+    return {"account": MessageToDict(resp.account, preserving_proto_field_name=True)}
+
+
+async def record_offline_order(
+    user_id: str,
+    account_id: str,
+    symbol: str,
+    side: str,
+    order_type: str,
+    qty: float,
+    client_order_id: str,
+) -> dict[str, Any]:
+    """Record a manual order on an OFFLINE account via TradingService.PlaceOrder (no broker submit).
+
+    side is 'buy'/'sell'; order_type is 'market'/'limit'/… The order lands NEW with filled_qty 0
+    until confirm_offline_order writes its fill.
+    """
+    from gen.trading.v1 import trading_pb2, trading_pb2_grpc  # noqa: PLC0415
+
+    side_val = _OFFLINE_SIDE.get(side.lower())
+    if side_val is None:
+        raise ValueError(f"invalid side {side!r}; expected 'buy' or 'sell'")
+    type_val = _OFFLINE_ORDER_TYPE.get(order_type.lower())
+    if type_val is None:
+        raise ValueError(f"invalid order_type {order_type!r}")
+
+    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+        stub = trading_pb2_grpc.TradingServiceStub(channel)
+        resp = await stub.PlaceOrder(
+            trading_pb2.PlaceOrderRequest(
+                symbol=symbol,
+                side=side_val,
+                order_type=type_val,
+                qty=qty,
+                account_id=account_id,
+                client_order_id=client_order_id,
+                user_id=user_id,
+            ),
+            metadata=_metadata(("x-user-id", user_id)),
+        )
+    return {"order": _order_to_dict(resp)}
+
+
+async def confirm_offline_order(
+    user_id: str,
+    order_id: str,
+    filled_qty: float,
+    filled_avg_price: float,
+    filled_at_iso: str | None = None,
+) -> dict[str, Any]:
+    """Confirm the fill on an OFFLINE order via TradingService.ConfirmOrder.
+
+    The resulting status is derived server-side (NEW/PARTIALLY_FILLED/FILLED); filled_at defaults to
+    now when omitted. Rejected for broker accounts and non-owners (server-side, order-sourced).
+    """
+    from gen.trading.v1 import trading_pb2, trading_pb2_grpc  # noqa: PLC0415
+
+    req = trading_pb2.ConfirmOrderRequest(
+        order_id=order_id,
+        filled_qty=filled_qty,
+        filled_avg_price=filled_avg_price,
+        user_id=user_id,
+    )
+    if filled_at_iso:
+        ts = Timestamp()
+        ts.FromDatetime(datetime.fromisoformat(filled_at_iso))
+        req.filled_at.CopyFrom(ts)
+
+    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+        stub = trading_pb2_grpc.TradingServiceStub(channel)
+        resp = await stub.ConfirmOrder(req, metadata=_metadata(("x-user-id", user_id)))
+    return {"order": _order_to_dict(resp)}
+
+
+async def get_order(user_id: str, order_id: str) -> dict[str, Any]:
+    """Read one order via TradingService.GetOrder (read-only)."""
+    from gen.trading.v1 import trading_pb2, trading_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+        stub = trading_pb2_grpc.TradingServiceStub(channel)
+        resp = await stub.GetOrder(
+            trading_pb2.GetOrderRequest(order_id=order_id),
+            metadata=_metadata(("x-user-id", user_id)),
+        )
+    return {"order": _order_to_dict(resp)}
+
+
+async def list_account_orders(user_id: str, account_id: str) -> dict[str, Any]:
+    """List an account's orders via TradingService.ListOrders (read-only, for reconciliation)."""
+    from gen.trading.v1 import trading_pb2, trading_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+        stub = trading_pb2_grpc.TradingServiceStub(channel)
+        resp = await stub.ListOrders(
+            trading_pb2.ListOrdersRequest(user_id=user_id, account_id=account_id),
+            metadata=_metadata(("x-user-id", user_id)),
+        )
+    return {"orders": [_order_to_dict(o) for o in resp.orders]}
+
+
+async def list_account_positions(user_id: str, account_id: str) -> dict[str, Any]:
+    """List an account's positions via PortfolioService.ListPositions (read-only)."""
+    from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+        stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
+        resp = await stub.ListPositions(
+            portfolio_pb2.ListPositionsRequest(account_id=account_id),
+            metadata=_metadata(("x-user-id", user_id)),
+        )
+    return {
+        "positions": [MessageToDict(p, preserving_proto_field_name=True) for p in resp.positions]
+    }

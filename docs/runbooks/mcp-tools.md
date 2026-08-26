@@ -1,6 +1,6 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the twenty-nine tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the thirty tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 ---
@@ -34,7 +34,7 @@ directly on port 9000.
 
 **Direct (local):** `http://localhost:9000`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same twenty-nine tools' `name`,
+**Tool catalog (UI display).** `GET /api/tools` returns the same thirty tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
 capabilities (the same data documented below), never user data or credentials. It powers the
 `xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
@@ -1081,6 +1081,45 @@ Returns `{"watchlist": <watchlist>}` — the updated list.
 **Errors:** `unknown operation '<op>' (expected add/remove)`; `manage_watchlist_symbols requires a
 watchlist_id`; `watchlist not found`; `permission denied` (non-owner); `invalid argument` (per-list
 cap exceeded); `RuntimeError` → no verified caller claims.
+
+---
+
+### `manage_offline_account`
+
+Manage a manually-tracked **OFFLINE** account and its orders in `xstockstrat-trading` (feature 157).
+An offline account has no broker: orders are recorded by hand and their fills confirmed via
+`ConfirmOrder`, which recomputes the account's positions and P&L. All operations act on the
+**caller's own** account (ownership from the verified `x-user-id`); broker accounts are rejected.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `operation` | string | yes | `create_account` \| `record_order` \| `confirm_order` \| `get_order` \| `list_orders` \| `list_positions` |
+| `account_id` | string | for record/list | The offline account to act on |
+| `display_name` | string | `create_account` | Name for the new account |
+| `symbol` | string | `record_order` | Ticker |
+| `side` | string | `record_order` | `buy` \| `sell` |
+| `order_type` | string | no | `market` (default) \| `limit` \| `stop` \| `stop_limit` \| `trailing_stop` |
+| `qty` | float | `record_order` | Order quantity (> 0) |
+| `order_id` | string | confirm/get | The order to confirm or read |
+| `client_order_id` | string | no | Idempotency nonce for `record_order` (auto-generated when omitted) |
+| `filled_qty` | float | `confirm_order` | Confirmed fill quantity |
+| `filled_avg_price` | float | `confirm_order` | Average fill price |
+| `filled_at` | string | no | ISO-8601 fill time (defaults to now) |
+
+- **create_account** → `{"account": …}` (broker_type `OFFLINE`, no credentials).
+- **record_order** → `{"order": …}` — a `NEW` order, `filled_qty` 0, no broker submit.
+- **confirm_order** → `{"order": …}` — status is **server-derived** (`NEW`/`PARTIALLY_FILLED`/`FILLED`),
+  never echoed; re-confirming replaces the fill (idempotent recompute from all confirmed orders).
+  The offline-only guard is enforced server-side from the persisted order — a broker account is
+  rejected `FAILED_PRECONDITION`.
+- **get_order** / **list_orders** / **list_positions** → read paths for statement reconciliation.
+
+Returns the shapes above. This is the platform capability behind a monthly statement-reconciliation
+task: correct drift by recording/confirming orders (no separate set-positions path).
+
+**Errors:** `unknown operation '<op>'`; missing required args per operation; `account or order not
+found`; `permission denied` (non-owner); `FAILED_PRECONDITION` (confirm on a broker account);
+`RuntimeError` → no verified caller claims.
 
 ---
 

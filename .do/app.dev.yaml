@@ -275,6 +275,8 @@ services:
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: PORTFOLIO_ENDPOINT
         value: ${xstockstrat-portfolio.PRIVATE_DOMAIN}:50052
+      - key: TRADING_ENDPOINT
+        value: ${xstockstrat-trading.PRIVATE_DOMAIN}:50051
       - key: SERVICE_NAME
         value: agent
       - key: WAIT_FOR
