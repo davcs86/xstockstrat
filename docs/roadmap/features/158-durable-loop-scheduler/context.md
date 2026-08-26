@@ -1,8 +1,8 @@
 # Context: durable-loop-scheduler
 
-**Feature**: `docs/roadmap/features/157-durable-loop-scheduler/feature.md`
-**Product Spec**: `docs/roadmap/features/157-durable-loop-scheduler/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/157-durable-loop-scheduler/implementation-spec.md`
+**Feature**: `docs/roadmap/features/158-durable-loop-scheduler/feature.md`
+**Product Spec**: `docs/roadmap/features/158-durable-loop-scheduler/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/158-durable-loop-scheduler/implementation-spec.md`
 
 ---
 
@@ -16,8 +16,8 @@
   migrates the analysis interval loops (`fundsignal_loop`, `live_loop`; opportunity refresh pending an
   OQ) onto it.
 - **Merge-order:** depends on and merges after feature 156 (which introduces the table + mechanism this
-  feature refactors). The 157 branch is currently stacked on the 156 branch; once 156 merges to
-  main-dev the 157 PR shows only the 157 additions.
+  feature refactors). The 158 branch is currently stacked on the 156 branch; once 156 merges to
+  main-dev the 158 PR shows only the 158 additions.
 - Consumer surface (C-14): **None (internal/platform)** — changes scheduling reliability of existing
   loops; no new user surface (156 already shipped the config-ui trigger).
 - Open questions carried to design: (1) wall-clock vs interval schedules (opportunity refresh is a daily
@@ -50,8 +50,8 @@
   inspection `Then`) reframed as an observable `[0,30]` delay + retry-advance. Scenarios re-mapped to
   8 IDs covering FR-1..FR-6 (safe to renumber pre-gate — no test steps cite these IDs yet).
 - **Overlap scan: CLEAN** (no FAIL). Only 156 shares concrete resources and is correctly sequenced
-  (lands first; 157 rebases + takes next-free migration `020`). Added a hard build-order row to
-  `docs/roadmap/features/merge-order.md`: 157 → 156 (Resolved: No).
+  (lands first; 158 rebases + takes next-free migration `020`). Added a hard build-order row to
+  `docs/roadmap/features/merge-order.md`: 158 → 156 (Resolved: No).
 - Next: `/sdd-design durable-loop-scheduler`.
 
 ## Session 2026-08-26 — sdd-design (2 rounds, full)
@@ -59,7 +59,7 @@
 - **Grounding note:** ran on a local `design-grounding-157` branch that merged 156's landed code
   (fundsignal scheduler, migration 019, specs) into the working tree, since the clean PR branch
   (`feature/durable-loop-scheduler`, PR #1017) is based on `main-dev` and 156 isn't merged yet. The
-  recon subagents needed 156's actual scheduler code to be grounded. Only the 157 doc commits are
+  recon subagents needed 156's actual scheduler code to be grounded. Only the 158 doc commits are
   cherry-picked back onto the clean PR branch — no 156 code enters #1017.
 - **Phase 0 Recon** (recon.md): one `codebase-discovery` (analysis) + one `scenario-recon`. Located the
   seven 156 seams (`fundsignal_loop.py:107-186`), next migration `020`, the two loops' shapes, config
@@ -151,3 +151,20 @@ _All five design-time spec guards were resolved into concrete step instructions:
   Migration `020`, both `analysis.opportunity.*` config keys, `durable_schedule.py`, and `servicer.py`
   are otherwise CLEAN vs all other in-flight features. No new merge-order row required.
 - Unresolved ✗ / ⚠ carried into execution: **none** (both C-01 warnings fixed above).
+
+## Session 2026-08-26 — renumber 157 → 158 + rebase onto merged 156
+
+- **Feature-number collision:** `157` was taken by `157-offline-account-portfolios`, which merged to
+  `main-dev` while this feature was mid-pipeline on its own branch (never itself pushed to `main-dev`
+  under `157`). Per the Feature Numbering collision rule (root CLAUDE.md), the not-yet-merged one
+  renumbers → **158**. `git mv 157-durable-loop-scheduler 158-durable-loop-scheduler` + updated all
+  self-references (feature/product-spec/recon/design/implementation-spec/context), the `merge-order.md`
+  row, and the `insights.md` entry. `@AC-*` IDs and migration `020` unchanged. Git branch stays
+  `feature/durable-loop-scheduler` (slug only, no number).
+- **156 merged + rebase:** feature 156 (`fix-fundamentals-signal-producer`) landed on `main-dev`, so
+  the hard build-order dependency is now satisfied. Rebased `feature/durable-loop-scheduler` onto the
+  new `origin/main-dev` — 156's scheduler code + migration `019` are now present in the branch itself,
+  so the earlier grounding-branch workaround is no longer needed. `merge-order.md` 158→156 row flipped
+  to Resolved: Yes. Confirmed `019` is still the highest analysis migration → `020` remains next-free.
+- Rebase conflict on `insights.md` (append-only; `157-offline-account-portfolios` added its own entry)
+  resolved by keeping both entries.

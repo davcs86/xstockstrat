@@ -2126,7 +2126,7 @@ reusing.
 - **Rule it implies**: before reusing an existing event/consumer for a new producer, ask "what *other* mechanism currently corrects this path's errors, and does my producer still have it?" If the corrector (a reconciling snapshot) is gone, an incremental/non-idempotent consumer is unsafe — switch that producer to absolute-recompute-and-emit-the-snapshot. And when a second service needs a fold that lived as a private func in the first, extract it to a shared `packages/` Go module (both services already `replace` the contracts module) but **host its golden/parity tests in a CI-executed service module** — no CI job runs `go test` under `packages/proto/`.
 =======
 
-### 2026-08-26 — 157-durable-loop-scheduler — design
+### 2026-08-26 — 158-durable-loop-scheduler — design
 - **Insight**: When generalizing a durable mechanism across N loops, extract only the **narrow
   timing/persistence seams** into a thin helper (`DurableSchedule`: `seed`/`next_sleep_seconds`/
   `advance` over the schedule table) and leave each loop's own `_tick`/`run_forever` (disabled-gate,
@@ -2138,7 +2138,7 @@ reusing.
   cadence for ~1440 writes/day) and a blanket retry cadence slows its recovery; scope it out rather than
   half-migrate it. A wall-clock loop is already largely redeploy-safe via next-hour math — durability
   there only closes the narrow crash-in-fire-window skipped-day gap.
-- **Evidence**: `docs/roadmap/features/157-durable-loop-scheduler/design.md` (Chosen Approach + Rejected
+- **Evidence**: `docs/roadmap/features/158-durable-loop-scheduler/design.md` (Chosen Approach + Rejected
   Alternatives); `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:107-186` (the seams);
   `servicer.py:3841-3850` (`_seconds_until_hour_utc`); builds on the 156 no-lease insight above.
 - **Rule it implies**: generalize the seams, not the control flow; and pressure-test each candidate

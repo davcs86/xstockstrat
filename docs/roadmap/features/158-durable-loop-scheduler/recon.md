@@ -49,7 +49,7 @@ they exist to catch. The design-adversary must require the shared helper to sati
 - **PRESERVE** `@AC-5` "A disabled producer neither runs nor advances the schedule, and does not busy-spin."
 - **PRESERVE** `@AC-6` "A manual scan does not contaminate the scheduled cadence" — manual `RunFundamentalsScan` leaves `blocked_until_ms` unchanged; the shared helper keeps the manual path off the schedule write.
 - **PRESERVE** `@AC-7` "Startup jitter is bounded" — one-shot delay in `[0, startup_jitter_seconds]`.
-- **No promoted `@AC-*` exists for `live_loop` or `run_opportunity_refresh_forever`** — their cadence/boot behavior lived only in code/specs (features 048/097/131), never promoted. Migrating them regresses no *written* rule, but recon can hand the adversary no scenario-level guard for them; 157's own `@AC-5`/`@AC-8` become their first acceptance coverage. Not a CHANGE (defaulted to "no guarantee to preserve").
+- **No promoted `@AC-*` exists for `live_loop` or `run_opportunity_refresh_forever`** — their cadence/boot behavior lived only in code/specs (features 048/097/131), never promoted. Migrating them regresses no *written* rule, but recon can hand the adversary no scenario-level guard for them; 158's own `@AC-5`/`@AC-8` become their first acceptance coverage. Not a CHANGE (defaulted to "no guarantee to preserve").
 
 ## Dependencies
 

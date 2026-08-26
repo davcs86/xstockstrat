@@ -2,7 +2,7 @@
 
 **Status**: `pending`
 **Created**: 2026-08-26
-**Feature**: `docs/roadmap/features/157-durable-loop-scheduler/feature.md`
+**Feature**: `docs/roadmap/features/158-durable-loop-scheduler/feature.md`
 **Total Steps**: 8
 **Feature Branch**: `feature/durable-loop-scheduler`
 
@@ -89,7 +89,7 @@ Author `020_job_schedule.up.sql` as the design's **additive `ALTER`** (Database 
 ```sql
 -- 020_job_schedule.up.sql
 -- Service: xstockstrat-analysis
--- Feature 157 (durable-loop-scheduler): generalize feature 156's analysis.fundsignal_schedule into a
+-- Feature 158 (durable-loop-scheduler): generalize feature 156's analysis.fundsignal_schedule into a
 -- (job_name, user_id)-keyed table backing the shared DurableSchedule helper. user_id = '' (never NULL)
 -- for a global job (one row per job); set for a per-user job. Additive ALTER preserves the single
 -- persisted 'fundsignal' row with no data copy and leaves no orphaned table (F-01: 019 is untouched;
@@ -348,11 +348,11 @@ Add two rows to the `## Config Keys Consumed` table in `services/xstockstrat-ana
 (namespace `analysis`), mirroring the fundsignal jitter/retry wording (C-05 — defaults declared in the
 service CLAUDE.md; the config service itself needs no schema change, keys are runtime `SetConfig` values):
 - `analysis.opportunity.startup_jitter_seconds` | int | `30` | One-shot random delay `[0, N]` seconds
-  applied once at the opportunity refresh loop entry to stagger concurrent redeploys (feature 157);
+  applied once at the opportunity refresh loop entry to stagger concurrent redeploys (feature 158);
   read presence-aware (`get_int_present`) — `0` disables jitter.
 - `analysis.opportunity.retry_seconds` | int | `300` | On a caught enumeration error the wall-clock
   `blocked_until_ms` advances by this many seconds (retry soon), not to the next wall-clock hour
-  (feature 157); read presence-aware, clamped `max(1, …)` at the read site.
+  (feature 158); read presence-aware, clamped `max(1, …)` at the read site.
 - Do **not** add a new anchor key — the wall-clock anchor reuses the existing
   `analysis.opportunity.refresh_hour_utc`. `fundsignal`'s three existing keys are unchanged; no key is
   removed.
@@ -525,7 +525,7 @@ that the durable, crash-safe schedule (seed-at-boot, compute-sleep-until-due, ad
 bounded jitter, retry cadence) now lives in the shared `app/engine/durable_schedule.py`
 (`DurableSchedule`, interval + wall-clock modes) backed by the `analysis.job_schedule` table
 (`(job_name, user_id)` PK, migration `020`), consumed by `fundsignal_loop` (interval) and
-`run_opportunity_refresh_forever` (wall-clock). Note `live_loop` is **not** migrated (feature 157 Out of
+`run_opportunity_refresh_forever` (wall-clock). Note `live_loop` is **not** migrated (feature 158 Out of
 Scope). This is a `## Teardown`-scoped context touch — keep it factual and brief. May fold into Step 5's
 CLAUDE.md edit (same file) to avoid a second PR.
 
