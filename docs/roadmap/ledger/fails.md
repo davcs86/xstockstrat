@@ -1877,3 +1877,19 @@ ambiguity is logged here).
 - **Evidence**: feature 150 Step 5 (both per-symbol simulators grew a 5th intent element).
 - **Rule it implies**: widening a returned tuple's shape is a cross-cutting signature change — audit all
   unpack sites (or return a named struct) before editing.
+
+### 2026-08-26 — backtest-next-bar-fill — assumption
+- **Mistake**: design.md referenced AC-7/AC-8/AC-9 (cooldown/config/decouple) that were never authored
+  in `acceptance.feature`; the impl-spec asserted those behaviors in a test body with no `@AC` tag,
+  forcing a later append of AC-7..AC-11 to keep C-15 whole. The design invented acceptance IDs the story never created.
+- **Evidence**: feature 151 context.md 2026-08-23 sdd-spec + sdd-review.
+- **Rule it implies**: `/sdd-design` must not cite `@AC-N` IDs beyond what `acceptance.feature` actually
+  contains; new behaviors need a `/sdd-story` acceptance touch, not a design-only reference.
+
+### 2026-08-26 — backtest-next-bar-fill — config
+- **Mistake**: A `get_int` config default (`analysis.backtest.default_fill_model`) cannot distinguish
+  "key absent" from a configured `0`; this is only safe because both collapse to the legacy sentinel.
+  An unwary future edit that adds a meaningful `0` value would silently break the fallback.
+- **Evidence**: feature 151 design.md (archived) §86-88; Step 4.
+- **Rule it implies**: an int config whose `0` means "unset" must keep `0 ≡ absent ≡ legacy`, and the
+  intentional zero-trap must be commented so it isn't "fixed."

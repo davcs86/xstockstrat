@@ -2370,3 +2370,27 @@ reusing.
 - **Evidence**: feature 150 `_canonical_pre150` helper (clears fields 17/18/19); design.md (archived) §149-154.
 - **Rule it implies**: additive-but-persisted proto changes must ship a golden-normalization shim in the
   same step, or every historical run false-fails/mis-renders (extends the feature-068 verbatim-bytes invariant).
+
+### 2026-08-26 — backtest-next-bar-fill — design
+- **Pattern**: When a helper must contribute to a per-index array that has a 1:1 alignment invariant
+  with another array, have the helper **return** the value and keep the loop the sole writer/appender,
+  instead of letting the helper mutate the shared structure. Makes "single writer" syntactically
+  enforced, kills clobber-ordering hazards, and keeps the alignment assert trivially true.
+- **Evidence**: feature 151 `_apply_fill` returns the action; the loop writes `diags.action` at `servicer.py:1046/1234`, appends `daily_equity` at `:1048/1235`; 1:1 assert `:3291`.
+- **Rule it implies**: a shared helper feeding an alignment-invariant array must return its contribution, never mutate the array.
+
+### 2026-08-26 — backtest-next-bar-fill — design
+- **Pattern**: Behavior-changing engine options ship as an opt-in enum with `UNSPECIFIED=0` mapping
+  byte-for-byte to legacy, resolved to an *effective* value once at entry, then that effective value
+  (never the raw request field) is persisted/echoed — so historical records always state the model that
+  actually produced them.
+- **Evidence**: feature 151 (mirrors commission/slippage resolution at `servicer.py:383-384`).
+- **Rule it implies**: persist the resolved-effective option, not the raw request field, whenever comparability of stored results matters.
+
+### 2026-08-26 — backtest-next-bar-fill — ordering
+- **Pattern**: Two features editing the same functions/proto message coordinate a pre-reserved
+  field-number and migration split via a `merge-order.md` row; the proto field split is order-independent
+  but the migration NNN is order-sensitive, so the second-to-land renumbers the migration only.
+- **Evidence**: feature 151 (150 took req.8/result 17-19; 151 took req.9/result 20/summary 18, migration 018).
+- **Rule it implies**: for concurrent features touching one proto message, reserve the field split up
+  front and make second-to-land renumber only the order-sensitive migration.
