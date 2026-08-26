@@ -101,9 +101,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Overlap scan: CLEAN — no migration/proto/config surface; the three touched files are shared only with
   launched features (042/125/140); no in-flight same-file overlap. No merge-order row needed.
 - Warnings:
-  - Step 1/Step 2 (`test` steps) state no `--cov-fail-under` in their own Verification — `[x]` no action:
-    a RED-only step can't measure coverage; the C-08 gate correctly lives at Step 3's GREEN full-suite
-    run (`--cov-fail-under=40`). Correct split, not a defect.
+  - Step 1/Step 2 (`test` steps) state no `--cov-fail-under` in their own Verification — `[x]` ADDRESSED:
+    added an explicit "Coverage (C-08): deliberately not measured on this RED-only step; gate satisfied
+    at Step 3's GREEN full-suite `--cov-fail-under=40`" note to both test steps' Verification, so the
+    split is documented in the spec rather than implicit. (A RED-only step can't measure coverage.)
   - Step 1 collateral-RED list was non-exhaustive — `[x]` FIXED in the spec: added
     `test_future_signal_is_ignored` (`:221`) and `test_zero_conviction_uses_default_half` (`:229`) to the
     named collateral-RED tests, and noted the two neutral short-circuit tests that stay GREEN.

@@ -136,6 +136,10 @@ reaches users through the agent `screen_symbols` MCP tool and the `/insights` sc
   fails with `AttributeError: timestamp` raised at `scoring.py:17` (the new anchor **and** the
   reshaped collateral tests).
 - Lint (C-13 §B / step-constraints §B): `cd services/xstockstrat-analysis && ruff check . && ruff format --check .` passes.
+- Coverage (C-08): **deliberately not measured on this RED-only step** — with `scoring.py:17` still
+  buggy the assertions raise, so a `--cov-fail-under` here would measure a crash, not coverage. The
+  C-08 coverage gate for this feature is satisfied at **Step 3**'s GREEN full-suite run
+  (`--cov-fail-under=40`). (Resolves the impl-spec-review coverage-threshold warning.)
 - C-13 verdict: the real `Bar`/`ExternalSignal` builders stay **inline in this one test file** (single
   consumer — `test_screener.py` builds its own differently-shaped bars/signals). No second consumer,
   so no move to `tests/conftest.py`; no `Bar`/`ExternalSignal` builder exists in `tests/conftest.py`
@@ -220,6 +224,9 @@ reaches users through the agent `screen_symbols` MCP tool and the `/insights` sc
 - RED (pre-Step-3, run by `/sdd-execute`): `cd services/xstockstrat-analysis && pytest tests/test_screener.py -k "signal_weighted_screen_returns_ok" -q`
   fails with `AttributeError: timestamp` propagating out of `screen()`.
 - Lint: `cd services/xstockstrat-analysis && ruff check . && ruff format --check .` passes.
+- Coverage (C-08): **deliberately not measured on this RED-only step** (the assertion raises pre-fix);
+  the C-08 coverage gate is satisfied at **Step 3**'s GREEN full-suite `--cov-fail-under=40`.
+  (Resolves the impl-spec-review coverage-threshold warning.)
 - C-13 verdict: the time-stamped `Bar` list and the `QuerySignalsResponse`/`ExternalSignal` literals
   stay **inline** — single consumer (this test), different shape from Step 1's single-`Bar` builder.
   No centralization (design § Rejected Alternatives).
