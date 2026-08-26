@@ -5,6 +5,7 @@
 **Last Updated**: 2026-08-18
 **Committed to main**: 6cd5572193b09a153c24e4cb90e3b65708846981
 **Launched date**: 2026-08-19
+**Archived**: 2026-08-26
 
 ---
 
@@ -18,6 +19,7 @@
 | 2026-08-18 | `implementation-ready` → `code-completed` | direct implementation | All 3 steps implemented on `claude/symbol-page-ui-refinements-t2xp26`; tsc + lint + build (R2) clean, trader e2e green (R1 broad pass) |
 
 | 2026-08-19 | `code-completed` → `launched` | CI workflow | Promoted via PR #985; committed 6cd5572193b09a153c24e4cb90e3b65708846981 |
+| 2026-08-26 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); no scenarios (no acceptance.feature); pruned 4 specs |
 ---
 
 ## Artifacts

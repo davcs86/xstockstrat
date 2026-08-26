@@ -2297,3 +2297,12 @@ reusing.
   behavior downstream code hangs off it, not its name.
 - **Evidence**: feature 144 context.md:60-66 (the pinned `test_fundamental_hard_filter_missing_for_one_symbol_fails_closed` would have flipped).
 - **Rule it implies**: verify a status value's downstream behavioral contract before reusing it for a new case.
+
+### 2026-08-26 — symbol-page-panel-refinements — reuse
+- **Pattern**: Place a reused component by its **data coupling**, not its apparent genericity —
+  `StrategyPicker` went to `components/insights/` (co-located with `SignalReadiness`) because both depend
+  on the `analysisClient`-coupled `useStrategyDefinitions`, *not* into segment-agnostic
+  `components/shared/`. Putting it in `shared/` would have hidden a segment coupling behind a "shared" label.
+- **Evidence**: feature 145 design.md (archived) §27-31,91-92; implementation-spec.md Step 1.
+- **Rule it implies**: a component's home is decided by what it imports, not where it's used; a
+  data-coupled picker/widget is not `shared/`.

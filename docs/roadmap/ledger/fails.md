@@ -1833,3 +1833,14 @@ ambiguity is logged here).
 - **Evidence**: feature 144 context.md:86-90; unfixed twin `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:294` (`_builtin_score`).
 - **Rule it implies**: when fixing a "neutral default masks missing data" bug, sweep the whole service
   for the identical fallback shape and either fix or explicitly file each sibling.
+
+### 2026-08-26 — symbol-page-panel-refinements — duplication
+- **Mistake**: Adding a panel to feature 139's `SymbolPanelGroup` silently creates a hidden mobile
+  `role="radio"` tab whose text **equals** the panel's card title, so any pre-existing unscoped
+  `getByText('<title>')` starts matching 2 DOM nodes and fails Playwright strict mode on a *different,
+  untouched* spec. Same class as the shared-`aria-label` collision (fails.md 2026-08-09): the second
+  occurrence is off-screen (`md:hidden`) so it's invisible in the browser but present in the DOM.
+- **Evidence**: feature 145 design.md §70; implementation-spec.md Step 3 (`:256`); context.md 2026-08-18 sdd-spec.
+- **Rule it implies**: when promoting existing content into a `SymbolPanelGroup` panel, grep the whole
+  e2e suite for unscoped `getByText`/`getByLabel` on that text and rescope to `getByRole('heading'|'radio')`
+  before closing — the collision surfaces on a spec you didn't touch.
