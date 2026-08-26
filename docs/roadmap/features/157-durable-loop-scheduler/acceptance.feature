@@ -1,19 +1,19 @@
 Feature: durable-loop-scheduler
-  As a platform operator, I want every interval background loop to inherit feature 156's durable,
+  As a platform operator, I want every recurring background loop to inherit feature 156's durable,
   crash-safe schedule from one shared mechanism, so that reliability is uniform and no loop silently
   stops firing under normal deploy churn.
 
   @AC-1 @FR-1
   Scenario: The shared helper computes sleep-until-due without polling and advances only after a run
-    Given a shared schedule helper backing a job "demo" with a "run_interval_hours" of 24
+    Given a shared schedule helper in interval mode backing a job "demo" with a "run_interval_hours" of 24
     And the job's schedule row shows a "blocked_until_ms" 6 hours in the future
     When the helper is ticked
-    Then it returns a sleep of approximately 6 hours and does not invoke the job's run
+    Then it returns a sleep of approximately 6 hours (21600 seconds) and does not invoke the job's run
     And it issues no repeated "poll" write while waiting
 
   @AC-2 @FR-1
-  Scenario: The shared helper writes the next-due time only after a completed run
-    Given a shared schedule helper backing a due job "demo" with a 24h interval
+  Scenario: The shared helper writes the next-due time only after a completed interval run
+    Given a shared schedule helper in interval mode backing a due job "demo" with a 24h interval
     When the job's run completes successfully
     Then the helper advances "blocked_until_ms" to approximately now + 24h
     And when instead the run raises a caught error it advances by the configured retry cadence, not a full interval
@@ -26,23 +26,41 @@ Feature: durable-loop-scheduler
     And a per-user job seeds one distinct row per "(job_name, user_id)" pair
 
   @AC-4 @FR-3
-  Scenario: The fundamentals producer keeps feature 156's guarantees after migration onto the shared helper
-    Given the fundamentals producer now schedules via the shared helper and the generalized table
-    When the producer boots fresh, restarts within its interval, crashes mid-cycle, or a manual scan runs
-    Then it fires promptly on a fresh boot, does not reset its cadence on a redeploy, re-runs promptly after a crash
-    And a manual "RunFundamentalsScan" still does not move the scheduled cadence
+  Scenario: The fundamentals producer fires within the jitter window on a fresh boot after migration
+    Given the fundamentals producer schedules via the shared helper with a bounded startup jitter of N seconds
+    And it boots fresh with no prior schedule row
+    When the process starts
+    Then it runs its first cycle within N seconds of boot (the bounded jitter window), not after a full interval
 
-  @AC-5 @FR-4
-  Scenario: The live evaluation loop fires promptly on boot and survives a redeploy after migration
-    Given the live evaluation loop schedules via the shared helper as a global job
-    And it previously completed a cycle and persisted a future due time
+  @AC-5 @FR-3
+  Scenario: The fundamentals producer keeps feature 156's redeploy, crash, and manual-scan guarantees
+    Given the fundamentals producer schedules via the shared helper and the generalized table
+    And it previously completed a cycle and persisted a future "blocked_until_ms"
     When the process is redeployed before that due time
     Then it reads the persisted schedule and does not re-arm a fresh full interval from the restart moment
-    And on a first-ever boot with no prior schedule it runs its first cycle promptly (after the bounded jitter)
+    And after a crash mid-cycle (the due time still in the past) the next boot re-runs within the jitter window
+    And a manual "RunFundamentalsScan" does not move the scheduled "blocked_until_ms"
 
-  @AC-6 @FR-5
+  @AC-6 @FR-4
+  Scenario: The live evaluation loop reads its persisted interval schedule across a redeploy
+    Given the live evaluation loop schedules via the shared helper as a global interval job
+    And it previously completed a cycle and persisted a "blocked_until_ms" 2 hours in the future
+    When the process is redeployed 10 minutes after that cycle
+    Then it reads the persisted schedule and next fires at approximately the persisted due time, not a fresh full interval later
+    And on a first-ever boot with no prior schedule it runs its first cycle within the bounded jitter window
+
+  @AC-7 @FR-5
   Scenario: A migrated loop's jitter and retry cadence are configuration-driven, not hardcoded
     Given a migrated loop reading its startup jitter and retry cadence from config
-    When the startup-jitter config value is N seconds
-    Then the one-shot startup delay is a value in the closed interval [0, N] seconds
-    And no jitter or retry duration is a literal baked into the loop source
+    And the startup-jitter config value is 30 seconds
+    When the loop performs its one-shot startup delay
+    Then the delay is a value in the closed interval [0, 30] seconds
+    And when the retry-cadence config value is 300 seconds a caught-error run advances the schedule by approximately 300 seconds
+
+  @AC-8 @FR-6
+  Scenario: The daily opportunity refresh re-anchors to its wall-clock hour across a redeploy
+    Given the opportunity refresh schedules via the shared helper in wall-clock mode anchored to "analysis.opportunity.refresh_hour_utc" of 8
+    And it already ran today and persisted a due time of 08:00 UTC tomorrow
+    When the process is redeployed the same afternoon
+    Then it reads the persisted schedule and next fires at approximately 08:00 UTC tomorrow, not 24h after the redeploy
+    And on a first-ever boot before 08:00 UTC it schedules its first run for 08:00 UTC today

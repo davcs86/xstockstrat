@@ -27,3 +27,29 @@
   additive ALTER of fundsignal_schedule (F-01 forbids editing applied migration 019 either way).
 - Ledger grounding: 2026-08-25 / feature 156 insight — keep the crash-safe *write-after-completion*
   shape; do NOT rebuild lease/CAS/process_name fencing on an instance_count:1 service.
+
+## Session 2026-08-26 — sdd-review product-spec
+
+- Product spec reviewed via `/sdd-review durable-loop-scheduler product-spec` (spec-reviewer +
+  feature-overlap subagents). Status: draft → spec-ready.
+- **spec-reviewer**: initial verdict FAIL on criterion 9 (four unchecked Open Questions), all
+  code-checkable claims verified (live_loop.py, run_opportunity_refresh_forever, pnl_pattern_consumer,
+  entry_backfill, migration 019, config keys, feature 156 at code-completed). Three advisory warnings.
+- **Two scope-defining OQs resolved with the operator (2026-08-26):**
+  - OQ#1 (interval vs wall-clock) → **include wall-clock mode.** Shared helper now supports interval
+    *and* wall-clock-anchored modes (FR-1); the daily opportunity refresh is in v1 (new FR-6, migrated
+    as a global wall-clock job anchored to the existing `analysis.opportunity.refresh_hour_utc`).
+  - OQ#2 (per-user key) → **ship it.** Table carries `(job_name, user_id)` from v1 (FR-2), matching the
+    story's generalization goal — recorded as the accepted principle-#2 exception (forward-looking
+    schema, operator-signed-off, not a silent guess).
+  - OQ#3 (table strategy) and OQ#4 (ledger multi-instance-fencing trap) remain as design-scoped,
+    non-blocking notes.
+- **Warnings addressed** in `acceptance.feature`: quantitative bounds replace qualitative "promptly"
+  (jitter window `[0,N]`, `21600s`, `300s`, `08:00 UTC`); @AC-4's compound four-trigger `When` split
+  into atomic scenarios (@AC-4 fresh-boot / @AC-5 redeploy+crash+manual); @AC-6 (was the source-
+  inspection `Then`) reframed as an observable `[0,30]` delay + retry-advance. Scenarios re-mapped to
+  8 IDs covering FR-1..FR-6 (safe to renumber pre-gate — no test steps cite these IDs yet).
+- **Overlap scan: CLEAN** (no FAIL). Only 156 shares concrete resources and is correctly sequenced
+  (lands first; 157 rebases + takes next-free migration `020`). Added a hard build-order row to
+  `docs/roadmap/features/merge-order.md`: 157 → 156 (Resolved: No).
+- Next: `/sdd-design durable-loop-scheduler`.
