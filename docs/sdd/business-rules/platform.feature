@@ -45,3 +45,11 @@ Feature: Platform-wide guarantees
     Given the manage_strategy change has been applied
     When the manage_strategy docstring, docs/runbooks/mcp-tools.md, and the strat-lab backtest skill are read
     Then each states that entry_rule/exit_rule accept a JSON string or a JSON object (dict)
+
+  @AC-15 @FR-1 @feature-157
+  Scenario: Deregistering an offline account purges its positions and realized P&L
+    Given an offline account with open positions and recorded realized P&L
+    When the user deregisters that offline account
+    Then an account.deregistered event is emitted for that account_id
+    And the account's positions and its offline_account_realized row are removed
+    And the account no longer appears in ListBrokerAccounts

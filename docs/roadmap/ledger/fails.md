@@ -1930,3 +1930,14 @@ ambiguity is logged here).
 - **Rule it implies**: register new config-ui nav entries in `NAV_GROUPS` (`navGroups.tsx`), not
   `PLATFORM_SUBNAV`; C-10(a)'s reachability test must run in CI because it's the only gate that catches a
   wrong/dead nav surface.
+
+### 2026-08-26 — offline-account-portfolios — assumption
+- **Mistake**: The agent tool-count baseline was taken from a `@server.tool()` grep that missed one
+  decorator *form*, yielding 28 when the true count was 29 — and the impl-spec review then mis-attributed
+  the docstring's "29" as stale drift. Six inventory surfaces (docstring, decorators, agent CLAUDE.md
+  table, `mcp-tools.md`, `test_tools_endpoint.py` name-set, `GET /api/tools`) all pivot on this count, so
+  a wrong baseline propagates six ways.
+- **Evidence**: feature 157 context.md:194-196 (review assumed drift), :210-212 (execute found true baseline 29).
+- **Rule it implies**: verify an inventory count by the authoritative source-of-truth surface (the
+  registered name-set / running `GET /api/tools`), never a single decorator grep — decorator forms vary
+  and a grep undercounts silently.

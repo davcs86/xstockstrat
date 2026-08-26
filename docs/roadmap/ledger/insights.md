@@ -2448,3 +2448,14 @@ reusing.
 - **Evidence**: feature 154 context.md:160; implementation-spec.md (archived) §409-411 (host buf 1.47.2 re-emitted `google/protobuf/timestamp.ts`).
 - **Rule it implies**: pin the host codegen toolchain to `Dockerfile.codegen`'s exact versions and verify
   an empty `git diff packages/proto/gen/` outside the intended service before committing.
+
+### 2026-08-26 — offline-account-portfolios — reuse
+- **Pattern**: To add a **client-less variant** of a pooled resource (an offline account = an `s.brokers`
+  entry with `client=nil, brokerType=OFFLINE`), reuse the single pool + an existing type discriminant and
+  add an explicit `brokerType==OFFLINE` **skip at every site that ranges/keys the pool** (`pollFills`,
+  `syncPositions`, `reconcileTick`, `checkCredentialHealth`, `resolveAccount` sole-account fallback,
+  `LoadInflightOrders`, bracket watchdog). The impl-spec enumerated all sites rather than trusting
+  "natural" guards (`broker_order_id==""`) alone.
+- **Evidence**: feature 157 design.md (archived) §19-28; context.md:158-163 (every `s.brokers` site enumerated).
+- **Rule it implies**: when adding a null-client member to a shared pool, enumerate every pool-iteration
+  site and guard each explicitly — a nil-deref is one un-audited ranging loop away.
