@@ -2207,3 +2207,19 @@ reusing.
 - **Evidence**: feature 127 context.md §Session 2026-08-19 (round 2) and §COMPLETION (spec updated + re-run → PASS WITH WARNINGS).
 - **Rule it implies**: a scope expansion that falsifies a product-spec governance claim re-enters
   `/sdd-review product-spec`; reinforces C-14/C-09.
+
+### 2026-08-26 — symbol-page-section-nav — design
+- **Pattern**: When a section must show/hide conditional content (e.g. held-position stats), fold it
+  into a mounted **panel** inside a stable section rather than a nav chip that appears/disappears — a
+  navigation spine whose entry set is invariant across data state is more predictable for both users
+  and e2e locators.
+- **Evidence**: feature 139 context.md:170-172, design.md (archived) §155-157.
+- **Rule it implies**: prefer a fixed nav/tab spine + conditional panels over data-conditional nav entries.
+
+### 2026-08-26 — symbol-page-section-nav — design
+- **Pattern**: Before grouping components into a tab/panel group, verify they can actually co-render.
+  Components on mutually-exclusive branches (the FR-11 watchlist split: Fundamentals vs Screener) can
+  never be tab-switchable siblings; surface the contradiction (C-11) instead of silently reconciling a
+  user's proposed grouping.
+- **Evidence**: feature 139 implementation-spec.md (archived, D-4); design.md §174-178.
+- **Rule it implies**: a tab/panel group is valid only if all members can be simultaneously present in the DOM.

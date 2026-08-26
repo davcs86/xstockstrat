@@ -1773,3 +1773,11 @@ ambiguity is logged here).
 - **Rule it implies**: when adding a field to a proto message that passes through a hand-rolled
   normalizer/reconstructor, grep every normalizer on that type's write path and extend it in the same
   change — a field-by-field rebuild silently drops unknown fields.
+
+### 2026-08-26 — symbol-page-section-nav — assumption
+- **Mistake**: A `md:grid-flow-col md:auto-cols-fr` panel row overflowed horizontally by 59px at 390px
+  because CSS grid items default to `min-width:auto`; the layout looked correct at desktop and only the
+  390px `mobile-overflow` guard caught it.
+- **Evidence**: feature 139 implementation-spec.md (archived) :508-511; context.md:194-199.
+- **Rule it implies**: any CSS grid holding variable-width children needs `min-w-0` on the items, and
+  every layout change must be re-run against the 390px overflow guard.
