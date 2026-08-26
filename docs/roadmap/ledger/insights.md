@@ -2240,3 +2240,24 @@ reusing.
 - **Evidence**: feature 140 design.md §91-92; context.md 2026-08-18 round 1; shipped `staleCheckDue`.
 - **Rule it implies**: staleness/refetch throttles should be driven by elapsed-time cooldowns, not by
   observing a value change that a stalled producer will never deliver.
+
+### 2026-08-26 — fix-opportunities-bars-fetch-oom — ordering
+- **Pattern**: When bounding DB/RPC fan-out, remove the redundant work (dedup) **before** adding a
+  concurrency limiter — adding a semaphore over still-redundant N× queries can worsen lock pressure, not relieve it.
+- **Evidence**: feature 141 recon.md (archived) §65-67 (OQ4); design.md two-piece approach (dedup then semaphore).
+- **Rule it implies**: a concurrency limiter is a complement to dedup, never a substitute; sequence dedup-first.
+
+### 2026-08-26 — fix-opportunities-bars-fetch-oom — design
+- **Pattern**: Select a concurrency-primitive precedent by its **scope** (process-lifetime `__init__` vs
+  per-call), not by matching the surface idiom — a per-call semaphore re-instantiated each RPC silently
+  bounds nothing across concurrent users.
+- **Evidence**: feature 141 design.md §36-41,136-139 (`servicer.py:151-157` cross-request vs `screener.py:84-86`/`entry_backfill.py:55-57` per-call).
+- **Rule it implies**: cross-request bounds require a process-lifetime object; verify the precedent's
+  construction site before copying.
+
+### 2026-08-26 — fix-opportunities-bars-fetch-oom — design
+- **Pattern**: Size a fan-out semaphore to the *downstream's* real execution capacity (marketdata
+  `DB_POOL_MAX=2`), not to a sibling precedent's default — a higher client-side limit only adds queueing
+  without raising real concurrent work.
+- **Evidence**: feature 141 design.md §64-69,140-142.
+- **Rule it implies**: match a limiter's ceiling to the narrowest downstream bottleneck, not to convention.

@@ -1789,3 +1789,20 @@ ambiguity is logged here).
 - **Evidence**: feature 140 context.md 2026-08-19; feature.md Status History row 2026-08-19 (PR #981).
 - **Rule it implies**: the squash/merge commit for a feature must include its `NNN-slug` (or the status
   automation won't detect promotion) — verify `launched` after promotion rather than assuming CI set it.
+
+### 2026-08-26 — fix-opportunities-bars-fetch-oom — scope-creep
+- **Mistake**: Recon and both adversarial grilling rounds scoped only to the function under change
+  (`_compute_opportunities`) and never inspected the RPC's own read/return path, so a
+  `_DEFAULT_OPP_PAGE_SIZE=50` read cap invalidated a compute-scale test asserting `>=200` (241 rows
+  materialized, only 50 returned).
+- **Evidence**: feature 141 context.md Step 2 (`servicer.py:109,2245`); fixed with `page_size=300`.
+- **Rule it implies**: when a test must observe the output of a fix, ground the full read/return path
+  (pagination defaults included), not just the write/compute site.
+
+### 2026-08-26 — fix-opportunities-bars-fetch-oom — assumption
+- **Mistake**: Shipped a SEV-2 fix against an unconfirmed root-cause hypothesis (chunk-lock exhaustion
+  never validated against a real memory/lock profile); the ≥200-row test scale is a documented
+  *substitute* for the unknown real incident size, not a reproduction.
+- **Evidence**: feature 141 design.md Open Risks 1-2; context.md sdd-design + execute summary.
+- **Rule it implies**: when root cause is unconfirmed, name the substitute proof explicitly in-test and
+  pre-commit to an escalation path if the incident recurs.
