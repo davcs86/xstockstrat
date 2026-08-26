@@ -174,3 +174,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Added `TestScheduler` (AC-1..7) to `tests/test_fundsignal_loop.py`, reusing `_make_loop`/`_make_cfg` (extended `_make_cfg` with `get_int_present`). Full analysis suite 608 passed; coverage 83.7% (≥40).
 - Files modified: `services/xstockstrat-analysis/tests/test_fundsignal_loop.py`
 - Deviations: none. Covers AC-1..AC-7.
+
+### Step 5 — service: run_fundamentals_scan MCP tool + client wrapper [done]
+- Added `client.run_fundamentals_scan(force, dry_run, symbols, access_scope)` (mirrors `set_strategy_live`; forwards derived scope via `_metadata`, projects `FundamentalsScanSummary` via `_ts_to_iso`) and registered the `run_fundamentals_scan` MCP tool next to `trigger_backfill` (derives scope via `_caller_access_scope`, wraps AioRpcError). Bumped module docstring 28→29 + enumeration line. No proto change.
+- Files modified: `services/xstockstrat-agent/app/client.py`, `app/tools.py`
+- TDD (paired Step 6): RED — 4 fail (missing client fn / unregistered tool / name-set mismatch) → GREEN. Covers AC-8.
+- Deviations: none.
+
+### Step 6 — test: agent tool + client tests [done]
+- Added `TestRunFundamentalsScanClient` (endpoint + forwarded scope + 7-key projection) and `TestRunFundamentalsScanTool` (admin forwards derived scope 15; backend PERMISSION_DENIED → RuntimeError), and added the tool to the `/api/tools` catalog name-set (C-10 reachability). Full agent suite 289 passed; coverage 78.5% (≥40).
+- Files modified: `services/xstockstrat-agent/tests/test_client.py`, `tests/test_tools.py`, `tests/test_tools_endpoint.py`
+- Deviations: none. Covers AC-8.
+
+### Step 7 — docs: agent tool-doc surfaces [done]
+- Bumped tool count twenty-eight→twenty-nine in agent CLAUDE.md + mcp-tools.md (both occurrences); added a CLAUDE.md tool-table row and a `### run_fundamentals_scan` mcp-tools.md section (params/return/errors, admin gate, no-schedule-contamination note). Count now consistent across docstring + CLAUDE.md + mcp-tools.md + the /api/tools name-set.
+- Files modified: `services/xstockstrat-agent/CLAUDE.md`, `docs/runbooks/mcp-tools.md`
+- Deviations: none. TDD: N/A (docs).

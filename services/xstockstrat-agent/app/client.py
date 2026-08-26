@@ -1247,6 +1247,40 @@ async def set_strategy_live(
     }
 
 
+async def run_fundamentals_scan(
+    force: bool = False,
+    dry_run: bool = False,
+    symbols: list[str] | None = None,
+    access_scope: int = 0,
+) -> dict[str, Any]:
+    """Manually trigger the fundamentals signal producer via RunFundamentalsScan (admin-scoped).
+
+    feature 156: surfaces the pre-existing admin-scoped RPC to the MCP. Forwards the caller's REAL
+    derived scope (admin never fabricated), so the analysis admin gate rejects a non-admin. Projects
+    FundamentalsScanSummary to a flat dict.
+    """
+    from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
+
+    meta = _metadata(("x-access-scope", str(access_scope)))
+    async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
+        stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
+        resp = await stub.RunFundamentalsScan(
+            analysis_pb2.RunFundamentalsScanRequest(
+                force=force, dry_run=dry_run, symbols=list(symbols or [])
+            ),
+            metadata=meta,
+        )
+    return {
+        "run_id": resp.run_id,
+        "symbols_processed": resp.symbols_processed,
+        "signals_emitted": resp.signals_emitted,
+        "calls_spent": resp.calls_spent,
+        "deferred_count": resp.deferred_count,
+        "status": resp.status,
+        "finished_at": _ts_to_iso(resp.finished_at),
+    }
+
+
 async def get_config_value(
     key: str, *, namespace: str, environment: str, user_id: str = ""
 ) -> str | None:

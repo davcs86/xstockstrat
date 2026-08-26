@@ -307,7 +307,7 @@ the red run against the pre-Step-3 tree first — P-06.)
 
 ### Step 5 — service: add `run_fundamentals_scan` MCP tool + client wrapper
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify (add `run_fundamentals_scan` wrapper)
@@ -378,7 +378,7 @@ the red run against the pre-Step-3 tree first — P-06.)
 
 ### Step 6 — test: agent tool + client tests (red-before-green)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify (tool-level admin/non-admin cases)
@@ -432,7 +432,7 @@ matrix). Red captured against the pre-Step-5 tree first (P-06).
 
 ### Step 7 — docs: agent tool-doc surfaces (count + per-tool reference)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/` + `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/CLAUDE.md` — modify (tool table + "twenty-eight" count)
