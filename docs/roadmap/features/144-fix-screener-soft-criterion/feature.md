@@ -8,6 +8,7 @@
 **Last Updated**: 2026-08-17
 **Committed to main**: 6cd5572193b09a153c24e4cb90e3b65708846981
 **Launched date**: 2026-08-19
+**Archived**: 2026-08-26
 
 ---
 
@@ -19,6 +20,7 @@
 | 2026-08-17 | `draft` → `code-completed` | implementation session | Fix implemented directly (no interactive `/sdd-design`/`/sdd-spec` run — harness bug-fix session; grounded design reasoning performed and logged inline in `context.md` instead). See `context.md` for the full design decision and verification. |
 
 | 2026-08-19 | `code-completed` → `launched` | CI workflow | Promoted via PR #985; committed 6cd5572193b09a153c24e4cb90e3b65708846981 |
+| 2026-08-26 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); no scenarios (no acceptance.feature); pruned product-spec.md |
 ---
 
 ## Artifacts

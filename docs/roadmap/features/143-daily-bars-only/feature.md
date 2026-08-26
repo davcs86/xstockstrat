@@ -5,6 +5,7 @@
 **Last Updated**: 2026-08-16
 **Committed to main**: 6cd5572193b09a153c24e4cb90e3b65708846981
 **Launched date**: 2026-08-19
+**Archived**: 2026-08-26
 
 ---
 
@@ -20,6 +21,7 @@
 | 2026-08-16 | `in-progress` → `code-completed` | /sdd-execute | All 10 steps done (proto → marketdata → ingest → agent → ui). Red-green TDD on all code steps; Go 63.8% / ingest 79.3% / agent 75.8% / UI chart.ts 100% coverage. Deviations D-1…D-6 logged (proto-deprecation staticcheck blast radius confined to marketdata; two spec-missed breaking tests; grpc AioRpcError ctor; admin-gate test context; e2e test-strengthening; e2e dev-server warmup timeout → CI-equivalent tsc+lint+vitest fallback, real e2e runs in CI's prebuilt job). |
 
 | 2026-08-19 | `code-completed` → `launched` | CI workflow | Promoted via PR #985; committed 6cd5572193b09a153c24e4cb90e3b65708846981 |
+| 2026-08-26 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(2); no scenarios (no acceptance.feature); pruned 4 specs |
 ---
 
 ## Artifacts

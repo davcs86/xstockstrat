@@ -5,6 +5,7 @@
 **Last Updated**: 2026-08-24
 **Committed to main**: 2c8c9d7cb563140384324b5e1f9ff6fdceb1a367
 **Launched date**: 2026-08-24
+**Archived**: 2026-08-26
 
 ---
 
@@ -18,6 +19,7 @@
 | 2026-08-24 | `implementation-ready` → `code-completed` | implementation | All 9 steps landed; analysis 591 green, agent 286 green, buf clean |
 
 | 2026-08-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #1006; committed 2c8c9d7cb563140384324b5e1f9ff6fdceb1a367 |
+| 2026-08-26 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(0); promoted 8 scenarios → analysis suite; pruned 4 specs |
 ---
 
 ## Artifacts

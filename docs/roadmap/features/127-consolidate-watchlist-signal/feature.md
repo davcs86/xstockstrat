@@ -5,6 +5,7 @@
 **Last Updated**: 2026-08-11
 **Committed to main**: d908f33dc3283b79b61b233d57542cd47014c4ab
 **Launched date**: 2026-08-21
+**Archived**: 2026-08-26
 
 ---
 
@@ -21,6 +22,7 @@
 | 2026-08-20 | `in-progress` → `code-completed` | /sdd-execute | All 10 steps done — agent auto-add (steps 6,8; 227 agent tests pass) + UI undeletable affordance & signal badge (steps 9,10; watchlists e2e 11 pass). Portfolio build/lint/test green; proto stubs regenerate byte-clean. |
 
 | 2026-08-21 | `code-completed` → `launched` | CI workflow | Promoted via PR #997; committed d908f33dc3283b79b61b233d57542cd47014c4ab |
+| 2026-08-26 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(2); promoted 8 scenarios → platform+agent+portfolio+ui suites; pruned 4 specs |
 ---
 
 ## Artifacts

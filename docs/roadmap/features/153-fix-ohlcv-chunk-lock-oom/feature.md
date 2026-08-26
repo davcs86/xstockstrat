@@ -8,6 +8,7 @@
 **Last Updated**: 2026-08-24
 **Committed to main**: d1dd9e749e789c25f48ea86acf12ddf6ed97bd8b
 **Launched date**: 2026-08-25
+**Archived**: 2026-08-26
 
 ---
 
@@ -23,6 +24,7 @@
 | 2026-08-24 | `in-progress` → `code-completed` | /sdd-execute | All 3 steps done (migration 004; Piece A runbook; doc consistency). Piece A already applied to the live cluster |
 
 | 2026-08-25 | `code-completed` → `launched` | CI workflow | Promoted via PR #1011; committed d1dd9e749e789c25f48ea86acf12ddf6ed97bd8b |
+| 2026-08-26 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); promoted 2 scenarios → marketdata suite; pruned 4 specs |
 ---
 
 ## Artifacts

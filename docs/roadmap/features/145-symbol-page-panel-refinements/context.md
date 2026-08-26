@@ -1,100 +1,39 @@
-# Context: symbol-page-panel-refinements
+# Context: symbol-page-panel-refinements  (archived 2026-08-26)
 
-**Feature**: `docs/roadmap/features/145-symbol-page-panel-refinements/feature.md`
-**Product Spec**: `docs/roadmap/features/145-symbol-page-panel-refinements/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/145-symbol-page-panel-refinements/implementation-spec.md`
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-08-26 — /sdd-archiver
 
-## Session 2026-08-18 — sdd-story
+**What**: A pure `xstockstrat-ui` `/trader` presentation + client-state refinement of feature 139's symbol page. It shipped a single user-controllable strategy selection (modeled as a derivation) driving the Indicators / Backtests / "Why this fired" panels; removed the Manage and Broker panels; made Fundamentals always-on; and collapsed the stacked opportunity cards into one tabbed `SymbolPanelGroup`. No proto/config/DB/backend touched.
 
-- Created feature.md (status: draft), product-spec.md, context.md from an operator UI-refinement request.
-- Predecessor: feature 139 (`symbol-page-section-nav`) built the Overview/Trade/Research/Analysis
-  section-nav + `SymbolPanelGroup` (desktop columns / mobile tabbed) this feature reuses.
-- Product decisions captured up front from the user (recorded so design/spec don't re-litigate):
-  - **Manage + Broker panels → remove both** (Manage links all point to generic `/trader?symbol=`,
-    duplicating the Place order panel; Broker's account id/link are already elsewhere).
-  - **Fundamentals → always-on** for any symbol (was wrongly watchlist-gated).
-  - **Strategy resolution**: `?strategy=` query → watchlist binding → user **picker** (active +
-    `liveEnabled` only). Orders-derived `owningStrategy` **dropped**. Default **empty until picked**.
-    Picker shown **in each panel header** (Indicators/Backtests/Why-this-fired), synced.
-  - **Opportunities** stacked cards → **one tabbed panel group** (one card per strategy). Confirmed
-    not a bug — AMZN is evaluated by 3 live strategies.
-- Root cause found while scoping: `?strategy=` was already read only by `SignalReadiness` (line 34),
-  never by Backtests/Indicators, which resolved via `boundStrategyId || owningStrategy` — the source
-  of the "No strategy resolves for AMZN" dead-end despite the URL seed.
-- Known trap flagged (fails.md Breadcrumb entry): three synced pickers with the same
-  `aria-label="Strategy"` will make `getByLabel('Strategy')` ambiguous — must disambiguate + grep the
-  e2e suite before closing the step.
-- Harness branch constraint: implement on `claude/symbol-page-ui-refinements-t2xp26`, single PR to
-  `main-dev` (no per-step feature-step branches).
+**Why (irrecoverable rationale)**:
+- The original "No strategy resolves for AMZN" dead-end had a specific root cause: `?strategy=` was read **only** by `SignalReadiness`, while Backtests/Indicators resolved via `boundStrategyId || owningStrategy` and ignored the URL seed entirely. The fix unified all three onto one derived value — so the URL seed finally reaches every panel. Once shipped, the *why this was broken* is gone from the code.
+- **Manage panel removed because** all its links deep-linked to a generic `/trader?symbol=`, duplicating the on-page "Place order" panel; **Broker panel removed because** its account id/link were already surfaced in the Position subtitle and the "Exposure" breadcrumb. These removal reasons are irrecoverable once design/spec are deleted — the deleted panels would otherwise read as an unexplained gap.
+- The stacked-opportunity-cards behavior was **confirmed not a bug**: a single symbol (AMZN) is legitimately evaluated by multiple live strategies at once, so multiple opportunity rows per symbol is correct. This domain fact justified the tabbed group.
+- (The decisive selection-model reasoning — *derive precedence, don't seed it* — is already recorded at insights.md 2026-08-18.)
 
-## Session 2026-08-18 — sdd-design
+**Rejected alternatives**:
+- Effect + `seededRef` to seed selection state — lost: flashes a wrong "no strategy" state before the async watchlist binding resolves (the "seededRef guard is load-bearing" admission was the smell). *(Already balladed into insights.md 2026-08-18.)*
+- Sync three pickers via the URL alone — lost: `history.replaceState` isn't reactive, siblings won't re-render; shared React state required.
+- **One shared picker in a page toolbar / the section nav** — would have eliminated the 3× combobox a11y redundancy and the entire `getByLabel('Strategy')` ambiguity class, **but the user explicitly chose per-header pickers** (FR-7). This is the live tension for any future revisit (see Deferred).
+- `StrategyPicker` in `components/shared/` — lost: it's coupled to the insights `analysisClient` via `useStrategyDefinitions`, so it lives in `components/insights/` to keep the coupling honest.
+- Delete "Why it's held" — rejected **at the design gate by explicit user decision**; kept as a Trade panel, which is why `owningStrategy` was retained as a display value even after being dropped as a resolution source. Without this note the retained-`owningStrategy`-for-display-only split looks accidental.
 
-- Phase 0 Recon: wrote recon.md (service: xstockstrat-ui; reuse patterns: `SignalReadiness` picker +
-  `liveEnabled` filter, `SymbolPanelGroup`, `history.replaceState` query/hash preservation).
-- Phase 1 Grilling: 1 round (quick). Proposer proposed lifted `selectedStrategyId` + `StrategyPicker`;
-  adversary returned NEEDS WORK (no Floor breach) with valid objections, all adopted.
-- **Decisions (design.md):**
-  - Strategy selection is a **pure derivation** `effective = picked ?? url ?? bound ?? ''` — NOT an
-    effect+seededRef (race/flash-free; matches user precedence query→binding→empty).
-  - `owningStrategy` **dropped as a resolution source only**; kept as a display value (Position
-    subtitle `page.tsx:612` + "Why it's held"). Enumerated all refs so none stranded (adversary count-claim catch).
-  - **"Why it's held" KEPT as a Trade-section panel** (user decision at the design gate; not scope-crept away).
-  - `StrategyPicker` lives in `components/insights/` (coupled to insights `analysisClient`), not `shared/`.
-  - Distinct picker aria-labels ("Strategy for Indicators/Backtests/Why this fired") + update
-    `position-detail.spec.ts:315`; page-level `useSearchParams` inside a Suspense boundary (Next 15).
-  - Research: all opportunities → one `SymbolPanelGroup`; Fundamentals always-on.
-  - Trade: Position + Risk & exit + Why it's held as panels; Manage + Broker removed; 2-col grid dropped.
-  - Tests: new multi-opportunity fixture + INVENTORY row (C-12); RED tests for AC-5 (sync) + AC-6
-    (`?strategy=` seed); full-suite `getByLabel` collision grep before close.
-- Constitution rules touched: C-10, C-12/C-13, C-14, P-03, P-06. Floor breaches: none.
-- Status: draft → design-approved.
+**Scars & gotchas**:
+- Promoting a card into its own `SymbolPanelGroup` panel silently adds a hidden mobile `role="radio"` tab carrying the **same text** as the card title, so any unscoped `getByText('Risk & exit')` now matches 2 elements and fails Playwright strict mode. Must scope to `getByRole('heading')` / `getByRole('radio')`. This bit "Risk & exit" when it became its own panel.
+- Three synced pickers sharing `aria-label="Strategy"` make `getByLabel('Strategy')` ambiguous, and the collision can surface on a *different* spec than the one under test — requires a full-suite grep + broad e2e pass before close (the fails.md 2026-08-09 Breadcrumb trap recurring; the fix was distinct `aria-label`s per picker).
+- Page-level `useSearchParams()` in Next 15 needs a `Suspense` boundary or `pnpm build` fails with a CSR-bailout.
 
-## Open Threads
+**Permanent deviations**:
+- None on behavior. Execution-process deviation only: per the harness single-PR constraint, the 3 steps landed directly on `claude/symbol-page-ui-refinements-t2xp26` (not per-step feature-step branches) and the P-06 RED capture was compressed to "confirmed failing during iteration" rather than a strict per-assertion RED. Recoverable from git, noted for completeness.
+- Minor shipped adjustments (IndicatorSection gained a stable outer Card so the `indicator-panels-empty` testid moved to the empty-state `<p>`; Backtests no-strategy copy reworded to "pick a live strategy above") — all grep-able in shipped code/tests.
 
-- **R1** — `getByLabel`/`getByRole` collision can surface on a *different* spec; grep full e2e suite +
-  broad run before closing the strategy-picker step (fails.md 2026-08-09).
-- **R2** — verify no CSR-bailout warning from the page-level `useSearchParams` (Suspense placement) in `pnpm build`.
-- **R3** — confirm every `owningStrategy` ref disposition when dropping it as a resolution source (Trade-section step).
+**Cross-feature signal**: This is the second symbol-page feature (after 139) to be bitten by `SymbolPanelGroup`'s hidden-mobile-radio-duplicate-label test-locator trap and by collision-prone shared `aria-label`s. The pattern: feature 139 introduces an all-mounted panel/nav primitive → every subsequent feature that adds panels inherits a locator-ambiguity tax.
 
-## Session 2026-08-18 — sdd-spec
+**Deferred follow-ons**: The single-toolbar/section-nav picker (rejected only on user preference, not merit) remains the known lever if the 3× combobox a11y redundancy or `getByLabel` ambiguity ever needs to be retired. The next `/sdd-story` on this page should not re-derive it.
 
-- Generated implementation-spec.md with 3 steps (aligned to design's advisory step boundaries). Status → implementation-ready.
-- UI-only (`xstockstrat-ui` `/trader`): no proto/config/DB/backend step; C-14 surface = existing `/trader/positions/[symbol]` (no new route, no `PLATFORM_SUBNAV`). Next.js has no CI coverage threshold, so no separate coverage `test` step — each `service` step carries RED-first Playwright e2e (P-06).
-- Key codebase findings verified against the tree:
-  - Strategy-list source to reuse is `SignalReadiness.tsx:28,32` (`useStrategyDefinitions()` default `includeInactive=false` per `useStrategyDefinitions.ts:17`, then `.definitions.filter(liveEnabled)`); `Select`+`aria-label` pattern at `SignalReadiness.tsx:67-78`. New `StrategyPicker.tsx` co-located in `components/insights/`.
-  - `owningStrategy` resolution passes are `page.tsx:304` (Backtests) and `:360` (Indicators); display uses to keep are subtitle `:612` + "Why it's held" `:729-748` (both inside `PositionBody`, refactored in Step 3).
-  - `CardTitle` renders `<h3>` (`ui/card.tsx:36`), so `getByRole('heading')` targets card titles (already used at spec `:113,133,146`).
-  - Multi-opportunity FR-1 is untestable on the current mock (one opp row per symbol, `opportunities.ts` + `mock-backend.ts:617`): Step 2 adds AMZN rows (two liveEnabled strategies `strat-live-001`/`strat-001`) + INVENTORY row (C-12).
-  - `SymbolPanelGroup` gives each panel `label` a `role="radio"` mobile tab once ≥2 panels — so making "Risk & exit" its own Trade panel (Step 3) creates a 2nd "Risk & exit" DOM occurrence that breaks unscoped `getByText('Risk & exit')` at spec `:29,66,132`; Step 3 rescopes them. Trade-panels membership assert at `:482-483` also updated.
-  - Watchlist-binding pre-selection flips the premise of readiness tests `:292-303,305-319` (they bind AAPL then assert the empty prompt) — Step 1 rebinds them to an empty strategy so the prompt still asserts; `:315` accessible name → "Strategy for Why this fired".
-- Open Threads mapped to steps: **R1** (full-suite `getByLabel`/`getByRole('combobox')` collision grep + broad `pnpm test:e2e`) and **R2** (page-level `useSearchParams` inside a `Suspense` boundary; verify `pnpm build` has no CSR-bailout) both discharge in **Step 1**; **R3** (`owningStrategy` display uses not stranded) is enforced in **Steps 1 and 3** via `grep -n "owningStrategy"`. Details in the `## Open Threads` block above.
-
-## Session 2026-08-18 — implementation (direct on harness branch)
-
-- Implemented all 3 steps on `claude/symbol-page-ui-refinements-t2xp26` (single-PR harness flow).
-- **New**: `src/components/insights/StrategyPicker.tsx` (shared liveEnabled picker).
-- **page.tsx**: `PositionDetailInner` under a `Suspense` boundary (R2); page-level `pickedStrategyId`
-  + derived `effectiveStrategyId = picked ?? url ?? bound ?? ''` + `handleStrategyChange` (state +
-  `?strategy=` URL mirror); pickers wired into Indicators/Backtests/(controlled)SignalReadiness
-  headers with distinct aria-labels; opportunities → one `SymbolPanelGroup`; Fundamentals always-on;
-  `PositionBody` split into `PositionPanel`/`RiskExitPanel`/`WhyHeldPanel`; Manage + Broker + 2-col
-  grid removed; `owningStrategy` kept display-only (subtitle + Why-it's-held).
-- **SignalReadiness.tsx**: now controlled (`strategyId`/`onStrategyChange` props); internal
-  `useSearchParams`/`useState` picker removed; renders shared `StrategyPicker`.
-- **Tests**: AMZN multi-opportunity fixture + INVENTORY row (C-12); e2e updates — Risk & exit →
-  `getByRole('heading')` (panel-tab collision), readiness prompt tests rebind empty strategy, picker
-  label → "Strategy for Why this fired", Trade-panels membership → 5 panels; new AC-1/AC-4/AC-5/AC-6.
-- **Verification**: `tsc --noEmit` clean; `pnpm lint` clean (pre-existing warnings only); `pnpm build`
-  clean — no `useSearchParams` CSR-bailout (R2 discharged); `pnpm exec playwright test e2e/trader`
-  → 102 passed (2 pre-existing timing flakes passed on retry, both in untouched specs). R1 sweep:
-  no unscoped `getByLabel('Strategy')`/`getByRole('combobox')` collision on the symbol page.
-- Status: implementation-ready → code-completed.
-
-## Session 2026-08-19 (CI: feature status automation)
-
-- Promotion PR #985 merged to main
-- Feature promoted and committed: 6cd5572193b09a153c24e4cb90e3b65708846981
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-08-19
+**Ledger entries written**: insights.md (1), fails.md (1) — see the 2026-08-26 entries. (The derived-precedence selection insight was already recorded at insights.md 2026-08-18.)
+**Runtime-invariant recommendations (→ /context-constitution)**: none strong (multi-strategy-per-symbol opportunity return is derivable from the analysis opportunity key shape `(user|symbol|strategy)`; flagged only because the e2e mock originally served one row per symbol and hid this case).
+**Scenario promotion (C-16)**: none — this feature has no `acceptance.feature` file.
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 996210e4.

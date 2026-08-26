@@ -5,6 +5,7 @@
 **Last Updated**: 2026-08-19
 **Committed to main**: 1d97c6c78caa532a24265dae2fa79c674b3b69dd
 **Launched date**: 2026-08-19
+**Archived**: 2026-08-26
 
 ---
 
@@ -17,6 +18,7 @@
 | 2026-08-18 | `design-approved` → `code-completed` | direct-impl | FR-7/FR-2/FR-3 (marketdata), FR-1 (ui), FR-6 (analysis) implemented + tested; go/tsc/ruff/pytest green |
 
 | 2026-08-19 | `code-completed` → `launched` | status reconciliation | Reconciled to launched: code in production (main==main-dev @ 1d97c6c7); CI status automation (ci-validate-feature-status.yml) missed the slug grep-match. PR #981. |
+| 2026-08-26 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); no scenarios (no acceptance.feature); pruned 4 specs |
 ---
 
 ## Artifacts
