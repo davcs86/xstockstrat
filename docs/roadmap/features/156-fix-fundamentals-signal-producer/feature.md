@@ -18,6 +18,7 @@
 | 2026-08-25 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 | 2026-08-25 | `implementation-ready` | /sdd-execute | Renumbered 155 → 156 (NNN collision with `155-watchlist-opportunity-signal-cues`, merged to main-dev); merged main-dev into branch |
 | 2026-08-25 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (migration 019_fundsignal_schedule) done |
+| 2026-08-25 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done (analysis scheduler + 2 config keys + migration 019 + agent MCP tool + config-ui trigger); e2e deferred to CI (D-2) |
 
 ---
 
