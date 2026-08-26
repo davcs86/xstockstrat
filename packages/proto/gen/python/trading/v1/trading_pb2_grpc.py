@@ -64,6 +64,11 @@ class TradingServiceStub(object):
                 request_serializer=trading_dot_v1_dot_trading__pb2.ReplaceOrderRequest.SerializeToString,
                 response_deserializer=trading_dot_v1_dot_trading__pb2.Order.FromString,
                 _registered_method=True)
+        self.ConfirmOrder = channel.unary_unary(
+                '/xstockstrat.trading.v1.TradingService/ConfirmOrder',
+                request_serializer=trading_dot_v1_dot_trading__pb2.ConfirmOrderRequest.SerializeToString,
+                response_deserializer=trading_dot_v1_dot_trading__pb2.Order.FromString,
+                _registered_method=True)
         self.RegisterBrokerAccount = channel.unary_unary(
                 '/xstockstrat.trading.v1.TradingService/RegisterBrokerAccount',
                 request_serializer=trading_dot_v1_dot_trading__pb2.RegisterBrokerAccountRequest.SerializeToString,
@@ -134,6 +139,16 @@ class TradingServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ConfirmOrder(self, request, context):
+        """ConfirmOrder is OFFLINE-only (feature 157): it writes the fill fields a broker would
+        otherwise report (filled_qty/filled_avg_price/filled_at, and a server-derived status)
+        onto an order belonging to an offline account, then recomputes the account's positions.
+        It never contacts a broker and is rejected with FailedPrecondition for broker accounts.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def RegisterBrokerAccount(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -199,6 +214,11 @@ def add_TradingServiceServicer_to_server(servicer, server):
             'ReplaceOrder': grpc.unary_unary_rpc_method_handler(
                     servicer.ReplaceOrder,
                     request_deserializer=trading_dot_v1_dot_trading__pb2.ReplaceOrderRequest.FromString,
+                    response_serializer=trading_dot_v1_dot_trading__pb2.Order.SerializeToString,
+            ),
+            'ConfirmOrder': grpc.unary_unary_rpc_method_handler(
+                    servicer.ConfirmOrder,
+                    request_deserializer=trading_dot_v1_dot_trading__pb2.ConfirmOrderRequest.FromString,
                     response_serializer=trading_dot_v1_dot_trading__pb2.Order.SerializeToString,
             ),
             'RegisterBrokerAccount': grpc.unary_unary_rpc_method_handler(
@@ -388,6 +408,33 @@ class TradingService(object):
             target,
             '/xstockstrat.trading.v1.TradingService/ReplaceOrder',
             trading_dot_v1_dot_trading__pb2.ReplaceOrderRequest.SerializeToString,
+            trading_dot_v1_dot_trading__pb2.Order.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ConfirmOrder(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.trading.v1.TradingService/ConfirmOrder',
+            trading_dot_v1_dot_trading__pb2.ConfirmOrderRequest.SerializeToString,
             trading_dot_v1_dot_trading__pb2.Order.FromString,
             options,
             channel_credentials,

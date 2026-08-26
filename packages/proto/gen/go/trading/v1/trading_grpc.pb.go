@@ -25,6 +25,7 @@ const (
 	TradingService_ListOrders_FullMethodName                     = "/xstockstrat.trading.v1.TradingService/ListOrders"
 	TradingService_StreamOrderUpdates_FullMethodName             = "/xstockstrat.trading.v1.TradingService/StreamOrderUpdates"
 	TradingService_ReplaceOrder_FullMethodName                   = "/xstockstrat.trading.v1.TradingService/ReplaceOrder"
+	TradingService_ConfirmOrder_FullMethodName                   = "/xstockstrat.trading.v1.TradingService/ConfirmOrder"
 	TradingService_RegisterBrokerAccount_FullMethodName          = "/xstockstrat.trading.v1.TradingService/RegisterBrokerAccount"
 	TradingService_ListBrokerAccounts_FullMethodName             = "/xstockstrat.trading.v1.TradingService/ListBrokerAccounts"
 	TradingService_DeregisterBrokerAccount_FullMethodName        = "/xstockstrat.trading.v1.TradingService/DeregisterBrokerAccount"
@@ -46,6 +47,11 @@ type TradingServiceClient interface {
 	// (Alpaca → PATCH /v2/orders/{id}; IBKR → adapter-specific modify). Allowed only
 	// while the order is NEW or PARTIALLY_FILLED.
 	ReplaceOrder(ctx context.Context, in *ReplaceOrderRequest, opts ...grpc.CallOption) (*Order, error)
+	// ConfirmOrder is OFFLINE-only (feature 157): it writes the fill fields a broker would
+	// otherwise report (filled_qty/filled_avg_price/filled_at, and a server-derived status)
+	// onto an order belonging to an offline account, then recomputes the account's positions.
+	// It never contacts a broker and is rejected with FailedPrecondition for broker accounts.
+	ConfirmOrder(ctx context.Context, in *ConfirmOrderRequest, opts ...grpc.CallOption) (*Order, error)
 	RegisterBrokerAccount(ctx context.Context, in *RegisterBrokerAccountRequest, opts ...grpc.CallOption) (*RegisterBrokerAccountResponse, error)
 	ListBrokerAccounts(ctx context.Context, in *ListBrokerAccountsRequest, opts ...grpc.CallOption) (*ListBrokerAccountsResponse, error)
 	DeregisterBrokerAccount(ctx context.Context, in *DeregisterBrokerAccountRequest, opts ...grpc.CallOption) (*DeregisterBrokerAccountResponse, error)
@@ -134,6 +140,16 @@ func (c *tradingServiceClient) ReplaceOrder(ctx context.Context, in *ReplaceOrde
 	return out, nil
 }
 
+func (c *tradingServiceClient) ConfirmOrder(ctx context.Context, in *ConfirmOrderRequest, opts ...grpc.CallOption) (*Order, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Order)
+	err := c.cc.Invoke(ctx, TradingService_ConfirmOrder_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *tradingServiceClient) RegisterBrokerAccount(ctx context.Context, in *RegisterBrokerAccountRequest, opts ...grpc.CallOption) (*RegisterBrokerAccountResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RegisterBrokerAccountResponse)
@@ -198,6 +214,11 @@ type TradingServiceServer interface {
 	// (Alpaca → PATCH /v2/orders/{id}; IBKR → adapter-specific modify). Allowed only
 	// while the order is NEW or PARTIALLY_FILLED.
 	ReplaceOrder(context.Context, *ReplaceOrderRequest) (*Order, error)
+	// ConfirmOrder is OFFLINE-only (feature 157): it writes the fill fields a broker would
+	// otherwise report (filled_qty/filled_avg_price/filled_at, and a server-derived status)
+	// onto an order belonging to an offline account, then recomputes the account's positions.
+	// It never contacts a broker and is rejected with FailedPrecondition for broker accounts.
+	ConfirmOrder(context.Context, *ConfirmOrderRequest) (*Order, error)
 	RegisterBrokerAccount(context.Context, *RegisterBrokerAccountRequest) (*RegisterBrokerAccountResponse, error)
 	ListBrokerAccounts(context.Context, *ListBrokerAccountsRequest) (*ListBrokerAccountsResponse, error)
 	DeregisterBrokerAccount(context.Context, *DeregisterBrokerAccountRequest) (*DeregisterBrokerAccountResponse, error)
@@ -233,6 +254,9 @@ func (UnimplementedTradingServiceServer) StreamOrderUpdates(*StreamOrderUpdatesR
 }
 func (UnimplementedTradingServiceServer) ReplaceOrder(context.Context, *ReplaceOrderRequest) (*Order, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReplaceOrder not implemented")
+}
+func (UnimplementedTradingServiceServer) ConfirmOrder(context.Context, *ConfirmOrderRequest) (*Order, error) {
+	return nil, status.Error(codes.Unimplemented, "method ConfirmOrder not implemented")
 }
 func (UnimplementedTradingServiceServer) RegisterBrokerAccount(context.Context, *RegisterBrokerAccountRequest) (*RegisterBrokerAccountResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RegisterBrokerAccount not implemented")
@@ -370,6 +394,24 @@ func _TradingService_ReplaceOrder_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _TradingService_ConfirmOrder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConfirmOrderRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TradingServiceServer).ConfirmOrder(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TradingService_ConfirmOrder_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TradingServiceServer).ConfirmOrder(ctx, req.(*ConfirmOrderRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _TradingService_RegisterBrokerAccount_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RegisterBrokerAccountRequest)
 	if err := dec(in); err != nil {
@@ -486,6 +528,10 @@ var TradingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReplaceOrder",
 			Handler:    _TradingService_ReplaceOrder_Handler,
+		},
+		{
+			MethodName: "ConfirmOrder",
+			Handler:    _TradingService_ConfirmOrder_Handler,
 		},
 		{
 			MethodName: "RegisterBrokerAccount",

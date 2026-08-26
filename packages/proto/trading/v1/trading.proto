@@ -18,6 +18,11 @@ service TradingService {
   // (Alpaca → PATCH /v2/orders/{id}; IBKR → adapter-specific modify). Allowed only
   // while the order is NEW or PARTIALLY_FILLED.
   rpc ReplaceOrder(ReplaceOrderRequest) returns (Order);
+  // ConfirmOrder is OFFLINE-only (feature 157): it writes the fill fields a broker would
+  // otherwise report (filled_qty/filled_avg_price/filled_at, and a server-derived status)
+  // onto an order belonging to an offline account, then recomputes the account's positions.
+  // It never contacts a broker and is rejected with FailedPrecondition for broker accounts.
+  rpc ConfirmOrder(ConfirmOrderRequest) returns (Order);
   rpc RegisterBrokerAccount (RegisterBrokerAccountRequest) returns (RegisterBrokerAccountResponse);
   rpc ListBrokerAccounts (ListBrokerAccountsRequest) returns (ListBrokerAccountsResponse);
   rpc DeregisterBrokerAccount (DeregisterBrokerAccountRequest) returns (DeregisterBrokerAccountResponse);
@@ -52,6 +57,10 @@ message Order {
   xstockstrat.common.v1.BrokerType broker_type = 20;
   // intent_state is set by every write path and read via a cross-intent LATERAL join on other reads; see design.md.
   IntentState intent_state = 21;
+  // filled_at is the confirmed/observed fill time: broker fills use the broker's timestamp;
+  // offline confirmations (feature 157) use the operator-supplied time (server-defaulted to now
+  // when unset). NULL for a NEW/unconfirmed order and every historical order.
+  google.protobuf.Timestamp filled_at = 22;
 }
 
 enum OrderSide {
@@ -122,6 +131,17 @@ message CancelOrderResponse {
 
 message GetOrderRequest {
   string order_id = 1;
+}
+
+// ConfirmOrder writes the fill a broker would otherwise report onto an OFFLINE order.
+// status is server-derived from filled_qty vs qty (never client-supplied). Rejected with
+// FailedPrecondition for broker (Alpaca/IBKR) accounts (FR-8/@AC-9).
+message ConfirmOrderRequest {
+  string order_id = 1;
+  double filled_qty = 2;
+  double filled_avg_price = 3;
+  google.protobuf.Timestamp filled_at = 4; // optional; server defaults to now when unset
+  string user_id = 5; // caller identity (ownership guard)
 }
 
 message ListOrdersRequest {

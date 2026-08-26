@@ -220,7 +220,14 @@ export declare enum BrokerType {
     /**
      * @generated from enum value: BROKER_TYPE_IBKR = 2;
      */
-    IBKR = 2
+    IBKR = 2,
+    /**
+     * A manually-tracked account with no broker credentials and no broker client
+     * (feature 157). Its fills are hand-confirmed via ConfirmOrder; broker pollers skip it.
+     *
+     * @generated from enum value: BROKER_TYPE_OFFLINE = 3;
+     */
+    OFFLINE = 3
 }
 /**
  * Describes the enum xstockstrat.common.v1.BrokerType.

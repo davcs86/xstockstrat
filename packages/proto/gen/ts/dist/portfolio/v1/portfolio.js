@@ -205,6 +205,7 @@ function createBasePortfolio() {
         updatedAt: undefined,
         positions: [],
         accountId: "",
+        realizedPnl: undefined,
     };
 }
 exports.Portfolio = {
@@ -241,6 +242,9 @@ exports.Portfolio = {
         }
         if (message.accountId !== "") {
             writer.uint32(90).string(message.accountId);
+        }
+        if (message.realizedPnl !== undefined) {
+            writer.uint32(97).double(message.realizedPnl);
         }
         return writer;
     },
@@ -328,6 +332,13 @@ exports.Portfolio = {
                     message.accountId = reader.string();
                     continue;
                 }
+                case 12: {
+                    if (tag !== 97) {
+                        break;
+                    }
+                    message.realizedPnl = reader.double();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -383,6 +394,11 @@ exports.Portfolio = {
                 : isSet(object.account_id)
                     ? globalThis.String(object.account_id)
                     : "",
+            realizedPnl: isSet(object.realizedPnl)
+                ? globalThis.Number(object.realizedPnl)
+                : isSet(object.realized_pnl)
+                    ? globalThis.Number(object.realized_pnl)
+                    : undefined,
         };
     },
     toJSON(message) {
@@ -420,6 +436,9 @@ exports.Portfolio = {
         if (message.accountId !== "") {
             obj.accountId = message.accountId;
         }
+        if (message.realizedPnl !== undefined) {
+            obj.realizedPnl = message.realizedPnl;
+        }
         return obj;
     },
     create(base) {
@@ -438,6 +457,7 @@ exports.Portfolio = {
         message.updatedAt = object.updatedAt ?? undefined;
         message.positions = object.positions?.map((e) => exports.Position.fromPartial(e)) || [];
         message.accountId = object.accountId ?? "";
+        message.realizedPnl = object.realizedPnl ?? undefined;
         return message;
     },
 };
