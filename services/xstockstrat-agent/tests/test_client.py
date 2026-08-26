@@ -1026,3 +1026,53 @@ class TestRunBacktestSizingMode:
 
         req = await self._built_request()
         assert req.fill_model == analysis_pb2.FILL_MODEL_UNSPECIFIED
+
+
+class TestRunFundamentalsScanClient:
+    """feature 156: the run_fundamentals_scan wrapper dials analysis, forwards the caller's
+    derived scope (admin never fabricated), and projects FundamentalsScanSummary to a flat dict."""
+
+    @pytest.mark.asyncio
+    async def test_uses_analysis_endpoint_and_forwards_scope(self):
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+        from google.protobuf.timestamp_pb2 import Timestamp
+
+        ts = Timestamp()
+        ts.FromSeconds(1_700_000_000)
+        resp = analysis_pb2.FundamentalsScanSummary(
+            run_id="r1",
+            symbols_processed=3,
+            signals_emitted=1,
+            calls_spent=2,
+            deferred_count=0,
+            status="completed",
+            finished_at=ts,
+        )
+        mock_stub = MagicMock()
+        mock_stub.RunFundamentalsScan = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
+                result = await client.run_fundamentals_scan(
+                    force=True, dry_run=False, symbols=["AAPL"], access_scope=15
+                )
+        assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.ANALYSIS_ENDPOINT
+        req = mock_stub.RunFundamentalsScan.call_args[0][0]
+        assert req.force is True
+        assert req.dry_run is False
+        assert list(req.symbols) == ["AAPL"]
+        meta = mock_stub.RunFundamentalsScan.call_args.kwargs["metadata"]
+        assert ("x-access-scope", "15") in meta
+        assert not any(k == "authorization" for k, _ in meta)
+        assert set(result) == {
+            "run_id",
+            "symbols_processed",
+            "signals_emitted",
+            "calls_spent",
+            "deferred_count",
+            "status",
+            "finished_at",
+        }
+        assert result["symbols_processed"] == 3
+        assert result["status"] == "completed"
+        assert result["finished_at"].startswith("2023-11-14")
