@@ -2171,3 +2171,29 @@ reusing.
 - **Evidence**: feature 042 design.md §2 (archived); context.md round 3; ledger CLAUDE.md invariant #4.
 - **Rule it implies**: when an event consumer's correctness depends on inter-event-type ordering,
   subscribe once broadly and gate on the global sequence — do not split by type.
+
+### 2026-08-26 — unified-symbol-page — reuse
+- **Pattern**: Cross-segment BFF client reuse works only for RPCs *already forwarded* in the owning
+  segment's BFF; a **net-new** RPC still needs a `forward()` registration in the segment whose `/api`
+  the browser client routes through. Missing it fails at runtime as a **501 Not Implemented from the
+  BFF**, invisible to tsc/lint.
+- **Evidence**: feature 125 context.md:995-998 (`getIndicatorSeries` had to be registered in `insightsBff.ts`); builds on the cross-segment-reuse insight recorded 2026-08-10.
+- **Rule it implies**: when adopting cross-segment client reuse for a page needing a brand-new RPC,
+  register the method in the owning segment's BFF forward block; treat a 501-from-BFF as a missing
+  forward, not a service outage.
+
+### 2026-08-26 — unified-symbol-page — design
+- **Pattern**: A signature-changing account/tenant-scoping bug fix on a shared repo method must grep
+  **all** callers — a read-path scoping bug frequently has a silent write-path twin that corrupts data
+  for multi-tenant users.
+- **Evidence**: feature 125 context.md:639-648 (`GetPosition` read-path fix surfaced the `portfolio_service.go:257` fill avg-entry write-path twin).
+- **Rule it implies**: before landing a scoping fix, enumerate every caller of the changed signature and
+  classify each as read or write path; a write-path twin is a data-integrity defect, not a style change.
+
+### 2026-08-26 — unified-symbol-page — ordering
+- **Pattern**: recon/spec-quoted code skeletons go stale against features merged in the interim; the
+  executor must mirror the **live** handler, not the spec's quoted skeleton (`EvaluateReadiness` gained
+  owner-scoping via feature 133 between this feature's recon and its execute).
+- **Evidence**: feature 125 context.md:963 (Step 30).
+- **Rule it implies**: at execute time, re-read the actual anchor before copying a spec-quoted skeleton;
+  assume any handler cited from recon may have been owner-scoped/hardened by a feature merged since.

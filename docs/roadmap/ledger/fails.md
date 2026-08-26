@@ -1725,3 +1725,31 @@ ambiguity is logged here).
 - **Rule it implies**: a consumer's hardcoded event/topic string must be copied from (or asserted
   against) the producer's actual emit site, and a producer↔consumer parity test should pin it — a
   spelling mismatch is invisible to normal tests.
+
+### 2026-08-26 — unified-symbol-page — config
+- **Mistake**: Designed a nullable per-bar series as `repeated google.protobuf.DoubleValue` assuming the
+  wrapper conveys presence; at implementation this proved unimplementable — repeated wrapper elements
+  have no presence, `HasField` raises, and Connect-JSON collapses a gap and a real `0.0` to the same `0`.
+- **Evidence**: feature 125 context.md:967-979 (fixed with a per-point `IndicatorValue { optional double value = 1; }`).
+- **Rule it implies**: to carry nullable scalars in a *repeated* proto field, wrap each element in a
+  message with a proto3 `optional` scalar; `google.protobuf.*Value` only gives presence for a *singular*
+  optional field.
+
+### 2026-08-26 — unified-symbol-page — scope-creep
+- **Mistake**: A page-retirement/redirect step nearly dropped shipped functionality (feature 132's Mute
+  control, 083's Edge(BT) stat) that had landed on the target page *after* recon froze; the spec's
+  grep-only inbound sweep also missed 4 later-added e2e specs pointing at the retired route.
+- **Evidence**: feature 125 context.md:915-929 (Steps 22-26).
+- **Rule it implies**: before retiring/redirecting a page, re-derive its *current* feature surface and
+  inbound references against live trunk (not recon) — a consolidation spec written earlier cannot see
+  features merged onto its deletion target since.
+
+### 2026-08-26 — unified-symbol-page — assumption
+- **Mistake**: Status-automation drift recurred — executing on a harness-pinned `claude/*` branch with a
+  squash-merge (no `feature/<slug>` branch to reconcile) plus not flipping step/`status.md` state during
+  execute left the feature stuck at "Step 1 / implementation-ready" despite completion; CI auto-promote
+  silently skips anything not already `code-completed`. The same root cause hit feature 096.
+- **Evidence**: feature 125 feature.md 2026-08-16 correction row; context.md:15-25 (096's identical failure).
+- **Rule it implies**: when executing on a harness branch that will squash-merge, advance
+  `status.md`/step statuses explicitly during execution — do not rely on CI auto-promotion, which only
+  fires for features already at `code-completed`.
