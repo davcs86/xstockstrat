@@ -61,3 +61,113 @@
 Per root CLAUDE.md "Mandatory Entry Point": running `/sdd-story` → next `/sdd-design quick` before any
 code. This task arrived as a plain "implement X, commit and push"; treated as a request for the
 capability, not a waiver of the pipeline.
+
+---
+
+## Session 2026-08-26 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: trading, portfolio, ui, agent, packages/proto). Key reuse
+  patterns: `account.positions.synced` → `ConsumePositionSyncs` absolute self-heal; `enrichPositions`
+  mid-quote valuation on both read paths; `useReplaceOrder`/`useInvalidatingMutation` UI mutation;
+  `manage_watchlist` ownership-scoped agent tool.
+- Phase 1 Grilling: **4 rounds (full debate)**. Chosen approach: offline = `BROKER_TYPE_OFFLINE=3`,
+  single `s.brokers` pool with a type-skip flag; offline-only `ConfirmOrder` recomputes absolute
+  positions from all confirmed orders and emits `account.positions.synced` **only** (never
+  `order.filled`); realized P&L at account grain (`portfolio.offline_account_realized` table) surfaced
+  on the per-account card via `Portfolio.realized_pnl`; shorts via the existing signed fold; shared
+  `packages/proto/pnl` Fold refactors trading + portfolio onto one implementation.
+  Rejected: parallel offline map; incremental `order.filled` fold; signed-delta emission; per-position
+  realized; `GetPnL` Pass 3; `deregistered` flag on the sync event; `ReplaceOrder` extension;
+  golden-vectors-only; a dedicated set-positions reconcile capability.
+- Constitution rules touched: C-04, C-07, C-08, C-09, C-10, C-13, C-14, C-15, C-16, C-03, P-06, F-01,
+  F-04, F-07. Floor breaches: none (all 4 rounds APPROVE-blocked only on non-Floor objections, all
+  resolved).
+- Status: draft → design-approved.
+
+### Operator decisions (this session, via AskUserQuestion)
+
+- Account model = **new `BROKER_TYPE_OFFLINE` enum value**.
+- Confirmation API = **new offline-only `ConfirmOrder` RPC**.
+- Offline equity = **derived from positions** (marketdata mid-quotes; no `account_balances` row).
+- **Realized P&L in v1** and **shorts in v1** (both chosen over the minimal defer options).
+- Monthly statement reconciliation = **a Claude task that corrects drift via order edits** using this
+  feature's tools (no dedicated set-positions capability). Ultimate goal: a scheduled email-processing
+  task (record/confirm orders) + a monthly statement-sync task. **I am building the platform capability
+  only** — not setting up the scheduled Routines (operator will wire them after 156 ships).
+- Approval = **"fix all review warnings, then approved"** — all round-4 adversary objections folded in.
+
+### C-15 / C-16 sign-off — @AC-7 amended (recorded per C-16)
+
+The absolute-recompute model (operator-chosen at the round-2 gate, "Run another round with the
+absolute recompute approach") means offline emits `account.positions.synced`, not `order.filled`.
+`@AC-7` was amended accordingly (was "an order.filled ledger event is emitted"; now asserts
+`account.positions.synced` + the positions outcome + "no order.filled emitted"). Added scenarios
+`@AC-10..@AC-15` (re-edit idempotency, sell-to-close removal, sell-to-open short, realized survives
+wipe + shown on card, broker P&L unaffected, deregister purge). `@AC-*` IDs remain append-only.
+
+### Round-4 warnings folded in (all fixed before approval)
+
+1. Shared `pnl` golden/parity tests live in the **consuming service** test modules (no CI job runs
+   `go test` in `packages/proto/`); + a governance carve-out note in `packages/proto/CLAUDE.md`.
+2. Portfolio's `applyFill`/`realizedDelta`/test refactored onto shared `Fold` **in the same PR** (two
+   impls = 056 drift), gated by a characterization test + cross-service golden-vector parity test.
+3. `Portfolio.realized_pnl` is **`optional`** (proto3 presence → 0-vs-unset); UI Stat gated on account
+   type == OFFLINE.
+4. Deregister cleanup via a **dedicated `account.deregistered` event** (not a flag on the sync event).
+5. `offline_account_realized` upsert **outside** the `processPositionSync` positions loop, gated
+   `RealizedPnl != nil`.
+6. Realized populated on **both** `buildAccountPortfolio` (ListPortfolios) **and** `GetPortfolio`
+   (separate build path) with a parity assertion.
+
+### Named follow-ups (C-14 — not vague "later")
+
+- `offline-broker-card-realized` — surface realized P&L on **broker** account cards (requires fixing
+  `GetPnL` account-blindness). Offline-only realized is expected in v1.
+- Offline crash-recovery resync — offline self-heal is confirm-triggered only (no poller); a resync
+  path is a possible follow-up if staleness after a mid-confirm crash proves material.
+
+### Grounding verified this session
+
+- `Order` fields 1–21 (`intent_state=21`) → `filled_at = 22` next-free.
+- `Portfolio` fields 1–11 → `realized_pnl = 12` next-free.
+- `GetPortfolio` (`portfolio_service.go:459`) is a **separate** build path from `buildAccountPortfolio`
+  (`:1036`) → realized must be populated in both (parity).
+- Migration numbers `trading 008` / `portfolio 012` free on active `origin` branches (spot-scan;
+  `/sdd-review` runs the full feature-overlap scan).
+- `packages/proto/go.mod` = `github.com/xstockstrat/contracts`, in `go.work`, `replace`d by both
+  trading and portfolio `go.mod` → a sibling `pnl/` package resolves under `GOWORK=off` with no new
+  wiring; `proto-freshness` only diffs `gen/`.
+
+---
+
+## Session 2026-08-26 — sdd-spec
+
+- Generated implementation-spec.md with **15 steps**. Status → `implementation-ready`.
+- Consumed recon.md + design.md as authoritative inputs (chosen approach followed; rejected
+  alternatives off the table). Every step cites grep-verified `path:line` (C-01).
+- Key codebase findings (grounded this session, beyond recon):
+  - **Every `s.brokers` site enumerated** in `trading.go` for the offline-skip guard: `LoadBrokerPool`
+    (:205/:225), `resolveAccount` sole-account fallback (:269/:281-286), `pollFills` (:1136/:1138-1143),
+    `reconcileTick` (:1393/:1394-1399), `syncPositions` (:1731/:1736-1741), `checkCredentialHealth`
+    (:2062/:2063-2068), `flattenAndHalt` (:2176-2177), bracket watchdog `checkBracketProtection`
+    (:2281), `DeregisterBrokerAccountSvc` delete (:2402-2404), `LoadInflightOrders` (:247, broker-id
+    gated). `brokerPoolEntry.brokerType` is the existing discriminant (already read at trading.go:610).
+  - **ConfirmOrder guard is order-sourced**: `TradingRepo.GetOrder` (trading_repo.go:104) SELECT already
+    lists `user_id` + `broker_type` (:106-109) — no broker call needed to reject broker accounts.
+  - **Proto field numbers confirmed free**: `Order.filled_at = 22` (fields 1–21 used), `Portfolio`
+    `realized_pnl = 12` (fields 1–11 used, declared `optional` for presence), `BrokerType_OFFLINE = 3`.
+  - **Migrations**: trading last `007_broker_accounts_halt_source` → `008`; `credentials_enc BYTEA NOT
+    NULL` at 002_broker_accounts.up.sql:8; `trading.orders` has no `filled_at` (001_orders_hypertable).
+    Portfolio last `011` → `012` for `offline_account_realized`.
+  - **Shared `pnl` package resolves with zero wiring**: both trading & portfolio go.mod:10,41 require
+    `github.com/xstockstrat/contracts v0.0.0` + `replace => ../../packages/proto`; contracts module is
+    `github.com/xstockstrat/contracts` → sibling `packages/proto/pnl/` is `.../contracts/pnl`.
+  - **Portfolio fold to extract**: `realizedDelta` (portfolio_service.go:519) + `applyFill` closure
+    (:551-578); `processPositionSync` realized upsert lands after `DeletePositionsNotInSync` (:930),
+    gated `RealizedPnl != nil`; dual read paths `buildAccountPortfolio` (:1036) + `GetPortfolio` (:459).
+  - **`account.positions.synced` emit shape** to mirror: trading.go:1813-1818 / portfolio
+    `positionSyncPayload` :862-883 (add `RealizedPnl *float64`).
+  - **Agent** has no trading client: `client.py:19-25` endpoint consts (`TRADING_ENDPOINT` absent),
+    per-call channel pattern :293-311; six tool-count surfaces 28→29; env absent from docker-compose.yml
+    /.do/app.yaml/.do/app.dev.yaml/agent CLAUDE.md.
+- Every `@AC-1..@AC-15` mapped to a covering test step (see § Scenario Coverage in the spec).

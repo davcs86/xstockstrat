@@ -40,10 +40,13 @@ FR-5. The same offline order confirmation is editable via an MCP agent tool (cre
 and set/edit its fill).
 
 FR-6. Confirming or editing an offline order's fill updates the offline account's positions and P&L
-through the **same** portfolio path used for broker-synced fills (the `order.filled` ledger event
-consumed by portfolio's `ConsumeOrderFills`), so no separate offline-only valuation path is
-introduced. The mark-to-market a broker would supply (`current_price`/`unrealized_pnl`) is derived
-consistently across both the `ListPositions` and `ListPortfolios` read paths (see Known Trap).
+through the **same absolute position-sync path** used for broker position snapshots (the
+`account.positions.synced` ledger event consumed by portfolio's `ConsumePositionSyncs`), recomputed
+from all the account's confirmed orders so editing is idempotent. **Realized and unrealized P&L and
+short (net-negative) positions are in scope** (design decision, 2026-08-26): unrealized/mark-to-market
+is derived from marketdata mid-quotes consistently across both the `ListPositions` and `ListPortfolios`
+read paths; realized P&L is tracked at account grain and shown on the offline account's portfolio card.
+`ConfirmOrder` MUST NOT emit `order.filled` (that would double-count via the incremental fold).
 
 FR-7. Broker-only integrations — the fill poller, position/balance sync poller, credential-health
 poller, reconciliation poller, and bracket-protection watchdog — **skip** offline accounts; no live
@@ -116,24 +119,22 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **Account-source modeling (design fork):** add `BROKER_TYPE_OFFLINE` to the existing
-  `BrokerType` enum (least-effort mirror — routing/pollers already switch on `broker_type`), or add a
-  separate account-source/`is_offline` field so "offline" is orthogonal to the broker/provider axis?
-  Platform Lead + Proto Reviewer to weigh in at `/sdd-design`.
-- [ ] **Confirmation mutation shape (design fork):** a dedicated `ConfirmOrder`/`SetOrderFill` RPC vs.
-  extending `ReplaceOrder`. Note `ReplaceOrder` today is broker-routed and only edits *working* orders
-  (NEW/PARTIALLY_FILLED) qty/limit/stop/TIF — a fill confirmation writes `filled_qty`/`filled_avg_price`/
-  `status`, which is a different operation and must not touch a broker.
-- [ ] **Offline position valuation & equity:** offline positions have no broker mark-to-market. Is
-  `current_price`/`unrealized_pnl` pulled from `xstockstrat-marketdata` mid-quotes (as `ListPositions`
-  already does), and is offline account **equity/cash** derived from positions, or does the user enter
-  a starting cash balance? `portfolio.account_balances` is normally fed by `account.balance.synced`,
-  which offline accounts never emit — decide how the balance row is seeded.
-- [ ] **MCP scope:** should the agent tool cover full offline-account CRUD (create/deactivate) or only
-  order recording + confirmation editing? Scope to the minimum the story needs.
-- [ ] **Known trap (fails.md 2026-08-06, portfolio dual read path):** valuation added only to
-  `ListPortfolios`/`buildAccountPortfolio` once silently disagreed with `ListPositions`. Offline
-  valuation must be applied to **both** paths in this feature — call it out in the impl spec.
-- [ ] **Known trap (fails.md 2026-08-05, add-ikbr-account-support):** a documented "follow-up" gap
-  (missing `user_id` in a synced payload) shipped and became a production bug. Any offline-only
-  deferral here must point at a named follow-up feature, never a vague "later" (C-14).
+_All resolved in `/sdd-design` (4-round debate, see `design.md` + `context.md` 2026-08-26)._
+
+- [x] **Account-source modeling** → new `BROKER_TYPE_OFFLINE = 3` enum value (single `s.brokers` pool
+  with a type-skip flag, not a parallel map).
+- [x] **Confirmation mutation shape** → dedicated offline-only `ConfirmOrder` RPC (not a `ReplaceOrder`
+  extension).
+- [x] **Offline position valuation & equity** → equity derived from position market values
+  (marketdata mid-quotes via the shared `enrichPositions`); offline accounts have **no**
+  `account_balances` row. **Realized P&L and shorts are in v1** (account-grain realized table;
+  signed average-cost fold).
+- [x] **MCP scope** → create offline account + record order + confirm order, plus read of the offline
+  account's orders/positions (supports the user's monthly statement-reconciliation task, which corrects
+  drift via order edits — no separate set-positions capability).
+- [x] **Known trap (portfolio dual read path)** → offline valuation lands on both `ListPositions` and
+  `buildAccountPortfolio`/`GetPortfolio` via the shared `enrichPositions`; realized parity across
+  `ListPortfolios` and `GetPortfolio` with a parity test.
+- [x] **Known trap (add-ikbr user_id / deferrals)** → `account.positions.synced` payload carries
+  `user_id`; the two deferrals (broker-card realized, `GetPnL` account-blindness) point at **named**
+  follow-ups, never a vague "later".

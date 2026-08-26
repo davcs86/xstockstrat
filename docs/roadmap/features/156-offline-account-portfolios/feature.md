@@ -11,6 +11,8 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-26 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-26 | `draft` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + design.md written; @AC-7 amended + realized/shorts scenarios added |
+| 2026-08-26 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 15 steps |
 
 ---
 
@@ -18,7 +20,9 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec offline-account-portfolios`_
+- [Recon](recon.md) — grounded codebase dossier (Phase 0)
+- [Design](design.md) — debated, approved architecture (Phase 1, 4 rounds)
+- [Implementation Spec](implementation-spec.md) — 15 numbered steps with codebase evidence (Phase 2)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -49,4 +53,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review offline-account-portfolios product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-review offline-account-portfolios impl-spec` — validate the implementation spec, then `/sdd-execute offline-account-portfolios`
