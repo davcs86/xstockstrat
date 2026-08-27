@@ -25,8 +25,8 @@ convenience copy and will drift. Also keep in mind the caveat in the
 
 - **Go** (per root `CLAUDE.md` §Language Versions — 1.25) — needed both to build stubs and to
   `go install` the plugins and `buf`.
-- **Node.js 22** + **pnpm 9.15.0** — for the TypeScript plugins and to compile the TS package.
-- **Python 3.12** + `pip` — for `grpcio-tools`.
+- **Node.js 24** + **pnpm 9.15.9** — for the TypeScript plugins and to compile the TS package.
+- **Python 3.13** + `pip` — for `grpcio-tools`.
 
 ## Steps
 

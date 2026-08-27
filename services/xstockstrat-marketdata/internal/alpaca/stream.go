@@ -257,7 +257,7 @@ func (m *streamManager) dispatch(msg *streamMessage) {
 			Symbol: msg.S, Time: timestamppb.New(t),
 			Open: msg.O, High: msg.H, Low: msg.L, Close: msg.C,
 			Volume: msg.V, Vwap: msg.VW, TradeCount: msg.N,
-			Timeframe: streamBarTimeframe, Source: "alpaca",
+			Timeframe: streamBarTimeframe, Source: "alpaca", //nolint:staticcheck // SA1019: deprecated string timeframe written during the one-release deprecation window (053)
 			// A streamed bar genuinely IS a 1-minute bar. timeframe.FromString("1m") returns
 			// UNSPECIFIED by design (sub-15m intervals were removed so callers *requesting*
 			// them error), so route nothing through it here — label explicitly.

@@ -10,7 +10,7 @@ Node.js gRPC service for authentication and JWT management. All services validat
 
 ## Language
 
-Node.js 22 + TypeScript
+Node.js 24 + TypeScript
 
 ## Docker Build Pattern
 

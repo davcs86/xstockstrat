@@ -3,6 +3,19 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-08-27
+
+### Features
+- surface-signal-weight-decay-config: Clean up the dead `analysis.signals.source_weights` config key (superseded by feature 134) and fully surface the two live signal-scoring knobs — per-source `reliability_weight` (feature 134) and the `analysis.scoring.signal_decay_half_life_hours` decay half-life (feature 022) — to the config-ui and MCP-agent consumers, with brief in-UI guidance wherever they are configurable.
+
+### Proto Changes
+- config/v1/config.proto
+
+### Summary
+7 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-08-26
 
 ### Features

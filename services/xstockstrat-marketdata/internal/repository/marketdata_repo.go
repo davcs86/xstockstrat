@@ -143,7 +143,7 @@ func scanBars(rows pgx.Rows) ([]*marketdatav1.Bar, error) {
 		bars = append(bars, &marketdatav1.Bar{
 			Time:          timestamppb.New(t),
 			Symbol:        sym,
-			Timeframe:     tf,
+			Timeframe:     tf, //nolint:staticcheck // SA1019: deprecated string timeframe written during the one-release deprecation window (053)
 			Open:          open,
 			High:          high,
 			Low:           low,
