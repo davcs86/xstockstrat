@@ -12,6 +12,8 @@
 |---|---|---|---|
 | 2026-08-27 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-27 | `draft` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written |
+| 2026-08-27 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
+| 2026-08-27 | `implementation-ready` → `code-completed` | /sdd-execute | All 5 steps implemented + verified (316 pass, 77% cov); ledger tool-count sync deviation recorded |
 
 ---
 
@@ -21,7 +23,7 @@
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Recon Dossier](recon.md) — grounded codebase map (Phase 0)
 - [Design](design.md) — debated + approved architecture (Phase 1)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec <slug>`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -46,4 +48,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec agent-broker-account-tools` — generate implementation spec from the approved design
+`/sdd-review agent-broker-account-tools impl-spec` — validate implementation spec, then `/sdd-execute agent-broker-account-tools`
