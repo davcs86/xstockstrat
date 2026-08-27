@@ -148,3 +148,10 @@
   - Step 10: "onChange" label is actually the `onBlur` handler (line refs correct). — [x] cosmetic,
     will use the right handler at impl.
 - Overlap findings: (see feature-overlap run) — recorded separately.
+
+## Session 2026-08-27 (CI: feature status automation)
+
+- Promotion PR #1036 merged to main
+- Feature promoted and committed: d52375b58af14eb4718fab73e9aab8020fc92baf
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-27

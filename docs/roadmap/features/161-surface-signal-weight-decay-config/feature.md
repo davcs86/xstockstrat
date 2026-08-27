@@ -3,6 +3,8 @@
 **Development Branch**: `feature/surface-signal-weight-decay-config`
 **Created**: 2026-08-26
 **Last Updated**: 2026-08-26
+**Committed to main**: d52375b58af14eb4718fab73e9aab8020fc92baf
+**Launched date**: 2026-08-27
 
 ---
 
@@ -16,6 +18,7 @@
 | 2026-08-26 | `implementation-ready` → `in-progress` | /sdd-execute | Implementation started (agent → proto → config → config-ui → docs) |
 | 2026-08-26 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps executed on the harness branch; agent 298 + config 93 tests + 35 config-ui e2e green; buf breaking clean |
 
+| 2026-08-27 | `code-completed` → `launched` | CI workflow | Promoted via PR #1036; committed d52375b58af14eb4718fab73e9aab8020fc92baf |
 ---
 
 ## Artifacts
