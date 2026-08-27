@@ -1,4 +1,4 @@
-FROM golang:1.25-alpine AS builder
+FROM golang:1.27-alpine AS builder
 WORKDIR /app
 COPY packages/proto/ ../../packages/proto/
 COPY services/xstockstrat-portfolio/go.mod services/xstockstrat-portfolio/go.sum ./

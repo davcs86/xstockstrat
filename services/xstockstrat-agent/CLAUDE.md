@@ -29,7 +29,7 @@ Management-tool authorization.
 
 ## Language
 
-Python 3.12 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
+Python 3.13 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
 
 ## MCP Tools
 

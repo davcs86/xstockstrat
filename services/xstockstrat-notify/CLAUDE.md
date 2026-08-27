@@ -10,7 +10,7 @@ Node.js gRPC service providing **server-streaming alert delivery**. Services emi
 
 ## Language
 
-Node.js 22 + TypeScript
+Node.js 24 + TypeScript
 
 ## Docker Build Pattern
 

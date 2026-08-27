@@ -22,7 +22,7 @@ proxy was removed in the same feature.
 
 ## Language
 
-Node.js 22, Next.js 15 (App Router, React 18), TypeScript. Package manager: pnpm 9.15.0.
+Node.js 24, Next.js 15 (App Router, React 18), TypeScript. Package manager: pnpm 9.15.9.
 
 ## Styling
 
@@ -95,7 +95,7 @@ theme values come entirely from the preset).
 
 ## Docker Build Pattern
 
-Next.js pattern — see `docs/patterns/docker-build.md`. Multi-stage `node:22-alpine` build
+Next.js pattern — see `docs/patterns/docker-build.md`. Multi-stage `node:24-alpine` build
 (`base` → `deps` → `builder` → `runner`); production emits `output: 'standalone'` (`next.config.js`)
 and the runner serves it on port 3000. **E2E builds set `NEXT_DISABLE_STANDALONE=1`** so the Playwright
 `webServer` can use `next start` (unsupported with `output: 'standalone'`) — every other build keeps

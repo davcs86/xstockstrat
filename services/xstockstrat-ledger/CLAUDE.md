@@ -10,7 +10,7 @@ Node.js gRPC service implementing an **append-only event store**. Every service 
 
 ## Language
 
-Node.js 22 + TypeScript
+Node.js 24 + TypeScript
 
 ## Docker Build Pattern
 

@@ -112,13 +112,13 @@ to the frontends and the agent.
 
 | Language / Tool | Version | Notes |
 |---|---|---|
-| Go | 1.25 | `go.work` workspace file at repo root; use `GOWORK=off` for per-service builds |
-| Python | 3.12 | Dependencies managed by `uv`; run `uv sync --extra dev` to install, `uv lock` after any `pyproject.toml` change |
-| Node.js | 22 | All Node/Next services |
-| pnpm | 9.15.0 | Workspace manager (`pnpm-workspace.yaml`); `npm install -g pnpm@9.15.0` |
+| Go | 1.27 | `go.work` workspace file at repo root; use `GOWORK=off` for per-service builds |
+| Python | 3.13 | Dependencies managed by `uv`; run `uv sync --extra dev` to install, `uv lock` after any `pyproject.toml` change |
+| Node.js | 24 | All Node/Next services |
+| pnpm | 9.15.9 | Workspace manager (`pnpm-workspace.yaml`); `npm install -g pnpm@9.15.9` |
 | buf | latest | Proto toolchain; installed by `scripts/bootstrap.sh` |
 | golang-migrate | latest | DB migrations; installed by `scripts/bootstrap.sh` |
-| golangci-lint | v2.5.0 | Go lint; run via `golangci-lint-action@v9` |
+| golangci-lint | v2.13.1 | Go lint; run via `golangci-lint-action@v9` |
 | ruff | latest | Python lint + format |
 | Playwright | — | E2E tests for the consolidated `xstockstrat-ui` (all three segments) |
 | Vitest | ^3 | Unit (logic) tests for `xstockstrat-ui` — node-environment `src/**/*.test.ts`, coverage scoped to `src/lib/**` (feature 065); complements Playwright e2e |
@@ -326,7 +326,7 @@ When modifying a service's `Dockerfile`, update the complete chain:
 
 **Common updates:**
 
-- **Base image version bump** (Node 22 → 23, Python 3.12 → 3.13, etc.) → update the Dockerfile + version table in root CLAUDE.md + all affected service Dockerfiles
+- **Base image version bump** (Node 24 → 25, Python 3.13 → 3.14, etc.) → update the Dockerfile + version table in root CLAUDE.md + all affected service Dockerfiles
 - **Lock file tooling change** (pnpm@9 → pnpm@10) → update root CLAUDE.md version table + all Node service Dockerfiles + all Node service lock files
 - **Dependency strategy change** (e.g., switching from `--no-frozen-lockfile` to `--frozen-lockfile`) → update Dockerfile + service CLAUDE.md + `docs/patterns/docker-build.md`
 
