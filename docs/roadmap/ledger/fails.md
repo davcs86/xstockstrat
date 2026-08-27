@@ -1705,3 +1705,249 @@ ambiguity is logged here).
   And a routing/authorization decision that reads an in-memory cache (broker pool) must be checked against
   the case where the cache diverges from the authoritative store — prefer reading the persisted value, or
   prove the cache cannot diverge, before calling the path safe.
+
+### 2026-08-26 — notify-external-fanout — migration
+- **Mistake**: Feature 020's design artifacts hardcoded a concrete migration number (017), env name
+  (`dev`), and `ON CONFLICT` target (`…,trading_mode`); because a schema-reshaping feature (147)
+  landed first, the config seed had to be renumbered to 018, re-pointed to `staging`, and rewritten to
+  drop `trading_mode` at rebase — churn the artifacts guaranteed the moment they pinned volatile schema facts.
+- **Evidence**: `services/xstockstrat-config/migrations/018_notify_fanout.up.sql`; feature 147 `017_config_secrets_and_scoping`; feature 020 context.md 2026-08-21 DEVIATION.
+- **Rule it implies**: a config/DB-seed feature that will sit in a queue behind an in-flight
+  schema-reshaping feature should treat migration number, env labels, and conflict-target columns as
+  bind-at-rebase, not design-time constants — reconfirm them against `main-dev` immediately before execute.
+
+### 2026-08-26 — order-snapshots-pnl-patterns — assumption
+- **Mistake**: A cross-service event-string consumer was written matching an *assumed* spelling
+  (`order.cancelled`, British) instead of the producer's actual emitted literal (`order.canceled`,
+  American). No unit test catches a non-matching event string — the handler simply never fires, so
+  cancel snapshots would have silently gone uncaptured. Only grep-verifying the producer's emit sites caught it.
+- **Evidence**: producer emits at `services/xstockstrat-trading/internal/handler/trading.go:578,1220,1236,828,1248`; feature 042 context.md 2026-08-20 impl-spec review.
+- **Rule it implies**: a consumer's hardcoded event/topic string must be copied from (or asserted
+  against) the producer's actual emit site, and a producer↔consumer parity test should pin it — a
+  spelling mismatch is invisible to normal tests.
+
+### 2026-08-26 — unified-symbol-page — config
+- **Mistake**: Designed a nullable per-bar series as `repeated google.protobuf.DoubleValue` assuming the
+  wrapper conveys presence; at implementation this proved unimplementable — repeated wrapper elements
+  have no presence, `HasField` raises, and Connect-JSON collapses a gap and a real `0.0` to the same `0`.
+- **Evidence**: feature 125 context.md:967-979 (fixed with a per-point `IndicatorValue { optional double value = 1; }`).
+- **Rule it implies**: to carry nullable scalars in a *repeated* proto field, wrap each element in a
+  message with a proto3 `optional` scalar; `google.protobuf.*Value` only gives presence for a *singular*
+  optional field.
+
+### 2026-08-26 — unified-symbol-page — scope-creep
+- **Mistake**: A page-retirement/redirect step nearly dropped shipped functionality (feature 132's Mute
+  control, 083's Edge(BT) stat) that had landed on the target page *after* recon froze; the spec's
+  grep-only inbound sweep also missed 4 later-added e2e specs pointing at the retired route.
+- **Evidence**: feature 125 context.md:915-929 (Steps 22-26).
+- **Rule it implies**: before retiring/redirecting a page, re-derive its *current* feature surface and
+  inbound references against live trunk (not recon) — a consolidation spec written earlier cannot see
+  features merged onto its deletion target since.
+
+### 2026-08-26 — unified-symbol-page — assumption
+- **Mistake**: Status-automation drift recurred — executing on a harness-pinned `claude/*` branch with a
+  squash-merge (no `feature/<slug>` branch to reconcile) plus not flipping step/`status.md` state during
+  execute left the feature stuck at "Step 1 / implementation-ready" despite completion; CI auto-promote
+  silently skips anything not already `code-completed`. The same root cause hit feature 096.
+- **Evidence**: feature 125 feature.md 2026-08-16 correction row; context.md:15-25 (096's identical failure).
+- **Rule it implies**: when executing on a harness branch that will squash-merge, advance
+  `status.md`/step statuses explicitly during execution — do not rely on CI auto-promotion, which only
+  fires for features already at `code-completed`.
+
+### 2026-08-26 — consolidate-watchlist-signal — assumption
+- **Mistake**: The product spec named `form4-enhanced-ingest` as the *motivating* flow, but form4 scores
+  `direction="watchlist"` signals at conviction 0.30 (< the 0.6 gate) → they land in `skipped_signals`
+  and **never call `ingest_signal`** — so form4 triggers this feature exactly zero times. The stated
+  driver was recoverable only by reading the skill; grounding (P-03) corrected it at design and the real
+  trigger (any explicit `direction="watchlist"` caller) replaced it.
+- **Evidence**: `.claude/skills/form4-enhanced-ingest/SKILL.md:59-61`; feature 127 context.md §Session 2026-08-19 (Phase 1 round 1 "PREMISE CORRECTION").
+- **Rule it implies**: verify the cited motivating/producer flow actually reaches the code path before
+  designing on it (P-03) — a plausible-sounding trigger in a product spec is not evidence.
+
+### 2026-08-26 — consolidate-watchlist-signal — assumption
+- **Mistake**: A new proto field on `WatchlistBinding` (`source`) was silently zeroed at insert despite a
+  correct migration + insert path, because every portfolio watchlist write funnels through a central
+  `normalizeBindings` (`portfolio_service.go:1139`) that reconstructs each binding field-by-field and
+  never learned the new field — a runtime data-loss, not a compile error, found only by an execute-phase test.
+- **Evidence**: feature 127 implementation-spec.md Step 4 (normalizeBindings preserve source); `services/xstockstrat-portfolio/internal/service/portfolio_service.go:1139`.
+- **Rule it implies**: when adding a field to a proto message that passes through a hand-rolled
+  normalizer/reconstructor, grep every normalizer on that type's write path and extend it in the same
+  change — a field-by-field rebuild silently drops unknown fields.
+
+### 2026-08-26 — symbol-page-section-nav — assumption
+- **Mistake**: A `md:grid-flow-col md:auto-cols-fr` panel row overflowed horizontally by 59px at 390px
+  because CSS grid items default to `min-width:auto`; the layout looked correct at desktop and only the
+  390px `mobile-overflow` guard caught it.
+- **Evidence**: feature 139 implementation-spec.md (archived) :508-511; context.md:194-199.
+- **Rule it implies**: any CSS grid holding variable-width children needs `min-w-0` on the items, and
+  every layout change must be re-run against the 390px overflow guard.
+
+### 2026-08-26 — chart-data-freshness — config
+- **Mistake**: A merge/promotion commit whose message did not contain the feature slug caused
+  `ci-validate-feature-status.yml` to silently skip flipping the feature to `launched`; it sat at
+  `code-completed` despite being live in production, needing manual status reconciliation.
+- **Evidence**: feature 140 context.md 2026-08-19; feature.md Status History row 2026-08-19 (PR #981).
+- **Rule it implies**: the squash/merge commit for a feature must include its `NNN-slug` (or the status
+  automation won't detect promotion) — verify `launched` after promotion rather than assuming CI set it.
+
+### 2026-08-26 — fix-opportunities-bars-fetch-oom — scope-creep
+- **Mistake**: Recon and both adversarial grilling rounds scoped only to the function under change
+  (`_compute_opportunities`) and never inspected the RPC's own read/return path, so a
+  `_DEFAULT_OPP_PAGE_SIZE=50` read cap invalidated a compute-scale test asserting `>=200` (241 rows
+  materialized, only 50 returned).
+- **Evidence**: feature 141 context.md Step 2 (`servicer.py:109,2245`); fixed with `page_size=300`.
+- **Rule it implies**: when a test must observe the output of a fix, ground the full read/return path
+  (pagination defaults included), not just the write/compute site.
+
+### 2026-08-26 — fix-opportunities-bars-fetch-oom — assumption
+- **Mistake**: Shipped a SEV-2 fix against an unconfirmed root-cause hypothesis (chunk-lock exhaustion
+  never validated against a real memory/lock profile); the ≥200-row test scale is a documented
+  *substitute* for the unknown real incident size, not a reproduction.
+- **Evidence**: feature 141 design.md Open Risks 1-2; context.md sdd-design + execute summary.
+- **Rule it implies**: when root cause is unconfirmed, name the substitute proof explicitly in-test and
+  pre-commit to an escalation path if the incident recurs.
+
+### 2026-08-26 — daily-bars-only — assumption
+- **Mistake**: A TDD "red" test that narrows a validation set can silently be a false-green.
+  `pytest.raises(match=...)` is `re.search`, so a narrowed error substring still matches the old message;
+  and probing a value invalid under *both* old and new rules (`"1w"`) exercises nothing. Only probing a
+  value that flipped accepted→rejected (`15m`/`1h`) yields a genuine red→green.
+- **Evidence**: feature 143 implementation-spec.md Deviation Log D-5; `services/xstockstrat-agent/tests/test_client.py`.
+- **Rule it implies**: when testing a narrowed validation set, the RED must probe a previously-accepted
+  (boundary-flipped) value, never a `match=` substring or a value invalid under both sets.
+
+### 2026-08-26 — daily-bars-only — assumption
+- **Mistake**: A ChartPanel e2e that captures the component's *mount* `GetBars` is flaky — the mount
+  fetch races the async lightweight-charts series init and is never retried because `seriesRef` is not a
+  `fetchBars` effect dependency. The bug only surfaced under a real prebuilt/CI e2e run, not `pnpm dev`.
+- **Evidence**: feature 143 implementation-spec.md Deviation Log D-6; context.md Session sdd-execute Step 10 follow-up; `services/xstockstrat-ui/e2e/trader/chart-panel.spec.ts`.
+- **Rule it implies**: to assert an outbound `GetBars` in a ChartPanel e2e, wait for `.tv-lightweight-charts`
+  readiness then change a real `fetchBars` effect dep (bar-count) as the trigger; don't rely on the mount
+  fetch, and run the prebuilt harness not the dev server.
+
+### 2026-08-26 — fix-screener-soft-criterion — duplication
+- **Mistake**: The `x / n if n else 0.5` magic-neutral-fallback for missing data recurred across three
+  sites (PR #971 hard-filter, this feature's soft-criterion, and the still-unfixed
+  `fundsignal_loop.py:294`). Fixing one instance does not clear the platform-wide pattern; the same
+  defect keeps resurfacing per code path.
+- **Evidence**: feature 144 context.md:86-90; unfixed twin `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:294` (`_builtin_score`).
+- **Rule it implies**: when fixing a "neutral default masks missing data" bug, sweep the whole service
+  for the identical fallback shape and either fix or explicitly file each sibling.
+
+### 2026-08-26 — symbol-page-panel-refinements — duplication
+- **Mistake**: Adding a panel to feature 139's `SymbolPanelGroup` silently creates a hidden mobile
+  `role="radio"` tab whose text **equals** the panel's card title, so any pre-existing unscoped
+  `getByText('<title>')` starts matching 2 DOM nodes and fails Playwright strict mode on a *different,
+  untouched* spec. Same class as the shared-`aria-label` collision (fails.md 2026-08-09): the second
+  occurrence is off-screen (`md:hidden`) so it's invisible in the browser but present in the DOM.
+- **Evidence**: feature 145 design.md §70; implementation-spec.md Step 3 (`:256`); context.md 2026-08-18 sdd-spec.
+- **Rule it implies**: when promoting existing content into a `SymbolPanelGroup` panel, grep the whole
+  e2e suite for unscoped `getByText`/`getByLabel` on that text and rescope to `getByRole('heading'|'radio')`
+  before closing — the collision surfaces on a spec you didn't touch.
+
+### 2026-08-26 — fix-backtest-annualized-return — assumption
+- **Mistake**: `_compute_metrics` assumed `daily_equity` was one continuous daily curve, but the
+  *aggregate* backtest path passes N concatenated per-symbol curves, under-scaling the annualization
+  exponent ~N×. The assumption held for single-symbol callers and only broke on multi-symbol runs —
+  invisible until the numbers looked wrong in staging.
+- **Evidence**: feature 149 `servicer.py:522,525-529,571` (concat), `:3630-3632` (consumer); retained defect report.
+- **Rule it implies**: a helper that assumes a specific series shape must assert/validate that shape, or
+  the caller must pass the semantic quantity (`period_years`) explicitly.
+
+### 2026-08-26 — manage-strategy-accept-object-rules — assumption
+- **Mistake**: An MCP tool's strict `str` signature assumed clients send JSON as a *string*, but the
+  Claude Code harness pre-parses JSON-object args and delivers a `dict`, so valid strategy registrations
+  were rejected at the pydantic boundary — surfaced only by a live 4-strategy registration attempt against staging.
+- **Evidence**: feature 149 context.md 2026-08-22; design.md (archived) §15-20.
+- **Rule it implies**: for any MCP tool param that can be a structured value, accept `str | dict` — a
+  JSON-pre-parsing transport will hand you a dict.
+
+### 2026-08-26 — backtest-portfolio-sizing — assumption
+- **Mistake**: A look-ahead/forward-fill RED test built on *ragged start/end* calendars passes green
+  while the real look-ahead bug (using a future close to mark a *mid-series* gap) ships. The dangerous
+  case is a mid-series gap, not ragged edges.
+- **Evidence**: feature 150 design.md (archived) §91-93; Step 6.
+- **Rule it implies**: any forward-fill/MTM feature must assert past-only marking with a mid-series-gap
+  fixture, not merely ragged calendars.
+
+### 2026-08-26 — backtest-portfolio-sizing — assumption
+- **Mistake**: Changing a simulator's return-tuple arity silently breaks every unpacking call site and
+  test repo-wide; discovered only when 267 existing tests failed to unpack. Papered with `[:4]` slicing
+  helpers + a 5th-`[]` in mocks.
+- **Evidence**: feature 150 Step 5 (both per-symbol simulators grew a 5th intent element).
+- **Rule it implies**: widening a returned tuple's shape is a cross-cutting signature change — audit all
+  unpack sites (or return a named struct) before editing.
+
+### 2026-08-26 — backtest-next-bar-fill — assumption
+- **Mistake**: design.md referenced AC-7/AC-8/AC-9 (cooldown/config/decouple) that were never authored
+  in `acceptance.feature`; the impl-spec asserted those behaviors in a test body with no `@AC` tag,
+  forcing a later append of AC-7..AC-11 to keep C-15 whole. The design invented acceptance IDs the story never created.
+- **Evidence**: feature 151 context.md 2026-08-23 sdd-spec + sdd-review.
+- **Rule it implies**: `/sdd-design` must not cite `@AC-N` IDs beyond what `acceptance.feature` actually
+  contains; new behaviors need a `/sdd-story` acceptance touch, not a design-only reference.
+
+### 2026-08-26 — backtest-next-bar-fill — config
+- **Mistake**: A `get_int` config default (`analysis.backtest.default_fill_model`) cannot distinguish
+  "key absent" from a configured `0`; this is only safe because both collapse to the legacy sentinel.
+  An unwary future edit that adds a meaningful `0` value would silently break the fallback.
+- **Evidence**: feature 151 design.md (archived) §86-88; Step 4.
+- **Rule it implies**: an int config whose `0` means "unset" must keep `0 ≡ absent ≡ legacy`, and the
+  intentional zero-trap must be commented so it isn't "fixed."
+
+### 2026-08-26 — fix-ohlcv-chunk-lock-oom — duplication
+- **Mistake**: Feature 141 fixed the ohlcv-bars OOM at only one of several structurally identical
+  400-day bars-fetch call sites (`_compute_opportunities`), leaving `EvaluateReadiness` and other sibling
+  paths unguarded; the SEV-2 recurred from an unguarded sibling four days later (141 launched 08-19 →
+  153 triaged 08-24). 141's own design had named this recurrence as Open Risk 1.
+- **Evidence**: feature 153 context.md:22-27; recon.md (archived) §49-58; relates to insights.md:2244 (141 dedup/semaphore).
+- **Rule it implies**: when fixing a resource-exhaustion bug, enumerate ALL structurally identical call
+  sites and fix at the widest shared layer (schema/cluster/global guard) — a fix scoped to the one
+  observed-failing site invites recurrence through its siblings (C-10 blast-radius).
+
+### 2026-08-26 — ui-auth-improvements — assumption
+- **Mistake**: The user-reported "not staying signed in" was initially framed as a token-TTL problem;
+  recon found the true cause was cookies written with **no `maxAge`** (session cookies dropped on browser
+  close), while the server refresh token already lived 30 days. Chasing the reported symptom would have
+  driven a needless identity/proto/config change.
+- **Evidence**: feature 153 recon.md (archived) §20-22; design.md §12-13.
+- **Rule it implies**: for "session doesn't persist" symptoms, verify cookie `maxAge`/expiry *before*
+  assuming a server token-lifetime issue — the persistence knob is usually client-side.
+
+### 2026-08-26 — ui-auth-improvements — assumption
+- **Mistake**: A proposed FR acceptance test (`604800 ≤ 2592000`) compared two source literals and
+  enforced nothing at runtime — a tautological test that would pass forever regardless of behavior;
+  caught by the design-adversary and downgraded to a documented coupling comment.
+- **Evidence**: feature 153 design.md (archived) §81-82.
+- **Rule it implies**: a test asserting a relationship between two compile-time constants is not a test;
+  encode such cross-system ceilings as a documented coupling, not a green tautology.
+
+### 2026-08-26 — fix-fundamentals-signal-producer — assumption
+- **Mistake**: The impl-spec (and the standing ledger note at fails.md:69-70) cited `PLATFORM_SUBNAV` as
+  the config-ui shared-nav registration point, but that array is legacy/inert — `PlatformHeader` renders
+  `NAV_GROUPS`. Registering there produced an unreachable page that passed local lint+tsc and failed only
+  the CI nav-reachability e2e shard.
+- **Evidence**: feature 156 context.md:220-222 (D-3); `services/xstockstrat-ui/src/components/shared/navGroups.tsx`, `PlatformHeader.tsx`; supersedes the stale `PLATFORM_SUBNAV` evidence in fails.md:70.
+- **Rule it implies**: register new config-ui nav entries in `NAV_GROUPS` (`navGroups.tsx`), not
+  `PLATFORM_SUBNAV`; C-10(a)'s reachability test must run in CI because it's the only gate that catches a
+  wrong/dead nav surface.
+
+### 2026-08-26 — offline-account-portfolios — assumption
+- **Mistake**: The agent tool-count baseline was taken from a `@server.tool()` grep that missed one
+  decorator *form*, yielding 28 when the true count was 29 — and the impl-spec review then mis-attributed
+  the docstring's "29" as stale drift. Six inventory surfaces (docstring, decorators, agent CLAUDE.md
+  table, `mcp-tools.md`, `test_tools_endpoint.py` name-set, `GET /api/tools`) all pivot on this count, so
+  a wrong baseline propagates six ways.
+- **Evidence**: feature 157 context.md:194-196 (review assumed drift), :210-212 (execute found true baseline 29).
+- **Rule it implies**: verify an inventory count by the authoritative source-of-truth surface (the
+  registered name-set / running `GET /api/tools`), never a single decorator grep — decorator forms vary
+  and a grep undercounts silently.
+
+### 2026-08-26 — durable-loop-scheduler — assumption
+- **Mistake**: The impl-spec assumed `AnalysisServicer` exposed `self._db_pool` (it stores `db_pool`
+  only inside repos), which would have hit F-04/C-01 at execute; and its Step-7 Codebase-Evidence
+  overstated that a test "already references `run_opportunity_refresh_forever`" (grep: zero matches).
+  Both were spec-grounding claims not verified against the tree until the impl-spec review caught them.
+- **Evidence**: feature 158 context.md 2026-08-26 sdd-review impl-spec.
+- **Rule it implies**: a spec's "already exists / already stored" claims must be grep-confirmed against
+  the exact execution tree, not assumed from a sibling helper's shape — an advisory impl-spec review is
+  the last cheap place to catch it before F-04 bites at execute.

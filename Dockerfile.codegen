@@ -3,12 +3,12 @@
 # Used by scripts/localenv-setup.sh. NOT part of docker-compose.yml.
 #
 # Versions: keep in sync with CLAUDE.md §Language Versions & Tooling
-#   Go     1.25  → also in go.work, .github/workflows/ci.yml, Go service Dockerfiles
-#   Python 3.12  → also in .github/workflows/ci.yml, Python service Dockerfiles
-#   Node   22    → also in .github/workflows/ci.yml
-#   pnpm   9.15.0 → also in package.json "packageManager", .github/workflows/ci.yml
+#   Go     1.27  → also in go.work, .github/workflows/ci.yml, Go service Dockerfiles
+#   Python 3.13  → also in .github/workflows/ci.yml, Python service Dockerfiles
+#   Node   24    → also in .github/workflows/ci.yml
+#   pnpm   9.15.9 → also in package.json "packageManager", .github/workflows/ci.yml
 
-FROM golang:1.25-trixie
+FROM golang:1.27-trixie
 
 # ── System deps ───────────────────────────────────────────────────────────────
 # hadolint ignore=DL3008
@@ -19,14 +19,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
-# ── Node.js 22 (NodeSource) ────────────────────────────────────────────────────
+# ── Node.js 24 (NodeSource) ────────────────────────────────────────────────────
 # hadolint ignore=DL3008
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# ── pnpm 9.15.0 ────────────────────────────────────────────────────────────────
-RUN npm install -g pnpm@9.15.0
+# ── pnpm 9.15.9 ────────────────────────────────────────────────────────────────
+RUN npm install -g pnpm@9.15.9
 
 # ── TypeScript proto plugins (global install so buf can find them in PATH) ─────
 # These versions must match the devDependencies in packages/proto/gen/ts/package.json

@@ -1014,6 +1014,13 @@ async def manage_signal_source(
         cfg.update(config_json)
         src.config_json.CopyFrom(cfg)
 
+    # feature 161: reliability_weight is proto `optional double` (explicit presence). Set it ONLY
+    # when supplied — an unconditional set writes 0.0, which (if masked) would reset a source's
+    # weight on a field-only update. The tool layer likewise masks it only when supplied.
+    reliability_weight = source.get("reliability_weight")
+    if reliability_weight is not None:
+        src.reliability_weight = reliability_weight
+
     req = ingest_pb2.ManageSignalSourceRequest(source=src, operation_enum=op_enum)
     # credentials_ref: set whenever provided (including "" to clear on a masked update); the
     # update_mask decides whether the server applies it or preserves the stored ref.
@@ -1037,6 +1044,8 @@ async def manage_signal_source(
         "extractor_module": resp.source.extractor_module,
         "active": resp.source.active,
         "has_credentials": resp.source.has_credentials,
+        # feature 161 — echo the resulting per-source reliability weight (field 12).
+        "reliability_weight": resp.source.reliability_weight,
     }
 
 

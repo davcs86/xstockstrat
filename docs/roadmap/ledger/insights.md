@@ -2144,3 +2144,359 @@ reusing.
 - **Rule it implies**: generalize the seams, not the control flow; and pressure-test each candidate
   loop's *actual* interval before granting it a durable schedule — persistence that protects less than
   one redeploy's worth of cadence is churn, not reliability.
+
+### 2026-08-26 — notify-external-fanout — design
+- **Pattern**: A best-effort side-channel bolted onto an RPC handler must be dispatched *after* the
+  handler's success callback (here via `queueMicrotask`), not merely wrapped in try/catch — the
+  side-channel's synchronous prefix (gate read, Map sweep, dedup insert, payload build) can otherwise
+  throw an error onto an already-succeeded response and convert a success into an RPC failure.
+- **Evidence**: `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts:95`; feature 020 context.md round 2 ("O-ordering").
+- **Rule it implies**: isolate a post-commit side effect past the success boundary, not just inside a
+  catch — extends the best-effort/verify norm **PLAT-N1**.
+
+### 2026-08-26 — notify-external-fanout — design
+- **Pattern**: A content-hash dedup key for heterogeneous events must include the human-facing
+  title/body when a subset of producers write no structured context — for those producers title/body
+  is the only identity, so excluding it collapses genuinely distinct events (distinct CRITICAL
+  reconciliation/approval/fill alerts) into one suppressed key.
+- **Evidence**: `services/xstockstrat-notify/src/fanout/fanout.ts` dedup key; feature 020 context.md round 2.
+- **Rule it implies**: size a dedup key against the lowest-context producer in the set, not the richest.
+
+### 2026-08-26 — order-snapshots-pnl-patterns — ordering
+- **Pattern**: A single broad `StreamEvents` subscription (both filters null) is deliberately chosen
+  over N narrow subscriptions when cross-event **ordering** is a correctness requirement — here it
+  guarantees the closing `order.filled` snapshot commits before `portfolio.position.closed` seals,
+  because the ledger global sequence (`nextval('ledger.global_sequence')`, invariant #4) is monotonic
+  only across the *whole* stream, not per stream_key. Narrow per-type subscriptions lose that ordering.
+- **Evidence**: feature 042 design.md §2 (archived); context.md round 3; ledger CLAUDE.md invariant #4.
+- **Rule it implies**: when an event consumer's correctness depends on inter-event-type ordering,
+  subscribe once broadly and gate on the global sequence — do not split by type.
+
+### 2026-08-26 — unified-symbol-page — reuse
+- **Pattern**: Cross-segment BFF client reuse works only for RPCs *already forwarded* in the owning
+  segment's BFF; a **net-new** RPC still needs a `forward()` registration in the segment whose `/api`
+  the browser client routes through. Missing it fails at runtime as a **501 Not Implemented from the
+  BFF**, invisible to tsc/lint.
+- **Evidence**: feature 125 context.md:995-998 (`getIndicatorSeries` had to be registered in `insightsBff.ts`); builds on the cross-segment-reuse insight recorded 2026-08-10.
+- **Rule it implies**: when adopting cross-segment client reuse for a page needing a brand-new RPC,
+  register the method in the owning segment's BFF forward block; treat a 501-from-BFF as a missing
+  forward, not a service outage.
+
+### 2026-08-26 — unified-symbol-page — design
+- **Pattern**: A signature-changing account/tenant-scoping bug fix on a shared repo method must grep
+  **all** callers — a read-path scoping bug frequently has a silent write-path twin that corrupts data
+  for multi-tenant users.
+- **Evidence**: feature 125 context.md:639-648 (`GetPosition` read-path fix surfaced the `portfolio_service.go:257` fill avg-entry write-path twin).
+- **Rule it implies**: before landing a scoping fix, enumerate every caller of the changed signature and
+  classify each as read or write path; a write-path twin is a data-integrity defect, not a style change.
+
+### 2026-08-26 — unified-symbol-page — ordering
+- **Pattern**: recon/spec-quoted code skeletons go stale against features merged in the interim; the
+  executor must mirror the **live** handler, not the spec's quoted skeleton (`EvaluateReadiness` gained
+  owner-scoping via feature 133 between this feature's recon and its execute).
+- **Evidence**: feature 125 context.md:963 (Step 30).
+- **Rule it implies**: at execute time, re-read the actual anchor before copying a spec-quoted skeleton;
+  assume any handler cited from recon may have been owner-scoped/hardened by a feature merged since.
+
+### 2026-08-26 — consolidate-watchlist-signal — ordering
+- **Pattern**: When a design-phase debate expands scope beyond boundaries the product spec explicitly
+  asserted (here "no proto / no schema / no UI"), the product spec must be **updated and RE-RUN through
+  `/sdd-review product-spec`** — not patched in place — because the expansion pulls in newly-required
+  reviewers (proto owner, DBA, UI) and can moot earlier documented rationale (the config-key-rejection
+  reasoning became void under find-by-flag).
+- **Evidence**: feature 127 context.md §Session 2026-08-19 (round 2) and §COMPLETION (spec updated + re-run → PASS WITH WARNINGS).
+- **Rule it implies**: a scope expansion that falsifies a product-spec governance claim re-enters
+  `/sdd-review product-spec`; reinforces C-14/C-09.
+
+### 2026-08-26 — symbol-page-section-nav — design
+- **Pattern**: When a section must show/hide conditional content (e.g. held-position stats), fold it
+  into a mounted **panel** inside a stable section rather than a nav chip that appears/disappears — a
+  navigation spine whose entry set is invariant across data state is more predictable for both users
+  and e2e locators.
+- **Evidence**: feature 139 context.md:170-172, design.md (archived) §155-157.
+- **Rule it implies**: prefer a fixed nav/tab spine + conditional panels over data-conditional nav entries.
+
+### 2026-08-26 — symbol-page-section-nav — design
+- **Pattern**: Before grouping components into a tab/panel group, verify they can actually co-render.
+  Components on mutually-exclusive branches (the FR-11 watchlist split: Fundamentals vs Screener) can
+  never be tab-switchable siblings; surface the contradiction (C-11) instead of silently reconciling a
+  user's proposed grouping.
+- **Evidence**: feature 139 implementation-spec.md (archived, D-4); design.md §174-178.
+- **Rule it implies**: a tab/panel group is valid only if all members can be simultaneously present in the DOM.
+
+### 2026-08-26 — chart-data-freshness — design
+- **Pattern**: To add missing-data WARN visibility to a shared evaluator that is *also* driven by a
+  large background bulk loop, log at the **call sites** with one summarized, sample-bounded WARN per
+  cycle/scan and exclude already-logged error symbols — do **not** log inside the shared/parity-frozen
+  function (floods + double-logs) and do **not** thread a `symbol` kwarg through a contract-frozen signature.
+- **Evidence**: feature 140 design.md (archived) §67-82; implementation-spec.md §55-67 (`live_loop._run_cycle`, `screener.py`, `EvaluateReadiness`).
+- **Rule it implies**: observability added to a hot shared path belongs at the discriminated call site as
+  an aggregated/sampled emission, not in the shared function.
+
+### 2026-08-26 — chart-data-freshness — design
+- **Pattern**: Prefer a **time-cooldown self-healing guard** over a value-changed guard for "is this
+  stale enough to refetch" checks — a value-guard ("skip while stored value unchanged") deadlocks and
+  re-freezes when the upstream producer is paused; a cooldown recovers on its own once the producer resumes.
+- **Evidence**: feature 140 design.md §91-92; context.md 2026-08-18 round 1; shipped `staleCheckDue`.
+- **Rule it implies**: staleness/refetch throttles should be driven by elapsed-time cooldowns, not by
+  observing a value change that a stalled producer will never deliver.
+
+### 2026-08-26 — fix-opportunities-bars-fetch-oom — ordering
+- **Pattern**: When bounding DB/RPC fan-out, remove the redundant work (dedup) **before** adding a
+  concurrency limiter — adding a semaphore over still-redundant N× queries can worsen lock pressure, not relieve it.
+- **Evidence**: feature 141 recon.md (archived) §65-67 (OQ4); design.md two-piece approach (dedup then semaphore).
+- **Rule it implies**: a concurrency limiter is a complement to dedup, never a substitute; sequence dedup-first.
+
+### 2026-08-26 — fix-opportunities-bars-fetch-oom — design
+- **Pattern**: Select a concurrency-primitive precedent by its **scope** (process-lifetime `__init__` vs
+  per-call), not by matching the surface idiom — a per-call semaphore re-instantiated each RPC silently
+  bounds nothing across concurrent users.
+- **Evidence**: feature 141 design.md §36-41,136-139 (`servicer.py:151-157` cross-request vs `screener.py:84-86`/`entry_backfill.py:55-57` per-call).
+- **Rule it implies**: cross-request bounds require a process-lifetime object; verify the precedent's
+  construction site before copying.
+
+### 2026-08-26 — fix-opportunities-bars-fetch-oom — design
+- **Pattern**: Size a fan-out semaphore to the *downstream's* real execution capacity (marketdata
+  `DB_POOL_MAX=2`), not to a sibling precedent's default — a higher client-side limit only adds queueing
+  without raising real concurrent work.
+- **Evidence**: feature 141 design.md §64-69,140-142.
+- **Rule it implies**: match a limiter's ceiling to the narrowest downstream bottleneck, not to convention.
+
+### 2026-08-26 — daily-bars-only — ordering
+- **Pattern**: When removing support for a value across a proto→backend→UI stack, close the
+  *authoritative* RPC layer first (not last). Fanning out from consumer surfaces first leaves the RPC
+  open longest to callers the feature doesn't enumerate (scripts, `grpcurl`, internal tools) and ignores
+  always-on background writers (the poller). Pull any dependent fix (here, the retry-loop guard) forward
+  to land no later than the authoritative step.
+- **Evidence**: feature 143 context.md Session 2026-08-16 sdd-design Phase 1; design.md §Rejected Alternatives (step-order).
+- **Rule it implies**: value-removal step order should be authoritative-RPC-first, with dependent guards
+  pulled forward — not consumer-surface-first.
+
+### 2026-08-26 — daily-bars-only — design
+- **Pattern**: Before adding a permanent (`INVALID_ARGUMENT`) rejection to a service, audit callers'
+  error handling. A broad `except Exception: retry` (ingest's chunk-retry) treats a permanent rejection
+  as transient and storms it 3×-with-backoff. The fix is a non-retryable-code branch, sequenced no later
+  than the rejection itself.
+- **Evidence**: feature 143 context.md Session 2026-08-16 sdd-design Phase 1; design.md §Chosen Approach pt3 (`servicer.py:555` retry loop).
+- **Rule it implies**: introducing a permanent error code requires auditing every caller's retry loop
+  for a broad-except transient assumption in the same PR.
+
+### 2026-08-26 — fix-screener-soft-criterion — design
+- **Pattern**: When "data absent" must be distinguished from a legitimate in-range value, add an
+  **orthogonal additive bool** (`score_unavailable`) rather than overloading an existing status enum —
+  especially when that enum triggers behavioral side-effects (here a UI re-poll loop) whose semantics
+  (transient/retry-eligible) don't fit the new case (permanent absence). Preserve visibility with a
+  rank-last sort instead of excluding the row.
+- **Evidence**: feature 144 context.md 2026-08-17 implementation session; product-spec.md (archived) :100-102.
+- **Rule it implies**: a missing-data marker must not reuse a status whose consumers attach retry/polling
+  behavior unless the new case is also genuinely transient.
+
+### 2026-08-26 — fix-screener-soft-criterion — design
+- **Pattern**: Before overloading an existing enum/status value, grep its **consumers** (here
+  `useScreenSymbolsPoll`/`pendingRows`) and its **pinned tests** — a value's real contract is the
+  behavior downstream code hangs off it, not its name.
+- **Evidence**: feature 144 context.md:60-66 (the pinned `test_fundamental_hard_filter_missing_for_one_symbol_fails_closed` would have flipped).
+- **Rule it implies**: verify a status value's downstream behavioral contract before reusing it for a new case.
+
+### 2026-08-26 — symbol-page-panel-refinements — reuse
+- **Pattern**: Place a reused component by its **data coupling**, not its apparent genericity —
+  `StrategyPicker` went to `components/insights/` (co-located with `SignalReadiness`) because both depend
+  on the `analysisClient`-coupled `useStrategyDefinitions`, *not* into segment-agnostic
+  `components/shared/`. Putting it in `shared/` would have hidden a segment coupling behind a "shared" label.
+- **Evidence**: feature 145 design.md (archived) §27-31,91-92; implementation-spec.md Step 1.
+- **Rule it implies**: a component's home is decided by what it imports, not where it's used; a
+  data-coupled picker/widget is not `shared/`.
+
+### 2026-08-26 — unify-symbol-chart-libraries — design
+- **Pattern**: A Playwright hover/crosshair assertion against a lightweight-charts canvas silently never
+  fires if the mock bars are sparse enough to sit off the visible time range — the hovered time has no
+  bar. `chart.timeScale().fitContent()` after `setData` puts every bar on-screen (hoverable), and it is
+  simultaneously a real UX improvement.
+- **Evidence**: feature 146 context.md 2026-08-19 CI fix; `services/xstockstrat-ui/src/hooks/useCandlestickChart.ts`.
+- **Rule it implies**: for any canvas-chart hover/crosshair e2e, call `fitContent()` after data-set; a
+  hover test that "passes" without it may be asserting on a readout that never rendered.
+
+### 2026-08-26 — fix-backtest-annualized-return — design
+- **Pattern**: When a metric annualizes/normalizes by a *period*, derive that period from wall-clock
+  time (the request `range` span), never from `len(series)` — array length silently lies whenever the
+  series is a *concatenation* of sub-series (per-symbol curves) rather than a single continuous timeline.
+- **Evidence**: feature 149 `services/xstockstrat-analysis/app/handlers/servicer.py` `_compute_metrics` + aggregate call; confirmed by back-solving observed pairs to a constant `n_days≈8170`.
+- **Rule it implies**: time-window normalization inputs come from timestamps, not container length.
+
+### 2026-08-26 — fix-backtest-annualized-return — design
+- **Pattern**: A metrics bug can be root-caused empirically *without a debugger* by back-solving
+  several observed input→output pairs to a single hidden constant — a constant fit confirms the cause
+  before any code change.
+- **Evidence**: feature 149 three `total→annualized` pairs → constant `n_days≈8170` (retained defect report `docs/reports/2026-08-23-backtest-annualized-return-underscaled-defect.md`).
+- **Rule it implies**: prefer a closed-form confirmation of the suspected divisor before patching.
+
+### 2026-08-26 — manage-strategy-accept-object-rules — design
+- **Pattern**: For an MCP passthrough tool, widen a param to a union (`str | dict`) rather than model a
+  `TypedDict` when the real grammar is owned by a downstream service — the union admits objects at the
+  schema edge while still rejecting scalars, and avoids duplicating a recursive grammar that would drift
+  against the doc-mirror trio (F-12).
+- **Evidence**: feature 149 `services/xstockstrat-agent/app/tools.py` annotation widening.
+- **Rule it implies**: don't re-model a downstream service's contract in a passthrough tool; widen the type minimally and coerce.
+
+### 2026-08-26 — manage-strategy-accept-object-rules — design
+- **Pattern**: When adding a new input encoding that funnels into an existing serialization path, keep
+  the legacy path byte-for-byte identical — coerce the new form (bare `json.dumps`, no `sort_keys`) and
+  never canonicalize the pre-existing form, or you silently alter values the backend already tolerates.
+- **Evidence**: feature 149 design.md (archived) §29-32,67-69; the coercion in `tools.py`.
+- **Rule it implies**: new-encoding coercion must be additive and byte-preserving for the existing path;
+  document *why* a canonicalization flag is deliberately absent.
+
+### 2026-08-26 — manage-strategy-accept-object-rules — ordering
+- **Pattern**: Sequence doc-mirror edits before the docs-consistency test, and place field coercion
+  before the None-mask filter so omitted-vs-empty semantics stay correct (`{}`→`"{}"` enters the mask;
+  an omitted `None` still drops).
+- **Evidence**: feature 149 implementation-spec.md (archived) §37-46, 89-103.
+- **Rule it implies**: order steps so an assertion sees all surfaces it reads, and place value transforms
+  relative to filters by intended semantics.
+
+### 2026-08-26 — backtest-portfolio-sizing — design
+- **Pattern**: To add an alternate computation mode to an engine, have the existing simulator
+  *additively return* the extra signal it already computes (an extra tuple element) and feed the new
+  path into the **existing** aggregate metrics function — no parallel/second pass, no forked metrics.
+  Single fetch, DRY, divergence-free.
+- **Evidence**: feature 150 `servicer.py:995,1004,1017 / 1185,1201`; `_compute_metrics` reused at `:3617`.
+- **Rule it implies**: prefer additive intent-return over a second data-fetch pass when a new mode needs
+  the same source data (avoids the feature-141 fetch-cap/OOM class).
+
+### 2026-08-26 — backtest-portfolio-sizing — ordering
+- **Pattern**: When adding fields to a message whose bytes are persisted verbatim and compared against
+  banked goldens, add a canonical-clearing helper (clear the new additive fields) and write the legacy
+  byte-for-byte RED *before* the routing edit.
+- **Evidence**: feature 150 `_canonical_pre150` helper (clears fields 17/18/19); design.md (archived) §149-154.
+- **Rule it implies**: additive-but-persisted proto changes must ship a golden-normalization shim in the
+  same step, or every historical run false-fails/mis-renders (extends the feature-068 verbatim-bytes invariant).
+
+### 2026-08-26 — backtest-next-bar-fill — design
+- **Pattern**: When a helper must contribute to a per-index array that has a 1:1 alignment invariant
+  with another array, have the helper **return** the value and keep the loop the sole writer/appender,
+  instead of letting the helper mutate the shared structure. Makes "single writer" syntactically
+  enforced, kills clobber-ordering hazards, and keeps the alignment assert trivially true.
+- **Evidence**: feature 151 `_apply_fill` returns the action; the loop writes `diags.action` at `servicer.py:1046/1234`, appends `daily_equity` at `:1048/1235`; 1:1 assert `:3291`.
+- **Rule it implies**: a shared helper feeding an alignment-invariant array must return its contribution, never mutate the array.
+
+### 2026-08-26 — backtest-next-bar-fill — design
+- **Pattern**: Behavior-changing engine options ship as an opt-in enum with `UNSPECIFIED=0` mapping
+  byte-for-byte to legacy, resolved to an *effective* value once at entry, then that effective value
+  (never the raw request field) is persisted/echoed — so historical records always state the model that
+  actually produced them.
+- **Evidence**: feature 151 (mirrors commission/slippage resolution at `servicer.py:383-384`).
+- **Rule it implies**: persist the resolved-effective option, not the raw request field, whenever comparability of stored results matters.
+
+### 2026-08-26 — backtest-next-bar-fill — ordering
+- **Pattern**: Two features editing the same functions/proto message coordinate a pre-reserved
+  field-number and migration split via a `merge-order.md` row; the proto field split is order-independent
+  but the migration NNN is order-sensitive, so the second-to-land renumbers the migration only.
+- **Evidence**: feature 151 (150 took req.8/result 17-19; 151 took req.9/result 20/summary 18, migration 018).
+- **Rule it implies**: for concurrent features touching one proto message, reserve the field split up
+  front and make second-to-land renumber only the order-sensitive migration.
+
+### 2026-08-26 — market-regime-benchmark-operand — reuse
+- **Pattern**: For a cross-symbol/benchmark operand, route **every** component-assembly site through one
+  shared per-component compute helper (`_assemble_component_series`) and prove coverage with a
+  cross-site parity test — internal compute sites are a "shared consumer" family just like the agent surface.
+- **Evidence**: feature 152 implementation-spec.md (archived) steps 2-6; context.md 2026-08-24 execute.
+- **Rule it implies**: extends **C-10** beyond the agent request/response surface to internal multi-site
+  compute paths (backtest/live/readiness/chart) — a new operand lands behind one shared unit + a parity
+  test, not copied per site.
+
+### 2026-08-26 — market-regime-benchmark-operand — design
+- **Pattern**: Cross-series indicators must **compute on the source series' own contiguous bars, then
+  date-key left-join** onto the consumer timeline (gap→None→hold, no forward-fill, no reindex) — never
+  align raw values then compute, because tail-alignment helpers assume a contiguous warm-up head.
+- **Evidence**: feature 152 design.md (archived) §19-32,83-84.
+- **Rule it implies**: any future multi-symbol/multi-series operand aligns compute-then-join on the
+  trading-day date; lookahead-safety and rolling-window integrity are preserved by construction.
+
+### 2026-08-26 — fix-ohlcv-chunk-lock-oom — ordering
+- **Pattern**: On a **single-node** DO managed-Postgres cluster, a `db-cluster-update-psql-config` change
+  restarts **every database on the node at once** (staging + production together), producing a brief
+  cross-environment reconnect ripple — not an isolated, per-environment change. Sequence such a bump into
+  a low-traffic window and expect transient `StreamEvents`/reconnect churn on directly-connected services.
+- **Evidence**: feature 153 context.md:118-128 (ripple self-healed 21:25→21:25:37, all 12 components HEALTHY).
+- **Rule it implies**: treat any server-parameter change on a single-node managed cluster as a
+  shared-blast-radius restart across all its databases; gate and schedule accordingly.
+
+### 2026-08-26 — ui-auth-improvements — design
+- **Pattern**: For client-side auth-failure handling, "refresh-first, then redirect" (attempt one shared
+  `/api/auth/refresh`, redirect only on failure) mirrors what the server middleware already does for
+  navigations, so client data-calls and navigations behave identically and a refreshable session is
+  never bounced to full re-login on the ~15-min access-TTL boundary.
+- **Evidence**: feature 153 design.md (archived) §36-48,74-76.
+- **Rule it implies**: client 401/`Unauthenticated` handling must reuse the middleware's refresh+redirect
+  contract, not re-implement redirect-only.
+
+### 2026-08-26 — ui-auth-improvements — reuse
+- **Pattern**: When N inline transport/client constructions exist, consolidate onto one factory carrying
+  the cross-cutting concern (the 401 interceptor) AND add a parity guard test asserting every consumer
+  routes through the factory — the test is what closes the "forgot a client" gap, not the factory alone.
+  Also grep for protocol divergence *within* the surface (REST vs connect-web vs streaming) — a single
+  factory does not cover a consumer speaking a different protocol.
+- **Evidence**: feature 153 design.md (archived) §50-64,106-108 (14 inline `createConnectTransport` sites → one factory; `/accounts` REST + swallowing streams needed separate handling).
+- **Rule it implies**: shared-consumer refactors ship with a parity/reachability test; audit for mixed
+  protocols (REST/unary/stream) before declaring coverage (reinforces the C-10 family).
+
+### 2026-08-26 — fundsignal-watchlist-universe — reuse
+- **Pattern**: When `scripts/localenv-setup.sh` (Docker codegen) is unavailable and codegen runs on a
+  host `buf` ≠ CI's pin, `buf-gen` re-emits fresh doc-comments on `google/protobuf/*` well-known types;
+  scope the commit to your service's `gen/` subtree and `git checkout`-revert the rest, or the
+  `proto-freshness` diff carries unrelated noise.
+- **Evidence**: feature 154 context.md:160; implementation-spec.md (archived) §409-411 (host buf 1.47.2 re-emitted `google/protobuf/timestamp.ts`).
+- **Rule it implies**: pin the host codegen toolchain to `Dockerfile.codegen`'s exact versions and verify
+  an empty `git diff packages/proto/gen/` outside the intended service before committing.
+
+### 2026-08-26 — offline-account-portfolios — reuse
+- **Pattern**: To add a **client-less variant** of a pooled resource (an offline account = an `s.brokers`
+  entry with `client=nil, brokerType=OFFLINE`), reuse the single pool + an existing type discriminant and
+  add an explicit `brokerType==OFFLINE` **skip at every site that ranges/keys the pool** (`pollFills`,
+  `syncPositions`, `reconcileTick`, `checkCredentialHealth`, `resolveAccount` sole-account fallback,
+  `LoadInflightOrders`, bracket watchdog). The impl-spec enumerated all sites rather than trusting
+  "natural" guards (`broker_order_id==""`) alone.
+- **Evidence**: feature 157 design.md (archived) §19-28; context.md:158-163 (every `s.brokers` site enumerated).
+- **Rule it implies**: when adding a null-client member to a shared pool, enumerate every pool-iteration
+  site and guard each explicitly — a nil-deref is one un-audited ranging loop away.
+
+### 2026-08-26 — durable-loop-scheduler — ordering
+- **Pattern**: When feature B refactors feature A's just-landed code but A isn't merged yet, ground
+  B's recon/design/spec on a throwaway local branch that merges A's landed code into the tree, and
+  cherry-pick only B's doc commits back to the clean PR branch — so every `path:line` in B's
+  artifacts is verified against real code, never against a `main-dev` that lacks A. Re-run grounding
+  after A merges.
+- **Evidence**: feature 158 context.md 2026-08-26 sdd-design ("design-grounding-157"), sdd-spec
+  ("spec-grounding-157") — repeated three times until 156 merged.
+- **Rule it implies**: for a stacked/dependent feature, never spec against a base that lacks the
+  dependency — build a grounding branch (a workflow tactic, not a binding gate).
+
+### 2026-08-26 — fix-offline-account-ui-gaps — design
+- **Pattern**: When a defect spans a shared multi-mount UI component, gate the behavior with an
+  explicit intent prop, not an incidentally-shared one. `OrderForm` has 4 mounts; `initialSymbol`
+  could NOT distinguish the insights mount from the `/trader` positions mount (both pass it), so an
+  explicit `allowOfflineRecord` prop (default true; `SignalOrderTicket` passes false) was required to
+  scope the offline Record affordance to `/trader` and satisfy C-10(a).
+- **Evidence**: feature 159 context.md 2026-08-26 sdd-spec + Step 5.
+- **Rule it implies**: gate cross-mount behavior on a purpose-named prop and enumerate every mount
+  before shipping; never overload a data prop (`initialSymbol`) as an implicit surface discriminator.
+
+### 2026-08-26 — fix-offline-account-ui-gaps — design
+- **Pattern**: Before gating a "combined/all-accounts" view, verify which component actually renders
+  it. `PortfolioPanel`'s combined branch is effectively dead because `AccountContext` auto-selects the
+  first active account; the real combined surface is `src/app/trader/portfolio/page.tsx`. Gating only
+  the design-named component would have shipped a no-op.
+- **Evidence**: feature 159 context.md Step 6 expansion.
+- **Rule it implies**: confirm the live render path of a named surface (which branch/route users
+  actually hit) during recon, not the first component that name-matches.
+
+### 2026-08-26 — fix-signal-screen-crash — design
+- **Pattern**: When writing a RED regression test that must exercise the signal-blend path in
+  `ScreenerEngine.screen()`, supply ≥2 bars with `.time` set on at least the last AND assert the
+  in-window signal moves the final score off the 0.5 neutral default. Otherwise `_eval_symbol`
+  short-circuits to INSUFFICIENT_DATA before the blend (`screener.py:243-251`) and the test passes on
+  buggy code, guarding nothing.
+- **Evidence**: feature 160 design.md:49-56; context.md sdd-execute Step 2 (screener.py:243-251,265).
+- **Rule it implies**: a regression test for a guarded/short-circuiting engine must first prove it
+  clears the guard, then assert a discriminating (non-neutral-default) outcome — a "returns OK"
+  assertion alone can be satisfied by the very short-circuit that skips the code under test.

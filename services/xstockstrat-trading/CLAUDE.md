@@ -28,7 +28,7 @@ Go gRPC service responsible for order execution and trade lifecycle management. 
 
 ## Language
 
-Go 1.25
+Go 1.27
 
 ## Docker Build Pattern
 

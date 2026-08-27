@@ -8,6 +8,7 @@
 **Last Updated**: 2026-08-25
 **Committed to main**: c5a4eb3859ac271ceaa1946a4cb6a9835762a789
 **Launched date**: 2026-08-26
+**Archived**: 2026-08-26
 
 ---
 
@@ -23,6 +24,7 @@
 | 2026-08-25 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done (analysis scheduler + 2 config keys + migration 019 + agent MCP tool + config-ui trigger); e2e deferred to CI (D-2) |
 
 | 2026-08-26 | `code-completed` → `launched` | CI workflow | Promoted via PR #1019; committed c5a4eb3859ac271ceaa1946a4cb6a9835762a789 |
+| 2026-08-26 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(0)/fails(1); scenarios already promoted (all DUP); pruned 4 specs |
 ---
 
 ## Reviewers

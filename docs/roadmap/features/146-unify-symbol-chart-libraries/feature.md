@@ -5,6 +5,7 @@
 **Last Updated**: 2026-08-18
 **Committed to main**: 6cd5572193b09a153c24e4cb90e3b65708846981
 **Launched date**: 2026-08-19
+**Archived**: 2026-08-26
 
 ---
 
@@ -20,6 +21,7 @@
 | 2026-08-18 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done — v5 multi-pane symbol chart (price + indicator panes, one instance), shared crosshair/tooltip, recharts dropped from symbol page, CLAUDE.md updated |
 
 | 2026-08-19 | `code-completed` → `launched` | CI workflow | Promoted via PR #985; committed 6cd5572193b09a153c24e4cb90e3b65708846981 |
+| 2026-08-26 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(0); no scenarios (no acceptance.feature); pruned 4 specs |
 ---
 
 ## Artifacts

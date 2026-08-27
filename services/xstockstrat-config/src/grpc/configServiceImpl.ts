@@ -105,10 +105,14 @@ interface Subscriber {
   lastVersion: string;
 }
 
-// Known weight-map keys and their [min, max] bounds. Validation is keyed on the
-// config key path (semantic type), not the DB `value_type` storage column.
-const WEIGHT_KEY_REGISTRY: Record<string, { minValue: number; maxValue: number }> = {
-  'analysis.signals.source_weights': { minValue: 0.0, maxValue: 1.0 },
+// Scalar-float keys and their [min, max] bounds (feature 161). Keyed on the FULL config key path
+// (`namespace.key`, the semantic identity), NOT the DB `value_type` storage column. Bounds are both
+// surfaced to config-ui via ListKeys.validation AND enforced server-side at SetConfig, so every
+// write path (config-ui, agent set_config, direct SetConfig) is guarded, not just the UI.
+// (Replaces the former FLOAT_MAP WEIGHT_KEY_REGISTRY, whose sole key `analysis.signals.source_weights`
+// was removed by migration 020; the FLOAT_MAP validation path is retired with it.)
+const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: number }> = {
+  'analysis.scoring.signal_decay_half_life_hours': { minValue: 0, maxValue: 8760 },
 };
 
 export class ConfigServiceImpl {
@@ -393,6 +397,23 @@ export class ConfigServiceImpl {
       }
     }
 
+    // Feature 161: server-side scalar-float bounds enforcement — the authoritative gate that closes
+    // the agent set_config / direct SetConfig / stale-config-ui fail-open window. Parse via
+    // extractValueData (ALL oneof shapes), NOT a string-only read: the agent writes this key as
+    // float_val, and a string-only read would coerce it to '' → Number('') === 0 → pass unchecked.
+    // 0 is a valid value (min inclusive, "disable decay") — never a `!n` / falsy-zero trap.
+    const scalarBounds = SCALAR_BOUNDS_REGISTRY[`${namespace}.${key}`];
+    if (scalarBounds) {
+      const n = Number(extractValueData(value));
+      if (Number.isNaN(n) || n < scalarBounds.minValue || n > scalarBounds.maxValue) {
+        callback({
+          code: 3, // INVALID_ARGUMENT
+          message: `${namespace}.${key} must be a number in [${scalarBounds.minValue}, ${scalarBounds.maxValue}] (got: ${extractValueData(value)})`,
+        });
+        return;
+      }
+    }
+
     // Feature 091 existence gate + feature 147 row-authoritative is_secret: read the exact-scope
     // row's is_secret so encryption is decided by the STORED flag, never a request field (a request
     // that omitted is_secret on a secret key must still encrypt — never land plaintext in value_data).
@@ -505,7 +526,12 @@ export class ConfigServiceImpl {
       );
       callback(null, {
         keys: result.rows.map((r) => {
-          const weightBounds = WEIGHT_KEY_REGISTRY[r.key];
+          // Feature 161: index the registry with the FULL key path. The DB `key` column is
+          // namespace-stripped (e.g. `scoring.signal_decay_half_life_hours`), so a bare `r.key`
+          // lookup would miss the full-path registry key and emit no validation — the latent bug
+          // the former `WEIGHT_KEY_REGISTRY[r.key]` carried, masked only by a non-representative
+          // full-path test fixture.
+          const scalarBounds = SCALAR_BOUNDS_REGISTRY[`${call.request.namespace}.${r.key}`];
           const secret = r.is_secret === true;
           return {
             key: r.key,
@@ -520,11 +546,11 @@ export class ConfigServiceImpl {
               r.environment === 'production'
                 ? Environment.ENVIRONMENT_PRODUCTION
                 : Environment.ENVIRONMENT_STAGING,
-            validation: weightBounds
+            validation: scalarBounds
               ? {
-                  valueType: ValueType.VALUE_TYPE_FLOAT_MAP,
-                  minValue: weightBounds.minValue,
-                  maxValue: weightBounds.maxValue,
+                  valueType: ValueType.VALUE_TYPE_FLOAT_SCALAR,
+                  minValue: scalarBounds.minValue,
+                  maxValue: scalarBounds.maxValue,
                 }
               : undefined,
           };

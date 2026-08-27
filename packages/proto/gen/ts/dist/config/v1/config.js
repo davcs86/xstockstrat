@@ -83,7 +83,16 @@ function configUpdateTypeToNumber(object) {
 var ValueType;
 (function (ValueType) {
     ValueType["VALUE_TYPE_UNSPECIFIED"] = "VALUE_TYPE_UNSPECIFIED";
+    /**
+     * VALUE_TYPE_FLOAT_MAP - Deprecated (feature 161): the config service no longer emits or enforces FLOAT_MAP validation
+     * — its sole key (analysis.signals.source_weights) was removed. The member is retained for enum
+     * stability (removing it would be a breaking change and old wire values must still decode).
+     *
+     * @deprecated
+     */
     ValueType["VALUE_TYPE_FLOAT_MAP"] = "VALUE_TYPE_FLOAT_MAP";
+    /** VALUE_TYPE_FLOAT_SCALAR - Scalar float key: the value's scalar float_val must satisfy [min_value, max_value] (feature 161). */
+    ValueType["VALUE_TYPE_FLOAT_SCALAR"] = "VALUE_TYPE_FLOAT_SCALAR";
     ValueType["UNRECOGNIZED"] = "UNRECOGNIZED";
 })(ValueType || (exports.ValueType = ValueType = {}));
 function valueTypeFromJSON(object) {
@@ -94,6 +103,9 @@ function valueTypeFromJSON(object) {
         case 1:
         case "VALUE_TYPE_FLOAT_MAP":
             return ValueType.VALUE_TYPE_FLOAT_MAP;
+        case 2:
+        case "VALUE_TYPE_FLOAT_SCALAR":
+            return ValueType.VALUE_TYPE_FLOAT_SCALAR;
         case -1:
         case "UNRECOGNIZED":
         default:
@@ -106,6 +118,8 @@ function valueTypeToJSON(object) {
             return "VALUE_TYPE_UNSPECIFIED";
         case ValueType.VALUE_TYPE_FLOAT_MAP:
             return "VALUE_TYPE_FLOAT_MAP";
+        case ValueType.VALUE_TYPE_FLOAT_SCALAR:
+            return "VALUE_TYPE_FLOAT_SCALAR";
         case ValueType.UNRECOGNIZED:
         default:
             return "UNRECOGNIZED";
@@ -117,6 +131,8 @@ function valueTypeToNumber(object) {
             return 0;
         case ValueType.VALUE_TYPE_FLOAT_MAP:
             return 1;
+        case ValueType.VALUE_TYPE_FLOAT_SCALAR:
+            return 2;
         case ValueType.UNRECOGNIZED:
         default:
             return -1;

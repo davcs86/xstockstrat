@@ -5,6 +5,7 @@
 **Last Updated**: 2026-08-23
 **Committed to main**: 2c8c9d7cb563140384324b5e1f9ff6fdceb1a367
 **Launched date**: 2026-08-24
+**Archived**: 2026-08-26
 
 ---
 
@@ -19,6 +20,7 @@
 | 2026-08-23 | `in-progress` → `code-completed` | /sdd-execute | Steps 3–13 done on claude/xstockstrat-metrics-sweep-m070rf; analysis engine + agent + strat-lab skill + UI all landed, tests green |
 
 | 2026-08-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #1006; committed 2c8c9d7cb563140384324b5e1f9ff6fdceb1a367 |
+| 2026-08-26 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(2); promoted 7 scenarios → analysis suite; pruned 4 specs |
 ---
 
 ## Artifacts

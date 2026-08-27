@@ -5,6 +5,7 @@
 **Last Updated**: 2026-05-26
 **Committed to main**: d908f33dc3283b79b61b233d57542cd47014c4ab
 **Launched date**: 2026-08-21
+**Archived**: 2026-08-26
 
 ---
 
@@ -19,6 +20,7 @@
 | 2026-08-20 | `implementation-ready` → `code-completed` | /sdd-execute | All 14 steps done — proto (OrderSnapshot/PnLPatternFactor/QueryPnLPatterns) + codegen, portfolio migration 010 + realizedDelta producer, analysis migration 016 + ledger StreamEvents consumer + QueryPnLPatterns RPC, /insights P&L Patterns view + nav, docs. Verifications green: portfolio go test (cov 55.9%), analysis pytest 541 pass (cov 82%), UI build + pnl-patterns/nav-reachability e2e (5 pass). Executed on harness branch `claude/execute-020-042-127-pfa5cw`. Deviations: GetRealizedAccum (no proto field), v1 default indicator set / synthesized position_id, offline-deferred ConsumeOrderFills DB assertions. context-forge plugin unavailable → /context-scrubber not run (noted). |
 
 | 2026-08-21 | `code-completed` → `launched` | CI workflow | Promoted via PR #997; committed d908f33dc3283b79b61b233d57542cd47014c4ab |
+| 2026-08-26 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); promoted 7 scenarios → analysis+ui suites; pruned 4 specs |
 ---
 
 ## Artifacts

@@ -22,7 +22,7 @@ admin-only caller is also denied. See the `PORTFOLIO-*` invariant in `docs/conte
 
 ## Language
 
-Go 1.25
+Go 1.27
 
 ## Docker Build Pattern
 

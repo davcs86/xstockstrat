@@ -5,6 +5,7 @@
 **Last Updated**: 2026-08-17
 **Committed to main**: 6cd5572193b09a153c24e4cb90e3b65708846981
 **Launched date**: 2026-08-19
+**Archived**: 2026-08-26
 
 ---
 
@@ -20,6 +21,7 @@
 | 2026-08-17 | `code-completed` (amendment) | user request | Amended the layout: related panels within each section are clustered into a responsive `SymbolPanelGroup` (desktop columns / mobile tabbed panel, all panels **mounted**), reducing the top-level nav to a stable 4-section spine (Overview/Trade/Research/Analysis — Position folds into Trade, Backtests+Coverage merge into Analysis). No panel dropped (all 13 render targets preserved). D-4: rejected the user's "Screener/Fundamentals" group (mutually exclusive FR-11 branches). D-5: scroll-spy rewritten from `IntersectionObserver` to a deterministic scroll-position read (the shorter column layout broke the band heuristic for the last section). D-6: scoped two sibling-spec `getByText` gates + a `min-w-0` grid fix (390px overflow). Verified green: **230** trader+insights passed, `--retries=0` deterministic (incl. scroll-spy). See implementation-spec § Amendment. |
 
 | 2026-08-19 | `code-completed` → `launched` | CI workflow | Promoted via PR #985; committed 6cd5572193b09a153c24e4cb90e3b65708846981 |
+| 2026-08-26 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); no scenarios (no acceptance.feature); pruned 4 specs |
 ---
 
 ## Artifacts

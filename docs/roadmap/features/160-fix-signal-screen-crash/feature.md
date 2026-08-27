@@ -8,6 +8,7 @@
 **Last Updated**: 2026-08-26
 **Committed to main**: 65aeaa4c5bb7c000dfb4e30d5b788d6c39352234
 **Launched date**: 2026-08-26
+**Archived**: 2026-08-26
 
 ---
 
@@ -23,6 +24,7 @@
 | 2026-08-26 | `code-completed` (renumber 159→160) | manual | NNN collision: `fix-offline-account-ui-gaps` (merged, PR #1022) also took 159; renumbered this not-yet-merged feature to 160 (dir + live refs + @feature tags). Docs/tests-only, no behavior change |
 
 | 2026-08-26 | `code-completed` → `launched` | CI workflow | Promoted via PR #1027; committed 65aeaa4c5bb7c000dfb4e30d5b788d6c39352234 |
+| 2026-08-26 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(0); scenarios already promoted (all DUP); pruned 4 specs |
 ---
 
 ## Reviewers

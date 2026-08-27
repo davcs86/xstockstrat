@@ -2683,9 +2683,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         ]
 
         # feature 134 (FR-4 genuine replace): source weights now come from
-        # ingest.SignalSource.reliability_weight (reject-at-write in [0,1]), not the
-        # retained-but-inert analysis.signals.source_weights config key. Both analysis read paths
-        # (this + the Opportunities queue) share the one _drain_source_weights helper.
+        # ingest.SignalSource.reliability_weight (reject-at-write in [0,1]), not the former
+        # analysis.signals.source_weights config key (removed by feature 161). Both analysis read
+        # paths (this + the Opportunities queue) share the one _drain_source_weights helper.
         source_weights = await self._drain_source_weights(propagation_meta)
 
         engine = ScreenerEngine(

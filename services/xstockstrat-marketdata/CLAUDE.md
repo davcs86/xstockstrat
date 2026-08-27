@@ -20,7 +20,7 @@ Go gRPC service that is the **sole integration point for Alpaca's market data AP
 
 ## Language
 
-Go 1.25
+Go 1.27
 
 ## Docker Build Pattern
 

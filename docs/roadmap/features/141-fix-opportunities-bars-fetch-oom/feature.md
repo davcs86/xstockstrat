@@ -8,6 +8,7 @@
 **Last Updated**: 2026-08-16
 **Committed to main**: 6cd5572193b09a153c24e4cb90e3b65708846981
 **Launched date**: 2026-08-19
+**Archived**: 2026-08-26
 
 ---
 
@@ -23,6 +24,7 @@
 | 2026-08-16 | `in-progress` → `code-completed` | /sdd-execute | Step 3 done: analysis.opportunity.max_concurrent_bars_fetches registered in CLAUDE.md + config-governance.md. /context-scrubber unavailable this session (recorded, not skipped silently). ruff clean; full suite 522 passed, 83.5% coverage. All 3 steps complete. |
 
 | 2026-08-19 | `code-completed` → `launched` | CI workflow | Promoted via PR #985; committed 6cd5572193b09a153c24e4cb90e3b65708846981 |
+| 2026-08-26 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(3)/fails(2); no scenarios (no acceptance.feature); pruned 4 specs |
 ---
 
 ## Artifacts

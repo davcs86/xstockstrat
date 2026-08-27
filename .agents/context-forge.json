@@ -3,6 +3,6 @@
   "constitutionPath": "docs/context-constitution.md",
   "citeIds": true,
   "scrubberFindingsPath": "context-scrubber-findings.md",
-  "scrubberExtraTargets": ["README.md"],
+  "scrubberExtraTargets": ["README.md", "docs/patterns/ui-ux-governance.md"],
   "created": "2026-07-24"
 }

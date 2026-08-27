@@ -53,6 +53,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 |---|---|
 | Building or modifying a Next.js frontend | `docs/patterns/frontend-auth.md` |
 | Other Next.js patterns (basePath, BFF connect-web call chain + handler-map basePath gotcha, browser typed-client data shape, BFF route verification, Suspense fallbacks, Radix hydration, middleware matcher, app icons) | `docs/patterns/nextjs-frontends.md` |
+| UI/UX consistency (design tokens + no-hardcoded-color rule, shadcn component/variant governance, shared shell/nav contract, loading/empty/error state primitives, accessibility baseline, durable-acceptance coverage audit + deviation backlog) | `docs/patterns/ui-ux-governance.md` |
 | Nginx routing pattern (deprecated — nginx removed) | `docs/patterns/nginx-routing.md` (historical reference) |
 | Adding a new backend service (any language) | `docs/patterns/header-propagation.md` |
 | Docker build patterns (Node.js, Next.js, Python, Go) | `docs/patterns/docker-build.md` |
@@ -111,13 +112,13 @@ to the frontends and the agent.
 
 | Language / Tool | Version | Notes |
 |---|---|---|
-| Go | 1.25 | `go.work` workspace file at repo root; use `GOWORK=off` for per-service builds |
-| Python | 3.12 | Dependencies managed by `uv`; run `uv sync --extra dev` to install, `uv lock` after any `pyproject.toml` change |
-| Node.js | 22 | All Node/Next services |
-| pnpm | 9.15.0 | Workspace manager (`pnpm-workspace.yaml`); `npm install -g pnpm@9.15.0` |
+| Go | 1.27 | `go.work` workspace file at repo root; use `GOWORK=off` for per-service builds |
+| Python | 3.13 | Dependencies managed by `uv`; run `uv sync --extra dev` to install, `uv lock` after any `pyproject.toml` change |
+| Node.js | 24 | All Node/Next services |
+| pnpm | 9.15.9 | Workspace manager (`pnpm-workspace.yaml`); `npm install -g pnpm@9.15.9` |
 | buf | latest | Proto toolchain; installed by `scripts/bootstrap.sh` |
 | golang-migrate | latest | DB migrations; installed by `scripts/bootstrap.sh` |
-| golangci-lint | v2.5.0 | Go lint; run via `golangci-lint-action@v6` |
+| golangci-lint | v2.13.1 | Go lint; run via `golangci-lint-action@v9` |
 | ruff | latest | Python lint + format |
 | Playwright | — | E2E tests for the consolidated `xstockstrat-ui` (all three segments) |
 | Vitest | ^3 | Unit (logic) tests for `xstockstrat-ui` — node-environment `src/**/*.test.ts`, coverage scoped to `src/lib/**` (feature 065); complements Playwright e2e |
@@ -325,7 +326,7 @@ When modifying a service's `Dockerfile`, update the complete chain:
 
 **Common updates:**
 
-- **Base image version bump** (Node 22 → 23, Python 3.12 → 3.13, etc.) → update the Dockerfile + version table in root CLAUDE.md + all affected service Dockerfiles
+- **Base image version bump** (Node 24 → 25, Python 3.13 → 3.14, etc.) → update the Dockerfile + version table in root CLAUDE.md + all affected service Dockerfiles
 - **Lock file tooling change** (pnpm@9 → pnpm@10) → update root CLAUDE.md version table + all Node service Dockerfiles + all Node service lock files
 - **Dependency strategy change** (e.g., switching from `--no-frozen-lockfile` to `--frozen-lockfile`) → update Dockerfile + service CLAUDE.md + `docs/patterns/docker-build.md`
 
@@ -471,6 +472,7 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon
 | DO prod app spec | `.do/app.yaml` |
 | DO dev app spec | `.do/app.dev.yaml` |
 | Frontend auth pattern | `docs/patterns/frontend-auth.md` — required for all Next.js services |
+| UI/UX governance | `docs/patterns/ui-ux-governance.md` — tokens, components, shell/nav, state primitives, a11y baseline (Constitution C-17) |
 | Backend propagation pattern | `docs/patterns/header-propagation.md` — required for all backend services |
 | Nginx routing pattern (deprecated) | `docs/patterns/nginx-routing.md` — historical reference; nginx removed by feature 045 |
 | Local env setup script | `scripts/localenv-setup.sh` |
