@@ -2500,3 +2500,19 @@ reusing.
 - **Rule it implies**: a regression test for a guarded/short-circuiting engine must first prove it
   clears the guard, then assert a discriminating (non-neutral-default) outcome — a "returns OK"
   assertion alone can be satisfied by the very short-circuit that skips the code under test.
+
+### 2026-08-27 — agent-broker-account-tools — design
+- **Pattern**: When an agent MCP tool merely surfaces an EXISTING backend RPC, do not re-implement
+  the authorization or invariant checks client-side — verify what the Go/backend handler already
+  enforces and let it be the gate. Here `UpdateBrokerAccountCredentials` already rejects OFFLINE
+  accounts (`FailedPrecondition`, trading.go:2267-2270) and validates JSON server-side (2257), and
+  `DeregisterBrokerAccount` intentionally supports offline (2754-2761); the tool adds NO offline
+  guard or JSON validation — it just forwards `x-user-id` and maps the gRPC error via
+  `_grpc_error_message`. Client-side re-validation would be overbuild (behavior #2) AND could drift
+  from the backend.
+- **Evidence**: feature 162 design.md; `services/xstockstrat-trading/internal/service/trading.go:2256-2270,2736-2761`; `services/xstockstrat-agent/app/tools.py:184-195` (`_grpc_error_message` default branch surfaces FailedPrecondition/InvalidArgument details).
+- **Rule it implies**: for an agent tool wrapping an existing RPC, recon the backend handler's own
+  rejections first; the tool's job is identity forwarding + error translation, not a second copy of
+  the invariant. Adding a new agent tool must also move the tool-count literal across all inventory
+  surfaces (CLAUDE.md, tools.py docstring, mcp-tools.md ×2) AND add the full mcp-tools.md reference
+  entries in the same PR (ledger RC-1), guarded by a `BrokerAccount`-descriptor-parity test.
