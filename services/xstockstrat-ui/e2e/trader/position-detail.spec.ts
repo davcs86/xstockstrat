@@ -228,8 +228,12 @@ test.describe('Single Position page', () => {
     // ZZZZ is unheld (no orders → no owning strategy) and non-watchlisted → no strategy resolves.
     await page.goto('/trader/positions/ZZZZ');
     // Backtests-specific phrasing (the Indicators section also shows a "No strategy resolves" note).
+    // The mobile companion renders a second, sm:hidden copy of this note, so scope to the visible
+    // (desktop) instance to avoid a strict-mode collision.
     await expect(
-      page.getByText(/No strategy resolves for ZZZZ — pick a live strategy above/),
+      page.getByText(/No strategy resolves for ZZZZ — pick a live strategy above/).filter({
+        visible: true,
+      }),
     ).toBeVisible({ timeout: 30000 });
   });
 
