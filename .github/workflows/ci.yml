@@ -225,6 +225,13 @@ jobs:
           version: v2.5.0
           working-directory: services/${{ matrix.service }}
           args: --modules-download-mode=mod
+          # Skip `golangci-lint config verify`, which fetches the versioned
+          # JSON schema from golangci-lint.run over the network to validate
+          # .golangci.yml. That fetch intermittently times out on the runner
+          # (`context deadline exceeded`), failing the lint job with no code
+          # issue. The linters themselves still run and still reject an
+          # invalid config at load time; only the network schema check is off.
+          verify: false
         env:
           GOWORK: "off"
 
