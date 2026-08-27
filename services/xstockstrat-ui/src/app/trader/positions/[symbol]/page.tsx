@@ -332,7 +332,14 @@ function PositionDetailInner() {
             <CardTitle>Trade {symbol}</CardTitle>
           </CardHeader>
           <CardContent>
-            <OrderForm mode={mode} initialSymbol={symbol} />
+            {/* feature 125 unified the insights Signal-detail ticket onto this page; feature 162
+                restores its broker-execution intent: allowOfflineRecord={false} so an auto-selected
+                offline account can never flip this ticket to the "Record Offline Order" control here
+                (that affordance stays a /trader dashboard concern — feature 159). Without it, the
+                AccountContext auto-select re-render raced the assertion, flaking
+                offline-accounts.spec.ts:257 @AC-1. The trading routing guard still guarantees an
+                offline account is never broker-routed. */}
+            <OrderForm mode={mode} initialSymbol={symbol} allowOfflineRecord={false} />
           </CardContent>
         </Card>
       ),

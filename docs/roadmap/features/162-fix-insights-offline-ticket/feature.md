@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-27 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report (Issues disabled; --from-report path) |
+| 2026-08-27 | `draft` → `code-completed` | claude | Root cause pinned + one-line fix implemented (`allowOfflineRecord={false}` on the unified position/Signal-detail order ticket); implementation-spec written; regression @AC-1 verified |
 
 ---
 
@@ -35,4 +36,5 @@ failure of `e2e/trader/offline-accounts.spec.ts:257 @AC-1`.
 
 ## Next Action
 
-`/sdd-design fix-insights-offline-ticket quick` — recommended design depth (quick) from triage; see context.md
+Fix implemented on branch `claude/fix-162-gp2epi` (PR into `main-dev`). After merge and promotion,
+flip to `launched`; the `@AC-1` regression scenario in `acceptance.feature` guards against recurrence.
