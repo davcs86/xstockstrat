@@ -11,7 +11,7 @@ export const COPILOT_STREAM_PREFIX = 'copilot:';
 export const COPILOT_EVENT_TYPE = 'copilot.message';
 export const COPILOT_THREAD = 'default';
 /** Number of MCP tools surfaced in the beta footer (read-only unless confirmed). */
-export const COPILOT_MCP_TOOL_COUNT = 24;
+export const COPILOT_MCP_TOOL_COUNT = 32;
 
 /**
  * Per-user append-only thread key. The BFF derives {userId} from the verified session and
