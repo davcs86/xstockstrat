@@ -253,10 +253,10 @@ Start order in migrations: `config → ledger → identity → marketdata → tr
 
 | Language | Services | Why |
 |---|---|---|
-| Go 1.25 | trading, portfolio, marketdata | High-throughput order execution and data ingestion |
-| Python 3.12 | indicators, ingest, analysis | Formula sandboxing, numeric libraries (pandas, numpy) |
-| Node.js 22 | ledger, identity, notify, config | Event-driven I/O, streaming, JWT handling |
-| Next.js 14 | trader, insights, config-ui | React frontends with SSR (Node.js 22 runtime) |
+| Go 1.27 | trading, portfolio, marketdata | High-throughput order execution and data ingestion |
+| Python 3.13 | indicators, ingest, analysis | Formula sandboxing, numeric libraries (pandas, numpy) |
+| Node.js 24 | ledger, identity, notify, config | Event-driven I/O, streaming, JWT handling |
+| Next.js 14 | trader, insights, config-ui | React frontends with SSR (Node.js 24 runtime) |
 
 ### SDD Development Workflow
 

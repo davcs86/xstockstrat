@@ -12,7 +12,7 @@ As of Phase 3, ingest owns a database schema (`ingest`) and is no longer statele
 
 ## Language
 
-Python 3.12 (asyncio, grpc.aio)
+Python 3.13 (asyncio, grpc.aio)
 
 ## Docker Build Pattern
 

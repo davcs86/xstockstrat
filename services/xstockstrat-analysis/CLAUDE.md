@@ -140,7 +140,7 @@ Design-level detail — fingerprint eligibility, empirical-Bayes aggregation wit
 
 ## Language
 
-Python 3.12 (asyncio, grpc.aio)
+Python 3.13 (asyncio, grpc.aio)
 
 ## Docker Build Pattern
 

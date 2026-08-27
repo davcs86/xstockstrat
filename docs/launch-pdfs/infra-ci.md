@@ -146,9 +146,9 @@ The combined job is named `CI / Proto lint and breaking check` and is the **sing
 
 | Language | Lint | Test | Coverage |
 |---|---|---|---|
-| Go 1.25 | `golangci-lint v2.5.0` | `go test -race -coverprofile` | `go tool cover -func` ≥40% |
-| Python 3.12 | `ruff check` + `ruff format --check` | `pytest --cov` | ≥40% (≥50% indicators) |
-| Node.js 22 | `eslint` via `pnpm run lint` | `vitest --coverage` | ≥40% |
+| Go 1.27 | `golangci-lint v2.13.1` | `go test -race -coverprofile` | `go tool cover -func` ≥40% |
+| Python 3.13 | `ruff check` + `ruff format --check` | `pytest --cov` | ≥40% (≥50% indicators) |
+| Node.js 24 | `eslint` via `pnpm run lint` | `vitest --coverage` | ≥40% |
 | Next.js | `eslint` + Playwright E2E | `playwright test` | golden-path scenarios |
 
 Every Go job sets `GOWORK=off` so per-service builds use the service's own `go.mod`, not the workspace.

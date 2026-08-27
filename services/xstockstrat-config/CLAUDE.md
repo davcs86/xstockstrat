@@ -10,7 +10,7 @@ Node.js gRPC service that is the **central configuration authority** for the ent
 
 ## Language
 
-Node.js 22 + TypeScript
+Node.js 24 + TypeScript
 
 ## Docker Build Pattern
 

@@ -13,7 +13,7 @@ Python gRPC service providing two capabilities:
 
 ## Language
 
-Python 3.12 (asyncio, grpc.aio)
+Python 3.13 (asyncio, grpc.aio)
 
 ## Docker Build Pattern
 

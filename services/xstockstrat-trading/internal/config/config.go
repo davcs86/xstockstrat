@@ -121,12 +121,13 @@ func resolveTradingMode(tradingMode string) commonv1.TradingMode {
 func (w *Watcher) watchLoop() {
 	backoff := 2 * time.Second
 	for {
-		if err := w.stream(); err != nil {
-			slog.Warn("config watcher stream error, reconnecting", "error", err, "backoff", backoff)
-			time.Sleep(backoff)
-			if backoff < 30*time.Second {
-				backoff *= 2
-			}
+		// stream() only ever returns on error (it loops until the stream breaks), so a
+		// reconnect+backoff always applies — there is no nil-error branch to guard (SA4023).
+		err := w.stream()
+		slog.Warn("config watcher stream error, reconnecting", "error", err, "backoff", backoff)
+		time.Sleep(backoff)
+		if backoff < 30*time.Second {
+			backoff *= 2
 		}
 	}
 }
@@ -136,7 +137,8 @@ func (w *Watcher) stream() error {
 		Namespace:   w.namespace,
 		ClientId:    fmt.Sprintf("go-trading-%d", os.Getpid()),
 		Environment: w.environment,
-		TradingMode: w.tradingMode,
+		// trading_mode is deprecated and ignored by the config server (feature 147); paper/live
+		// derives from environment. user_id is left empty — services subscribe at global scope.
 	}
 	stream, err := w.client.WatchConfig(context.Background(), req)
 	if err != nil {
