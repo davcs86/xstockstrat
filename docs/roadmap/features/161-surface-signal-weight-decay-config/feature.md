@@ -13,6 +13,8 @@
 | 2026-08-26 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-26 | `draft` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written. Operator overrode "no proto changes" for enforced bounds; server-side bounds fail-open bug caught in round 3 |
 | 2026-08-26 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
+| 2026-08-26 | `implementation-ready` → `in-progress` | /sdd-execute | Implementation started (agent → proto → config → config-ui → docs) |
+| 2026-08-26 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps executed on the harness branch; agent 298 + config 93 tests + 35 config-ui e2e green; buf breaking clean |
 
 ---
 
@@ -51,4 +53,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review surface-signal-weight-decay-config impl-spec` — validate the implementation spec, then `/sdd-execute surface-signal-weight-decay-config`
+Integration PR to `main-dev` opened from `claude/signal-weights-decays-5h6rje`; after merge + promotion CI flips this to `launched`.

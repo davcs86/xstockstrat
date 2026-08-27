@@ -1,6 +1,6 @@
 # Implementation Spec: surface-signal-weight-decay-config
 
-**Status**: `in-progress`
+**Status**: `code-completed`
 **Created**: 2026-08-26
 **Feature**: `docs/roadmap/features/161-surface-signal-weight-decay-config/feature.md`
 **Total Steps**: 12
@@ -417,7 +417,7 @@ omission).
 
 ### Step 12 — docs: Update dead-key + decay-key references; context-scrubber scan
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` + `services/xstockstrat-analysis/`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
@@ -452,6 +452,13 @@ _Populated by /sdd-execute as implementation proceeds._
   branch `claude/signal-weights-decays-5h6rje` (one integration PR to `main-dev`), NOT via
   `/sdd-execute`'s per-step feature-branch/PR machinery — the harness pins this session to that single
   branch. TDD red-before-green still applied per step where a test suite is runnable in-session.
+- **2026-08-26 — Step 12 (docs) done + ALL steps complete:** updated analysis `CLAUDE.md` (dropped
+  the dead-key row; decay row now notes registered + server-enforced `[0,8760]` and drops the
+  'negative disables' claim), `config-governance.md` (dead-key note → removed; new Per-Feature
+  Registered Keys entry for feature 161), and a stale `servicer.py` comment. **context-scrubber:**
+  the context-forge `/context-scrubber` skill is NOT available in this session (no plugin/command
+  form), so I did a manual scrub — touched context files updated; the `scrubberExtraTargets`
+  (README.md, ui-ux-governance.md) have no references to the changed surfaces (verified by grep).
 - **2026-08-26 — Steps 8-11 (config-ui) done, green:** reliability_weight form field + guidance on
   both the create/edit form and the inline editor (sources/page.tsx); NamespaceEditor scalar
   validation replaces the removed validateFloatMap path (valueType===2, bounds hint); e2e
