@@ -289,7 +289,7 @@ omission).
 
 ### Step 8 — service: config-ui — `reliability_weight` field + guidance on the Signal Sources create/edit form and inline editor
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/sources/page.tsx` — modify
@@ -324,7 +324,7 @@ omission).
 
 ### Step 9 — test: config-ui — e2e for the reliability_weight form field + inline-editor guidance
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/config-ui/sources.spec.ts` — modify (or the existing Signal Sources spec; create if absent)
@@ -354,7 +354,7 @@ omission).
 
 ### Step 10 — service: config-ui — scalar validation in NamespaceEditor; remove the dead FLOAT_MAP path
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/[namespace]/NamespaceEditor.tsx` — modify
@@ -386,7 +386,7 @@ omission).
 
 ### Step 11 — test: config-ui — e2e for the scalar-validated decay key; rework FLOAT_MAP fixtures/specs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/configKeys.ts` — modify
@@ -452,6 +452,13 @@ _Populated by /sdd-execute as implementation proceeds._
   branch `claude/signal-weights-decays-5h6rje` (one integration PR to `main-dev`), NOT via
   `/sdd-execute`'s per-step feature-branch/PR machinery — the harness pins this session to that single
   branch. TDD red-before-green still applied per step where a test suite is runnable in-session.
+- **2026-08-26 — Steps 8-11 (config-ui) done, green:** reliability_weight form field + guidance on
+  both the create/edit form and the inline editor (sources/page.tsx); NamespaceEditor scalar
+  validation replaces the removed validateFloatMap path (valueType===2, bounds hint); e2e
+  fixtures/specs reworked off the dead FLOAT_MAP key onto the scalar decay key. tsc clean, lint
+  clean (only pre-existing hook-dep warnings). 35 config-ui e2e pass incl. new AC-4/AC-5/AC-6;
+  ran against a prebuilt prod server (E2E_PREBUILT) with PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH set to
+  the pre-installed /opt/pw-browsers/chromium-1194 (dev-server cold-compile made the warmup flaky).
 - **2026-08-26 — Step 6/7 (config-service) done, green:** applied the sdd-review fix — the
   `listKeys` scalar-bounds lookup uses the FULL path `${namespace}.${r.key}` (not the bare DB
   `key` column), and Step 7's fixtures use the representative SPLIT key form so the emission is

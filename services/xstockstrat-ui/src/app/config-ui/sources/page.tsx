@@ -59,6 +59,7 @@ interface FormState {
   url: string;
   scrapeSelector: string;
   credentialsRef: string;
+  reliabilityWeight: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -74,6 +75,7 @@ const EMPTY_FORM: FormState = {
   url: '',
   scrapeSelector: '',
   credentialsRef: '',
+  reliabilityWeight: '1', // feature 161 — default 1.0 (neutral)
 };
 
 function isEmailType(t: SourceType) {
@@ -160,6 +162,7 @@ function formFromSource(src: SignalSource): FormState {
     url: String(cfg.url ?? ''),
     scrapeSelector: String(cfg.scrape_selector ?? ''),
     credentialsRef: '',
+    reliabilityWeight: String(src.reliabilityWeight ?? 1.0),
   };
 }
 
@@ -234,6 +237,13 @@ export default function SourcesPage() {
 
   function handleSave() {
     setSaveError(null);
+    // feature 161: validate the reliability weight with the same [0,1] scalar shape as the inline
+    // editor (NOT validateFloatMap, which parses a JSON map). Blocks the write on a bad value.
+    const weight = Number(form.reliabilityWeight);
+    if (form.reliabilityWeight.trim() === '' || Number.isNaN(weight) || weight < 0 || weight > 1) {
+      setSaveError('Reliability weight must be a number in [0, 1]');
+      return;
+    }
     const isNew = editingSlug === '__new__';
     const configJson = buildConfigJson(form);
     const base = {
@@ -244,6 +254,7 @@ export default function SourcesPage() {
         extractorModule: form.extractorModule,
         active: form.active,
         configJson,
+        reliabilityWeight: weight,
       },
       ...(form.credentialsRef ? { credentialsRef: form.credentialsRef } : {}),
     };
@@ -262,6 +273,7 @@ export default function SourcesPage() {
               'source_type',
               'extractor_module',
               'config_json',
+              'reliability_weight', // feature 161 — persist the weight edited on the form
               ...(form.credentialsRef ? ['credentials_ref'] : []),
             ],
           },
@@ -333,24 +345,31 @@ export default function SourcesPage() {
         cell: ({ row }) => {
           const src = row.original;
           return editingWeightSlug === src.slug ? (
-            <div className="flex items-center gap-1.5">
-              <Input
-                type="number"
-                step="0.1"
-                min={0}
-                max={1}
-                value={weightValue}
-                onChange={(e) => setWeightValue(e.target.value)}
-                className="h-8 w-20"
-                aria-label={`Weight for ${src.slug}`}
-              />
-              <Button size="sm" disabled={saving} onClick={() => saveWeight(src.slug)}>
-                Save
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setEditingWeightSlug(null)}>
-                Cancel
-              </Button>
-              {weightError && <span className="text-xs text-destructive">{weightError}</span>}
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5">
+                <Input
+                  type="number"
+                  step="0.1"
+                  min={0}
+                  max={1}
+                  value={weightValue}
+                  onChange={(e) => setWeightValue(e.target.value)}
+                  className="h-8 w-20"
+                  aria-label={`Weight for ${src.slug}`}
+                />
+                <Button size="sm" disabled={saving} onClick={() => saveWeight(src.slug)}>
+                  Save
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setEditingWeightSlug(null)}>
+                  Cancel
+                </Button>
+                {weightError && <span className="text-xs text-destructive">{weightError}</span>}
+              </div>
+              {/* feature 161 — guidance on the inline weight editor */}
+              <p className="text-muted-foreground text-xs mt-0.5">
+                Ranking multiplier in [0, 1] (default 1.0). Higher = this source&apos;s signals rank
+                higher; 0 ignores the source.
+              </p>
             </div>
           ) : (
             <button
@@ -515,6 +534,23 @@ export default function SourcesPage() {
                 disabled={editingSlug !== '__new__'}
                 onChange={(e) => setField('extractorModule', e.target.value)}
               />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Reliability Weight</label>
+              <Input
+                type="number"
+                step="0.1"
+                min={0}
+                max={1}
+                value={form.reliabilityWeight}
+                onChange={(e) => setField('reliabilityWeight', e.target.value)}
+                aria-label="Reliability weight"
+              />
+              <p className="text-muted-foreground text-xs mt-0.5">
+                Ranking multiplier in [0, 1] (default 1.0). Higher weights rank this source&apos;s
+                signals higher; 0 effectively ignores the source.
+              </p>
             </div>
 
             {isEmailType(form.sourceType) && (

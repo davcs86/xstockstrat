@@ -27,22 +27,16 @@ function errMessage(err: unknown): string {
   return err instanceof ConnectError ? err.rawMessage : (err as Error).message;
 }
 
-// FR-3/FR-4: every numeric leaf in the JSON weight map must lie within [min, max].
-function validateFloatMap(json: string, min: number, max: number): string | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(json);
-  } catch {
-    return 'Value must be valid JSON';
-  }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    return 'Value must be a JSON object';
-  }
-  for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-    const n = Number(v);
-    if (isNaN(n) || n < min || n > max) {
-      return `Key "${k}": ${v} is outside [${min}, ${max}]`;
-    }
+// config.v1.ValueType.VALUE_TYPE_FLOAT_SCALAR (numeric on the es-generated browser client).
+// The former VALUE_TYPE_FLOAT_MAP (= 1) validation path was removed with its sole key (feature 161).
+const VALUE_TYPE_FLOAT_SCALAR = 2;
+
+// feature 161: a scalar-float key's single numeric value must lie within [min, max]. Pre-validation
+// only — the config service enforces the same bounds at the SetConfig write path (authoritative).
+function validateScalar(value: string, min: number, max: number): string | null {
+  const n = Number(value);
+  if (value.trim() === '' || Number.isNaN(n) || n < min || n > max) {
+    return `Value must be a number in [${min}, ${max}]`;
   }
   return null;
 }
@@ -92,11 +86,11 @@ export function NamespaceEditor({ namespace, env, user, nativeEnv }: Props) {
       setValidationError('Secret keys are global-scope only; switch to the global scope to edit.');
       return;
     }
-    if (meta?.validation?.valueType === 1) {
-      const err = validateFloatMap(editValue, meta.validation.minValue, meta.validation.maxValue);
+    if (meta?.validation?.valueType === VALUE_TYPE_FLOAT_SCALAR) {
+      const err = validateScalar(editValue, meta.validation.minValue, meta.validation.maxValue);
       if (err) {
         setValidationError(err);
-        return; // FR-6: no SetConfig call when validation fails
+        return; // no SetConfig call when validation fails (the server also enforces this)
       }
     }
     if (key === 'platform.trading_state' && !editReason.trim()) {
@@ -149,9 +143,9 @@ export function NamespaceEditor({ namespace, env, user, nativeEnv }: Props) {
                 placeholder={k.isSecret ? 'Enter new secret value' : undefined}
                 onChange={(e) => setEditValue(e.target.value)}
                 onBlur={() => {
-                  if (k.validation?.valueType === 1) {
+                  if (k.validation?.valueType === VALUE_TYPE_FLOAT_SCALAR) {
                     setValidationError(
-                      validateFloatMap(editValue, k.validation.minValue, k.validation.maxValue),
+                      validateScalar(editValue, k.validation.minValue, k.validation.maxValue),
                     );
                   }
                 }}
@@ -161,6 +155,11 @@ export function NamespaceEditor({ namespace, env, user, nativeEnv }: Props) {
                 <p className="text-muted-foreground text-xs mt-0.5">
                   Encrypted at rest; the current value is never shown. Saving stores exactly what
                   you type as the new secret.
+                </p>
+              )}
+              {k.validation?.valueType === VALUE_TYPE_FLOAT_SCALAR && (
+                <p className="text-muted-foreground text-xs mt-0.5">
+                  Must be a number in [{k.validation.minValue}, {k.validation.maxValue}].
                 </p>
               )}
               <Input
