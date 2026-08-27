@@ -138,7 +138,7 @@
     emitted in prod → config-ui shows no bounds (breaks AC-6). Same latent bug exists today at
     `configServiceImpl.ts:508` (`WEIGHT_KEY_REGISTRY[r.key]`), masked by a non-representative
     full-path test fixture. **FIX at Step 6: index with `${namespace}.${r.key}` (full path); Step 7
-    fixture uses the SPLIT key form to match real DB.** — [x] resolved at Step 6 impl.
+    fixture uses the SPLIT key form to match real DB.** — [x] RESOLVED at Step 6 (configServiceImpl.ts full-path lookup + split-key fixtures; 93 tests green, RED verified).
   - Step 9/11: Playwright e2e steps state no `--cov-fail-under` threshold — matches this repo's
     frontend-e2e pattern (UI coverage is vitest-scoped to src/lib/**). — [x] accepted (repo norm).
   - Step 4: `packages/proto/gen/**` wildcard in Files — conventional for generated output, covered

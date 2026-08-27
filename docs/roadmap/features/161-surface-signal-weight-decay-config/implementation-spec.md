@@ -221,7 +221,7 @@ omission).
 
 ### Step 6 — service: Config — enforce decay scalar bounds at `setConfig`; emit `FLOAT_SCALAR` validation; remove orphaned FLOAT_MAP machinery
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -255,7 +255,7 @@ omission).
 
 ### Step 7 — test: Config — scalar validation wire contract + `setConfig` bounds rejection + dead-key assertion rework
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/listKeysWire.test.ts` — modify
@@ -452,6 +452,12 @@ _Populated by /sdd-execute as implementation proceeds._
   branch `claude/signal-weights-decays-5h6rje` (one integration PR to `main-dev`), NOT via
   `/sdd-execute`'s per-step feature-branch/PR machinery — the harness pins this session to that single
   branch. TDD red-before-green still applied per step where a test suite is runnable in-session.
+- **2026-08-26 — Step 6/7 (config-service) done, green:** applied the sdd-review fix — the
+  `listKeys` scalar-bounds lookup uses the FULL path `${namespace}.${r.key}` (not the bare DB
+  `key` column), and Step 7's fixtures use the representative SPLIT key form so the emission is
+  actually exercised. Server-side bounds enforced in `setConfig` via all-shape `extractValueData`
+  (float_val parsed, 0 valid). FLOAT_MAP registry/emit branch + its two positive tests removed.
+  93 config tests pass, coverage 84%. RED confirmed: 4 new tests fail against the pre-Step-6 impl.
 - **2026-08-26 — Step 1/2 (agent) done, green:** 298 agent tests pass (incl. new
   `test_signal_source_reliability_weight.py` + sharpened `test_signal_source_builder.py` source-parity);
   ruff clean; coverage 76.6% (gate 40). RED confirmed: the two new tests fail against the pre-Step-1

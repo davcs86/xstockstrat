@@ -37,10 +37,14 @@ describe('ListKeys over a real gRPC connection', () => {
         environment: 'production',
       },
       {
-        key: 'analysis.signals.source_weights',
-        description: 'weights',
-        default_value: '{}',
-        value_data: '{"example_source": 0.5}',
+        // feature 161: the DB `key` column is namespace-stripped (namespace 'analysis' is a
+        // separate column), so the scalar-bounds registry lookup must reconstruct the full path
+        // `${namespace}.${key}`. Storing the SPLIT form here is what makes this fixture
+        // representative — the former full-path fixture masked the `[r.key]` lookup bug.
+        key: 'scoring.signal_decay_half_life_hours',
+        description: 'Exponential age-decay half-life in hours; 0 disables. Bounds [0, 8760].',
+        default_value: '24.0',
+        value_data: '48.0',
         is_secret: false,
         consuming_service: 'xstockstrat-analysis',
         environment: 'staging',
@@ -71,7 +75,8 @@ describe('ListKeys over a real gRPC connection', () => {
 
   function listKeys(): Promise<any> {
     return new Promise((resolve, reject) => {
-      client.listKeys({ namespace: 'marketdata' }, (err: any, res: any) =>
+      // namespace 'analysis' so the decay row's registry lookup (`${namespace}.${key}`) resolves.
+      client.listKeys({ namespace: 'analysis' }, (err: any, res: any) =>
         err ? reject(err) : resolve(res),
       );
     });
@@ -80,7 +85,7 @@ describe('ListKeys over a real gRPC connection', () => {
   it('reports isSecret truthfully — the guard /config-ui depends on', async () => {
     const res = await listKeys();
     const secret = res.keys.find((k: any) => k.key === 'secret.example.api_key');
-    const plain = res.keys.find((k: any) => k.key === 'analysis.signals.source_weights');
+    const plain = res.keys.find((k: any) => k.key === 'scoring.signal_decay_half_life_hours');
     assert.equal(secret.isSecret, true, 'a secret key must arrive flagged');
     assert.equal(plain.isSecret, false);
   });
@@ -96,8 +101,8 @@ describe('ListKeys over a real gRPC connection', () => {
     // Regression: currentValue used to be absent entirely, so config-ui had no way to show
     // (or re-edit) a key's live value — only its never-updated seed default (CONFIG-2).
     const res = await listKeys();
-    const plain = res.keys.find((k: any) => k.key === 'analysis.signals.source_weights');
-    assert.equal(plain.currentValue, '{"example_source": 0.5}');
+    const plain = res.keys.find((k: any) => k.key === 'scoring.signal_decay_half_life_hours');
+    assert.equal(plain.currentValue, '48.0');
     assert.notEqual(plain.currentValue, plain.defaultValue);
   });
 
@@ -105,16 +110,35 @@ describe('ListKeys over a real gRPC connection', () => {
     // Feature 147: trading_mode is no longer emitted; environment is production/staging.
     const res = await listKeys();
     const secret = res.keys.find((k: any) => k.key === 'secret.example.api_key');
-    const plain = res.keys.find((k: any) => k.key === 'analysis.signals.source_weights');
+    const plain = res.keys.find((k: any) => k.key === 'scoring.signal_decay_half_life_hours');
     assert.equal(secret.environment, 'ENVIRONMENT_PRODUCTION');
     assert.equal(plain.environment, 'ENVIRONMENT_STAGING');
   });
 
-  it('populates the validation sub-message for a registered weight key', async () => {
+  it('populates FLOAT_SCALAR validation for the registered decay key (AC-6)', async () => {
+    // feature 161: the scalar-bounds registry is keyed on the FULL path; ListKeys must emit the
+    // bounds so config-ui renders them. The DB `key` column is the split form, so this only passes
+    // when the handler reconstructs `${namespace}.${key}` — the reviewer-flagged fix.
     const res = await listKeys();
-    const plain = res.keys.find((k: any) => k.key === 'analysis.signals.source_weights');
+    const plain = res.keys.find((k: any) => k.key === 'scoring.signal_decay_half_life_hours');
     assert.ok(plain.validation, 'validation must survive encoding');
-    assert.equal(plain.validation.valueType, 'VALUE_TYPE_FLOAT_MAP');
-    assert.ok(Math.abs(plain.validation.maxValue - 1.0) < 1e-6);
+    assert.equal(plain.validation.valueType, 'VALUE_TYPE_FLOAT_SCALAR');
+    assert.ok(Math.abs(plain.validation.minValue - 0) < 1e-6);
+    assert.ok(Math.abs(plain.validation.maxValue - 8760) < 1e-6);
+    assert.equal(plain.defaultValue, '24.0');
+  });
+
+  it('no longer surfaces the removed analysis.signals.source_weights key (AC-8)', async () => {
+    // feature 161 / migration 020: the dead FLOAT_MAP key is gone; it must not appear, and no key
+    // may carry FLOAT_MAP validation any more (the emit branch was removed).
+    const res = await listKeys();
+    assert.equal(
+      res.keys.find((k: any) => k.key === 'signals.source_weights' || k.key === 'analysis.signals.source_weights'),
+      undefined,
+    );
+    assert.equal(
+      res.keys.some((k: any) => k.validation?.valueType === 'VALUE_TYPE_FLOAT_MAP'),
+      false,
+    );
   });
 });
