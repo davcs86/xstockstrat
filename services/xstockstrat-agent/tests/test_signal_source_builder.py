@@ -15,6 +15,24 @@ from app import client
 # superseded by operation_enum (feature 088). Any other new field must be carried or justified here.
 _INTENTIONALLY_UNSET = {"operation"}
 
+# SignalSource sub-message (feature 161): the builder is a WRITE path, so it sets only the
+# client-writable fields. These are server-set/read-only and are never sent on a write — each
+# justified individually:
+#   has_credentials — derived by the backend from the stored credential ref
+#   health          — derived from last_seen_at freshness (feature 083)
+#   last_seen_at    — stamped by the backend on ingest
+#   last_error      — recorded by the backend on a failed op
+#   signals_fed     — a backend counter
+# Any OTHER new SignalSource field must be carried by the builder or added here with a reason —
+# this is the parity gap that let feature-134 reliability_weight ship dropped on the write path.
+_INTENTIONALLY_UNSET_SOURCE = {
+    "has_credentials",
+    "health",
+    "last_seen_at",
+    "last_error",
+    "signals_fed",
+}
+
 
 def _channel_cm():
     cm = MagicMock()
@@ -59,6 +77,30 @@ class TestManageSignalSourceBuilderParity:
         set_fields = {f.name for f, _ in req.ListFields()}
         assert set_fields | _INTENTIONALLY_UNSET == set(
             ingest_pb2.ManageSignalSourceRequest.DESCRIPTOR.fields_by_name
+        )
+
+    @pytest.mark.asyncio
+    async def test_builder_covers_every_signal_source_subfield(self):
+        # feature 161 (AC-9): the request-level parity test above does NOT recurse into the
+        # `source` sub-message, which is exactly why feature-134 reliability_weight shipped dropped
+        # on the write path. Recurse here: every client-writable SignalSource field must be set.
+        from gen.ingest.v1 import ingest_pb2  # type: ignore
+
+        req = await _capture_request(
+            operation="update",
+            source={
+                "slug": "uw",
+                "display_name": "UW",
+                "source_type": "simple_website",
+                "extractor_module": "app.extractors.web",
+                "config_json": {"url": "https://x.com", "scrape_selector": ".a"},
+                "reliability_weight": 0.5,
+            },
+            update_mask=["reliability_weight"],
+        )
+        source_fields = {f.name for f, _ in req.source.ListFields()}
+        assert source_fields | _INTENTIONALLY_UNSET_SOURCE == set(
+            ingest_pb2.SignalSource.DESCRIPTOR.fields_by_name
         )
 
 

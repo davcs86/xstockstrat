@@ -306,3 +306,46 @@ test.describe('Feature 134 — inline reliability-weight edit', () => {
     expect(sawManage).toBe(false);
   });
 });
+
+test.describe('Feature 161 — reliability_weight on the create form + guidance', () => {
+  test('the create form sets reliability_weight at registration and shows guidance (AC-4)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto(SOURCES_PAGE);
+    await expect(page.getByRole('heading', { name: 'Signal Sources' })).toBeVisible({
+      timeout: 15000,
+    });
+    await page.getByRole('button', { name: 'Register New Source' }).click();
+
+    // FR-3: the form's reliability-weight field carries plain-language guidance describing the
+    // weight and its 0–1 range (distinct wording from the inline editor's guidance).
+    await expect(page.getByText(/Higher weights rank this source/)).toBeVisible();
+
+    await page.getByPlaceholder('e.g. unusual_whales').fill('insider-buys');
+    await page.getByPlaceholder('Display name').fill('Insider Buys');
+    await page.getByLabel('Reliability weight').fill('0.6');
+
+    const reqPromise = page.waitForRequest(
+      (r) => r.url().includes('/ManageSignalSource') && r.method() === 'POST',
+    );
+    await page.getByRole('button', { name: 'Register', exact: true }).click();
+    const body = (await reqPromise).postData() ?? '';
+    // register verb + the weight carried on the source (camelCase over proto3-JSON).
+    expect(body).toContain('register');
+    expect(body).toContain('reliabilityWeight');
+    expect(body).toContain('0.6');
+  });
+
+  test('the inline weight editor shows guidance text (AC-5)', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto(SOURCES_PAGE);
+    await expect(page.getByRole('heading', { name: 'Signal Sources' })).toBeVisible({
+      timeout: 15000,
+    });
+    const slug = SIGNAL_SOURCE_WEIGHTED.slug;
+    await page.getByTestId(`weight-${slug}`).click();
+    // FR-4: the inline editor explains the weight's meaning and its [0,1] / default-1.0 semantics.
+    await expect(page.getByText(/Higher = this source/)).toBeVisible();
+  });
+});

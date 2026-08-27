@@ -37,22 +37,23 @@ describe('ConfigServiceImpl.listKeys — validation field', () => {
     };
   }
 
-  it('populates validation for analysis.signals.source_weights', async () => {
+  it('populates FLOAT_SCALAR validation for the decay key (feature 161)', async () => {
+    // The DB `key` column is namespace-stripped, so the row's key is the SPLIT form and the handler
+    // must reconstruct `${namespace}.${key}` to hit the full-path registry (reviewer-flagged fix).
     const pool = makePool([
       {
-        key: 'analysis.signals.source_weights',
-        description: 'Weights',
-        default_value: '{}',
+        key: 'scoring.signal_decay_half_life_hours',
+        description: 'Decay half-life',
+        default_value: '24.0',
         is_secret: false,
         consuming_service: 'xstockstrat-analysis',
-        environment: 'dev',
-        trading_mode: 'all',
+        environment: 'staging',
       },
     ]);
     const impl = new ConfigServiceImpl(pool);
     let result: any = null;
     await impl.listKeys(
-      { request: { namespace: 'analysis', environment: 1, trading_mode: 1 } },
+      { request: { namespace: 'analysis', environment: 1 } },
       (_err: unknown, res: unknown) => {
         result = res;
       },
@@ -63,33 +64,32 @@ describe('ConfigServiceImpl.listKeys — validation field', () => {
     assert.ok(k.validation, 'validation field must be present');
     // packages/proto/buf.gen.yaml sets stringEnums=true, so ts-proto emits the enum's
     // string constant rather than its wire number.
-    assert.strictEqual(k.validation.valueType, 'VALUE_TYPE_FLOAT_MAP');
+    assert.strictEqual(k.validation.valueType, 'VALUE_TYPE_FLOAT_SCALAR');
     assert.ok(Math.abs(k.validation.minValue - 0.0) < 1e-6);
-    assert.ok(Math.abs(k.validation.maxValue - 1.0) < 1e-6);
+    assert.ok(Math.abs(k.validation.maxValue - 8760) < 1e-6);
   });
 
-  it('omits validation for non-weight keys', async () => {
+  it('omits validation for non-registered keys', async () => {
     const pool = makePool([
       {
-        key: 'platform.log_level',
+        key: 'log_level',
         description: 'Log level',
         default_value: 'info',
         is_secret: false,
         consuming_service: 'all',
-        environment: 'dev',
-        trading_mode: 'all',
+        environment: 'staging',
       },
     ]);
     const impl = new ConfigServiceImpl(pool);
     let result: any = null;
     await impl.listKeys(
-      { request: { namespace: 'platform', environment: 1, trading_mode: 0 } },
+      { request: { namespace: 'platform', environment: 1 } },
       (_err: unknown, res: unknown) => {
         result = res;
       },
     );
     assert.ok(result);
     const k = result.keys[0];
-    assert.strictEqual(k.validation, undefined, 'non-weight key must have no validation');
+    assert.strictEqual(k.validation, undefined, 'non-registered key must have no validation');
   });
 });

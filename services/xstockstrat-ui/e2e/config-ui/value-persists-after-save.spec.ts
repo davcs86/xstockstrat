@@ -11,10 +11,10 @@ const PLATFORM_NAMESPACE_PAGE = '/config-ui/platform?env=staging';
  * itself succeeded; the UI just never displayed it, so a save looked like a no-op.
  *
  * These tests exercise NamespaceEditor's Value column/edit-prefill, the consumer this bug
- * affected. (The former `useSignalSources' weight-map parse` consumer was removed by feature
- * 134 — signal-source reliability weight is now a first-class `SignalSource.reliabilityWeight`
- * field, no longer parsed from the `analysis.signals.source_weights` config blob; the Sources
- * page weight column is covered directly by `sources.spec.ts`.)
+ * affected. (Signal-source reliability weight is a first-class `SignalSource.reliabilityWeight`
+ * field, covered directly by `sources.spec.ts`. The former `analysis.signals.source_weights`
+ * config blob was removed entirely by feature 161; config-ui's per-key scalar validation is now
+ * exercised via the `analysis.scoring.signal_decay_half_life_hours` FLOAT_SCALAR key.)
  */
 test.describe('config-ui — a saved value replaces the displayed value (not the seed default)', () => {
   // Uses platform.trading_state, not platform.log_level — reason-capture.spec.ts and

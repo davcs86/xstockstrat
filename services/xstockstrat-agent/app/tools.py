@@ -218,9 +218,12 @@ def register_tools(server: MCPServer) -> None:
         source_type: list[str] | None = None,
     ) -> dict:
         """List active signal sources from xstockstrat-ingest.
-        Returns slug, display_name, source_type, config_json, and extractor_tool per source.
+        Returns slug, display_name, source_type, config_json, extractor_tool, and
+        reliability_weight per source.
         extractor_tool: 'extract_email_content' | 'extract_website_content' | null.
         Claude must follow extractor_tool exactly — do not infer routing from source_type.
+        reliability_weight: per-source ranking multiplier in [0, 1] (default 1.0); higher weights
+            rank this source's signals higher, 0 effectively ignores the source (feature 134).
         source_type: optional filter list
             (e.g. ['mediated_simple_email', 'mediated_email_attachment'])."""
         sources = await client.list_signal_sources(include_inactive=False)
@@ -236,6 +239,8 @@ def register_tools(server: MCPServer) -> None:
                     "source_type": st,
                     "config_json": src["config_json"],
                     "extractor_tool": _EXTRACTOR_TOOL_MAP.get(st, None),
+                    # feature 161 — surface the per-source reliability weight (was dropped here).
+                    "reliability_weight": src["reliability_weight"],
                 }
             )
         if source_type:
@@ -896,6 +901,7 @@ def register_tools(server: MCPServer) -> None:
         config_json: dict | None = None,
         extractor_module: str | None = None,
         credentials_ref: str | None = None,
+        reliability_weight: float | None = None,
     ) -> dict:
         """Register/update/reactivate/deactivate a signal source in xstockstrat-ingest.
         operation: 'register' | 'update' | 'reactivate' | 'deactivate'. These are HONEST,
@@ -911,8 +917,12 @@ def register_tools(server: MCPServer) -> None:
             is preserved when omitted; pass "" to explicitly clear it. A `authenticated_website` or
             `mediated_authenticated_website` source requires a credential (validated on the merged
             result).
+        reliability_weight: per-source ranking multiplier in [0, 1] (default 1.0 on register);
+            higher weights rank this source's signals higher, 0 effectively ignores the source
+            (feature 134). On update it is applied ONLY when supplied — omit it to preserve the
+            stored weight (an omitted value must never reset it to 0).
         Returns {"slug", "display_name", "source_type", "extractor_module", "active",
-            "has_credentials"} — credentials_ref is never included."""
+            "has_credentials", "reliability_weight"} — credentials_ref is never included."""
         source: dict = {"slug": slug}
         if display_name is not None:
             source["display_name"] = display_name
@@ -922,6 +932,8 @@ def register_tools(server: MCPServer) -> None:
             source["extractor_module"] = extractor_module
         if config_json is not None:
             source["config_json"] = config_json
+        if reliability_weight is not None:
+            source["reliability_weight"] = reliability_weight
         update_mask: list[str] | None = None
         if operation == "update":
             supplied = {
@@ -930,6 +942,9 @@ def register_tools(server: MCPServer) -> None:
                 "extractor_module": extractor_module,
                 "config_json": config_json,
                 "credentials_ref": credentials_ref,
+                # feature 161: include reliability_weight in the mask ONLY when the caller
+                # supplied it, so a field-only update never resets the stored weight to 0.0.
+                "reliability_weight": reliability_weight,
             }
             update_mask = [field for field, val in supplied.items() if val is not None]
             if not update_mask:

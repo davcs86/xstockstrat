@@ -81,13 +81,15 @@ export const CONFIG_KEY_FIXTURES = [
     environment: 1,
   },
   {
-    key: 'analysis.signals.source_weights',
-    description: 'JSON weight map for signal sources',
-    defaultValue: '{}',
+    // feature 161: the FLOAT_MAP `analysis.signals.source_weights` key was removed; the config-ui
+    // validation surface is now the scalar decay key. valueType 2 == VALUE_TYPE_FLOAT_SCALAR.
+    key: 'analysis.scoring.signal_decay_half_life_hours',
+    description: 'Exponential age-decay half-life in hours; 0 disables. Bounds [0, 8760].',
+    defaultValue: '24.0',
     isSecret: false,
     consumingService: 'xstockstrat-analysis',
     environment: 1,
     tradingMode: 0,
-    validation: { valueType: 1, minValue: 0.0, maxValue: 1.0 },
+    validation: { valueType: 2, minValue: 0.0, maxValue: 8760 },
   },
 ];

@@ -102,6 +102,27 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 161 — surface-signal-weight-decay-config (`xstockstrat-config` / `xstockstrat-analysis`)
+
+**Registers** `analysis.scoring.signal_decay_half_life_hours` (float, default `24.0`, migration 019)
+— the decay half-life feature 022 read with a hardcoded default but never registered. It carries
+**server-enforced scalar bounds `[0, 8760]`** (0 disables decay): the config service's
+`SCALAR_BOUNDS_REGISTRY` (`configServiceImpl.ts`) rejects an out-of-range/NaN `SetConfig` write
+`INVALID_ARGUMENT` (parsed via the all-oneof-shape `extractValueData`, so the agent's `float_val`
+write is guarded — not a config-ui-only check), and `ListKeys` emits a `ValidationRule` of the new
+`config.v1.ValueType.VALUE_TYPE_FLOAT_SCALAR` (proto enum value 2, additive/non-breaking) so config-ui
+renders the bound.
+
+**Removes** `analysis.signals.source_weights` (migration 020) — the FLOAT_MAP key superseded by
+feature 134, read by no service. Its removal also retired the config-service FLOAT_MAP validation
+machinery (`WEIGHT_KEY_REGISTRY` + the `ListKeys` FLOAT_MAP emit branch + config-ui `validateFloatMap`),
+of which it was the sole consumer; `VALUE_TYPE_FLOAT_MAP` (enum value 1) is retained `[deprecated]` for
+enum stability.
+
+Also surfaces the per-source `reliability_weight` (feature 134) to the MCP agent
+(`list_signal_sources` / `manage_signal_source`) and the config-ui source create/edit form — not a
+config-key change, recorded here for cross-reference.
+
 ### feature 154 — fundsignal-watchlist-universe (`xstockstrat-analysis` reads `marketdata` namespace)
 
 **No new keys.** Recorded here for a first-of-its-kind coupling: `xstockstrat-analysis` now holds a
@@ -317,7 +338,7 @@ an operator can halt live trading during an incident while paper testing continu
 
 ### feature 097 — opportunity-universe-unification (`xstockstrat-analysis`)
 
-Config surface for the materialized opportunity queue (lazy compute-on-read + stale-while-revalidate + a daily refresh). The queue's independent signal ranking axis is the new scalar `analysis.opportunity.signal_rank_weight`. (Feature 134 note: `analysis.signals.source_weights` is now **superseded** — per-source reliability weight lives on `ingest.SignalSource.reliability_weight` and both analysis read paths, the queue and the screener, read it via `ListSignalSources`; the config key is retained but no longer read.)
+Config surface for the materialized opportunity queue (lazy compute-on-read + stale-while-revalidate + a daily refresh). The queue's independent signal ranking axis is the new scalar `analysis.opportunity.signal_rank_weight`. (Feature 134 note: `analysis.signals.source_weights` was **superseded** — per-source reliability weight lives on `ingest.SignalSource.reliability_weight` and both analysis read paths, the queue and the screener, read it via `ListSignalSources`. The key was then **removed entirely by feature 161** (migration 020), along with the config-service FLOAT_MAP validation machinery it was the sole consumer of.)
 
 | Key | Type | Default | Description |
 |---|---|---|---|

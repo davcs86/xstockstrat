@@ -157,7 +157,13 @@ test.describe('FR-20 order parity', () => {
     // bare getByText('Place Order') — the Trade panel group (feature 139 amendment) now also renders
     // a "Place order" mobile tab (case-insensitively matching, hidden md:hidden at this desktop
     // viewport), which a .first() getByText would resolve and fail toBeVisible on.
-    const form = page.locator('form').filter({ has: page.getByPlaceholder('Symbol (e.g. AAPL)') });
+    // The mobile companion (SectionRenderer) renders a second, sm:hidden copy of this form, so an
+    // unscoped `form` locator matches 2 and the placeholder query trips strict mode. Scope to the
+    // visible (desktop) form.
+    const form = page
+      .locator('form')
+      .filter({ has: page.getByPlaceholder('Symbol (e.g. AAPL)') })
+      .filter({ visible: true });
     await expect(form.getByPlaceholder('Symbol (e.g. AAPL)')).toBeVisible({ timeout: 30000 });
     // The symbol field is pre-filled from the route param (FR-6) and locked: the chart,
     // conviction, and edge stats above the ticket are all keyed to this symbol, so the field
