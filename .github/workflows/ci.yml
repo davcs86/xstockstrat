@@ -26,7 +26,7 @@ jobs:
     outputs:
       matched: ${{ steps.filter.outputs.changes }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: dorny/paths-filter@v4
         id: filter
@@ -93,7 +93,7 @@ jobs:
       contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # Full history required for buf breaking against the target branch
           fetch-depth: 0
@@ -130,14 +130,14 @@ jobs:
       contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: bufbuild/buf-setup-action@v1
         with:
           version: '1.69.0'
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.25"
           cache-dependency-path: packages/proto/go.sum
@@ -153,7 +153,7 @@ jobs:
           go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.19.2
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: 'pip'
@@ -161,11 +161,11 @@ jobs:
       - name: Install Python gRPC tools
         run: pip install grpcio-tools==1.80.0
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 9.15.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: 'pnpm'
@@ -207,9 +207,9 @@ jobs:
       run:
         working-directory: services/${{ matrix.service }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.25"
           cache-dependency-path: services/${{ matrix.service }}/go.sum
@@ -220,7 +220,7 @@ jobs:
           GOWORK: "off"
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v2.5.0
           working-directory: services/${{ matrix.service }}
@@ -266,7 +266,7 @@ jobs:
           "
 
       - name: upload coverage artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: go-coverage-${{ matrix.service }}
           path: services/${{ matrix.service }}/coverage.out
@@ -295,9 +295,9 @@ jobs:
       run:
         working-directory: services/${{ matrix.service }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: 'pip'
@@ -350,9 +350,9 @@ jobs:
       run:
         working-directory: services/${{ matrix.service }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: 'pip'
@@ -375,7 +375,7 @@ jobs:
                  --cov-fail-under=${{ matrix.coverage_threshold }}
 
       - name: upload coverage artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: python-coverage-${{ matrix.service }}
           path: services/${{ matrix.service }}/coverage.xml
@@ -404,13 +404,13 @@ jobs:
           - xstockstrat-notify
           - xstockstrat-ui
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 9.15.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: 'pnpm'
@@ -439,13 +439,13 @@ jobs:
       run:
         working-directory: services/xstockstrat-ui
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 9.15.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: 'pnpm'
@@ -460,7 +460,7 @@ jobs:
           NEXT_DISABLE_STANDALONE: '1'
 
       - name: upload build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-nextjs-build
           path: services/xstockstrat-ui/.next
@@ -479,13 +479,13 @@ jobs:
       run:
         working-directory: services/xstockstrat-ui
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 9.15.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: 'pnpm'
@@ -495,7 +495,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: download e2e build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: e2e-nextjs-build
           path: services/xstockstrat-ui/.next
@@ -504,7 +504,7 @@ jobs:
         id: pw-version
         run: echo "version=$(pnpm list @playwright/test --json | jq -r '.[0].devDependencies["@playwright/test"].version')" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
@@ -525,7 +525,7 @@ jobs:
 
       - name: upload playwright report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report-shard-${{ matrix.shard }}
           path: services/xstockstrat-ui/playwright-report/
@@ -561,13 +561,13 @@ jobs:
           - service: xstockstrat-ui
             coverage_threshold: 40
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 9.15.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: 'pnpm'
@@ -584,7 +584,7 @@ jobs:
         run: pnpm run test:coverage
 
       - name: upload coverage artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: node-coverage-${{ matrix.service }}
           path: services/${{ matrix.service }}/coverage/lcov.info
@@ -598,10 +598,10 @@ jobs:
       contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: hadolint
-        uses: hadolint/hadolint-action@v3.1.0
+        uses: hadolint/hadolint-action@v3.5.0
         with:
           recursive: true
           config: .hadolint.yaml
@@ -614,7 +614,7 @@ jobs:
       contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install shellcheck and shfmt
         run: sudo apt-get install -y shellcheck shfmt
@@ -633,10 +633,10 @@ jobs:
       contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: markdownlint
-        uses: DavidAnson/markdownlint-cli2-action@v20
+        uses: DavidAnson/markdownlint-cli2-action@v24
         with:
           config: .markdownlint.yaml
           globs: '**/CLAUDE.md'
@@ -649,7 +649,7 @@ jobs:
       contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Validate context map and doc cross-references
         run: ./scripts/check-context-map.sh
@@ -665,7 +665,7 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # Full history required for trufflehog git-history scan
           fetch-depth: 0

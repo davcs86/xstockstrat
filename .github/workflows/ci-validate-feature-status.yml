@@ -13,7 +13,7 @@ jobs:
   validate-and-update-feature-status:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           # PAT required to push status-update commits and delete remote branches without
