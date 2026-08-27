@@ -166,8 +166,12 @@ export type ConfigValue = Message<"xstockstrat.config.v1.ConfigValue"> & {
 export declare const ConfigValueSchema: GenMessage<ConfigValue>;
 /**
  * Validation constraints declared by the config service for a key.
- * When value_type == VALUE_TYPE_FLOAT_MAP, every numeric leaf in the JSON value
- * must satisfy [min_value, max_value]. Absent or VALUE_TYPE_UNSPECIFIED = no validation.
+ * When value_type == VALUE_TYPE_FLOAT_SCALAR, the scalar float_val (ConfigValue oneof) must satisfy
+ * [min_value, max_value]; a write outside the bound is rejected INVALID_ARGUMENT at the config
+ * service's SetConfig write path (feature 161).
+ * (Deprecated) When value_type == VALUE_TYPE_FLOAT_MAP, every numeric leaf in the JSON value must
+ * satisfy [min_value, max_value] — no longer emitted; see the ValueType note above.
+ * Absent or VALUE_TYPE_UNSPECIFIED = no validation.
  *
  * @generated from message xstockstrat.config.v1.ValidationRule
  */
@@ -483,9 +487,20 @@ export declare enum ValueType {
      */
     UNSPECIFIED = 0,
     /**
-     * @generated from enum value: VALUE_TYPE_FLOAT_MAP = 1;
+     * Deprecated (feature 161): the config service no longer emits or enforces FLOAT_MAP validation
+     * — its sole key (analysis.signals.source_weights) was removed. The member is retained for enum
+     * stability (removing it would be a breaking change and old wire values must still decode).
+     *
+     * @generated from enum value: VALUE_TYPE_FLOAT_MAP = 1 [deprecated = true];
+     * @deprecated
      */
-    FLOAT_MAP = 1
+    FLOAT_MAP = 1,
+    /**
+     * Scalar float key: the value's scalar float_val must satisfy [min_value, max_value] (feature 161).
+     *
+     * @generated from enum value: VALUE_TYPE_FLOAT_SCALAR = 2;
+     */
+    FLOAT_SCALAR = 2
 }
 /**
  * Describes the enum xstockstrat.config.v1.ValueType.

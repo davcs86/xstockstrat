@@ -80,7 +80,14 @@ type ValueType int32
 
 const (
 	ValueType_VALUE_TYPE_UNSPECIFIED ValueType = 0
-	ValueType_VALUE_TYPE_FLOAT_MAP   ValueType = 1
+	// Deprecated (feature 161): the config service no longer emits or enforces FLOAT_MAP validation
+	// — its sole key (analysis.signals.source_weights) was removed. The member is retained for enum
+	// stability (removing it would be a breaking change and old wire values must still decode).
+	//
+	// Deprecated: Marked as deprecated in config/v1/config.proto.
+	ValueType_VALUE_TYPE_FLOAT_MAP ValueType = 1
+	// Scalar float key: the value's scalar float_val must satisfy [min_value, max_value] (feature 161).
+	ValueType_VALUE_TYPE_FLOAT_SCALAR ValueType = 2
 )
 
 // Enum value maps for ValueType.
@@ -88,10 +95,12 @@ var (
 	ValueType_name = map[int32]string{
 		0: "VALUE_TYPE_UNSPECIFIED",
 		1: "VALUE_TYPE_FLOAT_MAP",
+		2: "VALUE_TYPE_FLOAT_SCALAR",
 	}
 	ValueType_value = map[string]int32{
-		"VALUE_TYPE_UNSPECIFIED": 0,
-		"VALUE_TYPE_FLOAT_MAP":   1,
+		"VALUE_TYPE_UNSPECIFIED":  0,
+		"VALUE_TYPE_FLOAT_MAP":    1,
+		"VALUE_TYPE_FLOAT_SCALAR": 2,
 	}
 )
 
@@ -467,8 +476,12 @@ func (*ConfigValue_BoolVal) isConfigValue_Value() {}
 func (*ConfigValue_JsonVal) isConfigValue_Value() {}
 
 // Validation constraints declared by the config service for a key.
-// When value_type == VALUE_TYPE_FLOAT_MAP, every numeric leaf in the JSON value
-// must satisfy [min_value, max_value]. Absent or VALUE_TYPE_UNSPECIFIED = no validation.
+// When value_type == VALUE_TYPE_FLOAT_SCALAR, the scalar float_val (ConfigValue oneof) must satisfy
+// [min_value, max_value]; a write outside the bound is rejected INVALID_ARGUMENT at the config
+// service's SetConfig write path (feature 161).
+// (Deprecated) When value_type == VALUE_TYPE_FLOAT_MAP, every numeric leaf in the JSON value must
+// satisfy [min_value, max_value] — no longer emitted; see the ValueType note above.
+// Absent or VALUE_TYPE_UNSPECIFIED = no validation.
 type ValidationRule struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ValueType     ValueType              `protobuf:"varint,1,opt,name=value_type,json=valueType,proto3,enum=xstockstrat.config.v1.ValueType" json:"value_type,omitempty"`
@@ -1198,10 +1211,11 @@ const file_config_v1_config_proto_rawDesc = "" +
 	"\x1eCONFIG_UPDATE_TYPE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bCONFIG_UPDATE_TYPE_SNAPSHOT\x10\x01\x12\x1c\n" +
 	"\x18CONFIG_UPDATE_TYPE_DELTA\x10\x02\x12\x1d\n" +
-	"\x19CONFIG_UPDATE_TYPE_RELOAD\x10\x03*A\n" +
+	"\x19CONFIG_UPDATE_TYPE_RELOAD\x10\x03*b\n" +
 	"\tValueType\x12\x1a\n" +
-	"\x16VALUE_TYPE_UNSPECIFIED\x10\x00\x12\x18\n" +
-	"\x14VALUE_TYPE_FLOAT_MAP\x10\x012\xec\x03\n" +
+	"\x16VALUE_TYPE_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x14VALUE_TYPE_FLOAT_MAP\x10\x01\x1a\x02\b\x01\x12\x1b\n" +
+	"\x17VALUE_TYPE_FLOAT_SCALAR\x10\x022\xec\x03\n" +
 	"\rConfigService\x12a\n" +
 	"\vWatchConfig\x12).xstockstrat.config.v1.WatchConfigRequest\x1a%.xstockstrat.config.v1.ConfigSnapshot0\x01\x12[\n" +
 	"\tGetConfig\x12'.xstockstrat.config.v1.GetConfigRequest\x1a%.xstockstrat.config.v1.ConfigSnapshot\x12^\n" +

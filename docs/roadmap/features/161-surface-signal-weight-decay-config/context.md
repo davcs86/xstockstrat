@@ -115,3 +115,36 @@
       half-life is ever needed (target: config-service registry step).
 - [ ] 020 down-restore clobbers any live operator edit to the dead key's `value_data` — documented in
       the migration comment (target: migration 020 step).
+
+## Session 2026-08-26 — sdd-review impl-spec (advisory)
+
+- Overlap scan (feature-overlap): **CLEAN** — no migration/proto/config/file collisions. Only other
+  in-flight feature (142-fix-fundamentals-upsert-invalid-json) is disjoint (xstockstrat-marketdata,
+  no proto/config/migration). No merge-order entry required.
+- Criteria pass (spec-reviewer): _pending — recorded below when it lands._
+- **Environment note (execution):** the Docker codegen path (`localenv-setup.sh`/`Dockerfile.codegen`)
+  is unavailable here — the container build fails fetching nodejs from deb.nodesource.com (egress
+  blocked). Falling back to the host-toolchain path (`docs/runbooks/codegen-toolchain-host-setup.md`):
+  go-installed buf + pinned Go/TS/Python plugins. Docker daemon itself was down and had to be started.
+
+## Session 2026-08-26 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 5 warnings (advisory — did not block; no Floor F-* breach).
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 6/7: **listKeys registry-key mismatch (C-01, load-bearing).** Spec Instr 3 says
+    `SCALAR_BOUNDS_REGISTRY[r.key]`, but `r.key` is the DB `key` column
+    (`scoring.signal_decay_half_life_hours`, namespace-stripped) while the registry key is the
+    full `analysis.scoring.signal_decay_half_life_hours` → lookup returns undefined → NO validation
+    emitted in prod → config-ui shows no bounds (breaks AC-6). Same latent bug exists today at
+    `configServiceImpl.ts:508` (`WEIGHT_KEY_REGISTRY[r.key]`), masked by a non-representative
+    full-path test fixture. **FIX at Step 6: index with `${namespace}.${r.key}` (full path); Step 7
+    fixture uses the SPLIT key form to match real DB.** — [x] resolved at Step 6 impl.
+  - Step 9/11: Playwright e2e steps state no `--cov-fail-under` threshold — matches this repo's
+    frontend-e2e pattern (UI coverage is vitest-scoped to src/lib/**). — [x] accepted (repo norm).
+  - Step 4: `packages/proto/gen/**` wildcard in Files — conventional for generated output, covered
+    by the `proto-freshness` diff gate. — [x] accepted.
+  - Step 3: status/reality drift (proto already edited while Status was pending). — [x] resolved
+    (statuses flipped as steps land).
+  - Step 10: "onChange" label is actually the `onBlur` handler (line refs correct). — [x] cosmetic,
+    will use the right handler at impl.
+- Overlap findings: (see feature-overlap run) — recorded separately.

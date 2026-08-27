@@ -132,7 +132,7 @@ omission).
 
 ### Step 3 — proto: Add `VALUE_TYPE_FLOAT_SCALAR` to `config.v1.ValueType`; deprecate `FLOAT_MAP`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/config/v1/config.proto` — modify
@@ -160,7 +160,7 @@ omission).
 
 ### Step 4 — proto-gen: Regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/**` — modify (generated — do not hand-edit)
@@ -187,7 +187,7 @@ omission).
 
 ### Step 5 — migration: Config — register the decay key (019); remove the dead source-weights key (020)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/019_register_analysis_signal_decay_half_life.up.sql` — create
