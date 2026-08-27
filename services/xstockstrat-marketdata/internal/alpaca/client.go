@@ -148,7 +148,7 @@ func barFromAlpaca(symbol string, b alpacaBar, t time.Time, timeframe string) *m
 		Symbol: symbol, Time: timestamppb.New(t),
 		Open: b.O, High: b.H, Low: b.L, Close: b.C,
 		Volume: b.V, Vwap: b.VW, TradeCount: b.N,
-		Timeframe: timeframe, Source: "alpaca",
+		Timeframe: timeframe, Source: "alpaca", //nolint:staticcheck // SA1019: deprecated string timeframe written during the one-release deprecation window (053)
 		TimeframeEnum: tfpkg.FromString(timeframe),
 	}
 }
