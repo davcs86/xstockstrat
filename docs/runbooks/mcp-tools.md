@@ -1,6 +1,6 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the thirty tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the thirty-two tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 ---
@@ -34,7 +34,7 @@ directly on port 9000.
 
 **Direct (local):** `http://localhost:9000`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same thirty tools' `name`,
+**Tool catalog (UI display).** `GET /api/tools` returns the same thirty-two tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
 capabilities (the same data documented below), never user data or credentials. It powers the
 `xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
@@ -1120,6 +1120,51 @@ task: correct drift by recording/confirming orders (no separate set-positions pa
 **Errors:** `unknown operation '<op>'`; missing required args per operation; `account or order not
 found`; `permission denied` (non-owner); `FAILED_PRECONDITION` (confirm on a broker account);
 `RuntimeError` → no verified caller claims.
+
+---
+
+### `manage_account`
+
+Manage the **caller's own BROKER accounts** (Alpaca / IBKR) in `xstockstrat-trading` (feature 162).
+All operations act on the **caller's own** accounts (ownership from the verified `x-user-id`); a
+non-owner is rejected `PERMISSION_DENIED`. Broker credentials pass through to the backend (which
+encrypts them at rest) and are **never echoed back** — a `BrokerAccount` carries no credential
+field. Offline accounts are **not** created here — use `manage_offline_account` (`create_account`).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `operation` | string | yes | `register` \| `update_credentials` \| `deregister` |
+| `account_id` | string | update/deregister | The broker account to act on |
+| `display_name` | string | `register` | Name for the new account |
+| `broker_type` | string | `register` | `alpaca` \| `ibkr` (offline is rejected) |
+| `credentials_json` | string | register/update | Broker-specific credential blob (Alpaca `{"api_key":…,"api_secret":…}`; IBKR `{"consumer_key":…,"access_token":…,"access_token_secret":…,"ibkr_account_id":…}`) |
+
+- **register** → `{"account": …}` with `credential_status`; the submitted credentials are never
+  returned.
+- **update_credentials** → `{"account": …}` for the rotated account. The backend rejects an offline
+  account (`FAILED_PRECONDITION`) and invalid JSON (`INVALID_ARGUMENT`).
+- **deregister** → `{"deregistered": true, "account_id": …}`. Works for broker **and** offline
+  accounts (the RPC returns nothing; the confirmation is synthesized from the input).
+
+**Errors:** `unknown operation '<op>'` (expected `register/update_credentials/deregister`); missing
+required args per operation; offline steer on `register` (`broker_type=offline`); unsupported
+`broker_type`; `broker account not found`; `permission denied` (non-owner); `FAILED_PRECONDITION`
+(update_credentials on an offline account); `INVALID_ARGUMENT` (malformed `credentials_json`);
+`RuntimeError` → no verified caller claims.
+
+---
+
+### `list_accounts`
+
+List the **caller's own** accounts — broker **and** offline together (read-only, feature 162). No
+parameters. Offline accounts (feature 157) appear alongside broker accounts, each distinguishable by
+its `broker_type` (`BROKER_TYPE_ALPACA` / `BROKER_TYPE_IBKR` / `BROKER_TYPE_OFFLINE`). Ownership is
+resolved server-side from the verified `x-user-id`. Credentials are not part of a `BrokerAccount` and
+are never returned.
+
+Returns `{"accounts": [...]}` — the caller's accounts; empty list when the caller owns none.
+
+**Errors:** `permission denied`; `RuntimeError` → no verified caller claims.
 
 ---
 
