@@ -54,12 +54,13 @@ async def test_confirm_offline_order_forwards_user_and_returns_derived_status():
 
     assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.TRADING_ENDPOINT
     sent = mock_stub.ConfirmOrder.call_args.args[0]
-    # The request carries the fill fields and the ownership user_id...
+    # The request carries the fill fields...
     assert sent.order_id == "ord-1"
     assert sent.filled_qty == 10
     assert sent.filled_avg_price == 190.25
-    assert sent.user_id == "user-42"
-    # ...and the caller identity is forwarded as x-user-id metadata (never trusted from the body).
+    # The deprecated request-body user_id is no longer sent — ownership is resolved server-side
+    # from the x-user-id metadata the edge injects, never from the body.
+    assert sent.user_id == ""
     meta = mock_stub.ConfirmOrder.call_args.kwargs["metadata"]
     assert ("x-user-id", "user-42") in meta
     # The returned status is the SERVER's derived value (3 = FILLED), surfaced verbatim.
@@ -121,3 +122,61 @@ async def test_record_offline_order_signs_side_and_forwards_user():
 async def test_record_offline_order_rejects_bad_side():
     with pytest.raises(ValueError, match="invalid side"):
         await client.record_offline_order("u", "off-1", "AAPL", "hodl", "market", 5, "n")
+
+
+def _patch_portfolio_stub(mock_stub):
+    from gen.portfolio.v1 import portfolio_pb2_grpc  # type: ignore
+
+    grpc_patch = patch("app.client.grpc")
+    stub_patch = patch.object(portfolio_pb2_grpc, "PortfolioServiceStub", return_value=mock_stub)
+    return grpc_patch, stub_patch
+
+
+@pytest.mark.asyncio
+async def test_list_account_positions_forwards_user_id_via_header():
+    """Regression: list_positions once failed with "user_id required" because the wrapper sent
+    no user_id at all. The portfolio ListPositions handler now resolves the caller from the
+    x-user-id header, so the wrapper forwards identity as metadata only and leaves the deprecated
+    request-body user_id unset."""
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+
+    mock_stub = MagicMock()
+    mock_stub.ListPositions = AsyncMock(
+        return_value=portfolio_pb2.ListPositionsResponse(positions=[])
+    )
+    grpc_patch, stub_patch = _patch_portfolio_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with stub_patch:
+            out = await client.list_account_positions("user-42", "off-1")
+
+    sent = mock_stub.ListPositions.call_args.args[0]
+    # user_id is resolved server-side from the x-user-id header, so the deprecated request-body
+    # field is left unset and the identity travels only as metadata.
+    assert sent.user_id == ""
+    assert sent.account_id == "off-1"
+    meta = mock_stub.ListPositions.call_args.kwargs["metadata"]
+    assert ("x-user-id", "user-42") in meta
+    assert out == {"positions": []}
+
+
+@pytest.mark.asyncio
+async def test_list_account_orders_forwards_user_id_in_request_body():
+    """The known-good reference path: list_account_orders already carries user_id in the body.
+    Pinned alongside positions so the two reconciliation reads stay symmetric."""
+    from gen.trading.v1 import trading_pb2  # type: ignore
+
+    mock_stub = MagicMock()
+    mock_stub.ListOrders = AsyncMock(return_value=trading_pb2.ListOrdersResponse(orders=[]))
+    grpc_patch, stub_patch = _patch_trading_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with stub_patch:
+            out = await client.list_account_orders("user-42", "off-1")
+
+    sent = mock_stub.ListOrders.call_args.args[0]
+    assert sent.user_id == "user-42"
+    assert sent.account_id == "off-1"
+    meta = mock_stub.ListOrders.call_args.kwargs["metadata"]
+    assert ("x-user-id", "user-42") in meta
+    assert out == {"orders": []}

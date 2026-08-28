@@ -916,7 +916,6 @@ async def manage_formula(
 
             req = indicators_pb2.UpdateFormulaRequest(
                 formula_id=formula["formula_id"],
-                user_id=formula["user_id"],
                 name=formula.get("name", ""),
                 description=formula.get("description", ""),
                 source=formula.get("source", ""),
@@ -930,14 +929,15 @@ async def manage_formula(
             update_mask = formula.get("update_mask")
             if update_mask:
                 req.update_mask.CopyFrom(field_mask_pb2.FieldMask(paths=list(update_mask)))
-            resp = await stub.UpdateFormula(req, metadata=_metadata())
+            resp = await stub.UpdateFormula(
+                req, metadata=_metadata(("x-user-id", formula["user_id"]))
+            )
             return MessageToDict(resp.formula)
         resp = await stub.DeleteFormula(
             indicators_pb2.DeleteFormulaRequest(
                 formula_id=formula["formula_id"],
-                user_id=formula["user_id"],
             ),
-            metadata=_metadata(),
+            metadata=_metadata(("x-user-id", formula["user_id"])),
         )
         return {"success": resp.success}
 
@@ -1689,7 +1689,6 @@ async def record_offline_order(
                 qty=qty,
                 account_id=account_id,
                 client_order_id=client_order_id,
-                user_id=user_id,
             ),
             metadata=_metadata(("x-user-id", user_id)),
         )
@@ -1714,7 +1713,6 @@ async def confirm_offline_order(
         order_id=order_id,
         filled_qty=filled_qty,
         filled_avg_price=filled_avg_price,
-        user_id=user_id,
     )
     if filled_at_iso:
         ts = Timestamp()

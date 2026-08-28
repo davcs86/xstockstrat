@@ -10,6 +10,17 @@ Go gRPC service that tracks open positions, portfolio equity, and P&L. Maintains
 
 **Paper vs Live separation**: Positions and P&L are tracked independently per `TradingMode` (PAPER / LIVE). Callers can filter by `trading_mode` on `ListPositions`, `GetPortfolio`, `GetPnL`, and `StreamPortfolioUpdates`. Paper positions and P&L never mix with live figures. `ListPositions` additionally accepts additive `symbol` (exact match) and `side` (long/short, derived from the sign of `qty`) filters (feature 056), and enriches each returned position with current price / market value / unrealized P&L (the same enrichment `GetPortfolio`/`GetPosition` apply).
 
+**Caller identity comes from the `x-user-id` header, not the request body.** The self-scoped read
+RPCs — `GetPortfolio`, `GetPosition`, `ListPositions`, `GetPnL`, `StreamPortfolioUpdates` — resolve
+the caller from the propagated **`x-user-id`** header (unary RPCs via
+`middleware.FromContext(ctx).UserID`; the streaming RPC reads incoming metadata directly, since no
+stream interceptor is registered), exactly like the watchlist RPCs. Their request-body `user_id`
+field is **deprecated and ignored** (a client cannot spoof the header, which the edge injects/strips
+after auth). Internal callers with no inbound header (e.g. `xstockstrat-trading`'s reconciliation and
+flatten pollers) inject `x-user-id` explicitly on the outbound call
+(`metadata.AppendToOutgoingContext`). A missing header still yields `InvalidArgument "user_id
+required"`.
+
 **Cross-user watchlist enumeration & first authz gate (feature 154).** `ListAllWatchlistSymbols`
 returns the **distinct union of watchlist symbols across ALL users** (`SELECT DISTINCT symbol FROM
 portfolio.watchlist_symbols`, no user filter/join, no migration) — the fundamentals-signal producer's
