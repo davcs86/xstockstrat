@@ -220,7 +220,11 @@ export interface ListFormulasResponse {
 }
 export interface UpdateFormulaRequest {
     formulaId: string;
-    /** must match formula.author; returns PERMISSION_DENIED otherwise */
+    /**
+     * DEPRECATED: author identity resolved from the x-user-id header; must match formula.author, else PERMISSION_DENIED.
+     *
+     * @deprecated
+     */
     userId: string;
     name: string;
     description: string;
@@ -243,7 +247,11 @@ export interface UpdateFormulaResponse {
 }
 export interface DeleteFormulaRequest {
     formulaId: string;
-    /** must match formula.author; returns PERMISSION_DENIED otherwise */
+    /**
+     * DEPRECATED: author identity resolved from the x-user-id header; must match formula.author, else PERMISSION_DENIED.
+     *
+     * @deprecated
+     */
     userId: string;
 }
 export interface DeleteFormulaResponse {

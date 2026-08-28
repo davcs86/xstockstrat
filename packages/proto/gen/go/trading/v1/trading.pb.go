@@ -585,7 +585,8 @@ type PlaceOrderRequest struct {
 	StopPrice   float64                `protobuf:"fixed64,6,opt,name=stop_price,json=stopPrice,proto3" json:"stop_price,omitempty"`
 	TimeInForce string                 `protobuf:"bytes,7,opt,name=time_in_force,json=timeInForce,proto3" json:"time_in_force,omitempty"`
 	StrategyId  string                 `protobuf:"bytes,8,opt,name=strategy_id,json=strategyId,proto3" json:"strategy_id,omitempty"`
-	UserId      string                 `protobuf:"bytes,9,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// Deprecated: Marked as deprecated in trading/v1/trading.proto.
+	UserId string `protobuf:"bytes,9,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"` // DEPRECATED: order owner resolved from the x-user-id header; body value ignored.
 	// client_order_id is required: a stable client-generated nonce reused across retries of
 	// the same logical place-order action (see the /trader Place Order form's nonce generator).
 	// Empty is rejected with InvalidArgument. Used as the order-intent dedup key (feature 101).
@@ -694,6 +695,7 @@ func (x *PlaceOrderRequest) GetStrategyId() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in trading/v1/trading.proto.
 func (x *PlaceOrderRequest) GetUserId() string {
 	if x != nil {
 		return x.UserId
@@ -751,9 +753,10 @@ func (x *PlaceOrderRequest) GetConfidence() float64 {
 }
 
 type CancelOrderRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	OrderId string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	// Deprecated: Marked as deprecated in trading/v1/trading.proto.
+	UserId        string `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"` // DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -795,6 +798,7 @@ func (x *CancelOrderRequest) GetOrderId() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in trading/v1/trading.proto.
 func (x *CancelOrderRequest) GetUserId() string {
 	if x != nil {
 		return x.UserId
@@ -907,9 +911,10 @@ type ConfirmOrderRequest struct {
 	FilledQty      float64                `protobuf:"fixed64,2,opt,name=filled_qty,json=filledQty,proto3" json:"filled_qty,omitempty"`
 	FilledAvgPrice float64                `protobuf:"fixed64,3,opt,name=filled_avg_price,json=filledAvgPrice,proto3" json:"filled_avg_price,omitempty"`
 	FilledAt       *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=filled_at,json=filledAt,proto3" json:"filled_at,omitempty"` // optional; server defaults to now when unset
-	UserId         string                 `protobuf:"bytes,5,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`       // caller identity (ownership guard)
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Deprecated: Marked as deprecated in trading/v1/trading.proto.
+	UserId        string `protobuf:"bytes,5,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"` // DEPRECATED: caller identity (ownership guard) resolved from the x-user-id header; body value ignored.
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ConfirmOrderRequest) Reset() {
@@ -970,6 +975,7 @@ func (x *ConfirmOrderRequest) GetFilledAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in trading/v1/trading.proto.
 func (x *ConfirmOrderRequest) GetUserId() string {
 	if x != nil {
 		return x.UserId
@@ -1208,7 +1214,8 @@ type ReplaceOrderRequest struct {
 	LimitPrice  float64 `protobuf:"fixed64,3,opt,name=limit_price,json=limitPrice,proto3" json:"limit_price,omitempty"`
 	StopPrice   float64 `protobuf:"fixed64,4,opt,name=stop_price,json=stopPrice,proto3" json:"stop_price,omitempty"`
 	TimeInForce string  `protobuf:"bytes,5,opt,name=time_in_force,json=timeInForce,proto3" json:"time_in_force,omitempty"`
-	UserId      string  `protobuf:"bytes,6,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// Deprecated: Marked as deprecated in trading/v1/trading.proto.
+	UserId string `protobuf:"bytes,6,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"` // DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
 	// New trail offset for a working trailing_stop order (Alpaca's replace body
 	// uses a single `trail` value); zero means "leave unchanged".
 	Trail         float64 `protobuf:"fixed64,7,opt,name=trail,proto3" json:"trail,omitempty"`
@@ -1281,6 +1288,7 @@ func (x *ReplaceOrderRequest) GetTimeInForce() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in trading/v1/trading.proto.
 func (x *ReplaceOrderRequest) GetUserId() string {
 	if x != nil {
 		return x.UserId
@@ -1941,7 +1949,7 @@ const file_trading_v1_trading_proto_rawDesc = "" +
 	"\vbroker_type\x18\x14 \x01(\x0e2!.xstockstrat.common.v1.BrokerTypeR\n" +
 	"brokerType\x12F\n" +
 	"\fintent_state\x18\x15 \x01(\x0e2#.xstockstrat.trading.v1.IntentStateR\vintentState\x127\n" +
-	"\tfilled_at\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\bfilledAt\"\x89\x05\n" +
+	"\tfilled_at\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\bfilledAt\"\x8d\x05\n" +
 	"\x11PlaceOrderRequest\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x125\n" +
 	"\x04side\x18\x02 \x01(\x0e2!.xstockstrat.trading.v1.OrderSideR\x04side\x12@\n" +
@@ -1954,8 +1962,8 @@ const file_trading_v1_trading_proto_rawDesc = "" +
 	"stop_price\x18\x06 \x01(\x01R\tstopPrice\x12\"\n" +
 	"\rtime_in_force\x18\a \x01(\tR\vtimeInForce\x12\x1f\n" +
 	"\vstrategy_id\x18\b \x01(\tR\n" +
-	"strategyId\x12\x17\n" +
-	"\auser_id\x18\t \x01(\tR\x06userId\x12&\n" +
+	"strategyId\x12\x1b\n" +
+	"\auser_id\x18\t \x01(\tB\x02\x18\x01R\x06userId\x12&\n" +
 	"\x0fclient_order_id\x18\n" +
 	" \x01(\tR\rclientOrderId\x12+\n" +
 	"\x11requires_approval\x18\v \x01(\bR\x10requiresApproval\x12E\n" +
@@ -1968,22 +1976,22 @@ const file_trading_v1_trading_proto_rawDesc = "" +
 	"\n" +
 	"confidence\x18\x10 \x01(\x01H\x00R\n" +
 	"confidence\x88\x01\x01B\r\n" +
-	"\v_confidence\"H\n" +
+	"\v_confidence\"L\n" +
 	"\x12CancelOrderRequest\x12\x19\n" +
-	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x17\n" +
-	"\auser_id\x18\x02 \x01(\tR\x06userId\"d\n" +
+	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1b\n" +
+	"\auser_id\x18\x02 \x01(\tB\x02\x18\x01R\x06userId\"d\n" +
 	"\x13CancelOrderResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x123\n" +
 	"\x05order\x18\x02 \x01(\v2\x1d.xstockstrat.trading.v1.OrderR\x05order\",\n" +
 	"\x0fGetOrderRequest\x12\x19\n" +
-	"\border_id\x18\x01 \x01(\tR\aorderId\"\xcb\x01\n" +
+	"\border_id\x18\x01 \x01(\tR\aorderId\"\xcf\x01\n" +
 	"\x13ConfirmOrderRequest\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1d\n" +
 	"\n" +
 	"filled_qty\x18\x02 \x01(\x01R\tfilledQty\x12(\n" +
 	"\x10filled_avg_price\x18\x03 \x01(\x01R\x0efilledAvgPrice\x127\n" +
-	"\tfilled_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bfilledAt\x12\x17\n" +
-	"\auser_id\x18\x05 \x01(\tR\x06userId\"\xf1\x03\n" +
+	"\tfilled_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bfilledAt\x12\x1b\n" +
+	"\auser_id\x18\x05 \x01(\tB\x02\x18\x01R\x06userId\"\xf1\x03\n" +
 	"\x11ListOrdersRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1f\n" +
 	"\vstrategy_id\x18\x02 \x01(\tR\n" +
@@ -2004,7 +2012,7 @@ const file_trading_v1_trading_proto_rawDesc = "" +
 	"\x04page\x18\x02 \x01(\v2#.xstockstrat.common.v1.PageResponseR\x04page\"~\n" +
 	"\x19StreamOrderUpdatesRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12H\n" +
-	"\rstatus_filter\x18\x02 \x03(\x0e2#.xstockstrat.trading.v1.OrderStatusR\fstatusFilter\"\xd5\x01\n" +
+	"\rstatus_filter\x18\x02 \x03(\x0e2#.xstockstrat.trading.v1.OrderStatusR\fstatusFilter\"\xd9\x01\n" +
 	"\x13ReplaceOrderRequest\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x10\n" +
 	"\x03qty\x18\x02 \x01(\x01R\x03qty\x12\x1f\n" +
@@ -2012,8 +2020,8 @@ const file_trading_v1_trading_proto_rawDesc = "" +
 	"limitPrice\x12\x1d\n" +
 	"\n" +
 	"stop_price\x18\x04 \x01(\x01R\tstopPrice\x12\"\n" +
-	"\rtime_in_force\x18\x05 \x01(\tR\vtimeInForce\x12\x17\n" +
-	"\auser_id\x18\x06 \x01(\tR\x06userId\x12\x14\n" +
+	"\rtime_in_force\x18\x05 \x01(\tR\vtimeInForce\x12\x1b\n" +
+	"\auser_id\x18\x06 \x01(\tB\x02\x18\x01R\x06userId\x12\x14\n" +
 	"\x05trail\x18\a \x01(\x01R\x05trail\"\xb5\x04\n" +
 	"\rBrokerAccount\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +

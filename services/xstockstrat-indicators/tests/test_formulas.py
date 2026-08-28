@@ -509,6 +509,38 @@ class TestFormulaAdminOverride:
             await servicer.DeleteFormula(req, ctx)
         assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
 
+    async def test_owner_updates_from_header_without_body_user_id(self):
+        """The author identity is resolved from the x-user-id header; the deprecated request-body
+        user_id is no longer required."""
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = _repo_servicer(author="user-1")
+        req = indicators_pb2.UpdateFormulaRequest(formula_id="f", name="n")  # no body user_id
+        resp = await servicer.UpdateFormula(req, _ctx([("x-user-id", "user-1")]))
+        assert resp.formula.formula_id == "f"
+
+    async def test_header_identity_wins_over_spoofed_body_user_id(self):
+        """A body user_id claiming the owner cannot bypass the author check — identity comes from
+        the trusted x-user-id header, so a non-owner header is denied even if the body lies."""
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = _repo_servicer(author="owner")
+        # Body claims to be the owner, but the header (the trusted source) says otherwise.
+        req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="owner", name="n")
+        ctx = _ctx([("x-user-id", "attacker"), ("x-access-scope", "0")])
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception):
+            await servicer.UpdateFormula(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
+
+    async def test_delete_owner_from_header_without_body_user_id(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = _repo_servicer(author="owner")
+        req = indicators_pb2.DeleteFormulaRequest(formula_id="f")  # no body user_id
+        resp = await servicer.DeleteFormula(req, _ctx([("x-user-id", "owner")]))
+        assert resp.success is True
+
 
 # ---------------------------------------------------------------------------
 # Custom-formula warm-up period (feature 064-backtest-debug-info)

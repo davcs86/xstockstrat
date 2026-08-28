@@ -132,18 +132,18 @@ message PnLResponse {
 
 // If trading_mode is UNSPECIFIED, returns positions for all modes.
 message GetPortfolioRequest {
-  string user_id = 1;
+  string user_id = 1 [deprecated = true]; // DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
   xstockstrat.common.v1.TradingMode trading_mode = 2;
   optional string account_id = 3;
 }
 message GetPositionRequest {
-  string user_id = 1;
+  string user_id = 1 [deprecated = true]; // DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
   string symbol = 2;
   xstockstrat.common.v1.TradingMode trading_mode = 3;
   optional string account_id = 4;
 }
 message ListPositionsRequest {
-  string user_id = 1;
+  string user_id = 1 [deprecated = true]; // DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
   xstockstrat.common.v1.PageRequest page = 2;
   // Filter by trading mode; UNSPECIFIED returns all positions.
   xstockstrat.common.v1.TradingMode trading_mode = 3;
@@ -157,7 +157,7 @@ message ListPositionsResponse {
   xstockstrat.common.v1.PageResponse page = 2;
 }
 message GetPnLRequest {
-  string user_id = 1;
+  string user_id = 1 [deprecated = true]; // DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
   xstockstrat.common.v1.TimeRange range = 2;
   // Filter by trading mode; UNSPECIFIED returns combined P&L.
   xstockstrat.common.v1.TradingMode trading_mode = 3;
@@ -169,7 +169,7 @@ message GetSnapshotRequest {
   optional string account_id = 3;
 }
 message StreamPortfolioUpdatesRequest {
-  string user_id = 1;
+  string user_id = 1 [deprecated = true]; // DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
   // Filter by trading mode; UNSPECIFIED streams all modes.
   xstockstrat.common.v1.TradingMode trading_mode = 2;
   optional string account_id = 3;

@@ -71,8 +71,8 @@ func (h *TradingHandler) ConfirmOrder(ctx context.Context, req *connect.Request[
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("order_id is required"))
 	}
 	// Ownership is enforced from the trusted x-user-id metadata the edge injects — never a
-	// client-supplied request field (feature 157; the offline-only guard is order-sourced in the service).
-	req.Msg.UserId = extractUserID(ctx)
+	// client-supplied request field (feature 157; the offline-only guard is order-sourced in the
+	// service, which reads the caller identity from the propagated header, not the deprecated body).
 	order, err := h.svc.ConfirmOrder(ctx, req.Msg)
 	if err != nil {
 		// Preserve the service's gRPC status code (NotFound / FailedPrecondition / InvalidArgument).
