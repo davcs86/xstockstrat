@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -444,7 +445,8 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 
 	// Hoisted from checkPortfolioRisk's own internal guard so sizing and the warn-only
 	// risk check can share one equity lookup instead of each fetching it independently.
-	needRiskCheck := req.UserId != "" && s.cfgW.GetFloat("trading.risk.max_position_pct", 0.05) > 0
+	// Caller identity from the trusted x-user-id header (deprecated request body user_id ignored).
+	needRiskCheck := middleware.FromContext(ctx).UserID != "" && s.cfgW.GetFloat("trading.risk.max_position_pct", 0.05) > 0
 	var equity float64
 	var equityErr error
 	if needSizing || needRiskCheck {
@@ -603,7 +605,7 @@ func (s *TradingService) submitOrder(
 		StopPrice:     req.StopPrice,
 		TimeInForce:   req.TimeInForce,
 		StrategyId:    req.StrategyId,
-		UserId:        req.UserId,
+		UserId:        accountEntry.userID,
 		TradingMode:   mode,
 		AccountId:     resolvedAccountID,
 		BrokerType:    commonv1.BrokerType(accountEntry.brokerType),
@@ -810,7 +812,7 @@ func (s *TradingService) recordOfflineOrder(ctx context.Context, req *tradingv1.
 		StopPrice:     req.StopPrice,
 		TimeInForce:   req.TimeInForce,
 		StrategyId:    req.StrategyId,
-		UserId:        req.UserId,
+		UserId:        userID,
 		TradingMode:   mode,
 		AccountId:     accountID,
 		BrokerType:    commonv1.BrokerType_BROKER_TYPE_OFFLINE,
@@ -903,7 +905,7 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 	if order.BrokerType != commonv1.BrokerType_BROKER_TYPE_OFFLINE {
 		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "ConfirmOrder applies only to offline accounts")
 	}
-	if req.UserId != "" && order.UserId != req.UserId {
+	if callerID := middleware.FromContext(ctx).UserID; callerID != "" && order.UserId != callerID {
 		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "order %q does not belong to caller", req.OrderId)
 	}
 
@@ -1119,7 +1121,7 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 	}
 
 	go s.emitLedgerEvent(context.Background(), "order.canceled", req.OrderId, map[string]interface{}{
-		"order_id": req.OrderId, "user_id": req.UserId,
+		"order_id": req.OrderId, "user_id": middleware.FromContext(ctx).UserID,
 	})
 	s.broadcastOrder(order)
 
@@ -1273,7 +1275,7 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 	}
 
 	go s.emitLedgerEvent(context.Background(), "order.replaced", req.OrderId, map[string]interface{}{
-		"order_id": req.OrderId, "user_id": req.UserId,
+		"order_id": req.OrderId, "user_id": middleware.FromContext(ctx).UserID,
 	})
 	s.broadcastOrder(order)
 
@@ -1797,8 +1799,11 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 			tradingMode = commonv1.TradingMode_TRADING_MODE_LIVE
 		}
 		listPosCtx, listPosCancel := context.WithTimeout(ctx, timeout)
+		// Identity travels in the x-user-id header (portfolio resolves the caller from it); this
+		// background poller has no inbound header, so inject the account owner explicitly.
+		listPosCtx = metadata.AppendToOutgoingContext(listPosCtx, "x-user-id", entry.userID)
 		platformPositions, ppErr := s.portfolio.ListPositions(listPosCtx, &portfoliov1.ListPositionsRequest{
-			UserId: entry.userID, AccountId: &accountID, TradingMode: tradingMode,
+			AccountId: &accountID, TradingMode: tradingMode,
 			Page: &commonv1.PageRequest{PageSize: 500},
 		})
 		listPosCancel()
@@ -2535,8 +2540,11 @@ func (s *TradingService) flattenAndHalt(ctx context.Context, bracket *repository
 	}
 
 	posCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	// x-user-id header carries the caller identity to portfolio; this background flatten path has
+	// no inbound header, so inject the order owner explicitly.
+	posCtx = metadata.AppendToOutgoingContext(posCtx, "x-user-id", order.UserId)
 	position, err := s.portfolio.GetPosition(posCtx, &portfoliov1.GetPositionRequest{
-		UserId: order.UserId, Symbol: order.Symbol, TradingMode: order.TradingMode,
+		Symbol: order.Symbol, TradingMode: order.TradingMode,
 	})
 	cancel()
 	if err != nil || position == nil || position.Qty == 0 {
@@ -2810,7 +2818,8 @@ func (s *TradingService) instantiateBrokerLocked(rec *repository.BrokerAccountRe
 // call uses ListPortfolios (the real account equity), so a flat account's order could silently
 // bypass this check.
 func (s *TradingService) checkPortfolioRisk(ctx context.Context, req *tradingv1.PlaceOrderRequest, mode commonv1.TradingMode, equity float64, equityErr error) {
-	if req.UserId == "" {
+	callerID := middleware.FromContext(ctx).UserID
+	if callerID == "" {
 		return
 	}
 	maxPositionPct := s.cfgW.GetFloat("trading.risk.max_position_pct", 0.05)
@@ -2819,7 +2828,7 @@ func (s *TradingService) checkPortfolioRisk(ctx context.Context, req *tradingv1.
 	}
 
 	if equityErr != nil {
-		slog.Warn("portfolio risk check skipped", "user_id", req.UserId, "error", equityErr)
+		slog.Warn("portfolio risk check skipped", "user_id", callerID, "error", equityErr)
 		return
 	}
 
@@ -3262,8 +3271,9 @@ func (s *TradingService) checkTradingStateForPlaceOrder(ctx context.Context, use
 	default: // REDUCE_ONLY
 		posCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 		defer cancel()
+		posCtx = metadata.AppendToOutgoingContext(posCtx, "x-user-id", userID)
 		pos, err := s.portfolio.GetPosition(posCtx, &portfoliov1.GetPositionRequest{
-			UserId: userID, Symbol: symbol, TradingMode: mode,
+			Symbol: symbol, TradingMode: mode,
 		})
 		if err != nil {
 			if grpcstatus.Code(err) == codes.NotFound {

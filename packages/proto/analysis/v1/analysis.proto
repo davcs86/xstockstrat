@@ -279,7 +279,7 @@ message GetBacktestRequest { string backtest_id = 1; }
 
 message ListStrategiesRequest {
   xstockstrat.common.v1.PageRequest page = 1;
-  string user_id = 2;
+  string user_id = 2 [deprecated = true]; // DEPRECATED: caller identity resolved from the x-user-id header; body value ignored (feature 133).
 }
 
 message ListStrategiesResponse {

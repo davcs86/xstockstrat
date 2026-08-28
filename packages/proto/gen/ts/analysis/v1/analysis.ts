@@ -1309,7 +1309,14 @@ export interface GetBacktestRequest {
 }
 
 export interface ListStrategiesRequest {
-  page?: PageRequest | undefined;
+  page?:
+    | PageRequest
+    | undefined;
+  /**
+   * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored (feature 133).
+   *
+   * @deprecated
+   */
   userId: string;
 }
 

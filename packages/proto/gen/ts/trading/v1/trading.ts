@@ -509,6 +509,11 @@ export interface PlaceOrderRequest {
   stopPrice: number;
   timeInForce: string;
   strategyId: string;
+  /**
+   * DEPRECATED: order owner resolved from the x-user-id header; body value ignored.
+   *
+   * @deprecated
+   */
   userId: string;
   /**
    * client_order_id is required: a stable client-generated nonce reused across retries of
@@ -540,6 +545,11 @@ export interface PlaceOrderRequest {
 
 export interface CancelOrderRequest {
   orderId: string;
+  /**
+   * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+   *
+   * @deprecated
+   */
   userId: string;
 }
 
@@ -565,7 +575,11 @@ export interface ConfirmOrderRequest {
   filledAt?:
     | Date
     | undefined;
-  /** caller identity (ownership guard) */
+  /**
+   * DEPRECATED: caller identity (ownership guard) resolved from the x-user-id header; body value ignored.
+   *
+   * @deprecated
+   */
   userId: string;
 }
 
@@ -606,6 +620,11 @@ export interface ReplaceOrderRequest {
   limitPrice: number;
   stopPrice: number;
   timeInForce: string;
+  /**
+   * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+   *
+   * @deprecated
+   */
   userId: string;
   /**
    * New trail offset for a working trailing_stop order (Alpaca's replace body

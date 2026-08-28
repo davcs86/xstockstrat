@@ -1361,16 +1361,17 @@ func (x *ListFormulasResponse) GetTotalCount() int32 {
 }
 
 type UpdateFormulaRequest struct {
-	state        protoimpl.MessageState `protogen:"open.v1"`
-	FormulaId    string                 `protobuf:"bytes,1,opt,name=formula_id,json=formulaId,proto3" json:"formula_id,omitempty"`
-	UserId       string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"` // must match formula.author; returns PERMISSION_DENIED otherwise
-	Name         string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	Description  string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
-	Source       string                 `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`
-	IsPublic     bool                   `protobuf:"varint,6,opt,name=is_public,json=isPublic,proto3" json:"is_public,omitempty"`
-	Parameters   []*FormulaParameter    `protobuf:"bytes,7,rep,name=parameters,proto3" json:"parameters,omitempty"`
-	Outputs      []*FormulaOutput       `protobuf:"bytes,8,rep,name=outputs,proto3" json:"outputs,omitempty"`                                // declared output series (beyond implicit "value")
-	WarmupPeriod int32                  `protobuf:"varint,9,opt,name=warmup_period,json=warmupPeriod,proto3" json:"warmup_period,omitempty"` // bars of warm-up before this formula's outputs are valid (feature 064)
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	FormulaId string                 `protobuf:"bytes,1,opt,name=formula_id,json=formulaId,proto3" json:"formula_id,omitempty"`
+	// Deprecated: Marked as deprecated in indicators/v1/indicators.proto.
+	UserId       string              `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"` // DEPRECATED: author identity resolved from the x-user-id header; must match formula.author, else PERMISSION_DENIED.
+	Name         string              `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Description  string              `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
+	Source       string              `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`
+	IsPublic     bool                `protobuf:"varint,6,opt,name=is_public,json=isPublic,proto3" json:"is_public,omitempty"`
+	Parameters   []*FormulaParameter `protobuf:"bytes,7,rep,name=parameters,proto3" json:"parameters,omitempty"`
+	Outputs      []*FormulaOutput    `protobuf:"bytes,8,rep,name=outputs,proto3" json:"outputs,omitempty"`                                // declared output series (beyond implicit "value")
+	WarmupPeriod int32               `protobuf:"varint,9,opt,name=warmup_period,json=warmupPeriod,proto3" json:"warmup_period,omitempty"` // bars of warm-up before this formula's outputs are valid (feature 064)
 	// AIP-161 partial update (feature 086). Absent = full replace (back-compat: the UI sends a full
 	// payload every call). Present = merge only the named paths onto the stored row; unlisted fields
 	// are preserved. Reject an update whose target formula is soft-deleted (FAILED_PRECONDITION).
@@ -1416,6 +1417,7 @@ func (x *UpdateFormulaRequest) GetFormulaId() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in indicators/v1/indicators.proto.
 func (x *UpdateFormulaRequest) GetUserId() string {
 	if x != nil {
 		return x.UserId
@@ -1524,9 +1526,10 @@ func (x *UpdateFormulaResponse) GetFormula() *FormulaDefinition {
 }
 
 type DeleteFormulaRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	FormulaId     string                 `protobuf:"bytes,1,opt,name=formula_id,json=formulaId,proto3" json:"formula_id,omitempty"`
-	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"` // must match formula.author; returns PERMISSION_DENIED otherwise
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	FormulaId string                 `protobuf:"bytes,1,opt,name=formula_id,json=formulaId,proto3" json:"formula_id,omitempty"`
+	// Deprecated: Marked as deprecated in indicators/v1/indicators.proto.
+	UserId        string `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"` // DEPRECATED: author identity resolved from the x-user-id header; must match formula.author, else PERMISSION_DENIED.
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1568,6 +1571,7 @@ func (x *DeleteFormulaRequest) GetFormulaId() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in indicators/v1/indicators.proto.
 func (x *DeleteFormulaRequest) GetUserId() string {
 	if x != nil {
 		return x.UserId
@@ -1756,11 +1760,11 @@ const file_indicators_v1_indicators_proto_rawDesc = "" +
 	"\x14ListFormulasResponse\x12H\n" +
 	"\bformulas\x18\x01 \x03(\v2,.xstockstrat.indicators.v1.FormulaDefinitionR\bformulas\x12\x1f\n" +
 	"\vtotal_count\x18\x02 \x01(\x05R\n" +
-	"totalCount\"\xac\x03\n" +
+	"totalCount\"\xb0\x03\n" +
 	"\x14UpdateFormulaRequest\x12\x1d\n" +
 	"\n" +
-	"formula_id\x18\x01 \x01(\tR\tformulaId\x12\x17\n" +
-	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x12\n" +
+	"formula_id\x18\x01 \x01(\tR\tformulaId\x12\x1b\n" +
+	"\auser_id\x18\x02 \x01(\tB\x02\x18\x01R\x06userId\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x16\n" +
 	"\x06source\x18\x05 \x01(\tR\x06source\x12\x1b\n" +
@@ -1774,11 +1778,11 @@ const file_indicators_v1_indicators_proto_rawDesc = "" +
 	" \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
 	"updateMask\"_\n" +
 	"\x15UpdateFormulaResponse\x12F\n" +
-	"\aformula\x18\x01 \x01(\v2,.xstockstrat.indicators.v1.FormulaDefinitionR\aformula\"N\n" +
+	"\aformula\x18\x01 \x01(\v2,.xstockstrat.indicators.v1.FormulaDefinitionR\aformula\"R\n" +
 	"\x14DeleteFormulaRequest\x12\x1d\n" +
 	"\n" +
-	"formula_id\x18\x01 \x01(\tR\tformulaId\x12\x17\n" +
-	"\auser_id\x18\x02 \x01(\tR\x06userId\"1\n" +
+	"formula_id\x18\x01 \x01(\tR\tformulaId\x12\x1b\n" +
+	"\auser_id\x18\x02 \x01(\tB\x02\x18\x01R\x06userId\"1\n" +
 	"\x15DeleteFormulaResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess*\xf2\x01\n" +
 	"\x11SandboxExitReason\x12#\n" +

@@ -669,7 +669,10 @@ export type ListStrategiesRequest = Message<"xstockstrat.analysis.v1.ListStrateg
      */
     page?: PageRequest | undefined;
     /**
-     * @generated from field: string user_id = 2;
+     * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored (feature 133).
+     *
+     * @generated from field: string user_id = 2 [deprecated = true];
+     * @deprecated
      */
     userId: string;
 };

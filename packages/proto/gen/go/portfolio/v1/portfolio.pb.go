@@ -712,10 +712,11 @@ func (x *PnLResponse) GetRange() *v1.TimeRange {
 
 // If trading_mode is UNSPECIFIED, returns positions for all modes.
 type GetPortfolioRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	TradingMode   v1.TradingMode         `protobuf:"varint,2,opt,name=trading_mode,json=tradingMode,proto3,enum=xstockstrat.common.v1.TradingMode" json:"trading_mode,omitempty"`
-	AccountId     *string                `protobuf:"bytes,3,opt,name=account_id,json=accountId,proto3,oneof" json:"account_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Deprecated: Marked as deprecated in portfolio/v1/portfolio.proto.
+	UserId        string         `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"` // DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+	TradingMode   v1.TradingMode `protobuf:"varint,2,opt,name=trading_mode,json=tradingMode,proto3,enum=xstockstrat.common.v1.TradingMode" json:"trading_mode,omitempty"`
+	AccountId     *string        `protobuf:"bytes,3,opt,name=account_id,json=accountId,proto3,oneof" json:"account_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -750,6 +751,7 @@ func (*GetPortfolioRequest) Descriptor() ([]byte, []int) {
 	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{4}
 }
 
+// Deprecated: Marked as deprecated in portfolio/v1/portfolio.proto.
 func (x *GetPortfolioRequest) GetUserId() string {
 	if x != nil {
 		return x.UserId
@@ -772,11 +774,12 @@ func (x *GetPortfolioRequest) GetAccountId() string {
 }
 
 type GetPositionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Symbol        string                 `protobuf:"bytes,2,opt,name=symbol,proto3" json:"symbol,omitempty"`
-	TradingMode   v1.TradingMode         `protobuf:"varint,3,opt,name=trading_mode,json=tradingMode,proto3,enum=xstockstrat.common.v1.TradingMode" json:"trading_mode,omitempty"`
-	AccountId     *string                `protobuf:"bytes,4,opt,name=account_id,json=accountId,proto3,oneof" json:"account_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Deprecated: Marked as deprecated in portfolio/v1/portfolio.proto.
+	UserId        string         `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"` // DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+	Symbol        string         `protobuf:"bytes,2,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	TradingMode   v1.TradingMode `protobuf:"varint,3,opt,name=trading_mode,json=tradingMode,proto3,enum=xstockstrat.common.v1.TradingMode" json:"trading_mode,omitempty"`
+	AccountId     *string        `protobuf:"bytes,4,opt,name=account_id,json=accountId,proto3,oneof" json:"account_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -811,6 +814,7 @@ func (*GetPositionRequest) Descriptor() ([]byte, []int) {
 	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{5}
 }
 
+// Deprecated: Marked as deprecated in portfolio/v1/portfolio.proto.
 func (x *GetPositionRequest) GetUserId() string {
 	if x != nil {
 		return x.UserId
@@ -840,9 +844,10 @@ func (x *GetPositionRequest) GetAccountId() string {
 }
 
 type ListPositionsRequest struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	UserId string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Page   *v1.PageRequest        `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Deprecated: Marked as deprecated in portfolio/v1/portfolio.proto.
+	UserId string          `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"` // DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+	Page   *v1.PageRequest `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
 	// Filter by trading mode; UNSPECIFIED returns all positions.
 	TradingMode v1.TradingMode `protobuf:"varint,3,opt,name=trading_mode,json=tradingMode,proto3,enum=xstockstrat.common.v1.TradingMode" json:"trading_mode,omitempty"`
 	AccountId   *string        `protobuf:"bytes,4,opt,name=account_id,json=accountId,proto3,oneof" json:"account_id,omitempty"`
@@ -883,6 +888,7 @@ func (*ListPositionsRequest) Descriptor() ([]byte, []int) {
 	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{6}
 }
 
+// Deprecated: Marked as deprecated in portfolio/v1/portfolio.proto.
 func (x *ListPositionsRequest) GetUserId() string {
 	if x != nil {
 		return x.UserId
@@ -978,9 +984,10 @@ func (x *ListPositionsResponse) GetPage() *v1.PageResponse {
 }
 
 type GetPnLRequest struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	UserId string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Range  *v1.TimeRange          `protobuf:"bytes,2,opt,name=range,proto3" json:"range,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Deprecated: Marked as deprecated in portfolio/v1/portfolio.proto.
+	UserId string        `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"` // DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+	Range  *v1.TimeRange `protobuf:"bytes,2,opt,name=range,proto3" json:"range,omitempty"`
 	// Filter by trading mode; UNSPECIFIED returns combined P&L.
 	TradingMode   v1.TradingMode `protobuf:"varint,3,opt,name=trading_mode,json=tradingMode,proto3,enum=xstockstrat.common.v1.TradingMode" json:"trading_mode,omitempty"`
 	AccountId     *string        `protobuf:"bytes,4,opt,name=account_id,json=accountId,proto3,oneof" json:"account_id,omitempty"`
@@ -1018,6 +1025,7 @@ func (*GetPnLRequest) Descriptor() ([]byte, []int) {
 	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{8}
 }
 
+// Deprecated: Marked as deprecated in portfolio/v1/portfolio.proto.
 func (x *GetPnLRequest) GetUserId() string {
 	if x != nil {
 		return x.UserId
@@ -1107,8 +1115,9 @@ func (x *GetSnapshotRequest) GetAccountId() string {
 }
 
 type StreamPortfolioUpdatesRequest struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	UserId string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Deprecated: Marked as deprecated in portfolio/v1/portfolio.proto.
+	UserId string `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"` // DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
 	// Filter by trading mode; UNSPECIFIED streams all modes.
 	TradingMode   v1.TradingMode `protobuf:"varint,2,opt,name=trading_mode,json=tradingMode,proto3,enum=xstockstrat.common.v1.TradingMode" json:"trading_mode,omitempty"`
 	AccountId     *string        `protobuf:"bytes,3,opt,name=account_id,json=accountId,proto3,oneof" json:"account_id,omitempty"`
@@ -1146,6 +1155,7 @@ func (*StreamPortfolioUpdatesRequest) Descriptor() ([]byte, []int) {
 	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{10}
 }
 
+// Deprecated: Marked as deprecated in portfolio/v1/portfolio.proto.
 func (x *StreamPortfolioUpdatesRequest) GetUserId() string {
 	if x != nil {
 		return x.UserId
@@ -2363,22 +2373,22 @@ const file_portfolio_v1_portfolio_proto_rawDesc = "" +
 	"\x0eunrealized_pnl\x18\x02 \x01(\x01R\runrealizedPnl\x12\x1b\n" +
 	"\ttotal_pnl\x18\x03 \x01(\x01R\btotalPnl\x12\x17\n" +
 	"\aday_pnl\x18\x04 \x01(\x01R\x06dayPnl\x126\n" +
-	"\x05range\x18\x05 \x01(\v2 .xstockstrat.common.v1.TimeRangeR\x05range\"\xa8\x01\n" +
-	"\x13GetPortfolioRequest\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\x12E\n" +
+	"\x05range\x18\x05 \x01(\v2 .xstockstrat.common.v1.TimeRangeR\x05range\"\xac\x01\n" +
+	"\x13GetPortfolioRequest\x12\x1b\n" +
+	"\auser_id\x18\x01 \x01(\tB\x02\x18\x01R\x06userId\x12E\n" +
 	"\ftrading_mode\x18\x02 \x01(\x0e2\".xstockstrat.common.v1.TradingModeR\vtradingMode\x12\"\n" +
 	"\n" +
 	"account_id\x18\x03 \x01(\tH\x00R\taccountId\x88\x01\x01B\r\n" +
-	"\v_account_id\"\xbf\x01\n" +
-	"\x12GetPositionRequest\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x16\n" +
+	"\v_account_id\"\xc3\x01\n" +
+	"\x12GetPositionRequest\x12\x1b\n" +
+	"\auser_id\x18\x01 \x01(\tB\x02\x18\x01R\x06userId\x12\x16\n" +
 	"\x06symbol\x18\x02 \x01(\tR\x06symbol\x12E\n" +
 	"\ftrading_mode\x18\x03 \x01(\x0e2\".xstockstrat.common.v1.TradingModeR\vtradingMode\x12\"\n" +
 	"\n" +
 	"account_id\x18\x04 \x01(\tH\x00R\taccountId\x88\x01\x01B\r\n" +
-	"\v_account_id\"\xb5\x02\n" +
-	"\x14ListPositionsRequest\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\x126\n" +
+	"\v_account_id\"\xb9\x02\n" +
+	"\x14ListPositionsRequest\x12\x1b\n" +
+	"\auser_id\x18\x01 \x01(\tB\x02\x18\x01R\x06userId\x126\n" +
 	"\x04page\x18\x02 \x01(\v2\".xstockstrat.common.v1.PageRequestR\x04page\x12E\n" +
 	"\ftrading_mode\x18\x03 \x01(\x0e2\".xstockstrat.common.v1.TradingModeR\vtradingMode\x12\"\n" +
 	"\n" +
@@ -2388,9 +2398,9 @@ const file_portfolio_v1_portfolio_proto_rawDesc = "" +
 	"\v_account_id\"\x92\x01\n" +
 	"\x15ListPositionsResponse\x12@\n" +
 	"\tpositions\x18\x01 \x03(\v2\".xstockstrat.portfolio.v1.PositionR\tpositions\x127\n" +
-	"\x04page\x18\x02 \x01(\v2#.xstockstrat.common.v1.PageResponseR\x04page\"\xda\x01\n" +
-	"\rGetPnLRequest\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\x126\n" +
+	"\x04page\x18\x02 \x01(\v2#.xstockstrat.common.v1.PageResponseR\x04page\"\xde\x01\n" +
+	"\rGetPnLRequest\x12\x1b\n" +
+	"\auser_id\x18\x01 \x01(\tB\x02\x18\x01R\x06userId\x126\n" +
 	"\x05range\x18\x02 \x01(\v2 .xstockstrat.common.v1.TimeRangeR\x05range\x12E\n" +
 	"\ftrading_mode\x18\x03 \x01(\x0e2\".xstockstrat.common.v1.TradingModeR\vtradingMode\x12\"\n" +
 	"\n" +
@@ -2401,9 +2411,9 @@ const file_portfolio_v1_portfolio_proto_rawDesc = "" +
 	"\aat_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x06atTime\x12\"\n" +
 	"\n" +
 	"account_id\x18\x03 \x01(\tH\x00R\taccountId\x88\x01\x01B\r\n" +
-	"\v_account_id\"\xb2\x01\n" +
-	"\x1dStreamPortfolioUpdatesRequest\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\x12E\n" +
+	"\v_account_id\"\xb6\x01\n" +
+	"\x1dStreamPortfolioUpdatesRequest\x12\x1b\n" +
+	"\auser_id\x18\x01 \x01(\tB\x02\x18\x01R\x06userId\x12E\n" +
 	"\ftrading_mode\x18\x02 \x01(\x0e2\".xstockstrat.common.v1.TradingModeR\vtradingMode\x12\"\n" +
 	"\n" +
 	"account_id\x18\x03 \x01(\tH\x00R\taccountId\x88\x01\x01B\r\n" +

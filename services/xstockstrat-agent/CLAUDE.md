@@ -21,7 +21,14 @@ The agent is a platform **edge** and forwards the full propagation trio — `x-u
 caller's verified OAuth claims with a fresh `x-trace-id` minted at the edge when absent. This is
 wired by one `CallerPropagationMiddleware` (`app/tools.py`) that binds the identity onto `client`'s
 per-request contextvar for each `tools/call`; there is **no per-tool plumbing** (see constitution
-**AGENT-4**). Backend role checks *verify* admin from the forwarded `x-access-scope` (feature 092
+**AGENT-4**). Because identity travels in the `x-user-id` header, the caller-identity request
+builders in `app/client.py` **no longer set a request-body `user_id`** (deprecated on those RPCs):
+`list_account_positions` (portfolio `ListPositions`), `record_offline_order`/`confirm_offline_order`
+(trading `PlaceOrder`/`ConfirmOrder`), and `manage_formula` update/delete (indicators
+`UpdateFormula`/`DeleteFormula`) forward the caller only as `x-user-id`. Body `user_id` is still sent
+where it is a **target/scope selector, not the caller** — `list_account_orders` (`ListOrders`
+filter), the config tools (per-user scope), `emit_alert` (`target_user_id`), and `IssueAuthCode`
+(token subject). Backend role checks *verify* admin from the forwarded `x-access-scope` (feature 092
 generalized this from the feature-073 `set_config`-only case; the old hardcoded admin scope was
 removed). The strategy tools (`manage_strategy`/`set_strategy_live`) are the exception since feature
 133 — they are **ownership**-gated on the forwarded `x-user-id`, not admin-gated. See §

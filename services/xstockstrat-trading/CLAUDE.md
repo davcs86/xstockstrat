@@ -26,6 +26,19 @@ Go gRPC service responsible for order execution and trade lifecycle management. 
 
 **Offline (manually-tracked) accounts** (feature 157, hardened by feature 159): a `BROKER_TYPE_OFFLINE` account has no broker client — its orders are recorded, not routed. `PlaceOrder` routes to `recordOfflineOrder` (persists `NEW`, empty `broker_order_id`, no broker submit) whenever **either** the in-memory pool tag **or** the **authoritative persisted** `broker_type` (`accountRepo.GetBrokerAccount`) is OFFLINE — a divergence-safe union, so an offline account can never fall through to a broker path even if its pool entry is stale (best-effort: a DB read error falls back to the pool tag). `CancelOrder` **rejects** an offline order with `FailedPrecondition` (offline orders are un-placed via `ConfirmOrder` edits, never a broker cancel) — this is an offline-**type** guard, orthogonal to the halt gating above: `CancelOrder` remains **never halt-gated** (the operator's manual de-risk tool for *broker* accounts).
 
+**Caller identity comes from the `x-user-id` header, not the request body.** `PlaceOrder`,
+`CancelOrder`, `ReplaceOrder`, and `ConfirmOrder` resolve the caller from the propagated
+**`x-user-id`** header (`middleware.FromContext(ctx).UserID`); their request-body `user_id` field is
+**deprecated and ignored**. For `PlaceOrder` the order **owner** is the server-resolved account owner
+(`accountEntry.userID` / the `recordOfflineOrder` `userID` param), not a client-claimed body field —
+so it is correct for the internal bracket-flatten path too, and a caller cannot place an order owned
+by someone else. `ConfirmOrder`'s ownership guard and the warn-only `checkPortfolioRisk` gate both
+read the header. When trading calls **`xstockstrat-portfolio`** (`ListPositions`/`GetPosition`) from a
+background context with no inbound header (reconciliation, flatten), it injects `x-user-id` explicitly
+via `metadata.AppendToOutgoingContext`. **Exception:** `ListOrders` and `StreamOrderUpdates` keep
+their body `user_id` — there it is a **cross-user filter/subscription selector** (empty = all users),
+not the caller's own identity, so it is not deprecated.
+
 ## Language
 
 Go 1.27

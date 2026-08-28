@@ -149,7 +149,10 @@ export type PlaceOrderRequest = Message<"xstockstrat.trading.v1.PlaceOrderReques
      */
     strategyId: string;
     /**
-     * @generated from field: string user_id = 9;
+     * DEPRECATED: order owner resolved from the x-user-id header; body value ignored.
+     *
+     * @generated from field: string user_id = 9 [deprecated = true];
+     * @deprecated
      */
     userId: string;
     /**
@@ -211,7 +214,10 @@ export type CancelOrderRequest = Message<"xstockstrat.trading.v1.CancelOrderRequ
      */
     orderId: string;
     /**
-     * @generated from field: string user_id = 2;
+     * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+     *
+     * @generated from field: string user_id = 2 [deprecated = true];
+     * @deprecated
      */
     userId: string;
 };
@@ -279,9 +285,10 @@ export type ConfirmOrderRequest = Message<"xstockstrat.trading.v1.ConfirmOrderRe
      */
     filledAt?: Timestamp | undefined;
     /**
-     * caller identity (ownership guard)
+     * DEPRECATED: caller identity (ownership guard) resolved from the x-user-id header; body value ignored.
      *
-     * @generated from field: string user_id = 5;
+     * @generated from field: string user_id = 5 [deprecated = true];
+     * @deprecated
      */
     userId: string;
 };
@@ -408,7 +415,10 @@ export type ReplaceOrderRequest = Message<"xstockstrat.trading.v1.ReplaceOrderRe
      */
     timeInForce: string;
     /**
-     * @generated from field: string user_id = 6;
+     * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+     *
+     * @generated from field: string user_id = 6 [deprecated = true];
+     * @deprecated
      */
     userId: string;
     /**

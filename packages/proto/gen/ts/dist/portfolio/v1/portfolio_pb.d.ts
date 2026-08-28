@@ -266,7 +266,10 @@ export declare const PnLResponseSchema: GenMessage<PnLResponse>;
  */
 export type GetPortfolioRequest = Message<"xstockstrat.portfolio.v1.GetPortfolioRequest"> & {
     /**
-     * @generated from field: string user_id = 1;
+     * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+     *
+     * @generated from field: string user_id = 1 [deprecated = true];
+     * @deprecated
      */
     userId: string;
     /**
@@ -288,7 +291,10 @@ export declare const GetPortfolioRequestSchema: GenMessage<GetPortfolioRequest>;
  */
 export type GetPositionRequest = Message<"xstockstrat.portfolio.v1.GetPositionRequest"> & {
     /**
-     * @generated from field: string user_id = 1;
+     * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+     *
+     * @generated from field: string user_id = 1 [deprecated = true];
+     * @deprecated
      */
     userId: string;
     /**
@@ -314,7 +320,10 @@ export declare const GetPositionRequestSchema: GenMessage<GetPositionRequest>;
  */
 export type ListPositionsRequest = Message<"xstockstrat.portfolio.v1.ListPositionsRequest"> & {
     /**
-     * @generated from field: string user_id = 1;
+     * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+     *
+     * @generated from field: string user_id = 1 [deprecated = true];
+     * @deprecated
      */
     userId: string;
     /**
@@ -374,7 +383,10 @@ export declare const ListPositionsResponseSchema: GenMessage<ListPositionsRespon
  */
 export type GetPnLRequest = Message<"xstockstrat.portfolio.v1.GetPnLRequest"> & {
     /**
-     * @generated from field: string user_id = 1;
+     * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+     *
+     * @generated from field: string user_id = 1 [deprecated = true];
+     * @deprecated
      */
     userId: string;
     /**
@@ -424,7 +436,10 @@ export declare const GetSnapshotRequestSchema: GenMessage<GetSnapshotRequest>;
  */
 export type StreamPortfolioUpdatesRequest = Message<"xstockstrat.portfolio.v1.StreamPortfolioUpdatesRequest"> & {
     /**
-     * @generated from field: string user_id = 1;
+     * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+     *
+     * @generated from field: string user_id = 1 [deprecated = true];
+     * @deprecated
      */
     userId: string;
     /**
