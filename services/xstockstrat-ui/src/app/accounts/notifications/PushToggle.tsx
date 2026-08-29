@@ -29,35 +29,37 @@ export function PushToggle() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Derive current permission/subscription state on mount.
+  // Derive current permission/subscription state on mount. Support is resolved SYNCHRONOUSLY from
+  // feature detection + Notification.permission — we must NOT block the 'unknown' loading state on
+  // `navigator.serviceWorker.ready`, which can hang indefinitely in some headless environments
+  // (CI), leaving the control stuck on the spinner. Reading the existing subscription is a
+  // best-effort enhancement that runs in the background and only flips `enabled`.
   useEffect(() => {
+    if (
+      typeof navigator === 'undefined' ||
+      !navigator.serviceWorker ||
+      typeof window === 'undefined' ||
+      !window.PushManager ||
+      typeof Notification === 'undefined'
+    ) {
+      setSupport('unsupported');
+      return;
+    }
+    if (Notification.permission === 'denied') {
+      setSupport('blocked');
+      return;
+    }
+    setSupport('ready');
+
     let cancelled = false;
-    (async () => {
-      if (
-        typeof navigator === 'undefined' ||
-        !navigator.serviceWorker ||
-        typeof window === 'undefined' ||
-        !window.PushManager ||
-        typeof Notification === 'undefined'
-      ) {
-        if (!cancelled) setSupport('unsupported');
-        return;
-      }
-      if (Notification.permission === 'denied') {
-        if (!cancelled) setSupport('blocked');
-        return;
-      }
-      try {
-        const reg = await navigator.serviceWorker.ready;
-        const sub = await reg.pushManager.getSubscription();
-        if (!cancelled) {
-          setEnabled(!!sub);
-          setSupport('ready');
-        }
-      } catch {
-        if (!cancelled) setSupport('ready');
-      }
-    })();
+    navigator.serviceWorker.ready
+      .then((reg) => reg.pushManager.getSubscription())
+      .then((sub) => {
+        if (!cancelled) setEnabled(!!sub);
+      })
+      .catch(() => {
+        /* best-effort — the control stays usable even if this never resolves */
+      });
     return () => {
       cancelled = true;
     };
