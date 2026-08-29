@@ -24,7 +24,7 @@ service NotifyService {
   rpc ListAlerts(ListAlertsRequest) returns (ListAlertsResponse);
 
   // Register (or upsert) a Web Push subscription for the calling user.
-  // The BFF fills user_id from the verified session — never trusted from the browser body.
+  // The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
   rpc RegisterPushSubscription(RegisterPushSubscriptionRequest) returns (RegisterPushSubscriptionResponse);
 
   // Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()).
@@ -101,11 +101,12 @@ message ListAlertsResponse {
 
 // Web Push subscription registration (feature 163 — pwa-notifications).
 message RegisterPushSubscriptionRequest {
-  string user_id = 1;     // filled by the BFF from the verified session — never trusted from the browser body
-  string endpoint = 2;    // the push service endpoint URL (PushSubscription.endpoint)
-  string p256dh = 3;      // client public key (PushSubscription.keys.p256dh)
-  string auth = 4;        // client auth secret (PushSubscription.keys.auth)
-  string user_agent = 5;  // optional device label for debugging
+  // No user_id field — the owner is resolved from the propagated x-user-id metadata header (C-03),
+  // never trusted from the request body.
+  string endpoint = 1;    // the push service endpoint URL (PushSubscription.endpoint)
+  string p256dh = 2;      // client public key (PushSubscription.keys.p256dh)
+  string auth = 3;        // client auth secret (PushSubscription.keys.auth)
+  string user_agent = 4;  // optional device label for debugging
 }
 
 message RegisterPushSubscriptionResponse {

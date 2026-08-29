@@ -656,12 +656,13 @@ func (x *ListAlertsResponse) GetNextPageToken() string {
 
 // Web Push subscription registration (feature 163 — pwa-notifications).
 type RegisterPushSubscriptionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`          // filled by the BFF from the verified session — never trusted from the browser body
-	Endpoint      string                 `protobuf:"bytes,2,opt,name=endpoint,proto3" json:"endpoint,omitempty"`                    // the push service endpoint URL (PushSubscription.endpoint)
-	P256Dh        string                 `protobuf:"bytes,3,opt,name=p256dh,proto3" json:"p256dh,omitempty"`                        // client public key (PushSubscription.keys.p256dh)
-	Auth          string                 `protobuf:"bytes,4,opt,name=auth,proto3" json:"auth,omitempty"`                            // client auth secret (PushSubscription.keys.auth)
-	UserAgent     string                 `protobuf:"bytes,5,opt,name=user_agent,json=userAgent,proto3" json:"user_agent,omitempty"` // optional device label for debugging
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// No user_id field — the owner is resolved from the propagated x-user-id metadata header (C-03),
+	// never trusted from the request body.
+	Endpoint      string `protobuf:"bytes,1,opt,name=endpoint,proto3" json:"endpoint,omitempty"`                    // the push service endpoint URL (PushSubscription.endpoint)
+	P256Dh        string `protobuf:"bytes,2,opt,name=p256dh,proto3" json:"p256dh,omitempty"`                        // client public key (PushSubscription.keys.p256dh)
+	Auth          string `protobuf:"bytes,3,opt,name=auth,proto3" json:"auth,omitempty"`                            // client auth secret (PushSubscription.keys.auth)
+	UserAgent     string `protobuf:"bytes,4,opt,name=user_agent,json=userAgent,proto3" json:"user_agent,omitempty"` // optional device label for debugging
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -694,13 +695,6 @@ func (x *RegisterPushSubscriptionRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use RegisterPushSubscriptionRequest.ProtoReflect.Descriptor instead.
 func (*RegisterPushSubscriptionRequest) Descriptor() ([]byte, []int) {
 	return file_notify_v1_notify_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *RegisterPushSubscriptionRequest) GetUserId() string {
-	if x != nil {
-		return x.UserId
-	}
-	return ""
 }
 
 func (x *RegisterPushSubscriptionRequest) GetEndpoint() string {
@@ -921,14 +915,13 @@ const file_notify_v1_notify_proto_rawDesc = "" +
 	"page_token\x18\x04 \x01(\tR\tpageToken\"r\n" +
 	"\x12ListAlertsResponse\x124\n" +
 	"\x06alerts\x18\x01 \x03(\v2\x1c.xstockstrat.notify.v1.AlertR\x06alerts\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xa1\x01\n" +
-	"\x1fRegisterPushSubscriptionRequest\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1a\n" +
-	"\bendpoint\x18\x02 \x01(\tR\bendpoint\x12\x16\n" +
-	"\x06p256dh\x18\x03 \x01(\tR\x06p256dh\x12\x12\n" +
-	"\x04auth\x18\x04 \x01(\tR\x04auth\x12\x1d\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x88\x01\n" +
+	"\x1fRegisterPushSubscriptionRequest\x12\x1a\n" +
+	"\bendpoint\x18\x01 \x01(\tR\bendpoint\x12\x16\n" +
+	"\x06p256dh\x18\x02 \x01(\tR\x06p256dh\x12\x12\n" +
+	"\x04auth\x18\x03 \x01(\tR\x04auth\x12\x1d\n" +
 	"\n" +
-	"user_agent\x18\x05 \x01(\tR\tuserAgent\"K\n" +
+	"user_agent\x18\x04 \x01(\tR\tuserAgent\"K\n" +
 	" RegisterPushSubscriptionResponse\x12'\n" +
 	"\x0fsubscription_id\x18\x01 \x01(\tR\x0esubscriptionId\"?\n" +
 	"!UnregisterPushSubscriptionRequest\x12\x1a\n" +

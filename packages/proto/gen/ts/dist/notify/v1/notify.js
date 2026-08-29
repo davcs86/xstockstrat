@@ -1036,24 +1036,21 @@ exports.ListAlertsResponse = {
     },
 };
 function createBaseRegisterPushSubscriptionRequest() {
-    return { userId: "", endpoint: "", p256dh: "", auth: "", userAgent: "" };
+    return { endpoint: "", p256dh: "", auth: "", userAgent: "" };
 }
 exports.RegisterPushSubscriptionRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
-        if (message.userId !== "") {
-            writer.uint32(10).string(message.userId);
-        }
         if (message.endpoint !== "") {
-            writer.uint32(18).string(message.endpoint);
+            writer.uint32(10).string(message.endpoint);
         }
         if (message.p256dh !== "") {
-            writer.uint32(26).string(message.p256dh);
+            writer.uint32(18).string(message.p256dh);
         }
         if (message.auth !== "") {
-            writer.uint32(34).string(message.auth);
+            writer.uint32(26).string(message.auth);
         }
         if (message.userAgent !== "") {
-            writer.uint32(42).string(message.userAgent);
+            writer.uint32(34).string(message.userAgent);
         }
         return writer;
     },
@@ -1068,32 +1065,25 @@ exports.RegisterPushSubscriptionRequest = {
                     if (tag !== 10) {
                         break;
                     }
-                    message.userId = reader.string();
+                    message.endpoint = reader.string();
                     continue;
                 }
                 case 2: {
                     if (tag !== 18) {
                         break;
                     }
-                    message.endpoint = reader.string();
+                    message.p256dh = reader.string();
                     continue;
                 }
                 case 3: {
                     if (tag !== 26) {
                         break;
                     }
-                    message.p256dh = reader.string();
+                    message.auth = reader.string();
                     continue;
                 }
                 case 4: {
                     if (tag !== 34) {
-                        break;
-                    }
-                    message.auth = reader.string();
-                    continue;
-                }
-                case 5: {
-                    if (tag !== 42) {
                         break;
                     }
                     message.userAgent = reader.string();
@@ -1109,11 +1099,6 @@ exports.RegisterPushSubscriptionRequest = {
     },
     fromJSON(object) {
         return {
-            userId: isSet(object.userId)
-                ? globalThis.String(object.userId)
-                : isSet(object.user_id)
-                    ? globalThis.String(object.user_id)
-                    : "",
             endpoint: isSet(object.endpoint) ? globalThis.String(object.endpoint) : "",
             p256dh: isSet(object.p256dh) ? globalThis.String(object.p256dh) : "",
             auth: isSet(object.auth) ? globalThis.String(object.auth) : "",
@@ -1126,9 +1111,6 @@ exports.RegisterPushSubscriptionRequest = {
     },
     toJSON(message) {
         const obj = {};
-        if (message.userId !== "") {
-            obj.userId = message.userId;
-        }
         if (message.endpoint !== "") {
             obj.endpoint = message.endpoint;
         }
@@ -1148,7 +1130,6 @@ exports.RegisterPushSubscriptionRequest = {
     },
     fromPartial(object) {
         const message = createBaseRegisterPushSubscriptionRequest();
-        message.userId = object.userId ?? "";
         message.endpoint = object.endpoint ?? "";
         message.p256dh = object.p256dh ?? "";
         message.auth = object.auth ?? "";
@@ -1361,7 +1342,7 @@ exports.NotifyServiceService = {
     },
     /**
      * Register (or upsert) a Web Push subscription for the calling user.
-     * The BFF fills user_id from the verified session — never trusted from the browser body.
+     * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
      */
     registerPushSubscription: {
         path: "/xstockstrat.notify.v1.NotifyService/RegisterPushSubscription",

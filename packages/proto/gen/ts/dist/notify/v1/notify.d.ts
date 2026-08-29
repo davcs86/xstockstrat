@@ -76,9 +76,10 @@ export interface ListAlertsResponse {
 }
 /** Web Push subscription registration (feature 163 — pwa-notifications). */
 export interface RegisterPushSubscriptionRequest {
-    /** filled by the BFF from the verified session — never trusted from the browser body */
-    userId: string;
-    /** the push service endpoint URL (PushSubscription.endpoint) */
+    /**
+     * No user_id field — the owner is resolved from the propagated x-user-id metadata header (C-03),
+     * never trusted from the request body.
+     */
     endpoint: string;
     /** client public key (PushSubscription.keys.p256dh) */
     p256dh: string;
@@ -160,7 +161,7 @@ export declare const NotifyServiceService: {
     };
     /**
      * Register (or upsert) a Web Push subscription for the calling user.
-     * The BFF fills user_id from the verified session — never trusted from the browser body.
+     * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
      */
     readonly registerPushSubscription: {
         readonly path: "/xstockstrat.notify.v1.NotifyService/RegisterPushSubscription";
@@ -196,7 +197,7 @@ export interface NotifyServiceServer extends UntypedServiceImplementation {
     listAlerts: handleUnaryCall<ListAlertsRequest, ListAlertsResponse>;
     /**
      * Register (or upsert) a Web Push subscription for the calling user.
-     * The BFF fills user_id from the verified session — never trusted from the browser body.
+     * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
      */
     registerPushSubscription: handleUnaryCall<RegisterPushSubscriptionRequest, RegisterPushSubscriptionResponse>;
     /** Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()). */
@@ -223,7 +224,7 @@ export interface NotifyServiceClient extends Client {
     listAlerts(request: ListAlertsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListAlertsResponse) => void): ClientUnaryCall;
     /**
      * Register (or upsert) a Web Push subscription for the calling user.
-     * The BFF fills user_id from the verified session — never trusted from the browser body.
+     * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
      */
     registerPushSubscription(request: RegisterPushSubscriptionRequest, callback: (error: ServiceError | null, response: RegisterPushSubscriptionResponse) => void): ClientUnaryCall;
     registerPushSubscription(request: RegisterPushSubscriptionRequest, metadata: Metadata, callback: (error: ServiceError | null, response: RegisterPushSubscriptionResponse) => void): ClientUnaryCall;

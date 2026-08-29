@@ -268,9 +268,9 @@ Then read both: the `.up` INSERT of `notify.push.min_severity` (two env rows) is
 - `web-push` is **not** currently a dependency (confirmed `grep web-push services/xstockstrat-notify/package.json` → no hit); `pg` is `^8.11.5` `:30`.
 - Ledger 2026-08-26 insight (folded into design Decision 3): a best-effort side-channel must dispatch
   **after** the success callback via `queueMicrotask`, not merely inside a try/catch.
-- Feature 162 insight (`insights.md:2506-2514`): `web-push` throws synchronously per send if
-  `vapidDetails.subject` is not `mailto:`/`https:` — validate at startup, fail-loud/disable, never a
-  silent per-send black-hole.
+- Feature 163 insight (`insights.md`, `2026-08-29 — pwa-notifications — design`): `web-push` throws
+  synchronously per send if `vapidDetails.subject` is not `mailto:`/`https:` — validate at startup,
+  fail-loud/disable, never a silent per-send black-hole.
 
 **TDD**: `red-green required`
 

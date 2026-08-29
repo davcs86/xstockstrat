@@ -164,9 +164,10 @@ export interface ListAlertsResponse {
 
 /** Web Push subscription registration (feature 163 — pwa-notifications). */
 export interface RegisterPushSubscriptionRequest {
-  /** filled by the BFF from the verified session — never trusted from the browser body */
-  userId: string;
-  /** the push service endpoint URL (PushSubscription.endpoint) */
+  /**
+   * No user_id field — the owner is resolved from the propagated x-user-id metadata header (C-03),
+   * never trusted from the request body.
+   */
   endpoint: string;
   /** client public key (PushSubscription.keys.p256dh) */
   p256dh: string;
@@ -1231,25 +1232,22 @@ export const ListAlertsResponse: MessageFns<ListAlertsResponse> = {
 };
 
 function createBaseRegisterPushSubscriptionRequest(): RegisterPushSubscriptionRequest {
-  return { userId: "", endpoint: "", p256dh: "", auth: "", userAgent: "" };
+  return { endpoint: "", p256dh: "", auth: "", userAgent: "" };
 }
 
 export const RegisterPushSubscriptionRequest: MessageFns<RegisterPushSubscriptionRequest> = {
   encode(message: RegisterPushSubscriptionRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.userId !== "") {
-      writer.uint32(10).string(message.userId);
-    }
     if (message.endpoint !== "") {
-      writer.uint32(18).string(message.endpoint);
+      writer.uint32(10).string(message.endpoint);
     }
     if (message.p256dh !== "") {
-      writer.uint32(26).string(message.p256dh);
+      writer.uint32(18).string(message.p256dh);
     }
     if (message.auth !== "") {
-      writer.uint32(34).string(message.auth);
+      writer.uint32(26).string(message.auth);
     }
     if (message.userAgent !== "") {
-      writer.uint32(42).string(message.userAgent);
+      writer.uint32(34).string(message.userAgent);
     }
     return writer;
   },
@@ -1266,7 +1264,7 @@ export const RegisterPushSubscriptionRequest: MessageFns<RegisterPushSubscriptio
             break;
           }
 
-          message.userId = reader.string();
+          message.endpoint = reader.string();
           continue;
         }
         case 2: {
@@ -1274,7 +1272,7 @@ export const RegisterPushSubscriptionRequest: MessageFns<RegisterPushSubscriptio
             break;
           }
 
-          message.endpoint = reader.string();
+          message.p256dh = reader.string();
           continue;
         }
         case 3: {
@@ -1282,19 +1280,11 @@ export const RegisterPushSubscriptionRequest: MessageFns<RegisterPushSubscriptio
             break;
           }
 
-          message.p256dh = reader.string();
+          message.auth = reader.string();
           continue;
         }
         case 4: {
           if (tag !== 34) {
-            break;
-          }
-
-          message.auth = reader.string();
-          continue;
-        }
-        case 5: {
-          if (tag !== 42) {
             break;
           }
 
@@ -1312,11 +1302,6 @@ export const RegisterPushSubscriptionRequest: MessageFns<RegisterPushSubscriptio
 
   fromJSON(object: any): RegisterPushSubscriptionRequest {
     return {
-      userId: isSet(object.userId)
-        ? globalThis.String(object.userId)
-        : isSet(object.user_id)
-        ? globalThis.String(object.user_id)
-        : "",
       endpoint: isSet(object.endpoint) ? globalThis.String(object.endpoint) : "",
       p256dh: isSet(object.p256dh) ? globalThis.String(object.p256dh) : "",
       auth: isSet(object.auth) ? globalThis.String(object.auth) : "",
@@ -1330,9 +1315,6 @@ export const RegisterPushSubscriptionRequest: MessageFns<RegisterPushSubscriptio
 
   toJSON(message: RegisterPushSubscriptionRequest): unknown {
     const obj: any = {};
-    if (message.userId !== "") {
-      obj.userId = message.userId;
-    }
     if (message.endpoint !== "") {
       obj.endpoint = message.endpoint;
     }
@@ -1355,7 +1337,6 @@ export const RegisterPushSubscriptionRequest: MessageFns<RegisterPushSubscriptio
     object: I,
   ): RegisterPushSubscriptionRequest {
     const message = createBaseRegisterPushSubscriptionRequest();
-    message.userId = object.userId ?? "";
     message.endpoint = object.endpoint ?? "";
     message.p256dh = object.p256dh ?? "";
     message.auth = object.auth ?? "";
@@ -1609,7 +1590,7 @@ export const NotifyServiceService = {
   },
   /**
    * Register (or upsert) a Web Push subscription for the calling user.
-   * The BFF fills user_id from the verified session — never trusted from the browser body.
+   * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
    */
   registerPushSubscription: {
     path: "/xstockstrat.notify.v1.NotifyService/RegisterPushSubscription" as const,
@@ -1654,7 +1635,7 @@ export interface NotifyServiceServer extends UntypedServiceImplementation {
   listAlerts: handleUnaryCall<ListAlertsRequest, ListAlertsResponse>;
   /**
    * Register (or upsert) a Web Push subscription for the calling user.
-   * The BFF fills user_id from the verified session — never trusted from the browser body.
+   * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
    */
   registerPushSubscription: handleUnaryCall<RegisterPushSubscriptionRequest, RegisterPushSubscriptionResponse>;
   /** Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()). */
@@ -1722,7 +1703,7 @@ export interface NotifyServiceClient extends Client {
   ): ClientUnaryCall;
   /**
    * Register (or upsert) a Web Push subscription for the calling user.
-   * The BFF fills user_id from the verified session — never trusted from the browser body.
+   * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
    */
   registerPushSubscription(
     request: RegisterPushSubscriptionRequest,

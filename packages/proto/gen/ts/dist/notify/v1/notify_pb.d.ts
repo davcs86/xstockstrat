@@ -248,33 +248,30 @@ export declare const ListAlertsResponseSchema: GenMessage<ListAlertsResponse>;
  */
 export type RegisterPushSubscriptionRequest = Message<"xstockstrat.notify.v1.RegisterPushSubscriptionRequest"> & {
     /**
-     * filled by the BFF from the verified session — never trusted from the browser body
+     * No user_id field — the owner is resolved from the propagated x-user-id metadata header (C-03),
+     * never trusted from the request body.
      *
-     * @generated from field: string user_id = 1;
-     */
-    userId: string;
-    /**
      * the push service endpoint URL (PushSubscription.endpoint)
      *
-     * @generated from field: string endpoint = 2;
+     * @generated from field: string endpoint = 1;
      */
     endpoint: string;
     /**
      * client public key (PushSubscription.keys.p256dh)
      *
-     * @generated from field: string p256dh = 3;
+     * @generated from field: string p256dh = 2;
      */
     p256dh: string;
     /**
      * client auth secret (PushSubscription.keys.auth)
      *
-     * @generated from field: string auth = 4;
+     * @generated from field: string auth = 3;
      */
     auth: string;
     /**
      * optional device label for debugging
      *
-     * @generated from field: string user_agent = 5;
+     * @generated from field: string user_agent = 4;
      */
     userAgent: string;
 };
@@ -406,7 +403,7 @@ export declare const NotifyService: GenService<{
     };
     /**
      * Register (or upsert) a Web Push subscription for the calling user.
-     * The BFF fills user_id from the verified session — never trusted from the browser body.
+     * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
      *
      * @generated from rpc xstockstrat.notify.v1.NotifyService.RegisterPushSubscription
      */

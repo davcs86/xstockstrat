@@ -1,6 +1,6 @@
 -- Migration: 002_push_subscriptions.up.sql
 -- Service: xstockstrat-notify
--- Feature 162 (pwa-notifications): stores Web Push subscriptions, one row per installed device+origin.
+-- Feature 163 (pwa-notifications): stores Web Push subscriptions, one row per installed device+origin.
 --
 -- `endpoint` is UNIQUE — it is both the ON CONFLICT upsert target (RegisterPushSubscription) and the
 -- delete key (UnregisterPushSubscription); the browser proves possession of an endpoint via

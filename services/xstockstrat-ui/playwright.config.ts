@@ -183,7 +183,7 @@ export default defineConfig({
       // connector URL + drive the agent-health probe. Point at a dead port so the probe is
       // deterministically "unreachable" unless a test overrides /accounts/api/agent-health.
       AGENT_PUBLIC_URL: 'http://127.0.0.1:9099',
-      // Feature 162 — the /accounts layout exposes VAPID_PUBLIC_KEY (public key only) to the push
+      // Feature 163 — the /accounts layout exposes VAPID_PUBLIC_KEY (public key only) to the push
       // toggle. A real, format-valid VAPID public key so the enable flow reaches the BFF register
       // call in e2e (the browser Push API itself is stubbed per spec). The private key stays
       // notify-only and is never set here.

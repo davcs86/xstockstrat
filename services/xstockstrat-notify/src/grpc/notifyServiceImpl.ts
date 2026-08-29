@@ -185,12 +185,18 @@ export class NotifyServiceImpl {
 
   /**
    * RegisterPushSubscription — upsert a Web Push subscription for the calling user (feature 163).
-   * `user_id` is injected by the BFF from the verified session (never trusted from the browser).
-   * Keyed on `endpoint` (globally unique) so a re-subscribe from the same browser updates in place
-   * and refreshes the rotated p256dh/auth keys instead of duplicating (AC-2).
+   * The owner is resolved from the propagated `x-user-id` metadata header (C-03), never the request
+   * body — the external edge injects/strips it after auth, so the platform-internal value is trusted
+   * and a browser cannot assert another user's identity. Keyed on `endpoint` (globally unique) so a
+   * re-subscribe from the same browser updates in place and refreshes the rotated p256dh/auth keys
+   * instead of duplicating (AC-2).
    */
   async registerPushSubscription(call: any, callback: any) {
-    const { userId, endpoint, p256dh, auth, userAgent } = call.request;
+    const userId = (call.metadata?.get?.('x-user-id')?.[0] ?? '').toString();
+    if (!userId) {
+      return callback({ code: 3, message: 'x-user-id header required' });
+    }
+    const { endpoint, p256dh, auth, userAgent } = call.request;
     if (!endpoint || !p256dh || !auth) {
       return callback({ code: 3, message: 'endpoint, p256dh and auth are required' });
     }

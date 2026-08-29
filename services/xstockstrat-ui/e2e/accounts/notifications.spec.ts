@@ -7,9 +7,10 @@ import { TEST_USER_ID } from '../fixtures/users';
  *
  * The register/unregister IDOR guard (@AC-2 / @AC-3) is proven by driving the trader BFF's Connect
  * endpoint directly — the browser Push API is not reliably stubbable in headless Chromium, and the
- * property under test is the BFF wiring, not the browser's push service. The mock backend echoes the
- * received user_id back as the subscription id, so a request that carries a SPOOFED userId still
- * comes back stamped with the session user — proving the BFF overrides it from the verified session.
+ * property under test is the BFF wiring, not the browser's push service. Identity is carried by the
+ * propagated x-user-id header (set by the BFF from the verified session, never settable by the
+ * browser); the mock echoes that header value back as the subscription id. So even a request whose
+ * body tries to assert another user comes back stamped with the session user.
  */
 
 const REGISTER = '/trader/api/xstockstrat.notify.v1.NotifyService/RegisterPushSubscription';
@@ -17,13 +18,14 @@ const UNREGISTER = '/trader/api/xstockstrat.notify.v1.NotifyService/UnregisterPu
 const CONNECT_HEADERS = { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' };
 
 test.describe('push subscription BFF (IDOR guard)', () => {
-  test('@AC-2 register stamps the session user, ignoring a browser-supplied userId', async ({
+  test('@AC-2 register owner comes from the session x-user-id header, not the request body', async ({
     page,
   }) => {
     await addAuthCookie(page);
     const res = await page.request.post(REGISTER, {
       headers: CONNECT_HEADERS,
-      // Deliberately spoof userId — the BFF must overwrite it with the session user.
+      // A body-supplied userId would be ignored — the proto has no user_id field and the notify
+      // service resolves the owner from the x-user-id header the BFF forwards from the session.
       data: {
         userId: 'attacker-999',
         endpoint: 'https://push.example/e2e',
@@ -34,6 +36,7 @@ test.describe('push subscription BFF (IDOR guard)', () => {
     });
     expect(res.ok()).toBeTruthy();
     const body = await res.json();
+    // The mock echoes the header-derived caller — proving identity came from the session, not the body.
     expect(body.subscriptionId).toBe(TEST_USER_ID);
     expect(body.subscriptionId).not.toBe('attacker-999');
   });

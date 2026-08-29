@@ -459,14 +459,23 @@ function capturingPool(rows: any[] = []): { calls: { sql: string; params: any[] 
   };
 }
 
+// A gRPC call whose metadata carries the propagated x-user-id header (mirrors the identity pattern).
+function metaCall(userId: string | null, request: any): any {
+  return {
+    request,
+    metadata: { get: (k: string) => (k === 'x-user-id' && userId ? [userId] : []) },
+  };
+}
+
 describe('registerPushSubscription (AC-2)', () => {
-  it('upserts by endpoint with the full ON CONFLICT SET list and returns the id', async () => {
+  it('upserts by endpoint using the x-user-id header as owner, with the full ON CONFLICT SET list', async () => {
     const pool = capturingPool([{ subscription_id: 'sub-1' }]);
     const impl = new NotifyServiceImpl(pool.obj as any, {} as any, noopFanout(), noopWebPush());
-    const req = { userId: 'user-42', endpoint: 'https://push.example/abc', p256dh: 'k', auth: 'a', userAgent: 'ua' };
+    // No user_id in the body — the owner comes from the x-user-id header.
+    const req = { endpoint: 'https://push.example/abc', p256dh: 'k', auth: 'a', userAgent: 'ua' };
 
     const res = await new Promise<any>((resolve, reject) =>
-      impl.registerPushSubscription({ request: req }, (err: any, r: any) => (err ? reject(err) : resolve(r))),
+      impl.registerPushSubscription(metaCall('user-42', req), (err: any, r: any) => (err ? reject(err) : resolve(r))),
     );
 
     assert.equal(pool.calls.length, 1);
@@ -477,15 +486,27 @@ describe('registerPushSubscription (AC-2)', () => {
     for (const col of ['user_id', 'p256dh', 'auth', 'user_agent', 'created_at']) {
       assert.match(sql, new RegExp(col + ' ='), `upsert must refresh ${col}`);
     }
+    // The owner bound as user_id is the header value, not anything from the body.
     assert.deepEqual(pool.calls[0].params, ['user-42', 'https://push.example/abc', 'k', 'a', 'ua']);
     assert.equal(res.subscriptionId, 'sub-1');
+  });
+
+  it('rejects with code 3 when the x-user-id header is absent (no DB write)', async () => {
+    const pool = capturingPool();
+    const impl = new NotifyServiceImpl(pool.obj as any, {} as any, noopFanout(), noopWebPush());
+    const req = { endpoint: 'https://push.example/abc', p256dh: 'k', auth: 'a' };
+    const err = await new Promise<any>((resolve) =>
+      impl.registerPushSubscription(metaCall(null, req), (e: any) => resolve(e)),
+    );
+    assert.equal(err.code, 3);
+    assert.equal(pool.calls.length, 0, 'no DB write without a caller identity');
   });
 
   it('rejects with code 3 when endpoint/keys are missing', async () => {
     const pool = capturingPool();
     const impl = new NotifyServiceImpl(pool.obj as any, {} as any, noopFanout(), noopWebPush());
     const err = await new Promise<any>((resolve) =>
-      impl.registerPushSubscription({ request: { userId: 'u', endpoint: '', p256dh: '', auth: '' } }, (e: any) => resolve(e)),
+      impl.registerPushSubscription(metaCall('user-42', { endpoint: '', p256dh: '', auth: '' }), (e: any) => resolve(e)),
     );
     assert.equal(err.code, 3);
     assert.equal(pool.calls.length, 0, 'no DB write on invalid input');

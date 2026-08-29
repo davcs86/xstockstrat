@@ -307,8 +307,10 @@ The UI is an installable PWA that can receive OS-level Web Push notifications ev
   Push API with the VAPID **public** key, and calls `notifyClient.registerPushSubscription` /
   `unregisterPushSubscription`. Its four states (unsupported/blocked/enabled/default) route through
   `EmptyState`/`CardNotice`/`Switch` (C-17).
-- **BFF**: `traderBff` `registerPushSubscription` **injects the session `user_id`** (IDOR guard — never
-  `forward`); `unregisterPushSubscription` deletes by endpoint only. The `/accounts` page reuses the
+- **BFF**: `traderBff` `registerPushSubscription`/`unregisterPushSubscription` are plain `forward()`s —
+  the notify service resolves the subscription owner from the propagated `x-user-id` header
+  (`backendHeaders`, applied by `forward`; the request body carries no `user_id`), matching the
+  header-identity convention (#1040/#1041, C-03); unregister is by endpoint only. The `/accounts` page reuses the
   root-relative `notifyClient` (`/trader/api`) per the "Sanctioned exception" (four facts re-verified).
 - **`VAPID_PUBLIC_KEY`** crosses server→client via `src/app/accounts/VapidKeyContext.tsx` (mirrors
   `AgentUrlContext`; the `/accounts` layout is already `force-dynamic`) — never `NEXT_PUBLIC_*`. The

@@ -121,3 +121,17 @@ Implemented the full feature on `claude/pwa-notifications-2eggrc` (harness branc
 - **Operator action required before push works:** set the VAPID GitHub Actions secrets
   (`DEV/PROD_VAPID_PRIVATE_KEY|PUBLIC_KEY|SUBJECT`) — a generated keypair is provided in the session
   hand-off. Push is disabled until all three are set (Slack/SendGrid pattern).
+
+## Session 2026-08-29 — rebase + header-identity alignment
+
+- Rebased `claude/pwa-notifications-2eggrc` onto latest `main-dev` (resolved one append conflict in
+  `insights.md`, keeping both entries). Renumbered the feature **162 → 163** (two already-merged
+  features had also taken 162; the unmerged one renumbers per the numbering rule).
+- **Register identity changed to the x-user-id header** (operator-approved). The rebase pulled in
+  #1040/#1041 (caller-identity RPCs moved off body `user_id` onto the trusted propagated `x-user-id`
+  header, C-03). `RegisterPushSubscription` now: drops `user_id` from the request (fields renumbered),
+  the notify servicer resolves the owner from `call.metadata['x-user-id']` (mirrors identity's
+  `userIdFrom`; rejects `code 3` when absent), and the BFF register/unregister are plain `forward()`s.
+  Security unchanged (browser cannot set `x-user-id`; e2e asserts the mock echoes the session user).
+  Updated: proto (+regen), notifyServiceImpl, traderBff, notify tests (added a missing-header case →
+  51 tests), e2e mock (`callerUserId(ctx)`) + spec, ui CLAUDE.md, design.md (Post-approval revision).

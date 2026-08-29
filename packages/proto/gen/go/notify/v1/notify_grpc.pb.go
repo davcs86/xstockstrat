@@ -44,7 +44,7 @@ type NotifyServiceClient interface {
 	// List historical alerts
 	ListAlerts(ctx context.Context, in *ListAlertsRequest, opts ...grpc.CallOption) (*ListAlertsResponse, error)
 	// Register (or upsert) a Web Push subscription for the calling user.
-	// The BFF fills user_id from the verified session — never trusted from the browser body.
+	// The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
 	RegisterPushSubscription(ctx context.Context, in *RegisterPushSubscriptionRequest, opts ...grpc.CallOption) (*RegisterPushSubscriptionResponse, error)
 	// Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()).
 	UnregisterPushSubscription(ctx context.Context, in *UnregisterPushSubscriptionRequest, opts ...grpc.CallOption) (*UnregisterPushSubscriptionResponse, error)
@@ -144,7 +144,7 @@ type NotifyServiceServer interface {
 	// List historical alerts
 	ListAlerts(context.Context, *ListAlertsRequest) (*ListAlertsResponse, error)
 	// Register (or upsert) a Web Push subscription for the calling user.
-	// The BFF fills user_id from the verified session — never trusted from the browser body.
+	// The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
 	RegisterPushSubscription(context.Context, *RegisterPushSubscriptionRequest) (*RegisterPushSubscriptionResponse, error)
 	// Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()).
 	UnregisterPushSubscription(context.Context, *UnregisterPushSubscriptionRequest) (*UnregisterPushSubscriptionResponse, error)

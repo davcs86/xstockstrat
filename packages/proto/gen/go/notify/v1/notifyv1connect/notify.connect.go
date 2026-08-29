@@ -64,7 +64,7 @@ type NotifyServiceClient interface {
 	// List historical alerts
 	ListAlerts(context.Context, *connect.Request[v1.ListAlertsRequest]) (*connect.Response[v1.ListAlertsResponse], error)
 	// Register (or upsert) a Web Push subscription for the calling user.
-	// The BFF fills user_id from the verified session — never trusted from the browser body.
+	// The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
 	RegisterPushSubscription(context.Context, *connect.Request[v1.RegisterPushSubscriptionRequest]) (*connect.Response[v1.RegisterPushSubscriptionResponse], error)
 	// Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()).
 	UnregisterPushSubscription(context.Context, *connect.Request[v1.UnregisterPushSubscriptionRequest]) (*connect.Response[v1.UnregisterPushSubscriptionResponse], error)
@@ -172,7 +172,7 @@ type NotifyServiceHandler interface {
 	// List historical alerts
 	ListAlerts(context.Context, *connect.Request[v1.ListAlertsRequest]) (*connect.Response[v1.ListAlertsResponse], error)
 	// Register (or upsert) a Web Push subscription for the calling user.
-	// The BFF fills user_id from the verified session — never trusted from the browser body.
+	// The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
 	RegisterPushSubscription(context.Context, *connect.Request[v1.RegisterPushSubscriptionRequest]) (*connect.Response[v1.RegisterPushSubscriptionResponse], error)
 	// Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()).
 	UnregisterPushSubscription(context.Context, *connect.Request[v1.UnregisterPushSubscriptionRequest]) (*connect.Response[v1.UnregisterPushSubscriptionResponse], error)

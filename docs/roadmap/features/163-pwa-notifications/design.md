@@ -41,7 +41,7 @@ PWA plumbing that makes `xstockstrat-ui` installable and able to receive OS noti
 **Proto (additive, `packages/proto/notify/v1/notify.proto`).**
 - `rpc RegisterPushSubscription(RegisterPushSubscriptionRequest) returns (RegisterPushSubscriptionResponse);`
 - `rpc UnregisterPushSubscription(UnregisterPushSubscriptionRequest) returns (UnregisterPushSubscriptionResponse);`
-- `RegisterPushSubscriptionRequest { string user_id=1; string endpoint=2; string p256dh=3; string auth=4; string user_agent=5; }` — `user_id` filled by the BFF from the verified session, never trusted from the browser body.
+- `RegisterPushSubscriptionRequest { string endpoint=1; string p256dh=2; string auth=3; string user_agent=4; }` — **no `user_id` field**; the owner is resolved from the propagated `x-user-id` header (see Post-approval revision). _(As originally approved this carried `string user_id=1` filled by the BFF; changed to header-identity after rebasing onto #1040/#1041.)_
 - `RegisterPushSubscriptionResponse { string subscription_id=1; }`
 - `UnregisterPushSubscriptionRequest { string endpoint=1; }` — **no `user_id`** (see Decision 1).
 - `UnregisterPushSubscriptionResponse { bool deleted=1; }` (mirrors `AcknowledgeAlertResponse`).
@@ -91,10 +91,11 @@ PWA plumbing that makes `xstockstrat-ui` installable and able to receive OS noti
   → POST `subscription.toJSON()` (`endpoint`, `keys.p256dh`, `keys.auth`) via
   `notifyClient.registerPushSubscription(...)`. Disable → `subscription.unsubscribe()` then
   `notifyClient.unregisterPushSubscription({endpoint})`.
-- BFF: extend the **existing** `router.service(NotifyService, {...})` block in `traderBff.ts:119-128` —
-  `registerPushSubscription` **injects `userId: claims.user_id`** (like `streamAlerts`, an IDOR guard —
-  never `forward`, which would let the browser spoof the owner); `unregisterPushSubscription: forward(...)`
-  (endpoint-only, no user to inject). Browser calls go through `notifyClient`
+- BFF: extend the **existing** `router.service(NotifyService, {...})` block in `traderBff.ts` —
+  `registerPushSubscription`/`unregisterPushSubscription` are plain `forward()`s; the notify service
+  resolves the owner from the `x-user-id` header that `forward`→`backendHeaders` propagates (the browser
+  cannot set it — IDOR guard). _(Originally approved as a `userId: claims.user_id` body injection like
+  `streamAlerts`; changed to header-identity — see Post-approval revision.)_ Browser calls go through `notifyClient`
   (`browserClients/notifyClient.ts:5-6`), already on the guarded `makeBrowserTransport` (ui-auth
   `@AC-5`/`@AC-6` PRESERVE). See "Cross-segment reuse" in Open Risks.
 - C-17 (Decision 8): design-role tokens only; the control is `ui/switch.tsx` with
@@ -203,3 +204,19 @@ No CHANGE verdicts — user sign-off not required on business-rule grounds.
 2 rounds (quick mode; operator opted into the second). Round 1: shape confirmed, no Floor breach, 8
 refinement objections. Round 2: all 8 resolved; 3 small correctness/traceability fixes folded in
 (`tag` coalescing, captured-SQL RED assertions, BFF ownership test). Termination: approved by user.
+
+## Post-approval revision (2026-08-29) — header identity for register
+
+After the branch was rebased onto `main-dev`, it picked up #1040/#1041, which moved caller-identity
+RPCs off the deprecated request-body `user_id` and onto the trusted, propagated **`x-user-id` header**
+(C-03). To avoid introducing a *new* instance of the just-deprecated pattern, `RegisterPushSubscription`
+was changed to match:
+
+- `RegisterPushSubscriptionRequest` **drops `user_id`** (fields renumbered `endpoint=1..user_agent=4`).
+- The notify servicer resolves the owner from `call.metadata['x-user-id']` (mirrors the identity
+  service's `userIdFrom` pattern) and rejects with `code 3` when the header is absent.
+- The BFF `registerPushSubscription` becomes a plain `forward()` (identity travels via
+  `backendHeaders`→`x-user-id`, which the browser cannot set).
+
+Security is unchanged (still IDOR-safe — the browser cannot assert another user), and it removes the
+redundant body field so identity has a single source of truth. Operator-approved in the same session.

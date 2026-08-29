@@ -104,7 +104,7 @@ class NotifyServiceServicer(object):
 
     def RegisterPushSubscription(self, request, context):
         """Register (or upsert) a Web Push subscription for the calling user.
-        The BFF fills user_id from the verified session — never trusted from the browser body.
+        The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
