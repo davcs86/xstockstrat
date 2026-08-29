@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Dockerfile.codegen
 # Proto-generation container — installs buf + all language plugins and runs buf-gen.sh.
 # Used by scripts/localenv-setup.sh. NOT part of docker-compose.yml.
@@ -20,6 +21,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     xz-utils \
     && rm -rf /var/lib/apt/lists/*
+
+# ── Optional extra CA (TLS-terminating egress proxy) ───────────────────────────
+# When the build runs behind a proxy that re-terminates TLS (e.g. a managed
+# agent/CI sandbox), the nodejs.org / github.com downloads below can't verify the
+# proxy's cert against the stock trust store and fail with `curl: (60)`. Pass that
+# proxy's CA as a BuildKit secret and it is added to the system trust store for the
+# rest of the build:
+#     docker build --secret id=proxy_ca,src=/path/to/ca-bundle.crt ...
+# (scripts/localenv-setup.sh wires this automatically when the CA is present.)
+# No secret → no file at /run/secrets/proxy_ca → this is a clean no-op, so normal
+# developer and CI builds are unaffected and no CA is ever baked into the image.
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -s /run/secrets/proxy_ca ]; then \
+      cp /run/secrets/proxy_ca /usr/local/share/ca-certificates/proxy-egress-ca.crt && \
+      update-ca-certificates; \
+    fi
+# curl (the Node + buf downloads) and pip read the system trust store updated above,
+# but Node/npm do NOT — they use their own bundled CA list — so also point Node at the
+# system CA bundle. Harmless in a normal build (that bundle is just Debian's standard
+# CAs); when a proxy CA was added above it lets npm/pnpm reach the registry through the
+# TLS-terminating proxy. No secret is ever baked into the image either way.
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
 
 # ── Node.js 24 (official nodejs.org tarball) ───────────────────────────────────
 # Installed from the official static build rather than the NodeSource apt repo.
