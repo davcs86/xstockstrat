@@ -1,6 +1,6 @@
 # Implementation Spec: pwa-notifications
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-08-29
 **Feature**: `docs/roadmap/features/162-pwa-notifications/feature.md`
 **Total Steps**: 12
@@ -63,7 +63,7 @@ marks it `[ ] Agent — no MCP tool change`); no separate step required.
 
 ### Step 1 — proto: additive RegisterPushSubscription / UnregisterPushSubscription
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/notify/v1/notify.proto` — modify
@@ -111,7 +111,7 @@ Both must pass (C-09). `buf breaking` against `main-dev` proves the additive cha
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/ts/**`, `packages/proto/gen/python/**`, `packages/proto/gen/go/**` — modify (generated; do not hand-edit)
@@ -141,7 +141,7 @@ After a fresh run the working tree under `packages/proto/gen/` must be exactly t
 
 ### Step 3 — migration: notify `002_push_subscriptions`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/migrations/002_push_subscriptions.up.sql` — create
@@ -193,7 +193,7 @@ in `.down`, and that `endpoint` carries `UNIQUE`.
 
 ### Step 4 — migration: config seed `021_notify_push_min_severity`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/021_notify_push_min_severity.up.sql` — create
@@ -249,7 +249,7 @@ Then read both: the `.up` INSERT of `notify.push.min_severity` (two env rows) is
 
 ### Step 5 — service: notify WebPushDispatcher + register/unregister handlers + emitAlert wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/fanout/webPush.ts` — create (new `WebPushDispatcher` class)
@@ -350,7 +350,7 @@ cd services/xstockstrat-notify && pnpm run build   # tsc must compile the new di
 
 ### Step 6 — test: notify push channel + register/unregister
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/webPush.test.ts` — create
@@ -418,7 +418,7 @@ e.g. by momentarily breaking one and watching it go red).
 
 ### Step 7 — service: UI PWA plumbing (manifest, service worker, icons, layout, headers, middleware, Dockerfile, VAPID public-key bridge)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/public/manifest.webmanifest` — create
@@ -488,7 +488,7 @@ Lint clean, build succeeds; the middleware matcher and `next.config.js headers()
 
 ### Step 8 — test: UI PWA (manifest served, SW scope, notificationclick logic)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/pwa.spec.ts` — create (Playwright: manifest reachable + shape)
@@ -530,7 +530,7 @@ threshold on `xstockstrat-ui` (spec-template table) — e2e + unit are the gate.
 
 ### Step 9 — service: UI enable/disable control + nav registration + BFF register/unregister
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/accounts/notifications/page.tsx` — create (Settings-group page)
@@ -613,7 +613,7 @@ Lint clean, build succeeds; both nav surfaces list Notifications; the BFF block 
 
 ### Step 10 — test: UI enable/disable + BFF register-ownership + nav-reachability
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/accounts/notifications.spec.ts` — create
@@ -664,7 +664,7 @@ auth/fixtures per C-12 (or records the single-consumer verdict). No coverage thr
 
 ### Step 11 — config: VAPID secret + env wiring through every deploy site
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify` (`VAPID_PRIVATE_KEY` secret + `VAPID_PUBLIC_KEY` + `VAPID_SUBJECT`), `xstockstrat-ui` (`VAPID_PUBLIC_KEY`)
 **Files**:
 - `docker-compose.yml` — modify (notify block: all three; ui block: `VAPID_PUBLIC_KEY`)
@@ -735,7 +735,7 @@ Confirm: `VAPID_PRIVATE_KEY` appears in **all eight** files (the secret-wiring c
 
 ### Step 12 — docs: config key log, service CLAUDE.md, DigitalOcean secret table
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/patterns/config-governance.md` — modify (Per-Feature Registered Keys log: `notify.push.min_severity`)

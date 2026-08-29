@@ -82,3 +82,42 @@
     (`accounts/layout.tsx` already `force-dynamic`), never `NEXT_PUBLIC_*`.
 - Coverage: all 9 `@AC-*` mapped to steps (Scenario Coverage table); consumer surface = UI only
   (Steps 7–10), no Agent tool (product spec).
+
+## Session 2026-08-29 — sdd-execute (all 12 steps)
+
+Implemented the full feature on `claude/pwa-notifications-2eggrc` (harness branch, from/to
+`main-dev`). Status implementation-ready → code-completed.
+
+- **Steps 1–2 (proto+gen):** added additive `RegisterPushSubscription`/`UnregisterPushSubscription`
+  RPCs + messages; regenerated go/python/ts stubs via the buf toolchain (installed on host — the
+  Docker codegen image failed on in-container nodesource egress; `buf lint` passed). Reverted an
+  unrelated cosmetic `analysis.pb.go` whitespace drift from a plugin-version difference so the gen diff
+  is notify-only. protoc-gen-go pinned to v1.36.11 (matches CI).
+- **Steps 3–4 (migrations):** notify `002_push_subscriptions` (endpoint UNIQUE); config `021` seeds
+  `notify.push.min_severity` (int 2, staging+production).
+- **Steps 5–6 (notify):** `WebPushDispatcher` (disjoint class, second `queueMicrotask`, severity gate,
+  404/410 prune, VAPID startup validation, `web-push` dep); register upsert (full SET) / unregister
+  by endpoint. A protected `deliver` seam makes the network send stubbable; tests generate a real VAPID
+  keypair so `setVapidDetails` (which validates key format) succeeds. 50/50 notify tests pass;
+  webPush.js 94.7% coverage; lint clean.
+- **Steps 7–10 (ui):** manifest/sw.js/icons in `public/` (icons generated with Pillow from the brand
+  mark), root metadata + `ServiceWorkerRegistrar`, `next.config` headers, middleware exclusions,
+  Dockerfile `public/` copy, `VapidKeyContext`, `/accounts/notifications` `PushToggle`, nav in both
+  surfaces, `traderBff` register(inject userId)/unregister(forward). Pure `swHelpers` unit-tested
+  (vitest, 7 cases); e2e 10/10 pass (manifest/sw AC-1, BFF IDOR guard AC-2/AC-3 via a spoofed-userId
+  Connect request, nav reachability). UI build (tsc) green.
+  - **e2e note:** the register-ownership assertion drives the BFF Connect endpoint directly rather than
+    stubbing the browser Push API (headless Chromium can't mint a real subscription and
+    `navigator.serviceWorker` isn't reliably override-able); the mock echoes the received user_id so a
+    spoofed `userId:'attacker-999'` still comes back stamped with the session user — a stronger IDOR
+    proof. A throwaway VAPID public key is set in `playwright.config.ts` (public keys aren't secret).
+- **Step 11 (deploy):** VAPID wired through docker-compose, both `.do/app*.yaml`, `deploy.yml`
+  (+ dev/prod callers), `do-inject-prod-secrets.py`, `.env.example` — all 8 sites (finnhub-key trap);
+  YAML/py parse-validated.
+- **Step 12 (docs):** config-governance key log, notify + ui CLAUDE.md, digitalocean secrets table.
+- **Teardown:** the context-forge / `/context-scrubber` plugin is not available as an invokable skill
+  in this session (only `.agents/context-forge.json` is present) — noted in the PR body per the root
+  CLAUDE.md Teardown rule instead of skipping silently.
+- **Operator action required before push works:** set the VAPID GitHub Actions secrets
+  (`DEV/PROD_VAPID_PRIVATE_KEY|PUBLIC_KEY|SUBJECT`) — a generated keypair is provided in the session
+  hand-off. Push is disabled until all three are set (Slack/SendGrid pattern).
