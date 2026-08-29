@@ -179,3 +179,62 @@ Accountability:
   closest available substitute for now; a genuine Docker-accessible session should still run the
   actual repro per Step 1/3's instructions when one becomes available.
 - Status: in-progress (unchanged) — still 2 of 4 steps done (2, 4, now corrected), 2 blocked (1, 3).
+
+## Session 2026-08-29 — sdd-execute (Steps 1 & 3: the mandatory live-DB repro finally RAN)
+
+The verification gate that was `blocked` in every prior session (no Docker daemon) has now been
+completed. **Key realization that unblocked it:** the bug does not require Docker or a real
+PgBouncer server — it only requires pgx running in `QueryExecModeExec` (set by `DB_PGBOUNCER=true`,
+`pool.go:36-38`) against *any* real Postgres. This environment has local PostgreSQL 16 binaries
+(`/usr/lib/postgresql/16/bin`, run under an unprivileged `pgrunner` user since PG refuses root) and
+Go 1.27, so a standalone cluster + the `marketdata.fundamentals` table (migration
+`002_fundamentals.up.sql`) was enough. `DB_PGBOUNCER=true` alone flips the pgx query mode; no PgBouncer
+process is needed to reproduce the OID-inference behavior.
+
+Throwaway repro (`services/xstockstrat-marketdata/scratch/repro_upsert/main.go`, **deleted after
+capture, never committed** — F-08 confirmed clean via `git status --porcelain`) ran two things
+against the live cluster with `DB_PGBOUNCER=true`: (a) three raw pgx `Exec` variants isolating the
+mechanism, and (b) the **real** `repository.UpsertFundamentals` (current, post-#969 code) for UPRO.
+
+**Captured transcript (verbatim):**
+
+```
+== RAW mechanism variants (QueryExecModeExec) ==
+[A_bareParam_byteslice] error: ERROR: invalid input syntax for type json (SQLSTATE 22P02)
+[B_jsonbCast_byteslice] error: ERROR: invalid input syntax for type json (SQLSTATE 22P02)
+[C_jsonbCast_string] error: <nil>
+== REAL repository.UpsertFundamentals (current code) ==
+UpsertFundamentals error: <nil>
+```
+
+Row persisted afterward (proves it wrote valid JSON, not merely that Exec returned nil):
+
+```
+         symbol         | extra_metrics | source  | pg_typeof
+------------------------+---------------+---------+-----------
+ RAW_C_jsonbCast_string | {}            | test    | jsonb
+ UPRO                   | {}            | finnhub | jsonb
+```
+
+**What this proves (Step 1 RED + Step 3 GREEN, both halves of design.md's mandatory gate):**
+- **RED, variant A** (`$14` bare + `[]byte` bind) — the *original* pre-#967 code — reproduces the
+  exact reported `SQLSTATE 22P02` for the first time against live Postgres. This is Step 1's RED.
+- **RED, variant B** (`$14::jsonb` + `[]byte` bind) — the *#967 cast-only* code — reproduces the
+  **identical** `SQLSTATE 22P02`. This is first-party, local confirmation of *why #967 failed in
+  staging*: a `[]byte` arg is wire-encoded as `bytea` under `QueryExecModeExec`, and `bytea::jsonb`
+  hex-garbles rather than parsing the text — exactly as the corrected root-cause analysis and pgx's
+  own docs state. The cast was necessary but not sufficient.
+- **GREEN, variant C** (`$14::jsonb` + `string` bind) — the *#969 shipped* mechanism — succeeds.
+- **GREEN, real code path**: the current `UpsertFundamentals` (PR #969, `string(extraJSON)` +
+  `$14::jsonb`, already merged to `main-dev` **and** `main`/production, commit `6af00b9d`) inserts
+  UPRO's fundamentals with no error and persists a valid `jsonb {}`. This is Step 3's GREEN against
+  the real production code path.
+
+**Conclusion:** the shipped fix (#969) is now empirically verified against a live Postgres in the
+same `QueryExecModeExec` mode production uses — the verification design.md always required but no
+prior session could run. The fix commit is already in `origin/main` (production), so the feature is
+now both **shipped and verified**.
+
+- Steps 1 & 3: `blocked` → `done`.
+- Status: `in-progress` → `launched` (fix `6af00b9d` is in `origin/main`; all 4 steps now done and
+  the mandatory live-DB gate has passed).

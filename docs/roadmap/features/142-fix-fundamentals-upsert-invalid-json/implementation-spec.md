@@ -1,6 +1,6 @@
 # Implementation Spec: fix-fundamentals-upsert-invalid-json
 
-**Status**: `in-progress`
+**Status**: `launched`
 **Created**: 2026-08-16
 **Feature**: `docs/roadmap/features/142-fix-fundamentals-upsert-invalid-json/feature.md`
 **Total Steps**: 4
@@ -38,7 +38,7 @@ tripwire, not a substitute for the live repro. No proto, config, or migration ch
 
 ### Step 1 — test: Mandatory pre-merge repro — reproduce SQLSTATE 22P02 against unfixed code (RED)
 
-**Status**: `blocked`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `docs/roadmap/features/142-fix-fundamentals-upsert-invalid-json/context.md` — modify (append the
@@ -221,7 +221,7 @@ Step 3's re-run of the live repro, and Step 4's `pgxmock` pin.)
 
 ### Step 3 — test: Re-run the mandatory repro against the fixed code (GREEN) and record the result
 
-**Status**: `blocked`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `docs/roadmap/features/142-fix-fundamentals-upsert-invalid-json/context.md` — modify (append the
@@ -426,3 +426,14 @@ environment with Docker access: run the repro against the unfixed code (`git sho
 <pre-fix-commit>:services/xstockstrat-marketdata/internal/repository/marketdata_repo.go`) to
 confirm SQLSTATE 22P02 reproduces, then against the fixed code (this commit) to confirm it
 resolves, and record both transcripts in this feature's `context.md`.
+
+### Resolution (2026-08-29): Steps 1 & 3 unblocked and passed — fix verified
+
+The "blocked, no Docker daemon" deviation above is **resolved**. A later session ran the mandatory
+live-DB repro without Docker: the bug only needs pgx in `QueryExecModeExec` (`DB_PGBOUNCER=true`)
+against any real Postgres, and this environment had local PostgreSQL 16 binaries + Go 1.27. The repro
+reproduced `SQLSTATE 22P02` against both the original (`$14` + `[]byte`) and the #967 cast-only
+(`$14::jsonb` + `[]byte`) code (RED), and confirmed the shipped #969 code (`$14::jsonb` + `string`,
+via the real `UpsertFundamentals`) succeeds and persists valid `jsonb` (GREEN). Full transcript is in
+`context.md` under the 2026-08-29 session entry. Steps 1 & 3 → `done`; the fix (already in
+`origin/main`, commit `6af00b9d`) is now shipped **and** verified.
