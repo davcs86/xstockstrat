@@ -1,5 +1,5 @@
 /*
- * xstockstrat service worker (feature 162 — pwa-notifications).
+ * xstockstrat service worker (feature 163 — pwa-notifications).
  *
  * Push-only: no fetch/precache handler (this is not an offline cache). It renders pushed alerts as OS
  * notifications and, on click, focuses an existing app window or opens one. The parse-with-fallback

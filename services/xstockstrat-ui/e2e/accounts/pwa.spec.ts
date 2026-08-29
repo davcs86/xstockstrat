@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * PWA installability (feature 162, @AC-1). The web app manifest and the service worker must be
+ * PWA installability (feature 163, @AC-1). The web app manifest and the service worker must be
  * served publicly from the domain root — NOT behind the auth gate — or a supporting browser can
  * never register the SW or offer "Install app". These assert the manifest shape and that the
  * middleware matcher exclusion is in place (an unauthenticated request is served, not 307'd to login).

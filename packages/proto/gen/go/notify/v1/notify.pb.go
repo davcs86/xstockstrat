@@ -654,7 +654,7 @@ func (x *ListAlertsResponse) GetNextPageToken() string {
 	return ""
 }
 
-// Web Push subscription registration (feature 162 — pwa-notifications).
+// Web Push subscription registration (feature 163 — pwa-notifications).
 type RegisterPushSubscriptionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`          // filled by the BFF from the verified session — never trusted from the browser body

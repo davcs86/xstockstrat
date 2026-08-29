@@ -55,7 +55,7 @@ function noopFanout(): any {
   return { dispatch: async () => {} };
 }
 
-// A no-op Web Push dispatcher (feature 162) — for the cases that don't exercise the push channel.
+// A no-op Web Push dispatcher (feature 163) — for the cases that don't exercise the push channel.
 function noopWebPush(): any {
   return { dispatch: async () => {} };
 }
@@ -441,7 +441,7 @@ describe('emitAlert fanout wiring', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Web Push subscription handlers + emit isolation (feature 162)
+// Web Push subscription handlers + emit isolation (feature 163)
 // ---------------------------------------------------------------------------
 
 // A pool fake that records every query(sql, params) so we can assert on the emitted SQL shape.

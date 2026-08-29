@@ -25,7 +25,7 @@ ENV NODE_ENV=production
 COPY --from=builder /workspace/services/xstockstrat-ui/.next/standalone ./
 COPY --from=builder /workspace/services/xstockstrat-ui/.next/static ./services/xstockstrat-ui/.next/static
 # Next.js `output: standalone` does NOT include public/ — copy it so the PWA manifest, icons, and
-# service worker (feature 162) are served at runtime.
+# service worker (feature 163) are served at runtime.
 COPY --from=builder /workspace/services/xstockstrat-ui/public ./services/xstockstrat-ui/public
 EXPOSE 3000
 CMD ["node", "services/xstockstrat-ui/server.js"]

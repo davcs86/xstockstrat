@@ -1,5 +1,5 @@
 /**
- * swHelpers.ts — pure, unit-testable logic mirrored inside `public/sw.js` (feature 162).
+ * swHelpers.ts — pure, unit-testable logic mirrored inside `public/sw.js` (feature 163).
  *
  * The service worker itself is a standalone static script served from `public/` (it cannot import
  * from the Next bundle), so it inlines a copy of this logic. These pure functions are the tested

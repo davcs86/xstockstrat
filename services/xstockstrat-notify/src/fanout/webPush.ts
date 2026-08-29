@@ -1,5 +1,5 @@
 /**
- * fanout/webPush.ts — best-effort Web Push channel (feature 162, pwa-notifications).
+ * fanout/webPush.ts — best-effort Web Push channel (feature 163, pwa-notifications).
  *
  * A third side-channel bolted onto EmitAlert alongside FanoutDispatcher (Slack/SendGrid). Qualifying
  * alerts are delivered as OS notifications to the target user's installed PWA devices via the Web Push

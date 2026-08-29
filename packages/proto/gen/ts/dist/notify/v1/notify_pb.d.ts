@@ -242,7 +242,7 @@ export type ListAlertsResponse = Message<"xstockstrat.notify.v1.ListAlertsRespon
  */
 export declare const ListAlertsResponseSchema: GenMessage<ListAlertsResponse>;
 /**
- * Web Push subscription registration (feature 162 — pwa-notifications).
+ * Web Push subscription registration (feature 163 — pwa-notifications).
  *
  * @generated from message xstockstrat.notify.v1.RegisterPushSubscriptionRequest
  */

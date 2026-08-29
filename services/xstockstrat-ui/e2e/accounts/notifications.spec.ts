@@ -3,7 +3,7 @@ import { addAuthCookie } from '../helpers/auth';
 import { TEST_USER_ID } from '../fixtures/users';
 
 /**
- * E2E for the /accounts "Notifications" push feature (feature 162).
+ * E2E for the /accounts "Notifications" push feature (feature 163).
  *
  * The register/unregister IDOR guard (@AC-2 / @AC-3) is proven by driving the trader BFF's Connect
  * endpoint directly — the browser Push API is not reliably stubbable in headless Chromium, and the

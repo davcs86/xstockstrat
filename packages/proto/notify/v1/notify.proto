@@ -99,7 +99,7 @@ message ListAlertsResponse {
   string next_page_token = 2;
 }
 
-// Web Push subscription registration (feature 162 — pwa-notifications).
+// Web Push subscription registration (feature 163 — pwa-notifications).
 message RegisterPushSubscriptionRequest {
   string user_id = 1;     // filled by the BFF from the verified session — never trusted from the browser body
   string endpoint = 2;    // the push service endpoint URL (PushSubscription.endpoint)

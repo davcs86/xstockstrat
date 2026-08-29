@@ -111,7 +111,7 @@ export class NotifyServiceImpl {
         ),
       );
 
-      // Best-effort Web Push (feature 162). Second, disjoint queueMicrotask beside the fanout one —
+      // Best-effort Web Push (feature 163). Second, disjoint queueMicrotask beside the fanout one —
       // deferred until AFTER the success callback so a slow/failed push can never turn a succeeded
       // emit into an RPC error or add latency to the primary StreamAlerts write (FR-3/AC-4/AC-5).
       queueMicrotask(() =>
@@ -184,7 +184,7 @@ export class NotifyServiceImpl {
   }
 
   /**
-   * RegisterPushSubscription — upsert a Web Push subscription for the calling user (feature 162).
+   * RegisterPushSubscription — upsert a Web Push subscription for the calling user (feature 163).
    * `user_id` is injected by the BFF from the verified session (never trusted from the browser).
    * Keyed on `endpoint` (globally unique) so a re-subscribe from the same browser updates in place
    * and refreshes the rotated p256dh/auth keys instead of duplicating (AC-2).
@@ -212,7 +212,7 @@ export class NotifyServiceImpl {
   }
 
   /**
-   * UnregisterPushSubscription — delete a Web Push subscription by endpoint (feature 162).
+   * UnregisterPushSubscription — delete a Web Push subscription by endpoint (feature 163).
    * Endpoint-only (no user scoping): an endpoint is a possession-proven capability, and the register
    * upsert can reassign an endpoint to another user, so a user-scoped delete could strand the row (AC-3).
    */

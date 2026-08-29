@@ -9,7 +9,7 @@ const roboto = Roboto({ subsets: ['latin'], variable: '--font-sans' });
 export const metadata: Metadata = {
   title: 'xstockstrat',
   description: 'xstockstrat trading platform',
-  // PWA (feature 162): the manifest makes the app installable; icons back the install/home-screen UI.
+  // PWA (feature 163): the manifest makes the app installable; icons back the install/home-screen UI.
   manifest: '/manifest.webmanifest',
   icons: {
     icon: '/icon-192.png',

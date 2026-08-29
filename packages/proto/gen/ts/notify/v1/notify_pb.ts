@@ -303,7 +303,7 @@ export const ListAlertsResponseSchema: GenMessage<ListAlertsResponse> = /*@__PUR
   messageDesc(file_notify_v1_notify, 7);
 
 /**
- * Web Push subscription registration (feature 162 — pwa-notifications).
+ * Web Push subscription registration (feature 163 — pwa-notifications).
  *
  * @generated from message xstockstrat.notify.v1.RegisterPushSubscriptionRequest
  */

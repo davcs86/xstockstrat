@@ -87,7 +87,7 @@ router.service(NotifyService, {
     );
   },
   listAlerts: forward((req, opts) => notifyClient.listAlerts(req, opts)),
-  // Push subscription register/unregister (feature 162). Register INJECTS the session user id —
+  // Push subscription register/unregister (feature 163). Register INJECTS the session user id —
   // the subscription's owner must come from the verified session, never from the browser body
   // (IDOR guard, same pattern as streamAlerts). Unregister is keyed by endpoint only (a
   // possession-proven capability), so it forwards as-is with no user to inject.

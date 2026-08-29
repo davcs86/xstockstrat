@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic';
 
 export default function AccountsLayout({ children }: { children: React.ReactNode }) {
-  // Server-boundary read: runtime server env vars, never NEXT_PUBLIC_* (FR-9 / feature 162). Only the
+  // Server-boundary read: runtime server env vars, never NEXT_PUBLIC_* (FR-9 / feature 163). Only the
   // VAPID *public* key crosses to the browser — the private key stays a notify-only secret.
   const agentUrl = process.env.AGENT_PUBLIC_URL ?? '';
   const vapidPublicKey = process.env.VAPID_PUBLIC_KEY ?? '';

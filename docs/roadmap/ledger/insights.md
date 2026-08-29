@@ -2538,7 +2538,7 @@ reusing.
   fold it into the `configured` gate (fail-loud/disable), never per-send. Also: keep the new channel a
   **disjoint class**, not an extension of the existing dispatcher — that structural separation is what
   protects the existing channel's `@AC-*` isolation guarantees (C-16) from a future edit.
-- **Evidence**: feature 162 design.md Decisions 3 + "Chosen Approach"; mirrors `FanoutDispatcher`
+- **Evidence**: feature 163 design.md Decisions 3 + "Chosen Approach"; mirrors `FanoutDispatcher`
   (`services/xstockstrat-notify/src/fanout/fanout.ts:51-108`).
 - **Rule it implies**: a best-effort channel whose failures are swallowed must validate its credentials'
   *shape* up front (not just presence) and surface an invalid-but-present config loudly at startup — a

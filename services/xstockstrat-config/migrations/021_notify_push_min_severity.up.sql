@@ -1,6 +1,6 @@
 -- Migration: 021_notify_push_min_severity.up.sql
 -- Service: xstockstrat-config
--- Seeds the notify.push.min_severity config key (feature 162, pwa-notifications) for staging + production.
+-- Seeds the notify.push.min_severity config key (feature 163, pwa-notifications) for staging + production.
 --
 -- The `key` column carries the FULL dotted key the notify service reads
 -- (cfgWatcher.getInt("notify.push.min_severity")): the WatchConfig snapshot is keyed by the `key`

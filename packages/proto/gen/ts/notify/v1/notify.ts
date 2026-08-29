@@ -162,7 +162,7 @@ export interface ListAlertsResponse {
   nextPageToken: string;
 }
 
-/** Web Push subscription registration (feature 162 — pwa-notifications). */
+/** Web Push subscription registration (feature 163 — pwa-notifications). */
 export interface RegisterPushSubscriptionRequest {
   /** filled by the BFF from the verified session — never trusted from the browser body */
   userId: string;
