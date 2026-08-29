@@ -54,3 +54,31 @@
   **Floor breaches: none** (both rounds).
 - Business rules: all PRESERVE/EXTEND, **no CHANGE** — no sign-off required on business-rule grounds.
 - Status: draft → design-approved.
+
+## Session 2026-08-29 — sdd-spec
+
+- Generated implementation-spec.md with 12 steps. Status → implementation-ready.
+- Key codebase findings (resolved the design's Open Risks flagged "resolve at /sdd-spec"):
+  - **Config seed NNN = `021`** (`services/xstockstrat-config/migrations/`, last is
+    `020_remove_analysis_signal_source_weights`); notify table NNN = `002` (last is `001_notify_alerts`).
+    Two different services' migration dirs (ledger 2026-08-26 trap) — Steps 3 (notify) and 4 (config).
+  - **Cross-segment `notifyClient` reuse — all four "Sanctioned exception" facts re-verified:**
+    (i) `.do/app.yaml:12-20` single `/` catch-all to `xstockstrat-ui`, only `/agent` split off;
+    (ii) session cookies `path: '/'` (`src/lib/auth.ts:76,83`); (iii) `requireSession` per dispatch
+    (`bffShared.ts:32,68`); (iv) `notifyClient` base root-relative `'/trader/api'` (`notifyClient.ts:5`).
+    `/accounts/notifications` may reuse the existing guarded `notifyClient` (Step 9).
+  - **Secret-wiring checklist grounded on the SLACK/SENDGRID precedent** — VAPID must land in eight
+    files: `docker-compose.yml:225-226`, `.do/app.dev.yaml:398-405` + `.do/app.yaml:396-403`
+    (`type: SECRET`, `YOUR_{DEV,PROD}_*` placeholders), `deploy.yml:37-44/62-63/72-73/84-92`,
+    `deploy-dev.yml:52-53` / `deploy-prod.yml:51-52`, `scripts/do-inject-prod-secrets.py:43-44`,
+    `.env.example`. Step 11 enumerates each (ledger 2026-08-19 finnhub-key trap).
+  - **Nav registration is TWO surfaces** (C-10(a)): `PLATFORM_SUBNAV.accounts` (`PlatformHeader.tsx:91-95`)
+    **and** the `NAV_GROUPS` Settings group (`navGroups.tsx:80-96`) — existing accounts pages appear in
+    both, so Notifications must too (Step 9); nav-reachability spec updated (Step 10).
+  - `web-push` is not yet a notify dependency (add in Step 5); notify tests are compile-first
+    (`tsc && node --test`), coverage via `pnpm run test:coverage` (c8 `--lines 40`); no
+    `src/__tests__/fixtures/` home yet (C-13 lazy — create only on a second consumer).
+  - VAPID public key crosses server→browser via a `VapidKeyContext` copying `AgentUrlContext`
+    (`accounts/layout.tsx` already `force-dynamic`), never `NEXT_PUBLIC_*`.
+- Coverage: all 9 `@AC-*` mapped to steps (Scenario Coverage table); consumer surface = UI only
+  (Steps 7–10), no Agent tool (product spec).
