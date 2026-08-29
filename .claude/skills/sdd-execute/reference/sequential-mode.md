@@ -202,9 +202,13 @@ In `sequential` mode, when the sanctioned verification tool is unavailable, use 
 fallback and log a `## Deviation Log` entry (`**Disposition**: CI-equivalent fallback`). In the
 default modes, surface these as a deviation question instead of auto-applying.
 
-- **Proto codegen — go host-native, never via Docker.** The execute environment has no Docker
-  daemon, so do **not** attempt `scripts/localenv-setup.sh` / the `Dockerfile.codegen` container
-  (it always fails and wastes the run). Install the codegen toolchain on
+- **Proto codegen — prefer host-native.** For a lone proto step the host toolchain is the fastest
+  path. A Docker daemon **can** be started here (`dockerd &` as root), but
+  `scripts/localenv-setup.sh` / the `Dockerfile.codegen` container fetch Node + buf from hosts
+  outside the agent-proxy `noProxy` allowlist, so the build's `curl` fails TLS verification (exit
+  60) unless the proxy CA (`/root/.ccr/ca-bundle.crt`) is trusted inside it (see the host-setup
+  runbook's "Using Docker" note) — extra friction that only pays off for a full-container run.
+  Install the codegen toolchain on
   the host pinned to the **CI `proto-freshness` job versions** in `.github/workflows/ci.yml` — `buf`,
   `protoc-gen-go` / `protoc-gen-go-grpc` / `protoc-gen-connect-go` (the exact pinned versions),
   `grpcio-tools` + a `protobuf` runtime matching the committed stubs, and the TS plugins from the

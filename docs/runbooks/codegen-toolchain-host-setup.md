@@ -1,9 +1,13 @@
 # Runbook — Provision the codegen toolchain on a bare host (no Docker)
 
-**Trigger:** You need to run `./scripts/buf-gen.sh` (regenerate proto stubs) but the normal
-Docker path (`scripts/localenv-setup.sh` → `Dockerfile.codegen`) is unavailable — e.g. Docker
-isn't installed in the execution environment, or GitHub-releases egress is blocked so `buf`
-can't be fetched from its release binary.
+**Trigger:** You need to run `./scripts/buf-gen.sh` (regenerate proto stubs) and the normal
+Docker path (`scripts/localenv-setup.sh` → `Dockerfile.codegen`) is either not worth the setup
+(you only need a single proto step) or fails in this environment — e.g. GitHub-releases egress is
+blocked so `buf` can't be fetched, or the codegen build's `curl` to nodejs.org / github.com fails
+TLS verification because those hosts route through the agent proxy (see [Using Docker in an
+agent-proxy environment](#using-docker-in-an-agent-proxy-environment) below). In a
+managed agent/execute session a Docker daemon **can** be started (`dockerd &` as root), so Docker
+is not inherently unavailable — this host path is usually just the faster route for a lone step.
 
 This runbook reproduces the pinned toolchain from `Dockerfile.codegen` **directly on the host**,
 then validates that codegen reproduces the committed stubs **byte-for-byte before you edit any
@@ -137,6 +141,45 @@ Only once this diff is empty should you start editing `.proto` files. After your
 - **Exact patch versions matter.** A mismatched patch on any plugin surfaces as a non-empty
   generated-stub diff. Treat the Step 5 empty-diff check as the acceptance gate; when it fails,
   bisect by plugin.
+
+## Using Docker in an agent-proxy environment
+
+Docker is **not** inherently unavailable in a managed agent/execute session: the daemon simply
+isn't running by default. As root you can start it and it comes up in about a second:
+
+```bash
+dockerd >/tmp/dockerd.log 2>&1 &
+until docker info >/dev/null 2>&1; do sleep 0.5; done   # overlayfs driver
+```
+
+The one catch is TLS. Outbound HTTPS in these sessions is re-terminated by the agent egress proxy,
+which presents a cert signed by `/root/.ccr/ca-bundle.crt`. The host trusts that CA, but a fresh
+build container does not — so any `curl`/`fetch` to a host **not** on the proxy's `noProxy`
+allowlist fails with `curl: (60) SSL certificate problem`. `Dockerfile.codegen` fetches Node from
+`nodejs.org` and `buf` from `github.com` (neither is on the allowlist; `registry.npmjs.org`,
+`pypi.org`, `proxy.golang.org` and the Debian mirrors are, which is why apt / npm / pip / `go
+install` succeed while the Node and buf steps do not). `curl -sS "$HTTPS_PROXY/__agentproxy/status"`
+prints the live `noProxy` list.
+
+To build the codegen image here, trust the proxy CA **inside** the build — do this in a throwaway
+Dockerfile that wraps the committed one, never by editing `Dockerfile.codegen` (the real image must
+not carry sandbox-specific trust):
+
+```dockerfile
+# validation-only wrapper — inject right after the system-deps apt layer
+COPY ca-bundle.crt /usr/local/share/ca-certificates/ccr-proxy.crt
+RUN update-ca-certificates
+ENV CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
+    NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
+```
+
+`Dockerfile.codegen` itself `COPY`s nothing from the build context, so the context can be a tiny
+temp dir holding just the wrapper Dockerfile and a copy of `ca-bundle.crt`. Once built, run codegen
+against the repo exactly as `localenv-setup.sh` does (`docker run --rm -v "$PWD:/workspace" -w
+/workspace <image> bash -c 'git config --global --add safe.directory /workspace &&
+./scripts/buf-gen.sh'`) and confirm an empty `git diff packages/proto/gen/`. For a single proto
+step the host path above is still less setup; reach for Docker when you want the full,
+version-pinned container end-to-end.
 
 ## References
 
