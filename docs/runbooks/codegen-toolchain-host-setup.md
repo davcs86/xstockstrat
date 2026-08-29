@@ -32,11 +32,13 @@ convenience copy and will drift. Also keep in mind the caveat in the
 
 ### 1. Install `buf`
 
-`Dockerfile.codegen` downloads the `buf` release binary from GitHub releases. **Try that first** —
-egress is not always blocked, and it is the same binary the container uses:
+`Dockerfile.codegen` downloads the `buf` release binary from GitHub releases, pinned via its
+`BUF_VERSION` ARG. **Try that first** — egress is not always blocked, and it is the same binary
+the container uses. Match the pinned version (re-read `Dockerfile.codegen`; currently `1.72.0`):
 
 ```bash
-curl -fsSL "https://github.com/bufbuild/buf/releases/latest/download/buf-Linux-x86_64" \
+BUF_VERSION=1.72.0
+curl -fsSL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64" \
   -o "$(go env GOPATH)/bin/buf" && chmod +x "$(go env GOPATH)/bin/buf"
 ```
 
