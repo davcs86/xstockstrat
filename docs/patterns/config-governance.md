@@ -207,6 +207,19 @@ deliberately excludes INFO fill confirmations; an operator lowers it to `1` to f
 | `notify.fanout.sendgrid_from_email` | string | `''` | Fanout email sender; email disabled until from/to set and `SENDGRID_API_KEY` present |
 | `notify.fanout.sendgrid_to_email` | string | `''` | Fanout email recipient; same enable condition |
 
+### feature 162 — pwa-notifications (`xstockstrat-notify`)
+
+Adds a best-effort **Web Push** channel (a third fanout channel) delivering OS notifications to
+installed-PWA devices. The one key below is seeded by config migration `021` for `staging`+`production`
+(global scope). The VAPID credentials (`VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_SUBJECT`) are
+**not** config keys — they are deploy-pipeline env vars (private key `type: SECRET`), like the
+feature-020 fanout credentials. Gating mirrors `notify.fanout.min_severity` but is applied
+independently to the push channel.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `notify.push.min_severity` | int | `2` | Minimum `AlertSeverity` ordinal (0–4, clamped) to send a Web Push; default 2 (WARNING) excludes INFO fills |
+
 ### feature 141 — fix-opportunities-bars-fetch-oom (`xstockstrat-analysis`)
 
 Adds one process-lifetime singleton semaphore key bounding cross-request concurrency of

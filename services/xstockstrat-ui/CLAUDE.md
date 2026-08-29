@@ -263,6 +263,7 @@ ANALYSIS_ENDPOINT=xstockstrat-analysis:50056
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
 CONFIG_ENDPOINT=xstockstrat-config:50060
+VAPID_PUBLIC_KEY            # feature 162 — Web Push public key, exposed to the browser via VapidKeyContext (server→client prop, NOT NEXT_PUBLIC_*); empty ⇒ push enable control reports "not configured"
 DATABASE_URL                # config-ui audit route only
 DB_POOL_MAX=1               # config-ui audit pool cap
 OTEL_ENABLED                # toggle OTel; init errors never block startup
@@ -282,6 +283,38 @@ See `docs/patterns/nextjs-frontends.md` and `docs/patterns/client-api-pattern.md
 - **Middleware matcher must include `/`** — the negative-lookahead pattern alone does not match the bare root.
 - **Suspense fallbacks** must render real shell/placeholder structure, not `null`, so SSR HTML isn't empty.
 - **Radix primitives** (Select/Dialog) are Client Components (`'use client'`) to avoid hydration mismatch.
+
+## PWA & Push Notifications (feature 162)
+
+The UI is an installable PWA that can receive OS-level Web Push notifications even when closed.
+
+- **Served from `public/` at the domain root** (no `basePath`): `manifest.webmanifest` (`display:
+  standalone`, `start_url: /trader`, 192/512 + maskable icons), the three `icon-*.png`, and a
+  hand-written `sw.js` (no `next-pwa`). **`public/` is NOT auto-included by `output: standalone`** — the
+  `Dockerfile` has an explicit `COPY … public …` step; don't drop it.
+- **`sw.js`** handles `push` (always `showNotification` — the `userVisibleOnly` obligation — with a
+  fallback on parse failure, and a deterministic `tag` for OS coalescing) and `notificationclick`
+  (focus an existing window or open one). Its two decisions (parse-with-fallback, focus-vs-open) are
+  the pure, unit-tested helpers in `src/lib/swHelpers.ts`, mirrored (inlined) into `sw.js` because a
+  service worker can't import from the Next bundle.
+- **`middleware.ts` matcher excludes** `sw.js` / `manifest.webmanifest` / the `icon-*.png` so they're
+  served publicly (else the SW never registers). **`next.config.js headers()`** sends
+  `Cache-Control: no-cache` for `sw.js` + `manifest.webmanifest` so an updated worker reaches clients.
+- **`ServiceWorkerRegistrar`** (mounted in the root layout) registers `/sw.js` at root scope, covering
+  all four segments.
+- **Enable/disable control** at `/accounts/notifications` (Settings group — registered in **both**
+  `PLATFORM_SUBNAV.accounts` and `NAV_GROUPS`). `PushToggle` requests permission, subscribes via the
+  Push API with the VAPID **public** key, and calls `notifyClient.registerPushSubscription` /
+  `unregisterPushSubscription`. Its four states (unsupported/blocked/enabled/default) route through
+  `EmptyState`/`CardNotice`/`Switch` (C-17).
+- **BFF**: `traderBff` `registerPushSubscription` **injects the session `user_id`** (IDOR guard — never
+  `forward`); `unregisterPushSubscription` deletes by endpoint only. The `/accounts` page reuses the
+  root-relative `notifyClient` (`/trader/api`) per the "Sanctioned exception" (four facts re-verified).
+- **`VAPID_PUBLIC_KEY`** crosses server→client via `src/app/accounts/VapidKeyContext.tsx` (mirrors
+  `AgentUrlContext`; the `/accounts` layout is already `force-dynamic`) — never `NEXT_PUBLIC_*`. The
+  private key is notify-only.
+- **iOS** requires adding the app to the Home Screen before Web Push works (standard behavior; not
+  separately engineered).
 
 ## Observability
 
