@@ -84,6 +84,7 @@ export const NAV_GROUPS: NavGroup[] = [
     sectionStart: 'Settings',
     items: [
       { label: 'Profile', href: '/accounts/profile' },
+      { label: 'Notifications', href: '/accounts/notifications' },
       { label: 'Trader home', href: '/trader', match: 'exact' },
       { label: 'Insights home', href: '/insights', match: 'exact' },
       { label: 'Accounts', href: '/trader/accounts' },

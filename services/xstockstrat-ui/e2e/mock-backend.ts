@@ -438,6 +438,16 @@ export async function startMockBackend(): Promise<void> {
             ],
           };
         },
+        // Feature 162: echo the received user_id back as the subscription id so the e2e can assert
+        // the BFF stamped the SESSION user (not any browser-supplied value) — the IDOR guard.
+        async registerPushSubscription(req: { userId?: string; endpoint?: string }) {
+          return { subscriptionId: req.userId ?? '' };
+        },
+        // deleted=true iff an endpoint was provided; the endpoint is echoed via the (absent) body,
+        // so the e2e asserts the call reached here with the right endpoint through the response shape.
+        async unregisterPushSubscription(req: { endpoint?: string }) {
+          return { deleted: !!req.endpoint };
+        },
       });
 
       router.service(MarketDataService, {

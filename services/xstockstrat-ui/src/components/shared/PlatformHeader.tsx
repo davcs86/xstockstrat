@@ -90,6 +90,7 @@ export const PLATFORM_SUBNAV: Record<PlatformSegment, SubNavItem[]> = {
   ],
   accounts: [
     { label: 'Profile', href: '/accounts/profile', match: 'exact' },
+    { label: 'Notifications', href: '/accounts/notifications', match: 'exact' },
     { label: 'Authorized Apps', href: '/accounts/authorized-apps', match: 'exact' },
     { label: 'MCP Tools', href: '/accounts/mcp-tools', match: 'exact' },
   ],

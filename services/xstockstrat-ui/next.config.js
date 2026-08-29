@@ -15,6 +15,14 @@ const nextConfig = {
   async redirects() {
     return [{ source: '/', destination: '/trader', permanent: false }];
   },
+  // PWA (feature 162): the service worker and manifest must be revalidated on every load so an
+  // updated handler always reaches installed clients — a cached sw.js would pin a stale worker.
+  async headers() {
+    return [
+      { source: '/sw.js', headers: [{ key: 'Cache-Control', value: 'no-cache' }] },
+      { source: '/manifest.webmanifest', headers: [{ key: 'Cache-Control', value: 'no-cache' }] },
+    ];
+  },
   // Serve the MCP agent's OAuth metadata at the RFC 8414/9728 canonical (path-insertion) locations.
   // The agent is mounted under `/agent`, so its issuer is `https://<host>/agent`; spec-compliant
   // clients (Claude.ai) fetch `…/.well-known/oauth-authorization-server/agent`, which lands on this

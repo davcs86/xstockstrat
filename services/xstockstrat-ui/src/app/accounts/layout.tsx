@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { PlatformHeader, PLATFORM_SUBNAV } from '@/components/shared/PlatformHeader';
 import { AgentUrlProvider } from './AgentUrlContext';
+import { VapidKeyProvider } from './VapidKeyContext';
 
 export const metadata: Metadata = {
   title: 'xstockstrat Accounts',
@@ -15,12 +16,16 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic';
 
 export default function AccountsLayout({ children }: { children: React.ReactNode }) {
-  // Server-boundary read: AGENT_PUBLIC_URL is a runtime server env var, never NEXT_PUBLIC_* (FR-9).
+  // Server-boundary read: runtime server env vars, never NEXT_PUBLIC_* (FR-9 / feature 162). Only the
+  // VAPID *public* key crosses to the browser — the private key stays a notify-only secret.
   const agentUrl = process.env.AGENT_PUBLIC_URL ?? '';
+  const vapidPublicKey = process.env.VAPID_PUBLIC_KEY ?? '';
   return (
     <AgentUrlProvider value={agentUrl}>
-      <PlatformHeader segment="accounts" subNav={PLATFORM_SUBNAV.accounts} />
-      <main className="p-4 pb-20 sm:p-6 sm:pb-6">{children}</main>
+      <VapidKeyProvider value={vapidPublicKey}>
+        <PlatformHeader segment="accounts" subNav={PLATFORM_SUBNAV.accounts} />
+        <main className="p-4 pb-20 sm:p-6 sm:pb-6">{children}</main>
+      </VapidKeyProvider>
     </AgentUrlProvider>
   );
 }

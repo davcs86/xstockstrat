@@ -48,6 +48,7 @@ const GROUPS: { tab: string; items: { label: string; href: string }[] }[] = [
   {
     tab: 'Settings',
     items: [
+      { label: 'Notifications', href: '/accounts/notifications' },
       { label: 'Accounts', href: '/trader/accounts' },
       { label: 'Config', href: '/config-ui' },
       { label: 'Audit log', href: '/config-ui/audit' },
