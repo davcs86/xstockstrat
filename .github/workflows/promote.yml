@@ -57,6 +57,8 @@ jobs:
           fi
 
       - uses: bufbuild/buf-setup-action@v1
+        with:
+          version: '1.72.0'
 
       - name: buf breaking check against main
         id: buf-breaking

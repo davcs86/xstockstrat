@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Dockerfile.codegen
 # Proto-generation container — installs buf + all language plugins and runs buf-gen.sh.
 # Used by scripts/localenv-setup.sh. NOT part of docker-compose.yml.
@@ -5,7 +6,8 @@
 # Versions: keep in sync with CLAUDE.md §Language Versions & Tooling
 #   Go     1.27  → also in go.work, .github/workflows/ci.yml, Go service Dockerfiles
 #   Python 3.13  → also in .github/workflows/ci.yml, Python service Dockerfiles
-#   Node   24    → also in .github/workflows/ci.yml
+#   Node   24    → also in .github/workflows/ci.yml (installed here from the official
+#                  nodejs.org tarball, pinned by NODE_VERSION below — bump that line too)
 #   pnpm   9.15.9 → also in package.json "packageManager", .github/workflows/ci.yml
 
 FROM golang:1.27-trixie
@@ -17,13 +19,55 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     python3 \
     python3-pip \
+    xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# ── Node.js 24 (NodeSource) ────────────────────────────────────────────────────
-# hadolint ignore=DL3008
-RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
-    && rm -rf /var/lib/apt/lists/*
+# ── Optional extra CA (TLS-terminating egress proxy) ───────────────────────────
+# When the build runs behind a proxy that re-terminates TLS (e.g. a managed
+# agent/CI sandbox), the nodejs.org / github.com downloads below can't verify the
+# proxy's cert against the stock trust store and fail with `curl: (60)`. Pass that
+# proxy's CA as a BuildKit secret and it is added to the system trust store for the
+# rest of the build:
+#     docker build --secret id=proxy_ca,src=/path/to/ca-bundle.crt ...
+# (scripts/localenv-setup.sh wires this automatically when the CA is present.)
+# No secret → no file at /run/secrets/proxy_ca → this is a clean no-op, so normal
+# developer and CI builds are unaffected and no CA is ever baked into the image.
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -s /run/secrets/proxy_ca ]; then \
+      cp /run/secrets/proxy_ca /usr/local/share/ca-certificates/proxy-egress-ca.crt && \
+      update-ca-certificates; \
+    fi
+# curl (the Node + buf downloads) and pip read the system trust store updated above,
+# but Node/npm do NOT — they use their own bundled CA list — so also point Node at the
+# system CA bundle. Harmless in a normal build (that bundle is just Debian's standard
+# CAs); when a proxy CA was added above it lets npm/pnpm reach the registry through the
+# TLS-terminating proxy. No secret is ever baked into the image either way.
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
+
+# ── Node.js 24 (official nodejs.org tarball) ───────────────────────────────────
+# Installed from the official static build rather than the NodeSource apt repo.
+# NodeSource's node_24.x repo has intermittently 404'd its Release/InRelease
+# metadata (nodesource/distributions#1864), which makes the setup script's
+# `apt update` fail with exit code 100 and takes the whole codegen build down.
+# The tarball is pinned by version + SHA-256, so the build is deterministic and
+# no longer depends on that repo being healthy. Bump NODE_VERSION and both
+# checksums together (from https://nodejs.org/dist/v<ver>/SHASUMS256.txt).
+ARG NODE_VERSION=24.20.0
+ARG NODE_SHA256_AMD64=2f2c0da162318f0de47665410c7c8c2ed3d36c8f3105de4bbc61176c70a7cbf2
+ARG NODE_SHA256_ARM64=5f4ddab610c1ab2016b3c227cebdbf6d9495161487e4739c7b90090595f465f7
+RUN set -eux; \
+    case "$(dpkg --print-architecture)" in \
+      amd64) NODE_ARCH=x64;  NODE_SHA256="$NODE_SHA256_AMD64" ;; \
+      arm64) NODE_ARCH=arm64; NODE_SHA256="$NODE_SHA256_ARM64" ;; \
+      *) echo "Unsupported architecture: $(dpkg --print-architecture)" >&2; exit 1 ;; \
+    esac; \
+    TARBALL="node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz"; \
+    curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/${TARBALL}"; \
+    echo "${NODE_SHA256}  ${TARBALL}" | sha256sum -c -; \
+    tar -xJf "${TARBALL}" -C /usr/local --strip-components=1 --no-same-owner; \
+    rm "${TARBALL}"; \
+    node --version; \
+    npm --version
 
 # ── pnpm 9.15.9 ────────────────────────────────────────────────────────────────
 RUN npm install -g pnpm@9.15.9
@@ -35,12 +79,16 @@ RUN npm install -g \
     @bufbuild/protoc-gen-es@2.12.0 \
     @connectrpc/protoc-gen-connect-es@1.7.0
 
-# ── buf CLI (latest) ───────────────────────────────────────────────────────────
+# ── buf CLI (pinned) ───────────────────────────────────────────────────────────
 # Detects TARGETARCH so the image builds on both x86_64 and Apple Silicon (arm64).
+# BUF_VERSION is pinned (not "latest") so the committed stubs stay reproducible;
+# it must match the bufbuild/buf-setup-action version in .github/workflows/ci.yml
+# (buf lint / breaking + proto-freshness jobs) and CLAUDE.md §Language Versions.
 ARG TARGETARCH=amd64
+ARG BUF_VERSION=1.72.0
 RUN BUF_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "aarch64" || echo "x86_64") \
     && curl -fsSL \
-       "https://github.com/bufbuild/buf/releases/latest/download/buf-Linux-${BUF_ARCH}" \
+       "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-${BUF_ARCH}" \
        -o /usr/local/bin/buf \
     && chmod +x /usr/local/bin/buf
 
