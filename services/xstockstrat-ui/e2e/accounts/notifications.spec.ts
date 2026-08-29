@@ -67,14 +67,15 @@ test.describe('push subscription BFF (IDOR guard)', () => {
 });
 
 test.describe('push notifications page', () => {
-  test('renders the toggle with an accessible name', async ({ page }) => {
+  test('renders the toggle with an accessible name', async ({ page, context }) => {
+    // Grant Notification permission so the toggle reaches the 'ready' state and renders the Switch.
+    // Headless Chromium defaults Notification.permission to 'denied', which would (correctly) render
+    // the blocked notice instead — we want to exercise the enabled control here (C-17 accessible name).
+    await context.grantPermissions(['notifications'], { origin: 'http://localhost:3000' });
     await addAuthCookie(page);
     await page.goto('/accounts/notifications');
     await expect(page.getByRole('heading', { name: 'Push notifications' })).toBeVisible();
-    // The control has a unique accessible name (C-17) — asserted regardless of push support state.
-    // In a browser lacking push support the page instead shows the unsupported empty state.
-    const toggle = page.getByRole('switch', { name: 'Enable push notifications' });
-    const unsupported = page.getByText("Notifications aren't supported here");
-    await expect(toggle.or(unsupported)).toBeVisible();
+    // The control carries a unique accessible name (C-17).
+    await expect(page.getByRole('switch', { name: 'Enable push notifications' })).toBeVisible();
   });
 });
