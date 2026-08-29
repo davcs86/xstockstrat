@@ -67,11 +67,20 @@ test.describe('push subscription BFF (IDOR guard)', () => {
 });
 
 test.describe('push notifications page', () => {
-  test('renders the toggle with an accessible name', async ({ page, context }) => {
-    // Grant Notification permission so the toggle reaches the 'ready' state and renders the Switch.
-    // Headless Chromium defaults Notification.permission to 'denied', which would (correctly) render
-    // the blocked notice instead — we want to exercise the enabled control here (C-17 accessible name).
-    await context.grantPermissions(['notifications'], { origin: 'http://localhost:3000' });
+  test('renders the toggle with an accessible name', async ({ page }) => {
+    // PushToggle only renders the Switch when Notification.permission !== 'denied'. CI runs the
+    // `chrome-headless-shell` build, which has no notification platform and hard-reports
+    // Notification.permission === 'denied' regardless of context.grantPermissions(['notifications'])
+    // — so a real grant can't reach the 'ready' state there (it renders the blocked notice instead).
+    // Force the permission getter to 'granted' before app scripts run so the enabled control renders
+    // deterministically across browsers; we're asserting the control's accessible name (C-17), not the
+    // browser's permission plumbing (the enable/register wiring is covered by the IDOR-guard specs above).
+    await page.addInitScript(() => {
+      Object.defineProperty(Notification, 'permission', {
+        configurable: true,
+        get: () => 'granted',
+      });
+    });
     await addAuthCookie(page);
     await page.goto('/accounts/notifications');
     await expect(page.getByRole('heading', { name: 'Push notifications' })).toBeVisible();
