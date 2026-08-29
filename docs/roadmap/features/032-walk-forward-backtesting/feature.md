@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/walk-forward-backtesting`
 **Created**: 2026-05-26
-**Last Updated**: 2026-05-26
+**Last Updated**: 2026-08-29
 
 ---
 
@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-26 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-29 | `draft` (unchanged) | product-spec rescope | **Rescoped walk-forward → regime-segmented backtest.** The platform has no strategy-parameter optimizer (confirmed by grep), so the in-sample/out-of-sample "walk-forward" framing was a misnomer — with nothing tuned, each window is just an independent backtest. Reframed the value honestly as *regime-consistency* stats (per-window + worst-window Sharpe, consistency ratio, Sharpe dispersion); true walk-forward recorded as a Future Extension gated on an optimizer. Proto/config renamed (`RunSegmentedBacktest`, `analysis.segmentedbacktest.max_total_window_days`). See context.md 2026-08-29. |
 
 ---
 
@@ -24,7 +25,7 @@
 
 ## Summary
 
-Extends the analysis service's existing backtesting with a walk-forward validation mode that runs rolling in-sample optimization and out-of-sample test windows, reporting per-window out-of-sample Sharpe ratios to detect overfitting before any live capital commitment.
+Adds a **regime-segmented backtest** to the analysis service: partition history into rolling windows, run the existing backtest on each independently (fixed strategy parameters — the platform has no optimizer), and report per-window and aggregate consistency statistics (mean/worst-window Sharpe, consistency ratio, Sharpe dispersion) so an operator can tell a strategy that worked across many regimes from one carried by a single lucky stretch — fast, and covering downturns paper mode hasn't sampled yet. **Not** walk-forward optimization and **not** an overfitting guard (both require a parameter optimizer that does not exist); true walk-forward is a documented Future Extension gated on that optimizer.
 
 ## Reviewers
 
