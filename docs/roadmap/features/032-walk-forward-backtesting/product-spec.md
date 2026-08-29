@@ -1,71 +1,152 @@
-# Product Spec: walk-forward-backtesting
+# Product Spec: regime-segmented backtest
+
+> **Rescoped 2026-08-29** (was "walk-forward-backtesting"). The original spec sold *overfitting
+> detection via walk-forward optimization*, but its own Out-of-Scope removed parameter optimization
+> and the platform has **no strategy-parameter optimizer** (`xstockstrat-analysis` runs strategies
+> on fixed, hand-authored parameters — confirmed: no optimize/grid-search/tuning code exists). With
+> nothing tuned on the in-sample window, "walk-forward" degenerated to running the existing backtest
+> on rolling sub-windows — i.e. a **regime-segmented backtest**, not walk-forward. This spec is
+> reframed to what it actually delivers, and true walk-forward is recorded as a future extension
+> gated on an optimizer. The directory slug stays `032-walk-forward-backtesting` (numbering is
+> immutable pre-launch churn we avoid), but the capability is a segmented backtest.
 
 **Created**: 2026-05-26
+**Rescoped**: 2026-08-29
 
 ---
 
 ## Problem Statement
 
-The analysis service supports standard backtesting, but standard backtests overfit to the in-sample period — they measure how well the strategy would have traded the data it was tuned on, not how well it would trade unseen data. This produces optimistic performance estimates that routinely fail to materialize in live trading. There is currently no quantitative gate that distinguishes a genuinely robust strategy from a historically overfit one.
+The analysis service already supports a standard backtest **and** the platform can run a strategy
+forward in **paper mode** (staging = paper, derived from environment). Between them, those cover
+"how did it do over all of history, as one number" and "how is it doing forward, for real, right
+now." Neither answers a third question that matters for a go-live decision: **was the strategy
+*consistently* profitable across different historical market regimes, or is its single aggregate
+Sharpe carried by one lucky stretch?**
+
+- A **single** backtest collapses years into one aggregate number, hiding that a strategy might have
+  been strongly profitable in a 2020-style rally and deeply negative in a 2022-style drawdown.
+- **Paper mode** shows real forward performance but through exactly **one** regime — the one you are
+  currently living through — and takes weeks-to-months to accumulate a meaningful sample.
+
+There is currently no fast way to see performance **broken down by sub-period/regime** with
+consistency statistics. That is the specific, non-redundant gap this feature fills.
+
+## What this is *not* (to avoid the earlier confusion)
+
+- **Not walk-forward optimization.** No parameters are fit on any window. Each window is an
+  independent backtest of the *same* fixed strategy over a different date range. There is therefore
+  **no in-sample/out-of-sample split** — that framing only has meaning when something is optimized
+  in-sample, and nothing is.
+- **Not an overfitting guard.** With no tuning, there is no optimization-induced overfitting to
+  detect. (Real walk-forward — and the overfitting guard it provides — becomes meaningful only once
+  the platform can optimize strategy parameters; see Future Extension.)
 
 ## User Story
 
-As a platform operator, I want to run walk-forward validation on the strategy so that I can see how it performs on out-of-sample data and make a data-driven decision about whether to commit live capital.
+As a platform operator, before I commit real (paper or live) capital to a strategy, I want to see
+its performance segmented into rolling historical windows with per-window and aggregate consistency
+statistics, so that I can tell a strategy that worked *everywhere* from one that worked in *one*
+lucky regime — quickly, without waiting months for paper mode to sample a downturn.
 
 ## Functional Requirements
 
-FR-1. The analysis service must expose a new `RunWalkForward(WalkForwardRequest) returns (WalkForwardResponse)` RPC.
-FR-2. Walk-forward procedure: given a total historical window, split into N rolling periods. Each period has an in-sample window (for parameter fitting) and an immediately following out-of-sample window (for evaluation). Slide forward by one out-of-sample window length and repeat.
-FR-3. Window sizes must be configurable per request: `in_sample_days`, `out_of_sample_days`, `total_window_days`.
-FR-4. Per out-of-sample window, the response must include: window start/end dates, out-of-sample Sharpe ratio, out-of-sample win rate, out-of-sample total return, trade count.
-FR-5. The response must also include aggregate statistics across all out-of-sample windows: mean Sharpe, worst-window Sharpe, consistency ratio (% of windows with Sharpe > 0).
-FR-6. Walk-forward computation is strictly look-ahead-free: the in-sample window never overlaps with or references data after its end date, and parameter fitting uses only in-sample data.
-FR-7. A "Run Walk-Forward" button in the insights UI triggers the RPC with configurable window parameters and displays results as a per-window bar chart (out-of-sample Sharpe per period) and the aggregate statistics table.
-FR-8. Long-running walk-forward jobs (> 30 seconds) must stream progress updates back to the UI rather than blocking on a single response.
+FR-1. The analysis service must expose a new `RunSegmentedBacktest(SegmentedBacktestRequest)` RPC
+(server-streaming, see FR-8).
+
+FR-2. Segmentation procedure: given a total historical window, partition it into evaluation windows
+of `window_days`, advancing each window's start by `step_days`. `step_days == window_days` yields
+consecutive non-overlapping windows; `step_days < window_days` yields overlapping rolling windows.
+Each window is backtested **independently** with the strategy's existing fixed parameters.
+
+FR-3. Window geometry must be configurable per request: `window_days`, `step_days`,
+`total_window_days`.
+
+FR-4. Per window, the response must include: window start/end dates, Sharpe ratio, win rate, total
+return, and trade count — each computed **only** from data inside that window.
+
+FR-5. The response must include aggregate statistics across all windows: mean Sharpe,
+**worst-window Sharpe**, **consistency ratio** (% of windows with Sharpe > 0), and **Sharpe
+dispersion** (stdev across windows — a direct regime-robustness measure).
+
+FR-6. Each window is strictly self-contained: a window's metrics reference no bar or signal dated
+outside `[window_start, window_end]`. (Trivially satisfied because each window is an independent
+historical backtest — stated so acceptance testing verifies no accidental cross-window leakage,
+e.g. an indicator warm-up reaching into a prior window.)
+
+FR-7. A "Run Segmented Backtest" action in the insights UI triggers the RPC with configurable window
+parameters and displays results as a per-window bar chart (Sharpe per window, colored by sign) plus
+the aggregate-statistics table.
+
+FR-8. Long-running jobs (> 30 seconds) must stream progress updates back to the UI ("window 3 of 8
+complete") rather than blocking on a single response.
 
 ## Out of Scope
 
-- Automated parameter optimization within each in-sample window (V1 uses fixed strategy parameters; walk-forward only evaluates them on rolling windows)
-- Monte Carlo permutation testing
-- Multi-strategy comparison in a single walk-forward run
+- **Any parameter optimization / fitting** (this is what made "walk-forward" a misnomer). Deferred to
+  the Future Extension below.
+- Monte Carlo permutation testing.
+- Multi-strategy comparison in a single run.
+- Persisting results for historical comparison across runs (open question below — default ephemeral).
+
+## Future Extension — true walk-forward (gated on an optimizer)
+
+This feature becomes genuine walk-forward **only** if the platform later gains a strategy-parameter
+optimizer. At that point: re-introduce an in-sample slice preceding each evaluation window, fit
+parameters on the in-sample slice, evaluate on the (now truly out-of-sample) window, and the
+in-sample→out-of-sample performance gap becomes the overfitting signal. The RPC could then gain an
+optional `optimize: bool` / `in_sample_days` field. **Do not build the in-sample plumbing now** —
+there is nothing to optimize, so it would be dead scaffolding (CLAUDE.md "How to Act" #2).
 
 ## Affected Services
 
-Exact service names from CLAUDE.md Service Registry:
-- `xstockstrat-analysis` — new `RunWalkForward` RPC, rolling window loop calling existing backtest engine
-- `xstockstrat-insights` — walk-forward trigger UI, progress streaming, results display
+- `xstockstrat-analysis` — new `RunSegmentedBacktest` RPC; rolling-window loop calling the **existing
+  backtest engine** once per window.
+- `xstockstrat-ui` (insights segment) — trigger UI, progress streaming, results display.
 
 ## Proto Contract Changes
 
-- New RPC: `RunWalkForward(WalkForwardRequest) returns (stream WalkForwardProgressEvent)` in analysis proto
-- `WalkForwardRequest`: `symbol`, `in_sample_days`, `out_of_sample_days`, `total_window_days`
-- `WalkForwardProgressEvent`: oneof `progress` (window index, total windows) or `result` (WalkForwardResult with all per-window and aggregate stats)
+- New RPC: `RunSegmentedBacktest(SegmentedBacktestRequest) returns (stream SegmentedBacktestProgressEvent)`
+  in the analysis proto (non-breaking addition).
+- `SegmentedBacktestRequest`: `symbol`, `strategy_id`, `window_days`, `step_days`, `total_window_days`.
+- `SegmentedBacktestProgressEvent`: `oneof` of `progress` (window index, total windows) or `result`
+  (`SegmentedBacktestResult` with all per-window rows and aggregate stats).
 
 ## Config Key Changes
 
-- `analysis.walkforward.max_total_window_days` — integer; cap on total historical window to prevent runaway queries (default: 1825 = 5 years)
+- `analysis.segmentedbacktest.max_total_window_days` — integer; cap on total historical window to
+  prevent runaway queries (default: `1825` = 5 years).
 
 ## Database Changes
 
-- [ ] No schema changes (reads from existing OHLCV and signal tables)
+- [x] No schema changes (reads existing OHLCV and signal tables). Result persistence is out of scope
+  for V1 (see Out of Scope / Open Questions).
 
 ## Feature Workflow Notes
 
-Branch to create: `feature/walk-forward-backtesting` (branch from `main-dev`)
-Approval gates required (per docs/runbooks/feature-workflow.md):
+Branch to create: `feature/walk-forward-backtesting` (slug unchanged; branch from `main-dev`).
+Approval gates (per docs/runbooks/feature-workflow.md):
 - [x] 1 service owner approval (analysis service + new proto RPC)
-- [ ] 2 service owners + platform lead (breaking proto change) — not applicable (new RPC, non-breaking)
-- [ ] DBA review + service owner (schema migration) — not applicable
+- [ ] 2 service owners + platform lead (breaking proto) — not applicable (new RPC, non-breaking)
+- [ ] DBA review — not applicable (no schema change)
 
 ## Acceptance Criteria
 
-1. A walk-forward run with 252-day in-sample and 63-day out-of-sample windows over 3 years produces 8 out-of-sample windows with no overlap and no look-ahead.
-2. Out-of-sample Sharpe for each window matches a hand-computed reference using the same date boundaries and fill prices.
-3. The insights UI displays per-window Sharpe as a bar chart and aggregate stats within 5 seconds of job completion.
-4. For a job taking > 30 seconds, progress updates appear in the UI (e.g., "window 3 of 8 complete") without a timeout.
-5. Setting `total_window_days` above `max_total_window_days` returns a clear 400-equivalent error.
+1. A run with `window_days=63`, `step_days=63`, `total_window_days` = 3 years produces ~12
+   consecutive non-overlapping windows with no gaps and no cross-window data leakage.
+2. A run with `step_days < window_days` produces the expected number of overlapping rolling windows.
+3. Per-window Sharpe for each window matches a hand-computed reference using the same date boundaries
+   and fill prices.
+4. Aggregate stats (mean / worst-window Sharpe, consistency ratio, dispersion) match a reference
+   computed from the per-window rows.
+5. The insights UI displays per-window Sharpe as a sign-colored bar chart and the aggregate table
+   within 5 seconds of job completion.
+6. For a job taking > 30 seconds, progress updates appear in the UI without a timeout.
+7. Setting `total_window_days` above `max_total_window_days` returns a clear 400-equivalent error.
 
 ## Open Questions
 
-- [ ] Should walk-forward results be persisted (written to a results table) or ephemeral (computed on demand, returned in stream)? Persisted results enable historical comparison of walk-forward runs over time. Decision deferred to impl-spec.
-- [ ] gRPC server-streaming for progress vs. polling a job ID endpoint: server-streaming is cleaner but requires SSE or WebSocket bridging in the Next.js frontend. Confirm the insights UI's existing SSE infrastructure can support this. Deferred to impl-spec.
+- [ ] Persist results (results table, enables cross-run comparison over time) vs. ephemeral
+      (computed on demand, streamed). Default **ephemeral** unless impl-spec finds a cheap persist.
+- [ ] gRPC server-streaming for progress vs. polling a job-ID endpoint — confirm the insights UI's
+      existing SSE infrastructure supports the stream bridge. Deferred to impl-spec.
