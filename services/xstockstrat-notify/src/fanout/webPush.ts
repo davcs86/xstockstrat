@@ -48,8 +48,12 @@ interface SubscriptionRow {
 interface PushPayload {
   title: string;
   body: string;
-  url?: string;
   icon: string;
+  // Deterministic OS-notification tag so the service worker coalesces concurrently-visible
+  // notifications of the same category (design Decision 4 — this is OS-level visible-window
+  // coalescing, NOT content-hash dedup; the fanout dedup window is untouched).
+  tag: string;
+  url?: string;
 }
 
 export class WebPushDispatcher {
@@ -113,6 +117,7 @@ export class WebPushDispatcher {
         title: alert.title,
         body: alert.body,
         icon: '/icon-192.png',
+        tag: alert.category || 'xstockstrat',
       };
       const body = JSON.stringify(payload);
 
