@@ -138,10 +138,6 @@ Three read RPCs back the opportunities-first UI, all over the existing evaluator
 
 Design-level detail — fingerprint eligibility, empirical-Bayes aggregation with worked calibration anchors, recompute triggers, warm-up prefix sizing, and the FR/OQ caveats — lives on-demand in this service's `docs/` folder (**`scoring.md`**, **`warmup.md`**). The **binding** invariants are **ANALYSIS-2** (evidence-weighted EB grade) and **ANALYSIS-3** (definition-fingerprint eligibility) in `docs/context-constitution.md`.
 
-## Language
-
-Python 3.13 (asyncio, grpc.aio)
-
 ## Docker Build Pattern
 
 Python pattern — see `docs/patterns/docker-build.md` for single-stage `uv` builds, `--frozen --no-dev` flags, and proto namespace package setup.
@@ -153,8 +149,7 @@ Python pattern — see `docs/patterns/docker-build.md` for single-stage `uv` bui
 | gRPC | `50056` | Internal service-to-service (protobuf) |
 
 This service is **gRPC-only** (`app/main.py` runs a single `grpc.aio` server). The MCP agent
-triggers backtests via the `RunBacktest` gRPC RPC. The former HTTP/Connect-RPC server on `8056`
-(and its `/webhooks/run-backtest` handler) was removed.
+triggers backtests via the `RunBacktest` gRPC RPC.
 
 ## Dependencies
 
