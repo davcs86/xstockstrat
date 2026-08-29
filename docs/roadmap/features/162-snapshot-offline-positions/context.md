@@ -46,3 +46,21 @@
   realized correctness (verify `pnl.RealizedDelta` under a seeded accumulator); `filled_at` NULL handling.
 - Recon was read-only (no code changed). Consumer surface (C-14): Agent tool `manage_offline_account`
   (`snapshot_positions` op + `list_positions` provenance); UI display deferred as optional, not required.
+
+## Session 2026-08-29 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Verdict: PASS WITH WARNINGS (no blockers, no Floor breach). All 3 warnings addressed in the same pass:
+  - Criterion 9 (unchecked `- [ ]` in Open Questions): reworked — the two known-traps are now
+    bound-constraint `> Note` blocks (they are FR-6/FR-7-enforced requirements, not open decisions),
+    and the four genuine forks moved under `### Deferred to /sdd-design` with leans, no checkbox syntax.
+  - C-3 (paper-safety not stated): added to FR-4 — the OFFLINE snapshot/fold is paper-safe and
+    independent of the paper/live axis.
+  - C-5 (fill-status coverage not stated): added to FR-4 — the fold reads already-confirmed orders
+    regardless of PARTIALLY_FILLED vs FILLED.
+- Overlap scan: CLEAN. No config-key/proto-field/migration-NNN/file collisions. Concrete free slots
+  confirmed for /sdd-spec: trading migration `009` (tips at `008_offline_accounts`); `Position`
+  additive fields 22/23 (message tops at 21); `FoldFrom` net-new in `packages/proto/pnl/pnl.go`
+  (only `Fold`/`RealizedDelta` exist today). Only concurrent features 084/142 touch disjoint
+  resources (deploy/compose, marketdata). Touched services are trunk baseline from launched 157/159.
+- Not a re-attempt of any demoted/canceled feature (none semantically related to offline-position snapshots).

@@ -51,7 +51,11 @@ signed average-cost + realized reduce/flip math (`pnl.RealizedDelta`) then handl
 correctly — a post-`T0` sell drawing down baseline shares realizes against the **baseline** avg cost,
 shorts included. The recompute runs on both a snapshot write and on `ConfirmOrder`, and continues to
 emit the existing absolute `account.positions.synced` event so `xstockstrat-portfolio`'s stored
-positions update.
+positions update. **Fill-status handling is unaffected** — the fold reads already-confirmed orders
+and folds their `filled_qty`/`filled_avg_price` regardless of `ORDER_STATUS_PARTIALLY_FILLED` vs
+`ORDER_STATUS_FILLED`. The recompute is **paper-safe** — OFFLINE accounts need no live market
+access, so the snapshot/fold is independent of the paper/live (environment-derived) axis and is
+fully testable in dev/compose.
 
 FR-5. **Per-row validation / fault-tolerant batch.** Validate each baseline row independently: one
 malformed row (bad symbol, non-numeric qty/cost, negative `avg_cost_per_share`) is rejected and
@@ -147,25 +151,34 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **Known trap (fails.md 2026-08-05, add-ikbr-account-support):** the `account.positions.synced`
-  payload once shipped missing `user_id` and surfaced weeks later as a production "positions out of
-  sync" reconciliation bug. This feature both consumes and (for the audit event) produces a
-  reconciliation payload — every field a reconciler needs (esp. `user_id`, `account_id`, `as_of`,
-  `client_snapshot_id`) must be present before launch, not deferred.
-- [ ] **Known trap (fails.md 2026-07-01, 056-open-positions-ui → C-10(b)):** `as_of`/`source` must be
-  surfaced by both `ListPositions` and `buildAccountPortfolio`/`ListPortfolios` with a parity test,
-  or the Positions table and portfolio card silently disagree. FR-7 requires this; the design/spec
-  must name both write sites.
-- [ ] Snapshot submitted while unconfirmed (`NEW`) orders exist in the window — **warn + report**
-  (preserving the fault-tolerant-batch principle) vs. hard-reject? Lean warn+report. Resolve in design.
-- [ ] Audit ledger event idempotency on re-submit of the same `client_snapshot_id` — append-latest
-  (no dedup key, latest-by-sequence wins, consistent with how `account.positions.synced` works today)
-  vs. content-hash dedup? Note the ledger's `idempotency_key` is *return-the-original*, not
-  overwrite, so it cannot express "replace." Lean append-latest. Resolve in design.
-- [ ] Post-`T0` sell that exceeds baseline qty (partial baseline draw-down + partial new-lot open, incl.
-  long→short flip): confirm the existing `pnl.RealizedDelta` reduce/flip math produces the correct
-  realized figure once the accumulator is seeded — verify the producer, don't assume (fails.md
+### Bound constraints (not open — enforced by FRs; retained as build-time reminders)
+
+> **Reconciliation-payload completeness** (fails.md 2026-08-05, add-ikbr-account-support): the
+> `account.positions.synced` payload once shipped missing `user_id` and surfaced weeks later as a
+> production "positions out of sync" reconciliation bug. This feature both consumes and (for the
+> audit event) produces a reconciliation payload — every field a reconciler needs (`user_id`,
+> `account_id`, `as_of`, `client_snapshot_id`) must be present before launch, not deferred.
+> **Bound by FR-6.**
+>
+> **Read-path parity** (fails.md 2026-07-01, 056-open-positions-ui → C-10(b)): `as_of`/`source`
+> must be surfaced by both `ListPositions` and `buildAccountPortfolio`/`ListPortfolios` with a
+> parity test, or the Positions table and portfolio card silently disagree. **Bound by FR-7 / AC-12.**
+
+### Deferred to /sdd-design (design gate resolves; leans recorded)
+
+These are genuine design forks, escalated rather than silently guessed (P-03). Each carries a lean
+for the design debate to confirm or overturn:
+
+- **Snapshot submitted while unconfirmed (`NEW`) orders exist in the window** — warn + report vs.
+  hard-reject. Lean: **warn + report** (preserves the fault-tolerant-batch principle).
+- **Audit-event idempotency on re-submit of the same `client_snapshot_id`** — append-latest
+  (latest-by-sequence wins, as `account.positions.synced` works today) vs. content-hash dedup.
+  Lean: **append-latest** (the ledger `idempotency_key` is *return-the-original*, not overwrite, so
+  it cannot express "replace").
+- **Post-`T0` sell that exceeds baseline qty** (partial baseline draw-down + partial new-lot open,
+  incl. long→short flip) — confirm the existing `pnl.RealizedDelta` reduce/flip math produces the
+  correct realized figure once the accumulator is seeded. Verify the producer, don't assume (fails.md
   "demonstration ≠ producer contract" family).
-- [ ] `filled_at` is `NULL` for `NEW`/historical orders (ordered `NULLS LAST` today). Confirm the
-  confirmed-order set the fold reads always has `filled_at` set, so `filled_at > as_of` is
-  well-defined for every folded row.
+- **`filled_at` NULL handling** — confirm the confirmed-order set the fold reads always has
+  `filled_at` set, so `filled_at > as_of` is well-defined for every folded row (`NEW`/historical rows
+  are `NULL`, ordered `NULLS LAST` today, and excluded by the confirmed-status filter).

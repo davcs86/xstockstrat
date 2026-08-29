@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-29 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-29 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings addressed) |
 
 ---
 
@@ -48,4 +49,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review snapshot-offline-positions product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec snapshot-offline-positions` — generate implementation spec
