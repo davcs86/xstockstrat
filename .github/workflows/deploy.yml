@@ -43,6 +43,17 @@ on:
         required: false
         # Callers pass DEV_SENDGRID_API_KEY or PROD_SENDGRID_API_KEY from GitHub Secrets. Optional —
         # email fanout is off until the key AND both addresses are set (feature 020).
+      VAPID_PRIVATE_KEY:
+        required: false
+        # Callers pass DEV_VAPID_PRIVATE_KEY or PROD_VAPID_PRIVATE_KEY from GitHub Secrets. Optional —
+        # Web Push is off until all three VAPID values are set (feature 162). App-level notify secret.
+      VAPID_PUBLIC_KEY:
+        required: false
+        # Non-secret VAPID public key (also consumed by the UI). Passed as a secret input only so the
+        # same substitution path fills the YOUR_*_VAPID_PUBLIC_KEY placeholders (feature 162).
+      VAPID_SUBJECT:
+        required: false
+        # Non-secret VAPID subject (a mailto:/https: URL). Same substitution path (feature 162).
 
 jobs:
   deploy:
@@ -61,6 +72,9 @@ jobs:
           CONFIG_SECRETS_ENCRYPTION_KEY: ${{ secrets.CONFIG_SECRETS_ENCRYPTION_KEY }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
         run: |
           sed \
             -e "s|YOUR_GITHUB_ORG|${{ github.repository_owner }}|g" \
@@ -71,6 +85,9 @@ jobs:
             CONFIG_SECRETS_ENCRYPTION_KEY="$CONFIG_SECRETS_ENCRYPTION_KEY" \
             SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL" \
             SENDGRID_API_KEY="$SENDGRID_API_KEY" \
+            VAPID_PRIVATE_KEY="$VAPID_PRIVATE_KEY" \
+            VAPID_PUBLIC_KEY="$VAPID_PUBLIC_KEY" \
+            VAPID_SUBJECT="$VAPID_SUBJECT" \
             python3 -c "
           import os, sys
           content = sys.stdin.read()
@@ -89,6 +106,15 @@ jobs:
           sendgrid_key = os.environ.get('SENDGRID_API_KEY', '')
           content = content.replace('YOUR_DEV_SENDGRID_API_KEY', sendgrid_key)
           content = content.replace('YOUR_PROD_SENDGRID_API_KEY', sendgrid_key)
+          vapid_priv = os.environ.get('VAPID_PRIVATE_KEY', '')
+          content = content.replace('YOUR_DEV_VAPID_PRIVATE_KEY', vapid_priv)
+          content = content.replace('YOUR_PROD_VAPID_PRIVATE_KEY', vapid_priv)
+          vapid_pub = os.environ.get('VAPID_PUBLIC_KEY', '')
+          content = content.replace('YOUR_DEV_VAPID_PUBLIC_KEY', vapid_pub)
+          content = content.replace('YOUR_PROD_VAPID_PUBLIC_KEY', vapid_pub)
+          vapid_subject = os.environ.get('VAPID_SUBJECT', '')
+          content = content.replace('YOUR_DEV_VAPID_SUBJECT', vapid_subject)
+          content = content.replace('YOUR_PROD_VAPID_SUBJECT', vapid_subject)
           sys.stdout.write(content)
           " > /tmp/app_spec_substituted.yaml
 

@@ -51,6 +51,9 @@ jobs:
       CONFIG_SECRETS_ENCRYPTION_KEY: ${{ secrets.PROD_CONFIG_SECRETS_ENCRYPTION_KEY }}
       SLACK_WEBHOOK_URL: ${{ secrets.PROD_SLACK_WEBHOOK_URL }}
       SENDGRID_API_KEY: ${{ secrets.PROD_SENDGRID_API_KEY }}
+      VAPID_PRIVATE_KEY: ${{ secrets.PROD_VAPID_PRIVATE_KEY }}
+      VAPID_PUBLIC_KEY: ${{ secrets.PROD_VAPID_PUBLIC_KEY }}
+      VAPID_SUBJECT: ${{ secrets.PROD_VAPID_SUBJECT }}
     with:
       app_spec: .do/app.yaml
       image_tag: ${{ needs.prepare.outputs.short_sha }}

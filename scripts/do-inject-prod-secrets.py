@@ -42,6 +42,11 @@ PLACEHOLDER_KEYS = (
 OPTIONAL_PLACEHOLDER_KEYS = (
     ("YOUR_PROD_SLACK_WEBHOOK_URL", "SLACK_WEBHOOK_URL"),
     ("YOUR_PROD_SENDGRID_API_KEY", "SENDGRID_API_KEY"),
+    # Feature 162 — Web Push (VAPID). Private key is the secret; public key + subject are non-secret
+    # but injected the same way so all three placeholders resolve. Off until all three are set.
+    ("YOUR_PROD_VAPID_PRIVATE_KEY", "VAPID_PRIVATE_KEY"),
+    ("YOUR_PROD_VAPID_PUBLIC_KEY", "VAPID_PUBLIC_KEY"),
+    ("YOUR_PROD_VAPID_SUBJECT", "VAPID_SUBJECT"),
 )
 
 
