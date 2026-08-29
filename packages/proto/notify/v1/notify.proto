@@ -22,6 +22,13 @@ service NotifyService {
 
   // List historical alerts
   rpc ListAlerts(ListAlertsRequest) returns (ListAlertsResponse);
+
+  // Register (or upsert) a Web Push subscription for the calling user.
+  // The BFF fills user_id from the verified session — never trusted from the browser body.
+  rpc RegisterPushSubscription(RegisterPushSubscriptionRequest) returns (RegisterPushSubscriptionResponse);
+
+  // Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()).
+  rpc UnregisterPushSubscription(UnregisterPushSubscriptionRequest) returns (UnregisterPushSubscriptionResponse);
 }
 
 message Alert {
@@ -90,4 +97,25 @@ message ListAlertsRequest {
 message ListAlertsResponse {
   repeated Alert alerts = 1;
   string next_page_token = 2;
+}
+
+// Web Push subscription registration (feature 162 — pwa-notifications).
+message RegisterPushSubscriptionRequest {
+  string user_id = 1;     // filled by the BFF from the verified session — never trusted from the browser body
+  string endpoint = 2;    // the push service endpoint URL (PushSubscription.endpoint)
+  string p256dh = 3;      // client public key (PushSubscription.keys.p256dh)
+  string auth = 4;        // client auth secret (PushSubscription.keys.auth)
+  string user_agent = 5;  // optional device label for debugging
+}
+
+message RegisterPushSubscriptionResponse {
+  string subscription_id = 1;
+}
+
+message UnregisterPushSubscriptionRequest {
+  string endpoint = 1;    // delete by endpoint only — no user_id (an endpoint is a possession-proven capability)
+}
+
+message UnregisterPushSubscriptionResponse {
+  bool deleted = 1;
 }

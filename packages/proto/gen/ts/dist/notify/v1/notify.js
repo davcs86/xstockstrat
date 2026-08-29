@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: notify/v1/notify.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.NotifyServiceClient = exports.NotifyServiceService = exports.ListAlertsResponse = exports.ListAlertsRequest = exports.AcknowledgeAlertResponse = exports.AcknowledgeAlertRequest = exports.StreamAlertsRequest = exports.EmitAlertResponse = exports.EmitAlertRequest = exports.Alert = exports.AlertSeverity = exports.protobufPackage = void 0;
+exports.NotifyServiceClient = exports.NotifyServiceService = exports.UnregisterPushSubscriptionResponse = exports.UnregisterPushSubscriptionRequest = exports.RegisterPushSubscriptionResponse = exports.RegisterPushSubscriptionRequest = exports.ListAlertsResponse = exports.ListAlertsRequest = exports.AcknowledgeAlertResponse = exports.AcknowledgeAlertRequest = exports.StreamAlertsRequest = exports.EmitAlertResponse = exports.EmitAlertRequest = exports.Alert = exports.AlertSeverity = exports.protobufPackage = void 0;
 exports.alertSeverityFromJSON = alertSeverityFromJSON;
 exports.alertSeverityToJSON = alertSeverityToJSON;
 exports.alertSeverityToNumber = alertSeverityToNumber;
@@ -1035,6 +1035,286 @@ exports.ListAlertsResponse = {
         return message;
     },
 };
+function createBaseRegisterPushSubscriptionRequest() {
+    return { userId: "", endpoint: "", p256dh: "", auth: "", userAgent: "" };
+}
+exports.RegisterPushSubscriptionRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.userId !== "") {
+            writer.uint32(10).string(message.userId);
+        }
+        if (message.endpoint !== "") {
+            writer.uint32(18).string(message.endpoint);
+        }
+        if (message.p256dh !== "") {
+            writer.uint32(26).string(message.p256dh);
+        }
+        if (message.auth !== "") {
+            writer.uint32(34).string(message.auth);
+        }
+        if (message.userAgent !== "") {
+            writer.uint32(42).string(message.userAgent);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseRegisterPushSubscriptionRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.endpoint = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.p256dh = reader.string();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.auth = reader.string();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.userAgent = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
+            endpoint: isSet(object.endpoint) ? globalThis.String(object.endpoint) : "",
+            p256dh: isSet(object.p256dh) ? globalThis.String(object.p256dh) : "",
+            auth: isSet(object.auth) ? globalThis.String(object.auth) : "",
+            userAgent: isSet(object.userAgent)
+                ? globalThis.String(object.userAgent)
+                : isSet(object.user_agent)
+                    ? globalThis.String(object.user_agent)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
+        if (message.endpoint !== "") {
+            obj.endpoint = message.endpoint;
+        }
+        if (message.p256dh !== "") {
+            obj.p256dh = message.p256dh;
+        }
+        if (message.auth !== "") {
+            obj.auth = message.auth;
+        }
+        if (message.userAgent !== "") {
+            obj.userAgent = message.userAgent;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.RegisterPushSubscriptionRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseRegisterPushSubscriptionRequest();
+        message.userId = object.userId ?? "";
+        message.endpoint = object.endpoint ?? "";
+        message.p256dh = object.p256dh ?? "";
+        message.auth = object.auth ?? "";
+        message.userAgent = object.userAgent ?? "";
+        return message;
+    },
+};
+function createBaseRegisterPushSubscriptionResponse() {
+    return { subscriptionId: "" };
+}
+exports.RegisterPushSubscriptionResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.subscriptionId !== "") {
+            writer.uint32(10).string(message.subscriptionId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseRegisterPushSubscriptionResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.subscriptionId = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            subscriptionId: isSet(object.subscriptionId)
+                ? globalThis.String(object.subscriptionId)
+                : isSet(object.subscription_id)
+                    ? globalThis.String(object.subscription_id)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.subscriptionId !== "") {
+            obj.subscriptionId = message.subscriptionId;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.RegisterPushSubscriptionResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseRegisterPushSubscriptionResponse();
+        message.subscriptionId = object.subscriptionId ?? "";
+        return message;
+    },
+};
+function createBaseUnregisterPushSubscriptionRequest() {
+    return { endpoint: "" };
+}
+exports.UnregisterPushSubscriptionRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.endpoint !== "") {
+            writer.uint32(10).string(message.endpoint);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseUnregisterPushSubscriptionRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.endpoint = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { endpoint: isSet(object.endpoint) ? globalThis.String(object.endpoint) : "" };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.endpoint !== "") {
+            obj.endpoint = message.endpoint;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.UnregisterPushSubscriptionRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseUnregisterPushSubscriptionRequest();
+        message.endpoint = object.endpoint ?? "";
+        return message;
+    },
+};
+function createBaseUnregisterPushSubscriptionResponse() {
+    return { deleted: false };
+}
+exports.UnregisterPushSubscriptionResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.deleted !== false) {
+            writer.uint32(8).bool(message.deleted);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseUnregisterPushSubscriptionResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 8) {
+                        break;
+                    }
+                    message.deleted = reader.bool();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { deleted: isSet(object.deleted) ? globalThis.Boolean(object.deleted) : false };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.deleted !== false) {
+            obj.deleted = message.deleted;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.UnregisterPushSubscriptionResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseUnregisterPushSubscriptionResponse();
+        message.deleted = object.deleted ?? false;
+        return message;
+    },
+};
 exports.NotifyServiceService = {
     /** Emit an alert from any service */
     emitAlert: {
@@ -1078,6 +1358,29 @@ exports.NotifyServiceService = {
         requestDeserialize: (value) => exports.ListAlertsRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.ListAlertsResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.ListAlertsResponse.decode(value),
+    },
+    /**
+     * Register (or upsert) a Web Push subscription for the calling user.
+     * The BFF fills user_id from the verified session — never trusted from the browser body.
+     */
+    registerPushSubscription: {
+        path: "/xstockstrat.notify.v1.NotifyService/RegisterPushSubscription",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.RegisterPushSubscriptionRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.RegisterPushSubscriptionRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.RegisterPushSubscriptionResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.RegisterPushSubscriptionResponse.decode(value),
+    },
+    /** Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()). */
+    unregisterPushSubscription: {
+        path: "/xstockstrat.notify.v1.NotifyService/UnregisterPushSubscription",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.UnregisterPushSubscriptionRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.UnregisterPushSubscriptionRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.UnregisterPushSubscriptionResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.UnregisterPushSubscriptionResponse.decode(value),
     },
 };
 exports.NotifyServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.NotifyServiceService, "xstockstrat.notify.v1.NotifyService");

@@ -242,6 +242,92 @@ export type ListAlertsResponse = Message<"xstockstrat.notify.v1.ListAlertsRespon
  */
 export declare const ListAlertsResponseSchema: GenMessage<ListAlertsResponse>;
 /**
+ * Web Push subscription registration (feature 162 — pwa-notifications).
+ *
+ * @generated from message xstockstrat.notify.v1.RegisterPushSubscriptionRequest
+ */
+export type RegisterPushSubscriptionRequest = Message<"xstockstrat.notify.v1.RegisterPushSubscriptionRequest"> & {
+    /**
+     * filled by the BFF from the verified session — never trusted from the browser body
+     *
+     * @generated from field: string user_id = 1;
+     */
+    userId: string;
+    /**
+     * the push service endpoint URL (PushSubscription.endpoint)
+     *
+     * @generated from field: string endpoint = 2;
+     */
+    endpoint: string;
+    /**
+     * client public key (PushSubscription.keys.p256dh)
+     *
+     * @generated from field: string p256dh = 3;
+     */
+    p256dh: string;
+    /**
+     * client auth secret (PushSubscription.keys.auth)
+     *
+     * @generated from field: string auth = 4;
+     */
+    auth: string;
+    /**
+     * optional device label for debugging
+     *
+     * @generated from field: string user_agent = 5;
+     */
+    userAgent: string;
+};
+/**
+ * Describes the message xstockstrat.notify.v1.RegisterPushSubscriptionRequest.
+ * Use `create(RegisterPushSubscriptionRequestSchema)` to create a new message.
+ */
+export declare const RegisterPushSubscriptionRequestSchema: GenMessage<RegisterPushSubscriptionRequest>;
+/**
+ * @generated from message xstockstrat.notify.v1.RegisterPushSubscriptionResponse
+ */
+export type RegisterPushSubscriptionResponse = Message<"xstockstrat.notify.v1.RegisterPushSubscriptionResponse"> & {
+    /**
+     * @generated from field: string subscription_id = 1;
+     */
+    subscriptionId: string;
+};
+/**
+ * Describes the message xstockstrat.notify.v1.RegisterPushSubscriptionResponse.
+ * Use `create(RegisterPushSubscriptionResponseSchema)` to create a new message.
+ */
+export declare const RegisterPushSubscriptionResponseSchema: GenMessage<RegisterPushSubscriptionResponse>;
+/**
+ * @generated from message xstockstrat.notify.v1.UnregisterPushSubscriptionRequest
+ */
+export type UnregisterPushSubscriptionRequest = Message<"xstockstrat.notify.v1.UnregisterPushSubscriptionRequest"> & {
+    /**
+     * delete by endpoint only — no user_id (an endpoint is a possession-proven capability)
+     *
+     * @generated from field: string endpoint = 1;
+     */
+    endpoint: string;
+};
+/**
+ * Describes the message xstockstrat.notify.v1.UnregisterPushSubscriptionRequest.
+ * Use `create(UnregisterPushSubscriptionRequestSchema)` to create a new message.
+ */
+export declare const UnregisterPushSubscriptionRequestSchema: GenMessage<UnregisterPushSubscriptionRequest>;
+/**
+ * @generated from message xstockstrat.notify.v1.UnregisterPushSubscriptionResponse
+ */
+export type UnregisterPushSubscriptionResponse = Message<"xstockstrat.notify.v1.UnregisterPushSubscriptionResponse"> & {
+    /**
+     * @generated from field: bool deleted = 1;
+     */
+    deleted: boolean;
+};
+/**
+ * Describes the message xstockstrat.notify.v1.UnregisterPushSubscriptionResponse.
+ * Use `create(UnregisterPushSubscriptionResponseSchema)` to create a new message.
+ */
+export declare const UnregisterPushSubscriptionResponseSchema: GenMessage<UnregisterPushSubscriptionResponse>;
+/**
  * @generated from enum xstockstrat.notify.v1.AlertSeverity
  */
 export declare enum AlertSeverity {
@@ -317,5 +403,26 @@ export declare const NotifyService: GenService<{
         methodKind: "unary";
         input: typeof ListAlertsRequestSchema;
         output: typeof ListAlertsResponseSchema;
+    };
+    /**
+     * Register (or upsert) a Web Push subscription for the calling user.
+     * The BFF fills user_id from the verified session — never trusted from the browser body.
+     *
+     * @generated from rpc xstockstrat.notify.v1.NotifyService.RegisterPushSubscription
+     */
+    registerPushSubscription: {
+        methodKind: "unary";
+        input: typeof RegisterPushSubscriptionRequestSchema;
+        output: typeof RegisterPushSubscriptionResponseSchema;
+    };
+    /**
+     * Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()).
+     *
+     * @generated from rpc xstockstrat.notify.v1.NotifyService.UnregisterPushSubscription
+     */
+    unregisterPushSubscription: {
+        methodKind: "unary";
+        input: typeof UnregisterPushSubscriptionRequestSchema;
+        output: typeof UnregisterPushSubscriptionResponseSchema;
     };
 }>;

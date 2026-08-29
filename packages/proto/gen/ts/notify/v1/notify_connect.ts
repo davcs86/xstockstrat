@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AcknowledgeAlertRequest, AcknowledgeAlertResponse, Alert, EmitAlertRequest, EmitAlertResponse, ListAlertsRequest, ListAlertsResponse, StreamAlertsRequest } from "./notify_pb.js";
+import { AcknowledgeAlertRequest, AcknowledgeAlertResponse, Alert, EmitAlertRequest, EmitAlertResponse, ListAlertsRequest, ListAlertsResponse, RegisterPushSubscriptionRequest, RegisterPushSubscriptionResponse, StreamAlertsRequest, UnregisterPushSubscriptionRequest, UnregisterPushSubscriptionResponse } from "./notify_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -58,6 +58,29 @@ export const NotifyService = {
       name: "ListAlerts",
       I: ListAlertsRequest,
       O: ListAlertsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Register (or upsert) a Web Push subscription for the calling user.
+     * The BFF fills user_id from the verified session — never trusted from the browser body.
+     *
+     * @generated from rpc xstockstrat.notify.v1.NotifyService.RegisterPushSubscription
+     */
+    registerPushSubscription: {
+      name: "RegisterPushSubscription",
+      I: RegisterPushSubscriptionRequest,
+      O: RegisterPushSubscriptionResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()).
+     *
+     * @generated from rpc xstockstrat.notify.v1.NotifyService.UnregisterPushSubscription
+     */
+    unregisterPushSubscription: {
+      name: "UnregisterPushSubscription",
+      I: UnregisterPushSubscriptionRequest,
+      O: UnregisterPushSubscriptionResponse,
       kind: MethodKind.Unary,
     },
   }

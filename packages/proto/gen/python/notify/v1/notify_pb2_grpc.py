@@ -56,6 +56,16 @@ class NotifyServiceStub(object):
                 request_serializer=notify_dot_v1_dot_notify__pb2.ListAlertsRequest.SerializeToString,
                 response_deserializer=notify_dot_v1_dot_notify__pb2.ListAlertsResponse.FromString,
                 _registered_method=True)
+        self.RegisterPushSubscription = channel.unary_unary(
+                '/xstockstrat.notify.v1.NotifyService/RegisterPushSubscription',
+                request_serializer=notify_dot_v1_dot_notify__pb2.RegisterPushSubscriptionRequest.SerializeToString,
+                response_deserializer=notify_dot_v1_dot_notify__pb2.RegisterPushSubscriptionResponse.FromString,
+                _registered_method=True)
+        self.UnregisterPushSubscription = channel.unary_unary(
+                '/xstockstrat.notify.v1.NotifyService/UnregisterPushSubscription',
+                request_serializer=notify_dot_v1_dot_notify__pb2.UnregisterPushSubscriptionRequest.SerializeToString,
+                response_deserializer=notify_dot_v1_dot_notify__pb2.UnregisterPushSubscriptionResponse.FromString,
+                _registered_method=True)
 
 
 class NotifyServiceServicer(object):
@@ -92,6 +102,21 @@ class NotifyServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def RegisterPushSubscription(self, request, context):
+        """Register (or upsert) a Web Push subscription for the calling user.
+        The BFF fills user_id from the verified session — never trusted from the browser body.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UnregisterPushSubscription(self, request, context):
+        """Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_NotifyServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -114,6 +139,16 @@ def add_NotifyServiceServicer_to_server(servicer, server):
                     servicer.ListAlerts,
                     request_deserializer=notify_dot_v1_dot_notify__pb2.ListAlertsRequest.FromString,
                     response_serializer=notify_dot_v1_dot_notify__pb2.ListAlertsResponse.SerializeToString,
+            ),
+            'RegisterPushSubscription': grpc.unary_unary_rpc_method_handler(
+                    servicer.RegisterPushSubscription,
+                    request_deserializer=notify_dot_v1_dot_notify__pb2.RegisterPushSubscriptionRequest.FromString,
+                    response_serializer=notify_dot_v1_dot_notify__pb2.RegisterPushSubscriptionResponse.SerializeToString,
+            ),
+            'UnregisterPushSubscription': grpc.unary_unary_rpc_method_handler(
+                    servicer.UnregisterPushSubscription,
+                    request_deserializer=notify_dot_v1_dot_notify__pb2.UnregisterPushSubscriptionRequest.FromString,
+                    response_serializer=notify_dot_v1_dot_notify__pb2.UnregisterPushSubscriptionResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -226,6 +261,60 @@ class NotifyService(object):
             '/xstockstrat.notify.v1.NotifyService/ListAlerts',
             notify_dot_v1_dot_notify__pb2.ListAlertsRequest.SerializeToString,
             notify_dot_v1_dot_notify__pb2.ListAlertsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RegisterPushSubscription(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.notify.v1.NotifyService/RegisterPushSubscription',
+            notify_dot_v1_dot_notify__pb2.RegisterPushSubscriptionRequest.SerializeToString,
+            notify_dot_v1_dot_notify__pb2.RegisterPushSubscriptionResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UnregisterPushSubscription(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.notify.v1.NotifyService/UnregisterPushSubscription',
+            notify_dot_v1_dot_notify__pb2.UnregisterPushSubscriptionRequest.SerializeToString,
+            notify_dot_v1_dot_notify__pb2.UnregisterPushSubscriptionResponse.FromString,
             options,
             channel_credentials,
             insecure,

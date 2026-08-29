@@ -74,6 +74,29 @@ export interface ListAlertsResponse {
     alerts: Alert[];
     nextPageToken: string;
 }
+/** Web Push subscription registration (feature 162 — pwa-notifications). */
+export interface RegisterPushSubscriptionRequest {
+    /** filled by the BFF from the verified session — never trusted from the browser body */
+    userId: string;
+    /** the push service endpoint URL (PushSubscription.endpoint) */
+    endpoint: string;
+    /** client public key (PushSubscription.keys.p256dh) */
+    p256dh: string;
+    /** client auth secret (PushSubscription.keys.auth) */
+    auth: string;
+    /** optional device label for debugging */
+    userAgent: string;
+}
+export interface RegisterPushSubscriptionResponse {
+    subscriptionId: string;
+}
+export interface UnregisterPushSubscriptionRequest {
+    /** delete by endpoint only — no user_id (an endpoint is a possession-proven capability) */
+    endpoint: string;
+}
+export interface UnregisterPushSubscriptionResponse {
+    deleted: boolean;
+}
 export declare const Alert: MessageFns<Alert>;
 export declare const EmitAlertRequest: MessageFns<EmitAlertRequest>;
 export declare const EmitAlertResponse: MessageFns<EmitAlertResponse>;
@@ -82,6 +105,10 @@ export declare const AcknowledgeAlertRequest: MessageFns<AcknowledgeAlertRequest
 export declare const AcknowledgeAlertResponse: MessageFns<AcknowledgeAlertResponse>;
 export declare const ListAlertsRequest: MessageFns<ListAlertsRequest>;
 export declare const ListAlertsResponse: MessageFns<ListAlertsResponse>;
+export declare const RegisterPushSubscriptionRequest: MessageFns<RegisterPushSubscriptionRequest>;
+export declare const RegisterPushSubscriptionResponse: MessageFns<RegisterPushSubscriptionResponse>;
+export declare const UnregisterPushSubscriptionRequest: MessageFns<UnregisterPushSubscriptionRequest>;
+export declare const UnregisterPushSubscriptionResponse: MessageFns<UnregisterPushSubscriptionResponse>;
 /**
  * NotifyService — gRPC server-streaming alert delivery.
  * Services emit alerts via EmitAlert; subscribers receive via StreamAlerts.
@@ -131,6 +158,29 @@ export declare const NotifyServiceService: {
         readonly responseSerialize: (value: ListAlertsResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => ListAlertsResponse;
     };
+    /**
+     * Register (or upsert) a Web Push subscription for the calling user.
+     * The BFF fills user_id from the verified session — never trusted from the browser body.
+     */
+    readonly registerPushSubscription: {
+        readonly path: "/xstockstrat.notify.v1.NotifyService/RegisterPushSubscription";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: RegisterPushSubscriptionRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => RegisterPushSubscriptionRequest;
+        readonly responseSerialize: (value: RegisterPushSubscriptionResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => RegisterPushSubscriptionResponse;
+    };
+    /** Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()). */
+    readonly unregisterPushSubscription: {
+        readonly path: "/xstockstrat.notify.v1.NotifyService/UnregisterPushSubscription";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: UnregisterPushSubscriptionRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => UnregisterPushSubscriptionRequest;
+        readonly responseSerialize: (value: UnregisterPushSubscriptionResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => UnregisterPushSubscriptionResponse;
+    };
 };
 export interface NotifyServiceServer extends UntypedServiceImplementation {
     /** Emit an alert from any service */
@@ -144,6 +194,13 @@ export interface NotifyServiceServer extends UntypedServiceImplementation {
     acknowledgeAlert: handleUnaryCall<AcknowledgeAlertRequest, AcknowledgeAlertResponse>;
     /** List historical alerts */
     listAlerts: handleUnaryCall<ListAlertsRequest, ListAlertsResponse>;
+    /**
+     * Register (or upsert) a Web Push subscription for the calling user.
+     * The BFF fills user_id from the verified session — never trusted from the browser body.
+     */
+    registerPushSubscription: handleUnaryCall<RegisterPushSubscriptionRequest, RegisterPushSubscriptionResponse>;
+    /** Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()). */
+    unregisterPushSubscription: handleUnaryCall<UnregisterPushSubscriptionRequest, UnregisterPushSubscriptionResponse>;
 }
 export interface NotifyServiceClient extends Client {
     /** Emit an alert from any service */
@@ -164,6 +221,17 @@ export interface NotifyServiceClient extends Client {
     listAlerts(request: ListAlertsRequest, callback: (error: ServiceError | null, response: ListAlertsResponse) => void): ClientUnaryCall;
     listAlerts(request: ListAlertsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListAlertsResponse) => void): ClientUnaryCall;
     listAlerts(request: ListAlertsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListAlertsResponse) => void): ClientUnaryCall;
+    /**
+     * Register (or upsert) a Web Push subscription for the calling user.
+     * The BFF fills user_id from the verified session — never trusted from the browser body.
+     */
+    registerPushSubscription(request: RegisterPushSubscriptionRequest, callback: (error: ServiceError | null, response: RegisterPushSubscriptionResponse) => void): ClientUnaryCall;
+    registerPushSubscription(request: RegisterPushSubscriptionRequest, metadata: Metadata, callback: (error: ServiceError | null, response: RegisterPushSubscriptionResponse) => void): ClientUnaryCall;
+    registerPushSubscription(request: RegisterPushSubscriptionRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: RegisterPushSubscriptionResponse) => void): ClientUnaryCall;
+    /** Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()). */
+    unregisterPushSubscription(request: UnregisterPushSubscriptionRequest, callback: (error: ServiceError | null, response: UnregisterPushSubscriptionResponse) => void): ClientUnaryCall;
+    unregisterPushSubscription(request: UnregisterPushSubscriptionRequest, metadata: Metadata, callback: (error: ServiceError | null, response: UnregisterPushSubscriptionResponse) => void): ClientUnaryCall;
+    unregisterPushSubscription(request: UnregisterPushSubscriptionRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: UnregisterPushSubscriptionResponse) => void): ClientUnaryCall;
 }
 export declare const NotifyServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): NotifyServiceClient;

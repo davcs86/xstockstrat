@@ -19,10 +19,12 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	NotifyService_EmitAlert_FullMethodName        = "/xstockstrat.notify.v1.NotifyService/EmitAlert"
-	NotifyService_StreamAlerts_FullMethodName     = "/xstockstrat.notify.v1.NotifyService/StreamAlerts"
-	NotifyService_AcknowledgeAlert_FullMethodName = "/xstockstrat.notify.v1.NotifyService/AcknowledgeAlert"
-	NotifyService_ListAlerts_FullMethodName       = "/xstockstrat.notify.v1.NotifyService/ListAlerts"
+	NotifyService_EmitAlert_FullMethodName                  = "/xstockstrat.notify.v1.NotifyService/EmitAlert"
+	NotifyService_StreamAlerts_FullMethodName               = "/xstockstrat.notify.v1.NotifyService/StreamAlerts"
+	NotifyService_AcknowledgeAlert_FullMethodName           = "/xstockstrat.notify.v1.NotifyService/AcknowledgeAlert"
+	NotifyService_ListAlerts_FullMethodName                 = "/xstockstrat.notify.v1.NotifyService/ListAlerts"
+	NotifyService_RegisterPushSubscription_FullMethodName   = "/xstockstrat.notify.v1.NotifyService/RegisterPushSubscription"
+	NotifyService_UnregisterPushSubscription_FullMethodName = "/xstockstrat.notify.v1.NotifyService/UnregisterPushSubscription"
 )
 
 // NotifyServiceClient is the client API for NotifyService service.
@@ -41,6 +43,11 @@ type NotifyServiceClient interface {
 	AcknowledgeAlert(ctx context.Context, in *AcknowledgeAlertRequest, opts ...grpc.CallOption) (*AcknowledgeAlertResponse, error)
 	// List historical alerts
 	ListAlerts(ctx context.Context, in *ListAlertsRequest, opts ...grpc.CallOption) (*ListAlertsResponse, error)
+	// Register (or upsert) a Web Push subscription for the calling user.
+	// The BFF fills user_id from the verified session — never trusted from the browser body.
+	RegisterPushSubscription(ctx context.Context, in *RegisterPushSubscriptionRequest, opts ...grpc.CallOption) (*RegisterPushSubscriptionResponse, error)
+	// Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()).
+	UnregisterPushSubscription(ctx context.Context, in *UnregisterPushSubscriptionRequest, opts ...grpc.CallOption) (*UnregisterPushSubscriptionResponse, error)
 }
 
 type notifyServiceClient struct {
@@ -100,6 +107,26 @@ func (c *notifyServiceClient) ListAlerts(ctx context.Context, in *ListAlertsRequ
 	return out, nil
 }
 
+func (c *notifyServiceClient) RegisterPushSubscription(ctx context.Context, in *RegisterPushSubscriptionRequest, opts ...grpc.CallOption) (*RegisterPushSubscriptionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RegisterPushSubscriptionResponse)
+	err := c.cc.Invoke(ctx, NotifyService_RegisterPushSubscription_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *notifyServiceClient) UnregisterPushSubscription(ctx context.Context, in *UnregisterPushSubscriptionRequest, opts ...grpc.CallOption) (*UnregisterPushSubscriptionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UnregisterPushSubscriptionResponse)
+	err := c.cc.Invoke(ctx, NotifyService_UnregisterPushSubscription_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // NotifyServiceServer is the server API for NotifyService service.
 // All implementations should embed UnimplementedNotifyServiceServer
 // for forward compatibility.
@@ -116,6 +143,11 @@ type NotifyServiceServer interface {
 	AcknowledgeAlert(context.Context, *AcknowledgeAlertRequest) (*AcknowledgeAlertResponse, error)
 	// List historical alerts
 	ListAlerts(context.Context, *ListAlertsRequest) (*ListAlertsResponse, error)
+	// Register (or upsert) a Web Push subscription for the calling user.
+	// The BFF fills user_id from the verified session — never trusted from the browser body.
+	RegisterPushSubscription(context.Context, *RegisterPushSubscriptionRequest) (*RegisterPushSubscriptionResponse, error)
+	// Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()).
+	UnregisterPushSubscription(context.Context, *UnregisterPushSubscriptionRequest) (*UnregisterPushSubscriptionResponse, error)
 }
 
 // UnimplementedNotifyServiceServer should be embedded to have
@@ -136,6 +168,12 @@ func (UnimplementedNotifyServiceServer) AcknowledgeAlert(context.Context, *Ackno
 }
 func (UnimplementedNotifyServiceServer) ListAlerts(context.Context, *ListAlertsRequest) (*ListAlertsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListAlerts not implemented")
+}
+func (UnimplementedNotifyServiceServer) RegisterPushSubscription(context.Context, *RegisterPushSubscriptionRequest) (*RegisterPushSubscriptionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RegisterPushSubscription not implemented")
+}
+func (UnimplementedNotifyServiceServer) UnregisterPushSubscription(context.Context, *UnregisterPushSubscriptionRequest) (*UnregisterPushSubscriptionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UnregisterPushSubscription not implemented")
 }
 func (UnimplementedNotifyServiceServer) testEmbeddedByValue() {}
 
@@ -222,6 +260,42 @@ func _NotifyService_ListAlerts_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NotifyService_RegisterPushSubscription_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterPushSubscriptionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NotifyServiceServer).RegisterPushSubscription(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NotifyService_RegisterPushSubscription_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NotifyServiceServer).RegisterPushSubscription(ctx, req.(*RegisterPushSubscriptionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NotifyService_UnregisterPushSubscription_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnregisterPushSubscriptionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NotifyServiceServer).UnregisterPushSubscription(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NotifyService_UnregisterPushSubscription_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NotifyServiceServer).UnregisterPushSubscription(ctx, req.(*UnregisterPushSubscriptionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // NotifyService_ServiceDesc is the grpc.ServiceDesc for NotifyService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -240,6 +314,14 @@ var NotifyService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListAlerts",
 			Handler:    _NotifyService_ListAlerts_Handler,
+		},
+		{
+			MethodName: "RegisterPushSubscription",
+			Handler:    _NotifyService_RegisterPushSubscription_Handler,
+		},
+		{
+			MethodName: "UnregisterPushSubscription",
+			Handler:    _NotifyService_UnregisterPushSubscription_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

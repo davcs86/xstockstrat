@@ -44,6 +44,12 @@ const (
 	// NotifyServiceListAlertsProcedure is the fully-qualified name of the NotifyService's ListAlerts
 	// RPC.
 	NotifyServiceListAlertsProcedure = "/xstockstrat.notify.v1.NotifyService/ListAlerts"
+	// NotifyServiceRegisterPushSubscriptionProcedure is the fully-qualified name of the NotifyService's
+	// RegisterPushSubscription RPC.
+	NotifyServiceRegisterPushSubscriptionProcedure = "/xstockstrat.notify.v1.NotifyService/RegisterPushSubscription"
+	// NotifyServiceUnregisterPushSubscriptionProcedure is the fully-qualified name of the
+	// NotifyService's UnregisterPushSubscription RPC.
+	NotifyServiceUnregisterPushSubscriptionProcedure = "/xstockstrat.notify.v1.NotifyService/UnregisterPushSubscription"
 )
 
 // NotifyServiceClient is a client for the xstockstrat.notify.v1.NotifyService service.
@@ -57,6 +63,11 @@ type NotifyServiceClient interface {
 	AcknowledgeAlert(context.Context, *connect.Request[v1.AcknowledgeAlertRequest]) (*connect.Response[v1.AcknowledgeAlertResponse], error)
 	// List historical alerts
 	ListAlerts(context.Context, *connect.Request[v1.ListAlertsRequest]) (*connect.Response[v1.ListAlertsResponse], error)
+	// Register (or upsert) a Web Push subscription for the calling user.
+	// The BFF fills user_id from the verified session — never trusted from the browser body.
+	RegisterPushSubscription(context.Context, *connect.Request[v1.RegisterPushSubscriptionRequest]) (*connect.Response[v1.RegisterPushSubscriptionResponse], error)
+	// Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()).
+	UnregisterPushSubscription(context.Context, *connect.Request[v1.UnregisterPushSubscriptionRequest]) (*connect.Response[v1.UnregisterPushSubscriptionResponse], error)
 }
 
 // NewNotifyServiceClient constructs a client for the xstockstrat.notify.v1.NotifyService service.
@@ -94,15 +105,29 @@ func NewNotifyServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(notifyServiceMethods.ByName("ListAlerts")),
 			connect.WithClientOptions(opts...),
 		),
+		registerPushSubscription: connect.NewClient[v1.RegisterPushSubscriptionRequest, v1.RegisterPushSubscriptionResponse](
+			httpClient,
+			baseURL+NotifyServiceRegisterPushSubscriptionProcedure,
+			connect.WithSchema(notifyServiceMethods.ByName("RegisterPushSubscription")),
+			connect.WithClientOptions(opts...),
+		),
+		unregisterPushSubscription: connect.NewClient[v1.UnregisterPushSubscriptionRequest, v1.UnregisterPushSubscriptionResponse](
+			httpClient,
+			baseURL+NotifyServiceUnregisterPushSubscriptionProcedure,
+			connect.WithSchema(notifyServiceMethods.ByName("UnregisterPushSubscription")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // notifyServiceClient implements NotifyServiceClient.
 type notifyServiceClient struct {
-	emitAlert        *connect.Client[v1.EmitAlertRequest, v1.EmitAlertResponse]
-	streamAlerts     *connect.Client[v1.StreamAlertsRequest, v1.Alert]
-	acknowledgeAlert *connect.Client[v1.AcknowledgeAlertRequest, v1.AcknowledgeAlertResponse]
-	listAlerts       *connect.Client[v1.ListAlertsRequest, v1.ListAlertsResponse]
+	emitAlert                  *connect.Client[v1.EmitAlertRequest, v1.EmitAlertResponse]
+	streamAlerts               *connect.Client[v1.StreamAlertsRequest, v1.Alert]
+	acknowledgeAlert           *connect.Client[v1.AcknowledgeAlertRequest, v1.AcknowledgeAlertResponse]
+	listAlerts                 *connect.Client[v1.ListAlertsRequest, v1.ListAlertsResponse]
+	registerPushSubscription   *connect.Client[v1.RegisterPushSubscriptionRequest, v1.RegisterPushSubscriptionResponse]
+	unregisterPushSubscription *connect.Client[v1.UnregisterPushSubscriptionRequest, v1.UnregisterPushSubscriptionResponse]
 }
 
 // EmitAlert calls xstockstrat.notify.v1.NotifyService.EmitAlert.
@@ -125,6 +150,16 @@ func (c *notifyServiceClient) ListAlerts(ctx context.Context, req *connect.Reque
 	return c.listAlerts.CallUnary(ctx, req)
 }
 
+// RegisterPushSubscription calls xstockstrat.notify.v1.NotifyService.RegisterPushSubscription.
+func (c *notifyServiceClient) RegisterPushSubscription(ctx context.Context, req *connect.Request[v1.RegisterPushSubscriptionRequest]) (*connect.Response[v1.RegisterPushSubscriptionResponse], error) {
+	return c.registerPushSubscription.CallUnary(ctx, req)
+}
+
+// UnregisterPushSubscription calls xstockstrat.notify.v1.NotifyService.UnregisterPushSubscription.
+func (c *notifyServiceClient) UnregisterPushSubscription(ctx context.Context, req *connect.Request[v1.UnregisterPushSubscriptionRequest]) (*connect.Response[v1.UnregisterPushSubscriptionResponse], error) {
+	return c.unregisterPushSubscription.CallUnary(ctx, req)
+}
+
 // NotifyServiceHandler is an implementation of the xstockstrat.notify.v1.NotifyService service.
 type NotifyServiceHandler interface {
 	// Emit an alert from any service
@@ -136,6 +171,11 @@ type NotifyServiceHandler interface {
 	AcknowledgeAlert(context.Context, *connect.Request[v1.AcknowledgeAlertRequest]) (*connect.Response[v1.AcknowledgeAlertResponse], error)
 	// List historical alerts
 	ListAlerts(context.Context, *connect.Request[v1.ListAlertsRequest]) (*connect.Response[v1.ListAlertsResponse], error)
+	// Register (or upsert) a Web Push subscription for the calling user.
+	// The BFF fills user_id from the verified session — never trusted from the browser body.
+	RegisterPushSubscription(context.Context, *connect.Request[v1.RegisterPushSubscriptionRequest]) (*connect.Response[v1.RegisterPushSubscriptionResponse], error)
+	// Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()).
+	UnregisterPushSubscription(context.Context, *connect.Request[v1.UnregisterPushSubscriptionRequest]) (*connect.Response[v1.UnregisterPushSubscriptionResponse], error)
 }
 
 // NewNotifyServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -169,6 +209,18 @@ func NewNotifyServiceHandler(svc NotifyServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(notifyServiceMethods.ByName("ListAlerts")),
 		connect.WithHandlerOptions(opts...),
 	)
+	notifyServiceRegisterPushSubscriptionHandler := connect.NewUnaryHandler(
+		NotifyServiceRegisterPushSubscriptionProcedure,
+		svc.RegisterPushSubscription,
+		connect.WithSchema(notifyServiceMethods.ByName("RegisterPushSubscription")),
+		connect.WithHandlerOptions(opts...),
+	)
+	notifyServiceUnregisterPushSubscriptionHandler := connect.NewUnaryHandler(
+		NotifyServiceUnregisterPushSubscriptionProcedure,
+		svc.UnregisterPushSubscription,
+		connect.WithSchema(notifyServiceMethods.ByName("UnregisterPushSubscription")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.notify.v1.NotifyService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case NotifyServiceEmitAlertProcedure:
@@ -179,6 +231,10 @@ func NewNotifyServiceHandler(svc NotifyServiceHandler, opts ...connect.HandlerOp
 			notifyServiceAcknowledgeAlertHandler.ServeHTTP(w, r)
 		case NotifyServiceListAlertsProcedure:
 			notifyServiceListAlertsHandler.ServeHTTP(w, r)
+		case NotifyServiceRegisterPushSubscriptionProcedure:
+			notifyServiceRegisterPushSubscriptionHandler.ServeHTTP(w, r)
+		case NotifyServiceUnregisterPushSubscriptionProcedure:
+			notifyServiceUnregisterPushSubscriptionHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -202,4 +258,12 @@ func (UnimplementedNotifyServiceHandler) AcknowledgeAlert(context.Context, *conn
 
 func (UnimplementedNotifyServiceHandler) ListAlerts(context.Context, *connect.Request[v1.ListAlertsRequest]) (*connect.Response[v1.ListAlertsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.notify.v1.NotifyService.ListAlerts is not implemented"))
+}
+
+func (UnimplementedNotifyServiceHandler) RegisterPushSubscription(context.Context, *connect.Request[v1.RegisterPushSubscriptionRequest]) (*connect.Response[v1.RegisterPushSubscriptionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.notify.v1.NotifyService.RegisterPushSubscription is not implemented"))
+}
+
+func (UnimplementedNotifyServiceHandler) UnregisterPushSubscription(context.Context, *connect.Request[v1.UnregisterPushSubscriptionRequest]) (*connect.Response[v1.UnregisterPushSubscriptionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.notify.v1.NotifyService.UnregisterPushSubscription is not implemented"))
 }
