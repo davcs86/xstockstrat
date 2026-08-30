@@ -304,12 +304,22 @@ export interface PnLResponse {
 
 /** If trading_mode is UNSPECIFIED, returns positions for all modes. */
 export interface GetPortfolioRequest {
+  /**
+   * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+   *
+   * @deprecated
+   */
   userId: string;
   tradingMode: TradingMode;
   accountId?: string | undefined;
 }
 
 export interface GetPositionRequest {
+  /**
+   * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+   *
+   * @deprecated
+   */
   userId: string;
   symbol: string;
   tradingMode: TradingMode;
@@ -317,6 +327,11 @@ export interface GetPositionRequest {
 }
 
 export interface ListPositionsRequest {
+  /**
+   * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+   *
+   * @deprecated
+   */
   userId: string;
   page?:
     | PageRequest
@@ -338,6 +353,11 @@ export interface ListPositionsResponse {
 }
 
 export interface GetPnLRequest {
+  /**
+   * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+   *
+   * @deprecated
+   */
   userId: string;
   range?:
     | TimeRange
@@ -354,6 +374,11 @@ export interface GetSnapshotRequest {
 }
 
 export interface StreamPortfolioUpdatesRequest {
+  /**
+   * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+   *
+   * @deprecated
+   */
   userId: string;
   /** Filter by trading mode; UNSPECIFIED streams all modes. */
   tradingMode: TradingMode;

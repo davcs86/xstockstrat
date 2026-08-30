@@ -194,7 +194,7 @@ message ListFormulasResponse {
 
 message UpdateFormulaRequest {
   string formula_id = 1;
-  string user_id = 2;        // must match formula.author; returns PERMISSION_DENIED otherwise
+  string user_id = 2 [deprecated = true]; // DEPRECATED: author identity resolved from the x-user-id header; must match formula.author, else PERMISSION_DENIED.
   string name = 3;
   string description = 4;
   string source = 5;
@@ -214,7 +214,7 @@ message UpdateFormulaResponse {
 
 message DeleteFormulaRequest {
   string formula_id = 1;
-  string user_id = 2;        // must match formula.author; returns PERMISSION_DENIED otherwise
+  string user_id = 2 [deprecated = true]; // DEPRECATED: author identity resolved from the x-user-id header; must match formula.author, else PERMISSION_DENIED.
 }
 
 message DeleteFormulaResponse {

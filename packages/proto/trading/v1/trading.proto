@@ -98,7 +98,7 @@ message PlaceOrderRequest {
   double stop_price = 6;
   string time_in_force = 7;
   string strategy_id = 8;
-  string user_id = 9;
+  string user_id = 9 [deprecated = true]; // DEPRECATED: order owner resolved from the x-user-id header; body value ignored.
   // client_order_id is required: a stable client-generated nonce reused across retries of
   // the same logical place-order action (see the /trader Place Order form's nonce generator).
   // Empty is rejected with InvalidArgument. Used as the order-intent dedup key (feature 101).
@@ -121,7 +121,7 @@ message PlaceOrderRequest {
 
 message CancelOrderRequest {
   string order_id = 1;
-  string user_id = 2;
+  string user_id = 2 [deprecated = true]; // DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
 }
 
 message CancelOrderResponse {
@@ -141,7 +141,7 @@ message ConfirmOrderRequest {
   double filled_qty = 2;
   double filled_avg_price = 3;
   google.protobuf.Timestamp filled_at = 4; // optional; server defaults to now when unset
-  string user_id = 5; // caller identity (ownership guard)
+  string user_id = 5 [deprecated = true]; // DEPRECATED: caller identity (ownership guard) resolved from the x-user-id header; body value ignored.
 }
 
 message ListOrdersRequest {
@@ -177,7 +177,7 @@ message ReplaceOrderRequest {
   double limit_price = 3;
   double stop_price = 4;
   string time_in_force = 5;
-  string user_id = 6;
+  string user_id = 6 [deprecated = true]; // DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
   // New trail offset for a working trailing_stop order (Alpaca's replace body
   // uses a single `trail` value); zero means "leave unchanged".
   double trail = 7;

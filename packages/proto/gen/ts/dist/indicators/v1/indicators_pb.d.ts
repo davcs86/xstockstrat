@@ -561,9 +561,10 @@ export type UpdateFormulaRequest = Message<"xstockstrat.indicators.v1.UpdateForm
      */
     formulaId: string;
     /**
-     * must match formula.author; returns PERMISSION_DENIED otherwise
+     * DEPRECATED: author identity resolved from the x-user-id header; must match formula.author, else PERMISSION_DENIED.
      *
-     * @generated from field: string user_id = 2;
+     * @generated from field: string user_id = 2 [deprecated = true];
+     * @deprecated
      */
     userId: string;
     /**
@@ -635,9 +636,10 @@ export type DeleteFormulaRequest = Message<"xstockstrat.indicators.v1.DeleteForm
      */
     formulaId: string;
     /**
-     * must match formula.author; returns PERMISSION_DENIED otherwise
+     * DEPRECATED: author identity resolved from the x-user-id header; must match formula.author, else PERMISSION_DENIED.
      *
-     * @generated from field: string user_id = 2;
+     * @generated from field: string user_id = 2 [deprecated = true];
+     * @deprecated
      */
     userId: string;
 };

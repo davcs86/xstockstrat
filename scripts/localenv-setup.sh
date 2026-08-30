@@ -50,12 +50,29 @@ for arg in "$@"; do
   esac
 done
 
+# ── Optional egress-proxy CA ────────────────────────────────────────────────────
+# Some environments (managed agent/CI sandboxes) route outbound HTTPS through a
+# proxy that re-terminates TLS. The image's nodejs.org / github.com downloads then
+# fail cert verification unless that proxy's CA is trusted inside the build. When
+# such a CA file is present, pass it to the build as a secret (Dockerfile.codegen
+# adds it to the trust store, a no-op when absent). Override the path with
+# CODEGEN_PROXY_CA=/path/to/ca.crt; set CODEGEN_PROXY_CA=none to skip detection.
+BUILD_SECRETS=()
+PROXY_CA="${CODEGEN_PROXY_CA:-/root/.ccr/ca-bundle.crt}"
+if [ "$PROXY_CA" != "none" ] && [ -f "$PROXY_CA" ]; then
+  info "Trusting egress-proxy CA in the build: $PROXY_CA"
+  BUILD_SECRETS+=(--secret "id=proxy_ca,src=$PROXY_CA")
+fi
+
 # ── Build the codegen image ────────────────────────────────────────────────────
 section "Building proto-gen container ($IMAGE_NAME)"
 info "This may take a few minutes on first run."
 
-docker build \
+# BuildKit is required for --mount=type=secret / --secret (default in modern Docker;
+# forced here so the optional proxy-CA secret works on older daemons too).
+DOCKER_BUILDKIT=1 docker build \
   ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"} \
+  ${BUILD_SECRETS[@]+"${BUILD_SECRETS[@]}"} \
   --platform linux/amd64 \
   -t "$IMAGE_NAME" \
   -f "$DOCKERFILE" \

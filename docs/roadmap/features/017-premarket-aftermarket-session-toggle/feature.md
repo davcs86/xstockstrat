@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/premarket-aftermarket-session-toggle`
 **Created**: 2026-05-24
-**Last Updated**: 2026-05-24
+**Last Updated**: 2026-08-29
 
 ---
 
@@ -11,6 +11,17 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-24 | `idea` | /sdd-execute (014 step 4) | Backlogged during trader-chart-panel execution |
+| 2026-08-29 | `idea` → `demoted/canceled` | product-review | **Premise obsolete on two independent counts.** (1) A pre-market/regular/after-hours session toggle only has meaning for **intraday** bars, but feature **143 (`daily-bars-only`, launched)** made `GetBars`/`BackfillBars` reject every non-`1d` timeframe — the 10m/30m/1h intraday bars this feature toggles no longer exist in the platform, and no trading-path consumer evaluates sub-daily bars. (2) It targets the `ChartPanel` in `xstockstrat-trader`, a service **removed by feature 045 (`ui-consolidation-nextjs`)**. Same call already made for the analogous intraday feature 025 (`realtime-tick-streaming` → demoted/canceled). If intraday support is ever revived, this would be re-created fresh under a new NNN, not resurrected. |
+
+---
+
+## Cancellation Rationale
+
+This feature was never developed beyond the `idea` backlog stub (no product-spec, design, or code).
+It is canceled — not deferred — because the platform deliberately moved to **daily-only** market
+data (feature 143) and consolidated the frontend off `xstockstrat-trader` (feature 045). A session
+toggle is inherently an intraday concept; on a daily/swing platform there is no intraday session to
+select. See the Status History row above.
 
 ---
 
@@ -28,4 +39,5 @@ Add pre-market and after-hours session filtering to the `ChartPanel` component i
 
 ## Next Action
 
-Run `/sdd-story premarket-aftermarket-session-toggle` with the above context to generate a full product spec when ready to implement.
+**None — canceled.** See Cancellation Rationale above. The `**Blocker**` section below is retained
+only as a historical record of what implementation would have required; it is not a to-do.

@@ -29,7 +29,7 @@ version to root `CLAUDE.md` § Language Versions & Tooling — never a floating 
 | Python `service`/`test` (`xstockstrat-{indicators,ingest,analysis}`) | Python 3.12, `uv`, `ruff`, pytest | `uv sync --extra dev` in the service dir (installs deps incl. ruff/pytest); `uv` itself via `pip install uv` if absent |
 | Node/Next `service`/`test` (`xstockstrat-{ledger,identity,notify,config,ui}`) | Node 22, `pnpm` 9.15.0 | `corepack enable && corepack prepare pnpm@9.15.0 --activate` (or `npm install -g pnpm@9.15.0`), then `pnpm install --frozen-lockfile` |
 | `xstockstrat-ui` e2e (`test` step using Playwright) | Chromium — **already installed** (`PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`) | **Never run `playwright install`** (env note); browsers are pre-provisioned |
-| `proto` / `proto-gen` step | `buf` + Go/TS/Python codegen plugins, pinned to the CI `proto-freshness` job | Provision the **host** toolchain per `docs/runbooks/codegen-toolchain-host-setup.md`, then run `./scripts/buf-gen.sh` (host-native — no Docker). **Do not run `scripts/localenv-setup.sh` or build the `Dockerfile.codegen` container** — the execute environment has no Docker daemon, so attempting it only burns the run before the host toolchain you'd use anyway. |
+| `proto` / `proto-gen` step | `buf` + Go/TS/Python codegen plugins, pinned to the CI `proto-freshness` job | Both paths work. **Host-native** (fastest for a lone step): provision per `docs/runbooks/codegen-toolchain-host-setup.md`, then `./scripts/buf-gen.sh`. **Docker**: a daemon can be started here (`dockerd &` as root; up in ~1s) and `./scripts/localenv-setup.sh` now auto-trusts the agent-proxy CA (`/root/.ccr/ca-bundle.crt`, threaded into the build as a BuildKit secret), so the container path works in agent sessions too — reach for it when you want the full version-pinned container end-to-end. |
 | `migration` step | **none** | Verified offline (up/down parity + `NNN`). **Do not install or start a database.** |
 | `config` / `docs` step | none (unless its `**Verification**` names a specific tool) | — |
 
@@ -56,12 +56,13 @@ Legend: `✓` present · `⬇` installed now · `✗` unavailable (with the deci
 If a required tool is missing and cannot be installed (egress blocked, version conflict, etc.), do
 **not** proceed into the steps. Decide it here, up front:
 
-- **proto codegen** → the execute environment has **no Docker daemon**, so **never attempt the
-  Docker codegen container** (`scripts/localenv-setup.sh` / `Dockerfile.codegen`): it always fails
-  and wastes the run. Go straight to the **host** codegen toolchain per
+- **proto codegen** → default to the **host** codegen toolchain per
   `docs/runbooks/codegen-toolchain-host-setup.md` (pinned to CI `proto-freshness` versions), then
-  `./scripts/buf-gen.sh` (host-native). Only if the host toolchain itself cannot be provisioned
-  (egress fully blocked) → blocker.
+  `./scripts/buf-gen.sh` (host-native) — the fastest path for a lone proto step. The Docker path
+  also works: a daemon can be started here (`dockerd &` as root) and `./scripts/localenv-setup.sh`
+  auto-trusts the agent-proxy CA (`/root/.ccr/ca-bundle.crt`) via a BuildKit secret, so the
+  container build no longer fails on TLS. Only if the host toolchain cannot be provisioned **and**
+  Docker is genuinely unavailable (egress fully blocked) → blocker.
 - **Playwright dev-server / browser issue** → adopt the documented **`tsc --noEmit` + `pnpm run lint`**
   e2e fallback now (the same fallback the verification step would otherwise reach for), and note it —
   so the `test` step doesn't discover it mid-run.

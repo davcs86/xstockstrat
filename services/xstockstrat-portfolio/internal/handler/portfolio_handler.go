@@ -7,13 +7,37 @@ import (
 
 	"connectrpc.com/connect"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
 	portfoliov1connect "github.com/xstockstrat/contracts/gen/go/portfolio/v1/portfoliov1connect"
+	"github.com/xstockstrat/portfolio/internal/middleware"
 	"github.com/xstockstrat/portfolio/internal/repository"
 	"github.com/xstockstrat/portfolio/internal/service"
 )
+
+// callerUserID returns the caller identity from the trusted x-user-id header, populated by the
+// unary propagation interceptor. Used to validate self-scoped RPCs instead of the deprecated
+// request-body user_id field.
+func callerUserID(ctx context.Context) string {
+	return middleware.FromContext(ctx).UserID
+}
+
+// streamUserID reads x-user-id directly from incoming gRPC metadata. Server-streaming RPCs do not
+// pass through the unary interceptor (no stream interceptor is registered), so middleware.FromContext
+// is empty for them — read the header off the stream context instead.
+func streamUserID(ctx context.Context) string {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return ""
+	}
+	vals := md.Get("x-user-id")
+	if len(vals) == 0 {
+		return ""
+	}
+	return vals[0]
+}
 
 // Ensure PortfolioHandler implements the Connect interface at compile time.
 var _ portfoliov1connect.PortfolioServiceHandler = (*PortfolioHandler)(nil)
@@ -31,7 +55,7 @@ func NewPortfolioHandler(svc *service.PortfolioService) *PortfolioHandler {
 
 // GetPortfolio returns the full portfolio with positions and live prices.
 func (h *PortfolioHandler) GetPortfolio(ctx context.Context, req *connect.Request[portfoliov1.GetPortfolioRequest]) (*connect.Response[portfoliov1.Portfolio], error) {
-	if req.Msg.UserId == "" {
+	if callerUserID(ctx) == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errorf("user_id required"))
 	}
 	p, err := h.svc.GetPortfolio(ctx, req.Msg)
@@ -43,7 +67,7 @@ func (h *PortfolioHandler) GetPortfolio(ctx context.Context, req *connect.Reques
 
 // GetPosition returns a single position with live price.
 func (h *PortfolioHandler) GetPosition(ctx context.Context, req *connect.Request[portfoliov1.GetPositionRequest]) (*connect.Response[portfoliov1.Position], error) {
-	if req.Msg.UserId == "" || req.Msg.Symbol == "" {
+	if callerUserID(ctx) == "" || req.Msg.Symbol == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errorf("user_id and symbol required"))
 	}
 	p, err := h.svc.GetPosition(ctx, req.Msg)
@@ -55,7 +79,7 @@ func (h *PortfolioHandler) GetPosition(ctx context.Context, req *connect.Request
 
 // ListPositions returns paginated positions for a user.
 func (h *PortfolioHandler) ListPositions(ctx context.Context, req *connect.Request[portfoliov1.ListPositionsRequest]) (*connect.Response[portfoliov1.ListPositionsResponse], error) {
-	if req.Msg.UserId == "" {
+	if callerUserID(ctx) == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errorf("user_id required"))
 	}
 	resp, err := h.svc.ListPositions(ctx, req.Msg)
@@ -67,7 +91,7 @@ func (h *PortfolioHandler) ListPositions(ctx context.Context, req *connect.Reque
 
 // GetPnL returns P&L summary for a user over a time range.
 func (h *PortfolioHandler) GetPnL(ctx context.Context, req *connect.Request[portfoliov1.GetPnLRequest]) (*connect.Response[portfoliov1.PnLResponse], error) {
-	if req.Msg.UserId == "" {
+	if callerUserID(ctx) == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errorf("user_id required"))
 	}
 	resp, err := h.svc.GetPnL(ctx, req.Msg)
@@ -91,10 +115,11 @@ func (h *PortfolioHandler) GetSnapshot(ctx context.Context, req *connect.Request
 
 // StreamPortfolioUpdates pushes portfolio snapshots as they occur.
 func (h *PortfolioHandler) StreamPortfolioUpdates(ctx context.Context, req *connect.Request[portfoliov1.StreamPortfolioUpdatesRequest], stream *connect.ServerStream[portfoliov1.PortfolioSnapshot]) error {
-	if req.Msg.UserId == "" {
+	userID := streamUserID(ctx)
+	if userID == "" {
 		return connect.NewError(connect.CodeInvalidArgument, errorf("user_id required"))
 	}
-	subID := fmt.Sprintf("portfolio-%s-%p", req.Msg.UserId, stream)
+	subID := fmt.Sprintf("portfolio-%s-%p", userID, stream)
 	ch := h.svc.Subscribe(subID)
 	defer h.svc.Unsubscribe(subID)
 
@@ -254,7 +279,7 @@ func (a *grpcPortfolioAdapter) GetSnapshot(ctx context.Context, req *portfoliov1
 }
 
 func (a *grpcPortfolioAdapter) StreamPortfolioUpdates(req *portfoliov1.StreamPortfolioUpdatesRequest, grpcStream portfoliov1.PortfolioService_StreamPortfolioUpdatesServer) error {
-	subID := fmt.Sprintf("portfolio-%s-%p", req.UserId, grpcStream)
+	subID := fmt.Sprintf("portfolio-%s-%p", streamUserID(grpcStream.Context()), grpcStream)
 	ch := a.h.svc.Subscribe(subID)
 	defer a.h.svc.Unsubscribe(subID)
 	for {

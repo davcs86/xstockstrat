@@ -116,7 +116,7 @@ to the frontends and the agent.
 | Python | 3.13 | Dependencies managed by `uv`; run `uv sync --extra dev` to install, `uv lock` after any `pyproject.toml` change |
 | Node.js | 24 | All Node/Next services |
 | pnpm | 9.15.9 | Workspace manager (`pnpm-workspace.yaml`); `npm install -g pnpm@9.15.9` |
-| buf | latest | Proto toolchain; installed by `scripts/bootstrap.sh` |
+| buf | 1.72.0 | Proto toolchain; pinned in `Dockerfile.codegen` (`BUF_VERSION`) and `.github/workflows/ci.yml` (`buf-setup-action` in the `proto-lint` + `proto-freshness` jobs) — bump all three together; installed by `scripts/bootstrap.sh` |
 | golang-migrate | latest | DB migrations; installed by `scripts/bootstrap.sh` |
 | golangci-lint | v2.13.1 | Go lint; run via `golangci-lint-action@v9` |
 | ruff | latest | Python lint + format |

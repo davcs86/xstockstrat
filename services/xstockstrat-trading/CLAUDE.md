@@ -10,7 +10,7 @@ Go gRPC service responsible for order execution and trade lifecycle management. 
 
 **Alpaca API ownership**: `xstockstrat-trading` is the sole integration point for Alpaca's **broker/order APIs** (`/v2/orders`, `/v2/account`). `xstockstrat-marketdata` owns Alpaca's **market data APIs** — these are separate API surfaces and separate responsibilities.
 
-**Paper vs live**: Mode is resolved per order. Priority: `PlaceOrderRequest.trading_mode` > `trading.broker.paper` (live config) > `ALPACA_PAPER` (env). Paper routes to `https://paper-api.alpaca.markets`; live routes to `https://api.alpaca.markets`.
+**Paper vs live**: Mode is resolved per order from the account's persisted `is_paper` / the `trading.broker.paper` live config, falling back to the `TRADING_MODE` env var (there is **no** `ALPACA_PAPER` env var — no code reads one). Paper routes to `https://paper-api.alpaca.markets`; live routes to `https://api.alpaca.markets`.
 
 **Order types & trailing stops**: `PlaceOrder` supports `market`/`limit`/`stop`/`stop_limit`/`trailing_stop`. A `trailing_stop` order requires **exactly one** of `PlaceOrderRequest.trail_price` / `trail_percent` (sent to Alpaca as `trail_price`/`trail_percent`); any other order type must leave both zero — both rules are validated up front with `InvalidArgument` so a bad request never reaches the broker as a 422. `ReplaceOrder.trail` updates a working trailing stop (Alpaca's PATCH body uses a single `trail`).
 
@@ -25,6 +25,19 @@ Go gRPC service responsible for order execution and trade lifecycle management. 
 **Automatic stop-loss/take-profit brackets** (feature 030): whenever an auto-sized (`ComputePositionSize`) `MARKET`/`LIMIT` entry fills, `maybeSubmitBracket` opens a persisted bracket (`trading.order_brackets`) protecting it — Alpaca attaches the stop/take-profit atomically at entry `SubmitOrder`; IBKR submits them as a follow-up linked pair (`SubmitBracketLegs`, `isSingleGroup`+`parentId`) after the fill is confirmed, since IBKR's Client Portal Web API has no client-settable OCA group field. A per-account **protection-window watchdog** (`StartBracketProtectionWatchdog`, piggybacking on the fill-poller tick) flattens the position and halts the account (`trading.risk.max_unprotected_seconds`) if no bracket confirms in time. The halt is **persisted** on `trading.broker_accounts` (`halted`/`halted_at`/`halt_reason`, boot-hydrated) and blocks `PlaceOrder`/`ReplaceOrder` — never `CancelOrder`, the operator's sole remaining manual de-risk tool. `trading.risk.bracket_orders_enabled` seeds `false` in production (pending feature 103 or a documented manual verification) — a deliberate override of the default `true`, see `docs/roadmap/features/030-stop-loss-bracket-orders/context.md` § Archive Synthesis (Rejected alternatives).
 
 **Offline (manually-tracked) accounts** (feature 157, hardened by feature 159): a `BROKER_TYPE_OFFLINE` account has no broker client — its orders are recorded, not routed. `PlaceOrder` routes to `recordOfflineOrder` (persists `NEW`, empty `broker_order_id`, no broker submit) whenever **either** the in-memory pool tag **or** the **authoritative persisted** `broker_type` (`accountRepo.GetBrokerAccount`) is OFFLINE — a divergence-safe union, so an offline account can never fall through to a broker path even if its pool entry is stale (best-effort: a DB read error falls back to the pool tag). `CancelOrder` **rejects** an offline order with `FailedPrecondition` (offline orders are un-placed via `ConfirmOrder` edits, never a broker cancel) — this is an offline-**type** guard, orthogonal to the halt gating above: `CancelOrder` remains **never halt-gated** (the operator's manual de-risk tool for *broker* accounts).
+
+**Caller identity comes from the `x-user-id` header, not the request body.** `PlaceOrder`,
+`CancelOrder`, `ReplaceOrder`, and `ConfirmOrder` resolve the caller from the propagated
+**`x-user-id`** header (`middleware.FromContext(ctx).UserID`); their request-body `user_id` field is
+**deprecated and ignored**. For `PlaceOrder` the order **owner** is the server-resolved account owner
+(`accountEntry.userID` / the `recordOfflineOrder` `userID` param), not a client-claimed body field —
+so it is correct for the internal bracket-flatten path too, and a caller cannot place an order owned
+by someone else. `ConfirmOrder`'s ownership guard and the warn-only `checkPortfolioRisk` gate both
+read the header. When trading calls **`xstockstrat-portfolio`** (`ListPositions`/`GetPosition`) from a
+background context with no inbound header (reconciliation, flatten), it injects `x-user-id` explicitly
+via `metadata.AppendToOutgoingContext`. **Exception:** `ListOrders` and `StreamOrderUpdates` keep
+their body `user_id` — there it is a **cross-user filter/subscription selector** (empty = all users),
+not the caller's own identity, so it is not deprecated.
 
 ## Language
 
@@ -72,7 +85,7 @@ All config values are served by **xstockstrat-config** namespace `trading`.
 | `trading.risk.max_concentration_pct` | float | `0.10` | Max fraction of equity in any single auto-sized position — enforcing, unlike the warn-only `max_position_pct` above |
 | `trading.risk.sizing_enabled` | bool | `true` | Master gate for `ComputePositionSize`; `false` rejects any order submitted without an explicit `qty` |
 | `platform.maintenance_mode` | bool | `false` | Platform-wide halt (the real halt key; there is no `trading.maintenance_mode`) |
-| `platform.trading_state` | string | `ACTIVE` | Richer halt state (`ACTIVE`/`REDUCE_ONLY`/`HALTED`), independent of `platform.maintenance_mode`. `HALTED` blocks `PlaceOrder`/`ReplaceOrder`; `REDUCE_ONLY` blocks only exposure-increasing orders (verified via `PortfolioService.GetPosition` for `PlaceOrder`, a local qty comparison for `ReplaceOrder`). `CancelOrder` is deliberately ungated. Unrecognized/unset values fail closed to `HALTED`. Seeded per `trading_mode` (feature 100). |
+| `platform.trading_state` | string | `ACTIVE` | Richer halt state (`ACTIVE`/`REDUCE_ONLY`/`HALTED`), independent of `platform.maintenance_mode`. `HALTED` blocks `PlaceOrder`/`ReplaceOrder`; `REDUCE_ONLY` blocks only exposure-increasing orders (verified via `PortfolioService.GetPosition` for `PlaceOrder`, a local qty comparison for `ReplaceOrder`). `CancelOrder` is deliberately ungated. Unrecognized/unset values fail closed to `HALTED`. Seeded by `config` migration 011 (feature 100); the former per-`trading_mode` seeding was collapsed to one row per environment by feature 147 (`config` migration 017 dropped the `trading_mode` column). |
 | `trading.broker.paper` | bool | `true` | Route orders to paper API when true; live API when false. Also the source of truth for the mode new broker accounts are registered in. |
 | `trading.broker.timeout_ms` | int | `5000` | Alpaca broker HTTP call timeout. Read at account-client construction and applied as the broker HTTP client's `Timeout`. |
 | `trading.credential_health.interval_ms` | int | `300000` | Interval for the background poller that re-validates each broker account's API secrets. Read live on every cycle; set to `0` (or negative) to disable/pause the poller without a restart. |

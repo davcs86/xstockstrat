@@ -100,7 +100,7 @@ jobs:
 
       - uses: bufbuild/buf-setup-action@v1
         with:
-          version: '1.69.0'
+          version: '1.72.0'
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: buf lint
@@ -134,7 +134,7 @@ jobs:
 
       - uses: bufbuild/buf-setup-action@v1
         with:
-          version: '1.69.0'
+          version: '1.72.0'
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-go@v7
