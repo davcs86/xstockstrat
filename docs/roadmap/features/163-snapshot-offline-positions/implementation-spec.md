@@ -1,6 +1,6 @@
 # Implementation Spec: snapshot-offline-positions
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-08-30
 **Feature**: `docs/roadmap/features/163-snapshot-offline-positions/feature.md`
 **Total Steps**: 14
@@ -70,7 +70,7 @@ follow-up — not a deferred-required surface, so no UI step). The Agent surface
 
 ### Step 1 — proto: new SnapshotOfflinePositions RPC + additive Position provenance fields
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/trading/v1/trading.proto` — modify
@@ -141,7 +141,7 @@ Both pass (lint clean; breaking reports nothing — all additive). Confirm `Posi
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/**` — modify (generated; never hand-edited)
@@ -171,7 +171,7 @@ service stubs, and `PositionSource` in the portfolio stubs (via `grep -rl`, not 
 
 ### Step 3 — service: additive FoldFrom(baseline, fills) sibling in the shared pnl engine
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto` (`pnl/` — the hand-written, non-generated Go helper)
 **Files**:
 - `packages/proto/pnl/pnl.go` — modify
@@ -212,7 +212,7 @@ service stubs, and `PositionSource` in the portfolio stubs (via `grep -rl`, not 
 
 ### Step 4 — test: pnl FoldFrom parity, seam-realized, shorts, oversell/flip
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto` (tests hosted in the consuming trading service module)
 **Files**:
 - `services/xstockstrat-trading/internal/service/pnl_fold_test.go` — modify
@@ -253,7 +253,7 @@ coverpkg-excluded.
 
 ### Step 5 — migration: trading.offline_position_baselines (009)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/migrations/009_offline_position_baselines.up.sql` — create

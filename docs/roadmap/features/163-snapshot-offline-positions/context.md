@@ -157,3 +157,25 @@
   - [x] Step 4 (coverage formality): added a note that the ≥40% coverage gate for trading-service code
     is asserted in Step 9, not here (pnl is coverpkg-excluded).
 - Nothing carried into execution unaddressed.
+
+## Session 2026-08-30 — sdd-execute (sequential mode, Steps 1-5)
+
+- Execution started in sequential mode (§5.1–§5.8). Branch: `claude/snapshot-positions-contract-1fcdmt`.
+- **Step 1 (proto)**: Added `SnapshotOfflinePositions` RPC, `PositionBaseline`, request/response messages
+  to `trading.proto`; added `PositionSource` enum and `as_of=22`/`source=23` fields to `Position` in
+  `portfolio.proto`. `buf lint` + `buf breaking` clean. Committed `878407e3^`.
+- **Step 2 (proto-gen)**: Ran `./scripts/buf-gen.sh` with host-native toolchain (PATH fix:
+  `export PATH="$(go env GOPATH)/bin:$PATH"`). Reverted `analysis.pb.go` cosmetic diff (known
+  tabs-vs-spaces artifact). 20 files changed. Verified `SnapshotOfflinePositions` in Go/Python stubs,
+  `PositionSource` in Go/Python/TS stubs.
+- **Step 3 (pnl FoldFrom)**: Extracted loop body into unexported `foldInto(accs, fills)`, rewrote
+  `Fold` as `foldInto(make(map[string]Lot), fills)`, added `FoldFrom(baseline, fills)` sibling.
+  Behavior byte-identical for existing callers; compile verified.
+- **Step 4 (pnl test)**: Added `TestPnLFoldFrom_Trading` with 7 table-driven cases + 1 parity sub-test
+  covering AC-1/AC-2/AC-3/AC-4/AC-17. All pass with `-race -count=1`. Also added `TestRealizedDelta_Trading`.
+- **Step 5 (trading migration 009)**: Created `009_offline_position_baselines.up.sql` (plain table with
+  composite PK `(account_id, client_snapshot_id, symbol)`, `as_of` DESC index) and matching `.down.sql`
+  (DROP TABLE). Spec status updated for Steps 1-5 → `done`.
+- **Deviation**: spec file status updates for Steps 1-4 were deferred to the Step 5 commit (caught up
+  in the same commit rather than per-step as §5.5 prescribes). No data loss — all step outcomes recorded.
+- Steps since last checkpoint: 5 → step-cap checkpoint triggered (§5.5b).
