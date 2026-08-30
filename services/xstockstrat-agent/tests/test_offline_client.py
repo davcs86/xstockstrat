@@ -180,3 +180,133 @@ async def test_list_account_orders_forwards_user_id_in_request_body():
     meta = mock_stub.ListOrders.call_args.kwargs["metadata"]
     assert ("x-user-id", "user-42") in meta
     assert out == {"orders": []}
+
+
+# ── Feature 163 — snapshot_offline_positions client + provenance passthrough ──
+
+
+@pytest.mark.asyncio
+async def test_snapshot_offline_positions_forwards_baseline_and_user():
+    """Step 13 @AC-13: snapshot_offline_positions parses the positions_json array, builds
+    PositionBaseline messages, and forwards them with account_id, client_snapshot_id, as_of,
+    and the x-user-id header to the SnapshotOfflinePositions RPC."""
+    from gen.trading.v1 import trading_pb2  # type: ignore
+
+    mock_resp = trading_pb2.SnapshotOfflinePositionsResponse(
+        account_id="off-1",
+        committed_count=2,
+        warnings=["advisory: unconfirmed NEW orders"],
+    )
+    mock_stub = MagicMock()
+    mock_stub.SnapshotOfflinePositions = AsyncMock(return_value=mock_resp)
+
+    grpc_patch, stub_patch = _patch_trading_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with stub_patch:
+            out = await client.snapshot_offline_positions(
+                "user-42",
+                "off-1",
+                "2026-01-15T16:00:00Z",
+                "snap-nonce-1",
+                '[{"symbol":"AAPL","qty":100,"avg_cost_per_share":150.00},'
+                '{"symbol":"NVDA","qty":50,"avg_cost_per_share":200.00}]',
+            )
+
+    # Verify the gRPC call target.
+    assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.TRADING_ENDPOINT
+
+    sent = mock_stub.SnapshotOfflinePositions.call_args.args[0]
+    assert sent.account_id == "off-1"
+    assert sent.user_id == "user-42"
+    assert sent.client_snapshot_id == "snap-nonce-1"
+    assert len(sent.positions) == 2
+    assert sent.positions[0].symbol == "AAPL"
+    assert sent.positions[0].qty == 100.0
+    assert sent.positions[0].avg_cost_per_share == 150.0
+    assert sent.positions[1].symbol == "NVDA"
+    assert sent.positions[1].qty == 50.0
+    assert sent.as_of.seconds > 0  # as_of was set from the ISO string
+
+    meta = mock_stub.SnapshotOfflinePositions.call_args.kwargs["metadata"]
+    assert ("x-user-id", "user-42") in meta
+
+    # Return shape matches the proto response.
+    assert out["account_id"] == "off-1"
+    assert out["committed_count"] == 2
+    assert out["warnings"] == ["advisory: unconfirmed NEW orders"]
+
+
+@pytest.mark.asyncio
+async def test_snapshot_offline_positions_no_as_of():
+    """When as_of is None the request omits the timestamp (server defaults to now)."""
+    from gen.trading.v1 import trading_pb2  # type: ignore
+
+    mock_resp = trading_pb2.SnapshotOfflinePositionsResponse(account_id="off-1", committed_count=1)
+    mock_stub = MagicMock()
+    mock_stub.SnapshotOfflinePositions = AsyncMock(return_value=mock_resp)
+
+    grpc_patch, stub_patch = _patch_trading_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with stub_patch:
+            out = await client.snapshot_offline_positions(
+                "user-42",
+                "off-1",
+                None,  # no as_of
+                "snap-2",
+                '[{"symbol":"AAPL","qty":10,"avg_cost_per_share":100}]',
+            )
+
+    sent = mock_stub.SnapshotOfflinePositions.call_args.args[0]
+    assert sent.as_of.seconds == 0  # unset timestamp
+    assert out["committed_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_snapshot_offline_positions_bad_json_raises():
+    """Unparseable positions_json raises ValueError before any gRPC call."""
+    with pytest.raises(ValueError, match="not valid JSON"):
+        await client.snapshot_offline_positions("u", "off-1", None, "n", "not json{")
+
+
+@pytest.mark.asyncio
+async def test_snapshot_offline_positions_non_array_raises():
+    """positions_json that parses but is not an array raises ValueError."""
+    with pytest.raises(ValueError, match="JSON array"):
+        await client.snapshot_offline_positions("u", "off-1", None, "n", '{"a":1}')
+
+
+@pytest.mark.asyncio
+async def test_list_positions_provenance_passthrough():
+    """Step 13 @AC-13: list_account_positions passes through source and as_of provenance
+    fields when the backend returns a Position carrying them (feature 163)."""
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+    from google.protobuf.timestamp_pb2 import Timestamp as PbTimestamp  # type: ignore
+
+    as_of_ts = PbTimestamp()
+    as_of_ts.FromJsonString("2026-01-15T16:00:00Z")
+    pos = portfolio_pb2.Position(
+        symbol="AAPL",
+        qty=100,
+        avg_entry_price=150.0,
+        source=2,  # POSITION_SOURCE_BASELINE
+        as_of=as_of_ts,
+        account_id="off-1",
+    )
+    mock_stub = MagicMock()
+    mock_stub.ListPositions = AsyncMock(
+        return_value=portfolio_pb2.ListPositionsResponse(positions=[pos])
+    )
+
+    grpc_patch, stub_patch = _patch_portfolio_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with stub_patch:
+            out = await client.list_account_positions("user-42", "off-1")
+
+    assert len(out["positions"]) == 1
+    p = out["positions"][0]
+    assert p["source"] == "POSITION_SOURCE_BASELINE"
+    assert "as_of" in p  # timestamp is present
+    assert p["symbol"] == "AAPL"

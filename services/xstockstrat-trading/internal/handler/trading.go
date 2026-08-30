@@ -81,6 +81,19 @@ func (h *TradingHandler) ConfirmOrder(ctx context.Context, req *connect.Request[
 	return connect.NewResponse(order), nil
 }
 
+func (h *TradingHandler) SnapshotOfflinePositions(ctx context.Context, req *connect.Request[tradingv1.SnapshotOfflinePositionsRequest]) (*connect.Response[tradingv1.SnapshotOfflinePositionsResponse], error) {
+	if req.Msg.AccountId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("account_id is required"))
+	}
+	// Caller identity from the trusted x-user-id header the edge injects (mirroring RegisterBrokerAccount).
+	req.Msg.UserId = extractUserID(ctx)
+	resp, err := h.svc.SnapshotOfflinePositions(ctx, req.Msg)
+	if err != nil {
+		return nil, connect.NewError(connectCodeFromErr(err), err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
 func (h *TradingHandler) GetOrder(ctx context.Context, req *connect.Request[tradingv1.GetOrderRequest]) (*connect.Response[tradingv1.Order], error) {
 	if req.Msg.OrderId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("order_id is required"))
@@ -157,6 +170,14 @@ func (a *grpcTradingAdapter) ReplaceOrder(ctx context.Context, req *tradingv1.Re
 
 func (a *grpcTradingAdapter) ConfirmOrder(ctx context.Context, req *tradingv1.ConfirmOrderRequest) (*tradingv1.Order, error) {
 	resp, err := a.h.ConfirmOrder(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcTradingAdapter) SnapshotOfflinePositions(ctx context.Context, req *tradingv1.SnapshotOfflinePositionsRequest) (*tradingv1.SnapshotOfflinePositionsResponse, error) {
+	resp, err := a.h.SnapshotOfflinePositions(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, toGRPCError(err)
 	}

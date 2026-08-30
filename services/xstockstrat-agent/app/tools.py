@@ -1481,6 +1481,9 @@ def register_tools(server: MCPServer) -> None:
         filled_qty: float = 0.0,
         filled_avg_price: float = 0.0,
         filled_at: str = "",
+        as_of: str = "",
+        client_snapshot_id: str = "",
+        positions_json: str = "",
     ) -> dict:
         """Manage a manually-tracked OFFLINE account and its orders (feature 157).
 
@@ -1499,11 +1502,18 @@ def register_tools(server: MCPServer) -> None:
               filled_at is an optional ISO-8601 time (defaults to now). Status is derived
               server-side (NEW/PARTIALLY_FILLED/FILLED). Returns {"order": …}. Re-confirming
               replaces the fill (idempotent recompute from all confirmed orders); brokers rejected.
+          'snapshot_positions' — set the effective-dated opening baseline from a brokerage statement
+              (feature 163). Requires account_id and positions_json (a JSON array
+              [{"symbol","qty","avg_cost_per_share"}, …]). as_of is the statement date (ISO-8601,
+              defaults to now); client_snapshot_id is an idempotency nonce (auto-generated when
+              omitted). Returns {"account_id", "committed_count", "rejected": [...],
+              "warnings": [...]}.
           'get_order'       — read one order. Requires order_id. Returns {"order": …}.
           'list_orders'     — list an account's orders (reconciliation). Requires account_id.
               Returns {"orders": [...]}.
           'list_positions'  — list an account's positions (reconciliation). Requires account_id.
-              Returns {"positions": [...]}.
+              Returns {"positions": [...]}. Each position includes source (ORDERS/BASELINE/MIXED)
+              and as_of (baseline effective date) provenance fields (feature 163).
 
         This is the platform capability behind the monthly statement-reconciliation task: correct
         drift by recording/confirming orders (no separate set-positions path)."""
@@ -1538,9 +1548,16 @@ def register_tools(server: MCPServer) -> None:
                 if not account_id:
                     raise ValueError("list_positions requires an account_id")
                 return await client.list_account_positions(user_id, account_id)
+            if operation == "snapshot_positions":
+                if not account_id or not positions_json:
+                    raise ValueError("snapshot_positions requires account_id and positions_json")
+                nonce = client_snapshot_id or f"agent-{uuid.uuid4()}"
+                return await client.snapshot_offline_positions(
+                    user_id, account_id, as_of or None, nonce, positions_json
+                )
             raise ValueError(
                 f"unknown operation '{operation}' (expected create_account/record_order/"
-                "confirm_order/get_order/list_orders/list_positions)"
+                "confirm_order/snapshot_positions/get_order/list_orders/list_positions)"
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(

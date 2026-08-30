@@ -2501,18 +2501,16 @@ reusing.
   clears the guard, then assert a discriminating (non-neutral-default) outcome — a "returns OK"
   assertion alone can be satisfied by the very short-circuit that skips the code under test.
 
-### 2026-08-27 — agent-broker-account-tools — design
-- **Pattern**: When an agent MCP tool merely surfaces an EXISTING backend RPC, do not re-implement
-  the authorization or invariant checks client-side — verify what the Go/backend handler already
-  enforces and let it be the gate. Here `UpdateBrokerAccountCredentials` already rejects OFFLINE
-  accounts (`FailedPrecondition`, trading.go:2267-2270) and validates JSON server-side (2257), and
-  `DeregisterBrokerAccount` intentionally supports offline (2754-2761); the tool adds NO offline
-  guard or JSON validation — it just forwards `x-user-id` and maps the gRPC error via
-  `_grpc_error_message`. Client-side re-validation would be overbuild (behavior #2) AND could drift
-  from the backend.
-- **Evidence**: feature 162 design.md; `services/xstockstrat-trading/internal/service/trading.go:2256-2270,2736-2761`; `services/xstockstrat-agent/app/tools.py:184-195` (`_grpc_error_message` default branch surfaces FailedPrecondition/InvalidArgument details).
-- **Rule it implies**: for an agent tool wrapping an existing RPC, recon the backend handler's own
-  rejections first; the tool's job is identity forwarding + error translation, not a second copy of
-  the invariant. Adding a new agent tool must also move the tool-count literal across all inventory
-  surfaces (CLAUDE.md, tools.py docstring, mcp-tools.md ×2) AND add the full mcp-tools.md reference
-  entries in the same PR (ledger RC-1), guarded by a `BrokerAccount`-descriptor-parity test.
+### 2026-08-30 — snapshot-offline-positions — design
+- **Pattern**: To add a second entry point to a stateful per-account recompute that a mutex already
+  serializes, extract the *post-lock* body into a lock-free helper (`recomputeAndEmitOfflinePositions`)
+  with a **caller-holds-lock** doc comment, and have the new caller acquire the SAME per-account lock
+  around persist+recompute+emit — never have the helper grab the (non-reentrant) mutex itself (deadlocks
+  the original caller). Pin the branch with a **producer-level** test that drives the helper, not just
+  the pure engine underneath it (`Fold==FoldFrom(nil)` proves the engine, not the branch selection).
+- **Evidence**: `services/xstockstrat-trading/internal/service/trading.go:912` (existing `confirmLock`
+  before the recompute at `:934-981`); feature 163 design.md § Chosen Approach / Open Risks.
+- **Rule it implies**: when two request-driven writers share one absolute-recompute-and-emit path,
+  the serialization guarantee (here @AC-10 idempotency) is the caller's, not the extracted helper's;
+  and a shared-helper refactor needs a producer-level test, not just an engine-parity test (extends the
+  "demonstration ≠ producer contract" ledger family to refactor-extractions).

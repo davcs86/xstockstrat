@@ -1725,6 +1725,56 @@ async def confirm_offline_order(
     return {"order": _order_to_dict(resp)}
 
 
+async def snapshot_offline_positions(
+    user_id: str,
+    account_id: str,
+    as_of_iso: str | None,
+    client_snapshot_id: str,
+    positions_json: str,
+) -> dict[str, Any]:
+    """Submit a baseline snapshot via TradingService.SnapshotOfflinePositions (feature 163).
+
+    positions_json is a JSON string: [{"symbol":"AAPL","qty":100,"avg_cost_per_share":150.00}, …].
+    Raises ValueError on unparseable input.
+    """
+    import json  # noqa: PLC0415
+
+    from gen.trading.v1 import trading_pb2, trading_pb2_grpc  # noqa: PLC0415
+
+    try:
+        rows = json.loads(positions_json)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise ValueError(f"positions_json is not valid JSON: {exc}") from exc
+    if not isinstance(rows, list):
+        raise ValueError("positions_json must be a JSON array")
+
+    baselines = []
+    for r in rows:
+        baselines.append(
+            trading_pb2.PositionBaseline(
+                symbol=r.get("symbol", ""),
+                qty=float(r.get("qty", 0)),
+                avg_cost_per_share=float(r.get("avg_cost_per_share", 0)),
+            )
+        )
+
+    req = trading_pb2.SnapshotOfflinePositionsRequest(
+        account_id=account_id,
+        user_id=user_id,
+        client_snapshot_id=client_snapshot_id,
+        positions=baselines,
+    )
+    if as_of_iso:
+        ts = Timestamp()
+        ts.FromDatetime(datetime.fromisoformat(as_of_iso).astimezone(UTC))
+        req.as_of.CopyFrom(ts)
+
+    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+        stub = trading_pb2_grpc.TradingServiceStub(channel)
+        resp = await stub.SnapshotOfflinePositions(req, metadata=_metadata(("x-user-id", user_id)))
+    return MessageToDict(resp, preserving_proto_field_name=True)
+
+
 async def get_order(user_id: str, order_id: str) -> dict[str, Any]:
     """Read one order via TradingService.GetOrder (read-only)."""
     from gen.trading.v1 import trading_pb2, trading_pb2_grpc  # noqa: PLC0415

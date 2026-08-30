@@ -92,6 +92,13 @@ message Position {
   // disabled, or bracket not yet confirmed ACTIVE).
   string stop_order_id = 20;
   string take_profit_order_id = 21;
+  // ── Provenance (feature 163 — snapshot-offline-positions) ──────────────────
+  // as_of is the effective date of the baseline snapshot that seeded this position
+  // (T0); unset for pure-order positions.
+  google.protobuf.Timestamp as_of = 22;
+  // source indicates how the position was constructed: ORDERS (fill-only),
+  // BASELINE (snapshot-only), or MIXED (baseline + post-T0 fills).
+  PositionSource source = 23;
 }
 
 // A risk cue surfaced on the Exposure surface (feature 083). Closed set → enum (C-04).
@@ -100,6 +107,16 @@ enum PositionRiskFlag {
   POSITION_RISK_FLAG_ADD_SIGNAL = 1;     // a buy signal is live for this held symbol
   POSITION_RISK_FLAG_REDUCE_SIGNAL = 2;  // a sell signal is live for this held symbol
   POSITION_RISK_FLAG_STOP_NEAR = 3;      // stop-distance within the near threshold
+}
+
+// PositionSource indicates how a position was seeded (feature 163 — snapshot-offline-positions).
+// Per-symbol: ORDERS = built purely from confirmed fills; BASELINE = snapshot-seeded with no
+// post-T0 fills; MIXED = baseline-seeded with ≥1 post-T0 fill folded in.
+enum PositionSource {
+  POSITION_SOURCE_UNSPECIFIED = 0;
+  POSITION_SOURCE_ORDERS = 1;
+  POSITION_SOURCE_BASELINE = 2;
+  POSITION_SOURCE_MIXED = 3;
 }
 
 // PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.
