@@ -438,6 +438,20 @@ export async function startMockBackend(): Promise<void> {
             ],
           };
         },
+        // Feature 163: echo the caller resolved from the propagated x-user-id header back as the
+        // subscription id, so the e2e can assert the notify service derives the owner from the
+        // session-forwarded header (not the request body) — the IDOR guard.
+        async registerPushSubscription(
+          _req: { endpoint?: string },
+          ctx: { requestHeader: Headers },
+        ) {
+          return { subscriptionId: callerUserId(ctx) };
+        },
+        // deleted=true iff an endpoint was provided; the endpoint is echoed via the (absent) body,
+        // so the e2e asserts the call reached here with the right endpoint through the response shape.
+        async unregisterPushSubscription(req: { endpoint?: string }) {
+          return { deleted: !!req.endpoint };
+        },
       });
 
       router.service(MarketDataService, {

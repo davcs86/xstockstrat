@@ -87,6 +87,16 @@ router.service(NotifyService, {
     );
   },
   listAlerts: forward((req, opts) => notifyClient.listAlerts(req, opts)),
+  // Push subscription register/unregister (feature 163). The subscription owner is resolved by the
+  // notify service from the propagated x-user-id header (backendHeaders, applied by forward) — the
+  // request body carries no user_id, so a browser cannot assert another user's identity (IDOR guard).
+  // Unregister is keyed by endpoint only (a possession-proven capability).
+  registerPushSubscription: forward((req, opts) =>
+    notifyClient.registerPushSubscription(req, opts),
+  ),
+  unregisterPushSubscription: forward((req, opts) =>
+    notifyClient.unregisterPushSubscription(req, opts),
+  ),
 });
 
 router.service(AnalysisService, {

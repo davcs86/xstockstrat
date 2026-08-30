@@ -2124,7 +2124,6 @@ reusing.
 - **Insight**: When a downstream position/state pipeline is only *tolerable* because a periodic **absolute snapshot** self-heals an upstream **incremental, non-idempotent fold** (here portfolio's `order.filled`→`processOrderFill` fold, corrected every 300s by the broker `account.positions.synced` snapshot + `DeletePositionsNotInSync`), any new producer that **removes the snapshot** (a manually-tracked "offline" account with no poller) must NOT reuse the incremental fold — an *editable* input re-runs the fold and double-counts / mis-signs with nothing to correct it. Instead have the new producer **recompute the absolute state from its own source of truth on every edit** and emit the *snapshot* event (the self-healing one), never the incremental one. Guard rails that make this safe: a **per-account lock** across persist→recompute→emit (request-driven writes lack the poller's one-goroutine-per-account serialization → lost-update reorder), **emit nothing on a failed recompute** (an empty snapshot makes `DeleteNotInSync` wipe the account — indistinguishable from a legitimate flat), fold in **economic order** (`filled_at`, not insert order — BUY/SELL/BUY is non-commutative), and keep any account-grain accumulator (realized P&L) in a **separate table**, because a per-row accumulator dies when the snapshot legitimately drops that row on close.
 - **Evidence**: `docs/roadmap/features/157-offline-account-portfolios/design.md` (Chosen Approach + Rejected Alternatives, R1–R3); `services/xstockstrat-portfolio/internal/service/portfolio_service.go:268` (incremental fold), `:887,:930` (snapshot consumer + `DeletePositionsNotInSync`), `:508-581` (signed `applyFill`/`realizedDelta`).
 - **Rule it implies**: before reusing an existing event/consumer for a new producer, ask "what *other* mechanism currently corrects this path's errors, and does my producer still have it?" If the corrector (a reconciling snapshot) is gone, an incremental/non-idempotent consumer is unsafe — switch that producer to absolute-recompute-and-emit-the-snapshot. And when a second service needs a fold that lived as a private func in the first, extract it to a shared `packages/` Go module (both services already `replace` the contracts module) but **host its golden/parity tests in a CI-executed service module** — no CI job runs `go test` under `packages/proto/`.
-=======
 
 ### 2026-08-26 — 158-durable-loop-scheduler — design
 - **Insight**: When generalizing a durable mechanism across N loops, extract only the **narrow
@@ -2514,3 +2513,33 @@ reusing.
   the serialization guarantee (here @AC-10 idempotency) is the caller's, not the extracted helper's;
   and a shared-helper refactor needs a producer-level test, not just an engine-parity test (extends the
   "demonstration ≠ producer contract" ledger family to refactor-extractions).
+### 2026-08-27 — agent-broker-account-tools — design
+- **Pattern**: When an agent MCP tool merely surfaces an EXISTING backend RPC, do not re-implement
+  the authorization or invariant checks client-side — verify what the Go/backend handler already
+  enforces and let it be the gate. Here `UpdateBrokerAccountCredentials` already rejects OFFLINE
+  accounts (`FailedPrecondition`, trading.go:2267-2270) and validates JSON server-side (2257), and
+  `DeregisterBrokerAccount` intentionally supports offline (2754-2761); the tool adds NO offline
+  guard or JSON validation — it just forwards `x-user-id` and maps the gRPC error via
+  `_grpc_error_message`. Client-side re-validation would be overbuild (behavior #2) AND could drift
+  from the backend.
+- **Evidence**: feature 162 design.md; `services/xstockstrat-trading/internal/service/trading.go:2256-2270,2736-2761`; `services/xstockstrat-agent/app/tools.py:184-195` (`_grpc_error_message` default branch surfaces FailedPrecondition/InvalidArgument details).
+- **Rule it implies**: for an agent tool wrapping an existing RPC, recon the backend handler's own
+  rejections first; the tool's job is identity forwarding + error translation, not a second copy of
+  the invariant. Adding a new agent tool must also move the tool-count literal across all inventory
+  surfaces (CLAUDE.md, tools.py docstring, mcp-tools.md ×2) AND add the full mcp-tools.md reference
+  entries in the same PR (ledger RC-1), guarded by a `BrokerAccount`-descriptor-parity test.
+
+### 2026-08-29 — pwa-notifications — design
+- **Pattern**: When adding a new best-effort side-channel that shares the "swallow every error to WARN"
+  contract (a 3rd fanout channel beside Slack/SendGrid), a credential that is merely *present* is not
+  the same as *usable*: `web-push` throws synchronously per send if `vapidDetails.subject` is not a
+  `mailto:`/`https:` URL, and inside a full-body try/catch that becomes a silent per-send black-hole
+  while the channel still reads "enabled". Validate credential *format* at construction/startup and
+  fold it into the `configured` gate (fail-loud/disable), never per-send. Also: keep the new channel a
+  **disjoint class**, not an extension of the existing dispatcher — that structural separation is what
+  protects the existing channel's `@AC-*` isolation guarantees (C-16) from a future edit.
+- **Evidence**: feature 163 design.md Decisions 3 + "Chosen Approach"; mirrors `FanoutDispatcher`
+  (`services/xstockstrat-notify/src/fanout/fanout.ts:51-108`).
+- **Rule it implies**: a best-effort channel whose failures are swallowed must validate its credentials'
+  *shape* up front (not just presence) and surface an invalid-but-present config loudly at startup — a
+  present-key/malformed-format combination is the exact case that looks healthy and delivers nothing.

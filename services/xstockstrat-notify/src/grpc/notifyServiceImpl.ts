@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { alertSeverityToNumber, alertSeverityFromJSON } from '@xstockstrat/proto/notify/v1/notify';
 import { ConfigWatcher } from '../services/configWatcher';
 import { FanoutDispatcher } from '../fanout/fanout';
+import { WebPushDispatcher } from '../fanout/webPush';
 import { getLogger } from '../services/logger';
 
 const log = getLogger('notify:impl');
@@ -23,6 +24,7 @@ export class NotifyServiceImpl {
     private readonly pool: Pool,
     private readonly config: ConfigWatcher,
     private readonly fanout: FanoutDispatcher,
+    private readonly webPush: WebPushDispatcher,
   ) {}
 
   /**
@@ -108,6 +110,15 @@ export class NotifyServiceImpl {
           log.warn('fanout dispatch rejected', { alertId, error: e?.message ?? String(e) }),
         ),
       );
+
+      // Best-effort Web Push (feature 163). Second, disjoint queueMicrotask beside the fanout one —
+      // deferred until AFTER the success callback so a slow/failed push can never turn a succeeded
+      // emit into an RPC error or add latency to the primary StreamAlerts write (FR-3/AC-4/AC-5).
+      queueMicrotask(() =>
+        void this.webPush.dispatch(alert).catch((e: any) =>
+          log.warn('push dispatch rejected', { alertId, error: e?.message ?? String(e) }),
+        ),
+      );
     } catch (err: any) {
       log.error('emitAlert failed', { error: err.message });
       callback({ code: 13, message: err.message });
@@ -167,6 +178,57 @@ export class NotifyServiceImpl {
         [req.userId || null, req.limit || 50]
       );
       callback(null, { alerts: result.rows.map(rowToAlert) });
+    } catch (err: any) {
+      callback({ code: 13, message: err.message });
+    }
+  }
+
+  /**
+   * RegisterPushSubscription — upsert a Web Push subscription for the calling user (feature 163).
+   * The owner is resolved from the propagated `x-user-id` metadata header (C-03), never the request
+   * body — the external edge injects/strips it after auth, so the platform-internal value is trusted
+   * and a browser cannot assert another user's identity. Keyed on `endpoint` (globally unique) so a
+   * re-subscribe from the same browser updates in place and refreshes the rotated p256dh/auth keys
+   * instead of duplicating (AC-2).
+   */
+  async registerPushSubscription(call: any, callback: any) {
+    const userId = (call.metadata?.get?.('x-user-id')?.[0] ?? '').toString();
+    if (!userId) {
+      return callback({ code: 3, message: 'x-user-id header required' });
+    }
+    const { endpoint, p256dh, auth, userAgent } = call.request;
+    if (!endpoint || !p256dh || !auth) {
+      return callback({ code: 3, message: 'endpoint, p256dh and auth are required' });
+    }
+    try {
+      const result = await this.pool.query(
+        `INSERT INTO notify.push_subscriptions (user_id, endpoint, p256dh, auth, user_agent)
+         VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (endpoint) DO UPDATE
+           SET user_id = EXCLUDED.user_id, p256dh = EXCLUDED.p256dh,
+               auth = EXCLUDED.auth, user_agent = EXCLUDED.user_agent, created_at = NOW()
+         RETURNING subscription_id`,
+        [userId, endpoint, p256dh, auth, userAgent || null],
+      );
+      callback(null, { subscriptionId: result.rows[0].subscription_id });
+    } catch (err: any) {
+      log.error('registerPushSubscription failed', { error: err.message });
+      callback({ code: 13, message: err.message });
+    }
+  }
+
+  /**
+   * UnregisterPushSubscription — delete a Web Push subscription by endpoint (feature 163).
+   * Endpoint-only (no user scoping): an endpoint is a possession-proven capability, and the register
+   * upsert can reassign an endpoint to another user, so a user-scoped delete could strand the row (AC-3).
+   */
+  async unregisterPushSubscription(call: any, callback: any) {
+    try {
+      const result = await this.pool.query(
+        'DELETE FROM notify.push_subscriptions WHERE endpoint = $1',
+        [call.request.endpoint],
+      );
+      callback(null, { deleted: (result.rowCount ?? 0) > 0 });
     } catch (err: any) {
       callback({ code: 13, message: err.message });
     }
