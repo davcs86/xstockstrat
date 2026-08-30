@@ -45,6 +45,18 @@ type configSetConfigForwarder interface {
 	SetConfig(ctx context.Context, callerID string, req *configv1.SetConfigRequest) (*configv1.SetConfigResponse, error)
 }
 
+// offlineBaselineStore is the seam SnapshotOfflinePositions and recomputeAndEmitOfflinePositions
+// call through for baseline-related persistence. *repository.TradingRepo satisfies it in
+// production. Extracted for testability — same hoisting-for-testability approach as
+// configSetConfigForwarder and AccountRepository (feature 163, Step 9).
+type offlineBaselineStore interface {
+	UpsertBaselineSnapshot(ctx context.Context, accountID, clientSnapshotID string, asOf time.Time, rows []repository.BaselineRow) error
+	EffectiveBaselineByAccount(ctx context.Context, accountID string) (asOf time.Time, lots map[string]pnl.Lot, ok bool, err error)
+	DeleteBaselinesByAccount(ctx context.Context, accountID string) error
+	HasUnconfirmedOfflineOrders(ctx context.Context, accountID string) (bool, error)
+	ListConfirmedOfflineOrdersByAccount(ctx context.Context, accountID string) ([]*tradingv1.Order, error)
+}
+
 // brokerPoolEntry holds a broker client and its type tag for a registered account.
 type brokerPoolEntry struct {
 	client     broker.Broker
@@ -94,6 +106,9 @@ type TradingService struct {
 	marketdata marketdatav1.MarketDataServiceClient
 	// repo persists orders to trading.orders hypertable.
 	repo *repository.TradingRepo
+	// baselineStore is the narrow seam for offline-baseline persistence (feature 163).
+	// *repository.TradingRepo satisfies it in production; tests inject a fake.
+	baselineStore offlineBaselineStore
 	// orderIntentRepo is the insert-or-return-existing dedup store (feature 101). Struct
 	// field added here (Step 9) so order_intent.go's sweeper compiles; NewTradingService's
 	// constructor parameter and main.go wiring land in Step 11.
@@ -194,6 +209,7 @@ func NewTradingService(
 		portfolio:           portfoliov1.NewPortfolioServiceClient(portfolioConn),
 		marketdata:          marketdatav1.NewMarketDataServiceClient(marketdataConn),
 		repo:                repo,
+		baselineStore:       repo,
 		orderIntentRepo:     orderIntentRepo,
 		bracketRepo:         bracketRepo,
 		orders:              make(map[string]*tradingv1.Order),
@@ -950,7 +966,7 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 // caller must hold s.confirmLock(accountID).
 func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, accountID, userID string) error {
 	// --- Load baseline (fail-closed: error → skip emit) ---
-	asOf, seedLots, hasBaseline, err := s.repo.EffectiveBaselineByAccount(ctx, accountID)
+	asOf, seedLots, hasBaseline, err := s.baselineStore.EffectiveBaselineByAccount(ctx, accountID)
 	if err != nil {
 		slog.Warn("recomputeAndEmitOfflinePositions: baseline query failed; skipping positions.synced emit",
 			"account_id", accountID, "error", err)
@@ -958,7 +974,7 @@ func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, a
 	}
 
 	// --- Load confirmed orders (fail-closed: error → skip emit) ---
-	confirmed, err := s.repo.ListConfirmedOfflineOrdersByAccount(ctx, accountID)
+	confirmed, err := s.baselineStore.ListConfirmedOfflineOrdersByAccount(ctx, accountID)
 	if err != nil {
 		slog.Warn("recomputeAndEmitOfflinePositions: recompute query failed; skipping positions.synced emit",
 			"account_id", accountID, "error", err)
@@ -1112,7 +1128,7 @@ func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *trad
 
 	// Warnings: check for unconfirmed NEW offline orders (AC-16, design.md § Snapshot-over-NEW).
 	var warnings []string
-	hasNew, warnErr := s.repo.HasUnconfirmedOfflineOrders(ctx, req.AccountId)
+	hasNew, warnErr := s.baselineStore.HasUnconfirmedOfflineOrders(ctx, req.AccountId)
 	if warnErr != nil {
 		slog.Warn("SnapshotOfflinePositions: failed to check for unconfirmed orders",
 			"account_id", req.AccountId, "error", warnErr)
@@ -1125,7 +1141,7 @@ func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *trad
 	lock.Lock()
 	defer lock.Unlock()
 
-	if err := s.repo.UpsertBaselineSnapshot(ctx, req.AccountId, req.ClientSnapshotId, asOf, validRows); err != nil {
+	if err := s.baselineStore.UpsertBaselineSnapshot(ctx, req.AccountId, req.ClientSnapshotId, asOf, validRows); err != nil {
 		return nil, grpcstatus.Errorf(codes.Internal, "persist baseline: %v", err)
 	}
 
@@ -2940,7 +2956,7 @@ func (s *TradingService) DeregisterBrokerAccountSvc(ctx context.Context, account
 	// so downstream consumers never see a stale baseline for a deregistered account (FR-8/AC-18).
 	// Fail the RPC on error (retry-safe: both ops are idempotent).
 	if rec.BrokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) {
-		if err := s.repo.DeleteBaselinesByAccount(ctx, accountID); err != nil {
+		if err := s.baselineStore.DeleteBaselinesByAccount(ctx, accountID); err != nil {
 			return grpcstatus.Errorf(codes.Internal, "purge baselines for account %s: %v", accountID, err)
 		}
 		// Emit account.deregistered so xstockstrat-portfolio purges the account's positions and its
