@@ -2,7 +2,7 @@
 
 **Status**: `pending`
 **Created**: 2026-08-30
-**Feature**: `docs/roadmap/features/162-snapshot-offline-positions/feature.md`
+**Feature**: `docs/roadmap/features/163-snapshot-offline-positions/feature.md`
 **Total Steps**: 14
 **Feature Branch**: `feature/snapshot-offline-positions`
 
@@ -722,7 +722,7 @@ inline in the test module — compliant; no new fixture home.
    snapshot/baseline operation.
 3. `services/xstockstrat-trading/CLAUDE.md`: add a **Ledger Events Emitted** row
    `account.positions.baseline_set | account:{account_id} | Offline position baseline recorded
-   (feature 162)`; add `trading.offline_position_baselines` to the **Database** section (plain table,
+   (feature 163)`; add `trading.offline_position_baselines` to the **Database** section (plain table,
    effective = greatest `as_of` per account, migration `009`).
 4. `services/xstockstrat-portfolio/CLAUDE.md`: note the `portfolio.positions.source`/`as_of` provenance
    columns (migration `013`) and that `account.positions.synced` now carries per-position `source`/`as_of`.

@@ -1,8 +1,8 @@
 # Context: snapshot-offline-positions
 
-**Feature**: `docs/roadmap/features/162-snapshot-offline-positions/feature.md`
-**Product Spec**: `docs/roadmap/features/162-snapshot-offline-positions/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/162-snapshot-offline-positions/implementation-spec.md`
+**Feature**: `docs/roadmap/features/163-snapshot-offline-positions/feature.md`
+**Product Spec**: `docs/roadmap/features/163-snapshot-offline-positions/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/163-snapshot-offline-positions/implementation-spec.md`
 
 ---
 

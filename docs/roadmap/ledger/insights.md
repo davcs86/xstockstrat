@@ -2509,7 +2509,7 @@ reusing.
   the original caller). Pin the branch with a **producer-level** test that drives the helper, not just
   the pure engine underneath it (`Fold==FoldFrom(nil)` proves the engine, not the branch selection).
 - **Evidence**: `services/xstockstrat-trading/internal/service/trading.go:912` (existing `confirmLock`
-  before the recompute at `:934-981`); feature 162 design.md § Chosen Approach / Open Risks.
+  before the recompute at `:934-981`); feature 163 design.md § Chosen Approach / Open Risks.
 - **Rule it implies**: when two request-driven writers share one absolute-recompute-and-emit path,
   the serialization guarantee (here @AC-10 idempotency) is the caller's, not the extracted helper's;
   and a shared-helper refactor needs a producer-level test, not just an engine-parity test (extends the
