@@ -10,8 +10,8 @@ import (
 
 // BaselineRow is a single position row from a brokerage statement baseline snapshot.
 type BaselineRow struct {
-	Symbol         string
-	Qty            float64
+	Symbol          string
+	Qty             float64
 	AvgCostPerShare float64
 }
 
@@ -75,9 +75,9 @@ func (r *TradingRepo) EffectiveBaselineByAccount(ctx context.Context, accountID 
 	lots = make(map[string]pnl.Lot)
 	for rows.Next() {
 		var (
-			rowAsOf         time.Time
-			symbol          string
-			qty, avgCost    float64
+			rowAsOf      time.Time
+			symbol       string
+			qty, avgCost float64
 		)
 		if err := rows.Scan(&rowAsOf, &symbol, &qty, &avgCost); err != nil {
 			return time.Time{}, nil, false, fmt.Errorf("scan baseline row: %w", err)

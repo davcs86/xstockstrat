@@ -595,11 +595,11 @@ type syncedPayload struct {
 	Positions   []syncedPosition
 }
 type syncedPosition struct {
-	Symbol string
-	Qty    float64
+	Symbol  string
+	Qty     float64
 	AvgCost float64
 	Source  int32
-	AsOf   string // RFC3339 or empty
+	AsOf    string // RFC3339 or empty
 }
 
 func parseSyncedPayload(t *testing.T, ledger *recordingLedger) *syncedPayload {
@@ -1314,7 +1314,7 @@ func TestSnapshotOfflinePositions_AC7_EmptySymbolRejected(t *testing.T) {
 
 	resp, err := svc.SnapshotOfflinePositions(context.Background(), snapshotReq(
 		"acc-1", "user-1", "snap-1", T0,
-		posBaseline("", 100, 150),  // empty symbol
+		posBaseline("", 100, 150), // empty symbol
 		posBaseline("AAPL", 50, 200),
 	))
 	if err != nil {
