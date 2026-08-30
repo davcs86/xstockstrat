@@ -300,7 +300,7 @@ the table drop). No applied migration edited (F-01).
 
 ### Step 6 — migration: portfolio.positions source + as_of columns (013)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/migrations/013_positions_provenance.up.sql` — create
@@ -342,7 +342,7 @@ migration edited (F-01).
 
 ### Step 7 — service: trading baseline repository (persist / effective / delete)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/offline_baseline_repo.go` — create
@@ -380,7 +380,7 @@ migration edited (F-01).
 
 ### Step 8 — service: SnapshotOfflinePositions RPC, seeded recompute, provenance, audit event, deregister purge
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify

@@ -179,3 +179,38 @@
 - **Deviation**: spec file status updates for Steps 1-4 were deferred to the Step 5 commit (caught up
   in the same commit rather than per-step as §5.5 prescribes). No data loss — all step outcomes recorded.
 - Steps since last checkpoint: 5 → step-cap checkpoint triggered (§5.5b).
+
+## Session 2026-08-30 — sdd-execute (sequential mode, Steps 6-8)
+
+- Continuing from checkpoint; Steps 6-8 committed.
+- **Step 6 (portfolio migration 013)**: Created `013_positions_provenance.up.sql` adding `source`
+  (INTEGER, NOT NULL DEFAULT 0) and `as_of` (TIMESTAMPTZ, nullable) columns to `portfolio.positions`;
+  matching `.down.sql` with DROP COLUMN for both.
+- **Step 7 (baseline repository)**: Created `offline_baseline_repo.go` with 4 methods on `*TradingRepo`:
+  `UpsertBaselineSnapshot` (replace-in-tx DELETE+INSERT, AC-6), `EffectiveBaselineByAccount`
+  (greatest as_of with created_at tiebreak, drops qty=0, returns `map[string]pnl.Lot`),
+  `DeleteBaselinesByAccount` (FR-8 purge), `HasUnconfirmedOfflineOrders` (AC-16 warning).
+  Compile verified.
+- **Step 8 (THE BIG STEP)**: Implemented the core service+handler changes in `trading.go` and
+  `handler/trading.go`:
+  - Extracted recompute-and-emit block from `ConfirmOrder` into private, lock-free
+    `recomputeAndEmitOfflinePositions(ctx, accountID, userID)` with `// caller must hold
+    s.confirmLock(accountID)` doc comment.
+  - Replaced `pnl.Fold(...)` with fail-closed three-branch baseline build: loads
+    `EffectiveBaselineByAccount`, filters confirmed orders to `filled_at > asOf` in baseline branch,
+    uses `pnl.FoldFrom(seedLots, fills)` for seeded fold, `pnl.Fold(...)` for no-baseline branch.
+  - Added symbol-level provenance computation: `MIXED` (baseline + post-T0 fill), `BASELINE`
+    (baseline only), `ORDERS` (fills only). `source` and `as_of` added to `posEntries` map.
+    Used `portfoliov1.PositionSource_*` (enum is in portfolio.proto, not trading.proto).
+  - `ConfirmOrder` now delegates to extracted producer (still under existing confirmLock).
+  - Added `SnapshotOfflinePositions` method: offline-only gate (AC-9), per-row validation
+    (fault-tolerant, rejects empty symbol/non-finite/negative avg_cost, qty=0 valid per AC-8/AC-15),
+    warnings for unconfirmed NEW orders (AC-16), confirmLock serialization (AC-10), persists via
+    `UpsertBaselineSnapshot`, emits `account.positions.baseline_set` audit event (FR-6), then calls
+    `recomputeAndEmitOfflinePositions`.
+  - Added deregister purge: `DeleteBaselinesByAccount` runs BEFORE `account.deregistered` emit in
+    `DeregisterBrokerAccountSvc`'s OFFLINE branch (FR-8/AC-18), fail-the-RPC on error.
+  - Added handler twin: `TradingHandler.SnapshotOfflinePositions` (sets `req.Msg.UserId` from
+    `extractUserID(ctx)`, preserves gRPC status codes) and `grpcTradingAdapter.SnapshotOfflinePositions`.
+  - Full build (`cmd/server`) and existing tests pass. No new jscpd duplication.
+- **Deviation**: spec file status updates for Steps 6-7 were caught up in the Step 8 commit.
