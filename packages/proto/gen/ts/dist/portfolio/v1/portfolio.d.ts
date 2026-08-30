@@ -17,6 +17,21 @@ export declare function positionRiskFlagFromJSON(object: any): PositionRiskFlag;
 export declare function positionRiskFlagToJSON(object: PositionRiskFlag): string;
 export declare function positionRiskFlagToNumber(object: PositionRiskFlag): number;
 /**
+ * PositionSource indicates how a position was seeded (feature 163 — snapshot-offline-positions).
+ * Per-symbol: ORDERS = built purely from confirmed fills; BASELINE = snapshot-seeded with no
+ * post-T0 fills; MIXED = baseline-seeded with ≥1 post-T0 fill folded in.
+ */
+export declare enum PositionSource {
+    POSITION_SOURCE_UNSPECIFIED = "POSITION_SOURCE_UNSPECIFIED",
+    POSITION_SOURCE_ORDERS = "POSITION_SOURCE_ORDERS",
+    POSITION_SOURCE_BASELINE = "POSITION_SOURCE_BASELINE",
+    POSITION_SOURCE_MIXED = "POSITION_SOURCE_MIXED",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function positionSourceFromJSON(object: any): PositionSource;
+export declare function positionSourceToJSON(object: PositionSource): string;
+export declare function positionSourceToNumber(object: PositionSource): number;
+/**
  * PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.
  * Used only as an additive filter on ListPositionsRequest; the Position message itself
  * continues to carry signed qty.
@@ -110,6 +125,17 @@ export interface Position {
      */
     stopOrderId: string;
     takeProfitOrderId: string;
+    /**
+     * ── Provenance (feature 163 — snapshot-offline-positions) ──────────────────
+     * as_of is the effective date of the baseline snapshot that seeded this position
+     * (T0); unset for pure-order positions.
+     */
+    asOf?: Date | undefined;
+    /**
+     * source indicates how the position was constructed: ORDERS (fill-only),
+     * BASELINE (snapshot-only), or MIXED (baseline + post-T0 fills).
+     */
+    source: PositionSource;
 }
 export interface PortfolioSnapshot {
     portfolioId: string;

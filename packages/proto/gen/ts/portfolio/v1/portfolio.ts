@@ -99,6 +99,72 @@ export function positionRiskFlagToNumber(object: PositionRiskFlag): number {
 }
 
 /**
+ * PositionSource indicates how a position was seeded (feature 163 — snapshot-offline-positions).
+ * Per-symbol: ORDERS = built purely from confirmed fills; BASELINE = snapshot-seeded with no
+ * post-T0 fills; MIXED = baseline-seeded with ≥1 post-T0 fill folded in.
+ */
+export enum PositionSource {
+  POSITION_SOURCE_UNSPECIFIED = "POSITION_SOURCE_UNSPECIFIED",
+  POSITION_SOURCE_ORDERS = "POSITION_SOURCE_ORDERS",
+  POSITION_SOURCE_BASELINE = "POSITION_SOURCE_BASELINE",
+  POSITION_SOURCE_MIXED = "POSITION_SOURCE_MIXED",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function positionSourceFromJSON(object: any): PositionSource {
+  switch (object) {
+    case 0:
+    case "POSITION_SOURCE_UNSPECIFIED":
+      return PositionSource.POSITION_SOURCE_UNSPECIFIED;
+    case 1:
+    case "POSITION_SOURCE_ORDERS":
+      return PositionSource.POSITION_SOURCE_ORDERS;
+    case 2:
+    case "POSITION_SOURCE_BASELINE":
+      return PositionSource.POSITION_SOURCE_BASELINE;
+    case 3:
+    case "POSITION_SOURCE_MIXED":
+      return PositionSource.POSITION_SOURCE_MIXED;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return PositionSource.UNRECOGNIZED;
+  }
+}
+
+export function positionSourceToJSON(object: PositionSource): string {
+  switch (object) {
+    case PositionSource.POSITION_SOURCE_UNSPECIFIED:
+      return "POSITION_SOURCE_UNSPECIFIED";
+    case PositionSource.POSITION_SOURCE_ORDERS:
+      return "POSITION_SOURCE_ORDERS";
+    case PositionSource.POSITION_SOURCE_BASELINE:
+      return "POSITION_SOURCE_BASELINE";
+    case PositionSource.POSITION_SOURCE_MIXED:
+      return "POSITION_SOURCE_MIXED";
+    case PositionSource.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function positionSourceToNumber(object: PositionSource): number {
+  switch (object) {
+    case PositionSource.POSITION_SOURCE_UNSPECIFIED:
+      return 0;
+    case PositionSource.POSITION_SOURCE_ORDERS:
+      return 1;
+    case PositionSource.POSITION_SOURCE_BASELINE:
+      return 2;
+    case PositionSource.POSITION_SOURCE_MIXED:
+      return 3;
+    case PositionSource.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
+/**
  * PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.
  * Used only as an additive filter on ListPositionsRequest; the Position message itself
  * continues to carry signed qty.
@@ -281,6 +347,19 @@ export interface Position {
    */
   stopOrderId: string;
   takeProfitOrderId: string;
+  /**
+   * ── Provenance (feature 163 — snapshot-offline-positions) ──────────────────
+   * as_of is the effective date of the baseline snapshot that seeded this position
+   * (T0); unset for pure-order positions.
+   */
+  asOf?:
+    | Date
+    | undefined;
+  /**
+   * source indicates how the position was constructed: ORDERS (fill-only),
+   * BASELINE (snapshot-only), or MIXED (baseline + post-T0 fills).
+   */
+  source: PositionSource;
 }
 
 export interface PortfolioSnapshot {
@@ -831,6 +910,8 @@ function createBasePosition(): Position {
     exitRule: "",
     stopOrderId: "",
     takeProfitOrderId: "",
+    asOf: undefined,
+    source: PositionSource.POSITION_SOURCE_UNSPECIFIED,
   };
 }
 
@@ -898,6 +979,12 @@ export const Position: MessageFns<Position> = {
     }
     if (message.takeProfitOrderId !== "") {
       writer.uint32(170).string(message.takeProfitOrderId);
+    }
+    if (message.asOf !== undefined) {
+      Timestamp.encode(toTimestamp(message.asOf), writer.uint32(178).fork()).join();
+    }
+    if (message.source !== PositionSource.POSITION_SOURCE_UNSPECIFIED) {
+      writer.uint32(184).int32(positionSourceToNumber(message.source));
     }
     return writer;
   },
@@ -1077,6 +1164,22 @@ export const Position: MessageFns<Position> = {
           message.takeProfitOrderId = reader.string();
           continue;
         }
+        case 22: {
+          if (tag !== 178) {
+            break;
+          }
+
+          message.asOf = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 23: {
+          if (tag !== 184) {
+            break;
+          }
+
+          message.source = positionSourceFromJSON(reader.int32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1179,6 +1282,12 @@ export const Position: MessageFns<Position> = {
         : isSet(object.take_profit_order_id)
         ? globalThis.String(object.take_profit_order_id)
         : "",
+      asOf: isSet(object.asOf)
+        ? fromJsonTimestamp(object.asOf)
+        : isSet(object.as_of)
+        ? fromJsonTimestamp(object.as_of)
+        : undefined,
+      source: isSet(object.source) ? positionSourceFromJSON(object.source) : PositionSource.POSITION_SOURCE_UNSPECIFIED,
     };
   },
 
@@ -1247,6 +1356,12 @@ export const Position: MessageFns<Position> = {
     if (message.takeProfitOrderId !== "") {
       obj.takeProfitOrderId = message.takeProfitOrderId;
     }
+    if (message.asOf !== undefined) {
+      obj.asOf = message.asOf.toISOString();
+    }
+    if (message.source !== PositionSource.POSITION_SOURCE_UNSPECIFIED) {
+      obj.source = positionSourceToJSON(message.source);
+    }
     return obj;
   },
 
@@ -1276,6 +1391,8 @@ export const Position: MessageFns<Position> = {
     message.exitRule = object.exitRule ?? "";
     message.stopOrderId = object.stopOrderId ?? "";
     message.takeProfitOrderId = object.takeProfitOrderId ?? "";
+    message.asOf = object.asOf ?? undefined;
+    message.source = object.source ?? PositionSource.POSITION_SOURCE_UNSPECIFIED;
     return message;
   },
 };

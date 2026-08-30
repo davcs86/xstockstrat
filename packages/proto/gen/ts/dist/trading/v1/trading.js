@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: trading/v1/trading.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TradingServiceClient = exports.TradingServiceService = exports.DeregisterBrokerAccountResponse = exports.DeregisterBrokerAccountRequest = exports.ListBrokerAccountsResponse = exports.ListBrokerAccountsRequest = exports.GetTradingEnvironmentResponse = exports.GetTradingEnvironmentRequest = exports.UpdateBrokerAccountCredentialsResponse = exports.UpdateBrokerAccountCredentialsRequest = exports.RegisterBrokerAccountResponse = exports.RegisterBrokerAccountRequest = exports.BrokerAccount = exports.ReplaceOrderRequest = exports.StreamOrderUpdatesRequest = exports.ListOrdersResponse = exports.ListOrdersRequest = exports.ConfirmOrderRequest = exports.GetOrderRequest = exports.CancelOrderResponse = exports.CancelOrderRequest = exports.PlaceOrderRequest = exports.Order = exports.HaltSource = exports.IntentState = exports.CredentialStatus = exports.OrderStatus = exports.OrderType = exports.OrderSide = exports.protobufPackage = void 0;
+exports.TradingServiceClient = exports.TradingServiceService = exports.SnapshotOfflinePositionsResponse = exports.RejectedBaselineRow = exports.SnapshotOfflinePositionsRequest = exports.PositionBaseline = exports.DeregisterBrokerAccountResponse = exports.DeregisterBrokerAccountRequest = exports.ListBrokerAccountsResponse = exports.ListBrokerAccountsRequest = exports.GetTradingEnvironmentResponse = exports.GetTradingEnvironmentRequest = exports.UpdateBrokerAccountCredentialsResponse = exports.UpdateBrokerAccountCredentialsRequest = exports.RegisterBrokerAccountResponse = exports.RegisterBrokerAccountRequest = exports.BrokerAccount = exports.ReplaceOrderRequest = exports.StreamOrderUpdatesRequest = exports.ListOrdersResponse = exports.ListOrdersRequest = exports.ConfirmOrderRequest = exports.GetOrderRequest = exports.CancelOrderResponse = exports.CancelOrderRequest = exports.PlaceOrderRequest = exports.Order = exports.HaltSource = exports.IntentState = exports.CredentialStatus = exports.OrderStatus = exports.OrderType = exports.OrderSide = exports.protobufPackage = void 0;
 exports.orderSideFromJSON = orderSideFromJSON;
 exports.orderSideToJSON = orderSideToJSON;
 exports.orderSideToNumber = orderSideToNumber;
@@ -2990,6 +2990,404 @@ exports.DeregisterBrokerAccountResponse = {
         return message;
     },
 };
+function createBasePositionBaseline() {
+    return { symbol: "", qty: 0, avgCostPerShare: 0 };
+}
+exports.PositionBaseline = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        if (message.qty !== 0) {
+            writer.uint32(17).double(message.qty);
+        }
+        if (message.avgCostPerShare !== 0) {
+            writer.uint32(25).double(message.avgCostPerShare);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBasePositionBaseline();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 17) {
+                        break;
+                    }
+                    message.qty = reader.double();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 25) {
+                        break;
+                    }
+                    message.avgCostPerShare = reader.double();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            qty: isSet(object.qty) ? globalThis.Number(object.qty) : 0,
+            avgCostPerShare: isSet(object.avgCostPerShare)
+                ? globalThis.Number(object.avgCostPerShare)
+                : isSet(object.avg_cost_per_share)
+                    ? globalThis.Number(object.avg_cost_per_share)
+                    : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.qty !== 0) {
+            obj.qty = message.qty;
+        }
+        if (message.avgCostPerShare !== 0) {
+            obj.avgCostPerShare = message.avgCostPerShare;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.PositionBaseline.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBasePositionBaseline();
+        message.symbol = object.symbol ?? "";
+        message.qty = object.qty ?? 0;
+        message.avgCostPerShare = object.avgCostPerShare ?? 0;
+        return message;
+    },
+};
+function createBaseSnapshotOfflinePositionsRequest() {
+    return { accountId: "", userId: "", asOf: undefined, clientSnapshotId: "", positions: [] };
+}
+exports.SnapshotOfflinePositionsRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.accountId !== "") {
+            writer.uint32(10).string(message.accountId);
+        }
+        if (message.userId !== "") {
+            writer.uint32(18).string(message.userId);
+        }
+        if (message.asOf !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.asOf), writer.uint32(26).fork()).join();
+        }
+        if (message.clientSnapshotId !== "") {
+            writer.uint32(34).string(message.clientSnapshotId);
+        }
+        for (const v of message.positions) {
+            exports.PositionBaseline.encode(v, writer.uint32(42).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSnapshotOfflinePositionsRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.accountId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.asOf = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.clientSnapshotId = reader.string();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.positions.push(exports.PositionBaseline.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            accountId: isSet(object.accountId)
+                ? globalThis.String(object.accountId)
+                : isSet(object.account_id)
+                    ? globalThis.String(object.account_id)
+                    : "",
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
+            asOf: isSet(object.asOf)
+                ? fromJsonTimestamp(object.asOf)
+                : isSet(object.as_of)
+                    ? fromJsonTimestamp(object.as_of)
+                    : undefined,
+            clientSnapshotId: isSet(object.clientSnapshotId)
+                ? globalThis.String(object.clientSnapshotId)
+                : isSet(object.client_snapshot_id)
+                    ? globalThis.String(object.client_snapshot_id)
+                    : "",
+            positions: globalThis.Array.isArray(object?.positions)
+                ? object.positions.map((e) => exports.PositionBaseline.fromJSON(e))
+                : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.accountId !== "") {
+            obj.accountId = message.accountId;
+        }
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
+        if (message.asOf !== undefined) {
+            obj.asOf = message.asOf.toISOString();
+        }
+        if (message.clientSnapshotId !== "") {
+            obj.clientSnapshotId = message.clientSnapshotId;
+        }
+        if (message.positions?.length) {
+            obj.positions = message.positions.map((e) => exports.PositionBaseline.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SnapshotOfflinePositionsRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSnapshotOfflinePositionsRequest();
+        message.accountId = object.accountId ?? "";
+        message.userId = object.userId ?? "";
+        message.asOf = object.asOf ?? undefined;
+        message.clientSnapshotId = object.clientSnapshotId ?? "";
+        message.positions = object.positions?.map((e) => exports.PositionBaseline.fromPartial(e)) || [];
+        return message;
+    },
+};
+function createBaseRejectedBaselineRow() {
+    return { rowIndex: 0, reason: "" };
+}
+exports.RejectedBaselineRow = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.rowIndex !== 0) {
+            writer.uint32(8).int32(message.rowIndex);
+        }
+        if (message.reason !== "") {
+            writer.uint32(18).string(message.reason);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseRejectedBaselineRow();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 8) {
+                        break;
+                    }
+                    message.rowIndex = reader.int32();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.reason = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            rowIndex: isSet(object.rowIndex)
+                ? globalThis.Number(object.rowIndex)
+                : isSet(object.row_index)
+                    ? globalThis.Number(object.row_index)
+                    : 0,
+            reason: isSet(object.reason) ? globalThis.String(object.reason) : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.rowIndex !== 0) {
+            obj.rowIndex = Math.round(message.rowIndex);
+        }
+        if (message.reason !== "") {
+            obj.reason = message.reason;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.RejectedBaselineRow.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseRejectedBaselineRow();
+        message.rowIndex = object.rowIndex ?? 0;
+        message.reason = object.reason ?? "";
+        return message;
+    },
+};
+function createBaseSnapshotOfflinePositionsResponse() {
+    return { accountId: "", committedCount: 0, rejected: [], warnings: [] };
+}
+exports.SnapshotOfflinePositionsResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.accountId !== "") {
+            writer.uint32(10).string(message.accountId);
+        }
+        if (message.committedCount !== 0) {
+            writer.uint32(16).int32(message.committedCount);
+        }
+        for (const v of message.rejected) {
+            exports.RejectedBaselineRow.encode(v, writer.uint32(26).fork()).join();
+        }
+        for (const v of message.warnings) {
+            writer.uint32(34).string(v);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSnapshotOfflinePositionsResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.accountId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.committedCount = reader.int32();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.rejected.push(exports.RejectedBaselineRow.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.warnings.push(reader.string());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            accountId: isSet(object.accountId)
+                ? globalThis.String(object.accountId)
+                : isSet(object.account_id)
+                    ? globalThis.String(object.account_id)
+                    : "",
+            committedCount: isSet(object.committedCount)
+                ? globalThis.Number(object.committedCount)
+                : isSet(object.committed_count)
+                    ? globalThis.Number(object.committed_count)
+                    : 0,
+            rejected: globalThis.Array.isArray(object?.rejected)
+                ? object.rejected.map((e) => exports.RejectedBaselineRow.fromJSON(e))
+                : [],
+            warnings: globalThis.Array.isArray(object?.warnings) ? object.warnings.map((e) => globalThis.String(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.accountId !== "") {
+            obj.accountId = message.accountId;
+        }
+        if (message.committedCount !== 0) {
+            obj.committedCount = Math.round(message.committedCount);
+        }
+        if (message.rejected?.length) {
+            obj.rejected = message.rejected.map((e) => exports.RejectedBaselineRow.toJSON(e));
+        }
+        if (message.warnings?.length) {
+            obj.warnings = message.warnings;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SnapshotOfflinePositionsResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSnapshotOfflinePositionsResponse();
+        message.accountId = object.accountId ?? "";
+        message.committedCount = object.committedCount ?? 0;
+        message.rejected = object.rejected?.map((e) => exports.RejectedBaselineRow.fromPartial(e)) || [];
+        message.warnings = object.warnings?.map((e) => e) || [];
+        return message;
+    },
+};
 exports.TradingServiceService = {
     placeOrder: {
         path: "/xstockstrat.trading.v1.TradingService/PlaceOrder",
@@ -3118,6 +3516,20 @@ exports.TradingServiceService = {
         requestDeserialize: (value) => exports.GetTradingEnvironmentRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.GetTradingEnvironmentResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.GetTradingEnvironmentResponse.decode(value),
+    },
+    /**
+     * SnapshotOfflinePositions records brokerage-statement period-end holdings as an
+     * effective-dated opening baseline for an OFFLINE account (feature 163). Rejected
+     * with FailedPrecondition for broker (Alpaca/IBKR) accounts.
+     */
+    snapshotOfflinePositions: {
+        path: "/xstockstrat.trading.v1.TradingService/SnapshotOfflinePositions",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.SnapshotOfflinePositionsRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.SnapshotOfflinePositionsRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.SnapshotOfflinePositionsResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.SnapshotOfflinePositionsResponse.decode(value),
     },
 };
 exports.TradingServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.TradingServiceService, "xstockstrat.trading.v1.TradingService");

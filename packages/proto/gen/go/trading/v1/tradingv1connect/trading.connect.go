@@ -68,6 +68,9 @@ const (
 	// TradingServiceGetTradingEnvironmentProcedure is the fully-qualified name of the TradingService's
 	// GetTradingEnvironment RPC.
 	TradingServiceGetTradingEnvironmentProcedure = "/xstockstrat.trading.v1.TradingService/GetTradingEnvironment"
+	// TradingServiceSnapshotOfflinePositionsProcedure is the fully-qualified name of the
+	// TradingService's SnapshotOfflinePositions RPC.
+	TradingServiceSnapshotOfflinePositionsProcedure = "/xstockstrat.trading.v1.TradingService/SnapshotOfflinePositions"
 )
 
 // TradingServiceClient is a client for the xstockstrat.trading.v1.TradingService service.
@@ -96,6 +99,10 @@ type TradingServiceClient interface {
 	// GetTradingEnvironment reports the deployment-fixed trading mode. Users cannot
 	// switch between paper and live — the environment owns this decision.
 	GetTradingEnvironment(context.Context, *connect.Request[v1.GetTradingEnvironmentRequest]) (*connect.Response[v1.GetTradingEnvironmentResponse], error)
+	// SnapshotOfflinePositions records brokerage-statement period-end holdings as an
+	// effective-dated opening baseline for an OFFLINE account (feature 163). Rejected
+	// with FailedPrecondition for broker (Alpaca/IBKR) accounts.
+	SnapshotOfflinePositions(context.Context, *connect.Request[v1.SnapshotOfflinePositionsRequest]) (*connect.Response[v1.SnapshotOfflinePositionsResponse], error)
 }
 
 // NewTradingServiceClient constructs a client for the xstockstrat.trading.v1.TradingService
@@ -181,6 +188,12 @@ func NewTradingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(tradingServiceMethods.ByName("GetTradingEnvironment")),
 			connect.WithClientOptions(opts...),
 		),
+		snapshotOfflinePositions: connect.NewClient[v1.SnapshotOfflinePositionsRequest, v1.SnapshotOfflinePositionsResponse](
+			httpClient,
+			baseURL+TradingServiceSnapshotOfflinePositionsProcedure,
+			connect.WithSchema(tradingServiceMethods.ByName("SnapshotOfflinePositions")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -198,6 +211,7 @@ type tradingServiceClient struct {
 	deregisterBrokerAccount        *connect.Client[v1.DeregisterBrokerAccountRequest, v1.DeregisterBrokerAccountResponse]
 	updateBrokerAccountCredentials *connect.Client[v1.UpdateBrokerAccountCredentialsRequest, v1.UpdateBrokerAccountCredentialsResponse]
 	getTradingEnvironment          *connect.Client[v1.GetTradingEnvironmentRequest, v1.GetTradingEnvironmentResponse]
+	snapshotOfflinePositions       *connect.Client[v1.SnapshotOfflinePositionsRequest, v1.SnapshotOfflinePositionsResponse]
 }
 
 // PlaceOrder calls xstockstrat.trading.v1.TradingService.PlaceOrder.
@@ -261,6 +275,11 @@ func (c *tradingServiceClient) GetTradingEnvironment(ctx context.Context, req *c
 	return c.getTradingEnvironment.CallUnary(ctx, req)
 }
 
+// SnapshotOfflinePositions calls xstockstrat.trading.v1.TradingService.SnapshotOfflinePositions.
+func (c *tradingServiceClient) SnapshotOfflinePositions(ctx context.Context, req *connect.Request[v1.SnapshotOfflinePositionsRequest]) (*connect.Response[v1.SnapshotOfflinePositionsResponse], error) {
+	return c.snapshotOfflinePositions.CallUnary(ctx, req)
+}
+
 // TradingServiceHandler is an implementation of the xstockstrat.trading.v1.TradingService service.
 type TradingServiceHandler interface {
 	PlaceOrder(context.Context, *connect.Request[v1.PlaceOrderRequest]) (*connect.Response[v1.Order], error)
@@ -287,6 +306,10 @@ type TradingServiceHandler interface {
 	// GetTradingEnvironment reports the deployment-fixed trading mode. Users cannot
 	// switch between paper and live — the environment owns this decision.
 	GetTradingEnvironment(context.Context, *connect.Request[v1.GetTradingEnvironmentRequest]) (*connect.Response[v1.GetTradingEnvironmentResponse], error)
+	// SnapshotOfflinePositions records brokerage-statement period-end holdings as an
+	// effective-dated opening baseline for an OFFLINE account (feature 163). Rejected
+	// with FailedPrecondition for broker (Alpaca/IBKR) accounts.
+	SnapshotOfflinePositions(context.Context, *connect.Request[v1.SnapshotOfflinePositionsRequest]) (*connect.Response[v1.SnapshotOfflinePositionsResponse], error)
 }
 
 // NewTradingServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -368,6 +391,12 @@ func NewTradingServiceHandler(svc TradingServiceHandler, opts ...connect.Handler
 		connect.WithSchema(tradingServiceMethods.ByName("GetTradingEnvironment")),
 		connect.WithHandlerOptions(opts...),
 	)
+	tradingServiceSnapshotOfflinePositionsHandler := connect.NewUnaryHandler(
+		TradingServiceSnapshotOfflinePositionsProcedure,
+		svc.SnapshotOfflinePositions,
+		connect.WithSchema(tradingServiceMethods.ByName("SnapshotOfflinePositions")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.trading.v1.TradingService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TradingServicePlaceOrderProcedure:
@@ -394,6 +423,8 @@ func NewTradingServiceHandler(svc TradingServiceHandler, opts ...connect.Handler
 			tradingServiceUpdateBrokerAccountCredentialsHandler.ServeHTTP(w, r)
 		case TradingServiceGetTradingEnvironmentProcedure:
 			tradingServiceGetTradingEnvironmentHandler.ServeHTTP(w, r)
+		case TradingServiceSnapshotOfflinePositionsProcedure:
+			tradingServiceSnapshotOfflinePositionsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -449,4 +480,8 @@ func (UnimplementedTradingServiceHandler) UpdateBrokerAccountCredentials(context
 
 func (UnimplementedTradingServiceHandler) GetTradingEnvironment(context.Context, *connect.Request[v1.GetTradingEnvironmentRequest]) (*connect.Response[v1.GetTradingEnvironmentResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.trading.v1.TradingService.GetTradingEnvironment is not implemented"))
+}
+
+func (UnimplementedTradingServiceHandler) SnapshotOfflinePositions(context.Context, *connect.Request[v1.SnapshotOfflinePositionsRequest]) (*connect.Response[v1.SnapshotOfflinePositionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.trading.v1.TradingService.SnapshotOfflinePositions is not implemented"))
 }

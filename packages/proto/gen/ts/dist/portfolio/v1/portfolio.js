@@ -5,10 +5,13 @@
 //   protoc               unknown
 // source: portfolio/v1/portfolio.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PortfolioServiceClient = exports.PortfolioServiceService = exports.ListAllWatchlistSymbolsResponse = exports.ListAllWatchlistSymbolsRequest = exports.EnsureSignalWatchlistResponse = exports.EnsureSignalWatchlistRequest = exports.RemoveWatchlistSymbolsResponse = exports.RemoveWatchlistSymbolsRequest = exports.AddWatchlistSymbolsResponse = exports.AddWatchlistSymbolsRequest = exports.DeleteWatchlistResponse = exports.DeleteWatchlistRequest = exports.UpdateWatchlistResponse = exports.UpdateWatchlistRequest = exports.ListWatchlistsResponse = exports.ListWatchlistsRequest = exports.GetWatchlistResponse = exports.GetWatchlistRequest = exports.CreateWatchlistResponse = exports.CreateWatchlistRequest = exports.Watchlist = exports.WatchlistBinding = exports.ListPortfoliosResponse = exports.ListPortfoliosRequest = exports.StreamPortfolioUpdatesRequest = exports.GetSnapshotRequest = exports.GetPnLRequest = exports.ListPositionsResponse = exports.ListPositionsRequest = exports.GetPositionRequest = exports.GetPortfolioRequest = exports.PnLResponse = exports.PortfolioSnapshot = exports.Position = exports.Portfolio = exports.WatchlistEntrySource = exports.PositionSide = exports.PositionRiskFlag = exports.protobufPackage = void 0;
+exports.PortfolioServiceClient = exports.PortfolioServiceService = exports.ListAllWatchlistSymbolsResponse = exports.ListAllWatchlistSymbolsRequest = exports.EnsureSignalWatchlistResponse = exports.EnsureSignalWatchlistRequest = exports.RemoveWatchlistSymbolsResponse = exports.RemoveWatchlistSymbolsRequest = exports.AddWatchlistSymbolsResponse = exports.AddWatchlistSymbolsRequest = exports.DeleteWatchlistResponse = exports.DeleteWatchlistRequest = exports.UpdateWatchlistResponse = exports.UpdateWatchlistRequest = exports.ListWatchlistsResponse = exports.ListWatchlistsRequest = exports.GetWatchlistResponse = exports.GetWatchlistRequest = exports.CreateWatchlistResponse = exports.CreateWatchlistRequest = exports.Watchlist = exports.WatchlistBinding = exports.ListPortfoliosResponse = exports.ListPortfoliosRequest = exports.StreamPortfolioUpdatesRequest = exports.GetSnapshotRequest = exports.GetPnLRequest = exports.ListPositionsResponse = exports.ListPositionsRequest = exports.GetPositionRequest = exports.GetPortfolioRequest = exports.PnLResponse = exports.PortfolioSnapshot = exports.Position = exports.Portfolio = exports.WatchlistEntrySource = exports.PositionSide = exports.PositionSource = exports.PositionRiskFlag = exports.protobufPackage = void 0;
 exports.positionRiskFlagFromJSON = positionRiskFlagFromJSON;
 exports.positionRiskFlagToJSON = positionRiskFlagToJSON;
 exports.positionRiskFlagToNumber = positionRiskFlagToNumber;
+exports.positionSourceFromJSON = positionSourceFromJSON;
+exports.positionSourceToJSON = positionSourceToJSON;
+exports.positionSourceToNumber = positionSourceToNumber;
 exports.positionSideFromJSON = positionSideFromJSON;
 exports.positionSideToJSON = positionSideToJSON;
 exports.positionSideToNumber = positionSideToNumber;
@@ -79,6 +82,69 @@ function positionRiskFlagToNumber(object) {
         case PositionRiskFlag.POSITION_RISK_FLAG_STOP_NEAR:
             return 3;
         case PositionRiskFlag.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/**
+ * PositionSource indicates how a position was seeded (feature 163 — snapshot-offline-positions).
+ * Per-symbol: ORDERS = built purely from confirmed fills; BASELINE = snapshot-seeded with no
+ * post-T0 fills; MIXED = baseline-seeded with ≥1 post-T0 fill folded in.
+ */
+var PositionSource;
+(function (PositionSource) {
+    PositionSource["POSITION_SOURCE_UNSPECIFIED"] = "POSITION_SOURCE_UNSPECIFIED";
+    PositionSource["POSITION_SOURCE_ORDERS"] = "POSITION_SOURCE_ORDERS";
+    PositionSource["POSITION_SOURCE_BASELINE"] = "POSITION_SOURCE_BASELINE";
+    PositionSource["POSITION_SOURCE_MIXED"] = "POSITION_SOURCE_MIXED";
+    PositionSource["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(PositionSource || (exports.PositionSource = PositionSource = {}));
+function positionSourceFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "POSITION_SOURCE_UNSPECIFIED":
+            return PositionSource.POSITION_SOURCE_UNSPECIFIED;
+        case 1:
+        case "POSITION_SOURCE_ORDERS":
+            return PositionSource.POSITION_SOURCE_ORDERS;
+        case 2:
+        case "POSITION_SOURCE_BASELINE":
+            return PositionSource.POSITION_SOURCE_BASELINE;
+        case 3:
+        case "POSITION_SOURCE_MIXED":
+            return PositionSource.POSITION_SOURCE_MIXED;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return PositionSource.UNRECOGNIZED;
+    }
+}
+function positionSourceToJSON(object) {
+    switch (object) {
+        case PositionSource.POSITION_SOURCE_UNSPECIFIED:
+            return "POSITION_SOURCE_UNSPECIFIED";
+        case PositionSource.POSITION_SOURCE_ORDERS:
+            return "POSITION_SOURCE_ORDERS";
+        case PositionSource.POSITION_SOURCE_BASELINE:
+            return "POSITION_SOURCE_BASELINE";
+        case PositionSource.POSITION_SOURCE_MIXED:
+            return "POSITION_SOURCE_MIXED";
+        case PositionSource.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function positionSourceToNumber(object) {
+    switch (object) {
+        case PositionSource.POSITION_SOURCE_UNSPECIFIED:
+            return 0;
+        case PositionSource.POSITION_SOURCE_ORDERS:
+            return 1;
+        case PositionSource.POSITION_SOURCE_BASELINE:
+            return 2;
+        case PositionSource.POSITION_SOURCE_MIXED:
+            return 3;
+        case PositionSource.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -484,6 +550,8 @@ function createBasePosition() {
         exitRule: "",
         stopOrderId: "",
         takeProfitOrderId: "",
+        asOf: undefined,
+        source: PositionSource.POSITION_SOURCE_UNSPECIFIED,
     };
 }
 exports.Position = {
@@ -550,6 +618,12 @@ exports.Position = {
         }
         if (message.takeProfitOrderId !== "") {
             writer.uint32(170).string(message.takeProfitOrderId);
+        }
+        if (message.asOf !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.asOf), writer.uint32(178).fork()).join();
+        }
+        if (message.source !== PositionSource.POSITION_SOURCE_UNSPECIFIED) {
+            writer.uint32(184).int32(positionSourceToNumber(message.source));
         }
         return writer;
     },
@@ -707,6 +781,20 @@ exports.Position = {
                     message.takeProfitOrderId = reader.string();
                     continue;
                 }
+                case 22: {
+                    if (tag !== 178) {
+                        break;
+                    }
+                    message.asOf = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 23: {
+                    if (tag !== 184) {
+                        break;
+                    }
+                    message.source = positionSourceFromJSON(reader.int32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -808,6 +896,12 @@ exports.Position = {
                 : isSet(object.take_profit_order_id)
                     ? globalThis.String(object.take_profit_order_id)
                     : "",
+            asOf: isSet(object.asOf)
+                ? fromJsonTimestamp(object.asOf)
+                : isSet(object.as_of)
+                    ? fromJsonTimestamp(object.as_of)
+                    : undefined,
+            source: isSet(object.source) ? positionSourceFromJSON(object.source) : PositionSource.POSITION_SOURCE_UNSPECIFIED,
         };
     },
     toJSON(message) {
@@ -875,6 +969,12 @@ exports.Position = {
         if (message.takeProfitOrderId !== "") {
             obj.takeProfitOrderId = message.takeProfitOrderId;
         }
+        if (message.asOf !== undefined) {
+            obj.asOf = message.asOf.toISOString();
+        }
+        if (message.source !== PositionSource.POSITION_SOURCE_UNSPECIFIED) {
+            obj.source = positionSourceToJSON(message.source);
+        }
         return obj;
     },
     create(base) {
@@ -903,6 +1003,8 @@ exports.Position = {
         message.exitRule = object.exitRule ?? "";
         message.stopOrderId = object.stopOrderId ?? "";
         message.takeProfitOrderId = object.takeProfitOrderId ?? "";
+        message.asOf = object.asOf ?? undefined;
+        message.source = object.source ?? PositionSource.POSITION_SOURCE_UNSPECIFIED;
         return message;
     },
 };
