@@ -838,6 +838,10 @@ type positionSyncPayload struct {
 		Symbol  string  `json:"symbol"`
 		Qty     float64 `json:"qty"`
 		AvgCost float64 `json:"avg_cost"`
+		// Provenance (feature 163): source is the PositionSource enum integer; as_of is
+		// the baseline snapshot effective date (RFC3339 or empty for ORDERS-only positions).
+		Source int    `json:"source"`
+		AsOf   string `json:"as_of"`
 		// Broker mark-to-market valuation (zero when the broker did not report it, e.g.
 		// legacy events emitted before these fields existed). When present these are
 		// authoritative and used verbatim so the card reconciles with broker equity.
@@ -937,6 +941,8 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 			UnrealizedPnlPct: p.UnrealizedPnlPct,
 			DayPnl:           p.DayPnl,
 			DayPnlPct:        p.DayPnlPct,
+			Source:           p.Source,
+			AsOf:             p.AsOf,
 		}
 		if err := s.repo.UpsertPositionFromSync(ctx, userID, p.Symbol, sync.TradingMode, sync.AccountID, p.Qty, p.AvgCost, val); err != nil {
 			slog.Warn("upsert position from sync failed", "symbol", p.Symbol, "error", err)

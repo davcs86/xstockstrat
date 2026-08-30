@@ -60,10 +60,10 @@ func TestGetPosition_ScopesToRequestedAccount(t *testing.T) {
 	rows := mock.NewRows([]string{
 		"symbol", "qty", "avg_entry_price", "cost_basis", "opened_at", "trading_mode", "account_id",
 		"current_price", "market_value", "unrealized_pnl", "unrealized_pnl_pct", "day_pnl",
-		"day_pnl_pct", "stop_order_id", "take_profit_order_id",
+		"day_pnl_pct", "stop_order_id", "take_profit_order_id", "source", "as_of",
 	}).AddRow(
 		"AAPL", 10.0, 150.0, 1500.0, time.Now(), "TRADING_MODE_PAPER", "acc-target",
-		0.0, 0.0, 0.0, 0.0, 0.0, 0.0, "", "",
+		0.0, 0.0, 0.0, 0.0, 0.0, 0.0, "", "", 0, nil,
 	)
 
 	mock.ExpectQuery(`account_id=\$4`).

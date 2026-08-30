@@ -251,16 +251,18 @@ func scanPositionRow(row pgxRow) (*portfoliov1.Position, error) {
 		dayPnl, dayPnlPct                                          float64
 		stopOrderID, takeProfitOrderID                             string
 		openedAt                                                   time.Time
+		source                                                     int
+		asOf                                                       *time.Time
 	)
 	if err := row.Scan(&symbol, &qty, &avgEntry, &costBasis, &openedAt, &modeStr, &accountID,
 		&currentPrice, &marketValue, &unrealizedPnl, &unrealizedPnlPct, &dayPnl, &dayPnlPct,
-		&stopOrderID, &takeProfitOrderID); err != nil {
+		&stopOrderID, &takeProfitOrderID, &source, &asOf); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrPositionNotFound
 		}
 		return nil, fmt.Errorf("scan position: %w", err)
 	}
-	return &portfoliov1.Position{
+	pos := &portfoliov1.Position{
 		Symbol:            symbol,
 		Qty:               qty,
 		AvgEntryPrice:     avgEntry,
@@ -275,14 +277,19 @@ func scanPositionRow(row pgxRow) (*portfoliov1.Position, error) {
 		DayPnlPct:         dayPnlPct,
 		StopOrderId:       stopOrderID,
 		TakeProfitOrderId: takeProfitOrderID,
-	}, nil
+		Source:            portfoliov1.PositionSource(source),
+	}
+	if asOf != nil {
+		pos.AsOf = timestamppb.New(*asOf)
+	}
+	return pos, nil
 }
 
 // positionColumns is the SELECT column list backing scanPositionRow — kept in one place so
 // the column order stays in lockstep with the Scan call above. stop_order_id/take_profit_order_id
 // are nullable TEXT (feature 030); COALESCE'd to ” so scanPositionRow can use plain strings,
 // matching the "empty = no active bracket" contract on Position (portfolio.proto).
-const positionColumns = `symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id, current_price, market_value, unrealized_pnl, unrealized_pnl_pct, day_pnl, day_pnl_pct, COALESCE(stop_order_id, ''), COALESCE(take_profit_order_id, '')`
+const positionColumns = `symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id, current_price, market_value, unrealized_pnl, unrealized_pnl_pct, day_pnl, day_pnl_pct, COALESCE(stop_order_id, ''), COALESCE(take_profit_order_id, ''), source, as_of`
 
 // PositionValuation is the broker's mark-to-market snapshot for a single position,
 // carried on account.positions.synced. Zero fields mean the broker did not report a
@@ -296,6 +303,11 @@ type PositionValuation struct {
 	// previous close. Distinct from UnrealizedPnl (total since entry); zero = not reported.
 	DayPnl    float64
 	DayPnlPct float64
+	// Source is the PositionSource enum integer (feature 163): 0=UNSPECIFIED, 1=ORDERS,
+	// 2=BASELINE, 3=MIXED. Legacy events default to 0 (safe, additive).
+	Source int
+	// AsOf is the baseline snapshot effective date (RFC3339 or empty). Empty/zero = unset.
+	AsOf string
 }
 
 // UpsertPositionFromSync inserts or updates a position from a broker position sync.
@@ -306,13 +318,21 @@ type PositionValuation struct {
 // reconcile with broker equity instead of recomputing from marketdata mid-quotes.
 func (r *PortfolioRepo) UpsertPositionFromSync(ctx context.Context, userID, symbol, tradingMode, accountID string, qty, avgCost float64, val PositionValuation) error {
 	costBasis := qty * avgCost
+	// Parse the optional as_of timestamp (RFC3339 or empty).
+	var asOf *time.Time
+	if val.AsOf != "" {
+		if t, err := time.Parse(time.RFC3339Nano, val.AsOf); err == nil {
+			asOf = &t
+		}
+	}
 	const q = `
-		INSERT INTO portfolio.positions (user_id, symbol, qty, avg_entry_price, cost_basis, trading_mode, account_id, current_price, market_value, unrealized_pnl, unrealized_pnl_pct, day_pnl, day_pnl_pct, opened_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
+		INSERT INTO portfolio.positions (user_id, symbol, qty, avg_entry_price, cost_basis, trading_mode, account_id, current_price, market_value, unrealized_pnl, unrealized_pnl_pct, day_pnl, day_pnl_pct, source, as_of, opened_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW())
 		ON CONFLICT (user_id, symbol, trading_mode, account_id) DO UPDATE
-		SET qty=$3, avg_entry_price=$4, cost_basis=$5, current_price=$8, market_value=$9, unrealized_pnl=$10, unrealized_pnl_pct=$11, day_pnl=$12, day_pnl_pct=$13, updated_at=NOW()`
+		SET qty=$3, avg_entry_price=$4, cost_basis=$5, current_price=$8, market_value=$9, unrealized_pnl=$10, unrealized_pnl_pct=$11, day_pnl=$12, day_pnl_pct=$13, source=$14, as_of=$15, updated_at=NOW()`
 	_, err := r.pool.Exec(ctx, q, userID, symbol, qty, avgCost, costBasis, tradingMode, accountID,
-		val.CurrentPrice, val.MarketValue, val.UnrealizedPnl, val.UnrealizedPnlPct, val.DayPnl, val.DayPnlPct)
+		val.CurrentPrice, val.MarketValue, val.UnrealizedPnl, val.UnrealizedPnlPct, val.DayPnl, val.DayPnlPct,
+		val.Source, asOf)
 	return err
 }
 
