@@ -114,6 +114,7 @@ never wedge the sync loop. Likewise every ledger `AppendEvent` is bounded (`ledg
 - Schema: `trading`
 - Hypertable: `trading.orders` (partition: `created_at`, chunk: 1 day)
 - `trading.order_brackets` — the per-order bracket (stop-loss/take-profit) state machine (feature 030): `NONE→SUBMITTING→PENDING_VERIFY→ACTIVE→CANCELING→CANCELED`, with a `FAILED` terminal on any submission error. Plain indexed `order_id` column (no FK — `trading.orders`' composite hypertable PK has no single-column FK target, matching this service's existing avoidance of cross-hypertable FKs).
+- `trading.offline_position_baselines` — effective-dated brokerage-statement baseline rows per offline account (feature 163, migration `009`). Each row is `(account_id, symbol, qty, avg_cost_per_share, as_of, client_snapshot_id, created_at)`. The effective baseline for an account is the set of rows with the greatest `as_of`; a new snapshot replaces the prior baseline atomically (DELETE + INSERT in tx). Only offline accounts may have baselines.
 - Migration tool: `golang-migrate`
 - Run: `migrate -path ./migrations -database $DATABASE_URL up`
 
@@ -141,6 +142,7 @@ Orders requiring approval (above configured thresholds) are placed in `ORDER_STA
 | `order.bracket_updated` | `order:{order_id}` | Bracket leg order IDs assigned/cleared (feature 030) — consumed by `xstockstrat-portfolio` to populate `Position.stop_order_id`/`take_profit_order_id` |
 | `reconciliation.mismatch_found` | `account:{account_id}` | Non-propagation-delay mismatch found by the reconciliation poller (feature 102) |
 | `order_intent.resolved_by_reconciliation` | `order:{order_id}` | A `101` `UNKNOWN` order intent resolved against broker truth by the reconciliation poller (feature 102) |
+| `account.positions.baseline_set` | `account:{account_id}` | Offline position baseline recorded (feature 163) — emitted after a `SnapshotOfflinePositions` call replaces the prior baseline and re-folds the account's positions |
 
 ## Order Replace (`ReplaceOrder`)
 

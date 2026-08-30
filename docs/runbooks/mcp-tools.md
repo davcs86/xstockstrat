@@ -1093,8 +1093,8 @@ An offline account has no broker: orders are recorded by hand and their fills co
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `operation` | string | yes | `create_account` \| `record_order` \| `confirm_order` \| `get_order` \| `list_orders` \| `list_positions` |
-| `account_id` | string | for record/list | The offline account to act on |
+| `operation` | string | yes | `create_account` \| `record_order` \| `confirm_order` \| `snapshot_positions` \| `get_order` \| `list_orders` \| `list_positions` |
+| `account_id` | string | for record/list/snapshot | The offline account to act on |
 | `display_name` | string | `create_account` | Name for the new account |
 | `symbol` | string | `record_order` | Ticker |
 | `side` | string | `record_order` | `buy` \| `sell` |
@@ -1105,6 +1105,9 @@ An offline account has no broker: orders are recorded by hand and their fills co
 | `filled_qty` | float | `confirm_order` | Confirmed fill quantity |
 | `filled_avg_price` | float | `confirm_order` | Average fill price |
 | `filled_at` | string | no | ISO-8601 fill time (defaults to now) |
+| `positions_json` | string | `snapshot_positions` | JSON array of baseline positions: `[{"symbol":"AAPL","qty":100,"avg_cost_per_share":150.00}, …]` |
+| `as_of` | string | no | ISO-8601 statement date for `snapshot_positions` (defaults to now) |
+| `client_snapshot_id` | string | no | Idempotency nonce for `snapshot_positions` (auto-generated when omitted) |
 
 - **create_account** → `{"account": …}` (broker_type `OFFLINE`, no credentials).
 - **record_order** → `{"order": …}` — a `NEW` order, `filled_qty` 0, no broker submit.
@@ -1112,10 +1115,18 @@ An offline account has no broker: orders are recorded by hand and their fills co
   never echoed; re-confirming replaces the fill (idempotent recompute from all confirmed orders).
   The offline-only guard is enforced server-side from the persisted order — a broker account is
   rejected `FAILED_PRECONDITION`.
+- **snapshot_positions** → `{"account_id": …, "committed_count": N, "rejected": [...], "warnings": [...]}`
+  — set the effective-dated opening baseline from a brokerage statement (feature 163). The baseline
+  seeds the offline fold: `position(symbol) = baseline_as_of(T0) + Σ fills(filled_at > T0)`. The
+  service replaces the prior baseline atomically (delete-then-insert in tx) and re-folds all
+  confirmed orders against the new seed. Requires `account_id` and `positions_json`; `as_of` defaults
+  to now; `client_snapshot_id` is an idempotency nonce (auto-generated when omitted).
 - **get_order** / **list_orders** / **list_positions** → read paths for statement reconciliation.
+  `list_positions` returns per-position provenance: `source` (`ORDERS`/`BASELINE`/`MIXED`) and `as_of`
+  (baseline effective date, unset for pure-order positions) — feature 163.
 
 Returns the shapes above. This is the platform capability behind a monthly statement-reconciliation
-task: correct drift by recording/confirming orders (no separate set-positions path).
+task: correct drift by recording/confirming orders or snapshotting a brokerage statement baseline.
 
 **Errors:** `unknown operation '<op>'`; missing required args per operation; `account or order not
 found`; `permission denied` (non-owner); `FAILED_PRECONDITION` (confirm on a broker account);
