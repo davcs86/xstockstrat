@@ -94,3 +94,49 @@
   migration number via a CROSS-REMOTE-BRANCH max(NNN) scan (fails.md 2026-07-29/081 numbering trap;
   recon shows 012 last → likely 013).
 - Status: spec-ready → design-approved.
+
+## Session 2026-08-30 — sdd-spec
+
+- Generated implementation-spec.md with 14 steps. Status → implementation-ready.
+- Consumed recon.md + design.md as authoritative inputs; reused recon's Codebase Map directly and
+  only re-discovered the three groundings design.md deferred to /sdd-spec.
+- Key codebase findings (grounded this session):
+  - **Migration numbers via cross-remote-branch scan** (fails.md 2026-07-29/081 trap): trading max
+    NNN = `008` across ALL remote branches → next `009`; portfolio max = `012` → next `013`. No
+    collision on any branch. (Local `ls` alone would have been unsafe; scanned `git ls-remote` heads.)
+  - **Deregister purge site grounded**: `DeregisterBrokerAccountSvc` at `trading.go:2736`; OFFLINE
+    branch at `:2758`; the `account.deregistered` emit at `:2759`. `DeleteBaselinesByAccount` must run
+    synchronously in that branch, fail-the-RPC, BEFORE the emit.
+  - **Recompute/emit block to extract**: `trading.go:934-980` (ConfirmOrder), already fail-closed on
+    query error (`:937-943`); `confirmLock` at `:842-857`, acquired `:912-914`. Extracted producer
+    `recomputeAndEmitOfflinePositions` stays lock-free (caller-holds-lock; ConfirmOrder holds the
+    non-reentrant mutex — internal acquire would deadlock).
+  - **pnl engine**: `Fold` loop body `pnl.go:59-90`; extract `foldInto(accs, fills)`, add
+    `FoldFrom(baseline, fills)` sibling; `FoldFrom(nil, fills)==Fold(fills)` by construction. Signed
+    `Lot.CostBasis` (`:38-41`); `RealizedDelta` reduce/flip (`:17-28`) handles the seam unchanged.
+  - **Handler twin**: trading has a Connect handler + `grpcTradingAdapter` (`internal/handler/trading.go:69,158`);
+    new RPC needs a method on both plus the service. `extractUserID(ctx)` sets trusted user_id (`:75`).
+  - **Portfolio read-path parity (C-10(b))**: the shared `positionColumns` SELECT constant
+    (`portfolio_repo.go:285`) drives BOTH `ListPositions` (`:117`) and `ListPositionsByAccount`
+    (`:498`, behind `buildAccountPortfolio`/`ListPortfolios`) — one edit surfaces provenance on both
+    paths; parity test pins it (AC-12). `positionSyncPayload` at `portfolio_service.go:826-851`;
+    `processPositionSync` upsert loop `:925-952`; realized gate `:948` (replace-not-accumulate).
+  - **Proto slots free** (overlap-scan confirmed): `Position.as_of=22`, `Position.source=23`
+    (message tops at 21). New RPC + PositionBaseline/RejectedBaselineRow/Request/Response on
+    TradingService. Response carries BOTH `rejected` (per-row) and `warnings` (NEW-order advisory).
+  - **Agent consumer surface**: `manage_offline_account` at `tools.py:1468`, dispatch ladder
+    `:1508-1542`; `confirm_offline_order`/`list_account_positions` at `client.py:1685,1742`.
+    `list_account_positions` uses `MessageToDict` → `source`/`as_of` ride through with NO client
+    change once the proto carries them (verify, don't assume). `credentials_json` blob-as-string
+    precedent `client.py:1638` reused for `positions_json`.
+  - **Tool count unchanged**: `snapshot_positions` is a new OPERATION on an existing tool, not a new
+    tool — `mcp-tools.md:3,37` "thirty tools" must NOT change (recorded as an absence claim to verify).
+  - **buf breaking form** (from ci.yml:109-123): `cd packages/proto && buf lint . && buf breaking .
+    --against '../../.git#branch=main-dev,subdir=packages/proto'`.
+- **Out-of-repo surface (P-03)**: the `xstockstrat-trade-confirm-ingest` skill named in the product
+  spec Consumer Surface is session/marketplace-managed, NOT in the repo tree (`find` returns nothing;
+  only `plugins/strat-lab/` is in-tree, and the root CLAUDE.md strat-lab rule does not list
+  `manage_offline_account`). Updating that external skill is a follow-up outside this PR's reach; the
+  in-repo doc surfaces (Step 14) are the complete repo-side C-14 documentation. Flag at execute time.
+- All 18 acceptance scenarios (AC-1..18) mapped to covering test steps (4, 9, 11, 13) — see the
+  Scenario Coverage table in the Execution Summary. C-15 satisfied.

@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/snapshot-offline-positions`
 **Created**: 2026-08-29
-**Last Updated**: 2026-08-29
+**Last Updated**: 2026-08-30
 
 ---
 
@@ -13,6 +13,7 @@
 | 2026-08-29 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-29 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings addressed) |
 | 2026-08-30 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written |
+| 2026-08-30 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 14 steps |
 
 ---
 
@@ -22,7 +23,7 @@
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Recon Dossier](recon.md) — grounded codebase map + Existing Business Rules (C-16)
 - [Design](design.md) — debated, approved architecture (3 rounds) + rejected alternatives
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec snapshot-offline-positions`_
+- [Implementation Spec](implementation-spec.md) — numbered steps with codebase evidence (14 steps)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -52,4 +53,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec snapshot-offline-positions` — generate implementation spec from the approved design
+`/sdd-review snapshot-offline-positions impl-spec` — validate implementation spec, then `/sdd-execute snapshot-offline-positions`
