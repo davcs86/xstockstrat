@@ -1,6 +1,6 @@
 # Implementation Spec: snapshot-offline-positions
 
-**Status**: `in-progress`
+**Status**: `code-completed`
 **Created**: 2026-08-30
 **Feature**: `docs/roadmap/features/163-snapshot-offline-positions/feature.md`
 **Total Steps**: 14
@@ -472,7 +472,7 @@ header propagation already satisfied; no C-03 new-call surface).
 
 ### Step 9 — test: trading snapshot producer, gate, provenance, realized reset, warnings, deregister, concurrency
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_offline_test.go` — modify
@@ -523,7 +523,7 @@ scenario one-offs local to `trading_offline_test.go` — inline compliant, no fi
 
 ### Step 10 — service: portfolio persists + surfaces source/as_of on both read paths
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -564,7 +564,7 @@ scenario one-offs local to `trading_offline_test.go` — inline compliant, no fi
 
 ### Step 11 — test: portfolio provenance persistence + read-path parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_offline_test.go` — modify
@@ -602,7 +602,7 @@ literals are single-consumer scenario one-offs inline in the test — compliant.
 
 ### Step 12 — service: agent snapshot_positions operation + list_positions provenance
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -656,7 +656,7 @@ grep -n "snapshot_positions\|snapshot_offline_positions\|positions_json" app/too
 
 ### Step 13 — test: agent snapshot_positions dispatch + provenance passthrough
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools_endpoint.py` — modify (or the offline-tool test module if one exists — grep `manage_offline_account` under `tests/` and extend the file that owns it)
@@ -692,7 +692,7 @@ inline in the test module — compliant; no new fixture home.
 
 ### Step 14 — docs: MCP tool reference, agent + trading + portfolio CLAUDE.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` + service CLAUDE.md files
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify (`manage_offline_account` section, `:1087`)

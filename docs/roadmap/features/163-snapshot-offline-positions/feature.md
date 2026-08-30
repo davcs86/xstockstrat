@@ -15,6 +15,7 @@
 | 2026-08-30 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written |
 | 2026-08-30 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 14 steps |
 | 2026-08-30 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode; Steps 1-5 done (proto, proto-gen, pnl FoldFrom, pnl test, trading migration 009) |
+| 2026-08-30 | `in-progress` → `code-completed` | /sdd-execute | All 14 steps done (Steps 6-14 across sessions); integration PR next |
 
 ---
 

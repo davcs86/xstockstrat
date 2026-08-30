@@ -214,3 +214,39 @@
     `extractUserID(ctx)`, preserves gRPC status codes) and `grpcTradingAdapter.SnapshotOfflinePositions`.
   - Full build (`cmd/server`) and existing tests pass. No new jscpd duplication.
 - **Deviation**: spec file status updates for Steps 6-7 were caught up in the Step 8 commit.
+
+## Session 2026-08-30 — sdd-execute (Steps 9–14)
+
+- **Step 9** (trading snapshot tests): 19 test functions covering AC-1 through AC-18 plus
+  validation/concurrency in `trading_offline_test.go`. Enhanced `recordingLedger` with
+  `requestsByType()` helper; added `fakeBaselineStore` (~100 lines) enabling test-only scenarios
+  without the live DB. All 19 pass with `-race`.
+- **Steps 10–11** (portfolio provenance persistence + tests):
+  - Extended `positionSyncPayload` inner position entry with `Source int` / `AsOf string` and
+    `processPositionSync` passes them through to `PositionValuation`.
+  - Extended `PositionValuation` struct, `UpsertPositionFromSync` INSERT/ON CONFLICT with
+    `source` ($14) and `as_of` ($15), and `positionColumns` + `scanPositionRow` with the two
+    new columns.
+  - Created `export_test_helpers.go` (`ExportedPositionColumns()`) for cross-package test assertions.
+  - Tests: `TestPositionSyncPayload_AC11_ProvenanceParsing`, `_AC11_LegacyDefaultsZero`,
+    `_AC12_ReadPathParity` (pins `positionColumns` to contain `source` and `as_of`).
+  - Fixed pgxmock regression in `TestGetPosition_ScopesToRequestedAccount` — scanPositionRow
+    now expects 17 columns; mock needed `"source", "as_of"` + `0, nil`.
+- **Steps 12–13** (agent snapshot_positions):
+  - Added `snapshot_offline_positions()` to `client.py` — parses `positions_json` JSON string,
+    builds `PositionBaseline` messages, dials TradingService with `x-user-id` metadata.
+  - Added `snapshot_positions` dispatch branch in `tools.py` `manage_offline_account` with
+    `as_of`, `client_snapshot_id`, `positions_json` params.
+  - 5 agent tests: `test_snapshot_offline_positions_forwards_baseline_and_user`,
+    `_no_as_of`, `_bad_json_raises`, `_non_array_raises`,
+    `test_list_positions_provenance_passthrough`. All 323 agent tests pass, 78% coverage.
+- **Step 14** (docs): Updated `mcp-tools.md` (snapshot_positions operation + provenance note),
+  agent CLAUDE.md (tool row), trading CLAUDE.md (offline_position_baselines table +
+  `account.positions.baseline_set` ledger event), portfolio CLAUDE.md (source/as_of columns in
+  positions table + provenance note in `account.positions.synced` consumer). Tool count
+  unchanged at thirty-two.
+- **Out-of-repo surface note (P-03)**: the `xstockstrat-trade-confirm-ingest` skill is
+  session/marketplace-managed, not a file in this repo. Updating it is a follow-up outside
+  this PR's reach; the in-repo doc surfaces (Step 14) are the complete repo-side C-14
+  documentation.
+- All 14 steps done → status `code-completed`.
