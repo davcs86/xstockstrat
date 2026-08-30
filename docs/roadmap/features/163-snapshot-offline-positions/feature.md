@@ -3,6 +3,8 @@
 **Development Branch**: `feature/snapshot-offline-positions`
 **Created**: 2026-08-29
 **Last Updated**: 2026-08-30
+**Committed to main**: 57e40a310ed09b205ce76ca440ee7a40a87fb7ec
+**Launched date**: 2026-08-30
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-08-30 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode; Steps 1-5 done (proto, proto-gen, pnl FoldFrom, pnl test, trading migration 009) |
 | 2026-08-30 | `in-progress` → `code-completed` | /sdd-execute | All 14 steps done (Steps 6-14 across sessions); integration PR next |
 
+| 2026-08-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1047; committed 57e40a310ed09b205ce76ca440ee7a40a87fb7ec |
 ---
 
 ## Artifacts

@@ -250,3 +250,10 @@
   this PR's reach; the in-repo doc surfaces (Step 14) are the complete repo-side C-14
   documentation.
 - All 14 steps done → status `code-completed`.
+
+## Session 2026-08-30 (CI: feature status automation)
+
+- Promotion PR #1047 merged to main
+- Feature promoted and committed: 57e40a310ed09b205ce76ca440ee7a40a87fb7ec
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-30

@@ -3,6 +3,8 @@
 **Development Branch**: `feature/agent-broker-account-tools`
 **Created**: 2026-08-27
 **Last Updated**: 2026-08-27
+**Committed to main**: 57e40a310ed09b205ce76ca440ee7a40a87fb7ec
+**Launched date**: 2026-08-30
 
 ---
 
@@ -15,6 +17,7 @@
 | 2026-08-27 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
 | 2026-08-27 | `implementation-ready` → `code-completed` | /sdd-execute | All 5 steps implemented + verified (316 pass, 77% cov); ledger tool-count sync deviation recorded |
 
+| 2026-08-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1047; committed 57e40a310ed09b205ce76ca440ee7a40a87fb7ec |
 ---
 
 ## Artifacts

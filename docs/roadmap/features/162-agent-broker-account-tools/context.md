@@ -66,3 +66,10 @@
   cov** (gate 40%). Offline-client tests still green (the `_account_to_dict` migration is behavior-
   preserving).
 - Status: implementation-ready → code-completed.
+
+## Session 2026-08-30 (CI: feature status automation)
+
+- Promotion PR #1047 merged to main
+- Feature promoted and committed: 57e40a310ed09b205ce76ca440ee7a40a87fb7ec
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-30
