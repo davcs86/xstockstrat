@@ -140,3 +140,20 @@
   in-repo doc surfaces (Step 14) are the complete repo-side C-14 documentation. Flag at execute time.
 - All 18 acceptance scenarios (AC-1..18) mapped to covering test steps (4, 9, 11, 13) — see the
   Scenario Coverage table in the Execution Summary. C-15 satisfied.
+
+## Session 2026-08-30 — sdd-review impl-spec (advisory)
+
+- Result: 0 blockers, 1 warning, 2 notes (advisory — did not block). No Floor risk. All 18 acceptance
+  scenarios (AC-1..18) trace to a covering RED test step (Steps 4, 9, 11, 13). Overlap scan CLEAN
+  (trading migration 009 / portfolio 013 / Position fields 22,23 all next-free; no merge-order entry).
+- All findings ADDRESSED in the spec before /sdd-execute (F-09 not yet in effect):
+  - [x] Step 10 (C-01 evidence precision): INSERT edit was cited at `UpsertPosition`
+    (`portfolio_repo.go:57-115` / INSERT `:59`, the order.filled path) but the sync-path provenance
+    keys flow through `UpsertPositionFromSync` (`:307-317` / INSERT `:309-313`). Citation corrected in
+    the Codebase Evidence and Instruction 2, with an explicit "do not touch UpsertPosition" guard.
+  - [x] Execution Summary merge-order prose: reworded — only the portfolio migration (Step 6) is
+    order-critical before the trading emit (Step 8); the consumer (Step 10) may follow (unmapped
+    source/as_of keys default safely to source=0 / null as_of).
+  - [x] Step 4 (coverage formality): added a note that the ≥40% coverage gate for trading-service code
+    is asserted in Step 9, not here (pnl is coverpkg-excluded).
+- Nothing carried into execution unaddressed.

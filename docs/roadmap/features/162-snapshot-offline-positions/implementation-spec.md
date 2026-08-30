@@ -19,9 +19,12 @@ columns) before any code that persists into them; (4) the trading producer — b
 event, and the deregister purge; (5) the portfolio consumer surfaces `source`/`as_of` on **both**
 read paths; (6) the agent `snapshot_positions` operation (the C-14 consumer surface); (7) docs.
 
-**Merge-order (design.md Open Risks):** the portfolio migration + consumer (Steps 6, 10) must land no
-later than the trading emit change (Step 8), so the additive `source`/`as_of` payload keys have
-columns to persist into. Steps are ordered accordingly.
+**Merge-order (design.md Open Risks):** only the portfolio **migration** (Step 6) is order-critical —
+it must land no later than the trading emit change (Step 8), so the additive `source`/`as_of` payload
+keys have columns to persist into. The portfolio **consumer** (Step 10) may follow Step 8, since an
+`account.positions.synced` payload whose `source`/`as_of` keys are not yet parsed defaults safely to
+`source=0` (`POSITION_SOURCE_UNSPECIFIED`) / null `as_of` — additive, no data loss. Steps are ordered
+accordingly (see `## Step Dependencies`).
 
 **Consumer surface (C-14):** the product spec names **Agent** only (UI is out of scope, optional
 follow-up — not a deferred-required surface, so no UI step). The Agent surface is Step 12.
@@ -241,7 +244,10 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 ```
 All new cases pass. Note: `pnl` is an external module to this service, so these cases exercise it but
 do not count toward the service's 40% coverpkg total — the parity/seam correctness they pin is the
-point, not the coverage number (a `test` step is required regardless per C-08).
+point, not the coverage number (a `test` step is required regardless per C-08). **The `≥ 40%`
+coverage gate for this feature's trading-service code is asserted in Step 9** (the paired
+producer-level test), not here — this step deliberately runs no coverage threshold because `pnl` is
+coverpkg-excluded.
 
 ---
 
@@ -527,7 +533,7 @@ scenario one-offs local to `trading_offline_test.go` — inline compliant, no fi
 
 **Codebase Evidence**:
 - `positionSyncPayload` struct at `services/xstockstrat-portfolio/internal/service/portfolio_service.go:826-851`; inner position entry has `symbol`/`qty`/`avg_cost` (`:832-834`) and top-level `RealizedPnl *float64` (`:850`); `processPositionSync` upsert loop at `:925-942` (`UpsertPositionFromSync` call `:935`), realized gate at `:948-952`.
-- `UpsertPositionFromSync` at `portfolio_repo.go:307`; `PositionValuation` struct at `:290`; the shared `positionColumns` SELECT constant at `:285` (drives **both** `ListPositions` `:117` and `ListPositionsByAccount` `:498` — the two read paths behind `ListPositions` and `buildAccountPortfolio`/`ListPortfolios`); `INSERT INTO portfolio.positions` at `:59`.
+- `UpsertPositionFromSync` at `portfolio_repo.go:307-317` — this is the sync-path upsert the `account.positions.synced` provenance keys actually flow through; its `INSERT INTO portfolio.positions ... ON CONFLICT` is at `:309-313`. (Do **not** edit `UpsertPosition` at `:57-115` / INSERT `:59` — that is the separate per-fill `order.filled` path from feature 042, which the snapshot provenance never reaches.) `PositionValuation` struct at `:290`; the shared `positionColumns` SELECT constant at `:285` (drives **both** `ListPositions` `:117` and `ListPositionsByAccount` `:498` — the two read paths behind `ListPositions` and `buildAccountPortfolio`/`ListPortfolios`).
 - Read paths: service `ListPositions` at `portfolio_service.go:500`; `buildAccountPortfolio` at `:1056` (calls the account-scoped repo read); `ListPortfolios` at `:1104`. Both must carry provenance (C-10(b), AC-12).
 
 **TDD**: `red-green required` (covered by Step 11)
@@ -539,8 +545,10 @@ scenario one-offs local to `trading_offline_test.go` — inline compliant, no fi
    and `AsOf string` (`json:"as_of"`, RFC3339 or empty) — matching the keys trading now emits (Step 8.2).
 2. Extend `PositionValuation` (or add params to `UpsertPositionFromSync`) to carry `source int` and a
    nullable `as_of` timestamp; write them to the new `portfolio.positions.source`/`as_of` columns in
-   the `INSERT ... ON CONFLICT` upsert (`portfolio_repo.go:57-115` — include the two new columns in
-   the insert column list and the `SET` clause, so a re-sync overwrites provenance).
+   the `UpsertPositionFromSync` `INSERT ... ON CONFLICT` upsert (`portfolio_repo.go:307-317`, INSERT
+   at `:309-313` — include the two new columns in the insert column list and the `ON CONFLICT ... SET`
+   clause, so a re-sync overwrites provenance). Do not touch the `order.filled`-path `UpsertPosition`
+   (`:57-115`).
 3. In `processPositionSync` (`:925-942`), parse `p.Source`/`p.AsOf` and pass them through
    `UpsertPositionFromSync`. Legacy events without the keys default to `source=0`
    (`POSITION_SOURCE_UNSPECIFIED`) / null `as_of` (safe, additive).
