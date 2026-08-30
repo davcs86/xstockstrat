@@ -31,6 +31,7 @@ const (
 	TradingService_DeregisterBrokerAccount_FullMethodName        = "/xstockstrat.trading.v1.TradingService/DeregisterBrokerAccount"
 	TradingService_UpdateBrokerAccountCredentials_FullMethodName = "/xstockstrat.trading.v1.TradingService/UpdateBrokerAccountCredentials"
 	TradingService_GetTradingEnvironment_FullMethodName          = "/xstockstrat.trading.v1.TradingService/GetTradingEnvironment"
+	TradingService_SnapshotOfflinePositions_FullMethodName       = "/xstockstrat.trading.v1.TradingService/SnapshotOfflinePositions"
 )
 
 // TradingServiceClient is the client API for TradingService service.
@@ -61,6 +62,10 @@ type TradingServiceClient interface {
 	// GetTradingEnvironment reports the deployment-fixed trading mode. Users cannot
 	// switch between paper and live — the environment owns this decision.
 	GetTradingEnvironment(ctx context.Context, in *GetTradingEnvironmentRequest, opts ...grpc.CallOption) (*GetTradingEnvironmentResponse, error)
+	// SnapshotOfflinePositions records brokerage-statement period-end holdings as an
+	// effective-dated opening baseline for an OFFLINE account (feature 163). Rejected
+	// with FailedPrecondition for broker (Alpaca/IBKR) accounts.
+	SnapshotOfflinePositions(ctx context.Context, in *SnapshotOfflinePositionsRequest, opts ...grpc.CallOption) (*SnapshotOfflinePositionsResponse, error)
 }
 
 type tradingServiceClient struct {
@@ -200,6 +205,16 @@ func (c *tradingServiceClient) GetTradingEnvironment(ctx context.Context, in *Ge
 	return out, nil
 }
 
+func (c *tradingServiceClient) SnapshotOfflinePositions(ctx context.Context, in *SnapshotOfflinePositionsRequest, opts ...grpc.CallOption) (*SnapshotOfflinePositionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SnapshotOfflinePositionsResponse)
+	err := c.cc.Invoke(ctx, TradingService_SnapshotOfflinePositions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // TradingServiceServer is the server API for TradingService service.
 // All implementations should embed UnimplementedTradingServiceServer
 // for forward compatibility.
@@ -228,6 +243,10 @@ type TradingServiceServer interface {
 	// GetTradingEnvironment reports the deployment-fixed trading mode. Users cannot
 	// switch between paper and live — the environment owns this decision.
 	GetTradingEnvironment(context.Context, *GetTradingEnvironmentRequest) (*GetTradingEnvironmentResponse, error)
+	// SnapshotOfflinePositions records brokerage-statement period-end holdings as an
+	// effective-dated opening baseline for an OFFLINE account (feature 163). Rejected
+	// with FailedPrecondition for broker (Alpaca/IBKR) accounts.
+	SnapshotOfflinePositions(context.Context, *SnapshotOfflinePositionsRequest) (*SnapshotOfflinePositionsResponse, error)
 }
 
 // UnimplementedTradingServiceServer should be embedded to have
@@ -272,6 +291,9 @@ func (UnimplementedTradingServiceServer) UpdateBrokerAccountCredentials(context.
 }
 func (UnimplementedTradingServiceServer) GetTradingEnvironment(context.Context, *GetTradingEnvironmentRequest) (*GetTradingEnvironmentResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetTradingEnvironment not implemented")
+}
+func (UnimplementedTradingServiceServer) SnapshotOfflinePositions(context.Context, *SnapshotOfflinePositionsRequest) (*SnapshotOfflinePositionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SnapshotOfflinePositions not implemented")
 }
 func (UnimplementedTradingServiceServer) testEmbeddedByValue() {}
 
@@ -502,6 +524,24 @@ func _TradingService_GetTradingEnvironment_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _TradingService_SnapshotOfflinePositions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SnapshotOfflinePositionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TradingServiceServer).SnapshotOfflinePositions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TradingService_SnapshotOfflinePositions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TradingServiceServer).SnapshotOfflinePositions(ctx, req.(*SnapshotOfflinePositionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // TradingService_ServiceDesc is the grpc.ServiceDesc for TradingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -552,6 +592,10 @@ var TradingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetTradingEnvironment",
 			Handler:    _TradingService_GetTradingEnvironment_Handler,
+		},
+		{
+			MethodName: "SnapshotOfflinePositions",
+			Handler:    _TradingService_SnapshotOfflinePositions_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

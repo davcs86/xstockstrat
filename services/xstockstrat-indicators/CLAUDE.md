@@ -11,6 +11,14 @@ Python gRPC service providing two capabilities:
 1. **Built-in indicator engine** — vectorized computation of SMA, EMA, RSI, MACD, BB, ATR, VWAP, STOCH
 2. **Sandboxed Python formula execution** — user-defined formulas run in subprocess isolation with configurable timeout and memory cap
 
+**Formula author identity comes from the `x-user-id` header.** `RegisterFormula` stamps the author
+from the propagated `x-user-id` header, and `UpdateFormula`/`DeleteFormula` resolve the caller from
+that same header for the author-ownership check (`_caller_user_id` — header, falling back to the
+deprecated request-body `user_id` only when no header is present, keeping the change non-breaking).
+The request-body `user_id` field on `UpdateFormulaRequest`/`DeleteFormulaRequest` is **deprecated**;
+identity is the header, which a client cannot spoof. The admin-scope override (`x-access-scope` ADMIN
+bit) is unchanged.
+
 ## Language
 
 Python 3.13 (asyncio, grpc.aio)

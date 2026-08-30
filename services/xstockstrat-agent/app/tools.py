@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Thirty tools:
+Thirty-two tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -32,6 +32,8 @@ Thirty tools:
   manage_watchlist    — create/update(read-modify-write merge)/delete a caller-owned watchlist
   manage_watchlist_symbols — add/remove stocks on a caller-owned watchlist (add = MANUAL source)
   manage_offline_account — offline-account create/record/confirm + read orders/positions
+  manage_account       — register/update_credentials/deregister a broker account (ownership-gated)
+  list_accounts        — lists the caller's broker + offline accounts together (read-only)
 """
 
 import base64
@@ -1479,6 +1481,9 @@ def register_tools(server: MCPServer) -> None:
         filled_qty: float = 0.0,
         filled_avg_price: float = 0.0,
         filled_at: str = "",
+        as_of: str = "",
+        client_snapshot_id: str = "",
+        positions_json: str = "",
     ) -> dict:
         """Manage a manually-tracked OFFLINE account and its orders (feature 157).
 
@@ -1497,11 +1502,18 @@ def register_tools(server: MCPServer) -> None:
               filled_at is an optional ISO-8601 time (defaults to now). Status is derived
               server-side (NEW/PARTIALLY_FILLED/FILLED). Returns {"order": …}. Re-confirming
               replaces the fill (idempotent recompute from all confirmed orders); brokers rejected.
+          'snapshot_positions' — set the effective-dated opening baseline from a brokerage statement
+              (feature 163). Requires account_id and positions_json (a JSON array
+              [{"symbol","qty","avg_cost_per_share"}, …]). as_of is the statement date (ISO-8601,
+              defaults to now); client_snapshot_id is an idempotency nonce (auto-generated when
+              omitted). Returns {"account_id", "committed_count", "rejected": [...],
+              "warnings": [...]}.
           'get_order'       — read one order. Requires order_id. Returns {"order": …}.
           'list_orders'     — list an account's orders (reconciliation). Requires account_id.
               Returns {"orders": [...]}.
           'list_positions'  — list an account's positions (reconciliation). Requires account_id.
-              Returns {"positions": [...]}.
+              Returns {"positions": [...]}. Each position includes source (ORDERS/BASELINE/MIXED)
+              and as_of (baseline effective date) provenance fields (feature 163).
 
         This is the platform capability behind the monthly statement-reconciliation task: correct
         drift by recording/confirming orders (no separate set-positions path)."""
@@ -1536,14 +1548,97 @@ def register_tools(server: MCPServer) -> None:
                 if not account_id:
                     raise ValueError("list_positions requires an account_id")
                 return await client.list_account_positions(user_id, account_id)
+            if operation == "snapshot_positions":
+                if not account_id or not positions_json:
+                    raise ValueError("snapshot_positions requires account_id and positions_json")
+                nonce = client_snapshot_id or f"agent-{uuid.uuid4()}"
+                return await client.snapshot_offline_positions(
+                    user_id, account_id, as_of or None, nonce, positions_json
+                )
             raise ValueError(
                 f"unknown operation '{operation}' (expected create_account/record_order/"
-                "confirm_order/get_order/list_orders/list_positions)"
+                "confirm_order/snapshot_positions/get_order/list_orders/list_positions)"
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(
                 _grpc_error_message(e, not_found="account or order not found")
             ) from e
+
+    @server.tool()
+    async def manage_account(
+        ctx: Context,
+        operation: str,
+        account_id: str = "",
+        display_name: str = "",
+        broker_type: str = "",
+        credentials_json: str = "",
+    ) -> dict:
+        """Manage the CALLER's own BROKER accounts (Alpaca / IBKR) — feature 162.
+
+        All operations act on the caller's own accounts (ownership from the verified identity's
+        x-user-id); a non-owner is rejected PERMISSION_DENIED by the trading backend. Broker
+        credentials pass through to the backend (encrypted at rest) and are NEVER echoed back — the
+        returned account carries no credential field.
+
+        operation:
+          'register'          — register a new broker account. Requires display_name, broker_type
+              ('alpaca' or 'ibkr'), and credentials_json (broker-specific blob:
+              Alpaca {"api_key":…,"api_secret":…}; IBKR {"consumer_key":…,"access_token":…,
+              "access_token_secret":…,"ibkr_account_id":…}). Returns {"account": …} (with
+              credential_status). Offline accounts are NOT created here — use
+              manage_offline_account.
+          'update_credentials' — rotate an account's credentials. Requires account_id and
+              credentials_json. Returns {"account": …}. The backend rejects offline accounts
+              (FAILED_PRECONDITION) and invalid JSON (INVALID_ARGUMENT).
+          'deregister'        — deactivate an account. Requires account_id. Works for broker and
+              offline accounts. Returns {"deregistered": true, "account_id": …}.
+
+        For a read of all your accounts (broker + offline together), use list_accounts."""
+        user_id = _caller_user_id(ctx, "manage_account")
+        try:
+            if operation == "register":
+                if broker_type.strip().lower() == "offline":
+                    raise ValueError(
+                        "offline accounts are created with manage_offline_account "
+                        "(operation 'create_account'), not manage_account"
+                    )
+                if not display_name or not broker_type or not credentials_json:
+                    raise ValueError(
+                        "register requires display_name, broker_type ('alpaca' or 'ibkr'), "
+                        "and credentials_json"
+                    )
+                return await client.register_broker_account(
+                    user_id, display_name, broker_type, credentials_json
+                )
+            if operation == "update_credentials":
+                if not account_id or not credentials_json:
+                    raise ValueError("update_credentials requires account_id and credentials_json")
+                return await client.update_broker_account_credentials(
+                    user_id, account_id, credentials_json
+                )
+            if operation == "deregister":
+                if not account_id:
+                    raise ValueError("deregister requires an account_id")
+                return await client.deregister_broker_account(user_id, account_id)
+            raise ValueError(
+                f"unknown operation '{operation}' (expected register/update_credentials/deregister)"
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="broker account not found")) from e
+
+    @server.tool()
+    async def list_accounts(ctx: Context) -> dict:
+        """List the CALLER's own accounts — broker AND offline together (read-only, feature 162).
+
+        Offline accounts (feature 157) appear alongside broker accounts, each distinguishable by its
+        broker_type (BROKER_TYPE_ALPACA / BROKER_TYPE_IBKR / BROKER_TYPE_OFFLINE). Ownership is
+        resolved server-side from the verified x-user-id. Credentials are not part of an account and
+        are never returned. Returns {"accounts": [...]}."""
+        user_id = _caller_user_id(ctx, "list_accounts")
+        try:
+            return await client.list_broker_accounts(user_id)
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
 
 
 async def _get_source(source_slug: str) -> dict:

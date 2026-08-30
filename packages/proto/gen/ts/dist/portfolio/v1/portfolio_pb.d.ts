@@ -181,6 +181,21 @@ export type Position = Message<"xstockstrat.portfolio.v1.Position"> & {
      * @generated from field: string take_profit_order_id = 21;
      */
     takeProfitOrderId: string;
+    /**
+     * ── Provenance (feature 163 — snapshot-offline-positions) ──────────────────
+     * as_of is the effective date of the baseline snapshot that seeded this position
+     * (T0); unset for pure-order positions.
+     *
+     * @generated from field: google.protobuf.Timestamp as_of = 22;
+     */
+    asOf?: Timestamp | undefined;
+    /**
+     * source indicates how the position was constructed: ORDERS (fill-only),
+     * BASELINE (snapshot-only), or MIXED (baseline + post-T0 fills).
+     *
+     * @generated from field: xstockstrat.portfolio.v1.PositionSource source = 23;
+     */
+    source: PositionSource;
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.Position.
@@ -266,7 +281,10 @@ export declare const PnLResponseSchema: GenMessage<PnLResponse>;
  */
 export type GetPortfolioRequest = Message<"xstockstrat.portfolio.v1.GetPortfolioRequest"> & {
     /**
-     * @generated from field: string user_id = 1;
+     * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+     *
+     * @generated from field: string user_id = 1 [deprecated = true];
+     * @deprecated
      */
     userId: string;
     /**
@@ -288,7 +306,10 @@ export declare const GetPortfolioRequestSchema: GenMessage<GetPortfolioRequest>;
  */
 export type GetPositionRequest = Message<"xstockstrat.portfolio.v1.GetPositionRequest"> & {
     /**
-     * @generated from field: string user_id = 1;
+     * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+     *
+     * @generated from field: string user_id = 1 [deprecated = true];
+     * @deprecated
      */
     userId: string;
     /**
@@ -314,7 +335,10 @@ export declare const GetPositionRequestSchema: GenMessage<GetPositionRequest>;
  */
 export type ListPositionsRequest = Message<"xstockstrat.portfolio.v1.ListPositionsRequest"> & {
     /**
-     * @generated from field: string user_id = 1;
+     * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+     *
+     * @generated from field: string user_id = 1 [deprecated = true];
+     * @deprecated
      */
     userId: string;
     /**
@@ -374,7 +398,10 @@ export declare const ListPositionsResponseSchema: GenMessage<ListPositionsRespon
  */
 export type GetPnLRequest = Message<"xstockstrat.portfolio.v1.GetPnLRequest"> & {
     /**
-     * @generated from field: string user_id = 1;
+     * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+     *
+     * @generated from field: string user_id = 1 [deprecated = true];
+     * @deprecated
      */
     userId: string;
     /**
@@ -424,7 +451,10 @@ export declare const GetSnapshotRequestSchema: GenMessage<GetSnapshotRequest>;
  */
 export type StreamPortfolioUpdatesRequest = Message<"xstockstrat.portfolio.v1.StreamPortfolioUpdatesRequest"> & {
     /**
-     * @generated from field: string user_id = 1;
+     * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+     *
+     * @generated from field: string user_id = 1 [deprecated = true];
+     * @deprecated
      */
     userId: string;
     /**
@@ -887,6 +917,35 @@ export declare enum PositionRiskFlag {
  * Describes the enum xstockstrat.portfolio.v1.PositionRiskFlag.
  */
 export declare const PositionRiskFlagSchema: GenEnum<PositionRiskFlag>;
+/**
+ * PositionSource indicates how a position was seeded (feature 163 — snapshot-offline-positions).
+ * Per-symbol: ORDERS = built purely from confirmed fills; BASELINE = snapshot-seeded with no
+ * post-T0 fills; MIXED = baseline-seeded with ≥1 post-T0 fill folded in.
+ *
+ * @generated from enum xstockstrat.portfolio.v1.PositionSource
+ */
+export declare enum PositionSource {
+    /**
+     * @generated from enum value: POSITION_SOURCE_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: POSITION_SOURCE_ORDERS = 1;
+     */
+    ORDERS = 1,
+    /**
+     * @generated from enum value: POSITION_SOURCE_BASELINE = 2;
+     */
+    BASELINE = 2,
+    /**
+     * @generated from enum value: POSITION_SOURCE_MIXED = 3;
+     */
+    MIXED = 3
+}
+/**
+ * Describes the enum xstockstrat.portfolio.v1.PositionSource.
+ */
+export declare const PositionSourceSchema: GenEnum<PositionSource>;
 /**
  * PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.
  * Used only as an additive filter on ListPositionsRequest; the Position message itself

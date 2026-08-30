@@ -149,7 +149,10 @@ export type PlaceOrderRequest = Message<"xstockstrat.trading.v1.PlaceOrderReques
      */
     strategyId: string;
     /**
-     * @generated from field: string user_id = 9;
+     * DEPRECATED: order owner resolved from the x-user-id header; body value ignored.
+     *
+     * @generated from field: string user_id = 9 [deprecated = true];
+     * @deprecated
      */
     userId: string;
     /**
@@ -211,7 +214,10 @@ export type CancelOrderRequest = Message<"xstockstrat.trading.v1.CancelOrderRequ
      */
     orderId: string;
     /**
-     * @generated from field: string user_id = 2;
+     * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+     *
+     * @generated from field: string user_id = 2 [deprecated = true];
+     * @deprecated
      */
     userId: string;
 };
@@ -279,9 +285,10 @@ export type ConfirmOrderRequest = Message<"xstockstrat.trading.v1.ConfirmOrderRe
      */
     filledAt?: Timestamp | undefined;
     /**
-     * caller identity (ownership guard)
+     * DEPRECATED: caller identity (ownership guard) resolved from the x-user-id header; body value ignored.
      *
-     * @generated from field: string user_id = 5;
+     * @generated from field: string user_id = 5 [deprecated = true];
+     * @deprecated
      */
     userId: string;
 };
@@ -408,7 +415,10 @@ export type ReplaceOrderRequest = Message<"xstockstrat.trading.v1.ReplaceOrderRe
      */
     timeInForce: string;
     /**
-     * @generated from field: string user_id = 6;
+     * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+     *
+     * @generated from field: string user_id = 6 [deprecated = true];
+     * @deprecated
      */
     userId: string;
     /**
@@ -656,6 +666,120 @@ export type DeregisterBrokerAccountResponse = Message<"xstockstrat.trading.v1.De
  * Use `create(DeregisterBrokerAccountResponseSchema)` to create a new message.
  */
 export declare const DeregisterBrokerAccountResponseSchema: GenMessage<DeregisterBrokerAccountResponse>;
+/**
+ * A single position row from a brokerage statement to be used as a baseline.
+ *
+ * @generated from message xstockstrat.trading.v1.PositionBaseline
+ */
+export type PositionBaseline = Message<"xstockstrat.trading.v1.PositionBaseline"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * signed: long +, short −
+     *
+     * @generated from field: double qty = 2;
+     */
+    qty: number;
+    /**
+     * @generated from field: double avg_cost_per_share = 3;
+     */
+    avgCostPerShare: number;
+};
+/**
+ * Describes the message xstockstrat.trading.v1.PositionBaseline.
+ * Use `create(PositionBaselineSchema)` to create a new message.
+ */
+export declare const PositionBaselineSchema: GenMessage<PositionBaseline>;
+/**
+ * Seeds (or replaces) the effective-dated opening baseline for an OFFLINE account.
+ * client_snapshot_id is the replace/idempotency key: re-submitting the same ID
+ * replaces the prior snapshot's rows atomically.
+ *
+ * @generated from message xstockstrat.trading.v1.SnapshotOfflinePositionsRequest
+ */
+export type SnapshotOfflinePositionsRequest = Message<"xstockstrat.trading.v1.SnapshotOfflinePositionsRequest"> & {
+    /**
+     * @generated from field: string account_id = 1;
+     */
+    accountId: string;
+    /**
+     * caller identity (ownership + reconciliation payload)
+     *
+     * @generated from field: string user_id = 2;
+     */
+    userId: string;
+    /**
+     * T0
+     *
+     * @generated from field: google.protobuf.Timestamp as_of = 3;
+     */
+    asOf?: Timestamp | undefined;
+    /**
+     * idempotency / replace key (UUID)
+     *
+     * @generated from field: string client_snapshot_id = 4;
+     */
+    clientSnapshotId: string;
+    /**
+     * @generated from field: repeated xstockstrat.trading.v1.PositionBaseline positions = 5;
+     */
+    positions: PositionBaseline[];
+};
+/**
+ * Describes the message xstockstrat.trading.v1.SnapshotOfflinePositionsRequest.
+ * Use `create(SnapshotOfflinePositionsRequestSchema)` to create a new message.
+ */
+export declare const SnapshotOfflinePositionsRequestSchema: GenMessage<SnapshotOfflinePositionsRequest>;
+/**
+ * A row that failed validation and was not committed.
+ *
+ * @generated from message xstockstrat.trading.v1.RejectedBaselineRow
+ */
+export type RejectedBaselineRow = Message<"xstockstrat.trading.v1.RejectedBaselineRow"> & {
+    /**
+     * @generated from field: int32 row_index = 1;
+     */
+    rowIndex: number;
+    /**
+     * @generated from field: string reason = 2;
+     */
+    reason: string;
+};
+/**
+ * Describes the message xstockstrat.trading.v1.RejectedBaselineRow.
+ * Use `create(RejectedBaselineRowSchema)` to create a new message.
+ */
+export declare const RejectedBaselineRowSchema: GenMessage<RejectedBaselineRow>;
+/**
+ * @generated from message xstockstrat.trading.v1.SnapshotOfflinePositionsResponse
+ */
+export type SnapshotOfflinePositionsResponse = Message<"xstockstrat.trading.v1.SnapshotOfflinePositionsResponse"> & {
+    /**
+     * @generated from field: string account_id = 1;
+     */
+    accountId: string;
+    /**
+     * @generated from field: int32 committed_count = 2;
+     */
+    committedCount: number;
+    /**
+     * @generated from field: repeated xstockstrat.trading.v1.RejectedBaselineRow rejected = 3;
+     */
+    rejected: RejectedBaselineRow[];
+    /**
+     * e.g. unconfirmed NEW-order advisory (design.md § Snapshot-over-NEW)
+     *
+     * @generated from field: repeated string warnings = 4;
+     */
+    warnings: string[];
+};
+/**
+ * Describes the message xstockstrat.trading.v1.SnapshotOfflinePositionsResponse.
+ * Use `create(SnapshotOfflinePositionsResponseSchema)` to create a new message.
+ */
+export declare const SnapshotOfflinePositionsResponseSchema: GenMessage<SnapshotOfflinePositionsResponse>;
 /**
  * @generated from enum xstockstrat.trading.v1.OrderSide
  */
@@ -973,5 +1097,17 @@ export declare const TradingService: GenService<{
         methodKind: "unary";
         input: typeof GetTradingEnvironmentRequestSchema;
         output: typeof GetTradingEnvironmentResponseSchema;
+    };
+    /**
+     * SnapshotOfflinePositions records brokerage-statement period-end holdings as an
+     * effective-dated opening baseline for an OFFLINE account (feature 163). Rejected
+     * with FailedPrecondition for broker (Alpaca/IBKR) accounts.
+     *
+     * @generated from rpc xstockstrat.trading.v1.TradingService.SnapshotOfflinePositions
+     */
+    snapshotOfflinePositions: {
+        methodKind: "unary";
+        input: typeof SnapshotOfflinePositionsRequestSchema;
+        output: typeof SnapshotOfflinePositionsResponseSchema;
     };
 }>;

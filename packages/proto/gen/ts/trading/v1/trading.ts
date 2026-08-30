@@ -509,6 +509,11 @@ export interface PlaceOrderRequest {
   stopPrice: number;
   timeInForce: string;
   strategyId: string;
+  /**
+   * DEPRECATED: order owner resolved from the x-user-id header; body value ignored.
+   *
+   * @deprecated
+   */
   userId: string;
   /**
    * client_order_id is required: a stable client-generated nonce reused across retries of
@@ -540,6 +545,11 @@ export interface PlaceOrderRequest {
 
 export interface CancelOrderRequest {
   orderId: string;
+  /**
+   * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+   *
+   * @deprecated
+   */
   userId: string;
 }
 
@@ -565,7 +575,11 @@ export interface ConfirmOrderRequest {
   filledAt?:
     | Date
     | undefined;
-  /** caller identity (ownership guard) */
+  /**
+   * DEPRECATED: caller identity (ownership guard) resolved from the x-user-id header; body value ignored.
+   *
+   * @deprecated
+   */
   userId: string;
 }
 
@@ -606,6 +620,11 @@ export interface ReplaceOrderRequest {
   limitPrice: number;
   stopPrice: number;
   timeInForce: string;
+  /**
+   * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+   *
+   * @deprecated
+   */
   userId: string;
   /**
    * New trail offset for a working trailing_stop order (Alpaca's replace body
@@ -699,6 +718,46 @@ export interface DeregisterBrokerAccountRequest {
 }
 
 export interface DeregisterBrokerAccountResponse {
+}
+
+/** A single position row from a brokerage statement to be used as a baseline. */
+export interface PositionBaseline {
+  symbol: string;
+  /** signed: long +, short − */
+  qty: number;
+  avgCostPerShare: number;
+}
+
+/**
+ * Seeds (or replaces) the effective-dated opening baseline for an OFFLINE account.
+ * client_snapshot_id is the replace/idempotency key: re-submitting the same ID
+ * replaces the prior snapshot's rows atomically.
+ */
+export interface SnapshotOfflinePositionsRequest {
+  accountId: string;
+  /** caller identity (ownership + reconciliation payload) */
+  userId: string;
+  /** T0 */
+  asOf?:
+    | Date
+    | undefined;
+  /** idempotency / replace key (UUID) */
+  clientSnapshotId: string;
+  positions: PositionBaseline[];
+}
+
+/** A row that failed validation and was not committed. */
+export interface RejectedBaselineRow {
+  rowIndex: number;
+  reason: string;
+}
+
+export interface SnapshotOfflinePositionsResponse {
+  accountId: string;
+  committedCount: number;
+  rejected: RejectedBaselineRow[];
+  /** e.g. unconfirmed NEW-order advisory (design.md § Snapshot-over-NEW) */
+  warnings: string[];
 }
 
 function createBaseOrder(): Order {
@@ -3484,6 +3543,448 @@ export const DeregisterBrokerAccountResponse: MessageFns<DeregisterBrokerAccount
   },
 };
 
+function createBasePositionBaseline(): PositionBaseline {
+  return { symbol: "", qty: 0, avgCostPerShare: 0 };
+}
+
+export const PositionBaseline: MessageFns<PositionBaseline> = {
+  encode(message: PositionBaseline, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    if (message.qty !== 0) {
+      writer.uint32(17).double(message.qty);
+    }
+    if (message.avgCostPerShare !== 0) {
+      writer.uint32(25).double(message.avgCostPerShare);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): PositionBaseline {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBasePositionBaseline();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.qty = reader.double();
+          continue;
+        }
+        case 3: {
+          if (tag !== 25) {
+            break;
+          }
+
+          message.avgCostPerShare = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): PositionBaseline {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      qty: isSet(object.qty) ? globalThis.Number(object.qty) : 0,
+      avgCostPerShare: isSet(object.avgCostPerShare)
+        ? globalThis.Number(object.avgCostPerShare)
+        : isSet(object.avg_cost_per_share)
+        ? globalThis.Number(object.avg_cost_per_share)
+        : 0,
+    };
+  },
+
+  toJSON(message: PositionBaseline): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.qty !== 0) {
+      obj.qty = message.qty;
+    }
+    if (message.avgCostPerShare !== 0) {
+      obj.avgCostPerShare = message.avgCostPerShare;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<PositionBaseline>, I>>(base?: I): PositionBaseline {
+    return PositionBaseline.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<PositionBaseline>, I>>(object: I): PositionBaseline {
+    const message = createBasePositionBaseline();
+    message.symbol = object.symbol ?? "";
+    message.qty = object.qty ?? 0;
+    message.avgCostPerShare = object.avgCostPerShare ?? 0;
+    return message;
+  },
+};
+
+function createBaseSnapshotOfflinePositionsRequest(): SnapshotOfflinePositionsRequest {
+  return { accountId: "", userId: "", asOf: undefined, clientSnapshotId: "", positions: [] };
+}
+
+export const SnapshotOfflinePositionsRequest: MessageFns<SnapshotOfflinePositionsRequest> = {
+  encode(message: SnapshotOfflinePositionsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.accountId !== "") {
+      writer.uint32(10).string(message.accountId);
+    }
+    if (message.userId !== "") {
+      writer.uint32(18).string(message.userId);
+    }
+    if (message.asOf !== undefined) {
+      Timestamp.encode(toTimestamp(message.asOf), writer.uint32(26).fork()).join();
+    }
+    if (message.clientSnapshotId !== "") {
+      writer.uint32(34).string(message.clientSnapshotId);
+    }
+    for (const v of message.positions) {
+      PositionBaseline.encode(v!, writer.uint32(42).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SnapshotOfflinePositionsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSnapshotOfflinePositionsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.accountId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.asOf = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.clientSnapshotId = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.positions.push(PositionBaseline.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SnapshotOfflinePositionsRequest {
+    return {
+      accountId: isSet(object.accountId)
+        ? globalThis.String(object.accountId)
+        : isSet(object.account_id)
+        ? globalThis.String(object.account_id)
+        : "",
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
+      asOf: isSet(object.asOf)
+        ? fromJsonTimestamp(object.asOf)
+        : isSet(object.as_of)
+        ? fromJsonTimestamp(object.as_of)
+        : undefined,
+      clientSnapshotId: isSet(object.clientSnapshotId)
+        ? globalThis.String(object.clientSnapshotId)
+        : isSet(object.client_snapshot_id)
+        ? globalThis.String(object.client_snapshot_id)
+        : "",
+      positions: globalThis.Array.isArray(object?.positions)
+        ? object.positions.map((e: any) => PositionBaseline.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: SnapshotOfflinePositionsRequest): unknown {
+    const obj: any = {};
+    if (message.accountId !== "") {
+      obj.accountId = message.accountId;
+    }
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
+    if (message.asOf !== undefined) {
+      obj.asOf = message.asOf.toISOString();
+    }
+    if (message.clientSnapshotId !== "") {
+      obj.clientSnapshotId = message.clientSnapshotId;
+    }
+    if (message.positions?.length) {
+      obj.positions = message.positions.map((e) => PositionBaseline.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SnapshotOfflinePositionsRequest>, I>>(base?: I): SnapshotOfflinePositionsRequest {
+    return SnapshotOfflinePositionsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SnapshotOfflinePositionsRequest>, I>>(
+    object: I,
+  ): SnapshotOfflinePositionsRequest {
+    const message = createBaseSnapshotOfflinePositionsRequest();
+    message.accountId = object.accountId ?? "";
+    message.userId = object.userId ?? "";
+    message.asOf = object.asOf ?? undefined;
+    message.clientSnapshotId = object.clientSnapshotId ?? "";
+    message.positions = object.positions?.map((e) => PositionBaseline.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseRejectedBaselineRow(): RejectedBaselineRow {
+  return { rowIndex: 0, reason: "" };
+}
+
+export const RejectedBaselineRow: MessageFns<RejectedBaselineRow> = {
+  encode(message: RejectedBaselineRow, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.rowIndex !== 0) {
+      writer.uint32(8).int32(message.rowIndex);
+    }
+    if (message.reason !== "") {
+      writer.uint32(18).string(message.reason);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RejectedBaselineRow {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRejectedBaselineRow();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.rowIndex = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.reason = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): RejectedBaselineRow {
+    return {
+      rowIndex: isSet(object.rowIndex)
+        ? globalThis.Number(object.rowIndex)
+        : isSet(object.row_index)
+        ? globalThis.Number(object.row_index)
+        : 0,
+      reason: isSet(object.reason) ? globalThis.String(object.reason) : "",
+    };
+  },
+
+  toJSON(message: RejectedBaselineRow): unknown {
+    const obj: any = {};
+    if (message.rowIndex !== 0) {
+      obj.rowIndex = Math.round(message.rowIndex);
+    }
+    if (message.reason !== "") {
+      obj.reason = message.reason;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<RejectedBaselineRow>, I>>(base?: I): RejectedBaselineRow {
+    return RejectedBaselineRow.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RejectedBaselineRow>, I>>(object: I): RejectedBaselineRow {
+    const message = createBaseRejectedBaselineRow();
+    message.rowIndex = object.rowIndex ?? 0;
+    message.reason = object.reason ?? "";
+    return message;
+  },
+};
+
+function createBaseSnapshotOfflinePositionsResponse(): SnapshotOfflinePositionsResponse {
+  return { accountId: "", committedCount: 0, rejected: [], warnings: [] };
+}
+
+export const SnapshotOfflinePositionsResponse: MessageFns<SnapshotOfflinePositionsResponse> = {
+  encode(message: SnapshotOfflinePositionsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.accountId !== "") {
+      writer.uint32(10).string(message.accountId);
+    }
+    if (message.committedCount !== 0) {
+      writer.uint32(16).int32(message.committedCount);
+    }
+    for (const v of message.rejected) {
+      RejectedBaselineRow.encode(v!, writer.uint32(26).fork()).join();
+    }
+    for (const v of message.warnings) {
+      writer.uint32(34).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SnapshotOfflinePositionsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSnapshotOfflinePositionsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.accountId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.committedCount = reader.int32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.rejected.push(RejectedBaselineRow.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.warnings.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SnapshotOfflinePositionsResponse {
+    return {
+      accountId: isSet(object.accountId)
+        ? globalThis.String(object.accountId)
+        : isSet(object.account_id)
+        ? globalThis.String(object.account_id)
+        : "",
+      committedCount: isSet(object.committedCount)
+        ? globalThis.Number(object.committedCount)
+        : isSet(object.committed_count)
+        ? globalThis.Number(object.committed_count)
+        : 0,
+      rejected: globalThis.Array.isArray(object?.rejected)
+        ? object.rejected.map((e: any) => RejectedBaselineRow.fromJSON(e))
+        : [],
+      warnings: globalThis.Array.isArray(object?.warnings) ? object.warnings.map((e: any) => globalThis.String(e)) : [],
+    };
+  },
+
+  toJSON(message: SnapshotOfflinePositionsResponse): unknown {
+    const obj: any = {};
+    if (message.accountId !== "") {
+      obj.accountId = message.accountId;
+    }
+    if (message.committedCount !== 0) {
+      obj.committedCount = Math.round(message.committedCount);
+    }
+    if (message.rejected?.length) {
+      obj.rejected = message.rejected.map((e) => RejectedBaselineRow.toJSON(e));
+    }
+    if (message.warnings?.length) {
+      obj.warnings = message.warnings;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SnapshotOfflinePositionsResponse>, I>>(
+    base?: I,
+  ): SnapshotOfflinePositionsResponse {
+    return SnapshotOfflinePositionsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SnapshotOfflinePositionsResponse>, I>>(
+    object: I,
+  ): SnapshotOfflinePositionsResponse {
+    const message = createBaseSnapshotOfflinePositionsResponse();
+    message.accountId = object.accountId ?? "";
+    message.committedCount = object.committedCount ?? 0;
+    message.rejected = object.rejected?.map((e) => RejectedBaselineRow.fromPartial(e)) || [];
+    message.warnings = object.warnings?.map((e) => e) || [];
+    return message;
+  },
+};
+
 export type TradingServiceService = typeof TradingServiceService;
 export const TradingServiceService = {
   placeOrder: {
@@ -3628,6 +4129,24 @@ export const TradingServiceService = {
       Buffer.from(GetTradingEnvironmentResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): GetTradingEnvironmentResponse => GetTradingEnvironmentResponse.decode(value),
   },
+  /**
+   * SnapshotOfflinePositions records brokerage-statement period-end holdings as an
+   * effective-dated opening baseline for an OFFLINE account (feature 163). Rejected
+   * with FailedPrecondition for broker (Alpaca/IBKR) accounts.
+   */
+  snapshotOfflinePositions: {
+    path: "/xstockstrat.trading.v1.TradingService/SnapshotOfflinePositions" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: SnapshotOfflinePositionsRequest): Buffer =>
+      Buffer.from(SnapshotOfflinePositionsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): SnapshotOfflinePositionsRequest =>
+      SnapshotOfflinePositionsRequest.decode(value),
+    responseSerialize: (value: SnapshotOfflinePositionsResponse): Buffer =>
+      Buffer.from(SnapshotOfflinePositionsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): SnapshotOfflinePositionsResponse =>
+      SnapshotOfflinePositionsResponse.decode(value),
+  },
 } as const;
 
 export interface TradingServiceServer extends UntypedServiceImplementation {
@@ -3666,6 +4185,12 @@ export interface TradingServiceServer extends UntypedServiceImplementation {
    * switch between paper and live — the environment owns this decision.
    */
   getTradingEnvironment: handleUnaryCall<GetTradingEnvironmentRequest, GetTradingEnvironmentResponse>;
+  /**
+   * SnapshotOfflinePositions records brokerage-statement period-end holdings as an
+   * effective-dated opening baseline for an OFFLINE account (feature 163). Rejected
+   * with FailedPrecondition for broker (Alpaca/IBKR) accounts.
+   */
+  snapshotOfflinePositions: handleUnaryCall<SnapshotOfflinePositionsRequest, SnapshotOfflinePositionsResponse>;
 }
 
 export interface TradingServiceClient extends Client {
@@ -3856,6 +4381,26 @@ export interface TradingServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: GetTradingEnvironmentResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * SnapshotOfflinePositions records brokerage-statement period-end holdings as an
+   * effective-dated opening baseline for an OFFLINE account (feature 163). Rejected
+   * with FailedPrecondition for broker (Alpaca/IBKR) accounts.
+   */
+  snapshotOfflinePositions(
+    request: SnapshotOfflinePositionsRequest,
+    callback: (error: ServiceError | null, response: SnapshotOfflinePositionsResponse) => void,
+  ): ClientUnaryCall;
+  snapshotOfflinePositions(
+    request: SnapshotOfflinePositionsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: SnapshotOfflinePositionsResponse) => void,
+  ): ClientUnaryCall;
+  snapshotOfflinePositions(
+    request: SnapshotOfflinePositionsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: SnapshotOfflinePositionsResponse) => void,
   ): ClientUnaryCall;
 }
 

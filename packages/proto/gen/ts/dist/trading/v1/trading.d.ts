@@ -132,6 +132,11 @@ export interface PlaceOrderRequest {
     stopPrice: number;
     timeInForce: string;
     strategyId: string;
+    /**
+     * DEPRECATED: order owner resolved from the x-user-id header; body value ignored.
+     *
+     * @deprecated
+     */
     userId: string;
     /**
      * client_order_id is required: a stable client-generated nonce reused across retries of
@@ -162,6 +167,11 @@ export interface PlaceOrderRequest {
 }
 export interface CancelOrderRequest {
     orderId: string;
+    /**
+     * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+     *
+     * @deprecated
+     */
     userId: string;
 }
 export interface CancelOrderResponse {
@@ -182,7 +192,11 @@ export interface ConfirmOrderRequest {
     filledAvgPrice: number;
     /** optional; server defaults to now when unset */
     filledAt?: Date | undefined;
-    /** caller identity (ownership guard) */
+    /**
+     * DEPRECATED: caller identity (ownership guard) resolved from the x-user-id header; body value ignored.
+     *
+     * @deprecated
+     */
     userId: string;
 }
 export interface ListOrdersRequest {
@@ -217,6 +231,11 @@ export interface ReplaceOrderRequest {
     limitPrice: number;
     stopPrice: number;
     timeInForce: string;
+    /**
+     * DEPRECATED: caller identity resolved from the x-user-id header; body value ignored.
+     *
+     * @deprecated
+     */
     userId: string;
     /**
      * New trail offset for a working trailing_stop order (Alpaca's replace body
@@ -298,6 +317,40 @@ export interface DeregisterBrokerAccountRequest {
 }
 export interface DeregisterBrokerAccountResponse {
 }
+/** A single position row from a brokerage statement to be used as a baseline. */
+export interface PositionBaseline {
+    symbol: string;
+    /** signed: long +, short − */
+    qty: number;
+    avgCostPerShare: number;
+}
+/**
+ * Seeds (or replaces) the effective-dated opening baseline for an OFFLINE account.
+ * client_snapshot_id is the replace/idempotency key: re-submitting the same ID
+ * replaces the prior snapshot's rows atomically.
+ */
+export interface SnapshotOfflinePositionsRequest {
+    accountId: string;
+    /** caller identity (ownership + reconciliation payload) */
+    userId: string;
+    /** T0 */
+    asOf?: Date | undefined;
+    /** idempotency / replace key (UUID) */
+    clientSnapshotId: string;
+    positions: PositionBaseline[];
+}
+/** A row that failed validation and was not committed. */
+export interface RejectedBaselineRow {
+    rowIndex: number;
+    reason: string;
+}
+export interface SnapshotOfflinePositionsResponse {
+    accountId: string;
+    committedCount: number;
+    rejected: RejectedBaselineRow[];
+    /** e.g. unconfirmed NEW-order advisory (design.md § Snapshot-over-NEW) */
+    warnings: string[];
+}
 export declare const Order: MessageFns<Order>;
 export declare const PlaceOrderRequest: MessageFns<PlaceOrderRequest>;
 export declare const CancelOrderRequest: MessageFns<CancelOrderRequest>;
@@ -319,6 +372,10 @@ export declare const ListBrokerAccountsRequest: MessageFns<ListBrokerAccountsReq
 export declare const ListBrokerAccountsResponse: MessageFns<ListBrokerAccountsResponse>;
 export declare const DeregisterBrokerAccountRequest: MessageFns<DeregisterBrokerAccountRequest>;
 export declare const DeregisterBrokerAccountResponse: MessageFns<DeregisterBrokerAccountResponse>;
+export declare const PositionBaseline: MessageFns<PositionBaseline>;
+export declare const SnapshotOfflinePositionsRequest: MessageFns<SnapshotOfflinePositionsRequest>;
+export declare const RejectedBaselineRow: MessageFns<RejectedBaselineRow>;
+export declare const SnapshotOfflinePositionsResponse: MessageFns<SnapshotOfflinePositionsResponse>;
 export type TradingServiceService = typeof TradingServiceService;
 export declare const TradingServiceService: {
     readonly placeOrder: {
@@ -449,6 +506,20 @@ export declare const TradingServiceService: {
         readonly responseSerialize: (value: GetTradingEnvironmentResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => GetTradingEnvironmentResponse;
     };
+    /**
+     * SnapshotOfflinePositions records brokerage-statement period-end holdings as an
+     * effective-dated opening baseline for an OFFLINE account (feature 163). Rejected
+     * with FailedPrecondition for broker (Alpaca/IBKR) accounts.
+     */
+    readonly snapshotOfflinePositions: {
+        readonly path: "/xstockstrat.trading.v1.TradingService/SnapshotOfflinePositions";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: SnapshotOfflinePositionsRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => SnapshotOfflinePositionsRequest;
+        readonly responseSerialize: (value: SnapshotOfflinePositionsResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => SnapshotOfflinePositionsResponse;
+    };
 };
 export interface TradingServiceServer extends UntypedServiceImplementation {
     placeOrder: handleUnaryCall<PlaceOrderRequest, Order>;
@@ -483,6 +554,12 @@ export interface TradingServiceServer extends UntypedServiceImplementation {
      * switch between paper and live — the environment owns this decision.
      */
     getTradingEnvironment: handleUnaryCall<GetTradingEnvironmentRequest, GetTradingEnvironmentResponse>;
+    /**
+     * SnapshotOfflinePositions records brokerage-statement period-end holdings as an
+     * effective-dated opening baseline for an OFFLINE account (feature 163). Rejected
+     * with FailedPrecondition for broker (Alpaca/IBKR) accounts.
+     */
+    snapshotOfflinePositions: handleUnaryCall<SnapshotOfflinePositionsRequest, SnapshotOfflinePositionsResponse>;
 }
 export interface TradingServiceClient extends Client {
     placeOrder(request: PlaceOrderRequest, callback: (error: ServiceError | null, response: Order) => void): ClientUnaryCall;
@@ -540,6 +617,14 @@ export interface TradingServiceClient extends Client {
     getTradingEnvironment(request: GetTradingEnvironmentRequest, callback: (error: ServiceError | null, response: GetTradingEnvironmentResponse) => void): ClientUnaryCall;
     getTradingEnvironment(request: GetTradingEnvironmentRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetTradingEnvironmentResponse) => void): ClientUnaryCall;
     getTradingEnvironment(request: GetTradingEnvironmentRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetTradingEnvironmentResponse) => void): ClientUnaryCall;
+    /**
+     * SnapshotOfflinePositions records brokerage-statement period-end holdings as an
+     * effective-dated opening baseline for an OFFLINE account (feature 163). Rejected
+     * with FailedPrecondition for broker (Alpaca/IBKR) accounts.
+     */
+    snapshotOfflinePositions(request: SnapshotOfflinePositionsRequest, callback: (error: ServiceError | null, response: SnapshotOfflinePositionsResponse) => void): ClientUnaryCall;
+    snapshotOfflinePositions(request: SnapshotOfflinePositionsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: SnapshotOfflinePositionsResponse) => void): ClientUnaryCall;
+    snapshotOfflinePositions(request: SnapshotOfflinePositionsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: SnapshotOfflinePositionsResponse) => void): ClientUnaryCall;
 }
 export declare const TradingServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): TradingServiceClient;

@@ -458,7 +458,10 @@ func sideOf(qty float64) portfoliov1.PositionSide {
 
 // GetPortfolio aggregates all open positions with live prices.
 func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.GetPortfolioRequest) (*portfoliov1.Portfolio, error) {
-	positions, _, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, 500, "", req.GetAccountId(), "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
+	// Caller identity comes from the trusted x-user-id header (propagated by the edge), never the
+	// deprecated request body user_id field.
+	userID := middleware.FromContext(ctx).UserID
+	positions, _, err := s.repo.ListPositions(ctx, userID, req.TradingMode, 500, "", req.GetAccountId(), "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
 	if err != nil {
 		return nil, err
 	}
@@ -470,8 +473,8 @@ func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.Ge
 	}
 
 	portfolio := &portfoliov1.Portfolio{
-		PortfolioId: req.UserId,
-		UserId:      req.UserId,
+		PortfolioId: userID,
+		UserId:      userID,
 		Equity:      totalValue,
 		UpdatedAt:   timestamppb.Now(),
 		Positions:   positions,
@@ -488,7 +491,8 @@ func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.Ge
 
 // GetPosition returns a single position with live price.
 func (s *PortfolioService) GetPosition(ctx context.Context, req *portfoliov1.GetPositionRequest) (*portfoliov1.Position, error) {
-	p, err := s.repo.GetPosition(ctx, req.UserId, req.Symbol, req.TradingMode, req.GetAccountId())
+	userID := middleware.FromContext(ctx).UserID
+	p, err := s.repo.GetPosition(ctx, userID, req.Symbol, req.TradingMode, req.GetAccountId())
 	if err != nil {
 		return nil, err
 	}
@@ -506,7 +510,8 @@ func (s *PortfolioService) ListPositions(ctx context.Context, req *portfoliov1.L
 		}
 		pageToken = req.Page.PageToken
 	}
-	positions, nextToken, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, pageSize, pageToken, req.GetAccountId(), req.Symbol, req.Side)
+	userID := middleware.FromContext(ctx).UserID
+	positions, nextToken, err := s.repo.ListPositions(ctx, userID, req.TradingMode, pageSize, pageToken, req.GetAccountId(), req.Symbol, req.Side)
 	if err != nil {
 		return nil, err
 	}
@@ -528,7 +533,8 @@ func (s *PortfolioService) ListPositions(ctx context.Context, req *portfoliov1.L
 // enrichment routes through pnl.RealizedDelta; xstockstrat-trading's ConfirmOrder recompute uses
 // the same pnl.Fold. No second formula lives in this tree (the feature-056 dual-source fix).
 func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRequest) (*portfoliov1.PnLResponse, error) {
-	positions, _, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
+	userID := middleware.FromContext(ctx).UserID
+	positions, _, err := s.repo.ListPositions(ctx, userID, req.TradingMode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
 	if err != nil {
 		return nil, err
 	}
@@ -572,7 +578,7 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 			if err := json.Unmarshal(raw, &fill); err != nil {
 				continue
 			}
-			if fill.UserID != req.UserId {
+			if fill.UserID != userID {
 				continue
 			}
 			if req.TradingMode != commonv1.TradingMode_TRADING_MODE_UNSPECIFIED {
@@ -617,7 +623,7 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 			if err := json.Unmarshal(raw, &fill); err != nil {
 				continue
 			}
-			if fill.UserID != req.UserId {
+			if fill.UserID != userID {
 				continue
 			}
 			if req.TradingMode != commonv1.TradingMode_TRADING_MODE_UNSPECIFIED {
@@ -832,6 +838,10 @@ type positionSyncPayload struct {
 		Symbol  string  `json:"symbol"`
 		Qty     float64 `json:"qty"`
 		AvgCost float64 `json:"avg_cost"`
+		// Provenance (feature 163): source is the PositionSource enum integer; as_of is
+		// the baseline snapshot effective date (RFC3339 or empty for ORDERS-only positions).
+		Source int    `json:"source"`
+		AsOf   string `json:"as_of"`
 		// Broker mark-to-market valuation (zero when the broker did not report it, e.g.
 		// legacy events emitted before these fields existed). When present these are
 		// authoritative and used verbatim so the card reconciles with broker equity.
@@ -931,6 +941,8 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 			UnrealizedPnlPct: p.UnrealizedPnlPct,
 			DayPnl:           p.DayPnl,
 			DayPnlPct:        p.DayPnlPct,
+			Source:           p.Source,
+			AsOf:             p.AsOf,
 		}
 		if err := s.repo.UpsertPositionFromSync(ctx, userID, p.Symbol, sync.TradingMode, sync.AccountID, p.Qty, p.AvgCost, val); err != nil {
 			slog.Warn("upsert position from sync failed", "symbol", p.Symbol, "error", err)

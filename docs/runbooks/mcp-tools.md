@@ -1,6 +1,6 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the thirty tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the thirty-two tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 ---
@@ -34,7 +34,7 @@ directly on port 9000.
 
 **Direct (local):** `http://localhost:9000`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same thirty tools' `name`,
+**Tool catalog (UI display).** `GET /api/tools` returns the same thirty-two tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
 capabilities (the same data documented below), never user data or credentials. It powers the
 `xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
@@ -1093,8 +1093,8 @@ An offline account has no broker: orders are recorded by hand and their fills co
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `operation` | string | yes | `create_account` \| `record_order` \| `confirm_order` \| `get_order` \| `list_orders` \| `list_positions` |
-| `account_id` | string | for record/list | The offline account to act on |
+| `operation` | string | yes | `create_account` \| `record_order` \| `confirm_order` \| `snapshot_positions` \| `get_order` \| `list_orders` \| `list_positions` |
+| `account_id` | string | for record/list/snapshot | The offline account to act on |
 | `display_name` | string | `create_account` | Name for the new account |
 | `symbol` | string | `record_order` | Ticker |
 | `side` | string | `record_order` | `buy` \| `sell` |
@@ -1105,6 +1105,9 @@ An offline account has no broker: orders are recorded by hand and their fills co
 | `filled_qty` | float | `confirm_order` | Confirmed fill quantity |
 | `filled_avg_price` | float | `confirm_order` | Average fill price |
 | `filled_at` | string | no | ISO-8601 fill time (defaults to now) |
+| `positions_json` | string | `snapshot_positions` | JSON array of baseline positions: `[{"symbol":"AAPL","qty":100,"avg_cost_per_share":150.00}, …]` |
+| `as_of` | string | no | ISO-8601 statement date for `snapshot_positions` (defaults to now) |
+| `client_snapshot_id` | string | no | Idempotency nonce for `snapshot_positions` (auto-generated when omitted) |
 
 - **create_account** → `{"account": …}` (broker_type `OFFLINE`, no credentials).
 - **record_order** → `{"order": …}` — a `NEW` order, `filled_qty` 0, no broker submit.
@@ -1112,14 +1115,67 @@ An offline account has no broker: orders are recorded by hand and their fills co
   never echoed; re-confirming replaces the fill (idempotent recompute from all confirmed orders).
   The offline-only guard is enforced server-side from the persisted order — a broker account is
   rejected `FAILED_PRECONDITION`.
+- **snapshot_positions** → `{"account_id": …, "committed_count": N, "rejected": [...], "warnings": [...]}`
+  — set the effective-dated opening baseline from a brokerage statement (feature 163). The baseline
+  seeds the offline fold: `position(symbol) = baseline_as_of(T0) + Σ fills(filled_at > T0)`. The
+  service replaces the prior baseline atomically (delete-then-insert in tx) and re-folds all
+  confirmed orders against the new seed. Requires `account_id` and `positions_json`; `as_of` defaults
+  to now; `client_snapshot_id` is an idempotency nonce (auto-generated when omitted).
 - **get_order** / **list_orders** / **list_positions** → read paths for statement reconciliation.
+  `list_positions` returns per-position provenance: `source` (`ORDERS`/`BASELINE`/`MIXED`) and `as_of`
+  (baseline effective date, unset for pure-order positions) — feature 163.
 
 Returns the shapes above. This is the platform capability behind a monthly statement-reconciliation
-task: correct drift by recording/confirming orders (no separate set-positions path).
+task: correct drift by recording/confirming orders or snapshotting a brokerage statement baseline.
 
 **Errors:** `unknown operation '<op>'`; missing required args per operation; `account or order not
 found`; `permission denied` (non-owner); `FAILED_PRECONDITION` (confirm on a broker account);
 `RuntimeError` → no verified caller claims.
+
+---
+
+### `manage_account`
+
+Manage the **caller's own BROKER accounts** (Alpaca / IBKR) in `xstockstrat-trading` (feature 162).
+All operations act on the **caller's own** accounts (ownership from the verified `x-user-id`); a
+non-owner is rejected `PERMISSION_DENIED`. Broker credentials pass through to the backend (which
+encrypts them at rest) and are **never echoed back** — a `BrokerAccount` carries no credential
+field. Offline accounts are **not** created here — use `manage_offline_account` (`create_account`).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `operation` | string | yes | `register` \| `update_credentials` \| `deregister` |
+| `account_id` | string | update/deregister | The broker account to act on |
+| `display_name` | string | `register` | Name for the new account |
+| `broker_type` | string | `register` | `alpaca` \| `ibkr` (offline is rejected) |
+| `credentials_json` | string | register/update | Broker-specific credential blob (Alpaca `{"api_key":…,"api_secret":…}`; IBKR `{"consumer_key":…,"access_token":…,"access_token_secret":…,"ibkr_account_id":…}`) |
+
+- **register** → `{"account": …}` with `credential_status`; the submitted credentials are never
+  returned.
+- **update_credentials** → `{"account": …}` for the rotated account. The backend rejects an offline
+  account (`FAILED_PRECONDITION`) and invalid JSON (`INVALID_ARGUMENT`).
+- **deregister** → `{"deregistered": true, "account_id": …}`. Works for broker **and** offline
+  accounts (the RPC returns nothing; the confirmation is synthesized from the input).
+
+**Errors:** `unknown operation '<op>'` (expected `register/update_credentials/deregister`); missing
+required args per operation; offline steer on `register` (`broker_type=offline`); unsupported
+`broker_type`; `broker account not found`; `permission denied` (non-owner); `FAILED_PRECONDITION`
+(update_credentials on an offline account); `INVALID_ARGUMENT` (malformed `credentials_json`);
+`RuntimeError` → no verified caller claims.
+
+---
+
+### `list_accounts`
+
+List the **caller's own** accounts — broker **and** offline together (read-only, feature 162). No
+parameters. Offline accounts (feature 157) appear alongside broker accounts, each distinguishable by
+its `broker_type` (`BROKER_TYPE_ALPACA` / `BROKER_TYPE_IBKR` / `BROKER_TYPE_OFFLINE`). Ownership is
+resolved server-side from the verified `x-user-id`. Credentials are not part of a `BrokerAccount` and
+are never returned.
+
+Returns `{"accounts": [...]}` — the caller's accounts; empty list when the caller owns none.
+
+**Errors:** `permission denied`; `RuntimeError` → no verified caller claims.
 
 ---
 

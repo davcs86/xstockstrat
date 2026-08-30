@@ -3,6 +3,24 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-08-30
+
+### Features
+- agent-broker-account-tools: Expose broker-account management through the MCP agent: a `manage_account` write tool (register / update-credentials / deregister a broker account) and a `list_accounts` read tool that returns the caller's broker **and** offline accounts together — all ownership-gated on the caller's `x-user-id`, with broker credentials passing through to the trading backend and never echoed back.
+- fix-insights-offline-ticket: The insights Signal-detail order ticket (`/insights/market/[symbol]`) flakily renders the offline "Record Offline Order" control instead of the broker "Place Order" ticket for an offline account, despite `SignalOrderTicket` passing `allowOfflineRecord={false}` — surfacing as an intermittent failure of `e2e/trader/offline-accounts.spec.ts:257 @AC-1`.
+- snapshot-offline-positions: Record an effective-dated position snapshot (statement period-end holdings — signed qty + avg cost per share per symbol) as an opening baseline for an OFFLINE account, so the position projection folds from that baseline plus only the confirmed fills dated after the snapshot's `as_of`, dissolving the double-count between seeded holdings and later-ingested confirmations while keeping the ledger append-only.
+
+### Proto Changes
+- analysis/v1/analysis.proto
+- indicators/v1/indicators.proto
+- portfolio/v1/portfolio.proto
+- trading/v1/trading.proto
+
+### Summary
+10 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-08-27
 
 ### Features

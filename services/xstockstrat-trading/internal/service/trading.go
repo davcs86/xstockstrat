@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -42,6 +43,18 @@ import (
 // SetConfig method already matches this signature exactly.
 type configSetConfigForwarder interface {
 	SetConfig(ctx context.Context, callerID string, req *configv1.SetConfigRequest) (*configv1.SetConfigResponse, error)
+}
+
+// offlineBaselineStore is the seam SnapshotOfflinePositions and recomputeAndEmitOfflinePositions
+// call through for baseline-related persistence. *repository.TradingRepo satisfies it in
+// production. Extracted for testability — same hoisting-for-testability approach as
+// configSetConfigForwarder and AccountRepository (feature 163, Step 9).
+type offlineBaselineStore interface {
+	UpsertBaselineSnapshot(ctx context.Context, accountID, clientSnapshotID string, asOf time.Time, rows []repository.BaselineRow) error
+	EffectiveBaselineByAccount(ctx context.Context, accountID string) (asOf time.Time, lots map[string]pnl.Lot, ok bool, err error)
+	DeleteBaselinesByAccount(ctx context.Context, accountID string) error
+	HasUnconfirmedOfflineOrders(ctx context.Context, accountID string) (bool, error)
+	ListConfirmedOfflineOrdersByAccount(ctx context.Context, accountID string) ([]*tradingv1.Order, error)
 }
 
 // brokerPoolEntry holds a broker client and its type tag for a registered account.
@@ -93,6 +106,9 @@ type TradingService struct {
 	marketdata marketdatav1.MarketDataServiceClient
 	// repo persists orders to trading.orders hypertable.
 	repo *repository.TradingRepo
+	// baselineStore is the narrow seam for offline-baseline persistence (feature 163).
+	// *repository.TradingRepo satisfies it in production; tests inject a fake.
+	baselineStore offlineBaselineStore
 	// orderIntentRepo is the insert-or-return-existing dedup store (feature 101). Struct
 	// field added here (Step 9) so order_intent.go's sweeper compiles; NewTradingService's
 	// constructor parameter and main.go wiring land in Step 11.
@@ -193,6 +209,7 @@ func NewTradingService(
 		portfolio:           portfoliov1.NewPortfolioServiceClient(portfolioConn),
 		marketdata:          marketdatav1.NewMarketDataServiceClient(marketdataConn),
 		repo:                repo,
+		baselineStore:       repo,
 		orderIntentRepo:     orderIntentRepo,
 		bracketRepo:         bracketRepo,
 		orders:              make(map[string]*tradingv1.Order),
@@ -444,7 +461,8 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 
 	// Hoisted from checkPortfolioRisk's own internal guard so sizing and the warn-only
 	// risk check can share one equity lookup instead of each fetching it independently.
-	needRiskCheck := req.UserId != "" && s.cfgW.GetFloat("trading.risk.max_position_pct", 0.05) > 0
+	// Caller identity from the trusted x-user-id header (deprecated request body user_id ignored).
+	needRiskCheck := middleware.FromContext(ctx).UserID != "" && s.cfgW.GetFloat("trading.risk.max_position_pct", 0.05) > 0
 	var equity float64
 	var equityErr error
 	if needSizing || needRiskCheck {
@@ -603,7 +621,7 @@ func (s *TradingService) submitOrder(
 		StopPrice:     req.StopPrice,
 		TimeInForce:   req.TimeInForce,
 		StrategyId:    req.StrategyId,
-		UserId:        req.UserId,
+		UserId:        accountEntry.userID,
 		TradingMode:   mode,
 		AccountId:     resolvedAccountID,
 		BrokerType:    commonv1.BrokerType(accountEntry.brokerType),
@@ -810,7 +828,7 @@ func (s *TradingService) recordOfflineOrder(ctx context.Context, req *tradingv1.
 		StopPrice:     req.StopPrice,
 		TimeInForce:   req.TimeInForce,
 		StrategyId:    req.StrategyId,
-		UserId:        req.UserId,
+		UserId:        userID,
 		TradingMode:   mode,
 		AccountId:     accountID,
 		BrokerType:    commonv1.BrokerType_BROKER_TYPE_OFFLINE,
@@ -903,7 +921,7 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 	if order.BrokerType != commonv1.BrokerType_BROKER_TYPE_OFFLINE {
 		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "ConfirmOrder applies only to offline accounts")
 	}
-	if req.UserId != "" && order.UserId != req.UserId {
+	if callerID := middleware.FromContext(ctx).UserID; callerID != "" && order.UserId != callerID {
 		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "order %q does not belong to caller", req.OrderId)
 	}
 
@@ -931,19 +949,63 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 	s.orders[order.OrderId] = order
 	s.mu.Unlock()
 
-	// Recompute the account's absolute net positions from ALL its confirmed offline orders, so a
-	// re-edit of one order's fill replaces (not accumulates) — the @AC-10 idempotency guarantee.
-	confirmed, err := s.repo.ListConfirmedOfflineOrdersByAccount(ctx, order.AccountId)
-	if err != nil {
-		// A failed recompute emits nothing: an empty snapshot would make portfolio's
-		// DeletePositionsNotInSync wipe the account. The order edit itself is already persisted.
-		slog.Warn("ConfirmOrder: recompute query failed; skipping positions.synced emit",
+	// Recompute the account's absolute net positions from ALL its confirmed offline orders
+	// (seeded by the effective baseline when one exists) — the @AC-10 idempotency guarantee.
+	if err := s.recomputeAndEmitOfflinePositions(ctx, order.AccountId, order.UserId); err != nil {
+		slog.Warn("ConfirmOrder: recompute failed; positions.synced not emitted",
 			"account_id", order.AccountId, "error", err)
-		return order, nil
 	}
-	result := pnl.Fold(offlineFillsFromOrders(confirmed))
+	return order, nil
+}
 
-	// trading_mode is environment-derived (offline has no client.IsPaper()).
+// recomputeAndEmitOfflinePositions recomputes the absolute net positions for an offline account
+// from ALL its confirmed orders, seeded by the effective baseline when one exists, and emits the
+// self-healing account.positions.synced event. Fail-closed: a query error skips the emit (an
+// empty snapshot would make portfolio's DeletePositionsNotInSync wipe the account).
+//
+// caller must hold s.confirmLock(accountID).
+func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, accountID, userID string) error {
+	// --- Load baseline (fail-closed: error → skip emit) ---
+	asOf, seedLots, hasBaseline, err := s.baselineStore.EffectiveBaselineByAccount(ctx, accountID)
+	if err != nil {
+		slog.Warn("recomputeAndEmitOfflinePositions: baseline query failed; skipping positions.synced emit",
+			"account_id", accountID, "error", err)
+		return err
+	}
+
+	// --- Load confirmed orders (fail-closed: error → skip emit) ---
+	confirmed, err := s.baselineStore.ListConfirmedOfflineOrdersByAccount(ctx, accountID)
+	if err != nil {
+		slog.Warn("recomputeAndEmitOfflinePositions: recompute query failed; skipping positions.synced emit",
+			"account_id", accountID, "error", err)
+		return err
+	}
+
+	// --- Fold: three-branch baseline build (design.md § One producer, three baseline cases) ---
+	var result pnl.FoldResult
+	// postT0Symbols tracks which symbols had a post-T0 fill (for provenance computation).
+	postT0Symbols := make(map[string]bool)
+	if hasBaseline {
+		// Baseline branch: filter confirmed orders to only those with filled_at > asOf.
+		var postT0Orders []*tradingv1.Order
+		for _, o := range confirmed {
+			if o.FilledAt != nil && o.FilledAt.AsTime().After(asOf) {
+				postT0Orders = append(postT0Orders, o)
+				postT0Symbols[o.Symbol] = true
+			}
+		}
+		result = pnl.FoldFrom(seedLots, offlineFillsFromOrders(postT0Orders))
+	} else {
+		// No-baseline branch: fold ALL confirmed orders — byte-identical to feature-157 behavior.
+		result = pnl.Fold(offlineFillsFromOrders(confirmed))
+	}
+
+	// --- Build position entries with symbol-level provenance ---
+	baselineSymbols := make(map[string]bool, len(seedLots))
+	for sym := range seedLots {
+		baselineSymbols[sym] = true
+	}
+
 	tradingMode := "TRADING_MODE_LIVE"
 	if s.environmentIsPaper() {
 		tradingMode = "TRADING_MODE_PAPER"
@@ -954,7 +1016,7 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 		if lot.Qty != 0 {
 			avgCost = lot.CostBasis / lot.Qty
 		}
-		posEntries = append(posEntries, map[string]interface{}{
+		entry := map[string]interface{}{
 			"symbol":   sym,
 			"qty":      lot.Qty,
 			"avg_cost": avgCost,
@@ -965,20 +1027,153 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 			"unrealized_plpc": 0.0,
 			"day_pnl":         0.0,
 			"day_pnl_pct":     0.0,
-		})
+		}
+		// Symbol-level provenance (design.md § Symbol-level MIXED):
+		// - in baseline AND has a post-T0 fill → MIXED (3)
+		// - in baseline, no post-T0 fill → BASELINE (2)
+		// - only post-T0 fills (or no baseline exists) → ORDERS (1)
+		if hasBaseline {
+			inBaseline := baselineSymbols[sym]
+			hasPostT0 := postT0Symbols[sym]
+			switch {
+			case inBaseline && hasPostT0:
+				entry["source"] = int32(portfoliov1.PositionSource_POSITION_SOURCE_MIXED)
+				entry["as_of"] = asOf.Format(time.RFC3339Nano)
+			case inBaseline:
+				entry["source"] = int32(portfoliov1.PositionSource_POSITION_SOURCE_BASELINE)
+				entry["as_of"] = asOf.Format(time.RFC3339Nano)
+			default:
+				entry["source"] = int32(portfoliov1.PositionSource_POSITION_SOURCE_ORDERS)
+			}
+		} else {
+			entry["source"] = int32(portfoliov1.PositionSource_POSITION_SOURCE_ORDERS)
+		}
+		posEntries = append(posEntries, entry)
 	}
 	// Emit account.positions.synced ONLY (never order.filled) — the disjointness invariant that
 	// keeps portfolio's ConsumeOrderFills/GetPnL from double-folding. realized_pnl carries the
 	// account-grain cumulative realized; broker syncs never set the key (nil on the portfolio side).
 	// Run on the inbound request ctx (C-03 header propagation).
-	s.emitLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", order.AccountId), map[string]interface{}{
-		"account_id":   order.AccountId,
-		"user_id":      order.UserId,
+	s.emitLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", accountID), map[string]interface{}{
+		"account_id":   accountID,
+		"user_id":      userID,
 		"trading_mode": tradingMode,
 		"positions":    posEntries,
 		"realized_pnl": result.Realized,
 	})
-	return order, nil
+	return nil
+}
+
+// SnapshotOfflinePositions records brokerage-statement period-end holdings as an effective-dated
+// opening baseline for an OFFLINE account (feature 163). Rejected with FailedPrecondition for
+// broker (Alpaca/IBKR) accounts. Per-row validation is fault-tolerant: invalid rows are rejected
+// individually, valid rows commit, and the response lists both.
+func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *tradingv1.SnapshotOfflinePositionsRequest) (*tradingv1.SnapshotOfflinePositionsResponse, error) {
+	if req.AccountId == "" {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "account_id is required")
+	}
+	if req.UserId == "" {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "user_id is required")
+	}
+	if req.ClientSnapshotId == "" {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "client_snapshot_id is required")
+	}
+	if req.AsOf == nil {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "as_of is required")
+	}
+
+	// Offline-only gate: mirrors ConfirmOrder's guard (AC-9).
+	rec, err := s.accountRepo.GetBrokerAccount(ctx, req.AccountId)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.NotFound, "account %q not found: %v", req.AccountId, err)
+	}
+	if rec.BrokerType != int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) {
+		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "snapshots apply to OFFLINE accounts only")
+	}
+
+	// Per-row validation (fault-tolerant — FR-5/AC-7).
+	var (
+		validRows []repository.BaselineRow
+		rejected  []*tradingv1.RejectedBaselineRow
+	)
+	for i, pos := range req.Positions {
+		switch {
+		case pos.Symbol == "":
+			rejected = append(rejected, &tradingv1.RejectedBaselineRow{
+				RowIndex: int32(i), Reason: "empty symbol",
+			})
+		case math.IsInf(pos.Qty, 0) || math.IsNaN(pos.Qty):
+			rejected = append(rejected, &tradingv1.RejectedBaselineRow{
+				RowIndex: int32(i), Reason: fmt.Sprintf("non-finite qty for %s", pos.Symbol),
+			})
+		case math.IsInf(pos.AvgCostPerShare, 0) || math.IsNaN(pos.AvgCostPerShare):
+			rejected = append(rejected, &tradingv1.RejectedBaselineRow{
+				RowIndex: int32(i), Reason: fmt.Sprintf("non-finite avg_cost_per_share for %s", pos.Symbol),
+			})
+		case pos.AvgCostPerShare < 0:
+			rejected = append(rejected, &tradingv1.RejectedBaselineRow{
+				RowIndex: int32(i), Reason: fmt.Sprintf("negative avg_cost_per_share for %s", pos.Symbol),
+			})
+		default:
+			// qty == 0 is valid (flatten — commits, dropped later by EffectiveBaselineByAccount, AC-8/AC-15).
+			validRows = append(validRows, repository.BaselineRow{
+				Symbol:          pos.Symbol,
+				Qty:             pos.Qty,
+				AvgCostPerShare: pos.AvgCostPerShare,
+			})
+		}
+	}
+
+	asOf := req.AsOf.AsTime()
+
+	// Warnings: check for unconfirmed NEW offline orders (AC-16, design.md § Snapshot-over-NEW).
+	var warnings []string
+	hasNew, warnErr := s.baselineStore.HasUnconfirmedOfflineOrders(ctx, req.AccountId)
+	if warnErr != nil {
+		slog.Warn("SnapshotOfflinePositions: failed to check for unconfirmed orders",
+			"account_id", req.AccountId, "error", warnErr)
+	} else if hasNew {
+		warnings = append(warnings, "account has unconfirmed NEW offline orders; their fills are excluded from the position fold until confirmed")
+	}
+
+	// Serialize persist→audit→recompute→emit under the per-account lock (@AC-10).
+	lock := s.confirmLock(req.AccountId)
+	lock.Lock()
+	defer lock.Unlock()
+
+	if err := s.baselineStore.UpsertBaselineSnapshot(ctx, req.AccountId, req.ClientSnapshotId, asOf, validRows); err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "persist baseline: %v", err)
+	}
+
+	// Audit event: account.positions.baseline_set (FR-6/AC-10, append-latest).
+	baselinePayload := make([]interface{}, 0, len(validRows))
+	for _, r := range validRows {
+		baselinePayload = append(baselinePayload, map[string]interface{}{
+			"symbol":             r.Symbol,
+			"qty":                r.Qty,
+			"avg_cost_per_share": r.AvgCostPerShare,
+		})
+	}
+	s.emitLedgerEvent(ctx, "account.positions.baseline_set", fmt.Sprintf("account:%s", req.AccountId), map[string]interface{}{
+		"account_id":         req.AccountId,
+		"user_id":            req.UserId,
+		"client_snapshot_id": req.ClientSnapshotId,
+		"as_of":              asOf.Format(time.RFC3339Nano),
+		"positions":          baselinePayload,
+	})
+
+	// Recompute and emit the seeded positions.synced event.
+	if err := s.recomputeAndEmitOfflinePositions(ctx, req.AccountId, req.UserId); err != nil {
+		slog.Warn("SnapshotOfflinePositions: recompute failed after baseline persist",
+			"account_id", req.AccountId, "error", err)
+	}
+
+	return &tradingv1.SnapshotOfflinePositionsResponse{
+		AccountId:      req.AccountId,
+		CommittedCount: int32(len(validRows)),
+		Rejected:       rejected,
+		Warnings:       warnings,
+	}, nil
 }
 
 // CancelOrder is deliberately NOT gated by platform.trading_state (feature 100) — mirrors
@@ -1119,7 +1314,7 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 	}
 
 	go s.emitLedgerEvent(context.Background(), "order.canceled", req.OrderId, map[string]interface{}{
-		"order_id": req.OrderId, "user_id": req.UserId,
+		"order_id": req.OrderId, "user_id": middleware.FromContext(ctx).UserID,
 	})
 	s.broadcastOrder(order)
 
@@ -1273,7 +1468,7 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 	}
 
 	go s.emitLedgerEvent(context.Background(), "order.replaced", req.OrderId, map[string]interface{}{
-		"order_id": req.OrderId, "user_id": req.UserId,
+		"order_id": req.OrderId, "user_id": middleware.FromContext(ctx).UserID,
 	})
 	s.broadcastOrder(order)
 
@@ -1797,8 +1992,11 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 			tradingMode = commonv1.TradingMode_TRADING_MODE_LIVE
 		}
 		listPosCtx, listPosCancel := context.WithTimeout(ctx, timeout)
+		// Identity travels in the x-user-id header (portfolio resolves the caller from it); this
+		// background poller has no inbound header, so inject the account owner explicitly.
+		listPosCtx = metadata.AppendToOutgoingContext(listPosCtx, "x-user-id", entry.userID)
 		platformPositions, ppErr := s.portfolio.ListPositions(listPosCtx, &portfoliov1.ListPositionsRequest{
-			UserId: entry.userID, AccountId: &accountID, TradingMode: tradingMode,
+			AccountId: &accountID, TradingMode: tradingMode,
 			Page: &commonv1.PageRequest{PageSize: 500},
 		})
 		listPosCancel()
@@ -2535,8 +2733,11 @@ func (s *TradingService) flattenAndHalt(ctx context.Context, bracket *repository
 	}
 
 	posCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	// x-user-id header carries the caller identity to portfolio; this background flatten path has
+	// no inbound header, so inject the order owner explicitly.
+	posCtx = metadata.AppendToOutgoingContext(posCtx, "x-user-id", order.UserId)
 	position, err := s.portfolio.GetPosition(posCtx, &portfoliov1.GetPositionRequest{
-		UserId: order.UserId, Symbol: order.Symbol, TradingMode: order.TradingMode,
+		Symbol: order.Symbol, TradingMode: order.TradingMode,
 	})
 	cancel()
 	if err != nil || position == nil || position.Qty == 0 {
@@ -2751,11 +2952,15 @@ func (s *TradingService) DeregisterBrokerAccountSvc(ctx context.Context, account
 	delete(s.credStatus, accountID)
 	s.credStatusMu.Unlock()
 
-	// Offline accounts (feature 157): emit account.deregistered so xstockstrat-portfolio purges
-	// the account's positions and its account-grain realized P&L (no broker sync ever will).
-	// Broker accounts keep their existing deregister behavior — offline has no live position
-	// source to reconcile against, so the purge must be event-driven.
+	// Offline accounts (feature 157/163): purge the baseline table BEFORE the deregistered emit
+	// so downstream consumers never see a stale baseline for a deregistered account (FR-8/AC-18).
+	// Fail the RPC on error (retry-safe: both ops are idempotent).
 	if rec.BrokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) {
+		if err := s.baselineStore.DeleteBaselinesByAccount(ctx, accountID); err != nil {
+			return grpcstatus.Errorf(codes.Internal, "purge baselines for account %s: %v", accountID, err)
+		}
+		// Emit account.deregistered so xstockstrat-portfolio purges the account's positions and its
+		// account-grain realized P&L (no broker sync ever will).
 		s.emitLedgerEvent(ctx, "account.deregistered", fmt.Sprintf("account:%s", accountID), map[string]interface{}{
 			"account_id": accountID,
 			"user_id":    rec.UserID,
@@ -2810,7 +3015,8 @@ func (s *TradingService) instantiateBrokerLocked(rec *repository.BrokerAccountRe
 // call uses ListPortfolios (the real account equity), so a flat account's order could silently
 // bypass this check.
 func (s *TradingService) checkPortfolioRisk(ctx context.Context, req *tradingv1.PlaceOrderRequest, mode commonv1.TradingMode, equity float64, equityErr error) {
-	if req.UserId == "" {
+	callerID := middleware.FromContext(ctx).UserID
+	if callerID == "" {
 		return
 	}
 	maxPositionPct := s.cfgW.GetFloat("trading.risk.max_position_pct", 0.05)
@@ -2819,7 +3025,7 @@ func (s *TradingService) checkPortfolioRisk(ctx context.Context, req *tradingv1.
 	}
 
 	if equityErr != nil {
-		slog.Warn("portfolio risk check skipped", "user_id", req.UserId, "error", equityErr)
+		slog.Warn("portfolio risk check skipped", "user_id", callerID, "error", equityErr)
 		return
 	}
 
@@ -3262,8 +3468,9 @@ func (s *TradingService) checkTradingStateForPlaceOrder(ctx context.Context, use
 	default: // REDUCE_ONLY
 		posCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 		defer cancel()
+		posCtx = metadata.AppendToOutgoingContext(posCtx, "x-user-id", userID)
 		pos, err := s.portfolio.GetPosition(posCtx, &portfoliov1.GetPositionRequest{
-			UserId: userID, Symbol: symbol, TradingMode: mode,
+			Symbol: symbol, TradingMode: mode,
 		})
 		if err != nil {
 			if grpcstatus.Code(err) == codes.NotFound {

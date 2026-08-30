@@ -47,6 +47,17 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             access_scope = 0
         return bool(access_scope & 0x04)
 
+    @staticmethod
+    def _caller_user_id(context, request) -> str:
+        """Resolve the caller's author identity from the trusted x-user-id header.
+
+        The request-body ``user_id`` field is deprecated (identity comes from the propagated
+        header at the edge, which a client cannot spoof); it is kept only as a fallback for any
+        caller not yet forwarding the header, so this stays non-breaking.
+        """
+        x_user_id = dict(context.invocation_metadata()).get("x-user-id", "")
+        return x_user_id or request.user_id
+
     async def ComputeIndicator(self, request, context):
         try:
             results = indicators_engine.compute(
@@ -314,7 +325,8 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 "system formulas are read-only and cannot be modified",
             )
             return
-        if row["author"] != request.user_id and not self._has_admin_scope(context):
+        caller_user_id = self._caller_user_id(context, request)
+        if row["author"] != caller_user_id and not self._has_admin_scope(context):
             await context.abort(
                 grpc.StatusCode.PERMISSION_DENIED, "user_id does not match formula author"
             )
@@ -413,7 +425,8 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 "system formulas are read-only and cannot be deleted",
             )
             return
-        if row["author"] != request.user_id and not self._has_admin_scope(context):
+        caller_user_id = self._caller_user_id(context, request)
+        if row["author"] != caller_user_id and not self._has_admin_scope(context):
             await context.abort(
                 grpc.StatusCode.PERMISSION_DENIED, "user_id does not match formula author"
             )

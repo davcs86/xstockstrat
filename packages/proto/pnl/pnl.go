@@ -53,7 +53,22 @@ type FoldResult struct {
 // (short) lots are retained (no oversell guard — shorts are in scope). A lot whose |qty| drops below
 // 1e-9 is treated as flat and dropped from Positions.
 func Fold(fills []Fill) FoldResult {
-	accs := make(map[string]Lot)
+	return foldInto(make(map[string]Lot), fills)
+}
+
+// FoldFrom seeds the accumulator from baseline lots, then applies fills. FoldFrom(nil, fills)
+// is exactly Fold(fills). Seed CostBasis is signed total (qty × avg_cost_per_share).
+func FoldFrom(baseline map[string]Lot, fills []Fill) FoldResult {
+	accs := make(map[string]Lot, len(baseline))
+	for sym, lot := range baseline {
+		accs[sym] = lot
+	}
+	return foldInto(accs, fills)
+}
+
+// foldInto folds fills onto the given accumulator map and returns the result. The caller owns
+// the map — foldInto mutates it in place.
+func foldInto(accs map[string]Lot, fills []Fill) FoldResult {
 	var realized float64
 
 	for _, f := range fills {

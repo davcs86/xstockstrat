@@ -2500,3 +2500,17 @@ reusing.
 - **Rule it implies**: a regression test for a guarded/short-circuiting engine must first prove it
   clears the guard, then assert a discriminating (non-neutral-default) outcome — a "returns OK"
   assertion alone can be satisfied by the very short-circuit that skips the code under test.
+
+### 2026-08-30 — snapshot-offline-positions — design
+- **Pattern**: To add a second entry point to a stateful per-account recompute that a mutex already
+  serializes, extract the *post-lock* body into a lock-free helper (`recomputeAndEmitOfflinePositions`)
+  with a **caller-holds-lock** doc comment, and have the new caller acquire the SAME per-account lock
+  around persist+recompute+emit — never have the helper grab the (non-reentrant) mutex itself (deadlocks
+  the original caller). Pin the branch with a **producer-level** test that drives the helper, not just
+  the pure engine underneath it (`Fold==FoldFrom(nil)` proves the engine, not the branch selection).
+- **Evidence**: `services/xstockstrat-trading/internal/service/trading.go:912` (existing `confirmLock`
+  before the recompute at `:934-981`); feature 163 design.md § Chosen Approach / Open Risks.
+- **Rule it implies**: when two request-driven writers share one absolute-recompute-and-emit path,
+  the serialization guarantee (here @AC-10 idempotency) is the caller's, not the extracted helper's;
+  and a shared-helper refactor needs a producer-level test, not just an engine-parity test (extends the
+  "demonstration ≠ producer contract" ledger family to refactor-extractions).

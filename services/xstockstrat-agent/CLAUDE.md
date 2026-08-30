@@ -21,7 +21,14 @@ The agent is a platform **edge** and forwards the full propagation trio — `x-u
 caller's verified OAuth claims with a fresh `x-trace-id` minted at the edge when absent. This is
 wired by one `CallerPropagationMiddleware` (`app/tools.py`) that binds the identity onto `client`'s
 per-request contextvar for each `tools/call`; there is **no per-tool plumbing** (see constitution
-**AGENT-4**). Backend role checks *verify* admin from the forwarded `x-access-scope` (feature 092
+**AGENT-4**). Because identity travels in the `x-user-id` header, the caller-identity request
+builders in `app/client.py` **no longer set a request-body `user_id`** (deprecated on those RPCs):
+`list_account_positions` (portfolio `ListPositions`), `record_offline_order`/`confirm_offline_order`
+(trading `PlaceOrder`/`ConfirmOrder`), and `manage_formula` update/delete (indicators
+`UpdateFormula`/`DeleteFormula`) forward the caller only as `x-user-id`. Body `user_id` is still sent
+where it is a **target/scope selector, not the caller** — `list_account_orders` (`ListOrders`
+filter), the config tools (per-user scope), `emit_alert` (`target_user_id`), and `IssueAuthCode`
+(token subject). Backend role checks *verify* admin from the forwarded `x-access-scope` (feature 092
 generalized this from the feature-073 `set_config`-only case; the old hardcoded admin scope was
 removed). The strategy tools (`manage_strategy`/`set_strategy_live`) are the exception since feature
 133 — they are **ownership**-gated on the forwarded `x-user-id`, not admin-gated. See §
@@ -33,7 +40,7 @@ Python 3.13 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
 
 ## MCP Tools
 
-The agent registers thirty tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
+The agent registers thirty-two tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
 reference):
 
 | Tool | Purpose |
@@ -67,7 +74,9 @@ reference):
 | `get_watchlist` | Read one of the caller's watchlists incl. its stocks (read-only, feature 148) |
 | `manage_watchlist` | Create/update/delete a caller-owned watchlist; `update` is a **read-modify-write merge** over the replace-only `UpdateWatchlist` RPC so a name-only edit never wipes the stocks (feature 148) |
 | `manage_watchlist_symbols` | Add/remove stocks on a caller-owned watchlist; `add` records `MANUAL`-sourced entries (feature 148) |
-| `manage_offline_account` | Create a caller-owned OFFLINE account, record its orders, confirm their fills (recomputes positions + realized P&L), and read its orders/positions — the manual-book reconciliation surface (feature 157) |
+| `manage_offline_account` | Create a caller-owned OFFLINE account, record its orders, confirm their fills (recomputes positions + realized P&L), snapshot a brokerage-statement baseline (effective-dated opening positions, feature 163), and read its orders/positions (with per-position `source`/`as_of` provenance) — the manual-book reconciliation surface (feature 157) |
+| `manage_account` | Register / update-credentials / deregister a caller-owned BROKER account (Alpaca/IBKR); ownership-gated on `x-user-id`, credentials never echoed back (feature 162) |
+| `list_accounts` | List the caller's own accounts — broker and offline together, each by `broker_type` (read-only, feature 162) |
 
 ### Management-tool authorization
 

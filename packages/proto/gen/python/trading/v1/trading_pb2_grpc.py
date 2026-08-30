@@ -94,6 +94,11 @@ class TradingServiceStub(object):
                 request_serializer=trading_dot_v1_dot_trading__pb2.GetTradingEnvironmentRequest.SerializeToString,
                 response_deserializer=trading_dot_v1_dot_trading__pb2.GetTradingEnvironmentResponse.FromString,
                 _registered_method=True)
+        self.SnapshotOfflinePositions = channel.unary_unary(
+                '/xstockstrat.trading.v1.TradingService/SnapshotOfflinePositions',
+                request_serializer=trading_dot_v1_dot_trading__pb2.SnapshotOfflinePositionsRequest.SerializeToString,
+                response_deserializer=trading_dot_v1_dot_trading__pb2.SnapshotOfflinePositionsResponse.FromString,
+                _registered_method=True)
 
 
 class TradingServiceServicer(object):
@@ -183,6 +188,15 @@ class TradingServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def SnapshotOfflinePositions(self, request, context):
+        """SnapshotOfflinePositions records brokerage-statement period-end holdings as an
+        effective-dated opening baseline for an OFFLINE account (feature 163). Rejected
+        with FailedPrecondition for broker (Alpaca/IBKR) accounts.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_TradingServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -245,6 +259,11 @@ def add_TradingServiceServicer_to_server(servicer, server):
                     servicer.GetTradingEnvironment,
                     request_deserializer=trading_dot_v1_dot_trading__pb2.GetTradingEnvironmentRequest.FromString,
                     response_serializer=trading_dot_v1_dot_trading__pb2.GetTradingEnvironmentResponse.SerializeToString,
+            ),
+            'SnapshotOfflinePositions': grpc.unary_unary_rpc_method_handler(
+                    servicer.SnapshotOfflinePositions,
+                    request_deserializer=trading_dot_v1_dot_trading__pb2.SnapshotOfflinePositionsRequest.FromString,
+                    response_serializer=trading_dot_v1_dot_trading__pb2.SnapshotOfflinePositionsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -571,6 +590,33 @@ class TradingService(object):
             '/xstockstrat.trading.v1.TradingService/GetTradingEnvironment',
             trading_dot_v1_dot_trading__pb2.GetTradingEnvironmentRequest.SerializeToString,
             trading_dot_v1_dot_trading__pb2.GetTradingEnvironmentResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SnapshotOfflinePositions(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.trading.v1.TradingService/SnapshotOfflinePositions',
+            trading_dot_v1_dot_trading__pb2.SnapshotOfflinePositionsRequest.SerializeToString,
+            trading_dot_v1_dot_trading__pb2.SnapshotOfflinePositionsResponse.FromString,
             options,
             channel_credentials,
             insecure,

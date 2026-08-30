@@ -2284,9 +2284,10 @@ func (x *GetBacktestRequest) GetBacktestId() string {
 }
 
 type ListStrategiesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Page          *v1.PageRequest        `protobuf:"bytes,1,opt,name=page,proto3" json:"page,omitempty"`
-	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Page  *v1.PageRequest        `protobuf:"bytes,1,opt,name=page,proto3" json:"page,omitempty"`
+	// Deprecated: Marked as deprecated in analysis/v1/analysis.proto.
+	UserId        string `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"` // DEPRECATED: caller identity resolved from the x-user-id header; body value ignored (feature 133).
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2328,6 +2329,7 @@ func (x *ListStrategiesRequest) GetPage() *v1.PageRequest {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in analysis/v1/analysis.proto.
 func (x *ListStrategiesRequest) GetUserId() string {
 	if x != nil {
 		return x.UserId
@@ -5200,10 +5202,10 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x04runs\x18\x01 \x03(\v2+.xstockstrat.analysis.v1.BacktestRunSummaryR\x04runs\"5\n" +
 	"\x12GetBacktestRequest\x12\x1f\n" +
 	"\vbacktest_id\x18\x01 \x01(\tR\n" +
-	"backtestId\"h\n" +
+	"backtestId\"l\n" +
 	"\x15ListStrategiesRequest\x126\n" +
-	"\x04page\x18\x01 \x01(\v2\".xstockstrat.common.v1.PageRequestR\x04page\x12\x17\n" +
-	"\auser_id\x18\x02 \x01(\tR\x06userId\"\x99\x01\n" +
+	"\x04page\x18\x01 \x01(\v2\".xstockstrat.common.v1.PageRequestR\x04page\x12\x1b\n" +
+	"\auser_id\x18\x02 \x01(\tB\x02\x18\x01R\x06userId\"\x99\x01\n" +
 	"\x16ListStrategiesResponse\x12F\n" +
 	"\n" +
 	"strategies\x18\x01 \x03(\v2&.xstockstrat.analysis.v1.StrategyScoreR\n" +

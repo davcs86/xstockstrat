@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CancelOrderRequest, CancelOrderResponse, ConfirmOrderRequest, DeregisterBrokerAccountRequest, DeregisterBrokerAccountResponse, GetOrderRequest, GetTradingEnvironmentRequest, GetTradingEnvironmentResponse, ListBrokerAccountsRequest, ListBrokerAccountsResponse, ListOrdersRequest, ListOrdersResponse, Order, PlaceOrderRequest, RegisterBrokerAccountRequest, RegisterBrokerAccountResponse, ReplaceOrderRequest, StreamOrderUpdatesRequest, UpdateBrokerAccountCredentialsRequest, UpdateBrokerAccountCredentialsResponse } from "./trading_pb.js";
+import { CancelOrderRequest, CancelOrderResponse, ConfirmOrderRequest, DeregisterBrokerAccountRequest, DeregisterBrokerAccountResponse, GetOrderRequest, GetTradingEnvironmentRequest, GetTradingEnvironmentResponse, ListBrokerAccountsRequest, ListBrokerAccountsResponse, ListOrdersRequest, ListOrdersResponse, Order, PlaceOrderRequest, RegisterBrokerAccountRequest, RegisterBrokerAccountResponse, ReplaceOrderRequest, SnapshotOfflinePositionsRequest, SnapshotOfflinePositionsResponse, StreamOrderUpdatesRequest, UpdateBrokerAccountCredentialsRequest, UpdateBrokerAccountCredentialsResponse } from "./trading_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -134,6 +134,19 @@ export const TradingService = {
       name: "GetTradingEnvironment",
       I: GetTradingEnvironmentRequest,
       O: GetTradingEnvironmentResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * SnapshotOfflinePositions records brokerage-statement period-end holdings as an
+     * effective-dated opening baseline for an OFFLINE account (feature 163). Rejected
+     * with FailedPrecondition for broker (Alpaca/IBKR) accounts.
+     *
+     * @generated from rpc xstockstrat.trading.v1.TradingService.SnapshotOfflinePositions
+     */
+    snapshotOfflinePositions: {
+      name: "SnapshotOfflinePositions",
+      I: SnapshotOfflinePositionsRequest,
+      O: SnapshotOfflinePositionsResponse,
       kind: MethodKind.Unary,
     },
   }

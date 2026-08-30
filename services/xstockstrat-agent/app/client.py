@@ -916,7 +916,6 @@ async def manage_formula(
 
             req = indicators_pb2.UpdateFormulaRequest(
                 formula_id=formula["formula_id"],
-                user_id=formula["user_id"],
                 name=formula.get("name", ""),
                 description=formula.get("description", ""),
                 source=formula.get("source", ""),
@@ -930,14 +929,15 @@ async def manage_formula(
             update_mask = formula.get("update_mask")
             if update_mask:
                 req.update_mask.CopyFrom(field_mask_pb2.FieldMask(paths=list(update_mask)))
-            resp = await stub.UpdateFormula(req, metadata=_metadata())
+            resp = await stub.UpdateFormula(
+                req, metadata=_metadata(("x-user-id", formula["user_id"]))
+            )
             return MessageToDict(resp.formula)
         resp = await stub.DeleteFormula(
             indicators_pb2.DeleteFormulaRequest(
                 formula_id=formula["formula_id"],
-                user_id=formula["user_id"],
             ),
-            metadata=_metadata(),
+            metadata=_metadata(("x-user-id", formula["user_id"])),
         )
         return {"success": resp.success}
 
@@ -1615,10 +1615,24 @@ async def set_config(
 _OFFLINE_SIDE = {"buy": 1, "sell": 2}  # common.v1.OrderSide
 _OFFLINE_ORDER_TYPE = {"market": 1, "limit": 2, "stop": 3, "stop_limit": 4, "trailing_stop": 5}
 
+# common.v1.BrokerType — the registrable broker kinds for `manage_account register`. OFFLINE (3) is
+# deliberately absent (created via `manage_offline_account`, steered at the tool layer) and
+# UNSPECIFIED (0) is unreachable: a `.get()` miss raises ValueError before any RPC is issued.
+_BROKER_TYPE = {"alpaca": 1, "ibkr": 2}
+
 
 def _order_to_dict(order: Any) -> dict[str, Any]:
     """Shape a trading.v1.Order proto into a compact JSON-safe dict for tool output."""
     return MessageToDict(order, preserving_proto_field_name=True)
+
+
+def _account_to_dict(account: Any) -> dict[str, Any]:
+    """Shape a trading.v1.BrokerAccount proto into a compact JSON-safe dict for tool output.
+
+    BrokerAccount carries no credential field, so this projection can never echo submitted
+    credentials (api_key/api_secret/credentials_json).
+    """
+    return MessageToDict(account, preserving_proto_field_name=True)
 
 
 async def register_offline_account(user_id: str, display_name: str) -> dict[str, Any]:
@@ -1639,7 +1653,7 @@ async def register_offline_account(user_id: str, display_name: str) -> dict[str,
             ),
             metadata=_metadata(("x-user-id", user_id)),
         )
-    return {"account": MessageToDict(resp.account, preserving_proto_field_name=True)}
+    return {"account": _account_to_dict(resp.account)}
 
 
 async def record_offline_order(
@@ -1675,7 +1689,6 @@ async def record_offline_order(
                 qty=qty,
                 account_id=account_id,
                 client_order_id=client_order_id,
-                user_id=user_id,
             ),
             metadata=_metadata(("x-user-id", user_id)),
         )
@@ -1700,7 +1713,6 @@ async def confirm_offline_order(
         order_id=order_id,
         filled_qty=filled_qty,
         filled_avg_price=filled_avg_price,
-        user_id=user_id,
     )
     if filled_at_iso:
         ts = Timestamp()
@@ -1711,6 +1723,56 @@ async def confirm_offline_order(
         stub = trading_pb2_grpc.TradingServiceStub(channel)
         resp = await stub.ConfirmOrder(req, metadata=_metadata(("x-user-id", user_id)))
     return {"order": _order_to_dict(resp)}
+
+
+async def snapshot_offline_positions(
+    user_id: str,
+    account_id: str,
+    as_of_iso: str | None,
+    client_snapshot_id: str,
+    positions_json: str,
+) -> dict[str, Any]:
+    """Submit a baseline snapshot via TradingService.SnapshotOfflinePositions (feature 163).
+
+    positions_json is a JSON string: [{"symbol":"AAPL","qty":100,"avg_cost_per_share":150.00}, …].
+    Raises ValueError on unparseable input.
+    """
+    import json  # noqa: PLC0415
+
+    from gen.trading.v1 import trading_pb2, trading_pb2_grpc  # noqa: PLC0415
+
+    try:
+        rows = json.loads(positions_json)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise ValueError(f"positions_json is not valid JSON: {exc}") from exc
+    if not isinstance(rows, list):
+        raise ValueError("positions_json must be a JSON array")
+
+    baselines = []
+    for r in rows:
+        baselines.append(
+            trading_pb2.PositionBaseline(
+                symbol=r.get("symbol", ""),
+                qty=float(r.get("qty", 0)),
+                avg_cost_per_share=float(r.get("avg_cost_per_share", 0)),
+            )
+        )
+
+    req = trading_pb2.SnapshotOfflinePositionsRequest(
+        account_id=account_id,
+        user_id=user_id,
+        client_snapshot_id=client_snapshot_id,
+        positions=baselines,
+    )
+    if as_of_iso:
+        ts = Timestamp()
+        ts.FromDatetime(datetime.fromisoformat(as_of_iso).astimezone(UTC))
+        req.as_of.CopyFrom(ts)
+
+    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+        stub = trading_pb2_grpc.TradingServiceStub(channel)
+        resp = await stub.SnapshotOfflinePositions(req, metadata=_metadata(("x-user-id", user_id)))
+    return MessageToDict(resp, preserving_proto_field_name=True)
 
 
 async def get_order(user_id: str, order_id: str) -> dict[str, Any]:
@@ -1752,3 +1814,98 @@ async def list_account_positions(user_id: str, account_id: str) -> dict[str, Any
     return {
         "positions": [MessageToDict(p, preserving_proto_field_name=True) for p in resp.positions]
     }
+
+
+# ── Broker account management (feature 162) ──────────────────────────────────
+# Thin wrappers over TradingService backing the `manage_account` (write) and `list_accounts` (read)
+# MCP tools. Ownership is always taken from the forwarded `x-user-id`; the trading handler resolves
+# ownership server-side and rejects non-owners PERMISSION_DENIED. Broker credentials pass through to
+# the backend (which encrypts them at rest) and are never echoed back — BrokerAccount has no
+# credential field. JSON validity and the offline-account rejection are enforced server-side, so no
+# client-side validation is duplicated here.
+
+
+async def register_broker_account(
+    user_id: str, display_name: str, broker_type: str, credentials_json: str
+) -> dict[str, Any]:
+    """Register a new broker account (Alpaca/IBKR) via RegisterBrokerAccount.
+
+    broker_type is 'alpaca' or 'ibkr'; credentials_json is the broker-specific credential blob,
+    passed through verbatim. Ownership is set server-side from the forwarded x-user-id. The returned
+    account never contains the submitted credentials.
+    """
+    from gen.trading.v1 import trading_pb2, trading_pb2_grpc  # noqa: PLC0415
+
+    bt = _BROKER_TYPE.get(broker_type.strip().lower())
+    if bt is None:
+        raise ValueError(f"unsupported broker_type '{broker_type}' (expected 'alpaca' or 'ibkr')")
+
+    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+        stub = trading_pb2_grpc.TradingServiceStub(channel)
+        resp = await stub.RegisterBrokerAccount(
+            trading_pb2.RegisterBrokerAccountRequest(
+                display_name=display_name,
+                broker_type=bt,
+                credentials_json=credentials_json,
+            ),
+            metadata=_metadata(("x-user-id", user_id)),
+        )
+    return {"account": _account_to_dict(resp.account)}
+
+
+async def update_broker_account_credentials(
+    user_id: str, account_id: str, credentials_json: str
+) -> dict[str, Any]:
+    """Rotate a broker account's credentials via UpdateBrokerAccountCredentials.
+
+    The backend rejects an offline account (FAILED_PRECONDITION) and invalid JSON
+    (INVALID_ARGUMENT); those surface to the caller via the tool's error mapping. The returned
+    account never contains the submitted credentials.
+    """
+    from gen.trading.v1 import trading_pb2, trading_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+        stub = trading_pb2_grpc.TradingServiceStub(channel)
+        resp = await stub.UpdateBrokerAccountCredentials(
+            trading_pb2.UpdateBrokerAccountCredentialsRequest(
+                account_id=account_id,
+                credentials_json=credentials_json,
+            ),
+            metadata=_metadata(("x-user-id", user_id)),
+        )
+    return {"account": _account_to_dict(resp.account)}
+
+
+async def deregister_broker_account(user_id: str, account_id: str) -> dict[str, Any]:
+    """Deregister (deactivate) a broker or offline account via DeregisterBrokerAccount.
+
+    The RPC returns an empty response, so the confirmation is synthesized from the input account_id.
+    Ownership is enforced server-side from the forwarded x-user-id.
+    """
+    from gen.trading.v1 import trading_pb2, trading_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+        stub = trading_pb2_grpc.TradingServiceStub(channel)
+        await stub.DeregisterBrokerAccount(
+            trading_pb2.DeregisterBrokerAccountRequest(account_id=account_id),
+            metadata=_metadata(("x-user-id", user_id)),
+        )
+    return {"deregistered": True, "account_id": account_id}
+
+
+async def list_broker_accounts(user_id: str) -> dict[str, Any]:
+    """List the caller's own accounts (broker + offline) via ListBrokerAccounts (read-only).
+
+    Offline accounts appear as BrokerAccount rows with broker_type BROKER_TYPE_OFFLINE, so the
+    single list surfaces both kinds; each entry carries its broker_type. Ownership is resolved
+    server-side from the forwarded x-user-id.
+    """
+    from gen.trading.v1 import trading_pb2, trading_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+        stub = trading_pb2_grpc.TradingServiceStub(channel)
+        resp = await stub.ListBrokerAccounts(
+            trading_pb2.ListBrokerAccountsRequest(),
+            metadata=_metadata(("x-user-id", user_id)),
+        )
+    return {"accounts": [_account_to_dict(a) for a in resp.accounts]}

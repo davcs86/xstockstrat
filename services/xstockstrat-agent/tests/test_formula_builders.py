@@ -19,7 +19,9 @@ from app import client
 # it or it is justified here.
 _REGISTER_INTENTIONALLY_UNSET = {"input_schema"}
 # UpdateFormulaRequest: the builder sets every field, including the meta `update_mask`.
-_UPDATE_INTENTIONALLY_UNSET: set[str] = set()
+# user_id is deprecated on the wire — the caller identity is forwarded as the x-user-id header and
+# resolved server-side, so the builder no longer sets the request-body field.
+_UPDATE_INTENTIONALLY_UNSET: set[str] = {"user_id"}
 
 
 def _channel_cm():

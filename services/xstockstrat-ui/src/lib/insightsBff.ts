@@ -112,21 +112,11 @@ router.service(IndicatorsService, {
   },
   getFormula: forward((req, opts) => indicatorsClient.getFormula(req, opts)),
   listFormulas: forward((req, opts) => indicatorsClient.listFormulas(req, opts)),
-  async updateFormula(req, ctx) {
-    const claims = await requireSession(ctx);
-    // Enforce user_id from JWT — caller cannot impersonate another user
-    return indicatorsClient.updateFormula(
-      { ...req, userId: claims.user_id },
-      { headers: backendHeaders(claims, ctx) },
-    );
-  },
-  async deleteFormula(req, ctx) {
-    const claims = await requireSession(ctx);
-    return indicatorsClient.deleteFormula(
-      { ...req, userId: claims.user_id },
-      { headers: backendHeaders(claims, ctx) },
-    );
-  },
+  // The author-ownership check resolves the caller from the propagated x-user-id header
+  // (backendHeaders); the request-body user_id is deprecated, so these forward unchanged. A caller
+  // still cannot impersonate another user — the header is set from the verified session, not the body.
+  updateFormula: forward((req, opts) => indicatorsClient.updateFormula(req, opts)),
+  deleteFormula: forward((req, opts) => indicatorsClient.deleteFormula(req, opts)),
   executeFormula: forward((req, opts) => indicatorsClient.executeFormula(req, opts)),
   computeIndicator: forward((req, opts) => indicatorsClient.computeIndicator(req, opts)),
   listIndicators: forward((req, opts) => indicatorsClient.listIndicators(req, opts)),

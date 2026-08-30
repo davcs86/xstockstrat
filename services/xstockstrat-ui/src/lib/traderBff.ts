@@ -26,13 +26,11 @@ import { COPILOT_STREAM_PREFIX, COPILOT_EVENT_TYPE, copilotStreamKey } from '@/l
 const router = createBffRouter();
 
 router.service(TradingService, {
-  async placeOrder(req, ctx) {
-    const claims = await requireSession(ctx);
-    return tradingClient.placeOrder(
-      { ...req, userId: claims.user_id },
-      { headers: backendHeaders(claims, ctx) },
-    );
-  },
+  // Ownership comes from the propagated x-user-id header (backendHeaders) — the trading service
+  // resolves the caller from it and the request-body user_id is deprecated, so these forward the
+  // request unchanged. listOrders keeps its explicit user_id because there it is a cross-user
+  // filter (empty = all users), not the caller's own identity — the BFF pins it to the session.
+  placeOrder: forward((req, opts) => tradingClient.placeOrder(req, opts)),
   async listOrders(req, ctx) {
     const claims = await requireSession(ctx);
     return tradingClient.listOrders(
@@ -42,23 +40,10 @@ router.service(TradingService, {
   },
   getOrder: forward((req, opts) => tradingClient.getOrder(req, opts)),
   cancelOrder: forward((req, opts) => tradingClient.cancelOrder(req, opts)),
-  async replaceOrder(req, ctx) {
-    const claims = await requireSession(ctx);
-    // Inject the verified session user so a client cannot replace another user's order.
-    return tradingClient.replaceOrder(
-      { ...req, userId: claims.user_id },
-      { headers: backendHeaders(claims, ctx) },
-    );
-  },
-  async confirmOrder(req, ctx) {
-    const claims = await requireSession(ctx);
-    // Inject the verified session user so a client cannot confirm another user's offline order
-    // (feature 157). The trading service enforces the offline-only + ownership guard server-side.
-    return tradingClient.confirmOrder(
-      { ...req, userId: claims.user_id },
-      { headers: backendHeaders(claims, ctx) },
-    );
-  },
+  replaceOrder: forward((req, opts) => tradingClient.replaceOrder(req, opts)),
+  // The trading service enforces the offline-only + ownership guard server-side from the header
+  // (feature 157).
+  confirmOrder: forward((req, opts) => tradingClient.confirmOrder(req, opts)),
   async *streamOrderUpdates(req, ctx) {
     const claims = await requireSession(ctx);
     yield* tradingClient.streamOrderUpdates(
@@ -76,36 +61,13 @@ router.service(TradingService, {
 });
 
 router.service(PortfolioService, {
-  async getPortfolio(req, ctx) {
-    const claims = await requireSession(ctx);
-    return portfolioClient.getPortfolio(
-      { ...req, userId: claims.user_id },
-      { headers: backendHeaders(claims, ctx) },
-    );
-  },
-  async listPortfolios(req, ctx) {
-    const claims = await requireSession(ctx);
-    // No user_id field on the request — the service resolves the user from the
-    // propagated x-user-id header to aggregate the all-accounts view.
-    return portfolioClient.listPortfolios(req, { headers: backendHeaders(claims, ctx) });
-  },
-  async listPositions(req, ctx) {
-    const claims = await requireSession(ctx);
-    // Inject the verified session user so positions are always scoped to the caller.
-    return portfolioClient.listPositions(
-      { ...req, userId: claims.user_id },
-      { headers: backendHeaders(claims, ctx) },
-    );
-  },
-  async getPosition(req, ctx) {
-    const claims = await requireSession(ctx);
-    // Single-position read for the dedicated Position page (feature 096). Same userId
-    // injection as listPositions so the position is always scoped to the verified caller.
-    return portfolioClient.getPosition(
-      { ...req, userId: claims.user_id },
-      { headers: backendHeaders(claims, ctx) },
-    );
-  },
+  // These self-scoped reads resolve the caller from the propagated x-user-id header
+  // (backendHeaders); the request-body user_id is deprecated, so they forward the request
+  // unchanged, matching listPortfolios (which never carried a body user_id).
+  getPortfolio: forward((req, opts) => portfolioClient.getPortfolio(req, opts)),
+  listPortfolios: forward((req, opts) => portfolioClient.listPortfolios(req, opts)),
+  listPositions: forward((req, opts) => portfolioClient.listPositions(req, opts)),
+  getPosition: forward((req, opts) => portfolioClient.getPosition(req, opts)),
 });
 
 router.service(MarketDataService, {
