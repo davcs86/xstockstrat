@@ -64,3 +64,33 @@
   (only `Fold`/`RealizedDelta` exist today). Only concurrent features 084/142 touch disjoint
   resources (deploy/compose, marketdata). Touched services are trunk baseline from launched 157/159.
 - Not a re-attempt of any demoted/canceled feature (none semantically related to offline-position snapshots).
+
+## Session 2026-08-30 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: trading, portfolio, agent, ledger, packages/proto/pnl).
+  Key reuse patterns: the ConfirmOrder→account.positions.synced recompute+emit path; the shared
+  pnl.Fold/RealizedDelta engine (extended via an additive FoldFrom sibling); credentials_json
+  blob-as-string. C-16 read surfaced a NEW hard requirement: deregister must purge the baseline
+  table (@AC-15 full-purge) → added FR-8 + AC-18.
+- Phase 1 Grilling: 3 rounds (full). Chosen approach: trading-owned baseline table + seeded FoldFrom
+  via an extracted foldInto + provenance computed in trading's emit loop + statement-sealed realized
+  reset + audit account.positions.baseline_set + agent snapshot_positions op. Rejected: synthetic-orders
+  baseline, lot-lineage provenance, provenance-on-portfolio-read, carry-forward realized, lock-inside-producer.
+- User decisions at the gates (P-04):
+  - Mixed-lot provenance → PositionSource MIXED=3, **symbol-level** semantic (seeded symbol + any
+    post-T0 fill → MIXED regardless of surviving baseline shares; flatten-refill → MIXED). AC-13/AC-17.
+  - Realized on re-snapshot → **statement-sealed reset** (later snapshot reseats realized via the
+    replace-not-accumulate UpsertOfflineRealized). AC-14 asserts the observable 600→0.00 transition.
+- Round-3 blocker (new, not in the ledger): the snapshot handler must hold s.confirmLock(accountID)
+  around persist+recompute+emit — ConfirmOrder already holds it (trading.go:912) and @AC-10 idempotency
+  depends on a serialized recompute; the extracted producer stays lock-free (caller-holds-lock).
+  Baked into design.md; @AC-10 concurrency test required.
+- Other resolutions baked in: fail-closed baseline load (rows→baseline / zero→fold-all / ERROR→skip-emit,
+  never fold-all on error); producer-level seam test (drive recomputeAndEmitOfflinePositions, not just
+  FoldFrom); non-empty user_id on the shared emit (add-ikbr trap); warnings triggered by any NEW offline
+  order at snapshot time.
+- Constitution rules touched: C-01/C-03/C-04/C-07/C-08/C-10(b)/C-14/C-15/C-16/P-03/P-06; Floor F-01/F-04/F-06/F-07 all honored (no breach).
+- Deferred to /sdd-spec (grounded search required): deregister purge site path:line; portfolio
+  migration number via a CROSS-REMOTE-BRANCH max(NNN) scan (fails.md 2026-07-29/081 numbering trap;
+  recon shows 012 last → likely 013).
+- Status: spec-ready → design-approved.

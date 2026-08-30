@@ -70,10 +70,17 @@ rows. (No proto enum exists — ledger `event_type` is a string; this is a new c
 CLAUDE.md "Ledger Events Emitted" table row, documented on the emitting service.)
 
 FR-7. **Reconciliation provenance on reads.** Add additive `as_of` (`google.protobuf.Timestamp`) and
-a `source` discriminator (baseline vs. orders) to the `Position` message so a reader can tell a
-baseline-seeded position from an orders-only one. The value must be surfaced by **every** portfolio
-read path that exposes positions (`ListPositions` and `buildAccountPortfolio`/`ListPortfolios`), not
-just one — see Known Trap below.
+a `source` discriminator (`ORDERS` / `BASELINE` / `MIXED`) to the `Position` message so a reader can
+tell a baseline-seeded position from an orders-only one. Symbol-level `MIXED`: a baseline-seeded
+symbol with ≥1 post-T0 fill is `MIXED` (with the snapshot `as_of`), regardless of whether baseline
+shares survive. The value must be surfaced by **every** portfolio read path that exposes positions
+(`ListPositions` and `buildAccountPortfolio`/`ListPortfolios`), not just one — see Known Trap below.
+
+FR-8. **Deregister purges the baseline.** Deregistering an OFFLINE account also purges its
+`trading.offline_position_baselines` rows (synchronous, in the trading deregister handler, failing
+the RPC on error, before the `account.deregistered` event) — preserving the platform full-purge
+guarantee (`@AC-15 @feature-157`) that a deregistered account leaves no residual position / realized
+/ baseline state.
 
 ## Out of Scope
 
@@ -115,11 +122,14 @@ _Constitution **C-14**._
 - New RPC `SnapshotOfflinePositions` on `xstockstrat.trading.v1.TradingService`.
 - New messages `SnapshotOfflinePositionsRequest` (`account_id`, `user_id`, `as_of` Timestamp,
   `client_snapshot_id`, `repeated PositionBaseline`), `SnapshotOfflinePositionsResponse`
-  (committed summary + `repeated RejectedBaselineRow { row_index, reason }`), and `PositionBaseline`
-  (`symbol`, `qty` signed double, `avg_cost_per_share` double).
+  (committed summary + `repeated RejectedBaselineRow { row_index, reason }` + `repeated string
+  warnings` — the `warnings` list carries the snapshot-over-NEW advisory, an explicit addition
+  beyond the per-row `rejected` list), and `PositionBaseline` (`symbol`, `qty` signed double,
+  `avg_cost_per_share` double).
 - Additive fields on `xstockstrat.portfolio.v1.Position`: `as_of` (Timestamp) and a `source`
-  discriminator (prefer an enum `PositionSource { PENDING/UNSPECIFIED=0, ORDERS=1, BASELINE=2 }`
-  per the enum-over-string rule, with a `_UNSPECIFIED = 0` sentinel).
+  discriminator enum `PositionSource { POSITION_SOURCE_UNSPECIFIED=0, ORDERS=1, BASELINE=2, MIXED=3 }`
+  (enum-over-string, zero sentinel; `MIXED` = a baseline-seeded symbol that also has ≥1 post-T0 fill —
+  see FR-7 / design.md § Symbol-level MIXED).
 - All additive — no field removals/renames/type changes. `buf breaking` stays green.
 
 ## Config Key Changes
@@ -164,21 +174,20 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 > must be surfaced by both `ListPositions` and `buildAccountPortfolio`/`ListPortfolios` with a
 > parity test, or the Positions table and portfolio card silently disagree. **Bound by FR-7 / AC-12.**
 
-### Deferred to /sdd-design (design gate resolves; leans recorded)
+### Resolved by /sdd-design (see design.md; 3-round debate, user-approved 2026-08-30)
 
-These are genuine design forks, escalated rather than silently guessed (P-03). Each carries a lean
-for the design debate to confirm or overturn:
+All prior forks are decided — recorded here for traceability:
 
-- **Snapshot submitted while unconfirmed (`NEW`) orders exist in the window** — warn + report vs.
-  hard-reject. Lean: **warn + report** (preserves the fault-tolerant-batch principle).
-- **Audit-event idempotency on re-submit of the same `client_snapshot_id`** — append-latest
-  (latest-by-sequence wins, as `account.positions.synced` works today) vs. content-hash dedup.
-  Lean: **append-latest** (the ledger `idempotency_key` is *return-the-original*, not overwrite, so
-  it cannot express "replace").
-- **Post-`T0` sell that exceeds baseline qty** (partial baseline draw-down + partial new-lot open,
-  incl. long→short flip) — confirm the existing `pnl.RealizedDelta` reduce/flip math produces the
-  correct realized figure once the accumulator is seeded. Verify the producer, don't assume (fails.md
-  "demonstration ≠ producer contract" family).
-- **`filled_at` NULL handling** — confirm the confirmed-order set the fold reads always has
-  `filled_at` set, so `filled_at > as_of` is well-defined for every folded row (`NEW`/historical rows
-  are `NULL`, ordered `NULLS LAST` today, and excluded by the confirmed-status filter).
+- **Snapshot over unconfirmed (`NEW`) orders** → **warn + report** (additive `warnings` field; NEW
+  excluded by the confirmed-status fold filter). Covered by AC-16.
+- **Audit-event idempotency** → **append-latest** (fresh event per submission; the mutable baseline
+  table is the replace source of truth).
+- **Post-`T0` oversell / long→short flip realized** → the seeded `pnl.FoldFrom` + unchanged
+  `RealizedDelta` reduce/flip math handles the seam; pinned by RED-first seam tests + the
+  `Fold(fills)==FoldFrom(nil,fills)` parity test and a **producer-level** seam test (design.md).
+- **`filled_at` NULL handling** → the `filled_at > as_of` filter runs only in the baseline branch;
+  confirmed orders always have `filled_at` set, NEW/historical are excluded by the status filter.
+- **Mixed-lot provenance** (raised in debate) → **symbol-level `MIXED=3`** (AC-13/AC-17).
+- **Realized on re-snapshot** (raised in debate) → **statement-sealed reset** (AC-14).
+- **Per-account serialization** (raised in debate) → the snapshot handler holds `s.confirmLock(accountID)`
+  around persist+recompute+emit (preserves `@AC-10` idempotency).
