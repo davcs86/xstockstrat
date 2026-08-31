@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AddWatchlistSymbolsRequest, AddWatchlistSymbolsResponse, CreateWatchlistRequest, CreateWatchlistResponse, DeleteWatchlistRequest, DeleteWatchlistResponse, EnsureSignalWatchlistRequest, EnsureSignalWatchlistResponse, GetPnLRequest, GetPortfolioRequest, GetPositionRequest, GetSnapshotRequest, GetWatchlistRequest, GetWatchlistResponse, ListAllWatchlistSymbolsRequest, ListAllWatchlistSymbolsResponse, ListPortfoliosRequest, ListPortfoliosResponse, ListPositionsRequest, ListPositionsResponse, ListWatchlistsRequest, ListWatchlistsResponse, PnLResponse, Portfolio, PortfolioSnapshot, Position, RemoveWatchlistSymbolsRequest, RemoveWatchlistSymbolsResponse, StreamPortfolioUpdatesRequest, UpdateWatchlistRequest, UpdateWatchlistResponse } from "./portfolio_pb.js";
+import { AddWatchlistSymbolsRequest, AddWatchlistSymbolsResponse, CreateWatchlistRequest, CreateWatchlistResponse, DeleteWatchlistRequest, DeleteWatchlistResponse, EnsureSignalWatchlistRequest, EnsureSignalWatchlistResponse, GetPnLRequest, GetPortfolioRequest, GetPositionRequest, GetSnapshotRequest, GetWatchlistRequest, GetWatchlistResponse, ListAllWatchlistSymbolsRequest, ListAllWatchlistSymbolsResponse, ListPortfoliosRequest, ListPortfoliosResponse, ListPositionsRequest, ListPositionsResponse, ListWatchlistsRequest, ListWatchlistsResponse, PnLResponse, Portfolio, PortfolioSnapshot, Position, RemoveWatchlistSymbolsRequest, RemoveWatchlistSymbolsResponse, StreamPortfolioUpdatesRequest, UpdateWatchlistBindingRequest, UpdateWatchlistBindingResponse, UpdateWatchlistRequest, UpdateWatchlistResponse } from "./portfolio_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -166,6 +166,19 @@ export const PortfolioService = {
       name: "ListAllWatchlistSymbols",
       I: ListAllWatchlistSymbolsRequest,
       O: ListAllWatchlistSymbolsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Targeted single-symbol rebind (feature 167): change one binding's strategy_id via a single-row
+     * UPDATE — no replace-all. Ownership from the propagated x-user-id header (server-side), never
+     * from the request body. NOT_FOUND if the symbol is not in the watchlist.
+     *
+     * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlistBinding
+     */
+    updateWatchlistBinding: {
+      name: "UpdateWatchlistBinding",
+      I: UpdateWatchlistBindingRequest,
+      O: UpdateWatchlistBindingResponse,
       kind: MethodKind.Unary,
     },
   }

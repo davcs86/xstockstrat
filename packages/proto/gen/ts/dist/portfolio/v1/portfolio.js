@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: portfolio/v1/portfolio.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PortfolioServiceClient = exports.PortfolioServiceService = exports.ListAllWatchlistSymbolsResponse = exports.ListAllWatchlistSymbolsRequest = exports.EnsureSignalWatchlistResponse = exports.EnsureSignalWatchlistRequest = exports.RemoveWatchlistSymbolsResponse = exports.RemoveWatchlistSymbolsRequest = exports.AddWatchlistSymbolsResponse = exports.AddWatchlistSymbolsRequest = exports.DeleteWatchlistResponse = exports.DeleteWatchlistRequest = exports.UpdateWatchlistResponse = exports.UpdateWatchlistRequest = exports.ListWatchlistsResponse = exports.ListWatchlistsRequest = exports.GetWatchlistResponse = exports.GetWatchlistRequest = exports.CreateWatchlistResponse = exports.CreateWatchlistRequest = exports.Watchlist = exports.WatchlistBinding = exports.ListPortfoliosResponse = exports.ListPortfoliosRequest = exports.StreamPortfolioUpdatesRequest = exports.GetSnapshotRequest = exports.GetPnLRequest = exports.ListPositionsResponse = exports.ListPositionsRequest = exports.GetPositionRequest = exports.GetPortfolioRequest = exports.PnLResponse = exports.PortfolioSnapshot = exports.Position = exports.Portfolio = exports.WatchlistEntrySource = exports.PositionSide = exports.PositionSource = exports.PositionRiskFlag = exports.protobufPackage = void 0;
+exports.PortfolioServiceClient = exports.PortfolioServiceService = exports.UpdateWatchlistBindingResponse = exports.UpdateWatchlistBindingRequest = exports.ListAllWatchlistSymbolsResponse = exports.ListAllWatchlistSymbolsRequest = exports.EnsureSignalWatchlistResponse = exports.EnsureSignalWatchlistRequest = exports.RemoveWatchlistSymbolsResponse = exports.RemoveWatchlistSymbolsRequest = exports.AddWatchlistSymbolsResponse = exports.AddWatchlistSymbolsRequest = exports.DeleteWatchlistResponse = exports.DeleteWatchlistRequest = exports.UpdateWatchlistResponse = exports.UpdateWatchlistRequest = exports.ListWatchlistsResponse = exports.ListWatchlistsRequest = exports.GetWatchlistResponse = exports.GetWatchlistRequest = exports.CreateWatchlistResponse = exports.CreateWatchlistRequest = exports.Watchlist = exports.WatchlistBinding = exports.ListPortfoliosResponse = exports.ListPortfoliosRequest = exports.StreamPortfolioUpdatesRequest = exports.GetSnapshotRequest = exports.GetPnLRequest = exports.ListPositionsResponse = exports.ListPositionsRequest = exports.GetPositionRequest = exports.GetPortfolioRequest = exports.PnLResponse = exports.PortfolioSnapshot = exports.Position = exports.Portfolio = exports.WatchlistEntrySource = exports.PositionSide = exports.PositionSource = exports.PositionRiskFlag = exports.protobufPackage = void 0;
 exports.positionRiskFlagFromJSON = positionRiskFlagFromJSON;
 exports.positionRiskFlagToJSON = positionRiskFlagToJSON;
 exports.positionRiskFlagToNumber = positionRiskFlagToNumber;
@@ -3565,6 +3565,171 @@ exports.ListAllWatchlistSymbolsResponse = {
         return message;
     },
 };
+function createBaseUpdateWatchlistBindingRequest() {
+    return { watchlistId: "", symbol: "", strategyId: "" };
+}
+exports.UpdateWatchlistBindingRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.watchlistId !== "") {
+            writer.uint32(10).string(message.watchlistId);
+        }
+        if (message.symbol !== "") {
+            writer.uint32(18).string(message.symbol);
+        }
+        if (message.strategyId !== "") {
+            writer.uint32(26).string(message.strategyId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseUpdateWatchlistBindingRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.watchlistId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.strategyId = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            watchlistId: isSet(object.watchlistId)
+                ? globalThis.String(object.watchlistId)
+                : isSet(object.watchlist_id)
+                    ? globalThis.String(object.watchlist_id)
+                    : "",
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            strategyId: isSet(object.strategyId)
+                ? globalThis.String(object.strategyId)
+                : isSet(object.strategy_id)
+                    ? globalThis.String(object.strategy_id)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.watchlistId !== "") {
+            obj.watchlistId = message.watchlistId;
+        }
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.strategyId !== "") {
+            obj.strategyId = message.strategyId;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.UpdateWatchlistBindingRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseUpdateWatchlistBindingRequest();
+        message.watchlistId = object.watchlistId ?? "";
+        message.symbol = object.symbol ?? "";
+        message.strategyId = object.strategyId ?? "";
+        return message;
+    },
+};
+function createBaseUpdateWatchlistBindingResponse() {
+    return { binding: undefined, updatedAt: undefined };
+}
+exports.UpdateWatchlistBindingResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.binding !== undefined) {
+            exports.WatchlistBinding.encode(message.binding, writer.uint32(10).fork()).join();
+        }
+        if (message.updatedAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.updatedAt), writer.uint32(18).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseUpdateWatchlistBindingResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.binding = exports.WatchlistBinding.decode(reader, reader.uint32());
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.updatedAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            binding: isSet(object.binding) ? exports.WatchlistBinding.fromJSON(object.binding) : undefined,
+            updatedAt: isSet(object.updatedAt)
+                ? fromJsonTimestamp(object.updatedAt)
+                : isSet(object.updated_at)
+                    ? fromJsonTimestamp(object.updated_at)
+                    : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.binding !== undefined) {
+            obj.binding = exports.WatchlistBinding.toJSON(message.binding);
+        }
+        if (message.updatedAt !== undefined) {
+            obj.updatedAt = message.updatedAt.toISOString();
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.UpdateWatchlistBindingResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseUpdateWatchlistBindingResponse();
+        message.binding = (object.binding !== undefined && object.binding !== null)
+            ? exports.WatchlistBinding.fromPartial(object.binding)
+            : undefined;
+        message.updatedAt = object.updatedAt ?? undefined;
+        return message;
+    },
+};
 exports.PortfolioServiceService = {
     getPortfolio: {
         path: "/xstockstrat.portfolio.v1.PortfolioService/GetPortfolio",
@@ -3724,6 +3889,20 @@ exports.PortfolioServiceService = {
         requestDeserialize: (value) => exports.ListAllWatchlistSymbolsRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.ListAllWatchlistSymbolsResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.ListAllWatchlistSymbolsResponse.decode(value),
+    },
+    /**
+     * Targeted single-symbol rebind (feature 167): change one binding's strategy_id via a single-row
+     * UPDATE — no replace-all. Ownership from the propagated x-user-id header (server-side), never
+     * from the request body. NOT_FOUND if the symbol is not in the watchlist.
+     */
+    updateWatchlistBinding: {
+        path: "/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlistBinding",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.UpdateWatchlistBindingRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.UpdateWatchlistBindingRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.UpdateWatchlistBindingResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.UpdateWatchlistBindingResponse.decode(value),
     },
 };
 exports.PortfolioServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.PortfolioServiceService, "xstockstrat.portfolio.v1.PortfolioService");

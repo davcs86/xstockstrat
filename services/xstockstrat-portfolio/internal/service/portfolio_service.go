@@ -1220,6 +1220,10 @@ type WatchlistStore interface {
 	Delete(ctx context.Context, watchlistID string) error
 	AddSymbols(ctx context.Context, watchlistID string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error)
 	RemoveSymbols(ctx context.Context, watchlistID string, symbols []string) (*portfoliov1.Watchlist, error)
+	// UpdateBinding rebinds one symbol's strategy_id via a single-row UPDATE (feature 167),
+	// returning the updated binding and the parent list's bumped updated_at; ErrBindingNotFound
+	// when the (watchlist_id, symbol) row is absent.
+	UpdateBinding(ctx context.Context, watchlistID, symbol, strategyID string) (*portfoliov1.WatchlistBinding, time.Time, error)
 	CountByUser(ctx context.Context, userID string) (int, error)
 	EnsureSystemManaged(ctx context.Context, userID, defaultName string) (*portfoliov1.Watchlist, error)
 	// ListAllSymbols returns the distinct union of watchlist symbols across ALL users
@@ -1460,6 +1464,38 @@ func (s *PortfolioService) UpdateWatchlist(ctx context.Context, req *portfoliov1
 		"user_id": userID, "watchlist_id": wl.WatchlistId,
 	})
 	return &portfoliov1.UpdateWatchlistResponse{Watchlist: wl}, nil
+}
+
+// UpdateWatchlistBinding rebinds one symbol's strategy without a replace-all (feature 167, FR-1).
+func (s *PortfolioService) UpdateWatchlistBinding(ctx context.Context, req *portfoliov1.UpdateWatchlistBindingRequest) (*portfoliov1.UpdateWatchlistBindingResponse, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// Ownership: loadOwned yields NotFound(absent list)/PermissionDenied(wrong owner) — AC-4.
+	if _, err := s.loadOwned(ctx, userID, req.GetWatchlistId()); err != nil {
+		return nil, err
+	}
+	// Normalize the request symbol to match stored (uppercased/trimmed) rows — design Open Risk 4.
+	symbol := strings.ToUpper(strings.TrimSpace(req.GetSymbol()))
+	if symbol == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("symbol required"))
+	}
+	// strategy_id == "" passes through as a valid unbind (FR-4/AC-5).
+	binding, updatedAt, err := s.watchlists.UpdateBinding(ctx, req.GetWatchlistId(), symbol, strings.TrimSpace(req.GetStrategyId()))
+	if err != nil {
+		if errors.Is(err, repository.ErrBindingNotFound) {
+			return nil, connect.NewError(connect.CodeNotFound, errors.New("symbol not in watchlist")) // AC-3
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+req.GetWatchlistId(), map[string]interface{}{
+		"user_id": userID, "watchlist_id": req.GetWatchlistId(), "symbol": symbol,
+	})
+	return &portfoliov1.UpdateWatchlistBindingResponse{
+		Binding:   binding,
+		UpdatedAt: timestamppb.New(updatedAt),
+	}, nil
 }
 
 // DeleteWatchlist hard-deletes a watchlist owned by the caller (FR-6).

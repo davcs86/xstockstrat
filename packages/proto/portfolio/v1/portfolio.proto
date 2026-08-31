@@ -33,6 +33,10 @@ service PortfolioService {
   // bit (PR #994) — a non-allow-listed caller gets PERMISSION_DENIED. Read-only; intended for
   // the fundamentals-signal producer's universe resolution.
   rpc ListAllWatchlistSymbols(ListAllWatchlistSymbolsRequest) returns (ListAllWatchlistSymbolsResponse);
+  // Targeted single-symbol rebind (feature 167): change one binding's strategy_id via a single-row
+  // UPDATE — no replace-all. Ownership from the propagated x-user-id header (server-side), never
+  // from the request body. NOT_FOUND if the symbol is not in the watchlist.
+  rpc UpdateWatchlistBinding(UpdateWatchlistBindingRequest) returns (UpdateWatchlistBindingResponse);
 }
 
 message Portfolio {
@@ -308,4 +312,15 @@ message ListAllWatchlistSymbolsRequest {}
 message ListAllWatchlistSymbolsResponse {
   // Distinct, sorted bare symbols across all users' watchlists (bindings collapsed).
   repeated string symbols = 1;
+}
+
+// user_id intentionally absent — ownership from the x-user-id header (feature 167).
+message UpdateWatchlistBindingRequest {
+  string watchlist_id = 1;
+  string symbol = 2;
+  string strategy_id = 3;  // "" = unbind this one row (matches WatchlistBinding.strategy_id)
+}
+message UpdateWatchlistBindingResponse {
+  WatchlistBinding binding = 1;                 // the updated binding (symbol/strategy_id/source)
+  google.protobuf.Timestamp updated_at = 2;     // list-level watchlists.updated_at, bumped in-tx
 }

@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { insightsPortfolioClient } from '@/lib/browserClients/insightsPortfolioClient';
 import { useInvalidatingMutation } from './useInvalidatingMutation';
 
@@ -104,4 +104,47 @@ export function useRemoveWatchlistSymbols() {
     [WATCHLISTS_KEY],
     { mutationKey: WATCHLIST_WRITE_KEY },
   );
+}
+
+/**
+ * feature 167 — targeted single-symbol rebind. A plain (non-invalidating) useMutation: on success it
+ * PATCHES just the one binding in the cached ['watchlists'] list from the RPC's returned
+ * WatchlistBinding (carrying `source`), with NO invalidateQueries → no listWatchlists refetch (AC-6).
+ * Carries mutationKey WATCHLIST_WRITE_KEY so the Layer-2 `useIsMutating` guard still serializes it
+ * against rename/remove (design.md §5 Layer 2).
+ */
+export function useUpdateWatchlistBinding() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    Awaited<ReturnType<typeof insightsPortfolioClient.updateWatchlistBinding>>,
+    Error,
+    { watchlistId: string; symbol: string; strategyId: string }
+  >({
+    mutationKey: WATCHLIST_WRITE_KEY,
+    mutationFn: (input) =>
+      insightsPortfolioClient.updateWatchlistBinding({
+        watchlistId: input.watchlistId,
+        symbol: input.symbol,
+        strategyId: input.strategyId,
+      }),
+    onSuccess: (result, input) => {
+      const patched = result.binding;
+      if (!patched) return;
+      queryClient.setQueryData(WATCHLISTS_KEY, (old: ListWatchlistsResult | undefined) => {
+        if (!old) return old;
+        return {
+          ...old,
+          watchlists: old.watchlists.map((wl) =>
+            wl.watchlistId === input.watchlistId
+              ? {
+                  ...wl,
+                  bindings: wl.bindings.map((b) => (b.symbol === patched.symbol ? patched : b)),
+                }
+              : wl,
+          ),
+        };
+      });
+      // NO invalidateQueries(['watchlists']) — the whole point of AC-6.
+    },
+  });
 }

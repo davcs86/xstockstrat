@@ -113,6 +113,30 @@ export async function mockWatchlists(page: Page, seed: MockWatchlist[] = []): Pr
     },
   );
 
+  // feature 167 — targeted single-symbol rebind: patch ONLY that row's strategyId, leave `source`
+  // untouched, and return { binding, updated_at }. Models the server's single-row UPDATE ... RETURNING.
+  await page.route(
+    '**/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlistBinding',
+    (route) => {
+      const req = JSON.parse(route.request().postData() ?? '{}');
+      const wl = find(req.watchlistId);
+      const sym = (req.symbol ?? '').trim().toUpperCase();
+      let binding: MockBinding | undefined;
+      if (wl) {
+        binding = wl.bindings.find((b) => b.symbol === sym);
+        if (binding) {
+          binding.strategyId = req.strategyId ?? ''; // single-column patch; source untouched
+          sync(wl);
+        }
+      }
+      // Happy-path e2e: the symbol exists. (A real server returns NOT_FOUND when absent.)
+      // updated_at is a google.protobuf.Timestamp → Connect-JSON encodes it as an RFC3339 string
+      // (NOT {seconds,nanos}); this raw page.route body must match that wire shape or the client's
+      // response decode throws and the mutation never resolves.
+      return json(route, { binding, updatedAt: new Date(0).toISOString() });
+    },
+  );
+
   await page.route('**/xstockstrat.portfolio.v1.PortfolioService/DeleteWatchlist', (route) => {
     const req = JSON.parse(route.request().postData() ?? '{}');
     state.lists = state.lists.filter((w) => w.watchlistId !== req.watchlistId);

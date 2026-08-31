@@ -885,6 +885,54 @@ export type ListAllWatchlistSymbolsResponse = Message<"xstockstrat.portfolio.v1.
  */
 export declare const ListAllWatchlistSymbolsResponseSchema: GenMessage<ListAllWatchlistSymbolsResponse>;
 /**
+ * user_id intentionally absent — ownership from the x-user-id header (feature 167).
+ *
+ * @generated from message xstockstrat.portfolio.v1.UpdateWatchlistBindingRequest
+ */
+export type UpdateWatchlistBindingRequest = Message<"xstockstrat.portfolio.v1.UpdateWatchlistBindingRequest"> & {
+    /**
+     * @generated from field: string watchlist_id = 1;
+     */
+    watchlistId: string;
+    /**
+     * @generated from field: string symbol = 2;
+     */
+    symbol: string;
+    /**
+     * "" = unbind this one row (matches WatchlistBinding.strategy_id)
+     *
+     * @generated from field: string strategy_id = 3;
+     */
+    strategyId: string;
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.UpdateWatchlistBindingRequest.
+ * Use `create(UpdateWatchlistBindingRequestSchema)` to create a new message.
+ */
+export declare const UpdateWatchlistBindingRequestSchema: GenMessage<UpdateWatchlistBindingRequest>;
+/**
+ * @generated from message xstockstrat.portfolio.v1.UpdateWatchlistBindingResponse
+ */
+export type UpdateWatchlistBindingResponse = Message<"xstockstrat.portfolio.v1.UpdateWatchlistBindingResponse"> & {
+    /**
+     * the updated binding (symbol/strategy_id/source)
+     *
+     * @generated from field: xstockstrat.portfolio.v1.WatchlistBinding binding = 1;
+     */
+    binding?: WatchlistBinding | undefined;
+    /**
+     * list-level watchlists.updated_at, bumped in-tx
+     *
+     * @generated from field: google.protobuf.Timestamp updated_at = 2;
+     */
+    updatedAt?: Timestamp | undefined;
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.UpdateWatchlistBindingResponse.
+ * Use `create(UpdateWatchlistBindingResponseSchema)` to create a new message.
+ */
+export declare const UpdateWatchlistBindingResponseSchema: GenMessage<UpdateWatchlistBindingResponse>;
+/**
  * A risk cue surfaced on the Exposure surface (feature 083). Closed set → enum (C-04).
  *
  * @generated from enum xstockstrat.portfolio.v1.PositionRiskFlag
@@ -1143,5 +1191,17 @@ export declare const PortfolioService: GenService<{
         methodKind: "unary";
         input: typeof ListAllWatchlistSymbolsRequestSchema;
         output: typeof ListAllWatchlistSymbolsResponseSchema;
+    };
+    /**
+     * Targeted single-symbol rebind (feature 167): change one binding's strategy_id via a single-row
+     * UPDATE — no replace-all. Ownership from the propagated x-user-id header (server-side), never
+     * from the request body. NOT_FOUND if the symbol is not in the watchlist.
+     *
+     * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlistBinding
+     */
+    updateWatchlistBinding: {
+        methodKind: "unary";
+        input: typeof UpdateWatchlistBindingRequestSchema;
+        output: typeof UpdateWatchlistBindingResponseSchema;
     };
 }>;
