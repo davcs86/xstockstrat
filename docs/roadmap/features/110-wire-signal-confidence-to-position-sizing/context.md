@@ -187,3 +187,12 @@ Confirmed operator decision applied to `product-spec.md`, `acceptance.feature`, 
     is 023's launched contract). merge-order.md:66 already reflects 110's deletion + e2e updates (no
     change needed there).
 - Reviewers snapshot finalized in feature.md: Proto Reviewer, xstockstrat-analysis owner, xstockstrat-ui owner.
+
+## Session 2026-08-31 — sdd-review impl-spec (advisory)
+
+- Result: 7 OK / 1 warning / 0 fail. No Floor risk. Field 19 derivation confirmed (095 owns 13-18); orphan delete grep-confirmed safe (zero importers); NaN-qty trap grounded (Go NaN<=0 is false -> blank must coerce to real 0); descriptor-parity guard coordination with 095 confirmed; all AC-1..9 covered.
+- Unresolved ⚠ carried into execution:
+  - Step 7: the verification `! grep -rn "insights/market" e2e/nav-reachability.spec.ts` over-matches a SURVIVING comment at `nav-reachability.spec.ts:101` (in the preserved sibling test), so the `&&` chain fails even after a correct implementation. Narrow the guard to `! grep -rn "goto('/insights/market" ...` (or reword the :101 comment). — [ ] unaddressed
+  - Cross-cutting NOTE: 110 Step 4 adds `signal_confidence` onto 095's already-expanded 18-entry `_MAPPED` set (both co-edit servicer.py `_row_to_opportunity` + the parity `_MAPPED`); 110 runs SECOND, so it rebases onto 095's set (additive, low risk). — [ ] note only
+  - Step 2 gen wildcard / Step 8 directory-in-Files (filename pinned in Verification) — accepted conventions. — [ ] note only
+- Overlap findings: batch scan CLEAN; 095<110 on analysis servicer.py + parity test + OrderForm (merge-order.md).
