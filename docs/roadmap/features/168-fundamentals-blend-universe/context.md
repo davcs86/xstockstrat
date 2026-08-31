@@ -57,3 +57,45 @@
   Fixed proto cites (ingest.proto:129 source; analysis.proto:318 signal_params / :351 symbols key).
 - Re-review verdict: PASS (0 blockers, 0 warnings).
 - Status: draft → spec-ready. Next: /sdd-design fundamentals-blend-universe quick.
+
+## Session 2026-08-31 — sdd-design
+
+- Phase 0 Recon: refreshed/extended recon.md (service: xstockstrat-analysis; read deps ingest,
+  marketdata, config). Key regroundings vs the prior partial recon:
+  - The enforcement seam is `_run_cycle` (`live_loop.py:263-356`); `resolve_universe` is called at
+    `:296-298` and records built `:300-309`.
+  - `_drain_signals` (`:358-385`) filters by `active_window`, NOT `source` — so the fundamentals
+    universe needs its OWN `QuerySignals(source=slug, active_window=[now,now])` call; it cannot reuse
+    `_drain_signals` (which returns only symbols).
+  - `get_bool` (`watcher.py:116-122`) is `HasField`-based → the kill-switch default `true` does NOT
+    swallow an explicit `false`. The config zero-trap family does NOT apply to the enable flag. RESOLVED.
+  - "has fundamentals" reuse point = `fundsignal_loop._paced_fetch:373-378` (symbol present in
+    `resp.fundamentals`). Fundsignal is a separate ~daily loop; no shared in-process fundamentals cache.
+  - Key-reuse patterns: extend the `resolve_universe` call site (not a parallel path); fail-closed-to-empty
+    mirrors `_drain_signals`; source slug from `analysis.fundsignal.source_slug` (F-07).
+- Phase 1 Grilling: 2 rounds (full). Chosen approach: a single universe-override branch in `_run_cycle`,
+  gated by `analysis.engine.fundamentals_blend_enabled` (bool, default true, kill-switch) targeting
+  `analysis.engine.fundamentals_blend_strategy_id` (string, default `fundamentals_macd_blend`), fed by a
+  once-per-cycle fundamentals-universe resolver (new source-filtered QuerySignals ∩ GetFundamentalsMulti
+  "has row") that fails closed to empty (FR-6). No proto change, no migration. When
+  `strategy_id == blend_id`: universe = `(fundamentals_universe − denied_symbols) | (held ∩ denied)`
+  (feature-132 precedence: denied subtracts, blend allowlist ignored); all other strategies unchanged
+  (AC-3). Rejected: global-strategy promotion, parallel loop, per-strategy GetFundamentalsMulti fan-out,
+  unconditional per-cycle resolution, broad-universe fallback on error, hardcoded source string,
+  honoring the blend allowlist.
+- Constitution rules touched: C-05, C-08/P-06, C-10, C-13, C-14, C-16 (AC-3 preserved), F-06, F-07, P-03.
+  Floor breaches: none (F-06 + F-07 both honored by construction).
+- Business rules: PRESERVE feature-154 @AC-3 and feature-156 @AC-1 (read-only consumer, slug reused);
+  no existing @AC-* extended or changed.
+- **Deferred to the orchestrator (ledger 2026-08-08 nested-subagent trap):** this isolated subagent run
+  has no `AskUserQuestion`, so the final Phase-1 approval gate and the `spec-ready → design-approved`
+  status.md flip were NOT performed. Two operator-confirm items must be answered before /sdd-spec:
+  (1) held-but-left-universe exit alert — strict FR-2 (recommended, matches AC-2, alert-only loop) vs
+  union-held-for-exit (feature-132 spirit); (2) accept shipping without a cross-cycle TTL cache (the
+  fundamentals universe re-resolves every ~60s cycle when a blend strategy is live; recommended: ship,
+  defer the cache). Artifacts written this session: recon.md, design.md. status.md left at spec-ready.
+
+## Session 2026-08-31 — design decisions resolved (operator defaults)
+
+- Held-but-left-universe exit alerts: RESOLVED to strict FR-2 (a symbol that drops out of the fundamentals universe is not re-added for exit unless it is a held ∩ denied case per the blend rule). Design's recommended option.
+- Cross-cycle TTL cache for the fundamentals universe: NOT added in this feature (resolve-once-per-cycle is sufficient; a TTL cache is a possible later optimization). Design's recommended option.

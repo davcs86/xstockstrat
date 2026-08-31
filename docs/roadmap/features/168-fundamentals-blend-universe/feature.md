@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-08-31 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-31 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings after fixes); overlap CLEAN |
+| 2026-08-31 | `spec-ready` → `design-approved` | /sdd-design | Design debated (full) and approved; recon.md + design.md written |
 
 ---
 
