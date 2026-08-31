@@ -169,7 +169,7 @@ exist: `grep -rn "UpdateWatchlistBinding" packages/proto/gen/go/portfolio/v1/ | 
 
 ### Step 3 — service: single-row rebind repo method, `ErrBindingNotFound`, `WatchlistStore` method, service method + handler adapters
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/watchlist_repo.go` — modify (add `ErrBindingNotFound`, `UpdateBinding`; extend `touchWatchlistTx` to return the timestamp)
@@ -358,7 +358,7 @@ method, and both handler adapters are all in lockstep).
 
 ### Step 4 — test: Go service tests for `UpdateWatchlistBinding` (AC-1…AC-5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go` — modify (add `fakeWatchlistStore.UpdateBinding`; add test cases)
@@ -687,4 +687,26 @@ untouched); lint clean. Confirm mock/spec imports come from the canonical helper
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Steps 3-4 — golangci-lint unrunnable locally (go-version gate); CI is authoritative
+- `golangci-lint` (both the v2.5.0/go1.25 and v2.13.1/go1.26 builds on this host) refuses to run
+  because the module targets go1.27 (`the Go language version used to build golangci-lint is lower
+  than the targeted Go version (1.27.0)`). Same platform limitation seen across this run's Go work.
+- **Substitution**: `GOWORK=off go build ./...` (clean) + `go vet ./internal/{service,repository,handler}/...`
+  (clean) + `gofmt -l` (no diff). CI's `golangci-lint-action@v9` runs the authoritative lint on a
+  go1.27-compatible toolchain.
+- **Disposition**: CI-equivalent local gate; no lint suppression added.
+
+### Step 3 — `touchWatchlistTx` signature widened to return the bumped timestamp (design's reuse form)
+- Chose the design's stated reuse form: `touchWatchlistTx` now returns `(time.Time, error)` via
+  `UPDATE ... RETURNING updated_at`, so `UpdateBinding` sources the response `updated_at` from the
+  single parent-row touch (no second query, one touch helper — DRY). Both existing callers
+  (`AddSymbols`, `RemoveSymbols`) updated to `if _, err := touchWatchlistTx(...)`. The alternative
+  (inline the bump inside `UpdateBinding`) was declined per the spec's stated intent. Full
+  service + repository test suites stay green after the signature change.
+
+### Step 4 — helper named `storeBinding` to avoid collision with the feature-097 `bindingFor`
+- The spec's test sketch referenced a `bindingFor` accessor, but a fatal `bindingFor(t, wl, symbol)`
+  helper already exists in this file (feature 097). Added a non-fatal `storeBinding(store, id, symbol)`
+  (returns nil when absent) instead — AC-3 needs to assert a symbol was NOT inserted, which the
+  fatal helper cannot express. TDD red confirmed first (undefined `repository.ErrBindingNotFound` /
+  `svc.UpdateWatchlistBinding`), green after Step 3 (AC-1…AC-5 pass, `-race`).

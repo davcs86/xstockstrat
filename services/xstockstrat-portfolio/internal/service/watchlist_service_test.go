@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"google.golang.org/grpc"
@@ -146,6 +147,24 @@ func (f *fakeWatchlistStore) RemoveSymbols(_ context.Context, watchlistID string
 	wl.Bindings = kept
 	wl.Symbols = fakeSymbols(wl.Bindings) //nolint:staticcheck // SA1019: deprecated symbols mirror intentionally retained for old clients (feature 097)
 	return clone(wl), nil
+}
+
+// UpdateBinding models the repo's single-row UPDATE ... RETURNING semantics (feature 167): a matched
+// symbol has ONLY its strategy_id rewritten (source untouched — the fails-080 reset trap is
+// structurally impossible), and returns the (possibly value-unchanged) row; an unmatched symbol
+// returns ErrBindingNotFound. Postgres counts a WHERE-matched row regardless of value change.
+func (f *fakeWatchlistStore) UpdateBinding(_ context.Context, watchlistID, symbol, strategyID string) (*portfoliov1.WatchlistBinding, time.Time, error) {
+	wl, ok := f.byID[watchlistID]
+	if !ok {
+		return nil, time.Time{}, repository.ErrWatchlistNotFound // defensive; loadOwned already guarded
+	}
+	for _, b := range wl.Bindings {
+		if b.GetSymbol() == symbol { // WHERE-match: matched regardless of value change
+			b.StrategyId = strategyID // single-column update; Source untouched (models RETURNING source)
+			return &portfoliov1.WatchlistBinding{Symbol: b.GetSymbol(), StrategyId: strategyID, Source: b.GetSource()}, time.Now(), nil
+		}
+	}
+	return nil, time.Time{}, repository.ErrBindingNotFound // AC-3
 }
 
 func (f *fakeWatchlistStore) CountByUser(_ context.Context, userID string) (int, error) {
@@ -610,5 +629,143 @@ func TestDeleteWatchlist_SystemManagedGuard(t *testing.T) {
 	}
 	if _, err := svc.DeleteWatchlist(ctx, &portfoliov1.DeleteWatchlistRequest{WatchlistId: manual.Watchlist.GetWatchlistId()}); err != nil {
 		t.Fatalf("manual delete should succeed: %v", err)
+	}
+}
+
+// ─── feature 167: UpdateWatchlistBinding (targeted single-symbol rebind) ──────
+
+// seedWatchlist inserts a watchlist owned by userID with the given bindings directly into the fake
+// store (bypassing Create so per-binding Source and the list-level SystemManaged flag can be set).
+func seedWatchlist(store *fakeWatchlistStore, id, userID string, systemManaged bool, binds []*portfoliov1.WatchlistBinding) {
+	wl := &portfoliov1.Watchlist{WatchlistId: id, UserId: userID, SystemManaged: systemManaged}
+	setBindings(wl, binds)
+	store.byID[id] = wl
+}
+
+// storeBinding returns the stored binding for a symbol, or nil if absent (non-fatal — AC-3 asserts
+// absence). Distinct from the fatal feature-097 bindingFor helper.
+func storeBinding(store *fakeWatchlistStore, id, symbol string) *portfoliov1.WatchlistBinding {
+	for _, b := range store.byID[id].GetBindings() {
+		if b.GetSymbol() == symbol {
+			return b
+		}
+	}
+	return nil
+}
+
+// AC-1: rebinding one symbol changes only that row; the others are untouched (no replace-all).
+func TestUpdateWatchlistBinding_RebindsOneSymbol(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, []*portfoliov1.WatchlistBinding{
+		{Symbol: "AAPL", StrategyId: "sma_cross"},
+		{Symbol: "MSFT", StrategyId: "macd"},
+		{Symbol: "TSLA", StrategyId: "rsi"},
+	})
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	resp, err := svc.UpdateWatchlistBinding(ctxWithUser(t, "u-1"), &portfoliov1.UpdateWatchlistBindingRequest{
+		WatchlistId: "wl-1", Symbol: "MSFT", StrategyId: "fundamentals_macd_blend",
+	})
+	if err != nil {
+		t.Fatalf("rebind: %v", err)
+	}
+	if got := resp.GetBinding(); got.GetSymbol() != "MSFT" || got.GetStrategyId() != "fundamentals_macd_blend" {
+		t.Fatalf("response binding = %+v, want MSFT->fundamentals_macd_blend", got)
+	}
+	if got := storeBinding(store, "wl-1", "MSFT").GetStrategyId(); got != "fundamentals_macd_blend" {
+		t.Errorf("stored MSFT strategy_id = %q, want fundamentals_macd_blend", got)
+	}
+	// AAPL/TSLA rows are not rewritten by a full-list replace.
+	if got := storeBinding(store, "wl-1", "AAPL").GetStrategyId(); got != "sma_cross" {
+		t.Errorf("AAPL strategy_id = %q, want unchanged sma_cross", got)
+	}
+	if got := storeBinding(store, "wl-1", "TSLA").GetStrategyId(); got != "rsi" {
+		t.Errorf("TSLA strategy_id = %q, want unchanged rsi", got)
+	}
+}
+
+// AC-2: a rebind preserves the entry's per-binding source and the list-level system_managed flag.
+func TestUpdateWatchlistBinding_PreservesSourceOnSystemManaged(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", true, []*portfoliov1.WatchlistBinding{
+		{Symbol: "NVDA", StrategyId: "macd", Source: portfoliov1.WatchlistEntrySource_WATCHLIST_ENTRY_SOURCE_SIGNAL},
+	})
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	resp, err := svc.UpdateWatchlistBinding(ctxWithUser(t, "u-1"), &portfoliov1.UpdateWatchlistBindingRequest{
+		WatchlistId: "wl-1", Symbol: "NVDA", StrategyId: "sma_cross",
+	})
+	if err != nil {
+		t.Fatalf("rebind: %v", err)
+	}
+	if got := resp.GetBinding().GetStrategyId(); got != "sma_cross" {
+		t.Errorf("NVDA strategy_id = %q, want sma_cross", got)
+	}
+	if got := resp.GetBinding().GetSource(); got != portfoliov1.WatchlistEntrySource_WATCHLIST_ENTRY_SOURCE_SIGNAL {
+		t.Errorf("NVDA source = %v, want SIGNAL (preserved)", got)
+	}
+	if !store.byID["wl-1"].GetSystemManaged() {
+		t.Errorf("list system_managed flag was cleared, want still true")
+	}
+}
+
+// AC-3: rebinding a symbol not in the list is NOT_FOUND and does not insert a row.
+func TestUpdateWatchlistBinding_AbsentSymbolNotFound(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, []*portfoliov1.WatchlistBinding{
+		{Symbol: "AAPL", StrategyId: "sma_cross"},
+	})
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	_, err := svc.UpdateWatchlistBinding(ctxWithUser(t, "u-1"), &portfoliov1.UpdateWatchlistBindingRequest{
+		WatchlistId: "wl-1", Symbol: "GOOG", StrategyId: "macd",
+	})
+	if connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("code = %v, want NotFound", connect.CodeOf(err))
+	}
+	if storeBinding(store, "wl-1", "GOOG") != nil {
+		t.Errorf("a GOOG binding was created; rebind must not insert")
+	}
+}
+
+// AC-4: a non-owner cannot rebind another user's watchlist (loadOwned → PermissionDenied).
+func TestUpdateWatchlistBinding_NonOwnerDenied(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, []*portfoliov1.WatchlistBinding{
+		{Symbol: "AAPL", StrategyId: "sma_cross"},
+	})
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	_, err := svc.UpdateWatchlistBinding(ctxWithUser(t, "u-2"), &portfoliov1.UpdateWatchlistBindingRequest{
+		WatchlistId: "wl-1", Symbol: "AAPL", StrategyId: "macd",
+	})
+	if code := connect.CodeOf(err); code != connect.CodePermissionDenied && code != connect.CodeNotFound {
+		t.Fatalf("code = %v, want PermissionDenied or NotFound", code)
+	}
+	if got := storeBinding(store, "wl-1", "AAPL").GetStrategyId(); got != "sma_cross" {
+		t.Errorf("AAPL strategy_id = %q, want unchanged sma_cross", got)
+	}
+}
+
+// AC-5: an empty strategy_id unbinds only that row; siblings are untouched.
+func TestUpdateWatchlistBinding_EmptyStrategyUnbinds(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, []*portfoliov1.WatchlistBinding{
+		{Symbol: "AAPL", StrategyId: "sma_cross"},
+		{Symbol: "MSFT", StrategyId: "macd"},
+	})
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	resp, err := svc.UpdateWatchlistBinding(ctxWithUser(t, "u-1"), &portfoliov1.UpdateWatchlistBindingRequest{
+		WatchlistId: "wl-1", Symbol: "AAPL", StrategyId: "",
+	})
+	if err != nil {
+		t.Fatalf("unbind: %v", err)
+	}
+	if got := resp.GetBinding().GetStrategyId(); got != "" {
+		t.Errorf("AAPL strategy_id = %q, want \"\" (unbound)", got)
+	}
+	if got := storeBinding(store, "wl-1", "MSFT").GetStrategyId(); got != "macd" {
+		t.Errorf("MSFT strategy_id = %q, want unchanged macd", got)
 	}
 }
