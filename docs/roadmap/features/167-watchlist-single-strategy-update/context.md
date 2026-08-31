@@ -131,3 +131,9 @@
   primitives named with their nearest pattern: `ErrBindingNotFound` sentinel and the
   `setQueryData` non-invalidating cache-patch.
 - Next: `/sdd-review watchlist-single-strategy-update impl-spec`.
+
+## Session 2026-08-31 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 4 advisory warnings (all accepted conventions), 1 note. No Floor risk. Every path:line confirmed; additive proto, single-row UPDATE...RETURNING with ErrBindingNotFound->NOT_FOUND, loadOwned authz, touchWatchlistTx updated_at, symbol normalized, writeInFlight fix present, non-invalidating setQueryData patch. No migration (008 already added strategy_id).
+- Notes (no execution action required): Step 2 gen wildcard (accepted); Step 4 no coverage threshold (service/ pkg CI-excluded, cited); Step 4 AC-2 source-preservation via fake not real SQL (proven at integration); Step 6 e2e no threshold (expected); touchWatchlistTx signature change is in-scope with both callers updated.
+- Overlap findings: batch scan CLEAN; 167 shares insightsBff.ts with 029/031/095 (distinct router blocks, rebase-only).
