@@ -21,3 +21,17 @@
   field must exist) before this feature's `/sdd-design` can proceed meaningfully — recorded as an
   Open Question in product-spec.md, not yet a formal `merge-order.md` entry (added once this feature
   reaches `spec-ready`/`implementation-ready`).
+
+## Session 2026-08-31 — sdd-story (in-place regenerate)
+
+- Regenerated `product-spec.md` to the current C-14/C-15 template (kept feature number 110, status
+  stays `draft`); moved the inlined acceptance list into a new `acceptance.feature` with 8 `@AC-*`
+  scenarios covering all of FR-1..FR-5 (every FR tagged; conviction-vs-ordinal separation and the
+  scoped blank-qty `/insights`-only affordance are explicit scenarios).
+- Preserved all prior scope: additive `analysis.Opportunity` field (or targeted read RPC — resolved at
+  `/sdd-design`), no config keys, no schema change; `/trader` forms explicitly unchanged (FR-3).
+- **023 dependency is now satisfied** — feature 023 (position-sizing-engine) is `launched`, so
+  `PlaceOrderRequest.confidence` and its `qty <= 0` auto-sizing path already exist; no merge-order
+  blocker remains on 023.
+- Note: the regeneration subagent lost its connection before writing this block; the orchestrator
+  appended it and verified `product-spec.md` / `acceptance.feature` / `feature.md` were written correctly.

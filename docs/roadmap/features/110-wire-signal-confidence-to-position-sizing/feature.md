@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/wire-signal-confidence-to-position-sizing`
 **Created**: 2026-08-05
-**Last Updated**: 2026-08-05
+**Last Updated**: 2026-08-31
 
 ---
 
@@ -11,12 +11,14 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-05 | `idea` → `draft` | /sdd-story | Product spec generated — named follow-up from 023-position-sizing-engine's design round 5 (C-14 deferral) |
+| 2026-08-31 | `draft` (regenerated) | /sdd-story (overwrite) | product-spec.md regenerated to current template; acceptance.feature authored |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec wire-signal-confidence-to-position-sizing`_
 - [Context Log](context.md) — session history, decisions, deviations
 
