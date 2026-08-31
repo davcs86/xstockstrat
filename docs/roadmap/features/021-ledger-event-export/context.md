@@ -221,3 +221,28 @@ Unattended run (auto-proceed through checkpoints; pause only on real blockers).
   offline: next NNN 022 correct (tip 021); value_types int/bool; down reverses both. No DB started.
 - Files: `services/xstockstrat-config/migrations/022_ledger_export_keys.{up,down}.sql`,
   `services/xstockstrat-ledger/CLAUDE.md`. Deviations: none.
+
+### Step 9 — service: trading producer stamps owning user_id [done]
+- `trading.go`: added a `userID string` param to `emitLedgerEvent` (between streamKey and payload) and
+  set `UserId: userID` on the `AppendEventRequest`. Updated all 26 call sites (25 trading.go + 1
+  order_intent.go) per the codebase-discovery mapping: user-owned emits pass the owner
+  (`order.UserId` for order lifecycle/fills/brackets; `userID` param for offline/positions/balance
+  sync; `req.UserId` for baseline_set; `rec.UserID` for account.deregistered), and the 4
+  genuinely platform-scoped emits pass `""` (reconciliation.mismatch_found,
+  order_intent.resolved_by_reconciliation ×2, order_intent.reclaimed_unknown).
+- TDD (P-06): **red** — with `UserId` unset the fill emits carry `""` (test fails, UserId != u_42) →
+  **green** after restoring the assignment. `GOWORK=off go build ./...` OK; `go vet` clean; `gofmt`
+  clean; full `internal/service` test package `ok`. golangci-lint deferred to CI (build-Go guard — see
+  Deviation Log).
+- Files: `services/xstockstrat-trading/internal/service/trading.go`,
+  `services/xstockstrat-trading/internal/service/order_intent.go`. Deviations: golangci-lint local
+  fallback (Deviation Log).
+
+### Step 10 — test: trading fill emits carry user_id [done]
+- New `trading_ledger_userid_test.go`: `TestEmitLedgerEventStampsOwningUserId` drives the fill emit
+  path directly (recordingLedger + `&TradingService{ledger:rec}`), asserting order.filled and
+  order.partially_filled requests carry `UserId == "u_42"` and a platform-scoped emit carries `""`.
+  Reuses the existing `recordingLedger`/`requestsByType` helper (C-13 — no third capturer). `u_42`
+  inline. Name contains "UserId" for the `-run UserId` filter.
+- TDD as above. Files: `services/xstockstrat-trading/internal/service/trading_ledger_userid_test.go`.
+  Deviations: none beyond the shared golangci-lint fallback.

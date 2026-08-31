@@ -355,7 +355,7 @@ grep -n "ledger.export" services/xstockstrat-ledger/CLAUDE.md   # both keys decl
 
 ### Step 9 — service: trading producer stamps owning `user_id`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -383,7 +383,7 @@ grep -n "ledger.export" services/xstockstrat-ledger/CLAUDE.md   # both keys decl
 
 ### Step 10 — test: trading fill emits carry `user_id`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_offline_test.go` — modify (or a sibling `*_test.go` in `internal/service/`)
