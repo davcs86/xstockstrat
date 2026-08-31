@@ -57,6 +57,9 @@ router.service(AnalysisService, {
   getIndicatorSeries: forward((req, opts) => analysisClient.getIndicatorSeries(req, opts)),
   // feature 042: ranked P&L-attribution factors. Read-only; no admin gate.
   queryPnLPatterns: forward((req, opts) => analysisClient.queryPnLPatterns(req, opts)),
+  // feature 029: per-source signal-performance attribution. Read-only; owner-scoped server-side
+  // from the propagated x-user-id header (forward → backendHeaders).
+  getAttribution: forward((req, opts) => analysisClient.getAttribution(req, opts)),
 });
 
 router.service(IngestService, {

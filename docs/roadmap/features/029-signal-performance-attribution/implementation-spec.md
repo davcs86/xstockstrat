@@ -520,7 +520,7 @@ Confirm the suite passes and coverage ≥ 40%.
 
 ### Step 13 — service: UI — `/insights/attribution` page, BFF+hook, nav registration, fixture
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/insightsBff.ts` — modify (register `getAttribution`)
@@ -560,7 +560,7 @@ Confirm the suite passes and coverage ≥ 40%.
 
 ### Step 14 — test: UI e2e — attribution table renders, sorts, exports CSV, is nav-reachable
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/attribution.spec.ts` — create
@@ -630,3 +630,17 @@ The suite has no coverage threshold (Playwright e2e); confirm the new spec passe
   analysis consumer test (Step 10, which asserts the close payload's `fees_total` is read into
   `seal`) and the `GetAttribution` net test (Step 12, `net = realized_pnl - fees_total`). This closes
   AC-10/AC-11 end-to-end across the seam without a portfolio live-DB harness this feature does not add.
+
+### Steps 13-14 — nav registered in NAV_GROUPS, not the dead PLATFORM_SUBNAV (honored impl-review fix)
+- The spec's Step 13 instruction 4 registered `Attribution` in `PLATFORM_SUBNAV.insights`
+  (`PlatformHeader.tsx`), but the impl-review flagged `PLATFORM_SUBNAV` as **dead** (feature 083's
+  shell renders the desktop Row-2 "Section" nav from `NAV_GROUPS`; `PlatformHeader.tsx` marks that
+  prop "Legacy: ignored"). Registered the entry in `NAV_GROUPS` (`navGroups.tsx`, Engine group,
+  right after `P&L Patterns`) **only**; `PlatformHeader.tsx` untouched. Matches the same fix honored
+  for 043 (Users) and 167.
+- Step 14's nav-reachability e2e (impl-review fix) targets the **rendered** Section landmark
+  (`getByRole('navigation', { name: 'Section' }).getByRole('link', { name: 'Attribution' })` from a
+  sibling Engine page → click → assert `/insights/attribution`), not a `PLATFORM_SUBNAV` structure
+  check — guarding the 060/058 "link renders but never routes" failure. TDD RED for Step 14 is by
+  construction: without Step 13 the `/insights/attribution` route 404s, so every assertion fails.
+  GREEN: 3/3 (AC-2 render + win-rate sort, AC-8 CSV clipboard, nav reachability).
