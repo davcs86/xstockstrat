@@ -1967,3 +1967,23 @@ ambiguity is logged here).
   as coverage — confirm the impl actually imports (non-zero c8 lines), or run the compiled `dist`
   tests. The configured runner should build-then-`--test` (or use `--experimental-transform-types`
   with extension resolution); until fixed, treat these suites as characterization-only in CI.
+
+## 2026-08-31 — raw `page.route` e2e mock returned a Timestamp as `{seconds,nanos}`, not RFC3339 (feature 167)
+
+- **What happened**: feature 167 added an `UpdateWatchlistBinding` route to `e2e/helpers/watchlistMock.ts`
+  as a raw `page.route` handler returning `{ binding, updatedAt: { seconds: '0', nanos: 0 } }`. Unlike
+  the `connectNodeAdapter`-backed `mock-backend.ts` (which serializes JS objects to Connect-JSON for
+  you), a raw `page.route` body IS the wire response, so it must already be Connect-JSON. A
+  `google.protobuf.Timestamp` field encodes as an **RFC3339 string** (`"1970-01-01T00:00:00Z"`), not
+  `{seconds,nanos}`. The malformed shape threw on the browser client's response decode → the mutation
+  rejected → `onSuccess` never ran → EVERY test that drives that RPC failed (8 in one file), not just
+  the new one.
+- **Why it hid**: the existing watchlist mock routes never returned a Timestamp (Watchlist's
+  created_at/updated_at were simply omitted), so this was the first raw-`page.route` Timestamp in that
+  helper; the failure surfaced as "the Select never reflects the pick", masking the decode error.
+- **Rule it implies**: in a raw `page.route`/`route.fulfill` mock body, hand-write **Connect-JSON**, not
+  the proto wire/JS shape — Timestamps are RFC3339 strings, `bytes` are base64, enums are the name
+  string or the integer, `int64` is a decimal string. When a field isn't read by the code under test,
+  omit it rather than guess its JSON shape. (Related: also match request URLs on the `/<Method>` segment
+  — the connect path is `<pkg>.<Service>/<Method>`, a DOT precedes the service, so a `'/<Service>/'`
+  `.includes` never matches.)

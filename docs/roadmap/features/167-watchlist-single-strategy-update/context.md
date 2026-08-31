@@ -137,3 +137,38 @@
 - Result: 0 failures, 4 advisory warnings (all accepted conventions), 1 note. No Floor risk. Every path:line confirmed; additive proto, single-row UPDATE...RETURNING with ErrBindingNotFound->NOT_FOUND, loadOwned authz, touchWatchlistTx updated_at, symbol normalized, writeInFlight fix present, non-invalidating setQueryData patch. No migration (008 already added strategy_id).
 - Notes (no execution action required): Step 2 gen wildcard (accepted); Step 4 no coverage threshold (service/ pkg CI-excluded, cited); Step 4 AC-2 source-preservation via fake not real SQL (proven at integration); Step 6 e2e no threshold (expected); touchWatchlistTx signature change is in-scope with both callers updated.
 - Overlap findings: batch scan CLEAN; 167 shares insightsBff.ts with 029/031/095 (distinct router blocks, rebase-only).
+
+## Session 2026-08-31 — sdd-execute (Steps 1–6, code-completed)
+
+Executed on `feature/watchlist-single-strategy-update`. **Stacked-PR mode** (operator directive):
+this feature's integration PR targets `feature/user-management-ui` (043, PR #1054), not `main-dev`;
+each later Stage-2 feature stacks on the prior. Branch was rebased onto 043's tip before pushing.
+
+- **Step 1–2 (proto + stubs)** [commit ea57973]: appended the additive `UpdateWatchlistBinding` RPC +
+  `UpdateWatchlistBindingRequest{watchlist_id,symbol,strategy_id}` / `UpdateWatchlistBindingResponse{
+  binding,updated_at}` to `portfolio.proto`; regenerated Go/Python/TS stubs via the codegen container.
+  `buf lint` + `buf breaking` (vs main-dev) both clean (additive). Empty `gen/` diff beyond portfolio/v1.
+- **Step 3–4 (Go backend + tests)** [commit 061a9b1]: single-row `UPDATE … RETURNING` repo method
+  (writes only `strategy_id`; `RETURNING source` reads provenance back untouched → fails-080 trap
+  structurally impossible), `ErrBindingNotFound` sentinel, `touchWatchlistTx` widened to return the
+  bumped `watchlists.updated_at` (both callers updated), `WatchlistStore` interface method, the service
+  method (`loadOwned` authz → NOT_FOUND/PERMISSION_DENIED; symbol normalized; ""→unbind;
+  ErrBindingNotFound→NOT_FOUND), and both handler adapters. Paired service tests AC-1…AC-5 via the
+  in-memory fake — **red** (undefined method/sentinel) → **green** (`-race`). `go build`+`vet`+`gofmt`
+  clean; golangci-lint deferred to CI (local go1.27 gate). Helper `storeBinding` avoids the fatal
+  feature-097 `bindingFor` collision.
+- **Step 5–6 (UI + e2e)** [commit pending]: `useUpdateWatchlistBinding` — a plain `useMutation` +
+  `queryClient.setQueryData(['watchlists'])` cache-patch, **no** `invalidateQueries` (AC-6), carrying
+  `WATCHLIST_WRITE_KEY` for the Layer-2 guard; `setBinding` rewired off replace-all `UpdateWatchlist`
+  (still used by `commitRename`); `writeInFlight += updateBinding.isPending` (FR-5); one-line BFF
+  `forward`. Browser client auto-exposed the RPC (no edit). AC-6 e2e proves one `UpdateWatchlistBinding`
+  request, zero `ListWatchlists` refetch, one row patched, others untouched. **red→green**: stashed
+  Step-5 → AC-6 failed; restored + 3 mock fixes → **15/15**. The 3 fixes (Connect-JSON Timestamp is
+  RFC3339 not `{seconds,nanos}`; request-counter matches the `/<Method>` segment since a dot precedes
+  the service; concurrency-guard delay override re-pointed at `UpdateWatchlistBinding`) are in
+  implementation-spec.md § Deviation Log; the Timestamp one is generalized to `fails.md`.
+- **C-16**: acceptance-scenario promotion into the portfolio business-rule suite deferred to `/promote`
+  at launch (documented backstop), not done here.
+- Local gates green: `buf lint`/`breaking`; Go `build`+`vet`+`gofmt` + AC-1…AC-5 `-race`; UI `lint`+
+  `build` (`/insights/watchlists` compiles) + `watchlists.spec.ts` 15/15. CI runs authoritative
+  golangci-lint, python, node, proto-freshness, and the full Playwright suite.
