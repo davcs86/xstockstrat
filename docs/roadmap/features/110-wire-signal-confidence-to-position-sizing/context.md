@@ -148,3 +148,42 @@ Confirmed operator decision applied to `product-spec.md`, `acceptance.feature`, 
   now stale for 110 (110 deletes the file); left untouched here (out of this task's scope), flag for
   `/sdd-spec`/merge-order maintenance. If 095 also modifies that file, 110's deletion supersedes it in
   the sequential cohort (delete wins), but re-verify at execute time.
+
+## Session 2026-08-31 — sdd-spec
+
+- Generated implementation-spec.md with 8 steps. Status → `implementation-ready`.
+- Key codebase findings (all grep/Read-verified against the current tree):
+  - **Proto (OR-4):** `analysis.Opportunity` currently maxes at `bool muted = 12`
+    (`packages/proto/analysis/v1/analysis.proto:554`) — feature 095's 13-18 are NOT yet in the tree
+    (095 is `implementation-ready`, unmerged). Spec adds `optional double signal_confidence = 19` but
+    Step 1 must re-derive next-free from the merged tree in the sequential cohort (095 lands first;
+    `merge-order.md:66`). `signal_confidence`/`signalConfidence` exists nowhere yet.
+  - **Persistence (OR-3 → RESOLVED: JSONB-ride, NO migration/DBA gate.)** `analysis.opportunities` has
+    no `signal_confidence` column; the max-raw value rides the existing `readiness_json` JSONB
+    (`repositories/opportunities.py:56-57,97-98,24-32`) exactly as feature 132's `muted` rides
+    `provenance`. Populate at the candidate row-build (`servicer.py:3392-3404`, stash into the
+    per-candidate `readiness` dict when `c["_best_sig_conv"] >= 0.0` — the reducer at `:3140,3275-3276`)
+    and carry in `_row_to_opportunity` (`:3860-3876`) as explicit-presence. A top-level row key would be
+    silently dropped by `replace_for_user`'s fixed INSERT column list — must go through `readiness_json`.
+  - **Analysis RED:** `TestOpportunityRowParity` (`tests/test_analysis_servicer.py:4847-4877`) enumerates
+    every `Opportunity` field in `_MAPPED` (incl. `muted`; `signal_axis` deliberately absent — it is a
+    row key, not a proto field). Adding field 19 fails `test_mapper_covers_every_proto_field` until
+    `_MAPPED` gains `signal_confidence` and the mapper carries it — the natural red-before-green.
+  - **UI OrderForm:** scoped `signalConfidence?: number` prop mirrors the `allowOfflineRecord` precedent
+    (`OrderForm.tsx:52`, NOT keyed on `initialSymbol`); qty `required` at `:206-214`; submit
+    `qty: parseFloat(qty)` at `:108`; must coerce blank→0 (Go's `NaN <= 0` is false, `trading.go:457`).
+    Render site `page.tsx:342` already has `symbolOpportunities` (`:185-189`) — zero new fetch.
+  - **Orphan deletion (FR-6/AC-9):** `SignalOrderTicket.tsx` has zero importers (only a stale
+    `OrderForm.tsx:71` comment + a comment in `offline-accounts.spec.ts:265`); `insights/market/[symbol]/page.tsx`
+    is a redirect-only stub. Two e2e specs `goto` the stub and are updated in the same step:
+    `nav-reachability.spec.ts:117-126` (redirect test removed — sibling `:95-115` already covers the live
+    route) and `offline-accounts.spec.ts:257-274` (@AC-1 retargeted `/insights/market/AAPL` → `/trader/positions/AAPL`).
+    `mobile-overflow.spec.ts:14` / `position-detail.spec.ts:294` are comment-only (untouched).
+  - **UI fixtures (C-12):** the AC scenarios' symbol `CAPR` already exists as two `OPPORTUNITIES` rows
+    (`e2e/fixtures/opportunities.ts`, `INVENTORY.md:25`) — extend with `signalConfidence`, no inline
+    literal. `mock-backend.ts` `placeOrder` (`:193-209`) captures each request by `clientOrderId` — the
+    assertion seam for qty≤0 + confidence.
+  - **No config key, no ingest/trading code change** (trading `confidence` sizing at `trading.go:483-490,3165`
+    is 023's launched contract). merge-order.md:66 already reflects 110's deletion + e2e updates (no
+    change needed there).
+- Reviewers snapshot finalized in feature.md: Proto Reviewer, xstockstrat-analysis owner, xstockstrat-ui owner.
