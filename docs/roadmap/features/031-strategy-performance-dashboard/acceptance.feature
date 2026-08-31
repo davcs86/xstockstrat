@@ -5,7 +5,7 @@ Feature: strategy-performance-dashboard
   @AC-1 @FR-1
   Scenario: Equity curve renders cumulative P&L from closed trades starting at the configured base date
     Given a trader with 10 closed paper trades recorded in the ledger
-    And insights.performance.equity_curve_start_date is "2026-01-01"
+    And ui.performance.equity_curve_start_date is "2026-01-01"
     When the trader opens the insights performance dashboard
     Then the equity curve renders as a line of cumulative realized P&L over time
     And the curve's first point is dated on or after 2026-01-01
@@ -20,7 +20,7 @@ Feature: strategy-performance-dashboard
 
   @AC-3 @FR-3
   Scenario: Rolling 30-day Sharpe ratio uses the configured risk-free rate
-    Given insights.performance.risk_free_rate_annual is 0.045
+    Given ui.performance.risk_free_rate_annual is 0.045
     And a 30-day daily-returns series with non-zero standard deviation
     When the dashboard computes the rolling 30-day Sharpe ratio
     Then it equals mean(daily_returns) / std(daily_returns) x sqrt(252), net of the 0.045 annual risk-free rate
@@ -28,7 +28,7 @@ Feature: strategy-performance-dashboard
 
   @AC-4 @FR-3
   Scenario: A zero-variance return window does not emit a non-finite Sharpe ratio
-    Given insights.performance.risk_free_rate_annual is 0.045
+    Given ui.performance.risk_free_rate_annual is 0.045
     And a 30-day window where every daily return is identical (standard deviation 0)
     When the dashboard computes the rolling 30-day Sharpe ratio
     Then it does not display "Infinity" or "NaN"
@@ -62,13 +62,13 @@ Feature: strategy-performance-dashboard
     Then the equity curve, maximum drawdown, rolling Sharpe ratio, and summary statistics all recompute for only that window
 
   @AC-9 @FR-8
-  Scenario: The "Paper Trading" label is visible in paper mode
-    Given TRADING_MODE=paper
+  Scenario: The "Paper Trading" label is visible when the environment-derived mode is paper
+    Given the deployment environment is staging, so GetTradingEnvironment reports the trading mode paper
     When the trader opens the performance dashboard
     Then a "Paper Trading" label is visible on the dashboard
 
   @AC-10 @FR-8
-  Scenario: The "Paper Trading" label is absent in live mode
-    Given TRADING_MODE=live
+  Scenario: The "Paper Trading" label is absent when the environment-derived mode is live
+    Given the deployment environment is production, so GetTradingEnvironment reports the trading mode live
     When the trader opens the performance dashboard
     Then the "Paper Trading" label is not displayed

@@ -23,6 +23,8 @@ Feature: ui-middleware-nodejs-runtime
     When middleware.ts runs
     Then it calls refreshSession() from src/lib/identity.ts with the value of the "refresh_token" cookie
     And it makes no outbound fetch() to /api/auth/refresh
+    And the browser receives one updated "Set-Cookie" for the refreshed session on that same response
+    And no "/api/auth/refresh" network request is observed during the near-expiry refresh
 
   @AC-3 @FR-3
   Scenario: Refreshed cookies keep the same attributes as before the change
@@ -56,6 +58,6 @@ Feature: ui-middleware-nodejs-runtime
   @AC-7 @FR-6
   Scenario: Edge-only docs are corrected to describe the Node.js-runtime middleware
     Given the feature is implemented
-    When services/xstockstrat-ui/docs/patterns/frontend-auth.md and services/xstockstrat-ui/CLAUDE.md are inspected
+    When docs/patterns/frontend-auth.md and services/xstockstrat-ui/CLAUDE.md are inspected
     Then neither states the rule "Only lib/auth.ts may be imported from middleware.ts" as a current constraint
     And both describe middleware.ts running in the Node.js runtime and calling refreshSession() directly

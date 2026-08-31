@@ -61,7 +61,7 @@ closing the C-14 gap 023's design round 5 identified (the product-spec that ship
 - An agent MCP order-placement tool that could also supply confidence — no such tool exists yet
   (`services/xstockstrat-agent/app/tools.py`); wiring one is a separate, larger feature.
 - Changing `Opportunity.conviction`'s existing meaning or its `signal_axis` blend formula
-  (`services/xstockstrat-analysis/app/repositories/opportunities.py:112`) — that ordinal keeps serving
+  (`services/xstockstrat-analysis/app/repositories/opportunities.py:114`) — that ordinal keeps serving
   its existing UI purpose (strength bars, "N/M conditions") unchanged; this feature adds a parallel,
   distinct confidence value, it does not repurpose the existing one.
 
@@ -73,6 +73,8 @@ Exact service names from CLAUDE.md Service Registry:
 - `xstockstrat-ui` — `SignalOrderTicket` scoped blank-qty affordance (FR-2, FR-3)
 - `xstockstrat-ingest` — source of `ExternalSignal.conviction`; read-only for this feature, confirm at `/sdd-design`
 - `xstockstrat-trading` — consumer only (023 already built the `confidence`-reading logic); confirm no change needed here at `/sdd-design`
+
+**Paper-safe (Constitution C-3):** the confidence-sizing behavior is identical under paper and live and is fully paper-testable — feature 023 owns execution; this feature only populates the `confidence` field.
 
 ## Consumer Surface(s)
 
@@ -91,6 +93,14 @@ _Constitution **C-14**._
   (`packages/proto/analysis/v1/analysis.proto`) to carry the real confidence value distinctly from the
   existing ordinal `conviction` field — additive (non-breaking), exact field number and shape resolved
   at `/sdd-design`. A separate targeted read RPC is the alternative under consideration.
+- **Field-number coordination with feature 095 (`opportunity-live-market-enrichment`).** The
+  `analysis.Opportunity` message currently maxes at `muted = 12`; feature 095 pre-assigns its
+  live-market enrichment block at fields **13+** (`live_price`, `change_pct`, `target_price`,
+  `stop_price`, `risk_reward`, `suggested_qty`, and a sparkline series — all appended after the current
+  max). 110's additive `confidence` field must therefore take the **next free field number AFTER 095's
+  enrichment block**, not field `13`. Per `docs/roadmap/features/merge-order.md`, **110 is blocked by
+  095** for this reason; the exact number is re-derived from the actually-merged tree at
+  `/sdd-design`/`/sdd-spec`. Additive/non-breaking either way (`buf breaking` must pass).
 
 ## Config Key Changes
 
@@ -127,27 +137,39 @@ acceptance truth (Constitution **C-15**). Each functional requirement above is c
 
 ## Open Questions
 
-- [ ] Should the real confidence value be a new additive field on `Opportunity`, or should the signal
-  ticket fetch it via a separate, more targeted RPC (e.g. a small `GetExternalSignal`-shaped read)
-  rather than widening the already-large `Opportunity` message? **Decide at `/sdd-design`.**
-- [ ] `ExternalSignal.conviction` is per-source; an opportunity can aggregate multiple signals — which
-  signal's (or which aggregation of) conviction does the order ticket show/use when more than one
-  signal exists for the symbol? **Decide at `/sdd-design`.** Known trap: `fails.md` 2026-07-01
-  (056-open-positions-ui, **C-10(b)**) — don't let this become a second, silently-diverging notion of
-  "the" signal for a symbol; and `fails.md` 2026-07-27/2026-07-29 (072/074/081) — verify the
-  producer's *actual* aggregation behavior by reading `xstockstrat-analysis`'s opportunity-ranking code
-  before assuming one signal maps 1:1 to an opportunity.
-- [ ] **Conviction-vs-ordinal trap (do not repeat).** `fails.md` 2026-08-05 (023-position-sizing-engine)
+None — moved to Design-Phase Decisions (owned by /sdd-design) and Design Guardrails below.
+
+## Design-Phase Decisions (owned by /sdd-design)
+
+Genuine design-mechanism decisions correctly deferred to `/sdd-design`:
+
+- Whether the real confidence value is a new additive field on `Opportunity`, or is fetched via a
+  separate, more targeted RPC (e.g. a small `GetExternalSignal`-shaped read) rather than widening the
+  already-large `Opportunity` message.
+- Which single signal's conviction (or which aggregation of multiple signals' conviction) the order
+  ticket shows/uses when more than one `ExternalSignal` exists for the symbol —
+  `ExternalSignal.conviction` is per-source and an opportunity can aggregate multiple signals.
+- The exact blank-qty affordance UX on the signal ticket (helper text, a toggle, etc.), following
+  023's design.md `allowBlankQty` prop pattern as a starting point and keeping the affordance scoped
+  so it cannot leak into the plain `/trader` form (FR-3). Confirm the backend auto-sizing trigger is
+  exactly `qty <= 0` (`ComputePositionSize` is 023's sole source of quantity) so a blank ticket qty
+  reliably routes into the scaling formula and a populated one does not.
+
+## Design Guardrails
+
+Known traps `/sdd-design` must not re-hit:
+
+- **Conviction-vs-ordinal trap (do not repeat).** `fails.md` 2026-08-05 (023-position-sizing-engine)
   and 2026-08-05 (028-mpt-portfolio-optimization): `Opportunity.conviction` is a deterministic ordinal
   documented "**NOT a probability**"; `ExternalSignal.conviction` is the 0.0–1.0 confidence. They share
   a name and a range but not a meaning — read each candidate field's **doc comment**, not just its name
   and range, before wiring it into a sizing input, and keep the two values separately readable (FR-1).
   The design must state, in prose, which value feeds `confidence` and why the ordinal does not.
-- [ ] Exact blank-qty affordance UX on the signal ticket (helper text, a toggle, etc.) — **decide at
-  `/sdd-design`**, following 023's design.md `allowBlankQty` prop pattern as a starting point, and
-  keeping the affordance scoped so it cannot leak into the plain `/trader` form (FR-3). Confirm the
-  backend auto-sizing trigger is exactly `qty <= 0` (`ComputePositionSize` is 023's sole source of
-  quantity) so a blank ticket qty reliably routes into the scaling formula and a populated one does not.
-- [ ] Range/validity of the threaded value — `ExternalSignal.conviction` is guarded to `0.0–1.0` at the
+- **Multi-signal aggregation trap.** `fails.md` 2026-07-01 (056-open-positions-ui, **C-10(b)**) —
+  don't let the chosen per-symbol conviction become a second, silently-diverging notion of "the" signal
+  for a symbol; and `fails.md` 2026-07-27/2026-07-29 (072/074/081) — verify the producer's *actual*
+  aggregation behavior by reading `xstockstrat-analysis`'s opportunity-ranking code before assuming one
+  signal maps 1:1 to an opportunity.
+- **Range/validity of the threaded value.** `ExternalSignal.conviction` is guarded to `0.0–1.0` at the
   producer (inverted-range guard, `fails`/`insights` 094); confirm nothing downstream re-derives or
-  coerces it so a NaN/out-of-range value cannot reach `confidence`. **Confirm at `/sdd-design`.**
+  coerces it so a NaN/out-of-range value cannot reach `confidence`.

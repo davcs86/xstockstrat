@@ -50,7 +50,9 @@ Feature: wire-signal-confidence-to-position-sizing
     Then the order is placed for exactly 50 shares, and the confidence value is sent but not consumed by the backend
 
   @AC-8 @FR-5
-  Scenario: The /insights signal ticket is a named PlaceOrder consumer surface
-    Given the product spec's Consumer Surface(s) section
-    When it is reviewed for C-14 completeness
-    Then it names /insights and the SignalOrderTicket as a live PlaceOrder caller, and states the plain /trader segment is explicitly unchanged
+  Scenario: The /insights SignalOrderTicket reaches PlaceOrder while the plain /trader form's blank-qty path does not auto-size
+    Given the /insights SignalOrderTicket for "CAPR" with a real confidence attached and the quantity field left blank
+    And the plain /trader order form for "CAPR" with the quantity field left blank
+    When each is submitted
+    Then the SignalOrderTicket sends a PlaceOrder request that routes into 023's auto-sizing path (qty <= 0 with the real confidence)
+    And the plain /trader form sends no PlaceOrder request and is rejected with a "quantity required" validation error, so it never auto-sizes

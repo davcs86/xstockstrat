@@ -35,3 +35,33 @@
   blocker remains on 023.
 - Note: the regeneration subagent lost its connection before writing this block; the orchestrator
   appended it and verified `product-spec.md` / `acceptance.feature` / `feature.md` were written correctly.
+
+## Session 2026-08-31 — sdd-review fixes (product-spec)
+
+Applied the PASS-WITH-WARNINGS product-spec review fixes (status stays `draft`; no number/slug change):
+
+- **AC-8 reframed to an observable runtime behavior.** It previously asserted product-spec document
+  content ("When it is reviewed for C-14 completeness…"), which can't trace to a RED test. Now it
+  asserts the runtime outcome — the `/insights` `SignalOrderTicket` sends a `PlaceOrder` request that
+  routes into 023's auto-sizing path (`qty <= 0` + real confidence) while the plain `/trader` form's
+  blank-qty submit sends **no** `PlaceOrder` and is rejected with "quantity required" (never
+  auto-sizes). `@AC-8`/`@FR-5` tags preserved; only `acceptance.feature`'s AC-8 was touched.
+- **Open Questions reorganized.** The five `- [ ]` items were split into two new plain-bullet sections:
+  `## Design-Phase Decisions (owned by /sdd-design)` (additive-field-vs-targeted-RPC, multi-signal
+  conviction selection, blank-qty affordance UX) and `## Design Guardrails` (the conviction-vs-ordinal
+  trap, the multi-signal aggregation trap, and range/validity of the threaded value). `## Open
+  Questions` now reads "None — moved to Design-Phase Decisions / Design Guardrails below." No unchecked
+  genuine-unknown `- [ ]` remains under `## Open Questions`.
+- **Paper-safe note (Constitution C-3).** Added a line under Affected Services: confidence-sizing
+  behavior is identical under paper and live and is fully paper-testable — 023 owns execution, this
+  feature only populates the `confidence` field.
+- **Citation fix.** Out-of-Scope `signal_axis` blend-formula reference corrected
+  `opportunities.py:112` → `:114` (verified against the current file — the `ORDER BY ((1 - $3) *
+  o.conviction + $3 * o.signal_axis)` line is 114).
+- **Proto field coordination with 095.** Added a Proto Contract Changes note: `analysis.Opportunity`
+  currently maxes at `muted = 12`; feature 095 pre-assigns its enrichment block at fields 13+, so 110's
+  additive `confidence` field must take the next free number **after** 095's block (not 13). Recorded
+  as **110 blocked by 095** per `merge-order.md`; exact number re-derived at `/sdd-design`/`/sdd-spec`.
+  Additive/non-breaking.
+
+All FRs, `@FR-*`/`@AC-*` tags, and FR→AC coverage preserved.

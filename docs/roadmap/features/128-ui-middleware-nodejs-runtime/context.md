@@ -57,3 +57,34 @@
   `middleware.ts` transitively imports the Node-only transport.
 - Updated `feature.md`: added the `acceptance.feature` artifact link, bumped `**Last Updated**` to
   2026-08-31, appended the regeneration row to Status History.
+
+## Session 2026-08-31 — sdd-review fixes (product-spec)
+
+`/sdd-review ui-middleware-nodejs-runtime product-spec` returned **FAIL** (criterion 9) plus two
+warnings; applied fixes (docs-only, still `draft`, number/slug unchanged):
+
+- **BLOCKER (criterion 9 — Open Questions).** The four `- [ ]` items under `## Open Questions` were
+  phrased as work the design phase "must verify", which read as unresolved acceptance gates on the
+  spec. They are genuine feasibility investigations design owns, not spec gates — so rather than
+  tick them, reframed them into a new **non-gated** `## Design-Phase Investigation (owned by
+  /sdd-design Phase 0)` section as plain bullets, and left `## Open Questions` as "None — moved to
+  Design-Phase Investigation below." The load-bearing bullet is called out explicitly: whether the
+  Node.js middleware runtime actually lifts the Edge-bundling constraint on `@connectrpc/connect-node`
+  under this repo's `output: 'standalone'` Docker build — grounded now in the two concrete artifacts
+  that encode the old constraint (`next.config.js` lists `@connectrpc/connect-node` in
+  `serverExternalPackages` for route handlers only; `src/lib/identity.ts` carries a "NEVER import
+  from middleware.ts" header). FR-7's dangling "(see Open Questions)" pointer updated to
+  "(see Design-Phase Investigation)". No unchecked genuine-unknown `- [ ]` remains under
+  `## Open Questions`.
+- **WARNING — wrong doc path.** FR-6, AC-7, and `## Affected Services` cited
+  `services/xstockstrat-ui/docs/patterns/frontend-auth.md`, which does not exist. Verified the real
+  file is at repo root `docs/patterns/frontend-auth.md` (the quoted rule "Only `lib/auth.ts` may be
+  imported from `middleware.ts`" is at line 58). Corrected every reference; the sibling
+  `services/xstockstrat-ui/CLAUDE.md` reference was already correct and left as-is (Affected Services
+  now splits the root doc onto its own bullet so it is not misread as service-relative).
+- **WARNING — AC-2 observable pairing.** Kept AC-2's structural assertions (calls `refreshSession()`,
+  no outbound `fetch()` to `/api/auth/refresh`) and paired them with browser-observable checks: the
+  browser receives one updated `Set-Cookie` on that same response, and no `/api/auth/refresh` network
+  request is observed during the near-expiry refresh.
+- Preserved all seven FRs, the Consumer Surface = **None** justification, and all `@AC-*` tags /
+  FR coverage. Only `product-spec.md`, `acceptance.feature`, and this `context.md` changed.

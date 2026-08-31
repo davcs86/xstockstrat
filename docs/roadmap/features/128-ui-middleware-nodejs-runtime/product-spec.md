@@ -46,7 +46,7 @@ and the `api/auth/refresh` matcher exclusion in `middleware.ts`) is removed — 
 Node route itself may stay (browsers never call it directly today, but removing it is out of scope
 here; see Out of Scope) or be deleted if this feature's design finds it now fully redundant.
 
-FR-6. `services/xstockstrat-ui/docs/patterns/frontend-auth.md` and
+FR-6. `docs/patterns/frontend-auth.md` and
 `services/xstockstrat-ui/CLAUDE.md` are updated in the same feature: the documented hard rule "Only
 `lib/auth.ts` may be imported from `middleware.ts`" (and the associated Edge-bundling-trap
 explanation) no longer applies once `middleware.ts` runs in the Node.js runtime, and must be
@@ -56,7 +56,7 @@ FR-7. `docs/roadmap/ledger/insights.md`'s 2026-08-05 `wire-fe-auth` entry ("`mid
 other Edge-runtime code must never import modules that pull in `@connectrpc/connect-node`") predates
 this change and describes a now-superseded constraint; the Ledger is append-only, so this feature
 does not edit it, but its design phase must explicitly account for why the old constraint no longer
-applies (see Open Questions).
+applies (see Design-Phase Investigation).
 
 ## Out of Scope
 
@@ -74,7 +74,8 @@ applies (see Open Questions).
 ## Affected Services
 
 - `xstockstrat-ui` — `src/middleware.ts`, `src/lib/auth.ts`, `src/lib/identity.ts`,
-  `docs/patterns/frontend-auth.md`, `CLAUDE.md`
+  `services/xstockstrat-ui/CLAUDE.md`
+- Repo-root docs — `docs/patterns/frontend-auth.md`
 
 ## Consumer Surface(s)
 
@@ -118,27 +119,42 @@ suite at launch (**C-16**).
 
 ## Open Questions
 
-- [ ] **Known trap** (`docs/roadmap/ledger/insights.md`, 2026-08-05, `wire-fe-auth`, reuse — the
-  entry at `insights.md:777-780`): "`middleware.ts` and other Edge-runtime code must never import
+None — moved to Design-Phase Investigation below.
+
+## Design-Phase Investigation (owned by /sdd-design Phase 0)
+
+These are genuine feasibility investigations the design phase owns and must resolve during Recon —
+they are **not** acceptance gates on this product spec, so they are listed as plain bullets rather
+than checklist items. The first is load-bearing: if it fails, the feature's entire premise collapses.
+
+- **Load-bearing — does the Node.js middleware runtime actually lift the Edge-bundling constraint on
+  `@connectrpc/connect-node` under this repo's `output: 'standalone'` Docker build?** The known trap
+  (`docs/roadmap/ledger/insights.md`, 2026-08-05, `wire-fe-auth`, reuse — the entry at
+  `insights.md:777-780`) records: "`middleware.ts` and other Edge-runtime code must never import
   modules that pull in `@connectrpc/connect-node`; inline the needed constant instead." This
-  feature's entire premise is that Next.js 15.5's stable Node.js middleware runtime removes the
-  reason that rule existed. The Ledger is append-only, so this feature does not edit that entry —
-  but the design phase must **VERIFY, not assume**, that the Node.js runtime genuinely lifts the
-  Edge-bundling constraint **under this repo's own Docker `output: 'standalone'` build**, by
-  re-deriving why the rule was written and confirming a real build where `middleware.ts` transitively
-  imports `@connectrpc/connect-node` succeeds. Treat "the ledger entry is simply obsolete" as a
-  hypothesis to disprove, not a given (recurrence family: `docs/roadmap/ledger/fails.md` 2026-07-29
+  feature's entire premise is that Next.js 15.5's stable Node.js middleware runtime removes the reason
+  that rule existed. Concretely, `next.config.js` lists `@connectrpc/connect-node` in
+  `serverExternalPackages` **for route handlers only**, and `src/lib/identity.ts` carries a "NEVER
+  import this file from middleware.ts or from any module middleware.ts transitively imports" header —
+  both encode the old Edge constraint. The Ledger is append-only, so this feature does not edit that
+  entry; but design must **VERIFY, not assume**, that the Node.js runtime genuinely lifts the
+  constraint **under this repo's own Docker `output: 'standalone'` build**, by re-deriving why the
+  rule was written and confirming a real build where `middleware.ts` transitively imports
+  `@connectrpc/connect-node` succeeds. Treat "the ledger entry is simply obsolete" as a hypothesis to
+  disprove, not a given (recurrence family: `docs/roadmap/ledger/fails.md` 2026-07-29
   `081-qa-capability` — "exercise the producer, not its advertised state").
-- [ ] Does `identity.ts`'s `refreshSession()` (and the `@connectrpc/connect-node` gRPC client it
-  builds) behave correctly when constructed/invoked once per middleware invocation (as opposed to
-  once per Node.js route handler invocation, its current call pattern)? Middleware runs far more
-  frequently (every non-excluded request) than the refresh route did — check for any per-call
-  client-construction cost or connection-pooling assumption in `connectClients.ts`.
-- [ ] Should `app/api/auth/refresh/route.ts` be deleted once middleware no longer calls it, or kept
-  as a still-reachable (if currently uncalled) API surface? Confirm no other caller exists before
-  deciding (FR-5 leaves this to the design phase).
-- [ ] Is there a Docker/standalone-specific gotcha with Node.js-runtime middleware bundling (e.g.
-  `serverExternalPackages` in `next.config.js` already lists `@connectrpc/connect-node` for route
-  handlers — does middleware need the same treatment, and does the standalone output's `server.js`
-  still discover it correctly)? Must be verified with a real `docker build`/`next build` under
-  `output: 'standalone'`, not assumed from Vercel-oriented documentation.
+- **Per-invocation client behavior.** Does `identity.ts`'s `refreshSession()` (and the
+  `@connectrpc/connect-node` gRPC client it builds) behave correctly when constructed/invoked once per
+  middleware invocation (as opposed to once per Node.js route handler invocation, its current call
+  pattern)? Middleware runs far more frequently (every non-excluded request) than the refresh route
+  did — check for any per-call client-construction cost or connection-pooling assumption in
+  `connectClients.ts`.
+- **Fate of `app/api/auth/refresh/route.ts`.** Should it be deleted once middleware no longer calls
+  it, or kept as a still-reachable (if currently uncalled) API surface? Confirm no other caller exists
+  before deciding (FR-5 leaves this to the design phase).
+- **Docker/standalone bundling gotcha.** Is there a `standalone`-specific gotcha with Node.js-runtime
+  middleware bundling (e.g. `serverExternalPackages` in `next.config.js` already lists
+  `@connectrpc/connect-node` for route handlers — does middleware need the same treatment, and does
+  the standalone output's `server.js` still discover it correctly)? Must be verified with a real
+  `docker build`/`next build` under `output: 'standalone'`, not assumed from Vercel-oriented
+  documentation.
