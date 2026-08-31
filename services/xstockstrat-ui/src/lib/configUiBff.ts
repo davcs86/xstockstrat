@@ -2,7 +2,8 @@ import { ConnectError, Code } from '@connectrpc/connect';
 import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
 import { IngestService } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
-import { configClient, ingestClient, analysisClient } from '@/lib/connectClients';
+import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
+import { configClient, ingestClient, analysisClient, identityClient } from '@/lib/connectClients';
 import { getNativeConfigEnv, isNativeConfigEnvironment } from '@/lib/deploymentEnv';
 import {
   createBffRouter,
@@ -52,6 +53,28 @@ router.service(IngestService, {
 // every other AnalysisService method unimplemented, so this does not widen the config-ui surface.
 router.service(AnalysisService, {
   runFundamentalsScan: forwardAdmin((req, opts) => analysisClient.runFundamentalsScan(req, opts)),
+});
+
+// User management (admin-gated, feature 043). Only these six IdentityService methods are registered;
+// connect-node leaves the rest (auth/OAuth/metadata) unimplemented, so config-ui exposes user
+// management only. Reads are admin-gated server-side too (AC-7); forwardAdmin keeps the UI honest.
+// createUser/updatePassword keep an explicit admin-gated body because they carry a write-only
+// password (forwarded to the backend, never logged or echoed — AC-10); the password is not rewritten.
+router.service(IdentityService, {
+  listUsers: forwardAdmin((req, opts) => identityClient.listUsers(req, opts)),
+  getUser: forwardAdmin((req, opts) => identityClient.getUser(req, opts)),
+  setUserRoles: forwardAdmin((req, opts) => identityClient.setUserRoles(req, opts)),
+  setUserActive: forwardAdmin((req, opts) => identityClient.setUserActive(req, opts)),
+  async createUser(req, ctx) {
+    const claims = await requireSession(ctx);
+    requireAdminScope(claims);
+    return identityClient.createUser(req, { headers: backendHeaders(claims, ctx) });
+  },
+  async updatePassword(req, ctx) {
+    const claims = await requireSession(ctx);
+    requireAdminScope(claims);
+    return identityClient.updatePassword(req, { headers: backendHeaders(claims, ctx) });
+  },
 });
 
 // In the consolidated app there is no basePath — the full URL /config-ui/api/<service>/<method>
