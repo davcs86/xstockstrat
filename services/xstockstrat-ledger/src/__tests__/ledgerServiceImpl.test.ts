@@ -126,6 +126,13 @@ describe('rowToEvent', () => {
     assert.strictEqual(evt.correlationId, '');
     assert.deepStrictEqual(evt.metadata, {});
   });
+
+  // Feature 021 — the DB user_id column surfaces on the wire shape (AC-8).
+  it('maps user_id onto userId (empty string when NULL)', () => {
+    if (!rowToEvent) return;
+    assert.strictEqual(rowToEvent(makeRow({ user_id: 'u_7' })).userId, 'u_7');
+    assert.strictEqual(rowToEvent(makeRow({ user_id: null })).userId, '');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -401,8 +408,8 @@ describe('appendEvent', () => {
     assert.ok(!/event_seq_/.test(capturedSql), 'must not reference a per-stream sequence');
     assert.ok(!/nextval/i.test(capturedSql), 'must not set sequence explicitly (rely on column DEFAULT)');
     // event_id, event_type, source_service, correlation_id, stream_key,
-    // payload, metadata, occurred_at, recorded_at — 9 bound params.
-    assert.strictEqual(capturedParams.length, 9);
+    // payload, metadata, occurred_at, recorded_at, user_id — 10 bound params (feature 021).
+    assert.strictEqual(capturedParams.length, 10);
   });
 
   // Idempotency: a first-seen key claims the row and inserts the event normally.
@@ -462,6 +469,71 @@ describe('appendEvent', () => {
       !calls.some((s) => /INSERT INTO ledger\.events/.test(s)),
       'duplicate key must not insert a second event',
     );
+  });
+
+  // Feature 021 — owning user_id is stamped on the write path (AC-8/AC-11 write side).
+  // user_id is the 10th bound param (index 9), after occurred_at (7) and recorded_at (8).
+  function captureAppend() {
+    let capturedParams: any[] = [];
+    const pool = {
+      async query(_sql: string, params?: any[]) {
+        capturedParams = params ?? [];
+        return { rows: [{ sequence: 1, recorded_at: new Date() }] };
+      },
+    };
+    return { pool, params: () => capturedParams };
+  }
+
+  it('stamps req.userId onto the insert (request field wins)', async () => {
+    if (!LedgerServiceImpl) return;
+    const { pool, params } = captureAppend();
+    const impl = new LedgerServiceImpl(pool, {});
+    const call = makeCall({
+      eventType: 'order.filled',
+      sourceService: 'trading',
+      streamKey: 'order:1',
+      payload: {},
+      userId: 'u_42',
+    });
+    await new Promise<void>((resolve, reject) => {
+      impl.appendEvent(call, (err: any) => (err ? reject(err) : resolve()));
+    });
+    assert.strictEqual(params()[9], 'u_42');
+  });
+
+  it('falls back to the x-user-id metadata when req.userId is empty', async () => {
+    if (!LedgerServiceImpl) return;
+    const { pool, params } = captureAppend();
+    const impl = new LedgerServiceImpl(pool, {});
+    const call = {
+      request: {
+        eventType: 'order.filled',
+        sourceService: 'trading',
+        streamKey: 'order:1',
+        payload: {},
+      },
+      metadata: { get: (k: string) => (k === 'x-user-id' ? ['u_99'] : []) },
+    };
+    await new Promise<void>((resolve, reject) => {
+      impl.appendEvent(call, (err: any) => (err ? reject(err) : resolve()));
+    });
+    assert.strictEqual(params()[9], 'u_99');
+  });
+
+  it('stamps NULL when neither req.userId nor x-user-id metadata is present', async () => {
+    if (!LedgerServiceImpl) return;
+    const { pool, params } = captureAppend();
+    const impl = new LedgerServiceImpl(pool, {});
+    const call = makeCall({
+      eventType: 'reconciliation.mismatch_found',
+      sourceService: 'trading',
+      streamKey: 'recon:1',
+      payload: {},
+    });
+    await new Promise<void>((resolve, reject) => {
+      impl.appendEvent(call, (err: any) => (err ? reject(err) : resolve()));
+    });
+    assert.strictEqual(params()[9], null);
   });
 });
 
