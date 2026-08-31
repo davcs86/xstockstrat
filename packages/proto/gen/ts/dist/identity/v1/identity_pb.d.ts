@@ -1,4 +1,4 @@
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 /**
@@ -510,6 +510,249 @@ export type UpdateUserMetadataResponse = Message<"xstockstrat.identity.v1.Update
  */
 export declare const UpdateUserMetadataResponseSchema: GenMessage<UpdateUserMetadataResponse>;
 /**
+ * Password-free admin view of a user (no password / password_hash — FR-10/AC-10).
+ *
+ * @generated from message xstockstrat.identity.v1.User
+ */
+export type User = Message<"xstockstrat.identity.v1.User"> & {
+    /**
+     * @generated from field: string user_id = 1;
+     */
+    userId: string;
+    /**
+     * @generated from field: string email = 2;
+     */
+    email: string;
+    /**
+     * @generated from field: repeated xstockstrat.identity.v1.Role roles = 3;
+     */
+    roles: Role[];
+    /**
+     * @generated from field: bool is_active = 4;
+     */
+    isActive: boolean;
+    /**
+     * @generated from field: google.protobuf.Timestamp created_at = 5;
+     */
+    createdAt?: Timestamp | undefined;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.User.
+ * Use `create(UserSchema)` to create a new message.
+ */
+export declare const UserSchema: GenMessage<User>;
+/**
+ * @generated from message xstockstrat.identity.v1.CreateUserRequest
+ */
+export type CreateUserRequest = Message<"xstockstrat.identity.v1.CreateUserRequest"> & {
+    /**
+     * @generated from field: string email = 1;
+     */
+    email: string;
+    /**
+     * write-only; never echoed back
+     *
+     * @generated from field: string password = 2;
+     */
+    password: string;
+    /**
+     * @generated from field: repeated xstockstrat.identity.v1.Role roles = 3;
+     */
+    roles: Role[];
+};
+/**
+ * Describes the message xstockstrat.identity.v1.CreateUserRequest.
+ * Use `create(CreateUserRequestSchema)` to create a new message.
+ */
+export declare const CreateUserRequestSchema: GenMessage<CreateUserRequest>;
+/**
+ * @generated from message xstockstrat.identity.v1.CreateUserResponse
+ */
+export type CreateUserResponse = Message<"xstockstrat.identity.v1.CreateUserResponse"> & {
+    /**
+     * @generated from field: xstockstrat.identity.v1.User user = 1;
+     */
+    user?: User | undefined;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.CreateUserResponse.
+ * Use `create(CreateUserResponseSchema)` to create a new message.
+ */
+export declare const CreateUserResponseSchema: GenMessage<CreateUserResponse>;
+/**
+ * @generated from message xstockstrat.identity.v1.ListUsersRequest
+ */
+export type ListUsersRequest = Message<"xstockstrat.identity.v1.ListUsersRequest"> & {};
+/**
+ * Describes the message xstockstrat.identity.v1.ListUsersRequest.
+ * Use `create(ListUsersRequestSchema)` to create a new message.
+ */
+export declare const ListUsersRequestSchema: GenMessage<ListUsersRequest>;
+/**
+ * @generated from message xstockstrat.identity.v1.ListUsersResponse
+ */
+export type ListUsersResponse = Message<"xstockstrat.identity.v1.ListUsersResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.identity.v1.User users = 1;
+     */
+    users: User[];
+};
+/**
+ * Describes the message xstockstrat.identity.v1.ListUsersResponse.
+ * Use `create(ListUsersResponseSchema)` to create a new message.
+ */
+export declare const ListUsersResponseSchema: GenMessage<ListUsersResponse>;
+/**
+ * @generated from message xstockstrat.identity.v1.GetUserRequest
+ */
+export type GetUserRequest = Message<"xstockstrat.identity.v1.GetUserRequest"> & {
+    /**
+     * @generated from field: string user_id = 1;
+     */
+    userId: string;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.GetUserRequest.
+ * Use `create(GetUserRequestSchema)` to create a new message.
+ */
+export declare const GetUserRequestSchema: GenMessage<GetUserRequest>;
+/**
+ * @generated from message xstockstrat.identity.v1.GetUserResponse
+ */
+export type GetUserResponse = Message<"xstockstrat.identity.v1.GetUserResponse"> & {
+    /**
+     * @generated from field: xstockstrat.identity.v1.User user = 1;
+     */
+    user?: User | undefined;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.GetUserResponse.
+ * Use `create(GetUserResponseSchema)` to create a new message.
+ */
+export declare const GetUserResponseSchema: GenMessage<GetUserResponse>;
+/**
+ * @generated from message xstockstrat.identity.v1.UpdatePasswordRequest
+ */
+export type UpdatePasswordRequest = Message<"xstockstrat.identity.v1.UpdatePasswordRequest"> & {
+    /**
+     * @generated from field: string user_id = 1;
+     */
+    userId: string;
+    /**
+     * write-only; never echoed back
+     *
+     * @generated from field: string new_password = 2;
+     */
+    newPassword: string;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.UpdatePasswordRequest.
+ * Use `create(UpdatePasswordRequestSchema)` to create a new message.
+ */
+export declare const UpdatePasswordRequestSchema: GenMessage<UpdatePasswordRequest>;
+/**
+ * @generated from message xstockstrat.identity.v1.UpdatePasswordResponse
+ */
+export type UpdatePasswordResponse = Message<"xstockstrat.identity.v1.UpdatePasswordResponse"> & {};
+/**
+ * Describes the message xstockstrat.identity.v1.UpdatePasswordResponse.
+ * Use `create(UpdatePasswordResponseSchema)` to create a new message.
+ */
+export declare const UpdatePasswordResponseSchema: GenMessage<UpdatePasswordResponse>;
+/**
+ * @generated from message xstockstrat.identity.v1.SetUserRolesRequest
+ */
+export type SetUserRolesRequest = Message<"xstockstrat.identity.v1.SetUserRolesRequest"> & {
+    /**
+     * @generated from field: string user_id = 1;
+     */
+    userId: string;
+    /**
+     * @generated from field: repeated xstockstrat.identity.v1.Role roles = 2;
+     */
+    roles: Role[];
+};
+/**
+ * Describes the message xstockstrat.identity.v1.SetUserRolesRequest.
+ * Use `create(SetUserRolesRequestSchema)` to create a new message.
+ */
+export declare const SetUserRolesRequestSchema: GenMessage<SetUserRolesRequest>;
+/**
+ * @generated from message xstockstrat.identity.v1.SetUserRolesResponse
+ */
+export type SetUserRolesResponse = Message<"xstockstrat.identity.v1.SetUserRolesResponse"> & {
+    /**
+     * @generated from field: xstockstrat.identity.v1.User user = 1;
+     */
+    user?: User | undefined;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.SetUserRolesResponse.
+ * Use `create(SetUserRolesResponseSchema)` to create a new message.
+ */
+export declare const SetUserRolesResponseSchema: GenMessage<SetUserRolesResponse>;
+/**
+ * @generated from message xstockstrat.identity.v1.SetUserActiveRequest
+ */
+export type SetUserActiveRequest = Message<"xstockstrat.identity.v1.SetUserActiveRequest"> & {
+    /**
+     * @generated from field: string user_id = 1;
+     */
+    userId: string;
+    /**
+     * @generated from field: bool active = 2;
+     */
+    active: boolean;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.SetUserActiveRequest.
+ * Use `create(SetUserActiveRequestSchema)` to create a new message.
+ */
+export declare const SetUserActiveRequestSchema: GenMessage<SetUserActiveRequest>;
+/**
+ * @generated from message xstockstrat.identity.v1.SetUserActiveResponse
+ */
+export type SetUserActiveResponse = Message<"xstockstrat.identity.v1.SetUserActiveResponse"> & {
+    /**
+     * @generated from field: xstockstrat.identity.v1.User user = 1;
+     */
+    user?: User | undefined;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.SetUserActiveResponse.
+ * Use `create(SetUserActiveResponseSchema)` to create a new message.
+ */
+export declare const SetUserActiveResponseSchema: GenMessage<SetUserActiveResponse>;
+/**
+ * ── User management (admin-gated, feature 043) ───────────────────────────────
+ * Closed role set (C-04). Mirrors the viewer/trader/admin roles the platform already uses;
+ * TokenClaims.roles stays a free-string list (JWT claim shape, unchanged).
+ *
+ * @generated from enum xstockstrat.identity.v1.Role
+ */
+export declare enum Role {
+    /**
+     * @generated from enum value: ROLE_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: ROLE_ADMIN = 1;
+     */
+    ADMIN = 1,
+    /**
+     * @generated from enum value: ROLE_TRADER = 2;
+     */
+    TRADER = 2,
+    /**
+     * @generated from enum value: ROLE_VIEWER = 3;
+     */
+    VIEWER = 3
+}
+/**
+ * Describes the enum xstockstrat.identity.v1.Role.
+ */
+export declare const RoleSchema: GenEnum<Role>;
+/**
  * @generated from service xstockstrat.identity.v1.IdentityService
  */
 export declare const IdentityService: GenService<{
@@ -624,5 +867,56 @@ export declare const IdentityService: GenService<{
         methodKind: "unary";
         input: typeof UpdateUserMetadataRequestSchema;
         output: typeof UpdateUserMetadataResponseSchema;
+    };
+    /**
+     * User management (admin-gated, feature 043). Every RPC requires the admin access-scope bit;
+     * passwords are write-only (never returned). Additive over the existing service.
+     *
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.CreateUser
+     */
+    createUser: {
+        methodKind: "unary";
+        input: typeof CreateUserRequestSchema;
+        output: typeof CreateUserResponseSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.ListUsers
+     */
+    listUsers: {
+        methodKind: "unary";
+        input: typeof ListUsersRequestSchema;
+        output: typeof ListUsersResponseSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.GetUser
+     */
+    getUser: {
+        methodKind: "unary";
+        input: typeof GetUserRequestSchema;
+        output: typeof GetUserResponseSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.UpdatePassword
+     */
+    updatePassword: {
+        methodKind: "unary";
+        input: typeof UpdatePasswordRequestSchema;
+        output: typeof UpdatePasswordResponseSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.SetUserRoles
+     */
+    setUserRoles: {
+        methodKind: "unary";
+        input: typeof SetUserRolesRequestSchema;
+        output: typeof SetUserRolesResponseSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.SetUserActive
+     */
+    setUserActive: {
+        methodKind: "unary";
+        input: typeof SetUserActiveRequestSchema;
+        output: typeof SetUserActiveResponseSchema;
     };
 }>;

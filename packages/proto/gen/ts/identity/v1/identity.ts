@@ -23,6 +23,72 @@ import { Timestamp } from "../../google/protobuf/timestamp";
 
 export const protobufPackage = "xstockstrat.identity.v1";
 
+/**
+ * ── User management (admin-gated, feature 043) ───────────────────────────────
+ * Closed role set (C-04). Mirrors the viewer/trader/admin roles the platform already uses;
+ * TokenClaims.roles stays a free-string list (JWT claim shape, unchanged).
+ */
+export enum Role {
+  ROLE_UNSPECIFIED = "ROLE_UNSPECIFIED",
+  ROLE_ADMIN = "ROLE_ADMIN",
+  ROLE_TRADER = "ROLE_TRADER",
+  ROLE_VIEWER = "ROLE_VIEWER",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function roleFromJSON(object: any): Role {
+  switch (object) {
+    case 0:
+    case "ROLE_UNSPECIFIED":
+      return Role.ROLE_UNSPECIFIED;
+    case 1:
+    case "ROLE_ADMIN":
+      return Role.ROLE_ADMIN;
+    case 2:
+    case "ROLE_TRADER":
+      return Role.ROLE_TRADER;
+    case 3:
+    case "ROLE_VIEWER":
+      return Role.ROLE_VIEWER;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return Role.UNRECOGNIZED;
+  }
+}
+
+export function roleToJSON(object: Role): string {
+  switch (object) {
+    case Role.ROLE_UNSPECIFIED:
+      return "ROLE_UNSPECIFIED";
+    case Role.ROLE_ADMIN:
+      return "ROLE_ADMIN";
+    case Role.ROLE_TRADER:
+      return "ROLE_TRADER";
+    case Role.ROLE_VIEWER:
+      return "ROLE_VIEWER";
+    case Role.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function roleToNumber(object: Role): number {
+  switch (object) {
+    case Role.ROLE_UNSPECIFIED:
+      return 0;
+    case Role.ROLE_ADMIN:
+      return 1;
+    case Role.ROLE_TRADER:
+      return 2;
+    case Role.ROLE_VIEWER:
+      return 3;
+    case Role.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 export interface AuthenticateUserRequest {
   email: string;
   password: string;
@@ -169,6 +235,68 @@ export interface UpdateUserMetadataRequest {
 
 export interface UpdateUserMetadataResponse {
   userMetadata?: UserMetadata | undefined;
+}
+
+/** Password-free admin view of a user (no password / password_hash — FR-10/AC-10). */
+export interface User {
+  userId: string;
+  email: string;
+  roles: Role[];
+  isActive: boolean;
+  createdAt?: Date | undefined;
+}
+
+export interface CreateUserRequest {
+  email: string;
+  /** write-only; never echoed back */
+  password: string;
+  roles: Role[];
+}
+
+export interface CreateUserResponse {
+  user?: User | undefined;
+}
+
+export interface ListUsersRequest {
+}
+
+export interface ListUsersResponse {
+  users: User[];
+}
+
+export interface GetUserRequest {
+  userId: string;
+}
+
+export interface GetUserResponse {
+  user?: User | undefined;
+}
+
+export interface UpdatePasswordRequest {
+  userId: string;
+  /** write-only; never echoed back */
+  newPassword: string;
+}
+
+export interface UpdatePasswordResponse {
+}
+
+export interface SetUserRolesRequest {
+  userId: string;
+  roles: Role[];
+}
+
+export interface SetUserRolesResponse {
+  user?: User | undefined;
+}
+
+export interface SetUserActiveRequest {
+  userId: string;
+  active: boolean;
+}
+
+export interface SetUserActiveResponse {
+  user?: User | undefined;
 }
 
 function createBaseAuthenticateUserRequest(): AuthenticateUserRequest {
@@ -2409,6 +2537,954 @@ export const UpdateUserMetadataResponse: MessageFns<UpdateUserMetadataResponse> 
   },
 };
 
+function createBaseUser(): User {
+  return { userId: "", email: "", roles: [], isActive: false, createdAt: undefined };
+}
+
+export const User: MessageFns<User> = {
+  encode(message: User, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.userId !== "") {
+      writer.uint32(10).string(message.userId);
+    }
+    if (message.email !== "") {
+      writer.uint32(18).string(message.email);
+    }
+    writer.uint32(26).fork();
+    for (const v of message.roles) {
+      writer.int32(roleToNumber(v));
+    }
+    writer.join();
+    if (message.isActive !== false) {
+      writer.uint32(32).bool(message.isActive);
+    }
+    if (message.createdAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(42).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): User {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseUser();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.email = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag === 24) {
+            message.roles.push(roleFromJSON(reader.int32()));
+
+            continue;
+          }
+
+          if (tag === 26) {
+            const end2 = reader.uint32() + reader.pos;
+            while (reader.pos < end2) {
+              message.roles.push(roleFromJSON(reader.int32()));
+            }
+
+            continue;
+          }
+
+          break;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.isActive = reader.bool();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.createdAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): User {
+    return {
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
+      email: isSet(object.email) ? globalThis.String(object.email) : "",
+      roles: globalThis.Array.isArray(object?.roles) ? object.roles.map((e: any) => roleFromJSON(e)) : [],
+      isActive: isSet(object.isActive)
+        ? globalThis.Boolean(object.isActive)
+        : isSet(object.is_active)
+        ? globalThis.Boolean(object.is_active)
+        : false,
+      createdAt: isSet(object.createdAt)
+        ? fromJsonTimestamp(object.createdAt)
+        : isSet(object.created_at)
+        ? fromJsonTimestamp(object.created_at)
+        : undefined,
+    };
+  },
+
+  toJSON(message: User): unknown {
+    const obj: any = {};
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
+    if (message.email !== "") {
+      obj.email = message.email;
+    }
+    if (message.roles?.length) {
+      obj.roles = message.roles.map((e) => roleToJSON(e));
+    }
+    if (message.isActive !== false) {
+      obj.isActive = message.isActive;
+    }
+    if (message.createdAt !== undefined) {
+      obj.createdAt = message.createdAt.toISOString();
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<User>, I>>(base?: I): User {
+    return User.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<User>, I>>(object: I): User {
+    const message = createBaseUser();
+    message.userId = object.userId ?? "";
+    message.email = object.email ?? "";
+    message.roles = object.roles?.map((e) => e) || [];
+    message.isActive = object.isActive ?? false;
+    message.createdAt = object.createdAt ?? undefined;
+    return message;
+  },
+};
+
+function createBaseCreateUserRequest(): CreateUserRequest {
+  return { email: "", password: "", roles: [] };
+}
+
+export const CreateUserRequest: MessageFns<CreateUserRequest> = {
+  encode(message: CreateUserRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.email !== "") {
+      writer.uint32(10).string(message.email);
+    }
+    if (message.password !== "") {
+      writer.uint32(18).string(message.password);
+    }
+    writer.uint32(26).fork();
+    for (const v of message.roles) {
+      writer.int32(roleToNumber(v));
+    }
+    writer.join();
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CreateUserRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCreateUserRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.email = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.password = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag === 24) {
+            message.roles.push(roleFromJSON(reader.int32()));
+
+            continue;
+          }
+
+          if (tag === 26) {
+            const end2 = reader.uint32() + reader.pos;
+            while (reader.pos < end2) {
+              message.roles.push(roleFromJSON(reader.int32()));
+            }
+
+            continue;
+          }
+
+          break;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): CreateUserRequest {
+    return {
+      email: isSet(object.email) ? globalThis.String(object.email) : "",
+      password: isSet(object.password) ? globalThis.String(object.password) : "",
+      roles: globalThis.Array.isArray(object?.roles) ? object.roles.map((e: any) => roleFromJSON(e)) : [],
+    };
+  },
+
+  toJSON(message: CreateUserRequest): unknown {
+    const obj: any = {};
+    if (message.email !== "") {
+      obj.email = message.email;
+    }
+    if (message.password !== "") {
+      obj.password = message.password;
+    }
+    if (message.roles?.length) {
+      obj.roles = message.roles.map((e) => roleToJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<CreateUserRequest>, I>>(base?: I): CreateUserRequest {
+    return CreateUserRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<CreateUserRequest>, I>>(object: I): CreateUserRequest {
+    const message = createBaseCreateUserRequest();
+    message.email = object.email ?? "";
+    message.password = object.password ?? "";
+    message.roles = object.roles?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseCreateUserResponse(): CreateUserResponse {
+  return { user: undefined };
+}
+
+export const CreateUserResponse: MessageFns<CreateUserResponse> = {
+  encode(message: CreateUserResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.user !== undefined) {
+      User.encode(message.user, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CreateUserResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCreateUserResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.user = User.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): CreateUserResponse {
+    return { user: isSet(object.user) ? User.fromJSON(object.user) : undefined };
+  },
+
+  toJSON(message: CreateUserResponse): unknown {
+    const obj: any = {};
+    if (message.user !== undefined) {
+      obj.user = User.toJSON(message.user);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<CreateUserResponse>, I>>(base?: I): CreateUserResponse {
+    return CreateUserResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<CreateUserResponse>, I>>(object: I): CreateUserResponse {
+    const message = createBaseCreateUserResponse();
+    message.user = (object.user !== undefined && object.user !== null) ? User.fromPartial(object.user) : undefined;
+    return message;
+  },
+};
+
+function createBaseListUsersRequest(): ListUsersRequest {
+  return {};
+}
+
+export const ListUsersRequest: MessageFns<ListUsersRequest> = {
+  encode(_: ListUsersRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListUsersRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListUsersRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(_: any): ListUsersRequest {
+    return {};
+  },
+
+  toJSON(_: ListUsersRequest): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListUsersRequest>, I>>(base?: I): ListUsersRequest {
+    return ListUsersRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListUsersRequest>, I>>(_: I): ListUsersRequest {
+    const message = createBaseListUsersRequest();
+    return message;
+  },
+};
+
+function createBaseListUsersResponse(): ListUsersResponse {
+  return { users: [] };
+}
+
+export const ListUsersResponse: MessageFns<ListUsersResponse> = {
+  encode(message: ListUsersResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.users) {
+      User.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListUsersResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListUsersResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.users.push(User.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ListUsersResponse {
+    return { users: globalThis.Array.isArray(object?.users) ? object.users.map((e: any) => User.fromJSON(e)) : [] };
+  },
+
+  toJSON(message: ListUsersResponse): unknown {
+    const obj: any = {};
+    if (message.users?.length) {
+      obj.users = message.users.map((e) => User.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListUsersResponse>, I>>(base?: I): ListUsersResponse {
+    return ListUsersResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListUsersResponse>, I>>(object: I): ListUsersResponse {
+    const message = createBaseListUsersResponse();
+    message.users = object.users?.map((e) => User.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseGetUserRequest(): GetUserRequest {
+  return { userId: "" };
+}
+
+export const GetUserRequest: MessageFns<GetUserRequest> = {
+  encode(message: GetUserRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.userId !== "") {
+      writer.uint32(10).string(message.userId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetUserRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetUserRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetUserRequest {
+    return {
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
+    };
+  },
+
+  toJSON(message: GetUserRequest): unknown {
+    const obj: any = {};
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetUserRequest>, I>>(base?: I): GetUserRequest {
+    return GetUserRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetUserRequest>, I>>(object: I): GetUserRequest {
+    const message = createBaseGetUserRequest();
+    message.userId = object.userId ?? "";
+    return message;
+  },
+};
+
+function createBaseGetUserResponse(): GetUserResponse {
+  return { user: undefined };
+}
+
+export const GetUserResponse: MessageFns<GetUserResponse> = {
+  encode(message: GetUserResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.user !== undefined) {
+      User.encode(message.user, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetUserResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetUserResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.user = User.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetUserResponse {
+    return { user: isSet(object.user) ? User.fromJSON(object.user) : undefined };
+  },
+
+  toJSON(message: GetUserResponse): unknown {
+    const obj: any = {};
+    if (message.user !== undefined) {
+      obj.user = User.toJSON(message.user);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetUserResponse>, I>>(base?: I): GetUserResponse {
+    return GetUserResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetUserResponse>, I>>(object: I): GetUserResponse {
+    const message = createBaseGetUserResponse();
+    message.user = (object.user !== undefined && object.user !== null) ? User.fromPartial(object.user) : undefined;
+    return message;
+  },
+};
+
+function createBaseUpdatePasswordRequest(): UpdatePasswordRequest {
+  return { userId: "", newPassword: "" };
+}
+
+export const UpdatePasswordRequest: MessageFns<UpdatePasswordRequest> = {
+  encode(message: UpdatePasswordRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.userId !== "") {
+      writer.uint32(10).string(message.userId);
+    }
+    if (message.newPassword !== "") {
+      writer.uint32(18).string(message.newPassword);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdatePasswordRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseUpdatePasswordRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.newPassword = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): UpdatePasswordRequest {
+    return {
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
+      newPassword: isSet(object.newPassword)
+        ? globalThis.String(object.newPassword)
+        : isSet(object.new_password)
+        ? globalThis.String(object.new_password)
+        : "",
+    };
+  },
+
+  toJSON(message: UpdatePasswordRequest): unknown {
+    const obj: any = {};
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
+    if (message.newPassword !== "") {
+      obj.newPassword = message.newPassword;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<UpdatePasswordRequest>, I>>(base?: I): UpdatePasswordRequest {
+    return UpdatePasswordRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UpdatePasswordRequest>, I>>(object: I): UpdatePasswordRequest {
+    const message = createBaseUpdatePasswordRequest();
+    message.userId = object.userId ?? "";
+    message.newPassword = object.newPassword ?? "";
+    return message;
+  },
+};
+
+function createBaseUpdatePasswordResponse(): UpdatePasswordResponse {
+  return {};
+}
+
+export const UpdatePasswordResponse: MessageFns<UpdatePasswordResponse> = {
+  encode(_: UpdatePasswordResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdatePasswordResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseUpdatePasswordResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(_: any): UpdatePasswordResponse {
+    return {};
+  },
+
+  toJSON(_: UpdatePasswordResponse): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<UpdatePasswordResponse>, I>>(base?: I): UpdatePasswordResponse {
+    return UpdatePasswordResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UpdatePasswordResponse>, I>>(_: I): UpdatePasswordResponse {
+    const message = createBaseUpdatePasswordResponse();
+    return message;
+  },
+};
+
+function createBaseSetUserRolesRequest(): SetUserRolesRequest {
+  return { userId: "", roles: [] };
+}
+
+export const SetUserRolesRequest: MessageFns<SetUserRolesRequest> = {
+  encode(message: SetUserRolesRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.userId !== "") {
+      writer.uint32(10).string(message.userId);
+    }
+    writer.uint32(18).fork();
+    for (const v of message.roles) {
+      writer.int32(roleToNumber(v));
+    }
+    writer.join();
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetUserRolesRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSetUserRolesRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag === 16) {
+            message.roles.push(roleFromJSON(reader.int32()));
+
+            continue;
+          }
+
+          if (tag === 18) {
+            const end2 = reader.uint32() + reader.pos;
+            while (reader.pos < end2) {
+              message.roles.push(roleFromJSON(reader.int32()));
+            }
+
+            continue;
+          }
+
+          break;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SetUserRolesRequest {
+    return {
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
+      roles: globalThis.Array.isArray(object?.roles) ? object.roles.map((e: any) => roleFromJSON(e)) : [],
+    };
+  },
+
+  toJSON(message: SetUserRolesRequest): unknown {
+    const obj: any = {};
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
+    if (message.roles?.length) {
+      obj.roles = message.roles.map((e) => roleToJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SetUserRolesRequest>, I>>(base?: I): SetUserRolesRequest {
+    return SetUserRolesRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SetUserRolesRequest>, I>>(object: I): SetUserRolesRequest {
+    const message = createBaseSetUserRolesRequest();
+    message.userId = object.userId ?? "";
+    message.roles = object.roles?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseSetUserRolesResponse(): SetUserRolesResponse {
+  return { user: undefined };
+}
+
+export const SetUserRolesResponse: MessageFns<SetUserRolesResponse> = {
+  encode(message: SetUserRolesResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.user !== undefined) {
+      User.encode(message.user, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetUserRolesResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSetUserRolesResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.user = User.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SetUserRolesResponse {
+    return { user: isSet(object.user) ? User.fromJSON(object.user) : undefined };
+  },
+
+  toJSON(message: SetUserRolesResponse): unknown {
+    const obj: any = {};
+    if (message.user !== undefined) {
+      obj.user = User.toJSON(message.user);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SetUserRolesResponse>, I>>(base?: I): SetUserRolesResponse {
+    return SetUserRolesResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SetUserRolesResponse>, I>>(object: I): SetUserRolesResponse {
+    const message = createBaseSetUserRolesResponse();
+    message.user = (object.user !== undefined && object.user !== null) ? User.fromPartial(object.user) : undefined;
+    return message;
+  },
+};
+
+function createBaseSetUserActiveRequest(): SetUserActiveRequest {
+  return { userId: "", active: false };
+}
+
+export const SetUserActiveRequest: MessageFns<SetUserActiveRequest> = {
+  encode(message: SetUserActiveRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.userId !== "") {
+      writer.uint32(10).string(message.userId);
+    }
+    if (message.active !== false) {
+      writer.uint32(16).bool(message.active);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetUserActiveRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSetUserActiveRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.active = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SetUserActiveRequest {
+    return {
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
+      active: isSet(object.active) ? globalThis.Boolean(object.active) : false,
+    };
+  },
+
+  toJSON(message: SetUserActiveRequest): unknown {
+    const obj: any = {};
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
+    if (message.active !== false) {
+      obj.active = message.active;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SetUserActiveRequest>, I>>(base?: I): SetUserActiveRequest {
+    return SetUserActiveRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SetUserActiveRequest>, I>>(object: I): SetUserActiveRequest {
+    const message = createBaseSetUserActiveRequest();
+    message.userId = object.userId ?? "";
+    message.active = object.active ?? false;
+    return message;
+  },
+};
+
+function createBaseSetUserActiveResponse(): SetUserActiveResponse {
+  return { user: undefined };
+}
+
+export const SetUserActiveResponse: MessageFns<SetUserActiveResponse> = {
+  encode(message: SetUserActiveResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.user !== undefined) {
+      User.encode(message.user, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetUserActiveResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSetUserActiveResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.user = User.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SetUserActiveResponse {
+    return { user: isSet(object.user) ? User.fromJSON(object.user) : undefined };
+  },
+
+  toJSON(message: SetUserActiveResponse): unknown {
+    const obj: any = {};
+    if (message.user !== undefined) {
+      obj.user = User.toJSON(message.user);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SetUserActiveResponse>, I>>(base?: I): SetUserActiveResponse {
+    return SetUserActiveResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SetUserActiveResponse>, I>>(object: I): SetUserActiveResponse {
+    const message = createBaseSetUserActiveResponse();
+    message.user = (object.user !== undefined && object.user !== null) ? User.fromPartial(object.user) : undefined;
+    return message;
+  },
+};
+
 export type IdentityServiceService = typeof IdentityServiceService;
 export const IdentityServiceService = {
   authenticateUser: {
@@ -2551,6 +3627,68 @@ export const IdentityServiceService = {
       Buffer.from(UpdateUserMetadataResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): UpdateUserMetadataResponse => UpdateUserMetadataResponse.decode(value),
   },
+  /**
+   * User management (admin-gated, feature 043). Every RPC requires the admin access-scope bit;
+   * passwords are write-only (never returned). Additive over the existing service.
+   */
+  createUser: {
+    path: "/xstockstrat.identity.v1.IdentityService/CreateUser" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: CreateUserRequest): Buffer => Buffer.from(CreateUserRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): CreateUserRequest => CreateUserRequest.decode(value),
+    responseSerialize: (value: CreateUserResponse): Buffer => Buffer.from(CreateUserResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): CreateUserResponse => CreateUserResponse.decode(value),
+  },
+  listUsers: {
+    path: "/xstockstrat.identity.v1.IdentityService/ListUsers" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListUsersRequest): Buffer => Buffer.from(ListUsersRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListUsersRequest => ListUsersRequest.decode(value),
+    responseSerialize: (value: ListUsersResponse): Buffer => Buffer.from(ListUsersResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListUsersResponse => ListUsersResponse.decode(value),
+  },
+  getUser: {
+    path: "/xstockstrat.identity.v1.IdentityService/GetUser" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetUserRequest): Buffer => Buffer.from(GetUserRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetUserRequest => GetUserRequest.decode(value),
+    responseSerialize: (value: GetUserResponse): Buffer => Buffer.from(GetUserResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetUserResponse => GetUserResponse.decode(value),
+  },
+  updatePassword: {
+    path: "/xstockstrat.identity.v1.IdentityService/UpdatePassword" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: UpdatePasswordRequest): Buffer =>
+      Buffer.from(UpdatePasswordRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): UpdatePasswordRequest => UpdatePasswordRequest.decode(value),
+    responseSerialize: (value: UpdatePasswordResponse): Buffer =>
+      Buffer.from(UpdatePasswordResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): UpdatePasswordResponse => UpdatePasswordResponse.decode(value),
+  },
+  setUserRoles: {
+    path: "/xstockstrat.identity.v1.IdentityService/SetUserRoles" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: SetUserRolesRequest): Buffer => Buffer.from(SetUserRolesRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): SetUserRolesRequest => SetUserRolesRequest.decode(value),
+    responseSerialize: (value: SetUserRolesResponse): Buffer =>
+      Buffer.from(SetUserRolesResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): SetUserRolesResponse => SetUserRolesResponse.decode(value),
+  },
+  setUserActive: {
+    path: "/xstockstrat.identity.v1.IdentityService/SetUserActive" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: SetUserActiveRequest): Buffer => Buffer.from(SetUserActiveRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): SetUserActiveRequest => SetUserActiveRequest.decode(value),
+    responseSerialize: (value: SetUserActiveResponse): Buffer =>
+      Buffer.from(SetUserActiveResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): SetUserActiveResponse => SetUserActiveResponse.decode(value),
+  },
 } as const;
 
 export interface IdentityServiceServer extends UntypedServiceImplementation {
@@ -2576,6 +3714,16 @@ export interface IdentityServiceServer extends UntypedServiceImplementation {
   /** User profile metadata self-management (feature 130) */
   getUserMetadata: handleUnaryCall<GetUserMetadataRequest, GetUserMetadataResponse>;
   updateUserMetadata: handleUnaryCall<UpdateUserMetadataRequest, UpdateUserMetadataResponse>;
+  /**
+   * User management (admin-gated, feature 043). Every RPC requires the admin access-scope bit;
+   * passwords are write-only (never returned). Additive over the existing service.
+   */
+  createUser: handleUnaryCall<CreateUserRequest, CreateUserResponse>;
+  listUsers: handleUnaryCall<ListUsersRequest, ListUsersResponse>;
+  getUser: handleUnaryCall<GetUserRequest, GetUserResponse>;
+  updatePassword: handleUnaryCall<UpdatePasswordRequest, UpdatePasswordResponse>;
+  setUserRoles: handleUnaryCall<SetUserRolesRequest, SetUserRolesResponse>;
+  setUserActive: handleUnaryCall<SetUserActiveRequest, SetUserActiveResponse>;
 }
 
 export interface IdentityServiceClient extends Client {
@@ -2782,6 +3930,100 @@ export interface IdentityServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: UpdateUserMetadataResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * User management (admin-gated, feature 043). Every RPC requires the admin access-scope bit;
+   * passwords are write-only (never returned). Additive over the existing service.
+   */
+  createUser(
+    request: CreateUserRequest,
+    callback: (error: ServiceError | null, response: CreateUserResponse) => void,
+  ): ClientUnaryCall;
+  createUser(
+    request: CreateUserRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: CreateUserResponse) => void,
+  ): ClientUnaryCall;
+  createUser(
+    request: CreateUserRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: CreateUserResponse) => void,
+  ): ClientUnaryCall;
+  listUsers(
+    request: ListUsersRequest,
+    callback: (error: ServiceError | null, response: ListUsersResponse) => void,
+  ): ClientUnaryCall;
+  listUsers(
+    request: ListUsersRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListUsersResponse) => void,
+  ): ClientUnaryCall;
+  listUsers(
+    request: ListUsersRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListUsersResponse) => void,
+  ): ClientUnaryCall;
+  getUser(
+    request: GetUserRequest,
+    callback: (error: ServiceError | null, response: GetUserResponse) => void,
+  ): ClientUnaryCall;
+  getUser(
+    request: GetUserRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetUserResponse) => void,
+  ): ClientUnaryCall;
+  getUser(
+    request: GetUserRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetUserResponse) => void,
+  ): ClientUnaryCall;
+  updatePassword(
+    request: UpdatePasswordRequest,
+    callback: (error: ServiceError | null, response: UpdatePasswordResponse) => void,
+  ): ClientUnaryCall;
+  updatePassword(
+    request: UpdatePasswordRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: UpdatePasswordResponse) => void,
+  ): ClientUnaryCall;
+  updatePassword(
+    request: UpdatePasswordRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: UpdatePasswordResponse) => void,
+  ): ClientUnaryCall;
+  setUserRoles(
+    request: SetUserRolesRequest,
+    callback: (error: ServiceError | null, response: SetUserRolesResponse) => void,
+  ): ClientUnaryCall;
+  setUserRoles(
+    request: SetUserRolesRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: SetUserRolesResponse) => void,
+  ): ClientUnaryCall;
+  setUserRoles(
+    request: SetUserRolesRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: SetUserRolesResponse) => void,
+  ): ClientUnaryCall;
+  setUserActive(
+    request: SetUserActiveRequest,
+    callback: (error: ServiceError | null, response: SetUserActiveResponse) => void,
+  ): ClientUnaryCall;
+  setUserActive(
+    request: SetUserActiveRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: SetUserActiveResponse) => void,
+  ): ClientUnaryCall;
+  setUserActive(
+    request: SetUserActiveRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: SetUserActiveResponse) => void,
   ): ClientUnaryCall;
 }
 

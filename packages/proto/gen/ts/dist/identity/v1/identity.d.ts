@@ -1,6 +1,21 @@
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
 import { type CallOptions, type ChannelCredentials, Client, type ClientOptions, type ClientUnaryCall, type handleUnaryCall, type Metadata, type ServiceError, type UntypedServiceImplementation } from "@grpc/grpc-js";
 export declare const protobufPackage = "xstockstrat.identity.v1";
+/**
+ * ── User management (admin-gated, feature 043) ───────────────────────────────
+ * Closed role set (C-04). Mirrors the viewer/trader/admin roles the platform already uses;
+ * TokenClaims.roles stays a free-string list (JWT claim shape, unchanged).
+ */
+export declare enum Role {
+    ROLE_UNSPECIFIED = "ROLE_UNSPECIFIED",
+    ROLE_ADMIN = "ROLE_ADMIN",
+    ROLE_TRADER = "ROLE_TRADER",
+    ROLE_VIEWER = "ROLE_VIEWER",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function roleFromJSON(object: any): Role;
+export declare function roleToJSON(object: Role): string;
+export declare function roleToNumber(object: Role): number;
 export interface AuthenticateUserRequest {
     email: string;
     password: string;
@@ -124,6 +139,55 @@ export interface UpdateUserMetadataRequest {
 export interface UpdateUserMetadataResponse {
     userMetadata?: UserMetadata | undefined;
 }
+/** Password-free admin view of a user (no password / password_hash — FR-10/AC-10). */
+export interface User {
+    userId: string;
+    email: string;
+    roles: Role[];
+    isActive: boolean;
+    createdAt?: Date | undefined;
+}
+export interface CreateUserRequest {
+    email: string;
+    /** write-only; never echoed back */
+    password: string;
+    roles: Role[];
+}
+export interface CreateUserResponse {
+    user?: User | undefined;
+}
+export interface ListUsersRequest {
+}
+export interface ListUsersResponse {
+    users: User[];
+}
+export interface GetUserRequest {
+    userId: string;
+}
+export interface GetUserResponse {
+    user?: User | undefined;
+}
+export interface UpdatePasswordRequest {
+    userId: string;
+    /** write-only; never echoed back */
+    newPassword: string;
+}
+export interface UpdatePasswordResponse {
+}
+export interface SetUserRolesRequest {
+    userId: string;
+    roles: Role[];
+}
+export interface SetUserRolesResponse {
+    user?: User | undefined;
+}
+export interface SetUserActiveRequest {
+    userId: string;
+    active: boolean;
+}
+export interface SetUserActiveResponse {
+    user?: User | undefined;
+}
 export declare const AuthenticateUserRequest: MessageFns<AuthenticateUserRequest>;
 export declare const AuthTokenResponse: MessageFns<AuthTokenResponse>;
 export declare const TokenClaims: MessageFns<TokenClaims>;
@@ -149,6 +213,19 @@ export declare const GetUserMetadataRequest: MessageFns<GetUserMetadataRequest>;
 export declare const GetUserMetadataResponse: MessageFns<GetUserMetadataResponse>;
 export declare const UpdateUserMetadataRequest: MessageFns<UpdateUserMetadataRequest>;
 export declare const UpdateUserMetadataResponse: MessageFns<UpdateUserMetadataResponse>;
+export declare const User: MessageFns<User>;
+export declare const CreateUserRequest: MessageFns<CreateUserRequest>;
+export declare const CreateUserResponse: MessageFns<CreateUserResponse>;
+export declare const ListUsersRequest: MessageFns<ListUsersRequest>;
+export declare const ListUsersResponse: MessageFns<ListUsersResponse>;
+export declare const GetUserRequest: MessageFns<GetUserRequest>;
+export declare const GetUserResponse: MessageFns<GetUserResponse>;
+export declare const UpdatePasswordRequest: MessageFns<UpdatePasswordRequest>;
+export declare const UpdatePasswordResponse: MessageFns<UpdatePasswordResponse>;
+export declare const SetUserRolesRequest: MessageFns<SetUserRolesRequest>;
+export declare const SetUserRolesResponse: MessageFns<SetUserRolesResponse>;
+export declare const SetUserActiveRequest: MessageFns<SetUserActiveRequest>;
+export declare const SetUserActiveResponse: MessageFns<SetUserActiveResponse>;
 export type IdentityServiceService = typeof IdentityServiceService;
 export declare const IdentityServiceService: {
     readonly authenticateUser: {
@@ -277,6 +354,64 @@ export declare const IdentityServiceService: {
         readonly responseSerialize: (value: UpdateUserMetadataResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => UpdateUserMetadataResponse;
     };
+    /**
+     * User management (admin-gated, feature 043). Every RPC requires the admin access-scope bit;
+     * passwords are write-only (never returned). Additive over the existing service.
+     */
+    readonly createUser: {
+        readonly path: "/xstockstrat.identity.v1.IdentityService/CreateUser";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: CreateUserRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => CreateUserRequest;
+        readonly responseSerialize: (value: CreateUserResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => CreateUserResponse;
+    };
+    readonly listUsers: {
+        readonly path: "/xstockstrat.identity.v1.IdentityService/ListUsers";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ListUsersRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ListUsersRequest;
+        readonly responseSerialize: (value: ListUsersResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => ListUsersResponse;
+    };
+    readonly getUser: {
+        readonly path: "/xstockstrat.identity.v1.IdentityService/GetUser";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetUserRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetUserRequest;
+        readonly responseSerialize: (value: GetUserResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => GetUserResponse;
+    };
+    readonly updatePassword: {
+        readonly path: "/xstockstrat.identity.v1.IdentityService/UpdatePassword";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: UpdatePasswordRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => UpdatePasswordRequest;
+        readonly responseSerialize: (value: UpdatePasswordResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => UpdatePasswordResponse;
+    };
+    readonly setUserRoles: {
+        readonly path: "/xstockstrat.identity.v1.IdentityService/SetUserRoles";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: SetUserRolesRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => SetUserRolesRequest;
+        readonly responseSerialize: (value: SetUserRolesResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => SetUserRolesResponse;
+    };
+    readonly setUserActive: {
+        readonly path: "/xstockstrat.identity.v1.IdentityService/SetUserActive";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: SetUserActiveRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => SetUserActiveRequest;
+        readonly responseSerialize: (value: SetUserActiveResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => SetUserActiveResponse;
+    };
 };
 export interface IdentityServiceServer extends UntypedServiceImplementation {
     authenticateUser: handleUnaryCall<AuthenticateUserRequest, AuthTokenResponse>;
@@ -301,6 +436,16 @@ export interface IdentityServiceServer extends UntypedServiceImplementation {
     /** User profile metadata self-management (feature 130) */
     getUserMetadata: handleUnaryCall<GetUserMetadataRequest, GetUserMetadataResponse>;
     updateUserMetadata: handleUnaryCall<UpdateUserMetadataRequest, UpdateUserMetadataResponse>;
+    /**
+     * User management (admin-gated, feature 043). Every RPC requires the admin access-scope bit;
+     * passwords are write-only (never returned). Additive over the existing service.
+     */
+    createUser: handleUnaryCall<CreateUserRequest, CreateUserResponse>;
+    listUsers: handleUnaryCall<ListUsersRequest, ListUsersResponse>;
+    getUser: handleUnaryCall<GetUserRequest, GetUserResponse>;
+    updatePassword: handleUnaryCall<UpdatePasswordRequest, UpdatePasswordResponse>;
+    setUserRoles: handleUnaryCall<SetUserRolesRequest, SetUserRolesResponse>;
+    setUserActive: handleUnaryCall<SetUserActiveRequest, SetUserActiveResponse>;
 }
 export interface IdentityServiceClient extends Client {
     authenticateUser(request: AuthenticateUserRequest, callback: (error: ServiceError | null, response: AuthTokenResponse) => void): ClientUnaryCall;
@@ -351,6 +496,28 @@ export interface IdentityServiceClient extends Client {
     updateUserMetadata(request: UpdateUserMetadataRequest, callback: (error: ServiceError | null, response: UpdateUserMetadataResponse) => void): ClientUnaryCall;
     updateUserMetadata(request: UpdateUserMetadataRequest, metadata: Metadata, callback: (error: ServiceError | null, response: UpdateUserMetadataResponse) => void): ClientUnaryCall;
     updateUserMetadata(request: UpdateUserMetadataRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: UpdateUserMetadataResponse) => void): ClientUnaryCall;
+    /**
+     * User management (admin-gated, feature 043). Every RPC requires the admin access-scope bit;
+     * passwords are write-only (never returned). Additive over the existing service.
+     */
+    createUser(request: CreateUserRequest, callback: (error: ServiceError | null, response: CreateUserResponse) => void): ClientUnaryCall;
+    createUser(request: CreateUserRequest, metadata: Metadata, callback: (error: ServiceError | null, response: CreateUserResponse) => void): ClientUnaryCall;
+    createUser(request: CreateUserRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: CreateUserResponse) => void): ClientUnaryCall;
+    listUsers(request: ListUsersRequest, callback: (error: ServiceError | null, response: ListUsersResponse) => void): ClientUnaryCall;
+    listUsers(request: ListUsersRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListUsersResponse) => void): ClientUnaryCall;
+    listUsers(request: ListUsersRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListUsersResponse) => void): ClientUnaryCall;
+    getUser(request: GetUserRequest, callback: (error: ServiceError | null, response: GetUserResponse) => void): ClientUnaryCall;
+    getUser(request: GetUserRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetUserResponse) => void): ClientUnaryCall;
+    getUser(request: GetUserRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetUserResponse) => void): ClientUnaryCall;
+    updatePassword(request: UpdatePasswordRequest, callback: (error: ServiceError | null, response: UpdatePasswordResponse) => void): ClientUnaryCall;
+    updatePassword(request: UpdatePasswordRequest, metadata: Metadata, callback: (error: ServiceError | null, response: UpdatePasswordResponse) => void): ClientUnaryCall;
+    updatePassword(request: UpdatePasswordRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: UpdatePasswordResponse) => void): ClientUnaryCall;
+    setUserRoles(request: SetUserRolesRequest, callback: (error: ServiceError | null, response: SetUserRolesResponse) => void): ClientUnaryCall;
+    setUserRoles(request: SetUserRolesRequest, metadata: Metadata, callback: (error: ServiceError | null, response: SetUserRolesResponse) => void): ClientUnaryCall;
+    setUserRoles(request: SetUserRolesRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: SetUserRolesResponse) => void): ClientUnaryCall;
+    setUserActive(request: SetUserActiveRequest, callback: (error: ServiceError | null, response: SetUserActiveResponse) => void): ClientUnaryCall;
+    setUserActive(request: SetUserActiveRequest, metadata: Metadata, callback: (error: ServiceError | null, response: SetUserActiveResponse) => void): ClientUnaryCall;
+    setUserActive(request: SetUserActiveRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: SetUserActiveResponse) => void): ClientUnaryCall;
 }
 export declare const IdentityServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): IdentityServiceClient;

@@ -99,6 +99,36 @@ class IdentityServiceStub(object):
                 request_serializer=identity_dot_v1_dot_identity__pb2.UpdateUserMetadataRequest.SerializeToString,
                 response_deserializer=identity_dot_v1_dot_identity__pb2.UpdateUserMetadataResponse.FromString,
                 _registered_method=True)
+        self.CreateUser = channel.unary_unary(
+                '/xstockstrat.identity.v1.IdentityService/CreateUser',
+                request_serializer=identity_dot_v1_dot_identity__pb2.CreateUserRequest.SerializeToString,
+                response_deserializer=identity_dot_v1_dot_identity__pb2.CreateUserResponse.FromString,
+                _registered_method=True)
+        self.ListUsers = channel.unary_unary(
+                '/xstockstrat.identity.v1.IdentityService/ListUsers',
+                request_serializer=identity_dot_v1_dot_identity__pb2.ListUsersRequest.SerializeToString,
+                response_deserializer=identity_dot_v1_dot_identity__pb2.ListUsersResponse.FromString,
+                _registered_method=True)
+        self.GetUser = channel.unary_unary(
+                '/xstockstrat.identity.v1.IdentityService/GetUser',
+                request_serializer=identity_dot_v1_dot_identity__pb2.GetUserRequest.SerializeToString,
+                response_deserializer=identity_dot_v1_dot_identity__pb2.GetUserResponse.FromString,
+                _registered_method=True)
+        self.UpdatePassword = channel.unary_unary(
+                '/xstockstrat.identity.v1.IdentityService/UpdatePassword',
+                request_serializer=identity_dot_v1_dot_identity__pb2.UpdatePasswordRequest.SerializeToString,
+                response_deserializer=identity_dot_v1_dot_identity__pb2.UpdatePasswordResponse.FromString,
+                _registered_method=True)
+        self.SetUserRoles = channel.unary_unary(
+                '/xstockstrat.identity.v1.IdentityService/SetUserRoles',
+                request_serializer=identity_dot_v1_dot_identity__pb2.SetUserRolesRequest.SerializeToString,
+                response_deserializer=identity_dot_v1_dot_identity__pb2.SetUserRolesResponse.FromString,
+                _registered_method=True)
+        self.SetUserActive = channel.unary_unary(
+                '/xstockstrat.identity.v1.IdentityService/SetUserActive',
+                request_serializer=identity_dot_v1_dot_identity__pb2.SetUserActiveRequest.SerializeToString,
+                response_deserializer=identity_dot_v1_dot_identity__pb2.SetUserActiveResponse.FromString,
+                _registered_method=True)
 
 
 class IdentityServiceServicer(object):
@@ -187,6 +217,44 @@ class IdentityServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def CreateUser(self, request, context):
+        """User management (admin-gated, feature 043). Every RPC requires the admin access-scope bit;
+        passwords are write-only (never returned). Additive over the existing service.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListUsers(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetUser(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdatePassword(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetUserRoles(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetUserActive(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_IdentityServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -254,6 +322,36 @@ def add_IdentityServiceServicer_to_server(servicer, server):
                     servicer.UpdateUserMetadata,
                     request_deserializer=identity_dot_v1_dot_identity__pb2.UpdateUserMetadataRequest.FromString,
                     response_serializer=identity_dot_v1_dot_identity__pb2.UpdateUserMetadataResponse.SerializeToString,
+            ),
+            'CreateUser': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateUser,
+                    request_deserializer=identity_dot_v1_dot_identity__pb2.CreateUserRequest.FromString,
+                    response_serializer=identity_dot_v1_dot_identity__pb2.CreateUserResponse.SerializeToString,
+            ),
+            'ListUsers': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListUsers,
+                    request_deserializer=identity_dot_v1_dot_identity__pb2.ListUsersRequest.FromString,
+                    response_serializer=identity_dot_v1_dot_identity__pb2.ListUsersResponse.SerializeToString,
+            ),
+            'GetUser': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetUser,
+                    request_deserializer=identity_dot_v1_dot_identity__pb2.GetUserRequest.FromString,
+                    response_serializer=identity_dot_v1_dot_identity__pb2.GetUserResponse.SerializeToString,
+            ),
+            'UpdatePassword': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdatePassword,
+                    request_deserializer=identity_dot_v1_dot_identity__pb2.UpdatePasswordRequest.FromString,
+                    response_serializer=identity_dot_v1_dot_identity__pb2.UpdatePasswordResponse.SerializeToString,
+            ),
+            'SetUserRoles': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetUserRoles,
+                    request_deserializer=identity_dot_v1_dot_identity__pb2.SetUserRolesRequest.FromString,
+                    response_serializer=identity_dot_v1_dot_identity__pb2.SetUserRolesResponse.SerializeToString,
+            ),
+            'SetUserActive': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetUserActive,
+                    request_deserializer=identity_dot_v1_dot_identity__pb2.SetUserActiveRequest.FromString,
+                    response_serializer=identity_dot_v1_dot_identity__pb2.SetUserActiveResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -607,6 +705,168 @@ class IdentityService(object):
             '/xstockstrat.identity.v1.IdentityService/UpdateUserMetadata',
             identity_dot_v1_dot_identity__pb2.UpdateUserMetadataRequest.SerializeToString,
             identity_dot_v1_dot_identity__pb2.UpdateUserMetadataResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateUser(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.identity.v1.IdentityService/CreateUser',
+            identity_dot_v1_dot_identity__pb2.CreateUserRequest.SerializeToString,
+            identity_dot_v1_dot_identity__pb2.CreateUserResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListUsers(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.identity.v1.IdentityService/ListUsers',
+            identity_dot_v1_dot_identity__pb2.ListUsersRequest.SerializeToString,
+            identity_dot_v1_dot_identity__pb2.ListUsersResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetUser(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.identity.v1.IdentityService/GetUser',
+            identity_dot_v1_dot_identity__pb2.GetUserRequest.SerializeToString,
+            identity_dot_v1_dot_identity__pb2.GetUserResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdatePassword(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.identity.v1.IdentityService/UpdatePassword',
+            identity_dot_v1_dot_identity__pb2.UpdatePasswordRequest.SerializeToString,
+            identity_dot_v1_dot_identity__pb2.UpdatePasswordResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetUserRoles(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.identity.v1.IdentityService/SetUserRoles',
+            identity_dot_v1_dot_identity__pb2.SetUserRolesRequest.SerializeToString,
+            identity_dot_v1_dot_identity__pb2.SetUserRolesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetUserActive(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.identity.v1.IdentityService/SetUserActive',
+            identity_dot_v1_dot_identity__pb2.SetUserActiveRequest.SerializeToString,
+            identity_dot_v1_dot_identity__pb2.SetUserActiveResponse.FromString,
             options,
             channel_credentials,
             insecure,
