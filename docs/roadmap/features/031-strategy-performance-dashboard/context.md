@@ -119,3 +119,39 @@ consumer unaffected (C-16 additive-extend).
   in the same PR, and add a portfolio service-owner approval gate + a RED test on the new payload keys.
 - **No Floor (F-*) breach:** the extension adds no DB access (fields already in hand), no pool/proto/
   secret Floor crossing — additive emit only. Design remains approvable.
+
+## Session 2026-08-31 — sdd-spec
+
+- Generated `implementation-spec.md` with **11 steps** (2 code-bearing services per design.md). Status
+  flip to `implementation-ready` deliberately **not** applied (orchestrator owns `status.md`/`feature.md`).
+- Key codebase findings (grounded `path:line`):
+  - Portfolio close emit is the map literal at `portfolio_service.go:304-307` inside `processOrderFill`
+    (`:233`); `existing` (`:262`) carries `CostBasis` (repo `:269`) + `OpenedAt` (repo `:270`, NOT NULL);
+    `emitEvent`/`structpb.NewValue` at `:790-795`; RFC3339 `as_of` precedent `:841-844`. `repo` is a
+    **concrete** `*repository.PortfolioRepo` (not fakeable), and `internal/service/` is coverage-excluded
+    → the RED test targets an extracted **pure** `closedPositionPayload` helper (mirrors the feature-042
+    `realizedDelta` pattern), not a DB-driven `processOrderFill`.
+  - **Config migration = `023_ui_performance_keys`** — confirmed against `merge-order.md:191`
+    pre-assignment (tip on disk `021_notify_push_min_severity`; `022` reserved to feature 021). Post-147
+    seed pattern from `021`/`019` (namespace `ui`, `staging`+`production`, `user_id NULL`,
+    `ON CONFLICT (namespace,key,environment,COALESCE(user_id,'')) DO NOTHING`). **No portfolio migration**
+    (`014_positions_fees_accum` is feature 029's, `merge-order.md:197`); the two payload fields are
+    existing `portfolio.positions` columns.
+  - Config map keying (design R3 resolved): `values[row.key]` verbatim
+    (`configServiceImpl.ts:176,206`) → seed `key='performance.risk_free_rate_annual'` /
+    `'performance.equity_curve_start_date'`, read `resp.values['performance.…']` with the oneof-`case`
+    presence check (`positions/page.tsx:131-133`; a stored `0` survives).
+  - `insightsBff.ts` gaps: no `LedgerService`, no `ConfigService`, `TradingService` has only
+    `listBrokerAccounts` (`:100-102`) — Step 6 adds all three (queryEvents forces
+    `stream_key=portfolio:<user>` server-side, `traderBff.ts:117-126` IDOR precedent).
+  - Metric math lives in a pure `src/lib/performanceMetrics.ts` (vitest-scoped `src/lib/**`,
+    `equityCurve.ts` precedent); recharts `^3.10.1` `Brush` for zoom (no lightweight-charts);
+    paper label via `AccountProvider`/`TradingModeBadge` (same-origin `/trader/api`, SignalOrderTicket
+    precedent). Sharpe R2 pinned: `rollingSharpe(returns[], rfAnnual)` = `(mean − rf/252)/popStd × √252`,
+    `null` on <2 pts / std 0 / non-finite (AC-4).
+- Every `@AC-*` (1–13) is covered by ≥1 test step (see § Scenario Coverage): AC-1..AC-5/AC-8/AC-11..13 by
+  the metric-lib vitest (Step 8) + portfolio emit test (Step 2); AC-6/AC-7/AC-8/AC-9/AC-10 by the
+  Playwright e2e (Step 11); AC-1 render also Step 11.
+- Deduped Reviewers: `xstockstrat-portfolio` service owner (Steps 1,2); `xstockstrat-ui` service owner
+  (Steps 5–11); `xstockstrat-config` service owner (Steps 4,5); DBA (Step 4); none (Step 3 docs).
+- No "Not found / create from scratch" steps — every path/symbol cited to a real `path:line`.
