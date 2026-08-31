@@ -132,3 +132,12 @@
     `fake_eval` pair-capture pattern — reused for the two new RED-first test classes.
 - Every `@AC-*` covered by a test step: AC-1/AC-6 in Step 3 (resolver) + Step 5 (cycle); AC-2/AC-3/AC-4/AC-5
   in Step 5. Deduped Reviewers: DBA, xstockstrat-config, xstockstrat-analysis (docs step = none).
+
+## Session 2026-08-31 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 3 advisory warnings (all cosmetic/justified). No Floor risk. Full-dotted key convention confirmed (021 precedent, not the stale 008 split form); strict FR-2 exit (held∩denied only re-enters); AC-3 no-regression (else-branch byte-for-byte); get_bool HasField-based so explicit false kill-switch honored; reads via existing QuerySignals/GetFundamentalsMulti (no new RPC/pool); config seed 024 confirmed.
+- Advisory ⚠ (optional, no gate impact):
+  - Steps 2/4 Instructions verbose-but-complete — cosmetic. — [ ] note only
+  - C-03 letter: the resolver's outbound QuerySignals/GetFundamentalsMulti carry no x-user-id — justified as platform-global background-loop reads (mirrors _drain_signals). — [ ] note only
+  - Minor normalization asymmetry in S&F intersection (`f.symbol.upper()` vs `_normalize_symbol`); optionally use `_normalize_symbol(f.symbol)` for symmetry. — [ ] optional
+- Overlap findings: batch scan CLEAN; 168 shares config-governance.md / analysis CLAUDE.md with 095 (distinct sections).
