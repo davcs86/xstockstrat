@@ -26,7 +26,7 @@ Feature: ledger-event-export
     When the browser requests "GET .../api/ledger/export?start=2026-01-01&end=2026-03-31&format=csv"
     Then the response status is 200
     And the "Content-Type" is "text/csv"
-    And the first line is the header "event_id,event_type,occurred_at,service_origin,payload,user_id"
+    And the first line is the header "event_id,event_type,occurred_at,source_service,correlation_id,sequence,stream_key,payload"
     And 3 data rows follow, one per event
 
   @AC-3 @FR-3
@@ -73,11 +73,11 @@ Feature: ledger-event-export
 
   @AC-8 @FR-7
   Scenario: Each exported row carries the required fields
-    Given the ledger holds one fill event with event_id "evt_9f21" at 2026-02-15T14:30:00Z from service_origin "xstockstrat-trading" for user_id "u_42"
+    Given the ledger holds one fill event with event_id "evt_9f21" at 2026-02-15T14:30:00Z from source_service "xstockstrat-trading" with correlation_id "corr_7c3"
     And the browser has a valid authenticated session
     When the browser requests "GET .../api/ledger/export?start=2026-02-01&end=2026-02-28"
     Then the response status is 200
-    And the row for "evt_9f21" has keys "event_id", "event_type", "occurred_at", "service_origin", "payload", "user_id"
+    And the row for "evt_9f21" has keys "event_id", "event_type", "occurred_at", "source_service", "correlation_id", "sequence", "stream_key", "payload"
     And its "payload" is a JSON object
 
   @AC-9 @FR-8

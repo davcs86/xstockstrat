@@ -20,7 +20,7 @@ FR-3. Supported `event_type` filter values (comma-separated): `fill`, `signal`, 
 FR-4. The export window must be bounded by a configurable maximum duration (`ledger.export.max_window_days`, default 365) to prevent runaway queries. The ledger enforces the bound and returns a gRPC `InvalidArgument`; the BFF maps it to HTTP 400.
 FR-5. The BFF route must require an authenticated session. The `xstockstrat-ui` middleware verifies the JWT and injects `x-user-id` / `x-access-scope` / `x-trace-id`, which the BFF forwards to the ledger on the `ExportEvents` call. An unauthenticated request is rejected with 401 (or redirected to the login route) and never reaches the ledger.
 FR-6. Rows must stream end-to-end without buffering the full result set: the ledger reads rows from a DB cursor and emits them on the `ExportEvents` stream, and the BFF pipes each message straight to the HTTP response.
-FR-7. Each exported row must include: `event_id`, `event_type`, `occurred_at`, `service_origin`, `payload` (JSON object), `user_id`.
+FR-7. Each exported row must include the ledger `Event`'s own fields (`packages/proto/ledger/v1/ledger.proto`): `event_id`, `event_type`, `occurred_at`, `source_service`, `correlation_id`, `sequence`, `stream_key`, and `payload` (the event's JSON data). The ledger `Event` message has **no `user_id` field** — events are keyed by `stream_key`/`correlation_id`, not by user — so no `user_id` column is exported. Whether (and how) the export is scoped to the requesting user vs. returned operator-wide (both are auth-gated per FR-5) is a Design-Phase Decision below, since the ledger is not user-partitioned at the event level.
 FR-8. A download button in the `xstockstrat-ui` (segment decided at design — see § Design-Phase Decisions) triggers the export with sensible defaults (last 90 days, all types) via the BFF route and prompts a file-save dialog.
 FR-9. The export must be gated by the `ledger.export.enabled` feature flag (default `true`). When `false`, the ledger rejects `ExportEvents` and the BFF returns an error (HTTP 403) without streaming any events.
 
@@ -77,6 +77,7 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 ## Design-Phase Decisions (owned by /sdd-design)
 
 - Which `xstockstrat-ui` segment hosts the "Export events" download button — `/trader` (fill-centric export) vs `/insights` (review-centric). Both segments already proxy ledger reads through their BFFs, so either is viable; `/sdd-design` picks one and records it in `design.md`. This is a decided-at-design choice, **not** an open-ended deferral (C-14).
+- **User-scoping of the export.** The ledger `Event` message has no `user_id` field (it is keyed by `stream_key`/`correlation_id`, not user), so the export cannot filter rows by the requesting user at the event level. `/sdd-design` decides whether this export is (a) operator-wide (auth-gated to any authenticated session, returning all events in the window — matching how the existing ledger read BFFs already behave) or (b) narrowed by a `stream_key`/`correlation_id` convention that encodes the owning user. The problem statement's per-user framing ("my best trades") is satisfied by whichever scoping design records; FR-5 auth-gates access either way.
 
 ## Design Guardrails
 

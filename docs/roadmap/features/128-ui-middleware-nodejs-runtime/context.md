@@ -88,3 +88,8 @@ warnings; applied fixes (docs-only, still `draft`, number/slug unchanged):
   request is observed during the near-expiry refresh.
 - Preserved all seven FRs, the Consumer Surface = **None** justification, and all `@AC-*` tags /
   FR coverage. Only `product-spec.md`, `acceptance.feature`, and this `context.md` changed.
+
+## Session 2026-08-31 — sdd-review product-spec (approved)
+
+- Product spec approved: `draft` → `spec-ready`. All `/sdd-review` blockers and warnings were addressed (see the sdd-review-fixes session above).
+- NOTE: the confirming re-review pass was interrupted by a session usage/rate limit; fixes were applied against each reviewer's explicit findings. For 021 specifically, the orchestrator manually caught and fixed a residual field-name error (`service_origin` → `source_service`; the ledger `Event` has no `user_id` field). A quick re-review can re-confirm on resume.

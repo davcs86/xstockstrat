@@ -30,3 +30,8 @@ Product-spec review returned FAIL: the spec predated the gRPC-only migration and
 - **Open Questions reorganization.** No unchecked genuine-unknown `- [ ]` remains under `## Open Questions` — it now reads "None". The transport question is resolved inline; the UI-segment choice moved to a new `## Design-Phase Decisions (owned by /sdd-design)` section (plain bullet); the config-key native-type trap and the ledger global-sequence-ordering trap moved to a new `## Design Guardrails` section (plain bullets).
 - **C-14 (warning).** Stated the segment choice is decided at design (Design-Phase Decisions), not an open-ended deferral.
 - **acceptance.feature.** Rewrote all scenarios from the HTTP `GET /export` / `Content-Type` model to the gRPC-RPC-via-BFF model, keeping every `@AC-*`/`@FR-*` tag and full FR coverage. Added global-sequence ordering to AC-1 and a new **FR-9** (+ **AC-10**) covering the `ledger.export.enabled=false` disabled path. Concrete example values (dates, counts, `evt_9f21`, `u_42`, `xstockstrat-trading`) preserved.
+
+## Session 2026-08-31 — sdd-review product-spec (approved)
+
+- Product spec approved: `draft` → `spec-ready`. All `/sdd-review` blockers and warnings were addressed (see the sdd-review-fixes session above).
+- NOTE: the confirming re-review pass was interrupted by a session usage/rate limit; fixes were applied against each reviewer's explicit findings. For 021 specifically, the orchestrator manually caught and fixed a residual field-name error (`service_origin` → `source_service`; the ledger `Event` has no `user_id` field). A quick re-review can re-confirm on resume.

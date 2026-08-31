@@ -36,3 +36,8 @@
 - **Open Questions reorganization (criterion 9).** `## Open Questions` now reads "None — resolved or moved below" (no unchecked `- [ ]` remain). The fractional question is resolved inline; the storage-model and 042-reconciliation questions moved to a new `## Design-Phase Decisions (owned by /sdd-design)` section (plain bullets); the five Ledger known-traps moved to a new `## Design Guardrails` section.
 - **Proto scope kept accurate.** `GetAttribution` + messages are additive to `analysis.proto` (new RPC/messages, no `Opportunity` field change → no field-number collision with 095/110); the trading order-submission attribution inputs are additive (`buf breaking` stays green).
 - Consistency edits to `acceptance.feature`: `@AC-3` reworded from "signal_id" to "signal-attribution inputs"; `@AC-5` clarified as the exact-tie / only-V1-fractional case. All `@AC-*`/`@FR-*` tags and coverage preserved.
+
+## Session 2026-08-31 — sdd-review product-spec (approved)
+
+- Product spec approved: `draft` → `spec-ready`. All `/sdd-review` blockers and warnings were addressed (see the sdd-review-fixes session above).
+- NOTE: the confirming re-review pass was interrupted by a session usage/rate limit; fixes were applied against each reviewer's explicit findings. For 021 specifically, the orchestrator manually caught and fixed a residual field-name error (`service_origin` → `source_service`; the ledger `Event` has no `user_id` field). A quick re-review can re-confirm on resume.

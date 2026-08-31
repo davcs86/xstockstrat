@@ -65,3 +65,8 @@ Applied the PASS-WITH-WARNINGS product-spec review fixes (status stays `draft`; 
   Additive/non-breaking.
 
 All FRs, `@FR-*`/`@AC-*` tags, and FR→AC coverage preserved.
+
+## Session 2026-08-31 — sdd-review product-spec (approved)
+
+- Product spec approved: `draft` → `spec-ready`. All `/sdd-review` blockers and warnings were addressed (see the sdd-review-fixes session above).
+- NOTE: the confirming re-review pass was interrupted by a session usage/rate limit; fixes were applied against each reviewer's explicit findings. For 021 specifically, the orchestrator manually caught and fixed a residual field-name error (`service_origin` → `source_service`; the ledger `Event` has no `user_id` field). A quick re-review can re-confirm on resume.
