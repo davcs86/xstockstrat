@@ -166,3 +166,23 @@ Unattended run (auto-proceed through checkpoints; pause only on real blockers).
 - TDD: N/A (migration). Verified offline: next NNN 003 correct (tip was 002_idempotency_keys); every
   `ADD COLUMN`/`CREATE INDEX` in `.up` has an inverse `DROP` in `.down`. No DB started.
 - Files: `services/xstockstrat-ledger/migrations/003_events_user_id.{up,down}.sql`. Deviations: none.
+
+### Step 4 — service: stamp user_id on the ledger write path [done]
+- `ledgerServiceImpl.ts`: resolve `userId = req.userId || call.metadata.get('x-user-id')[0] || null`
+  before the insert branches; added `user_id` as the 10th insert column + `$10` param (covers both the
+  plain and idempotent paths, which share `insertSql`/`insertParams`); added `userId: row.user_id ?? ''`
+  to `rowToEvent` so all reads (Query/Get/Stream/Export) surface it. Immutability untouched.
+- TDD (P-06): **red** 5/22 fail against pre-Step-4 dist (rowToEvent userId, insert param count 9→10,
+  the 3 stamping cases) → **green** 22/22 after. See Deviation Log — the configured
+  `--experimental-strip-types` runner is vacuous (parameter-property class), so the genuine gate was
+  the compiled-`dist` run (`node --test dist/__tests__/ledgerServiceImpl.test.js`).
+- Files: `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts`. Deviations: vacuous-runner
+  (pre-existing platform defect; fails.md logged, out of 021 scope).
+
+### Step 5 — test: ledger write-path user_id stamping [done]
+- `ledgerServiceImpl.test.ts`: updated the existing insert-param-count assertion 9→10; added a
+  `rowToEvent` user_id/NULL case and three appendEvent stamping cases (req.userId wins; x-user-id
+  metadata fallback; neither → NULL). `u_42`/`u_99` are single-file inline literals (C-13).
+- TDD as above (paired with Step 4). `pnpm run lint` clean (0 errors). Files:
+  `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts`. Deviations: none beyond the
+  shared vacuous-runner note.

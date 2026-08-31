@@ -175,7 +175,7 @@ ls services/xstockstrat-ledger/migrations/003_events_user_id.up.sql \
 
 ### Step 4 — service: stamp `user_id` on the ledger write path
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts` — modify
@@ -204,7 +204,7 @@ ls services/xstockstrat-ledger/migrations/003_events_user_id.up.sql \
 
 ### Step 5 — test: ledger write-path `user_id` stamping
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts` — modify
@@ -526,4 +526,24 @@ grep -n "from '../fixtures'\|helpers/auth" e2e/trader/ledger-export.spec.ts   # 
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Steps 5/7/10 — ledger unit suite runs vacuously under the configured runner (pre-existing platform defect)
+- **What**: `services/xstockstrat-ledger/package.json` runs unit tests with
+  `node --experimental-strip-types --test`. `LedgerServiceImpl` uses TypeScript **parameter
+  properties** (`constructor(private readonly pool: Pool, …)`), which strip-only mode refuses to load
+  ("TypeScript parameter property is not supported in strip-only mode"). The test file's lazy-import
+  guard (`try { await import('../grpc/ledgerServiceImpl.js') } catch {}`) then swallows the failure and
+  every `if (!LedgerServiceImpl) return;` short-circuits — so `pnpm run test:coverage` reports
+  `All files | 0%` yet **exits 0** (c8 `--lines 40` passes a zero-file run). This is the exact
+  `fails.md` 2026-07-29 (feature 074) vacuous-green trap, and it is **pre-existing** — it affects every
+  ledger unit test, not anything feature 021 introduced.
+- **Substitution (CI-equivalent+)**: to get a genuine red→green for Steps 4/5 (and 6/7 later), the
+  tests were compiled with the service's own `tsc` (`pnpm run build`, which handles parameter
+  properties) and run against `dist`: `node --test dist/__tests__/ledgerServiceImpl.test.js`. Under
+  that real execution the new assertions failed against the pre-Step-4 tree (5 fail / 17 pass) and
+  passed after (22/22). This is a stronger proof than the configured command, which cannot fail.
+- **Disposition**: recorded as a `fails.md` ledger entry and to be routed to `/sdd-qa defect` /
+  `/sdd-triage` as a **platform** test-infra bug (the runner should build-then-`--test`, or use
+  `--experimental-transform-types` with extension resolution, across the Node services). **Out of scope
+  for feature 021** (F-08 — a platform-wide runner change touching every Node service, not this
+  feature's Files). The `pnpm run test:coverage` command in Steps 5/7 verification still runs (exits 0)
+  and the dist-run is the authoritative behavioral gate; CI runs the same configured command.

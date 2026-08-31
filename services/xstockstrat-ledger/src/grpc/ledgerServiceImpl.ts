@@ -31,11 +31,18 @@ export class LedgerServiceImpl {
     const eventId = uuidv4();
     const now = new Date();
 
+    // Resolve the owning user once (feature 021): the request field wins, then the
+    // inbound x-user-id metadata (dual-channel — background producers set the field
+    // explicitly since they carry no metadata; request-scoped callers ride the header),
+    // else NULL for genuinely platform-scoped events.
+    const userId: string | null =
+      (req.userId && String(req.userId)) || call.metadata?.get?.('x-user-id')?.[0] || null;
+
     // event-insert columns + values, shared by the plain and idempotent paths.
     const insertSql = `INSERT INTO ledger.events
          (event_id, event_type, source_service, correlation_id, stream_key,
-          payload, metadata, occurred_at, recorded_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          payload, metadata, occurred_at, recorded_at, user_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING sequence, recorded_at`;
     const insertParams = [
       eventId,
@@ -51,6 +58,7 @@ export class LedgerServiceImpl {
       // rejected as `invalid input syntax for type timestamp` ("0NaN-NaN-NaN…").
       toValidDate(req.occurredAt, now),
       now,
+      userId,
     ];
 
     // Plain path — no dedup key, behave exactly as before.
@@ -313,5 +321,6 @@ export function rowToEvent(row: any) {
     occurredAt: new Date(row.occurred_at),
     recordedAt: new Date(row.recorded_at),
     sequence: row.sequence,
+    userId: row.user_id ?? '',
   };
 }
