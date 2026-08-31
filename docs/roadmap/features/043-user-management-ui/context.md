@@ -100,3 +100,44 @@ pool), F-07 (endpoint is env, TTLs from config), F-04 (client specifier pinned b
 proposer/adversary debate and the approval gate were self-run and are **provisional**. The four forks above
 must be confirmed by the operator before/at `/sdd-spec`. Status intentionally NOT advanced to
 `design-approved` by this subagent.
+
+## Session 2026-08-31 — sdd-spec
+
+- Generated implementation-spec.md with **10 steps** (isolated `/sdd-spec` run: this session wrote
+  only implementation-spec.md and this context log; `status.md` and `feature.md` were intentionally
+  left unchanged for the orchestrator to advance). Consumed the approved design.md (chosen approach:
+  6 additive admin RPCs + `/config-ui` Users section + best-effort redacted ledger audit) and reused
+  recon.md's Codebase Map as grounded evidence; re-verified the deeper details recon pointed to
+  before citing them.
+- Step boundaries follow recon's recommended scope: proto → proto-gen → identity authz gate →
+  identity servicer → identity unit tests → identity ledger audit client → audit unit test → UI BFF →
+  UI Users section → UI e2e. Every `@AC-1..@AC-11` mapped to a covering step (see § Scenario Coverage).
+- Key codebase findings (all grep/Read-confirmed):
+  - **Ledger client specifier pinned by grep (F-04):** `LedgerServiceClient` is a grpc-js generic
+    client constructor exported at `packages/proto/gen/ts/ledger/v1/ledger.ts:1389`; import subpath
+    `@xstockstrat/proto/ledger/v1/ledger` (mirrors identity's own server import at `src/index.ts:5`).
+    Never read `gen/` for the shape — only grep-pinned the export.
+  - **Identity `authz.ts` already exists** (feature 130) with `first`/`userIdFrom`/`HEADER_USER_ID`
+    but **no admin gate**; Step 3 ports the config gate verbatim (`ADMIN_SCOPE=0x04`,
+    `hasAdminAccessScope`, `ADMIN_SCOPE_ERROR`) from `services/xstockstrat-config/src/grpc/authz.ts:22,44-48,56-59`.
+  - **No DB migration** — `users` already has `roles TEXT[]`/`is_active`/`created_at`/`updated_at`
+    (`migrations/001_identity_tables.up.sql:6-14`); last migration is `006_user_metadata`.
+  - **`LEDGER_ENDPOINT` for identity is already wired** (`docker-compose.yml:185-186` + both `.do`
+    specs) — no deployment-file change; only the reader code is new. Identity becomes an outbound
+    caller for the first time → C-03 binds it (headers read from `call.metadata`, `x-trace-id` =
+    `correlation_id`); do NOT revive the dead `src/middleware/propagation.ts`.
+  - **Atomic last-admin guard (FR-11/AC-11)** designed as a single conditional `UPDATE` guarded by
+    `EXISTS(other active admin)` — no count-then-write (TOCTOU).
+  - **`Role` enum → exhaustive TS `Record<Role,…>`** obligation (C-10(a/d), fails.md 2026-07-21) lands
+    in the same PR as the enum via `src/lib/roleLabels.ts`; `pnpm run build` (tsc) is its gate.
+  - **⚠ Test-execution trap (fails.md 2026-07-29 / 074):** the existing identity test lazy-imports
+    `../grpc/identityServiceImpl.js` in a silent try/catch (strip-only guard). The new paired tests
+    must actually resolve and assert; the `c8 --lines 40` `test:coverage` gate is the backstop, and
+    P-06 red-before-green must show a real red.
+  - **`e2e/fixtures/users.ts` exists** with identity constants only (no `User`-view row) → Step 10
+    extends it with a `User`-view fixture + `INVENTORY.md` row (C-12).
+- Floor check: no F-* breach. F-01 (no migration), F-04 (ledger specifier grep-pinned), F-06 (gRPC
+  client, not a new `pg.Pool`; single identity Pool reused), F-07 (endpoint from env, TTLs from config).
+- Deduped reviewers across the 10 steps (recorded per-step in implementation-spec.md): Proto Reviewer,
+  xstockstrat-identity owner, Security, xstockstrat-ledger owner, xstockstrat-ui owner. Next:
+  `/sdd-review user-management-ui impl-spec`.
