@@ -150,3 +150,13 @@ No code, no `status.md` change.
 - **No "Not found / create from scratch" steps** — every path/symbol cited a real `path:line`
   (new files — migrations, `useSignalAttribution.ts`, `attribution/page.tsx`, fixtures, tests — follow
   a grounded sibling pattern, not an absent-pattern gap).
+
+## Session 2026-08-31 — sdd-review impl-spec (advisory)
+
+- Result: 1 failure, 3 warnings/notes (advisory — did not block; no Floor breach). Spec is otherwise exceptionally well-grounded (proto/migration/fee-seam ordering causally correct, every code step test-paired, winner-takes-all/exact-tie/net-of-fees/fees-default-0 all covered).
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 13: **C-10(a) nav registration** — registers `Attribution` only in `PLATFORM_SUBNAV.insights`, but `PlatformHeader.tsx:116` marks that prop "Legacy: ignored"; the shell renders `NAV_GROUPS` (`:231`/`:281`). Register the entry in `NAV_GROUPS` in `services/xstockstrat-ui/src/components/shared/navGroups.tsx` (engine group, alongside `P&L Patterns` at `navGroups.tsx:65`); add `navGroups.tsx` to the step's Files. — [ ] unaddressed
+  - Step 14: point the nav-reachability e2e assertion at the RENDERED shell nav (click the `Attribution` link, assert landing on `/insights/attribution`), not a `PLATFORM_SUBNAV` structure check. — [ ] unaddressed
+  - Step 9: `$8` "renumber" wording is ambiguous; the concrete target (`SET closed_at=$5, realized_pnl=$6, close_event_id=$7, fees_total=$8`) is correct — no logic change. — [ ] note only
+  - Step 13: 7-file step (>5) is a cohesive UI slice — acceptable, splitting optional. — [ ] note only
+- Overlap findings: batch scan CLEAN (0 FAIL); WARN same-function overlaps recorded in merge-order.md (trading.go 021<029, portfolio_service.go 029<031).
