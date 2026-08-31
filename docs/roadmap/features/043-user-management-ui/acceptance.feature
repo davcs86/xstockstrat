@@ -73,3 +73,14 @@ Feature: user-management-ui
     Given the caller holds the "admin" role
     When the caller invokes "CreateUser", "UpdatePassword", "GetUser", or "ListUsers"
     Then no response payload, log line, or rendered UI field contains a plaintext password or a password hash
+
+  @AC-11 @FR-11
+  Scenario: The last active admin cannot be deactivated or demoted
+    Given the caller holds the "admin" role
+    And "admin@localhost" is the only remaining active user with the "admin" role
+    When the caller invokes "SetUserActive" for "admin@localhost" with active = false
+    Then the RPC is rejected with a FAILED_PRECONDITION error "cannot remove last admin"
+    And "admin@localhost" is still active and still holds the "admin" role
+    When the caller instead invokes "SetUserRoles" for "admin@localhost" with roles ["trader"]
+    Then the RPC is rejected with a FAILED_PRECONDITION error "cannot remove last admin"
+    And "admin@localhost" still holds the "admin" role

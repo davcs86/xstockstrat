@@ -27,6 +27,11 @@ FR-7. All user management actions require the caller to hold the `admin` role (e
 FR-8. All user management actions are written to the ledger as audit events.
 FR-9. The UI is accessible from a new "Users" section within the `xstockstrat-ui` `/config-ui` segment.
 FR-10. Password values are never returned or displayed in any API response or UI field.
+FR-11. **Last-admin lockout guard.** `SetUserActive(active=false)` and `SetUserRoles` MUST refuse to
+  deactivate or strip the `admin` role from the **final active admin** (including the seeded
+  `admin@localhost`), returning a clear error (gRPC `FAILED_PRECONDITION`, "cannot remove last admin").
+  The refusal is enforced server-side in `xstockstrat-identity`, checked against the live set of
+  currently-active `admin` users — never a UI-only guard.
 
 ## Out of Scope
 
@@ -40,7 +45,9 @@ FR-10. Password values are never returned or displayed in any API response or UI
 
 Exact service names from CLAUDE.md Service Registry:
 - `xstockstrat-identity` — new admin RPCs: `CreateUser`, `ListUsers`, `GetUser`, `UpdatePassword`,
-  `SetUserRoles`, `SetUserActive`; admin-role authorization on each; ledger audit event per action.
+  `SetUserRoles`, `SetUserActive`; admin-role authorization on each; ledger audit event per action
+  (**new plumbing** — identity has no ledger-write client today, see Design Guardrails); last-admin
+  lockout guard on `SetUserActive`/`SetUserRoles` (FR-11).
 - `xstockstrat-ui` — new "Users" admin section under the `/config-ui` segment (list, create, and edit
   surfaces) plus the BFF routes that call the identity RPCs over gRPC.
 - `packages/proto` — new RPC definitions and request/response messages in the identity proto.
@@ -97,19 +104,43 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **Known trap (ledger 2026-08-06 `unify-admin-auth-gates` / C-10(c), 115-fix-config-ui-env)**:
-  enforce the admin check at every identity **RPC write path** via the trusted `x-access-scope` admin
-  bit — a UI-only guard leaves each mutation reachable by direct gRPC/BFF call, and every mutating RPC
-  must sit inside the authz gate (no new verb falling through the switch as non-mutating).
-- [ ] **Known trap (ledger 2026-08-05 `formula-management-ui`)**: backends are **gRPC-only**; do not
-  assume any HTTP-header identity mechanism or HTTP transport — the UI reaches identity over gRPC and
-  forwards `x-user-id`/`x-access-scope`/`x-trace-id`, so verify authz plumbing against that model.
-- [ ] **Known trap (ledger 2026-07-01 `060-screener-engine` / C-10(a))**: a new UI section/route must
-  be registered in the shared nav (`PLATFORM_SUBNAV`) with a nav-reachability test, or the Users page
-  ships unreachable from the sidebar.
-- [ ] Which roles are valid? The seed admin uses `admin` and the default is `trader` — enforce a closed
-  enum, or keep open role strings? Resolve in `/sdd-design`.
-- [ ] Should the "Users" section be route-guarded to `admin` at the Next.js middleware level in addition
-  to the server-side RPC enforcement (defense in depth)? Resolve in `/sdd-design`.
-- [ ] Should `UpdatePassword` (and `SetUserActive` deactivate) also invalidate the user's existing
-  refresh tokens? Resolve in `/sdd-design`.
+None — moved to Design-Phase Decisions / Design Guardrails below.
+
+## Design Guardrails
+
+Known traps and new plumbing to honor at design/implementation — not open decisions, but constraints
+the design must satisfy:
+
+- **Server-side authz at every RPC write path (ledger 2026-08-06 `unify-admin-auth-gates` / C-10(c),
+  115-fix-config-ui-env).** Enforce the admin check at every identity **RPC write path** via the
+  trusted `x-access-scope` admin bit — a UI-only guard leaves each mutation reachable by direct
+  gRPC/BFF call, and every mutating RPC must sit inside the authz gate (no new verb falling through
+  the switch as non-mutating).
+- **gRPC-only identity plumbing (ledger 2026-08-05 `formula-management-ui`).** Backends are
+  **gRPC-only**; do not assume any HTTP-header identity mechanism or HTTP transport — the UI reaches
+  identity over gRPC and forwards `x-user-id`/`x-access-scope`/`x-trace-id`, so verify authz plumbing
+  against that model.
+- **Shared-nav reachability (ledger 2026-07-01 `060-screener-engine` / C-10(a)).** A new UI
+  section/route must be registered in the shared nav (`PLATFORM_SUBNAV`) with a nav-reachability test,
+  or the Users page ships unreachable from the sidebar.
+- **Identity→ledger audit is NEW plumbing, not a reuse.** FR-8/AC-8 require a ledger audit event per
+  mutating action, but `xstockstrat-identity` has **no ledger-write client today** — the fictional
+  `xstockstrat-ledger` dep and `LEDGER_ENDPOINT` were removed from identity, and its auth events are
+  currently only `log.info` lines (see `services/xstockstrat-identity/docs/context-constitution-findings.md`).
+  This audit client (gRPC client, `LEDGER_ENDPOINT` wiring, `AppendEvent` calls, redaction so no
+  password/hash reaches the ledger) is **new plumbing to build and verify at design**, not an existing
+  capability to reuse. Treat the ledger-write path as a first-class implementation step, not a
+  one-line addition.
+
+## Design-Phase Decisions (owned by /sdd-design)
+
+Genuine design forks to resolve in `/sdd-design`:
+
+- **Roles: closed enum vs. open `TEXT[]` strings.** The seed admin uses `admin` and the default is
+  `trader` — enforce a closed enum, or keep open role strings? (Out of Scope already fixes storage as
+  `TEXT[]`; this decides validation/typing at the RPC boundary.)
+- **UI middleware admin route-guard (defense in depth).** Should the "Users" section be route-guarded
+  to `admin` at the Next.js middleware level **in addition to** the server-side RPC enforcement, as
+  defense in depth?
+- **Refresh-token invalidation on mutate.** Should `UpdatePassword` (and `SetUserActive` deactivate)
+  also invalidate the user's existing refresh tokens?
