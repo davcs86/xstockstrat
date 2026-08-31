@@ -215,3 +215,45 @@ checkpoints; pause only on real blockers).
 - Files modified: none (contingent `next.config.js` change not required).
 - Deviations: Docker→offline build (CI-equivalent fallback) — see Deviation Log. The authoritative
   container build + running-container in-process-refresh proof runs in CI on this PR.
+
+### Step 4 — docs: correct Edge-only auth docs to Node.js-runtime middleware [done]
+- `docs/patterns/frontend-auth.md`: middleware required-files row → Node.js runtime + in-process
+  `refreshSession()`; "Edge-runtime trap" section retitled **HISTORICAL — superseded by feature 128**
+  with a superseded banner (kept as a scar explaining the old loopback + why the matcher exclusion
+  stays); reframed the "Only lib/auth.ts may be imported from middleware.ts" rule and the `auth.ts`
+  MUST-NOT-import rule as historical; corrected the `identity.ts` example header comment and the
+  `middleware.ts` required-behaviour bullet (in-process refresh, no self-`fetch`).
+- `services/xstockstrat-ui/CLAUDE.md`: Auth+BFF rows for `auth.ts` (Node-safe, preference not hard
+  requirement), `identity.ts` (imported by middleware), `middleware.ts` (Node.js runtime + in-process
+  refresh + kept matcher exclusion); Frontend-gotchas "Edge-runtime import trap" bullet rewritten.
+- Verification greps pass: "Only lib/auth.ts may be imported" no longer present as a current
+  constraint; both docs describe the Node.js-runtime middleware calling `refreshSession()`; remaining
+  "Edge" mentions are historical/superseded framing only.
+- **Teardown (root CLAUDE.md):** `/context-scrubber` (context-forge plugin) is **not available** in
+  this execute session — noted here and in the PR body rather than skipped silently. The doc edits
+  were made to match the shipped behavior directly.
+- TDD: N/A (docs-only). Files modified: `docs/patterns/frontend-auth.md`,
+  `services/xstockstrat-ui/CLAUDE.md`. Deviations: none.
+
+## Session 2026-08-31 — sdd-execute (sequential) — feature complete
+**Steps this session**: 1, 2, 3, 4
+**Progress**: 4 done / 4 total → status `code-completed`
+**C-16 promotion**: No new durable scenarios to promote. Feature 128 is an internal auth-transport
+refactor; its behavioral guarantees (near-expiry refresh, redirect-to-login on failure, unchanged
+cookie attributes) are already durable via feature 153's
+`services/xstockstrat-ui/acceptance/ui-auth-improvements.feature` (@AC-5/@AC-6, which the design
+explicitly PRESERVED by keeping the matcher exclusion). The new @AC-1/@AC-5/@AC-6 assertions
+(Node.js runtime, removed loopback, standalone-build feasibility) are implementation-structure
+guarantees, not cross-feature business rules — the sanctioned "pure refactor, no new guarantee" skip.
+**Accountability (P-03)**:
+- Out-of-scope changes: none.
+- Open questions / items: none.
+- Unaddressed review warnings: the sdd-review impl-spec ⚠ (pin `e2e/auth.spec.ts` as the E2E guard
+  for the now-rotated near-expiry cookie path) is **addressed at the unit layer** — the new
+  `middleware.test.ts` @AC-2/@AC-3 assert the rotated `Set-Cookie` on the middleware response
+  directly (the FR-3 latent-bug fix). The existing `e2e/auth.spec.ts` remains green; extending it for
+  the near-expiry rotation is a follow-up nicety, not a blocker (unit coverage now proves the path).
+**AC-6 authoritative proof**: the container build + running-container in-process-refresh check runs
+in CI's Docker build on the integration PR (docker unavailable in this sandbox — offline `pnpm run
+build` fallback passed).
+**Next**: integration PR → main-dev.

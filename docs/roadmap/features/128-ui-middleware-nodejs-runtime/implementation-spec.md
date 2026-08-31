@@ -1,6 +1,6 @@
 # Implementation Spec: ui-middleware-nodejs-runtime
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-08-31
 **Feature**: `docs/roadmap/features/128-ui-middleware-nodejs-runtime/feature.md`
 **Total Steps**: 4
@@ -204,7 +204,7 @@ All 7 scenarios covered.
 
 ### Step 4 — docs: correct the Edge-only auth docs to describe the Node.js-runtime middleware
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns/` + `xstockstrat-ui`
 **Files**:
 - `docs/patterns/frontend-auth.md` — modify
