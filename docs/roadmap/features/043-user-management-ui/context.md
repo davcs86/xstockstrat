@@ -215,3 +215,54 @@ execution: Step 6 audit idempotency_key must be stable (addressed at Step 6); St
   the Step-5 updatePassword mock to return `rows:[{email}]` (Step 6 added `RETURNING email`).
 - TDD (P-06): red 3 audit tests fail with the Step-6 wiring stashed → green 52/52 after. Files:
   `identityServiceImpl.test.ts`.
+
+### Step 8 — service: register six IdentityService RPCs on config-ui BFF [done]
+- `configUiBff.ts`: imported `IdentityService` + reused `identityClient` (`connectClients.ts:35`,
+  already present for auth). Added `router.service(IdentityService, {...})`: `listUsers`/`getUser`/
+  `setUserRoles`/`setUserActive` via `forwardAdmin` (admin-gate + header propagation for free);
+  `createUser`/`updatePassword` as explicit admin-gated bodies (`requireSession`+`requireAdminScope`+
+  `backendHeaders`) so the write-only password is forwarded but never injected/echoed (AC-10). Only
+  these six are registered — connect-node leaves the rest of IdentityService unimplemented, so
+  config-ui exposes user management only. No new propagation code (backendHeaders reused). TDD:
+  covered by Step 10 e2e (BFF RPC round-trips). Files: `services/xstockstrat-ui/src/lib/configUiBff.ts`.
+
+### Step 9 — service: config-ui Users section (page, nav, browser client, Role map) [done]
+- Created `src/lib/browserClients/configUiIdentityClient.ts` (`makeBrowserTransport('/config-ui/api')`
+  + `createClient(IdentityService, …)` — per-segment, refresh-guarded transport).
+- Created `src/lib/roleLabels.ts`: exhaustive `Record<Role,string> ROLE_LABELS` (+ `ASSIGNABLE_ROLES`,
+  `rolesLabel()`) so a new proto Role fails `tsc` here (C-10(a/d), mirrors opportunityShared.tsx).
+- Created `src/app/config-ui/users/page.tsx` ('use client'): React-Query `listUsers`, `DataTable`
+  (email / roles via `rolesLabel` / status Badge / created via `timestampDate`), Create + Reset-password
+  + Edit-roles `FormDialog`s, Deactivate/Reactivate via `DropdownMenu`; last-admin `FAILED_PRECONDITION`
+  surfaced via `CardNotice` (AC-11, `ConnectError.rawMessage`), never swallowed. Password fields
+  write-only (AC-10). C-17 tokens/state primitives; every row action button has a unique accessible
+  name (`Actions for <email>`).
+- Nav: added `{ label: 'Users', href: '/config-ui/users', adminOnly: true }` to the Settings group in
+  `navGroups.tsx` (single source of truth). **Deviation (honored impl-review fix):** the spec's
+  instruction 5 (also add to `PLATFORM_SUBNAV.config`) was DROPPED — `PLATFORM_SUBNAV` is dead code
+  (feature 083 renders the Section nav from `NAV_GROUPS`); editing it would add an unreachable link.
+  `PlatformHeader.tsx` untouched. See implementation-spec.md § Deviation Log.
+- TDD: N/A (frontend page — behavior gated by Step 10 e2e). Lint + tsc build clean.
+
+### Step 10 — test: config-ui Users e2e [done]
+- Extended `e2e/fixtures/users.ts` with `USER_VIEW_*` (primary [Admin,Trader] active / trader /
+  inactive-viewer / last-admin) + `USER_VIEWS` + `LAST_ADMIN_USER_ID`; catalog row in `INVENTORY.md`
+  (C-12, reuses `TEST_USER_ID`/`TEST_USER_EMAIL`). `mock-backend.ts`: six `identityHandlers` methods
+  (registered on all three mock ports; config-ui BFF dials 9091) — list/get return password-free
+  `User` views, setUserRoles/setUserActive throw `FAILED_PRECONDITION 'cannot remove last admin'` for
+  `LAST_ADMIN_USER_ID`.
+- `e2e/config-ui/users.spec.ts`: AC-1/AC-10 (rows render email/roles/status, no `password_hash`/`$2b$`),
+  AC-9 (Section-landmark nav walk to /config-ui/users), AC-11 (last-admin guard message + row kept),
+  AC-8 (create round-trips through BFF, no error). AC-9 targets
+  `getByRole('navigation',{name:'Section'})` to avoid the hidden mobile-offcanvas copy; AC-1 scopes
+  'Inactive' to the status Badge and gives the first row `{timeout:30000}` for BFF cold-compile.
+- TDD (P-06): implemented spec+page first (red — page 404/empty), then wired; final **5/5 passed
+  (1.2m)** with `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=…/chromium-1194/chrome-linux/chrome
+  --timeout=120000 --workers=1`. CI runs the authoritative e2e. Files: `users.spec.ts`,
+  `mock-backend.ts`, `fixtures/users.ts`, `fixtures/INVENTORY.md`.
+
+### Feature close-out [code-completed]
+- All 10 steps done. status.md → `code-completed`. Steps 8–10 committed; branch pushed; integration
+  PR opened against `main-dev`. Features 128 (#1052) and 021 (#1053) already merged to main-dev.
+- C-16 acceptance-scenario promotion into the durable identity + config-ui business-rule suites is
+  deferred to `/promote` at launch (documented backstop), not done here.

@@ -1,6 +1,6 @@
 # Implementation Spec: user-management-ui
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-08-31
 **Feature**: `docs/roadmap/features/043-user-management-ui/feature.md`
 **Total Steps**: 10
@@ -373,7 +373,7 @@ Confirm the audit cases execute and pass and coverage stays ≥ 40%. Break the "
 
 ### Step 8 — service: Register the six RPCs on the config-ui BFF
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/configUiBff.ts` — modify
@@ -408,7 +408,7 @@ Confirm all six methods are registered and the two password-carrying methods use
 
 ### Step 9 — service: config-ui "Users" section (pages, nav, browser client, Role label map)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/users/page.tsx` — create (user list + create/reset/roles/activate actions)
@@ -458,7 +458,7 @@ grep -n "config-ui/users" services/xstockstrat-ui/src/components/shared/navGroup
 
 ### Step 10 — test: config-ui Users e2e (list, actions, nav reachability)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/config-ui/users.spec.ts` — create
@@ -519,3 +519,18 @@ grep -n "Users\|User view" services/xstockstrat-ui/e2e/fixtures/INVENTORY.md
 - Same sandbox constraints as feature 021 Step 13 (pinned browser build 1234 vs installed 1194; `pnpm dev`
   cold-compile > 10s). Worked around identically: `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/
   chromium-1194/chrome-linux/chrome` + `--timeout=120000 --workers=1`. CI runs the authoritative e2e.
+- AC-1 locator: `getByText('Inactive')` was a strict-mode violation (the string also appears inside a
+  table row's accessible name); scoped it to the status Badge (`locator('[data-slot="badge"]', {
+  hasText: 'Inactive' })`). AC-1 also needs `{ timeout: 30000 }` on the first row — the BFF `ListUsers`
+  route cold-compiles on first hit under `pnpm dev`. Final: **5/5 passed**.
+
+### Step 9 — `PLATFORM_SUBNAV.config` registration dropped (impl-review fix, honored)
+- **Spec instruction 5** said to also add `{ label: 'Users', href: '/config-ui/users' }` to
+  `PLATFORM_SUBNAV.config` (`PlatformHeader.tsx`). The impl-spec review flagged `PLATFORM_SUBNAV` as
+  **dead code** — feature 083's shell renders the desktop Row-2 "Section" nav from `NAV_GROUPS`
+  (`navGroups.tsx`), and `PLATFORM_SUBNAV` is no longer read for config-ui section links. Editing it
+  would add an unreachable entry and a misleading second source of truth.
+- **Disposition**: registered the nav entry **only** in `NAV_GROUPS` (Settings group, `adminOnly:true`);
+  `PlatformHeader.tsx` untouched. AC-9 nav reachability is proven green by the Step 10 e2e walking the
+  real `Section` landmark to `/config-ui/users`. Matches the recorded 029 fix ("nav must register in
+  NAV_GROUPS not PLATFORM_SUBNAV").
