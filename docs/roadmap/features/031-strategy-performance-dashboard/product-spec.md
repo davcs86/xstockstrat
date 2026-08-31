@@ -25,7 +25,14 @@ P&L, expressed as both a dollar amount and a percentage of peak equity.
 FR-3. A rolling 30-day Sharpe ratio must be displayed, computed as:
 `mean(daily_returns) / std(daily_returns) × sqrt(252)`, using the risk-free rate from config.
 FR-4. Summary statistics must include: total trades, win count, win rate (%), average return per trade
-(%), average hold time (hours), total realized P&L.
+(%), average hold time (days), total realized P&L. **Average return per trade** and **average hold
+time** are computed from the two fields the xstockstrat-portfolio producer extension adds to the
+`portfolio.position.closed` event (see Affected Services / Proto Contract Changes): average return per
+trade = mean(`realized_pnl` / `cost_basis`) across closed positions; average hold time =
+mean(close time − `opened_at`), where the close time is the event's own `occurred_at`. A close event
+that lacks the two added fields (a legacy event, or the redelivered post-close edge that has no prior
+position row) is excluded from these two averages but still counts toward total trades, win rate, total
+realized P&L, and the equity curve.
 FR-5. All metrics must refresh automatically on a configurable polling interval (default: 60 seconds)
 without a page reload.
 FR-6. The equity curve chart must support zoom and pan for inspecting specific time windows.
@@ -56,10 +63,21 @@ Exact service names from CLAUDE.md Service Registry:
   chart components (the standalone `xstockstrat-insights` service was consolidated into `xstockstrat-ui`
   by feature 045). **All equity-curve / drawdown / rolling-Sharpe / summary-stat math runs here, in the
   xstockstrat-ui BFF/lib** — reading ledger events + portfolio `GetPnL` over existing RPCs. There is no
-  backend analytics service in this feature and no proto change.
+  new backend analytics service in this feature and no proto change.
 - `xstockstrat-ledger` — queried for fill and closed-position P&L events by date range (read-only).
-- `xstockstrat-portfolio` — queried for current equity basis (the starting value for the equity curve)
-  via `GetPnL` (read-only).
+- `xstockstrat-portfolio` — **producer extension (code-bearing).** Two roles: (1) read-only, queried for
+  the current equity basis via `GetPnL`; and (2) **additively extends the `portfolio.position.closed`
+  emit** (`internal/service/portfolio_service.go:304-307`) to carry two already-tracked fields —
+  `cost_basis` (`existing.CostBasis`, `portfolio_service.go:271` / `portfolio_repo.go:269`) and
+  `opened_at` (`existing.OpenedAt`, `portfolio_repo.go:270`) — so the UI can compute average return per
+  trade and average hold time (FR-4). This makes the feature **no longer zero-backend**: it adds an
+  additive Go producer change (with its own test step) to xstockstrat-portfolio. It remains **no
+  proto change and no DB migration** — both fields are existing columns on `portfolio.positions`
+  (migration `001_portfolio_hypertable.up.sql`) and the payload is a `google.protobuf.Struct` (additive
+  keys only). The existing key set (`user_id, symbol, account_id, trading_mode, realized_pnl`) is
+  **preserved** — the two keys are purely additive, so the `xstockstrat-analysis` P&L-pattern consumer
+  is unaffected (C-16). The producer-contract note in `services/xstockstrat-portfolio/CLAUDE.md` §
+  Ledger Events Emitted must be updated in the same PR.
 - `xstockstrat-trading` — read-only reuse of the existing `GetTradingEnvironment` RPC (via the current
   `traderBff.ts` registration / `AccountContext.tsx`) for the FR-8 environment-derived paper/live label.
   No new endpoint or behavior.
@@ -75,7 +93,11 @@ _Constitution **C-14**._
 
 ## Proto Contract Changes
 
-- [ ] No proto changes required — reuses the existing ledger read RPCs and portfolio `GetPnL`.
+- [x] No proto changes required — reuses the existing ledger read RPCs and portfolio `GetPnL`. The two
+  new fields (`cost_basis`, `opened_at`) ride the existing `google.protobuf.Struct` payload of the
+  `portfolio.position.closed` ledger event, so no `.proto` is touched (the same additive-Struct pattern
+  by which feature 029 adds `fees` to the fill payload). `opened_at` is serialized as an RFC3339 string
+  (the `as_of` timestamp precedent, `portfolio_service.go:842-844`); `cost_basis` is a JSON number.
 
 ## Config Key Changes
 
@@ -96,17 +118,24 @@ Design-Phase Decision — see below.
 
 ## Database Changes
 
-- [ ] No schema changes
+- [x] No schema changes — the producer extension reads two columns that already exist on
+  `portfolio.positions`: `cost_basis` and `opened_at` (both defined in migration
+  `001_portfolio_hypertable.up.sql`, `opened_at` being `NOT NULL DEFAULT NOW()`). No new migration is
+  needed; the next-free portfolio migration NNN (currently `014`) is **not** consumed by this feature.
 
 ## Feature Workflow Notes
 
 Branch to create: `feature/strategy-performance-dashboard` (branch from `main-dev`)
-This is a **config-only gate** feature (two new config keys, no proto/DB change).
+This is a **config-gate + additive-producer** feature (two new config keys, plus an additive
+`portfolio.position.closed` payload extension — no proto/DB change).
 Approval gates required (per docs/runbooks/feature-workflow.md):
-- [x] 1 service owner approval (insights UI + read-only ledger/portfolio queries)
+- [x] Service owner approval — `xstockstrat-ui` (insights UI + read-only ledger/portfolio queries) **and
+  `xstockstrat-portfolio`** (the additive producer emit extension is a code-bearing change to that
+  service, so its owner must review)
 - [x] Config-key owner + config team (two new `ui.performance.*` keys)
-- [ ] 2 service owners + platform lead (breaking proto change) — not applicable
-- [ ] DBA review + service owner (schema migration) — not applicable
+- [ ] 2 service owners + platform lead (breaking proto change) — not applicable (additive Struct keys,
+  no proto change)
+- [ ] DBA review + service owner (schema migration) — not applicable (both fields are existing columns)
 
 ## Acceptance Criteria
 

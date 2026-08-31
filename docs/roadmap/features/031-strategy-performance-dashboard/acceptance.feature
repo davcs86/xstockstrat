@@ -39,7 +39,27 @@ Feature: strategy-performance-dashboard
     Given a trader with 10 closed paper trades, of which 6 are winners and 4 are losers
     When the dashboard renders its summary statistics
     Then it shows total trades 10, win count 6, and win rate 60.0%
-    And it shows average return per trade (%), average hold time (hours), and total realized P&L
+    And it shows average return per trade, average hold time, and total realized P&L
+
+  @AC-11 @FR-4
+  Scenario: Average return per trade is the mean of realized P&L over cost basis from the extended close event
+    Given a closed paper trade whose portfolio.position.closed event carries realized_pnl 500 and cost_basis 10000
+    When the dashboard computes average return per trade
+    Then it shows an average return per trade of +5.0%
+
+  @AC-12 @FR-4
+  Scenario: Average hold time is the mean of close time minus open time from the extended close event
+    Given a closed paper trade whose portfolio.position.closed event carries opened_at "2026-02-01"
+    And whose close is recorded on 2026-02-11 (the event's occurred_at)
+    When the dashboard computes average hold time
+    Then it shows an average hold time of 10 days
+
+  @AC-13 @FR-4
+  Scenario: A legacy close event without the extended fields is excluded from the per-trade averages
+    Given a closed paper trade whose portfolio.position.closed event carries realized_pnl but no cost_basis or opened_at
+    When the dashboard computes average return per trade and average hold time
+    Then that trade is excluded from both averages
+    And it is still counted in total trades, win rate, total realized P&L, and the equity curve
 
   @AC-6 @FR-5
   Scenario: Metrics auto-refresh on the default polling interval without a page reload

@@ -75,3 +75,47 @@ Applied the `/sdd-review` product-spec findings (FAIL on C-05 + warnings). Statu
 - **Other open risks**: R2 Sharpe daily-returns basis (dollar Δ vs % of an equity base — pin the reference formula, may need `GetPnL`); R3 config map-key slicing (confirm `namespace:'ui'` → `values['performance.*']` against real keying); R4 FR-5 poll interval declared "configurable" with no key (ship 60s client constant).
 - **Constitution rules touched**: C-05, C-10(a), C-12/C-13, C-14, C-16 (net-new; PRESERVE the `portfolio.position.closed` key-set contract + header-identity IDOR guard), C-17; P-02; F-04, F-07 (config sourced via `GetConfig`, not hardcoded — no Floor breach), F-06 (untouched). **Floor breaches: none.**
 - Status: unchanged (this run writes only `recon.md` + `design.md` + this note; the `spec-ready` → `design-approved` flip and `feature.md`/`status.md` updates are deferred to the operator-confirmed design gate).
+
+## Session 2026-08-31 — design revision (R1 operator decision: extend the portfolio producer now)
+
+**Confirmed operator decision:** resolve Open Risk R1 via option (b) — additively extend the
+`xstockstrat-portfolio` producer NOW so avg-return-% and avg-hold-time ship in V1. This overturns the
+prior "UI-only / zero-backend" framing. Revised `design.md`, `product-spec.md`, `acceptance.feature`
+(this note is the `context.md` record). `status.md` and code untouched.
+
+**Investigation result (the load-bearing finding).** The position row already tracks everything the two
+stats need at close — **no migration**:
+- `portfolio.positions` defines `cost_basis` and `opened_at` (`NOT NULL DEFAULT NOW()`) in migration
+  `001_portfolio_hypertable.up.sql`; `qty` and `avg_entry_price` are there too.
+- At the full-close emit, `existing` (fetched `portfolio_service.go:262`) is a `*portfoliov1.Position`
+  carrying `CostBasis` (`portfolio_repo.go:269`) and `OpenedAt` (`portfolio_repo.go:270`, RFC3339-able).
+- The emit `portfolio_service.go:304-307` writes a `google.protobuf.Struct` payload via
+  `emitEvent`/`structpb.NewValue` (`:790-795`) — so adding keys needs **no proto change** (mirrors
+  feature 029's additive `fees`). `structpb.NewValue` rejects `time.Time`, so `opened_at` is emitted as
+  an RFC3339 string (the `as_of` precedent, `:842-844`).
+
+**Fields added to the `portfolio.position.closed` payload:** exactly **two** — `cost_basis` (JSON number,
+from `existing.CostBasis`) and `opened_at` (RFC3339 string, from `existing.OpenedAt`). `qty` /
+`avg_entry_price` deliberately **not** added (neither stat needs them — minimalism). `closed_at`
+deliberately **not** added — the event's producer-stamped `OccurredAt` (`portfolio_service.go:800`) is
+already the close time and the equity-curve ordering key, so avg-hold-time = `occurred_at − opened_at`.
+Guarded by `existing != nil`: the redelivered-post-close edge omits both keys.
+
+**Migration:** none needed. Next-free portfolio NNN would be `014` but is **not** consumed here.
+**Proto change:** none (additive Struct keys). **Existing 5 keys preserved** → analysis P&L-pattern
+consumer unaffected (C-16 additive-extend).
+
+**Decisions / notes surfaced:**
+- FR-4 avg-hold-time unit changed **hours → days** to match the operator's confirmed example
+  (2026-02-01 → 2026-02-11 = 10 days); reversible one-line display divisor if hours preferred (R6).
+- avg-return-% = `mean(realized_pnl / cost_basis)`; `cost_basis` is total-signed and `realized_pnl` is
+  documented long-exact, so the UI lib must use `abs(cost_basis)` (or scope to longs) and guard
+  `cost_basis == 0` (R5) — mirrors the non-finite Sharpe guard.
+- Backward compat: legacy close events (and the redelivered edge) lack the two fields; the lib
+  presence-checks and excludes them from the two averages only, still counting them in
+  trades/win-rate/total-P&L/equity-curve. New scenario **AC-13** covers this; **AC-11**/**AC-12** cover
+  the two stats concretely ($500/$10,000 → +5.0%; 10-day hold). AC-5 kept (units removed from its line).
+- Impl must update `services/xstockstrat-portfolio/CLAUDE.md` § Ledger Events Emitted (producer contract)
+  in the same PR, and add a portfolio service-owner approval gate + a RED test on the new payload keys.
+- **No Floor (F-*) breach:** the extension adds no DB access (fields already in hand), no pool/proto/
+  secret Floor crossing — additive emit only. Design remains approvable.
