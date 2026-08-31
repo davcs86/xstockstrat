@@ -203,3 +203,15 @@ checkpoints; pause only on real blockers).
   `grep buildInternalRefreshUrl src/lib/auth.test.ts` → no matches.
 - Files modified: `services/xstockstrat-ui/src/middleware.test.ts`, `services/xstockstrat-ui/src/lib/auth.test.ts`
 - Deviations: none
+
+### Step 3 — test: standalone-build feasibility gate (AC-6, load-bearing) [done]
+- Docker unavailable in sandbox → ran the spec's offline fallback `pnpm run build` (standalone,
+  NEXT_DISABLE_STANDALONE unset). **Build succeeded**; `.next/standalone/services/xstockstrat-ui/server.js`
+  emitted; **no** `node:http` / Edge-runtime bundling error for `@connectrpc/connect-node` despite the
+  Node-runtime middleware now importing it transitively via `@/lib/identity`. Feasibility premise
+  proven (disproves insights.md:777-780 for the Node runtime; clears design Open Risk 1). No
+  `serverExternalPackages`/`next.config.js` change needed (happy path).
+- TDD: N/A (build/integration feasibility proof, not a unit red-green pair).
+- Files modified: none (contingent `next.config.js` change not required).
+- Deviations: Docker→offline build (CI-equivalent fallback) — see Deviation Log. The authoritative
+  container build + running-container in-process-refresh proof runs in CI on this PR.

@@ -172,7 +172,7 @@ All 7 scenarios covered.
 
 ### Step 3 — test: standalone-build feasibility gate (load-bearing, `@AC-6`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/next.config.js` — modify **only if** the standalone build fails and a middleware-aware `serverExternalPackages` adjustment is required (contingent; happy path = no change)
@@ -237,4 +237,17 @@ All 7 scenarios covered.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Step 3 — AC-6 standalone-build gate: Docker unavailable → CI-equivalent offline build
+- **What**: The spec's authoritative AC-6 proof is `docker compose build --no-cache xstockstrat-ui`
+  followed by a running-container in-process-refresh check. Docker is unavailable in the execute
+  sandbox.
+- **Substitution**: Ran the spec's documented offline fallback `cd services/xstockstrat-ui &&
+  pnpm run build` (standalone target, `NEXT_DISABLE_STANDALONE` unset). Build **succeeded** with no
+  `Module not found: Can't resolve 'node:http'` or any Edge-runtime bundling error for
+  `@connectrpc/connect-node`, even though the Node.js-runtime `middleware.ts` now transitively imports
+  it via `@/lib/identity`. `.next/standalone/services/xstockstrat-ui/server.js` was emitted. This
+  disproves the `insights.md:777-780` hypothesis for the Node runtime and clears design Open Risk 1;
+  no `serverExternalPackages` adjustment was required (happy path — `next.config.js` unchanged).
+- **Disposition**: CI-equivalent fallback (sequential-mode verification fallback). The authoritative
+  container build + running-container refresh proof runs in CI's Docker build on this PR; it is the
+  final AC-6 gate before launch.
