@@ -751,7 +751,7 @@ describe('updatePassword (AC-3/AC-10)', () => {
   it('updates the hash then revokes the target refresh tokens, returning an empty body', async () => {
     if (!IdentityServiceImpl) return;
     const pool = routePool([
-      { re: /UPDATE identity\.users SET password_hash/, resp: { rowCount: 1 } },
+      { re: /UPDATE identity\.users SET password_hash/, resp: { rows: [{ email: 'alice@example.com' }], rowCount: 1 } },
       { re: /UPDATE identity\.refresh_tokens SET revoked_at/, resp: { rowCount: 1 } },
     ]);
     const impl = makeAdminImpl(pool);
@@ -829,5 +829,97 @@ describe('last-admin guard (AC-11)', () => {
     const { err } = await runRpc(impl, 'setUserRoles', adminCall({ userId: 'admin-only', roles: [2] }));
     assert.equal(err.code, 9);
     assert.equal(err.message, 'cannot remove last admin');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Ledger audit (feature 043, Step 7) — AC-8/AC-10
+// ---------------------------------------------------------------------------
+
+function makeFakeAudit() {
+  const calls: Array<{ eventType: string; targetUserId: string; payload: any }> = [];
+  return {
+    calls,
+    async append(eventType: string, targetUserId: string, _md: any, payload: any) {
+      calls.push({ eventType, targetUserId, payload });
+    },
+  };
+}
+
+function makeAuditImpl(pool: any, audit: any) {
+  if (!IdentityServiceImpl) return null;
+  const config = { getInt: (_k: string, d: number) => d } as any;
+  return new IdentityServiceImpl(pool, config, audit);
+}
+
+const NO_SECRET_KEYS = ['password', 'newPassword', 'new_password', 'passwordHash', 'password_hash'];
+function assertNoSecret(payload: any) {
+  for (const k of NO_SECRET_KEYS) assert.ok(!(k in payload), `audit payload must not carry ${k}`);
+}
+
+describe('ledger audit emits (AC-8/AC-10)', () => {
+  it('createUser emits identity.user.created with a secret-free payload from x-user-id', async () => {
+    if (!IdentityServiceImpl) return;
+    const pool = routePool([{ re: /INSERT INTO identity\.users/, resp: { rows: [USER_ROW], rowCount: 1 } }]);
+    const audit = makeFakeAudit();
+    const impl = makeAuditImpl(pool, audit);
+    await runRpc(impl, 'createUser', adminCall({ email: 'alice@example.com', password: 'secret-pw', roles: [2] }, 'admin-42'));
+    assert.equal(audit.calls.length, 1);
+    assert.equal(audit.calls[0].eventType, 'identity.user.created');
+    assert.equal(audit.calls[0].payload.acting_admin_user_id, 'admin-42');
+    assert.equal(audit.calls[0].payload.target_user_id, 'u-1');
+    assertNoSecret(audit.calls[0].payload);
+  });
+
+  it('updatePassword emits identity.user.password_updated with NO password in the payload', async () => {
+    if (!IdentityServiceImpl) return;
+    const pool = routePool([
+      { re: /UPDATE identity\.users SET password_hash/, resp: { rows: [{ email: 'alice@example.com' }], rowCount: 1 } },
+      { re: /refresh_tokens SET revoked_at/, resp: { rowCount: 1 } },
+    ]);
+    const audit = makeFakeAudit();
+    const impl = makeAuditImpl(pool, audit);
+    await runRpc(impl, 'updatePassword', adminCall({ userId: 'u-1', newPassword: 'brand-new-pw' }));
+    assert.equal(audit.calls.length, 1);
+    assert.equal(audit.calls[0].eventType, 'identity.user.password_updated');
+    assertNoSecret(audit.calls[0].payload);
+  });
+
+  it('setUserRoles and setUserActive emit their events; reads emit nothing', async () => {
+    if (!IdentityServiceImpl) return;
+    const rolesAudit = makeFakeAudit();
+    const rolesImpl = makeAuditImpl(routePool([{ re: /SET roles/, resp: { rows: [{ ...USER_ROW, roles: ['trader'] }], rowCount: 1 } }]), rolesAudit);
+    await runRpc(rolesImpl, 'setUserRoles', adminCall({ userId: 'u-1', roles: [2] }));
+    assert.equal(rolesAudit.calls[0].eventType, 'identity.user.roles_updated');
+
+    const activeAudit = makeFakeAudit();
+    const activeImpl = makeAuditImpl(routePool([
+      { re: /SET is_active/, resp: { rows: [{ ...USER_ROW, is_active: false }], rowCount: 1 } },
+      { re: /refresh_tokens SET revoked_at/, resp: { rowCount: 1 } },
+    ]), activeAudit);
+    await runRpc(activeImpl, 'setUserActive', adminCall({ userId: 'u-1', active: false }));
+    assert.equal(activeAudit.calls[0].eventType, 'identity.user.deactivated');
+    assert.equal(activeAudit.calls[0].payload.active, false);
+
+    // reads do not audit
+    const readAudit = makeFakeAudit();
+    const readImpl = makeAuditImpl(routePool([{ re: /FROM identity\.users/, resp: { rows: [USER_ROW] } }]), readAudit);
+    await runRpc(readImpl, 'listUsers', adminCall({}));
+    await runRpc(readImpl, 'getUser', adminCall({ userId: 'u-1' }));
+    assert.equal(readAudit.calls.length, 0, 'reads must not audit');
+  });
+
+  it('is best-effort: a throwing audit sink does not fail the mutation (AC-8 / design R5)', async () => {
+    if (!IdentityServiceImpl) return;
+    const pool = routePool([{ re: /INSERT INTO identity\.users/, resp: { rows: [USER_ROW], rowCount: 1 } }]);
+    const throwingAudit = {
+      async append() {
+        throw new Error('ledger unavailable');
+      },
+    };
+    const impl = makeAuditImpl(pool, throwingAudit);
+    const { err, resp } = await runRpc(impl, 'createUser', adminCall({ email: 'a@b.c', password: 'x' }));
+    assert.equal(err, null, 'mutation still succeeds when the audit throws');
+    assert.ok(resp.user);
   });
 });
