@@ -99,3 +99,36 @@
 
 - Held-but-left-universe exit alerts: RESOLVED to strict FR-2 (a symbol that drops out of the fundamentals universe is not re-added for exit unless it is a held ∩ denied case per the blend rule). Design's recommended option.
 - Cross-cycle TTL cache for the fundamentals universe: NOT added in this feature (resolve-once-per-cycle is sufficient; a TTL cache is a possible later optimization). Design's recommended option.
+
+## Session 2026-08-31 — sdd-spec
+
+- Generated implementation-spec.md with 6 steps. (status.md deliberately left at `design-approved` —
+  this was an isolated spec-authoring run; the `design-approved → implementation-ready` flip is left to
+  the orchestrating `/sdd-spec` session.)
+- Confirms: NO proto change, NO analysis migration; the only migration is config seed
+  `024_analysis_engine_blend_keys` (pre-assigned per merge-order.md:188-193 — 021→022, 031→023, 168→024,
+  166→025).
+- Key codebase findings:
+  - **Config seed `key`-column convention (critical):** the WatchConfig snapshot `values` map is keyed by
+    the RAW `row.key` with no namespace prefix (`configServiceImpl.ts:176`), and analysis reads the FULL
+    dotted key (`watcher.py:90`). So `024` must store `key='analysis.engine.fundamentals_blend_*'`
+    (namespace `analysis`), matching migration 021's authoritative full-dotted form — NOT migration 008's
+    split `fundsignal.*` form (008 predates the feature-147 schema; its default==seeded values mask the
+    mismatch). Post-147 scope columns: `user_id NULL`, environments `staging`+`production`,
+    `ON CONFLICT (namespace, key, environment, COALESCE(user_id,'')) DO NOTHING`.
+  - `buildConfigValue` (`configServiceImpl.ts:565-576`): `bool` → `bool_val = value_data==='true'`,
+    `string` → `string_val`; so `get_bool`'s `HasField("bool_val")` (`watcher.py:116-122`) honors an
+    explicit operator `false`, default stays `true`.
+  - Resolver reuse: `_drain_signals:358-385` (paginated `QuerySignals`, best-effort fail) drops `source`,
+    so the resolver needs its own `QuerySignals(source=slug, active_window)`; "has-fundamentals" reuse =
+    `fundsignal_loop._paced_fetch:373-378` (`GetFundamentalsMulti`, keep `f.symbol.upper()` present in
+    `resp.fundamentals`). Slug from `analysis.fundsignal.source_slug` via `get_str` (F-07; same-namespace,
+    no cross-namespace subscription).
+  - `_run_cycle:263-356` — override branch strictly on `definition.strategy_id == blend_id` reproduces
+    feature-132 precedence with `fundamentals_universe` in place of `union`: `universe =
+    (fundamentals_universe − denied) | (held ∩ denied)`; strict FR-2 (held not unioned in; only held∩denied
+    re-enters for the exit trace). All other rows untouched → AC-3 no-regression asserted in Step 5.
+  - Test harness: `test_live_loop.py` `_make_loop:36-56`, `_live_row:629-648`, `_wire:766-786`,
+    `fake_eval` pair-capture pattern — reused for the two new RED-first test classes.
+- Every `@AC-*` covered by a test step: AC-1/AC-6 in Step 3 (resolver) + Step 5 (cycle); AC-2/AC-3/AC-4/AC-5
+  in Step 5. Deduped Reviewers: DBA, xstockstrat-config, xstockstrat-analysis (docs step = none).
