@@ -103,3 +103,75 @@
 
 - (B) Bearer token is MANDATORY for every `mcp_client` source — registration is rejected (fail-closed, INVALID_ARGUMENT) if no bearer secret is provided; no unauthenticated MCP endpoint is allowed. Design's recommended security posture.
 - (A) MCP client transport (SDK vs httpx JSON-RPC fallback) is pinned at `/sdd-spec` against the actual installed client; prefer the robust minimal JSON-RPC-over-Streamable-HTTP path to avoid the agent's non-standard `mcp.server.mcpserver` SDK-path fragility (feature-009 trap). F-04-safe gate at spec.
+
+## Session 2026-08-31T16:00:00Z — sdd-spec
+
+- Generated implementation-spec.md with **17 steps**. Status → `implementation-ready`.
+- Consumed recon.md + design.md (status was `design-approved`). Followed the design's Chosen
+  Approach unchanged; resolved the two OPERATOR-CONFIRM open risks at spec time (see below).
+- Key codebase findings (all path:line-grounded):
+  - **Next ingest migration = `011`** (trunk tip `010_add_signal_source_reliability_weight`; `007` CHECK
+    carries all 11 values — migration 010 added only the `reliability_weight` column). Step 1 DROP+re-ADD
+    re-lists all 12; the validator branch (Step 2, `signal_sources.py:186-230`, already fail-closed at
+    the `else`) + the CHECK land in the same PR (fails.md `signal-source-registry` lockstep).
+  - **Config seed migration = `025_ingest_mcp_client_keys` (Step 12)** — for the two non-secret loop keys
+    `ingest.mcp_client.poll_interval_seconds` (300) / `request_timeout_seconds` (30). NNN pre-assigned by
+    merge-order.md lines 187–198 (config-seed batch: 021→`022`, 031→`023`, 168→`024`, 166→`025`); config
+    working-tree tip is `021_notify_push_min_severity`, so `025` merges AFTER `022`/`023`/`024`
+    (golang-migrate numeric-order apply — cross-feature merge dependency, not code). Post-147 seed schema
+    mirrored from `019`/`021` (`is_secret`/`user_id` NULL, staging+production, no `trading_mode` — dropped
+    by `017`); `key` column is namespace-relative (`mcp_client.poll_interval_seconds`, per ingest
+    `watcher.py:95-101` snapshot lookup + the `005` precedent). Bearer secret `ingest.mcp_credential.<slug>`
+    is NOT seeded (written at registration via `SetConfig(is_secret=true)`). Busy-loop hazard surfaced:
+    optional `SCALAR_BOUNDS_REGISTRY` bound (`configServiceImpl.ts:114`) or a loop-side clamp so a settable
+    `0` cannot busy-loop.
+  - **MCP SDK OPEN RISK RESOLVED (fails.md 085):** installed SDK is `mcp==2.0.0` (agent `uv.lock:459`),
+    a non-reference distro (`mcp.server.mcpserver.MCPServer`, deps `httpx2`+`mcp-types`). Downloaded and
+    inspected the wheel: it **does** expose `mcp.client.streamable_http.streamable_http_client(url, *,
+    http_client)` + `mcp.client.ClientSession` (`initialize`/`call_tool`). **Bearer injection** =
+    `httpx2.AsyncClient(headers={"Authorization": f"Bearer <token>"})` passed as `http_client`;
+    `_prepare_headers` (wheel `mcp/client/streamable_http.py:113-131`) never sets Authorization, so the
+    bearer survives and no other auth is sent (@AC-3). The high-level `Client(url)` cannot inject headers
+    (`client.py:396`) — low-level pattern required. `call_tool` returns `CallToolResult` with
+    `structured_content: Any` (the JSON contract list), `content`, `is_error` (`mcp_types/_types.py:1463`).
+    **Decision: SDK path chosen; httpx JSON-RPC fallback NOT needed.** ingest gains `mcp>=2.0.0,<3` →
+    `uv lock` (pulls httpx2/mcp-types/starlette/uvicorn/pydantic/pyjwt transitively).
+  - **`credentials_ref` split** confirmed against marketdata precedent: `ingest.mcp_credential.<slug>`
+    → GetSecret `namespace="ingest"`, `key="mcp_credential.<slug>"` (split on first dot; config stores
+    (namespace, key) where key may contain dots — cf. `marketdata`/`alpaca.api_key`, `config.go:120-133`).
+  - **Config allow-list gap (Step 4):** `SecretCallerGrant` (`authz.ts:141-154`) only supports exact
+    `keys[]`; ingest's per-slug credential keys are dynamic → added a `keyPrefixes` concept
+    (`mcp_credential.`) to `hasSecretCallerAuthority` (`:161-174`), keeping marketdata's exact grant +
+    the fail-closed default (PRESERVE `@AC-5 @feature-147`). Security-review step.
+  - **No runtime extractor dispatcher exists** in ingest — the `noop`/`example` extractors are never
+    driven server-side. The `mcp_client` loop is fully net-new; the extractor (Step 8) is a pure parser
+    over an already-fetched result (`McpClientInput` added to the `RawInput` union, `base.py:42-48`).
+  - **IngestSignal reuse (Step 10):** `IngestSignal` (`servicer.py:720+`) is context-coupled; spec
+    extracts an internal `_ingest_external_signal(signal) -> (signal_id, deduplicated)` helper reused by
+    both the RPC and the loop (loopback-gRPC fallback recorded). Dedup on `(source,symbol,direction)` via
+    `signal_dedup_keys`. Health via `mark_source_fed`/`mark_source_error` (`signal_sources.py:60-77`).
+  - **AC-1/AC-2 vs. agent tool (Step 13):** `list_signal_sources` currently **strips** `has_credentials`
+    (`tools.py:233`), but product-spec §Consumer Surfaces line 87 + @AC-1/@AC-2 require it. Resolved:
+    reverse the exclusion for the **boolean `has_credentials` only** (never the token/`credentials_ref`).
+    Tool **count unchanged (32)** — a param + an output field, not a new tool (fails.md
+    `offline-account-portfolios`), so the six count surfaces don't change.
+  - config-ui `/sources` page exists (`page.tsx:34` `SOURCE_TYPES`), nav via `NAV_GROUPS` — no new
+    page/C-10(a) step. No new env var/port anywhere (loop reuses config watcher + endpoints).
+
+## Decisions (durable)
+
+- **MCP client = official `mcp` SDK Streamable-HTTP low-level client** (`streamable_http_client` +
+  `ClientSession`), bearer via `httpx2.AsyncClient` custom header. httpx fallback rejected as unneeded.
+- **Bearer stance = mandatory** for every `mcp_client` source (`mcp_client` ∈ `_SS_CREDENTIAL_REQUIRED_TYPES`);
+  no-auth MCP endpoints Out of Scope (design OPERATOR-CONFIRM item, resolved per product spec).
+- **Two-write = secret-first**, no compensating saga (failed register → harmless redacted orphan secret).
+- **Config secret key** `ingest.mcp_credential.<slug>` (3-segment C-05); loop keys
+  `ingest.mcp_client.poll_interval_seconds` (300) / `request_timeout_seconds` (30) declared in ingest CLAUDE.md.
+
+## Open Threads
+
+- Step 10 `IngestSignal` refactor (extract `_ingest_external_signal`) must keep the RPC's existing tests
+  green — flagged in the step; loopback-gRPC is the recorded fallback if extraction proves invasive.
+- `CallToolResult.structured_content` vs `content[0].text` fallback: parser reads structured first; the
+  exact attribute name (`structured_content`) is pinned from `mcp-types==2.0.0` — re-confirm at execute
+  against the actually-installed version.
