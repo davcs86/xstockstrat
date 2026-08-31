@@ -2543,3 +2543,138 @@ reusing.
 - **Rule it implies**: a best-effort channel whose failures are swallowed must validate its credentials'
   *shape* up front (not just presence) and surface an invalid-but-present config loudly at startup — a
   present-key/malformed-format combination is the exact case that looks healthy and delivers nothing.
+
+### 2026-08-31 — premarket-aftermarket-session-toggle — design
+- **Pattern**: When canceling a backlogged stub, document both independent obsolescence counts
+  explicitly — not just the primary one. If one reason is later reversed, the record of the second
+  reason survives and the cancellation still stands.
+- **Evidence**: `docs/roadmap/features/017-premarket-aftermarket-session-toggle/feature.md`
+  Status History row 2026-08-29 ("Premise obsolete on two independent counts")
+- **Rule it implies**: Cancellation notes should enumerate every independent blocker; a
+  single-reason cancellation invites resurrection when that one reason changes.
+
+### 2026-08-31 — fix-fundamentals-upsert-invalid-json — design
+- **Pattern**: When a pgxmock test guards a SQL-text property (e.g. an `::jsonb` cast), add a
+  custom `pgxmock.Argument` matcher on each argument position that carries a type-level invariant
+  (e.g. `string` not `[]byte` for json/jsonb). A SQL-text-only `ExpectExec` pin passes regardless
+  of argument Go type and provides false confidence against OID-inference bugs.
+- **Evidence**: `docs/roadmap/features/142-fix-fundamentals-upsert-invalid-json/context.md`
+  2026-08-16 post-launch follow-up; implementation-spec.md Deviation Log
+- **Rule it implies**: For any pgxmock test guarding a jsonb/json/text bind, assert the argument's
+  Go type (`string`, not `[]byte`) in addition to pinning the SQL text.
+
+### 2026-08-31 — fix-fundamentals-upsert-invalid-json — reuse
+- **Pattern**: `execer` interface (subset of `*pgxpool.Pool` for `Exec`) plus a `db execer` field
+  alongside `pool *pgxpool.Pool` on a Go repository struct — the `Exec`-shaped analog of
+  `portfolio_repo.go`'s `queryRower` pattern, enabling pgxmock injection for `Exec`-only methods
+  without exposing the full pool.
+- **Evidence**: `docs/roadmap/features/142-fix-fundamentals-upsert-invalid-json/context.md`
+  2026-08-16 sdd-spec session;
+  `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go`
+- **Rule it implies**: Go repository methods that call only `Exec` (not `QueryRow`/`Query`) should
+  get an `execer` interface field via the same `db`+`pool` split pattern; reuse `pgconn.CommandTag`
+  as the return type (`github.com/jackc/pgx/v5/pgconn`).
+
+### 2026-08-31 — surface-signal-weight-decay-config — design
+- **Pattern**: When a config-service registry indexes validation bounds, always key it by the full
+  `namespace.key` path (e.g. `analysis.scoring.signal_decay_half_life_hours`), not the bare DB
+  `key` column. The lookup in `listKeys` joins `namespace` from the row — `` `${namespace}.${r.key}` ``
+  — so bare-key indexes silently return undefined and no validation is emitted. Test fixtures for
+  this path must use the split/DB-column form to be representative.
+- **Evidence**: `docs/roadmap/features/161-surface-signal-weight-decay-config/implementation-spec.md`
+  Step 6 Instruction 2; context.md 2026-08-26 sdd-review impl-spec (Step 6/7 warning, RESOLVED)
+- **Rule it implies**: Config-service validation registries must use full-path keys (`namespace.key`);
+  test fixtures must use the DB-column split form, not the full path, to exercise the real lookup
+  path.
+
+### 2026-08-31 — surface-signal-weight-decay-config — design
+- **Pattern**: When adding server-side numeric bounds to a config key that agents send as `float_val`
+  (not `string_val`), parse via the all-shape `extractValueData` with `??`-chaining, never a
+  string-only read. The `platform.trading_state` guard at `configServiceImpl.ts:385` is string-only;
+  `float_val` coerces to `''` → `Number('')` = 0, which passes any `[0, N]` range check silently.
+  Also: 0 is a valid minimum — never gate on `!n` / falsy truthy-checks when 0 carries meaning.
+- **Evidence**: `docs/roadmap/features/161-surface-signal-weight-decay-config/design.md` §4
+  (round-3 fail-open catch); context.md 2026-08-26 sdd-design session
+- **Rule it implies**: Numeric bounds guards on config keys must use `extractValueData` (all-oneof
+  shapes) + explicit `Number.isNaN || < min || > max`; never mirror the `trading_state`
+  string-only read for float-typed keys.
+
+### 2026-08-31 — fix-insights-offline-ticket — design
+- **Pattern**: When a wrapper component passes an explicit safety prop to a child (e.g.
+  `allowOfflineRecord={false}` in `SignalOrderTicket`), inlining the child directly at a new call
+  site must explicitly re-declare that prop — defaults are not safety-preserving. The wrapper's
+  intent is lost silently when the wrapper is bypassed.
+- **Evidence**: `docs/roadmap/features/162-fix-insights-offline-ticket/context.md` 2026-08-27
+  (root-cause pinned session); implementation-spec.md § Root Cause
+- **Rule it implies**: At every new `OrderForm` (or equivalent child-with-safety-prop) mount site,
+  assert all non-default safety props are present; treat the wrapper's prop set as a required
+  interface, not an optional hint.
+
+### 2026-08-31 — snapshot-offline-positions — design
+- **Pattern**: When extending a shared fold/accumulator engine used by multiple services, add an
+  additive sibling (`FoldFrom(baseline, fills)`) rather than widening the return contract or adding
+  parameters to the existing function. Construct it so `FoldFrom(nil, fills) == Fold(fills)` —
+  existing callers require zero changes and behavior is byte-identical.
+- **Evidence**: `packages/proto/pnl/pnl.go` Step 3; context.md 2026-08-30 sdd-execute Steps 1-5;
+  `docs/roadmap/features/163-snapshot-offline-positions/design.md` § Seeded fold engine
+- **Rule it implies**: When a shared domain engine needs a seeded variant, extract the loop body
+  into a private `foldInto`, rewrite the public function as `foldInto(empty, fills)`, and add the
+  seeded sibling calling `foldInto` — additive, no caller migration, parity testable in one line.
+
+### 2026-08-31 — snapshot-offline-positions — design
+- **Pattern**: Any private method extracted from inside a non-reentrant per-account mutex must carry
+  a `// caller must hold <lock>` doc comment and must never acquire that lock internally. This is
+  enforced structurally, not by convention — the trading `confirmLock` is a sync.Mutex, so an
+  internal acquire deadlocks the calling goroutine.
+- **Evidence**: `services/xstockstrat-trading/internal/service/trading.go:912-914`;
+  `docs/roadmap/features/163-snapshot-offline-positions/design.md` § Per-account serialization
+  (round-3 blocker); context.md 2026-08-30 sdd-design
+- **Rule it implies**: Before extracting any block from inside a lock into a helper, verify the lock
+  is non-reentrant and annotate the helper with caller-holds-lock semantics.
+
+### 2026-08-31 — snapshot-offline-positions — design
+- **Pattern**: A producer that emits an absolute position snapshot must be fail-closed on every DB
+  query it issues: ERROR → skip-emit. Never fold-all on a baseline load error (double-count risk)
+  and never emit an empty positions list (the consumer uses it to wipe all positions via
+  `DeletePositionsNotInSync`).
+- **Evidence**: `docs/roadmap/features/163-snapshot-offline-positions/design.md` § One producer,
+  three baseline cases;
+  `services/xstockstrat-portfolio/internal/service/portfolio_service.go:940`;
+  context.md 2026-08-30 sdd-design
+- **Rule it implies**: Any absolute-snapshot emitter in this codebase must treat DB errors as
+  skip-emit, not as fall-through to a degraded fold — document this invariant wherever a new
+  absolute-sync producer is added.
+
+### 2026-08-31 — snapshot-offline-positions — ordering
+- **Pattern**: When adding provenance columns to a portfolio positions table that a trading-side
+  emitter will populate via an existing event, the portfolio migration must land before the trading
+  emit change in the merge order — but the consumer-side parse change can follow the emit change,
+  because unmapped JSON keys default safely (source=0/null as_of).
+- **Evidence**: `docs/roadmap/features/163-snapshot-offline-positions/implementation-spec.md`
+  § Execution Summary (merge-order); context.md 2026-08-30 sdd-spec
+- **Rule it implies**: For additive provenance fields delivered via an existing event, split the
+  merge-order risk: migration first (blocks emit), consumer parse last (safe with defaults).
+
+### 2026-08-31 — agent-broker-account-tools — design
+- **Pattern**: When wrapping existing backend RPCs in an agent tool, verify the backend's
+  accept/reject behavior for edge inputs (e.g. OFFLINE broker_type on update, invalid JSON) during
+  design adversarial phase rather than designing client-side guards. Backend rejections surface
+  cleanly through the existing `_grpc_error_message` path, making client-side guards redundant
+  duplication.
+- **Evidence**: `docs/roadmap/features/164-agent-broker-account-tools/design.md` §
+  "No client-side guard/validation needed" (trading.go:2267-2270, :2257); context.md 2026-08-27
+  sdd-design
+- **Rule it implies**: Before adding client-side input validation on an agent-to-backend RPC call,
+  check what the backend already rejects and at what gRPC status code — if the backend catches it,
+  omit the client guard and let `_grpc_error_message` surface it.
+
+### 2026-08-31 — agent-broker-account-tools — design
+- **Pattern**: Credential safety via proto message structure: when the proto message returned by an
+  RPC has no credential field, `MessageToDict` is structurally credential-safe without any
+  filtering logic. Verify this at recon time to avoid over-engineering redaction.
+- **Evidence**: `docs/roadmap/features/164-agent-broker-account-tools/design.md` §
+  "Credential safety (FR-1/FR-2)"; `packages/proto/trading/v1/trading.proto:217-237`
+  (BrokerAccount has no credential field); context.md 2026-08-27 sdd-design
+- **Rule it implies**: For any tool that handles credentials as input but returns an account/entity
+  object, check whether the response proto message contains credential fields before adding
+  redaction logic — structural absence is stronger than filter logic.

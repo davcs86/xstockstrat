@@ -5,6 +5,7 @@
 **Last Updated**: 2026-08-27
 **Committed to main**: 57e40a310ed09b205ce76ca440ee7a40a87fb7ec
 **Launched date**: 2026-08-30
+**Archived**: 2026-08-31
 
 ---
 
@@ -18,6 +19,7 @@
 | 2026-08-27 | `implementation-ready` → `code-completed` | /sdd-execute | All 5 steps implemented + verified (316 pass, 77% cov); ledger tool-count sync deviation recorded |
 
 | 2026-08-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1047; committed 57e40a310ed09b205ce76ca440ee7a40a87fb7ec |
+| 2026-08-31 | archived | /sdd-archiver | Synthesis distilled to context.md + Ledger (2 insights, 2 fails); 8 scenarios promoted to services/xstockstrat-agent/acceptance/; product-spec.md, recon.md, design.md, implementation-spec.md pruned (recoverable from git) |
 ---
 
 ## Artifacts

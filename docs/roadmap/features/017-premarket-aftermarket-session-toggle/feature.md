@@ -3,6 +3,7 @@
 **Development Branch**: `feature/premarket-aftermarket-session-toggle`
 **Created**: 2026-05-24
 **Last Updated**: 2026-08-29
+**Archived**: 2026-08-31
 
 ---
 
@@ -12,6 +13,7 @@
 |---|---|---|---|
 | 2026-05-24 | `idea` | /sdd-execute (014 step 4) | Backlogged during trader-chart-panel execution |
 | 2026-08-29 | `idea` → `demoted/canceled` | product-review | **Premise obsolete on two independent counts.** (1) A pre-market/regular/after-hours session toggle only has meaning for **intraday** bars, but feature **143 (`daily-bars-only`, launched)** made `GetBars`/`BackfillBars` reject every non-`1d` timeframe — the 10m/30m/1h intraday bars this feature toggles no longer exist in the platform, and no trading-path consumer evaluates sub-daily bars. (2) It targets the `ChartPanel` in `xstockstrat-trader`, a service **removed by feature 045 (`ui-consolidation-nextjs`)**. Same call already made for the analogous intraday feature 025 (`realtime-tick-streaming` → demoted/canceled). If intraday support is ever revived, this would be re-created fresh under a new NNN, not resurrected. |
+| 2026-08-31 | archived | /sdd-archiver | Synthesis distilled to context.md; no spec files to prune (feature never advanced past `idea`) |
 
 ---
 

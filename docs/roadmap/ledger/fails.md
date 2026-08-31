@@ -1951,3 +1951,143 @@ ambiguity is logged here).
 - **Rule it implies**: a spec's "already exists / already stored" claims must be grep-confirmed against
   the exact execution tree, not assumed from a sibling helper's shape — an advisory impl-spec review is
   the last cheap place to catch it before F-04 bites at execute.
+
+### 2026-08-31 — premarket-aftermarket-session-toggle — assumption
+- **Mistake**: Intraday-adjacent feature stubs (017, 025) were backlogged without vetting against
+  the platform's bar-timeframe architectural direction. When feature 143 (`daily-bars-only`) landed,
+  both stubs became obsolete simultaneously and were only caught three months later in a product
+  review pass.
+- **Evidence**: `docs/roadmap/features/017-premarket-aftermarket-session-toggle/feature.md`
+  Status History — 017 created 2026-05-24, demoted 2026-08-29; same pattern confirmed for 025.
+- **Rule it implies**: Before backlogging any idea that depends on a specific data granularity or
+  service, run a one-line recon check against the platform's current architectural constraints (bar
+  timeframes, service registry); catch obsolescence at intake, not at the next product review.
+
+### 2026-08-31 — fix-fundamentals-upsert-invalid-json — assumption
+- **Mistake**: The design grilling correctly identified the OID-inference mechanism (`[]byte` →
+  `bytea` under `QueryExecModeExec`) but proposed only a SQL cast as the remedy, leaving the Go
+  argument type unchanged (`[]byte`). The partial fix (PR #967) merged and deployed when the
+  mandatory live-DB repro gate was blocked by environment constraints; staging confirmed the bug
+  persisted. The real fix required both the SQL cast and changing the argument to `string`.
+- **Evidence**: `docs/roadmap/features/142-fix-fundamentals-upsert-invalid-json/context.md`
+  2026-08-16 post-launch follow-up; implementation-spec.md Deviation Log
+- **Rule it implies**: When a design identifies a type-mismatch at the wire layer, the fix must
+  address both the SQL annotation AND the Go argument type — a SQL cast cannot override pgx's
+  Go-type-to-wire-type inference under `QueryExecModeExec`.
+
+### 2026-08-31 — fix-fundamentals-upsert-invalid-json — assumption
+- **Mistake**: The mandatory pre-merge live-DB repro gate (designed to catch exactly this class of
+  wrong fix) was skipped because the execute sandbox had no Docker daemon. The fix merged without
+  the gate running; the bug recurred in staging exactly as the adversary had predicted it would if
+  the hypothesis was wrong.
+- **Evidence**: `docs/roadmap/features/142-fix-fundamentals-upsert-invalid-json/context.md`
+  2026-08-16 execute session (Steps 1/3 blocked), 2026-08-16 post-launch follow-up
+- **Rule it implies**: When a verification step requires live Postgres and Docker is unavailable,
+  explore whether a local standalone Postgres cluster satisfies the requirement before escalating
+  — `DB_PGBOUNCER=true` alone activates `QueryExecModeExec`; no PgBouncer process is needed. Do
+  not merge when a user-mandated verification gate is still open.
+
+### 2026-08-31 — surface-signal-weight-decay-config — config
+- **Mistake**: The `WEIGHT_KEY_REGISTRY` pattern (a registry of config-key validation rules indexed
+  by bare DB `key` column) was silently broken from feature 016 onward — production emitted no
+  validation for `analysis.signals.source_weights` because the lookup returned undefined. The test
+  suite masked it by using the full path in fixtures rather than the split/DB-column form.
+- **Evidence**: `docs/roadmap/features/161-surface-signal-weight-decay-config/context.md`
+  2026-08-26 sdd-review impl-spec (Step 6/7 load-bearing warning); implementation-spec.md Step 6
+  Instruction 2; implementation-spec.md Deviation Log 2026-08-26 Step 6/7
+- **Rule it implies**: When adding a config-service validation registry, verify the lookup key form
+  matches the data shape at the lookup site (`r.key` is the DB column, not the full path); use a
+  fixture with the split form to expose the real code path in tests.
+
+### 2026-08-31 — surface-signal-weight-decay-config — assumption
+- **Mistake**: Assumed the product-spec "no proto changes" scope was a hard constraint. This led to
+  the recon recommendation being guidance-only. The design gate revealed that enforced bounds require
+  a proto enum addition and that guidance-only was not acceptable. An additive enum value is
+  non-breaking (`buf breaking` passes) and should have been surfaced as an option in recon's
+  risk/fork section, not deferred to the design gate.
+- **Evidence**: `docs/roadmap/features/161-surface-signal-weight-decay-config/recon.md` § Risks
+  (Design Fork 1 stated "no proto changes" as a constraint and recommended guidance-only); context.md
+  2026-08-26 sdd-design (Fork-1, operator chose enforced bounds); design.md §3
+- **Rule it implies**: Additive proto enum values are non-breaking — recon should surface them as a
+  viable option whenever a bounds-surfacing or typing feature is in scope, not default to
+  guidance-only because of a "no proto changes" phrase in the product-spec.
+
+### 2026-08-31 — fix-insights-offline-ticket — assumption
+- **Mistake**: The defect report hypothesized the wrong failure mechanism (mobile `SectionRenderer`
+  double-mount) because root-cause investigation had not yet grounded the route architecture. The
+  redirect-stub pattern for `/insights/market/[symbol]` was not visible without tracing the route
+  tree; the real render site was one redirect hop away.
+- **Evidence**: `docs/roadmap/features/162-fix-insights-offline-ticket/product-spec.md` § Root
+  Cause Hypothesis vs. context.md 2026-08-27 (root-cause pinned)
+- **Rule it implies**: Before writing a defect hypothesis for an insights ticket component, check
+  whether the insights route is a redirect stub (feature 125 pattern) — the actual render code lives
+  in the trader segment, not the insights segment.
+
+### 2026-08-31 — fix-insights-offline-ticket — assumption
+- **Mistake**: Feature 125's unified-page consolidation inlined `OrderForm` from the
+  `SignalOrderTicket` wrapper without carrying over the wrapper's explicit `allowOfflineRecord=
+  {false}`, leaving a latent prop-drift bug that only activates when an offline account is
+  auto-selected. No type error or lint warning flagged the omission because the prop has a
+  permissive `true` default.
+- **Evidence**: `docs/roadmap/features/162-fix-insights-offline-ticket/context.md` 2026-08-27;
+  implementation-spec.md § Root Cause (feature 125 cross-reference)
+- **Rule it implies**: Any consolidation PR that inlines a component previously wrapped (i.e.,
+  deletes a wrapper and calls the child directly) must diff the wrapper's explicit prop set against
+  the new call site and carry over every prop whose default is unsafe in the new context.
+
+### 2026-08-31 — snapshot-offline-positions — assumption
+- **Mistake**: Assuming a reconciliation payload field (like `user_id`) is optional because the
+  service has a fallback — `portfolio_service.go:922` falls back to `"default"` when `user_id` is
+  absent. The fallback masks the bug at emit time; it surfaces weeks later as a "positions out of
+  sync" reconciliation error tied to the wrong user bucket.
+- **Evidence**: `docs/roadmap/features/163-snapshot-offline-positions/recon.md:84`; context.md
+  2026-08-29 sdd-story (add-ikbr trap); product-spec.md § Open Questions; design.md § Audit event
+- **Rule it implies**: Before any feature emits a reconciliation payload (`account.positions.synced`
+  or similar), enumerate every field the consumer uses for routing/ownership and assert non-empty in
+  the handler — never rely on consumer-side fallback behavior as correctness validation.
+
+### 2026-08-31 — snapshot-offline-positions — migration
+- **Mistake**: Determining the next migration NNN by listing local files only. A concurrent feature
+  branch can create the same number on a remote branch that has not yet merged, causing a
+  migration-number collision that only surfaces at deploy time.
+- **Evidence**: `docs/roadmap/features/163-snapshot-offline-positions/context.md` 2026-08-30
+  sdd-spec (cross-remote-branch scan); implementation-spec.md Steps 5/6
+- **Rule it implies**: Always determine the next migration NNN by scanning `git ls-remote` heads for
+  all remote branches — never `ls migrations/` alone. Cross-branch migration-NNN uniqueness must be
+  verified before authoring a new migration file.
+
+### 2026-08-31 — snapshot-offline-positions — assumption
+- **Mistake**: Citing a codebase location in a spec based on an earlier grounding pass without
+  re-verifying the specific code path for the new operation. The impl-spec review found that the
+  sync-path provenance INSERT flows through `UpsertPositionFromSync` (`:307-317`), not
+  `UpsertPosition` (`:57-115`) — citing the wrong function would have produced a no-op change on
+  the `order.filled` path while the `account.positions.synced` path remained unpopulated.
+- **Evidence**: `docs/roadmap/features/163-snapshot-offline-positions/context.md` 2026-08-30
+  sdd-review impl-spec (Step 10 finding); implementation-spec.md Step 10 Codebase Evidence
+  "Do not edit UpsertPosition" guard
+- **Rule it implies**: When two write paths share a repo struct, always verify which path a new
+  operation flows through before citing a file:line in the spec — label the other path explicitly
+  as a "do not touch" guard to prevent review ambiguity.
+
+### 2026-08-31 — agent-broker-account-tools — duplication
+- **Mistake**: `tests/test_tools_endpoint.py` asserts tool name-set with exact equality
+  (`names == {...}`), not a subset check. Every new tool addition must manually append to this
+  literal set or CI fails. The design missed this surface entirely; it was only discovered during
+  `/sdd-spec`.
+- **Evidence**: `docs/roadmap/features/164-agent-broker-account-tools/implementation-spec.md`
+  Step 4 codebase evidence note (test_tools_endpoint.py:22-54); context.md 2026-08-27 sdd-spec
+- **Rule it implies**: When adding MCP tools, always check `tests/test_tools_endpoint.py`'s
+  exact-equality name-set and append both new tool names in the same step as the tool addition;
+  consider converting to a subset check in a future cleanup.
+
+### 2026-08-31 — agent-broker-account-tools — duplication
+- **Mistake**: `services/xstockstrat-ui/src/lib/copilot.ts:14` `COPILOT_MCP_TOOL_COUNT` is a
+  seventh tool-count surface (in a different service) not included in the documented six-surface
+  checklist. It drifted by 6 counts over multiple features (feature 130 origin) before being caught
+  here.
+- **Evidence**: `docs/roadmap/features/164-agent-broker-account-tools/context.md` 2026-08-27
+  sdd-execute; implementation-spec.md Deviation Log; `docs/roadmap/ledger/fails.md:1530-1532`
+- **Rule it implies**: Add `services/xstockstrat-ui/src/lib/copilot.ts:14` `COPILOT_MCP_TOOL_COUNT`
+  to the canonical tool-count surface checklist in `docs/runbooks/mcp-tools.md`; it is a required
+  sync target on every agent-tool change regardless of whether xstockstrat-ui is the primary service
+  changed.

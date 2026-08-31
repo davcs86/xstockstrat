@@ -1,91 +1,17 @@
-# Context: agent-broker-account-tools
+# Context: agent-broker-account-tools  (archived 2026-08-31)
 
-**Feature**: `docs/roadmap/features/164-agent-broker-account-tools/feature.md`
-**Product Spec**: `docs/roadmap/features/164-agent-broker-account-tools/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/164-agent-broker-account-tools/implementation-spec.md`
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-08-31 — /sdd-archiver
 
-## Session 2026-08-27 — sdd-story
-
-- Created feature.md (status: draft), product-spec.md, acceptance.feature, context.md from user story.
-- Scope confirmed with operator up front (AskUserQuestion): **full broker-account CRUD**
-  (register + update_credentials + deregister + list) via a `manage_account` write tool, plus a
-  `list_accounts` read tool returning broker **and** offline accounts together.
-- Key realization: offline accounts are already `BrokerAccount` rows (`broker_type=OFFLINE`), so the
-  "unified list" is simply `ListBrokerAccounts` — no aggregation across two backends needed.
-- All four trading RPCs already exist (`packages/proto/trading/v1/trading.proto`) → **no proto, config,
-  or DB change**. Agent is the only service touched.
-- Known trap flagged for design (Ledger F-12 / RC-1): agent tool docstrings + `mcp-tools.md` +
-  tool-count statements drift from code; update them in the same PR and consider a
-  `BrokerAccount`-field-parity test (the one non-drifting tool, `run_backtest`, has one).
-
-## Session 2026-08-27 — sdd-design
-
-- Phase 0 Recon: wrote recon.md (service: xstockstrat-agent only; reuse patterns: manage_offline_account tool shape, register_offline_account client wrapper, _OFFLINE_SIDE enum-map idiom, descriptor-parity test).
-- Phase 1 Grilling: 1 round (quick). Proposer + adversary + synthesis + operator gate.
-- Chosen approach: manage_account (register/update_credentials/deregister verb dispatch) + read-only list_accounts; ownership-gated on x-user-id; _account_to_dict helper; _BROKER_TYPE map (case-normalized).
-- Operator decisions at gate: (1) register REJECTS broker_type=offline (one creation path per kind); (2) migrate the existing register_offline_account inline MessageToDict to the new _account_to_dict helper too.
-- Adversary findings resolved against the Go backend: UpdateBrokerAccountCredentials rejects OFFLINE (FailedPrecondition, trading.go:2267-2270) and validates JSON server-side (2257) → no client-side guard/validation needed; DeregisterBrokerAccount intentionally supports offline (trading.go:2754-2761) → deregister stays unified. Inbound credential-logging vector checked: CallerPropagationMiddleware forwards trio only, no tool-arg logging/OTel span attrs (main.py/tools.py verified).
-- Doc-drift (ledger RC-1): six edits scoped (2 mcp-tools count literals + 2 full entries; CLAUDE.md count + 2 rows; tools.py docstring count + 2 lines).
-- Constitution rules touched: C-11, C-14, C-15, C-13, P-03. Floor breaches: none.
-- Status: draft → design-approved.
-
-## Session 2026-08-27 — sdd-spec
-
-- Generated implementation-spec.md with 5 steps. Status → implementation-ready.
-- Steps: (1) client.py — `_BROKER_TYPE` map + `_account_to_dict` helper + four trading-RPC wrappers, migrate `register_offline_account` to `_account_to_dict`; (2) test_broker_account_client.py — mock-stub request/metadata/no-echo tests + BrokerAccount descriptor-parity guard; (3) tools.py — `manage_account` (register/update_credentials/deregister) + read-only `list_accounts` + docstring count thirty→thirty-two; (4) test_account_tools.py + update test_tools_endpoint.py exact name-set; (5) docs — mcp-tools.md (2 count literals + 2 reference entries) + agent CLAUDE.md (count + 2 rows).
-- Key codebase findings (all grounded path:line):
-  - Client reuse anchors confirmed: `register_offline_account` skeleton (`client.py:1624-1642`), `_OFFLINE_SIDE` map idiom (`:1615`), `_order_to_dict` (`:1619`), `list_account_orders` comprehension (`:1729-1739`); `TRADING_ENDPOINT` (`:26`), `_metadata` (`:59`).
-  - Tool reuse anchors: `manage_offline_account` verb-dispatch tool (`tools.py:1467-1548`), `_caller_user_id` (`:116`), `_grpc_error_message` (`:184`); module docstring "Thirty tools:" (`:4`, list ends L34); `/api/tools` built dynamically from `server.list_tools()` (`main.py:112-123`) — no count literal there.
-  - Proto verified: BrokerAccount has NO credential field (`trading.proto:217-237`) → MessageToDict is structurally credential-safe; response `.account` on register/update (`:252,:263`), empty deregister response (`:286`), `ListBrokerAccountsResponse.accounts` (`:278`); BROKER_TYPE ALPACA=1/IBKR=2/OFFLINE=3 (`common.proto:68-74`).
-  - **New surface the design missed — folded into Step 4:** `tests/test_tools_endpoint.py:22-54` asserts the EXACT set of 30 tool names (`names == {...}`); adding two tools breaks it unless the two names are appended. Included in Step 4 instructions.
-  - **Out-of-scope flag:** `services/xstockstrat-ui/src/lib/copilot.ts:14` `COPILOT_MCP_TOOL_COUNT = 24` is a numeric agent-tool-count surface in a DIFFERENT service (xstockstrat-ui, product-spec marks it unaffected) and is ALREADY drifted (24 vs prose "thirty"), so it does not track the live count today. Approved design scoped drift discharge to agent surfaces only; left out of scope, raised in report for operator decision. (fails.md:1530-1532, feature 130.)
-  - Agent coverage gate: CI matrix `xstockstrat-agent` threshold 40%, `--cov=app` (`.github/workflows/ci.yml:346-347`); lint `ruff check . && ruff format --check .`; `asyncio_mode = "auto"` (`pyproject.toml:31`).
-
-## Session 2026-08-27 — sdd-execute (implemented on harness branch)
-
-- Implemented all 5 steps on `claude/mcp-account-management-tools-zvbwdl` (harness git rules pin work
-  to this branch → single PR into main-dev; SDD per-step-PR model yields to that).
-- Step 1 (client.py): `_BROKER_TYPE={"alpaca":1,"ibkr":2}`, `_account_to_dict` helper, four wrappers
-  (`register_broker_account`/`update_broker_account_credentials`/`deregister_broker_account`/
-  `list_broker_accounts`); migrated `register_offline_account` to `_account_to_dict`.
-- Step 3 (tools.py): `manage_account` (register/update_credentials/deregister, case-normalized
-  offline steer) + read-only `list_accounts`; docstring count → thirty-two + two list lines.
-- Steps 2/4 (tests): `test_broker_account_client.py` (request fields + x-user-id metadata + no
-  credential echo + BrokerAccount descriptor-parity guard freezing the 12-field contract),
-  `test_account_tools.py` (verb dispatch, offline steer, PERMISSION_DENIED→RuntimeError, unknown-op,
-  /api/tools catalog), and appended the two names to `test_tools_endpoint.py`'s exact-match set.
-- Step 5 (docs): mcp-tools.md (2 count literals + 2 full reference entries), agent CLAUDE.md (count +
-  2 table rows).
-- **Deviation (operator-approved):** also synced `services/xstockstrat-ui/src/lib/copilot.ts`
-  `COPILOT_MCP_TOOL_COUNT` 24 → 32 — the ledger (fails.md:1530-1532) mandates syncing all six
-  tool-count surfaces on every agent-tool change, and it was already stale. One-line UI edit; no test
-  asserts a specific value. Recorded in implementation-spec.md Deviation Log.
-- Verification: `ruff check .` + `ruff format --check .` clean; full agent suite **316 passed, 77%
-  cov** (gate 40%). Offline-client tests still green (the `_account_to_dict` migration is behavior-
-  preserving).
-- Status: implementation-ready → code-completed.
-
-## Session 2026-08-30 (CI: feature status automation)
-
-- Promotion PR #1047 merged to main
-- Feature promoted and committed: 57e40a310ed09b205ce76ca440ee7a40a87fb7ec
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-08-30
-
-## 2026-08-31 — Renumber 162 → 164 (numbering-collision cleanup)
-
-Two features shipped under NNN **162** (`162-agent-broker-account-tools` and
-`162-fix-insights-offline-ticket`) — a `/sdd-story` numbering race that was never reconciled before
-both launched. Per `docs/runbooks/feature-workflow.md` § Feature Numbering, the earlier-created
-feature keeps the number; `162-fix-insights-offline-ticket` (first commit 2026-08-26) predates this
-one (first commit 2026-08-27), so **this feature moved to 164** and fix-insights keeps 162.
-
-**Constitution override recorded (required):** this feature is `launched` (promoted to `main`), and the
-numbering rule makes a launched feature's number immutable. The user **explicitly authorized** overriding
-that immutability to resolve the duplicate ("fix 162 as well" → chose "Override & renumber 162 too",
-2026-08-31 session). Scope of the move was documentation + provenance comments only (feature dir rename +
-`feature 162`→`164` references in `services/xstockstrat-agent/{CLAUDE.md,app/client.py,app/tools.py,tests/*}`,
-`docs/runbooks/mcp-tools.md`, and this feature's own artifacts) — **no behavior, API, schema, or migration
-change**. The paired `163` collision (`163-pwa-notifications` → 165) was fixed in the same PR.
+**What**: Added `manage_account` (register / update_credentials / deregister) and `list_accounts` MCP tools to `xstockstrat-agent`, wiring the four pre-existing trading RPCs (`RegisterBrokerAccount`, `UpdateBrokerAccountCredentials`, `DeregisterBrokerAccount`, `ListBrokerAccounts`) through a `_BROKER_TYPE` enum map and a shared `_account_to_dict` helper; migrated `register_offline_account` to the same helper; added a `BrokerAccount` descriptor-parity test; synced all six tool-count surfaces (including `COPILOT_MCP_TOOL_COUNT` in xstockstrat-ui). No proto, config, or DB changes — the agent is the only service touched (all four RPCs pre-exist in `trading.proto`).
+**Why (irrecoverable rationale)**: (1) **No proto/DB changes**: all four trading RPCs already existed in `trading.proto:217-286`; the feature is purely an agent consumer, not a service change. (2) **register rejects broker_type=offline** (operator decision at design gate): offline accounts have a dedicated creation path (`register_offline_account`); conflating creation via `manage_account:register` would bypass the offline-specific validation path — one creation path per kind is the enforced invariant. (3) **deregister stays unified**: the trading backend intentionally supports `DeregisterBrokerAccount` for OFFLINE accounts (`trading.go:2754-2761`) — no client-side gate needed. (4) **No client-side credential validation**: `UpdateBrokerAccountCredentials` rejects OFFLINE at the backend (`trading.go:2267-2270`) with `FailedPrecondition`; credentials JSON is validated server-side (`:2257`). Adding a client guard would duplicate enforcement and risk divergence. (5) **`_account_to_dict` helper**: the existing `register_offline_account` used an inline `MessageToDict` call; migrating it to the shared helper is behavioral-parity, not a behavioral change — `BrokerAccount` has no credential field (`trading.proto:217-237`), so `MessageToDict` is structurally credential-safe at any call site. (6) **COPILOT_MCP_TOOL_COUNT sync** (operator-approved deviation): the ledger (fails.md entry RC-1) mandates syncing all six tool-count surfaces on every agent-tool change; `xstockstrat-ui/src/lib/copilot.ts:14` was already stale (24 vs 30 in prose) before this feature — bringing it to 32 in the same PR was the correct action even though the product-spec scoped the drift discharge to agent surfaces only.
+**Rejected alternatives**: Keeping `register_offline_account`'s inline `MessageToDict` — lost (DRY violation; the shared helper is the canonical form going forward); client-side broker_type validation for deregister — lost (trading backend already handles it, and adding a client-side guard that disagrees with the backend invariant creates a maintenance trap).
+**Scars & gotchas**: (1) **`test_tools_endpoint.py` exact-match set** (`tests/test_tools_endpoint.py:22-54`): the test asserts the EXACT set of tool names as a `names == {...}` equality; adding any new tool requires appending the name(s) to that set or the test fails. This guard is easy to miss when adding a new tool and not reading the test file. (2) **`COPILOT_MCP_TOOL_COUNT` in xstockstrat-ui**: `services/xstockstrat-ui/src/lib/copilot.ts:14` must be kept in sync with every agent-tool addition henceforth — it was already stale before this feature. No test asserts a specific value, so drift is invisible in CI. (3) **BrokerAccount descriptor-parity test**: `test_broker_account_client.py` freezes the 12-field contract of `BrokerAccount`; any future proto field added to `BrokerAccount` in `trading.proto` requires updating the parity test. (4) **Credential-safety by structure**: `BrokerAccount` proto message has no credential field — `MessageToDict` is safe. However, `UpdateBrokerAccountCredentialsRequest` does carry credentials; the agent wrapper passes the request through to the trading backend and never reflects it back in the response, which carries only `account` (no credentials). This structural guarantee must be preserved if the request or response message shapes ever change. (5) **Renumber 162→164**: this feature shipped under NNN 162, which collided with `162-fix-insights-offline-ticket` (earlier creation date). An operator-authorized renumber moved it to 164 (2026-08-31, PR #1048). The rename touched `feature dir + provenance comments in agent/CLAUDE.md, client.py, tools.py, tests/*, mcp-tools.md` — no behavior, API, schema, or migration change.
+**Permanent deviations**: Product-spec scoped drift discharge to agent surfaces only → shipped with `xstockstrat-ui/src/lib/copilot.ts:14` `COPILOT_MCP_TOOL_COUNT` 24→32 also synced (operator-approved, ledger RC-1 mandate); NNN 162 immutability → overridden by operator to resolve numbering collision (recorded in context.md 2026-08-31).
+**Cross-feature signal**: (1) Every future agent-tool addition must update all six tool-count surfaces: module docstring `tools.py:4`, tool list `tools.py:8-34`, `mcp-tools.md` count literals (×2), agent `CLAUDE.md` count, and `xstockstrat-ui/src/lib/copilot.ts:14`. The `test_tools_endpoint.py` exact-match set is the CI gate; the UI constant has no gate. (2) The `_account_to_dict` helper is the canonical `BrokerAccount`→dict conversion; any future tool returning account data must use it, not a new inline `MessageToDict`.
+**Deferred follow-ons**: The `xstockstrat-ui` Copilot integration may surface the new broker-account tools; no behavioral wiring was added beyond the count constant. If the Copilot integration ever drives account management workflows, the tool contract documented in `mcp-tools.md` is the authority.
+**Ledger entries written**: insights.md (2), fails.md (2) — see the 2026-08-31 entries.
+**Runtime-invariant recommendations (→ /context-constitution)**: AGENT-*: All six tool-count surfaces (`tools.py:4`, `tools.py:8-34` list, `mcp-tools.md` ×2, agent `CLAUDE.md`, `xstockstrat-ui/src/lib/copilot.ts:14`) must be updated in the same PR as any agent-tool addition or removal. Only `test_tools_endpoint.py:22-54` provides a CI gate (exact name-set equality); the UI constant has no gate. Candidate for `services/xstockstrat-agent/docs/` context-constitution entry.
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 4903e98d2c9e7349ff0a80f90d0c0706fd7fc64f.
