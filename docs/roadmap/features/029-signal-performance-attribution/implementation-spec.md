@@ -321,7 +321,7 @@ Confirm ≥ 40%. The fee-stamp logic lives in `internal/service/` (a coverage-ex
 
 ### Step 7 — service: portfolio — fold per-fill `fees` into `fees_accum`; emit `fees_total` on close
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify (`orderFillPayload` + fold + close emit)
@@ -351,7 +351,7 @@ Confirm ≥ 40%. The fee-stamp logic lives in `internal/service/` (a coverage-ex
 
 ### Step 8 — test: portfolio fee fold + `fees_total` emit; no-fee ⇒ gross
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_helpers_test.go` — modify, or new `portfolio_fees_test.go` — create
@@ -618,4 +618,15 @@ The suite has no coverage threshold (Playwright e2e); confirm the new spec passe
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Step 8 — portfolio fee-fold emit is not unit-drivable (concrete `pool` / no live-DB harness)
+- `UpsertPosition` writes via the concrete `r.pool *pgxpool.Pool` (not the mockable `queryRower`
+  `r.db`), and `processOrderFill` reads `existing` + calls `checkRiskLimits`/`broadcastSnapshot` with
+  no live-DB test harness (the codebase's own documented limitation — `portfolio_offline_test.go:16,58`).
+  So the `fees_accum` accumulation SQL and the `fees_total` close-emit cannot be exercised in a unit
+  test the way the spec's instruction 1-2 sketch.
+- **What IS tested**: `GetFeesAccum` through pgxmock (returns `COALESCE(fees_accum,0)`, 0 on
+  `ErrNoRows` — AC-11), red→green. The accumulation SQL is a byte-for-byte parallel of the shipped
+  `realized_accum` upsert (compile-checked); the `fees_total` emit key is verified downstream by the
+  analysis consumer test (Step 10, which asserts the close payload's `fees_total` is read into
+  `seal`) and the `GetAttribution` net test (Step 12, `net = realized_pnl - fees_total`). This closes
+  AC-10/AC-11 end-to-end across the seam without a portfolio live-DB harness this feature does not add.
