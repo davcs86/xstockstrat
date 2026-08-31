@@ -14,6 +14,7 @@
 | 2026-08-31 | `draft` (regenerated) | /sdd-story (overwrite) | product-spec.md regenerated to current template; acceptance.feature authored |
 | 2026-08-31 | `draft` → `spec-ready` | /sdd-review | Product spec approved; all review blockers addressed |
 | 2026-08-31 | `spec-ready` → `design-approved` | /sdd-design | Design debated (full) and approved; recon.md + design.md written; FR-5/AC-5 corrected (keep matcher exclusion) |
+| 2026-08-31 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (4 steps) |
 
 ---
 
@@ -21,7 +22,7 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec ui-middleware-nodejs-runtime`_
+- [Implementation Spec](implementation-spec.md) — numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -41,4 +42,4 @@ the self-referential HTTP loopback to `/api/auth/refresh` landed as a hotfix in 
 
 ## Next Action
 
-`/sdd-spec ui-middleware-nodejs-runtime` — generate the implementation spec
+`/sdd-review ui-middleware-nodejs-runtime impl-spec` then `/sdd-execute ui-middleware-nodejs-runtime`

@@ -124,3 +124,30 @@ warnings; applied fixes (docs-only, still `draft`, number/slug unchanged):
 
 - The full-mode design's adversarial pass found the regenerated FR-5/AC-5 were stale: they removed the `/api/auth/refresh` matcher exclusion, but that route still has a live non-middleware caller (`src/lib/authRedirect.ts:40`), so removing the exclusion would regress feature 153's `@AC-5`/`@AC-6` (C-16). Corrected FR-5 + AC-5 to KEEP the matcher exclusion and retain the route; only `buildInternalRefreshUrl()` + the middleware self-fetch are removed.
 - Feasibility is doc-supported (Node middleware stable in Next 15.5) but the `output:'standalone'` bundling of `@connectrpc/connect-node` in the Node middleware chunk MUST be proven by a real `docker build` (AC-6); a build failure blocks the feature (F-04/P-03).
+
+## Session 2026-08-31 — sdd-spec
+
+- Generated `implementation-spec.md` with **4 steps**. Status → implementation-ready. Followed
+  `design.md`'s Chosen Approach exactly (Node runtime + in-process `refreshSession()`; KEEP matcher
+  exclusion + `api/auth/refresh` route per corrected FR-5).
+- Step map: **1 [service]** middleware.ts + auth.ts + identity.ts (runtime flip, in-process refresh,
+  delete `buildInternalRefreshUrl`, keep matcher exclusion w/ rewritten rationale, correct stale
+  in-file comments) → **2 [test]** vitest unit tests (covers AC-1..AC-5, red-before-green) →
+  **3 [test]** standalone-build feasibility gate (covers AC-6, load-bearing F-04/P-03) →
+  **4 [docs]** frontend-auth.md + service CLAUDE.md (covers AC-7). Every `@AC-*` covered.
+- Key codebase findings surfaced during discovery:
+  - **`buildInternalRefreshUrl` has an existing test** — `src/lib/auth.test.ts:24-42` (`describe`)
+    + import `:2` + the `ORIGINAL_PORT`/`afterEach` PORT harness `:17-22`. Deleting the function
+    forces removing that block (and `afterEach` from the vitest import) or the suite won't compile —
+    folded into Step 2. Not called out in recon; caught by a repo-wide `grep buildInternalRefreshUrl`.
+  - **In-file doc-drift beyond FR-6's two docs:** `auth.ts:42-44` ("must not be reachable from
+    middleware … Edge runtime") and `identity.ts:1-6` ("NEVER import from middleware.ts … breaks the
+    Edge runtime bundle") become actively false once middleware imports identity. Corrected in Step 1
+    (files already in scope), not the docs step.
+  - `refreshSession` (`identity.ts:11-24`) returns `{accessToken,refreshToken,claims}|null`;
+    `setSessionCookies`/`clearSessionCookies` (`auth.ts:62-91`) and the `req.cookies.get('refresh_token')`
+    read pattern (`route.ts:6`) are the mandatory reuse targets.
+  - `serverExternalPackages` (`next.config.js:8-14`) already lists `@connectrpc/connect-node` for
+    route handlers; middleware-chunk coverage under `output:'standalone'` is the residual, build-only
+    provable risk — Step 3 may touch `next.config.js` only if the build fails.
+- Reviewers (deduped): **xstockstrat-ui service owner** (Steps 1-3); **none** (Step 4, docs).
