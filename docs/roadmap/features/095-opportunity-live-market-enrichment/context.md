@@ -230,3 +230,13 @@ Operator confirmed the target/stop Open Risk and expanded the consumer surface. 
 - Enrichment field placement: 13/14/17 read-time (`_INTENTIONALLY_UNSET`), 15/16/18 compute-time
   persisted (`_MAPPED`). `change_pct` derived in analysis, not on the marketdata wire.
 - No DB migration; no config-service seed migration; no new env vars/ports.
+
+## Session 2026-08-31 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 4 warnings (advisory; no Floor breach). All key confirmations OK: Opportunity fields 13-18 (110→19), read-time enrichment keeps AC-14 no-look-ahead by construction (Step 7.4 ranking-parity test), tool count 32→33 consistent across all surfaces, graceful degradation (null-not-NaN, omit-when-absent, cross-surface parity) tested.
+- Unresolved ⚠ carried into execution:
+  - Step 8: correct the Codebase Evidence line — both MarketDataService BFF blocks already register more than `getBars` (trader: +listAssets/getFundamentals; insights: +deleteBackfilledData). Instruction (add getLatestPrice) is valid; cosmetic. — [ ] unaddressed
+  - Step 11: add `--coverage` / `pnpm run test:coverage` to the vitest Verification so the client-side R:R math hits the 40% src/lib gate, not just executes. — [ ] unaddressed
+  - Step 6: persisting strategy-derived target/stop/conditions inside `_compute_opportunities` is ranking-NEUTRAL (only live-market fields are read-time) and guarded by the Step 7.4 parity test — confirmed sound vs design's enrich-at-read/never-at-rank intent. — [ ] confirmed, no change
+  - Step 2: `packages/proto/gen/` directory Files entry — codegen convention. — [ ] note only
+- Overlap findings: batch scan CLEAN; 095↔110 analysis servicer.py + parity test recorded in merge-order.md (095 before 110).
