@@ -120,3 +120,33 @@ No code, no `status.md` change.
   pending)".
 - **No Floor breach.** Constitution touched: C-01/C-04/C-07/C-09/C-10(a)/C-10(b)/C-12/C-13/C-14/C-16/
   C-17, P-03, F-01, F-06.
+
+## Session 2026-08-31 — sdd-spec
+
+- Generated `implementation-spec.md` with **15 steps**. Status → `implementation-ready`.
+- **Migration NNNs verified next-free (fails.md 081 numbering trap re-scan):** portfolio
+  `014_positions_fees_accum` (last existing `013_positions_provenance`); analysis
+  `021_pnl_positions_fees_total` (last existing `020_job_schedule`). Both paired up/down, additive
+  `NOT NULL DEFAULT 0`; analysis `021` also adds the `(user_id, closed_at)` index.
+- **Proto additive, no collision confirmed by grep:** `GetAttribution`/`GetAttributionRequest`/
+  `SourceAttribution`/`GetAttributionResponse` appear **nowhere** in `packages/proto/`, `services/`, or
+  other feature dirs; `Opportunity` (`analysis.proto:542`) untouched → no field-number collision with
+  095/110. Fee seam adds **no** proto (Struct payload keys).
+- **Two /sdd-spec decisions surfaced (C-11):** (1) `SourceAttribution.trade_count`/`win_count` are
+  **`double`**, not int32, so FR-3's exact-tie 0.5/0.5 split (AC-5) is representable; AC-1's integer
+  counts are exact doubles. (2) `avg_return` is a **percent over an approximate cost basis** (earliest
+  order_snapshot price×qty; cost_basis==0 trades excluded from the mean only) — resolves recon's
+  "avg return % has no denominator" risk. No `@AC-*` asserts a numeric `avg_return`.
+- **Grounded correction to design's `:731-732` fee-emit reference:** the ONLY `order.filled`/
+  `order.partially_filled` emit sites are `trading.go:1712`/`:1728` (the `pollFills` path); the
+  submit-time path emits `order.broker_submitted`, not `order.filled`, so the `"fees"` stamp lands at
+  1712/1728 where `brokerOrder` is in scope.
+- **Every `@AC-*` covered by a test step:** AC-1/3/4/5/6/7/9/10/11 → Step 12 (analysis handler test);
+  AC-2/8 → Step 14 (UI e2e); AC-10 also spans Steps 6/8/10 (trading→portfolio→analysis fee seam);
+  AC-11 also Step 8. C-14 UI surface landed (Steps 13–14, `/insights/attribution` + PLATFORM_SUBNAV +
+  nav-reachability); Agent not required.
+- **Reviewers (deduped):** Proto Reviewer, DBA, xstockstrat-analysis, xstockstrat-portfolio,
+  xstockstrat-trading, xstockstrat-ui.
+- **No "Not found / create from scratch" steps** — every path/symbol cited a real `path:line`
+  (new files — migrations, `useSignalAttribution.ts`, `attribution/page.tsx`, fixtures, tests — follow
+  a grounded sibling pattern, not an absent-pattern gap).
