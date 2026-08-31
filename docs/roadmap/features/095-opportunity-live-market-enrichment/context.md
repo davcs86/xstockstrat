@@ -119,3 +119,47 @@
 - Constitution rules touched: C-04, C-10(a/d — does NOT fire), C-10(b), C-14, C-15/C-16, C-03, C-09, C-17, F-04, F-07, P-03, P-06. **Floor breaches: none** (the F-04 target/stop-producer gap is surfaced as an Open Risk, not invented).
 - Additive confirmation: `Opportunity` 13-18 and the marketdata `GetLatestPrice` RPC are additive/non-breaking (`buf breaking` green); field numbers 13-18 honored so feature 110 lands at 19+ (merge-order intact).
 - Status: `spec-ready` → design-approved **pending** the two operator-confirm items (target/stop producer decision; read-pressure batching). `recon.md` + `design.md` written; `status.md` NOT flipped by this subagent.
+
+## Session 2026-08-31 — design revision (confirmed operator decision)
+
+Operator confirmed the target/stop Open Risk and expanded the consumer surface. Revised `design.md`,
+`product-spec.md`, and `acceptance.feature` (docs-only; no code, `status.md` untouched).
+
+- **DECISION 1 — target/stop ships WIRED, authoring deferred to a NAMED follow-up.** Fields
+  `target_price=15`/`stop_price=16` ship as explicit-presence plumbing fed from
+  `StrategyDefinition.signal_params.{target,stop}` where present, **omitted when absent, never
+  fabricated** (design Open Risk option A). The strategy-builder *authoring* UI is the named follow-up
+  **`strategy-target-stop-authoring`** (number allocated by `/sdd-story` when created — satisfies C-14's
+  named-deferral rule). The Open Risk checkbox is now resolved; the `signal_params.{target,stop}`
+  governance-note item remains.
+- **DECISION 2 — update BOTH consumers: UI *and* Agent.** The prior design named only the UI. Added
+  the **Agent** consumer. **Investigation finding:** the agent has **no opportunities surface** — a
+  grep of `services/xstockstrat-agent` for `opportunit` is empty and no tool calls `ListOpportunities`.
+  The closest tool `screen_symbols` (`app/tools.py:552` → `app/client.py:617`) reads a **different**
+  RPC — `ScreenSymbols`→`ScreenResult` (`analysis.proto:451`) — which carries none of the 13-18
+  enrichment fields (they live only on `Opportunity`). So a new tool is **necessary**: added FR-9 +
+  design §(e) for a **read-only `list_opportunities`** MCP tool wrapping the existing
+  `ListOpportunities` RPC (`analysis.proto:34`), projecting the enriched `Opportunity` with
+  omit-not-fabricate (`HasField` gates for live_price/change_pct/target_price/stop_price; sparkline
+  gaps as `null`; per-`ConditionEval` leaves). **Additive — no proto change** (reuses the 095
+  `Opportunity` block; tool + `client.py` projection mirroring `screen_symbols` at `client.py:677-698`
+  + `mcp-tools.md` entry). **Caller-scoped, no admin scope** — `ListOpportunitiesRequest` has no
+  `user_id`; the queue resolves from the forwarded `x-user-id` (`analysis.proto:590-591`) via
+  `CallerPropagationMiddleware` (AGENT-4), matching `list_watchlists`/`list_strategies`. R:R + sizing
+  are **not** projected (UI-only, no wire field). Parity with the UI holds (same
+  `Opportunity.live_price`, C-10(b)).
+- **RECON CORRECTION applied to the spec.** The real Signal-detail surface is
+  `trader/positions/[symbol]` (feature 125); `insights/market/[symbol]` is a **redirect stub**. Fixed
+  the Consumer Surface(s) block and the Affected-Services `xstockstrat-ui` bullet in `product-spec.md`
+  (design.md already had this right).
+- **Field pre-assignment UNCHANGED.** `Opportunity` 13-18 kept exactly as-is (feature 110 lands its
+  confidence field at 19+; merge-order intact). The agent change adds **no** proto field.
+- **Artifacts touched:** `product-spec.md` (FR-9, Consumer Surface(s) Agent checked + tool named,
+  Affected Services + `xstockstrat-agent`, Design-Phase Decisions confirmed-decisions block + named
+  follow-up, signal-detail route corrected); `acceptance.feature` (**AC-15 @FR-9 @FR-6** — agent tool
+  returns live_price, omits target when the strategy has none; all existing @AC-1..@AC-14 + tags
+  preserved); `design.md` (Chosen Approach §(e) + Consumer-surfaces paragraph, 2 rejected
+  alternatives, Open Risk resolved, C-14/C-15/C-16/F-04 updated, Rounds note). **Floor breaches:
+  none** — F-04 honored (grep-confirmed agent absence; real RPC/paths cited).
+- **Next:** re-confirm `/sdd-design` gate if desired, then `/sdd-spec` (which must now spec the agent
+  `list_opportunities` step alongside the UI/analysis/marketdata steps).

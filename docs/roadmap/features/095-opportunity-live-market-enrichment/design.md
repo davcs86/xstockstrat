@@ -1,7 +1,8 @@
 # Design: opportunity-live-market-enrichment
 
 **Created**: 2026-08-31
-**Rounds**: 2 (full; termination: approved with two operator-confirm items carried as Open Risks)
+**Rounds**: 2 (full) + 1 revision (2026-08-31 operator decision: ship target/stop WIRED with a named
+authoring follow-up, and update BOTH consumers — UI **and** Agent; see § Chosen Approach (e))
 **Approved by**: (design authored in an isolated `/sdd-design` subagent — Phase-1 gate items flagged for the operator; see Open Risks)
 **Grounded in**: recon.md
 
@@ -84,12 +85,41 @@ both surfaces read the same `Opportunity.live_price` from the same shared React-
 `marketDataClient.getLatestPrice` call → symbol + live price only, no chips/overlays/R:R. No fields are
 added to `SymbolReadiness` (no field after 5).
 
-**Consumer surfaces (C-14).** Queue cards `insights/opportunities/page.tsx` (price/change/sparkline +
-condition chip); Signal-detail `trader/positions/[symbol]/page.tsx` (header price/change/sparkline,
-target/stop overlay lines + legend reusing `SymbolPriceChart`'s `priceLinesRef`, condition chips);
-order ticket (client-side R:R + sizing). BFF: add `getLatestPrice` to `MarketDataService` on
+**(e) Agent consumer — a new read-only `list_opportunities` MCP tool (operator-confirmed: update
+BOTH consumers).** The agent has **no opportunities surface today** — a grep of
+`services/xstockstrat-agent` for `opportunit` is empty, and no tool calls `ListOpportunities`. The
+closest existing tool, `screen_symbols` (`app/tools.py:552` → `app/client.py:617`), reads a
+**different** RPC — `ScreenSymbols` → `ScreenResult` (`analysis.proto:451`) — whose message carries
+**none** of the enrichment fields (they live only on `Opportunity`, 13-18). So extending
+`screen_symbols` cannot surface the enrichment without changing the screener proto (out of scope) and
+would misrepresent the screener as the Decide queue. The minimal additive path is therefore a **new
+read-only tool** over the **existing** `ListOpportunities` RPC (`analysis.proto:34`,
+`ListOpportunitiesResponse` `:596`): add `list_opportunities` (`app/tools.py`, alongside
+`list_strategies` `tools.py:1129`) + a `client.list_opportunities` projection (`app/client.py`,
+mirroring `screen_symbols`'s dict projection at `client.py:677-698`) that calls
+`AnalysisServiceStub.ListOpportunities` and projects each `Opportunity`: base fields
+(`symbol`/`action` name/`conviction`/`thesis`/`strategy_id`/`source`/`opportunity_key`/`provenance`/`muted`)
+**plus** the 095 enrichment with **omit-not-fabricate** — `live_price`/`change_pct`/`target_price`/`stop_price`
+projected only under `HasField(...)` (unset → key omitted, AC-11/AC-8/AC-15), `sparkline` as bar
+closes with a **`null`** for each `SparklinePoint` whose `close` is unset (P-03, AC-4), `conditions`
+as the per-`ConditionEval` leaves (`ref_name`/`lhs_value`/`threshold`/`fn`/`state` name/`distance_to_threshold`).
+**Additive, no proto change** (reuses the 095 `Opportunity` block; adds a tool + projection + a
+`docs/runbooks/mcp-tools.md` entry only). **Caller-scoped, no admin scope**: `ListOpportunitiesRequest`
+carries no `user_id` — the queue is resolved server-side from the propagated `x-user-id`
+(`analysis.proto:590-591`), which the agent forwards on every outbound gRPC via
+`CallerPropagationMiddleware` (invariant **AGENT-4**), matching the read-only caller-scoped pattern of
+`list_watchlists`/`list_strategies`. **R:R + suggested sizing are NOT projected** — they are a UI-only
+client-side computation with no wire field (FR-5), so there is nothing for the agent to surface.
+Same-source parity with the UI (C-10(b)) holds structurally: the tool reads the same
+`Opportunity.live_price` the UI reads (AC-15).
+
+**Consumer surfaces (C-14 — UI *and* Agent).** Queue cards `insights/opportunities/page.tsx`
+(price/change/sparkline + condition chip); Signal-detail `trader/positions/[symbol]/page.tsx` (header
+price/change/sparkline, target/stop overlay lines + legend reusing `SymbolPriceChart`'s
+`priceLinesRef`, condition chips); order ticket (client-side R:R + sizing); **agent
+`list_opportunities`** tool (§(e)). BFF: add `getLatestPrice` to `MarketDataService` on
 `traderBff`/`insightsBff` + `marketDataClient` method + `mock-backend` handler + `opportunities.ts`
-fixture fields.
+fixture fields. Each of the four surfaces earns its own implementation step(s).
 
 ## Rejected Alternatives
 
@@ -107,17 +137,26 @@ fixture fields.
   trace is already computed, so carrying it costs nothing and keeps 110 at field 19+.
 - **Derive target/stop from an ATR/stop rule** — rejected by FR-4 (no-fabrication; keeps indicators
   out of scope).
+- **Surface the enrichment by extending `screen_symbols` instead of a new agent tool** — rejected:
+  `screen_symbols` reads `ScreenSymbols` → `ScreenResult` (`analysis.proto:451`), which carries none
+  of the `Opportunity` 13-18 fields; surfacing them there would require adding them to the screener
+  proto (out of scope) and would misrepresent the screener as the Decide queue. A read-only
+  `list_opportunities` over the existing `ListOpportunities` RPC is the minimal additive path — a new
+  tool is *necessary* precisely because no existing tool reads that RPC.
+- **A new agent RPC / proto field for the agent path** — rejected: the agent reads the same enriched
+  `Opportunity` the UI reads; the only additive surface is the tool + its dict projection.
 
 ## Open Risks
 
-- [ ] **No target/stop producer exists (OPERATOR CONFIRM).** `ExternalSignal` and `StrategyDefinition`
-  carry no numeric target/stop today, so fields 15/16 render nothing until a source is populated.
-  Decision to confirm: (A) ship 15/16 as explicit-presence plumbing fed from
-  `StrategyDefinition.signal_params.{target,stop}` (agent-writable now; a strategy-builder "set
-  target/stop" UI is a **named follow-up feature**) — recommended; or (B) defer fields 15/16 and the
-  chart-overlay UI entirely to that follow-up. Either way AC-7 is testable only via an injected
-  fixture value and AC-8 (no line when absent) is the real production path today. — resolve before
-  `/sdd-spec`.
+- [x] **No target/stop producer exists — RESOLVED (operator-confirmed 2026-08-31: option A).**
+  `ExternalSignal` and `StrategyDefinition` carry no numeric target/stop today, so fields 15/16 render
+  nothing until a source is populated. **Confirmed decision:** ship 15/16 **WIRED** — explicit-presence
+  plumbing fed from `StrategyDefinition.signal_params.{target,stop}` where present (agent-writable now
+  via `manage_strategy`), **omitted when absent, never fabricated**. The strategy-builder UI to
+  *author* those values is a **named follow-up feature — `strategy-target-stop-authoring`** (number
+  allocated by `/sdd-story` when created; satisfies C-14's named-deferral rule). AC-7 is testable via
+  an injected fixture value; AC-8/AC-15 (no line / omitted field when absent) is the real production
+  path today. Governance note for `signal_params.{target,stop}` still required (below).
 - [ ] **Marketdata read-pressure under the 15s poll (OPERATOR/DESIGN CONFIRM).** Read-time enrichment
   fans out ≤50 quote reads + sparkline bars per `ListOpportunities`; must batch (multi-fetch, like
   `GetLatestQuotesMulti`) and serve `prev_close`/bars from cache/DB to stay within the
@@ -134,10 +173,13 @@ fixture fields.
   `Opportunity.live_price` from the one marketdata-backed source; paired parity test (AC-12). Honored.
 - `C-10(a/d)` — does NOT fire: adds fields, not enum values; `opportunityShared.tsx` exhaustive maps
   are over enums (`:29-52`). Confirmed.
-- `C-14` — all three consumer surfaces named and each earns implementation steps (queue / Signal-detail
-  / order ticket); the target/stop authoring UI is deferred to a **named** follow-up. Honored.
-- `C-15`/`C-16` — every FR-1..FR-8 covered by ≥1 `@AC-*`; no existing `@AC-*` guarantee changed
-  (net-new additive). Honored.
+- `C-14` — **both** consumer surfaces named and each earns implementation steps: **UI** (queue /
+  Signal-detail `trader/positions/[symbol]` / order ticket) **and Agent** (the new read-only
+  `list_opportunities` MCP tool, §(e)). The target/stop **authoring** UI is deferred to a **named**
+  follow-up feature (`strategy-target-stop-authoring`), which is what makes the deferral C-14-legal.
+  Honored.
+- `C-15`/`C-16` — every FR-1..FR-9 covered by ≥1 `@AC-*` (FR-9 by the new `@AC-15`); no existing
+  `@AC-*` guarantee changed (net-new additive). Honored.
 - `C-17` — new UI (chips, overlay legend, R:R row) uses design-role tokens + canonical primitives;
   reuses `SymbolPriceChart`/`priceLinesRef` and `StatTile`/`Badge`. Honored.
 - `C-03` — analysis threads the propagation tuple on the new `GetLatestPrice`/`GetBars` calls
@@ -145,7 +187,10 @@ fixture fields.
 - `C-09`/`P-06` — additive proto: `buf lint` + `buf breaking` green (new fields/RPC only); red-before-green
   on every code step. Honored.
 - `F-04` — no invented paths: the Signal-detail surface is the real `trader/positions/[symbol]` page,
-  not the redirect stub; no target/stop producer is invented (surfaced as an Open Risk). Honored.
+  not the redirect stub; no target/stop producer is invented (surfaced as an Open Risk); the agent's
+  lack of an opportunities tool is a grep-confirmed absence (`services/xstockstrat-agent` has no
+  `opportunit` match), so `list_opportunities` is a real new tool, not an assumed-existing one, and
+  wraps the real `ListOpportunities` RPC (`analysis.proto:34`). Honored.
 - `F-07` — `sparkline_bars` is a registered config key, no literal. Honored.
 - `P-03` — sparkline/live/target/stop absence modeled as explicit-presence unset, never `NaN`/`0`;
   the target/stop absence-claim is escalated, not guessed. Honored.

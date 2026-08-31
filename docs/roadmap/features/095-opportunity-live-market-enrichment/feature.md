@@ -13,6 +13,7 @@
 | 2026-08-02 | `idea` → `draft` | /sdd-story | Product spec generated — the backend + UI backlog for the handoff extras feature 083 intentionally omitted (live price/change, sparkline, per-condition value chips, target/stop chart overlays, R:R + sizing) |
 | 2026-08-31 | `draft` (regenerated) | /sdd-story (overwrite) | product-spec.md regenerated to current template; acceptance.feature authored |
 | 2026-08-31 | `draft` → `spec-ready` | /sdd-review | Product spec approved; all review blockers addressed |
+| 2026-08-31 | `spec-ready` → `design-approved` | /sdd-design | Design debated (full) + agent-consumer revision; approved; recon.md + design.md written |
 
 ---
 
@@ -50,4 +51,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review opportunity-live-market-enrichment product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec opportunity-live-market-enrichment` — generate the implementation spec

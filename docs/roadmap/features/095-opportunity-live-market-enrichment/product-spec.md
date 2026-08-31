@@ -56,6 +56,16 @@ FR-8. **No look-ahead into ranking (analysis-owned invariant).** Folding a live 
   Decide surface must never leak future data into the conviction/readiness ranking hot path — a fixed
   ranking input must produce an identical conviction score and readiness ordering whether or not the
   live-quote enrichment is attached (the hot backtest/ranking path stays frozen).
+FR-9. **Agent consumer surface (C-14).** The same read-time `Opportunity` enrichment is also exposed
+  to the AI agent. No agent MCP tool reads `ListOpportunities` today (grep-confirmed — the agent has
+  no opportunities surface at all), and the enrichment lives only on `Opportunity`, so a small
+  **read-only `list_opportunities` MCP tool** is added that wraps the existing analysis
+  `ListOpportunities` RPC and projects each opportunity with `live_price`/`change_pct` (**omitted when
+  the quote is unavailable**), `target_price`/`stop_price` (**omitted when the strategy carries none —
+  never fabricated**), the sparkline closes (gaps as `null`, never `NaN`/`0`), and the per-condition
+  `ConditionEval` leaves. The tool is read-only and **caller-scoped** (queue resolved from the
+  forwarded `x-user-id`, no admin scope). R:R + suggested sizing stay **UI-only** (no wire field —
+  nothing for the agent to project). Every projected field obeys the no-fabrication rule (FR-6).
 
 ## Out of Scope
 
@@ -80,9 +90,16 @@ Exact service names from CLAUDE.md Service Registry:
   price, no prior close), so this feature adds an **additive, non-breaking** exposure of latest-trade
   price + prior-close (additive `Quote` fields or a small latest-trade read RPC — shape resolved at
   `/sdd-design`); change% is computed from the prior close.
-- `xstockstrat-ui` — consume the new fields on `insights/opportunities` cards, the
-  `insights/market/[symbol]` header + chart overlays + order ticket, and compute R:R + suggested
+- `xstockstrat-ui` — consume the new fields on `insights/opportunities` cards, the real Signal-detail
+  surface `trader/positions/[symbol]` (feature 125 — `insights/market/[symbol]` is now a redirect
+  stub, not the live surface) header + chart overlays + order ticket, and compute R:R + suggested
   sizing client-side (FR-5). Keep the no-fabrication rule.
+- `xstockstrat-agent` — expose the same read-time enrichment to the AI agent (FR-9). The agent has no
+  opportunities tool today, so add a small **read-only `list_opportunities`** MCP tool
+  (`app/tools.py` + `app/client.py` projection, `docs/runbooks/mcp-tools.md` entry) that wraps the
+  existing analysis `ListOpportunities` RPC and projects the enriched `Opportunity` (live price,
+  change%, target/stop when present, sparkline closes with `null` gaps, per-condition `ConditionEval`
+  leaves) — additive, no proto change, caller-scoped via the forwarded `x-user-id`.
 - `xstockstrat-portfolio` — _FYI_: buying power for the client-side suggested sizing (already read on
   the Opportunities page via `insightsPortfolioClient.listPortfolios`; sizing reuses it rather than a
   new server read).
@@ -95,21 +112,34 @@ Exact service names from CLAUDE.md Service Registry:
 
 ## Consumer Surface(s)
 
-**C-14 — this feature changes UI surfaces.**
+**C-14 — this feature changes UI *and* Agent surfaces.**
 
 - [x] **UI** — `xstockstrat-ui`, all three consumer surfaces on the Decide flow:
   - **Decide surface** — the Opportunities queue cards (`insights/opportunities`): live price + change%,
     sparkline, per-condition value chips.
-  - **Signal-detail surface** — `insights/market/[symbol]`: header (live price + change% + sparkline),
-    candlestick chart (target/stop overlay lines + legend), per-condition chips.
+  - **Signal-detail surface** — the real page is `trader/positions/[symbol]` (feature 125);
+    `insights/market/[symbol]` is now a **redirect stub**, not the live surface (design recon
+    correction). Header (live price + change% + sparkline), candlestick chart (target/stop overlay
+    lines + legend), per-condition chips.
   - **Order-ticket surface** — the Signal-detail order ticket: risk:reward + suggested share sizing
     (presentation only, execution path unchanged).
-- [ ] Agent (MCP tools) — no change.
+- [x] **Agent (MCP tools)** — `xstockstrat-agent`: a new **read-only `list_opportunities`** tool
+  wraps the existing analysis `ListOpportunities` RPC and projects the enriched `Opportunity` so the
+  agent sees the same market context (FR-9). Response change vs. today: the tool did not exist, so
+  this adds the projection — `symbol`, `action`, `conviction`, `thesis`, `strategy_id`, `source`,
+  `opportunity_key`, `provenance`, `muted` (base row) **plus** `live_price`, `change_pct` (omitted
+  when the quote is unavailable), `target_price`, `stop_price` (omitted when the strategy carries no
+  target/stop — never fabricated), `sparkline` (bar closes, gaps as `null`), and `conditions`
+  (per-`ConditionEval` leaves). No admin scope; queue resolved from the forwarded `x-user-id`. R:R +
+  suggested sizing are **not** projected (UI-only client-side computation, no wire field).
 - [ ] Config-UI — no change.
 
-All three surfaces must be registered/reachable via the existing Decide navigation (no new route) and
-must honor the no-fabrication rule (FR-6). C-10(b) parity is required between the Decide queue card and
-the Signal-detail header (FR-7).
+The three UI surfaces must be registered/reachable via the existing Decide navigation (no new route);
+the agent surface is a new MCP tool reachable through the existing agent transport (no new RPC). Every
+surface must honor the no-fabrication rule (FR-6). C-10(b) parity is required between the Decide queue
+card and the Signal-detail header (FR-7). Each named surface — the three UI segments and the agent
+tool — earns its own implementation step(s) (C-14); the target/stop **authoring** UI is deferred to a
+named follow-up feature (see Design-Phase Decisions).
 
 ## Proto Contract Changes
 
@@ -191,7 +221,21 @@ choices moved to **Design-Phase Decisions**, and the known traps to **Design Gua
 
 ## Design-Phase Decisions (owned by /sdd-design)
 
-Scope is settled; only the "how" remains — resolve each at `/sdd-design`:
+**Confirmed operator decisions (2026-08-31):**
+
+- **Target/stop ships WIRED, authoring deferred to a NAMED follow-up.** Fields 15/16 ship as
+  explicit-presence plumbing fed from `StrategyDefinition.signal_params.{target,stop}` where present
+  (agent-writable via `manage_strategy` today), omitted when absent, never fabricated (option A of the
+  design Open Risk). The strategy-builder UI to *author* those values is deferred to a named follow-up
+  feature: **`strategy-target-stop-authoring`** (a `/config-ui` or strategy-builder surface that sets
+  `signal_params.{target,stop}`; number allocated by `/sdd-story` when it is created). This satisfies
+  C-14's "deferral counts only when it points at a named follow-up feature."
+- **BOTH consumers updated — UI and Agent.** Per the operator, the enrichment is surfaced on the UI
+  Decide surfaces **and** through the AI agent via the new read-only `list_opportunities` MCP tool
+  (FR-9). The agent had no opportunities surface, so this is an additive new tool wrapping the
+  existing `ListOpportunities` RPC — no proto change beyond the shared 095 `Opportunity` block.
+
+Scope is settled; only the "how" of the following remains — resolve each at `/sdd-design`:
 
 - **Marketdata latest-trade/prior-close shape.** Additive fields on the `Quote` read (append at 8+)
   vs. a small dedicated latest-trade read RPC — pick the smaller non-breaking option. (The *need* for

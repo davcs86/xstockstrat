@@ -87,3 +87,9 @@ Feature: opportunity-live-market-enrichment
     Given a fixed backtest/ranking input for "CAPR"
     When conviction and readiness ranking are computed with the live-quote enrichment attached and again with it absent
     Then the conviction score and readiness ranking are identical in both cases, proving the live quote does not enter the ranking hot path
+
+  @AC-15 @FR-9 @FR-6
+  Scenario: The agent list_opportunities tool surfaces the enrichment and omits an absent target
+    Given the ranked opportunities queue holds "CAPR" whose latest marketdata trade is 12.34 and whose attributed strategy carries no target and no stop
+    When the AI agent calls the read-only "list_opportunities" MCP tool
+    Then the returned "CAPR" opportunity includes live_price 12.34 (sourced from the same marketdata-backed field the UI reads), and it omits target_price and stop_price entirely rather than returning a fabricated or zero value
