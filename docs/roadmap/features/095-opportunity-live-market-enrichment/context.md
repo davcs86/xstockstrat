@@ -163,3 +163,70 @@ Operator confirmed the target/stop Open Risk and expanded the consumer surface. 
   none** — F-04 honored (grep-confirmed agent absence; real RPC/paths cited).
 - **Next:** re-confirm `/sdd-design` gate if desired, then `/sdd-spec` (which must now spec the agent
   `list_opportunities` step alongside the UI/analysis/marketdata steps).
+
+## Session 2026-08-31 — sdd-spec
+
+- Generated `implementation-spec.md` with **13 steps**. Status → `implementation-ready`.
+- Consumed `recon.md` + `design.md` (design-approved) as authoritative inputs; recon's Codebase Map
+  reused directly as grounded `path:line` evidence, with targeted re-discovery only for the agent
+  service (added in the design revision, thin in recon).
+- **Step shape (13):** 1 proto (additive `Opportunity` 13-18 + `SparklinePoint`; marketdata additive
+  `GetLatestPrice` RPC) → 2 proto-gen → 3-4 marketdata Go (`GetLatestPrice`: latest trade + prior
+  close, cache/DB-backed) → 5 config (`analysis.opportunity.sparkline_bars`=20, no-seed) → 6-7 analysis
+  Python (read-time enrichment) → 8-11 UI (plumbing, queue cards, Signal-detail, order ticket) → 12-13
+  agent (`list_opportunities` MCP tool). Every AC-1..AC-15 mapped to a covering step (§ Scenario Coverage).
+- **Key codebase findings / spec-time resolutions:**
+  - **Descriptor-parity split (grounded refinement of design's "how"):** `_row_to_opportunity`
+    (`servicer.py:3855`) is pinned by `TestOpportunityRowParity` (`tests/test_analysis_servicer.py:4847`,
+    `_MAPPED | _INTENTIONALLY_UNSET == Opportunity.DESCRIPTOR.fields_by_name`). Adding fields 13-18
+    fails `test_mapper_covers_every_proto_field` until updated. Resolved: **compute-time
+    strategy-derived** fields (`target_price`/`stop_price`/`conditions`) are persisted in
+    `_compute_opportunities`' row JSONB (no column/migration — like `muted` rides `"denied"` provenance,
+    `:3873-3875`) and carried by `_row_to_opportunity` → join `_MAPPED`; **read-time live-market**
+    fields (`live_price`/`change_pct`/`sparkline`) are set in `ListOpportunities` after ranking
+    (`:2994-2996`) → join `_INTENTIONALLY_UNSET`. This keeps ranking frozen (FR-8/AC-14) AND satisfies
+    the parity guard. `change_pct` is derived in analysis (`(last-prev)/prev`), never on the marketdata
+    wire (design (a)).
+  - **Config key uses the no-seed pattern:** `analysis.opportunity.*` keys have no config-service seed
+    migration (features 131/141; `config-governance.md:223-261`) — declare default in analysis CLAUDE.md
+    + Per-Feature Registered Keys log; read live via `get_int`. merge-order.md's config-migration NNN
+    pre-assignment batch does NOT allocate one to 095 (consistent).
+  - **Agent had no opportunities surface** (grep-confirmed); `screen_symbols` reads a different RPC
+    (`ScreenSymbols`→`ScreenResult`). New read-only `list_opportunities` over the existing
+    `ListOpportunities` RPC (caller-scoped via `x-user-id`, no admin scope). Tool-count invariant =
+    **thirty-two → thirty-three** across five surfaces: `app/tools.py:4` docstring, `mcp-tools.md:3` +
+    `:37`, agent `CLAUDE.md:43`, and the exact name-set in `tests/test_tools_endpoint.py:23-56`.
+    Feature 164 is the precedent (`164/implementation-spec.md:236-244`). Not a `strat-lab` plugin API,
+    so no plugin update.
+  - **marketdata coverage:** new `service`/`handler`/`repository` logic is in coverage-**excluded**
+    packages; the coverable assertion lives in `internal/alpaca/client_test.go` (latest-trade parse).
+    Threshold 40%.
+  - **UI anchors confirmed current** (post feature-125/143 landing): real Signal-detail surface is
+    `trader/positions/[symbol]/page.tsx` (`useOpportunities`→`symbolOpportunities` `:185-189`,
+    `SymbolPriceChart`/`priceLinesRef` `:129,:501-554`, `OrderForm` `:342`); both BFFs register
+    `MarketDataService` with only `getBars` today (`insightsBff.ts:79-80`/`traderBff.ts:73-74`);
+    `marketDataClient` is the generated full-service client (no edit needed for the new RPC);
+    `mock-backend.ts:457` has only `getBars`; fixtures `OPPORTUNITIES`/`CAPR` + `symbolReadiness` in
+    `e2e/fixtures/opportunities.ts` (INVENTORY rows 25-26). R:R/sizing → pure `src/lib/orderSizing.ts`
+    + vitest (AC-9 numbers).
+
+## Open Threads
+
+- **Read-pressure vs. single-symbol RPC (design.md Open Risk, unresolved — surfaced, not guessed):**
+  Chosen Approach (a) commits to a single-symbol `GetLatestPrice(symbol)` while the unchecked Open Risk
+  asks the ≤50-row read-time enrichment to batch. Spec follows the committed single-symbol RPC and
+  bounds fan-out with the existing `analysis.opportunity.max_concurrent_bars_fetches` semaphore
+  (`servicer.py:381`) + per-pass dedup + cache/DB-served `prev_close`/bars (Step 4 paired check). A
+  `GetLatestPricesMulti` batch RPC is the flagged follow-up if load testing shows pressure — not
+  pre-built. To confirm at `/sdd-review impl-spec` or during Step 4 execution.
+- **Deferred surface:** target/stop **authoring** UI → named follow-up `strategy-target-stop-authoring`
+  (number allocated by `/sdd-story` when created). Fields 15/16 ship WIRED, rendering nothing until it
+  populates `signal_params.{target,stop}`.
+
+## Decisions
+
+- Read-time enrichment is post-`_row_to_opportunity`, outside `_compute_opportunities`' ranking math →
+  FR-8/AC-14 true by construction; live quote never enters the ranking hot path.
+- Enrichment field placement: 13/14/17 read-time (`_INTENTIONALLY_UNSET`), 15/16/18 compute-time
+  persisted (`_MAPPED`). `change_pct` derived in analysis, not on the marketdata wire.
+- No DB migration; no config-service seed migration; no new env vars/ports.
