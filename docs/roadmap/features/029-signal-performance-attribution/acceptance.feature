@@ -25,9 +25,9 @@ Feature: signal-performance-attribution
     And clicking the "win rate" column header re-orders the rows by win rate descending
 
   @AC-3 @FR-2
-  Scenario: Orders with no signal_id are counted as manual and excluded from per-source metrics
-    Given 20 closed orders carrying signal_id resolving to source_id="form4"
-    And 5 closed orders submitted with no signal_id
+  Scenario: Orders with no signal-attribution inputs are counted as manual and excluded from per-source metrics
+    Given 20 closed orders carrying signal-attribution inputs resolving to source_id="form4"
+    And 5 closed orders submitted with no signal-attribution inputs
     When GetAttribution runs for the enclosing date range
     Then the 5 signal-less fills are categorized as "manual"
     And they are excluded from the "form4" per-source metrics
@@ -41,10 +41,11 @@ Feature: signal-performance-attribution
     And no fractional attribution is assigned to "news"
 
   @AC-5 @FR-3
-  Scenario: A tie in input weights splits attribution equally
+  Scenario: An exact tie in input weights splits attribution equally (the only V1 fractional case)
     Given an order whose analysis score had input weights source_id="form4"=0.5 and source_id="news"=0.5
     When attribution is computed for that order's closed position
     Then the trade is attributed 0.5 to "form4" and 0.5 to "news"
+    And this equal split applies only on an exact tie; otherwise V1 is winner-takes-all (AC-4)
 
   @AC-6 @FR-4
   Scenario: Win is defined as realized P&L greater than 0 after fees
