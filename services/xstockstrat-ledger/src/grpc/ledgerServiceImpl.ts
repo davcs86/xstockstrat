@@ -1,10 +1,22 @@
-import { Pool } from 'pg';
+import { Pool, Client } from 'pg';
+import Cursor from 'pg-cursor';
 import { v4 as uuidv4 } from 'uuid';
 import { ConfigWatcher } from '../services/configWatcher';
 import { EventNotifier } from '../services/eventNotifier';
 import { getLogger } from '../services/logger';
 
 const log = getLogger('ledger:impl');
+
+// Cursor page size for ExportEvents (feature 021). One ExportEventsResponse is emitted per
+// page, so a 1M-row export is ~1000 messages, not a million (AC-7).
+const EXPORT_BATCH_SIZE = 1000;
+
+// Promisified pg-cursor read: pg-cursor's read(rowCount, cb) is callback-based.
+function readCursor(cursor: Cursor, rowCount: number): Promise<any[]> {
+  return new Promise((resolve, reject) => {
+    cursor.read(rowCount, (err: Error | undefined, rows: any[]) => (err ? reject(err) : resolve(rows)));
+  });
+}
 
 export class LedgerServiceImpl {
   constructor(
@@ -294,6 +306,91 @@ export class LedgerServiceImpl {
       callback(null, rowToEvent(result.rows[0]));
     } catch (err: any) {
       callback({ code: 13, message: err.message });
+    }
+  }
+
+  /**
+   * ExportEvents — server-streaming export of the caller's events over a time window,
+   * batched by cursor page and ordered by the GLOBAL sequence (feature 021).
+   *
+   * Scope is the inbound `x-user-id` metadata: the `WHERE user_id = $1` predicate never
+   * matches another user's rows nor the pre-migration `NULL`-user_id rows (FR-10). Reads
+   * run on a DEDICATED short-lived pg.Client + pg-cursor — NEVER the DB_POOL_MAX=1 write
+   * pool — so a long export can never hold the single slot that would freeze AppendEvent
+   * (F-06; see CLAUDE.md § Live Streaming Architecture).
+   */
+  async exportEvents(call: any) {
+    // Config gate (AC-10) — FAILED_PRECONDITION (code 9) when disabled.
+    if (!this.config.getBool('ledger.export.enabled', true)) {
+      call.destroy({ code: 9, message: 'ledger export is disabled' });
+      return;
+    }
+
+    const req = call.request;
+    const start = toValidDate(req.start, new Date(0));
+    const end = toValidDate(req.end, new Date());
+
+    // Window bound (AC-5) — INVALID_ARGUMENT (code 3) with the exact message.
+    const maxDays = this.config.getInt('ledger.export.max_window_days', 365);
+    const spanDays = (end.getTime() - start.getTime()) / 86_400_000;
+    if (spanDays > maxDays) {
+      call.destroy({ code: 3, message: 'window exceeds ledger.export.max_window_days' });
+      return;
+    }
+
+    // Caller scope (AC-11) — empty caller matches nothing (NULL = '' is never true),
+    // which also excludes historical NULL-user_id rows (FR-10).
+    const caller: string = call.metadata?.get?.('x-user-id')?.[0] ?? '';
+
+    // Optional event_type subset (FR-3/AC-3/AC-4).
+    const types = String(req.eventType || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const params: any[] = [caller, start, end];
+    let sql = `SELECT * FROM ledger.events WHERE user_id = $1 AND occurred_at BETWEEN $2 AND $3`;
+    if (types.length) {
+      params.push(types);
+      sql += ` AND event_type = ANY($4)`;
+    }
+    sql += ` ORDER BY sequence ASC`;
+
+    try {
+      await this.streamExportRows(sql, params, (rows) => {
+        call.write({ events: rows.map(rowToEvent) });
+      });
+      call.end();
+    } catch (err: any) {
+      log.error('exportEvents failed', { error: err.message });
+      call.destroy({ code: 13, message: `Internal error: ${err.message}` });
+    }
+  }
+
+  /**
+   * Open a dedicated pg.Client (reusing the query pool's connection config, NOT a pooled
+   * connection) and read the export query in cursor batches, emitting each page via
+   * `onBatch`. Isolated as its own method so the exportEvents filter/order/gate logic can
+   * be unit-tested without a DB; the real cursor path is exercised by the e2e (Step 13).
+   */
+  protected async streamExportRows(
+    sql: string,
+    params: any[],
+    onBatch: (rows: any[]) => void,
+  ): Promise<void> {
+    const opts = (this.pool as any).options ?? {};
+    const client = new Client({ connectionString: opts.connectionString, ssl: opts.ssl });
+    await client.connect();
+    try {
+      const cursor = client.query(new Cursor(sql, params));
+      for (;;) {
+        const rows = await readCursor(cursor, EXPORT_BATCH_SIZE);
+        if (rows.length === 0) break;
+        onBatch(rows);
+      }
+      await cursor.close().catch(() => {});
+    } finally {
+      await client.end().catch(() => {});
     }
   }
 }

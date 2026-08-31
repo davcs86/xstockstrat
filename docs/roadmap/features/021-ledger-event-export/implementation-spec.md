@@ -238,7 +238,7 @@ cd services/xstockstrat-ledger && pnpm run lint && pnpm run test:coverage
 
 ### Step 6 — service: `ExportEvents` server-streaming cursor read
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts` — modify
@@ -277,7 +277,7 @@ cd services/xstockstrat-ledger && pnpm run lint && pnpm run test:coverage
 
 ### Step 7 — test: `ExportEvents` filtering, ordering, bounds, gating, isolation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts` — modify

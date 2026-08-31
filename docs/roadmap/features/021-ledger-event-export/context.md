@@ -186,3 +186,27 @@ Unattended run (auto-proceed through checkpoints; pause only on real blockers).
 - TDD as above (paired with Step 4). `pnpm run lint` clean (0 errors). Files:
   `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts`. Deviations: none beyond the
   shared vacuous-runner note.
+
+### Step 6 — service: ExportEvents server-streaming cursor read [done]
+- Added `pg-cursor` dep (`^2.11.0`) + `@types/pg-cursor` devDep to the ledger; refreshed
+  `pnpm-lock.yaml`. Implemented `exportEvents(call)`: config gate (`getBool('ledger.export.enabled')`
+  false → destroy code 9), window bound (`getInt('ledger.export.max_window_days')`, span > max →
+  destroy code 3 with the exact message), caller scope from `x-user-id` metadata, SQL
+  `SELECT * FROM ledger.events WHERE user_id=$1 AND occurred_at BETWEEN $2 AND $3 [AND event_type =
+  ANY($4)] ORDER BY sequence ASC`, streamed in cursor batches (one `ExportEventsResponse` per page).
+  Reads run on a **dedicated** `pg.Client` built from `this.pool.options` (never the DB_POOL_MAX=1
+  write pool — F-06), isolated in `streamExportRows()` so the gate/filter/order logic is unit-testable.
+- TDD (P-06): 7 exportEvents cases **red** against pre-Step-6 dist (method absent) → **green** 29/29
+  after (compiled-dist run — see Deviation Log for the vacuous-runner note).
+- Files: `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts`,
+  `services/xstockstrat-ledger/package.json`, `pnpm-lock.yaml`. Deviations: none new.
+
+### Step 7 — test: ExportEvents filtering, ordering, bounds, gating, isolation [done]
+- `ledgerServiceImpl.test.ts`: added an `exportEvents` describe covering AC-10 (disabled→code 9,
+  no query), AC-5 (over-window→code 3 + exact message), AC-11+AC-1 (`WHERE user_id = $1` +
+  `ORDER BY sequence ASC`, not `recorded_at`; param[0]=caller), AC-3 (`event_type = ANY($4)` with the
+  split list), AC-4 (no predicate when empty), AC-7 (two batches → two `write()`s, `this.pool` never
+  queried), AC-8 (emitted event carries eventId/type/source/sequence/streamKey/userId/payload). Uses a
+  `streamExportRows` instance override to capture SQL/params and feed batches (no DB). `u_42` inline (C-13).
+- TDD paired with Step 6. `pnpm run lint` clean. Files:
+  `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts`. Deviations: none.
