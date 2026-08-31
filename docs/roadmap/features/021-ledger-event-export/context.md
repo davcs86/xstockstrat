@@ -117,3 +117,12 @@ index. No unresolved Floor breach. Open risks mirrored into design.md § Open Ri
   `exportEvents` handler (new).
 - **Deduped Reviewers:** Proto Reviewer; xstockstrat-ledger; DBA; xstockstrat-config;
   xstockstrat-trading; xstockstrat-ui.
+
+## Session 2026-08-31 — sdd-review impl-spec (advisory)
+
+- Result: 1 failure, 2 warnings (advisory — did not block; no Floor breach). Spec otherwise unusually well-grounded (field numbers 11/9 free, migration NNNs 003/022 correct, 403/400 remap correct and avoids connectCodeToHttp, all 11 @AC trace to test steps).
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 9: **Files incomplete** — `emitLedgerEvent` is ALSO called at `services/xstockstrat-trading/internal/service/order_intent.go:166` (`order_intent.reclaimed_unknown`). Adding the `userID string` param changes the signature, so that call site MUST change or the `service` package won't compile (Step 10 `go test` then fails). Add `internal/service/order_intent.go` to Step 9 Files; pass `userID: ""` (platform-scoped sweep emit) at line 166. — [ ] unaddressed
+  - Step 6: F-06 export uses a dedicated pg.Client (correct, not the max=1 pool), but N concurrent exports hold N uncapped direct backend slots. No code change now; add a `ledger.export.max_concurrent` gate in follow-up 021b only if pressure is observed. — [ ] note only
+  - Step 8: config-seed migration lands after its reader (Step 6) — harmless (getBool/getInt supply code defaults). Optional: note in Step Dependencies. — [ ] note only
+- Overlap findings: batch scan CLEAN; WARN same-function overlap on trading.go fill emit (021 before 029) recorded in merge-order.md.
