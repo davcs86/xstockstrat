@@ -92,33 +92,40 @@ opportunities, backtests) unchanged — no new surface needed for the signals th
 
 ## Proto Contract Changes
 
-- [ ] No proto changes required
-- Likely additive (non-breaking), to be confirmed at design/spec time:
-  - No new `SignalSource` scalar fields are strictly required — the MCP endpoint/tool can ride in the
-    existing `config_json` (`google.protobuf.Struct`, `ingest.proto:143`). **Open question:** promote
-    `mcp_endpoint`/`mcp_tool` to typed fields vs. keep them in `config_json`.
-  - `mcp_client` is a new `source_type` **string** value (DB CHECK), not a proto enum — no proto enum
-    change. Confirm no message requires a new field.
+- [x] **No proto changes required.** Decided: the MCP endpoint and tool name ride in the existing
+  `config_json` field (`google.protobuf.Struct`, `packages/proto/ingest/v1/ingest.proto:150`) —
+  they are not promoted to typed `SignalSource` scalar fields (keeps the change non-breaking and
+  avoids a proto churn for what is source-specific config). `mcp_client` is a new `source_type`
+  **string** value governed by the DB CHECK constraint (`source_type` is a plain `string` at
+  `ingest.proto:146`, not a proto enum), so no proto message or enum changes. `/sdd-spec` re-confirms
+  no message needs a new field.
 
 ## Config Key Changes
 
-- [ ] No new config keys
-- Expected (confirm at design):
-  - One **encrypted secret** config row per registered MCP source holding the bearer token
-    (`is_secret=true`). Naming to follow `<service>.<category>.<key>`; **open question** whether the
-    key is fixed-per-source (e.g. `ingest.mcp_source.<slug>.bearer_token`) or a generic
-    `credentials_ref` the operator sets — this is a design fork, not settled here.
-  - Possibly an `ingest.mcp_client.*` category for the server-side query loop cadence/timeout
-    (mirrors `analysis.fundsignal.*`). Confirm at design.
+New keys (all `<service>.<category>.<key>`, 3-segment — C-05):
+- `ingest.mcp_credential.<slug>` — the **encrypted bearer secret** for the source with that slug
+  (`is_secret=true`, AES-256-GCM per feature 147). Decided: the register path writes the token here
+  and sets the source row's `credentials_ref` to this exact key (respecting feature 088's masked-update
+  of `credentials_ref` — never silently NULLed). `<slug>` is the `signal_sources.slug`, so the key is
+  three dot-segments (`ingest` / `mcp_credential` / `<slug>`), unlike the rejected four-segment
+  `ingest.mcp_source.<slug>.bearer_token`.
+- `ingest.mcp_client.poll_interval_seconds` — cadence of the server-side query loop (default `300`).
+- `ingest.mcp_client.request_timeout_seconds` — per-call outbound MCP timeout (default `30`).
+
+Also required (not a config *key*, but a config-service grant): `xstockstrat-ingest` is added to the
+`GetSecret` `x-internal-caller` allow-list (`SECRET_CALLER_ALLOWLIST`) alongside `xstockstrat-marketdata`,
+so it can resolve `ingest.mcp_credential.<slug>` (preserves feature-147 `@AC-4`/`@AC-5` fail-closed
+default for every other caller).
 
 ## Database Changes
 
-- [ ] No schema changes
-- Expected: a migration adding `mcp_client` to the `signal_sources.source_type` CHECK constraint
-  (current CHECK last set in `007_signal_source_type_mediated.up.sql`). **Migration number must be
-  reserved at design time** (ledger fail: fundamentals-signal-producer shared-migration collision).
-  No new columns anticipated (endpoint/tool live in existing `config_json`; credential in config, not
-  a new column).
+- One migration on `xstockstrat-ingest` adding `mcp_client` to the `signal_sources.source_type` CHECK
+  constraint (current CHECK last set in `007_signal_source_type_mediated.up.sql`). Shipped as a
+  numbered **`.up.sql` + `.down.sql` pair** per repo convention (C-07); the `.down.sql` restores the
+  prior CHECK. Next-free number is **`011`** (trunk tip is `010_add_signal_source_reliability_weight`;
+  overlap scan confirms `011` unclaimed) — `/sdd-spec` re-derives it from the merged tree at spec time
+  (ledger fail: fundamentals-signal-producer shared-migration collision). No new columns: endpoint/tool
+  live in the existing `config_json`; the credential lives in config, not a new column.
 
 ## Feature Workflow Notes
 
@@ -134,25 +141,34 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance truth (Constitution
 **C-15**). Each `FR-N` above is covered by ≥1 tagged scenario there.
 
-## Open Questions
+## Resolved Design Decisions
 
-- [ ] **Credential home / referencing:** does the bearer token live under a fixed per-source config
-  key (`ingest.mcp_source.<slug>.bearer_token`) that the register path creates, or does the operator
-  pre-create an encrypted config row and the source's `credentials_ref` names its key? (Behavior #1 —
-  surfaced, not guessed.) Note feature 088: `credentials_ref` is a masked-update path — a new write
-  must never silently NULL it.
-- [ ] **Query trigger:** a scheduled server-side loop in ingest (like `fundsignal_loop.py`) vs.
-  on-demand invocation. If scheduled, what config key sets the cadence, and does it respect the
-  active/health flags?
-- [ ] **Response → signal mapping:** does the external MCP tool have to return a fixed
-  xstockstrat-defined shape (documented contract), or is a field-mapping declared in `config_json`?
-  A fixed contract is simpler and testable; a mapping is more flexible but is another validation
-  surface.
-- [ ] **source_type tier:** `mcp_client` is a *programmatic server-side* type with a real extractor
-  (not `noop`, unlike today's `mediated_*`). Confirm it plugs into the `BaseExtractor` ABC
-  (`app/extractors/base.py`) rather than forking a parallel mechanism.
-- [ ] **Known trap (feature 093):** per-source credential resolution is currently unimplemented and
-  `extract_website_content` *raises* for `has_credentials=true`. This feature must actually build the
-  resolution for `mcp_client`; confirm it does not accidentally unblock the still-broken mediated path.
-- [ ] **MCP client library:** which Python MCP client (the same SDK the agent uses, or a lighter
-  client) runs inside ingest, and does it fit the service's `uv` dependency / connection-pool budget?
+Product-level forks are decided below (no unresolved blocking questions remain — criterion 9).
+`/sdd-design` validates the implementation specifics noted, but the product shape is committed.
+
+- [x] **Credential home / referencing:** the register path writes the bearer token to encrypted config
+  key `ingest.mcp_credential.<slug>` (`is_secret=true`) and sets the source row's `credentials_ref` to
+  that key; `xstockstrat-ingest` resolves plaintext only at query time via `GetSecret`
+  (`x-internal-caller`). Never a per-source plaintext column; never silently NULLs `credentials_ref`
+  (feature 088 masked-update path).
+- [x] **Query trigger:** a scheduled server-side loop in ingest (mirrors the `fundsignal_loop.py`
+  pattern), cadence from `ingest.mcp_client.poll_interval_seconds` (default 300), per-call timeout from
+  `ingest.mcp_client.request_timeout_seconds` (default 30). The loop only queries `active=true` sources
+  and records health/`last_error` on failure. (Design confirms loop placement + lifecycle wiring.)
+- [x] **Response → signal mapping:** the external MCP tool must return a **fixed, documented
+  xstockstrat contract** — a list of signal objects with keys `symbol`, `direction`
+  (`buy`/`sell`/`hold`/`watchlist`), `conviction` (0–1), and optional `headline`/`valid_from`/
+  `valid_until`/`raw_url`/`tags`. No per-source field-mapping in `config_json` (rejected: extra
+  validation surface for little gain). Malformed items are skipped and counted, not fatal (FR-5).
+- [x] **source_type tier:** `mcp_client` is a *programmatic server-side* type with a **real extractor**
+  that plugs into the existing `BaseExtractor` ABC (`services/xstockstrat-ingest/app/extractors/base.py`),
+  not a `noop` and not a parallel mechanism. (Design confirms the exact extractor signature/input
+  dataclass.)
+- [x] **Known trap (feature 093) — acknowledged:** per-source credential resolution is unimplemented
+  today (`extract_website_content` raises for `has_credentials=true`). This feature builds resolution
+  **only** for the `mcp_client` path via `GetSecret`; it does not touch or unblock the still-broken
+  mediated path (that generalization is explicitly Out of Scope).
+- [x] **MCP client library:** ingest uses the official Python MCP SDK client over **Streamable HTTP**
+  (the same SDK family `xstockstrat-agent` already depends on), issuing outbound-only calls (no DB pool
+  impact). `/sdd-spec` pins the exact package/version and runs `uv lock` for the ingest service per the
+  root uv-lock rule.

@@ -28,9 +28,11 @@ FR-1. `xstockstrat-portfolio` exposes a targeted `UpdateWatchlistBinding` RPC ta
 — it does not touch any other row, and does not require the caller to send the full binding set or the
 watchlist name/description.
 
-FR-2. The rebind updates **only** `strategy_id` for that row. It must not reset or clobber the entry's
-`source` (`MANUAL`/`SIGNAL`, feature 127) or `system_managed` flag (fails-080 reset trap): those
-columns are preserved exactly.
+FR-2. The rebind updates **only** the `strategy_id` column of that `watchlist_symbols` row. It must not
+reset or clobber the entry's per-binding `source` (`WATCHLIST_ENTRY_SOURCE_MANUAL`/`_SIGNAL`,
+feature 127) — the fails-080 reset trap. The list-level `system_managed` flag lives on
+`portfolio.watchlists` (not on the binding row), so the single-row `UPDATE` on `watchlist_symbols`
+cannot touch it and it is likewise unaffected.
 
 FR-3. Rebinding a symbol not present in the watchlist returns `NOT_FOUND` (no implicit insert); the RPC
 is authorized to the watchlist's owner (`x-user-id`), consistent with the other watchlist write RPCs.
@@ -68,9 +70,9 @@ _Constitution **C-14**._
 - [x] **UI** — `xstockstrat-ui` `/insights` `watchlists` page: the per-symbol strategy control
   (`WatchlistDetail` / `WatchlistReadiness` rows, `onRebindSymbol`) now performs a targeted rebind with
   no full-list reload. Already reachable via `PLATFORM_SUBNAV` (feature 058/045).
-- [ ] **Agent** — Not required for the core capability. The MCP `manage_watchlist` merge path
-  (feature 148) already works around replace-all; adding a targeted agent tool is an **open question**,
-  not in scope by default.
+- [ ] **Agent** — **Not a deferred surface.** The MCP `manage_watchlist` merge path (feature 148)
+  already provides agent-side single-symbol rebind (read-modify-write over replace-all), so there is
+  no missing agent capability to defer — this feature is deliberately UI-only. No agent tool change.
 - [ ] **None**
 
 ## Proto Contract Changes
@@ -105,18 +107,21 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance truth (Constitution
 **C-15**). Each `FR-N` above is covered by ≥1 tagged scenario there.
 
-## Open Questions
+## Resolved Design Decisions
 
-- [ ] **Response shape:** should `UpdateWatchlistBindingResponse` return just the updated
-  `WatchlistBinding`, or the full refreshed `Watchlist`? Returning only the binding is what enables the
-  UI cache-patch (FR-5) without a refetch; returning the whole list defeats the purpose. Lean: return
-  the single updated binding (+ maybe an `updated_at`).
-- [ ] **Agent parity:** do we add a targeted `manage_watchlist_symbols` rebind verb (feature 148
-  surface) in the same feature, or defer? Default: defer (UI + portfolio only) unless review wants the
-  MCP surface kept in lockstep to avoid `mcp-tools.md` drift (F-12).
-- [ ] **Concurrency semantics:** confirm the targeted UPDATE composes safely with an in-flight
-  replace-all `UpdateWatchlist` (last-writer-wins on that row) and that the UI guard
-  (`WATCHLIST_WRITE_KEY`) already serializes them adequately, or whether an optimistic-concurrency token
-  is warranted.
-- [ ] **Known trap (fails-080):** a bare write must never reset `strategy_id`/`source` to defaults —
-  FR-2 encodes this; verify the new repo method and any UI optimistic patch don't reintroduce it.
+Product-level forks are decided below (no unresolved blocking questions remain — criterion 9).
+
+- [x] **Response shape:** `UpdateWatchlistBindingResponse` returns **only the updated
+  `WatchlistBinding`** (symbol, strategy_id, source, plus an `updated_at`), not the whole `Watchlist`.
+  This is what lets the UI patch the single cached entry without a `listWatchlists` refetch (FR-5).
+- [x] **Agent parity:** UI + portfolio only. The MCP `manage_watchlist` merge path (feature 148)
+  already covers agent-side rebind, so no agent surface is deferred and there is no `mcp-tools.md`
+  parity gap — no agent tool changes in this feature, so the MCP-surface-drift trap does not apply.
+- [x] **Concurrency semantics:** the targeted `UPDATE` is last-writer-wins on that single row and
+  composes safely with an in-flight replace-all `UpdateWatchlist`; the existing UI guard
+  (`WATCHLIST_WRITE_KEY` / `writeInFlight`) serializes UI-side writes, so no optimistic-concurrency
+  token is introduced. (Design confirms the guard already covers the rebind path.)
+- [x] **Known trap (fails-080):** encoded in FR-2 — the rebind touches only `strategy_id`, preserving
+  the per-binding `source`; the UI cache-patch likewise carries `source` through untouched (see
+  Existing Business Rules the design must preserve). Verified against the repo method and the optimistic
+  patch at design/spec time.

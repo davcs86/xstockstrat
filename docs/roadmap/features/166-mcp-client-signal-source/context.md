@@ -37,3 +37,16 @@
   `list_signal_sources`.
 - Open design forks recorded in product-spec `## Open Questions` (credential home, query trigger,
   response→signal mapping, source_type tier, MCP client library) — to be resolved in `/sdd-design`.
+
+## Session 2026-08-31 — sdd-review product-spec
+
+- Ran /sdd-review (not skipped, per operator instruction). spec-reviewer + feature-overlap.
+- Initial verdict: FAIL (criterion 9 — six unchecked Open Questions) + warnings (4-segment secret key;
+  migration up/down pairing unstated; `config_json` cite `:143`→`:150`). Overlap: CLEAN (ingest migration
+  next-free 011; `ingest.mcp_*` namespace + `mcp_client` source_type unclaimed).
+- Fixes: resolved all Open Questions → "Resolved Design Decisions" (credential home=`ingest.mcp_credential.<slug>`
+  encrypted + credentials_ref + GetSecret; scheduled loop w/ `ingest.mcp_client.poll_interval_seconds`/`request_timeout_seconds`;
+  fixed xstockstrat-defined response contract; BaseExtractor tier; feature-093 mediated path untouched; official Python MCP SDK client / Streamable HTTP).
+  3-segment secret key; migration 011 up/down pair; line cite fixed; ingest added to SECRET_CALLER_ALLOWLIST.
+- Re-review verdict: PASS (0 blockers, 0 warnings).
+- Status: draft → spec-ready. Next: /sdd-design mcp-client-signal-source quick.

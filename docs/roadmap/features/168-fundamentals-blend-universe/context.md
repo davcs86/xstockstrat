@@ -44,3 +44,16 @@
 - **Consumer surface (C-14):** None (internal engine rule); output reaches users via existing
   live-strategy alerts (feature 048) + opportunity attribution (feature 131). Operator visibility flagged
   as a possible follow-up, not silently deferred.
+
+## Session 2026-08-31 — sdd-review product-spec
+
+- Ran /sdd-review (not skipped). spec-reviewer + feature-overlap.
+- Initial verdict: FAIL (criterion 9 — six unchecked Open Questions; OQ#1 per-user-vs-global load-bearing on
+  FR-1/FR-2) + NOTE on imprecise proto line cites. Overlap: CLEAN (`analysis.engine.fundamentals_blend_*`
+  keys unclaimed; no proto/migration collision; watch `resolve_universe`/`_run_cycle` same-function zone at impl-spec).
+- Fixes: Open Questions → "Resolved Design Decisions" — committed to PER-USER reading (global promotion moved to
+  Out of Scope as rejected alternative); enable flag `analysis.engine.fundamentals_blend_enabled` (default true);
+  precedence vs feature-132 (denied_symbols subtracts, blend allowlist ignored); once-per-cycle universe reuse.
+  Fixed proto cites (ingest.proto:129 source; analysis.proto:318 signal_params / :351 symbols key).
+- Re-review verdict: PASS (0 blockers, 0 warnings).
+- Status: draft → spec-ready. Next: /sdd-design fundamentals-blend-universe quick.

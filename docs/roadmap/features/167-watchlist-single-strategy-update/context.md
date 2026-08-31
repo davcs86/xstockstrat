@@ -38,3 +38,17 @@
   returning only the binding is what enables the no-refetch UI patch.
 - **Consumer surface (C-14):** UI `/insights` watchlists (per-symbol strategy control). Agent parity
   deferred (Open Question).
+
+## Session 2026-08-31 — sdd-review product-spec
+
+- Ran /sdd-review (not skipped). spec-reviewer + feature-overlap.
+- Initial verdict: FAIL (criterion 9 — four unchecked Open Questions) + warnings (C-14 agent surface deferred
+  via Open Question not a named follow-up; phantom `F-12` Floor citation; FR-2/AC-2 conflated list-level
+  `system_managed` with a per-binding field). Overlap: CLEAN (additive UpdateWatchlistBinding RPC; no
+  migration/config-key collision; next-free portfolio migration 014 if ever needed).
+- Fixes: Open Questions → "Resolved Design Decisions" (response=single WatchlistBinding+updated_at; UI-only,
+  agent already covered by feature-148 merge path; concurrency last-writer-wins + existing WATCHLIST_WRITE_KEY guard;
+  fails-080 encoded in FR-2). FR-2/AC-2 reworded (system_managed = watchlist-level flag; source = per-binding, preserved).
+  Removed phantom F-12 reference.
+- Re-review verdict: PASS (residual F-12 wording warning also cleared).
+- Status: draft → spec-ready. Next: /sdd-design watchlist-single-strategy-update quick.

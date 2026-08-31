@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-31 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-31 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings after fixes); overlap CLEAN |
 
 ---
 
@@ -46,4 +47,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review mcp-client-signal-source product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design mcp-client-signal-source quick` — recon + design debate before /sdd-spec

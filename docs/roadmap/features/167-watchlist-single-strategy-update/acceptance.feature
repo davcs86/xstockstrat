@@ -12,11 +12,12 @@ Feature: watchlist-single-strategy-update
     And no full-list replace of watchlist_symbols occurred (AAPL and TSLA rows were not rewritten)
 
   @AC-2 @FR-2
-  Scenario: Rebind preserves the entry's source and system_managed flag
-    Given a watchlist "wl-1" whose NVDA binding has strategy_id "macd" and source SIGNAL and system_managed true
+  Scenario: Rebind preserves the entry's per-binding source on a system-managed list
+    Given a system-managed watchlist "wl-1" (system_managed true on the list) whose NVDA binding has strategy_id "macd" and source SIGNAL
     When UpdateWatchlistBinding is called with watchlist_id "wl-1", symbol "NVDA", strategy_id "sma_cross"
     Then the NVDA binding's strategy_id is "sma_cross"
-    And the NVDA binding's source is still SIGNAL and system_managed is still true
+    And the NVDA binding's source is still SIGNAL
+    And the watchlist "wl-1" is still system_managed true (the list-level flag is untouched)
 
   @AC-3 @FR-3
   Scenario: Rebinding an absent symbol is rejected, not inserted

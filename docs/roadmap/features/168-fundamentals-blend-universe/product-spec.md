@@ -56,8 +56,13 @@ does not fall back to the broad watchlist/held universe, which FR-2 forbids), an
 - Changing the fundamentals **signal producer's** universe (that is feature 154,
   `fundsignal-watchlist-universe`, already launched) — this feature consumes those signals, it does not
   change how they are produced.
-- Auto-creating or seeding the `fundamentals_macd_blend` strategy for users who don't have it
-  (it is an agent-registered per-user strategy; see Open Questions on ownership/scope).
+- Auto-creating or seeding the `fundamentals_macd_blend` strategy for users who don't have it. The
+  rule applies **per user**: it fires only for users who have a live/enabled strategy whose id matches
+  the configured blend id (see Resolved Decisions). Provisioning the strategy for users who lack it is
+  a separate concern.
+- Promoting `fundamentals_macd_blend` to a global/platform strategy (a rejected alternative — see
+  Resolved Decisions); this feature keeps the existing per-user `(user_id, strategy_id)` ownership
+  model (feature 133).
 - Applying the same "run on a derived sub-universe, exclude elsewhere" rule to any other strategy — this
   feature scopes exactly one configurable strategy id.
 - Placing orders — the live loop only emits alerts/opportunities (analysis CLAUDE.md); unchanged.
@@ -82,27 +87,30 @@ _Constitution **C-14**._
   contract change required.
 - [x] **None** — internal to the analysis live-evaluation loop. Justification: the capability is a
   universe-resolution rule inside the evaluation engine; its user-visible output (alerts/opportunities)
-  reaches users through already-shipped surfaces, so no new consumer surface is introduced. (If review
-  decides operators need to *see/toggle* the rule, that is a config-ui/agent follow-up — flagged in
-  Open Questions, not silently deferred.)
+  reaches users through already-shipped surfaces, so no new consumer surface is introduced. Operators
+  toggle the rule via the `analysis.engine.fundamentals_blend_enabled` config key (Resolved Decisions);
+  a dedicated config-ui/agent view is a possible follow-up, not silently deferred.
 
 ## Proto Contract Changes
 
 - [x] No proto changes required — the needed inputs already exist: `QuerySignalsRequest.source`
-  (`packages/proto/ingest/v1/ingest.proto:128`), `GetFundamentalsMulti` (marketdata), and
-  `StrategyDefinition` universe fields `denied_symbols`/`signal_eligible`/`signal_params.symbols`
-  (`packages/proto/analysis/v1/analysis.proto:342,355,55`). The rule is engine logic, not a new contract.
+  (`packages/proto/ingest/v1/ingest.proto:129`), `GetFundamentalsMulti`
+  (`packages/proto/marketdata/v1/marketdata.proto:41`), and `StrategyDefinition` universe fields
+  `denied_symbols` (`packages/proto/analysis/v1/analysis.proto:342`), `signal_eligible`
+  (`analysis.proto:355`), and `signal_params` (`analysis.proto:318`, a `google.protobuf.Struct` whose
+  `symbols` key is referenced at `analysis.proto:351`). The rule is engine logic, not a new contract.
 
 ## Config Key Changes
 
-- [ ] No new config keys
-- Expected (confirm at design):
-  - `analysis.engine.fundamentals_blend_strategy_id` — string, default `fundamentals_macd_blend`
-    (FR-5). Names the strategy the rule governs.
-  - Possibly `analysis.engine.fundamentals_blend_enabled` — bool kill-switch. **Open question** whether
-    a separate enable flag is needed or the strategy simply being live is sufficient.
-  - Keys follow `<service>.<category>.<key>` and must be registered in the Per-Feature Registered Keys
-    log (`docs/patterns/config-governance.md`).
+Two new keys (both `<service>.<category>.<key>` — C-05; `analysis.engine.*` is an existing category
+holding `eval_interval_seconds` / `max_strategies_per_cycle` / `alert_throttle_seconds`):
+- `analysis.engine.fundamentals_blend_strategy_id` — string, default `fundamentals_macd_blend` (FR-5).
+  Names the strategy the rule governs; retargetable without a code change.
+- `analysis.engine.fundamentals_blend_enabled` — bool, default `true`. Explicit kill-switch for the
+  forced-universe rule, independent of whether the strategy is live (Resolved Decisions).
+
+Both must be registered in the Per-Feature Registered Keys log (`docs/patterns/config-governance.md`),
+read via the `WatchConfig` stream (never hardcoded — F-07).
 
 ## Database Changes
 
@@ -123,22 +131,32 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance truth (Constitution
 **C-15**). Each `FR-N` above is covered by ≥1 tagged scenario there.
 
-## Open Questions
+## Resolved Design Decisions
 
-- [ ] **Blend-strategy ownership/scope:** `fundamentals_macd_blend` is an **agent-registered per-user**
-  strategy (composite `(user_id, strategy_id)` PK, feature 133), not a seeded/global one. Does the rule
-  apply per-user (only for users who have a live strategy with that id) or should the blend strategy be
-  promoted to a platform/global strategy first? This is the central design fork — surfaced, not guessed.
-- [ ] **"In addition to whatever strategy the user selected":** confirm the force-run is additive at the
-  `(strategy, symbol)` record level in `_run_cycle` (i.e. it adds blend×fundamentals-universe pairs) and
-  does not alter other strategies' universes.
-- [ ] **Universe intersection cost:** `GetFundamentalsMulti` is a paced FMP/Finnhub chokepoint
-  (feature 059). Should the fundamentals-universe set be cached per cycle (reuse the fundsignal loop's
-  fetched set) rather than re-fetched, to respect pacing/pool budget?
-- [ ] **Enable flag vs live-only:** is `analysis.engine.fundamentals_blend_enabled` needed, or is
-  "the strategy is live" the toggle (FR-5 no-op path)?
-- [ ] **Interaction with per-strategy deny list / allowlist (feature 132):** if the blend strategy also
-  has a `denied_symbols` or `signal_params.symbols` set, which wins — the forced fundamentals universe
-  or the explicit per-strategy override? Define precedence.
-- [ ] **Operator visibility:** should there be a way to see/toggle this rule (config-ui/agent)? Default
-  is internal-only (C-14 "None"); revisit if review wants a surface.
+Product-level forks are decided below (no unresolved blocking questions remain — criterion 9).
+`/sdd-design` validates the enforcement mechanics; the product shape is committed.
+
+- [x] **Blend-strategy ownership/scope (the central fork) — per-user.** `fundamentals_macd_blend` is an
+  agent-registered per-user strategy (composite `(user_id, strategy_id)` PK, feature 133). The rule
+  applies **per user**: for each user who has a live/enabled strategy whose id matches the configured
+  blend id, that strategy is force-run over the fundamentals universe. Promoting the strategy to a
+  global/platform strategy is a **rejected alternative** (moved to Out of Scope). FR-1/FR-2 and
+  AC-2/AC-3/AC-6 already presume this per-user reading — now committed, not provisional.
+- [x] **"In addition to the user's selected strategy" is additive at the pair level.** The force-run
+  adds `(blend_strategy, fundamentals-universe-symbol)` records in `_run_cycle`; it does **not** alter
+  any other strategy's universe (asserted by AC-3: `sma_cross`'s own universe is unchanged).
+- [x] **Universe intersection cost:** the fundamentals-universe set is resolved **once per cycle** and
+  reused, drawing on the fundsignal loop's already-fetched fundamentals rather than issuing a fresh
+  per-strategy `GetFundamentalsMulti` fan-out, to respect the FMP/Finnhub pacing + pool budget
+  (feature 059). (Design confirms the exact reuse/caching seam.)
+- [x] **Enable flag:** ship `analysis.engine.fundamentals_blend_enabled` (bool, default `true`) as an
+  explicit kill-switch **in addition to** the live-only no-op path (FR-5), so operators can disable the
+  forced universe without un-liveing the strategy.
+- [x] **Precedence vs per-strategy deny list / allowlist (feature 132):** an explicit per-strategy
+  `denied_symbols` still **subtracts** from the forced fundamentals universe (a denied symbol is never
+  evaluated, even if in-universe); an explicit `signal_params.symbols` allowlist on the blend strategy
+  is **ignored** for the blend strategy because FR-2 replaces its universe with the fundamentals
+  universe (the whole point of the rule). Design encodes this precedence and a test asserts it.
+- [x] **Operator visibility:** internal-only for this feature (C-14 "None"); the enable flag above is
+  the operator control. A dedicated config-ui/agent view is a possible follow-up, not part of this
+  feature — recorded, not silently deferred.
