@@ -172,7 +172,7 @@ Exit 0 after staging confirms the checked-in stubs match a fresh generation (the
 
 ### Step 3 — migration: portfolio `014_positions_fees_accum` (fee accumulator column)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/migrations/014_positions_fees_accum.up.sql` — create
@@ -212,7 +212,7 @@ Then read both: the `.up` `ADD COLUMN fees_accum` is reversed by the `.down` `DR
 
 ### Step 4 — migration: analysis `021_pnl_positions_fees_total` (fee column + range index)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/021_pnl_positions_fees_total.up.sql` — create
