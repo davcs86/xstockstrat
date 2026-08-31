@@ -47,6 +47,9 @@ service AnalysisService {
   // Ranked P&L-attribution factors (feature 042): which indicator value-ranges and signals
   // correlate with positive vs negative realized P&L, scoped by symbol/strategy/time window.
   rpc QueryPnLPatterns(QueryPnLPatternsRequest) returns (QueryPnLPatternsResponse);
+  // Per-source trading-performance attribution over closed positions (feature 029). Read-only;
+  // aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
+  rpc GetAttribution(GetAttributionRequest) returns (GetAttributionResponse);
 }
 
 message RunBacktestRequest {
@@ -743,4 +746,26 @@ message QueryPnLPatternsRequest {
 message QueryPnLPatternsResponse {
   repeated PnLPatternFactor positive_factors = 1;
   repeated PnLPatternFactor negative_factors = 2;
+}
+
+// ── Signal-performance attribution (feature 029) ───────────────────────────────
+message GetAttributionRequest {
+  google.protobuf.Timestamp start = 1;
+  google.protobuf.Timestamp end = 2;
+  string source_id = 3;  // optional filter — the signal_sources.slug; empty = all sources (open registry, C-04: string not enum)
+}
+// Per-source metrics. trade_count/win_count are DOUBLE (not int32): FR-3's exact-tie case
+// contributes 0.5 to each tied source (AC-5); winner-takes-all contributes 1.0. total_pnl is
+// NET of fees (realized_pnl − fees_total). avg_return is a percent over an approximate cost basis.
+message SourceAttribution {
+  string source_id = 1;      // signal_sources.slug (the snapshot's signal source)
+  string source_name = 2;    // resolved via ingest ListSignalSources; falls back to the slug
+  double trade_count = 3;
+  double win_count = 4;
+  double win_rate = 5;       // win_count / trade_count
+  double avg_return = 6;     // mean per-trade net_pnl / cost_basis (percent, v1 approximation)
+  double total_pnl = 7;      // net of fees
+}
+message GetAttributionResponse {
+  repeated SourceAttribution attributions = 1;
 }

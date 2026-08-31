@@ -82,7 +82,7 @@ registration + nav-reachability test (C-10(a)). No Agent step is required (decis
 
 ### Step 1 — proto: additive `GetAttribution` RPC + request/response/`SourceAttribution` messages
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -142,7 +142,7 @@ Both must pass (breaking = green: additive RPC + new messages only).
 
 ### Step 2 — proto-gen: regenerate stubs (Go, Python, TS)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/**` — modify (generated; never hand-edited)

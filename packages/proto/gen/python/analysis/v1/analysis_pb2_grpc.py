@@ -124,6 +124,11 @@ class AnalysisServiceStub(object):
                 request_serializer=analysis_dot_v1_dot_analysis__pb2.QueryPnLPatternsRequest.SerializeToString,
                 response_deserializer=analysis_dot_v1_dot_analysis__pb2.QueryPnLPatternsResponse.FromString,
                 _registered_method=True)
+        self.GetAttribution = channel.unary_unary(
+                '/xstockstrat.analysis.v1.AnalysisService/GetAttribution',
+                request_serializer=analysis_dot_v1_dot_analysis__pb2.GetAttributionRequest.SerializeToString,
+                response_deserializer=analysis_dot_v1_dot_analysis__pb2.GetAttributionResponse.FromString,
+                _registered_method=True)
 
 
 class AnalysisServiceServicer(object):
@@ -256,6 +261,14 @@ class AnalysisServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetAttribution(self, request, context):
+        """Per-source trading-performance attribution over closed positions (feature 029). Read-only;
+        aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_AnalysisServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -348,6 +361,11 @@ def add_AnalysisServiceServicer_to_server(servicer, server):
                     servicer.QueryPnLPatterns,
                     request_deserializer=analysis_dot_v1_dot_analysis__pb2.QueryPnLPatternsRequest.FromString,
                     response_serializer=analysis_dot_v1_dot_analysis__pb2.QueryPnLPatternsResponse.SerializeToString,
+            ),
+            'GetAttribution': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetAttribution,
+                    request_deserializer=analysis_dot_v1_dot_analysis__pb2.GetAttributionRequest.FromString,
+                    response_serializer=analysis_dot_v1_dot_analysis__pb2.GetAttributionResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -836,6 +854,33 @@ class AnalysisService(object):
             '/xstockstrat.analysis.v1.AnalysisService/QueryPnLPatterns',
             analysis_dot_v1_dot_analysis__pb2.QueryPnLPatternsRequest.SerializeToString,
             analysis_dot_v1_dot_analysis__pb2.QueryPnLPatternsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetAttribution(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.analysis.v1.AnalysisService/GetAttribution',
+            analysis_dot_v1_dot_analysis__pb2.GetAttributionRequest.SerializeToString,
+            analysis_dot_v1_dot_analysis__pb2.GetAttributionResponse.FromString,
             options,
             channel_credentials,
             insecure,

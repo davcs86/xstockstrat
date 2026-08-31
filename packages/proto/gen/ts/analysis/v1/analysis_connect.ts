@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BacktestResult, EvaluateReadinessRequest, EvaluateReadinessResponse, FundamentalsScanSummary, GetBacktestRequest, GetIndicatorSeriesRequest, GetIndicatorSeriesResponse, GetStrategyAnalyticsRequest, GetStrategyReportRequest, GetStrategyRequest, ListBacktestsRequest, ListBacktestsResponse, ListOpportunitiesRequest, ListOpportunitiesResponse, ListStrategiesRequest, ListStrategiesResponse, ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse, ManageStrategyRequest, QueryPnLPatternsRequest, QueryPnLPatternsResponse, RunBacktestRequest, RunFundamentalsScanRequest, ScoreStrategyRequest, ScreenSymbolsRequest, ScreenSymbolsResponse, SetOpportunityActionRequest, SetOpportunityActionResponse, SetStrategyLiveRequest, SetStrategyLiveResponse, StrategyAnalytics, StrategyDefinition, StrategyReport, StrategyScore } from "./analysis_pb.js";
+import { BacktestResult, EvaluateReadinessRequest, EvaluateReadinessResponse, FundamentalsScanSummary, GetAttributionRequest, GetAttributionResponse, GetBacktestRequest, GetIndicatorSeriesRequest, GetIndicatorSeriesResponse, GetStrategyAnalyticsRequest, GetStrategyReportRequest, GetStrategyRequest, ListBacktestsRequest, ListBacktestsResponse, ListOpportunitiesRequest, ListOpportunitiesResponse, ListStrategiesRequest, ListStrategiesResponse, ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse, ManageStrategyRequest, QueryPnLPatternsRequest, QueryPnLPatternsResponse, RunBacktestRequest, RunFundamentalsScanRequest, ScoreStrategyRequest, ScreenSymbolsRequest, ScreenSymbolsResponse, SetOpportunityActionRequest, SetOpportunityActionResponse, SetStrategyLiveRequest, SetStrategyLiveResponse, StrategyAnalytics, StrategyDefinition, StrategyReport, StrategyScore } from "./analysis_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -201,6 +201,18 @@ export const AnalysisService = {
       name: "QueryPnLPatterns",
       I: QueryPnLPatternsRequest,
       O: QueryPnLPatternsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Per-source trading-performance attribution over closed positions (feature 029). Read-only;
+     * aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.GetAttribution
+     */
+    getAttribution: {
+      name: "GetAttribution",
+      I: GetAttributionRequest,
+      O: GetAttributionResponse,
       kind: MethodKind.Unary,
     },
   }
