@@ -151,3 +151,11 @@ warnings; applied fixes (docs-only, still `draft`, number/slug unchanged):
     route handlers; middleware-chunk coverage under `output:'standalone'` is the residual, build-only
     provable risk — Step 3 may touch `next.config.js` only if the build fails.
 - Reviewers (deduped): **xstockstrat-ui service owner** (Steps 1-3); **none** (Step 4, docs).
+
+## Session 2026-08-31 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 1 warning, 5 notes. No Floor risk. All path:line grounded; corrected FR-5 matcher-keep justified by a real live caller (authRedirect.ts:40); buildInternalRefreshUrl removal enforced structurally; standalone-build feasibility gate (AC-6) is real and blocks on failure (F-04/P-03); docs step uses repo-root paths.
+- Unresolved ⚠ carried into execution:
+  - Step 1/Step 2: frontend E2E coverage not pinned — the FR-3 fix (near-expiry middleware path now ACTUALLY rotates the browser cookie, previously discarded) is subtly NEW browser-observable behavior. Add a note pinning `e2e/auth.spec.ts` as the E2E guard (stays green) or extend it to cover the rotated near-expiry cookie path. — [ ] unaddressed
+  - Notes (no fix): refresh RPC carries no x-trace-id (parity with existing route.ts, not a C-03 regression); prefer signed-JWT stub over vi.mock('@/lib/auth') in Step 2 so AC-3/AC-4 assert real cookie helpers; Step 3 build-gate coverage N/A (carried by Step 2); CLAUDE.md line numbers unverified (content present). — [ ] notes
+- Overlap findings: batch scan CLEAN; 128 is isolated (middleware/auth transport only).
