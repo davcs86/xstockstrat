@@ -65,7 +65,7 @@ Every `@AC-*` in `acceptance.feature` is covered by ≥1 test step:
 
 ### Step 1 — proto: additive `ExportEvents` RPC + `user_id` fields
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/ledger/v1/ledger.proto` — modify
@@ -101,7 +101,7 @@ cd packages/proto && buf lint && buf breaking --against ".git#branch=feature/led
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/**` — modify (generated; do not hand-edit)

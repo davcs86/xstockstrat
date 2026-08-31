@@ -126,3 +126,34 @@ index. No unresolved Floor breach. Open risks mirrored into design.md § Open Ri
   - Step 6: F-06 export uses a dedicated pg.Client (correct, not the max=1 pool), but N concurrent exports hold N uncapped direct backend slots. No code change now; add a `ledger.export.max_concurrent` gate in follow-up 021b only if pressure is observed. — [ ] note only
   - Step 8: config-seed migration lands after its reader (Step 6) — harmless (getBool/getInt supply code defaults). Optional: note in Step Dependencies. — [ ] note only
 - Overlap findings: batch scan CLEAN; WARN same-function overlap on trading.go fill emit (021 before 029) recorded in merge-order.md.
+
+## Session 2026-08-31 — sdd-execute (sequential)
+
+Executed on `feature/ledger-event-export`, branched off clean `main-dev` (Stage-1 PR #1051 merged).
+Unattended run (auto-proceed through checkpoints; pause only on real blockers).
+
+- **Proto codegen toolchain (critical enabler for 6 proto features):** buf/plugins were absent and no
+  Docker daemon was running. Started `dockerd` (root) and built the pinned codegen container from
+  `Dockerfile.codegen` (`--secret id=proxy_ca,src=/root/.ccr/ca-bundle.crt`), image
+  `xstockstrat-codegen`. Validated the toolchain reproduces the committed stubs **byte-for-byte**
+  (stashed the proto edit → `./scripts/buf-gen.sh` → empty `git diff packages/proto/gen/`) before
+  trusting any regeneration.
+- **Tooling setup (steps 1–13):** go1.27 ✓ · docker ✓ (dockerd started) · codegen container ✓ (buf
+  1.72.0 + pinned Go/TS/Python plugins) · node v22.22.2 / pnpm 9.15.9 ✓ (CI uses Node 24 — authoritative
+  there) · uv 0.8.17 ✓. Migrations verified offline (never start a DB).
+
+### Step 1 — proto: additive ExportEvents RPC + user_id fields [done]
+- `packages/proto/ledger/v1/ledger.proto`: added `rpc ExportEvents(ExportEventsRequest) returns
+  (stream ExportEventsResponse)`; `ExportEventsRequest{start,end,event_type}` +
+  `ExportEventsResponse{repeated LedgerEvent events}` (batched pages); `LedgerEvent.user_id = 11`;
+  `AppendEventRequest.user_id = 9`. All additive.
+- TDD: N/A (proto). Verification: `buf lint` OK; `buf breaking` against `main-dev` reports **no
+  breaking change** (additive RPC + fields). Field numbers 11/9 were the next free per message.
+- Files: `packages/proto/ledger/v1/ledger.proto`. Deviations: none.
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Ran `./scripts/buf-gen.sh` inside the codegen container. Regenerated diff touches **only** ledger
+  stubs across all three languages (Go `ledgerv1` pb/grpc/connect, Python `ledger_pb2`/`_grpc`, TS
+  ts-proto + connect-es + compiled `dist/`) — 12 files, additive, no drift into other services.
+- TDD: N/A (generated). Verification: `git status --porcelain packages/proto/gen/` limited to ledger
+  (mirrors CI's `proto-freshness` gate). Files: `packages/proto/gen/**`. Deviations: none.
