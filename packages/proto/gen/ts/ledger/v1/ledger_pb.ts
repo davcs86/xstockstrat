@@ -14,7 +14,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file ledger/v1/ledger.proto.
  */
 export const file_ledger_v1_ledger: GenFile = /*@__PURE__*/
-  fileDesc("ChZsZWRnZXIvdjEvbGVkZ2VyLnByb3RvEhV4c3RvY2tzdHJhdC5sZWRnZXIudjEiigMKC0xlZGdlckV2ZW50EhAKCGV2ZW50X2lkGAEgASgJEhIKCmV2ZW50X3R5cGUYAiABKAkSFgoOc291cmNlX3NlcnZpY2UYAyABKAkSFgoOY29ycmVsYXRpb25faWQYBCABKAkSLwoLb2NjdXJyZWRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KC3JlY29yZGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIoCgdwYXlsb2FkGAcgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBJCCghtZXRhZGF0YRgIIAMoCzIwLnhzdG9ja3N0cmF0LmxlZGdlci52MS5MZWRnZXJFdmVudC5NZXRhZGF0YUVudHJ5EhAKCHNlcXVlbmNlGAkgASgDEhIKCnN0cmVhbV9rZXkYCiABKAkaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBItwCChJBcHBlbmRFdmVudFJlcXVlc3QSEgoKZXZlbnRfdHlwZRgBIAEoCRIWCg5zb3VyY2Vfc2VydmljZRgCIAEoCRIWCg5jb3JyZWxhdGlvbl9pZBgDIAEoCRISCgpzdHJlYW1fa2V5GAQgASgJEigKB3BheWxvYWQYBSABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EkkKCG1ldGFkYXRhGAYgAygLMjcueHN0b2Nrc3RyYXQubGVkZ2VyLnYxLkFwcGVuZEV2ZW50UmVxdWVzdC5NZXRhZGF0YUVudHJ5Ei8KC29jY3VycmVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIXCg9pZGVtcG90ZW5jeV9rZXkYCCABKAkaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBImoKE0FwcGVuZEV2ZW50UmVzcG9uc2USEAoIZXZlbnRfaWQYASABKAkSEAoIc2VxdWVuY2UYAiABKAMSLwoLcmVjb3JkZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wItMBChJRdWVyeUV2ZW50c1JlcXVlc3QSEgoKc3RyZWFtX2tleRgBIAEoCRISCgpldmVudF90eXBlGAIgASgJEhYKDnNvdXJjZV9zZXJ2aWNlGAMgASgJEjQKCnRpbWVfcmFuZ2UYBCABKAsyIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZVJhbmdlEjAKBHBhZ2UYBSABKAsyIi54c3RvY2tzdHJhdC5jb21tb24udjEuUGFnZVJlcXVlc3QSFQoNZnJvbV9zZXF1ZW5jZRgGIAEoAyJ8ChNRdWVyeUV2ZW50c1Jlc3BvbnNlEjIKBmV2ZW50cxgBIAMoCzIiLnhzdG9ja3N0cmF0LmxlZGdlci52MS5MZWRnZXJFdmVudBIxCgRwYWdlGAIgASgLMiMueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSJUChNTdHJlYW1FdmVudHNSZXF1ZXN0EhIKCnN0cmVhbV9rZXkYASABKAkSEgoKZXZlbnRfdHlwZRgCIAEoCRIVCg1mcm9tX3NlcXVlbmNlGAMgASgDIiMKD0dldEV2ZW50UmVxdWVzdBIQCghldmVudF9pZBgBIAEoCTKVAwoNTGVkZ2VyU2VydmljZRJkCgtBcHBlbmRFdmVudBIpLnhzdG9ja3N0cmF0LmxlZGdlci52MS5BcHBlbmRFdmVudFJlcXVlc3QaKi54c3RvY2tzdHJhdC5sZWRnZXIudjEuQXBwZW5kRXZlbnRSZXNwb25zZRJkCgtRdWVyeUV2ZW50cxIpLnhzdG9ja3N0cmF0LmxlZGdlci52MS5RdWVyeUV2ZW50c1JlcXVlc3QaKi54c3RvY2tzdHJhdC5sZWRnZXIudjEuUXVlcnlFdmVudHNSZXNwb25zZRJgCgxTdHJlYW1FdmVudHMSKi54c3RvY2tzdHJhdC5sZWRnZXIudjEuU3RyZWFtRXZlbnRzUmVxdWVzdBoiLnhzdG9ja3N0cmF0LmxlZGdlci52MS5MZWRnZXJFdmVudDABElYKCEdldEV2ZW50EiYueHN0b2Nrc3RyYXQubGVkZ2VyLnYxLkdldEV2ZW50UmVxdWVzdBoiLnhzdG9ja3N0cmF0LmxlZGdlci52MS5MZWRnZXJFdmVudEI8WjpnaXRodWIuY29tL3hzdG9ja3N0cmF0L2NvbnRyYWN0cy9nZW4vZ28vbGVkZ2VyL3YxO2xlZGdlcnYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_google_protobuf_struct, file_common_v1_common]);
+  fileDesc("ChZsZWRnZXIvdjEvbGVkZ2VyLnByb3RvEhV4c3RvY2tzdHJhdC5sZWRnZXIudjEimwMKC0xlZGdlckV2ZW50EhAKCGV2ZW50X2lkGAEgASgJEhIKCmV2ZW50X3R5cGUYAiABKAkSFgoOc291cmNlX3NlcnZpY2UYAyABKAkSFgoOY29ycmVsYXRpb25faWQYBCABKAkSLwoLb2NjdXJyZWRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KC3JlY29yZGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIoCgdwYXlsb2FkGAcgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBJCCghtZXRhZGF0YRgIIAMoCzIwLnhzdG9ja3N0cmF0LmxlZGdlci52MS5MZWRnZXJFdmVudC5NZXRhZGF0YUVudHJ5EhAKCHNlcXVlbmNlGAkgASgDEhIKCnN0cmVhbV9rZXkYCiABKAkSDwoHdXNlcl9pZBgLIAEoCRovCg1NZXRhZGF0YUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEi7QIKEkFwcGVuZEV2ZW50UmVxdWVzdBISCgpldmVudF90eXBlGAEgASgJEhYKDnNvdXJjZV9zZXJ2aWNlGAIgASgJEhYKDmNvcnJlbGF0aW9uX2lkGAMgASgJEhIKCnN0cmVhbV9rZXkYBCABKAkSKAoHcGF5bG9hZBgFIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSSQoIbWV0YWRhdGEYBiADKAsyNy54c3RvY2tzdHJhdC5sZWRnZXIudjEuQXBwZW5kRXZlbnRSZXF1ZXN0Lk1ldGFkYXRhRW50cnkSLwoLb2NjdXJyZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhcKD2lkZW1wb3RlbmN5X2tleRgIIAEoCRIPCgd1c2VyX2lkGAkgASgJGi8KDU1ldGFkYXRhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJqChNBcHBlbmRFdmVudFJlc3BvbnNlEhAKCGV2ZW50X2lkGAEgASgJEhAKCHNlcXVlbmNlGAIgASgDEi8KC3JlY29yZGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCLTAQoSUXVlcnlFdmVudHNSZXF1ZXN0EhIKCnN0cmVhbV9rZXkYASABKAkSEgoKZXZlbnRfdHlwZRgCIAEoCRIWCg5zb3VyY2Vfc2VydmljZRgDIAEoCRI0Cgp0aW1lX3JhbmdlGAQgASgLMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVSYW5nZRIwCgRwYWdlGAUgASgLMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXF1ZXN0EhUKDWZyb21fc2VxdWVuY2UYBiABKAMifAoTUXVlcnlFdmVudHNSZXNwb25zZRIyCgZldmVudHMYASADKAsyIi54c3RvY2tzdHJhdC5sZWRnZXIudjEuTGVkZ2VyRXZlbnQSMQoEcGFnZRgCIAEoCzIjLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiVAoTU3RyZWFtRXZlbnRzUmVxdWVzdBISCgpzdHJlYW1fa2V5GAEgASgJEhIKCmV2ZW50X3R5cGUYAiABKAkSFQoNZnJvbV9zZXF1ZW5jZRgDIAEoAyIjCg9HZXRFdmVudFJlcXVlc3QSEAoIZXZlbnRfaWQYASABKAkifQoTRXhwb3J0RXZlbnRzUmVxdWVzdBIpCgVzdGFydBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJwoDZW5kGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBISCgpldmVudF90eXBlGAMgASgJIkoKFEV4cG9ydEV2ZW50c1Jlc3BvbnNlEjIKBmV2ZW50cxgBIAMoCzIiLnhzdG9ja3N0cmF0LmxlZGdlci52MS5MZWRnZXJFdmVudDKABAoNTGVkZ2VyU2VydmljZRJkCgtBcHBlbmRFdmVudBIpLnhzdG9ja3N0cmF0LmxlZGdlci52MS5BcHBlbmRFdmVudFJlcXVlc3QaKi54c3RvY2tzdHJhdC5sZWRnZXIudjEuQXBwZW5kRXZlbnRSZXNwb25zZRJkCgtRdWVyeUV2ZW50cxIpLnhzdG9ja3N0cmF0LmxlZGdlci52MS5RdWVyeUV2ZW50c1JlcXVlc3QaKi54c3RvY2tzdHJhdC5sZWRnZXIudjEuUXVlcnlFdmVudHNSZXNwb25zZRJgCgxTdHJlYW1FdmVudHMSKi54c3RvY2tzdHJhdC5sZWRnZXIudjEuU3RyZWFtRXZlbnRzUmVxdWVzdBoiLnhzdG9ja3N0cmF0LmxlZGdlci52MS5MZWRnZXJFdmVudDABElYKCEdldEV2ZW50EiYueHN0b2Nrc3RyYXQubGVkZ2VyLnYxLkdldEV2ZW50UmVxdWVzdBoiLnhzdG9ja3N0cmF0LmxlZGdlci52MS5MZWRnZXJFdmVudBJpCgxFeHBvcnRFdmVudHMSKi54c3RvY2tzdHJhdC5sZWRnZXIudjEuRXhwb3J0RXZlbnRzUmVxdWVzdBorLnhzdG9ja3N0cmF0LmxlZGdlci52MS5FeHBvcnRFdmVudHNSZXNwb25zZTABQjxaOmdpdGh1Yi5jb20veHN0b2Nrc3RyYXQvY29udHJhY3RzL2dlbi9nby9sZWRnZXIvdjE7bGVkZ2VydjFiBnByb3RvMw", [file_google_protobuf_timestamp, file_google_protobuf_struct, file_common_v1_common]);
 
 /**
  * @generated from message xstockstrat.ledger.v1.LedgerEvent
@@ -85,6 +85,13 @@ export type LedgerEvent = Message<"xstockstrat.ledger.v1.LedgerEvent"> & {
    * @generated from field: string stream_key = 10;
    */
   streamKey: string;
+
+  /**
+   * owning user; empty when platform-scoped or a pre-migration row
+   *
+   * @generated from field: string user_id = 11;
+   */
+  userId: string;
 };
 
 /**
@@ -142,6 +149,13 @@ export type AppendEventRequest = Message<"xstockstrat.ledger.v1.AppendEventReque
    * @generated from field: string idempotency_key = 8;
    */
   idempotencyKey: string;
+
+  /**
+   * owning user; falls back to the x-user-id metadata when empty
+   *
+   * @generated from field: string user_id = 9;
+   */
+  userId: string;
 };
 
 /**
@@ -297,6 +311,56 @@ export const GetEventRequestSchema: GenMessage<GetEventRequest> = /*@__PURE__*/
   messageDesc(file_ledger_v1_ledger, 6);
 
 /**
+ * @generated from message xstockstrat.ledger.v1.ExportEventsRequest
+ */
+export type ExportEventsRequest = Message<"xstockstrat.ledger.v1.ExportEventsRequest"> & {
+  /**
+   * @generated from field: google.protobuf.Timestamp start = 1;
+   */
+  start?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp end = 2;
+   */
+  end?: Timestamp | undefined;
+
+  /**
+   * Comma-joined subset of event types to include (e.g. "fill,signal,pnl_snapshot,config_change,alert").
+   * Empty = all types.
+   *
+   * @generated from field: string event_type = 3;
+   */
+  eventType: string;
+};
+
+/**
+ * Describes the message xstockstrat.ledger.v1.ExportEventsRequest.
+ * Use `create(ExportEventsRequestSchema)` to create a new message.
+ */
+export const ExportEventsRequestSchema: GenMessage<ExportEventsRequest> = /*@__PURE__*/
+  messageDesc(file_ledger_v1_ledger, 7);
+
+/**
+ * @generated from message xstockstrat.ledger.v1.ExportEventsResponse
+ */
+export type ExportEventsResponse = Message<"xstockstrat.ledger.v1.ExportEventsResponse"> & {
+  /**
+   * One cursor page of events per message (batched — a large export is thousands of
+   * messages, not one per row), each page ordered by the global sequence.
+   *
+   * @generated from field: repeated xstockstrat.ledger.v1.LedgerEvent events = 1;
+   */
+  events: LedgerEvent[];
+};
+
+/**
+ * Describes the message xstockstrat.ledger.v1.ExportEventsResponse.
+ * Use `create(ExportEventsResponseSchema)` to create a new message.
+ */
+export const ExportEventsResponseSchema: GenMessage<ExportEventsResponse> = /*@__PURE__*/
+  messageDesc(file_ledger_v1_ledger, 8);
+
+/**
  * LedgerService — append-only event store.
  * All services write events here. Events are immutable once written.
  *
@@ -334,6 +398,18 @@ export const LedgerService: GenService<{
     methodKind: "unary";
     input: typeof GetEventRequestSchema;
     output: typeof LedgerEventSchema;
+  },
+  /**
+   * Export a caller's events over a time window as a server stream of batched pages,
+   * ordered by the global monotonic sequence. Scoped to the caller (x-user-id metadata);
+   * never returns another user's or a pre-migration NULL-user_id event.
+   *
+   * @generated from rpc xstockstrat.ledger.v1.LedgerService.ExportEvents
+   */
+  exportEvents: {
+    methodKind: "server_streaming";
+    input: typeof ExportEventsRequestSchema;
+    output: typeof ExportEventsResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_ledger_v1_ledger, 0);

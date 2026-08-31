@@ -68,6 +68,12 @@ export type LedgerEvent = Message<"xstockstrat.ledger.v1.LedgerEvent"> & {
      * @generated from field: string stream_key = 10;
      */
     streamKey: string;
+    /**
+     * owning user; empty when platform-scoped or a pre-migration row
+     *
+     * @generated from field: string user_id = 11;
+     */
+    userId: string;
 };
 /**
  * Describes the message xstockstrat.ledger.v1.LedgerEvent.
@@ -117,6 +123,12 @@ export type AppendEventRequest = Message<"xstockstrat.ledger.v1.AppendEventReque
      * @generated from field: string idempotency_key = 8;
      */
     idempotencyKey: string;
+    /**
+     * owning user; falls back to the x-user-id metadata when empty
+     *
+     * @generated from field: string user_id = 9;
+     */
+    userId: string;
 };
 /**
  * Describes the message xstockstrat.ledger.v1.AppendEventRequest.
@@ -244,6 +256,48 @@ export type GetEventRequest = Message<"xstockstrat.ledger.v1.GetEventRequest"> &
  */
 export declare const GetEventRequestSchema: GenMessage<GetEventRequest>;
 /**
+ * @generated from message xstockstrat.ledger.v1.ExportEventsRequest
+ */
+export type ExportEventsRequest = Message<"xstockstrat.ledger.v1.ExportEventsRequest"> & {
+    /**
+     * @generated from field: google.protobuf.Timestamp start = 1;
+     */
+    start?: Timestamp | undefined;
+    /**
+     * @generated from field: google.protobuf.Timestamp end = 2;
+     */
+    end?: Timestamp | undefined;
+    /**
+     * Comma-joined subset of event types to include (e.g. "fill,signal,pnl_snapshot,config_change,alert").
+     * Empty = all types.
+     *
+     * @generated from field: string event_type = 3;
+     */
+    eventType: string;
+};
+/**
+ * Describes the message xstockstrat.ledger.v1.ExportEventsRequest.
+ * Use `create(ExportEventsRequestSchema)` to create a new message.
+ */
+export declare const ExportEventsRequestSchema: GenMessage<ExportEventsRequest>;
+/**
+ * @generated from message xstockstrat.ledger.v1.ExportEventsResponse
+ */
+export type ExportEventsResponse = Message<"xstockstrat.ledger.v1.ExportEventsResponse"> & {
+    /**
+     * One cursor page of events per message (batched — a large export is thousands of
+     * messages, not one per row), each page ordered by the global sequence.
+     *
+     * @generated from field: repeated xstockstrat.ledger.v1.LedgerEvent events = 1;
+     */
+    events: LedgerEvent[];
+};
+/**
+ * Describes the message xstockstrat.ledger.v1.ExportEventsResponse.
+ * Use `create(ExportEventsResponseSchema)` to create a new message.
+ */
+export declare const ExportEventsResponseSchema: GenMessage<ExportEventsResponse>;
+/**
  * LedgerService — append-only event store.
  * All services write events here. Events are immutable once written.
  *
@@ -281,5 +335,17 @@ export declare const LedgerService: GenService<{
         methodKind: "unary";
         input: typeof GetEventRequestSchema;
         output: typeof LedgerEventSchema;
+    };
+    /**
+     * Export a caller's events over a time window as a server stream of batched pages,
+     * ordered by the global monotonic sequence. Scoped to the caller (x-user-id metadata);
+     * never returns another user's or a pre-migration NULL-user_id event.
+     *
+     * @generated from rpc xstockstrat.ledger.v1.LedgerService.ExportEvents
+     */
+    exportEvents: {
+        methodKind: "server_streaming";
+        input: typeof ExportEventsRequestSchema;
+        output: typeof ExportEventsResponseSchema;
     };
 }>;

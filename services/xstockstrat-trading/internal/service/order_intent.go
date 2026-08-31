@@ -163,7 +163,7 @@ func (s *TradingService) sweepOrderIntents(ctx context.Context) {
 		if !reclaimed {
 			continue
 		}
-		s.emitLedgerEvent(ctx, "order_intent.reclaimed_unknown", fmt.Sprintf("order:%s", out.OrderID), map[string]interface{}{
+		s.emitLedgerEvent(ctx, "order_intent.reclaimed_unknown", fmt.Sprintf("order:%s", out.OrderID), "", map[string]interface{}{
 			"trigger":           "sweep",
 			"order_id":          out.OrderID,
 			"intent_id":         out.IntentID,

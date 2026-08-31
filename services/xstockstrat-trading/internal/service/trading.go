@@ -646,13 +646,13 @@ func (s *TradingService) submitOrder(
 		slog.Warn("db upsert order failed", "order_id", orderID, "error", err)
 	}
 
-	go s.emitLedgerEvent(context.Background(), "order.created", orderID, map[string]interface{}{
+	go s.emitLedgerEvent(context.Background(), "order.created", orderID, order.UserId, map[string]interface{}{
 		"symbol": order.Symbol, "side": order.Side.String(), "qty": order.Qty,
 		"status": orderStatus.String(), "trading_mode": mode.String(),
 	})
 
 	if requiresApproval {
-		go s.emitLedgerEvent(context.Background(), "order.approval_requested", orderID, map[string]interface{}{
+		go s.emitLedgerEvent(context.Background(), "order.approval_requested", orderID, order.UserId, map[string]interface{}{
 			"order_id": orderID, "symbol": order.Symbol, "qty": order.Qty,
 			"limit_price": order.LimitPrice, "user_id": order.UserId,
 		})
@@ -662,7 +662,7 @@ func (s *TradingService) submitOrder(
 	}
 
 	// Emit order.submitted before calling broker — signals intent to submit.
-	go s.emitLedgerEvent(context.Background(), "order.submitted", orderID, map[string]interface{}{
+	go s.emitLedgerEvent(context.Background(), "order.submitted", orderID, order.UserId, map[string]interface{}{
 		"order_id": orderID, "symbol": order.Symbol, "side": order.Side.String(),
 		"qty": order.Qty, "trading_mode": mode.String(),
 	})
@@ -692,7 +692,7 @@ func (s *TradingService) submitOrder(
 			// unconditionally mark REJECTED, which would conflate "definitely
 			// rejected" with "we don't know what happened."
 			_ = s.repo.UpsertOrder(context.Background(), order)
-			go s.emitLedgerEvent(context.Background(), "order.broker_call_uncertain", orderID, map[string]interface{}{
+			go s.emitLedgerEvent(context.Background(), "order.broker_call_uncertain", orderID, order.UserId, map[string]interface{}{
 				"order_id": orderID, "intent_id": intentID, "error": err.Error(),
 			})
 			slog.Warn("broker call uncertain (timeout)", "order_id", orderID, "intent_id", intentID, "error", err)
@@ -701,7 +701,7 @@ func (s *TradingService) submitOrder(
 		// Definite, synchronous rejection — existing behavior unchanged.
 		order.Status = tradingv1.OrderStatus_ORDER_STATUS_REJECTED
 		order.UpdatedAt = timestamppb.New(time.Now())
-		go s.emitLedgerEvent(context.Background(), "order.broker_rejected", orderID, map[string]interface{}{
+		go s.emitLedgerEvent(context.Background(), "order.broker_rejected", orderID, order.UserId, map[string]interface{}{
 			"order_id": orderID, "error": err.Error(), "trading_mode": mode.String(),
 		})
 		_ = s.repo.UpsertOrder(context.Background(), order)
@@ -760,7 +760,7 @@ func (s *TradingService) submitOrder(
 		}
 	}
 
-	go s.emitLedgerEvent(context.Background(), "order.broker_submitted", orderID, map[string]interface{}{
+	go s.emitLedgerEvent(context.Background(), "order.broker_submitted", orderID, order.UserId, map[string]interface{}{
 		"order_id": orderID, "broker_order_id": brokerOrder.BrokerOrderID,
 		"broker_status": brokerOrder.Status, "trading_mode": mode.String(),
 	})
@@ -850,7 +850,7 @@ func (s *TradingService) recordOfflineOrder(ctx context.Context, req *tradingv1.
 		}
 	}
 
-	go s.emitLedgerEvent(context.Background(), "order.created", orderID, map[string]interface{}{
+	go s.emitLedgerEvent(context.Background(), "order.created", orderID, order.UserId, map[string]interface{}{
 		"symbol": order.Symbol, "side": order.Side.String(), "qty": order.Qty,
 		"status": order.Status.String(), "trading_mode": mode.String(), "account_id": accountID,
 	})
@@ -1054,7 +1054,7 @@ func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, a
 	// keeps portfolio's ConsumeOrderFills/GetPnL from double-folding. realized_pnl carries the
 	// account-grain cumulative realized; broker syncs never set the key (nil on the portfolio side).
 	// Run on the inbound request ctx (C-03 header propagation).
-	s.emitLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", accountID), map[string]interface{}{
+	s.emitLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", accountID), userID, map[string]interface{}{
 		"account_id":   accountID,
 		"user_id":      userID,
 		"trading_mode": tradingMode,
@@ -1154,7 +1154,7 @@ func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *trad
 			"avg_cost_per_share": r.AvgCostPerShare,
 		})
 	}
-	s.emitLedgerEvent(ctx, "account.positions.baseline_set", fmt.Sprintf("account:%s", req.AccountId), map[string]interface{}{
+	s.emitLedgerEvent(ctx, "account.positions.baseline_set", fmt.Sprintf("account:%s", req.AccountId), req.UserId, map[string]interface{}{
 		"account_id":         req.AccountId,
 		"user_id":            req.UserId,
 		"client_snapshot_id": req.ClientSnapshotId,
@@ -1294,7 +1294,7 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 			if uErr := s.bracketRepo.UpdateBracketStatus(ctx, bracket.ID, bracketStatusCanceled, bracket.StopLegOrderID, bracket.TakeProfitLegOrderID, ""); uErr != nil {
 				slog.Warn("cancel: update bracket status failed", "order_id", req.OrderId, "error", uErr)
 			}
-			go s.emitLedgerEvent(context.Background(), "order.bracket_updated", req.OrderId, bracketUpdatedPayload(order, "", ""))
+			go s.emitLedgerEvent(context.Background(), "order.bracket_updated", req.OrderId, order.UserId, bracketUpdatedPayload(order, "", ""))
 		}
 	}
 
@@ -1313,7 +1313,7 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 		}
 	}
 
-	go s.emitLedgerEvent(context.Background(), "order.canceled", req.OrderId, map[string]interface{}{
+	go s.emitLedgerEvent(context.Background(), "order.canceled", req.OrderId, order.UserId, map[string]interface{}{
 		"order_id": req.OrderId, "user_id": middleware.FromContext(ctx).UserID,
 	})
 	s.broadcastOrder(order)
@@ -1467,7 +1467,7 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 		}
 	}
 
-	go s.emitLedgerEvent(context.Background(), "order.replaced", req.OrderId, map[string]interface{}{
+	go s.emitLedgerEvent(context.Background(), "order.replaced", req.OrderId, order.UserId, map[string]interface{}{
 		"order_id": req.OrderId, "user_id": middleware.FromContext(ctx).UserID,
 	})
 	s.broadcastOrder(order)
@@ -1709,7 +1709,7 @@ func (s *TradingService) pollFills(ctx context.Context) {
 
 		switch newStatus {
 		case tradingv1.OrderStatus_ORDER_STATUS_FILLED:
-			go s.emitLedgerEvent(context.Background(), "order.filled", order.OrderId, map[string]interface{}{
+			go s.emitLedgerEvent(context.Background(), "order.filled", order.OrderId, order.UserId, map[string]interface{}{
 				"order_id": order.OrderId, "symbol": order.Symbol,
 				"qty": order.Qty, "fill_price": order.FilledAvgPrice,
 				"user_id": order.UserId, "trading_mode": order.TradingMode.String(),
@@ -1725,7 +1725,7 @@ func (s *TradingService) pollFills(ctx context.Context) {
 				s.cfgW.GetBool("trading.risk.bracket_orders_enabled", true))
 
 		case tradingv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED:
-			go s.emitLedgerEvent(context.Background(), "order.partially_filled", order.OrderId, map[string]interface{}{
+			go s.emitLedgerEvent(context.Background(), "order.partially_filled", order.OrderId, order.UserId, map[string]interface{}{
 				"order_id": order.OrderId, "symbol": order.Symbol,
 				"filled_qty": order.FilledQty, "fill_price": order.FilledAvgPrice,
 				"user_id": order.UserId, "trading_mode": order.TradingMode.String(),
@@ -1737,12 +1737,12 @@ func (s *TradingService) pollFills(ctx context.Context) {
 				s.cfgW.GetBool("trading.risk.bracket_orders_enabled", true))
 
 		case tradingv1.OrderStatus_ORDER_STATUS_CANCELED:
-			go s.emitLedgerEvent(context.Background(), "order.canceled", order.OrderId, map[string]interface{}{
+			go s.emitLedgerEvent(context.Background(), "order.canceled", order.OrderId, order.UserId, map[string]interface{}{
 				"order_id": order.OrderId, "symbol": order.Symbol,
 			})
 
 		case tradingv1.OrderStatus_ORDER_STATUS_REJECTED:
-			go s.emitLedgerEvent(context.Background(), "order.rejected", order.OrderId, map[string]interface{}{
+			go s.emitLedgerEvent(context.Background(), "order.rejected", order.OrderId, order.UserId, map[string]interface{}{
 				"order_id": order.OrderId, "symbol": order.Symbol,
 			})
 		}
@@ -1838,7 +1838,7 @@ func (s *TradingService) emitReconciliationFinding(ctx context.Context, accountI
 	if s.isAccountHalted(accountID) {
 		return
 	}
-	s.emitLedgerEvent(ctx, "reconciliation.mismatch_found", fmt.Sprintf("account:%s", accountID), map[string]interface{}{
+	s.emitLedgerEvent(ctx, "reconciliation.mismatch_found", fmt.Sprintf("account:%s", accountID), "", map[string]interface{}{
 		"mismatch_class":  mismatchClass,
 		"order_id":        orderID,
 		"expected":        expected,
@@ -2136,7 +2136,7 @@ func (s *TradingService) resolveUnknownIntents(ctx context.Context, accountID st
 				continue
 			}
 			if resolved {
-				s.emitLedgerEvent(ctx, "order_intent.resolved_by_reconciliation", fmt.Sprintf("order:%s", intent.OrderID), map[string]interface{}{
+				s.emitLedgerEvent(ctx, "order_intent.resolved_by_reconciliation", fmt.Sprintf("order:%s", intent.OrderID), "", map[string]interface{}{
 					"intent_id": intent.IntentID, "order_id": intent.OrderID, "resolved_via": "late_response_conflict",
 				})
 			}
@@ -2167,7 +2167,7 @@ func (s *TradingService) resolveUnknownIntents(ctx context.Context, accountID st
 			continue
 		}
 		if resolved {
-			s.emitLedgerEvent(ctx, "order_intent.resolved_by_reconciliation", fmt.Sprintf("order:%s", intent.OrderID), map[string]interface{}{
+			s.emitLedgerEvent(ctx, "order_intent.resolved_by_reconciliation", fmt.Sprintf("order:%s", intent.OrderID), "", map[string]interface{}{
 				"intent_id": intent.IntentID, "order_id": intent.OrderID, "resolved_via": "alpaca_list_orders_fallback",
 			})
 		}
@@ -2314,7 +2314,7 @@ func (s *TradingService) syncAccountPositions(ctx context.Context, accountID str
 			"day_pnl_pct": p.DayPnlPct,
 		}
 	}
-	s.emitLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", accountID), map[string]interface{}{
+	s.emitLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", accountID), userID, map[string]interface{}{
 		"account_id":   accountID,
 		"user_id":      userID,
 		"trading_mode": tradingMode,
@@ -2330,7 +2330,7 @@ func (s *TradingService) syncAccountPositions(ctx context.Context, accountID str
 		slog.Warn("syncPositions: GetAccount failed", "account_id", accountID, "error", err)
 		return true
 	}
-	s.emitLedgerEvent(ctx, "account.balance.synced", fmt.Sprintf("account:%s", accountID), map[string]interface{}{
+	s.emitLedgerEvent(ctx, "account.balance.synced", fmt.Sprintf("account:%s", accountID), userID, map[string]interface{}{
 		"account_id":   accountID,
 		"user_id":      userID,
 		"trading_mode": tradingMode,
@@ -2961,7 +2961,7 @@ func (s *TradingService) DeregisterBrokerAccountSvc(ctx context.Context, account
 		}
 		// Emit account.deregistered so xstockstrat-portfolio purges the account's positions and its
 		// account-grain realized P&L (no broker sync ever will).
-		s.emitLedgerEvent(ctx, "account.deregistered", fmt.Sprintf("account:%s", accountID), map[string]interface{}{
+		s.emitLedgerEvent(ctx, "account.deregistered", fmt.Sprintf("account:%s", accountID), rec.UserID, map[string]interface{}{
 			"account_id": accountID,
 			"user_id":    rec.UserID,
 		})
@@ -3334,7 +3334,7 @@ func (s *TradingService) createBracket(ctx context.Context, order *tradingv1.Ord
 		if err := s.bracketRepo.UpdateBracketStatus(ctx, rec.ID, bracketStatusActive, brokerOrder.StopLegOrderID, brokerOrder.TakeProfitLegOrderID, ""); err != nil {
 			slog.Warn("update bracket status failed", "order_id", order.OrderId, "error", err)
 		}
-		go s.emitLedgerEvent(context.Background(), "order.bracket_updated", order.OrderId,
+		go s.emitLedgerEvent(context.Background(), "order.bracket_updated", order.OrderId, order.UserId,
 			bracketUpdatedPayload(order, brokerOrder.StopLegOrderID, brokerOrder.TakeProfitLegOrderID))
 	case commonv1.BrokerType_BROKER_TYPE_IBKR:
 		resp, err := accountEntry.client.SubmitBracketLegs(ctx, order.BrokerOrderId, order.ClientOrderId, broker.BracketLegsRequest{
@@ -3351,7 +3351,7 @@ func (s *TradingService) createBracket(ctx context.Context, order *tradingv1.Ord
 		if err := s.bracketRepo.UpdateBracketStatus(ctx, rec.ID, bracketStatusActive, resp.StopLegOrderID, resp.TakeProfitLegOrderID, ""); err != nil {
 			slog.Warn("update bracket status failed", "order_id", order.OrderId, "error", err)
 		}
-		go s.emitLedgerEvent(context.Background(), "order.bracket_updated", order.OrderId,
+		go s.emitLedgerEvent(context.Background(), "order.bracket_updated", order.OrderId, order.UserId,
 			bracketUpdatedPayload(order, resp.StopLegOrderID, resp.TakeProfitLegOrderID))
 	}
 }
@@ -3395,7 +3395,7 @@ func (s *TradingService) resizeBracket(ctx context.Context, order *tradingv1.Ord
 	if err := s.bracketRepo.UpdateBracketStatus(ctx, existing.ID, bracketStatusActive, resp.StopLegOrderID, resp.TakeProfitLegOrderID, ""); err != nil {
 		slog.Warn("update bracket status (active, resize) failed", "order_id", order.OrderId, "error", err)
 	}
-	go s.emitLedgerEvent(context.Background(), "order.bracket_updated", order.OrderId,
+	go s.emitLedgerEvent(context.Background(), "order.bracket_updated", order.OrderId, order.UserId,
 		bracketUpdatedPayload(order, resp.StopLegOrderID, resp.TakeProfitLegOrderID))
 }
 
@@ -3604,7 +3604,11 @@ func alpacaStatusToProto(s string) tradingv1.OrderStatus {
 // (which previously froze the position-sync poller with zero log output).
 const ledgerEmitTimeout = 10 * time.Second
 
-func (s *TradingService) emitLedgerEvent(ctx context.Context, eventType, streamKey string, payload map[string]interface{}) {
+// emitLedgerEvent appends an event to the ledger. userID is the owning user (feature 021):
+// pass the order/account owner for user-owned events so the ledger stamps AppendEventRequest.UserId
+// (fills are emitted from background pollers with no inbound x-user-id, so the owner must be threaded
+// explicitly or every fill would persist NULL); pass "" for genuinely platform-scoped events.
+func (s *TradingService) emitLedgerEvent(ctx context.Context, eventType, streamKey, userID string, payload map[string]interface{}) {
 	p, _ := structpb.NewStruct(payload)
 	emitCtx, cancel := context.WithTimeout(ctx, ledgerEmitTimeout)
 	defer cancel()
@@ -3612,6 +3616,7 @@ func (s *TradingService) emitLedgerEvent(ctx context.Context, eventType, streamK
 		EventType:     eventType,
 		SourceService: "xstockstrat-trading",
 		StreamKey:     streamKey,
+		UserId:        userID,
 		Payload:       p,
 	})
 	if err != nil {

@@ -68,6 +68,8 @@ Namespace: `ledger`
 | `ledger.stream.notify_enabled` | bool | `true` | **Documented, not yet enforced** — intended pg-NOTIFY toggle; no code reads it (NOTIFY is always on) |
 | `ledger.retention.years` | int | `2` | **Documented, not yet implemented** — intended event retention; no retention job reads it |
 | `ledger.compression.after_days` | int | `3` | **Documented, not yet implemented** — intended chunk compression; no policy reads it |
+| `ledger.export.enabled` | bool | `true` | Master on/off switch for `ExportEvents` (feature 021). When `false`, the RPC rejects with `FAILED_PRECONDITION` (BFF → HTTP 403). Read via `getBool` — seeded `value_type` `bool` (never `string`). |
+| `ledger.export.max_window_days` | int | `365` | Maximum `ExportEvents` window span in days (feature 021). A wider start..end is rejected with `INVALID_ARGUMENT` (BFF → HTTP 400). Read via `getInt` — seeded `value_type` `int`. |
 
 ## Idempotent Append
 

@@ -126,6 +126,13 @@ describe('rowToEvent', () => {
     assert.strictEqual(evt.correlationId, '');
     assert.deepStrictEqual(evt.metadata, {});
   });
+
+  // Feature 021 — the DB user_id column surfaces on the wire shape (AC-8).
+  it('maps user_id onto userId (empty string when NULL)', () => {
+    if (!rowToEvent) return;
+    assert.strictEqual(rowToEvent(makeRow({ user_id: 'u_7' })).userId, 'u_7');
+    assert.strictEqual(rowToEvent(makeRow({ user_id: null })).userId, '');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -401,8 +408,8 @@ describe('appendEvent', () => {
     assert.ok(!/event_seq_/.test(capturedSql), 'must not reference a per-stream sequence');
     assert.ok(!/nextval/i.test(capturedSql), 'must not set sequence explicitly (rely on column DEFAULT)');
     // event_id, event_type, source_service, correlation_id, stream_key,
-    // payload, metadata, occurred_at, recorded_at — 9 bound params.
-    assert.strictEqual(capturedParams.length, 9);
+    // payload, metadata, occurred_at, recorded_at, user_id — 10 bound params (feature 021).
+    assert.strictEqual(capturedParams.length, 10);
   });
 
   // Idempotency: a first-seen key claims the row and inserts the event normally.
@@ -462,6 +469,248 @@ describe('appendEvent', () => {
       !calls.some((s) => /INSERT INTO ledger\.events/.test(s)),
       'duplicate key must not insert a second event',
     );
+  });
+
+  // Feature 021 — owning user_id is stamped on the write path (AC-8/AC-11 write side).
+  // user_id is the 10th bound param (index 9), after occurred_at (7) and recorded_at (8).
+  function captureAppend() {
+    let capturedParams: any[] = [];
+    const pool = {
+      async query(_sql: string, params?: any[]) {
+        capturedParams = params ?? [];
+        return { rows: [{ sequence: 1, recorded_at: new Date() }] };
+      },
+    };
+    return { pool, params: () => capturedParams };
+  }
+
+  it('stamps req.userId onto the insert (request field wins)', async () => {
+    if (!LedgerServiceImpl) return;
+    const { pool, params } = captureAppend();
+    const impl = new LedgerServiceImpl(pool, {});
+    const call = makeCall({
+      eventType: 'order.filled',
+      sourceService: 'trading',
+      streamKey: 'order:1',
+      payload: {},
+      userId: 'u_42',
+    });
+    await new Promise<void>((resolve, reject) => {
+      impl.appendEvent(call, (err: any) => (err ? reject(err) : resolve()));
+    });
+    assert.strictEqual(params()[9], 'u_42');
+  });
+
+  it('falls back to the x-user-id metadata when req.userId is empty', async () => {
+    if (!LedgerServiceImpl) return;
+    const { pool, params } = captureAppend();
+    const impl = new LedgerServiceImpl(pool, {});
+    const call = {
+      request: {
+        eventType: 'order.filled',
+        sourceService: 'trading',
+        streamKey: 'order:1',
+        payload: {},
+      },
+      metadata: { get: (k: string) => (k === 'x-user-id' ? ['u_99'] : []) },
+    };
+    await new Promise<void>((resolve, reject) => {
+      impl.appendEvent(call, (err: any) => (err ? reject(err) : resolve()));
+    });
+    assert.strictEqual(params()[9], 'u_99');
+  });
+
+  it('stamps NULL when neither req.userId nor x-user-id metadata is present', async () => {
+    if (!LedgerServiceImpl) return;
+    const { pool, params } = captureAppend();
+    const impl = new LedgerServiceImpl(pool, {});
+    const call = makeCall({
+      eventType: 'reconciliation.mismatch_found',
+      sourceService: 'trading',
+      streamKey: 'recon:1',
+      payload: {},
+    });
+    await new Promise<void>((resolve, reject) => {
+      impl.appendEvent(call, (err: any) => (err ? reject(err) : resolve()));
+    });
+    assert.strictEqual(params()[9], null);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// exportEvents — feature 021 (server-streaming cursor read)
+// ---------------------------------------------------------------------------
+
+// A streaming call mock: records write()s and the terminal end()/destroy().
+function makeStreamCall(req: any, userId?: string) {
+  return {
+    request: req,
+    metadata: { get: (k: string) => (k === 'x-user-id' && userId ? [userId] : []) },
+    writes: [] as any[],
+    ended: false,
+    destroyed: null as any,
+    write(msg: any) {
+      this.writes.push(msg);
+    },
+    end() {
+      this.ended = true;
+    },
+    destroy(err: any) {
+      this.destroyed = err;
+    },
+    on() {
+      /* cancellation wiring — unused in unit */
+    },
+  };
+}
+
+function makeExportImpl(cfg: { enabled?: boolean; maxDays?: number }) {
+  if (!LedgerServiceImpl) return null;
+  let poolQueried = false;
+  const pool = {
+    options: { connectionString: 'postgres://x', ssl: false },
+    async query() {
+      poolQueried = true;
+      return { rows: [] };
+    },
+  };
+  const config = {
+    getBool: (_k: string, d: boolean) => (cfg.enabled === undefined ? d : cfg.enabled),
+    getInt: (_k: string, d: number) => (cfg.maxDays === undefined ? d : cfg.maxDays),
+  };
+  const impl = new LedgerServiceImpl(pool, config);
+  // Capture the SQL/params the export would run; feed controlled batches. This replaces
+  // the dedicated pg.Client + pg-cursor read so the filter/order/gate logic is unit-tested
+  // without a DB; the real cursor path is exercised by the Playwright e2e (Step 13).
+  const captured: { sql?: string; params?: any[] } = {};
+  impl.streamExportRows = async (sql: string, params: any[], onBatch: (rows: any[]) => void) => {
+    captured.sql = sql;
+    captured.params = params;
+    // Two batches → proves batched (non-buffered) streaming (AC-7).
+    onBatch([
+      {
+        event_id: 'e1',
+        event_type: 'fill',
+        source_service: 'xstockstrat-trading',
+        correlation_id: 'c1',
+        stream_key: 'order:1',
+        payload: { qty: 1 },
+        metadata: {},
+        occurred_at: new Date('2026-01-01T00:00:00Z'),
+        recorded_at: new Date('2026-01-01T00:00:00Z'),
+        sequence: 1,
+        user_id: 'u_42',
+      },
+    ]);
+    onBatch([
+      {
+        event_id: 'e2',
+        event_type: 'signal',
+        source_service: 'xstockstrat-analysis',
+        correlation_id: 'c2',
+        stream_key: 'sig:1',
+        payload: {},
+        metadata: {},
+        occurred_at: new Date('2026-01-02T00:00:00Z'),
+        recorded_at: new Date('2026-01-02T00:00:00Z'),
+        sequence: 2,
+        user_id: 'u_42',
+      },
+    ]);
+  };
+  return { impl, captured, poolQueried: () => poolQueried };
+}
+
+describe('exportEvents', () => {
+  it('AC-10: rejects with FAILED_PRECONDITION (code 9) when ledger.export.enabled=false', async () => {
+    const h = makeExportImpl({ enabled: false });
+    if (!h) return;
+    const call = makeStreamCall({ eventType: '' }, 'u_42');
+    await h.impl.exportEvents(call);
+    assert.ok(call.destroyed, 'must destroy the stream');
+    assert.strictEqual(call.destroyed.code, 9);
+    assert.strictEqual(h.captured.sql, undefined, 'no query when disabled');
+  });
+
+  it('AC-5: rejects with INVALID_ARGUMENT (code 3) + exact message when window exceeds max', async () => {
+    const h = makeExportImpl({ maxDays: 365 });
+    if (!h) return;
+    const call = makeStreamCall(
+      { start: new Date('2024-01-01T00:00:00Z'), end: new Date('2026-01-01T00:00:00Z'), eventType: '' },
+      'u_42',
+    );
+    await h.impl.exportEvents(call);
+    assert.ok(call.destroyed);
+    assert.strictEqual(call.destroyed.code, 3);
+    assert.strictEqual(call.destroyed.message, 'window exceeds ledger.export.max_window_days');
+  });
+
+  it('AC-11 + AC-1: scopes to the caller (WHERE user_id = $1) and orders by sequence ASC', async () => {
+    const h = makeExportImpl({});
+    if (!h) return;
+    const call = makeStreamCall(
+      { start: new Date('2026-01-01T00:00:00Z'), end: new Date('2026-02-01T00:00:00Z'), eventType: '' },
+      'u_42',
+    );
+    await h.impl.exportEvents(call);
+    assert.match(h.captured.sql ?? '', /WHERE user_id = \$1/);
+    assert.match(h.captured.sql ?? '', /ORDER BY sequence ASC/);
+    assert.doesNotMatch(h.captured.sql ?? '', /ORDER BY recorded_at/);
+    assert.strictEqual((h.captured.params ?? [])[0], 'u_42');
+  });
+
+  it('AC-3: applies an event_type = ANY() predicate for a comma-joined subset', async () => {
+    const h = makeExportImpl({});
+    if (!h) return;
+    const call = makeStreamCall(
+      { start: new Date('2026-01-01T00:00:00Z'), end: new Date('2026-02-01T00:00:00Z'), eventType: 'fill,signal' },
+      'u_42',
+    );
+    await h.impl.exportEvents(call);
+    assert.match(h.captured.sql ?? '', /event_type = ANY\(\$4\)/);
+    assert.deepStrictEqual((h.captured.params ?? [])[3], ['fill', 'signal']);
+  });
+
+  it('AC-4: omits the event_type predicate when empty (all types)', async () => {
+    const h = makeExportImpl({});
+    if (!h) return;
+    const call = makeStreamCall(
+      { start: new Date('2026-01-01T00:00:00Z'), end: new Date('2026-02-01T00:00:00Z'), eventType: '' },
+      'u_42',
+    );
+    await h.impl.exportEvents(call);
+    assert.doesNotMatch(h.captured.sql ?? '', /event_type = ANY/);
+  });
+
+  it('AC-7: streams in batches (multiple write()s) via the dedicated client, never this.pool', async () => {
+    const h = makeExportImpl({});
+    if (!h) return;
+    const call = makeStreamCall(
+      { start: new Date('2026-01-01T00:00:00Z'), end: new Date('2026-02-01T00:00:00Z'), eventType: '' },
+      'u_42',
+    );
+    await h.impl.exportEvents(call);
+    assert.strictEqual(call.writes.length, 2, 'one ExportEventsResponse per cursor batch');
+    assert.ok(call.ended, 'stream ends after the last batch');
+    assert.strictEqual(h.poolQueried(), false, 'export must not touch the write pool (F-06)');
+  });
+
+  it('AC-8: each emitted event carries the full wire shape incl userId + payload', async () => {
+    const h = makeExportImpl({});
+    if (!h) return;
+    const call = makeStreamCall(
+      { start: new Date('2026-01-01T00:00:00Z'), end: new Date('2026-02-01T00:00:00Z'), eventType: '' },
+      'u_42',
+    );
+    await h.impl.exportEvents(call);
+    const first = call.writes[0].events[0];
+    assert.strictEqual(first.eventId, 'e1');
+    assert.strictEqual(first.eventType, 'fill');
+    assert.strictEqual(first.sourceService, 'xstockstrat-trading');
+    assert.strictEqual(first.sequence, 1);
+    assert.strictEqual(first.streamKey, 'order:1');
+    assert.strictEqual(first.userId, 'u_42');
+    assert.deepStrictEqual(first.payload, { qty: 1 });
   });
 });
 

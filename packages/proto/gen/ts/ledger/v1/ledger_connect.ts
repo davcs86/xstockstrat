@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AppendEventRequest, AppendEventResponse, GetEventRequest, LedgerEvent, QueryEventsRequest, QueryEventsResponse, StreamEventsRequest } from "./ledger_pb.js";
+import { AppendEventRequest, AppendEventResponse, ExportEventsRequest, ExportEventsResponse, GetEventRequest, LedgerEvent, QueryEventsRequest, QueryEventsResponse, StreamEventsRequest } from "./ledger_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -50,6 +50,19 @@ export const LedgerService = {
       I: GetEventRequest,
       O: LedgerEvent,
       kind: MethodKind.Unary,
+    },
+    /**
+     * Export a caller's events over a time window as a server stream of batched pages,
+     * ordered by the global monotonic sequence. Scoped to the caller (x-user-id metadata);
+     * never returns another user's or a pre-migration NULL-user_id event.
+     *
+     * @generated from rpc xstockstrat.ledger.v1.LedgerService.ExportEvents
+     */
+    exportEvents: {
+      name: "ExportEvents",
+      I: ExportEventsRequest,
+      O: ExportEventsResponse,
+      kind: MethodKind.ServerStreaming,
     },
   }
 } as const;

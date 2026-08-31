@@ -23,6 +23,7 @@ const (
 	LedgerService_QueryEvents_FullMethodName  = "/xstockstrat.ledger.v1.LedgerService/QueryEvents"
 	LedgerService_StreamEvents_FullMethodName = "/xstockstrat.ledger.v1.LedgerService/StreamEvents"
 	LedgerService_GetEvent_FullMethodName     = "/xstockstrat.ledger.v1.LedgerService/GetEvent"
+	LedgerService_ExportEvents_FullMethodName = "/xstockstrat.ledger.v1.LedgerService/ExportEvents"
 )
 
 // LedgerServiceClient is the client API for LedgerService service.
@@ -36,6 +37,10 @@ type LedgerServiceClient interface {
 	QueryEvents(ctx context.Context, in *QueryEventsRequest, opts ...grpc.CallOption) (*QueryEventsResponse, error)
 	StreamEvents(ctx context.Context, in *StreamEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[LedgerEvent], error)
 	GetEvent(ctx context.Context, in *GetEventRequest, opts ...grpc.CallOption) (*LedgerEvent, error)
+	// Export a caller's events over a time window as a server stream of batched pages,
+	// ordered by the global monotonic sequence. Scoped to the caller (x-user-id metadata);
+	// never returns another user's or a pre-migration NULL-user_id event.
+	ExportEvents(ctx context.Context, in *ExportEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ExportEventsResponse], error)
 }
 
 type ledgerServiceClient struct {
@@ -95,6 +100,25 @@ func (c *ledgerServiceClient) GetEvent(ctx context.Context, in *GetEventRequest,
 	return out, nil
 }
 
+func (c *ledgerServiceClient) ExportEvents(ctx context.Context, in *ExportEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ExportEventsResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &LedgerService_ServiceDesc.Streams[1], LedgerService_ExportEvents_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ExportEventsRequest, ExportEventsResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type LedgerService_ExportEventsClient = grpc.ServerStreamingClient[ExportEventsResponse]
+
 // LedgerServiceServer is the server API for LedgerService service.
 // All implementations should embed UnimplementedLedgerServiceServer
 // for forward compatibility.
@@ -106,6 +130,10 @@ type LedgerServiceServer interface {
 	QueryEvents(context.Context, *QueryEventsRequest) (*QueryEventsResponse, error)
 	StreamEvents(*StreamEventsRequest, grpc.ServerStreamingServer[LedgerEvent]) error
 	GetEvent(context.Context, *GetEventRequest) (*LedgerEvent, error)
+	// Export a caller's events over a time window as a server stream of batched pages,
+	// ordered by the global monotonic sequence. Scoped to the caller (x-user-id metadata);
+	// never returns another user's or a pre-migration NULL-user_id event.
+	ExportEvents(*ExportEventsRequest, grpc.ServerStreamingServer[ExportEventsResponse]) error
 }
 
 // UnimplementedLedgerServiceServer should be embedded to have
@@ -126,6 +154,9 @@ func (UnimplementedLedgerServiceServer) StreamEvents(*StreamEventsRequest, grpc.
 }
 func (UnimplementedLedgerServiceServer) GetEvent(context.Context, *GetEventRequest) (*LedgerEvent, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetEvent not implemented")
+}
+func (UnimplementedLedgerServiceServer) ExportEvents(*ExportEventsRequest, grpc.ServerStreamingServer[ExportEventsResponse]) error {
+	return status.Error(codes.Unimplemented, "method ExportEvents not implemented")
 }
 func (UnimplementedLedgerServiceServer) testEmbeddedByValue() {}
 
@@ -212,6 +243,17 @@ func _LedgerService_GetEvent_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LedgerService_ExportEvents_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ExportEventsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(LedgerServiceServer).ExportEvents(m, &grpc.GenericServerStream[ExportEventsRequest, ExportEventsResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type LedgerService_ExportEventsServer = grpc.ServerStreamingServer[ExportEventsResponse]
+
 // LedgerService_ServiceDesc is the grpc.ServiceDesc for LedgerService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -236,6 +278,11 @@ var LedgerService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "StreamEvents",
 			Handler:       _LedgerService_StreamEvents_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "ExportEvents",
+			Handler:       _LedgerService_ExportEvents_Handler,
 			ServerStreams: true,
 		},
 	},

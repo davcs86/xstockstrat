@@ -1,6 +1,6 @@
 # Implementation Spec: ledger-event-export
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-08-31
 **Feature**: `docs/roadmap/features/021-ledger-event-export/feature.md`
 **Total Steps**: 13
@@ -65,7 +65,7 @@ Every `@AC-*` in `acceptance.feature` is covered by ≥1 test step:
 
 ### Step 1 — proto: additive `ExportEvents` RPC + `user_id` fields
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/ledger/v1/ledger.proto` — modify
@@ -101,7 +101,7 @@ cd packages/proto && buf lint && buf breaking --against ".git#branch=feature/led
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/**` — modify (generated; do not hand-edit)
@@ -132,7 +132,7 @@ git diff --stat packages/proto/gen/
 
 ### Step 3 — migration: nullable `user_id` column + `(user_id, sequence)` index
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/migrations/003_events_user_id.up.sql` — create
@@ -175,7 +175,7 @@ ls services/xstockstrat-ledger/migrations/003_events_user_id.up.sql \
 
 ### Step 4 — service: stamp `user_id` on the ledger write path
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts` — modify
@@ -204,7 +204,7 @@ ls services/xstockstrat-ledger/migrations/003_events_user_id.up.sql \
 
 ### Step 5 — test: ledger write-path `user_id` stamping
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts` — modify
@@ -238,7 +238,7 @@ cd services/xstockstrat-ledger && pnpm run lint && pnpm run test:coverage
 
 ### Step 6 — service: `ExportEvents` server-streaming cursor read
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts` — modify
@@ -277,7 +277,7 @@ cd services/xstockstrat-ledger && pnpm run lint && pnpm run test:coverage
 
 ### Step 7 — test: `ExportEvents` filtering, ordering, bounds, gating, isolation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts` — modify
@@ -314,7 +314,7 @@ cd services/xstockstrat-ledger && pnpm run lint && pnpm run test:coverage
 
 ### Step 8 — config: seed `ledger.export.*` keys (native type) + declare defaults
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config` (key seed) + `xstockstrat-ledger` (default declaration)
 **Files**:
 - `services/xstockstrat-config/migrations/022_ledger_export_keys.up.sql` — create
@@ -355,7 +355,7 @@ grep -n "ledger.export" services/xstockstrat-ledger/CLAUDE.md   # both keys decl
 
 ### Step 9 — service: trading producer stamps owning `user_id`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -383,7 +383,7 @@ grep -n "ledger.export" services/xstockstrat-ledger/CLAUDE.md   # both keys decl
 
 ### Step 10 — test: trading fill emits carry `user_id`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_offline_test.go` — modify (or a sibling `*_test.go` in `internal/service/`)
@@ -414,7 +414,7 @@ cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run U
 
 ### Step 11 — service: `/trader` BFF export route (NDJSON/CSV streaming)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/api/ledger/export/route.ts` — create
@@ -453,7 +453,7 @@ grep -n "HEADER_USER_ID\|HEADER_ACCESS_SCOPE\|HEADER_TRACE_ID" src/app/trader/ap
 
 ### Step 12 — service: "Export events" button on the `/trader` Book page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/portfolio/page.tsx` — modify
@@ -484,7 +484,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 13 — test: `/trader` export e2e (Playwright)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/ledger-export.spec.ts` — create
@@ -526,4 +526,24 @@ grep -n "from '../fixtures'\|helpers/auth" e2e/trader/ledger-export.spec.ts   # 
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Steps 5/7/10 — ledger unit suite runs vacuously under the configured runner (pre-existing platform defect)
+- **What**: `services/xstockstrat-ledger/package.json` runs unit tests with
+  `node --experimental-strip-types --test`. `LedgerServiceImpl` uses TypeScript **parameter
+  properties** (`constructor(private readonly pool: Pool, …)`), which strip-only mode refuses to load
+  ("TypeScript parameter property is not supported in strip-only mode"). The test file's lazy-import
+  guard (`try { await import('../grpc/ledgerServiceImpl.js') } catch {}`) then swallows the failure and
+  every `if (!LedgerServiceImpl) return;` short-circuits — so `pnpm run test:coverage` reports
+  `All files | 0%` yet **exits 0** (c8 `--lines 40` passes a zero-file run). This is the exact
+  `fails.md` 2026-07-29 (feature 074) vacuous-green trap, and it is **pre-existing** — it affects every
+  ledger unit test, not anything feature 021 introduced.
+- **Substitution (CI-equivalent+)**: to get a genuine red→green for Steps 4/5 (and 6/7 later), the
+  tests were compiled with the service's own `tsc` (`pnpm run build`, which handles parameter
+  properties) and run against `dist`: `node --test dist/__tests__/ledgerServiceImpl.test.js`. Under
+  that real execution the new assertions failed against the pre-Step-4 tree (5 fail / 17 pass) and
+  passed after (22/22). This is a stronger proof than the configured command, which cannot fail.
+- **Disposition**: recorded as a `fails.md` ledger entry and to be routed to `/sdd-qa defect` /
+  `/sdd-triage` as a **platform** test-infra bug (the runner should build-then-`--test`, or use
+  `--experimental-transform-types` with extension resolution, across the Node services). **Out of scope
+  for feature 021** (F-08 — a platform-wide runner change touching every Node service, not this
+  feature's Files). The `pnpm run test:coverage` command in Steps 5/7 verification still runs (exits 0)
+  and the dist-run is the authoritative behavioral gate; CI runs the same configured command.

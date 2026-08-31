@@ -1951,3 +1951,19 @@ ambiguity is logged here).
 - **Rule it implies**: a spec's "already exists / already stored" claims must be grep-confirmed against
   the exact execution tree, not assumed from a sibling helper's shape — an advisory impl-spec review is
   the last cheap place to catch it before F-04 bites at execute.
+
+- **2026-08-31 `ledger-event-export` (021) — `assumption`: Node `--experimental-strip-types --test`
+  runs parameter-property services' unit suites VACUOUSLY (green at 0% coverage).** The ledger (and
+  any Node service whose impl uses TS parameter properties, e.g. `constructor(private readonly pool)`)
+  fails to load under `node --experimental-strip-types` ("parameter property is not supported in
+  strip-only mode"); the test file's `try { await import(...) } catch {}` guard swallows it and every
+  `if (!Impl) return;` short-circuits, so `pnpm run test:coverage` prints `All files | 0%` and still
+  **exits 0** (c8 `--lines 40` passes a zero-file run). CI is green but the assertions never ran — the
+  same vacuous-green trap as 2026-07-29 (feature 074).
+- **Evidence**: feature 021 context.md + implementation-spec.md Deviation Log (2026-08-31 sdd-execute).
+  Real red→green was obtained only by compiling (`pnpm run build`) and running
+  `node --test dist/__tests__/*.test.js`.
+- **Rule it implies**: for a Node service, never trust a green `--experimental-strip-types --test` run
+  as coverage — confirm the impl actually imports (non-zero c8 lines), or run the compiled `dist`
+  tests. The configured runner should build-then-`--test` (or use `--experimental-transform-types`
+  with extension resolution); until fixed, treat these suites as characterization-only in CI.
