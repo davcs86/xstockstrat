@@ -129,7 +129,7 @@ All 7 scenarios covered.
 
 ### Step 2 — test: vitest unit tests for the Node-runtime middleware; drop the `buildInternalRefreshUrl` test block
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/middleware.test.ts` — modify

@@ -188,3 +188,18 @@ checkpoints; pause only on real blockers).
 - Files modified: `services/xstockstrat-ui/src/middleware.ts`, `services/xstockstrat-ui/src/lib/auth.ts`,
   `services/xstockstrat-ui/src/lib/identity.ts`
 - Deviations: none
+
+### Step 2 — test: vitest unit tests for the Node-runtime middleware [done]
+- `middleware.test.ts`: added `@AC-1` (config.runtime === 'nodejs' + matcher still declared) and an
+  `@AC-2/@AC-3/@AC-4` describe that drives `middleware(req)` on the near-expiry path — signs a real
+  near-expiry JWT (via `JWT_SECRET`, so `getSessionFromRequest` and the real `setSessionCookies`/
+  `clearSessionCookies` run), mocks only `@/lib/identity` `refreshSession`, spies `globalThis.fetch`,
+  asserts refreshSession called with the refresh_token, no self-fetch, rotated `Set-Cookie` with
+  unchanged attributes, and the null-refresh redirect+clear path. Rewrote the `api/auth/refresh`
+  matcher test description to cite the live browser caller. `auth.test.ts`: dropped the
+  `buildInternalRefreshUrl` import + describe block + the `ORIGINAL_PORT`/`afterEach` PORT harness.
+- TDD (P-06): 4 assertions **red** against pre-Step-1 tree → **green** after (11 passed). Full suite
+  `pnpm run test:coverage`: 131 passed; `src/lib/auth.ts` 76.56% (> 40% floor). `pnpm run lint` clean.
+  `grep buildInternalRefreshUrl src/lib/auth.test.ts` → no matches.
+- Files modified: `services/xstockstrat-ui/src/middleware.test.ts`, `services/xstockstrat-ui/src/lib/auth.test.ts`
+- Deviations: none
