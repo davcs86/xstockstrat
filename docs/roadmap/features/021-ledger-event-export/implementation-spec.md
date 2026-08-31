@@ -314,7 +314,7 @@ cd services/xstockstrat-ledger && pnpm run lint && pnpm run test:coverage
 
 ### Step 8 — config: seed `ledger.export.*` keys (native type) + declare defaults
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config` (key seed) + `xstockstrat-ledger` (default declaration)
 **Files**:
 - `services/xstockstrat-config/migrations/022_ledger_export_keys.up.sql` — create

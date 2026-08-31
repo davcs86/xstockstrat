@@ -210,3 +210,14 @@ Unattended run (auto-proceed through checkpoints; pause only on real blockers).
   `streamExportRows` instance override to capture SQL/params and feed batches (no DB). `u_42` inline (C-13).
 - TDD paired with Step 6. `pnpm run lint` clean. Files:
   `services/xstockstrat-ledger/src/__tests__/ledgerServiceImpl.test.ts`. Deviations: none.
+
+### Step 8 — config: seed ledger.export.* keys (native type) + declare defaults [done]
+- Created `022_ledger_export_keys.{up,down}.sql` (config migration): seeds `ledger.export.enabled`
+  (`bool`, `true`) and `ledger.export.max_window_days` (`int`, `365`) × {staging, production}, global
+  (`user_id NULL`), `ON CONFLICT … DO NOTHING`; down DELETEs both. `value_type` is native `bool`/`int`
+  (never `string` — the fail-open trap the getters `?? default` would hit). Declared both keys in
+  `services/xstockstrat-ledger/CLAUDE.md` § Config Keys Consumed (C-05).
+- TDD: N/A (config seed migration; the disabled behavior is exercised by Step 7 AC-10). Verified
+  offline: next NNN 022 correct (tip 021); value_types int/bool; down reverses both. No DB started.
+- Files: `services/xstockstrat-config/migrations/022_ledger_export_keys.{up,down}.sql`,
+  `services/xstockstrat-ledger/CLAUDE.md`. Deviations: none.
