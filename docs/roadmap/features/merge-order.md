@@ -196,3 +196,21 @@ proto-field collisions, but re-run `./scripts/buf-gen.sh` after each merge.
 > Non-config migrations are single-owner per service dir: ledger `003_events_user_id` (021);
 > portfolio `014_positions_fees_accum` + analysis `021_pnl_positions_fees_total` (029); ingest
 > `011` mcp_client CHECK (166) — no cross-feature collision.
+
+> **Same-function execution overlaps within this batch (impl-spec overlap scan, 2026-08-31) — WARN,
+> not blocking.** No field/migration/config collision (all deconflicted above). These are shared
+> emit-sites / files where the SECOND feature to land must manually reconcile (not a mechanical
+> rebase); the `/sdd-execute … sequential` run handles them by ordering each second-toucher after the
+> first:
+> - `services/xstockstrat-trading/internal/service/trading.go` fill emit (`order.filled`/`partially_filled`):
+>   **021** adds a `userID` param to `emitLedgerEvent`; **029** adds a `"fees"` key to the same two payload maps. Run 021 before 029.
+> - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` `position.closed` emit:
+>   **029** adds `fees_total`; **031** adds `cost_basis`/`opened_at` (+ extracts `closedPositionPayload`). Run 029 before 031.
+> - `services/xstockstrat-analysis/app/handlers/servicer.py` `_row_to_opportunity`/`_compute_opportunities`
+>   + the `TestOpportunityRowParity` descriptor-parity guard (fails closed): **095** adds Opportunity 13-18,
+>   **110** adds `signal_confidence=19`. Run 095 before 110 (already a blocking row); the second merger MUST
+>   include the other's fields in the parity `_MAPPED` set or the parity test goes red.
+> - `services/xstockstrat-ui/e2e/fixtures/ledgerEvents.ts`: both **021** and **031** "create" it — the second
+>   must merge into the existing module, not re-create.
+>
+> **Recommended single-run execution order** (respects all of the above): `128 > 021 > 043 > 167 > 029 > 095 > 110 > 031 > 166 > 168`.
