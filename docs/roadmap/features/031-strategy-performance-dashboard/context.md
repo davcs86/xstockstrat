@@ -155,3 +155,13 @@ consumer unaffected (C-16 additive-extend).
 - Deduped Reviewers: `xstockstrat-portfolio` service owner (Steps 1,2); `xstockstrat-ui` service owner
   (Steps 5–11); `xstockstrat-config` service owner (Steps 4,5); DBA (Step 4); none (Step 3 docs).
 - No "Not found / create from scratch" steps — every path/symbol cited to a real `path:line`.
+
+## Session 2026-08-31 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 2 warnings, 3 notes. No Floor risk. Nav CORRECTLY registers in the rendered NAV_GROUPS (Engine group) + reachability walk (not legacy PLATFORM_SUBNAV); cost_basis/opened_at confirmed already on the position row (additive Struct, no migration); config seed 023 correct; BFF reads (queryEvents server-forced stream_key, oneof-presence getConfig, GetTradingEnvironment) grounded; metrics precedents verified.
+- Unresolved ⚠ carried into execution:
+  - Step 10: add `pnpm run lint` (or `+ tsc --noEmit`) to the Verification — the step edits `navGroups.tsx` source but has no lint gate (paired test is in-step e2e). — [ ] unaddressed
+  - Step 4: config NNN 023 presumes 021 lands 022 first (merge-order); re-derive next-free across remote branches at execute time (spec already instructs). — [ ] note only
+  - Step 7: oneof-read precedent line drift (:131-133 -> :132-134; pattern present). — [ ] note only
+  - Step 11: mock-backend.ts already defines getTradingEnvironment/queryEvents/getConfig — reword "add handlers" as "point queryEvents at the ledgerEvents fixture + extend getConfig for the ui namespace". — [ ] note only
+- Overlap findings: batch scan CLEAN; 031 shares portfolio_service.go emit with 029 (029 before 031), navGroups.tsx with 043, ledgerEvents.ts create with 021 (021 before 031) — all in merge-order.md.
