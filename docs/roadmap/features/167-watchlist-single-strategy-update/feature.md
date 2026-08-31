@@ -12,6 +12,8 @@
 |---|---|---|---|
 | 2026-08-31 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-31 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings after fixes); overlap CLEAN |
+| 2026-08-31 | `spec-ready` → `design-approved` | /sdd-design | Design debated (full) and approved; recon.md + design.md written |
+| 2026-08-31 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (6 steps) |
 
 ---
 
@@ -19,7 +21,7 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec watchlist-single-strategy-update`_
+- [Implementation Spec](implementation-spec.md) — numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

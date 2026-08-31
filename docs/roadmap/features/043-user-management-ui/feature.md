@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/user-management-ui`
 **Created**: 2026-05-28
-**Last Updated**: 2026-05-28
+**Last Updated**: 2026-08-31
 
 ---
 
@@ -11,13 +11,18 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-28 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-31 | `draft` (regenerated) | /sdd-story (overwrite) | product-spec.md regenerated to current template; acceptance.feature authored |
+| 2026-08-31 | `draft` → `spec-ready` | /sdd-review | Product spec approved; all review blockers addressed |
+| 2026-08-31 | `spec-ready` → `design-approved` | /sdd-design | Design debated (full) and approved; recon.md + design.md written |
+| 2026-08-31 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (10 steps) |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec user-management-ui`_
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios; single source of acceptance truth (C-15)
+- [Implementation Spec](implementation-spec.md) — numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -41,4 +46,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review user-management-ui product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-review user-management-ui impl-spec` then `/sdd-execute user-management-ui`
