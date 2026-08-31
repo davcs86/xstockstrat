@@ -2,7 +2,7 @@
 
 **Status**: `done`
 **Created**: 2026-08-29
-**Feature**: `docs/roadmap/features/163-pwa-notifications/feature.md`
+**Feature**: `docs/roadmap/features/165-pwa-notifications/feature.md`
 **Total Steps**: 12
 **Feature Branch**: `feature/pwa-notifications` (harness develops on `claude/pwa-notifications-2eggrc`, from/to `main-dev`)
 
@@ -268,7 +268,7 @@ Then read both: the `.up` INSERT of `notify.push.min_severity` (two env rows) is
 - `web-push` is **not** currently a dependency (confirmed `grep web-push services/xstockstrat-notify/package.json` → no hit); `pg` is `^8.11.5` `:30`.
 - Ledger 2026-08-26 insight (folded into design Decision 3): a best-effort side-channel must dispatch
   **after** the success callback via `queueMicrotask`, not merely inside a try/catch.
-- Feature 163 insight (`insights.md`, `2026-08-29 — pwa-notifications — design`): `web-push` throws
+- Feature 165 insight (`insights.md`, `2026-08-29 — pwa-notifications — design`): `web-push` throws
   synchronously per send if `vapidDetails.subject` is not `mailto:`/`https:` — validate at startup,
   fail-loud/disable, never a silent per-send black-hole.
 
@@ -760,7 +760,7 @@ Confirm: `VAPID_PRIVATE_KEY` appears in **all eight** files (the secret-wiring c
 **Covers**: —
 
 **Instructions**:
-1. `config-governance.md` Per-Feature Registered Keys: add feature 163's `notify.push.min_severity`
+1. `config-governance.md` Per-Feature Registered Keys: add feature 165's `notify.push.min_severity`
    (int, default 2, consuming `xstockstrat-notify`, seeded by config migration `021`).
 2. notify CLAUDE.md: add the `notify.push.min_severity` row to § Config Keys Consumed; add
    `VAPID_PRIVATE_KEY` (`type: SECRET`) / `VAPID_PUBLIC_KEY` / `VAPID_SUBJECT` to § Environment Variables

@@ -15,7 +15,7 @@ export const config = {
     // middleware's own near-expiry refresh below, never by the browser. Without the
     // exclusion, that self-call re-enters the auth gate on the still-not-yet-refreshed
     // cookie, which is still within the refresh threshold, triggering another self-call.
-    // sw.js / manifest.webmanifest / icon-*.png (feature 163) are public PWA assets — they must be
+    // sw.js / manifest.webmanifest / icon-*.png (feature 165) are public PWA assets — they must be
     // served without the auth gate, or the service worker never registers and install fails.
     '/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|sw.js|manifest.webmanifest|icon-192.png|icon-512.png|icon-512-maskable.png|api/auth/login|api/auth/refresh|api/health|health|auth/login|auth/oauth-login|\\.well-known|api/oauth).+)',
   ],

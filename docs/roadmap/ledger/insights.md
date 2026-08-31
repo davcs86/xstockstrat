@@ -2522,7 +2522,7 @@ reusing.
   guard or JSON validation — it just forwards `x-user-id` and maps the gRPC error via
   `_grpc_error_message`. Client-side re-validation would be overbuild (behavior #2) AND could drift
   from the backend.
-- **Evidence**: feature 162 design.md; `services/xstockstrat-trading/internal/service/trading.go:2256-2270,2736-2761`; `services/xstockstrat-agent/app/tools.py:184-195` (`_grpc_error_message` default branch surfaces FailedPrecondition/InvalidArgument details).
+- **Evidence**: feature 164 design.md; `services/xstockstrat-trading/internal/service/trading.go:2256-2270,2736-2761`; `services/xstockstrat-agent/app/tools.py:184-195` (`_grpc_error_message` default branch surfaces FailedPrecondition/InvalidArgument details).
 - **Rule it implies**: for an agent tool wrapping an existing RPC, recon the backend handler's own
   rejections first; the tool's job is identity forwarding + error translation, not a second copy of
   the invariant. Adding a new agent tool must also move the tool-count literal across all inventory
@@ -2538,7 +2538,7 @@ reusing.
   fold it into the `configured` gate (fail-loud/disable), never per-send. Also: keep the new channel a
   **disjoint class**, not an extension of the existing dispatcher — that structural separation is what
   protects the existing channel's `@AC-*` isolation guarantees (C-16) from a future edit.
-- **Evidence**: feature 163 design.md Decisions 3 + "Chosen Approach"; mirrors `FanoutDispatcher`
+- **Evidence**: feature 165 design.md Decisions 3 + "Chosen Approach"; mirrors `FanoutDispatcher`
   (`services/xstockstrat-notify/src/fanout/fanout.ts:51-108`).
 - **Rule it implies**: a best-effort channel whose failures are swallowed must validate its credentials'
   *shape* up front (not just presence) and surface an invalid-but-present config loudly at startup — a

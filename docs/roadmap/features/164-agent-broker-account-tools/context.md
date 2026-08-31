@@ -1,8 +1,8 @@
 # Context: agent-broker-account-tools
 
-**Feature**: `docs/roadmap/features/162-agent-broker-account-tools/feature.md`
-**Product Spec**: `docs/roadmap/features/162-agent-broker-account-tools/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/162-agent-broker-account-tools/implementation-spec.md`
+**Feature**: `docs/roadmap/features/164-agent-broker-account-tools/feature.md`
+**Product Spec**: `docs/roadmap/features/164-agent-broker-account-tools/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/164-agent-broker-account-tools/implementation-spec.md`
 
 ---
 
@@ -73,3 +73,19 @@
 - Feature promoted and committed: 57e40a310ed09b205ce76ca440ee7a40a87fb7ec
 - Status updated: `code-completed` → `launched`
 - Launched date: 2026-08-30
+
+## 2026-08-31 — Renumber 162 → 164 (numbering-collision cleanup)
+
+Two features shipped under NNN **162** (`162-agent-broker-account-tools` and
+`162-fix-insights-offline-ticket`) — a `/sdd-story` numbering race that was never reconciled before
+both launched. Per `docs/runbooks/feature-workflow.md` § Feature Numbering, the earlier-created
+feature keeps the number; `162-fix-insights-offline-ticket` (first commit 2026-08-26) predates this
+one (first commit 2026-08-27), so **this feature moved to 164** and fix-insights keeps 162.
+
+**Constitution override recorded (required):** this feature is `launched` (promoted to `main`), and the
+numbering rule makes a launched feature's number immutable. The user **explicitly authorized** overriding
+that immutability to resolve the duplicate ("fix 162 as well" → chose "Override & renumber 162 too",
+2026-08-31 session). Scope of the move was documentation + provenance comments only (feature dir rename +
+`feature 162`→`164` references in `services/xstockstrat-agent/{CLAUDE.md,app/client.py,app/tools.py,tests/*}`,
+`docs/runbooks/mcp-tools.md`, and this feature's own artifacts) — **no behavior, API, schema, or migration
+change**. The paired `163` collision (`163-pwa-notifications` → 165) was fixed in the same PR.

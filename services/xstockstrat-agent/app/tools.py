@@ -1573,7 +1573,7 @@ def register_tools(server: MCPServer) -> None:
         broker_type: str = "",
         credentials_json: str = "",
     ) -> dict:
-        """Manage the CALLER's own BROKER accounts (Alpaca / IBKR) — feature 162.
+        """Manage the CALLER's own BROKER accounts (Alpaca / IBKR) — feature 164.
 
         All operations act on the caller's own accounts (ownership from the verified identity's
         x-user-id); a non-owner is rejected PERMISSION_DENIED by the trading backend. Broker
@@ -1628,7 +1628,7 @@ def register_tools(server: MCPServer) -> None:
 
     @server.tool()
     async def list_accounts(ctx: Context) -> dict:
-        """List the CALLER's own accounts — broker AND offline together (read-only, feature 162).
+        """List the CALLER's own accounts — broker AND offline together (read-only, feature 164).
 
         Offline accounts (feature 157) appear alongside broker accounts, each distinguishable by its
         broker_type (BROKER_TYPE_ALPACA / BROKER_TYPE_IBKR / BROKER_TYPE_OFFLINE). Ownership is

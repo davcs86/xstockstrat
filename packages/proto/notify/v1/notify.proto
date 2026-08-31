@@ -99,7 +99,7 @@ message ListAlertsResponse {
   string next_page_token = 2;
 }
 
-// Web Push subscription registration (feature 163 — pwa-notifications).
+// Web Push subscription registration (feature 165 — pwa-notifications).
 message RegisterPushSubscriptionRequest {
   // No user_id field — the owner is resolved from the propagated x-user-id metadata header (C-03),
   // never trusted from the request body.

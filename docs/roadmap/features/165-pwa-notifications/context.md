@@ -1,8 +1,8 @@
 # Context: pwa-notifications
 
-**Feature**: `docs/roadmap/features/163-pwa-notifications/feature.md`
-**Product Spec**: `docs/roadmap/features/163-pwa-notifications/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/163-pwa-notifications/implementation-spec.md`
+**Feature**: `docs/roadmap/features/165-pwa-notifications/feature.md`
+**Product Spec**: `docs/roadmap/features/165-pwa-notifications/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/165-pwa-notifications/implementation-spec.md`
 
 ---
 
@@ -135,3 +135,14 @@ Implemented the full feature on `claude/pwa-notifications-2eggrc` (harness branc
   Security unchanged (browser cannot set `x-user-id`; e2e asserts the mock echoes the session user).
   Updated: proto (+regen), notifyServiceImpl, traderBff, notify tests (added a missing-header case →
   51 tests), e2e mock (`callerUserId(ctx)`) + spec, ui CLAUDE.md, design.md (Post-approval revision).
+
+## 2026-08-31 — Renumber 163 → 165 (numbering-collision cleanup)
+
+A second feature (`163-snapshot-offline-positions`, #1046) also took NNN **163** and merged/launched
+first. Per the numbering rule the later feature moves; `163-snapshot-offline-positions` is `launched`
+(immutable) and this feature was still `code-completed`, so **this feature moved to 165** and snapshot
+keeps 163. Change was documentation + comments only (feature dir rename + `feature 163`→`165` references
+across the notify/ui/deploy/config-governance surfaces and this feature's artifacts, plus the verbatim
+`notify.proto` doc-comment and its generated stubs) — no behavior/API/schema/migration change. Fixed in
+the same PR as the paired 162 collision (`162-agent-broker-account-tools` → 164, an explicit
+user-authorized override of launched-number immutability).

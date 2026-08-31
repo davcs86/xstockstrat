@@ -1,5 +1,5 @@
 /**
- * Unit tests for WebPushDispatcher — the best-effort Web Push channel (feature 163).
+ * Unit tests for WebPushDispatcher — the best-effort Web Push channel (feature 165).
  *
  * Runs compile-first (`tsc && node --test dist/__tests__/*.test.js`) with a STATIC import and a hard
  * "import succeeded" assertion (feature-074 zero-assertion trap guard — same posture as the notify

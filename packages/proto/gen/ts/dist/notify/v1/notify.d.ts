@@ -74,7 +74,7 @@ export interface ListAlertsResponse {
     alerts: Alert[];
     nextPageToken: string;
 }
-/** Web Push subscription registration (feature 163 — pwa-notifications). */
+/** Web Push subscription registration (feature 165 — pwa-notifications). */
 export interface RegisterPushSubscriptionRequest {
     /**
      * No user_id field — the owner is resolved from the propagated x-user-id metadata header (C-03),
