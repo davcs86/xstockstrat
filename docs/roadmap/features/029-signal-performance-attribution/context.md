@@ -41,3 +41,36 @@
 
 - Product spec approved: `draft` → `spec-ready`. All `/sdd-review` blockers and warnings were addressed (see the sdd-review-fixes session above).
 - NOTE: the confirming re-review pass was interrupted by a session usage/rate limit; fixes were applied against each reviewer's explicit findings. For 021 specifically, the orchestrator manually caught and fixed a residual field-name error (`service_origin` → `source_service`; the ledger `Event` has no `user_id` field). A quick re-review can re-confirm on resume.
+
+## Session 2026-08-31 — sdd-design (FULL, provisional)
+
+- Phase 0 Recon: wrote `recon.md`. Services surveyed: analysis, trading, portfolio (realized-P&L
+  source), ingest, ledger, ui, packages/proto. **Key reuse patterns:** feature 042's
+  `analysis.pnl_positions` (sealed realized P&L, user-scoped) + `analysis.order_snapshots.signals`
+  (per-order `{name,value,source}` capture) + ingest `ListSignalSources` (slug→display_name) + UI
+  `DataTable`/`usePnLPatterns` sibling.
+- Phase 1 Grilling: 2 rounds (full), **self-run** proposer/adversary (isolated subagent, no
+  `AskUserQuestion`; per fails.md 2026-08-08 121/122/123 the forks below are surfaced to the operator
+  for the live gate — this session did **not** flip lifecycle status).
+- **Chosen approach:** 029 collapses into a new **additive read-side `GetAttribution` RPC** in
+  analysis aggregating 042's already-persisted `pnl_positions` + `order_snapshots.signals`
+  (winner-takes-all by highest ingest conviction; exact-tie equal split; no-signal → `manual`).
+  **No trading migration 010, no `PlaceOrder` weight-vector, no cross-schema join.** UI = new
+  `/insights/attribution` page + `PLATFORM_SUBNAV` entry + nav-reachability test.
+- **Rejected:** product-spec-literal producer-side stamping (duplicates 042; trading has no causal
+  weight vector — `PlaceOrderRequest` has no signal field); aggregating `pnl_pattern_samples` (drops
+  the conviction value → can't do winner-takes-all); extending `QueryPnLPatterns` (symbol/factor
+  shape, not date-range/per-source).
+- **Proto collision check:** `GetAttribution` + new messages are additive; `Opportunity` is untouched
+  → **no field-number collision with features 095/110**. No other feature plans `GetAttribution`.
+- Constitution rules touched: C-01/C-04/C-07/C-09/C-10(a)/C-10(b)/C-12/C-13/C-14/C-16/C-17, P-03,
+  F-06. **No Floor breach** (C-10(b) is a Commandment, not a Floor).
+- **Open decisions for the operator (block a final gate):**
+  1. Drop producer-side scope — realize FR-2 via 042's capture (confirm).
+  2. FR-3 "highest input weight" = highest ingest **conviction** at order time (proxy; confirm).
+  3. **AC-6 net-of-fees is unbuildable today** — no realized-P&L figure nets fees (shared
+     `pnl.RealizedDelta` is price-only) and `order.filled` carries no fee field. Option A (redefine
+     AC-6 to gross authoritative figure — C-16 CHANGE + sign-off, recommended) vs Option B (add
+     fee-capture plumbing across trading→ledger→042).
+- Status left at `spec-ready` (artifacts written; the design-approved flip is deferred to the live
+  operator gate on the three decisions above).
