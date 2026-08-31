@@ -102,3 +102,49 @@ All FRs, `@FR-*`/`@AC-*` tags, and FR→AC coverage preserved.
   OR-4 (095 lands first; re-derive field 19 from merged tree).
 - Status: `spec-ready` → design-approved (status flip left to the orchestrator; this subagent did not
   modify `status.md`).
+
+## Session 2026-08-31 — design revision (operator decision: retarget + delete orphan in-scope)
+
+Confirmed operator decision applied to `product-spec.md`, `acceptance.feature`, and `design.md`
+(no code, no `status.md` change). Two prongs:
+
+- **(1) Retarget the affordance to the live surface.** The blank-qty + signal-confidence affordance
+  targets `OrderForm` as mounted on feature 125's unified symbol page
+  (`services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx:342`), via a scoped
+  `signalConfidence` prop (finite-in-[0,1] gate → drops `required`, coerces blank qty to `0` — NOT
+  `NaN` — attaches `confidence`, enabling 023's `qty<=0` auto-sizing). The plain `/trader`
+  (`trader/page.tsx`) and `/trader/orders` (`trader/orders/page.tsx`) entry forms mount the same
+  component **without** the prop and are unchanged (FR-3); scoping is by prop presence, mirroring the
+  `allowOfflineRecord` precedent, never keyed on `initialSymbol`. Proto field unchanged from design:
+  additive `optional double signal_confidence = 19;` on `analysis.Opportunity` (next free after 095's
+  13-18; verified current max is `muted = 12`, `analysis.proto:554`), populated from the existing
+  max-raw-`ExternalSignal.conviction` reducer — kept separate from the `conviction = 3` ordinal and
+  `signal_axis`.
+
+- **(2) Delete the orphan in-scope (OR-1 resolved).** Verified `SignalOrderTicket.tsx`
+  (`services/xstockstrat-ui/src/components/insights/SignalOrderTicket.tsx`) has **zero importers** —
+  a repo-wide grep for `import ... SignalOrderTicket` returns none; the only source references are its
+  own definition and a stale doc-comment at `OrderForm.tsx:71`. Its former route
+  `insights/market/[symbol]/page.tsx` is a **redirect-only stub** (→ `/trader/positions/${symbol}`,
+  feature 125), with no live `<Link>`/navigation pointing at it. Both are deleted in 110's PR
+  (new FR-6 / AC-9). **Test coupling flagged:** the redirect is currently e2e-asserted at
+  `e2e/nav-reachability.spec.ts:122` and `e2e/trader/offline-accounts.spec.ts:266` (both
+  `page.goto('/insights/market/AAPL')`) — those two specs must be updated in the same PR when the route
+  is removed. Old `/insights/market/[symbol]` deep links will 404 after removal (acceptable per the
+  operator decision).
+
+- **OR-2 resolved:** field name `signal_confidence` (not `confidence`), number 19. OR-3 (JSONB-ride vs
+  new column) and OR-4 (re-derive next-free field from the merged tree; 095 lands first) remain for
+  `/sdd-spec`.
+
+- **Artifacts touched:** `product-spec.md` (FR-2/FR-3/FR-4/FR-5 retargeted to the symbol-page
+  `OrderForm`; new FR-6; `## Consumer Surface(s)` → `/trader` symbol page; Affected Services + Proto
+  Contract Changes updated to the confirmed field 19 / `signal_confidence`); `acceptance.feature`
+  (AC-1..AC-8 retargeted off `SignalOrderTicket`/`/insights` onto the symbol-page `OrderForm`; new
+  AC-9 @FR-6 asserts the orphan + stub are gone and nothing imports the component; all @AC/@FR tags +
+  FR→AC coverage preserved); `design.md` (Chosen Approach part 5 = in-scope deletion; header/Rejected/
+  net-footprint/OR-1/OR-2/C-14/C-15-C-16/Business-Rules updated). **Note:** `merge-order.md` line 66
+  still says 095 and 110 "both edit `SignalOrderTicket.tsx` (same-file, rebase-only)" — that note is
+  now stale for 110 (110 deletes the file); left untouched here (out of this task's scope), flag for
+  `/sdd-spec`/merge-order maintenance. If 095 also modifies that file, 110's deletion supersedes it in
+  the sequential cohort (delete wins), but re-verify at execute time.

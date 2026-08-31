@@ -35,24 +35,42 @@ UI can read it — either as a distinct field alongside `xstockstrat-analysis`'s
 a direct read path. Exact mechanism (new `Opportunity` field vs. a separate signal-detail RPC) is a
 design decision, not resolved here.
 
-FR-2. `SignalOrderTicket` (`services/xstockstrat-ui/src/components/insights/SignalOrderTicket.tsx`)
-gains a scoped blank-qty affordance — distinct from the plain `/trader` order form, which keeps its
-required-qty behavior unchanged — that lets a trader submit an order with quantity omitted and the
-real signal confidence attached, triggering 023's auto-sizing path.
+FR-2. The **live** order ticket — `OrderForm` as mounted on the unified symbol page
+(`services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx:342`, feature 125) — gains a
+scoped blank-qty affordance driven by a new `signalConfidence` prop: when a finite in-[0,1] confidence
+is supplied, the qty field drops `required`, a blank qty is coerced to `0` on submit (NOT
+`parseFloat('')` = `NaN`), and the real signal confidence is attached, triggering 023's `qty <= 0`
+auto-sizing path. (The product-spec originally named `SignalOrderTicket.tsx`; that component is
+orphaned dead code superseded by feature 125 — retargeted here, and deleted in-scope per FR-6.)
 
-FR-3. The plain `/trader` and `/trader/orders` order forms are explicitly **not** changed by this
-feature — their qty field stays required, exactly as 023 shipped them (023's own design rejected a
-global blank-qty change specifically because it would silently default confidence to `1.0` on the
-manual form with no UI affordance explaining why).
+FR-3. The plain `/trader` (`trader/page.tsx`) and `/trader/orders` (`trader/orders/page.tsx`) order
+forms are explicitly **not** changed by this feature — they mount the **same** `OrderForm` component
+**without** the `signalConfidence` prop, so their qty field stays required, exactly as 023 shipped
+them (023's own design rejected a global blank-qty change specifically because it would silently
+default confidence to `1.0` on the manual form with no UI affordance explaining why). Scoping is by
+the explicit prop (mirroring the existing `allowOfflineRecord` precedent, `OrderForm.tsx:52-60`),
+**never** keyed on `initialSymbol` — which the `/trader` symbol page also passes.
 
-FR-4. When a trader submits from the signal ticket with qty populated (override mode), the real
+FR-4. When a trader submits from the symbol-page ticket with qty populated (override mode), the real
 confidence value may still be sent but is not consumed by the backend (023's `PlaceOrder` only reads
 `confidence` when `qty <= 0`) — no behavior change for explicit-qty orders from this surface either.
 
-FR-5. Add `## Consumer Surface(s)` naming `/insights` (the signal-detail order-ticket flow) explicitly,
-closing the C-14 gap 023's design round 5 identified (the product-spec that shipped 023 named only
-`/trader`, but `SignalOrderTicket` — added by feature 083 — is a second live `PlaceOrder` caller that
-023's own UI change never touched).
+FR-5. `## Consumer Surface(s)` names the **real** live `PlaceOrder` caller this feature touches — the
+`/trader` unified symbol page's `OrderForm` (`trader/positions/[symbol]/page.tsx:342`) — closing the
+C-14 gap 023's design round 5 identified (the product-spec that shipped 023 named only the plain
+`/trader` entry forms; the symbol-page ticket is a distinct live `PlaceOrder` caller that 023's own UI
+change never touched). The originally-named `SignalOrderTicket` was feature 083's version of this
+ticket; feature 125 superseded it with the symbol-page mount and orphaned the old component (FR-6).
+
+FR-6. **Delete the orphaned `SignalOrderTicket.tsx` and its route stub, in-scope for this feature's
+PR.** `services/xstockstrat-ui/src/components/insights/SignalOrderTicket.tsx` is dead code — feature
+125 unified the signal-detail ticket onto the symbol page and left this component imported by **no**
+page (verified: zero importers; the only remaining source reference is a stale doc-comment at
+`OrderForm.tsx:71`). Its former route `services/xstockstrat-ui/src/app/insights/market/[symbol]/page.tsx`
+is now a redirect-only stub (→ `/trader/positions/[symbol]`, feature 125). Remove both files and the
+stale comment reference in 110's PR. The e2e specs that assert the old redirect
+(`e2e/nav-reachability.spec.ts:122`, `e2e/trader/offline-accounts.spec.ts:266` — both `page.goto('/insights/market/AAPL')`)
+must be updated in the same PR, since the route ceases to exist.
 
 ## Out of Scope
 
@@ -70,7 +88,9 @@ closing the C-14 gap 023's design round 5 identified (the product-spec that ship
 Exact service names from CLAUDE.md Service Registry:
 
 - `xstockstrat-analysis` — threads `ExternalSignal.conviction` through to a UI-reachable field (FR-1)
-- `xstockstrat-ui` — `SignalOrderTicket` scoped blank-qty affordance (FR-2, FR-3)
+- `xstockstrat-ui` — `OrderForm` scoped `signalConfidence` blank-qty affordance on the unified symbol
+  page (FR-2, FR-3); delete the orphaned `SignalOrderTicket.tsx` + its `insights/market/[symbol]`
+  redirect stub (FR-6)
 - `xstockstrat-ingest` — source of `ExternalSignal.conviction`; read-only for this feature, confirm at `/sdd-design`
 - `xstockstrat-trading` — consumer only (023 already built the `confidence`-reading logic); confirm no change needed here at `/sdd-design`
 
@@ -80,19 +100,26 @@ Exact service names from CLAUDE.md Service Registry:
 
 _Constitution **C-14**._
 
-- [x] **UI** — `/insights` segment: the signal-detail page's `SignalOrderTicket` gains a scoped
-  blank-qty + real-confidence submission path (FR-2). The plain `/trader` segment is explicitly
-  unchanged (FR-3).
+- [x] **UI** — `/trader` segment: the unified symbol page's `OrderForm`
+  (`services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx:342`) gains a scoped blank-qty
+  + real-confidence submission path via a `signalConfidence` prop (FR-2). The plain `/trader` and
+  `/trader/orders` entry forms mount the same component **without** the prop and are explicitly
+  unchanged (FR-3). The orphaned `SignalOrderTicket.tsx` (feature 083's superseded version of this
+  ticket) and its `insights/market/[symbol]` redirect stub are deleted in-scope (FR-6).
 - [ ] **Agent** — no order-placement tool exists today; out of scope (see Out of Scope).
 - [ ] **None**
 
 ## Proto Contract Changes
 
 - [ ] No proto changes required
-- OR: FR-1 likely requires a new additive field on `Opportunity`
+- OR: FR-1 requires a new additive field on `Opportunity`
   (`packages/proto/analysis/v1/analysis.proto`) to carry the real confidence value distinctly from the
-  existing ordinal `conviction` field — additive (non-breaking), exact field number and shape resolved
-  at `/sdd-design`. A separate targeted read RPC is the alternative under consideration.
+  existing ordinal `conviction = 3` field. Resolved at `/sdd-design`:
+  **`optional double signal_confidence = 19;`** — additive/non-breaking, the next free number after
+  feature 095's 13-18 enrichment block (see the coordination note below; verified against the current
+  tree where `Opportunity` maxes at `muted = 12`). Named `signal_confidence` (not `confidence`) to
+  stay disambiguated from the `conviction = 3` ordinal and the decayed `signal_axis`. (A separate
+  targeted read RPC was the rejected alternative — see `design.md`.)
 - **Field-number coordination with feature 095 (`opportunity-live-market-enrichment`).** The
   `analysis.Opportunity` message currently maxes at `muted = 12`; feature 095 pre-assigns its
   live-market enrichment block at fields **13+** (`live_price`, `change_pct`, `target_price`,

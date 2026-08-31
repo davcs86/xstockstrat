@@ -13,6 +13,7 @@
 | 2026-08-05 | `idea` → `draft` | /sdd-story | Product spec generated — named follow-up from 023-position-sizing-engine's design round 5 (C-14 deferral) |
 | 2026-08-31 | `draft` (regenerated) | /sdd-story (overwrite) | product-spec.md regenerated to current template; acceptance.feature authored |
 | 2026-08-31 | `draft` → `spec-ready` | /sdd-review | Product spec approved; all review blockers addressed |
+| 2026-08-31 | `spec-ready` → `design-approved` | /sdd-design | Design debated (full) + retarget/delete-orphan revision; approved; recon.md + design.md written |
 
 ---
 
@@ -48,4 +49,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review wire-signal-confidence-to-position-sizing product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec wire-signal-confidence-to-position-sizing` — generate the implementation spec

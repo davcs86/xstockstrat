@@ -1,8 +1,9 @@
 # Design: wire-signal-confidence-to-position-sizing
 
 **Created**: 2026-08-31
-**Rounds**: 2 (full; termination: approved — subject to two operator confirmations recorded below)
-**Approved by**: pending operator confirmation @ 2026-08-31 (see Open Risks OR-1/OR-2)
+**Rounds**: 2 (full; termination: approved — the two operator confirmations are now resolved below)
+**Approved by**: operator @ 2026-08-31 — OR-1 (delete the orphan in-scope) and OR-2 (field name
+`signal_confidence`) confirmed; OR-3/OR-4 remain for `/sdd-spec`
 **Grounded in**: recon.md
 
 ---
@@ -55,12 +56,22 @@ symbol's `Opportunity` (`useOpportunities(0)` → `symbolOpportunities`, `page.t
 matched opportunity's `signal_confidence` (finite in-[0,1], else undefined) into the new prop there.
 The affordance appears only when a real signal confidence is present — a held/watchlist-only or
 off-queue symbol (no signal) shows the ordinary required-qty ticket, never a silent full-risk
-auto-size (023's own rejected footgun). The product-spec-named `SignalOrderTicket.tsx` is **orphaned
-dead code** (feature 125 superseded it; imported by no page) — see OR-1.
+auto-size (023's own rejected footgun).
+
+**5. Delete the orphan in-scope (operator-confirmed, OR-1).** The product-spec-named
+`SignalOrderTicket.tsx` (`services/xstockstrat-ui/src/components/insights/SignalOrderTicket.tsx`) is
+**orphaned dead code** — feature 125 superseded it; verified imported by **no** page (the only
+remaining source reference is a stale doc-comment at `OrderForm.tsx:71`). Its former route
+`insights/market/[symbol]/page.tsx` is now a **redirect-only stub** (→ `/trader/positions/[symbol]`).
+Per the 2026-08-31 operator decision, **both files are removed** in this feature's PR (FR-6/AC-9),
+along with the stale `OrderForm.tsx:71` comment. The redirect is currently e2e-asserted
+(`e2e/nav-reachability.spec.ts:122`, `e2e/trader/offline-accounts.spec.ts:266`), so those two specs
+are updated in the same PR (see OR-1).
 
 **Ingest** (source) and **trading** (023's consumer at `trading.go:457-490`) need **no code change** —
 confirmed at recon. Net code footprint: proto (1 field), analysis (surface one already-computed
-value), UI (`OrderForm` prop + one render-site wiring). Deliberately minimal (behavior #2).
+value), UI (`OrderForm` prop + one render-site wiring, plus deleting the orphan + stub + updating its
+two e2e specs). Deliberately minimal (behavior #2).
 
 ## Rejected Alternatives
 
@@ -73,7 +84,8 @@ value), UI (`OrderForm` prop + one render-site wiring). Deliberately minimal (be
   a new edge + a second source for "the signal" (C-10(b)); the signal-detail page already fetches the
   `Opportunity`, so a field is zero-new-fetch and reuses 095's established enrichment pattern.
 - **Reuse the product-spec-named `SignalOrderTicket.tsx`** — rejected: orphaned since feature 125;
-  modifying it reaches no user (a C-14 miss — the 056/060 failure shape). Wire the live render site.
+  modifying it reaches no user (a C-14 miss — the 056/060 failure shape). Wire the live render site,
+  and delete the orphan + its redirect stub in-scope (OR-1, FR-6).
 - **Scope the affordance on `initialSymbol`** — rejected: the `/trader` positions symbol page passes
   `initialSymbol` too (`page.tsx:342`), so it cannot distinguish the signal-detail mount; would leak
   blank-qty into a non-signal ticket (FR-3 breach). Use an explicit prop.
@@ -84,13 +96,20 @@ value), UI (`OrderForm` prop + one render-site wiring). Deliberately minimal (be
 
 ## Open Risks
 
-- [ ] **OR-1 (operator confirm) — orphaned `SignalOrderTicket.tsx`.** Design wires the **live**
+- [x] **OR-1 (RESOLVED — operator confirmed 2026-08-31: delete in-scope).** Design wires the **live**
   surface (`OrderForm` @ `trader/positions/[symbol]/page.tsx:342`), not the product-spec-named orphan.
-  Confirm whether to additionally **delete** the dead `SignalOrderTicket.tsx` (+ its stale comment
-  refs) in this feature, or leave it untouched and out of scope. To be addressed at the UI step /
-  its PR.
-- [ ] **OR-2 (operator confirm) — field name `signal_confidence` vs `confidence`.** Design chose
-  `signal_confidence` for disambiguation from `conviction=3`. Confirm at the proto step.
+  The dead `SignalOrderTicket.tsx` (zero importers — verified; only a stale `OrderForm.tsx:71`
+  doc-comment remains) **and** its redirect-only route stub `insights/market/[symbol]/page.tsx`
+  (→ `/trader/positions/[symbol]`) are **removed in this feature's PR** (FR-6/AC-9), along with the
+  stale comment. **Test coupling handled in the same PR:** the redirect is currently e2e-asserted —
+  `e2e/nav-reachability.spec.ts:122` and `e2e/trader/offline-accounts.spec.ts:266` both
+  `page.goto('/insights/market/AAPL')`; both are updated when the route is deleted so the suite stays
+  green. Old `/insights/market/[symbol]` deep links will 404 after removal — acceptable per the
+  operator decision (feature 125 already reduced the route to a stub, and no live nav links there).
+- [x] **OR-2 (RESOLVED — operator confirmed 2026-08-31: `signal_confidence`).** Field name
+  `signal_confidence` (not `confidence`) for disambiguation from the `conviction=3` ordinal and the
+  decayed `signal_axis`; field number **19** (next free after 095's 13-18; verified `Opportunity`
+  maxes at `muted = 12`). Re-verify next-free from the merged tree at the proto step (see OR-4).
 - [ ] **OR-3 — persistence mechanism (JSONB-ride vs new column).** Prefer JSONB (no migration);
   `/sdd-spec` verifies the materialize→read carry is feasible without a column. If a column is needed,
   the C-07 migration + DBA gate re-open. To be resolved at `/sdd-spec` / the analysis step.
@@ -104,8 +123,8 @@ value), UI (`OrderForm` prop + one render-site wiring). Deliberately minimal (be
 - `C-04` — no new enum (a `double` field); existing `_UNSPECIFIED` enums untouched. Honored.
 - `C-09` / `P-06` — additive proto field 19: `buf lint` + `buf breaking` green; run `./scripts/buf-gen.sh`; red-before-green on the analysis + e2e steps. Honored.
 - `C-10(b)` — no second divergent "the signal" notion: reuses the existing `_best_sig_conv` reducer (`servicer.py:3275`). Honored.
-- `C-14` — names and reaches the **real** consumer surface (`trader/positions/[symbol]/page.tsx:342`), not the orphaned component; plain `/trader` forms explicitly unchanged (FR-3). Honored.
-- `C-15` / `C-16` — every FR-1..FR-5 covered by ≥1 `@AC-*`; existing opportunity/cue guarantees (`watchlist-opportunity-signal-cues.feature`, `consolidate-watchlist-signal.feature`) preserved (post-ranking field, no cue/ordinal change). Honored.
+- `C-14` — names and reaches the **real** consumer surface (`trader/positions/[symbol]/page.tsx:342`), not the orphaned component; the orphan (`SignalOrderTicket.tsx`) **and** its redirect stub are deleted in-scope (FR-6) so no dead second surface lingers to be mistaken for a live one; plain `/trader` entry forms explicitly unchanged (FR-3). Honored.
+- `C-15` / `C-16` — every FR-1..**FR-6** covered by ≥1 `@AC-*` (FR-6 → **AC-9**, the orphan-removal scenario); existing opportunity/cue guarantees (`watchlist-opportunity-signal-cues.feature`, `consolidate-watchlist-signal.feature`) preserved (post-ranking field, no cue/ordinal change; deleting orphaned dead code regresses no live behavior). Honored.
 - `C-17` — the affordance uses existing `ui/*` primitives (`Input`/helper text) + design-role tokens, no hardcoded color, unique accessible name. Honored at the UI step.
 - `C-07` / `F-01` — no migration on the preferred path (JSONB-ride); the column fallback would add a **new** numbered migration only (never edits an applied one). Honored.
 - `F-07` — no hardcoded config value; no new config key introduced. Honored.
@@ -118,4 +137,4 @@ value), UI (`OrderForm` prop + one render-site wiring). Deliberately minimal (be
 - PRESERVE `@AC-1..@AC-13` "Watchlist & Opportunities signal cues" (`services/xstockstrat-ui/acceptance/watchlist-opportunity-signal-cues.feature`) — not regressed: adds a field + a ticket affordance; cue coding, ordinal render, and the queue are untouched.
 - PRESERVE `@AC-8` "Signal-sourced entries render a provenance badge" (`services/xstockstrat-ui/acceptance/consolidate-watchlist-signal.feature`) — not regressed.
 - PRESERVE opportunity-queue ranking/muted guarantees (analysis 097/131/132/134) — the new field is post-ranking, absent from `ORDER BY` (`opportunities.py:114`).
-- EXTEND — net-new behavior (per-signal confidence on the ticket + scoped blank-qty auto-size); promoted into a durable suite at launch (C-16). No existing rule is **changed**, so no sign-off required on that axis.
+- EXTEND — net-new behavior (per-signal confidence on the ticket + scoped blank-qty auto-size); promoted into a durable suite at launch (C-16). Deleting the orphaned `SignalOrderTicket.tsx` + its redirect stub (FR-6) removes only dead code reachable by no live surface, so it regresses no business rule; the two e2e specs that asserted the old redirect are updated in the same PR. No existing rule is **changed**, so no sign-off required on that axis.
