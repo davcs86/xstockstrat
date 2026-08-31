@@ -50,3 +50,56 @@
   3-segment secret key; migration 011 up/down pair; line cite fixed; ingest added to SECRET_CALLER_ALLOWLIST.
 - Re-review verdict: PASS (0 blockers, 0 warnings).
 - Status: draft → spec-ready. Next: /sdd-design mcp-client-signal-source quick.
+
+## Session 2026-08-31 — sdd-design
+
+- **Mode**: FULL (2 rounds). Ran in an isolated subagent (no live `AskUserQuestion`/`Task`) — proposer↔
+  adversary self-run + self-synthesized (fails.md 2026-08-08 / 121-123 precedent); recorded as a Process
+  Note in design.md. No Floor breach → approval not blocked, but the two genuine forks a human gate owns
+  are surfaced to the operator (below), not treated as settled.
+- **Phase 0 Recon**: refreshed/extended recon.md against direct verification. Key sharper facts vs the
+  prior draft: (1) `ManageSignalSource` register **stores `credentials_ref` only — never writes a secret
+  and never calls config `SetConfig`** (`servicer.py:1123,1144`), so the encrypted-secret write must be
+  orchestrated by the consumer surface (agent `set_config` + config-ui BFF), NOT ingest. (2)
+  `validate_config_json` is **already fail-closed** (feature 062 `else`→reject, `signal_sources.py:224-228`)
+  — the `mcp_client` branch reuses the `simple_website` "requires non-empty `url`" shape (`:214`). (3) Health
+  writers already exist: `mark_source_fed` (clear last_error) / `mark_source_error` (set) / `derive_health_status`
+  (→down) (`signal_sources.py:60-77,13-24`) — REUSE, not net-new. (4) `_SS_CREDENTIAL_REQUIRED_TYPES`
+  (`servicer.py:54`) gains `mcp_client`. (5) The agent's `mcp>=2.0.0,<3` uses **non-standard module paths**
+  (`mcp.server.mcpserver`, `tools.py:46`), so its client-side API is unverified; ingest has neither `mcp`
+  nor `GetSecret`. (6) config-ui nav is `NAV_GROUPS`, not the inert `PLATFORM_SUBNAV` (fails.md 2026-08-26) —
+  moot here since `/sources` already exists (no new page/nav).
+- **No proto change — CONFIRMED**: `source_type` string (`ingest.proto:146`), `config_json` Struct (`:150`),
+  `credentials_ref` request field (`:194`), `GetSecret`/`SetConfig` already exist. `/sdd-spec` re-confirms.
+- **Migration number — CONFIRMED real next-free `011`** (trunk tip `010_add_signal_source_reliability_weight`;
+  `migrations/` verified). `.up` re-lists all 12 CHECK values; `.down` restores the 007 CHECK of 11.
+- **Phase 1 Grilling (2 rounds)**. Chosen approach: new `mcp_client` type; secret-first two-write (config
+  `SetConfig` is_secret=true, then `ManageSignalSource` with `credentials_ref`); fail-closed `mcp_client`
+  validator branch naming a missing `mcp_endpoint` (@AC-6); net-new scheduled loop mirroring
+  `fundsignal_loop.py` resolving the bearer via `GetSecret` (`x-internal-caller: ingest`), calling the tool
+  over MCP Streamable HTTP with `Authorization: Bearer` only, mapping a fixed response contract to
+  `ExternalSignal`s via a pure `BaseExtractor`, ingesting via `IngestSignal`, and recording health via
+  `mark_source_fed`/`mark_source_error`. Rejected: DB-column token, token-through-config_json, proto
+  `bearer_token`, agent-mediated pull, per-source mapping DSL, orphan-cleanup saga.
+- **Bearer secret storage/redaction**: written ONLY to encrypted config key `ingest.mcp_credential.<slug>`
+  (`is_secret=true`, AES-256-GCM, feature 147) via `SetConfig`; redacted at every config read edge; never in
+  `config_json` (a verbatim `ListSignalSources` read edge) or any ingest column; resolved only via `GetSecret`.
+- **Fail-closed validation**: missing `mcp_endpoint`/`mcp_tool` → `INVALID_ARGUMENT` naming the field;
+  `mcp_client` ∈ `_SS_CREDENTIAL_REQUIRED_TYPES` → register without `credentials_ref` rejected. Validator
+  branch + migration-011 CHECK land in the SAME PR (fails.md `signal-source-registry` lockstep trap).
+- **Constitution rules touched**: C-04 (no enum — string+CHECK), C-05, C-07/F-01, C-08/P-06, C-10/C-14,
+  F-04, F-06, F-07. **Floor breaches: none** (the unverified MCP client symbol is parked as an F-04-safe
+  spec-time gate, not asserted). Business rules: PRESERVE feature-147 @AC-1/1b/2/3/5/16 + feature-127
+  @AC-1/2/3/4 + feature-156 @AC-8; EXTEND feature-147 @AC-4; no CHANGE.
+- **OPEN THREADS (operator-confirm before /sdd-execute)**: (A) MCP client implementation pick — SDK client
+  vs httpx JSON-RPC fallback — `/sdd-spec` must import the installed `mcp>=2.0.0,<3` and pin it (feature-009
+  trap). (B) Bearer-required stance — confirm no unauthenticated `mcp_client` is intended. (C) Two-write
+  non-atomicity accepted (secret-first; harmless redacted orphan on register failure; no saga).
+- **Status**: per task constraints, this run wrote ONLY recon.md + design.md + this context block; it did
+  NOT flip status.md (spec-ready) or edit feature.md. A normal /sdd-design COMPLETION would flip
+  spec-ready → design-approved — left for the orchestrator. Next: /sdd-spec mcp-client-signal-source.
+
+## Session 2026-08-31 — design decisions resolved (operator defaults)
+
+- (B) Bearer token is MANDATORY for every `mcp_client` source — registration is rejected (fail-closed, INVALID_ARGUMENT) if no bearer secret is provided; no unauthenticated MCP endpoint is allowed. Design's recommended security posture.
+- (A) MCP client transport (SDK vs httpx JSON-RPC fallback) is pinned at `/sdd-spec` against the actual installed client; prefer the robust minimal JSON-RPC-over-Streamable-HTTP path to avoid the agent's non-standard `mcp.server.mcpserver` SDK-path fragility (feature-009 trap). F-04-safe gate at spec.
