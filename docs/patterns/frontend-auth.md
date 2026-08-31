@@ -17,7 +17,7 @@ This doc covers the **auth-specific** rules. For general Next.js patterns (baseP
 | `src/app/api/[...connect]/route.ts` | Node | BFF catch-all — `export GET/POST = dispatchConnect` |
 | `src/lib/connectTransport.ts` | **Browser** | `browserTransport` — connect-web to BFF (`baseUrl: '/<basePath>/api'`) |
 | `src/lib/browserClients.ts` | **Browser** | typed connect-web clients on `browserTransport` — the only client import allowed in Client Components |
-| `src/middleware.ts` | **Edge runtime** | Auth gate, redirects to `/auth/login`, near-expiry refresh |
+| `src/middleware.ts` | **Node.js runtime** (`config.runtime = 'nodejs'`, feature 128) | Auth gate, redirects to `/auth/login`, near-expiry refresh — calls `identity.ts` `refreshSession()` **in-process** |
 | `src/app/auth/login/page.tsx` | Browser | **Unified** login form, served at the domain root (outside every basePath). The former per-basePath `src/app/<segment>/login/page.tsx` files were removed by feature 019. |
 | `src/app/auth/oauth-login/page.tsx` | Browser | OAuth agent login form (separate from operator login); redirects the browser to the agent `redirect_uri` with `state` on success |
 | `src/app/api/auth/login/route.ts` | Node | **Single consolidated** `AuthenticateUser` → sets cookies (one set of `/api/auth/{login,logout,refresh}` for all basePaths) |
@@ -28,11 +28,22 @@ This doc covers the **auth-specific** rules. For general Next.js patterns (baseP
 
 ---
 
-## The Edge-runtime trap (read this first)
+## The Edge-runtime trap (HISTORICAL — superseded by feature 128)
 
-> **`src/lib/auth.ts` MUST NOT statically import anything that pulls in `@connectrpc/connect-node` or any other Node-only API.**
+> **As of feature 128, `middleware.ts` runs in the Node.js runtime** (`export const config = { runtime:
+> 'nodejs' }`, stable since Next.js 15.5.0). It imports `@/lib/identity` (`refreshSession()`) directly
+> and refreshes near-expiry tokens **in-process** — there is no Edge bundle for the middleware chunk, so
+> the constraint below is **no longer current**. The standalone Docker build (`output: 'standalone'`)
+> resolves `@connectrpc/connect-node` in the Node-runtime middleware chunk with no bundler error
+> (feature 128 `@AC-6`). The section is kept as a scar: it explains why the old self-`fetch()` loopback
+> (`buildInternalRefreshUrl`, PR #925) existed and why the `api/auth/refresh` matcher exclusion is still
+> kept (it now guards a live browser caller, `src/lib/authRedirect.ts`, not a middleware self-call).
 
-Why: `middleware.ts` statically imports `auth.ts`, and Next.js bundles `middleware.ts` for the **Edge runtime** (`next-on-edge`). The Edge bundler cannot resolve Node-only modules (`node:http`, `net`, `tls`, `child_process`, …). If it sees them, the entire app fails to build with:
+**Historically (the Edge era):** `src/lib/auth.ts` MUST NOT statically import anything that pulls in
+`@connectrpc/connect-node` or any other Node-only API — because `middleware.ts` statically imported
+`auth.ts` and Next.js bundled `middleware.ts` for the **Edge runtime** (`next-on-edge`). The Edge
+bundler could not resolve Node-only modules (`node:http`, `net`, `tls`, `child_process`, …). If it saw
+them, the entire app failed to build with:
 
 ```
 Module not found: Can't resolve 'node:http'
@@ -43,7 +54,8 @@ Import trace for requested module:
 > Build failed because of webpack errors
 ```
 
-This happened on PRs #409 and #410 in the Connect-client migration. The fix:
+This happened on PRs #409 and #410 in the Connect-client migration. The Edge-era fix was to split
+Edge-safe helpers from Node-only ones:
 
 | Stays in `lib/auth.ts` (Edge-safe) | Lives in `lib/identity.ts` (Node-only) |
 |---|---|
@@ -55,9 +67,12 @@ This happened on PRs #409 and #410 in the Connect-client migration. The fix:
 | `rolesToAccessScope(roles)` | |
 | `generateTraceId()` | |
 
-Only `lib/auth.ts` may be imported from `middleware.ts`. `lib/identity.ts` is only ever imported from `app/api/auth/refresh/route.ts` and `app/api/auth/logout/route.ts` (both Node-runtime routes).
-
-If you add **any new import to `lib/auth.ts`**, ask: does this transitively pull in `@connectrpc/connect-node`, `node:*`, `fs`, `net`, `http`, etc.? If yes, it belongs in a separate Node-only file.
+**No longer a constraint (feature 128):** the Edge era's rule "only `lib/auth.ts` may be imported from
+`middleware.ts`" no longer holds — the Node.js-runtime `middleware.ts` imports `lib/identity.ts`
+(`refreshSession()`) directly, alongside `app/api/auth/refresh/route.ts` and
+`app/api/auth/logout/route.ts`. Keeping `lib/auth.ts` free of heavy Node dependencies can remain a
+sensible preference (it stays a small, fast, widely-imported module), but it is **no longer an
+Edge-bundling hard requirement**, and a new Node-only import in `middleware.ts` is fine.
 
 ---
 
@@ -91,9 +106,9 @@ export function generateTraceId(): string;                    // crypto.randomUU
 
 ```ts
 /**
- * Server-only identity helpers. NEVER import this from middleware.ts
- * or any module middleware.ts transitively imports — it pulls in
- * @connectrpc/connect-node which uses Node-only APIs.
+ * Server-only (Node.js) identity helpers. These wrap the Node-only Connect client
+ * (@connectrpc/connect-node). Imported by the Node.js-runtime middleware.ts
+ * (refreshSession) and the auth route handlers.
  */
 import { identityClient } from '@/lib/connectClients';
 import type { JwtClaims } from '@/lib/auth';
@@ -109,7 +124,7 @@ export async function revokeToken(token: string): Promise<void>;
 - Protect all routes **except** `/auth/login`, `/auth/oauth-login`, `/api/auth/login`, `/api/health`, `/health`, and Next.js asset paths.
 - **Matcher must include `/` explicitly** — the regex `/((?!...).*)` does not match the bare root. See `docs/patterns/nextjs-frontends.md` for the canonical matcher.
 - If `getSessionFromRequest` returns claims → allow request, inject `x-trace-id` upstream.
-- If access token is within `ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS` of expiry → call `/api/auth/refresh` via `fetch` (do NOT statically import `refreshSession` — that would re-trigger the Edge trap).
+- If access token is within `ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS` of expiry → read the `refresh_token` cookie and call `refreshSession()` from `@/lib/identity` **in-process** (Node.js runtime, feature 128), then set the rotated cookies on the returned `NextResponse` via `setSessionCookies`; on a null result, redirect to `/auth/login` and `clearSessionCookies`. Do **not** self-`fetch` `/api/auth/refresh` — that loopback (`buildInternalRefreshUrl`, PR #925) was removed by feature 128.
 - Otherwise → redirect to `/auth/login?redirect=<encoded pathname>`. The redirect target is the **unified** login page at the domain root, so build it with `new URL('/auth/login', req.url)` — do **not** clone `req.nextUrl` and set `pathname`, because `req.nextUrl` carries the basePath and would yield `/trader/auth/login`.
 
 ---
