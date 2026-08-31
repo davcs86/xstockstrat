@@ -256,7 +256,7 @@ Then read both: the `.up` `ADD COLUMN fees_total` + `CREATE INDEX idx_pnl_positi
 
 ### Step 5 — service: trading — `Fees` on `BrokerOrder` + additive `"fees"` key on the fill events
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/broker.go` — modify (add `Fees` field)
@@ -291,7 +291,7 @@ Then read both: the `.up` `ADD COLUMN fees_total` + `CREATE INDEX idx_pnl_positi
 
 ### Step 6 — test: trading fill events carry the additive `fees` key
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_helpers_test.go` — modify (add fee-stamp cases), or a new `trading_fees_test.go` — create
