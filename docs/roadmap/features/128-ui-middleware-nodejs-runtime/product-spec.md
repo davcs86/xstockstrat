@@ -41,10 +41,14 @@ the browser receives updated `Set-Cookie` headers from the refresh call — same
 FR-4. On failed refresh (invalid/expired refresh token), the middleware clears session cookies
 (`clearSessionCookies`) and redirects to `/auth/login`, matching current behavior.
 
-FR-5. `PR #925`'s loopback workaround (`buildInternalRefreshUrl()` in `auth.ts`, the `fetch()` call
-and the `api/auth/refresh` matcher exclusion in `middleware.ts`) is removed — the `/api/auth/refresh`
-Node route itself may stay (browsers never call it directly today, but removing it is out of scope
-here; see Out of Scope) or be deleted if this feature's design finds it now fully redundant.
+FR-5. `PR #925`'s in-middleware loopback workaround is removed: `buildInternalRefreshUrl()` in
+`auth.ts` and the middleware's self-`fetch()` to `/api/auth/refresh` are deleted (the middleware now
+refreshes in-process via `refreshSession()`, FR-2). The `/api/auth/refresh` **matcher exclusion in
+`middleware.ts` is KEPT**, and the `/api/auth/refresh` Node route is **retained** — that route still
+has a live non-middleware caller (`src/lib/authRedirect.ts:40`), so removing the exclusion would
+regress feature 153's `@AC-5`/`@AC-6` guarantees (Constitution **C-16**). Whether the route can ever
+be fully retired is a Design-Phase Investigation, not done here. (Design correction 2026-08-31: the
+original wording removed the exclusion — that was stale; see `design.md`.)
 
 FR-6. `docs/patterns/frontend-auth.md` and
 `services/xstockstrat-ui/CLAUDE.md` are updated in the same feature: the documented hard rule "Only

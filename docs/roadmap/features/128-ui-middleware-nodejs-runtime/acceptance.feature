@@ -46,7 +46,7 @@ Feature: ui-middleware-nodejs-runtime
     When src/lib/auth.ts and src/middleware.ts are inspected
     Then buildInternalRefreshUrl no longer exists in src/lib/auth.ts
     And no fetch() to /api/auth/refresh remains in src/middleware.ts
-    And the middleware matcher no longer excludes the "api/auth/refresh" path
+    And the middleware matcher still excludes the "api/auth/refresh" path (the route retains a live caller in src/lib/authRedirect.ts)
 
   @AC-6 @FR-1 @FR-7
   Scenario: Node.js-runtime middleware imports connect-node-backed code and the standalone build succeeds

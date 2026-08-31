@@ -13,6 +13,7 @@
 | 2026-08-11 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-31 | `draft` (regenerated) | /sdd-story (overwrite) | product-spec.md regenerated to current template; acceptance.feature authored |
 | 2026-08-31 | `draft` → `spec-ready` | /sdd-review | Product spec approved; all review blockers addressed |
+| 2026-08-31 | `spec-ready` → `design-approved` | /sdd-design | Design debated (full) and approved; recon.md + design.md written; FR-5/AC-5 corrected (keep matcher exclusion) |
 
 ---
 
@@ -40,4 +41,4 @@ the self-referential HTTP loopback to `/api/auth/refresh` landed as a hotfix in 
 
 ## Next Action
 
-`/sdd-review ui-middleware-nodejs-runtime product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec ui-middleware-nodejs-runtime` — generate the implementation spec

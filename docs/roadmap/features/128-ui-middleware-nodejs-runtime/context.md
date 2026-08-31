@@ -93,3 +93,34 @@ warnings; applied fixes (docs-only, still `draft`, number/slug unchanged):
 
 - Product spec approved: `draft` → `spec-ready`. All `/sdd-review` blockers and warnings were addressed (see the sdd-review-fixes session above).
 - NOTE: the confirming re-review pass was interrupted by a session usage/rate limit; fixes were applied against each reviewer's explicit findings. For 021 specifically, the orchestrator manually caught and fixed a residual field-name error (`service_origin` → `source_service`; the ledger `Event` has no `user_id` field). A quick re-review can re-confirm on resume.
+
+## Session 2026-08-31 — sdd-design (FULL)
+
+- Wrote `recon.md` + `design.md` (grounded recon + 2-round adversarial debate). Chosen approach:
+  flip `src/middleware.ts` to `runtime: 'nodejs'`, call `refreshSession()` in-process, set/clear
+  cookies on the `NextResponse`, remove `buildInternalRefreshUrl()` + the self-`fetch()`.
+- **Feasibility verdict (load-bearing item):** Node middleware runtime lifts the Edge-bundling
+  constraint IN PRINCIPLE — Next 15.5.0 stabilized `config.runtime='nodejs'` (Context7
+  `/vercel/next.js`; pinned `^15.5.21` at `package.json:48`), and moving off Edge removes the exact
+  documented `Module not found: node:http` failure (`frontend-auth.md:35`). RESIDUAL and NOT
+  doc-provable: whether `serverExternalPackages`/`.nft.json` covers the Node-runtime middleware chunk
+  under `output:'standalone'`. Must be proven by a real `docker build` (feature `@AC-6`); a failure
+  blocks the feature (F-04/P-03). `insights.md:777-780` treated as a hypothesis to disprove, not a given.
+- **DECISION FOR OPERATOR (deviation from FR-5/AC-5):** the `api/auth/refresh` matcher exclusion must
+  be **KEPT**, not removed. FR-5's premise "browsers never call it directly today" is factually stale —
+  `src/lib/authRedirect.ts:40` is a live browser caller (feature-153). Removing the exclusion would let
+  middleware redirect the browser's expired-token refresh POST to `/auth/login`, regressing the durable
+  guarantees `@AC-5`/`@AC-6` in `services/xstockstrat-ui/acceptance/ui-auth-improvements.feature` (C-16).
+  `@AC-*` are append-only (C-15), so the spec owner must correct FR-5 + AC-5's third clause. Not yet
+  signed off — flagged as Open Risk 2 in `design.md`.
+- `app/api/auth/refresh/route.ts` is **KEPT** (not redundant — authRedirect.ts still calls it).
+- Noted FR-3 wording caveat: today's middleware discards `refreshRes` (`middleware.ts:39-49`) and does
+  not forward the rotated `Set-Cookie`; the new in-process design does — a strict improvement, so
+  "observably identical" is slightly imprecise (Open Risk 3).
+- No Floor breach; status advisory-flip to `design-approved` is pending the orchestrator's gate and the
+  two operator confirmations above.
+
+## Session 2026-08-31 — design correction (FR-5 / AC-5)
+
+- The full-mode design's adversarial pass found the regenerated FR-5/AC-5 were stale: they removed the `/api/auth/refresh` matcher exclusion, but that route still has a live non-middleware caller (`src/lib/authRedirect.ts:40`), so removing the exclusion would regress feature 153's `@AC-5`/`@AC-6` (C-16). Corrected FR-5 + AC-5 to KEEP the matcher exclusion and retain the route; only `buildInternalRefreshUrl()` + the middleware self-fetch are removed.
+- Feasibility is doc-supported (Node middleware stable in Next 15.5) but the `output:'standalone'` bundling of `@connectrpc/connect-node` in the Node middleware chunk MUST be proven by a real `docker build` (AC-6); a build failure blocks the feature (F-04/P-03).
