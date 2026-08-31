@@ -169,3 +169,28 @@ execution: Step 6 audit idempotency_key must be stable (addressed at Step 6); St
 - `./scripts/buf-gen.sh` in the codegen container. 12 gen files changed, **all identity** (Go pb/grpc/
   connect, Python pb2/grpc, TS ts-proto + connect + compiled dist), 0 non-identity — additive, no drift.
 - TDD N/A. Files: `packages/proto/gen/**`.
+
+### Step 3 — service: port the config admin gate into identity authz.ts [done]
+- `authz.ts`: added `import { Metadata, status }`, `ADMIN_SCOPE=0x04`, `HEADER_ACCESS_SCOPE`,
+  `hasAdminAccessScope` (fails closed), `ADMIN_SCOPE_ERROR` (PERMISSION_DENIED "admin scope required") —
+  ported verbatim from config's authz. Existing `first`/`userIdFrom`/`HEADER_USER_ID` unchanged.
+- TDD paired with Step 5. Files: `services/xstockstrat-identity/src/grpc/authz.ts`.
+
+### Step 4 — service: six admin RPCs in the identity servicer [done]
+- `identityServiceImpl.ts`: Role enum↔DB-string maps (`rolesToStrings`/`stringsToRoles`), `toUserView`
+  (password-free), a shared `adminGate` (metadata + ADMIN bit, AC-7), and `createUser` (bcrypt.hash(10),
+  23505→ALREADY_EXISTS), `listUsers`, `getUser`, `updatePassword` (hash then revoke target's refresh
+  tokens, empty body), `setUserRoles`/`setUserActive` (atomic last-admin guard via a conditional UPDATE
+  + existence check → FAILED_PRECONDITION "cannot remove last admin"; deactivate also revokes tokens).
+  No audit calls here (Step 6).
+- TDD (P-06): red 15/48 fail against pre-Step-3/4 dist (methods absent) → green 48/48 after. Real gate
+  = compiled-dist run (configured strip-types runner is vacuous — see Deviation Log). lint 0 errors.
+- Files: `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts`.
+
+### Step 5 — test: identity admin-RPC unit tests (gate + servicer) [done]
+- Added a route-by-SQL capturing pool + `adminCall`/`nonAdminCall` and cases for AC-7 (6 methods denied,
+  no query), AC-1/AC-10 (password-free views), AC-2 (bcrypt hash param, ALREADY_EXISTS), AC-3 (password
+  update then revoke, in order; empty body), AC-4 (Role enum→string mapping), AC-5/AC-6 (deactivate
+  revokes / reactivate doesn't), AC-11 (last-admin FAILED_PRECONDITION for both setUserActive/setUserRoles).
+  Inline literals single-consumer (C-13). Files:
+  `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts`.

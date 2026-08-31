@@ -158,7 +158,7 @@ Confirm the only changed files under `packages/proto/gen/` are the identity stub
 
 ### Step 3 — service: Port the config admin gate into identity `authz.ts`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/authz.ts` — modify
@@ -196,7 +196,7 @@ grep -n "hasAdminAccessScope\|ADMIN_SCOPE_ERROR\|ADMIN_SCOPE = 0x04" services/xs
 
 ### Step 4 — service: Implement the six admin RPCs in the identity servicer
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts` — modify
@@ -254,7 +254,7 @@ grep -n "cannot remove last admin\|EXISTS (SELECT 1 FROM identity.users\|bcrypt.
 
 ### Step 5 — test: Identity admin-RPC unit tests (authz gate + servicer)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts` — modify (add cases)
@@ -505,4 +505,17 @@ grep -n "Users\|User view" services/xstockstrat-ui/e2e/fixtures/INVENTORY.md
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Steps 5/7 — identity unit suite runs vacuously under the configured runner (same pre-existing defect as 021)
+- **What**: `IdentityServiceImpl` uses TypeScript parameter properties, so `node --experimental-strip-types
+  --test` (the `test:coverage` runner) fails to load it and the lazy-import guard swallows it → `All files |
+  0%`, exit 0. Same trap as `fails.md` 2026-08-31 (feature 021) / 2026-07-29 (074); pre-existing, platform-wide.
+- **Substitution**: compiled with the service's `tsc` (`pnpm run build`) and ran
+  `node --test dist/__tests__/identityServiceImpl.test.js` for a genuine red→green: with Steps 3–4 stashed the
+  15 new admin cases failed (methods absent) / 33 existing passed; after restoring, **48/48 passed**.
+- **Disposition**: CI-equivalent+ (real execution). Out of 043's scope (platform runner change). See the 021
+  `fails.md` entry.
+
+### Step 10 — Playwright browser-build mismatch + local dev warmup timeout (same as 021)
+- Same sandbox constraints as feature 021 Step 13 (pinned browser build 1234 vs installed 1194; `pnpm dev`
+  cold-compile > 10s). Worked around identically: `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/
+  chromium-1194/chrome-linux/chrome` + `--timeout=120000 --workers=1`. CI runs the authoritative e2e.
