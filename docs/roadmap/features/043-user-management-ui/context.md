@@ -194,3 +194,24 @@ execution: Step 6 audit idempotency_key must be stable (addressed at Step 6); St
   revokes / reactivate doesn't), AC-11 (last-admin FAILED_PRECONDITION for both setUserActive/setUserRoles).
   Inline literals single-consumer (C-13). Files:
   `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts`.
+
+### Step 6 — service: identity → ledger audit client [done]
+- Created `src/grpc/ledgerAudit.ts`: `createLedgerAudit()` builds a grpc-js `LedgerServiceClient`
+  (insecure, `LEDGER_ENDPOINT`), `append()` forwards x-user-id/x-access-scope/x-trace-id (C-03),
+  sets `source_service='xstockstrat-identity'`, `stream_key='user:<id>'`, `correlation_id=trace`,
+  payload = the explicit safe allow-list (never the request), and is best-effort (swallows errors).
+  **Addressed impl-review ⚠**: `idempotency_key` is `${eventType}:${targetUserId}:${traceId}` when a
+  trace id is present (stable → dedups retries), else empty (fire-once) — NOT `Date.now()`.
+- `identityServiceImpl.ts`: optional 3rd constructor arg (`audit`, default NOOP); a resilient
+  `auditSafe` wrapper; emits `identity.user.{created,password_updated,roles_updated,activated,
+  deactivated}` after each successful mutation with a secret-free payload (`updatePassword` UPDATE
+  gained `RETURNING email`). `index.ts` constructs + injects the real client.
+- TDD paired with Step 7. Files: `ledgerAudit.ts`, `identityServiceImpl.ts`, `index.ts`.
+
+### Step 7 — test: identity audit-event unit test [done]
+- Added audit cases: each mutation emits its event once with `acting_admin_user_id` (from x-user-id) +
+  `target_user_id` and NO password/newPassword/passwordHash key (AC-8/AC-10); reads emit nothing;
+  best-effort proven — a throwing audit sink still returns mutation success (design R5). Also updated
+  the Step-5 updatePassword mock to return `rows:[{email}]` (Step 6 added `RETURNING email`).
+- TDD (P-06): red 3 audit tests fail with the Step-6 wiring stashed → green 52/52 after. Files:
+  `identityServiceImpl.test.ts`.

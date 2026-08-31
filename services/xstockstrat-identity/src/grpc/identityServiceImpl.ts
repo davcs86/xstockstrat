@@ -6,6 +6,7 @@ import * as bcrypt from 'bcrypt';
 import { ConfigWatcher } from '../services/configWatcher';
 import { getLogger } from '../services/logger';
 import { userIdFrom, hasAdminAccessScope, ADMIN_SCOPE_ERROR } from './authz';
+import { LedgerAudit, NOOP_LEDGER_AUDIT } from './ledgerAudit';
 
 const log = getLogger('identity:impl');
 
@@ -48,6 +49,9 @@ export class IdentityServiceImpl {
   constructor(
     private readonly pool: Pool,
     private readonly config: ConfigWatcher,
+    // Best-effort ledger audit sink (feature 043). Optional so existing tests constructing
+    // (pool, config) still work; production injects the real client in index.ts.
+    private readonly audit: LedgerAudit = NOOP_LEDGER_AUDIT,
   ) {}
 
   private get jwtSecret(): string {
@@ -637,6 +641,24 @@ export class IdentityServiceImpl {
   // ADMIN access-scope bit; passwords are write-only (never returned — AC-10). Audit emits are
   // added in Step 6 after each successful mutation (best-effort, never rolled back).
 
+  /**
+   * Best-effort audit emit (design R5): a throwing/rejecting audit sink is logged and swallowed here
+   * so a ledger outage never surfaces as a mutation failure. Double-guards the LedgerAudit contract
+   * (which also swallows internally) so even a misbehaving sink can't roll back a user change.
+   */
+  private async auditSafe(
+    eventType: string,
+    targetUserId: string,
+    metadata: any,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await this.audit.append(eventType, targetUserId, metadata, payload);
+    } catch (err: any) {
+      log.error('audit emit failed (best-effort)', { eventType, error: err?.message });
+    }
+  }
+
   /** Guard shared by all six admin RPCs: metadata present + ADMIN bit. Returns false + calls back on denial. */
   private adminGate(call: any, callback: any): boolean {
     if (!call.metadata?.get) {
@@ -664,7 +686,13 @@ export class IdentityServiceImpl {
          RETURNING user_id, email, roles, is_active, created_at`,
         [email, hash, roleStrings],
       );
-      callback(null, { user: toUserView(result.rows[0]) });
+      const row = result.rows[0];
+      await this.auditSafe('identity.user.created', row.user_id, call.metadata, {
+        acting_admin_user_id: userIdFrom(call.metadata),
+        target_user_id: row.user_id,
+        target_email: row.email,
+      });
+      callback(null, { user: toUserView(row) });
     } catch (err: any) {
       if (err.code === '23505') return callback({ code: 6, message: 'user already exists' });
       log.error('createUser failed', { error: err.message });
@@ -711,7 +739,7 @@ export class IdentityServiceImpl {
     try {
       const hash = await bcrypt.hash(newPassword, 10);
       const result = await this.pool.query(
-        `UPDATE identity.users SET password_hash = $1, updated_at = NOW() WHERE user_id = $2`,
+        `UPDATE identity.users SET password_hash = $1, updated_at = NOW() WHERE user_id = $2 RETURNING email`,
         [hash, userId],
       );
       if (result.rowCount === 0) return callback({ code: 5, message: 'user not found' });
@@ -721,6 +749,11 @@ export class IdentityServiceImpl {
         `UPDATE identity.refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL`,
         [userId],
       );
+      await this.auditSafe('identity.user.password_updated', userId, call.metadata, {
+        acting_admin_user_id: userIdFrom(call.metadata),
+        target_user_id: userId,
+        target_email: result.rows[0]?.email,
+      });
       callback(null, {}); // empty — no password/hash echoed (AC-10)
     } catch (err: any) {
       log.error('updatePassword failed', { error: err.message });
@@ -757,7 +790,14 @@ export class IdentityServiceImpl {
         if (exists.rowCount === 0) return callback({ code: 5, message: 'user not found' });
         return callback({ code: 9, message: 'cannot remove last admin' });
       }
-      callback(null, { user: toUserView(result.rows[0]) });
+      const row = result.rows[0];
+      await this.auditSafe('identity.user.roles_updated', userId, call.metadata, {
+        acting_admin_user_id: userIdFrom(call.metadata),
+        target_user_id: userId,
+        target_email: row.email,
+        roles: roleStrings,
+      });
+      callback(null, { user: toUserView(row) });
     } catch (err: any) {
       log.error('setUserRoles failed', { error: err.message });
       callback({ code: 13, message: err.message });
@@ -799,7 +839,19 @@ export class IdentityServiceImpl {
           [userId],
         );
       }
-      callback(null, { user: toUserView(result.rows[0]) });
+      const row = result.rows[0];
+      await this.auditSafe(
+        active ? 'identity.user.activated' : 'identity.user.deactivated',
+        userId,
+        call.metadata,
+        {
+          acting_admin_user_id: userIdFrom(call.metadata),
+          target_user_id: userId,
+          target_email: row.email,
+          active,
+        },
+      );
+      callback(null, { user: toUserView(row) });
     } catch (err: any) {
       log.error('setUserActive failed', { error: err.message });
       callback({ code: 13, message: err.message });

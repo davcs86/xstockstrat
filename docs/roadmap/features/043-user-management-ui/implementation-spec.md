@@ -295,7 +295,7 @@ grep -n "admin@localhost\|test-user" services/xstockstrat-identity/src/__tests__
 
 ### Step 6 — service: Identity → ledger audit client (new plumbing)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/ledgerAudit.ts` — create
@@ -342,7 +342,7 @@ Confirm the outbound call forwards the three propagation headers (C-03) and the 
 
 ### Step 7 — test: Identity audit-event unit test
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts` — modify (add audit cases) or `src/__tests__/ledgerAudit.test.ts` — create
