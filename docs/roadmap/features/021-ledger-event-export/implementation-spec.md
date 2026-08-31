@@ -1,6 +1,6 @@
 # Implementation Spec: ledger-event-export
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-08-31
 **Feature**: `docs/roadmap/features/021-ledger-event-export/feature.md`
 **Total Steps**: 13
@@ -414,7 +414,7 @@ cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/ -run U
 
 ### Step 11 — service: `/trader` BFF export route (NDJSON/CSV streaming)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/api/ledger/export/route.ts` — create
@@ -453,7 +453,7 @@ grep -n "HEADER_USER_ID\|HEADER_ACCESS_SCOPE\|HEADER_TRACE_ID" src/app/trader/ap
 
 ### Step 12 — service: "Export events" button on the `/trader` Book page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/portfolio/page.tsx` — modify
@@ -484,7 +484,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 13 — test: `/trader` export e2e (Playwright)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/ledger-export.spec.ts` — create

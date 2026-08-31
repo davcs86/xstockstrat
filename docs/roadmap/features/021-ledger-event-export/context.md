@@ -246,3 +246,35 @@ Unattended run (auto-proceed through checkpoints; pause only on real blockers).
   inline. Name contains "UserId" for the `-run UserId` filter.
 - TDD as above. Files: `services/xstockstrat-trading/internal/service/trading_ledger_userid_test.go`.
   Deviations: none beyond the shared golangci-lint fallback.
+
+### Step 11 — service: /trader BFF export route (NDJSON/CSV streaming) [done]
+- Created `src/app/trader/api/ledger/export/route.ts`: session gate (401 pre-ledger, AC-6); builds
+  the three propagation headers (x-user-id/x-access-scope/x-trace-id) inline (no HandlerContext in a
+  raw route); calls `ledgerClient.exportEvents({start,end,eventType},{headers})`, pulls the first page
+  BEFORE returning so the config-gate/window errors map pre-stream; wraps the rest in a ReadableStream
+  (NDJSON default, `?format=csv`). Explicit error map (NOT connectCodeToHttp): FailedPrecondition→403
+  (AC-10), InvalidArgument→400+message (AC-5), Unauthenticated→401, else 500. protobuf-es v2: payload
+  is a plain JsonObject, occurredAt via `timestampDate`.
+- TDD: behavior proven by Step 13 e2e (no unit threshold on ui). tsc --noEmit clean; lint clean.
+- Files: `services/xstockstrat-ui/src/app/trader/api/ledger/export/route.ts`.
+
+### Step 12 — service: "Export events" button on the /trader Book page [done]
+- `trader/portfolio/page.tsx`: added an "Export events" Button (ui/button primitive, accessible name)
+  in the header; `onExportEvents` defaults to last-90-days + all types (AC-9), `fetch()`es the route
+  (so the session-cookie refresh interceptor applies), then a transient `<a download>` presents the
+  save dialog. No new route → no nav registration.
+- TDD: proven by Step 13 e2e. lint clean (only the pre-existing `accountName` useMemo warning).
+- Files: `services/xstockstrat-ui/src/app/trader/portfolio/page.tsx`.
+
+### Step 13 — test: /trader export e2e (Playwright) [done]
+- Created `e2e/fixtures/ledgerEvents.ts` (5 rows across the 5 types, ascending sequence, TEST_USER_ID)
+  + INVENTORY.md row (C-12); added a `LedgerService.exportEvents` async-generator handler to
+  `e2e/mock-backend.ts` (honors event_type subset + >365d window→InvalidArgument + the
+  EXPORT_DISABLED_SENTINEL→FailedPrecondition); wrote `e2e/trader/ledger-export.spec.ts` (AC-1 NDJSON
+  order, AC-2 CSV header/rows, AC-3/4 type filter, AC-5 400+message, AC-6 401/redirect, AC-9 button
+  download last-90d/all-types, AC-10 403).
+- TDD (P-06): the route + button are new files, so pre-Step-11/12 AC-1 would 404 and AC-9 would find
+  no button (structural red); GREEN = a real Playwright run of the full spec, **8/8 passed** (warmup
+  pre-warmed 22/22 SSR routes). See Deviation Log for the browser-build/timeout workaround.
+- Files: `e2e/trader/ledger-export.spec.ts`, `e2e/mock-backend.ts`, `e2e/fixtures/ledgerEvents.ts`,
+  `e2e/fixtures/INVENTORY.md`. Deviations: Playwright infra (Deviation Log).

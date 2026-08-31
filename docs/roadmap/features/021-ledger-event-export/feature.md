@@ -16,6 +16,7 @@
 | 2026-08-31 | `spec-ready` → `design-approved` | /sdd-design | Design debated (full) and approved; recon.md + design.md written |
 | 2026-08-31 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (13 steps) |
 | 2026-08-31 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1–2 done — additive `ExportEvents` RPC + `user_id` fields; stubs regenerated (buf breaking clean) |
+| 2026-08-31 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done — ledger ExportEvents + per-user stamp + `/trader` BFF route/button; e2e 8/8 green |
 
 ---
 
