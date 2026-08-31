@@ -70,3 +70,35 @@ All FRs, `@FR-*`/`@AC-*` tags, and FR→AC coverage preserved.
 
 - Product spec approved: `draft` → `spec-ready`. All `/sdd-review` blockers and warnings were addressed (see the sdd-review-fixes session above).
 - NOTE: the confirming re-review pass was interrupted by a session usage/rate limit; fixes were applied against each reviewer's explicit findings. For 021 specifically, the orchestrator manually caught and fixed a residual field-name error (`service_origin` → `source_service`; the ledger `Event` has no `user_id` field). A quick re-review can re-confirm on resume.
+
+## Session 2026-08-31 — sdd-design
+
+- Phase 0 Recon: wrote `recon.md` (services: analysis, ui; ingest read-only; trading unchanged). Key
+  reuse patterns: the existing max-raw-conviction reducer `c["_best_sig_conv"]`
+  (`servicer.py:3140,3275-3276`); feature 095's additive-`Opportunity` enrichment pattern (explicit-
+  presence, omit-not-fabricate); `OrderForm`'s `allowOfflineRecord`-style explicit scoped prop.
+- **Confirmed field number:** `analysis.Opportunity` max today is `muted = 12`; feature 095
+  (design-approved) pre-assigns 13-18 (`095/design.md:47-52`), so **110's additive field lands at 19**
+  (`signal_confidence`). Re-derive next-free from the merged tree at `/sdd-spec` (095 lands first;
+  merge-order "110 blocked by 095").
+- Phase 1 Grilling: 2 rounds (full). **Chosen approach:** new `optional double signal_confidence = 19`
+  on `Opportunity`, populated from the raw max-conviction reducer (multi-signal rule = max raw
+  `ExternalSignal.conviction` among the symbol's active signals), consumed by the **live** signal-detail
+  ticket (`OrderForm` @ `trader/positions/[symbol]/page.tsx:342`) via a scoped `signalConfidence` prop
+  that enables blank-qty→0 + attaches `confidence`, gated on a finite in-[0,1] value; plain `/trader`
+  forms unchanged. **Rejected:** the ordinal `conviction=3` and the decayed `signal_axis` as the source
+  (conviction-vs-ordinal-vs-signal_axis trap, `fails.md` 2026-08-05); a targeted read RPC (C-10(b)
+  second source); wiring the orphaned `SignalOrderTicket.tsx` (C-14 miss — feature 125 superseded it).
+- **Recon discrepancy flagged:** product-spec FR-2/FR-3 name `SignalOrderTicket.tsx`, which is orphaned
+  dead code (imported by no page; `insights/market/[symbol]` is a redirect stub since feature 125). The
+  real consumer surface is `OrderForm` at `trader/positions/[symbol]/page.tsx:342` — design retargets
+  there (C-14).
+- **NaN-qty guard:** blank qty must be coerced to `0` (not `parseFloat('')`=`NaN`; Go's `NaN<=0` is
+  false, so NaN would bypass `qty<=0` sizing and reach the broker).
+- Constitution rules touched: C-01/F-04, C-04, C-09/P-06, C-10(b), C-14, C-15/C-16, C-17, C-07/F-01,
+  F-07, P-03. Floor breaches: none (all honored on the chosen no-migration path).
+- **Open operator confirms:** OR-1 (delete the orphaned `SignalOrderTicket.tsx` in-scope, or leave it?),
+  OR-2 (field name `signal_confidence` vs `confidence`), OR-3 (JSONB-ride vs new column — `/sdd-spec`),
+  OR-4 (095 lands first; re-derive field 19 from merged tree).
+- Status: `spec-ready` → design-approved (status flip left to the orchestrator; this subagent did not
+  modify `status.md`).
