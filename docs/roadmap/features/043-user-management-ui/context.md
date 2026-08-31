@@ -151,3 +151,118 @@ must be confirmed by the operator before/at `/sdd-spec`. Status intentionally NO
   - Step 2: `packages/proto/gen/**` wildcard Files — accepted proto-gen convention, bounded by the freshness check. — [ ] note only
   - Notes: last-admin guard is atomic per-row but two concurrent demotions of DIFFERENT admins can write-skew to zero under READ COMMITTED (design-accepted R4; needs SERIALIZABLE/advisory lock only if strict >=1 admin required); Role enum interim window safe (brand-new enum, no pre-existing exhaustive consumer). — [ ] note only
 - Overlap findings: batch scan CLEAN; 043 shares navGroups.tsx / PlatformHeader.tsx with 029/031 (rebase-only).
+
+## Session 2026-08-31 — sdd-execute (sequential)
+
+Executed on `feature/user-management-ui`, off clean `main-dev`. Unattended run. Reused the pinned
+codegen container built for feature 021 (buf 1.72.0 + plugins). Carried the two impl-review ⚠ into
+execution: Step 6 audit idempotency_key must be stable (addressed at Step 6); Step 9 drops the dead
+`PLATFORM_SUBNAV.config` edit (addressed at Step 9 — nav is `NAV_GROUPS`-only).
+
+### Step 1 — proto: 6 admin RPCs + Role enum + password-free User view [done]
+- `identity.proto`: added `CreateUser/ListUsers/GetUser/UpdatePassword/SetUserRoles/SetUserActive`
+  RPCs; closed `Role` enum (UNSPECIFIED/ADMIN/TRADER/VIEWER); `User` view (no password/hash); the six
+  request/response pairs (roles as `Role` enum on write inputs). TokenClaims untouched (JWT shape).
+- TDD N/A. `buf lint` OK; `buf breaking` against main-dev clean (additive). Files: `identity.proto`.
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- `./scripts/buf-gen.sh` in the codegen container. 12 gen files changed, **all identity** (Go pb/grpc/
+  connect, Python pb2/grpc, TS ts-proto + connect + compiled dist), 0 non-identity — additive, no drift.
+- TDD N/A. Files: `packages/proto/gen/**`.
+
+### Step 3 — service: port the config admin gate into identity authz.ts [done]
+- `authz.ts`: added `import { Metadata, status }`, `ADMIN_SCOPE=0x04`, `HEADER_ACCESS_SCOPE`,
+  `hasAdminAccessScope` (fails closed), `ADMIN_SCOPE_ERROR` (PERMISSION_DENIED "admin scope required") —
+  ported verbatim from config's authz. Existing `first`/`userIdFrom`/`HEADER_USER_ID` unchanged.
+- TDD paired with Step 5. Files: `services/xstockstrat-identity/src/grpc/authz.ts`.
+
+### Step 4 — service: six admin RPCs in the identity servicer [done]
+- `identityServiceImpl.ts`: Role enum↔DB-string maps (`rolesToStrings`/`stringsToRoles`), `toUserView`
+  (password-free), a shared `adminGate` (metadata + ADMIN bit, AC-7), and `createUser` (bcrypt.hash(10),
+  23505→ALREADY_EXISTS), `listUsers`, `getUser`, `updatePassword` (hash then revoke target's refresh
+  tokens, empty body), `setUserRoles`/`setUserActive` (atomic last-admin guard via a conditional UPDATE
+  + existence check → FAILED_PRECONDITION "cannot remove last admin"; deactivate also revokes tokens).
+  No audit calls here (Step 6).
+- TDD (P-06): red 15/48 fail against pre-Step-3/4 dist (methods absent) → green 48/48 after. Real gate
+  = compiled-dist run (configured strip-types runner is vacuous — see Deviation Log). lint 0 errors.
+- Files: `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts`.
+
+### Step 5 — test: identity admin-RPC unit tests (gate + servicer) [done]
+- Added a route-by-SQL capturing pool + `adminCall`/`nonAdminCall` and cases for AC-7 (6 methods denied,
+  no query), AC-1/AC-10 (password-free views), AC-2 (bcrypt hash param, ALREADY_EXISTS), AC-3 (password
+  update then revoke, in order; empty body), AC-4 (Role enum→string mapping), AC-5/AC-6 (deactivate
+  revokes / reactivate doesn't), AC-11 (last-admin FAILED_PRECONDITION for both setUserActive/setUserRoles).
+  Inline literals single-consumer (C-13). Files:
+  `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts`.
+
+### Step 6 — service: identity → ledger audit client [done]
+- Created `src/grpc/ledgerAudit.ts`: `createLedgerAudit()` builds a grpc-js `LedgerServiceClient`
+  (insecure, `LEDGER_ENDPOINT`), `append()` forwards x-user-id/x-access-scope/x-trace-id (C-03),
+  sets `source_service='xstockstrat-identity'`, `stream_key='user:<id>'`, `correlation_id=trace`,
+  payload = the explicit safe allow-list (never the request), and is best-effort (swallows errors).
+  **Addressed impl-review ⚠**: `idempotency_key` is `${eventType}:${targetUserId}:${traceId}` when a
+  trace id is present (stable → dedups retries), else empty (fire-once) — NOT `Date.now()`.
+- `identityServiceImpl.ts`: optional 3rd constructor arg (`audit`, default NOOP); a resilient
+  `auditSafe` wrapper; emits `identity.user.{created,password_updated,roles_updated,activated,
+  deactivated}` after each successful mutation with a secret-free payload (`updatePassword` UPDATE
+  gained `RETURNING email`). `index.ts` constructs + injects the real client.
+- TDD paired with Step 7. Files: `ledgerAudit.ts`, `identityServiceImpl.ts`, `index.ts`.
+
+### Step 7 — test: identity audit-event unit test [done]
+- Added audit cases: each mutation emits its event once with `acting_admin_user_id` (from x-user-id) +
+  `target_user_id` and NO password/newPassword/passwordHash key (AC-8/AC-10); reads emit nothing;
+  best-effort proven — a throwing audit sink still returns mutation success (design R5). Also updated
+  the Step-5 updatePassword mock to return `rows:[{email}]` (Step 6 added `RETURNING email`).
+- TDD (P-06): red 3 audit tests fail with the Step-6 wiring stashed → green 52/52 after. Files:
+  `identityServiceImpl.test.ts`.
+
+### Step 8 — service: register six IdentityService RPCs on config-ui BFF [done]
+- `configUiBff.ts`: imported `IdentityService` + reused `identityClient` (`connectClients.ts:35`,
+  already present for auth). Added `router.service(IdentityService, {...})`: `listUsers`/`getUser`/
+  `setUserRoles`/`setUserActive` via `forwardAdmin` (admin-gate + header propagation for free);
+  `createUser`/`updatePassword` as explicit admin-gated bodies (`requireSession`+`requireAdminScope`+
+  `backendHeaders`) so the write-only password is forwarded but never injected/echoed (AC-10). Only
+  these six are registered — connect-node leaves the rest of IdentityService unimplemented, so
+  config-ui exposes user management only. No new propagation code (backendHeaders reused). TDD:
+  covered by Step 10 e2e (BFF RPC round-trips). Files: `services/xstockstrat-ui/src/lib/configUiBff.ts`.
+
+### Step 9 — service: config-ui Users section (page, nav, browser client, Role map) [done]
+- Created `src/lib/browserClients/configUiIdentityClient.ts` (`makeBrowserTransport('/config-ui/api')`
+  + `createClient(IdentityService, …)` — per-segment, refresh-guarded transport).
+- Created `src/lib/roleLabels.ts`: exhaustive `Record<Role,string> ROLE_LABELS` (+ `ASSIGNABLE_ROLES`,
+  `rolesLabel()`) so a new proto Role fails `tsc` here (C-10(a/d), mirrors opportunityShared.tsx).
+- Created `src/app/config-ui/users/page.tsx` ('use client'): React-Query `listUsers`, `DataTable`
+  (email / roles via `rolesLabel` / status Badge / created via `timestampDate`), Create + Reset-password
+  + Edit-roles `FormDialog`s, Deactivate/Reactivate via `DropdownMenu`; last-admin `FAILED_PRECONDITION`
+  surfaced via `CardNotice` (AC-11, `ConnectError.rawMessage`), never swallowed. Password fields
+  write-only (AC-10). C-17 tokens/state primitives; every row action button has a unique accessible
+  name (`Actions for <email>`).
+- Nav: added `{ label: 'Users', href: '/config-ui/users', adminOnly: true }` to the Settings group in
+  `navGroups.tsx` (single source of truth). **Deviation (honored impl-review fix):** the spec's
+  instruction 5 (also add to `PLATFORM_SUBNAV.config`) was DROPPED — `PLATFORM_SUBNAV` is dead code
+  (feature 083 renders the Section nav from `NAV_GROUPS`); editing it would add an unreachable link.
+  `PlatformHeader.tsx` untouched. See implementation-spec.md § Deviation Log.
+- TDD: N/A (frontend page — behavior gated by Step 10 e2e). Lint + tsc build clean.
+
+### Step 10 — test: config-ui Users e2e [done]
+- Extended `e2e/fixtures/users.ts` with `USER_VIEW_*` (primary [Admin,Trader] active / trader /
+  inactive-viewer / last-admin) + `USER_VIEWS` + `LAST_ADMIN_USER_ID`; catalog row in `INVENTORY.md`
+  (C-12, reuses `TEST_USER_ID`/`TEST_USER_EMAIL`). `mock-backend.ts`: six `identityHandlers` methods
+  (registered on all three mock ports; config-ui BFF dials 9091) — list/get return password-free
+  `User` views, setUserRoles/setUserActive throw `FAILED_PRECONDITION 'cannot remove last admin'` for
+  `LAST_ADMIN_USER_ID`.
+- `e2e/config-ui/users.spec.ts`: AC-1/AC-10 (rows render email/roles/status, no `password_hash`/`$2b$`),
+  AC-9 (Section-landmark nav walk to /config-ui/users), AC-11 (last-admin guard message + row kept),
+  AC-8 (create round-trips through BFF, no error). AC-9 targets
+  `getByRole('navigation',{name:'Section'})` to avoid the hidden mobile-offcanvas copy; AC-1 scopes
+  'Inactive' to the status Badge and gives the first row `{timeout:30000}` for BFF cold-compile.
+- TDD (P-06): implemented spec+page first (red — page 404/empty), then wired; final **5/5 passed
+  (1.2m)** with `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=…/chromium-1194/chrome-linux/chrome
+  --timeout=120000 --workers=1`. CI runs the authoritative e2e. Files: `users.spec.ts`,
+  `mock-backend.ts`, `fixtures/users.ts`, `fixtures/INVENTORY.md`.
+
+### Feature close-out [code-completed]
+- All 10 steps done. status.md → `code-completed`. Steps 8–10 committed; branch pushed; integration
+  PR opened against `main-dev`. Features 128 (#1052) and 021 (#1053) already merged to main-dev.
+- C-16 acceptance-scenario promotion into the durable identity + config-ui business-rule suites is
+  deferred to `/promote` at launch (documented backstop), not done here.

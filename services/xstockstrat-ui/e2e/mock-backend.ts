@@ -56,6 +56,8 @@ import {
   SIGNAL_SOURCE_WEIGHTED,
   FUNDAMENTALS_AAPL,
 } from './fixtures';
+import { USER_VIEWS, LAST_ADMIN_USER_ID } from './fixtures/users';
+import { Role } from '@xstockstrat/proto/identity/v1/identity_pb';
 import { LEDGER_EXPORT_EVENTS, EXPORT_DISABLED_SENTINEL } from './fixtures/ledgerEvents';
 import { criterionDetailRow } from './fixtures/screenResults';
 import { backfillJob } from './fixtures/backfillJobs';
@@ -172,6 +174,46 @@ export async function startMockBackend(): Promise<void> {
     },
     async revokeAuthorizedApp() {
       return { success: true };
+    },
+    // ── User management (admin-gated, feature 043) ──────────────────────────
+    // The config-ui BFF (forwardAdmin) admin-gates before these are reached, so non-admin denial
+    // (AC-7) is a BFF concern; these return password-free User views and simulate the last-admin
+    // guard for the AC-11 target.
+    async listUsers() {
+      return { users: USER_VIEWS };
+    },
+    async getUser(req: { userId: string }) {
+      const user = USER_VIEWS.find((u) => u.userId === req.userId);
+      if (!user) throw new ConnectError('user not found', Code.NotFound);
+      return { user };
+    },
+    async createUser(req: { email: string; roles?: Role[] }) {
+      return {
+        user: {
+          userId: 'new-user-001',
+          email: req.email,
+          roles: req.roles && req.roles.length > 0 ? req.roles : [Role.TRADER],
+          isActive: true,
+          createdAt: timestampFromDate(new Date()),
+        },
+      };
+    },
+    async updatePassword() {
+      return {}; // empty — no password echoed (AC-10)
+    },
+    async setUserRoles(req: { userId: string; roles?: Role[] }) {
+      if (req.userId === LAST_ADMIN_USER_ID && !(req.roles ?? []).includes(Role.ADMIN)) {
+        throw new ConnectError('cannot remove last admin', Code.FailedPrecondition);
+      }
+      const base = USER_VIEWS.find((u) => u.userId === req.userId) ?? USER_VIEWS[0];
+      return { user: { ...base, roles: req.roles ?? base.roles } };
+    },
+    async setUserActive(req: { userId: string; active: boolean }) {
+      if (req.userId === LAST_ADMIN_USER_ID && req.active === false) {
+        throw new ConnectError('cannot remove last admin', Code.FailedPrecondition);
+      }
+      const base = USER_VIEWS.find((u) => u.userId === req.userId) ?? USER_VIEWS[0];
+      return { user: { ...base, isActive: req.active } };
     },
   };
 

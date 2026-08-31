@@ -2,8 +2,8 @@
 // @generated from file identity/v1/identity.proto (package xstockstrat.identity.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_struct, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
@@ -12,7 +12,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file identity/v1/identity.proto.
  */
 export const file_identity_v1_identity: GenFile = /*@__PURE__*/
-  fileDesc("ChppZGVudGl0eS92MS9pZGVudGl0eS5wcm90bxIXeHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEiOgoXQXV0aGVudGljYXRlVXNlclJlcXVlc3QSDQoFZW1haWwYASABKAkSEAoIcGFzc3dvcmQYAiABKAkipgEKEUF1dGhUb2tlblJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRIVCg1yZWZyZXNoX3Rva2VuGAIgASgJEi4KCmV4cGlyZXNfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjQKBmNsYWltcxgEIAEoCzIkLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlRva2VuQ2xhaW1zIqgBCgtUb2tlbkNsYWltcxIPCgd1c2VyX2lkGAEgASgJEg0KBWVtYWlsGAIgASgJEg0KBXJvbGVzGAMgAygJEi0KCWlzc3VlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZXhwaXJlc19hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASCwoDYXVkGAYgASgJIiUKFFZhbGlkYXRlVG9rZW5SZXF1ZXN0Eg0KBXRva2VuGAEgASgJIiwKE1JlZnJlc2hUb2tlblJlcXVlc3QSFQoNcmVmcmVzaF90b2tlbhgBIAEoCSIjChJSZXZva2VUb2tlblJlcXVlc3QSDQoFdG9rZW4YASABKAkiJgoTUmV2b2tlVG9rZW5SZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIInwKC09BdXRoQ2xpZW50EhEKCWNsaWVudF9pZBgBIAEoCRIVCg1yZWRpcmVjdF91cmlzGAIgAygJEhMKC2NsaWVudF9uYW1lGAMgASgJEi4KCmNyZWF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIkgKGlJlZ2lzdGVyT0F1dGhDbGllbnRSZXF1ZXN0EhUKDXJlZGlyZWN0X3VyaXMYASADKAkSEwoLY2xpZW50X25hbWUYAiABKAkiKgoVR2V0T0F1dGhDbGllbnRSZXF1ZXN0EhEKCWNsaWVudF9pZBgBIAEoCSJ6ChRJc3N1ZUF1dGhDb2RlUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEhEKCWNsaWVudF9pZBgCIAEoCRIUCgxyZWRpcmVjdF91cmkYAyABKAkSFgoOY29kZV9jaGFsbGVuZ2UYBCABKAkSEAoIcmVzb3VyY2UYBSABKAkiJQoVSXNzdWVBdXRoQ29kZVJlc3BvbnNlEgwKBGNvZGUYASABKAkieQoXRXhjaGFuZ2VBdXRoQ29kZVJlcXVlc3QSDAoEY29kZRgBIAEoCRIVCg1jb2RlX3ZlcmlmaWVyGAIgASgJEhQKDHJlZGlyZWN0X3VyaRgDIAEoCRIRCgljbGllbnRfaWQYBCABKAkSEAoIcmVzb3VyY2UYBSABKAkiaQoST0F1dGhUb2tlblJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRISCgp0b2tlbl90eXBlGAIgASgJEhIKCmV4cGlyZXNfaW4YAyABKAMSFQoNcmVmcmVzaF90b2tlbhgEIAEoCSJDChhSZWZyZXNoT0F1dGhUb2tlblJlcXVlc3QSFQoNcmVmcmVzaF90b2tlbhgBIAEoCRIQCghyZXNvdXJjZRgCIAEoCSKzAQoNQXV0aG9yaXplZEFwcBIRCgljbGllbnRfaWQYASABKAkSEwoLY2xpZW50X25hbWUYAiABKAkSMQoNYXV0aG9yaXplZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMbGFzdF91c2VkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIVCg1yZWRpcmVjdF91cmlzGAUgAygJIiwKGUxpc3RBdXRob3JpemVkQXBwc1JlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCSJSChpMaXN0QXV0aG9yaXplZEFwcHNSZXNwb25zZRI0CgRhcHBzGAEgAygLMiYueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuQXV0aG9yaXplZEFwcCJAChpSZXZva2VBdXRob3JpemVkQXBwUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEhEKCWNsaWVudF9pZBgCIAEoCSIuChtSZXZva2VBdXRob3JpemVkQXBwUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCCLcAQoMVXNlck1ldGFkYXRhEg8KB3VzZXJfaWQYASABKAkSDQoFZW1haWwYAiABKAkSEgoFcGhvbmUYAyABKAlIAIgBARIZCgxkaXNwbGF5X25hbWUYBCABKAlIAYgBARIpCghtZXRhZGF0YRgFIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSNwoTbWV0YWRhdGFfdXBkYXRlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCCAoGX3Bob25lQg8KDV9kaXNwbGF5X25hbWUiGAoWR2V0VXNlck1ldGFkYXRhUmVxdWVzdCJXChdHZXRVc2VyTWV0YWRhdGFSZXNwb25zZRI8Cg11c2VyX21ldGFkYXRhGAEgASgLMiUueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuVXNlck1ldGFkYXRhIqIBChlVcGRhdGVVc2VyTWV0YWRhdGFSZXF1ZXN0EhIKBXBob25lGAEgASgJSACIAQESGQoMZGlzcGxheV9uYW1lGAIgASgJSAGIAQESLgoIbWV0YWRhdGEYAyABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0SAKIAQFCCAoGX3Bob25lQg8KDV9kaXNwbGF5X25hbWVCCwoJX21ldGFkYXRhIloKGlVwZGF0ZVVzZXJNZXRhZGF0YVJlc3BvbnNlEjwKDXVzZXJfbWV0YWRhdGEYASABKAsyJS54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5Vc2VyTWV0YWRhdGEy5gsKD0lkZW50aXR5U2VydmljZRJwChBBdXRoZW50aWNhdGVVc2VyEjAueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuQXV0aGVudGljYXRlVXNlclJlcXVlc3QaKi54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5BdXRoVG9rZW5SZXNwb25zZRJkCg1WYWxpZGF0ZVRva2VuEi0ueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuVmFsaWRhdGVUb2tlblJlcXVlc3QaJC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5Ub2tlbkNsYWltcxJoCgxSZWZyZXNoVG9rZW4SLC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5SZWZyZXNoVG9rZW5SZXF1ZXN0GioueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuQXV0aFRva2VuUmVzcG9uc2USaAoLUmV2b2tlVG9rZW4SKy54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5SZXZva2VUb2tlblJlcXVlc3QaLC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5SZXZva2VUb2tlblJlc3BvbnNlEnAKE1JlZ2lzdGVyT0F1dGhDbGllbnQSMy54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5SZWdpc3Rlck9BdXRoQ2xpZW50UmVxdWVzdBokLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLk9BdXRoQ2xpZW50EmYKDkdldE9BdXRoQ2xpZW50Ei4ueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuR2V0T0F1dGhDbGllbnRSZXF1ZXN0GiQueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuT0F1dGhDbGllbnQSbgoNSXNzdWVBdXRoQ29kZRItLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLklzc3VlQXV0aENvZGVSZXF1ZXN0Gi4ueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuSXNzdWVBdXRoQ29kZVJlc3BvbnNlEnEKEEV4Y2hhbmdlQXV0aENvZGUSMC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5FeGNoYW5nZUF1dGhDb2RlUmVxdWVzdBorLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLk9BdXRoVG9rZW5SZXNwb25zZRJzChFSZWZyZXNoT0F1dGhUb2tlbhIxLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJlZnJlc2hPQXV0aFRva2VuUmVxdWVzdBorLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLk9BdXRoVG9rZW5SZXNwb25zZRJ9ChJMaXN0QXV0aG9yaXplZEFwcHMSMi54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5MaXN0QXV0aG9yaXplZEFwcHNSZXF1ZXN0GjMueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuTGlzdEF1dGhvcml6ZWRBcHBzUmVzcG9uc2USgAEKE1Jldm9rZUF1dGhvcml6ZWRBcHASMy54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5SZXZva2VBdXRob3JpemVkQXBwUmVxdWVzdBo0LnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJldm9rZUF1dGhvcml6ZWRBcHBSZXNwb25zZRJ0Cg9HZXRVc2VyTWV0YWRhdGESLy54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5HZXRVc2VyTWV0YWRhdGFSZXF1ZXN0GjAueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuR2V0VXNlck1ldGFkYXRhUmVzcG9uc2USfQoSVXBkYXRlVXNlck1ldGFkYXRhEjIueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuVXBkYXRlVXNlck1ldGFkYXRhUmVxdWVzdBozLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlVwZGF0ZVVzZXJNZXRhZGF0YVJlc3BvbnNlQkBaPmdpdGh1Yi5jb20veHN0b2Nrc3RyYXQvY29udHJhY3RzL2dlbi9nby9pZGVudGl0eS92MTtpZGVudGl0eXYxYgZwcm90bzM", [file_google_protobuf_struct, file_google_protobuf_timestamp]);
+  fileDesc("ChppZGVudGl0eS92MS9pZGVudGl0eS5wcm90bxIXeHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEiOgoXQXV0aGVudGljYXRlVXNlclJlcXVlc3QSDQoFZW1haWwYASABKAkSEAoIcGFzc3dvcmQYAiABKAkipgEKEUF1dGhUb2tlblJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRIVCg1yZWZyZXNoX3Rva2VuGAIgASgJEi4KCmV4cGlyZXNfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjQKBmNsYWltcxgEIAEoCzIkLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlRva2VuQ2xhaW1zIqgBCgtUb2tlbkNsYWltcxIPCgd1c2VyX2lkGAEgASgJEg0KBWVtYWlsGAIgASgJEg0KBXJvbGVzGAMgAygJEi0KCWlzc3VlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZXhwaXJlc19hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASCwoDYXVkGAYgASgJIiUKFFZhbGlkYXRlVG9rZW5SZXF1ZXN0Eg0KBXRva2VuGAEgASgJIiwKE1JlZnJlc2hUb2tlblJlcXVlc3QSFQoNcmVmcmVzaF90b2tlbhgBIAEoCSIjChJSZXZva2VUb2tlblJlcXVlc3QSDQoFdG9rZW4YASABKAkiJgoTUmV2b2tlVG9rZW5SZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIInwKC09BdXRoQ2xpZW50EhEKCWNsaWVudF9pZBgBIAEoCRIVCg1yZWRpcmVjdF91cmlzGAIgAygJEhMKC2NsaWVudF9uYW1lGAMgASgJEi4KCmNyZWF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIkgKGlJlZ2lzdGVyT0F1dGhDbGllbnRSZXF1ZXN0EhUKDXJlZGlyZWN0X3VyaXMYASADKAkSEwoLY2xpZW50X25hbWUYAiABKAkiKgoVR2V0T0F1dGhDbGllbnRSZXF1ZXN0EhEKCWNsaWVudF9pZBgBIAEoCSJ6ChRJc3N1ZUF1dGhDb2RlUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEhEKCWNsaWVudF9pZBgCIAEoCRIUCgxyZWRpcmVjdF91cmkYAyABKAkSFgoOY29kZV9jaGFsbGVuZ2UYBCABKAkSEAoIcmVzb3VyY2UYBSABKAkiJQoVSXNzdWVBdXRoQ29kZVJlc3BvbnNlEgwKBGNvZGUYASABKAkieQoXRXhjaGFuZ2VBdXRoQ29kZVJlcXVlc3QSDAoEY29kZRgBIAEoCRIVCg1jb2RlX3ZlcmlmaWVyGAIgASgJEhQKDHJlZGlyZWN0X3VyaRgDIAEoCRIRCgljbGllbnRfaWQYBCABKAkSEAoIcmVzb3VyY2UYBSABKAkiaQoST0F1dGhUb2tlblJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRISCgp0b2tlbl90eXBlGAIgASgJEhIKCmV4cGlyZXNfaW4YAyABKAMSFQoNcmVmcmVzaF90b2tlbhgEIAEoCSJDChhSZWZyZXNoT0F1dGhUb2tlblJlcXVlc3QSFQoNcmVmcmVzaF90b2tlbhgBIAEoCRIQCghyZXNvdXJjZRgCIAEoCSKzAQoNQXV0aG9yaXplZEFwcBIRCgljbGllbnRfaWQYASABKAkSEwoLY2xpZW50X25hbWUYAiABKAkSMQoNYXV0aG9yaXplZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMbGFzdF91c2VkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIVCg1yZWRpcmVjdF91cmlzGAUgAygJIiwKGUxpc3RBdXRob3JpemVkQXBwc1JlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCSJSChpMaXN0QXV0aG9yaXplZEFwcHNSZXNwb25zZRI0CgRhcHBzGAEgAygLMiYueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuQXV0aG9yaXplZEFwcCJAChpSZXZva2VBdXRob3JpemVkQXBwUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEhEKCWNsaWVudF9pZBgCIAEoCSIuChtSZXZva2VBdXRob3JpemVkQXBwUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCCLcAQoMVXNlck1ldGFkYXRhEg8KB3VzZXJfaWQYASABKAkSDQoFZW1haWwYAiABKAkSEgoFcGhvbmUYAyABKAlIAIgBARIZCgxkaXNwbGF5X25hbWUYBCABKAlIAYgBARIpCghtZXRhZGF0YRgFIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSNwoTbWV0YWRhdGFfdXBkYXRlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCCAoGX3Bob25lQg8KDV9kaXNwbGF5X25hbWUiGAoWR2V0VXNlck1ldGFkYXRhUmVxdWVzdCJXChdHZXRVc2VyTWV0YWRhdGFSZXNwb25zZRI8Cg11c2VyX21ldGFkYXRhGAEgASgLMiUueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuVXNlck1ldGFkYXRhIqIBChlVcGRhdGVVc2VyTWV0YWRhdGFSZXF1ZXN0EhIKBXBob25lGAEgASgJSACIAQESGQoMZGlzcGxheV9uYW1lGAIgASgJSAGIAQESLgoIbWV0YWRhdGEYAyABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0SAKIAQFCCAoGX3Bob25lQg8KDV9kaXNwbGF5X25hbWVCCwoJX21ldGFkYXRhIloKGlVwZGF0ZVVzZXJNZXRhZGF0YVJlc3BvbnNlEjwKDXVzZXJfbWV0YWRhdGEYASABKAsyJS54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5Vc2VyTWV0YWRhdGEilwEKBFVzZXISDwoHdXNlcl9pZBgBIAEoCRINCgVlbWFpbBgCIAEoCRIsCgVyb2xlcxgDIAMoDjIdLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJvbGUSEQoJaXNfYWN0aXZlGAQgASgIEi4KCmNyZWF0ZWRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wImIKEUNyZWF0ZVVzZXJSZXF1ZXN0Eg0KBWVtYWlsGAEgASgJEhAKCHBhc3N3b3JkGAIgASgJEiwKBXJvbGVzGAMgAygOMh0ueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuUm9sZSJBChJDcmVhdGVVc2VyUmVzcG9uc2USKwoEdXNlchgBIAEoCzIdLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlVzZXIiEgoQTGlzdFVzZXJzUmVxdWVzdCJBChFMaXN0VXNlcnNSZXNwb25zZRIsCgV1c2VycxgBIAMoCzIdLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlVzZXIiIQoOR2V0VXNlclJlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCSI+Cg9HZXRVc2VyUmVzcG9uc2USKwoEdXNlchgBIAEoCzIdLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlVzZXIiPgoVVXBkYXRlUGFzc3dvcmRSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSFAoMbmV3X3Bhc3N3b3JkGAIgASgJIhgKFlVwZGF0ZVBhc3N3b3JkUmVzcG9uc2UiVAoTU2V0VXNlclJvbGVzUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEiwKBXJvbGVzGAIgAygOMh0ueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuUm9sZSJDChRTZXRVc2VyUm9sZXNSZXNwb25zZRIrCgR1c2VyGAEgASgLMh0ueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuVXNlciI3ChRTZXRVc2VyQWN0aXZlUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEg4KBmFjdGl2ZRgCIAEoCCJEChVTZXRVc2VyQWN0aXZlUmVzcG9uc2USKwoEdXNlchgBIAEoCzIdLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlVzZXIqTgoEUm9sZRIUChBST0xFX1VOU1BFQ0lGSUVEEAASDgoKUk9MRV9BRE1JThABEg8KC1JPTEVfVFJBREVSEAISDwoLUk9MRV9WSUVXRVIQAzLfEAoPSWRlbnRpdHlTZXJ2aWNlEnAKEEF1dGhlbnRpY2F0ZVVzZXISMC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5BdXRoZW50aWNhdGVVc2VyUmVxdWVzdBoqLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLkF1dGhUb2tlblJlc3BvbnNlEmQKDVZhbGlkYXRlVG9rZW4SLS54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5WYWxpZGF0ZVRva2VuUmVxdWVzdBokLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlRva2VuQ2xhaW1zEmgKDFJlZnJlc2hUb2tlbhIsLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJlZnJlc2hUb2tlblJlcXVlc3QaKi54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5BdXRoVG9rZW5SZXNwb25zZRJoCgtSZXZva2VUb2tlbhIrLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJldm9rZVRva2VuUmVxdWVzdBosLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJldm9rZVRva2VuUmVzcG9uc2UScAoTUmVnaXN0ZXJPQXV0aENsaWVudBIzLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJlZ2lzdGVyT0F1dGhDbGllbnRSZXF1ZXN0GiQueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuT0F1dGhDbGllbnQSZgoOR2V0T0F1dGhDbGllbnQSLi54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5HZXRPQXV0aENsaWVudFJlcXVlc3QaJC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5PQXV0aENsaWVudBJuCg1Jc3N1ZUF1dGhDb2RlEi0ueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuSXNzdWVBdXRoQ29kZVJlcXVlc3QaLi54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5Jc3N1ZUF1dGhDb2RlUmVzcG9uc2UScQoQRXhjaGFuZ2VBdXRoQ29kZRIwLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLkV4Y2hhbmdlQXV0aENvZGVSZXF1ZXN0GisueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuT0F1dGhUb2tlblJlc3BvbnNlEnMKEVJlZnJlc2hPQXV0aFRva2VuEjEueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuUmVmcmVzaE9BdXRoVG9rZW5SZXF1ZXN0GisueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuT0F1dGhUb2tlblJlc3BvbnNlEn0KEkxpc3RBdXRob3JpemVkQXBwcxIyLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLkxpc3RBdXRob3JpemVkQXBwc1JlcXVlc3QaMy54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5MaXN0QXV0aG9yaXplZEFwcHNSZXNwb25zZRKAAQoTUmV2b2tlQXV0aG9yaXplZEFwcBIzLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJldm9rZUF1dGhvcml6ZWRBcHBSZXF1ZXN0GjQueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuUmV2b2tlQXV0aG9yaXplZEFwcFJlc3BvbnNlEnQKD0dldFVzZXJNZXRhZGF0YRIvLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLkdldFVzZXJNZXRhZGF0YVJlcXVlc3QaMC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5HZXRVc2VyTWV0YWRhdGFSZXNwb25zZRJ9ChJVcGRhdGVVc2VyTWV0YWRhdGESMi54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5VcGRhdGVVc2VyTWV0YWRhdGFSZXF1ZXN0GjMueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuVXBkYXRlVXNlck1ldGFkYXRhUmVzcG9uc2USZQoKQ3JlYXRlVXNlchIqLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLkNyZWF0ZVVzZXJSZXF1ZXN0GisueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuQ3JlYXRlVXNlclJlc3BvbnNlEmIKCUxpc3RVc2VycxIpLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLkxpc3RVc2Vyc1JlcXVlc3QaKi54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5MaXN0VXNlcnNSZXNwb25zZRJcCgdHZXRVc2VyEicueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuR2V0VXNlclJlcXVlc3QaKC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5HZXRVc2VyUmVzcG9uc2UScQoOVXBkYXRlUGFzc3dvcmQSLi54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5VcGRhdGVQYXNzd29yZFJlcXVlc3QaLy54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5VcGRhdGVQYXNzd29yZFJlc3BvbnNlEmsKDFNldFVzZXJSb2xlcxIsLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlNldFVzZXJSb2xlc1JlcXVlc3QaLS54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5TZXRVc2VyUm9sZXNSZXNwb25zZRJuCg1TZXRVc2VyQWN0aXZlEi0ueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuU2V0VXNlckFjdGl2ZVJlcXVlc3QaLi54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5TZXRVc2VyQWN0aXZlUmVzcG9uc2VCQFo+Z2l0aHViLmNvbS94c3RvY2tzdHJhdC9jb250cmFjdHMvZ2VuL2dvL2lkZW50aXR5L3YxO2lkZW50aXR5djFiBnByb3RvMw", [file_google_protobuf_struct, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message xstockstrat.identity.v1.AuthenticateUserRequest
@@ -632,6 +632,305 @@ export const UpdateUserMetadataResponseSchema: GenMessage<UpdateUserMetadataResp
   messageDesc(file_identity_v1_identity, 24);
 
 /**
+ * Password-free admin view of a user (no password / password_hash — FR-10/AC-10).
+ *
+ * @generated from message xstockstrat.identity.v1.User
+ */
+export type User = Message<"xstockstrat.identity.v1.User"> & {
+  /**
+   * @generated from field: string user_id = 1;
+   */
+  userId: string;
+
+  /**
+   * @generated from field: string email = 2;
+   */
+  email: string;
+
+  /**
+   * @generated from field: repeated xstockstrat.identity.v1.Role roles = 3;
+   */
+  roles: Role[];
+
+  /**
+   * @generated from field: bool is_active = 4;
+   */
+  isActive: boolean;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp created_at = 5;
+   */
+  createdAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.User.
+ * Use `create(UserSchema)` to create a new message.
+ */
+export const UserSchema: GenMessage<User> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 25);
+
+/**
+ * @generated from message xstockstrat.identity.v1.CreateUserRequest
+ */
+export type CreateUserRequest = Message<"xstockstrat.identity.v1.CreateUserRequest"> & {
+  /**
+   * @generated from field: string email = 1;
+   */
+  email: string;
+
+  /**
+   * write-only; never echoed back
+   *
+   * @generated from field: string password = 2;
+   */
+  password: string;
+
+  /**
+   * @generated from field: repeated xstockstrat.identity.v1.Role roles = 3;
+   */
+  roles: Role[];
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.CreateUserRequest.
+ * Use `create(CreateUserRequestSchema)` to create a new message.
+ */
+export const CreateUserRequestSchema: GenMessage<CreateUserRequest> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 26);
+
+/**
+ * @generated from message xstockstrat.identity.v1.CreateUserResponse
+ */
+export type CreateUserResponse = Message<"xstockstrat.identity.v1.CreateUserResponse"> & {
+  /**
+   * @generated from field: xstockstrat.identity.v1.User user = 1;
+   */
+  user?: User | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.CreateUserResponse.
+ * Use `create(CreateUserResponseSchema)` to create a new message.
+ */
+export const CreateUserResponseSchema: GenMessage<CreateUserResponse> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 27);
+
+/**
+ * @generated from message xstockstrat.identity.v1.ListUsersRequest
+ */
+export type ListUsersRequest = Message<"xstockstrat.identity.v1.ListUsersRequest"> & {
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.ListUsersRequest.
+ * Use `create(ListUsersRequestSchema)` to create a new message.
+ */
+export const ListUsersRequestSchema: GenMessage<ListUsersRequest> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 28);
+
+/**
+ * @generated from message xstockstrat.identity.v1.ListUsersResponse
+ */
+export type ListUsersResponse = Message<"xstockstrat.identity.v1.ListUsersResponse"> & {
+  /**
+   * @generated from field: repeated xstockstrat.identity.v1.User users = 1;
+   */
+  users: User[];
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.ListUsersResponse.
+ * Use `create(ListUsersResponseSchema)` to create a new message.
+ */
+export const ListUsersResponseSchema: GenMessage<ListUsersResponse> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 29);
+
+/**
+ * @generated from message xstockstrat.identity.v1.GetUserRequest
+ */
+export type GetUserRequest = Message<"xstockstrat.identity.v1.GetUserRequest"> & {
+  /**
+   * @generated from field: string user_id = 1;
+   */
+  userId: string;
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.GetUserRequest.
+ * Use `create(GetUserRequestSchema)` to create a new message.
+ */
+export const GetUserRequestSchema: GenMessage<GetUserRequest> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 30);
+
+/**
+ * @generated from message xstockstrat.identity.v1.GetUserResponse
+ */
+export type GetUserResponse = Message<"xstockstrat.identity.v1.GetUserResponse"> & {
+  /**
+   * @generated from field: xstockstrat.identity.v1.User user = 1;
+   */
+  user?: User | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.GetUserResponse.
+ * Use `create(GetUserResponseSchema)` to create a new message.
+ */
+export const GetUserResponseSchema: GenMessage<GetUserResponse> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 31);
+
+/**
+ * @generated from message xstockstrat.identity.v1.UpdatePasswordRequest
+ */
+export type UpdatePasswordRequest = Message<"xstockstrat.identity.v1.UpdatePasswordRequest"> & {
+  /**
+   * @generated from field: string user_id = 1;
+   */
+  userId: string;
+
+  /**
+   * write-only; never echoed back
+   *
+   * @generated from field: string new_password = 2;
+   */
+  newPassword: string;
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.UpdatePasswordRequest.
+ * Use `create(UpdatePasswordRequestSchema)` to create a new message.
+ */
+export const UpdatePasswordRequestSchema: GenMessage<UpdatePasswordRequest> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 32);
+
+/**
+ * @generated from message xstockstrat.identity.v1.UpdatePasswordResponse
+ */
+export type UpdatePasswordResponse = Message<"xstockstrat.identity.v1.UpdatePasswordResponse"> & {
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.UpdatePasswordResponse.
+ * Use `create(UpdatePasswordResponseSchema)` to create a new message.
+ */
+export const UpdatePasswordResponseSchema: GenMessage<UpdatePasswordResponse> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 33);
+
+/**
+ * @generated from message xstockstrat.identity.v1.SetUserRolesRequest
+ */
+export type SetUserRolesRequest = Message<"xstockstrat.identity.v1.SetUserRolesRequest"> & {
+  /**
+   * @generated from field: string user_id = 1;
+   */
+  userId: string;
+
+  /**
+   * @generated from field: repeated xstockstrat.identity.v1.Role roles = 2;
+   */
+  roles: Role[];
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.SetUserRolesRequest.
+ * Use `create(SetUserRolesRequestSchema)` to create a new message.
+ */
+export const SetUserRolesRequestSchema: GenMessage<SetUserRolesRequest> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 34);
+
+/**
+ * @generated from message xstockstrat.identity.v1.SetUserRolesResponse
+ */
+export type SetUserRolesResponse = Message<"xstockstrat.identity.v1.SetUserRolesResponse"> & {
+  /**
+   * @generated from field: xstockstrat.identity.v1.User user = 1;
+   */
+  user?: User | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.SetUserRolesResponse.
+ * Use `create(SetUserRolesResponseSchema)` to create a new message.
+ */
+export const SetUserRolesResponseSchema: GenMessage<SetUserRolesResponse> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 35);
+
+/**
+ * @generated from message xstockstrat.identity.v1.SetUserActiveRequest
+ */
+export type SetUserActiveRequest = Message<"xstockstrat.identity.v1.SetUserActiveRequest"> & {
+  /**
+   * @generated from field: string user_id = 1;
+   */
+  userId: string;
+
+  /**
+   * @generated from field: bool active = 2;
+   */
+  active: boolean;
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.SetUserActiveRequest.
+ * Use `create(SetUserActiveRequestSchema)` to create a new message.
+ */
+export const SetUserActiveRequestSchema: GenMessage<SetUserActiveRequest> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 36);
+
+/**
+ * @generated from message xstockstrat.identity.v1.SetUserActiveResponse
+ */
+export type SetUserActiveResponse = Message<"xstockstrat.identity.v1.SetUserActiveResponse"> & {
+  /**
+   * @generated from field: xstockstrat.identity.v1.User user = 1;
+   */
+  user?: User | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.SetUserActiveResponse.
+ * Use `create(SetUserActiveResponseSchema)` to create a new message.
+ */
+export const SetUserActiveResponseSchema: GenMessage<SetUserActiveResponse> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 37);
+
+/**
+ * ── User management (admin-gated, feature 043) ───────────────────────────────
+ * Closed role set (C-04). Mirrors the viewer/trader/admin roles the platform already uses;
+ * TokenClaims.roles stays a free-string list (JWT claim shape, unchanged).
+ *
+ * @generated from enum xstockstrat.identity.v1.Role
+ */
+export enum Role {
+  /**
+   * @generated from enum value: ROLE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: ROLE_ADMIN = 1;
+   */
+  ADMIN = 1,
+
+  /**
+   * @generated from enum value: ROLE_TRADER = 2;
+   */
+  TRADER = 2,
+
+  /**
+   * @generated from enum value: ROLE_VIEWER = 3;
+   */
+  VIEWER = 3,
+}
+
+/**
+ * Describes the enum xstockstrat.identity.v1.Role.
+ */
+export const RoleSchema: GenEnum<Role> = /*@__PURE__*/
+  enumDesc(file_identity_v1_identity, 0);
+
+/**
  * @generated from service xstockstrat.identity.v1.IdentityService
  */
 export const IdentityService: GenService<{
@@ -746,6 +1045,57 @@ export const IdentityService: GenService<{
     methodKind: "unary";
     input: typeof UpdateUserMetadataRequestSchema;
     output: typeof UpdateUserMetadataResponseSchema;
+  },
+  /**
+   * User management (admin-gated, feature 043). Every RPC requires the admin access-scope bit;
+   * passwords are write-only (never returned). Additive over the existing service.
+   *
+   * @generated from rpc xstockstrat.identity.v1.IdentityService.CreateUser
+   */
+  createUser: {
+    methodKind: "unary";
+    input: typeof CreateUserRequestSchema;
+    output: typeof CreateUserResponseSchema;
+  },
+  /**
+   * @generated from rpc xstockstrat.identity.v1.IdentityService.ListUsers
+   */
+  listUsers: {
+    methodKind: "unary";
+    input: typeof ListUsersRequestSchema;
+    output: typeof ListUsersResponseSchema;
+  },
+  /**
+   * @generated from rpc xstockstrat.identity.v1.IdentityService.GetUser
+   */
+  getUser: {
+    methodKind: "unary";
+    input: typeof GetUserRequestSchema;
+    output: typeof GetUserResponseSchema;
+  },
+  /**
+   * @generated from rpc xstockstrat.identity.v1.IdentityService.UpdatePassword
+   */
+  updatePassword: {
+    methodKind: "unary";
+    input: typeof UpdatePasswordRequestSchema;
+    output: typeof UpdatePasswordResponseSchema;
+  },
+  /**
+   * @generated from rpc xstockstrat.identity.v1.IdentityService.SetUserRoles
+   */
+  setUserRoles: {
+    methodKind: "unary";
+    input: typeof SetUserRolesRequestSchema;
+    output: typeof SetUserRolesResponseSchema;
+  },
+  /**
+   * @generated from rpc xstockstrat.identity.v1.IdentityService.SetUserActive
+   */
+  setUserActive: {
+    methodKind: "unary";
+    input: typeof SetUserActiveRequestSchema;
+    output: typeof SetUserActiveResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_identity_v1_identity, 0);

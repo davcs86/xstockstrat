@@ -6,6 +6,7 @@ import { IdentityServiceService } from '@xstockstrat/proto/identity/v1/identity'
 import { Pool } from 'pg';
 import { ConfigWatcher } from './services/configWatcher';
 import { IdentityServiceImpl } from './grpc/identityServiceImpl';
+import { createLedgerAudit } from './grpc/ledgerAudit';
 import { getLogger } from './services/logger';
 
 const log = getLogger('identity:server');
@@ -40,7 +41,10 @@ async function main() {
     },
   });
 
-  const identityImpl = new IdentityServiceImpl(pool, configWatcher);
+  // Best-effort ledger audit for admin user-management mutations (feature 043). LEDGER_ENDPOINT is
+  // already wired in docker-compose + both .do specs; only this reader is new.
+  const ledgerAudit = createLedgerAudit();
+  const identityImpl = new IdentityServiceImpl(pool, configWatcher, ledgerAudit);
 
   // ── gRPC server (internal service-to-service, port 50058) ──────────────
   const grpcServer = new grpc.Server();

@@ -1,6 +1,6 @@
 # Implementation Spec: user-management-ui
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-08-31
 **Feature**: `docs/roadmap/features/043-user-management-ui/feature.md`
 **Total Steps**: 10
@@ -60,7 +60,7 @@ Surface — no MCP tool change).
 
 ### Step 1 — proto: Add six admin RPCs, a `Role` enum, and a password-free `User` view
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/identity/v1/identity.proto` — modify
@@ -129,7 +129,7 @@ Confirm `buf lint` passes and `buf breaking` reports no breaking change (additiv
 
 ### Step 2 — proto-gen: Regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/**` — modify (generated; never hand-edited)
@@ -158,7 +158,7 @@ Confirm the only changed files under `packages/proto/gen/` are the identity stub
 
 ### Step 3 — service: Port the config admin gate into identity `authz.ts`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/authz.ts` — modify
@@ -196,7 +196,7 @@ grep -n "hasAdminAccessScope\|ADMIN_SCOPE_ERROR\|ADMIN_SCOPE = 0x04" services/xs
 
 ### Step 4 — service: Implement the six admin RPCs in the identity servicer
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts` — modify
@@ -254,7 +254,7 @@ grep -n "cannot remove last admin\|EXISTS (SELECT 1 FROM identity.users\|bcrypt.
 
 ### Step 5 — test: Identity admin-RPC unit tests (authz gate + servicer)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts` — modify (add cases)
@@ -295,7 +295,7 @@ grep -n "admin@localhost\|test-user" services/xstockstrat-identity/src/__tests__
 
 ### Step 6 — service: Identity → ledger audit client (new plumbing)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/ledgerAudit.ts` — create
@@ -342,7 +342,7 @@ Confirm the outbound call forwards the three propagation headers (C-03) and the 
 
 ### Step 7 — test: Identity audit-event unit test
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts` — modify (add audit cases) or `src/__tests__/ledgerAudit.test.ts` — create
@@ -373,7 +373,7 @@ Confirm the audit cases execute and pass and coverage stays ≥ 40%. Break the "
 
 ### Step 8 — service: Register the six RPCs on the config-ui BFF
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/configUiBff.ts` — modify
@@ -408,7 +408,7 @@ Confirm all six methods are registered and the two password-carrying methods use
 
 ### Step 9 — service: config-ui "Users" section (pages, nav, browser client, Role label map)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/users/page.tsx` — create (user list + create/reset/roles/activate actions)
@@ -458,7 +458,7 @@ grep -n "config-ui/users" services/xstockstrat-ui/src/components/shared/navGroup
 
 ### Step 10 — test: config-ui Users e2e (list, actions, nav reachability)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/config-ui/users.spec.ts` — create
@@ -505,4 +505,32 @@ grep -n "Users\|User view" services/xstockstrat-ui/e2e/fixtures/INVENTORY.md
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Steps 5/7 — identity unit suite runs vacuously under the configured runner (same pre-existing defect as 021)
+- **What**: `IdentityServiceImpl` uses TypeScript parameter properties, so `node --experimental-strip-types
+  --test` (the `test:coverage` runner) fails to load it and the lazy-import guard swallows it → `All files |
+  0%`, exit 0. Same trap as `fails.md` 2026-08-31 (feature 021) / 2026-07-29 (074); pre-existing, platform-wide.
+- **Substitution**: compiled with the service's `tsc` (`pnpm run build`) and ran
+  `node --test dist/__tests__/identityServiceImpl.test.js` for a genuine red→green: with Steps 3–4 stashed the
+  15 new admin cases failed (methods absent) / 33 existing passed; after restoring, **48/48 passed**.
+- **Disposition**: CI-equivalent+ (real execution). Out of 043's scope (platform runner change). See the 021
+  `fails.md` entry.
+
+### Step 10 — Playwright browser-build mismatch + local dev warmup timeout (same as 021)
+- Same sandbox constraints as feature 021 Step 13 (pinned browser build 1234 vs installed 1194; `pnpm dev`
+  cold-compile > 10s). Worked around identically: `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/
+  chromium-1194/chrome-linux/chrome` + `--timeout=120000 --workers=1`. CI runs the authoritative e2e.
+- AC-1 locator: `getByText('Inactive')` was a strict-mode violation (the string also appears inside a
+  table row's accessible name); scoped it to the status Badge (`locator('[data-slot="badge"]', {
+  hasText: 'Inactive' })`). AC-1 also needs `{ timeout: 30000 }` on the first row — the BFF `ListUsers`
+  route cold-compiles on first hit under `pnpm dev`. Final: **5/5 passed**.
+
+### Step 9 — `PLATFORM_SUBNAV.config` registration dropped (impl-review fix, honored)
+- **Spec instruction 5** said to also add `{ label: 'Users', href: '/config-ui/users' }` to
+  `PLATFORM_SUBNAV.config` (`PlatformHeader.tsx`). The impl-spec review flagged `PLATFORM_SUBNAV` as
+  **dead code** — feature 083's shell renders the desktop Row-2 "Section" nav from `NAV_GROUPS`
+  (`navGroups.tsx`), and `PLATFORM_SUBNAV` is no longer read for config-ui section links. Editing it
+  would add an unreachable entry and a misleading second source of truth.
+- **Disposition**: registered the nav entry **only** in `NAV_GROUPS` (Settings group, `adminOnly:true`);
+  `PlatformHeader.tsx` untouched. AC-9 nav reachability is proven green by the Step 10 e2e walking the
+  real `Section` landmark to `/config-ui/users`. Matches the recorded 029 fix ("nav must register in
+  NAV_GROUPS not PLATFORM_SUBNAV").

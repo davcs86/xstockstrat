@@ -3,6 +3,7 @@
 **Development Branch**: `feature/user-management-ui`
 **Created**: 2026-05-28
 **Last Updated**: 2026-08-31
+**Total Steps**: 10 (all done)
 
 ---
 
@@ -15,6 +16,8 @@
 | 2026-08-31 | `draft` → `spec-ready` | /sdd-review | Product spec approved; all review blockers addressed |
 | 2026-08-31 | `spec-ready` → `design-approved` | /sdd-design | Design debated (full) and approved; recon.md + design.md written |
 | 2026-08-31 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (10 steps) |
+| 2026-08-31 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1–2 done — 6 admin identity RPCs + Role/User proto; stubs regenerated (buf breaking clean) |
+| 2026-08-31 | `in-progress` → `code-completed` | /sdd-execute | Steps 3–10 done — authz gate, 6 admin handlers (atomic last-admin guard), ledger audit, unit 52/52, config-ui BFF + Users page + e2e 5/5 green. Integration PR opened to main-dev |
 
 ---
 
@@ -46,4 +49,5 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review user-management-ui impl-spec` then `/sdd-execute user-management-ui`
+Integration PR open against `main-dev` — awaiting CI + review. On merge, `/promote` handles the
+C-16 scenario promotion into the identity + config-ui business-rule suites.
