@@ -14,6 +14,8 @@
 | 2026-08-31 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings after fixes); overlap CLEAN |
 | 2026-08-31 | `spec-ready` → `design-approved` | /sdd-design | Design debated (full) and approved; recon.md + design.md written |
 | 2026-08-31 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (6 steps) |
+| 2026-08-31 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1–4 done — additive proto + stubs; Go single-row rebind backend + AC-1…AC-5 tests (red→green, -race) |
+| 2026-08-31 | `in-progress` → `code-completed` | /sdd-execute | Steps 5–6 done — non-invalidating cache-patch hook + `setBinding` rewire + `writeInFlight` fix + BFF forward; AC-6 e2e (15/15 in watchlists.spec.ts). Stacked integration PR opened onto feature/user-management-ui (043) |
 
 ---
 

@@ -23,9 +23,9 @@ import {
   useAddWatchlistSymbols,
   useRemoveWatchlistSymbols,
   useUpdateWatchlist,
+  useUpdateWatchlistBinding,
   UNBOUND,
   toApiStrategyId,
-  type WatchlistBindingInput,
 } from '@/hooks/useWatchlists';
 import { useStrategyDefinitions } from '@/hooks/useStrategyDefinitions';
 import { useOpportunities } from '@/hooks/useOpportunities';
@@ -63,6 +63,7 @@ export function WatchlistDetail({
   const addSymbols = useAddWatchlistSymbols();
   const removeSymbols = useRemoveWatchlistSymbols();
   const updateWatchlist = useUpdateWatchlist();
+  const updateBinding = useUpdateWatchlistBinding();
   const { data: defs } = useStrategyDefinitions();
   const allStrategies = defs?.definitions ?? [];
   // Only live-enabled strategies are offered for a NEW binding — `active` alone (the fetch
@@ -78,7 +79,10 @@ export function WatchlistDetail({
   // this component's own mutations is in flight, closing all 4 write-pairings (rebind/rebind,
   // rebind/rename, rebind/remove, rename/remove). Layer 2 (Step 8) covers the cross-instance case.
   const writeInFlight =
-    addSymbols.isPending || removeSymbols.isPending || updateWatchlist.isPending;
+    addSymbols.isPending ||
+    removeSymbols.isPending ||
+    updateWatchlist.isPending ||
+    updateBinding.isPending;
 
   const inQueue = new Set((oppData?.opportunities ?? []).map((o) => o.symbol.toUpperCase()));
 
@@ -106,18 +110,10 @@ export function WatchlistDetail({
     );
   }
 
-  // Re-bind one symbol's strategy. Sends the FULL updated binding set via UpdateWatchlist
-  // (replace semantics) so no other symbol's `strategyId` is reset — the fails-080 trap (FR-6).
+  // Re-bind one symbol's strategy via the targeted single-row RPC (feature 167). Patches just this
+  // entry in the ['watchlists'] cache — no replace-all, no full-list refetch. Other rows untouched.
   function setBinding(symbol: string, strategyId: string) {
-    const next: WatchlistBindingInput[] = bindings.map((b) =>
-      b.symbol === symbol ? { symbol: b.symbol, strategyId } : b,
-    );
-    updateWatchlist.mutate({
-      watchlistId: watchlist.watchlistId,
-      name: watchlist.name,
-      description: watchlist.description ?? '',
-      bindings: next,
-    });
+    updateBinding.mutate({ watchlistId: watchlist.watchlistId, symbol, strategyId });
   }
 
   // Commit the rename only if the trimmed draft is non-empty and actually changed. Sends the

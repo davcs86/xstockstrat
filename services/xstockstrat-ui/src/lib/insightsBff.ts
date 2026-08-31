@@ -95,6 +95,8 @@ router.service(PortfolioService, {
   deleteWatchlist: forward((req, opts) => portfolioClient.deleteWatchlist(req, opts)),
   addWatchlistSymbols: forward((req, opts) => portfolioClient.addWatchlistSymbols(req, opts)),
   removeWatchlistSymbols: forward((req, opts) => portfolioClient.removeWatchlistSymbols(req, opts)),
+  // Targeted single-symbol rebind (feature 167) — same header-propagating forward as its siblings.
+  updateWatchlistBinding: forward((req, opts) => portfolioClient.updateWatchlistBinding(req, opts)),
 });
 
 router.service(TradingService, {

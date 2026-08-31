@@ -1,6 +1,6 @@
 # Implementation Spec: watchlist-single-strategy-update
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-08-31
 **Feature**: `docs/roadmap/features/167-watchlist-single-strategy-update/feature.md`
 **Total Steps**: 6
@@ -439,7 +439,7 @@ behavioral verification — precedent `watchlist_service_test.go:20-21`).
 
 ### Step 5 — service: UI non-invalidating cache-patch hook, `setBinding` rewire, `writeInFlight` fix, BFF forward
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/hooks/useWatchlists.ts` — modify (add `useUpdateWatchlistBinding`)
@@ -566,7 +566,7 @@ the regenerated `PortfolioService` client). No hardcoded color introduced (C-17)
 
 ### Step 6 — test: Playwright e2e — UI patches only the changed row, no `listWatchlists` refetch (AC-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/helpers/watchlistMock.ts` — modify (add `UpdateWatchlistBinding` route)
@@ -703,6 +703,26 @@ untouched); lint clean. Confirm mock/spec imports come from the canonical helper
   (`AddSymbols`, `RemoveSymbols`) updated to `if _, err := touchWatchlistTx(...)`. The alternative
   (inline the bump inside `UpdateBinding`) was declined per the spec's stated intent. Full
   service + repository test suites stay green after the signature change.
+
+### Steps 5-6 — three e2e-mock fixes surfaced by the `setBinding` rewire (TDD red→green)
+- **RED established** by stashing the Step-5 source (hook + `setBinding` + BFF) and running the AC-6
+  test: it failed without the rewire. GREEN after restoring Step 5 + the fixes below (15/15 in
+  `watchlists.spec.ts`).
+- **(a) Connect-JSON Timestamp shape.** `watchlistMock.ts`'s new `UpdateWatchlistBinding` route is a
+  raw `page.route` body (not a `connectNodeAdapter` handler), so it must already be Connect-JSON. A
+  `google.protobuf.Timestamp` field (`updated_at`) encodes as an **RFC3339 string**, not
+  `{seconds,nanos}` — the wrong shape threw on client-side response decode, the mutation never
+  resolved, and *every* `bindStrategy`-driven test (8) failed. Fixed to `new Date(0).toISOString()`.
+  (Logged to `fails.md` — recurring class for future raw-`page.route` mocks.)
+- **(b) Request-counter URL match (AC-6).** The connect path is
+  `…xstockstrat.portfolio.v1.PortfolioService/<Method>` — a **dot** precedes `PortfolioService`, so a
+  `'/PortfolioService/<Method>'` `.includes` never matched and both counters stayed 0 (bind assertion
+  read 0). Matched on the unique `/<Method>` segment instead.
+- **(c) Concurrency-guard test (FR-5).** `concurrency guard…` holds a delayed response to observe the
+  in-flight guard; it targeted `UpdateWatchlist`, but the rebind now calls `UpdateWatchlistBinding`, so
+  the override no longer intercepted it (instant response → no visible disabled window). Re-pointed the
+  delay override at `UpdateWatchlistBinding` with the `{binding, updatedAt}` response shape — the test
+  now proves Layer-1/Layer-2 cover the new rebind RPC (the design's `writeInFlight += updateBinding.isPending`).
 
 ### Step 4 — helper named `storeBinding` to avoid collision with the feature-097 `bindingFor`
 - The spec's test sketch referenced a `bindingFor` accessor, but a fatal `bindingFor(t, wl, symbol)`
