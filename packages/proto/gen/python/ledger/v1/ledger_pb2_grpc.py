@@ -56,6 +56,11 @@ class LedgerServiceStub(object):
                 request_serializer=ledger_dot_v1_dot_ledger__pb2.GetEventRequest.SerializeToString,
                 response_deserializer=ledger_dot_v1_dot_ledger__pb2.LedgerEvent.FromString,
                 _registered_method=True)
+        self.ExportEvents = channel.unary_stream(
+                '/xstockstrat.ledger.v1.LedgerService/ExportEvents',
+                request_serializer=ledger_dot_v1_dot_ledger__pb2.ExportEventsRequest.SerializeToString,
+                response_deserializer=ledger_dot_v1_dot_ledger__pb2.ExportEventsResponse.FromString,
+                _registered_method=True)
 
 
 class LedgerServiceServicer(object):
@@ -87,6 +92,15 @@ class LedgerServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ExportEvents(self, request, context):
+        """Export a caller's events over a time window as a server stream of batched pages,
+        ordered by the global monotonic sequence. Scoped to the caller (x-user-id metadata);
+        never returns another user's or a pre-migration NULL-user_id event.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_LedgerServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -109,6 +123,11 @@ def add_LedgerServiceServicer_to_server(servicer, server):
                     servicer.GetEvent,
                     request_deserializer=ledger_dot_v1_dot_ledger__pb2.GetEventRequest.FromString,
                     response_serializer=ledger_dot_v1_dot_ledger__pb2.LedgerEvent.SerializeToString,
+            ),
+            'ExportEvents': grpc.unary_stream_rpc_method_handler(
+                    servicer.ExportEvents,
+                    request_deserializer=ledger_dot_v1_dot_ledger__pb2.ExportEventsRequest.FromString,
+                    response_serializer=ledger_dot_v1_dot_ledger__pb2.ExportEventsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -221,6 +240,33 @@ class LedgerService(object):
             '/xstockstrat.ledger.v1.LedgerService/GetEvent',
             ledger_dot_v1_dot_ledger__pb2.GetEventRequest.SerializeToString,
             ledger_dot_v1_dot_ledger__pb2.LedgerEvent.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ExportEvents(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/xstockstrat.ledger.v1.LedgerService/ExportEvents',
+            ledger_dot_v1_dot_ledger__pb2.ExportEventsRequest.SerializeToString,
+            ledger_dot_v1_dot_ledger__pb2.ExportEventsResponse.FromString,
             options,
             channel_credentials,
             insecure,
