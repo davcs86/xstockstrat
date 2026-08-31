@@ -52,3 +52,51 @@ number/slug unchanged, all FR-1..FR-10 and the six additive identity RPCs preser
 
 - Product spec approved: `draft` → `spec-ready`. All `/sdd-review` blockers and warnings were addressed (see the sdd-review-fixes session above).
 - NOTE: the confirming re-review pass was interrupted by a session usage/rate limit; fixes were applied against each reviewer's explicit findings. For 021 specifically, the orchestrator manually caught and fixed a residual field-name error (`service_origin` → `source_service`; the ledger `Event` has no `user_id` field). A quick re-review can re-confirm on resume.
+
+## Session 2026-08-31 — sdd-design (FULL)
+
+Wrote `recon.md` (Phase 0) + `design.md` (Phase 1). Did NOT flip `status.md` (left `spec-ready`);
+no code/other files changed.
+
+**Grounded recon findings (evidence-cited in recon.md):**
+- Admin gate to reuse: the config service's `authz.ts` is the canonical Node role check —
+  `ADMIN_SCOPE=0x04`, `hasAdminAccessScope(md)` (reads `x-access-scope`, fails closed), `ADMIN_SCOPE_ERROR`
+  (`services/xstockstrat-config/src/grpc/authz.ts:22,44-48,56-59`). Port it into identity; gate all six RPCs
+  (reads too, per AC-7).
+- Identity→ledger is genuinely new **code**, but the **endpoint env is already wired**: `LEDGER_ENDPOINT`
+  + `depends_on`/`WAIT_FOR` on ledger exist in `docker-compose.yml:185-186`, `.do/app.yaml:351-356`,
+  `.do/app.dev.yaml:16,20`. (The findings-doc "ledger dep removed from identity" is accurate only for the
+  CLAUDE.md deps table, not the deploy specs.) `LedgerServiceClient` (grpc-js) export confirmed at
+  `packages/proto/gen/ts/ledger/v1/ledger.ts:1389` (existence via grep; `/sdd-spec` pins the specifier, F-04).
+- No DB migration (users table already has roles/is_active/timestamps, `001:6-14`). No new config keys.
+- Nav: `NAV_GROUPS` (not `PLATFORM_SUBNAV`) is the live shell; `NavItem.adminOnly` + `Backfills`
+  precedent (`navGroups.tsx:67`) + `visibleItems` filter (`PlatformHeader.tsx:203`) give admin-hide for free.
+- `middleware.ts` is authN-only today (has `claims.roles`, no route-level authZ).
+- C-03 now binds identity (its first outbound per-request call).
+
+**Resolved the four Design-Phase Decisions (recommendations; see design.md § Process note):**
+- **Roles enum vs strings** → **closed `Role` enum** (`ROLE_UNSPECIFIED=0`,ADMIN,TRADER,VIEWER) on write
+  inputs + `User` view; `TokenClaims.roles` stays `repeated string`. C-04 (closed deployment-time set) wins
+  over the strings alternative; the enum obliges an exhaustive TS `Record<Role,…>` in the same PR (C-10(a/d),
+  ledger 2026-07-21). Rejected: open strings + server allow-list.
+- **Middleware admin route-guard** → **do NOT add one**. Load-bearing authz = BFF `forwardAdmin` + identity
+  server gate (both fail-closed); nav hides via `adminOnly`. A third Edge authZ site is UX-only scope creep.
+- **Refresh-token invalidation on mutate** → **revoke on `UpdatePassword` and `SetUserActive(false)`** (reuse
+  `UPDATE refresh_tokens SET revoked_at=NOW() WHERE user_id=$1`, `identityServiceImpl.ts:209-212`, keyed on
+  the *target* user_id — sidesteps the `revokeToken` unsigned-decode finding). Leave `SetUserRoles` eventual
+  (≤ access-TTL 15 min). Access-token deactivation lag (≤15 min) accepted as open risk.
+- **Last-admin guard** → **atomic conditional UPDATE** guarded by `EXISTS(other active active-admin)` (or a
+  row-locking tx), NOT count-then-write (TOCTOU on concurrent demotions). `FAILED_PRECONDITION "cannot remove
+  last admin"` when 0 rows affected and the target is the final active admin.
+- **Ledger audit client** → best-effort **after** the DB commit, awaited + try/catch (log on failure, don't
+  roll back), `idempotency_key` for safe retry, payload built from an explicit safe-field allow-list (never
+  spread the request → no password/hash), C-03 headers forwarded. Residual "ledger down ⇒ audit lost" risk
+  accepted (platform norm).
+
+**Floor check:** no unresolved F-* breach. F-01 (no migration), F-06 (reuse single Pool, gRPC not a new DB
+pool), F-07 (endpoint is env, TTLs from config), F-04 (client specifier pinned by grep at spec).
+
+**Process caveat (P-04 / ledger 2026-08-08):** run in a subagent without `Task`/`AskUserQuestion`; the
+proposer/adversary debate and the approval gate were self-run and are **provisional**. The four forks above
+must be confirmed by the operator before/at `/sdd-spec`. Status intentionally NOT advanced to
+`design-approved` by this subagent.
