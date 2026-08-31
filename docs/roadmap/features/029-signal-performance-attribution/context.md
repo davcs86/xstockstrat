@@ -74,3 +74,49 @@
      fee-capture plumbing across trading→ledger→042).
 - Status left at `spec-ready` (artifacts written; the design-approved flip is deferred to the live
   operator gate on the three decisions above).
+
+## Session 2026-08-31 — design revision (operator gate closed; two confirmed decisions)
+
+Revised `design.md`, `product-spec.md`, and `acceptance.feature` per two operator-confirmed decisions.
+No code, no `status.md` change.
+
+- **Decision #1 CONFIRMED — reuse 042, drop producer-side.** 029 is a single additive read-side
+  `GetAttribution` RPC in analysis aggregating 042's already-persisted `analysis.pnl_positions`
+  (user-scoped realized P&L + `closed_at`) and `analysis.order_snapshots.signals` (`{name,value,source}`
+  + conviction). **No `trading.orders` migration, no `PlaceOrder` weight vector** — grounded: orders
+  carry no signal field (`trading.proto:96` / `PlaceOrderRequest`), no causal score→order weight exists.
+  Former "trading migration 010" plan withdrawn. FR-3 "highest input weight" = highest captured
+  conviction (`order_snapshots.signals[].value`).
+- **Decision #2 CONFIRMED — net-of-fees wins via additive fee plumbing (the new design work).**
+  Investigated the real fill path:
+  - **Honest verdict: Alpaca does NOT expose per-fill fees on the order/fill path.** `AlpacaOrder`
+    (`internal/broker/alpaca.go:76-97`) parses no fee; `broker.BrokerOrder` (`broker.go:15-29`) has
+    none; `order.filled` emit (`internal/service/trading.go:1712-1717`) carries only
+    `{order_id,symbol,qty,fill_price,user_id,trading_mode,account_id}`. US equities are commission-free;
+    SEC/TAF regulatory fees exist only in the Account Activities API (`/v2/account/activities`,
+    end-of-day-aggregated `FEE`/`REG`/`TAF`), not per-fill — and trading has no activities integration
+    (grep empty). Realized P&L today (`packages/proto/pnl/pnl.go:17-29`) is price-only/gross.
+  - **Designed seam (additive, non-breaking):** add `Fees` to `broker.BrokerOrder` (Alpaca leaves 0) →
+    stamp additive `"fees"` key on the `order.filled`/`order.partially_filled` **Struct** payloads
+    (ledger payload is `google.protobuf.Struct`, `ledger/v1/ledger.proto:27` → **no proto change**,
+    `buf breaking` green) → portfolio fold accumulates it into a **new `portfolio.positions.fees_accum`
+    column (migration `014`)** alongside `realized_accum` (`portfolio_service.go:288-307`,
+    `portfolio_repo.go:57-88`) → emit additive `"fees_total"` on `portfolio.position.closed` (existing
+    `realized_pnl` stays GROSS/authoritative — preserves 042's shipped page + `GetPnL`, C-10(b)/C-16) →
+    042 consumer (`pnl_pattern_consumer.py:256-283`) persists it to a **new
+    `analysis.pnl_positions.fees_total` column (migration `021`, + `(user_id,closed_at)` index)** →
+    `GetAttribution` win test computes net = `realized_pnl − fees_total`.
+  - **Migrations added:** portfolio `014_positions_fees_accum.{up,down}.sql`; analysis
+    `021_pnl_positions_fees_total.{up,down}.sql` (replaces the earlier optional-index-only 021). Both
+    additive `NOT NULL DEFAULT 0`, paired down. F-01/F-06 honored (new numbered migrations, no new
+    pool/service).
+- **AC-6 kept net-of-fees (now buildable)** — the earlier "redefine to gross (C-16 CHANGE)" option is
+  **withdrawn**; AC-6 is net-new, not a change to any existing rule. Added `@AC-10` (concrete: a $1.20
+  fee on `order.filled` → `fees_total=$1.20`, unchanged gross `realized_pnl=$1.00` → net −$0.20 =
+  loss) and `@AC-11` (no fee data ⇒ net == gross). All `@AC/@FR` tags preserved.
+- **Open Risk carried:** Alpaca-sourced `fees` = 0 until a **named follow-up** sources regulatory fees
+  from the Activities API and matches them to fills/positions; seam is correct end-to-end and unit
+  tests prove the subtraction with injected fees. UI labels P&L "net of fees (broker regulatory fees
+  pending)".
+- **No Floor breach.** Constitution touched: C-01/C-04/C-07/C-09/C-10(a)/C-10(b)/C-12/C-13/C-14/C-16/
+  C-17, P-03, F-01, F-06.

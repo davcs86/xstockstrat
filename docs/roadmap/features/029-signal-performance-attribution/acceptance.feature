@@ -49,10 +49,26 @@ Feature: signal-performance-attribution
 
   @AC-6 @FR-4
   Scenario: Win is defined as realized P&L greater than 0 after fees
-    Given a closed position with gross realized P&L of $12 and $15 of fees read from the fill event payload
+    Given a closed position with gross realized P&L of $12 and $15 of accumulated fees
     When win/loss is computed for that trade
     Then the net realized P&L is -$3 and the trade is counted as a loss
     And a second closed position with gross realized P&L $50 and $10 fees nets $40 and is counted as a win
+
+  @AC-10 @FR-4
+  Scenario: A per-fill fee flows through the fee-capture plumbing into the net win test
+    Given a fill carrying a $1.20 fee on the "order.filled" event payload
+    And that fill fully closes a position whose gross realized P&L is $1.00
+    When the portfolio realized-P&L fold accumulates the fee and seals the position
+    Then the "portfolio.position.closed" event carries fees_total=$1.20 and an unchanged gross realized_pnl=$1.00
+    And analysis persists fees_total=$1.20 on the pnl_positions row
+    And GetAttribution's win test uses net = $1.00 - $1.20 = -$0.20 and counts the trade as a loss
+
+  @AC-11 @FR-4
+  Scenario: A position with no captured fee data is netted at gross (no silent fee)
+    Given a closed position whose fills carried no fee value (fees_total defaults to 0)
+    When win/loss is computed for that trade
+    Then the net realized P&L equals the gross realized P&L
+    And the win/loss outcome is identical to the gross-only result
 
   @AC-7 @FR-5
   Scenario: Metrics are filterable by source ID within a date range
