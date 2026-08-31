@@ -29,6 +29,15 @@ service IdentityService {
   // User profile metadata self-management (feature 130)
   rpc GetUserMetadata(GetUserMetadataRequest) returns (GetUserMetadataResponse);
   rpc UpdateUserMetadata(UpdateUserMetadataRequest) returns (UpdateUserMetadataResponse);
+
+  // User management (admin-gated, feature 043). Every RPC requires the admin access-scope bit;
+  // passwords are write-only (never returned). Additive over the existing service.
+  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+  rpc UpdatePassword(UpdatePasswordRequest) returns (UpdatePasswordResponse);
+  rpc SetUserRoles(SetUserRolesRequest) returns (SetUserRolesResponse);
+  rpc SetUserActive(SetUserActiveRequest) returns (SetUserActiveResponse);
 }
 
 message AuthenticateUserRequest {
@@ -134,3 +143,53 @@ message UpdateUserMetadataRequest {
   optional google.protobuf.Struct metadata = 3;
 }
 message UpdateUserMetadataResponse { UserMetadata user_metadata = 1; }
+
+// ── User management (admin-gated, feature 043) ───────────────────────────────
+// Closed role set (C-04). Mirrors the viewer/trader/admin roles the platform already uses;
+// TokenClaims.roles stays a free-string list (JWT claim shape, unchanged).
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  ROLE_ADMIN = 1;
+  ROLE_TRADER = 2;
+  ROLE_VIEWER = 3;
+}
+
+// Password-free admin view of a user (no password / password_hash — FR-10/AC-10).
+message User {
+  string user_id = 1;
+  string email = 2;
+  repeated Role roles = 3;
+  bool is_active = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+message CreateUserRequest {
+  string email = 1;
+  string password = 2;       // write-only; never echoed back
+  repeated Role roles = 3;
+}
+message CreateUserResponse { User user = 1; }
+
+message ListUsersRequest {}
+message ListUsersResponse { repeated User users = 1; }
+
+message GetUserRequest { string user_id = 1; }
+message GetUserResponse { User user = 1; }
+
+message UpdatePasswordRequest {
+  string user_id = 1;
+  string new_password = 2;   // write-only; never echoed back
+}
+message UpdatePasswordResponse {}  // empty — no password/hash returned (AC-10)
+
+message SetUserRolesRequest {
+  string user_id = 1;
+  repeated Role roles = 2;
+}
+message SetUserRolesResponse { User user = 1; }
+
+message SetUserActiveRequest {
+  string user_id = 1;
+  bool active = 2;
+}
+message SetUserActiveResponse { User user = 1; }

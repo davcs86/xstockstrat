@@ -15,6 +15,7 @@
 | 2026-08-31 | `draft` → `spec-ready` | /sdd-review | Product spec approved; all review blockers addressed |
 | 2026-08-31 | `spec-ready` → `design-approved` | /sdd-design | Design debated (full) and approved; recon.md + design.md written |
 | 2026-08-31 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (10 steps) |
+| 2026-08-31 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1–2 done — 6 admin identity RPCs + Role/User proto; stubs regenerated (buf breaking clean) |
 
 ---
 

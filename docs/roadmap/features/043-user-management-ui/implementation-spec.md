@@ -60,7 +60,7 @@ Surface — no MCP tool change).
 
 ### Step 1 — proto: Add six admin RPCs, a `Role` enum, and a password-free `User` view
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/identity/v1/identity.proto` — modify
@@ -129,7 +129,7 @@ Confirm `buf lint` passes and `buf breaking` reports no breaking change (additiv
 
 ### Step 2 — proto-gen: Regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/**` — modify (generated; never hand-edited)

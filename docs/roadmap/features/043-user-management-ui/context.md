@@ -151,3 +151,21 @@ must be confirmed by the operator before/at `/sdd-spec`. Status intentionally NO
   - Step 2: `packages/proto/gen/**` wildcard Files — accepted proto-gen convention, bounded by the freshness check. — [ ] note only
   - Notes: last-admin guard is atomic per-row but two concurrent demotions of DIFFERENT admins can write-skew to zero under READ COMMITTED (design-accepted R4; needs SERIALIZABLE/advisory lock only if strict >=1 admin required); Role enum interim window safe (brand-new enum, no pre-existing exhaustive consumer). — [ ] note only
 - Overlap findings: batch scan CLEAN; 043 shares navGroups.tsx / PlatformHeader.tsx with 029/031 (rebase-only).
+
+## Session 2026-08-31 — sdd-execute (sequential)
+
+Executed on `feature/user-management-ui`, off clean `main-dev`. Unattended run. Reused the pinned
+codegen container built for feature 021 (buf 1.72.0 + plugins). Carried the two impl-review ⚠ into
+execution: Step 6 audit idempotency_key must be stable (addressed at Step 6); Step 9 drops the dead
+`PLATFORM_SUBNAV.config` edit (addressed at Step 9 — nav is `NAV_GROUPS`-only).
+
+### Step 1 — proto: 6 admin RPCs + Role enum + password-free User view [done]
+- `identity.proto`: added `CreateUser/ListUsers/GetUser/UpdatePassword/SetUserRoles/SetUserActive`
+  RPCs; closed `Role` enum (UNSPECIFIED/ADMIN/TRADER/VIEWER); `User` view (no password/hash); the six
+  request/response pairs (roles as `Role` enum on write inputs). TokenClaims untouched (JWT shape).
+- TDD N/A. `buf lint` OK; `buf breaking` against main-dev clean (additive). Files: `identity.proto`.
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- `./scripts/buf-gen.sh` in the codegen container. 12 gen files changed, **all identity** (Go pb/grpc/
+  connect, Python pb2/grpc, TS ts-proto + connect + compiled dist), 0 non-identity — additive, no drift.
+- TDD N/A. Files: `packages/proto/gen/**`.
