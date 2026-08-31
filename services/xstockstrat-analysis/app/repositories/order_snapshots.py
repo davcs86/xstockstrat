@@ -68,3 +68,14 @@ class OrderSnapshotsRepository:
             position_id,
         )
         return [dict(r) for r in rows]
+
+    async def attribution_inputs_for_position(self, position_id: str) -> list[dict]:
+        """Snapshots for a position, oldest-first, carrying `signals` (attribution inputs)
+        plus `price`/`quantity` (the earliest of which is the cost-basis denominator) — feature 029.
+        Distinct from list_for_position (feature 042's _build_samples depends on it — PRESERVE)."""
+        rows = await self._db.fetch(
+            "SELECT signals, price, quantity FROM analysis.order_snapshots "
+            "WHERE position_id=$1 ORDER BY event_ts ASC",
+            position_id,
+        )
+        return [dict(r) for r in rows]

@@ -441,7 +441,7 @@ Confirm the suite passes and coverage ≥ 40%.
 
 ### Step 11 — service: analysis — `GetAttribution` handler + attribution reads
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify (`GetAttribution` handler)
@@ -482,7 +482,7 @@ Confirm the suite passes and coverage ≥ 40%.
 
 ### Step 12 — test: analysis `GetAttribution` aggregation, tie split, net-of-fees, filter, auto-source
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_get_attribution.py` — create

@@ -78,3 +78,25 @@ class PnLPositionsRepository:
             fees_total,
         )
         return dict(row) if row is not None else None
+
+    async def list_closed_for_attribution(
+        self, *, user_id: str, start=None, end=None
+    ) -> list[dict]:
+        """Closed positions for a user in an optional [start, end] window (feature 029). Returns
+        {position_id, symbol, realized_pnl, fees_total, closed_at}; served by the migration-021
+        (user_id, closed_at) index. The optional source_id filter lives in the handler (a slug is a
+        snapshot-signal attribute, not a pnl_positions column)."""
+        clauses = ["user_id=$1", "closed_at IS NOT NULL"]
+        args: list = [user_id]
+        if start is not None:
+            args.append(start)
+            clauses.append(f"closed_at >= ${len(args)}")
+        if end is not None:
+            args.append(end)
+            clauses.append(f"closed_at <= ${len(args)}")
+        rows = await self._db.fetch(
+            "SELECT position_id, symbol, realized_pnl, fees_total, closed_at "
+            "FROM analysis.pnl_positions WHERE " + " AND ".join(clauses),
+            *args,
+        )
+        return [dict(r) for r in rows]
