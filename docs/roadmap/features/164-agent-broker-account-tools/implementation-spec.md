@@ -2,7 +2,7 @@
 
 **Status**: `done`
 **Created**: 2026-08-27
-**Feature**: `docs/roadmap/features/162-agent-broker-account-tools/feature.md`
+**Feature**: `docs/roadmap/features/164-agent-broker-account-tools/feature.md`
 **Total Steps**: 5
 **Feature Branch**: `feature/agent-broker-account-tools`
 
@@ -237,7 +237,7 @@ tools that are that surface. No UI step is required — a decision, not an omiss
 2. `docs/runbooks/mcp-tools.md` — after the `### manage_offline_account` section (before `## Usage Patterns`, L1124), add two full reference entries mirroring the offline entry's structure:
    - `### manage_account` — parameter table (`operation` = `register` \| `update_credentials` \| `deregister`; `account_id` for update/deregister; `display_name`, `broker_type` (`alpaca`\|`ibkr`), `credentials_json` for register), returns (`register`/`update_credentials` → `{"account": …}` with `credential_status`, credentials never echoed; `deregister` → `{"deregistered": true, "account_id": …}`), and an **Errors:** block (`unknown operation`; missing required args; offline steer; `broker account not found`; `permission denied` non-owner; `FAILED_PRECONDITION` on `update_credentials` for an offline account). Note ownership is the caller's own `x-user-id`.
    - `### list_accounts` — no parameters (read-only); returns `{"accounts": [...]}` of the caller's broker **and** offline accounts, each with `broker_type`; note credentials are not part of `BrokerAccount` and never returned.
-3. `services/xstockstrat-agent/CLAUDE.md:36` — change `thirty tools` → `thirty-two tools`; append two rows to the tool table after the `manage_offline_account` row: `| manage_account | Register / update-credentials / deregister a caller-owned broker account (ownership-gated; credentials never echoed) — feature 162 |` and `| list_accounts | List the caller's own accounts, broker and offline together, each by broker_type (read-only) — feature 162 |`.
+3. `services/xstockstrat-agent/CLAUDE.md:36` — change `thirty tools` → `thirty-two tools`; append two rows to the tool table after the `manage_offline_account` row: `| manage_account | Register / update-credentials / deregister a caller-owned broker account (ownership-gated; credentials never echoed) — feature 164 |` and `| list_accounts | List the caller's own accounts, broker and offline together, each by broker_type (read-only) — feature 164 |`.
 4. Do **not** touch `strat-lab` (confirmed no account/broker references) and do **not** touch `services/xstockstrat-ui/src/lib/copilot.ts` (`COPILOT_MCP_TOOL_COUNT`) — out of the approved product-spec scope (see `## Step Dependencies`).
 
 **Verification**:

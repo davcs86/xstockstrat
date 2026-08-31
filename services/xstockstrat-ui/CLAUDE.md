@@ -263,7 +263,7 @@ ANALYSIS_ENDPOINT=xstockstrat-analysis:50056
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
 CONFIG_ENDPOINT=xstockstrat-config:50060
-VAPID_PUBLIC_KEY            # feature 163 — Web Push public key, exposed to the browser via VapidKeyContext (server→client prop, NOT NEXT_PUBLIC_*); empty ⇒ push enable control reports "not configured"
+VAPID_PUBLIC_KEY            # feature 165 — Web Push public key, exposed to the browser via VapidKeyContext (server→client prop, NOT NEXT_PUBLIC_*); empty ⇒ push enable control reports "not configured"
 DATABASE_URL                # config-ui audit route only
 DB_POOL_MAX=1               # config-ui audit pool cap
 OTEL_ENABLED                # toggle OTel; init errors never block startup
@@ -284,7 +284,7 @@ See `docs/patterns/nextjs-frontends.md` and `docs/patterns/client-api-pattern.md
 - **Suspense fallbacks** must render real shell/placeholder structure, not `null`, so SSR HTML isn't empty.
 - **Radix primitives** (Select/Dialog) are Client Components (`'use client'`) to avoid hydration mismatch.
 
-## PWA & Push Notifications (feature 163)
+## PWA & Push Notifications (feature 165)
 
 The UI is an installable PWA that can receive OS-level Web Push notifications even when closed.
 

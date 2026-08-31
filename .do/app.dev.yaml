@@ -403,7 +403,7 @@ services:
         scope: RUN_TIME
         value: YOUR_DEV_SENDGRID_API_KEY
         type: SECRET
-      # Feature 163 — Web Push (VAPID). Private key is a SECRET; public key + subject are non-secret.
+      # Feature 165 — Web Push (VAPID). Private key is a SECRET; public key + subject are non-secret.
       # Push stays disabled until all three are set.
       - key: VAPID_PRIVATE_KEY
         scope: RUN_TIME
@@ -482,7 +482,7 @@ services:
         value: ${APP_URL}
       - key: AGENT_PUBLIC_URL
         value: ${APP_URL}/agent
-      # Feature 163 — the push toggle needs the VAPID PUBLIC key only (non-secret). Keep in sync
+      # Feature 165 — the push toggle needs the VAPID PUBLIC key only (non-secret). Keep in sync
       # with the notify component's VAPID_PUBLIC_KEY.
       - key: VAPID_PUBLIC_KEY
         scope: RUN_TIME

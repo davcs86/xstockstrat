@@ -207,7 +207,7 @@ deliberately excludes INFO fill confirmations; an operator lowers it to `1` to f
 | `notify.fanout.sendgrid_from_email` | string | `''` | Fanout email sender; email disabled until from/to set and `SENDGRID_API_KEY` present |
 | `notify.fanout.sendgrid_to_email` | string | `''` | Fanout email recipient; same enable condition |
 
-### feature 163 — pwa-notifications (`xstockstrat-notify`)
+### feature 165 — pwa-notifications (`xstockstrat-notify`)
 
 Adds a best-effort **Web Push** channel (a third fanout channel) delivering OS notifications to
 installed-PWA devices. The one key below is seeded by config migration `021` for `staging`+`production`

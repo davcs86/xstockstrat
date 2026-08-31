@@ -46,14 +46,14 @@ on:
       VAPID_PRIVATE_KEY:
         required: false
         # Callers pass DEV_VAPID_PRIVATE_KEY or PROD_VAPID_PRIVATE_KEY from GitHub Secrets. Optional —
-        # Web Push is off until all three VAPID values are set (feature 163). App-level notify secret.
+        # Web Push is off until all three VAPID values are set (feature 165). App-level notify secret.
       VAPID_PUBLIC_KEY:
         required: false
         # Non-secret VAPID public key (also consumed by the UI). Passed as a secret input only so the
-        # same substitution path fills the YOUR_*_VAPID_PUBLIC_KEY placeholders (feature 163).
+        # same substitution path fills the YOUR_*_VAPID_PUBLIC_KEY placeholders (feature 165).
       VAPID_SUBJECT:
         required: false
-        # Non-secret VAPID subject (a mailto:/https: URL). Same substitution path (feature 163).
+        # Non-secret VAPID subject (a mailto:/https: URL). Same substitution path (feature 165).
 
 jobs:
   deploy:

@@ -1136,7 +1136,7 @@ found`; `permission denied` (non-owner); `FAILED_PRECONDITION` (confirm on a bro
 
 ### `manage_account`
 
-Manage the **caller's own BROKER accounts** (Alpaca / IBKR) in `xstockstrat-trading` (feature 162).
+Manage the **caller's own BROKER accounts** (Alpaca / IBKR) in `xstockstrat-trading` (feature 164).
 All operations act on the **caller's own** accounts (ownership from the verified `x-user-id`); a
 non-owner is rejected `PERMISSION_DENIED`. Broker credentials pass through to the backend (which
 encrypts them at rest) and are **never echoed back** — a `BrokerAccount` carries no credential
@@ -1167,7 +1167,7 @@ required args per operation; offline steer on `register` (`broker_type=offline`)
 
 ### `list_accounts`
 
-List the **caller's own** accounts — broker **and** offline together (read-only, feature 162). No
+List the **caller's own** accounts — broker **and** offline together (read-only, feature 164). No
 parameters. Offline accounts (feature 157) appear alongside broker accounts, each distinguishable by
 its `broker_type` (`BROKER_TYPE_ALPACA` / `BROKER_TYPE_IBKR` / `BROKER_TYPE_OFFLINE`). Ownership is
 resolved server-side from the verified `x-user-id`. Credentials are not part of a `BrokerAccount` and

@@ -1,7 +1,7 @@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { PushToggle } from './PushToggle';
 
-// Settings-group page (feature 163): enable/disable OS push notifications for this device. The VAPID
+// Settings-group page (feature 165): enable/disable OS push notifications for this device. The VAPID
 // public key is provided by the accounts layout (server→client context), so this stays a server
 // component and delegates the browser Push API work to the client PushToggle.
 export default function NotificationsPage() {

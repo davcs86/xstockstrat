@@ -1816,7 +1816,7 @@ async def list_account_positions(user_id: str, account_id: str) -> dict[str, Any
     }
 
 
-# ── Broker account management (feature 162) ──────────────────────────────────
+# ── Broker account management (feature 164) ──────────────────────────────────
 # Thin wrappers over TradingService backing the `manage_account` (write) and `list_accounts` (read)
 # MCP tools. Ownership is always taken from the forwarded `x-user-id`; the trading handler resolves
 # ownership server-side and rejects non-owners PERMISSION_DENIED. Broker credentials pass through to

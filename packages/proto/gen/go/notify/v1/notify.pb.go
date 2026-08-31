@@ -654,7 +654,7 @@ func (x *ListAlertsResponse) GetNextPageToken() string {
 	return ""
 }
 
-// Web Push subscription registration (feature 163 — pwa-notifications).
+// Web Push subscription registration (feature 165 — pwa-notifications).
 type RegisterPushSubscriptionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// No user_id field — the owner is resolved from the propagated x-user-id metadata header (C-03),

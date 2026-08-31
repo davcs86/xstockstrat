@@ -15,7 +15,7 @@ const nextConfig = {
   async redirects() {
     return [{ source: '/', destination: '/trader', permanent: false }];
   },
-  // PWA (feature 163): the service worker and manifest must be revalidated on every load so an
+  // PWA (feature 165): the service worker and manifest must be revalidated on every load so an
   // updated handler always reaches installed clients — a cached sw.js would pin a stale worker.
   async headers() {
     return [

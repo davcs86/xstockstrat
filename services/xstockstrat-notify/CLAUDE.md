@@ -75,9 +75,9 @@ Namespace: `notify`
 | `notify.fanout.dedup_window_seconds` | int | `300` | Suppress re-delivery of a byte-identical alert (content hash of category/source/title/body + signal context) within this window (feature 020) |
 | `notify.fanout.sendgrid_from_email` | string | `''` | Sender address for outbound fanout email; email disabled until both from/to are set **and** `SENDGRID_API_KEY` is present (feature 020) |
 | `notify.fanout.sendgrid_to_email` | string | `''` | Recipient address for outbound fanout email; email disabled until both from/to are set **and** `SENDGRID_API_KEY` is present (feature 020) |
-| `notify.push.min_severity` | int | `2` | Web Push gate: minimum `AlertSeverity` ordinal to send a Web Push (0=UNSPECIFIED,1=INFO,2=WARNING,3=ERROR,4=CRITICAL), clamped to [0,4]. Mirrors `notify.fanout.min_severity`; default 2 (WARNING) excludes INFO fill confirmations. Read live per dispatch. (feature 163) |
+| `notify.push.min_severity` | int | `2` | Web Push gate: minimum `AlertSeverity` ordinal to send a Web Push (0=UNSPECIFIED,1=INFO,2=WARNING,3=ERROR,4=CRITICAL), clamped to [0,4]. Mirrors `notify.fanout.min_severity`; default 2 (WARNING) excludes INFO fill confirmations. Read live per dispatch. (feature 165) |
 
-**Web Push (feature 163).** `src/fanout/webPush.ts` (`WebPushDispatcher`) is a **third, disjoint,
+**Web Push (feature 165).** `src/fanout/webPush.ts` (`WebPushDispatcher`) is a **third, disjoint,
 best-effort fanout channel** — it delivers OS notifications to installed-PWA devices via the Web Push
 protocol (`web-push` lib, VAPID-signed). Dispatched from `emitAlert` via a **second `queueMicrotask`**
 beside the `FanoutDispatcher` one, *after* the success callback, so it never blocks/delays the primary
@@ -107,9 +107,9 @@ APPLICATION_ENV=development         # development | production
 TRADING_MODE=paper                     # paper | live
 SLACK_WEBHOOK_URL=                  # type: SECRET (feature 020) — Slack incoming webhook; empty ⇒ Slack fanout disabled; rotation requires redeploy, not a live config push
 SENDGRID_API_KEY=                   # type: SECRET (feature 020) — SendGrid v3 API key; empty ⇒ email fanout disabled; rotation requires redeploy
-VAPID_PRIVATE_KEY=                  # type: SECRET (feature 163) — Web Push VAPID private key; empty ⇒ push disabled
-VAPID_PUBLIC_KEY=                   # feature 163 — VAPID public key (also consumed by xstockstrat-ui); non-secret
-VAPID_SUBJECT=                      # feature 163 — VAPID contact URL (mailto: or https:); non-secret; invalid/absent ⇒ push disabled
+VAPID_PRIVATE_KEY=                  # type: SECRET (feature 165) — Web Push VAPID private key; empty ⇒ push disabled
+VAPID_PUBLIC_KEY=                   # feature 165 — VAPID public key (also consumed by xstockstrat-ui); non-secret
+VAPID_SUBJECT=                      # feature 165 — VAPID contact URL (mailto: or https:); non-secret; invalid/absent ⇒ push disabled
 ```
 
 > `SLACK_WEBHOOK_URL` / `SENDGRID_API_KEY` / `VAPID_PRIVATE_KEY` are credentials delivered as DO App
@@ -117,7 +117,7 @@ VAPID_SUBJECT=                      # feature 163 — VAPID contact URL (mailto:
 > `.do/app*.yaml`, the deploy workflows, and `scripts/do-inject-prod-secrets.py`) — **never**
 > config-service rows (config governance / feature 076). `VAPID_PUBLIC_KEY` / `VAPID_SUBJECT` are
 > non-secret and wired the same way for convenience. All are optional; an unset value simply disables
-> that channel. Web Push needs **all three** VAPID values (feature 163).
+> that channel. Web Push needs **all three** VAPID values (feature 165).
 
 ## Running Locally
 

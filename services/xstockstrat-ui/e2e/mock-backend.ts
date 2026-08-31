@@ -438,7 +438,7 @@ export async function startMockBackend(): Promise<void> {
             ],
           };
         },
-        // Feature 163: echo the caller resolved from the propagated x-user-id header back as the
+        // Feature 165: echo the caller resolved from the propagated x-user-id header back as the
         // subscription id, so the e2e can assert the notify service derives the owner from the
         // session-forwarded header (not the request body) — the IDOR guard.
         async registerPushSubscription(

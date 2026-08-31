@@ -75,8 +75,8 @@ reference):
 | `manage_watchlist` | Create/update/delete a caller-owned watchlist; `update` is a **read-modify-write merge** over the replace-only `UpdateWatchlist` RPC so a name-only edit never wipes the stocks (feature 148) |
 | `manage_watchlist_symbols` | Add/remove stocks on a caller-owned watchlist; `add` records `MANUAL`-sourced entries (feature 148) |
 | `manage_offline_account` | Create a caller-owned OFFLINE account, record its orders, confirm their fills (recomputes positions + realized P&L), snapshot a brokerage-statement baseline (effective-dated opening positions, feature 163), and read its orders/positions (with per-position `source`/`as_of` provenance) — the manual-book reconciliation surface (feature 157) |
-| `manage_account` | Register / update-credentials / deregister a caller-owned BROKER account (Alpaca/IBKR); ownership-gated on `x-user-id`, credentials never echoed back (feature 162) |
-| `list_accounts` | List the caller's own accounts — broker and offline together, each by `broker_type` (read-only, feature 162) |
+| `manage_account` | Register / update-credentials / deregister a caller-owned BROKER account (Alpaca/IBKR); ownership-gated on `x-user-id`, credentials never echoed back (feature 164) |
+| `list_accounts` | List the caller's own accounts — broker and offline together, each by `broker_type` (read-only, feature 164) |
 
 ### Management-tool authorization
 
