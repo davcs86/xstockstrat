@@ -336,6 +336,19 @@ export interface ListAllWatchlistSymbolsResponse {
     /** Distinct, sorted bare symbols across all users' watchlists (bindings collapsed). */
     symbols: string[];
 }
+/** user_id intentionally absent — ownership from the x-user-id header (feature 167). */
+export interface UpdateWatchlistBindingRequest {
+    watchlistId: string;
+    symbol: string;
+    /** "" = unbind this one row (matches WatchlistBinding.strategy_id) */
+    strategyId: string;
+}
+export interface UpdateWatchlistBindingResponse {
+    /** the updated binding (symbol/strategy_id/source) */
+    binding?: WatchlistBinding | undefined;
+    /** list-level watchlists.updated_at, bumped in-tx */
+    updatedAt?: Date | undefined;
+}
 export declare const Portfolio: MessageFns<Portfolio>;
 export declare const Position: MessageFns<Position>;
 export declare const PortfolioSnapshot: MessageFns<PortfolioSnapshot>;
@@ -369,6 +382,8 @@ export declare const EnsureSignalWatchlistRequest: MessageFns<EnsureSignalWatchl
 export declare const EnsureSignalWatchlistResponse: MessageFns<EnsureSignalWatchlistResponse>;
 export declare const ListAllWatchlistSymbolsRequest: MessageFns<ListAllWatchlistSymbolsRequest>;
 export declare const ListAllWatchlistSymbolsResponse: MessageFns<ListAllWatchlistSymbolsResponse>;
+export declare const UpdateWatchlistBindingRequest: MessageFns<UpdateWatchlistBindingRequest>;
+export declare const UpdateWatchlistBindingResponse: MessageFns<UpdateWatchlistBindingResponse>;
 export type PortfolioServiceService = typeof PortfolioServiceService;
 export declare const PortfolioServiceService: {
     readonly getPortfolio: {
@@ -530,6 +545,20 @@ export declare const PortfolioServiceService: {
         readonly responseSerialize: (value: ListAllWatchlistSymbolsResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => ListAllWatchlistSymbolsResponse;
     };
+    /**
+     * Targeted single-symbol rebind (feature 167): change one binding's strategy_id via a single-row
+     * UPDATE — no replace-all. Ownership from the propagated x-user-id header (server-side), never
+     * from the request body. NOT_FOUND if the symbol is not in the watchlist.
+     */
+    readonly updateWatchlistBinding: {
+        readonly path: "/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlistBinding";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: UpdateWatchlistBindingRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => UpdateWatchlistBindingRequest;
+        readonly responseSerialize: (value: UpdateWatchlistBindingResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => UpdateWatchlistBindingResponse;
+    };
 };
 export interface PortfolioServiceServer extends UntypedServiceImplementation {
     getPortfolio: handleUnaryCall<GetPortfolioRequest, Portfolio>;
@@ -563,6 +592,12 @@ export interface PortfolioServiceServer extends UntypedServiceImplementation {
      * the fundamentals-signal producer's universe resolution.
      */
     listAllWatchlistSymbols: handleUnaryCall<ListAllWatchlistSymbolsRequest, ListAllWatchlistSymbolsResponse>;
+    /**
+     * Targeted single-symbol rebind (feature 167): change one binding's strategy_id via a single-row
+     * UPDATE — no replace-all. Ownership from the propagated x-user-id header (server-side), never
+     * from the request body. NOT_FOUND if the symbol is not in the watchlist.
+     */
+    updateWatchlistBinding: handleUnaryCall<UpdateWatchlistBindingRequest, UpdateWatchlistBindingResponse>;
 }
 export interface PortfolioServiceClient extends Client {
     getPortfolio(request: GetPortfolioRequest, callback: (error: ServiceError | null, response: Portfolio) => void): ClientUnaryCall;
@@ -627,6 +662,14 @@ export interface PortfolioServiceClient extends Client {
     listAllWatchlistSymbols(request: ListAllWatchlistSymbolsRequest, callback: (error: ServiceError | null, response: ListAllWatchlistSymbolsResponse) => void): ClientUnaryCall;
     listAllWatchlistSymbols(request: ListAllWatchlistSymbolsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListAllWatchlistSymbolsResponse) => void): ClientUnaryCall;
     listAllWatchlistSymbols(request: ListAllWatchlistSymbolsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListAllWatchlistSymbolsResponse) => void): ClientUnaryCall;
+    /**
+     * Targeted single-symbol rebind (feature 167): change one binding's strategy_id via a single-row
+     * UPDATE — no replace-all. Ownership from the propagated x-user-id header (server-side), never
+     * from the request body. NOT_FOUND if the symbol is not in the watchlist.
+     */
+    updateWatchlistBinding(request: UpdateWatchlistBindingRequest, callback: (error: ServiceError | null, response: UpdateWatchlistBindingResponse) => void): ClientUnaryCall;
+    updateWatchlistBinding(request: UpdateWatchlistBindingRequest, metadata: Metadata, callback: (error: ServiceError | null, response: UpdateWatchlistBindingResponse) => void): ClientUnaryCall;
+    updateWatchlistBinding(request: UpdateWatchlistBindingRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: UpdateWatchlistBindingResponse) => void): ClientUnaryCall;
 }
 export declare const PortfolioServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): PortfolioServiceClient;

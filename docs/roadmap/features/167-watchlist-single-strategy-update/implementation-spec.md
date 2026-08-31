@@ -66,7 +66,7 @@ the single-row `UPDATE ... WHERE` is directly addressable (product-spec § Datab
 
 ### Step 1 — proto: additive `UpdateWatchlistBinding` RPC + request/response messages
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/portfolio/v1/portfolio.proto` — modify
@@ -128,7 +128,7 @@ retype), so `buf breaking` reports no breaking changes (C-09).
 
 ### Step 2 — proto-gen: regenerate Go/Python/TS stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/portfolio/v1/**` — modify (generated; do not hand-edit)
