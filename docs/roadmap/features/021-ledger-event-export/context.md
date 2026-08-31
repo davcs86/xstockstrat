@@ -35,3 +35,10 @@ Product-spec review returned FAIL: the spec predated the gRPC-only migration and
 
 - Product spec approved: `draft` → `spec-ready`. All `/sdd-review` blockers and warnings were addressed (see the sdd-review-fixes session above).
 - NOTE: the confirming re-review pass was interrupted by a session usage/rate limit; fixes were applied against each reviewer's explicit findings. For 021 specifically, the orchestrator manually caught and fixed a residual field-name error (`service_origin` → `source_service`; the ledger `Event` has no `user_id` field). A quick re-review can re-confirm on resume.
+
+## Session 2026-08-31 — per-user scoping restored (operator decision)
+
+- Operator directive: the export MUST be per-user. Restored `user_id` and made per-user a fixed requirement rather than a deferred design question.
+- FR-7 exports a `user_id` column again; added FR-10 (per-user isolation — a caller only ever exports their own events). AC-8 restores the `user_id` key; new AC-11 asserts cross-user isolation (u_42 sees evt_a1, never u_99's evt_b2).
+- Because the ledger `Event` had no `user_id`, this feature now ADDS one: an additive `user_id` field on the `Event` message + `AppendEventRequest` (stamped from `x-user-id` at write time) and a nullable `user_id` column + per-user index on the events hypertable (additive migration). Scope grew from proto-only to proto + DB migration; DBA gate now applies.
+- Remaining design choices (attribution mechanism for existing producers/event types, handling of NULL-user_id historical rows) are recorded as a § Design-Phase Decision — the per-user REQUIREMENT (FR-10) is fixed, only the mechanism is open.

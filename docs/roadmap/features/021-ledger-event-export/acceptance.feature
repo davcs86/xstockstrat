@@ -26,7 +26,7 @@ Feature: ledger-event-export
     When the browser requests "GET .../api/ledger/export?start=2026-01-01&end=2026-03-31&format=csv"
     Then the response status is 200
     And the "Content-Type" is "text/csv"
-    And the first line is the header "event_id,event_type,occurred_at,source_service,correlation_id,sequence,stream_key,payload"
+    And the first line is the header "event_id,event_type,occurred_at,source_service,correlation_id,sequence,stream_key,user_id,payload"
     And 3 data rows follow, one per event
 
   @AC-3 @FR-3
@@ -73,12 +73,22 @@ Feature: ledger-event-export
 
   @AC-8 @FR-7
   Scenario: Each exported row carries the required fields
-    Given the ledger holds one fill event with event_id "evt_9f21" at 2026-02-15T14:30:00Z from source_service "xstockstrat-trading" with correlation_id "corr_7c3"
+    Given the ledger holds one fill event with event_id "evt_9f21" at 2026-02-15T14:30:00Z from source_service "xstockstrat-trading" for user_id "u_42" with correlation_id "corr_7c3"
     And the browser has a valid authenticated session
     When the browser requests "GET .../api/ledger/export?start=2026-02-01&end=2026-02-28"
     Then the response status is 200
-    And the row for "evt_9f21" has keys "event_id", "event_type", "occurred_at", "source_service", "correlation_id", "sequence", "stream_key", "payload"
+    And the row for "evt_9f21" has keys "event_id", "event_type", "occurred_at", "source_service", "correlation_id", "sequence", "stream_key", "user_id", "payload"
+    And its "user_id" is "u_42"
     And its "payload" is a JSON object
+
+  @AC-11 @FR-10
+  Scenario: The export returns only the authenticated user's own events
+    Given the ledger holds a fill event "evt_a1" for user_id "u_42" and a fill event "evt_b2" for user_id "u_99", both between 2026-02-01 and 2026-02-28
+    And the browser has a valid authenticated session for user_id "u_42"
+    When the browser requests "GET .../api/ledger/export?start=2026-02-01&end=2026-02-28"
+    Then the response status is 200
+    And the export contains the row for "evt_a1"
+    And the export does not contain the row for "evt_b2"
 
   @AC-9 @FR-8
   Scenario: The UI download button exports the last 90 days of all event types
