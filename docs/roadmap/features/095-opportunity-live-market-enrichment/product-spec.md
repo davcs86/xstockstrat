@@ -9,11 +9,12 @@
 Feature 083 reframed `xstockstrat-ui` around the opportunities-first "Nocturne" design, but several
 handoff elements (screenshots `01-opportunities`, `02-signal-detail`) show market context that **no
 current RPC returns**: live price + change%, a price sparkline, per-condition live value chips,
-target/stop overlay lines on the chart, and risk:reward + suggested share sizing. Per 083's
-no-fabrication constraint those were **intentionally omitted, not faked** (see 083 `context.md`
-§ "No-fabrication constraint honored" and the PR that raised the two detail pages). A trader must
-currently leave the Decide surface to see whether a signal's price has moved or how a fill would size.
-This feature closes those gaps in the backend **and** wires the UI that consumes them.
+target/stop overlay lines on the Signal-detail chart, and risk:reward + suggested share sizing on the
+order ticket. Per 083's no-fabrication constraint those were **intentionally omitted, not faked** (see
+083 `context.md` § "No-fabrication constraint honored"). A trader must currently leave the Decide
+surface to see whether a signal's price has moved or how a fill would size. This feature closes those
+gaps in the backend **and** wires the UI that consumes them — every new field degrading gracefully
+under the inherited no-fabrication rule.
 
 ## User Story
 
@@ -61,10 +62,11 @@ FR-7. **Cross-surface parity (C-10(b)).** The live price/change shown on the que
 
 Exact service names from CLAUDE.md Service Registry:
 - `xstockstrat-analysis` — extend `ListOpportunities` / `EvaluateReadiness` aggregation to attach the
-  new market-context fields; reads marketdata quotes/bars (confirm the edge already exists — 083 recon
-  noted analysis→marketdata for the backtest path). Owner of the no-look-ahead invariant.
+  new market-context fields; reads marketdata quotes/bars. **Owner of the no-look-ahead invariant** —
+  folding a live quote into the Decide surface must not leak future data into conviction/readiness
+  ranking (the hot backtest path stays frozen).
 - `xstockstrat-marketdata` — serves the latest quote/trade + recent bars the enrichment reads (confirm
-  an existing "latest quote" read path vs a new additive RPC at design time).
+  an existing "latest quote" read path vs. a new additive RPC at design time).
 - `xstockstrat-ui` — consume the new fields on `insights/opportunities` cards, the
   `insights/market/[symbol]` header + chart overlays + order ticket. Keep the no-fabrication rule.
 - `xstockstrat-portfolio` — _FYI_: buying power for suggested sizing (already read client-side on the
@@ -75,37 +77,57 @@ Exact service names from CLAUDE.md Service Registry:
 - `packages/proto` — additive `Opportunity` / `SymbolReadiness` (and possibly a small sparkline-point
   message) field additions.
 
+## Consumer Surface(s)
+
+**C-14 — this feature changes UI surfaces.**
+
+- [x] **UI** — `xstockstrat-ui`, all three consumer surfaces on the Decide flow:
+  - **Decide surface** — the Opportunities queue cards (`insights/opportunities`): live price + change%,
+    sparkline, per-condition value chips.
+  - **Signal-detail surface** — `insights/market/[symbol]`: header (live price + change% + sparkline),
+    candlestick chart (target/stop overlay lines + legend), per-condition chips.
+  - **Order-ticket surface** — the Signal-detail order ticket: risk:reward + suggested share sizing
+    (presentation only, execution path unchanged).
+- [ ] Agent (MCP tools) — no change.
+- [ ] Config-UI — no change.
+
+All three surfaces must be registered/reachable via the existing Decide navigation (no new route) and
+must honor the no-fabrication rule (FR-6). C-10(b) parity is required between the Decide queue card and
+the Signal-detail header (FR-7).
+
 ## Proto Contract Changes
 
 - [ ] No proto changes required
 - **Additive only** (no breaking change), pending design confirmation of exact field numbers:
-  - `analysis.Opportunity` — append fields after the current max (`= 9`): e.g. `live_price`,
+  - `analysis.Opportunity` — append fields **after the current max field number**: e.g. `live_price`,
     `change_pct`, `target_price`, `stop_price`, `risk_reward`, `suggested_qty`, and a repeated
     sparkline series (a `repeated double` or a dedicated `repeated SparklinePoint`).
   - `analysis.SymbolReadiness` — append any per-symbol live-price/sparkline field needed by the
     Signal-detail header (or reuse the `Opportunity` fields if the header reads the queue row).
-  - Any new enum must carry `<NAME>_UNSPECIFIED = 0` (C-04). **Known trap C-10(a/d)** — if a new enum
-    is introduced, every exhaustive TS `Record<Enum,…>` map in `xstockstrat-ui`
-    (`src/lib/opportunityShared.tsx`) must gain its entry in the same PR or `tsc` fails.
+  - Any new enum must carry `<NAME>_UNSPECIFIED = 0` (C-04 / C-10(a)). **If a new enum is introduced,
+    every exhaustive TS `Record<Enum,…>` map in `xstockstrat-ui` (e.g. `src/lib/opportunityShared.tsx`)
+    must gain its entry in the same PR** (C-10(a/d)) or `tsc`/`pnpm build` fails.
   - Confirm whether marketdata needs a new "latest quote" RPC or an existing read suffices (design).
+- Regenerate stubs with `./scripts/buf-gen.sh`; `buf lint` + `buf breaking` must pass (additive).
 
 ## Config Key Changes
 
 - [ ] No new config keys
-- **Possible** (design to confirm): a sparkline bar-count / lookback default (e.g.
-  `analysis.opportunity.sparkline_bars`). If added it must be **env-overridable** (F-07 — no bare
-  literal) and follow `<service>.<category>.<key>`.
+- **Possible** (design to confirm): a sparkline bar-count / lookback default,
+  `analysis.opportunity.sparkline_bars`. If added it must be **env-overridable** (F-07 — no bare
+  literal), follow the `<service>.<category>.<key>` naming, and be registered in the Per-Feature
+  Registered Keys log in `docs/patterns/config-governance.md`.
 
 ## Database Changes
 
-- [x] No schema changes — the enrichment reads existing marketdata OHLCV/quotes; no new tables/columns.
+- [ ] No schema changes — the enrichment reads existing marketdata OHLCV/quotes; no new tables/columns.
 
 ## Feature Workflow Notes
 
-Branch to create: `feature/opportunity-live-market-enrichment` (branch from `main-dev`)
-Approval gates required (per docs/runbooks/feature-workflow.md):
-- [x] Non-breaking proto: Proto Reviewer + affected service owners (analysis, marketdata, ui) — the
-  additive field pass.
+Branch to create: `feature/opportunity-live-market-enrichment` (branch from `main-dev`).
+Approval gates required (per `docs/runbooks/feature-workflow.md`):
+- [x] **Non-breaking proto gate**: Proto Reviewer + affected service owners (analysis, marketdata, ui)
+  — the additive field pass; `buf breaking` must stay green.
 - [x] Platform Lead: confirm the `analysis → marketdata` (and any sizing) inter-service edge in the
   dependency graph and all three deployment files.
 - [ ] Breaking proto (2 owners + platform lead) — **not expected** (additive only); re-gate only if
@@ -114,20 +136,10 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Acceptance Criteria
 
-1. An Opportunities queue card renders a live price + change% and a sparkline for a symbol whose
-   marketdata is available, and **omits** them (no placeholder) when it is not.
-2. The Signal-detail header shows the same live price/change as the corresponding queue card
-   (parity test, FR-7 / C-10(b)).
-3. The Signal-detail chart draws target and stop overlay lines at the opportunity's levels with a
-   legend; absent target/stop → no line (not a zero line).
-4. Readiness leaves / queue cards show per-condition value chips built from the traced `ConditionEval`
-   values (no re-computation), and render nothing extra when a leaf has no value.
-5. The order ticket shows a risk:reward ratio and a suggested share count derived from entry/stop/target
-   + buying power; execution path is unchanged (a placed order matches pre-feature behavior).
-6. `buf lint` + `buf breaking` pass (additive); generated stubs regenerated; any new enum map updated
-   in the same PR; UI `tsc`/build green.
-7. No-look-ahead: analysis unit tests prove the live-quote fold-in does not leak future data into
-   conviction/readiness ranking (the hot path stays frozen).
+See [`acceptance.feature`](acceptance.feature) — the Gherkin `@AC-*` scenarios are the single source of
+acceptance truth (Constitution **C-15**). Every `FR-N` above is covered by at least one `@FR-N`-tagged
+scenario; those scenarios are traced to test steps by `/sdd-spec` and promoted into the durable
+per-service business-rule suites at launch (**C-16**).
 
 ## Open Questions
 
@@ -135,15 +147,20 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
   strategy definition, the external signal payload, or a derived ATR/stop rule? (Drives FR-4/FR-5 and
   whether marketdata/indicators are involved.)
 - [ ] **Latest-quote read.** Does marketdata already expose a latest quote/trade read, or is a new
-  additive RPC needed? **Known trap (fails.md 080/082 — absence claim):** grep-verify the
-  "edge already exists / RPC already served" claim end-to-end (BFF route + browser client + mock),
-  not just the advertised proto, at the design gate.
+  additive RPC needed? **Known trap (fails.md 080/082):** an "edge already exists / RPC already served"
+  claim is an *absence claim* — grep-verify it end-to-end (analysis→marketdata call site + BFF route +
+  browser client + e2e mock), not from the advertised proto alone, at the design gate.
 - [ ] **Per-condition chips on the queue card.** `ConditionEval` leaves exist on `EvaluateReadiness`
   (strategy-scoped), but the `Opportunity` queue row carries only `passing/total`. Does the card show
   the blocking-condition chip via a per-opportunity readiness fold-in, or only on Signal detail?
 - [ ] **Sizing location.** Compute R:R + suggested size client-side (entry/stop/target already on the
   row + buying power already fetched), or server-side on `Opportunity`? Prefer the smallest change.
-- [ ] **Sparkline payload + `NaN` (fails.md 067 / P-03).** If sparkline bars pass through a protobuf
-  `Struct`, `MessageToDict` rejects `NaN`/`Inf`; model warm-up/absent points as `null`, not `NaN`.
-- [ ] **Parity mechanism (C-10(b), fails.md 056).** Ensure the queue card and Signal-detail header read
-  the *same* field from the *same* source; do not add live price to one path only.
+- [ ] **Known trap — sparkline gaps as `null`, not `NaN` (fails.md 067 / P-03).** If sparkline bars
+  pass through a protobuf `Struct`, `MessageToDict` **rejects** `NaN`/`Inf`; model warm-up/absent
+  points as `null` (Python `None`), never `NaN`, so the payload round-trips.
+- [ ] **Known trap — cross-surface price parity (fails.md 056 / C-10(b)).** Ensure the queue card and
+  the Signal-detail header read the *same* new field from the *same* marketdata source; do not enrich
+  one read path only, and add the parity test (FR-7 / AC-12).
+- [ ] **Known trap — no look-ahead (analysis owner focus).** Folding a live quote into the Decide
+  surface must not leak future data into conviction/readiness ranking; prove the hot path stays frozen
+  (AC-14).

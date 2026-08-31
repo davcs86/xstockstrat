@@ -36,3 +36,24 @@
   directly (both `127-*` dirs existed side by side). Renumbered `127` → `128` via `mv` (files were
   still untracked, so `git mv` wasn't applicable) + updated `context.md`'s three self-referential
   path lines; `feature.md`/`product-spec.md` had no self-referential `NNN` paths to fix.
+
+## Session 2026-08-31 — sdd-story (in-place regenerate)
+
+- Regenerated `product-spec.md` to the current template (in place, **kept number 128** — no new
+  directory, status stays `draft`). Sections reordered/normalized; all seven FRs (FR-1..FR-7) and
+  the full scope preserved verbatim — this remains an internal auth-transport refactor of
+  `xstockstrat-ui`'s `middleware.ts` only, Consumer Surface = **None**, no proto/config/DB changes.
+- Authored `acceptance.feature` (7 scenarios, `@AC-1`..`@AC-7`), moving the previously-inlined
+  Acceptance Criteria list out of `product-spec.md`; the spec's `## Acceptance Criteria` is now a
+  C-15 pointer only. Since observable behavior is unchanged, scenarios assert preserved behavior
+  (in-process refresh, redirect-to-login, unchanged cookie attributes) plus structural outcomes
+  (Node.js runtime, removed `buildInternalRefreshUrl`/matcher exclusion, corrected docs). Every FR
+  is covered by ≥1 scenario.
+- **Carried the connect-node/Edge trap into Open Questions as a design-VERIFY item**: the
+  `insights.md` 2026-08-05 `wire-fe-auth` entry (`insights.md:777-780`) forbids Edge-runtime code
+  importing `@connectrpc/connect-node`. The Ledger is append-only, so this feature does not edit it;
+  the design phase must *verify* (not assume) that Next.js 15.5's Node.js middleware runtime lifts
+  that constraint under this repo's Docker `output: 'standalone'` build, via a real build where
+  `middleware.ts` transitively imports the Node-only transport.
+- Updated `feature.md`: added the `acceptance.feature` artifact link, bumped `**Last Updated**` to
+  2026-08-31, appended the regeneration row to Status History.

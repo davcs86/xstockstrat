@@ -21,7 +21,8 @@ version) stabilized a Node.js runtime option for middleware, which would let the
 
 As a platform engineer, I want `xstockstrat-ui`'s `middleware.ts` to run in the Node.js runtime and
 call `xstockstrat-identity`'s `refreshSession()` directly, so the near-expiry token refresh no
-longer needs a self-referential HTTP call to `/api/auth/refresh`.
+longer needs a self-referential HTTP call to `/api/auth/refresh` — with the observable behavior
+(session refresh, redirect-to-login on failure, cookie attributes) unchanged.
 
 ## Functional Requirements
 
@@ -34,7 +35,8 @@ longer an inner HTTP request to carry it.
 
 FR-3. On successful refresh, the middleware sets the new session cookies itself (reusing
 `setSessionCookies` from `auth.ts`) on the outgoing `NextResponse`, matching today's behavior where
-the browser receives updated `Set-Cookie` headers from the refresh call.
+the browser receives updated `Set-Cookie` headers from the refresh call — same cookie attributes
+(`httpOnly`/`secure`/`sameSite`/path/max-age).
 
 FR-4. On failed refresh (invalid/expired refresh token), the middleware clears session cookies
 (`clearSessionCookies`) and redirects to `/auth/login`, matching current behavior.
@@ -76,59 +78,57 @@ applies (see Open Questions).
 
 ## Consumer Surface(s)
 
+Constitution **C-14** — consumer surface must be declared for every feature.
+
 - [ ] **UI** — no visible change; the trader/insights/config-ui/accounts segments behave identically.
 - [ ] **Agent** — not applicable.
-- [x] **None** — internal platform/transport refactor of the existing auth middleware. No new
-  capability, page, control, or MCP tool; the observable behavior (session refresh, redirect-to-login
-  on failure) is unchanged — only how the middleware reaches `xstockstrat-identity` changes.
+- [x] **None** — internal auth-transport refactor of the existing middleware. No new capability,
+  page, control, route, or MCP tool. The observable behavior (session refresh, redirect-to-login on
+  failure, cookie attributes) is unchanged; only how the middleware reaches `xstockstrat-identity`
+  changes (in-process `refreshSession()` instead of a self-fetch to `/api/auth/refresh`), so there
+  is no user-facing surface to declare.
 
 ## Proto Contract Changes
 
-- [x] No proto changes required
+- [ ] No proto changes required
 
 ## Config Key Changes
 
-- [x] No new config keys
+- [ ] No new config keys
 
 ## Database Changes
 
-- [x] No schema changes
+- [ ] No schema changes
 
 ## Feature Workflow Notes
 
-Branch to create: `feature/ui-middleware-nodejs-runtime` (branch from `main-dev`)
-Approval gates required (per docs/runbooks/feature-workflow.md):
-- [x] 1 service owner approval (non-breaking, single-service change)
+Branch to create: `feature/ui-middleware-nodejs-runtime` (branch from `main-dev`).
+Approval gates required (per `docs/runbooks/feature-workflow.md`):
+
+- [x] 1 service owner approval — non-breaking, single-service (`xstockstrat-ui`) internal refactor;
+  no proto, config, or DB gate applies.
 
 ## Acceptance Criteria
 
-1. `middleware.ts` runs in the Node.js runtime (`config.runtime === 'nodejs'`) and no longer imports
-   or calls `fetch()` against `/api/auth/refresh`.
-2. Near-expiry access tokens are refreshed via a direct in-process call to `identity.ts`'s
-   `refreshSession()` — verified by a unit/integration test that stubs `refreshSession` and asserts
-   `middleware()` calls it with the request's `refresh_token` cookie, with no outbound `fetch`.
-3. On refresh failure, the user is redirected to `/auth/login` with cookies cleared, identical to
-   pre-change behavior (regression-tested).
-4. `buildInternalRefreshUrl()` and its test (`auth.test.ts`) are removed along with the `api/auth/refresh`
-   matcher exclusion (`middleware.test.ts` updated to match the new matcher, or removed if the
-   matcher concern no longer exists).
-5. `pnpm exec vitest run`, `pnpm exec tsc --noEmit`, `pnpm run lint`, and the Playwright e2e auth
-   suite (`e2e/auth.spec.ts`) all pass.
-6. `frontend-auth.md` and this service's `CLAUDE.md` no longer state the Edge-only constraint as
-   current; they describe the Node.js-runtime middleware and why the constraint was removed.
-7. Verified (not just asserted) that the app still builds and runs correctly under
-   `output: 'standalone'` in a Docker build — Node.js-runtime middleware is confirmed by Next.js
-   docs to be supported for both Node.js server and Docker container deploys, but this repo's own
-   standalone-output build must be exercised, not assumed.
+Acceptance scenarios are the single source of acceptance truth (Constitution **C-15**) and live in
+[`acceptance.feature`](acceptance.feature). Each functional requirement (FR-N) is covered by at
+least one `@AC-*` scenario tagged with the FR it validates; `/sdd-spec` traces each scenario to a
+concrete test step, and the scenarios are promoted into the `xstockstrat-ui` durable business-rule
+suite at launch (**C-16**).
 
 ## Open Questions
 
-- [ ] **Known trap** (`docs/roadmap/ledger/insights.md`, 2026-08-05, `wire-fe-auth`): "`middleware.ts`
-  and other Edge-runtime code must never import modules that pull in `@connectrpc/connect-node`."
-  This feature's entire premise is that Next.js 15.5's stable Node.js middleware runtime removes the
-  reason that rule existed. The design phase must confirm this directly (re-derive why the rule was
-  written, confirm Node.js-runtime middleware genuinely lifts the Edge-bundling constraint for this
-  repo's build/deploy setup) rather than assume the ledger entry is simply obsolete.
+- [ ] **Known trap** (`docs/roadmap/ledger/insights.md`, 2026-08-05, `wire-fe-auth`, reuse — the
+  entry at `insights.md:777-780`): "`middleware.ts` and other Edge-runtime code must never import
+  modules that pull in `@connectrpc/connect-node`; inline the needed constant instead." This
+  feature's entire premise is that Next.js 15.5's stable Node.js middleware runtime removes the
+  reason that rule existed. The Ledger is append-only, so this feature does not edit that entry —
+  but the design phase must **VERIFY, not assume**, that the Node.js runtime genuinely lifts the
+  Edge-bundling constraint **under this repo's own Docker `output: 'standalone'` build**, by
+  re-deriving why the rule was written and confirming a real build where `middleware.ts` transitively
+  imports `@connectrpc/connect-node` succeeds. Treat "the ledger entry is simply obsolete" as a
+  hypothesis to disprove, not a given (recurrence family: `docs/roadmap/ledger/fails.md` 2026-07-29
+  `081-qa-capability` — "exercise the producer, not its advertised state").
 - [ ] Does `identity.ts`'s `refreshSession()` (and the `@connectrpc/connect-node` gRPC client it
   builds) behave correctly when constructed/invoked once per middleware invocation (as opposed to
   once per Node.js route handler invocation, its current call pattern)? Middleware runs far more

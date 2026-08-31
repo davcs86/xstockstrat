@@ -50,3 +50,21 @@
   `/sdd-design opportunity-live-market-enrichment` (recon should resolve the Open Questions:
   target/stop source, existing latest-quote read, per-condition chip source, sizing location,
   sparkline payload shape).
+
+## Session 2026-08-31 — sdd-story (in-place regenerate)
+
+- Regenerated `product-spec.md` to the current template (sections reordered; added an explicit
+  `## Consumer Surface(s)` C-14 block naming the Decide / Signal-detail / order-ticket surfaces) and
+  authored `acceptance.feature` (14 `@AC-*` scenarios, every FR-1..FR-7 covered by ≥1 `@FR-*` tag).
+  Feature **number 095 kept** — no new directory, no renumber; status stays `draft`.
+- **All 083 scope preserved.** This remains the follow-on that fills the backend gaps + the UI for
+  the Nocturne handoff extras feature 083 deliberately left un-faked; the inherited **no-fabrication
+  rule** (FR-6) is enforced as concrete graceful-degradation scenarios (quote unavailable → price
+  omitted not synthesized; sparkline gap → `null` not `NaN`; absent target/stop → no line, not a zero
+  line; off-queue symbol → symbol+price-only header).
+- **Ledger traps folded into Open Questions as one-line "Known trap" notes:** latest-quote RPC
+  existence is an absence claim, grep-verify end-to-end (fails 080/082); sparkline gaps as `null` not
+  `NaN` because `MessageToDict` rejects non-finite (fails 067 / P-03); same-field cross-surface price
+  parity with a parity test (fails 056 / C-10(b)); no-look-ahead when folding the live quote into
+  ranking (analysis owner focus, AC-14).
+- **Next:** `/sdd-review opportunity-live-market-enrichment product-spec`, then `/sdd-design`.

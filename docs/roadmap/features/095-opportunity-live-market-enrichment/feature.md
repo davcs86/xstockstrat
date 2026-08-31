@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/opportunity-live-market-enrichment`
 **Created**: 2026-08-02
-**Last Updated**: 2026-08-02
+**Last Updated**: 2026-08-31
 
 ---
 
@@ -11,12 +11,14 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-02 | `idea` → `draft` | /sdd-story | Product spec generated — the backend + UI backlog for the handoff extras feature 083 intentionally omitted (live price/change, sparkline, per-condition value chips, target/stop chart overlays, R:R + sizing) |
+| 2026-08-31 | `draft` (regenerated) | /sdd-story (overwrite) | product-spec.md regenerated to current template; acceptance.feature authored |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Acceptance Criteria](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec opportunity-live-market-enrichment`_
 - [Context Log](context.md) — session history, decisions, deviations
 
