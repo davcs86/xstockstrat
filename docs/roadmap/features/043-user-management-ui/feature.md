@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/user-management-ui`
 **Created**: 2026-05-28
-**Last Updated**: 2026-05-28
+**Last Updated**: 2026-08-31
 
 ---
 
@@ -11,12 +11,14 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-28 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-31 | `draft` (regenerated) | /sdd-story (overwrite) | product-spec.md regenerated to current template; acceptance.feature authored |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios; single source of acceptance truth (C-15)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec user-management-ui`_
 - [Context Log](context.md) — session history, decisions, deviations
 

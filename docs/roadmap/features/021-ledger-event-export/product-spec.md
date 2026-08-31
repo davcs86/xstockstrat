@@ -10,7 +10,7 @@ The ledger service stores all platform events (fills, signal ingestions, P&L sna
 
 ## User Story
 
-As a trader, I want to download a structured export of all ledger events for a date range so that I can prepare tax filings, review which signals preceded my best trades, and satisfy any audit or compliance requirements.
+As a trader, I want to download a structured export of all ledger events for a date range, so that I can prepare tax filings, review which signals preceded my best trades, and satisfy any audit or compliance requirements.
 
 ## Functional Requirements
 
@@ -36,9 +36,16 @@ Exact service names from CLAUDE.md Service Registry:
 - `xstockstrat-ledger` — new HTTP export handler, streaming DB cursor
 - `xstockstrat-trader` or `xstockstrat-insights` — download button in UI (one of these, TBD at impl-spec time)
 
+## Consumer Surface(s)
+
+_Constitution **C-14**._ This feature adds a user-facing download control plus a new ledger export endpoint.
+- [x] **UI** — `xstockstrat-ui` segment(s): `/trader` | `/insights` (exactly which segment hosts the control is TBD at impl-spec time, per FR-8 and the Open Question below): a new "Export events" download button, defaulting to last 90 days / all event types, that triggers the export and prompts a file-save dialog.
+- [ ] **Agent** — `xstockstrat-agent` MCP tool(s): none.
+- [ ] **None** — internal/platform-only; state why.
+
 ## Proto Contract Changes
 
-- [ ] No proto changes required (HTTP endpoint only, not a gRPC RPC)
+- [x] No proto changes required (HTTP endpoint only, not a gRPC RPC)
 
 ## Config Key Changes
 
@@ -47,7 +54,7 @@ Exact service names from CLAUDE.md Service Registry:
 
 ## Database Changes
 
-- [ ] No schema changes (reads from existing ledger events hypertable)
+- [x] No schema changes (reads from existing ledger events hypertable)
 - Note: ensure a composite index on `(event_type, occurred_at)` exists — verify at impl-spec time
 
 ## Feature Workflow Notes
@@ -60,15 +67,11 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Acceptance Criteria
 
-1. `GET /export?start=2026-01-01&end=2026-03-31` returns a streaming NDJSON response with all events in that window.
-2. `GET /export?start=2026-01-01&end=2026-03-31&format=csv` returns a valid CSV with a header row and one row per event.
-3. `GET /export?event_type=fill,signal` filters to only fill and signal events.
-4. A request spanning more than `max_window_days` returns 400 with a descriptive error.
-5. An unauthenticated request returns 401.
-6. A 1-million-row export does not exhaust Node.js heap — streaming cursor confirmed via load test.
-7. The UI download button initiates the export and prompts a file-save dialog.
+See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance truth (Constitution **C-15**). Each `FR-N` above is covered by ≥1 tagged scenario there.
 
 ## Open Questions
 
 - [ ] Should the export endpoint live on the ledger HTTP port (8057) directly, or be proxied through nginx (preferred for auth header stripping)? Nginx proxy is the safer pattern — confirm at impl-spec time.
 - [ ] Which UI (trader vs. insights) hosts the download button? Insights is more natural for review; trader makes sense for fill-centric export. Decision deferred to impl-spec.
+- [ ] Known trap (config-key native type — ledger `fails.md` 2026-08-16 signal-time-decay): verify at recon which native type Node receives for `ledger.export.max_window_days` / `ledger.export.enabled` off the WatchConfig stream and cast explicitly at the call-site — a stored `0`/`false` can read falsy and silently fall back to the default instead of the operator-set value.
+- [ ] Known trap (ledger ordering — `insights.md` 2026-08-26, feature 042): the ledger global sequence is monotonic only across the whole stream, not per `stream_key`; if deterministic ordering of the export matters, order exported rows by that global sequence rather than per-type/per-stream reads.
