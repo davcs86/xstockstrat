@@ -44,6 +44,9 @@ const (
 	LedgerServiceStreamEventsProcedure = "/xstockstrat.ledger.v1.LedgerService/StreamEvents"
 	// LedgerServiceGetEventProcedure is the fully-qualified name of the LedgerService's GetEvent RPC.
 	LedgerServiceGetEventProcedure = "/xstockstrat.ledger.v1.LedgerService/GetEvent"
+	// LedgerServiceExportEventsProcedure is the fully-qualified name of the LedgerService's
+	// ExportEvents RPC.
+	LedgerServiceExportEventsProcedure = "/xstockstrat.ledger.v1.LedgerService/ExportEvents"
 )
 
 // LedgerServiceClient is a client for the xstockstrat.ledger.v1.LedgerService service.
@@ -52,6 +55,10 @@ type LedgerServiceClient interface {
 	QueryEvents(context.Context, *connect.Request[v1.QueryEventsRequest]) (*connect.Response[v1.QueryEventsResponse], error)
 	StreamEvents(context.Context, *connect.Request[v1.StreamEventsRequest]) (*connect.ServerStreamForClient[v1.LedgerEvent], error)
 	GetEvent(context.Context, *connect.Request[v1.GetEventRequest]) (*connect.Response[v1.LedgerEvent], error)
+	// Export a caller's events over a time window as a server stream of batched pages,
+	// ordered by the global monotonic sequence. Scoped to the caller (x-user-id metadata);
+	// never returns another user's or a pre-migration NULL-user_id event.
+	ExportEvents(context.Context, *connect.Request[v1.ExportEventsRequest]) (*connect.ServerStreamForClient[v1.ExportEventsResponse], error)
 }
 
 // NewLedgerServiceClient constructs a client for the xstockstrat.ledger.v1.LedgerService service.
@@ -89,6 +96,12 @@ func NewLedgerServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(ledgerServiceMethods.ByName("GetEvent")),
 			connect.WithClientOptions(opts...),
 		),
+		exportEvents: connect.NewClient[v1.ExportEventsRequest, v1.ExportEventsResponse](
+			httpClient,
+			baseURL+LedgerServiceExportEventsProcedure,
+			connect.WithSchema(ledgerServiceMethods.ByName("ExportEvents")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -98,6 +111,7 @@ type ledgerServiceClient struct {
 	queryEvents  *connect.Client[v1.QueryEventsRequest, v1.QueryEventsResponse]
 	streamEvents *connect.Client[v1.StreamEventsRequest, v1.LedgerEvent]
 	getEvent     *connect.Client[v1.GetEventRequest, v1.LedgerEvent]
+	exportEvents *connect.Client[v1.ExportEventsRequest, v1.ExportEventsResponse]
 }
 
 // AppendEvent calls xstockstrat.ledger.v1.LedgerService.AppendEvent.
@@ -120,12 +134,21 @@ func (c *ledgerServiceClient) GetEvent(ctx context.Context, req *connect.Request
 	return c.getEvent.CallUnary(ctx, req)
 }
 
+// ExportEvents calls xstockstrat.ledger.v1.LedgerService.ExportEvents.
+func (c *ledgerServiceClient) ExportEvents(ctx context.Context, req *connect.Request[v1.ExportEventsRequest]) (*connect.ServerStreamForClient[v1.ExportEventsResponse], error) {
+	return c.exportEvents.CallServerStream(ctx, req)
+}
+
 // LedgerServiceHandler is an implementation of the xstockstrat.ledger.v1.LedgerService service.
 type LedgerServiceHandler interface {
 	AppendEvent(context.Context, *connect.Request[v1.AppendEventRequest]) (*connect.Response[v1.AppendEventResponse], error)
 	QueryEvents(context.Context, *connect.Request[v1.QueryEventsRequest]) (*connect.Response[v1.QueryEventsResponse], error)
 	StreamEvents(context.Context, *connect.Request[v1.StreamEventsRequest], *connect.ServerStream[v1.LedgerEvent]) error
 	GetEvent(context.Context, *connect.Request[v1.GetEventRequest]) (*connect.Response[v1.LedgerEvent], error)
+	// Export a caller's events over a time window as a server stream of batched pages,
+	// ordered by the global monotonic sequence. Scoped to the caller (x-user-id metadata);
+	// never returns another user's or a pre-migration NULL-user_id event.
+	ExportEvents(context.Context, *connect.Request[v1.ExportEventsRequest], *connect.ServerStream[v1.ExportEventsResponse]) error
 }
 
 // NewLedgerServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -159,6 +182,12 @@ func NewLedgerServiceHandler(svc LedgerServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(ledgerServiceMethods.ByName("GetEvent")),
 		connect.WithHandlerOptions(opts...),
 	)
+	ledgerServiceExportEventsHandler := connect.NewServerStreamHandler(
+		LedgerServiceExportEventsProcedure,
+		svc.ExportEvents,
+		connect.WithSchema(ledgerServiceMethods.ByName("ExportEvents")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.ledger.v1.LedgerService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case LedgerServiceAppendEventProcedure:
@@ -169,6 +198,8 @@ func NewLedgerServiceHandler(svc LedgerServiceHandler, opts ...connect.HandlerOp
 			ledgerServiceStreamEventsHandler.ServeHTTP(w, r)
 		case LedgerServiceGetEventProcedure:
 			ledgerServiceGetEventHandler.ServeHTTP(w, r)
+		case LedgerServiceExportEventsProcedure:
+			ledgerServiceExportEventsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -192,4 +223,8 @@ func (UnimplementedLedgerServiceHandler) StreamEvents(context.Context, *connect.
 
 func (UnimplementedLedgerServiceHandler) GetEvent(context.Context, *connect.Request[v1.GetEventRequest]) (*connect.Response[v1.LedgerEvent], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.ledger.v1.LedgerService.GetEvent is not implemented"))
+}
+
+func (UnimplementedLedgerServiceHandler) ExportEvents(context.Context, *connect.Request[v1.ExportEventsRequest], *connect.ServerStream[v1.ExportEventsResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.ledger.v1.LedgerService.ExportEvents is not implemented"))
 }

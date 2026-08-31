@@ -14,6 +14,7 @@
 import * as http2 from 'node:http2';
 import { ConnectError, Code } from '@connectrpc/connect';
 import { connectNodeAdapter } from '@connectrpc/connect-node';
+import { timestampFromDate } from '@bufbuild/protobuf/wkt';
 import { AnalysisService, ReadinessRule } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
 import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
@@ -55,9 +56,9 @@ import {
   SIGNAL_SOURCE_WEIGHTED,
   FUNDAMENTALS_AAPL,
 } from './fixtures';
-import { timestampFromDate } from '@bufbuild/protobuf/wkt';
 import { USER_VIEWS, LAST_ADMIN_USER_ID } from './fixtures/users';
 import { Role } from '@xstockstrat/proto/identity/v1/identity_pb';
+import { LEDGER_EXPORT_EVENTS, EXPORT_DISABLED_SENTINEL } from './fixtures/ledgerEvents';
 import { criterionDetailRow } from './fixtures/screenResults';
 import { backfillJob } from './fixtures/backfillJobs';
 import { INDICATOR_SERIES_AAPL } from './fixtures/indicatorSeries';
@@ -414,6 +415,49 @@ export async function startMockBackend(): Promise<void> {
           });
           copilotThreads.set(req.streamKey, existing);
           return { eventId: `copilot-${existing.length}`, sequence };
+        },
+        // Feature 021 — ExportEvents server stream. Honors event_type subset + window bound,
+        // simulates the disabled gate via the EXPORT_DISABLED_SENTINEL event_type (no config
+        // service in the mock). Streams the fixture rows batched, ordered by sequence.
+        async *exportEvents(req) {
+          const et = String(req.eventType ?? '');
+          if (et === EXPORT_DISABLED_SENTINEL) {
+            throw new ConnectError('ledger export is disabled', Code.FailedPrecondition);
+          }
+          if (req.start && req.end) {
+            const spanDays = (Number(req.end.seconds) - Number(req.start.seconds)) / 86_400;
+            if (spanDays > 365) {
+              throw new ConnectError(
+                'window exceeds ledger.export.max_window_days',
+                Code.InvalidArgument,
+              );
+            }
+          }
+          const types = et
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
+          const rows = [...LEDGER_EXPORT_EVENTS]
+            .filter((r) => types.length === 0 || types.includes(r.eventType))
+            .sort((a, b) => Number(a.sequence - b.sequence));
+          // Batch per row to prove the client streams (no full-set buffering, AC-7).
+          for (const r of rows) {
+            yield {
+              events: [
+                {
+                  eventId: r.eventId,
+                  eventType: r.eventType,
+                  sourceService: r.sourceService,
+                  correlationId: r.correlationId,
+                  streamKey: r.streamKey,
+                  sequence: r.sequence,
+                  userId: r.userId,
+                  occurredAt: timestampFromDate(new Date(r.occurredAtIso)),
+                  payload: r.payload,
+                },
+              ],
+            };
+          }
         },
       });
 

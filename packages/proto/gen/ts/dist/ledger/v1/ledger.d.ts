@@ -25,6 +25,8 @@ export interface LedgerEvent {
     sequence: number;
     /** partition key (e.g. "order:uuid") */
     streamKey: string;
+    /** owning user; empty when platform-scoped or a pre-migration row */
+    userId: string;
 }
 export interface LedgerEvent_MetadataEntry {
     key: string;
@@ -49,6 +51,8 @@ export interface AppendEventRequest {
      * dedup (every call inserts), preserving the prior behavior.
      */
     idempotencyKey: string;
+    /** owning user; falls back to the x-user-id metadata when empty */
+    userId: string;
 }
 export interface AppendEventRequest_MetadataEntry {
     key: string;
@@ -84,6 +88,22 @@ export interface StreamEventsRequest {
 export interface GetEventRequest {
     eventId: string;
 }
+export interface ExportEventsRequest {
+    start?: Date | undefined;
+    end?: Date | undefined;
+    /**
+     * Comma-joined subset of event types to include (e.g. "fill,signal,pnl_snapshot,config_change,alert").
+     * Empty = all types.
+     */
+    eventType: string;
+}
+export interface ExportEventsResponse {
+    /**
+     * One cursor page of events per message (batched — a large export is thousands of
+     * messages, not one per row), each page ordered by the global sequence.
+     */
+    events: LedgerEvent[];
+}
 export declare const LedgerEvent: MessageFns<LedgerEvent>;
 export declare const LedgerEvent_MetadataEntry: MessageFns<LedgerEvent_MetadataEntry>;
 export declare const AppendEventRequest: MessageFns<AppendEventRequest>;
@@ -93,6 +113,8 @@ export declare const QueryEventsRequest: MessageFns<QueryEventsRequest>;
 export declare const QueryEventsResponse: MessageFns<QueryEventsResponse>;
 export declare const StreamEventsRequest: MessageFns<StreamEventsRequest>;
 export declare const GetEventRequest: MessageFns<GetEventRequest>;
+export declare const ExportEventsRequest: MessageFns<ExportEventsRequest>;
+export declare const ExportEventsResponse: MessageFns<ExportEventsResponse>;
 /**
  * LedgerService — append-only event store.
  * All services write events here. Events are immutable once written.
@@ -135,12 +157,32 @@ export declare const LedgerServiceService: {
         readonly responseSerialize: (value: LedgerEvent) => Buffer;
         readonly responseDeserialize: (value: Buffer) => LedgerEvent;
     };
+    /**
+     * Export a caller's events over a time window as a server stream of batched pages,
+     * ordered by the global monotonic sequence. Scoped to the caller (x-user-id metadata);
+     * never returns another user's or a pre-migration NULL-user_id event.
+     */
+    readonly exportEvents: {
+        readonly path: "/xstockstrat.ledger.v1.LedgerService/ExportEvents";
+        readonly requestStream: false;
+        readonly responseStream: true;
+        readonly requestSerialize: (value: ExportEventsRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ExportEventsRequest;
+        readonly responseSerialize: (value: ExportEventsResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => ExportEventsResponse;
+    };
 };
 export interface LedgerServiceServer extends UntypedServiceImplementation {
     appendEvent: handleUnaryCall<AppendEventRequest, AppendEventResponse>;
     queryEvents: handleUnaryCall<QueryEventsRequest, QueryEventsResponse>;
     streamEvents: handleServerStreamingCall<StreamEventsRequest, LedgerEvent>;
     getEvent: handleUnaryCall<GetEventRequest, LedgerEvent>;
+    /**
+     * Export a caller's events over a time window as a server stream of batched pages,
+     * ordered by the global monotonic sequence. Scoped to the caller (x-user-id metadata);
+     * never returns another user's or a pre-migration NULL-user_id event.
+     */
+    exportEvents: handleServerStreamingCall<ExportEventsRequest, ExportEventsResponse>;
 }
 export interface LedgerServiceClient extends Client {
     appendEvent(request: AppendEventRequest, callback: (error: ServiceError | null, response: AppendEventResponse) => void): ClientUnaryCall;
@@ -154,6 +196,13 @@ export interface LedgerServiceClient extends Client {
     getEvent(request: GetEventRequest, callback: (error: ServiceError | null, response: LedgerEvent) => void): ClientUnaryCall;
     getEvent(request: GetEventRequest, metadata: Metadata, callback: (error: ServiceError | null, response: LedgerEvent) => void): ClientUnaryCall;
     getEvent(request: GetEventRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: LedgerEvent) => void): ClientUnaryCall;
+    /**
+     * Export a caller's events over a time window as a server stream of batched pages,
+     * ordered by the global monotonic sequence. Scoped to the caller (x-user-id metadata);
+     * never returns another user's or a pre-migration NULL-user_id event.
+     */
+    exportEvents(request: ExportEventsRequest, options?: Partial<CallOptions>): ClientReadableStream<ExportEventsResponse>;
+    exportEvents(request: ExportEventsRequest, metadata?: Metadata, options?: Partial<CallOptions>): ClientReadableStream<ExportEventsResponse>;
 }
 export declare const LedgerServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): LedgerServiceClient;
