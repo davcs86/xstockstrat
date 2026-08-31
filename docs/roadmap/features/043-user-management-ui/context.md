@@ -141,3 +141,13 @@ must be confirmed by the operator before/at `/sdd-spec`. Status intentionally NO
 - Deduped reviewers across the 10 steps (recorded per-step in implementation-spec.md): Proto Reviewer,
   xstockstrat-identity owner, Security, xstockstrat-ledger owner, xstockstrat-ui owner. Next:
   `/sdd-review user-management-ui impl-spec`.
+
+## Session 2026-08-31 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 3 warnings, 2 notes (advisory; no Floor breach). Nav correctly registers in the RENDERED NAV_GROUPS (page reachable); proto/handlers/last-admin-guard/revocation/audit-client all confirmed grounded.
+- Unresolved ⚠ carried into execution:
+  - Step 6: audit `idempotency_key` `${eventType}:${targetUserId}:${Date.now()}` is NOT stable across retries, defeating ledger dedup. Derive from stable inputs (e.g. `eventType:targetUserId` + a per-request/correlation id), or drop the "deterministic" claim and state fire-once best-effort. — [ ] unaddressed
+  - Step 9 instruction 5: adding Users to `PLATFORM_SUBNAV.config` is dead work (`PlatformHeader.tsx:116` ignores that prop) — drop instruction 5 and remove `PlatformHeader.tsx` from Step 9 Files; AC-9/reachability is delivered entirely by the `navGroups.tsx` registration (instruction 4). — [ ] unaddressed
+  - Step 2: `packages/proto/gen/**` wildcard Files — accepted proto-gen convention, bounded by the freshness check. — [ ] note only
+  - Notes: last-admin guard is atomic per-row but two concurrent demotions of DIFFERENT admins can write-skew to zero under READ COMMITTED (design-accepted R4; needs SERIALIZABLE/advisory lock only if strict >=1 admin required); Role enum interim window safe (brand-new enum, no pre-existing exhaustive consumer). — [ ] note only
+- Overlap findings: batch scan CLEAN; 043 shares navGroups.tsx / PlatformHeader.tsx with 029/031 (rebase-only).
