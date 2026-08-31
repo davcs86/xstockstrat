@@ -54,13 +54,16 @@ class PnLPositionsRepository:
         closed_at,
         realized_pnl: float,
         close_event_id: str,
+        fees_total: float = 0.0,
     ) -> dict | None:
         """Seal the matching open row. Returns the sealed row (position_id/strategy_id/symbol) or
-        None when there is no open row (an empty-window close no-ops). Dedup on close_event_id."""
+        None when there is no open row (an empty-window close no-ops). Dedup on close_event_id.
+        realized_pnl stays gross/unchanged; fees_total (feature 029) is stored alongside so
+        GetAttribution computes net = realized_pnl - fees_total (0 default ⇒ net == gross)."""
         row = await db.fetchrow(
             """
             UPDATE analysis.pnl_positions
-               SET closed_at=$5, realized_pnl=$6, close_event_id=$7
+               SET closed_at=$5, realized_pnl=$6, close_event_id=$7, fees_total=$8
              WHERE user_id=$1 AND account_id=$2 AND symbol=$3 AND trading_mode=$4
                AND closed_at IS NULL
             RETURNING position_id, strategy_id, symbol
@@ -72,5 +75,6 @@ class PnLPositionsRepository:
             closed_at,
             realized_pnl,
             close_event_id,
+            fees_total,
         )
         return dict(row) if row is not None else None

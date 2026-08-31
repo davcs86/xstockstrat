@@ -106,6 +106,7 @@ class FakeSnapshots:
 class FakePositions:
     def __init__(self):
         self.open_rows = {}  # identity -> row
+        self.seal_kwargs = None  # feature 029 — capture the kwargs the last seal() received
 
     @staticmethod
     def _key(user_id, account_id, symbol, trading_mode):
@@ -120,6 +121,7 @@ class FakePositions:
         )
 
     async def seal(self, db, *, user_id, account_id, symbol, trading_mode, close_event_id, **kw):
+        self.seal_kwargs = kw  # captures realized_pnl, fees_total (feature 029), closed_at
         k = self._key(user_id, account_id, symbol, trading_mode)
         row = self.open_rows.pop(k, None)
         return row
@@ -248,6 +250,39 @@ async def test_ac2_close_seals_and_writes_samples():
     assert all(r["realized_pnl"] == 250.0 for r in samples.rows)
     assert "analysis.pattern.sealed" in ledger.appended
     assert pool.cursor == 3
+
+
+# ── AC-10/AC-11 (feature 029): the close's fees_total is persisted onto the sealed row ────────
+
+
+async def test_ac10_close_seals_fees_total_alongside_gross_realized():
+    consumer, pool, snaps, positions, samples, ledger = make_consumer()
+    await consumer.process_event(make_event(1, "order.filled", ORDER_PAYLOAD))
+    await consumer.process_event(
+        make_event(
+            2,
+            "portfolio.position.closed",
+            {**CLOSE_PAYLOAD, "realized_pnl": 1.00, "fees_total": 1.20},
+            source_service="xstockstrat-portfolio",
+        )
+    )
+    # seal got fees_total for net = realized_pnl - fees_total downstream; realized stays gross.
+    assert positions.seal_kwargs is not None, "seal was not called"
+    assert positions.seal_kwargs["fees_total"] == 1.20
+    assert positions.seal_kwargs["realized_pnl"] == 1.00
+
+
+async def test_ac11_close_without_fees_seals_zero():
+    consumer, pool, snaps, positions, samples, ledger = make_consumer()
+    await consumer.process_event(make_event(1, "order.filled", ORDER_PAYLOAD))
+    await consumer.process_event(
+        make_event(
+            2, "portfolio.position.closed", CLOSE_PAYLOAD, source_service="xstockstrat-portfolio"
+        )
+    )
+    # No fees_total key in the payload ⇒ seals 0.0, so downstream net == gross (no silent fee).
+    assert positions.seal_kwargs is not None, "seal was not called"
+    assert positions.seal_kwargs["fees_total"] == 0.0
 
 
 # ── AC-6: indicator timeout → partial snapshot (empty indicators) + degraded ─

@@ -383,7 +383,7 @@ Confirm ≥ 40%. Fold/emit logic is in the coverage-excluded `internal/service`/
 
 ### Step 9 — service: analysis — 042 consumer persists `fees_total` on seal
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py` — modify (`_handle_close_event`)
@@ -411,7 +411,7 @@ Confirm ≥ 40%. Fold/emit logic is in the coverage-excluded `internal/service`/
 
 ### Step 10 — test: analysis consumer persists `fees_total` (default 0 when absent)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_pnl_pattern_consumer.py` — modify

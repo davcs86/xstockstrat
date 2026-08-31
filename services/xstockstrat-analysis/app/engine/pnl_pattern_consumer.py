@@ -259,6 +259,9 @@ class PnLPatternConsumer:
         account_id = payload.get("account_id", "") or "alpaca-default"
         trading_mode = payload.get("trading_mode") or payload.get("mode") or ""
         realized_pnl = _num(payload.get("realized_pnl"))
+        # feature 029 — total broker fees for the closed position (absent key ⇒ 0.0 via _num(None),
+        # so a legacy close with no fees_total seals net == gross, AC-11). realized_pnl stays gross.
+        fees_total = _num(payload.get("fees_total"))
         closed_at = event.recorded_at.ToDatetime() if event.HasField("recorded_at") else None
 
         sealed = None
@@ -273,6 +276,7 @@ class PnLPatternConsumer:
                     closed_at=closed_at,
                     realized_pnl=realized_pnl,
                     close_event_id=event.event_id,
+                    fees_total=fees_total,
                 )
                 if sealed is not None:
                     rows = await self._build_samples(
