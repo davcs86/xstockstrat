@@ -175,3 +175,14 @@
 - `CallToolResult.structured_content` vs `content[0].text` fallback: parser reads structured first; the
   exact attribute name (`structured_content`) is pinned from `mcp-types==2.0.0` — re-confirm at execute
   against the actually-installed version.
+
+## Session 2026-08-31 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 4 warnings (advisory; no Floor breach). Exemplary secret handling (bearer encrypted, GetSecret-only, redacted at every read edge, never in config_json — a verbatim ListSignalSources edge); NO proto change; migrations 011 (ingest CHECK) + 025 (config seed) correct + paired; fail-closed validation; nav CORRECTLY targets NAV_GROUPS (Step 16).
+- Unresolved ⚠ carried into execution:
+  - Step 4: C-01 line drift — `INTERNAL_CALLER_ALLOWLIST` is at `authz.ts:103-110` (not `:96-108`); correct at execute time (symbols right). — [ ] unaddressed
+  - Step 5: annotate the `pnpm run test:coverage` Verification with the enforced 40% floor (vitest config) so "threshold explicit" is met. — [ ] unaddressed
+  - Step 15: C-01 evidence — SOURCE_TYPES has 10 types (not 9); the interface is `FormState` (not `SourceFormState`); correct at execute time. — [ ] unaddressed
+  - Step 12: config seed 025 sits above tip 021; must merge AFTER 022/023/024 (already tracked in merge-order.md; re-derive if 021/031/168 slip). — [ ] note only
+  - product-spec.md:85 still says `/sources` is "registered in PLATFORM_SUBNAV" (stale) — impl-spec is correct (NAV_GROUPS); reconcile the product spec on a later touch. — [ ] note only
+- Overlap findings: batch scan CLEAN; 166 shares agent tools.py / mcp-tools.md with 095 (distinct tools, count 32 vs 33 — no conflict).
