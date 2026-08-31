@@ -132,7 +132,7 @@ git diff --stat packages/proto/gen/
 
 ### Step 3 — migration: nullable `user_id` column + `(user_id, sequence)` index
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/migrations/003_events_user_id.up.sql` — create

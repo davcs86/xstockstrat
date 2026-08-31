@@ -157,3 +157,12 @@ Unattended run (auto-proceed through checkpoints; pause only on real blockers).
   ts-proto + connect-es + compiled `dist/`) — 12 files, additive, no drift into other services.
 - TDD: N/A (generated). Verification: `git status --porcelain packages/proto/gen/` limited to ledger
   (mirrors CI's `proto-freshness` gate). Files: `packages/proto/gen/**`. Deviations: none.
+
+### Step 3 — migration: nullable user_id column + (user_id, sequence) index [done]
+- Created `003_events_user_id.up.sql` (`ADD COLUMN IF NOT EXISTS user_id TEXT` + `CREATE INDEX
+  idx_events_user_sequence ON ledger.events (user_id, sequence)`) and `.down.sql` (DROP INDEX → DROP
+  COLUMN). Additive DDL only — no UPDATE, so the append-only `deny_mutation` guard is untouched and
+  historical rows keep `user_id = NULL` (excluded by the export's `WHERE user_id = $caller`).
+- TDD: N/A (migration). Verified offline: next NNN 003 correct (tip was 002_idempotency_keys); every
+  `ADD COLUMN`/`CREATE INDEX` in `.up` has an inverse `DROP` in `.down`. No DB started.
+- Files: `services/xstockstrat-ledger/migrations/003_events_user_id.{up,down}.sql`. Deviations: none.
