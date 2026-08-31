@@ -82,3 +82,38 @@ debate. `spec-ready` → **design-approved** (design gate; C-11 satisfied).
 **Proto:** additive — `ExportEvents` RPC, request/response msgs, `LedgerEvent.user_id=11`,
 `AppendEventRequest.user_id=9`. **Migration:** next `003` nullable `user_id` + `(user_id, sequence)`
 index. No unresolved Floor breach. Open risks mirrored into design.md § Open Risks.
+
+## Session 2026-08-31 — sdd-spec
+
+- Generated implementation-spec.md with **13 steps**. (status.md/feature.md intentionally left
+  untouched in this run per the task's write-scope constraint; normally /sdd-spec would flip
+  status → `implementation-ready` and append a feature.md Status History row.)
+- Key codebase findings (grounded `path:line`):
+  - **Ledger migration tip = `002_idempotency_keys` → next NNN = `003`** (`services/xstockstrat-ledger/migrations/`).
+  - **Config-key seed migration tip = `021_notify_push_min_severity` → next NNN = `022`** (`services/xstockstrat-config/migrations/`); `ledger.export.*` keys seed into `config.config_values` per environment, `value_type` `int`/`bool` (never `string` — the fail-open trap, mirrors `021…up.sql`).
+  - **Proto field numbers:** `LedgerEvent` max = `stream_key = 10` → `user_id = 11`; `AppendEventRequest` max = `idempotency_key = 8` → `user_id = 9` (`packages/proto/ledger/v1/ledger.proto:20-46`). Additive RPC + fields → `buf breaking` passes.
+  - **Two TS stub flavors** regenerate from one `./scripts/buf-gen.sh`: ts-proto on the ledger (`LedgerServiceService`, `serviceDefinition.ts:1`) and connect-es on the UI (`LedgerService`, `connectClients.ts:8`); Go `ledgerv1` on trading.
+  - **F-06 dedicated-connection precedent** = `EventNotifier` `pg.Client` outside the `DB_POOL_MAX=1` pool (`ledger index.ts:53-57`); export opens its own short-lived `pg.Client` + `pg-cursor`, never `this.pool`.
+  - **`pg-cursor` is absent** from `services/xstockstrat-ledger/package.json` → must be ADDED (dep + `pnpm-lock.yaml`).
+  - **`appendEvent` reads no inbound metadata today** (`ledgerServiceImpl.ts:28`; ledger has no gRPC interceptor, `index.ts:64`) → Step 4 adds `req.userId || call.metadata x-user-id || NULL` + the `user_id` insert column + `rowToEvent` mapping.
+  - **Trading fills emit on `context.Background()`** with `order.UserId` in local scope but only inside the payload (`trading.go:1712-1717,1728-1733`); `emitLedgerEvent` (`:3607-3620`) sets no `UserId` → Step 9 threads it onto `AppendEventRequest.UserId`. Capturing test fake `recordingLedger` already exists (`trading_offline_test.go:55-82`) — reused in Step 10 (no third copy, C-13).
+- **DISCOVERED CONFLICT surfaced (P-03) — BFF status mapping.** `connectCodeToHttp`
+  (`connectClients.ts:43-69`) maps `FailedPrecondition`→**400**, but AC-10 needs the disabled path
+  →**403** and AC-5 needs the over-window path →**400**. The Step 11 `route.ts` therefore maps
+  **explicitly** (`FailedPrecondition`→403, `InvalidArgument`→400, `Unauthenticated`→401, else 500)
+  rather than delegating to `connectCodeToHttp`. Also: `backendHeaders` needs a Connect
+  `HandlerContext` (`bffShared.ts:41`), which a raw `route.ts` lacks — the route replicates the same
+  three-header build using `rolesToAccessScope`/`generateTraceId`/`HEADER_*` (auth.ts/headers.ts).
+- **C-14:** one consumer surface (`/trader`), button on the **existing** Book→Portfolio page
+  (`trader/portfolio/page.tsx`) → no nav registration. Non-trading producer attribution deferred to
+  the **named** follow-up `021b-ledger-producer-attribution`.
+- **C-15:** every `@AC-1…@AC-11` is mapped to ≥1 test step (Steps 5, 7, 10, 13) — see the spec's
+  `## Scenario Coverage` table. (Note: `acceptance.feature` has no `@AC-*` numbered 0 — the set is
+  AC-1..AC-11 with no AC missing; all covered.)
+- **Not-found / new-from-scratch items:** `pg-cursor` dep (add); ledger `exportEvents` method (new,
+  server-streaming shape modeled on `streamEvents`); BFF `trader/api/ledger/export/route.ts` (new,
+  session gate modeled on `config-ui/api/audit/route.ts`, NDJSON/CSV streaming new); e2e
+  `ledgerEvents` fixture + `INVENTORY.md` row (no ledger-events fixture exists); mock-backend
+  `exportEvents` handler (new).
+- **Deduped Reviewers:** Proto Reviewer; xstockstrat-ledger; DBA; xstockstrat-config;
+  xstockstrat-trading; xstockstrat-ui.

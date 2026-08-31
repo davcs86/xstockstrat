@@ -183,3 +183,16 @@ catalog list + count on each merge. Proto: each adds a distinct enum/message (08
 `update_mask`/`deleted`, 088 `SignalSourceOperation`, 089 `StrategyOperation.REACTIVATE`) — no
 proto-field collisions, but re-run `./scripts/buf-gen.sh` after each merge.
 | `consolidate-watchlist-signal` (127) | `order-snapshots-pnl-patterns` (042) | **Portfolio migration-NNN collision on `010`** (`/sdd-review` product-spec overlap scan, 2026-08-19): both add a `services/xstockstrat-portfolio/migrations/` migration and the tip is `009_bracket_order_ids`, so each independently computes next-free `010`. 042 (design-approved) specced `010` first (`realized_accum` on `portfolio.positions`) and keeps it; 127 renumbers to `011` (its `system_managed` column + name-constraint rework + `source` column). No proto-field or config collision (042's portfolio change is migration+Go handler only, no `portfolio.proto` edit; 127 owns the next-free `Watchlist`/`WatchlistBinding` field numbers uncontested). Re-derive the NNN across **all remote branches** at `/sdd-spec` (ledger 081), not the local tree. The two may merge in either order as long as 127 uses `011`. | No |
+
+> **Config-service seed-migration NNN pre-assignment (this batch, 2026-08-31).** Four features in the
+> 021/029/031/043/095/110/128/166/167/168 batch add a seed migration to the shared
+> `services/xstockstrat-config/migrations/` dir (tip on branch = `021_notify_push_min_severity`).
+> To avoid a filename collision the numbers are pre-assigned: **021** `ledger-event-export` →
+> `022_ledger_export_keys`; **031** `strategy-performance-dashboard` → `023_ui_performance_keys`;
+> **168** `fundamentals-blend-universe` → `024_analysis_engine_blend_keys`; **166**
+> `mcp-client-signal-source` → `025_ingest_mcp_client_keys`. golang-migrate applies in numeric order;
+> seeded namespaces are disjoint (`ledger`/`ui`/`analysis`/`ingest`), so this is file-ordering only,
+> no key conflict. Each `/sdd-spec` re-derives next-free from the merged tree and honors this split.
+> Non-config migrations are single-owner per service dir: ledger `003_events_user_id` (021);
+> portfolio `014_positions_fees_accum` + analysis `021_pnl_positions_fees_total` (029); ingest
+> `011` mcp_client CHECK (166) — no cross-feature collision.
