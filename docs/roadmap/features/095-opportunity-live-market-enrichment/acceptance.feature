@@ -53,10 +53,10 @@ Feature: opportunity-live-market-enrichment
     Then no target or stop overlay line is drawn, and in particular no line is drawn at price 0
 
   @AC-9 @FR-5
-  Scenario: The order ticket shows risk:reward and a suggested share count
+  Scenario: The order ticket shows risk:reward and a suggested share count computed client-side
     Given the Signal-detail order ticket for "CAPR" with entry 12.34, stop 11.50, target 14.00 and buying power 5000
     When the ticket renders
-    Then it shows a risk:reward of "2.0:1" (reward 1.66 vs risk 0.84 per share) and a suggested share count greater than zero sized from buying power and per-share risk
+    Then it shows a risk:reward of "2.0:1" (reward 1.66 vs risk 0.84 per share) and a suggested share count greater than zero sized from buying power and per-share risk, both computed client-side in the UI from those already-available values (no server risk_reward/suggested_qty field)
 
   @AC-10 @FR-5
   Scenario: The order ticket's execution path is unchanged
@@ -82,7 +82,7 @@ Feature: opportunity-live-market-enrichment
     When the Signal-detail header renders
     Then it shows only the symbol and its live price, with no per-condition chips, target/stop overlays, or R:R sizing fabricated for it
 
-  @AC-14 @FR-1
+  @AC-14 @FR-8
   Scenario: Folding in the live quote does not leak look-ahead into ranking
     Given a fixed backtest/ranking input for "CAPR"
     When conviction and readiness ranking are computed with the live-quote enrichment attached and again with it absent

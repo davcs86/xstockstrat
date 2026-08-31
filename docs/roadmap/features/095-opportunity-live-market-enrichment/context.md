@@ -68,3 +68,40 @@
   parity with a parity test (fails 056 / C-10(b)); no-look-ahead when folding the live quote into
   ranking (analysis owner focus, AC-14).
 - **Next:** `/sdd-review opportunity-live-market-enrichment product-spec`, then `/sdd-design`.
+
+## Session 2026-08-31 — sdd-review fixes (product-spec)
+
+`/sdd-review product-spec` returned **FAIL (criterion 9)** with warnings. Applied the review fixes
+(docs-only, feature 095 dir; number/slug/status `draft` unchanged):
+
+- **Target/stop source (blocker #1, resolved inline in FR-4).** `target_price`/`stop_price` come from
+  the opportunity's **originating signal / strategy definition** where present; when **absent they are
+  omitted** (no overlay line), never derived or fabricated. No ATR derivation — `xstockstrat-indicators`
+  is **out of scope**.
+- **R:R + suggested-sizing location (blocker #2, resolved inline in FR-5).** Both are computed
+  **client-side in the UI** from already-available values (live price, target, stop, buying power).
+  Dropped the `risk_reward` and `suggested_qty` proto fields — **no server fields** carry them.
+- **Live price data shape (W2).** The existing `GetLatestQuote`/`Quote` returns **bid/ask only** (no
+  last-trade, no prior close), yet the scenarios need a latest **trade** price + **prior close**
+  (change% is from prior close). Added an **additive, non-breaking** `xstockstrat-marketdata` change
+  (additive `Quote` fields at 8+ or a small latest-trade read RPC — shape at `/sdd-design`) to the
+  Proto section and Affected Services.
+- **Proto field pre-assignment (W, coordinate with 110).** Pre-assigned a **contiguous `Opportunity`
+  enrichment block starting at field 13**: `live_price=13`, `change_pct=14`, `target_price=15`,
+  `stop_price=16`, sparkline=17, optional per-condition live-value carrier=18. Note added: **feature
+  110 appends its confidence field AFTER this block (next free field, 19+); see merge-order.md (110
+  blocked by 095)**. `SymbolReadiness` additive after field 5.
+- **AC-14 traceability (W3).** Added a dedicated **FR-8 (no-look-ahead invariant)** and **re-tagged
+  AC-14 from `@FR-1` to `@FR-8`** so the no-look-ahead scenario traces to the requirement it actually
+  guards. FR-1..FR-7 keep full coverage; FR-1 still covered by AC-1/AC-2/AC-13.
+- **Open Questions reorganization (criterion 9).** After resolving the two scope questions inline,
+  `## Open Questions` now reads **"None — resolved inline or moved below"** (no unchecked `- [ ]`). The
+  latest-quote data-shape decision (now answered by the additive marketdata change) plus the remaining
+  mechanism/shape choices (per-condition chip fold-in, sparkline payload shape, SymbolReadiness reuse)
+  moved to a new **`## Design-Phase Decisions (owned by /sdd-design)`** section; the three known traps
+  (analysis→marketdata edge verify; sparkline `null`-not-`NaN`; cross-surface price parity) moved to a
+  new **`## Design Guardrails`** section.
+- **Config unchanged in intent:** `analysis.opportunity.sparkline_bars` stays env-overridable (F-07);
+  firmed from "possible" to confirmed-in-scope now that the sparkline is `Opportunity` field 17.
+- **Next:** re-run `/sdd-review opportunity-live-market-enrichment product-spec` to clear the gate,
+  then `/sdd-design`.
