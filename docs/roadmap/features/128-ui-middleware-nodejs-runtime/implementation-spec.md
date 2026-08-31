@@ -72,7 +72,7 @@ All 7 scenarios covered.
 
 ### Step 1 — service: Middleware → Node.js runtime + in-process refresh; delete `buildInternalRefreshUrl`; keep matcher exclusion
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/middleware.ts` — modify

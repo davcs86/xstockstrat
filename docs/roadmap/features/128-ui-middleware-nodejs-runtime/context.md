@@ -159,3 +159,32 @@ warnings; applied fixes (docs-only, still `draft`, number/slug unchanged):
   - Step 1/Step 2: frontend E2E coverage not pinned — the FR-3 fix (near-expiry middleware path now ACTUALLY rotates the browser cookie, previously discarded) is subtly NEW browser-observable behavior. Add a note pinning `e2e/auth.spec.ts` as the E2E guard (stays green) or extend it to cover the rotated near-expiry cookie path. — [ ] unaddressed
   - Notes (no fix): refresh RPC carries no x-trace-id (parity with existing route.ts, not a C-03 regression); prefer signed-JWT stub over vi.mock('@/lib/auth') in Step 2 so AC-3/AC-4 assert real cookie helpers; Step 3 build-gate coverage N/A (carried by Step 2); CLAUDE.md line numbers unverified (content present). — [ ] notes
 - Overlap findings: batch scan CLEAN; 128 is isolated (middleware/auth transport only).
+
+## Session 2026-08-31 — sdd-execute (sequential)
+
+Executed on `feature/ui-middleware-nodejs-runtime`, branched off clean `main-dev` (Stage-1 planning
+PR #1051 already merged). Per operator direction the run is unattended (auto-proceed through
+checkpoints; pause only on real blockers).
+
+- **Tooling setup (steps 1–4):** node v22.22.2 (CI uses Node 24 — CI is authoritative for the
+  build; local build/tests unaffected) · pnpm ✓ 9.15.9 · vitest ✓ 3.2.7 (via pnpm) · next ✓ ^15.5.21 ·
+  docker ✗ (unavailable in sandbox) → AC-6 standalone gate uses the spec's offline `pnpm run build`
+  fallback; the authoritative container-refresh proof runs in CI.
+
+### Step 1 — service: Node.js-runtime middleware + in-process refresh; delete buildInternalRefreshUrl [done]
+- Flipped `src/middleware.ts` `config` to `runtime: 'nodejs'` (kept `matcher` byte-for-byte incl. the
+  `api/auth/refresh` exclusion, rationale comment rewritten to cite the live browser caller
+  `authRedirect.ts:40`). Replaced the near-expiry `fetch(buildInternalRefreshUrl())` loopback with an
+  in-process `refreshSession(req.cookies.get('refresh_token')?.value)` call: on success builds the
+  trace-ID `NextResponse.next` then `setSessionCookies(response, …)`; on null/absent redirects to
+  `/auth/login` with `clearSessionCookies`. Deleted `buildInternalRefreshUrl()` + JSDoc from
+  `src/lib/auth.ts` and dropped its import from middleware; corrected the stale Edge-only comments in
+  `auth.ts:42-44` and the `identity.ts:1-6` header.
+- TDD (P-06): AC-1/AC-2/AC-3/AC-4 **red** (config.runtime undefined; refreshSession not called / fetch
+  was called; no rotated Set-Cookie; 200 not 307) against the pre-change tree → **green** after Step 1
+  (`vitest run src/middleware.test.ts src/lib/auth.test.ts`: 11 passed). Grep verifications all pass:
+  `runtime: 'nodejs'` present; `buildInternalRefreshUrl` no matches; `fetch(` no matches in middleware;
+  `api/auth/refresh` still excluded. `pnpm run lint` clean (only pre-existing warnings in untouched files).
+- Files modified: `services/xstockstrat-ui/src/middleware.ts`, `services/xstockstrat-ui/src/lib/auth.ts`,
+  `services/xstockstrat-ui/src/lib/identity.ts`
+- Deviations: none

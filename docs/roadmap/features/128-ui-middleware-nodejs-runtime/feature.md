@@ -15,6 +15,7 @@
 | 2026-08-31 | `draft` → `spec-ready` | /sdd-review | Product spec approved; all review blockers addressed |
 | 2026-08-31 | `spec-ready` → `design-approved` | /sdd-design | Design debated (full) and approved; recon.md + design.md written; FR-5/AC-5 corrected (keep matcher exclusion) |
 | 2026-08-31 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (4 steps) |
+| 2026-08-31 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (service) done — Node.js-runtime middleware + in-process refresh |
 
 ---
 
