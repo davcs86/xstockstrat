@@ -102,6 +102,15 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 095 — opportunity-live-market-enrichment (`xstockstrat-analysis`)
+
+**Registers** `analysis.opportunity.sparkline_bars` (int, default `20`) — the number of most-recent
+daily bar closes fetched per opportunity for the Decide-surface sparkline (AC-3). Read **live** at
+read-time enrichment via `get_int` with a `max(1, …)` clamp. **No config-service seed migration** —
+this follows the `analysis.opportunity.*` no-seed pattern (features 131/141): the key resolves to the
+code default until an operator `SetConfig`s it, and is env-overridable per F-07. Declared in
+`services/xstockstrat-analysis/CLAUDE.md` § Config Keys Consumed. No other new keys.
+
 ### feature 161 — surface-signal-weight-decay-config (`xstockstrat-config` / `xstockstrat-analysis`)
 
 **Registers** `analysis.scoring.signal_decay_half_life_hours` (float, default `24.0`, migration 019)
