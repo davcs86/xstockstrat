@@ -172,3 +172,10 @@ each later Stage-2 feature stacks on the prior. Branch was rebased onto 043's ti
 - Local gates green: `buf lint`/`breaking`; Go `build`+`vet`+`gofmt` + AC-1…AC-5 `-race`; UI `lint`+
   `build` (`/insights/watchlists` compiles) + `watchlists.spec.ts` 15/15. CI runs authoritative
   golangci-lint, python, node, proto-freshness, and the full Playwright suite.
+
+## Session 2026-09-01 (CI: feature status automation)
+
+- Promotion PR #1065 merged to main
+- Feature promoted and committed: c086afc839f905c4f72b24d75e824e22d61af0b2
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-01

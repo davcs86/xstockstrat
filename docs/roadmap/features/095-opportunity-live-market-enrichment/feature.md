@@ -3,6 +3,8 @@
 **Development Branch**: `feature/opportunity-live-market-enrichment`
 **Created**: 2026-08-02
 **Last Updated**: 2026-09-01
+**Committed to main**: c086afc839f905c4f72b24d75e824e22d61af0b2
+**Launched date**: 2026-09-01
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-08-31 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (13 steps) |
 | 2026-09-01 | `implementation-ready` → `in-progress` → `code-completed` | /sdd-execute | All 13 steps executed (7 commits); red-before-green on every code step; both impl-review fixes honored |
 
+| 2026-09-01 | `code-completed` → `launched` | CI workflow | Promoted via PR #1065; committed c086afc839f905c4f72b24d75e824e22d61af0b2 |
 ---
 
 ## Artifacts

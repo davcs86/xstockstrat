@@ -146,3 +146,10 @@ across the notify/ui/deploy/config-governance surfaces and this feature's artifa
 `notify.proto` doc-comment and its generated stubs) — no behavior/API/schema/migration change. Fixed in
 the same PR as the paired 162 collision (`162-agent-broker-account-tools` → 164, an explicit
 user-authorized override of launched-number immutability).
+
+## Session 2026-09-01 (CI: feature status automation)
+
+- Promotion PR #1065 merged to main
+- Feature promoted and committed: c086afc839f905c4f72b24d75e824e22d61af0b2
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-01

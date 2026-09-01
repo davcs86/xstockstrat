@@ -278,3 +278,10 @@ Unattended run (auto-proceed through checkpoints; pause only on real blockers).
   pre-warmed 22/22 SSR routes). See Deviation Log for the browser-build/timeout workaround.
 - Files: `e2e/trader/ledger-export.spec.ts`, `e2e/mock-backend.ts`, `e2e/fixtures/ledgerEvents.ts`,
   `e2e/fixtures/INVENTORY.md`. Deviations: Playwright infra (Deviation Log).
+
+## Session 2026-09-01 (CI: feature status automation)
+
+- Promotion PR #1065 merged to main
+- Feature promoted and committed: c086afc839f905c4f72b24d75e824e22d61af0b2
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-01

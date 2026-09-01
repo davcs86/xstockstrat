@@ -296,3 +296,10 @@ code-bearing step). Status → `code-completed`. Commits (7):
 
 C-16 acceptance-suite promotion (095 `@AC-*` → the analysis + platform durable suites) is deferred to
 `/promote` at launch — promoted from the launched branch, not mid-execute (same backstop as 029/043/167).
+
+## Session 2026-09-01 (CI: feature status automation)
+
+- Promotion PR #1065 merged to main
+- Feature promoted and committed: c086afc839f905c4f72b24d75e824e22d61af0b2
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-01

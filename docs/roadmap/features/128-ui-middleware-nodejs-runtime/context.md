@@ -257,3 +257,10 @@ guarantees, not cross-feature business rules — the sanctioned "pure refactor, 
 in CI's Docker build on the integration PR (docker unavailable in this sandbox — offline `pnpm run
 build` fallback passed).
 **Next**: integration PR → main-dev.
+
+## Session 2026-09-01 (CI: feature status automation)
+
+- Promotion PR #1065 merged to main
+- Feature promoted and committed: c086afc839f905c4f72b24d75e824e22d61af0b2
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-01

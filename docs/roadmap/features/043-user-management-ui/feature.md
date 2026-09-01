@@ -3,6 +3,8 @@
 **Development Branch**: `feature/user-management-ui`
 **Created**: 2026-05-28
 **Last Updated**: 2026-08-31
+**Committed to main**: c086afc839f905c4f72b24d75e824e22d61af0b2
+**Launched date**: 2026-09-01
 **Total Steps**: 10 (all done)
 
 ---
@@ -19,6 +21,7 @@
 | 2026-08-31 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1–2 done — 6 admin identity RPCs + Role/User proto; stubs regenerated (buf breaking clean) |
 | 2026-08-31 | `in-progress` → `code-completed` | /sdd-execute | Steps 3–10 done — authz gate, 6 admin handlers (atomic last-admin guard), ledger audit, unit 52/52, config-ui BFF + Users page + e2e 5/5 green. Integration PR opened to main-dev |
 
+| 2026-09-01 | `code-completed` → `launched` | CI workflow | Promoted via PR #1065; committed c086afc839f905c4f72b24d75e824e22d61af0b2 |
 ---
 
 ## Artifacts

@@ -215,3 +215,10 @@ limitation). Covered instead by: `GetFeesAccum` pgxmock (AC-11 0-default), byte-
 the shipped `realized_accum` upsert (compile-checked), and end-to-end downstream via the analysis
 consumer test (Step 10) + `GetAttribution` net test (Step 12). Full note in `implementation-spec.md`
 § Deviation Log.
+
+## Session 2026-09-01 (CI: feature status automation)
+
+- Promotion PR #1065 merged to main
+- Feature promoted and committed: c086afc839f905c4f72b24d75e824e22d61af0b2
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-01

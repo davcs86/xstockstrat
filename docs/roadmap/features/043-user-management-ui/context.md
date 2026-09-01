@@ -266,3 +266,10 @@ execution: Step 6 audit idempotency_key must be stable (addressed at Step 6); St
   PR opened against `main-dev`. Features 128 (#1052) and 021 (#1053) already merged to main-dev.
 - C-16 acceptance-scenario promotion into the durable identity + config-ui business-rule suites is
   deferred to `/promote` at launch (documented backstop), not done here.
+
+## Session 2026-09-01 (CI: feature status automation)
+
+- Promotion PR #1065 merged to main
+- Feature promoted and committed: c086afc839f905c4f72b24d75e824e22d61af0b2
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-01

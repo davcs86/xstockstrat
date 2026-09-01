@@ -3,6 +3,8 @@
 **Development Branch**: `feature/pwa-notifications`
 **Created**: 2026-08-29
 **Last Updated**: 2026-08-29
+**Committed to main**: c086afc839f905c4f72b24d75e824e22d61af0b2
+**Launched date**: 2026-09-01
 
 ---
 
@@ -15,6 +17,7 @@
 | 2026-08-29 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
 | 2026-08-29 | `implementation-ready` → `code-completed` | /sdd-execute | All 12 steps implemented, tested, and committed on `claude/pwa-notifications-2eggrc` |
 
+| 2026-09-01 | `code-completed` → `launched` | CI workflow | Promoted via PR #1065; committed c086afc839f905c4f72b24d75e824e22d61af0b2 |
 ---
 
 ## Artifacts

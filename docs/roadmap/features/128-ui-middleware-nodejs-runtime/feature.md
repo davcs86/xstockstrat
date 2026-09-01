@@ -3,6 +3,8 @@
 **Development Branch**: `feature/ui-middleware-nodejs-runtime`
 **Created**: 2026-08-11
 **Last Updated**: 2026-08-31
+**Committed to main**: c086afc839f905c4f72b24d75e824e22d61af0b2
+**Launched date**: 2026-09-01
 
 ---
 
@@ -18,6 +20,7 @@
 | 2026-08-31 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (service) done — Node.js-runtime middleware + in-process refresh |
 | 2026-08-31 | `in-progress` → `code-completed` | /sdd-execute | All 4 steps done (service + tests red→green, standalone-build feasibility gate, docs); integration PR opened |
 
+| 2026-09-01 | `code-completed` → `launched` | CI workflow | Promoted via PR #1065; committed c086afc839f905c4f72b24d75e824e22d61af0b2 |
 ---
 
 ## Artifacts

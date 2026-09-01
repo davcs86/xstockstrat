@@ -232,3 +232,10 @@ merged into main-dev and 095 rebased onto the new main-dev. When 095 squash-merg
 the new main-dev (dropping 095's now-squashed commits).
 
 C-16 acceptance-suite promotion (110 `@AC-*`) is deferred to `/promote` at launch.
+
+## Session 2026-09-01 (CI: feature status automation)
+
+- Promotion PR #1065 merged to main
+- Feature promoted and committed: c086afc839f905c4f72b24d75e824e22d61af0b2
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-01

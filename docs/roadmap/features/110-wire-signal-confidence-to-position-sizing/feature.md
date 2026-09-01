@@ -3,6 +3,8 @@
 **Development Branch**: `feature/wire-signal-confidence-to-position-sizing`
 **Created**: 2026-08-05
 **Last Updated**: 2026-09-01
+**Committed to main**: c086afc839f905c4f72b24d75e824e22d61af0b2
+**Launched date**: 2026-09-01
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-08-31 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (8 steps) |
 | 2026-09-01 | `implementation-ready` → `in-progress` → `code-completed` | /sdd-execute | All 8 steps executed; red-before-green; field 19 stacked on 095's 13-18; orphan deleted; impl-review grep-narrowing fix honored |
 
+| 2026-09-01 | `code-completed` → `launched` | CI workflow | Promoted via PR #1065; committed c086afc839f905c4f72b24d75e824e22d61af0b2 |
 ---
 
 ## Artifacts

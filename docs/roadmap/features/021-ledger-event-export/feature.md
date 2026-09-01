@@ -3,6 +3,8 @@
 **Development Branch**: `feature/ledger-event-export`
 **Created**: 2026-05-26
 **Last Updated**: 2026-08-31
+**Committed to main**: c086afc839f905c4f72b24d75e824e22d61af0b2
+**Launched date**: 2026-09-01
 
 ---
 
@@ -18,6 +20,7 @@
 | 2026-08-31 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1–2 done — additive `ExportEvents` RPC + `user_id` fields; stubs regenerated (buf breaking clean) |
 | 2026-08-31 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done — ledger ExportEvents + per-user stamp + `/trader` BFF route/button; e2e 8/8 green |
 
+| 2026-09-01 | `code-completed` → `launched` | CI workflow | Promoted via PR #1065; committed c086afc839f905c4f72b24d75e824e22d61af0b2 |
 ---
 
 ## Artifacts

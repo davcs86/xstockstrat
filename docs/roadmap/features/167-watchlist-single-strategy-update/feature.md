@@ -3,6 +3,8 @@
 **Development Branch**: `feature/watchlist-single-strategy-update`
 **Created**: 2026-08-31
 **Last Updated**: 2026-08-31
+**Committed to main**: c086afc839f905c4f72b24d75e824e22d61af0b2
+**Launched date**: 2026-09-01
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-08-31 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1–4 done — additive proto + stubs; Go single-row rebind backend + AC-1…AC-5 tests (red→green, -race) |
 | 2026-08-31 | `in-progress` → `code-completed` | /sdd-execute | Steps 5–6 done — non-invalidating cache-patch hook + `setBinding` rewire + `writeInFlight` fix + BFF forward; AC-6 e2e (15/15 in watchlists.spec.ts). Stacked integration PR opened onto feature/user-management-ui (043) |
 
+| 2026-09-01 | `code-completed` → `launched` | CI workflow | Promoted via PR #1065; committed c086afc839f905c4f72b24d75e824e22d61af0b2 |
 ---
 
 ## Artifacts

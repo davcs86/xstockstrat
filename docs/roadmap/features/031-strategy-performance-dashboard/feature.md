@@ -3,6 +3,8 @@
 **Development Branch**: `feature/strategy-performance-dashboard`
 **Created**: 2026-05-26
 **Last Updated**: 2026-09-01
+**Committed to main**: c086afc839f905c4f72b24d75e824e22d61af0b2
+**Launched date**: 2026-09-01
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-08-31 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (11 steps) |
 | 2026-09-01 | `implementation-ready` → `code-completed` | /sdd-execute | All 11 steps implemented (RED→GREEN); portfolio producer + /insights/performance dashboard; e2e 8/8, unit 154 pass |
 
+| 2026-09-01 | `code-completed` → `launched` | CI workflow | Promoted via PR #1065; committed c086afc839f905c4f72b24d75e824e22d61af0b2 |
 ---
 
 ## Artifacts
