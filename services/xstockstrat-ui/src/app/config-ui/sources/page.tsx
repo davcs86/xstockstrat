@@ -25,7 +25,10 @@ import {
   SelectItem,
 } from '@/components/ui/select';
 import { useSignalSources } from '@/app/config-ui/hooks/useSignalSources';
-import { useManageSignalSource } from '@/app/config-ui/hooks/useSignalSourceMutations';
+import {
+  useManageSignalSource,
+  useRegisterMcpClientSource,
+} from '@/app/config-ui/hooks/useSignalSourceMutations';
 import type { SignalSource } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { SourceHealthStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { SOURCE_HEALTH, EnumBadge } from '@/lib/opportunityShared';
@@ -42,6 +45,7 @@ const SOURCE_TYPES = [
   'mediated_linked_email',
   'mediated_simple_website',
   'mediated_authenticated_website',
+  'mcp_client',
 ] as const;
 
 type SourceType = (typeof SOURCE_TYPES)[number];
@@ -60,6 +64,10 @@ interface FormState {
   scrapeSelector: string;
   credentialsRef: string;
   reliabilityWeight: string;
+  // feature 166 — mcp_client fields. The bearer token is WRITE-ONLY (never rendered back).
+  mcpEndpoint: string;
+  mcpTool: string;
+  bearerToken: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -76,6 +84,9 @@ const EMPTY_FORM: FormState = {
   scrapeSelector: '',
   credentialsRef: '',
   reliabilityWeight: '1', // feature 161 — default 1.0 (neutral)
+  mcpEndpoint: '',
+  mcpTool: '',
+  bearerToken: '',
 };
 
 function isEmailType(t: SourceType) {
@@ -114,6 +125,10 @@ function isMediatedType(t: SourceType) {
   return t.startsWith('mediated_');
 }
 
+function isMcpClientType(t: SourceType) {
+  return t === 'mcp_client';
+}
+
 function splitPatterns(s: string): string[] {
   return s
     .split(',')
@@ -142,6 +157,11 @@ function buildConfigJson(form: FormState): JsonObject {
   if (isWebsiteType(form.sourceType)) {
     return { url: form.url, scrape_selector: form.scrapeSelector };
   }
+  if (isMcpClientType(form.sourceType)) {
+    // feature 166 — only the endpoint + tool ride config_json; the bearer is NEVER here (it is
+    // written separately as an encrypted config secret).
+    return { mcp_endpoint: form.mcpEndpoint, mcp_tool: form.mcpTool };
+  }
   return {};
 }
 
@@ -163,12 +183,16 @@ function formFromSource(src: SignalSource): FormState {
     scrapeSelector: String(cfg.scrape_selector ?? ''),
     credentialsRef: '',
     reliabilityWeight: String(src.reliabilityWeight ?? 1.0),
+    mcpEndpoint: String(cfg.mcp_endpoint ?? ''),
+    mcpTool: String(cfg.mcp_tool ?? ''),
+    bearerToken: '', // write-only — never populated from a stored source
   };
 }
 
 export default function SourcesPage() {
   const { sources, isLoading: loading, error } = useSignalSources();
   const { mutate: manageMutate, isPending: saving } = useManageSignalSource();
+  const { mutate: registerMcpMutate, isPending: savingMcp } = useRegisterMcpClientSource();
 
   const [editingSlug, setEditingSlug] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -246,6 +270,32 @@ export default function SourcesPage() {
     }
     const isNew = editingSlug === '__new__';
     const configJson = buildConfigJson(form);
+    // feature 166 — registering a mcp_client source is a secret-first two-write: the bearer is
+    // written to an encrypted config secret, then the source is registered with credentials_ref
+    // (never the token in config_json). The bearer is mandatory on register.
+    if (isNew && isMcpClientType(form.sourceType)) {
+      if (!form.bearerToken.trim()) {
+        setSaveError('A bearer token is required to register an MCP client source');
+        return;
+      }
+      registerMcpMutate(
+        {
+          slug: form.slug,
+          bearerToken: form.bearerToken,
+          source: {
+            slug: form.slug,
+            displayName: form.displayName,
+            sourceType: form.sourceType,
+            extractorModule: form.extractorModule,
+            active: form.active,
+            configJson,
+            reliabilityWeight: weight,
+          },
+        },
+        { onSuccess: () => closeForm(), onError: (e) => setSaveError(errMessage(e)) },
+      );
+      return;
+    }
     const base = {
       source: {
         slug: form.slug,
@@ -640,6 +690,44 @@ export default function SourcesPage() {
               </>
             )}
 
+            {isMcpClientType(form.sourceType) && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">MCP Endpoint</label>
+                  <Input
+                    placeholder="https://mcp.acme.example/mcp"
+                    value={form.mcpEndpoint}
+                    onChange={(e) => setField('mcpEndpoint', e.target.value)}
+                    aria-label="MCP endpoint"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Tool Name</label>
+                  <Input
+                    placeholder="get_signals"
+                    value={form.mcpTool}
+                    onChange={(e) => setField('mcpTool', e.target.value)}
+                    aria-label="MCP tool name"
+                  />
+                </div>
+                {editingSlug === '__new__' && (
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Bearer Token</label>
+                    <Input
+                      type="password"
+                      placeholder="Enter the MCP bearer token"
+                      value={form.bearerToken}
+                      onChange={(e) => setField('bearerToken', e.target.value)}
+                      aria-label="Bearer token"
+                    />
+                    <p className="text-muted-foreground text-xs mt-0.5">
+                      Stored encrypted at rest and never shown again. Required to register.
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+
             <div className="flex items-center gap-2">
               <Switch
                 id="active-toggle"
@@ -654,10 +742,15 @@ export default function SourcesPage() {
             {saveError && <p className="text-xs text-destructive">{saveError}</p>}
 
             <div className="flex items-center gap-2 pt-1">
-              <Button size="sm" onClick={handleSave} disabled={saving}>
-                {saving ? 'Saving…' : editingSlug === '__new__' ? 'Register' : 'Save'}
+              <Button size="sm" onClick={handleSave} disabled={saving || savingMcp}>
+                {saving || savingMcp ? 'Saving…' : editingSlug === '__new__' ? 'Register' : 'Save'}
               </Button>
-              <Button size="sm" variant="ghost" onClick={closeForm} disabled={saving}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={closeForm}
+                disabled={saving || savingMcp}
+              >
                 Cancel
               </Button>
             </div>
