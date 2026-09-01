@@ -711,6 +711,14 @@ export interface Opportunity {
     stopPrice?: number | undefined;
     sparkline: SparklinePoint[];
     conditions: ConditionEval[];
+    /**
+     * feature 110 — the raw max per-signal ExternalSignal.conviction (0.0–1.0) among the symbol's
+     * active signals; the real probability that feeds trading PlaceOrder's confidence sizing.
+     * Explicit-presence optional: UNSET means "no active signal for this symbol" (never a fabricated
+     * 0.0). Deliberately NAMED signal_confidence and kept distinct from the ordinal `conviction = 3`
+     * (NOT a probability) and the decayed/weighted signal_axis. Next free after 095's 13-18 block.
+     */
+    signalConfidence?: number | undefined;
 }
 /**
  * One recent daily-bar close for the Decide-surface sparkline (feature 095). Explicit presence — an
