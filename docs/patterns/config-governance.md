@@ -102,6 +102,26 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 168 — fundamentals-blend-universe (`xstockstrat-analysis` / `xstockstrat-config`)
+
+**Registers** two `analysis.engine.*` keys, seeded by migration **`024_analysis_engine_blend_keys`**
+for `staging` + `production` (global, `user_id` NULL), `consuming_service` `xstockstrat-analysis`.
+Both use the **full-dotted-key form** in the `key` column (per migration `021`) — the live loop reads
+them via the existing `analysis`-namespace `WatchConfig` stream (`get_str`/`get_bool`), which keys the
+snapshot by the `key` column with no namespace prefix added, so the seeded key must equal the read
+string; **no new cross-namespace subscription** (unlike feature 154's `marketdata` read):
+
+- `analysis.engine.fundamentals_blend_strategy_id` (string, default `fundamentals_macd_blend`) — the
+  strategy id the fundamentals-universe force-run rule governs. When that strategy is live, the live
+  loop evaluates it over the fundamentals universe (signals from the fundamentals source ∩ symbols
+  with fundamentals data), minus its deny list, instead of its ordinary owner-scoped universe.
+- `analysis.engine.fundamentals_blend_enabled` (bool, default `true`) — the kill-switch. Read via
+  `get_bool` (HasField-based), so an explicit operator `false` is honored and disables the override
+  entirely (the governed strategy then resolves its own universe like any other), independent of
+  whether that strategy is live.
+
+Declared in `services/xstockstrat-analysis/CLAUDE.md` § Config Keys Consumed. No other new keys.
+
 ### feature 031 — strategy-performance-dashboard (`xstockstrat-ui`)
 
 **Registers** two `ui.performance.*` keys, seeded by migration **`023_ui_performance_keys`** for
