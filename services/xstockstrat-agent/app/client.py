@@ -1625,8 +1625,13 @@ async def set_config(
     access_scope: int,
     create_key: bool = False,
     user_id: str = "",
+    is_secret: bool = False,
 ) -> dict:
     """ConfigService.SetConfig, forwarding the REAL caller's access scope.
+
+    ``is_secret`` (feature 166) is honored only when CREATING a key (``create_key=true``); on an
+    existing key the stored row's ``is_secret`` is authoritative and the request flag is ignored by
+    the backend. Used to mint the per-source MCP bearer secret ``ingest.mcp_credential.<slug>``.
 
     Feature 073 introduced caller-derived scope here; feature 092 generalized it to every management
     tool (the hardcoded-admin ``_admin_metadata()`` was removed), so this is no longer an exception.
@@ -1645,6 +1650,9 @@ async def set_config(
         cv.bool_val = value.strip().lower() in ("true", "1", "yes")
     else:
         cv.string_val = value
+    # feature 166 — is_secret rides the ConfigValue (SetConfigRequest has no such field); the
+    # backend reads value.is_secret and, for a NEW key (create_key), encrypts at rest accordingly.
+    cv.is_secret = is_secret
 
     async with grpc.aio.insecure_channel(CONFIG_ENDPOINT) as channel:
         stub = config_pb2_grpc.ConfigServiceStub(channel)

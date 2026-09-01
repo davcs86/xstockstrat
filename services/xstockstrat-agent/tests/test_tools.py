@@ -100,10 +100,84 @@ async def test_list_signal_sources_adds_extractor_tool():
         assert enriched[0]["extractor_tool"] == "extract_email_content"
         assert enriched[1]["extractor_tool"] is None
         assert enriched[2]["extractor_tool"] == "extract_website_content"
-        # Confirm credentials are NOT in any enriched source
+        # feature 166: the token/credentials_ref stay excluded, but the boolean has_credentials is
+        # now surfaced (product-spec-committed reversal, @AC-1/@AC-2).
         for src in enriched:
             assert "credentials_ref" not in src
-            assert "has_credentials" not in src
+            assert "has_credentials" in src
+
+
+@pytest.mark.asyncio
+async def test_list_signal_sources_surfaces_has_credentials():
+    """feature 166 — has_credentials (bool) is surfaced; the token is never exposed (AC-1/2)."""
+    sources = [
+        {
+            "slug": "acme-mcp",
+            "display_name": "Acme MCP",
+            "source_type": "mcp_client",
+            "config_json": {"mcp_endpoint": "https://mcp.acme/mcp", "mcp_tool": "get_signals"},
+            "has_credentials": True,
+            "reliability_weight": 1.0,
+        }
+    ]
+    with patch.object(client, "list_signal_sources", AsyncMock(return_value=sources)):
+        server = _make_server()
+        result = await _tool_fn(server, "list_signal_sources")()
+        src = result["sources"][0]
+        assert src["source_type"] == "mcp_client"
+        assert src["has_credentials"] is True
+        assert "credentials_ref" not in src
+        # No field carries a token value.
+        assert all("sk-live" not in str(v) for v in src.values())
+
+
+@pytest.mark.asyncio
+async def test_manage_signal_source_mcp_client_secret_first_two_write():
+    """feature 166 — registering an mcp_client source writes the bearer as a secret FIRST, then
+    registers the source with credentials_ref; the token is never echoed back (AC-1/AC-2)."""
+    set_config_mock = AsyncMock(return_value={"version": "1", "updated_at": "2026-09-01T00:00:00"})
+    manage_mock = AsyncMock(
+        return_value={
+            "slug": "acme-mcp",
+            "display_name": "Acme MCP",
+            "source_type": "mcp_client",
+            "extractor_module": "",
+            "active": True,
+            "has_credentials": True,
+            "reliability_weight": 1.0,
+        }
+    )
+    with (
+        patch.object(client, "set_config", set_config_mock),
+        patch.object(client, "manage_signal_source", manage_mock),
+    ):
+        server = _make_server()
+        result = await _tool_fn(server, "manage_signal_source")(
+            _ctx(ADMIN),
+            operation="register",
+            slug="acme-mcp",
+            display_name="Acme MCP",
+            source_type="mcp_client",
+            config_json={"mcp_endpoint": "https://mcp.acme.example/mcp", "mcp_tool": "get_signals"},
+            bearer_token="sk-live-abc123",
+        )
+
+    # Secret written first, as an encrypted config key.
+    set_config_mock.assert_awaited_once()
+    sc_kwargs = set_config_mock.await_args.kwargs
+    assert sc_kwargs["namespace"] == "ingest"
+    assert sc_kwargs["key"] == "mcp_credential.acme-mcp"
+    assert sc_kwargs["value"] == "sk-live-abc123"
+    assert sc_kwargs["is_secret"] is True
+    assert sc_kwargs["create_key"] is True
+
+    # Then the source is registered with the credentials_ref pointing at the secret.
+    manage_mock.assert_awaited_once()
+    assert manage_mock.await_args.kwargs["credentials_ref"] == "ingest.mcp_credential.acme-mcp"
+
+    # The return never echoes the token or the credentials_ref (FR-12 / AC-2).
+    assert "credentials_ref" not in result
+    assert all("sk-live-abc123" != str(v) for v in result.values())
 
 
 @pytest.mark.asyncio
