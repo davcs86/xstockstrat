@@ -1,4 +1,4 @@
--- Migration: 024_analysis_engine_blend_keys.up.sql
+-- Migration: 026_analysis_engine_blend_keys.up.sql
 -- Service: xstockstrat-config
 -- Seeds the two analysis.engine.fundamentals_blend_* keys (feature 168, fundamentals-blend-universe)
 -- for staging + production.
@@ -10,9 +10,11 @@
 -- full-dotted form — NOT 008_analysis_fundsignal_keys's older split `fundsignal.*` form (008 predates
 -- the feature-147 schema; its default==seeded values masked the mismatch). `namespace` stays `analysis`.
 --
--- NNN is the pre-assigned 024 (merge-order.md: 021→022, 031→023, 168→024, 166→025). Working-tree tip is
--- 023_ui_performance_keys, so 024 merges after 022/023 and before 025 — golang-migrate applies in strict
--- numeric order.
+-- NNN renumbered 024 -> 026. merge-order.md pre-assigned 024 (021→022, 031→023, 168→024, 166→025),
+-- but feature 166's 025_ingest_mcp_client_keys merged into main-dev FIRST (PR #1063), so a 024 arriving
+-- afterward would sit below the already-applied 025 and golang-migrate (migrate up runs only versions >
+-- current) would never apply it on the persistent dev/prod DBs. 026 (next free after 025) restores
+-- forward-only ordering; the skipped 024 is a permanent, harmless gap (golang-migrate allows gaps).
 --
 -- Scope (post feature 147): global (user_id NULL), one row per environment; the trading_mode axis was
 -- removed by 017 — do not reintroduce the 'all' form used by 008. value_type 'bool'/'string' must match

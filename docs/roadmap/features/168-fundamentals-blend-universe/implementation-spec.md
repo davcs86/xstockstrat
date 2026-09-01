@@ -440,6 +440,16 @@ grep -n "analysis.engine.fundamentals_blend_strategy_id\|analysis.engine.fundame
 
 ## Deviation Log
 
+- **Step 1 migration renumbered `024` → `026` (post-merge, 2026-09-01):** the spec (and every
+  `024_analysis_engine_blend_keys` reference in Steps 1/verification above) pre-assigned config
+  migration **024**. Feature 166's `025_ingest_mcp_client_keys` merged into `main-dev` first
+  (PR #1063) while this branch was still open, so a `024` landing afterward would sit **below** the
+  already-applied `025`, and golang-migrate (`migrate up` applies only versions > current) would
+  never run it on the persistent dev/prod DBs — the two keys would silently never seed. The
+  migration files were renamed to **`026_analysis_engine_blend_keys.{up,down}.sql`** (next free after
+  025) and every durable reference (config-governance log, analysis `CLAUDE.md`) updated to `026`;
+  the skipped `024` is a permanent, harmless gap (golang-migrate allows gaps). The Step-1 planning
+  text above still reads `024` as authored — those references now denote the shipped `026` file.
 - **Step 2 (accepted, impl-review advisory #3):** the fundamentals-side symbol normalization uses
   `_normalize_symbol(f.symbol)` rather than the spec's `f.symbol.upper()`, for symmetry with the
   signal side (`_normalize_symbol(s.symbol)`). Behavior-equivalent for uppercase tickers; both feed

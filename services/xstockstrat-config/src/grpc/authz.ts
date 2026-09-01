@@ -142,7 +142,13 @@ interface SecretCallerGrant {
   callerID: string;
   namespace: string;
   /** The exact keys (within namespace) this caller may resolve. */
-  keys: ReadonlyArray<string>;
+  keys?: ReadonlyArray<string>;
+  /**
+   * Key prefixes (within namespace) this caller may resolve — for callers whose secret keys are
+   * dynamic (e.g. ingest's per-source `mcp_credential.<slug>`, feature 166) and cannot be
+   * enumerated as exact `keys`. A key is granted when it `startsWith` one of these.
+   */
+  keyPrefixes?: ReadonlyArray<string>;
 }
 
 const SECRET_CALLER_ALLOWLIST: ReadonlyArray<SecretCallerGrant> = [
@@ -150,6 +156,13 @@ const SECRET_CALLER_ALLOWLIST: ReadonlyArray<SecretCallerGrant> = [
     callerID: 'marketdata',
     namespace: 'marketdata',
     keys: ['alpaca.api_key', 'alpaca.api_secret', 'fmp.api_key', 'finnhub.api_key'],
+  },
+  {
+    // feature 166 — ingest resolves its per-source MCP bearer secrets, keyed by source slug, so
+    // the grant is a prefix (never an exact enumerable set). Read-side only.
+    callerID: 'ingest',
+    namespace: 'ingest',
+    keyPrefixes: ['mcp_credential.'],
   },
 ];
 
@@ -169,7 +182,8 @@ export function hasSecretCallerAuthority(
     (grant) =>
       grant.callerID === callerID &&
       grant.namespace === namespace &&
-      grant.keys.includes(key),
+      ((grant.keys?.includes(key) ?? false) ||
+        (grant.keyPrefixes?.some((prefix) => key.startsWith(prefix)) ?? false)),
   );
 }
 

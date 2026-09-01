@@ -182,3 +182,23 @@ scan could not run here — flagged per the root Teardown rule; the edits are li
 newly-registered `analysis.engine.*` keys.
 
 Status → `code-completed`.
+
+## Session 2026-09-01 — merge main-dev + migration renumber 024 → 026
+
+Feature 166 (PR #1063) merged into `main-dev` (commit c028b852) **before** this branch, landing its
+config migration `025_ingest_mcp_client_keys`. Merged `origin/main-dev` into
+`feature/fundamentals-blend-universe`:
+
+- **Conflict (`docs/patterns/config-governance.md`):** both 166 and 168 had prepended a Per-Feature
+  Registered Keys entry. Resolved newest-first — 168 on top, then 166 (verbatim from main-dev), then
+  031. Append-only rule honored (166's now-historical "must merge after 024" note left untouched).
+- **Migration renumber `024` → `026` (the real fix):** with `025` already applied on the persistent
+  dev/prod DBs, a `024` arriving later is `< current` and golang-migrate's `migrate up` would never
+  run it — the two `analysis.engine.fundamentals_blend_*` keys would silently never seed. Renamed the
+  seed files to `026_analysis_engine_blend_keys.{up,down}.sql` (next free after 025, `git mv` to
+  preserve history), updated their header comments, and updated the durable references
+  (config-governance 168 entry, analysis `CLAUDE.md` § Config Keys Consumed) to `026`. Recorded in the
+  impl-spec Deviation Log. On a fresh CI DB the gap (024 skipped) is harmless — golang-migrate applies
+  by numeric order and allows gaps.
+- Re-verified: analysis suite still green post-merge (no code conflicts — only docs/migration-name
+  changed); `.down.sql` still deletes exactly the two keys by explicit `key IN (...)`.

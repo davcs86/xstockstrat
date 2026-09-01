@@ -186,3 +186,49 @@
   - Step 12: config seed 025 sits above tip 021; must merge AFTER 022/023/024 (already tracked in merge-order.md; re-derive if 021/031/168 slip). — [ ] note only
   - product-spec.md:85 still says `/sources` is "registered in PLATFORM_SUBNAV" (stale) — impl-spec is correct (NAV_GROUPS); reconcile the product spec on a later touch. — [ ] note only
 - Overlap findings: batch scan CLEAN; 166 shares agent tools.py / mcp-tools.md with 095 (distinct tools, count 32 vs 33 — no conflict).
+
+## Session 2026-09-01 — sdd-execute (Steps 1–17, code-completed)
+
+Executed all 17 steps on `feature/mcp-client-signal-source` (branched off `origin/main-dev`, which
+now includes 110). A new server-side `mcp_client` signal source: fail-closed validation + CHECK
+(ingest), a config `GetSecret` key-prefix grant, a bearer-resolving MCP Streamable-HTTP client seam,
+a pure extractor, a scheduled query loop reusing an extracted `_ingest_external_signal` (dedup +
+health preserved), the config seed migration `025`, the agent two-write tool surface, the config-ui
+`/sources` registration, and `mcp-tools.md` parity.
+
+**Commits (one per step-pair):** 1-3 (`aefb5797`), 4-5 (`ac3b997c`), 6-7 (`91c1f983`), 8-9
+(`c3563afc`), 10-11 (`3711aacb`), 12 (`a50acbc5`), 13-14 (`4c4a6f0e`), 15-16 (`35787f14`),
+17 (`24841d11`).
+
+**RED→GREEN (Floor P-06):** every code-bearing pair captured RED then GREEN — Steps 3/5/9/14 by
+running the test before the impl; Steps 7/11 by `git stash`-ing the net-new impl to prove
+ImportError RED, then GREEN. Full suites: ingest 206 pass (78% cov), config 98 pass (84%), agent 327
+pass (78%), UI config-ui sources e2e 19/19 (production bundle). Regression-safe: the IngestSignal
+refactor kept all 44 existing signal tests green; the config env-gate + full sources suite passed.
+
+**MCP SDK (fails.md 085 re-check):** installed `mcp 2.1.1` (not the spec's 2.0.0); re-verified the
+exact API against the wheel — `streamable_http_client(url, *, http_client)` → `(read, write)`,
+`ClientSession.call_tool → CallToolResult.structured_content`, bearer via `httpx2.AsyncClient`
+header. Transitive deps pulled: httpx2, mcp-types, pydantic(-core), pyjwt, starlette, sse-starlette,
+uvicorn, referencing, rpds-py, truststore, python-multipart, typing-inspection.
+
+**impl-review ⚠ resolved:** Step 4 `INTERNAL_CALLER_ALLOWLIST` line-drift (symbols right at execute);
+Step 5 coverage floor met (config `test:coverage` 40% gate passes); Step 15 SOURCE_TYPES=10 / type is
+`FormState` (both confirmed, no code impact).
+
+**Deviations** (full detail in implementation-spec.md § Deviation Log): `is_secret` lives on
+`ConfigValue` not `SetConfigRequest` (agent + config-ui set `cv.is_secret`); agent tool count is 33
+(095 shipped `list_opportunities`), unchanged by this feature; config-ui env plumbing solved via the
+BFF filling UNSPECIFIED→native (`nativeConfigEnvironment`) instead of a page server-wrapper; Step 16
+mock left unchanged (per-test `page.route`, matching the sources-spec convention); loop-side clamp
+(not SCALAR_BOUNDS) for the busy-loop guard.
+
+**Cross-feature merge-order:** config migration `025` must merge AFTER `022`/`023`/`024`
+(golang-migrate numeric order) — 022 (021) is in main-dev; 023 (031, PR #1062) and 024 (168, not yet)
+must land first. Tracked in merge-order.md.
+
+**Teardown:** touched `services/xstockstrat-ingest/CLAUDE.md`, `docs/patterns/config-governance.md`,
+`docs/runbooks/mcp-tools.md`. `/context-scrubber` is not available in this session — flagged in the
+PR body per the Teardown rule.
+
+**Status:** `implementation-ready` → `code-completed`. Next: PR → `main-dev`.

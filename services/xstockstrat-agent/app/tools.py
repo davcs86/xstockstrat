@@ -231,7 +231,9 @@ def register_tools(server: MCPServer) -> None:
             (e.g. ['mediated_simple_email', 'mediated_email_attachment'])."""
         sources = await client.list_signal_sources(include_inactive=False)
         # Enrich each source with extractor_tool derived from source_type.
-        # has_credentials and credentials are intentionally excluded — never exposed to Claude.
+        # feature 166 — the boolean has_credentials IS surfaced (product-spec-committed,
+        # @AC-1/@AC-2);
+        # the token / credentials_ref remain intentionally excluded — never exposed to Claude.
         enriched = []
         for src in sources:
             st = src["source_type"]
@@ -242,6 +244,8 @@ def register_tools(server: MCPServer) -> None:
                     "source_type": st,
                     "config_json": src["config_json"],
                     "extractor_tool": _EXTRACTOR_TOOL_MAP.get(st, None),
+                    # feature 166 — whether a bearer/credential is configured (boolean only).
+                    "has_credentials": src["has_credentials"],
                     # feature 161 — surface the per-source reliability weight (was dropped here).
                     "reliability_weight": src["reliability_weight"],
                 }
@@ -905,6 +909,7 @@ def register_tools(server: MCPServer) -> None:
         extractor_module: str | None = None,
         credentials_ref: str | None = None,
         reliability_weight: float | None = None,
+        bearer_token: str | None = None,
     ) -> dict:
         """Register/update/reactivate/deactivate a signal source in xstockstrat-ingest.
         operation: 'register' | 'update' | 'reactivate' | 'deactivate'. These are HONEST,
@@ -924,8 +929,17 @@ def register_tools(server: MCPServer) -> None:
             higher weights rank this source's signals higher, 0 effectively ignores the source
             (feature 134). On update it is applied ONLY when supplied — omit it to preserve the
             stored weight (an omitted value must never reset it to 0).
+        bearer_token: the MCP bearer token for a `mcp_client` source (feature 166). Supplied on
+            register of a `mcp_client` source; it is written FIRST to an encrypted config secret
+            (`ingest.mcp_credential.<slug>`, is_secret=true) and then the source is registered with
+            `credentials_ref` pointing at it. It is stored encrypted at rest and NEVER returned.
+        `mcp_client` source_type (feature 166): a server-side MCP query source. Its `config_json`
+            carries `mcp_endpoint` (the Streamable-HTTP MCP URL) and `mcp_tool` (the tool name),
+            plus optional `mcp_arguments`. bearer_token is mandatory (register is rejected without
+            it).
         Returns {"slug", "display_name", "source_type", "extractor_module", "active",
-            "has_credentials", "reliability_weight"} — credentials_ref is never included."""
+            "has_credentials", "reliability_weight"} — credentials_ref and bearer_token are never
+            included."""
         source: dict = {"slug": slug}
         if display_name is not None:
             source["display_name"] = display_name
@@ -953,6 +967,26 @@ def register_tools(server: MCPServer) -> None:
             if not update_mask:
                 raise RuntimeError("update requires at least one field to change")
         access_scope = _caller_access_scope(ctx, "manage_signal_source")  # feature 092
+        # feature 166 — mcp_client bearer orchestration (secret-first). When registering an
+        # mcp_client source with a bearer token, write the token to an encrypted config secret
+        # FIRST, then register the source pointing at it via credentials_ref. The token is never
+        # placed in config_json and never echoed back (FR-12). A failed register after a successful
+        # secret write leaves only a harmless redacted orphan secret (no compensating cleanup).
+        if operation == "register" and source_type == "mcp_client" and bearer_token:
+            secret_key = f"mcp_credential.{slug}"
+            await client.set_config(
+                namespace="ingest",
+                key=secret_key,
+                value_type="string",
+                value=bearer_token,
+                environment=_resolve_scope(""),
+                author="manage_signal_source",
+                reason=f"bearer for mcp_client source {slug}",
+                access_scope=access_scope,
+                create_key=True,
+                is_secret=True,
+            )
+            credentials_ref = f"ingest.{secret_key}"
         try:
             return await client.manage_signal_source(
                 operation=operation,

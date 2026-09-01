@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/mcp-client-signal-source`
 **Created**: 2026-08-31
-**Last Updated**: 2026-08-31
+**Last Updated**: 2026-09-01
 
 ---
 
@@ -14,6 +14,7 @@
 | 2026-08-31 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings after fixes); overlap CLEAN |
 | 2026-08-31 | `spec-ready` → `design-approved` | /sdd-design | Design debated (full) and approved; recon.md + design.md written |
 | 2026-08-31 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (17 steps) |
+| 2026-09-01 | `implementation-ready` → `code-completed` | /sdd-execute | All 17 steps implemented (RED→GREEN) across ingest/config/agent/config-ui; suites green (ingest 206, config 98, agent 327, UI sources e2e 19) |
 
 ---
 

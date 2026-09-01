@@ -1,10 +1,15 @@
 import { ConnectError, Code } from '@connectrpc/connect';
+import { Environment } from '@xstockstrat/proto/common/v1/common_pb';
 import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
 import { IngestService } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
 import { configClient, ingestClient, analysisClient, identityClient } from '@/lib/connectClients';
-import { getNativeConfigEnv, isNativeConfigEnvironment } from '@/lib/deploymentEnv';
+import {
+  getNativeConfigEnv,
+  isNativeConfigEnvironment,
+  nativeConfigEnvironment,
+} from '@/lib/deploymentEnv';
 import {
   createBffRouter,
   createDispatch,
@@ -26,11 +31,17 @@ router.service(ConfigService, {
     // (feature 074); neither gate is load-bearing alone. Keeps an explicit body rather
     // than forwardAdmin because the author is injected from the verified session below.
     requireAdminScope(claims);
+    // feature 166 — a caller that leaves the environment UNSPECIFIED (e.g. the /sources secret
+    // write, which can't read the client-hidden APPLICATION_ENV) targets THIS deployment's native
+    // scope; fill it server-side so the write lands (and is gated) on the correct env. A caller
+    // that names a real env (NamespaceEditor) is unchanged.
+    const environment =
+      req.environment === Environment.UNSPECIFIED ? nativeConfigEnvironment() : req.environment;
     // This deployment's native scope is fixed by APPLICATION_ENV — dev and production are
     // separate physical databases, so a write scoped to the other environment is silently
     // unreachable by any real consumer (feature 115). Reject it here, not just in the UI,
     // so a direct RPC call / bookmark / stale tab can't bypass the gate the UI presents.
-    if (!isNativeConfigEnvironment(req.environment)) {
+    if (!isNativeConfigEnvironment(environment)) {
       throw new ConnectError(
         `This deployment's native environment is ${getNativeConfigEnv()}; ` +
           'SetConfig requests scoped to a different environment are rejected.',
@@ -38,7 +49,7 @@ router.service(ConfigService, {
       );
     }
     return configClient.setConfig(
-      { ...req, author: claims.user_id },
+      { ...req, environment, author: claims.user_id },
       { headers: backendHeaders(claims, ctx) },
     );
   },

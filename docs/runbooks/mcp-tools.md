@@ -121,7 +121,9 @@ unlike the int64-as-string contract of `run_backtest`/`get_backfill_status`).
 | `mediated_authenticated_website` | `"extract_website_content"` |
 | all other types | `null` |
 
-`credentials_ref` is intentionally omitted from the response — credentials are never exposed to Claude.
+`has_credentials` (boolean) **is** returned (feature 166) — it tells Claude whether a source has a
+bearer/credential configured. The token itself and `credentials_ref` are intentionally omitted from
+the response — the credential value is never exposed to Claude.
 
 **Errors**
 
@@ -659,6 +661,16 @@ gate.
 | `config_json` | `object` | No | Source configuration (on `update`, changed only if supplied) |
 | `extractor_module` | `string` | No | Extractor module name (on `update`, changed only if supplied) |
 | `credentials_ref` | `string` | No | Reference to stored credentials — forwarded, **never echoed**. On `update`, omit to preserve the stored ref; pass `""` to clear it |
+| `bearer_token` | `string` | No | The MCP bearer for a `mcp_client` source (feature 166). Supplied on `register`; written FIRST to an encrypted config secret (`ingest.mcp_credential.<slug>`, `is_secret=true`), then the source is registered with `credentials_ref` pointing at it. Stored encrypted at rest and **never returned** |
+
+> **`mcp_client` source type (feature 166).** A server-side MCP query source. Its `config_json`
+> carries `mcp_endpoint` (the Streamable-HTTP MCP URL) and `mcp_tool` (the tool name), plus optional
+> `mcp_arguments`. A bearer token is **mandatory** — a `register` without `bearer_token` is rejected
+> `INVALID_ARGUMENT` (the type is credential-required). The token is written secret-first (never in
+> `config_json`); a scheduled ingest loop then resolves it via `GetSecret` and calls the tool over
+> Streamable HTTP with `Authorization: Bearer` only. The external tool must return the **fixed
+> xstockstrat response contract**: a list of `{symbol, direction (buy|sell|hold|watchlist),
+> conviction (0–1), headline?, valid_from?, valid_until?, raw_url?, tags?}`.
 
 **Return**
 

@@ -104,7 +104,7 @@ Append-only log — one entry per feature that registered new keys. Newest first
 
 ### feature 168 — fundamentals-blend-universe (`xstockstrat-analysis` / `xstockstrat-config`)
 
-**Registers** two `analysis.engine.*` keys, seeded by migration **`024_analysis_engine_blend_keys`**
+**Registers** two `analysis.engine.*` keys, seeded by migration **`026_analysis_engine_blend_keys`**
 for `staging` + `production` (global, `user_id` NULL), `consuming_service` `xstockstrat-analysis`.
 Both use the **full-dotted-key form** in the `key` column (per migration `021`) — the live loop reads
 them via the existing `analysis`-namespace `WatchConfig` stream (`get_str`/`get_bool`), which keys the
@@ -120,7 +120,26 @@ string; **no new cross-namespace subscription** (unlike feature 154's `marketdat
   entirely (the governed strategy then resolves its own universe like any other), independent of
   whether that strategy is live.
 
-Declared in `services/xstockstrat-analysis/CLAUDE.md` § Config Keys Consumed. No other new keys.
+**Migration renumbered `024` → `026`:** `merge-order.md` pre-assigned `024`, but feature 166's
+`025_ingest_mcp_client_keys` merged into `main-dev` first (PR #1063), so a `024` arriving afterward
+would sit **below** the already-applied `025` and golang-migrate (`migrate up` applies only versions
+> current) would never run it on the persistent dev/prod DBs. Bumping to `026` (next free after
+`025`) restores forward-only ordering; the skipped `024` is a permanent, harmless gap. Declared in
+`services/xstockstrat-analysis/CLAUDE.md` § Config Keys Consumed. No other new keys.
+
+### feature 166 — mcp-client-signal-source (`xstockstrat-config` / `xstockstrat-ingest`)
+
+**Registers** two non-secret loop keys (seed migration `025_ingest_mcp_client_keys`, namespace-relative
+`key` column): `ingest.mcp_client.poll_interval_seconds` (int, default `300`) and
+`ingest.mcp_client.request_timeout_seconds` (int, default `30`) — the server-side MCP query loop's
+cadence and per-call timeout, both clamped to ≥1 at read (a loop-side clamp cannot busy-loop on a
+settable 0; the `SCALAR_BOUNDS_REGISTRY` hardening was declined in favor of the clamp). Declared in
+`services/xstockstrat-ingest/CLAUDE.md` § Config Keys Consumed. **NNN pre-assigned `025`** per
+`merge-order.md`; must merge **after** `022`/`023`/`024` (golang-migrate numeric-order apply).
+**Also introduces a dynamic secret key family** `ingest.mcp_credential.<slug>` (`is_secret=true`, one
+per registered `mcp_client` source) — **not seeded**; written at registration via
+`SetConfig(is_secret=true, create_key=true)` and resolvable only by ingest via `GetSecret` under the
+new `SECRET_CALLER_ALLOWLIST` `keyPrefixes: ['mcp_credential.']` grant (`authz.ts`).
 
 ### feature 031 — strategy-performance-dashboard (`xstockstrat-ui`)
 

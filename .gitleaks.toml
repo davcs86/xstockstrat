@@ -15,9 +15,18 @@ useDefault = true
 # roundtrip and the boot-time key load. It is a test constant committed on purpose, not a real
 # credential. Scoped to that exact literal so any real 32-byte hex secret is still detected.
 # Sites: services/xstockstrat-config/src/__tests__/{crypto,secretsAndScope}.test.ts.
+#
+# False positive (feature 166): the mcp_client bearer-secret tests hardcode a deterministic,
+# obviously-fake bearer literal (`sk-live-abc123`) to exercise the secret-first write path,
+# the `Authorization: Bearer` header build, and the never-echoed redaction assertions. It is a
+# test constant committed on purpose, not a real credential. Scoped to that exact literal so any
+# real `sk-live-`-shaped key is still detected. Sites: services/xstockstrat-ingest/tests/
+# {test_mcp_client,test_mcp_client_loop}.py, services/xstockstrat-agent/tests/test_tools.py,
+# services/xstockstrat-ui/e2e/config-ui/sources.spec.ts.
 [allowlist]
 regexTarget = "line"
 regexes = [
   '''first seeded secret: is_secret=TRUE''',
   '''00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff''',
+  '''sk-live-abc123''',
 ]
