@@ -846,3 +846,61 @@ class TestLiveLoopOwnerScoped:
         await loop._run_cycle()
         # AAA is held AND denied → retained in the universe but flagged deny_entry (exit-only)
         assert seen == {"AAA": True}
+
+
+class TestLiveLoopFundamentalsUniverse:
+    """feature 168 — the once-per-cycle fundamentals-universe resolver: symbols with an active
+    signal from the fundamentals source INTERSECTED with symbols that have actual fundamentals data,
+    failing closed to empty on any error (never a broad fallback)."""
+
+    def _cfg_slug(self, loop):
+        # _make_loop's cfg only stubs get_int/get_int_present; add get_str for the source slug.
+        loop._cfg.get_str = MagicMock(side_effect=lambda key, default="": default)
+
+    @pytest.mark.asyncio
+    async def test_intersection_keeps_only_signal_and_fundamentals(self):
+        # AC-1: signals for AAPL/MSFT/ZZZZ (source fundamentals); only AAPL/MSFT have fundamentals.
+        loop = _make_loop()
+        self._cfg_slug(loop)
+        loop._ingest.QuerySignals = AsyncMock(
+            return_value=SimpleNamespace(
+                signals=[SimpleNamespace(symbol=s) for s in ("AAPL", "MSFT", "ZZZZ")],
+                page=SimpleNamespace(next_page_token=""),
+            )
+        )
+        loop._marketdata.GetFundamentalsMulti = AsyncMock(
+            return_value=SimpleNamespace(
+                fundamentals=[SimpleNamespace(symbol=s) for s in ("AAPL", "MSFT")]
+            )
+        )
+
+        result = await loop._resolve_fundamentals_universe()
+
+        assert result == {"AAPL", "MSFT"}  # ZZZZ: has a signal but no fundamentals row → dropped
+        # The QuerySignals call filtered by the fundamentals source slug.
+        assert loop._ingest.QuerySignals.await_args.args[0].source == "fundamentals"
+
+    @pytest.mark.asyncio
+    async def test_querysignals_error_fails_closed_to_empty(self):
+        # AC-6: an ingest failure yields an empty universe — never a broad watchlist/held fallback.
+        loop = _make_loop()
+        self._cfg_slug(loop)
+        loop._ingest.QuerySignals = AsyncMock(side_effect=RuntimeError("ingest down"))
+        loop._marketdata.GetFundamentalsMulti = AsyncMock(
+            return_value=SimpleNamespace(fundamentals=[])
+        )
+        assert await loop._resolve_fundamentals_universe() == set()
+
+    @pytest.mark.asyncio
+    async def test_getfundamentals_error_fails_closed_to_empty(self):
+        # AC-6: a marketdata failure also fails closed to empty.
+        loop = _make_loop()
+        self._cfg_slug(loop)
+        loop._ingest.QuerySignals = AsyncMock(
+            return_value=SimpleNamespace(
+                signals=[SimpleNamespace(symbol=s) for s in ("AAPL", "MSFT")],
+                page=SimpleNamespace(next_page_token=""),
+            )
+        )
+        loop._marketdata.GetFundamentalsMulti = AsyncMock(side_effect=RuntimeError("md down"))
+        assert await loop._resolve_fundamentals_universe() == set()

@@ -45,6 +45,8 @@ log = logging.getLogger(__name__)
 _LOOKBACK_DAYS = 365  # window of bars fetched per (strategy, symbol) for warm-up + evaluation
 _DRAIN_PAGES = 50  # max pages when draining owner-scoped positions/watchlists/signals per cycle
 _DRAIN_PAGE_SIZE = 1000
+# symbols per GetFundamentalsMulti chunk (feature 168; mirrors fundsignal_loop's chunk_size)
+_FUNDAMENTALS_CHUNK = 50
 
 # feature 140 FR-6: sentinel _eval_pair returns when GetBars came back empty, so _run_cycle can
 # distinguish a genuine data gap (worth a WARN) from an evaluated-but-no-decision pair.
@@ -383,6 +385,52 @@ class LiveEvaluationLoop:
             if not page_token:
                 break
         return out
+
+    async def _resolve_fundamentals_universe(self) -> set:
+        """feature 168 — the fundamentals universe for the blend force-run: symbols with an active
+        signal from the fundamentals source AND actual fundamentals data (a GetFundamentalsMulti
+        row).
+        Resolved once per cycle. Fails **closed to empty** on any error (FR-6/AC-6) — never a broad
+        watchlist/held fallback. Platform-wide background reads carry no per-request x-user-id
+        (mirrors _drain_signals)."""
+        try:
+            if self._ingest is None or self._marketdata is None:
+                return set()
+            # F-07: the fundamentals source slug is config-driven, never hardcoded.
+            slug = self._cfg.get_str("analysis.fundsignal.source_slug", "fundamentals")
+            # Signals set S: active signals filtered to the fundamentals source, paginated.
+            now = Timestamp()
+            now.GetCurrentTime()
+            window = common_pb2.TimeRange(start=now, end=now)
+            signal_symbols: set = set()
+            page_token = ""
+            for _ in range(_DRAIN_PAGES):
+                resp = await self._ingest.QuerySignals(
+                    ingest_pb2.QuerySignalsRequest(
+                        source=slug,
+                        active_window=window,
+                        page=common_pb2.PageRequest(
+                            page_size=_DRAIN_PAGE_SIZE, page_token=page_token
+                        ),
+                    ),
+                )
+                signal_symbols.update(_normalize_symbol(s.symbol) for s in resp.signals)
+                page_token = resp.page.next_page_token
+                if not page_token:
+                    break
+            # Fundamentals set F: keep only symbols marketdata has a fundamentals row for.
+            fundamentals_symbols: set = set()
+            ordered = sorted(signal_symbols)
+            for i in range(0, len(ordered), _FUNDAMENTALS_CHUNK):
+                chunk = ordered[i : i + _FUNDAMENTALS_CHUNK]
+                resp = await self._marketdata.GetFundamentalsMulti(
+                    marketdata_pb2.GetFundamentalsMultiRequest(symbols=chunk),
+                )
+                fundamentals_symbols.update(_normalize_symbol(f.symbol) for f in resp.fundamentals)
+            return signal_symbols & fundamentals_symbols
+        except Exception as e:  # fail-closed to empty (FR-6/AC-6); no broad fallback
+            log.warning("live_loop: fundamentals-universe resolve failed: %s", e)
+            return set()
 
     async def _drain_held(self, owner: str) -> set:
         """Owner's held symbols (normalized). Synthetic ``x-user-id`` metadata scopes ownership
