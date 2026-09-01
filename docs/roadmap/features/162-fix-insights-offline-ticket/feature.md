@@ -6,6 +6,7 @@
 **Severity**: SEV-3
 **Created**: 2026-08-27
 **Last Updated**: 2026-08-27
+**Archived**: 2026-09-01
 **Committed to main**: 57e40a310ed09b205ce76ca440ee7a40a87fb7ec
 **Launched date**: 2026-08-30
 
@@ -19,6 +20,7 @@
 | 2026-08-27 | `draft` → `code-completed` | claude | Root cause pinned + one-line fix implemented (`allowOfflineRecord={false}` on the unified position/Signal-detail order ticket); implementation-spec written; regression @AC-1 verified |
 
 | 2026-08-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #1047; committed 57e40a310ed09b205ce76ca440ee7a40a87fb7ec |
+| 2026-09-01 | `launched` (unchanged) | /sdd-archiver | Archived — synthesis to context.md + 1 insight + 1 fail to Ledger; product-spec.md, implementation-spec.md pruned; @AC-1 promoted to per-service acceptance suite. |
 ---
 
 ## Artifacts

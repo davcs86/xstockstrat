@@ -6,6 +6,7 @@
 **Severity**: SEV-3
 **Created**: 2026-08-16
 **Last Updated**: 2026-08-29
+**Archived**: 2026-09-01
 
 ---
 
@@ -20,6 +21,7 @@
 | 2026-08-16 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 2 (::jsonb cast) and 4 (pgxmock regression test) done, red-before-green confirmed. Steps 1 and 3 (the mandatory live-DB repro) are **blocked** — no Docker daemon in this execute sandbox, and sdd-execute's HARD CONSTRAINTS forbid starting a DB container to verify a step. User chose to apply the code-only steps now and leave the repro as a required follow-up before this fix is considered fully verified — see implementation-spec.md Deviation Log. |
 | 2026-08-16 | `in-progress` (unchanged) | /sdd-execute | **PR #967 merged and deployed to staging — the `::jsonb`-cast-only fix did NOT resolve the bug.** Post-deploy staging logs (`xstockstrat-marketdata`) showed the identical `SQLSTATE 22P02` error for symbol UPRO after the fix commit (`57d3424`) was live, confirming Steps 1/3's blocked mandatory-repro gate would have caught this before merge. Root cause corrected: `extraJSON` was bound as `[]byte`, which pgx's `QueryExecModeExec` encodes as `bytea` regardless of the `::jsonb` SQL-text cast — `bytea::jsonb` casts through bytea's hex-escaped text representation, never valid JSON (confirmed via pgx v5's own doc comment on `QueryExecModeSimpleProtocol`, which `QueryExecModeExec` shares behavior with: "string must be used instead for text type values including json and jsonb"). Fix corrected to bind `string(extraJSON)` instead of the raw `[]byte`. `pgxmock` regression test strengthened with a custom `isStringArg` matcher on the `extra_metrics` argument specifically, so it now catches this exact regression (confirmed red against `[]byte`, green against `string`) — the prior test only pinned the SQL text and would have passed either way. Still blocked on Steps 1/3's live-DB repro; the next staging deploy is the closest available real-world confirmation. |
 | 2026-08-29 | `in-progress` → `launched` | /sdd-execute | **Mandatory live-DB repro (Steps 1 & 3) finally ran and passed** — the verification gate blocked in every prior session for lack of Docker. Insight that unblocked it: the bug needs only pgx in `QueryExecModeExec` (`DB_PGBOUNCER=true`) against *any* real Postgres, not Docker or a real PgBouncer — this environment had local PostgreSQL 16 binaries + Go 1.27. Repro reproduced `SQLSTATE 22P02` against both the original (`$14`+`[]byte`) and the #967 cast-only (`$14::jsonb`+`[]byte`) code (RED), and confirmed the shipped #969 code (`$14::jsonb`+`string`, via the real `UpsertFundamentals`) succeeds and persists valid `jsonb` (GREEN). Full transcript in context.md (2026-08-29 entry). Fix commit `6af00b9d` (PR #969) is already in `origin/main` (production), so the feature is now both shipped and verified — Steps 1–4 all `done`. |
+| 2026-09-01 | `launched` (unchanged) | /sdd-archiver | Archived — synthesis to context.md + 3 insights + 2 fails to Ledger; product-spec.md, recon.md, design.md, implementation-spec.md pruned. |
 
 ---
 

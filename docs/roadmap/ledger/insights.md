@@ -2543,3 +2543,130 @@ reusing.
 - **Rule it implies**: a best-effort channel whose failures are swallowed must validate its credentials'
   *shape* up front (not just presence) and surface an invalid-but-present config loudly at startup — a
   present-key/malformed-format combination is the exact case that looks healthy and delivers nothing.
+
+### 2026-09-01 — 142-fix-fundamentals-upsert-invalid-json — design
+- **Pattern**: In `pgx` v5 `QueryExecModeExec` (active when `DB_PGBOUNCER=true`), a `[]byte` parameter
+  is always wire-encoded as `bytea` OID regardless of a `::jsonb` cast in the SQL text — `bytea::jsonb`
+  goes through hex-escaped text representation which is never valid JSON. Bind JSON as `string(yourBytes)`
+  so pgx sends the `text` OID and `$N::jsonb` becomes a real text→jsonb parse.
+- **Evidence**: `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go` `UpsertFundamentals`
+  (`$14::jsonb`+`string(extraJSON)`); feature 142 context.md 2026-08-16 entry; PR #969 (commit `6af00b9d`).
+- **Rule it implies**: any pgx param bound against a `jsonb` column under `QueryExecModeExec` must be
+  typed `string`, never `[]byte` — a `::jsonb` SQL cast does not override the wire OID. Candidate PLAT-JSONB-1.
+
+### 2026-09-01 — 142-fix-fundamentals-upsert-invalid-json — design
+- **Pattern**: A `pgxmock` regression test that pins only the SQL text does NOT catch a `[]byte`→`string`
+  type change on a parameter — the mock accepts any argument for an unmatched position. Use a custom
+  `isStringArg` matcher on the specific JSON-bound `$N` position to confirm type, not just value.
+- **Evidence**: feature 142 context.md 2026-08-16 ("pgxmock regression test strengthened with a custom
+  `isStringArg` matcher on the `extra_metrics` argument specifically, so it now catches this exact
+  regression (confirmed red against `[]byte`, green against `string`)").
+- **Rule it implies**: for JSON-column pgxmock tests, assert the Go type (string vs []byte) of the
+  argument via a typed custom matcher, not just the SQL shape.
+
+### 2026-09-01 — 142-fix-fundamentals-upsert-invalid-json — design
+- **Pattern**: The mandatory live-DB repro gate (reproduce RED then GREEN against a real Postgres) can be
+  satisfied in a sandbox that has no Docker and no PgBouncer — any real Postgres + the `DB_PGBOUNCER=true`
+  env var activates `QueryExecModeExec`; the bug is driver-level, not infrastructure-level.
+- **Evidence**: feature 142 context.md 2026-08-29 entry (PostgreSQL 16 binaries + Go 1.27, no Docker
+  needed; set `DB_PGBOUNCER=true`, run via the real `UpsertFundamentals`).
+- **Rule it implies**: a "needs PgBouncer" repro is satisfied by `DB_PGBOUNCER=true`+any-real-Postgres;
+  don't block on a full infrastructure setup when the bug is a driver-mode flag.
+
+### 2026-09-01 — 161-surface-signal-weight-decay-config — design
+- **Pattern**: A config registry-lookup keyed on `r.key` (the DB `key` column, namespace-stripped) will
+  silently return `undefined` and skip validation when the registry map uses the full
+  `namespace.key` path as its key. Index the registry with `` `${namespace}.${r.key}` `` and keep the
+  fixture in split-key form matching the real DB row.
+- **Evidence**: feature 161 context.md Session 2026-08-26 sdd-review impl-spec ("Step 6/7: listKeys
+  registry-key mismatch (C-01, load-bearing)"); `services/xstockstrat-config/src/grpc/configServiceImpl.ts:508`.
+- **Rule it implies**: config-service registry lookups must use the full `namespace.key` path;
+  using the bare `key` column value is a latent no-validation bug masked by full-path test fixtures.
+
+### 2026-09-01 — 161-surface-signal-weight-decay-config — design
+- **Pattern**: Server-side scalar bounds enforcement in a `setConfig` handler must parse via the
+  all-oneof-shape `extractValueData` helper, NOT via a string-only read path — a `float_val:0` (valid
+  lower bound) coerces to `''` and then to `Number('')===0`, passing unchecked through a `!n` zero-trap.
+  Always validate via `Number.isNaN || <min || >max`, inclusive of zero.
+- **Evidence**: feature 161 context.md Session 2026-08-26 sdd-design (round-3 fail-open catch);
+  `services/xstockstrat-config/src/grpc/configServiceImpl.ts:335,383-394,574-585`.
+- **Rule it implies**: float range guards in config-service handlers use `extractValueData` for the parse
+  and `Number.isNaN||<min||>max` for the check — a `!n` zero-trap is wrong for any range whose minimum
+  is zero.
+
+### 2026-09-01 — 161-surface-signal-weight-decay-config — ordering
+- **Pattern**: When removing a now-orphaned config value-type (here `FLOAT_MAP`) whose only registered
+  key was deleted, retain the proto enum member with `[deprecated=true]` for enum stability while
+  removing the runtime registry entry + emit branch + its positive tests — shipping live-but-zero-coverage
+  code (C-13) is worse than removing it, and the proto member is non-breaking.
+- **Evidence**: feature 161 context.md Session 2026-08-26 sdd-design (Fork 2 operator decision);
+  `packages/proto/config/v1/config.proto:80-83` (`FLOAT_MAP=1 [deprecated=true]`, `VALUE_TYPE_FLOAT_SCALAR=2`).
+- **Rule it implies**: when a proto enum value loses all its users, `[deprecated=true]` the member and
+  remove the live code that emits/checks it — a dormant branch with zero coverage is a maintenance burden,
+  not a safety net.
+
+### 2026-09-01 — 163-snapshot-offline-positions — design
+- **Pattern**: When adding a second request-path writer to a post-lock recompute+emit body that a
+  non-reentrant mutex already serializes, extract the post-lock body as a lock-free helper and have
+  the new caller acquire the SAME mutex around persist+helper. The helper MUST NOT grab the mutex
+  internally — an internal acquire deadlocks the existing caller (confirmed: `s.confirmLock(accountID)`
+  at `trading.go:912`, non-reentrant). This is distinct from a `sync.RWMutex` — the per-account
+  confirm lock is an application-level, non-reentrant construct.
+- **Evidence**: feature 163 context.md Session 2026-08-30 sdd-spec ("Recompute/emit block to extract:
+  `trading.go:934-980`; `confirmLock` non-reentrant at `:842-857`"); design.md Round-3 blocker.
+- **Rule it implies**: when extracting a recompute-and-emit helper from a mutex-protected critical
+  section, the helper is always lock-free; caller-holds-lock must be documented at the extraction site.
+
+### 2026-09-01 — 163-snapshot-offline-positions — design
+- **Pattern**: A shared `positionColumns` SELECT constant that drives all read paths is the correct
+  C-10(b) pattern for ensuring new columns (here `source` and `as_of` provenance) appear on every
+  read path automatically. One edit to the shared constant + a parity test that pins it closed the
+  gap for both `ListPositions` and the `buildAccountPortfolio`/`ListPortfolios` path.
+- **Evidence**: feature 163 context.md Session 2026-08-30 sdd-spec ("Portfolio read-path parity (C-10(b)):
+  the shared `positionColumns` SELECT constant (`portfolio_repo.go:285`) drives BOTH `ListPositions`
+  (`:117`) and `ListPositionsByAccount` (`:498`)").
+- **Rule it implies**: shared read-model constants (`positionColumns`, `intentLateralJoinSQL`, etc.) are
+  the correct C-10(b) enforcement point for parity; a parity test that pins the constant's column list
+  is the guard (reinforces 140-fix-listorders insight).
+
+### 2026-09-01 — 163-snapshot-offline-positions — ordering
+- **Pattern**: DELETE+INSERT within a transaction (rather than `ON CONFLICT DO UPDATE`) is the correct
+  upsert strategy for a baseline snapshot table whose composite PK represents a complete set
+  replacement — `ON CONFLICT DO UPDATE` only updates matching rows and leaves stale rows from a prior
+  snapshot silently present.
+- **Evidence**: feature 163 design.md:61-63 (UpsertBaselineSnapshot ruling); context.md Session
+  2026-08-30 sdd-spec + sdd-execute Step 7 (`offline_baseline_repo.go` `UpsertBaselineSnapshot`).
+- **Rule it implies**: for a "replace-the-whole-set" table write, DELETE+INSERT-in-tx is more correct
+  than `ON CONFLICT DO UPDATE`; document the replace semantics in the method name.
+
+### 2026-09-01 — 163-snapshot-offline-positions — design
+- **Pattern**: `HasUnconfirmedOfflineOrders` must be account-level (not per-symbol) because the
+  `filled_at` field is unknown for NEW orders — the warning "you have unconfirmed orders" is meaningful
+  only at the account grain where the existence of any NEW orders is itself the advisory trigger.
+- **Evidence**: feature 163 design.md:107-110; context.md Session 2026-08-30 sdd-execute Step 7.
+- **Rule it implies**: a pre-snapshot warning about unconfirmed orders must be account-level; per-symbol
+  granularity assumes filled_at is knowable for NEW orders, which it is not.
+
+### 2026-09-01 — 164-agent-broker-account-tools — design
+- **Pattern**: When wrapping existing backend RPCs as MCP tools, the tool's authorization and
+  invariant checks should be exactly what the backend enforces — no more, no less. Adding client-side
+  guards that duplicate backend FailedPrecondition logic risks client/server drift and masks real
+  errors. The tool's job is identity forwarding (`x-user-id` metadata) + error translation via
+  `_grpc_error_message`.
+- **Evidence**: feature 164 context.md Session 2026-08-27 sdd-design ("Adversary findings resolved
+  against the Go backend: UpdateBrokerAccountCredentials rejects OFFLINE (FailedPrecondition,
+  trading.go:2267-2270)"); design.md § Chosen Approach.
+- **Rule it implies**: for an agent tool wrapping an existing RPC, recon the handler's own rejection
+  list first and let it be the gate — client-side re-validation of backend invariants is overbuilding.
+
+### 2026-09-01 — 164-agent-broker-account-tools — reuse
+- **Pattern**: Adding new MCP tools requires updating six tool-count surfaces atomically (C-14 / ledger
+  RC-1): (1) `tools.py` module docstring count + enumeration lines, (2) agent `CLAUDE.md` tool count +
+  table rows, (3) `docs/runbooks/mcp-tools.md` header count, (4) `mcp-tools.md` per-tool reference
+  entries, (5) `tests/test_tools_endpoint.py` exact-name set, (6) `services/xstockstrat-ui/src/lib/copilot.ts`
+  `COPILOT_MCP_TOOL_COUNT`. A `BrokerAccount`-field-descriptor-parity test guards against future
+  field drops on the projection.
+- **Evidence**: feature 164 context.md Session 2026-08-27 sdd-spec + sdd-execute (six surfaces listed;
+  copilot.ts 24→32 deviation approved by operator; descriptor-parity test in `test_broker_account_client.py`).
+- **Rule it implies**: always update all six tool-count surfaces in the same PR as any agent tool
+  addition; the parity test is the guard that survives refactors.
