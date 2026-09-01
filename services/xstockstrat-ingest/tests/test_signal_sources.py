@@ -151,6 +151,31 @@ class TestValidateConfigJson:
         assert "unsupported source_type" in err
 
 
+class TestMcpClientValidation:
+    """feature 166 — mcp_client is fail-closed: it requires mcp_endpoint + mcp_tool, and the
+    register path treats it as credential-required (bearer is mandatory)."""
+
+    def test_mcp_client_valid(self):
+        cfg = {"mcp_endpoint": "https://mcp.acme.example/mcp", "mcp_tool": "get_signals"}
+        assert validate_config_json("mcp_client", cfg) is None
+
+    def test_mcp_client_missing_endpoint_names_the_field(self):
+        # AC-6: the error names the missing field.
+        err = validate_config_json("mcp_client", {"mcp_tool": "get_signals"})
+        assert err is not None
+        assert "mcp_endpoint" in err
+
+    def test_mcp_client_missing_tool_names_the_field(self):
+        err = validate_config_json("mcp_client", {"mcp_endpoint": "https://x"})
+        assert err is not None
+        assert "mcp_tool" in err
+
+    def test_mcp_client_is_credential_required(self):
+        from app.handlers.servicer import _SS_CREDENTIAL_REQUIRED_TYPES
+
+        assert "mcp_client" in _SS_CREDENTIAL_REQUIRED_TYPES
+
+
 # ---------------------------------------------------------------------------
 # get_active_source
 # ---------------------------------------------------------------------------

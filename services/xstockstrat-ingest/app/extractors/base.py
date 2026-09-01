@@ -39,12 +39,21 @@ class AuthenticatedWebsiteInput:
     credentials: dict
 
 
+@dataclass
+class McpClientInput:
+    # feature 166 — the already-fetched MCP tool result (the parsed
+    # CallToolResult.structured_content list). The credential-bearing fetch happens in the loop;
+    # the extractor stays pure and JSON-typed.
+    result_items: list[dict]
+
+
 RawInput = (
     SimpleEmailInput
     | EmailAttachmentInput
     | LinkedEmailInput
     | SimpleWebsiteInput
     | AuthenticatedWebsiteInput
+    | McpClientInput
 )
 
 

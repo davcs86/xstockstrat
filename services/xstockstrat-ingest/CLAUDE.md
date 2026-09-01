@@ -94,6 +94,15 @@ Namespace: `ingest`
 | `ingest.backfill.chunk_window_days` | int | `90` | Time-window size (days) the chunk planner splits a range into |
 | `ingest.backfill.max_concurrent_chunks` | int | `3` | Max chunks of one job fetched in parallel |
 | `ingest.signals.dedup_window_hours` | int | `24` | Window within which a matching (source, symbol, direction, conviction, valid_until) signal is treated as a duplicate of the existing `ingest.signal_dedup_keys` claim (feature 111) |
+| `ingest.mcp_client.poll_interval_seconds` | int | `300` | Server-side MCP query loop cadence for `mcp_client` sources (feature 166). Clamped to ≥1 at read (a settable 0 cannot busy-loop). Seed migration `025_ingest_mcp_client_keys` |
+| `ingest.mcp_client.request_timeout_seconds` | int | `30` | Per-call outbound MCP request timeout for `mcp_client` sources (feature 166). Clamped to ≥1 at read. Seed migration `025_ingest_mcp_client_keys` |
+
+> **`mcp_client` bearer secret (feature 166).** An `mcp_client` source also references an encrypted
+> per-source bearer at `ingest.mcp_credential.<slug>` (`is_secret=true`, feature 147 — dynamic per
+> slug, **not** a seeded default). It is written at registration via `SetConfig(is_secret=true,
+> create_key=true)` (agent `manage_signal_source` / config-ui two-write, secret-first) and resolved
+> only via `GetSecret` with `x-internal-caller: ingest` (config `keyPrefixes` grant); it is never in
+> `config_json` and never returned by any read edge.
 
 ## Ledger Events Emitted
 

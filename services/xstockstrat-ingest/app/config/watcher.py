@@ -14,6 +14,20 @@ from gen.config.v1 import config_pb2, config_pb2_grpc
 log = logging.getLogger(__name__)
 
 
+# feature 166 — this service's internal-caller identity for GetSecret; matches the config
+# SECRET_CALLER_ALLOWLIST ingest grant (keyPrefixes ['mcp_credential.']).
+INGEST_INTERNAL_CALLER_ID = "ingest"
+HEADER_INTERNAL_CALLER = "x-internal-caller"
+
+
+def split_credentials_ref(ref: str) -> tuple[str, str]:
+    """Split a stored credentials_ref (e.g. 'ingest.mcp_credential.<slug>') into (namespace, key) on
+    the FIRST dot — config stores (namespace, key) where key may itself contain dots (cf. marketdata
+    'marketdata' / 'alpaca.api_key'). Returns ('ingest', 'mcp_credential.<slug>')."""
+    namespace, _, key = ref.partition(".")
+    return namespace, key
+
+
 def resolve_environment(application_env: str) -> int:
     """Map APPLICATION_ENV ("development" | "production") to the proto Environment enum.
     Anything other than "production" resolves to staging (feature 147).
@@ -115,6 +129,24 @@ class ConfigWatcher:
         if v is None:
             return default
         return v.float_val or default
+
+    async def resolve_secret(self, key: str) -> tuple[str, bool]:
+        """Resolve an encrypted config secret (feature 166) via the config GetSecret RPC.
+
+        Propagates this service's internal-caller identity so the config allow-list authorizes the
+        read (x-internal-caller: ingest, keyPrefixes grant). Returns (plaintext, found); found=False
+        means the key is unset — the caller treats that as degraded, never a crash (AC-5). Mirrors
+        the marketdata ResolveSecret shape. RPC errors (e.g. an un-granted key → PERMISSION_DENIED)
+        propagate to the caller's per-source guard."""
+        resp = await self._stub.GetSecret(
+            config_pb2.GetSecretRequest(
+                namespace=self.namespace,
+                key=key,
+                environment=self._environment,
+            ),
+            metadata=((HEADER_INTERNAL_CALLER, INGEST_INTERNAL_CALLER_ID),),
+        )
+        return resp.value, resp.found
 
     # Sandbox config helpers — indicators.sandbox.*
     @property

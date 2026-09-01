@@ -111,6 +111,17 @@ async def serve():
     resumed = await servicer.resume_incomplete_jobs()
     log.info("resumed %d backfill job(s) with incomplete chunks", resumed)
 
+    # feature 166 — server-side MCP query loop for mcp_client signal sources. Non-fatal: a failure
+    # to start (or inside) the loop must never take down the gRPC service (OTel-init-style).
+    try:
+        from app.engine.mcp_client_loop import run_mcp_client_loop
+        from app.mcp_client import StreamableHttpMcpClient
+
+        asyncio.create_task(run_mcp_client_loop(servicer, cfg_watcher, StreamableHttpMcpClient()))
+        log.info("started mcp_client query loop")
+    except Exception as e:
+        log.warning("failed to start mcp_client query loop: %s", e)
+
     def handle_shutdown(sig, _):
         async def _stop():
             await grpc_server.stop(grace=5)

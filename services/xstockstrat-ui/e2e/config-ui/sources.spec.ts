@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { addAuthCookie, BASE_URL } from '../helpers/auth';
+import { addAuthCookie, addAdminCookie, BASE_URL } from '../helpers/auth';
 import { SIGNAL_SOURCE_WEIGHTED } from '../fixtures';
 
 /**
@@ -347,5 +347,116 @@ test.describe('Feature 161 — reliability_weight on the create form + guidance'
     await page.getByTestId(`weight-${slug}`).click();
     // FR-4: the inline editor explains the weight's meaning and its [0,1] / default-1.0 semantics.
     await expect(page.getByText(/Higher = this source/)).toBeVisible();
+  });
+});
+
+test.describe('Feature 166 — mcp_client registration (secret-first two-write)', () => {
+  const SET_CONFIG = '**/xstockstrat.config.v1.ConfigService/SetConfig';
+  const MANAGE = '**/xstockstrat.ingest.v1.IngestService/ManageSignalSource';
+  const LIST = '**/xstockstrat.ingest.v1.IngestService/ListSignalSources';
+  const TOKEN = 'sk-live-abc123';
+
+  test('registers an mcp_client source: bearer secret written FIRST, then credentials_ref; token never shown (AC-1/AC-2)', async ({
+    page,
+  }) => {
+    await addAdminCookie(page);
+
+    const calls: string[] = [];
+    let setConfigBody: Record<string, unknown> | null = null;
+    let manageBody: Record<string, unknown> | null = null;
+
+    // A source list that starts empty, then shows the registered mcp_client source (no token) on
+    // the post-register refetch — so the assertion "the list shows acme-mcp as mcp_client" holds.
+    let listed: Array<Record<string, unknown>> = [];
+    await page.route(LIST, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ sources: listed }),
+      }),
+    );
+    await page.route(SET_CONFIG, (route) => {
+      calls.push('setConfig');
+      setConfigBody = route.request().postDataJSON();
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ version: '1', updatedAt: new Date(0).toISOString() }),
+      });
+    });
+    await page.route(MANAGE, (route) => {
+      calls.push('manage');
+      manageBody = route.request().postDataJSON();
+      // After a successful register the source appears in the list (has_credentials, no token).
+      listed = [
+        {
+          slug: 'acme-mcp',
+          displayName: 'Acme MCP',
+          sourceType: 'mcp_client',
+          active: true,
+          hasCredentials: true,
+          configJson: { mcp_endpoint: 'https://mcp.acme.example/mcp', mcp_tool: 'get_signals' },
+          extractorModule: '',
+          health: 4,
+          signalsFed: '0',
+          lastError: '',
+          reliabilityWeight: 1,
+        },
+      ];
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ source: listed[0] }),
+      });
+    });
+
+    await page.goto(SOURCES_PAGE);
+    await expect(page.getByRole('heading', { name: 'Signal Sources' })).toBeVisible({
+      timeout: 15000,
+    });
+    await page.getByRole('button', { name: 'Register New Source' }).click();
+
+    await page.getByPlaceholder('e.g. unusual_whales').fill('acme-mcp');
+    await page.getByPlaceholder('Display name').fill('Acme MCP');
+
+    // Choose the mcp_client source type (Radix Select).
+    await page.getByRole('combobox').click();
+    await page.getByRole('option', { name: 'mcp_client' }).click();
+
+    await page.getByLabel('MCP endpoint').fill('https://mcp.acme.example/mcp');
+    await page.getByLabel('MCP tool name').fill('get_signals');
+    await page.getByLabel('Bearer token').fill(TOKEN);
+
+    await page.getByRole('button', { name: 'Register', exact: true }).click();
+
+    // Secret-first: SetConfig ran before ManageSignalSource.
+    await expect.poll(() => calls.join(',')).toBe('setConfig,manage');
+
+    // The bearer was written as an encrypted config secret keyed by the source slug.
+    const sc = setConfigBody as unknown as {
+      key: string;
+      createKey: boolean;
+      value: { stringVal: string; isSecret: boolean };
+    };
+    expect(sc.key).toBe('mcp_credential.acme-mcp');
+    expect(sc.createKey).toBe(true);
+    expect(sc.value.isSecret).toBe(true);
+    expect(sc.value.stringVal).toBe(TOKEN);
+
+    // The source was then registered pointing at the secret via credentials_ref.
+    const mg = manageBody as unknown as {
+      operation: string;
+      credentialsRef: string;
+      source: { sourceType: string };
+    };
+    expect(mg.operation).toBe('register');
+    expect(mg.credentialsRef).toBe('ingest.mcp_credential.acme-mcp');
+    expect(mg.source.sourceType).toBe('mcp_client');
+
+    // The register succeeded → the form closed (the write-only bearer input is gone), and the bearer
+    // token is NEVER rendered anywhere on the page (AC-2 — the token input is write-only, the token
+    // rides an encrypted secret, and no read edge echoes it).
+    await expect(page.getByLabel('Bearer token')).toHaveCount(0);
+    expect(await page.textContent('body')).not.toContain(TOKEN);
   });
 });

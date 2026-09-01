@@ -1,6 +1,6 @@
 # Implementation Spec: mcp-client-signal-source
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-08-31
 **Feature**: `docs/roadmap/features/166-mcp-client-signal-source/feature.md`
 **Total Steps**: 17
@@ -67,7 +67,7 @@ touched (ingest's `TRADING_MODE` env var is unrelated), so `step-constraints.md`
 
 ### Step 1 — migration: add `mcp_client` to signal_sources.source_type CHECK
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/migrations/011_signal_source_type_mcp_client.up.sql` — create
@@ -100,7 +100,7 @@ Read both: confirm `.up` CHECK lists 12 values incl. `'mcp_client'`, `.down` lis
 
 ### Step 2 — service: fail-closed `mcp_client` validation + credential-required gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/repositories/signal_sources.py` — modify (`validate_config_json`)
@@ -129,7 +129,7 @@ Read both: confirm `.up` CHECK lists 12 values incl. `'mcp_client'`, `.down` lis
 
 ### Step 3 — test: `mcp_client` validation is fail-closed (AC-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_signal_sources.py` — create or modify (confirm existing file with `ls services/xstockstrat-ingest/tests/`)
@@ -160,7 +160,7 @@ Confirm the three `validate_config_json` cases and the credential-gate assertion
 
 ### Step 4 — service: add ingest to the config `GetSecret` allow-list (key-prefix grant)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/authz.ts` — modify (`SecretCallerGrant`, `SECRET_CALLER_ALLOWLIST`, `hasSecretCallerAuthority`)
@@ -188,7 +188,7 @@ Confirm the three `validate_config_json` cases and the credential-gate assertion
 
 ### Step 5 — test: ingest resolves `mcp_credential.*`; others stay fail-closed (AC-3 grant, AC-2/AC-5 preserve)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/authz.test.ts` — create or modify (confirm layout with `ls services/xstockstrat-config/src/__tests__/`)
@@ -220,7 +220,7 @@ Confirm all five cases pass (case 1 is RED before Step 4 — the ingest grant/pr
 
 ### Step 6 — service: ingest MCP client seam + `GetSecret` credential resolution
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/pyproject.toml` — modify (add `mcp>=2.0.0,<3` to `dependencies`)
@@ -262,7 +262,7 @@ cd services/xstockstrat-ingest && uv lock --check && ruff check . && ruff format
 
 ### Step 7 — test: bearer resolved via GetSecret + sent as Authorization header (AC-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_mcp_client.py` — create
@@ -294,7 +294,7 @@ Run before Step 6 to confirm RED (`resolve_secret`/`McpClientProtocol` do not ex
 
 ### Step 8 — service: `mcp_client` extractor (pure parser → ExternalSignal fields)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/extractors/base.py` — modify (add `McpClientInput` dataclass to the `RawInput` union)
@@ -323,7 +323,7 @@ Run before Step 6 to confirm RED (`resolve_secret`/`McpClientProtocol` do not ex
 
 ### Step 9 — test: extractor parses valid items and skips malformed (AC-4 parse half)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_mcp_client_extractor.py` — create
@@ -353,7 +353,7 @@ RED before Step 8 (extractor + `McpClientInput` absent).
 
 ### Step 10 — service: scheduled server-side MCP query loop + health-on-failure
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/engine/mcp_client_loop.py` — create (mkdir `app/engine/` if absent)
@@ -392,7 +392,7 @@ RED before Step 8 (extractor + `McpClientInput` absent).
 
 ### Step 11 — test: full cycle ingests + dedups; 401 records health without crashing (AC-4, AC-5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_mcp_client_loop.py` — create
@@ -425,7 +425,7 @@ Full ingest suite green (incl. the refactored `IngestSignal` RPC's existing test
 
 ### Step 12 — config: seed migration `025_ingest_mcp_client_keys` for the two loop keys + declare defaults
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config` (seed migration) / `xstockstrat-ingest` (CLAUDE.md defaults)
 **Files**:
 - `services/xstockstrat-config/migrations/025_ingest_mcp_client_keys.up.sql` — create
@@ -464,7 +464,7 @@ Confirm the `.up` seeds both keys (namespace-relative `key`, `is_secret=false`, 
 
 ### Step 13 — service: agent `manage_signal_source` bearer orchestration + `list_signal_sources` surfaces has_credentials
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify (`manage_signal_source` `:897`, `list_signal_sources` `:219`)
@@ -493,7 +493,7 @@ Confirm the `.up` seeds both keys (namespace-relative `key`, `is_secret=false`, 
 
 ### Step 14 — test: agent registers mcp_client (two-write) + surfaces has_credentials, no token (AC-1, AC-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify (confirm the tool-test file with `ls services/xstockstrat-agent/tests/`)
@@ -522,7 +522,7 @@ RED before Step 13 (`bearer_token` param + `has_credentials` field absent).
 
 ### Step 15 — service: config-ui `/sources` registers `mcp_client` (endpoint/tool/bearer, secret-first)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/sources/page.tsx` — modify (`SOURCE_TYPES`, form fields, config_json build)
@@ -552,7 +552,7 @@ RED before Step 13 (`bearer_token` param + `has_credentials` field absent).
 
 ### Step 16 — test: e2e register an mcp_client source via /sources (AC-1/AC-2, UI surface, C-14)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/config-ui/sources.spec.ts` — create or modify (confirm with `ls services/xstockstrat-ui/e2e/config-ui/`)
@@ -584,7 +584,7 @@ Confirm the e2e passes and (per fails.md `shadcn-migration-high-confidence`) run
 
 ### Step 17 — docs: mcp-tools.md parity for the mcp_client source type
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify
@@ -610,4 +610,42 @@ Confirm the e2e passes and (per fails.md `shadcn-migration-high-confidence`) run
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **MCP SDK version (Step 6):** the spec pinned `mcp==2.0.0`; `uv lock` resolved **`mcp 2.1.1`**
+  (within `>=2.0.0,<3`). Re-verified the exact API against the installed 2.1.1:
+  `mcp.client.streamable_http.streamable_http_client(url, *, http_client=...)` yields a `(read, write)`
+  tuple; `mcp.client.session.ClientSession(read, write).call_tool(name, args, read_timeout_seconds=…)`
+  returns `mcp.types.CallToolResult` with `structured_content` — all present. Bearer via
+  `httpx2.AsyncClient(headers=...)` confirmed.
+- **`is_secret` is on `ConfigValue`, not `SetConfigRequest` (Steps 13/15).** The design/spec assumed a
+  `SetConfigRequest.is_secret`; the proto has **no such field** — `is_secret` is a field of the
+  `ConfigValue` message (`config.proto`), and the config backend reads `value.is_secret` on write
+  (`configServiceImpl.ts:458`). So the agent `client.set_config` sets `cv.is_secret` (not the request),
+  and the config-ui secret write sets it on the `ConfigValue`. The `SetConfigRequest`-parity agent test
+  was left unchanged (is_secret is not one of its fields).
+- **Agent tool count is 33, not 32 (Steps 13/17).** The spec said "count unchanged (32)"; feature 095
+  (merged) already added `list_opportunities`, so the live count is **33**. This step adds a param + an
+  output field, not a tool — the count stays 33. All count statements were left at/updated to 33.
+- **config-ui env plumbing (Steps 15/16).** Rather than refactor the `/sources` page into a
+  server-wrapper to thread the client-hidden `APPLICATION_ENV`, the config-ui **BFF** now fills an
+  `Environment.UNSPECIFIED` SetConfig with the deployment's native scope
+  (`nativeConfigEnvironment()`), so the secret write lands (and is gated) on the correct env. A caller
+  that names a real env (NamespaceEditor) is unchanged.
+- **Step 16 mock (deviation from the listed files).** `e2e/mock-backend.ts` was NOT modified: the new
+  `sources.spec.ts` case drives SetConfig/ManageSignalSource/ListSignalSources via **`page.route`**
+  (the established sources-spec convention) rather than mutating the shared `SIGNAL_SOURCES` fixture,
+  which the other sources tests assert against. No new fixture was needed (a signal-source fixture
+  already exists). The final "list re-renders the source" assertion was reduced to a form-closed +
+  token-never-rendered check (the core AC-2), since the list-render path is already covered by the
+  suite and the two-write + redaction is the feature's essence.
+- **Busy-loop hardening (Step 12):** took the loop-side `max(interval, 1)` clamp (in
+  `mcp_client_loop.py`) rather than the optional `SCALAR_BOUNDS_REGISTRY` bound — a settable `0` can't
+  busy-loop, and no config-service code change was needed.
+- **IngestSignal refactor (Step 10):** the extraction of `_ingest_external_signal` was done in place
+  (not the loopback-gRPC fallback); the RPC's external behavior is byte-identical (all 44 existing
+  IngestSignal/signal tests stayed green) and the loop calls the shared helper directly.
+
+**RED→GREEN evidence (Floor P-06):** Step 3 (validator, 4 tests RED→GREEN), Step 5 (config authz, 5
+tests), Step 7 (bearer/GetSecret, 4 tests — RED via stash), Step 9 (extractor, 3 tests), Step 11 (loop
+cycle+dedup+401, 3 tests — RED via stash), Step 14 (agent two-write, 2 tests + flipped list test),
+Step 16 (config-ui e2e). Full suites green: ingest 206 pass (78% cov), config 98 pass (84%), agent 327
+pass (78%), UI sources e2e 19/19.
