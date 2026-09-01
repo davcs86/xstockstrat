@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/signal-performance-attribution`
 **Created**: 2026-05-26
-**Last Updated**: 2026-08-31
+**Last Updated**: 2026-09-01
 
 ---
 
@@ -15,6 +15,7 @@
 | 2026-08-31 | `draft` → `spec-ready` | /sdd-review | Product spec approved; all review blockers addressed |
 | 2026-08-31 | `spec-ready` → `design-approved` | /sdd-design | Design debated (full) + reuse-042/fee-plumbing revision; approved; recon.md + design.md written |
 | 2026-08-31 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (15 steps) |
+| 2026-09-01 | `implementation-ready` → `in-progress` → `code-completed` | /sdd-execute | All 15 steps executed (7 commits); red-before-green on every code step; C-16 promotion deferred to /promote |
 
 ---
 

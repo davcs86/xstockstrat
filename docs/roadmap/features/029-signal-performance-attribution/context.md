@@ -160,3 +160,58 @@ No code, no `status.md` change.
   - Step 9: `$8` "renumber" wording is ambiguous; the concrete target (`SET closed_at=$5, realized_pnl=$6, close_event_id=$7, fees_total=$8`) is correct — no logic change. — [ ] note only
   - Step 13: 7-file step (>5) is a cohesive UI slice — acceptable, splitting optional. — [ ] note only
 - Overlap findings: batch scan CLEAN (0 FAIL); WARN same-function overlaps recorded in merge-order.md (trading.go 021<029, portfolio_service.go 029<031).
+
+## Session 2026-09-01 — sdd-execute (Stage 2, all 15 steps → code-completed)
+
+Executed all 15 steps on `feature/signal-performance-attribution` (one commit per step-pair,
+red-before-green on every code-bearing step). Status → `code-completed`.
+
+**Commits (7):**
+- `69c5de36` steps 1-2 — additive `GetAttribution` proto (`analysis.proto`) + regenerated Go/Python/TS stubs.
+- `2d9accf8` steps 3-4 — fee-column migrations: portfolio `014_positions_fees_accum`, analysis `021_pnl_positions_fees_total` (+ `(user_id, closed_at)` index).
+- `938c5f72` steps 5-6 — trading per-fill fee seam: `broker.BrokerOrder.Fees`; additive `"fees"` key on the two `pollFills` emits (`trading.go:1712`/`:1728`); `trading_fees_test.go`.
+- `d11c2f29` steps 7-8 — portfolio fold: `orderFillPayload.Fees`, `UpsertPosition(...feesDelta)`, `GetFeesAccum`, additive `"fees_total"` on `portfolio.position.closed` (gross `realized_pnl` unchanged); pgxmock `TestGetFeesAccum`.
+- `a4a5ca9c` steps 9-10 — analysis consumer seals `fees_total` (`pnl_pattern_consumer.py` → `pnl_positions.seal`); consumer test.
+- `2b905a5d` steps 11-12 — analysis `GetAttribution` handler (owner-scoped `_caller_user_id`, `attribute_trade` winner-takes-all/exact-tie, `net = realized_pnl − fees_total`, approximate cost-basis `avg_return`, `source_id` filter, `ListSignalSources` slug-fallback); `test_get_attribution.py` (AC-1/3/4/5/6/7/9/10/11 + owner-scoping).
+- `dd473f59` steps 13-14 — `/insights/attribution` page + BFF (`getAttribution` forward) + `useSignalAttribution` hook + `NAV_GROUPS` Engine entry (honored impl-review fix — not the dead `PLATFORM_SUBNAV`) + fixture/INVENTORY + e2e (AC-2 render+win-rate sort, AC-8 CSV clipboard, nav reachability). e2e: **4 passed** (setup + 3).
+
+**Step 15 (docs) — launch-time promotion recorded, C-16 write deferred to `/promote`:**
+- The `029` `@AC-*` scenarios promote into the analysis durable business-rule suite
+  (`services/xstockstrat-analysis/acceptance/`, alongside `order-snapshots-pnl-patterns.feature`,
+  which stays PRESERVE/untouched) **at launch** via `/promote` (or `/sdd-archiver`) — the same
+  deferred-promotion backstop honored for 043 and 167 this Stage-2 run. Not written now because
+  the durable suites are promoted from the *launched* branch, not the feature branch mid-execute.
+- **The two `/sdd-spec` decisions (C-11, carried into the shipped code):**
+  1. `SourceAttribution.trade_count` / `win_count` are **`double`**, not int32 — FR-3's exact-tie
+     0.5/0.5 split (AC-5) is not representable as an int; AC-1's integer counts (20, 13) are exact
+     doubles; winner-takes-all contributes weight `1.0`.
+  2. `avg_return` is a **percent over an approximate cost basis** — per attributed trade,
+     `net_pnl / cost_basis` where `cost_basis = |earliest order_snapshot price × quantity|`; a trade
+     whose cost basis is 0 (degraded/partial snapshot) is excluded from the `avg_return` mean **only**
+     (still counted in `trade_count`). Surfaced in the UI copy as a v1 approximation. No `@AC-*`
+     asserts a numeric `avg_return`, so this pin changes no acceptance scenario.
+- **Alpaca-fee-0 limitation + named follow-up:** `broker.BrokerOrder.Fees` is `0` for both Alpaca and
+  IBKR today — US equities are commission-free and SEC/TAF regulatory fees exist only in Alpaca's
+  Account **Activities** API (`/v2/account/activities`, EOD-aggregated `FEE`/`REG`/`TAF`), not on the
+  order/fill path. The fee seam is correct end-to-end (unit tests prove the subtraction with an
+  **injected** fee — AC-6/AC-10); the **named follow-up** is a separate feature to source per-fill
+  regulatory fees from the Activities API and match them to fills/positions. The UI labels P&L
+  "net of fees (broker regulatory fees pending)".
+- **C-10(b) parity check:** `portfolio.position.closed`'s existing `realized_pnl` key stays **gross**
+  and authoritative (042's shipped P&L page + `GetPnL` read it unchanged); `fees_total` is purely
+  **additive**. `GetAttribution` computes net = `realized_pnl − fees_total` at read time only. The
+  Step-12 AC-1 test asserts the row's gross + fees reconcile to the underlying
+  `pnl_positions.realized_pnl` / `fees_total` sums (the parity check `design.md` flagged as Open Risk).
+
+**Honored impl-review `[ ] unaddressed` fixes (both closed):**
+- Step 13 C-10(a): nav registered in `NAV_GROUPS` (`navGroups.tsx`, Engine group, after P&L Patterns),
+  **not** the dead `PLATFORM_SUBNAV`; `PlatformHeader.tsx` untouched.
+- Step 14: nav-reachability e2e targets the **rendered** `Section` landmark (click → assert
+  `/insights/attribution`), not a `PLATFORM_SUBNAV` structure check.
+
+**Deviation (Step 8):** the portfolio `fees_accum` accumulation SQL + `fees_total` close-emit are not
+unit-drivable (concrete `*pgxpool.Pool`, no live-DB harness — the codebase's own documented
+limitation). Covered instead by: `GetFeesAccum` pgxmock (AC-11 0-default), byte-for-byte parallel to
+the shipped `realized_accum` upsert (compile-checked), and end-to-end downstream via the analysis
+consumer test (Step 10) + `GetAttribution` net test (Step 12). Full note in `implementation-spec.md`
+§ Deviation Log.

@@ -592,7 +592,7 @@ The suite has no coverage threshold (Playwright e2e); confirm the new spec passe
 
 ### Step 15 — docs: acceptance promotion + net-of-fees limitation note
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `services/xstockstrat-analysis/acceptance/` — add/extend a durable per-service business-rule suite entry for 029 (promotion at launch, C-16)
