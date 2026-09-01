@@ -114,14 +114,7 @@ test.describe('nav reachability', () => {
     ).toHaveAttribute('aria-current', 'page', { timeout: 30000 });
   });
 
-  test('the retired Signal-detail route redirects to the unified symbol page (feature 125)', async ({
-    page,
-  }) => {
-    await addAuthCookie(page);
-    // /insights/market/[symbol] is now a redirect-only stub (Step 22).
-    await page.goto('/insights/market/AAPL?strategy=strat-live-001');
-    await expect(page).toHaveURL(/\/trader\/positions\/AAPL/, { timeout: 30000 });
-    // The forwarded query string survives the hop (seeds SignalReadiness).
-    await expect(page).toHaveURL(/strategy=strat-live-001/);
-  });
+  // feature 110 removed the `/insights/market/[symbol]` redirect stub (the orphaned signal-order-ticket
+  // path). Its former redirect-to-`/trader/positions/[symbol]` test is gone with it; the live symbol
+  // page's reachability + Book-tab active state is already covered by the sibling test above.
 });

@@ -50,9 +50,27 @@ interface OrderFormProps {
   // a /trader mount (positions/[symbol]) also passes initialSymbol, so initialSymbol can't distinguish
   // the insights mount.
   allowOfflineRecord?: boolean;
+  // feature 110 — the scoped signal-detail affordance: when a finite in-[0,1] confidence is passed,
+  // the ticket lets quantity be left blank (coerced to 0) and attaches it as PlaceOrder.confidence,
+  // routing into feature 023's qty<=0 auto-sizing. Mirrors the allowOfflineRecord explicit-prop
+  // precedent — deliberately NOT keyed on initialSymbol (a plain /trader mount also passes that).
+  // Absent (every /trader + /trader/orders mount) → the qty field stays required, no confidence sent.
+  signalConfidence?: number;
 }
 
-export function OrderForm({ mode, initialSymbol, allowOfflineRecord = true }: OrderFormProps) {
+export function OrderForm({
+  mode,
+  initialSymbol,
+  allowOfflineRecord = true,
+  signalConfidence,
+}: OrderFormProps) {
+  // Finite in-[0,1] gate (belt-and-suspenders; the backend re-guards [0,1]). Only a real value
+  // enables the blank-qty auto-size affordance — a NaN/out-of-range prop is ignored.
+  const hasSignalConfidence =
+    typeof signalConfidence === 'number' &&
+    Number.isFinite(signalConfidence) &&
+    signalConfidence >= 0 &&
+    signalConfidence <= 1;
   const { selectedAccountId, accounts } = useAccountContext();
   // Offline detection reuses the canonical pattern (accountShared.tsx / PortfolioPanel showRealized):
   // key on the selected account's broker type, since the portfolio contract carries no offline marker.
@@ -68,10 +86,10 @@ export function OrderForm({ mode, initialSymbol, allowOfflineRecord = true }: Or
   useEffect(() => {
     if (prefillSymbol) setSymbol(prefillSymbol);
   }, [prefillSymbol]);
-  // An explicit initialSymbol (Signal-detail's SignalOrderTicket) pins this ticket to one
-  // symbol — the chart, conviction, and edge stats above it are all keyed to it, so letting the
-  // field be edited away from it would desync the order from the analysis it was placed from.
-  // The generic ?symbol= quick-trade deep link (/trader) stays editable — it's a convenience
+  // An explicit initialSymbol (the signal-detail mount on /trader/positions/[symbol]) pins this
+  // ticket to one symbol — the chart, conviction, and edge stats above it are all keyed to it, so
+  // letting the field be edited away from it would desync the order from the analysis it was placed
+  // from. The generic ?symbol= quick-trade deep link (/trader) stays editable — it's a convenience
   // prefill, not a pinned context.
   const symbolLocked = Boolean(initialSymbol);
   const [side, setSide] = useState<OrderSide>('buy');
@@ -105,7 +123,16 @@ export function OrderForm({ mode, initialSymbol, allowOfflineRecord = true }: Or
         // Record mode forces MARKET and maps the optional fill price to limit_price; the explicit
         // offline accountId makes the backend record a NEW offline order (no broker submit).
         orderType: isRecordMode ? PbOrderType.MARKET : ORDER_TYPE_ENUM[orderType],
-        qty: parseFloat(qty),
+        // feature 110 — with a signal confidence, a blank/NaN quantity coerces to a real 0 (never
+        // NaN — Go's `NaN <= 0` is false, which would bypass 023's qty<=0 sizing and reach the
+        // broker) so the order routes into confidence-based auto-sizing; an explicit qty overrides it.
+        qty: (() => {
+          const parsed = parseFloat(qty);
+          return hasSignalConfidence && !(parsed > 0) ? 0 : parsed;
+        })(),
+        // Attach the confidence only on the scoped signal-detail mount; undefined is omitted by the
+        // typed client → unset → backend default 1.0 (exactly the plain forms' behavior today).
+        confidence: hasSignalConfidence ? signalConfidence : undefined,
         limitPrice: isRecordMode
           ? fillPrice
             ? parseFloat(fillPrice)
@@ -210,8 +237,16 @@ export function OrderForm({ mode, initialSymbol, allowOfflineRecord = true }: Or
             placeholder="Quantity"
             value={qty}
             onChange={(e) => setQty(e.target.value)}
-            required
+            // feature 110 — required on every plain mount (FR-3); optional only on the scoped
+            // signal-detail mount, where a blank qty routes into confidence auto-sizing.
+            required={!hasSignalConfidence}
           />
+          {hasSignalConfidence && (
+            <p className="text-xs text-muted-foreground" data-testid="signal-confidence-hint">
+              Leave quantity blank to auto-size at {Math.round((signalConfidence ?? 0) * 100)}%
+              confidence.
+            </p>
+          )}
 
           {/* Record mode: a single optional fill price (mapped to limit_price). */}
           {isRecordMode && (
