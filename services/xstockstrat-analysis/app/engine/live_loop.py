@@ -274,12 +274,31 @@ class LiveEvaluationLoop:
         """
         max_pairs = self._cfg.get_int("analysis.engine.max_strategies_per_cycle", default=50)
         throttle = self._cfg.get_int("analysis.engine.alert_throttle_seconds", default=300)
+        # feature 168 — fundamentals-universe force-run. blend_id names the governed strategy;
+        # blend_enabled is the operator kill-switch (get_bool honors an explicit false via
+        # HasField).
+        blend_id = self._cfg.get_str(
+            "analysis.engine.fundamentals_blend_strategy_id", "fundamentals_macd_blend"
+        )
+        blend_enabled = self._cfg.get_bool("analysis.engine.fundamentals_blend_enabled", True)
         rows = await self._db.fetch(
             f"SELECT * FROM analysis.strategies WHERE {LIVE_ENABLED_PREDICATE_SQL} "
             "ORDER BY created_at, strategy_id"
         )
+        # The override activates only when the kill-switch is on AND that strategy is actually live
+        # this cycle — otherwise the loop is byte-identical to feature 132.
+        blend_active = blend_enabled and any(
+            dict(row).get("strategy_id") == blend_id for row in rows
+        )
         # Platform-wide active signals once per cycle (joined per-strategy iff signal_eligible).
         signal_symbols = await self._drain_signals()
+        # feature 168 — resolve the fundamentals universe (signals from the fundamentals source ∩
+        # symbols with fundamentals data) exactly ONCE, and only when the blend strategy is live.
+        # When not blend_active, no QuerySignals(source=…)/GetFundamentalsMulti call is issued
+        # (FR-5/AC-4, F-06 pacing).
+        fundamentals_universe = (
+            await self._resolve_fundamentals_universe() if blend_active else set()
+        )
         # Per-owner watchlist/held sets, memoized within this cycle so N strategies of one owner
         # cost one ListPositions + one ListWatchlists, not N of each.
         held_cache: dict[str, set] = {}
@@ -295,18 +314,32 @@ class LiveEvaluationLoop:
             if owner not in held_cache:
                 held_cache[owner] = await self._drain_held(owner)
                 watch_cache[owner] = await self._drain_watchlist(owner)
-            resolved = resolve_universe(
-                definition, watch_cache[owner], held_cache[owner], signal_symbols
-            )
             created_at = d.get("created_at")
-            for symbol in sorted(resolved.universe):
+            if blend_active and definition.strategy_id == blend_id:
+                # feature 168 FR-2: the governed strategy's universe is *replaced* by the
+                # fundamentals universe minus its deny list — reproducing resolve_universe's
+                # entry-only-deny precedence (held ∩ denied re-enters so its EXIT edge still
+                # traces), but held is NOT unioned in and the signal_params.symbols allowlist is
+                # ignored (the universe is force-set, never re-narrowed).
+                denied = {_normalize_symbol(s) for s in definition.denied_symbols}
+                deny_entry = held_cache[owner] & denied
+                universe = (fundamentals_universe - denied) | deny_entry
+            else:
+                # Every other strategy (and the blend id when blend_active is false) is
+                # byte-for-byte unchanged — feature 132 owner-scoped resolution (AC-3).
+                resolved = resolve_universe(
+                    definition, watch_cache[owner], held_cache[owner], signal_symbols
+                )
+                universe = resolved.universe
+                deny_entry = resolved.deny_entry
+            for symbol in sorted(universe):
                 records.append(
                     (
                         created_at,
                         definition.strategy_id,
                         symbol,
                         definition,
-                        symbol in resolved.deny_entry,
+                        symbol in deny_entry,
                     )
                 )
         if not records:
