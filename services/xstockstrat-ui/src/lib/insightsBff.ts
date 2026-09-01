@@ -4,6 +4,8 @@ import { IngestService } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
+import { LedgerService } from '@xstockstrat/proto/ledger/v1/ledger_pb';
+import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
 import {
   analysisClient,
   indicatorsClient,
@@ -11,6 +13,8 @@ import {
   marketDataClient,
   portfolioClient,
   tradingClient,
+  ledgerClient,
+  configClient,
 } from '@/lib/connectClients';
 import {
   createBffRouter,
@@ -107,6 +111,27 @@ router.service(PortfolioService, {
 
 router.service(TradingService, {
   listBrokerAccounts: forward((req, opts) => tradingClient.listBrokerAccounts(req, opts)),
+  // feature 031 — the /insights performance dashboard reads the env-derived paper/live mode for its
+  // "Paper Trading" label; wire it on this segment's BFF (mirrors traderBff) so /insights is self-contained.
+  getTradingEnvironment: forward((req, opts) => tradingClient.getTradingEnvironment(req, opts)),
+});
+
+// feature 031 — the /insights performance dashboard reads its equity-curve source events + config here.
+router.service(LedgerService, {
+  // queryEvents forces the caller's own portfolio stream key SERVER-SIDE from the verified session
+  // (IDOR guard — the browser must not supply it), mirroring the traderBff copilot force pattern.
+  queryEvents: async (req, ctx) => {
+    const claims = await requireSession(ctx);
+    return ledgerClient.queryEvents(
+      { ...req, streamKey: `portfolio:${claims.user_id}` },
+      { headers: backendHeaders(claims, ctx) },
+    );
+  },
+});
+
+router.service(ConfigService, {
+  // Read-only — GetConfig is deliberately open on the backend (no admin gate), matching traderBff.
+  getConfig: forward((req, opts) => configClient.getConfig(req, opts)),
 });
 
 router.service(IndicatorsService, {
