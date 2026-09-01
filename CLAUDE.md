@@ -77,6 +77,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 | Feature workflow (branch, PR, promote) | `docs/runbooks/feature-workflow.md` |
 | Using or troubleshooting the agent MCP tools | `docs/runbooks/mcp-tools.md` |
 | Adding/refactoring a skill, subagent, or `CLAUDE.md`; how the AI tooling curates context (subagent delegation, progressive disclosure, structured `context.md` memory) | `docs/patterns/context-engineering.md` |
+| Automated feature archiving — when features reach `launched` status, detect and archive them automatically | `docs/patterns/sdd-auto-archiving.md` |
 | SDD binding rules — Constitution constraint IDs (`C-*`/`P-*`/`F-*`) cited by review/design/execute | `docs/sdd/constitution.md` |
 | Acceptance scenarios & business rules (Gherkin `@AC-*`) — per-feature `acceptance.feature`, durable per-service suites read by recon/design, C-15/C-16 | `docs/sdd/business-rules/CLAUDE.md`, `docs/sdd/constitution.md` |
 | Codebase/runtime invariants (`PLAT-*`/`<MODULE>-*`) — non-obvious patterns, cross-module contracts, and scars an agent would otherwise miss; plus the defects/doc-drift log | `docs/context-constitution.md`, `docs/context-constitution-findings.md` (per-module: `services/*/docs/`, `packages/*/docs/`) |
