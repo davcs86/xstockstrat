@@ -17,6 +17,12 @@ type BrokerOrder struct {
 	Status         string
 	FilledQty      float64 // cumulative filled quantity; zero for unfilled orders
 	FilledAvgPrice float64 // zero for unfilled orders
+	// Fees is the cumulative broker fee for the order (feature 029); 0 when the broker exposes none.
+	// US equities are commission-free and Alpaca/IBKR return no per-fill fee on the order/fill path
+	// (SEC/TAF regulatory fees live only in Alpaca's end-of-day Account Activities API, not per-fill),
+	// so both adapters leave this at 0 today — a named follow-up will source regulatory fees from the
+	// Activities API. The fee seam is correct end-to-end regardless.
+	Fees float64
 	// StopLegOrderID / TakeProfitLegOrderID are populated when the broker returned bracket
 	// child order IDs on the same submit response (Alpaca only; empty otherwise).
 	StopLegOrderID       string

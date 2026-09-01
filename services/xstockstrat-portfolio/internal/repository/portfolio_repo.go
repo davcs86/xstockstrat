@@ -54,13 +54,15 @@ func (r *PortfolioRepo) Pool() *pgxpool.Pool {
 // UpsertPosition inserts or updates a position row. realizedDelta (feature 042) is the realized
 // P&L this fill contributed by reducing the position; it accumulates into realized_accum on
 // conflict (attribution-stats-only, never a user-facing figure).
-func (r *PortfolioRepo) UpsertPosition(ctx context.Context, userID, symbol string, qty, avgEntry, costBasis float64, mode commonv1.TradingMode, accountID string, realizedDelta float64) error {
+// feesDelta (feature 029) accumulates into fees_accum on conflict, the exact parallel of
+// realizedDelta/realized_accum — attribution-stats-only, sealed onto the close event as fees_total.
+func (r *PortfolioRepo) UpsertPosition(ctx context.Context, userID, symbol string, qty, avgEntry, costBasis float64, mode commonv1.TradingMode, accountID string, realizedDelta, feesDelta float64) error {
 	const q = `
-		INSERT INTO portfolio.positions (user_id, symbol, qty, avg_entry_price, cost_basis, trading_mode, account_id, realized_accum, opened_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+		INSERT INTO portfolio.positions (user_id, symbol, qty, avg_entry_price, cost_basis, trading_mode, account_id, realized_accum, fees_accum, opened_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
 		ON CONFLICT (user_id, symbol, trading_mode, account_id) DO UPDATE
-		SET qty=$3, avg_entry_price=$4, cost_basis=$5, realized_accum=portfolio.positions.realized_accum + $8, updated_at=NOW()`
-	_, err := r.pool.Exec(ctx, q, userID, symbol, qty, avgEntry, costBasis, mode.String(), accountID, realizedDelta)
+		SET qty=$3, avg_entry_price=$4, cost_basis=$5, realized_accum=portfolio.positions.realized_accum + $8, fees_accum=portfolio.positions.fees_accum + $9, updated_at=NOW()`
+	_, err := r.pool.Exec(ctx, q, userID, symbol, qty, avgEntry, costBasis, mode.String(), accountID, realizedDelta, feesDelta)
 	return err
 }
 
@@ -69,6 +71,26 @@ func (r *PortfolioRepo) UpsertPosition(ctx context.Context, userID, symbol strin
 // closing fill's delta without re-reading it onto the about-to-be-deleted row.
 func (r *PortfolioRepo) GetRealizedAccum(ctx context.Context, userID, symbol string, mode commonv1.TradingMode, accountID string) (float64, error) {
 	q := `SELECT COALESCE(realized_accum, 0) FROM portfolio.positions
+	      WHERE user_id=$1 AND symbol=$2 AND trading_mode=$3`
+	args := []any{userID, symbol, mode.String()}
+	if accountID != "" {
+		q += ` AND account_id=$4`
+		args = append(args, accountID)
+	}
+	q += ` ORDER BY opened_at DESC LIMIT 1`
+	var accum float64
+	err := r.db.QueryRow(ctx, q, args...).Scan(&accum)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, nil
+	}
+	return accum, err
+}
+
+// GetFeesAccum returns the position's accumulated broker fees (feature 029), the exact parallel of
+// GetRealizedAccum. 0 when the row does not exist. Read just before a full close so the sealed
+// fees_total is accum + the closing fill's fee.
+func (r *PortfolioRepo) GetFeesAccum(ctx context.Context, userID, symbol string, mode commonv1.TradingMode, accountID string) (float64, error) {
+	q := `SELECT COALESCE(fees_accum, 0) FROM portfolio.positions
 	      WHERE user_id=$1 AND symbol=$2 AND trading_mode=$3`
 	args := []any{userID, symbol, mode.String()}
 	if accountID != "" {

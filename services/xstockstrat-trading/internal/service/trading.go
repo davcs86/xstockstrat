@@ -1714,6 +1714,9 @@ func (s *TradingService) pollFills(ctx context.Context) {
 				"qty": order.Qty, "fill_price": order.FilledAvgPrice,
 				"user_id": order.UserId, "trading_mode": order.TradingMode.String(),
 				"account_id": order.AccountId,
+				// feature 029 — additive per-fill fee (0 when the broker exposes none). The payload
+				// is a schemaless Struct, so this key needs no proto change.
+				"fees": brokerOrder.Fees,
 			})
 			go s.emitFillAlert(context.Background(), order)
 			slog.Info("order filled", "order_id", order.OrderId, "symbol", order.Symbol,
@@ -1730,6 +1733,8 @@ func (s *TradingService) pollFills(ctx context.Context) {
 				"filled_qty": order.FilledQty, "fill_price": order.FilledAvgPrice,
 				"user_id": order.UserId, "trading_mode": order.TradingMode.String(),
 				"account_id": order.AccountId,
+				// feature 029 — additive per-fill fee (0 when the broker exposes none).
+				"fees": brokerOrder.Fees,
 			})
 			// First partial fill creates the bracket; a later partial fill on an
 			// already-ACTIVE IBKR bracket resizes it (maybeSubmitBracket's own dispatch).

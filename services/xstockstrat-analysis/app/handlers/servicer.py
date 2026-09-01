@@ -42,7 +42,9 @@ from app.repositories.backtest_run_symbols import BacktestRunSymbolsRepository
 from app.repositories.backtest_runs import BacktestRunsRepository
 from app.repositories.opportunities import OpportunitiesRepository
 from app.repositories.opportunity_actions import OpportunityActionsRepository
+from app.repositories.order_snapshots import OrderSnapshotsRepository
 from app.repositories.pnl_pattern_samples import PnLPatternSamplesRepository
+from app.repositories.pnl_positions import PnLPositionsRepository
 from app.repositories.strategies import StrategiesRepository
 from app.repositories.strategy_scores import StrategyScoresRepository
 from app.services import scoring, warmup
@@ -323,6 +325,35 @@ def bucket_pnl_factors(samples, *, min_sample, bucket_count):
     return factors
 
 
+def attribute_trade(source_values: dict[str, float]) -> dict[str, float]:
+    """Winner-takes-all signal attribution for one closed position (feature 029, FR-3).
+
+    ``source_values`` maps each contributing signal source (slug) to its highest conviction across
+    the position's snapshots. The source(s) holding the top value split weight 1.0: a clear winner
+    gets 1.0 (AC-4); an exact tie splits equally — a two-way tie is 0.5/0.5 (AC-5, the only V1
+    fractional case). A position with no signals yields ``{}`` → the trade is ``manual`` and is
+    excluded from per-source metrics (AC-3)."""
+    if not source_values:
+        return {}
+    top = max(source_values.values())
+    winners = [s for s, v in source_values.items() if v == top]
+    share = 1.0 / len(winners)
+    return {s: share for s in winners}
+
+
+def _parse_signals(raw) -> list[dict]:
+    """Normalize an order_snapshot's `signals` JSONB (a JSON string from asyncpg, or an
+    already-parsed list in tests) to a list of {name, value, source} dicts; else []."""
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (TypeError, ValueError):
+            return []
+    return raw if isinstance(raw, list) else []
+
+
 class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
     def __init__(
         self,
@@ -406,6 +437,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # P&L pattern attribution samples (feature 042). Written by the pnl_pattern_consumer;
         # read here by QueryPnLPatterns with query-time quantile bucketing. Reuses db_pool (F-06).
         self._pnl_samples_repo = PnLPatternSamplesRepository(db_pool) if db_pool else None
+        # Signal-performance attribution reads (feature 029): closed positions (net = realized -
+        # fees_total) + their order-snapshot signal inputs. Reuses db_pool (F-06); None in tests.
+        self._pnl_positions_repo = PnLPositionsRepository(db_pool) if db_pool else None
+        self._order_snapshots_repo = OrderSnapshotsRepository(db_pool) if db_pool else None
         # Per-user compute serialization (OR-A): a lazy asyncio.Lock so two tabs' cold reads
         # don't double-compute; a set marks users with a background recompute already in flight
         # (stale-while-revalidate) so a burst of stale reads kicks exactly one recompute.
@@ -2852,6 +2887,105 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             positive_factors=positive[:limit],
             negative_factors=negative[:limit],
         )
+
+    async def _resolve_source_names(self, propagation_meta) -> dict[str, str]:
+        """Best-effort slug → display_name from ingest ListSignalSources (feature 029). An ingest
+        failure yields {} so every slug falls back to itself — which also satisfies AC-9 (a source
+        registered after ship, unknown to this map, still appears keyed by its slug)."""
+        try:
+            resp = await self._ingest.ListSignalSources(
+                ingest_pb2.ListSignalSourcesRequest(include_inactive=True),
+                metadata=propagation_meta,
+            )
+        except grpc.RpcError as e:
+            log.warning("_resolve_source_names: ListSignalSources failed: %s", e)
+            return {}
+        return {src.slug: (src.display_name or src.slug) for src in resp.sources}
+
+    async def GetAttribution(self, request, context):
+        """Per-source attribution over closed positions (feature 029). Aggregates
+        042's analysis.pnl_positions (net = realized_pnl - fees_total) + order_snapshots.signals
+        (winner-takes-all conviction). Owner-scoped via x-user-id; read-only, DB-only."""
+        caller = self._caller_user_id(context)
+        if not caller or self._pnl_positions_repo is None or self._order_snapshots_repo is None:
+            return analysis_pb2.GetAttributionResponse()
+
+        start = request.start.ToDatetime() if request.HasField("start") else None
+        end = request.end.ToDatetime() if request.HasField("end") else None
+        rows = await self._pnl_positions_repo.list_closed_for_attribution(
+            user_id=caller, start=start, end=end
+        )
+
+        trade_count: dict[str, float] = {}
+        win_count: dict[str, float] = {}
+        total_pnl: dict[str, float] = {}
+        return_sum: dict[str, float] = {}
+        return_weight: dict[str, float] = {}
+
+        for row in rows:
+            inputs = await self._order_snapshots_repo.attribution_inputs_for_position(
+                row["position_id"]
+            )
+            # Collapse the position's snapshot signals to each source's peak conviction.
+            source_values: dict[str, float] = {}
+            for snap in inputs:
+                for sig in _parse_signals(snap.get("signals")):
+                    src = sig.get("source") or ""
+                    if not src:
+                        continue
+                    val = float(sig.get("value") or 0.0)
+                    if src not in source_values or val > source_values[src]:
+                        source_values[src] = val
+            weights = attribute_trade(source_values)
+            if not weights:
+                continue  # manual / no-signal trade — excluded from per-source metrics (AC-3)
+            net = float(row.get("realized_pnl") or 0.0) - float(row.get("fees_total") or 0.0)
+            win = net > 0.0  # net of fees (AC-6/AC-10/AC-11)
+            # Approximate cost basis: |earliest snapshot price × quantity| (v1 approximation).
+            cost_basis = 0.0
+            if inputs:
+                first = inputs[0]
+                cost_basis = abs(
+                    float(first.get("price") or 0.0) * float(first.get("quantity") or 0.0)
+                )
+            for src, w in weights.items():
+                trade_count[src] = trade_count.get(src, 0.0) + w
+                if win:
+                    win_count[src] = win_count.get(src, 0.0) + w
+                total_pnl[src] = total_pnl.get(src, 0.0) + w * net
+                if (
+                    cost_basis > 0.0
+                ):  # a 0 cost basis (degraded snapshot) is excluded from the mean only
+                    return_sum[src] = return_sum.get(src, 0.0) + w * (net / cost_basis)
+                    return_weight[src] = return_weight.get(src, 0.0) + w
+
+        source_filter = request.source_id or ""  # optional slug filter (AC-7)
+        surviving = [s for s in trade_count if not source_filter or s == source_filter]
+
+        propagation_meta = [
+            (k, v)
+            for k, v in context.invocation_metadata()
+            if k in ("x-user-id", "x-access-scope", "x-trace-id")
+        ]
+        names = await self._resolve_source_names(propagation_meta) if surviving else {}
+
+        attributions = []
+        for src in surviving:
+            tc = trade_count[src]
+            wc = win_count.get(src, 0.0)
+            rw = return_weight.get(src, 0.0)
+            attributions.append(
+                analysis_pb2.SourceAttribution(
+                    source_id=src,
+                    source_name=names.get(src, src),
+                    trade_count=tc,
+                    win_count=wc,
+                    win_rate=(wc / tc) if tc > 0 else 0.0,
+                    avg_return=(return_sum.get(src, 0.0) / rw) if rw > 0 else 0.0,
+                    total_pnl=total_pnl.get(src, 0.0),
+                )
+            )
+        return analysis_pb2.GetAttributionResponse(attributions=attributions)
 
     async def GetIndicatorSeries(self, request, context):
         """Per-component historical indicator series for a strategy over the caller's own bar window

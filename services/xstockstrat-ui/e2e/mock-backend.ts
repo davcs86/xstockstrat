@@ -63,6 +63,7 @@ import { criterionDetailRow } from './fixtures/screenResults';
 import { backfillJob } from './fixtures/backfillJobs';
 import { INDICATOR_SERIES_AAPL } from './fixtures/indicatorSeries';
 import { PNL_PATTERNS_AAPL } from './fixtures/pnlPatterns';
+import { SOURCE_ATTRIBUTION } from './fixtures/attribution';
 import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 
 export const TRADER_MOCK_PORT = 9091;
@@ -1119,6 +1120,10 @@ export async function startMockBackend(): Promise<void> {
         // feature 042 — ranked P&L-attribution factors for the P&L Patterns view.
         async queryPnLPatterns() {
           return PNL_PATTERNS_AAPL;
+        },
+        // feature 029 — per-source signal attribution for the Attribution view.
+        async getAttribution() {
+          return SOURCE_ATTRIBUTION;
         },
       });
 

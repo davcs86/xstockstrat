@@ -82,7 +82,7 @@ registration + nav-reachability test (C-10(a)). No Agent step is required (decis
 
 ### Step 1 — proto: additive `GetAttribution` RPC + request/response/`SourceAttribution` messages
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -142,7 +142,7 @@ Both must pass (breaking = green: additive RPC + new messages only).
 
 ### Step 2 — proto-gen: regenerate stubs (Go, Python, TS)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/**` — modify (generated; never hand-edited)
@@ -172,7 +172,7 @@ Exit 0 after staging confirms the checked-in stubs match a fresh generation (the
 
 ### Step 3 — migration: portfolio `014_positions_fees_accum` (fee accumulator column)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/migrations/014_positions_fees_accum.up.sql` — create
@@ -212,7 +212,7 @@ Then read both: the `.up` `ADD COLUMN fees_accum` is reversed by the `.down` `DR
 
 ### Step 4 — migration: analysis `021_pnl_positions_fees_total` (fee column + range index)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/021_pnl_positions_fees_total.up.sql` — create
@@ -256,7 +256,7 @@ Then read both: the `.up` `ADD COLUMN fees_total` + `CREATE INDEX idx_pnl_positi
 
 ### Step 5 — service: trading — `Fees` on `BrokerOrder` + additive `"fees"` key on the fill events
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/broker.go` — modify (add `Fees` field)
@@ -291,7 +291,7 @@ Then read both: the `.up` `ADD COLUMN fees_total` + `CREATE INDEX idx_pnl_positi
 
 ### Step 6 — test: trading fill events carry the additive `fees` key
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_helpers_test.go` — modify (add fee-stamp cases), or a new `trading_fees_test.go` — create
@@ -321,7 +321,7 @@ Confirm ≥ 40%. The fee-stamp logic lives in `internal/service/` (a coverage-ex
 
 ### Step 7 — service: portfolio — fold per-fill `fees` into `fees_accum`; emit `fees_total` on close
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify (`orderFillPayload` + fold + close emit)
@@ -351,7 +351,7 @@ Confirm ≥ 40%. The fee-stamp logic lives in `internal/service/` (a coverage-ex
 
 ### Step 8 — test: portfolio fee fold + `fees_total` emit; no-fee ⇒ gross
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_helpers_test.go` — modify, or new `portfolio_fees_test.go` — create
@@ -383,7 +383,7 @@ Confirm ≥ 40%. Fold/emit logic is in the coverage-excluded `internal/service`/
 
 ### Step 9 — service: analysis — 042 consumer persists `fees_total` on seal
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py` — modify (`_handle_close_event`)
@@ -411,7 +411,7 @@ Confirm ≥ 40%. Fold/emit logic is in the coverage-excluded `internal/service`/
 
 ### Step 10 — test: analysis consumer persists `fees_total` (default 0 when absent)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_pnl_pattern_consumer.py` — modify
@@ -441,7 +441,7 @@ Confirm the suite passes and coverage ≥ 40%.
 
 ### Step 11 — service: analysis — `GetAttribution` handler + attribution reads
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify (`GetAttribution` handler)
@@ -482,7 +482,7 @@ Confirm the suite passes and coverage ≥ 40%.
 
 ### Step 12 — test: analysis `GetAttribution` aggregation, tie split, net-of-fees, filter, auto-source
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_get_attribution.py` — create
@@ -520,7 +520,7 @@ Confirm the suite passes and coverage ≥ 40%.
 
 ### Step 13 — service: UI — `/insights/attribution` page, BFF+hook, nav registration, fixture
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/insightsBff.ts` — modify (register `getAttribution`)
@@ -560,7 +560,7 @@ Confirm the suite passes and coverage ≥ 40%.
 
 ### Step 14 — test: UI e2e — attribution table renders, sorts, exports CSV, is nav-reachable
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/attribution.spec.ts` — create
@@ -592,7 +592,7 @@ The suite has no coverage threshold (Playwright e2e); confirm the new spec passe
 
 ### Step 15 — docs: acceptance promotion + net-of-fees limitation note
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `services/xstockstrat-analysis/acceptance/` — add/extend a durable per-service business-rule suite entry for 029 (promotion at launch, C-16)
@@ -618,4 +618,29 @@ The suite has no coverage threshold (Playwright e2e); confirm the new spec passe
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Step 8 — portfolio fee-fold emit is not unit-drivable (concrete `pool` / no live-DB harness)
+- `UpsertPosition` writes via the concrete `r.pool *pgxpool.Pool` (not the mockable `queryRower`
+  `r.db`), and `processOrderFill` reads `existing` + calls `checkRiskLimits`/`broadcastSnapshot` with
+  no live-DB test harness (the codebase's own documented limitation — `portfolio_offline_test.go:16,58`).
+  So the `fees_accum` accumulation SQL and the `fees_total` close-emit cannot be exercised in a unit
+  test the way the spec's instruction 1-2 sketch.
+- **What IS tested**: `GetFeesAccum` through pgxmock (returns `COALESCE(fees_accum,0)`, 0 on
+  `ErrNoRows` — AC-11), red→green. The accumulation SQL is a byte-for-byte parallel of the shipped
+  `realized_accum` upsert (compile-checked); the `fees_total` emit key is verified downstream by the
+  analysis consumer test (Step 10, which asserts the close payload's `fees_total` is read into
+  `seal`) and the `GetAttribution` net test (Step 12, `net = realized_pnl - fees_total`). This closes
+  AC-10/AC-11 end-to-end across the seam without a portfolio live-DB harness this feature does not add.
+
+### Steps 13-14 — nav registered in NAV_GROUPS, not the dead PLATFORM_SUBNAV (honored impl-review fix)
+- The spec's Step 13 instruction 4 registered `Attribution` in `PLATFORM_SUBNAV.insights`
+  (`PlatformHeader.tsx`), but the impl-review flagged `PLATFORM_SUBNAV` as **dead** (feature 083's
+  shell renders the desktop Row-2 "Section" nav from `NAV_GROUPS`; `PlatformHeader.tsx` marks that
+  prop "Legacy: ignored"). Registered the entry in `NAV_GROUPS` (`navGroups.tsx`, Engine group,
+  right after `P&L Patterns`) **only**; `PlatformHeader.tsx` untouched. Matches the same fix honored
+  for 043 (Users) and 167.
+- Step 14's nav-reachability e2e (impl-review fix) targets the **rendered** Section landmark
+  (`getByRole('navigation', { name: 'Section' }).getByRole('link', { name: 'Attribution' })` from a
+  sibling Engine page → click → assert `/insights/attribution`), not a `PLATFORM_SUBNAV` structure
+  check — guarding the 060/058 "link renders but never routes" failure. TDD RED for Step 14 is by
+  construction: without Step 13 the `/insights/attribution` route 404s, so every assertion fails.
+  GREEN: 3/3 (AC-2 render + win-rate sort, AC-8 CSV clipboard, nav reachability).

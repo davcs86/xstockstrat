@@ -6,7 +6,7 @@
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ScreenResult_CriterionRawValuesEntry = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.EquityPoint = exports.PortfolioCapitalSkip = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.FactorType = exports.SnapshotEventType = exports.OpportunityAction = exports.ReadinessRule = exports.ConditionState = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.FillModel = exports.SizingMode = exports.BacktestStatus = exports.protobufPackage = void 0;
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.QueryPnLPatternsResponse = exports.QueryPnLPatternsRequest = exports.PnLPatternFactor = exports.OrderSnapshot_IndicatorValuesEntry = exports.OrderSnapshot = exports.SignalEntry = exports.IndicatorValue = exports.NamedSeries = exports.ComponentSeries = exports.GetIndicatorSeriesResponse = exports.GetIndicatorSeriesRequest = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionPassedEntry = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.GetAttributionResponse = exports.SourceAttribution = exports.GetAttributionRequest = exports.QueryPnLPatternsResponse = exports.QueryPnLPatternsRequest = exports.PnLPatternFactor = exports.OrderSnapshot_IndicatorValuesEntry = exports.OrderSnapshot = exports.SignalEntry = exports.IndicatorValue = exports.NamedSeries = exports.ComponentSeries = exports.GetIndicatorSeriesResponse = exports.GetIndicatorSeriesRequest = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionPassedEntry = void 0;
 exports.backtestStatusFromJSON = backtestStatusFromJSON;
 exports.backtestStatusToJSON = backtestStatusToJSON;
 exports.backtestStatusToNumber = backtestStatusToNumber;
@@ -8536,6 +8536,319 @@ exports.QueryPnLPatternsResponse = {
         return message;
     },
 };
+function createBaseGetAttributionRequest() {
+    return { start: undefined, end: undefined, sourceId: "" };
+}
+exports.GetAttributionRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.start !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.start), writer.uint32(10).fork()).join();
+        }
+        if (message.end !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.end), writer.uint32(18).fork()).join();
+        }
+        if (message.sourceId !== "") {
+            writer.uint32(26).string(message.sourceId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetAttributionRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.start = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.end = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.sourceId = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            start: isSet(object.start) ? fromJsonTimestamp(object.start) : undefined,
+            end: isSet(object.end) ? fromJsonTimestamp(object.end) : undefined,
+            sourceId: isSet(object.sourceId)
+                ? globalThis.String(object.sourceId)
+                : isSet(object.source_id)
+                    ? globalThis.String(object.source_id)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.start !== undefined) {
+            obj.start = message.start.toISOString();
+        }
+        if (message.end !== undefined) {
+            obj.end = message.end.toISOString();
+        }
+        if (message.sourceId !== "") {
+            obj.sourceId = message.sourceId;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetAttributionRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetAttributionRequest();
+        message.start = object.start ?? undefined;
+        message.end = object.end ?? undefined;
+        message.sourceId = object.sourceId ?? "";
+        return message;
+    },
+};
+function createBaseSourceAttribution() {
+    return { sourceId: "", sourceName: "", tradeCount: 0, winCount: 0, winRate: 0, avgReturn: 0, totalPnl: 0 };
+}
+exports.SourceAttribution = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.sourceId !== "") {
+            writer.uint32(10).string(message.sourceId);
+        }
+        if (message.sourceName !== "") {
+            writer.uint32(18).string(message.sourceName);
+        }
+        if (message.tradeCount !== 0) {
+            writer.uint32(25).double(message.tradeCount);
+        }
+        if (message.winCount !== 0) {
+            writer.uint32(33).double(message.winCount);
+        }
+        if (message.winRate !== 0) {
+            writer.uint32(41).double(message.winRate);
+        }
+        if (message.avgReturn !== 0) {
+            writer.uint32(49).double(message.avgReturn);
+        }
+        if (message.totalPnl !== 0) {
+            writer.uint32(57).double(message.totalPnl);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSourceAttribution();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.sourceId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.sourceName = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 25) {
+                        break;
+                    }
+                    message.tradeCount = reader.double();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 33) {
+                        break;
+                    }
+                    message.winCount = reader.double();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 41) {
+                        break;
+                    }
+                    message.winRate = reader.double();
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 49) {
+                        break;
+                    }
+                    message.avgReturn = reader.double();
+                    continue;
+                }
+                case 7: {
+                    if (tag !== 57) {
+                        break;
+                    }
+                    message.totalPnl = reader.double();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            sourceId: isSet(object.sourceId)
+                ? globalThis.String(object.sourceId)
+                : isSet(object.source_id)
+                    ? globalThis.String(object.source_id)
+                    : "",
+            sourceName: isSet(object.sourceName)
+                ? globalThis.String(object.sourceName)
+                : isSet(object.source_name)
+                    ? globalThis.String(object.source_name)
+                    : "",
+            tradeCount: isSet(object.tradeCount)
+                ? globalThis.Number(object.tradeCount)
+                : isSet(object.trade_count)
+                    ? globalThis.Number(object.trade_count)
+                    : 0,
+            winCount: isSet(object.winCount)
+                ? globalThis.Number(object.winCount)
+                : isSet(object.win_count)
+                    ? globalThis.Number(object.win_count)
+                    : 0,
+            winRate: isSet(object.winRate)
+                ? globalThis.Number(object.winRate)
+                : isSet(object.win_rate)
+                    ? globalThis.Number(object.win_rate)
+                    : 0,
+            avgReturn: isSet(object.avgReturn)
+                ? globalThis.Number(object.avgReturn)
+                : isSet(object.avg_return)
+                    ? globalThis.Number(object.avg_return)
+                    : 0,
+            totalPnl: isSet(object.totalPnl)
+                ? globalThis.Number(object.totalPnl)
+                : isSet(object.total_pnl)
+                    ? globalThis.Number(object.total_pnl)
+                    : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.sourceId !== "") {
+            obj.sourceId = message.sourceId;
+        }
+        if (message.sourceName !== "") {
+            obj.sourceName = message.sourceName;
+        }
+        if (message.tradeCount !== 0) {
+            obj.tradeCount = message.tradeCount;
+        }
+        if (message.winCount !== 0) {
+            obj.winCount = message.winCount;
+        }
+        if (message.winRate !== 0) {
+            obj.winRate = message.winRate;
+        }
+        if (message.avgReturn !== 0) {
+            obj.avgReturn = message.avgReturn;
+        }
+        if (message.totalPnl !== 0) {
+            obj.totalPnl = message.totalPnl;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SourceAttribution.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSourceAttribution();
+        message.sourceId = object.sourceId ?? "";
+        message.sourceName = object.sourceName ?? "";
+        message.tradeCount = object.tradeCount ?? 0;
+        message.winCount = object.winCount ?? 0;
+        message.winRate = object.winRate ?? 0;
+        message.avgReturn = object.avgReturn ?? 0;
+        message.totalPnl = object.totalPnl ?? 0;
+        return message;
+    },
+};
+function createBaseGetAttributionResponse() {
+    return { attributions: [] };
+}
+exports.GetAttributionResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.attributions) {
+            exports.SourceAttribution.encode(v, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetAttributionResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.attributions.push(exports.SourceAttribution.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            attributions: globalThis.Array.isArray(object?.attributions)
+                ? object.attributions.map((e) => exports.SourceAttribution.fromJSON(e))
+                : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.attributions?.length) {
+            obj.attributions = message.attributions.map((e) => exports.SourceAttribution.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetAttributionResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetAttributionResponse();
+        message.attributions = object.attributions?.map((e) => exports.SourceAttribution.fromPartial(e)) || [];
+        return message;
+    },
+};
 exports.AnalysisServiceService = {
     runBacktest: {
         path: "/xstockstrat.analysis.v1.AnalysisService/RunBacktest",
@@ -8727,6 +9040,19 @@ exports.AnalysisServiceService = {
         requestDeserialize: (value) => exports.QueryPnLPatternsRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.QueryPnLPatternsResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.QueryPnLPatternsResponse.decode(value),
+    },
+    /**
+     * Per-source trading-performance attribution over closed positions (feature 029). Read-only;
+     * aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
+     */
+    getAttribution: {
+        path: "/xstockstrat.analysis.v1.AnalysisService/GetAttribution",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.GetAttributionRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.GetAttributionRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.GetAttributionResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.GetAttributionResponse.decode(value),
     },
 };
 exports.AnalysisServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.AnalysisServiceService, "xstockstrat.analysis.v1.AnalysisService");

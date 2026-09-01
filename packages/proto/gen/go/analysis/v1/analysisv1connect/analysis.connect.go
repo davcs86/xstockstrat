@@ -87,6 +87,9 @@ const (
 	// AnalysisServiceQueryPnLPatternsProcedure is the fully-qualified name of the AnalysisService's
 	// QueryPnLPatterns RPC.
 	AnalysisServiceQueryPnLPatternsProcedure = "/xstockstrat.analysis.v1.AnalysisService/QueryPnLPatterns"
+	// AnalysisServiceGetAttributionProcedure is the fully-qualified name of the AnalysisService's
+	// GetAttribution RPC.
+	AnalysisServiceGetAttributionProcedure = "/xstockstrat.analysis.v1.AnalysisService/GetAttribution"
 )
 
 // AnalysisServiceClient is a client for the xstockstrat.analysis.v1.AnalysisService service.
@@ -128,6 +131,9 @@ type AnalysisServiceClient interface {
 	// Ranked P&L-attribution factors (feature 042): which indicator value-ranges and signals
 	// correlate with positive vs negative realized P&L, scoped by symbol/strategy/time window.
 	QueryPnLPatterns(context.Context, *connect.Request[v1.QueryPnLPatternsRequest]) (*connect.Response[v1.QueryPnLPatternsResponse], error)
+	// Per-source trading-performance attribution over closed positions (feature 029). Read-only;
+	// aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
+	GetAttribution(context.Context, *connect.Request[v1.GetAttributionRequest]) (*connect.Response[v1.GetAttributionResponse], error)
 }
 
 // NewAnalysisServiceClient constructs a client for the xstockstrat.analysis.v1.AnalysisService
@@ -249,6 +255,12 @@ func NewAnalysisServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(analysisServiceMethods.ByName("QueryPnLPatterns")),
 			connect.WithClientOptions(opts...),
 		),
+		getAttribution: connect.NewClient[v1.GetAttributionRequest, v1.GetAttributionResponse](
+			httpClient,
+			baseURL+AnalysisServiceGetAttributionProcedure,
+			connect.WithSchema(analysisServiceMethods.ByName("GetAttribution")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -272,6 +284,7 @@ type analysisServiceClient struct {
 	getStrategyAnalytics    *connect.Client[v1.GetStrategyAnalyticsRequest, v1.StrategyAnalytics]
 	getIndicatorSeries      *connect.Client[v1.GetIndicatorSeriesRequest, v1.GetIndicatorSeriesResponse]
 	queryPnLPatterns        *connect.Client[v1.QueryPnLPatternsRequest, v1.QueryPnLPatternsResponse]
+	getAttribution          *connect.Client[v1.GetAttributionRequest, v1.GetAttributionResponse]
 }
 
 // RunBacktest calls xstockstrat.analysis.v1.AnalysisService.RunBacktest.
@@ -364,6 +377,11 @@ func (c *analysisServiceClient) QueryPnLPatterns(ctx context.Context, req *conne
 	return c.queryPnLPatterns.CallUnary(ctx, req)
 }
 
+// GetAttribution calls xstockstrat.analysis.v1.AnalysisService.GetAttribution.
+func (c *analysisServiceClient) GetAttribution(ctx context.Context, req *connect.Request[v1.GetAttributionRequest]) (*connect.Response[v1.GetAttributionResponse], error) {
+	return c.getAttribution.CallUnary(ctx, req)
+}
+
 // AnalysisServiceHandler is an implementation of the xstockstrat.analysis.v1.AnalysisService
 // service.
 type AnalysisServiceHandler interface {
@@ -404,6 +422,9 @@ type AnalysisServiceHandler interface {
 	// Ranked P&L-attribution factors (feature 042): which indicator value-ranges and signals
 	// correlate with positive vs negative realized P&L, scoped by symbol/strategy/time window.
 	QueryPnLPatterns(context.Context, *connect.Request[v1.QueryPnLPatternsRequest]) (*connect.Response[v1.QueryPnLPatternsResponse], error)
+	// Per-source trading-performance attribution over closed positions (feature 029). Read-only;
+	// aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
+	GetAttribution(context.Context, *connect.Request[v1.GetAttributionRequest]) (*connect.Response[v1.GetAttributionResponse], error)
 }
 
 // NewAnalysisServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -521,6 +542,12 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 		connect.WithSchema(analysisServiceMethods.ByName("QueryPnLPatterns")),
 		connect.WithHandlerOptions(opts...),
 	)
+	analysisServiceGetAttributionHandler := connect.NewUnaryHandler(
+		AnalysisServiceGetAttributionProcedure,
+		svc.GetAttribution,
+		connect.WithSchema(analysisServiceMethods.ByName("GetAttribution")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.analysis.v1.AnalysisService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AnalysisServiceRunBacktestProcedure:
@@ -559,6 +586,8 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 			analysisServiceGetIndicatorSeriesHandler.ServeHTTP(w, r)
 		case AnalysisServiceQueryPnLPatternsProcedure:
 			analysisServiceQueryPnLPatternsHandler.ServeHTTP(w, r)
+		case AnalysisServiceGetAttributionProcedure:
+			analysisServiceGetAttributionHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -638,4 +667,8 @@ func (UnimplementedAnalysisServiceHandler) GetIndicatorSeries(context.Context, *
 
 func (UnimplementedAnalysisServiceHandler) QueryPnLPatterns(context.Context, *connect.Request[v1.QueryPnLPatternsRequest]) (*connect.Response[v1.QueryPnLPatternsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.QueryPnLPatterns is not implemented"))
+}
+
+func (UnimplementedAnalysisServiceHandler) GetAttribution(context.Context, *connect.Request[v1.GetAttributionRequest]) (*connect.Response[v1.GetAttributionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.GetAttribution is not implemented"))
 }

@@ -1783,6 +1783,40 @@ export interface QueryPnLPatternsResponse {
   negativeFactors: PnLPatternFactor[];
 }
 
+/** ── Signal-performance attribution (feature 029) ─────────────────────────────── */
+export interface GetAttributionRequest {
+  start?: Date | undefined;
+  end?:
+    | Date
+    | undefined;
+  /** optional filter — the signal_sources.slug; empty = all sources (open registry, C-04: string not enum) */
+  sourceId: string;
+}
+
+/**
+ * Per-source metrics. trade_count/win_count are DOUBLE (not int32): FR-3's exact-tie case
+ * contributes 0.5 to each tied source (AC-5); winner-takes-all contributes 1.0. total_pnl is
+ * NET of fees (realized_pnl − fees_total). avg_return is a percent over an approximate cost basis.
+ */
+export interface SourceAttribution {
+  /** signal_sources.slug (the snapshot's signal source) */
+  sourceId: string;
+  /** resolved via ingest ListSignalSources; falls back to the slug */
+  sourceName: string;
+  tradeCount: number;
+  winCount: number;
+  /** win_count / trade_count */
+  winRate: number;
+  /** mean per-trade net_pnl / cost_basis (percent, v1 approximation) */
+  avgReturn: number;
+  /** net of fees */
+  totalPnl: number;
+}
+
+export interface GetAttributionResponse {
+  attributions: SourceAttribution[];
+}
+
 function createBaseRunBacktestRequest(): RunBacktestRequest {
   return {
     strategyId: "",
@@ -9986,6 +10020,348 @@ export const QueryPnLPatternsResponse: MessageFns<QueryPnLPatternsResponse> = {
   },
 };
 
+function createBaseGetAttributionRequest(): GetAttributionRequest {
+  return { start: undefined, end: undefined, sourceId: "" };
+}
+
+export const GetAttributionRequest: MessageFns<GetAttributionRequest> = {
+  encode(message: GetAttributionRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.start !== undefined) {
+      Timestamp.encode(toTimestamp(message.start), writer.uint32(10).fork()).join();
+    }
+    if (message.end !== undefined) {
+      Timestamp.encode(toTimestamp(message.end), writer.uint32(18).fork()).join();
+    }
+    if (message.sourceId !== "") {
+      writer.uint32(26).string(message.sourceId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetAttributionRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetAttributionRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.start = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.end = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.sourceId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetAttributionRequest {
+    return {
+      start: isSet(object.start) ? fromJsonTimestamp(object.start) : undefined,
+      end: isSet(object.end) ? fromJsonTimestamp(object.end) : undefined,
+      sourceId: isSet(object.sourceId)
+        ? globalThis.String(object.sourceId)
+        : isSet(object.source_id)
+        ? globalThis.String(object.source_id)
+        : "",
+    };
+  },
+
+  toJSON(message: GetAttributionRequest): unknown {
+    const obj: any = {};
+    if (message.start !== undefined) {
+      obj.start = message.start.toISOString();
+    }
+    if (message.end !== undefined) {
+      obj.end = message.end.toISOString();
+    }
+    if (message.sourceId !== "") {
+      obj.sourceId = message.sourceId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetAttributionRequest>, I>>(base?: I): GetAttributionRequest {
+    return GetAttributionRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetAttributionRequest>, I>>(object: I): GetAttributionRequest {
+    const message = createBaseGetAttributionRequest();
+    message.start = object.start ?? undefined;
+    message.end = object.end ?? undefined;
+    message.sourceId = object.sourceId ?? "";
+    return message;
+  },
+};
+
+function createBaseSourceAttribution(): SourceAttribution {
+  return { sourceId: "", sourceName: "", tradeCount: 0, winCount: 0, winRate: 0, avgReturn: 0, totalPnl: 0 };
+}
+
+export const SourceAttribution: MessageFns<SourceAttribution> = {
+  encode(message: SourceAttribution, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.sourceId !== "") {
+      writer.uint32(10).string(message.sourceId);
+    }
+    if (message.sourceName !== "") {
+      writer.uint32(18).string(message.sourceName);
+    }
+    if (message.tradeCount !== 0) {
+      writer.uint32(25).double(message.tradeCount);
+    }
+    if (message.winCount !== 0) {
+      writer.uint32(33).double(message.winCount);
+    }
+    if (message.winRate !== 0) {
+      writer.uint32(41).double(message.winRate);
+    }
+    if (message.avgReturn !== 0) {
+      writer.uint32(49).double(message.avgReturn);
+    }
+    if (message.totalPnl !== 0) {
+      writer.uint32(57).double(message.totalPnl);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SourceAttribution {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSourceAttribution();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.sourceId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.sourceName = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 25) {
+            break;
+          }
+
+          message.tradeCount = reader.double();
+          continue;
+        }
+        case 4: {
+          if (tag !== 33) {
+            break;
+          }
+
+          message.winCount = reader.double();
+          continue;
+        }
+        case 5: {
+          if (tag !== 41) {
+            break;
+          }
+
+          message.winRate = reader.double();
+          continue;
+        }
+        case 6: {
+          if (tag !== 49) {
+            break;
+          }
+
+          message.avgReturn = reader.double();
+          continue;
+        }
+        case 7: {
+          if (tag !== 57) {
+            break;
+          }
+
+          message.totalPnl = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SourceAttribution {
+    return {
+      sourceId: isSet(object.sourceId)
+        ? globalThis.String(object.sourceId)
+        : isSet(object.source_id)
+        ? globalThis.String(object.source_id)
+        : "",
+      sourceName: isSet(object.sourceName)
+        ? globalThis.String(object.sourceName)
+        : isSet(object.source_name)
+        ? globalThis.String(object.source_name)
+        : "",
+      tradeCount: isSet(object.tradeCount)
+        ? globalThis.Number(object.tradeCount)
+        : isSet(object.trade_count)
+        ? globalThis.Number(object.trade_count)
+        : 0,
+      winCount: isSet(object.winCount)
+        ? globalThis.Number(object.winCount)
+        : isSet(object.win_count)
+        ? globalThis.Number(object.win_count)
+        : 0,
+      winRate: isSet(object.winRate)
+        ? globalThis.Number(object.winRate)
+        : isSet(object.win_rate)
+        ? globalThis.Number(object.win_rate)
+        : 0,
+      avgReturn: isSet(object.avgReturn)
+        ? globalThis.Number(object.avgReturn)
+        : isSet(object.avg_return)
+        ? globalThis.Number(object.avg_return)
+        : 0,
+      totalPnl: isSet(object.totalPnl)
+        ? globalThis.Number(object.totalPnl)
+        : isSet(object.total_pnl)
+        ? globalThis.Number(object.total_pnl)
+        : 0,
+    };
+  },
+
+  toJSON(message: SourceAttribution): unknown {
+    const obj: any = {};
+    if (message.sourceId !== "") {
+      obj.sourceId = message.sourceId;
+    }
+    if (message.sourceName !== "") {
+      obj.sourceName = message.sourceName;
+    }
+    if (message.tradeCount !== 0) {
+      obj.tradeCount = message.tradeCount;
+    }
+    if (message.winCount !== 0) {
+      obj.winCount = message.winCount;
+    }
+    if (message.winRate !== 0) {
+      obj.winRate = message.winRate;
+    }
+    if (message.avgReturn !== 0) {
+      obj.avgReturn = message.avgReturn;
+    }
+    if (message.totalPnl !== 0) {
+      obj.totalPnl = message.totalPnl;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SourceAttribution>, I>>(base?: I): SourceAttribution {
+    return SourceAttribution.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SourceAttribution>, I>>(object: I): SourceAttribution {
+    const message = createBaseSourceAttribution();
+    message.sourceId = object.sourceId ?? "";
+    message.sourceName = object.sourceName ?? "";
+    message.tradeCount = object.tradeCount ?? 0;
+    message.winCount = object.winCount ?? 0;
+    message.winRate = object.winRate ?? 0;
+    message.avgReturn = object.avgReturn ?? 0;
+    message.totalPnl = object.totalPnl ?? 0;
+    return message;
+  },
+};
+
+function createBaseGetAttributionResponse(): GetAttributionResponse {
+  return { attributions: [] };
+}
+
+export const GetAttributionResponse: MessageFns<GetAttributionResponse> = {
+  encode(message: GetAttributionResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.attributions) {
+      SourceAttribution.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetAttributionResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetAttributionResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.attributions.push(SourceAttribution.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetAttributionResponse {
+    return {
+      attributions: globalThis.Array.isArray(object?.attributions)
+        ? object.attributions.map((e: any) => SourceAttribution.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: GetAttributionResponse): unknown {
+    const obj: any = {};
+    if (message.attributions?.length) {
+      obj.attributions = message.attributions.map((e) => SourceAttribution.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetAttributionResponse>, I>>(base?: I): GetAttributionResponse {
+    return GetAttributionResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetAttributionResponse>, I>>(object: I): GetAttributionResponse {
+    const message = createBaseGetAttributionResponse();
+    message.attributions = object.attributions?.map((e) => SourceAttribution.fromPartial(e)) || [];
+    return message;
+  },
+};
+
 export type AnalysisServiceService = typeof AnalysisServiceService;
 export const AnalysisServiceService = {
   runBacktest: {
@@ -10203,6 +10579,21 @@ export const AnalysisServiceService = {
       Buffer.from(QueryPnLPatternsResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): QueryPnLPatternsResponse => QueryPnLPatternsResponse.decode(value),
   },
+  /**
+   * Per-source trading-performance attribution over closed positions (feature 029). Read-only;
+   * aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
+   */
+  getAttribution: {
+    path: "/xstockstrat.analysis.v1.AnalysisService/GetAttribution" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetAttributionRequest): Buffer =>
+      Buffer.from(GetAttributionRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetAttributionRequest => GetAttributionRequest.decode(value),
+    responseSerialize: (value: GetAttributionResponse): Buffer =>
+      Buffer.from(GetAttributionResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetAttributionResponse => GetAttributionResponse.decode(value),
+  },
 } as const;
 
 export interface AnalysisServiceServer extends UntypedServiceImplementation {
@@ -10253,6 +10644,11 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
    * correlate with positive vs negative realized P&L, scoped by symbol/strategy/time window.
    */
   queryPnLPatterns: handleUnaryCall<QueryPnLPatternsRequest, QueryPnLPatternsResponse>;
+  /**
+   * Per-source trading-performance attribution over closed positions (feature 029). Read-only;
+   * aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
+   */
+  getAttribution: handleUnaryCall<GetAttributionRequest, GetAttributionResponse>;
 }
 
 export interface AnalysisServiceClient extends Client {
@@ -10554,6 +10950,25 @@ export interface AnalysisServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: QueryPnLPatternsResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Per-source trading-performance attribution over closed positions (feature 029). Read-only;
+   * aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
+   */
+  getAttribution(
+    request: GetAttributionRequest,
+    callback: (error: ServiceError | null, response: GetAttributionResponse) => void,
+  ): ClientUnaryCall;
+  getAttribution(
+    request: GetAttributionRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetAttributionResponse) => void,
+  ): ClientUnaryCall;
+  getAttribution(
+    request: GetAttributionRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetAttributionResponse) => void,
   ): ClientUnaryCall;
 }
 

@@ -1869,6 +1869,98 @@ export type QueryPnLPatternsResponse = Message<"xstockstrat.analysis.v1.QueryPnL
  */
 export declare const QueryPnLPatternsResponseSchema: GenMessage<QueryPnLPatternsResponse>;
 /**
+ * ── Signal-performance attribution (feature 029) ───────────────────────────────
+ *
+ * @generated from message xstockstrat.analysis.v1.GetAttributionRequest
+ */
+export type GetAttributionRequest = Message<"xstockstrat.analysis.v1.GetAttributionRequest"> & {
+    /**
+     * @generated from field: google.protobuf.Timestamp start = 1;
+     */
+    start?: Timestamp | undefined;
+    /**
+     * @generated from field: google.protobuf.Timestamp end = 2;
+     */
+    end?: Timestamp | undefined;
+    /**
+     * optional filter — the signal_sources.slug; empty = all sources (open registry, C-04: string not enum)
+     *
+     * @generated from field: string source_id = 3;
+     */
+    sourceId: string;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.GetAttributionRequest.
+ * Use `create(GetAttributionRequestSchema)` to create a new message.
+ */
+export declare const GetAttributionRequestSchema: GenMessage<GetAttributionRequest>;
+/**
+ * Per-source metrics. trade_count/win_count are DOUBLE (not int32): FR-3's exact-tie case
+ * contributes 0.5 to each tied source (AC-5); winner-takes-all contributes 1.0. total_pnl is
+ * NET of fees (realized_pnl − fees_total). avg_return is a percent over an approximate cost basis.
+ *
+ * @generated from message xstockstrat.analysis.v1.SourceAttribution
+ */
+export type SourceAttribution = Message<"xstockstrat.analysis.v1.SourceAttribution"> & {
+    /**
+     * signal_sources.slug (the snapshot's signal source)
+     *
+     * @generated from field: string source_id = 1;
+     */
+    sourceId: string;
+    /**
+     * resolved via ingest ListSignalSources; falls back to the slug
+     *
+     * @generated from field: string source_name = 2;
+     */
+    sourceName: string;
+    /**
+     * @generated from field: double trade_count = 3;
+     */
+    tradeCount: number;
+    /**
+     * @generated from field: double win_count = 4;
+     */
+    winCount: number;
+    /**
+     * win_count / trade_count
+     *
+     * @generated from field: double win_rate = 5;
+     */
+    winRate: number;
+    /**
+     * mean per-trade net_pnl / cost_basis (percent, v1 approximation)
+     *
+     * @generated from field: double avg_return = 6;
+     */
+    avgReturn: number;
+    /**
+     * net of fees
+     *
+     * @generated from field: double total_pnl = 7;
+     */
+    totalPnl: number;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.SourceAttribution.
+ * Use `create(SourceAttributionSchema)` to create a new message.
+ */
+export declare const SourceAttributionSchema: GenMessage<SourceAttribution>;
+/**
+ * @generated from message xstockstrat.analysis.v1.GetAttributionResponse
+ */
+export type GetAttributionResponse = Message<"xstockstrat.analysis.v1.GetAttributionResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.SourceAttribution attributions = 1;
+     */
+    attributions: SourceAttribution[];
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.GetAttributionResponse.
+ * Use `create(GetAttributionResponseSchema)` to create a new message.
+ */
+export declare const GetAttributionResponseSchema: GenMessage<GetAttributionResponse>;
+/**
  * @generated from enum xstockstrat.analysis.v1.BacktestStatus
  */
 export declare enum BacktestStatus {
@@ -2547,5 +2639,16 @@ export declare const AnalysisService: GenService<{
         methodKind: "unary";
         input: typeof QueryPnLPatternsRequestSchema;
         output: typeof QueryPnLPatternsResponseSchema;
+    };
+    /**
+     * Per-source trading-performance attribution over closed positions (feature 029). Read-only;
+     * aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.GetAttribution
+     */
+    getAttribution: {
+        methodKind: "unary";
+        input: typeof GetAttributionRequestSchema;
+        output: typeof GetAttributionResponseSchema;
     };
 }>;

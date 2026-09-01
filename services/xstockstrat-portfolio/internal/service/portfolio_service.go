@@ -228,6 +228,9 @@ type orderFillPayload struct {
 	// (zero) on plain market/limit fills. Learned into the in-memory stop store so the
 	// Exposure surface can show risk-at-stop without a portfolio→trading edge.
 	StopPrice float64 `json:"stop_price"`
+	// Per-fill broker fee (feature 029); absent key ⇒ 0 (net == gross, AC-11). Accumulated into
+	// positions.fees_accum alongside realized_accum and emitted as fees_total on the close event.
+	Fees float64 `json:"fees"`
 }
 
 func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1.LedgerEvent) {
@@ -296,17 +299,24 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 		// The row is about to be deleted, so the cumulative realized goes into the emitted payload
 		// only (never persisted onto the deleted row). Read the prior accum + this closing delta.
 		var sealed float64
+		// feature 029 — seal the cumulative fees alongside realized: prior fees_accum + this fill's
+		// fee. realized_pnl stays GROSS/authoritative; net = realized_pnl - fees_total downstream.
+		var feesSealed float64
 		if existing != nil {
 			priorAccum, _ := s.repo.GetRealizedAccum(ctx, fill.UserID, fill.Symbol, mode, acctID)
 			sealed = priorAccum + delta
+			priorFees, _ := s.repo.GetFeesAccum(ctx, fill.UserID, fill.Symbol, mode, acctID)
+			feesSealed = priorFees + fill.Fees
 		}
 		_ = s.repo.ClosePosition(ctx, fill.UserID, fill.Symbol, mode, acctID)
 		s.emitEvent(ctx, "portfolio.position.closed", "portfolio:"+fill.UserID, map[string]interface{}{
 			"user_id": fill.UserID, "symbol": fill.Symbol, "account_id": acctID,
 			"trading_mode": mode.String(), "realized_pnl": sealed,
+			// feature 029 — additive; existing realized_pnl key unchanged (C-16 PRESERVE).
+			"fees_total": feesSealed,
 		})
 	} else {
-		_ = s.repo.UpsertPosition(ctx, fill.UserID, fill.Symbol, newQty, newAvgEntry, newCost, mode, acctID, delta)
+		_ = s.repo.UpsertPosition(ctx, fill.UserID, fill.Symbol, newQty, newAvgEntry, newCost, mode, acctID, delta, fill.Fees)
 		eventType := "portfolio.position.opened"
 		if existing != nil {
 			eventType = "portfolio.position.updated"
