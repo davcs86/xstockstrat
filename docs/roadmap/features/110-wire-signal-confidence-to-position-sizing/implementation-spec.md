@@ -1,6 +1,6 @@
 # Implementation Spec: wire-signal-confidence-to-position-sizing
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-08-31
 **Feature**: `docs/roadmap/features/110-wire-signal-confidence-to-position-sizing/feature.md`
 **Total Steps**: 8
@@ -63,7 +63,7 @@ exists — product-spec § Out of Scope). No new page/route, so no `NAV_GROUPS` 
 
 ### Step 1 — proto: add `signal_confidence` to `analysis.Opportunity`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -105,7 +105,7 @@ Both pass (additive field → non-breaking). Confirm no other `Opportunity` fiel
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/**`, `packages/proto/gen/python/**`, `packages/proto/gen/ts/**` — modify (generated)
@@ -136,7 +136,7 @@ Empty diff after a second run (stubs match the `.proto`). The Python `Opportunit
 
 ### Step 3 — service: populate `Opportunity.signal_confidence` in analysis
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -195,7 +195,7 @@ Empty diff after a second run (stubs match the `.proto`). The Python `Opportunit
 
 ### Step 4 — test: analysis signal_confidence producer + mapper
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -245,7 +245,7 @@ compliant, no `conftest.py` move.
 
 ### Step 5 — service: `OrderForm` scoped `signalConfidence` prop
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/OrderForm.tsx` — modify
@@ -305,7 +305,7 @@ Passes. Behavioral verification is Step 8 (e2e). Confirm by inspection that a mo
 
 ### Step 6 — service: wire `signalConfidence` at the symbol-page render site
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
@@ -351,7 +351,7 @@ verification is Step 8.
 
 ### Step 7 — service: delete the orphaned `SignalOrderTicket` + redirect stub; update coupled e2e specs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/SignalOrderTicket.tsx` — delete
@@ -408,7 +408,7 @@ the deleted route (AC-9).
 
 ### Step 8 — test: Playwright e2e for the scoped confidence ticket
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/` — create a new spec (e.g. `signal-confidence-ticket.spec.ts`)
