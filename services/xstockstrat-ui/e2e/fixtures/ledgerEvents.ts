@@ -80,3 +80,63 @@ export const LEDGER_EXPORT_EVENTS: LedgerExportFixtureRow[] = [
 // Sentinel event_type a test passes to make the mock throw FAILED_PRECONDITION, simulating
 // ledger.export.enabled=false (there is no config service in the e2e mock backend).
 export const EXPORT_DISABLED_SENTINEL = '__export_disabled__';
+
+// ── Feature 031: portfolio.position.closed events for the /insights performance dashboard ──
+// The dashboard derives every metric (equity curve, drawdown, rolling Sharpe, per-trade averages)
+// from these realized-close events. Stored NEUTRALLY (plain dates/numbers) so both consumers can
+// encode them their own way: the mock backend builds a message-init LedgerEvent (occurredAt via
+// timestampFromDate), while a spec's page.route fulfills the Connect-JSON WIRE shape
+// (occurredAt = RFC3339 string, payload Struct = plain object with the producer's snake_case keys)
+// via `closedPositionEventWire`. The last row is a LEGACY event lacking cost_basis/opened_at
+// (feature-031 additive keys) — excluded from the two per-trade averages but still counted in
+// totals and the equity curve (AC-13).
+export interface ClosedPositionRow {
+  sequence: number;
+  occurredAtIso: string;
+  realizedPnl: number;
+  costBasis?: number;
+  openedAtIso?: string;
+}
+
+export const CLOSED_POSITION_ROWS: ClosedPositionRow[] = [
+  { sequence: 1, occurredAtIso: '2026-01-10T15:00:00.000Z', realizedPnl: 100, costBasis: 2000, openedAtIso: '2026-01-05T15:00:00.000Z' },
+  { sequence: 2, occurredAtIso: '2026-02-10T15:00:00.000Z', realizedPnl: 200, costBasis: 4000, openedAtIso: '2026-02-05T15:00:00.000Z' },
+  { sequence: 3, occurredAtIso: '2026-03-10T15:00:00.000Z', realizedPnl: -50, costBasis: 1000, openedAtIso: '2026-03-05T15:00:00.000Z' },
+  { sequence: 4, occurredAtIso: '2026-04-10T15:00:00.000Z', realizedPnl: 150, costBasis: 3000, openedAtIso: '2026-04-05T15:00:00.000Z' },
+  { sequence: 5, occurredAtIso: '2026-05-10T15:00:00.000Z', realizedPnl: 80, costBasis: 1600, openedAtIso: '2026-05-05T15:00:00.000Z' },
+  { sequence: 6, occurredAtIso: '2026-06-05T15:00:00.000Z', realizedPnl: -120, costBasis: 2400, openedAtIso: '2026-06-01T15:00:00.000Z' },
+  { sequence: 7, occurredAtIso: '2026-06-15T15:00:00.000Z', realizedPnl: 300, costBasis: 6000, openedAtIso: '2026-06-10T15:00:00.000Z' },
+  { sequence: 8, occurredAtIso: '2026-06-25T15:00:00.000Z', realizedPnl: 90, costBasis: 1800, openedAtIso: '2026-06-20T15:00:00.000Z' },
+  { sequence: 9, occurredAtIso: '2026-07-10T15:00:00.000Z', realizedPnl: 60, costBasis: 1200, openedAtIso: '2026-07-05T15:00:00.000Z' },
+  // Legacy event (pre-feature-031): no cost_basis / opened_at (AC-13).
+  { sequence: 10, occurredAtIso: '2026-08-10T15:00:00.000Z', realizedPnl: 40 },
+];
+
+/** Total realized P&L across CLOSED_POSITION_ROWS — the equity curve's final value (AC-1). */
+export const CLOSED_POSITION_TOTAL_PNL = CLOSED_POSITION_ROWS.reduce((a, r) => a + r.realizedPnl, 0);
+
+/** One extra realized close a poll test appends to prove the 60s refetch (AC-6). */
+export const CLOSED_POSITION_POLL_ROW: ClosedPositionRow = {
+  sequence: 11,
+  occurredAtIso: '2026-08-20T15:00:00.000Z',
+  realizedPnl: 150,
+  costBasis: 3000,
+  openedAtIso: '2026-08-15T15:00:00.000Z',
+};
+
+/** Connect-JSON WIRE-shape LedgerEvent for a spec's page.route().fulfill (feature 031). */
+export function closedPositionEventWire(row: ClosedPositionRow): JsonObject {
+  const payload: JsonObject = { realized_pnl: row.realizedPnl };
+  if (row.costBasis !== undefined) payload.cost_basis = row.costBasis;
+  if (row.openedAtIso !== undefined) payload.opened_at = row.openedAtIso;
+  return {
+    eventId: `evt-closed-${row.sequence}`,
+    eventType: 'portfolio.position.closed',
+    sourceService: 'xstockstrat-portfolio',
+    streamKey: `portfolio:${TEST_USER_ID}`,
+    sequence: String(row.sequence),
+    userId: TEST_USER_ID,
+    occurredAt: row.occurredAtIso,
+    payload,
+  };
+}

@@ -1,6 +1,6 @@
 # Implementation Spec: strategy-performance-dashboard
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-08-31
 **Feature**: `docs/roadmap/features/031-strategy-performance-dashboard/feature.md`
 **Total Steps**: 11
@@ -61,7 +61,7 @@ the nav registration (Step 10), and the Playwright e2e that also centralizes the
 
 ### Step 1 — service: add `cost_basis` + `opened_at` to the `portfolio.position.closed` emit
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -138,7 +138,7 @@ grep -n "closedPositionPayload\|cost_basis\|opened_at" internal/service/portfoli
 
 ### Step 2 — test: portfolio emit carries `cost_basis` + `opened_at`; redelivered edge omits both
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_close_payload_test.go` — create
@@ -185,7 +185,7 @@ test on the pure payload builder is the required paired test (C-08).
 
 ### Step 3 — docs: document the two additive keys in the portfolio producer contract
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/CLAUDE.md` — modify (§ Ledger Events Emitted, the
@@ -222,7 +222,7 @@ grep -n "cost_basis\|opened_at\|feature 031" services/xstockstrat-portfolio/CLAU
 
 ### Step 4 — migration: seed the two `ui.performance.*` config keys (`023_ui_performance_keys`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/023_ui_performance_keys.up.sql` — create
@@ -280,7 +280,7 @@ ls services/xstockstrat-config/migrations/023_ui_performance_keys.up.sql service
 
 ### Step 5 — config: declare the two keys' defaults (ui CLAUDE.md + config-governance registered-keys log)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config` / `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/CLAUDE.md` — modify (add a "Config Keys Consumed" note for the two
@@ -319,7 +319,7 @@ grep -n "ui.performance.risk_free_rate_annual\|ui.performance.equity_curve_start
 
 ### Step 6 — service: wire the `/insights` BFF reads (ledger `queryEvents`, config `getConfig`, trading `getTradingEnvironment`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/insightsBff.ts` — modify
@@ -387,7 +387,7 @@ cd services/xstockstrat-ui && pnpm exec tsc --noEmit
 
 ### Step 7 — service: pure metric lib `performanceMetrics.ts` (equity curve, drawdown, Sharpe, summary, averages, window, config read)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/performanceMetrics.ts` — create
@@ -462,7 +462,7 @@ grep -n "buildEquityCurve\|maxDrawdown\|rollingSharpe\|avgReturnPct\|avgHoldTime
 
 ### Step 8 — test: `performanceMetrics.test.ts` vitest unit (RED) — AC-1..AC-5, AC-8, AC-11..AC-13
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/performanceMetrics.test.ts` — create
@@ -515,7 +515,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 9 — service: dashboard page + chart at `/insights/performance` (chart+Brush, date picker, 60s poll, paper label)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/performance/page.tsx` — create
@@ -589,7 +589,7 @@ cd services/xstockstrat-ui && pnpm run build   # /insights/performance route com
 
 ### Step 10 — service: register `/insights/performance` in the shared nav + extend the reachability walk (C-10(a))
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/navGroups.tsx` — modify
@@ -627,7 +627,7 @@ grep -n "Performance\|/insights/performance" src/components/shared/navGroups.tsx
 
 ### Step 11 — test: Playwright e2e for the dashboard (poll, zoom, date picker, paper label) + centralize the closed-position fixture
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/performance.spec.ts` — create
@@ -695,4 +695,26 @@ grep -n "ledgerEvents" e2e/fixtures/INVENTORY.md
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **Step 1 (producer payload):** the base `portfolio.position.closed` emit already carried a
+  **sixth** key, `fees_total` (added by feature 029, which merged after this spec was written), on
+  top of the five the spec listed. `closedPositionPayload` preserves all six base keys unchanged and
+  adds `cost_basis`/`opened_at` additively — no base key dropped (C-16).
+- **Step 9 (paper/live label):** the spec's parenthetical "`TradingModeBadge` … shows nothing in
+  production" mismatches the primitive's real behavior (it renders a **"live"** badge in live mode,
+  not nothing). Resolved by rendering the general `TradingModeBadge` **plus** a dedicated,
+  paper-only `data-testid="paper-trading-label"` span — present in paper, absent in live — so
+  AC-9/AC-10 are unambiguous. The dashboard also mounts its **own** `<AccountProvider>` (rather than
+  relying on `SignalOrderTicket`'s, which is being removed by feature 110 and is not in this branch)
+  — self-contained and correct regardless of 110's merge order.
+- **Step 11 (fixtures/mock):** `e2e/fixtures/ledgerEvents.ts`, `mock-backend.ts` `queryEvents`,
+  `getConfig`, and `getTradingEnvironment` **already existed** (feature 021 created the fixture file;
+  the handlers pre-dated this feature). So Step 11 **extended** rather than created: added
+  `CLOSED_POSITION_ROWS` + `closedPositionEventWire` to the fixture, a `portfolio.position.closed`
+  branch to `queryEvents`, and a `namespace==='ui'` branch to `getConfig` (paper is already the
+  `getTradingEnvironment` default). AC-6's 60s poll uses `page.clock` (the screener-spec precedent)
+  with a call counter; scenario-specific data (live mode, poll append) is driven by `page.route` at
+  the browser boundary, reusing the centralized fixture. Added a `performance-summary` testid so a
+  `$`-value assertion can't collide with a chart Y-axis tick.
+- **RED→GREEN evidence:** Step 8 vitest captured RED (module-missing) then GREEN (154 pass);
+  Step 10 nav-reachability + Step 11 performance e2e captured GREEN against the production bundle
+  (8/8 performance, 4/4 nav-reachability, 12/12 ledger-export + reconciliation regression).

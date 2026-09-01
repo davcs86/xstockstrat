@@ -309,12 +309,8 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 			feesSealed = priorFees + fill.Fees
 		}
 		_ = s.repo.ClosePosition(ctx, fill.UserID, fill.Symbol, mode, acctID)
-		s.emitEvent(ctx, "portfolio.position.closed", "portfolio:"+fill.UserID, map[string]interface{}{
-			"user_id": fill.UserID, "symbol": fill.Symbol, "account_id": acctID,
-			"trading_mode": mode.String(), "realized_pnl": sealed,
-			// feature 029 — additive; existing realized_pnl key unchanged (C-16 PRESERVE).
-			"fees_total": feesSealed,
-		})
+		s.emitEvent(ctx, "portfolio.position.closed", "portfolio:"+fill.UserID,
+			closedPositionPayload(fill.UserID, fill.Symbol, acctID, mode.String(), sealed, feesSealed, existing))
 	} else {
 		_ = s.repo.UpsertPosition(ctx, fill.UserID, fill.Symbol, newQty, newAvgEntry, newCost, mode, acctID, delta, fill.Fees)
 		eventType := "portfolio.position.opened"
@@ -339,6 +335,26 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 // reconciliation) are left untouched so their authoritative mark-to-market figures reconcile
 // with broker equity instead of being overwritten by a marketdata mid-quote. Only positions
 // the broker did not value (e.g. a fresh order-fill position) fall back to mid-quote enrichment.
+// closedPositionPayload builds the portfolio.position.closed emit payload. The base keys are the
+// producer contract — user_id/symbol/account_id/trading_mode/realized_pnl (feature 042) plus
+// fees_total (feature 029) — never dropped/renamed (C-16). cost_basis + opened_at (feature 031) are
+// added ONLY when the closing position row was present (existing != nil): a redelivered post-close
+// fill (existing == nil) omits both, matching the realized_pnl/fees_total 0 it already emits there.
+// opened_at is RFC3339 (structpb.NewValue rejects time.Time; the as_of precedent). The UI /insights
+// performance dashboard reads cost_basis for avg-return-% and opened_at for avg-hold-time.
+func closedPositionPayload(userID, symbol, acctID, mode string, sealed, feesSealed float64, existing *portfoliov1.Position) map[string]interface{} {
+	payload := map[string]interface{}{
+		"user_id": userID, "symbol": symbol, "account_id": acctID,
+		"trading_mode": mode, "realized_pnl": sealed,
+		"fees_total": feesSealed,
+	}
+	if existing != nil {
+		payload["cost_basis"] = existing.CostBasis
+		payload["opened_at"] = existing.OpenedAt.AsTime().Format(time.RFC3339)
+	}
+	return payload
+}
+
 func (s *PortfolioService) enrichPositions(ctx context.Context, positions []*portfoliov1.Position) {
 	for _, p := range positions {
 		if p.CurrentPrice > 0 {

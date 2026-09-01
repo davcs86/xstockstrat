@@ -247,6 +247,17 @@ Only the **config-ui audit route** touches the DB: `src/app/config-ui/api/audit/
 part of the platform's 20-connection budget (root CLAUDE.md § Connection Pool Budget) — do not raise it
 without re-checking that table. All other segments are stateless.
 
+## Config Keys Consumed
+
+Namespace: `ui`. Read **one-shot** via `GetConfig(namespace: 'ui')` in `insightsBff.ts` — the UI is a
+stateless BFF with **no `WatchConfig` subscription** (it cannot hold a server stream). Values are read
+with an oneof-presence check (never `value || default`), so a stored `0` / empty string survives.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `ui.performance.risk_free_rate_annual` | float | `0.045` | Annualized risk-free rate for the `/insights/performance` dashboard rolling-30d Sharpe (feature 031, FR-3). A stored `0` is legitimate. Seed migration `023_ui_performance_keys`. |
+| `ui.performance.equity_curve_start_date` | string | `""` (auto = earliest closed-position date) | ISO date the cumulative-P&L equity curve starts from (feature 031, FR-1). Empty ⇒ the UI defaults to the earliest closed-position date. Seed migration `023_ui_performance_keys`. |
+
 ## Environment Variables
 
 Per the root naming convention (`<SERVICE>_ENDPOINT`, gRPC `host:port`).
