@@ -102,6 +102,20 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 166 — mcp-client-signal-source (`xstockstrat-config` / `xstockstrat-ingest`)
+
+**Registers** two non-secret loop keys (seed migration `025_ingest_mcp_client_keys`, namespace-relative
+`key` column): `ingest.mcp_client.poll_interval_seconds` (int, default `300`) and
+`ingest.mcp_client.request_timeout_seconds` (int, default `30`) — the server-side MCP query loop's
+cadence and per-call timeout, both clamped to ≥1 at read (a loop-side clamp cannot busy-loop on a
+settable 0; the `SCALAR_BOUNDS_REGISTRY` hardening was declined in favor of the clamp). Declared in
+`services/xstockstrat-ingest/CLAUDE.md` § Config Keys Consumed. **NNN pre-assigned `025`** per
+`merge-order.md`; must merge **after** `022`/`023`/`024` (golang-migrate numeric-order apply).
+**Also introduces a dynamic secret key family** `ingest.mcp_credential.<slug>` (`is_secret=true`, one
+per registered `mcp_client` source) — **not seeded**; written at registration via
+`SetConfig(is_secret=true, create_key=true)` and resolvable only by ingest via `GetSecret` under the
+new `SECRET_CALLER_ALLOWLIST` `keyPrefixes: ['mcp_credential.']` grant (`authz.ts`).
+
 ### feature 095 — opportunity-live-market-enrichment (`xstockstrat-analysis`)
 
 **Registers** `analysis.opportunity.sparkline_bars` (int, default `20`) — the number of most-recent
