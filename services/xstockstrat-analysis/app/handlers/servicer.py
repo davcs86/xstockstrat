@@ -3601,6 +3601,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 else:
                     continue  # speculative sell-with-no-position → not actionable, drop
 
+            # feature 110 — carry the raw max ExternalSignal.conviction (JSONB-ride via
+            # readiness_json, no column). _best_sig_conv stays -1.0 when the symbol had no active
+            # signal → leave unset so Opportunity.signal_confidence is a genuine explicit-presence
+            # unset (P-03), never a fabricated 0.0. Parallel to conviction/signal_axis (post-rank).
+            if c["_best_sig_conv"] >= 0.0:
+                readiness["signal_confidence"] = c["_best_sig_conv"]
+
             rows.append(
                 {
                     "opportunity_key": _opportunity_key(user_id, sym, strat),
@@ -4111,6 +4118,11 @@ def _row_to_opportunity(row: dict) -> "analysis_pb2.Opportunity":
     stop_price = readiness.get("stop_price")
     if stop_price is not None:
         opp.stop_price = float(stop_price)
+    # feature 110 — the raw max ExternalSignal.conviction, carried from readiness_json as
+    # explicit-presence (unset when the symbol had no active signal — never a fabricated 0.0).
+    signal_confidence = readiness.get("signal_confidence")
+    if signal_confidence is not None:
+        opp.signal_confidence = float(signal_confidence)
     return opp
 
 

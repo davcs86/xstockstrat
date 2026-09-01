@@ -254,16 +254,17 @@ test.describe('Offline account UI gaps (feature 159)', () => {
     await expect(brokerCard.getByText('Day P&L')).toBeVisible();
   });
 
-  test('@AC-1 the insights Signal-detail ticket keeps the broker ticket for an offline account', async ({
+  test('@AC-1 the signal-detail ticket keeps the broker ticket for an offline account', async ({
     page,
   }) => {
-    // Only an offline account registered → AccountContext auto-selects it. The insights mount passes
-    // allowOfflineRecord={false}, so the broker ticket (not the Record-order control) must render there.
+    // Only an offline account registered → AccountContext auto-selects it. The signal-detail mount
+    // passes allowOfflineRecord={false}, so the broker ticket (not the Record-order control) renders.
     await routeAccounts(page, [BROKER_ACCOUNT_OFFLINE]);
     await addAuthCookie(page);
-    // The Signal-detail page polls several data sources, so `load` may never settle — wait only for the
-    // DOM, then let the order-ticket column (SignalOrderTicket → OrderForm) hydrate on its own.
-    await page.goto('/insights/market/AAPL', { waitUntil: 'domcontentloaded' });
+    // The signal-detail page (feature 125's unified /trader/positions/[symbol]) polls several data
+    // sources, so `load` may never settle — wait only for the DOM, then let the order-ticket column
+    // (OrderForm) hydrate on its own.
+    await page.goto('/trader/positions/AAPL', { waitUntil: 'domcontentloaded' });
 
     // The OrderForm renders its title as a card heading — scope to the heading role so we don't collide
     // with the page's "Place order" toggle button.
