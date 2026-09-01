@@ -16,6 +16,9 @@ import (
 // ErrWatchlistNotFound is returned when a watchlist row does not exist.
 var ErrWatchlistNotFound = errors.New("watchlist not found")
 
+// ErrBindingNotFound is returned when the (watchlist_id, symbol) row does not exist (feature 167).
+var ErrBindingNotFound = errors.New("watchlist binding not found")
+
 // WatchlistRepo handles reads and writes for user-owned watchlists. It reuses the
 // portfolio service's existing pgxpool (see PortfolioRepo.Pool) — no second pool.
 //
@@ -201,7 +204,7 @@ func (r *WatchlistRepo) AddSymbols(ctx context.Context, watchlistID string, bind
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	if err := touchWatchlistTx(ctx, tx, watchlistID); err != nil {
+	if _, err := touchWatchlistTx(ctx, tx, watchlistID); err != nil {
 		return nil, err
 	}
 	if err := insertBindingsTx(ctx, tx, watchlistID, bindings); err != nil {
@@ -221,7 +224,7 @@ func (r *WatchlistRepo) RemoveSymbols(ctx context.Context, watchlistID string, s
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	if err := touchWatchlistTx(ctx, tx, watchlistID); err != nil {
+	if _, err := touchWatchlistTx(ctx, tx, watchlistID); err != nil {
 		return nil, err
 	}
 	if len(symbols) > 0 {
@@ -235,6 +238,46 @@ func (r *WatchlistRepo) RemoveSymbols(ctx context.Context, watchlistID string, s
 		return nil, fmt.Errorf("commit: %w", err)
 	}
 	return r.GetByID(ctx, watchlistID)
+}
+
+// UpdateBinding rebinds one symbol's strategy_id in a single row (feature 167). It writes ONLY
+// strategy_id; RETURNING source reads the untouched provenance back (the fails-080 reset trap is
+// structurally impossible here). An empty result (no such symbol) → ErrBindingNotFound. It then bumps
+// the parent watchlists.updated_at and returns that list-level timestamp for the response.
+func (r *WatchlistRepo) UpdateBinding(ctx context.Context, watchlistID, symbol, strategyID string) (*portfoliov1.WatchlistBinding, time.Time, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, time.Time{}, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var (
+		sym, strat string
+		source     int16
+	)
+	err = tx.QueryRow(ctx,
+		`UPDATE portfolio.watchlist_symbols SET strategy_id = $3
+		 WHERE watchlist_id = $1 AND symbol = $2
+		 RETURNING symbol, strategy_id, source`,
+		watchlistID, symbol, strategyID).Scan(&sym, &strat, &source)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, time.Time{}, ErrBindingNotFound
+	}
+	if err != nil {
+		return nil, time.Time{}, fmt.Errorf("update binding: %w", err)
+	}
+	updatedAt, err := touchWatchlistTx(ctx, tx, watchlistID)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, time.Time{}, fmt.Errorf("commit: %w", err)
+	}
+	return &portfoliov1.WatchlistBinding{
+		Symbol:     sym,
+		StrategyId: strat,
+		Source:     portfoliov1.WatchlistEntrySource(source),
+	}, updatedAt, nil
 }
 
 // CountByUser returns how many watchlists a user owns (for the per-user cap).
@@ -302,16 +345,21 @@ func bindingSymbols(binds []*portfoliov1.WatchlistBinding) []string {
 	return out
 }
 
-// touchWatchlistTx bumps updated_at and verifies the row exists (ErrWatchlistNotFound otherwise).
-func touchWatchlistTx(ctx context.Context, tx pgx.Tx, watchlistID string) error {
-	ct, err := tx.Exec(ctx, `UPDATE portfolio.watchlists SET updated_at = now() WHERE watchlist_id = $1`, watchlistID)
+// touchWatchlistTx bumps updated_at, verifies the row exists (ErrWatchlistNotFound otherwise), and
+// returns the bumped timestamp so a caller (feature 167 UpdateBinding) can source a response
+// updated_at from the parent watchlists row without a second query.
+func touchWatchlistTx(ctx context.Context, tx pgx.Tx, watchlistID string) (time.Time, error) {
+	var updatedAt time.Time
+	err := tx.QueryRow(ctx,
+		`UPDATE portfolio.watchlists SET updated_at = now() WHERE watchlist_id = $1 RETURNING updated_at`,
+		watchlistID).Scan(&updatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return time.Time{}, ErrWatchlistNotFound
+	}
 	if err != nil {
-		return fmt.Errorf("touch watchlist: %w", err)
+		return time.Time{}, fmt.Errorf("touch watchlist: %w", err)
 	}
-	if ct.RowsAffected() == 0 {
-		return ErrWatchlistNotFound
-	}
-	return nil
+	return updatedAt, nil
 }
 
 // insertBindingsTx inserts (symbol, strategy_id) bindings (already normalized),

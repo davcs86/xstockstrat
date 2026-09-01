@@ -23,6 +23,7 @@ const (
 	MarketDataService_StreamQuotes_FullMethodName         = "/xstockstrat.marketdata.v1.MarketDataService/StreamQuotes"
 	MarketDataService_GetBars_FullMethodName              = "/xstockstrat.marketdata.v1.MarketDataService/GetBars"
 	MarketDataService_GetLatestQuote_FullMethodName       = "/xstockstrat.marketdata.v1.MarketDataService/GetLatestQuote"
+	MarketDataService_GetLatestPrice_FullMethodName       = "/xstockstrat.marketdata.v1.MarketDataService/GetLatestPrice"
 	MarketDataService_BackfillBars_FullMethodName         = "/xstockstrat.marketdata.v1.MarketDataService/BackfillBars"
 	MarketDataService_GetDataCoverage_FullMethodName      = "/xstockstrat.marketdata.v1.MarketDataService/GetDataCoverage"
 	MarketDataService_DeleteBackfilledData_FullMethodName = "/xstockstrat.marketdata.v1.MarketDataService/DeleteBackfilledData"
@@ -46,6 +47,8 @@ type MarketDataServiceClient interface {
 	GetBars(ctx context.Context, in *GetBarsRequest, opts ...grpc.CallOption) (*GetBarsResponse, error)
 	// Latest quote snapshot
 	GetLatestQuote(ctx context.Context, in *GetLatestQuoteRequest, opts ...grpc.CallOption) (*Quote, error)
+	// Latest trade price + prior-session daily close for the Decide surface (feature 095).
+	GetLatestPrice(ctx context.Context, in *GetLatestPriceRequest, opts ...grpc.CallOption) (*LatestPrice, error)
 	// Trigger historical backfill (used by xstockstrat-ingest)
 	BackfillBars(ctx context.Context, in *BackfillBarsRequest, opts ...grpc.CallOption) (*BackfillBarsResponse, error)
 	// Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe
@@ -120,6 +123,16 @@ func (c *marketDataServiceClient) GetLatestQuote(ctx context.Context, in *GetLat
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Quote)
 	err := c.cc.Invoke(ctx, MarketDataService_GetLatestQuote_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *marketDataServiceClient) GetLatestPrice(ctx context.Context, in *GetLatestPriceRequest, opts ...grpc.CallOption) (*LatestPrice, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LatestPrice)
+	err := c.cc.Invoke(ctx, MarketDataService_GetLatestPrice_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -201,6 +214,8 @@ type MarketDataServiceServer interface {
 	GetBars(context.Context, *GetBarsRequest) (*GetBarsResponse, error)
 	// Latest quote snapshot
 	GetLatestQuote(context.Context, *GetLatestQuoteRequest) (*Quote, error)
+	// Latest trade price + prior-session daily close for the Decide surface (feature 095).
+	GetLatestPrice(context.Context, *GetLatestPriceRequest) (*LatestPrice, error)
 	// Trigger historical backfill (used by xstockstrat-ingest)
 	BackfillBars(context.Context, *BackfillBarsRequest) (*BackfillBarsResponse, error)
 	// Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe
@@ -233,6 +248,9 @@ func (UnimplementedMarketDataServiceServer) GetBars(context.Context, *GetBarsReq
 }
 func (UnimplementedMarketDataServiceServer) GetLatestQuote(context.Context, *GetLatestQuoteRequest) (*Quote, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetLatestQuote not implemented")
+}
+func (UnimplementedMarketDataServiceServer) GetLatestPrice(context.Context, *GetLatestPriceRequest) (*LatestPrice, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetLatestPrice not implemented")
 }
 func (UnimplementedMarketDataServiceServer) BackfillBars(context.Context, *BackfillBarsRequest) (*BackfillBarsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method BackfillBars not implemented")
@@ -326,6 +344,24 @@ func _MarketDataService_GetLatestQuote_Handler(srv interface{}, ctx context.Cont
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MarketDataServiceServer).GetLatestQuote(ctx, req.(*GetLatestQuoteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MarketDataService_GetLatestPrice_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetLatestPriceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketDataServiceServer).GetLatestPrice(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketDataService_GetLatestPrice_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketDataServiceServer).GetLatestPrice(ctx, req.(*GetLatestPriceRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -452,6 +488,10 @@ var MarketDataService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetLatestQuote",
 			Handler:    _MarketDataService_GetLatestQuote_Handler,
+		},
+		{
+			MethodName: "GetLatestPrice",
+			Handler:    _MarketDataService_GetLatestPrice_Handler,
 		},
 		{
 			MethodName: "BackfillBars",

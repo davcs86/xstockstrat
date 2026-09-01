@@ -5,13 +5,79 @@
 //   protoc               unknown
 // source: identity/v1/identity.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IdentityServiceClient = exports.IdentityServiceService = exports.UpdateUserMetadataResponse = exports.UpdateUserMetadataRequest = exports.GetUserMetadataResponse = exports.GetUserMetadataRequest = exports.UserMetadata = exports.RevokeAuthorizedAppResponse = exports.RevokeAuthorizedAppRequest = exports.ListAuthorizedAppsResponse = exports.ListAuthorizedAppsRequest = exports.AuthorizedApp = exports.RefreshOAuthTokenRequest = exports.OAuthTokenResponse = exports.ExchangeAuthCodeRequest = exports.IssueAuthCodeResponse = exports.IssueAuthCodeRequest = exports.GetOAuthClientRequest = exports.RegisterOAuthClientRequest = exports.OAuthClient = exports.RevokeTokenResponse = exports.RevokeTokenRequest = exports.RefreshTokenRequest = exports.ValidateTokenRequest = exports.TokenClaims = exports.AuthTokenResponse = exports.AuthenticateUserRequest = exports.protobufPackage = void 0;
+exports.IdentityServiceClient = exports.IdentityServiceService = exports.SetUserActiveResponse = exports.SetUserActiveRequest = exports.SetUserRolesResponse = exports.SetUserRolesRequest = exports.UpdatePasswordResponse = exports.UpdatePasswordRequest = exports.GetUserResponse = exports.GetUserRequest = exports.ListUsersResponse = exports.ListUsersRequest = exports.CreateUserResponse = exports.CreateUserRequest = exports.User = exports.UpdateUserMetadataResponse = exports.UpdateUserMetadataRequest = exports.GetUserMetadataResponse = exports.GetUserMetadataRequest = exports.UserMetadata = exports.RevokeAuthorizedAppResponse = exports.RevokeAuthorizedAppRequest = exports.ListAuthorizedAppsResponse = exports.ListAuthorizedAppsRequest = exports.AuthorizedApp = exports.RefreshOAuthTokenRequest = exports.OAuthTokenResponse = exports.ExchangeAuthCodeRequest = exports.IssueAuthCodeResponse = exports.IssueAuthCodeRequest = exports.GetOAuthClientRequest = exports.RegisterOAuthClientRequest = exports.OAuthClient = exports.RevokeTokenResponse = exports.RevokeTokenRequest = exports.RefreshTokenRequest = exports.ValidateTokenRequest = exports.TokenClaims = exports.AuthTokenResponse = exports.AuthenticateUserRequest = exports.Role = exports.protobufPackage = void 0;
+exports.roleFromJSON = roleFromJSON;
+exports.roleToJSON = roleToJSON;
+exports.roleToNumber = roleToNumber;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
 const struct_1 = require("../../google/protobuf/struct");
 const timestamp_1 = require("../../google/protobuf/timestamp");
 exports.protobufPackage = "xstockstrat.identity.v1";
+/**
+ * ── User management (admin-gated, feature 043) ───────────────────────────────
+ * Closed role set (C-04). Mirrors the viewer/trader/admin roles the platform already uses;
+ * TokenClaims.roles stays a free-string list (JWT claim shape, unchanged).
+ */
+var Role;
+(function (Role) {
+    Role["ROLE_UNSPECIFIED"] = "ROLE_UNSPECIFIED";
+    Role["ROLE_ADMIN"] = "ROLE_ADMIN";
+    Role["ROLE_TRADER"] = "ROLE_TRADER";
+    Role["ROLE_VIEWER"] = "ROLE_VIEWER";
+    Role["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(Role || (exports.Role = Role = {}));
+function roleFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "ROLE_UNSPECIFIED":
+            return Role.ROLE_UNSPECIFIED;
+        case 1:
+        case "ROLE_ADMIN":
+            return Role.ROLE_ADMIN;
+        case 2:
+        case "ROLE_TRADER":
+            return Role.ROLE_TRADER;
+        case 3:
+        case "ROLE_VIEWER":
+            return Role.ROLE_VIEWER;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return Role.UNRECOGNIZED;
+    }
+}
+function roleToJSON(object) {
+    switch (object) {
+        case Role.ROLE_UNSPECIFIED:
+            return "ROLE_UNSPECIFIED";
+        case Role.ROLE_ADMIN:
+            return "ROLE_ADMIN";
+        case Role.ROLE_TRADER:
+            return "ROLE_TRADER";
+        case Role.ROLE_VIEWER:
+            return "ROLE_VIEWER";
+        case Role.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function roleToNumber(object) {
+    switch (object) {
+        case Role.ROLE_UNSPECIFIED:
+            return 0;
+        case Role.ROLE_ADMIN:
+            return 1;
+        case Role.ROLE_TRADER:
+            return 2;
+        case Role.ROLE_VIEWER:
+            return 3;
+        case Role.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
 function createBaseAuthenticateUserRequest() {
     return { email: "", password: "" };
 }
@@ -2039,6 +2105,847 @@ exports.UpdateUserMetadataResponse = {
         return message;
     },
 };
+function createBaseUser() {
+    return { userId: "", email: "", roles: [], isActive: false, createdAt: undefined };
+}
+exports.User = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.userId !== "") {
+            writer.uint32(10).string(message.userId);
+        }
+        if (message.email !== "") {
+            writer.uint32(18).string(message.email);
+        }
+        writer.uint32(26).fork();
+        for (const v of message.roles) {
+            writer.int32(roleToNumber(v));
+        }
+        writer.join();
+        if (message.isActive !== false) {
+            writer.uint32(32).bool(message.isActive);
+        }
+        if (message.createdAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(42).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseUser();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.email = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag === 24) {
+                        message.roles.push(roleFromJSON(reader.int32()));
+                        continue;
+                    }
+                    if (tag === 26) {
+                        const end2 = reader.uint32() + reader.pos;
+                        while (reader.pos < end2) {
+                            message.roles.push(roleFromJSON(reader.int32()));
+                        }
+                        continue;
+                    }
+                    break;
+                }
+                case 4: {
+                    if (tag !== 32) {
+                        break;
+                    }
+                    message.isActive = reader.bool();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.createdAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
+            email: isSet(object.email) ? globalThis.String(object.email) : "",
+            roles: globalThis.Array.isArray(object?.roles) ? object.roles.map((e) => roleFromJSON(e)) : [],
+            isActive: isSet(object.isActive)
+                ? globalThis.Boolean(object.isActive)
+                : isSet(object.is_active)
+                    ? globalThis.Boolean(object.is_active)
+                    : false,
+            createdAt: isSet(object.createdAt)
+                ? fromJsonTimestamp(object.createdAt)
+                : isSet(object.created_at)
+                    ? fromJsonTimestamp(object.created_at)
+                    : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
+        if (message.email !== "") {
+            obj.email = message.email;
+        }
+        if (message.roles?.length) {
+            obj.roles = message.roles.map((e) => roleToJSON(e));
+        }
+        if (message.isActive !== false) {
+            obj.isActive = message.isActive;
+        }
+        if (message.createdAt !== undefined) {
+            obj.createdAt = message.createdAt.toISOString();
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.User.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseUser();
+        message.userId = object.userId ?? "";
+        message.email = object.email ?? "";
+        message.roles = object.roles?.map((e) => e) || [];
+        message.isActive = object.isActive ?? false;
+        message.createdAt = object.createdAt ?? undefined;
+        return message;
+    },
+};
+function createBaseCreateUserRequest() {
+    return { email: "", password: "", roles: [] };
+}
+exports.CreateUserRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.email !== "") {
+            writer.uint32(10).string(message.email);
+        }
+        if (message.password !== "") {
+            writer.uint32(18).string(message.password);
+        }
+        writer.uint32(26).fork();
+        for (const v of message.roles) {
+            writer.int32(roleToNumber(v));
+        }
+        writer.join();
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseCreateUserRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.email = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.password = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag === 24) {
+                        message.roles.push(roleFromJSON(reader.int32()));
+                        continue;
+                    }
+                    if (tag === 26) {
+                        const end2 = reader.uint32() + reader.pos;
+                        while (reader.pos < end2) {
+                            message.roles.push(roleFromJSON(reader.int32()));
+                        }
+                        continue;
+                    }
+                    break;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            email: isSet(object.email) ? globalThis.String(object.email) : "",
+            password: isSet(object.password) ? globalThis.String(object.password) : "",
+            roles: globalThis.Array.isArray(object?.roles) ? object.roles.map((e) => roleFromJSON(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.email !== "") {
+            obj.email = message.email;
+        }
+        if (message.password !== "") {
+            obj.password = message.password;
+        }
+        if (message.roles?.length) {
+            obj.roles = message.roles.map((e) => roleToJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.CreateUserRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseCreateUserRequest();
+        message.email = object.email ?? "";
+        message.password = object.password ?? "";
+        message.roles = object.roles?.map((e) => e) || [];
+        return message;
+    },
+};
+function createBaseCreateUserResponse() {
+    return { user: undefined };
+}
+exports.CreateUserResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.user !== undefined) {
+            exports.User.encode(message.user, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseCreateUserResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.user = exports.User.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { user: isSet(object.user) ? exports.User.fromJSON(object.user) : undefined };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.user !== undefined) {
+            obj.user = exports.User.toJSON(message.user);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.CreateUserResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseCreateUserResponse();
+        message.user = (object.user !== undefined && object.user !== null) ? exports.User.fromPartial(object.user) : undefined;
+        return message;
+    },
+};
+function createBaseListUsersRequest() {
+    return {};
+}
+exports.ListUsersRequest = {
+    encode(_, writer = new wire_1.BinaryWriter()) {
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListUsersRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(_) {
+        return {};
+    },
+    toJSON(_) {
+        const obj = {};
+        return obj;
+    },
+    create(base) {
+        return exports.ListUsersRequest.fromPartial(base ?? {});
+    },
+    fromPartial(_) {
+        const message = createBaseListUsersRequest();
+        return message;
+    },
+};
+function createBaseListUsersResponse() {
+    return { users: [] };
+}
+exports.ListUsersResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.users) {
+            exports.User.encode(v, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListUsersResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.users.push(exports.User.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { users: globalThis.Array.isArray(object?.users) ? object.users.map((e) => exports.User.fromJSON(e)) : [] };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.users?.length) {
+            obj.users = message.users.map((e) => exports.User.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListUsersResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListUsersResponse();
+        message.users = object.users?.map((e) => exports.User.fromPartial(e)) || [];
+        return message;
+    },
+};
+function createBaseGetUserRequest() {
+    return { userId: "" };
+}
+exports.GetUserRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.userId !== "") {
+            writer.uint32(10).string(message.userId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetUserRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetUserRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetUserRequest();
+        message.userId = object.userId ?? "";
+        return message;
+    },
+};
+function createBaseGetUserResponse() {
+    return { user: undefined };
+}
+exports.GetUserResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.user !== undefined) {
+            exports.User.encode(message.user, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetUserResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.user = exports.User.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { user: isSet(object.user) ? exports.User.fromJSON(object.user) : undefined };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.user !== undefined) {
+            obj.user = exports.User.toJSON(message.user);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetUserResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetUserResponse();
+        message.user = (object.user !== undefined && object.user !== null) ? exports.User.fromPartial(object.user) : undefined;
+        return message;
+    },
+};
+function createBaseUpdatePasswordRequest() {
+    return { userId: "", newPassword: "" };
+}
+exports.UpdatePasswordRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.userId !== "") {
+            writer.uint32(10).string(message.userId);
+        }
+        if (message.newPassword !== "") {
+            writer.uint32(18).string(message.newPassword);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseUpdatePasswordRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.newPassword = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
+            newPassword: isSet(object.newPassword)
+                ? globalThis.String(object.newPassword)
+                : isSet(object.new_password)
+                    ? globalThis.String(object.new_password)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
+        if (message.newPassword !== "") {
+            obj.newPassword = message.newPassword;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.UpdatePasswordRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseUpdatePasswordRequest();
+        message.userId = object.userId ?? "";
+        message.newPassword = object.newPassword ?? "";
+        return message;
+    },
+};
+function createBaseUpdatePasswordResponse() {
+    return {};
+}
+exports.UpdatePasswordResponse = {
+    encode(_, writer = new wire_1.BinaryWriter()) {
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseUpdatePasswordResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(_) {
+        return {};
+    },
+    toJSON(_) {
+        const obj = {};
+        return obj;
+    },
+    create(base) {
+        return exports.UpdatePasswordResponse.fromPartial(base ?? {});
+    },
+    fromPartial(_) {
+        const message = createBaseUpdatePasswordResponse();
+        return message;
+    },
+};
+function createBaseSetUserRolesRequest() {
+    return { userId: "", roles: [] };
+}
+exports.SetUserRolesRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.userId !== "") {
+            writer.uint32(10).string(message.userId);
+        }
+        writer.uint32(18).fork();
+        for (const v of message.roles) {
+            writer.int32(roleToNumber(v));
+        }
+        writer.join();
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSetUserRolesRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag === 16) {
+                        message.roles.push(roleFromJSON(reader.int32()));
+                        continue;
+                    }
+                    if (tag === 18) {
+                        const end2 = reader.uint32() + reader.pos;
+                        while (reader.pos < end2) {
+                            message.roles.push(roleFromJSON(reader.int32()));
+                        }
+                        continue;
+                    }
+                    break;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
+            roles: globalThis.Array.isArray(object?.roles) ? object.roles.map((e) => roleFromJSON(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
+        if (message.roles?.length) {
+            obj.roles = message.roles.map((e) => roleToJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SetUserRolesRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSetUserRolesRequest();
+        message.userId = object.userId ?? "";
+        message.roles = object.roles?.map((e) => e) || [];
+        return message;
+    },
+};
+function createBaseSetUserRolesResponse() {
+    return { user: undefined };
+}
+exports.SetUserRolesResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.user !== undefined) {
+            exports.User.encode(message.user, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSetUserRolesResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.user = exports.User.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { user: isSet(object.user) ? exports.User.fromJSON(object.user) : undefined };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.user !== undefined) {
+            obj.user = exports.User.toJSON(message.user);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SetUserRolesResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSetUserRolesResponse();
+        message.user = (object.user !== undefined && object.user !== null) ? exports.User.fromPartial(object.user) : undefined;
+        return message;
+    },
+};
+function createBaseSetUserActiveRequest() {
+    return { userId: "", active: false };
+}
+exports.SetUserActiveRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.userId !== "") {
+            writer.uint32(10).string(message.userId);
+        }
+        if (message.active !== false) {
+            writer.uint32(16).bool(message.active);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSetUserActiveRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.active = reader.bool();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
+            active: isSet(object.active) ? globalThis.Boolean(object.active) : false,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
+        if (message.active !== false) {
+            obj.active = message.active;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SetUserActiveRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSetUserActiveRequest();
+        message.userId = object.userId ?? "";
+        message.active = object.active ?? false;
+        return message;
+    },
+};
+function createBaseSetUserActiveResponse() {
+    return { user: undefined };
+}
+exports.SetUserActiveResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.user !== undefined) {
+            exports.User.encode(message.user, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSetUserActiveResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.user = exports.User.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { user: isSet(object.user) ? exports.User.fromJSON(object.user) : undefined };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.user !== undefined) {
+            obj.user = exports.User.toJSON(message.user);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SetUserActiveResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSetUserActiveResponse();
+        message.user = (object.user !== undefined && object.user !== null) ? exports.User.fromPartial(object.user) : undefined;
+        return message;
+    },
+};
 exports.IdentityServiceService = {
     authenticateUser: {
         path: "/xstockstrat.identity.v1.IdentityService/AuthenticateUser",
@@ -2165,6 +3072,64 @@ exports.IdentityServiceService = {
         requestDeserialize: (value) => exports.UpdateUserMetadataRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.UpdateUserMetadataResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.UpdateUserMetadataResponse.decode(value),
+    },
+    /**
+     * User management (admin-gated, feature 043). Every RPC requires the admin access-scope bit;
+     * passwords are write-only (never returned). Additive over the existing service.
+     */
+    createUser: {
+        path: "/xstockstrat.identity.v1.IdentityService/CreateUser",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.CreateUserRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.CreateUserRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.CreateUserResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.CreateUserResponse.decode(value),
+    },
+    listUsers: {
+        path: "/xstockstrat.identity.v1.IdentityService/ListUsers",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ListUsersRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ListUsersRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.ListUsersResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.ListUsersResponse.decode(value),
+    },
+    getUser: {
+        path: "/xstockstrat.identity.v1.IdentityService/GetUser",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.GetUserRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.GetUserRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.GetUserResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.GetUserResponse.decode(value),
+    },
+    updatePassword: {
+        path: "/xstockstrat.identity.v1.IdentityService/UpdatePassword",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.UpdatePasswordRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.UpdatePasswordRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.UpdatePasswordResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.UpdatePasswordResponse.decode(value),
+    },
+    setUserRoles: {
+        path: "/xstockstrat.identity.v1.IdentityService/SetUserRoles",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.SetUserRolesRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.SetUserRolesRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.SetUserRolesResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.SetUserRolesResponse.decode(value),
+    },
+    setUserActive: {
+        path: "/xstockstrat.identity.v1.IdentityService/SetUserActive",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.SetUserActiveRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.SetUserActiveRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.SetUserActiveResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.SetUserActiveResponse.decode(value),
     },
 };
 exports.IdentityServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.IdentityServiceService, "xstockstrat.identity.v1.IdentityService");

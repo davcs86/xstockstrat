@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Thirty-two tools:
+Thirty-three tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -22,6 +22,7 @@ Thirty-two tools:
   cancel_backfill     — cancels a queued/running backfill job (admin-scoped)
   test_formula        — dry-runs inline formula source in the sandbox, registers nothing (read-only)
   list_strategies     — lists stored strategy definitions (read-only)
+  list_opportunities  — lists the caller's ranked Decide-queue with live enrichment (read-only)
   get_config          — reads a namespace's current config values, secrets redacted (read-only)
   list_config_keys    — lists a namespace's registered config keys, metadata only (read-only)
   set_config          — writes one config value incl. secrets (encrypted at rest; admin-scoped)
@@ -230,7 +231,9 @@ def register_tools(server: MCPServer) -> None:
             (e.g. ['mediated_simple_email', 'mediated_email_attachment'])."""
         sources = await client.list_signal_sources(include_inactive=False)
         # Enrich each source with extractor_tool derived from source_type.
-        # has_credentials and credentials are intentionally excluded — never exposed to Claude.
+        # feature 166 — the boolean has_credentials IS surfaced (product-spec-committed,
+        # @AC-1/@AC-2);
+        # the token / credentials_ref remain intentionally excluded — never exposed to Claude.
         enriched = []
         for src in sources:
             st = src["source_type"]
@@ -241,6 +244,8 @@ def register_tools(server: MCPServer) -> None:
                     "source_type": st,
                     "config_json": src["config_json"],
                     "extractor_tool": _EXTRACTOR_TOOL_MAP.get(st, None),
+                    # feature 166 — whether a bearer/credential is configured (boolean only).
+                    "has_credentials": src["has_credentials"],
                     # feature 161 — surface the per-source reliability weight (was dropped here).
                     "reliability_weight": src["reliability_weight"],
                 }
@@ -904,6 +909,7 @@ def register_tools(server: MCPServer) -> None:
         extractor_module: str | None = None,
         credentials_ref: str | None = None,
         reliability_weight: float | None = None,
+        bearer_token: str | None = None,
     ) -> dict:
         """Register/update/reactivate/deactivate a signal source in xstockstrat-ingest.
         operation: 'register' | 'update' | 'reactivate' | 'deactivate'. These are HONEST,
@@ -923,8 +929,17 @@ def register_tools(server: MCPServer) -> None:
             higher weights rank this source's signals higher, 0 effectively ignores the source
             (feature 134). On update it is applied ONLY when supplied — omit it to preserve the
             stored weight (an omitted value must never reset it to 0).
+        bearer_token: the MCP bearer token for a `mcp_client` source (feature 166). Supplied on
+            register of a `mcp_client` source; it is written FIRST to an encrypted config secret
+            (`ingest.mcp_credential.<slug>`, is_secret=true) and then the source is registered with
+            `credentials_ref` pointing at it. It is stored encrypted at rest and NEVER returned.
+        `mcp_client` source_type (feature 166): a server-side MCP query source. Its `config_json`
+            carries `mcp_endpoint` (the Streamable-HTTP MCP URL) and `mcp_tool` (the tool name),
+            plus optional `mcp_arguments`. bearer_token is mandatory (register is rejected without
+            it).
         Returns {"slug", "display_name", "source_type", "extractor_module", "active",
-            "has_credentials", "reliability_weight"} — credentials_ref is never included."""
+            "has_credentials", "reliability_weight"} — credentials_ref and bearer_token are never
+            included."""
         source: dict = {"slug": slug}
         if display_name is not None:
             source["display_name"] = display_name
@@ -952,6 +967,26 @@ def register_tools(server: MCPServer) -> None:
             if not update_mask:
                 raise RuntimeError("update requires at least one field to change")
         access_scope = _caller_access_scope(ctx, "manage_signal_source")  # feature 092
+        # feature 166 — mcp_client bearer orchestration (secret-first). When registering an
+        # mcp_client source with a bearer token, write the token to an encrypted config secret
+        # FIRST, then register the source pointing at it via credentials_ref. The token is never
+        # placed in config_json and never echoed back (FR-12). A failed register after a successful
+        # secret write leaves only a harmless redacted orphan secret (no compensating cleanup).
+        if operation == "register" and source_type == "mcp_client" and bearer_token:
+            secret_key = f"mcp_credential.{slug}"
+            await client.set_config(
+                namespace="ingest",
+                key=secret_key,
+                value_type="string",
+                value=bearer_token,
+                environment=_resolve_scope(""),
+                author="manage_signal_source",
+                reason=f"bearer for mcp_client source {slug}",
+                access_scope=access_scope,
+                create_key=True,
+                is_secret=True,
+            )
+            credentials_ref = f"ingest.{secret_key}"
         try:
             return await client.manage_signal_source(
                 operation=operation,
@@ -1138,6 +1173,24 @@ def register_tools(server: MCPServer) -> None:
         user_id = _caller_user_id(ctx, "list_strategies")
         try:
             return {"strategies": await client.list_strategy_definitions(user_id, include_inactive)}
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
+
+    @server.tool()
+    async def list_opportunities(ctx: Context, min_conviction: float = 0.0) -> dict:
+        """List the caller's ranked Decide-queue opportunities with live-market enrichment
+        (xstockstrat-analysis ListOpportunities, feature 095, read-only).
+        min_conviction: drop rows below this conviction floor (muted deny-list rows are exempt).
+        Returns {"opportunities": [<opportunity>, ...]} — each carries symbol, action, conviction,
+            thesis, strategy_id, source, provenance, muted, and (when the backend has them) the live
+            enrichment: live_price, change_pct, target_price, stop_price, a sparkline (recent daily
+            closes; a gap is null), and the traced conditions. Unavailable live values are OMITTED,
+            never fabricated. Only the calling user's OWN queue is returned."""
+        # feature 095: caller-scoped via x-user-id (like list_watchlists/list_strategies); no admin
+        # scope — analysis resolves the owner from the header, never a request-body id.
+        user_id = _caller_user_id(ctx, "list_opportunities")
+        try:
+            return await client.list_opportunities(user_id, min_conviction)
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e)) from e
 
@@ -1573,7 +1626,7 @@ def register_tools(server: MCPServer) -> None:
         broker_type: str = "",
         credentials_json: str = "",
     ) -> dict:
-        """Manage the CALLER's own BROKER accounts (Alpaca / IBKR) — feature 162.
+        """Manage the CALLER's own BROKER accounts (Alpaca / IBKR) — feature 164.
 
         All operations act on the caller's own accounts (ownership from the verified identity's
         x-user-id); a non-owner is rejected PERMISSION_DENIED by the trading backend. Broker
@@ -1628,7 +1681,7 @@ def register_tools(server: MCPServer) -> None:
 
     @server.tool()
     async def list_accounts(ctx: Context) -> dict:
-        """List the CALLER's own accounts — broker AND offline together (read-only, feature 162).
+        """List the CALLER's own accounts — broker AND offline together (read-only, feature 164).
 
         Offline accounts (feature 157) appear alongside broker accounts, each distinguishable by its
         broker_type (BROKER_TYPE_ALPACA / BROKER_TYPE_IBKR / BROKER_TYPE_OFFLINE). Ownership is

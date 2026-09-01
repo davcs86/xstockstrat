@@ -42,7 +42,9 @@ from app.repositories.backtest_run_symbols import BacktestRunSymbolsRepository
 from app.repositories.backtest_runs import BacktestRunsRepository
 from app.repositories.opportunities import OpportunitiesRepository
 from app.repositories.opportunity_actions import OpportunityActionsRepository
+from app.repositories.order_snapshots import OrderSnapshotsRepository
 from app.repositories.pnl_pattern_samples import PnLPatternSamplesRepository
+from app.repositories.pnl_positions import PnLPositionsRepository
 from app.repositories.strategies import StrategiesRepository
 from app.repositories.strategy_scores import StrategyScoresRepository
 from app.services import scoring, warmup
@@ -323,6 +325,35 @@ def bucket_pnl_factors(samples, *, min_sample, bucket_count):
     return factors
 
 
+def attribute_trade(source_values: dict[str, float]) -> dict[str, float]:
+    """Winner-takes-all signal attribution for one closed position (feature 029, FR-3).
+
+    ``source_values`` maps each contributing signal source (slug) to its highest conviction across
+    the position's snapshots. The source(s) holding the top value split weight 1.0: a clear winner
+    gets 1.0 (AC-4); an exact tie splits equally — a two-way tie is 0.5/0.5 (AC-5, the only V1
+    fractional case). A position with no signals yields ``{}`` → the trade is ``manual`` and is
+    excluded from per-source metrics (AC-3)."""
+    if not source_values:
+        return {}
+    top = max(source_values.values())
+    winners = [s for s, v in source_values.items() if v == top]
+    share = 1.0 / len(winners)
+    return {s: share for s in winners}
+
+
+def _parse_signals(raw) -> list[dict]:
+    """Normalize an order_snapshot's `signals` JSONB (a JSON string from asyncpg, or an
+    already-parsed list in tests) to a list of {name, value, source} dicts; else []."""
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (TypeError, ValueError):
+            return []
+    return raw if isinstance(raw, list) else []
+
+
 class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
     def __init__(
         self,
@@ -406,6 +437,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # P&L pattern attribution samples (feature 042). Written by the pnl_pattern_consumer;
         # read here by QueryPnLPatterns with query-time quantile bucketing. Reuses db_pool (F-06).
         self._pnl_samples_repo = PnLPatternSamplesRepository(db_pool) if db_pool else None
+        # Signal-performance attribution reads (feature 029): closed positions (net = realized -
+        # fees_total) + their order-snapshot signal inputs. Reuses db_pool (F-06); None in tests.
+        self._pnl_positions_repo = PnLPositionsRepository(db_pool) if db_pool else None
+        self._order_snapshots_repo = OrderSnapshotsRepository(db_pool) if db_pool else None
         # Per-user compute serialization (OR-A): a lazy asyncio.Lock so two tabs' cold reads
         # don't double-compute; a set marks users with a background recompute already in flight
         # (stale-while-revalidate) so a burst of stale reads kicks exactly one recompute.
@@ -2853,6 +2888,105 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             negative_factors=negative[:limit],
         )
 
+    async def _resolve_source_names(self, propagation_meta) -> dict[str, str]:
+        """Best-effort slug → display_name from ingest ListSignalSources (feature 029). An ingest
+        failure yields {} so every slug falls back to itself — which also satisfies AC-9 (a source
+        registered after ship, unknown to this map, still appears keyed by its slug)."""
+        try:
+            resp = await self._ingest.ListSignalSources(
+                ingest_pb2.ListSignalSourcesRequest(include_inactive=True),
+                metadata=propagation_meta,
+            )
+        except grpc.RpcError as e:
+            log.warning("_resolve_source_names: ListSignalSources failed: %s", e)
+            return {}
+        return {src.slug: (src.display_name or src.slug) for src in resp.sources}
+
+    async def GetAttribution(self, request, context):
+        """Per-source attribution over closed positions (feature 029). Aggregates
+        042's analysis.pnl_positions (net = realized_pnl - fees_total) + order_snapshots.signals
+        (winner-takes-all conviction). Owner-scoped via x-user-id; read-only, DB-only."""
+        caller = self._caller_user_id(context)
+        if not caller or self._pnl_positions_repo is None or self._order_snapshots_repo is None:
+            return analysis_pb2.GetAttributionResponse()
+
+        start = request.start.ToDatetime() if request.HasField("start") else None
+        end = request.end.ToDatetime() if request.HasField("end") else None
+        rows = await self._pnl_positions_repo.list_closed_for_attribution(
+            user_id=caller, start=start, end=end
+        )
+
+        trade_count: dict[str, float] = {}
+        win_count: dict[str, float] = {}
+        total_pnl: dict[str, float] = {}
+        return_sum: dict[str, float] = {}
+        return_weight: dict[str, float] = {}
+
+        for row in rows:
+            inputs = await self._order_snapshots_repo.attribution_inputs_for_position(
+                row["position_id"]
+            )
+            # Collapse the position's snapshot signals to each source's peak conviction.
+            source_values: dict[str, float] = {}
+            for snap in inputs:
+                for sig in _parse_signals(snap.get("signals")):
+                    src = sig.get("source") or ""
+                    if not src:
+                        continue
+                    val = float(sig.get("value") or 0.0)
+                    if src not in source_values or val > source_values[src]:
+                        source_values[src] = val
+            weights = attribute_trade(source_values)
+            if not weights:
+                continue  # manual / no-signal trade — excluded from per-source metrics (AC-3)
+            net = float(row.get("realized_pnl") or 0.0) - float(row.get("fees_total") or 0.0)
+            win = net > 0.0  # net of fees (AC-6/AC-10/AC-11)
+            # Approximate cost basis: |earliest snapshot price × quantity| (v1 approximation).
+            cost_basis = 0.0
+            if inputs:
+                first = inputs[0]
+                cost_basis = abs(
+                    float(first.get("price") or 0.0) * float(first.get("quantity") or 0.0)
+                )
+            for src, w in weights.items():
+                trade_count[src] = trade_count.get(src, 0.0) + w
+                if win:
+                    win_count[src] = win_count.get(src, 0.0) + w
+                total_pnl[src] = total_pnl.get(src, 0.0) + w * net
+                if (
+                    cost_basis > 0.0
+                ):  # a 0 cost basis (degraded snapshot) is excluded from the mean only
+                    return_sum[src] = return_sum.get(src, 0.0) + w * (net / cost_basis)
+                    return_weight[src] = return_weight.get(src, 0.0) + w
+
+        source_filter = request.source_id or ""  # optional slug filter (AC-7)
+        surviving = [s for s in trade_count if not source_filter or s == source_filter]
+
+        propagation_meta = [
+            (k, v)
+            for k, v in context.invocation_metadata()
+            if k in ("x-user-id", "x-access-scope", "x-trace-id")
+        ]
+        names = await self._resolve_source_names(propagation_meta) if surviving else {}
+
+        attributions = []
+        for src in surviving:
+            tc = trade_count[src]
+            wc = win_count.get(src, 0.0)
+            rw = return_weight.get(src, 0.0)
+            attributions.append(
+                analysis_pb2.SourceAttribution(
+                    source_id=src,
+                    source_name=names.get(src, src),
+                    trade_count=tc,
+                    win_count=wc,
+                    win_rate=(wc / tc) if tc > 0 else 0.0,
+                    avg_return=(return_sum.get(src, 0.0) / rw) if rw > 0 else 0.0,
+                    total_pnl=total_pnl.get(src, 0.0),
+                )
+            )
+        return analysis_pb2.GetAttributionResponse(attributions=attributions)
+
     async def GetIndicatorSeries(self, request, context):
         """Per-component historical indicator series for a strategy over the caller's own bar window
         (feature 125, FR-6). Reuses ``StrategyEvaluator._compute_component`` per declared component
@@ -2991,10 +3125,79 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             offset = 0
         window = rows[offset : offset + page_size]
         next_token = str(offset + page_size) if offset + page_size < len(rows) else ""
+        opps = [_row_to_opportunity(r) for r in window]
+        # feature 095 — read-time live-market enrichment, AFTER ranking + _row_to_opportunity, so
+        # the live quote never enters the conviction/ORDER BY path (FR-8/AC-14 by construction).
+        await self._enrich_opportunities_live(opps, propagation_meta)
         return analysis_pb2.ListOpportunitiesResponse(
-            opportunities=[_row_to_opportunity(r) for r in window],
+            opportunities=opps,
             page=common_pb2.PageResponse(next_page_token=next_token),
         )
+
+    async def _enrich_opportunities_live(self, opps, propagation_meta) -> None:
+        """Attach live_price / change_pct / sparkline to already-ranked Opportunities (feature 095).
+
+        Read-time only — never called from _compute_opportunities, so the live quote is never a
+        ranking input (FR-8/AC-14). Fan-out is bounded by the existing _bars_fetch_sem and deduped
+        per symbol per pass; prev_close/bars are served from marketdata's cache/DB. A GetLatestPrice
+        / GetBars miss or RPC error leaves the live fields UNSET (AC-11) and never aborts the read.
+        A SparklinePoint with an unset close models a warm-up/absent bar, never NaN/0 (AC-4/P-03).
+        """
+        if not opps:
+            return
+        sparkline_bars = max(1, self._cfg.get_int("analysis.opportunity.sparkline_bars", 20))
+        # Dedup the marketdata reads per symbol — several opportunities can share one symbol.
+        by_symbol: dict[str, list] = {}
+        for opp in opps:
+            by_symbol.setdefault(opp.symbol, []).append(opp)
+
+        async def _enrich_symbol(symbol: str, targets: list) -> None:
+            last_price = None
+            prev_close = None
+            spark: list | None = None
+            try:
+                async with self._bars_fetch_sem:
+                    lp = await self._marketdata.GetLatestPrice(
+                        marketdata_pb2.GetLatestPriceRequest(symbol=symbol),
+                        metadata=propagation_meta,
+                    )
+                if lp.HasField("last_price"):
+                    last_price = lp.last_price
+                if lp.HasField("prev_close"):
+                    prev_close = lp.prev_close
+            except Exception as e:  # live price is best-effort; leave unset on any failure (AC-11)
+                log.warning(
+                    "_enrich_opportunities_live: GetLatestPrice failed for %s: %s", symbol, e
+                )
+            try:
+                async with self._bars_fetch_sem:
+                    resp = await self._marketdata.GetBars(
+                        marketdata_pb2.GetBarsRequest(
+                            symbol=symbol,
+                            timeframe="1d",
+                            timeframe_enum=common_pb2.Timeframe.TIMEFRAME_1DAY,
+                            page=common_pb2.PageRequest(page_size=sparkline_bars),
+                        ),
+                        metadata=propagation_meta,
+                    )
+                spark = list(resp.bars)
+            except Exception as e:  # sparkline is best-effort; leave unset on any failure (AC-11)
+                log.warning("_enrich_opportunities_live: GetBars failed for %s: %s", symbol, e)
+            for opp in targets:
+                if last_price is not None:
+                    opp.live_price = last_price
+                    if prev_close is not None and prev_close != 0.0:
+                        opp.change_pct = (last_price - prev_close) / prev_close
+                if spark is not None:
+                    del opp.sparkline[:]
+                    for b in spark:
+                        # Finite close → set it; a warm-up/missing bar → unset close (never NaN/0).
+                        pt = analysis_pb2.SparklinePoint()
+                        if b.close == b.close and b.close not in (float("inf"), float("-inf")):
+                            pt.close = b.close
+                        opp.sparkline.append(pt)
+
+        await asyncio.gather(*(_enrich_symbol(sym, targets) for sym, targets in by_symbol.items()))
 
     # ── Materialized-queue compute (feature 097) ────────────────────────────────
 
@@ -3379,6 +3582,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     if c["is_held"]:
                         total = readiness["total_conditions"]
                         exit_fires = total > 0 and readiness["passing_conditions"] == total
+                    # feature 095 — persist strategy-derived target/stop from signal_params into the
+                    # readiness JSONB (no new column) so _row_to_opportunity carries them. Present →
+                    # store; absent → store nothing (AC-8, never fabricated). This is compute-time
+                    # and ranking-neutral — only live-market fields are read-time (FR-8/AC-14).
+                    _sp = json_format.MessageToDict(definition.signal_params)
+                    for _key, _dst in (("target", "target_price"), ("stop", "stop_price")):
+                        _val = _sp.get(_key)
+                        if isinstance(_val, (int, float)) and not isinstance(_val, bool):
+                            readiness[_dst] = float(_val)
 
             action = _resolve_action_tag(c, exit_fires)
             if action is None:
@@ -3388,6 +3600,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     action = analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED
                 else:
                     continue  # speculative sell-with-no-position → not actionable, drop
+
+            # feature 110 — carry the raw max ExternalSignal.conviction (JSONB-ride via
+            # readiness_json, no column). _best_sig_conv stays -1.0 when the symbol had no active
+            # signal → leave unset so Opportunity.signal_confidence is a genuine explicit-presence
+            # unset (P-03), never a fabricated 0.0. Parallel to conviction/signal_axis (post-rank).
+            if c["_best_sig_conv"] >= 0.0:
+                readiness["signal_confidence"] = c["_best_sig_conv"]
 
             rows.append(
                 {
@@ -3877,6 +4096,33 @@ def _row_to_opportunity(row: dict) -> "analysis_pb2.Opportunity":
     valid_until = row.get("valid_until")
     if valid_until is not None:
         opp.valid_until.FromDatetime(valid_until)
+    # feature 095 — compute-time strategy-derived enrichment, persisted in readiness_json and
+    # carried here so it joins _MAPPED in the OR-F parity guard. conditions = the already-traced
+    # leaves (no recompute, AC-5); an unattributed row has [] (AC-6). target_price/stop_price are
+    # carried ONLY when present (guarded on presence, never a fabricated 0 — AC-8); they stay unset
+    # until the strategy-target-stop-authoring follow-up populates signal_params.{target,stop}.
+    for cond in readiness.get("conditions") or []:
+        opp.conditions.append(
+            analysis_pb2.ConditionEval(
+                ref_name=cond.get("ref_name", ""),
+                lhs_value=float(cond.get("lhs_value", 0.0)),
+                threshold=float(cond.get("threshold", 0.0)),
+                fn=cond.get("fn", ""),
+                state=int(cond.get("state", 0)),
+                distance_to_threshold=float(cond.get("distance_to_threshold", 0.0)),
+            )
+        )
+    target_price = readiness.get("target_price")
+    if target_price is not None:
+        opp.target_price = float(target_price)
+    stop_price = readiness.get("stop_price")
+    if stop_price is not None:
+        opp.stop_price = float(stop_price)
+    # feature 110 — the raw max ExternalSignal.conviction, carried from readiness_json as
+    # explicit-presence (unset when the symbol had no active signal — never a fabricated 0.0).
+    signal_confidence = readiness.get("signal_confidence")
+    if signal_confidence is not None:
+        opp.signal_confidence = float(signal_confidence)
     return opp
 
 

@@ -72,6 +72,23 @@ const (
 	// IdentityServiceUpdateUserMetadataProcedure is the fully-qualified name of the IdentityService's
 	// UpdateUserMetadata RPC.
 	IdentityServiceUpdateUserMetadataProcedure = "/xstockstrat.identity.v1.IdentityService/UpdateUserMetadata"
+	// IdentityServiceCreateUserProcedure is the fully-qualified name of the IdentityService's
+	// CreateUser RPC.
+	IdentityServiceCreateUserProcedure = "/xstockstrat.identity.v1.IdentityService/CreateUser"
+	// IdentityServiceListUsersProcedure is the fully-qualified name of the IdentityService's ListUsers
+	// RPC.
+	IdentityServiceListUsersProcedure = "/xstockstrat.identity.v1.IdentityService/ListUsers"
+	// IdentityServiceGetUserProcedure is the fully-qualified name of the IdentityService's GetUser RPC.
+	IdentityServiceGetUserProcedure = "/xstockstrat.identity.v1.IdentityService/GetUser"
+	// IdentityServiceUpdatePasswordProcedure is the fully-qualified name of the IdentityService's
+	// UpdatePassword RPC.
+	IdentityServiceUpdatePasswordProcedure = "/xstockstrat.identity.v1.IdentityService/UpdatePassword"
+	// IdentityServiceSetUserRolesProcedure is the fully-qualified name of the IdentityService's
+	// SetUserRoles RPC.
+	IdentityServiceSetUserRolesProcedure = "/xstockstrat.identity.v1.IdentityService/SetUserRoles"
+	// IdentityServiceSetUserActiveProcedure is the fully-qualified name of the IdentityService's
+	// SetUserActive RPC.
+	IdentityServiceSetUserActiveProcedure = "/xstockstrat.identity.v1.IdentityService/SetUserActive"
 )
 
 // IdentityServiceClient is a client for the xstockstrat.identity.v1.IdentityService service.
@@ -94,6 +111,14 @@ type IdentityServiceClient interface {
 	// User profile metadata self-management (feature 130)
 	GetUserMetadata(context.Context, *connect.Request[v1.GetUserMetadataRequest]) (*connect.Response[v1.GetUserMetadataResponse], error)
 	UpdateUserMetadata(context.Context, *connect.Request[v1.UpdateUserMetadataRequest]) (*connect.Response[v1.UpdateUserMetadataResponse], error)
+	// User management (admin-gated, feature 043). Every RPC requires the admin access-scope bit;
+	// passwords are write-only (never returned). Additive over the existing service.
+	CreateUser(context.Context, *connect.Request[v1.CreateUserRequest]) (*connect.Response[v1.CreateUserResponse], error)
+	ListUsers(context.Context, *connect.Request[v1.ListUsersRequest]) (*connect.Response[v1.ListUsersResponse], error)
+	GetUser(context.Context, *connect.Request[v1.GetUserRequest]) (*connect.Response[v1.GetUserResponse], error)
+	UpdatePassword(context.Context, *connect.Request[v1.UpdatePasswordRequest]) (*connect.Response[v1.UpdatePasswordResponse], error)
+	SetUserRoles(context.Context, *connect.Request[v1.SetUserRolesRequest]) (*connect.Response[v1.SetUserRolesResponse], error)
+	SetUserActive(context.Context, *connect.Request[v1.SetUserActiveRequest]) (*connect.Response[v1.SetUserActiveResponse], error)
 }
 
 // NewIdentityServiceClient constructs a client for the xstockstrat.identity.v1.IdentityService
@@ -185,6 +210,42 @@ func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(identityServiceMethods.ByName("UpdateUserMetadata")),
 			connect.WithClientOptions(opts...),
 		),
+		createUser: connect.NewClient[v1.CreateUserRequest, v1.CreateUserResponse](
+			httpClient,
+			baseURL+IdentityServiceCreateUserProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("CreateUser")),
+			connect.WithClientOptions(opts...),
+		),
+		listUsers: connect.NewClient[v1.ListUsersRequest, v1.ListUsersResponse](
+			httpClient,
+			baseURL+IdentityServiceListUsersProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("ListUsers")),
+			connect.WithClientOptions(opts...),
+		),
+		getUser: connect.NewClient[v1.GetUserRequest, v1.GetUserResponse](
+			httpClient,
+			baseURL+IdentityServiceGetUserProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("GetUser")),
+			connect.WithClientOptions(opts...),
+		),
+		updatePassword: connect.NewClient[v1.UpdatePasswordRequest, v1.UpdatePasswordResponse](
+			httpClient,
+			baseURL+IdentityServiceUpdatePasswordProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("UpdatePassword")),
+			connect.WithClientOptions(opts...),
+		),
+		setUserRoles: connect.NewClient[v1.SetUserRolesRequest, v1.SetUserRolesResponse](
+			httpClient,
+			baseURL+IdentityServiceSetUserRolesProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("SetUserRoles")),
+			connect.WithClientOptions(opts...),
+		),
+		setUserActive: connect.NewClient[v1.SetUserActiveRequest, v1.SetUserActiveResponse](
+			httpClient,
+			baseURL+IdentityServiceSetUserActiveProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("SetUserActive")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -203,6 +264,12 @@ type identityServiceClient struct {
 	revokeAuthorizedApp *connect.Client[v1.RevokeAuthorizedAppRequest, v1.RevokeAuthorizedAppResponse]
 	getUserMetadata     *connect.Client[v1.GetUserMetadataRequest, v1.GetUserMetadataResponse]
 	updateUserMetadata  *connect.Client[v1.UpdateUserMetadataRequest, v1.UpdateUserMetadataResponse]
+	createUser          *connect.Client[v1.CreateUserRequest, v1.CreateUserResponse]
+	listUsers           *connect.Client[v1.ListUsersRequest, v1.ListUsersResponse]
+	getUser             *connect.Client[v1.GetUserRequest, v1.GetUserResponse]
+	updatePassword      *connect.Client[v1.UpdatePasswordRequest, v1.UpdatePasswordResponse]
+	setUserRoles        *connect.Client[v1.SetUserRolesRequest, v1.SetUserRolesResponse]
+	setUserActive       *connect.Client[v1.SetUserActiveRequest, v1.SetUserActiveResponse]
 }
 
 // AuthenticateUser calls xstockstrat.identity.v1.IdentityService.AuthenticateUser.
@@ -270,6 +337,36 @@ func (c *identityServiceClient) UpdateUserMetadata(ctx context.Context, req *con
 	return c.updateUserMetadata.CallUnary(ctx, req)
 }
 
+// CreateUser calls xstockstrat.identity.v1.IdentityService.CreateUser.
+func (c *identityServiceClient) CreateUser(ctx context.Context, req *connect.Request[v1.CreateUserRequest]) (*connect.Response[v1.CreateUserResponse], error) {
+	return c.createUser.CallUnary(ctx, req)
+}
+
+// ListUsers calls xstockstrat.identity.v1.IdentityService.ListUsers.
+func (c *identityServiceClient) ListUsers(ctx context.Context, req *connect.Request[v1.ListUsersRequest]) (*connect.Response[v1.ListUsersResponse], error) {
+	return c.listUsers.CallUnary(ctx, req)
+}
+
+// GetUser calls xstockstrat.identity.v1.IdentityService.GetUser.
+func (c *identityServiceClient) GetUser(ctx context.Context, req *connect.Request[v1.GetUserRequest]) (*connect.Response[v1.GetUserResponse], error) {
+	return c.getUser.CallUnary(ctx, req)
+}
+
+// UpdatePassword calls xstockstrat.identity.v1.IdentityService.UpdatePassword.
+func (c *identityServiceClient) UpdatePassword(ctx context.Context, req *connect.Request[v1.UpdatePasswordRequest]) (*connect.Response[v1.UpdatePasswordResponse], error) {
+	return c.updatePassword.CallUnary(ctx, req)
+}
+
+// SetUserRoles calls xstockstrat.identity.v1.IdentityService.SetUserRoles.
+func (c *identityServiceClient) SetUserRoles(ctx context.Context, req *connect.Request[v1.SetUserRolesRequest]) (*connect.Response[v1.SetUserRolesResponse], error) {
+	return c.setUserRoles.CallUnary(ctx, req)
+}
+
+// SetUserActive calls xstockstrat.identity.v1.IdentityService.SetUserActive.
+func (c *identityServiceClient) SetUserActive(ctx context.Context, req *connect.Request[v1.SetUserActiveRequest]) (*connect.Response[v1.SetUserActiveResponse], error) {
+	return c.setUserActive.CallUnary(ctx, req)
+}
+
 // IdentityServiceHandler is an implementation of the xstockstrat.identity.v1.IdentityService
 // service.
 type IdentityServiceHandler interface {
@@ -291,6 +388,14 @@ type IdentityServiceHandler interface {
 	// User profile metadata self-management (feature 130)
 	GetUserMetadata(context.Context, *connect.Request[v1.GetUserMetadataRequest]) (*connect.Response[v1.GetUserMetadataResponse], error)
 	UpdateUserMetadata(context.Context, *connect.Request[v1.UpdateUserMetadataRequest]) (*connect.Response[v1.UpdateUserMetadataResponse], error)
+	// User management (admin-gated, feature 043). Every RPC requires the admin access-scope bit;
+	// passwords are write-only (never returned). Additive over the existing service.
+	CreateUser(context.Context, *connect.Request[v1.CreateUserRequest]) (*connect.Response[v1.CreateUserResponse], error)
+	ListUsers(context.Context, *connect.Request[v1.ListUsersRequest]) (*connect.Response[v1.ListUsersResponse], error)
+	GetUser(context.Context, *connect.Request[v1.GetUserRequest]) (*connect.Response[v1.GetUserResponse], error)
+	UpdatePassword(context.Context, *connect.Request[v1.UpdatePasswordRequest]) (*connect.Response[v1.UpdatePasswordResponse], error)
+	SetUserRoles(context.Context, *connect.Request[v1.SetUserRolesRequest]) (*connect.Response[v1.SetUserRolesResponse], error)
+	SetUserActive(context.Context, *connect.Request[v1.SetUserActiveRequest]) (*connect.Response[v1.SetUserActiveResponse], error)
 }
 
 // NewIdentityServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -378,6 +483,42 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 		connect.WithSchema(identityServiceMethods.ByName("UpdateUserMetadata")),
 		connect.WithHandlerOptions(opts...),
 	)
+	identityServiceCreateUserHandler := connect.NewUnaryHandler(
+		IdentityServiceCreateUserProcedure,
+		svc.CreateUser,
+		connect.WithSchema(identityServiceMethods.ByName("CreateUser")),
+		connect.WithHandlerOptions(opts...),
+	)
+	identityServiceListUsersHandler := connect.NewUnaryHandler(
+		IdentityServiceListUsersProcedure,
+		svc.ListUsers,
+		connect.WithSchema(identityServiceMethods.ByName("ListUsers")),
+		connect.WithHandlerOptions(opts...),
+	)
+	identityServiceGetUserHandler := connect.NewUnaryHandler(
+		IdentityServiceGetUserProcedure,
+		svc.GetUser,
+		connect.WithSchema(identityServiceMethods.ByName("GetUser")),
+		connect.WithHandlerOptions(opts...),
+	)
+	identityServiceUpdatePasswordHandler := connect.NewUnaryHandler(
+		IdentityServiceUpdatePasswordProcedure,
+		svc.UpdatePassword,
+		connect.WithSchema(identityServiceMethods.ByName("UpdatePassword")),
+		connect.WithHandlerOptions(opts...),
+	)
+	identityServiceSetUserRolesHandler := connect.NewUnaryHandler(
+		IdentityServiceSetUserRolesProcedure,
+		svc.SetUserRoles,
+		connect.WithSchema(identityServiceMethods.ByName("SetUserRoles")),
+		connect.WithHandlerOptions(opts...),
+	)
+	identityServiceSetUserActiveHandler := connect.NewUnaryHandler(
+		IdentityServiceSetUserActiveProcedure,
+		svc.SetUserActive,
+		connect.WithSchema(identityServiceMethods.ByName("SetUserActive")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.identity.v1.IdentityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case IdentityServiceAuthenticateUserProcedure:
@@ -406,6 +547,18 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 			identityServiceGetUserMetadataHandler.ServeHTTP(w, r)
 		case IdentityServiceUpdateUserMetadataProcedure:
 			identityServiceUpdateUserMetadataHandler.ServeHTTP(w, r)
+		case IdentityServiceCreateUserProcedure:
+			identityServiceCreateUserHandler.ServeHTTP(w, r)
+		case IdentityServiceListUsersProcedure:
+			identityServiceListUsersHandler.ServeHTTP(w, r)
+		case IdentityServiceGetUserProcedure:
+			identityServiceGetUserHandler.ServeHTTP(w, r)
+		case IdentityServiceUpdatePasswordProcedure:
+			identityServiceUpdatePasswordHandler.ServeHTTP(w, r)
+		case IdentityServiceSetUserRolesProcedure:
+			identityServiceSetUserRolesHandler.ServeHTTP(w, r)
+		case IdentityServiceSetUserActiveProcedure:
+			identityServiceSetUserActiveHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -465,4 +618,28 @@ func (UnimplementedIdentityServiceHandler) GetUserMetadata(context.Context, *con
 
 func (UnimplementedIdentityServiceHandler) UpdateUserMetadata(context.Context, *connect.Request[v1.UpdateUserMetadataRequest]) (*connect.Response[v1.UpdateUserMetadataResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.UpdateUserMetadata is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) CreateUser(context.Context, *connect.Request[v1.CreateUserRequest]) (*connect.Response[v1.CreateUserResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.CreateUser is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) ListUsers(context.Context, *connect.Request[v1.ListUsersRequest]) (*connect.Response[v1.ListUsersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.ListUsers is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) GetUser(context.Context, *connect.Request[v1.GetUserRequest]) (*connect.Response[v1.GetUserResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.GetUser is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) UpdatePassword(context.Context, *connect.Request[v1.UpdatePasswordRequest]) (*connect.Response[v1.UpdatePasswordResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.UpdatePassword is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) SetUserRoles(context.Context, *connect.Request[v1.SetUserRolesRequest]) (*connect.Response[v1.SetUserRolesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.SetUserRoles is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) SetUserActive(context.Context, *connect.Request[v1.SetUserActiveRequest]) (*connect.Response[v1.SetUserActiveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.SetUserActive is not implemented"))
 }

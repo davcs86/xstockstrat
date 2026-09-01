@@ -4101,6 +4101,13 @@ def _materialized_svc(
 
 
 async def _list_opps(svc, **kwargs):
+    # feature 095: ListOpportunities now does read-time live-market enrichment (GetLatestPrice per
+    # returned symbol). Give it a benign default so pre-095 tests that assert on compute-path
+    # behavior (bars-fetch dedup, aggregated warnings) are not perturbed by the enrichment edge.
+    from gen.marketdata.v1 import marketdata_pb2 as _md
+
+    if not isinstance(getattr(svc._marketdata, "GetLatestPrice", None), AsyncMock):
+        svc._marketdata.GetLatestPrice = AsyncMock(return_value=_md.LatestPrice())
     resp = await svc.ListOpportunities(
         analysis_pb2.ListOpportunitiesRequest(**kwargs), _ctx(_HEADERS)
     )
@@ -4637,9 +4644,14 @@ class TestOpportunityBarsFetchDedup:
         assert (
             len(opps) >= 200
         )  # design's documented worst-case scale (240 watchlist rows + 1 muted)
-        assert svc._marketdata.GetBars.call_count == 30  # one fetch per DISTINCT traced symbol —
+        # Count only compute-path fetches (range-bearing) — feature 095's read-time sparkline
+        # enrichment also calls GetBars, but with no range (page only), so it is excluded here.
+        compute_calls = [
+            c for c in svc._marketdata.GetBars.call_args_list if c.args[0].HasField("range")
+        ]
+        assert len(compute_calls) == 30  # one fetch per DISTINCT traced symbol —
         # never per candidate row, and the muted-only symbol below is never fetched at all
-        fetched = {c.args[0].symbol for c in svc._marketdata.GetBars.call_args_list}
+        fetched = {c.args[0].symbol for c in compute_calls}
         assert fetched == set(symbols)
         assert "M00" not in fetched
         assert by_symbol["M00"].muted is True
@@ -4673,7 +4685,13 @@ class TestOpportunityBarsFetchDedup:
 
         by_symbol, opps = await _list_opps(svc)  # must not raise
 
-        bad_calls = [c for c in svc._marketdata.GetBars.call_args_list if c.args[0].symbol == "BAD"]
+        # Compute-path (range-bearing) calls only — feature 095's read-time sparkline enrichment
+        # also calls GetBars for BAD (no range), which is a separate, best-effort read.
+        bad_calls = [
+            c
+            for c in svc._marketdata.GetBars.call_args_list
+            if c.args[0].symbol == "BAD" and c.args[0].HasField("range")
+        ]
         assert len(bad_calls) == 1  # attempted exactly once for BAD despite 2 candidates sharing it
         assert len(opps) == 3  # wl0/BAD, wl1/BAD, wl2/OK all resolved
         bad_rows = [o for o in opps if o.symbol == "BAD"]
@@ -4862,8 +4880,16 @@ class TestOpportunityRowParity:
         "opportunity_key",
         "provenance",
         "muted",  # feature 132
+        # feature 095 — compute-time strategy-derived fields carried by _row_to_opportunity.
+        "target_price",
+        "stop_price",
+        "conditions",
+        # feature 110 — raw max ExternalSignal.conviction, carried from readiness_json.
+        "signal_confidence",
     }
-    _INTENTIONALLY_UNSET: set[str] = set()  # the mapper populates every field
+    # feature 095 — live-market fields set at read time in ListOpportunities (post-ranking), not by
+    # the mapper, so they join _INTENTIONALLY_UNSET rather than _MAPPED.
+    _INTENTIONALLY_UNSET: set[str] = {"live_price", "change_pct", "sparkline"}
 
     def test_mapper_covers_every_proto_field(self):
         assert self._MAPPED | self._INTENTIONALLY_UNSET == set(
@@ -5719,3 +5745,195 @@ class TestPortfolioSizingRouting:
             return [{k: v for k, v in c.items() if k != "backtest_id"} for c in cells]
 
         assert _strip(legacy_cells) == _strip(portfolio_cells)
+
+
+class TestOpportunityLiveEnrichment:
+    """feature 095 — read-time live-market enrichment + compute-time strategy-derived fields.
+    Enrichment runs AFTER ranking, so it must never change conviction or ordering (FR-8/AC-14),
+    and every live field is explicit-presence: unavailable → unset, never a fabricated 0 (AC-11)."""
+
+    def test_row_carries_conditions_and_target_stop(self):
+        """AC-5/AC-6/AC-8 — the mapper carries the persisted trace leaves + target/stop when
+        present, leaves target/stop unset (never 0) when absent; unattributed → no conditions."""
+        from app.handlers.servicer import _row_to_opportunity
+
+        attributed = _row_to_opportunity(
+            {
+                "opportunity_key": "u1|CAPR|sx",
+                "symbol": "CAPR",
+                "strategy_id": "sx",
+                "action": int(analysis_pb2.OPPORTUNITY_ACTION_TAG_ENTER),
+                "conviction": 0.8,
+                "readiness_json": {
+                    "passing_conditions": 1,
+                    "total_conditions": 1,
+                    "conditions": [
+                        {
+                            "ref_name": "close",
+                            "lhs_value": 12.34,
+                            "threshold": 12.0,
+                            "fn": ">",
+                            "state": int(analysis_pb2.CONDITION_STATE_PASS),
+                            "distance_to_threshold": 0.028,
+                        }
+                    ],
+                    "target_price": 14.0,
+                    "stop_price": 11.5,
+                },
+                "provenance": ["watchlist"],
+                "thesis": "entry firing",
+            }
+        )
+        assert len(attributed.conditions) == 1
+        assert attributed.conditions[0].ref_name == "close"
+        assert attributed.HasField("target_price") and attributed.target_price == 14.0
+        assert attributed.HasField("stop_price") and attributed.stop_price == 11.5
+
+        # Unattributed row: no conditions (AC-6), target/stop absent → unset (AC-8, not a 0 line).
+        bare = _row_to_opportunity(
+            {
+                "opportunity_key": "u1|XYZ|",
+                "symbol": "XYZ",
+                "strategy_id": "",
+                "action": int(analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED),
+                "conviction": 0.0,
+                "readiness_json": {
+                    "passing_conditions": 0,
+                    "total_conditions": 0,
+                    "conditions": [],
+                },
+                "provenance": ["watchlist"],
+                "thesis": "",
+            }
+        )
+        assert len(bare.conditions) == 0
+        assert not bare.HasField("target_price")
+        assert not bare.HasField("stop_price")
+
+    def test_read_time_enrichment_sets_live_price_change_and_sparkline(self):
+        """AC-1/AC-4 — GetLatestPrice sets live_price + the DERIVED change_pct; a GetBars page
+        builds the sparkline, with an unset close for a non-finite (warm-up/missing) bar."""
+        from gen.marketdata.v1 import marketdata_pb2
+
+        svc = make_servicer()
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetLatestPrice = AsyncMock(
+            return_value=marketdata_pb2.LatestPrice(
+                symbol="CAPR", last_price=12.34, prev_close=12.09
+            )
+        )
+        svc._marketdata.GetBars = AsyncMock(
+            return_value=marketdata_pb2.GetBarsResponse(
+                bars=[
+                    marketdata_pb2.Bar(symbol="CAPR", close=12.0),
+                    marketdata_pb2.Bar(symbol="CAPR", close=float("nan")),  # a gap → unset close
+                    marketdata_pb2.Bar(symbol="CAPR", close=12.34),
+                ]
+            )
+        )
+        opp = analysis_pb2.Opportunity(symbol="CAPR", conviction=0.8)
+        asyncio.run(svc._enrich_opportunities_live([opp], []))
+
+        assert opp.HasField("live_price") and abs(opp.live_price - 12.34) < 1e-9
+        assert opp.HasField("change_pct")
+        assert abs(opp.change_pct - (12.34 - 12.09) / 12.09) < 1e-9
+        assert len(opp.sparkline) == 3
+        assert opp.sparkline[0].HasField("close") and opp.sparkline[0].close == 12.0
+        assert not opp.sparkline[1].HasField("close")  # AC-4: gap → unset, never NaN/0
+        assert opp.sparkline[2].close == 12.34
+
+    def test_missing_quote_leaves_live_fields_unset(self):
+        """AC-11 — a GetLatestPrice returning no last_price leaves live_price/change_pct unset
+        (omit, never fabricate)."""
+        from gen.marketdata.v1 import marketdata_pb2
+
+        svc = make_servicer()
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetLatestPrice = AsyncMock(
+            return_value=marketdata_pb2.LatestPrice(symbol="NEW")  # last_price/prev_close unset
+        )
+        svc._marketdata.GetBars = AsyncMock(return_value=marketdata_pb2.GetBarsResponse(bars=[]))
+        opp = analysis_pb2.Opportunity(symbol="NEW", conviction=0.5)
+        asyncio.run(svc._enrich_opportunities_live([opp], []))
+        assert not opp.HasField("live_price")
+        assert not opp.HasField("change_pct")
+        assert len(opp.sparkline) == 0
+
+    def test_enrichment_never_changes_ranking(self):
+        """AC-14 — enrichment sets only live fields; conviction and list order are identical to
+        the pre-enrichment ranking (the live quote never enters the ranking path)."""
+        from gen.marketdata.v1 import marketdata_pb2
+
+        svc = make_servicer()
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetLatestPrice = AsyncMock(
+            return_value=marketdata_pb2.LatestPrice(symbol="A", last_price=99.0, prev_close=90.0)
+        )
+        svc._marketdata.GetBars = AsyncMock(return_value=marketdata_pb2.GetBarsResponse(bars=[]))
+        ranked = [
+            analysis_pb2.Opportunity(symbol="A", conviction=0.9),
+            analysis_pb2.Opportunity(symbol="B", conviction=0.4),
+        ]
+        before = [(o.symbol, o.conviction) for o in ranked]
+        asyncio.run(svc._enrich_opportunities_live(ranked, []))
+        after = [(o.symbol, o.conviction) for o in ranked]
+        assert before == after  # same symbols, same order, same conviction
+
+
+class TestSignalConfidence:
+    """feature 110 — Opportunity.signal_confidence: the raw max ExternalSignal.conviction, carried
+    from readiness_json as explicit-presence, kept distinct from the ordinal conviction (AC-1/4)."""
+
+    def test_mapper_carries_signal_confidence_explicit_presence(self):
+        from app.handlers.servicer import _row_to_opportunity
+
+        with_sig = _row_to_opportunity(
+            {
+                "opportunity_key": "u1|CAPR|",
+                "symbol": "CAPR",
+                "strategy_id": "",
+                "action": int(analysis_pb2.OPPORTUNITY_ACTION_TAG_ENTER),
+                "conviction": 0.5,
+                "readiness_json": {
+                    "passing_conditions": 1,
+                    "total_conditions": 1,
+                    "signal_confidence": 0.82,
+                },
+                "provenance": ["uw"],
+                "thesis": "",
+            }
+        )
+        assert with_sig.HasField("signal_confidence")
+        assert abs(with_sig.signal_confidence - 0.82) < 1e-9
+        # Read distinctly from the ordinal conviction (AC-1/AC-4) — a different value on the row.
+        assert abs(with_sig.conviction - 0.5) < 1e-9
+
+        without = _row_to_opportunity(
+            {
+                "opportunity_key": "u1|AAPL|",
+                "symbol": "AAPL",
+                "strategy_id": "",
+                "action": int(analysis_pb2.OPPORTUNITY_ACTION_TAG_ENTER),
+                "conviction": 0.5,
+                "readiness_json": {"passing_conditions": 0, "total_conditions": 0},
+                "provenance": ["uw"],
+                "thesis": "",
+            }
+        )
+        assert not without.HasField("signal_confidence")  # no active signal → genuine unset (P-03)
+
+    @pytest.mark.asyncio
+    async def test_producer_selects_max_raw_conviction(self):
+        """AC-4 — a symbol with two active signals (raw 0.30 and 0.90) yields signal_confidence 0.90
+        (the max raw ExternalSignal.conviction), the sizing probability that is NOT the ordinal
+        conviction. (The no-active-signal → unset case is covered by the mapper test above.)"""
+        svc = _materialized_svc(
+            signals=[
+                _sig("CAPR", "buy", 0.30, source="uw"),
+                _sig("CAPR", "buy", 0.90, source="uw"),
+            ],
+        )
+        by_symbol, _ = await _list_opps(svc)
+        capr = by_symbol["CAPR"]
+        assert capr.HasField("signal_confidence")
+        assert abs(capr.signal_confidence - 0.90) < 1e-9  # max raw, not the summed/averaged value

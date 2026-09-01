@@ -4,6 +4,8 @@ import { IngestService } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
+import { LedgerService } from '@xstockstrat/proto/ledger/v1/ledger_pb';
+import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
 import {
   analysisClient,
   indicatorsClient,
@@ -11,6 +13,8 @@ import {
   marketDataClient,
   portfolioClient,
   tradingClient,
+  ledgerClient,
+  configClient,
 } from '@/lib/connectClients';
 import {
   createBffRouter,
@@ -57,6 +61,9 @@ router.service(AnalysisService, {
   getIndicatorSeries: forward((req, opts) => analysisClient.getIndicatorSeries(req, opts)),
   // feature 042: ranked P&L-attribution factors. Read-only; no admin gate.
   queryPnLPatterns: forward((req, opts) => analysisClient.queryPnLPatterns(req, opts)),
+  // feature 029: per-source signal-performance attribution. Read-only; owner-scoped server-side
+  // from the propagated x-user-id header (forward → backendHeaders).
+  getAttribution: forward((req, opts) => analysisClient.getAttribution(req, opts)),
 });
 
 router.service(IngestService, {
@@ -78,6 +85,9 @@ router.service(IngestService, {
 
 router.service(MarketDataService, {
   getBars: forward((req, opts) => marketDataClient.getBars(req, opts)),
+  // feature 095 — Decide-surface live price. Wired on BOTH BFFs so the queue card and the
+  // Signal-detail header read the same source (C-10(b) cross-surface parity).
+  getLatestPrice: forward((req, opts) => marketDataClient.getLatestPrice(req, opts)),
   // Destructive — admin only (FR-7); the marketdata server enforces it again (Step 5).
   deleteBackfilledData: forwardAdmin((req, opts) =>
     marketDataClient.deleteBackfilledData(req, opts),
@@ -95,10 +105,33 @@ router.service(PortfolioService, {
   deleteWatchlist: forward((req, opts) => portfolioClient.deleteWatchlist(req, opts)),
   addWatchlistSymbols: forward((req, opts) => portfolioClient.addWatchlistSymbols(req, opts)),
   removeWatchlistSymbols: forward((req, opts) => portfolioClient.removeWatchlistSymbols(req, opts)),
+  // Targeted single-symbol rebind (feature 167) — same header-propagating forward as its siblings.
+  updateWatchlistBinding: forward((req, opts) => portfolioClient.updateWatchlistBinding(req, opts)),
 });
 
 router.service(TradingService, {
   listBrokerAccounts: forward((req, opts) => tradingClient.listBrokerAccounts(req, opts)),
+  // feature 031 — the /insights performance dashboard reads the env-derived paper/live mode for its
+  // "Paper Trading" label; wire it on this segment's BFF (mirrors traderBff) so /insights is self-contained.
+  getTradingEnvironment: forward((req, opts) => tradingClient.getTradingEnvironment(req, opts)),
+});
+
+// feature 031 — the /insights performance dashboard reads its equity-curve source events + config here.
+router.service(LedgerService, {
+  // queryEvents forces the caller's own portfolio stream key SERVER-SIDE from the verified session
+  // (IDOR guard — the browser must not supply it), mirroring the traderBff copilot force pattern.
+  queryEvents: async (req, ctx) => {
+    const claims = await requireSession(ctx);
+    return ledgerClient.queryEvents(
+      { ...req, streamKey: `portfolio:${claims.user_id}` },
+      { headers: backendHeaders(claims, ctx) },
+    );
+  },
+});
+
+router.service(ConfigService, {
+  // Read-only — GetConfig is deliberately open on the backend (no admin gate), matching traderBff.
+  getConfig: forward((req, opts) => configClient.getConfig(req, opts)),
 });
 
 router.service(IndicatorsService, {

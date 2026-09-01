@@ -41,6 +41,7 @@ def test_list_tools_returns_all_registered_tools():
         "cancel_backfill",
         "test_formula",
         "list_strategies",
+        "list_opportunities",
         "get_config",
         "list_config_keys",
         "set_config",

@@ -600,6 +600,23 @@ export interface ListAllWatchlistSymbolsResponse {
   symbols: string[];
 }
 
+/** user_id intentionally absent — ownership from the x-user-id header (feature 167). */
+export interface UpdateWatchlistBindingRequest {
+  watchlistId: string;
+  symbol: string;
+  /** "" = unbind this one row (matches WatchlistBinding.strategy_id) */
+  strategyId: string;
+}
+
+export interface UpdateWatchlistBindingResponse {
+  /** the updated binding (symbol/strategy_id/source) */
+  binding?:
+    | WatchlistBinding
+    | undefined;
+  /** list-level watchlists.updated_at, bumped in-tx */
+  updatedAt?: Date | undefined;
+}
+
 function createBasePortfolio(): Portfolio {
   return {
     portfolioId: "",
@@ -4228,6 +4245,192 @@ export const ListAllWatchlistSymbolsResponse: MessageFns<ListAllWatchlistSymbols
   },
 };
 
+function createBaseUpdateWatchlistBindingRequest(): UpdateWatchlistBindingRequest {
+  return { watchlistId: "", symbol: "", strategyId: "" };
+}
+
+export const UpdateWatchlistBindingRequest: MessageFns<UpdateWatchlistBindingRequest> = {
+  encode(message: UpdateWatchlistBindingRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.watchlistId !== "") {
+      writer.uint32(10).string(message.watchlistId);
+    }
+    if (message.symbol !== "") {
+      writer.uint32(18).string(message.symbol);
+    }
+    if (message.strategyId !== "") {
+      writer.uint32(26).string(message.strategyId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateWatchlistBindingRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseUpdateWatchlistBindingRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.watchlistId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.strategyId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): UpdateWatchlistBindingRequest {
+    return {
+      watchlistId: isSet(object.watchlistId)
+        ? globalThis.String(object.watchlistId)
+        : isSet(object.watchlist_id)
+        ? globalThis.String(object.watchlist_id)
+        : "",
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      strategyId: isSet(object.strategyId)
+        ? globalThis.String(object.strategyId)
+        : isSet(object.strategy_id)
+        ? globalThis.String(object.strategy_id)
+        : "",
+    };
+  },
+
+  toJSON(message: UpdateWatchlistBindingRequest): unknown {
+    const obj: any = {};
+    if (message.watchlistId !== "") {
+      obj.watchlistId = message.watchlistId;
+    }
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.strategyId !== "") {
+      obj.strategyId = message.strategyId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<UpdateWatchlistBindingRequest>, I>>(base?: I): UpdateWatchlistBindingRequest {
+    return UpdateWatchlistBindingRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UpdateWatchlistBindingRequest>, I>>(
+    object: I,
+  ): UpdateWatchlistBindingRequest {
+    const message = createBaseUpdateWatchlistBindingRequest();
+    message.watchlistId = object.watchlistId ?? "";
+    message.symbol = object.symbol ?? "";
+    message.strategyId = object.strategyId ?? "";
+    return message;
+  },
+};
+
+function createBaseUpdateWatchlistBindingResponse(): UpdateWatchlistBindingResponse {
+  return { binding: undefined, updatedAt: undefined };
+}
+
+export const UpdateWatchlistBindingResponse: MessageFns<UpdateWatchlistBindingResponse> = {
+  encode(message: UpdateWatchlistBindingResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.binding !== undefined) {
+      WatchlistBinding.encode(message.binding, writer.uint32(10).fork()).join();
+    }
+    if (message.updatedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.updatedAt), writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateWatchlistBindingResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseUpdateWatchlistBindingResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.binding = WatchlistBinding.decode(reader, reader.uint32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.updatedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): UpdateWatchlistBindingResponse {
+    return {
+      binding: isSet(object.binding) ? WatchlistBinding.fromJSON(object.binding) : undefined,
+      updatedAt: isSet(object.updatedAt)
+        ? fromJsonTimestamp(object.updatedAt)
+        : isSet(object.updated_at)
+        ? fromJsonTimestamp(object.updated_at)
+        : undefined,
+    };
+  },
+
+  toJSON(message: UpdateWatchlistBindingResponse): unknown {
+    const obj: any = {};
+    if (message.binding !== undefined) {
+      obj.binding = WatchlistBinding.toJSON(message.binding);
+    }
+    if (message.updatedAt !== undefined) {
+      obj.updatedAt = message.updatedAt.toISOString();
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<UpdateWatchlistBindingResponse>, I>>(base?: I): UpdateWatchlistBindingResponse {
+    return UpdateWatchlistBindingResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UpdateWatchlistBindingResponse>, I>>(
+    object: I,
+  ): UpdateWatchlistBindingResponse {
+    const message = createBaseUpdateWatchlistBindingResponse();
+    message.binding = (object.binding !== undefined && object.binding !== null)
+      ? WatchlistBinding.fromPartial(object.binding)
+      : undefined;
+    message.updatedAt = object.updatedAt ?? undefined;
+    return message;
+  },
+};
+
 export type PortfolioServiceService = typeof PortfolioServiceService;
 export const PortfolioServiceService = {
   getPortfolio: {
@@ -4412,6 +4615,23 @@ export const PortfolioServiceService = {
     responseDeserialize: (value: Buffer): ListAllWatchlistSymbolsResponse =>
       ListAllWatchlistSymbolsResponse.decode(value),
   },
+  /**
+   * Targeted single-symbol rebind (feature 167): change one binding's strategy_id via a single-row
+   * UPDATE — no replace-all. Ownership from the propagated x-user-id header (server-side), never
+   * from the request body. NOT_FOUND if the symbol is not in the watchlist.
+   */
+  updateWatchlistBinding: {
+    path: "/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlistBinding" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: UpdateWatchlistBindingRequest): Buffer =>
+      Buffer.from(UpdateWatchlistBindingRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): UpdateWatchlistBindingRequest => UpdateWatchlistBindingRequest.decode(value),
+    responseSerialize: (value: UpdateWatchlistBindingResponse): Buffer =>
+      Buffer.from(UpdateWatchlistBindingResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): UpdateWatchlistBindingResponse =>
+      UpdateWatchlistBindingResponse.decode(value),
+  },
 } as const;
 
 export interface PortfolioServiceServer extends UntypedServiceImplementation {
@@ -4446,6 +4666,12 @@ export interface PortfolioServiceServer extends UntypedServiceImplementation {
    * the fundamentals-signal producer's universe resolution.
    */
   listAllWatchlistSymbols: handleUnaryCall<ListAllWatchlistSymbolsRequest, ListAllWatchlistSymbolsResponse>;
+  /**
+   * Targeted single-symbol rebind (feature 167): change one binding's strategy_id via a single-row
+   * UPDATE — no replace-all. Ownership from the propagated x-user-id header (server-side), never
+   * from the request body. NOT_FOUND if the symbol is not in the watchlist.
+   */
+  updateWatchlistBinding: handleUnaryCall<UpdateWatchlistBindingRequest, UpdateWatchlistBindingResponse>;
 }
 
 export interface PortfolioServiceClient extends Client {
@@ -4697,6 +4923,26 @@ export interface PortfolioServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ListAllWatchlistSymbolsResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Targeted single-symbol rebind (feature 167): change one binding's strategy_id via a single-row
+   * UPDATE — no replace-all. Ownership from the propagated x-user-id header (server-side), never
+   * from the request body. NOT_FOUND if the symbol is not in the watchlist.
+   */
+  updateWatchlistBinding(
+    request: UpdateWatchlistBindingRequest,
+    callback: (error: ServiceError | null, response: UpdateWatchlistBindingResponse) => void,
+  ): ClientUnaryCall;
+  updateWatchlistBinding(
+    request: UpdateWatchlistBindingRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: UpdateWatchlistBindingResponse) => void,
+  ): ClientUnaryCall;
+  updateWatchlistBinding(
+    request: UpdateWatchlistBindingRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: UpdateWatchlistBindingResponse) => void,
   ): ClientUnaryCall;
 }
 

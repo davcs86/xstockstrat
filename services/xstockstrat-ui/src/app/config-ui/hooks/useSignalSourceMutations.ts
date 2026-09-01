@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ingestClient } from '@/lib/browserClients/ingestClient';
+import { configClient } from '@/lib/browserClients/configClient';
 import type { ManageSignalSourceResponse } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { ConnectError } from '@connectrpc/connect';
 
@@ -15,6 +16,40 @@ export function useManageSignalSource() {
     onError: (err) => {
       if (err instanceof ConnectError) return err;
       return err;
+    },
+  });
+}
+
+/**
+ * feature 166 — register a `mcp_client` source with a bearer token, SECRET-FIRST: write the token to
+ * the encrypted config key `ingest.mcp_credential.<slug>` (`is_secret`, `create_key`), then register
+ * the source pointing at it via `credentials_ref`. The token is never placed in `config_json`. The
+ * environment is left UNSPECIFIED — the config-ui BFF fills this deployment's native scope. A failed
+ * register after a successful secret write leaves only a harmless redacted orphan secret.
+ */
+export function useRegisterMcpClientSource() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    ManageSignalSourceResponse,
+    Error,
+    { source: ManageSignalSourceInput['source']; slug: string; bearerToken: string }
+  >({
+    mutationFn: async ({ source, slug, bearerToken }) => {
+      await configClient.setConfig({
+        namespace: 'ingest',
+        key: `mcp_credential.${slug}`,
+        value: { value: { case: 'stringVal', value: bearerToken }, isSecret: true },
+        reason: `bearer for mcp_client source ${slug}`,
+        createKey: true,
+      });
+      return ingestClient.manageSignalSource({
+        operation: 'register',
+        source,
+        credentialsRef: `ingest.mcp_credential.${slug}`,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['signal-sources'] });
     },
   });
 }

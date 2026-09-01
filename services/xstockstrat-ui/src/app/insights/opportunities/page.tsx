@@ -20,7 +20,14 @@ import {
   OpportunityAction,
 } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import type { Opportunity } from '@xstockstrat/proto/analysis/v1/analysis_pb';
-import { OPPORTUNITY_ACTION, EnumBadge } from '@/lib/opportunityShared';
+import {
+  OPPORTUNITY_ACTION,
+  EnumBadge,
+  blockingCondition,
+  ConditionChip,
+} from '@/lib/opportunityShared';
+import { Sparkline } from '@/components/shared/Sparkline';
+import { fmtUsd, fmtPct, pnlClass } from '@/lib/money';
 import { IN_QUEUE_CUE } from '@/lib/readinessCue';
 import { readinessState } from '@/lib/readinessRollup';
 import { useOpportunities, useSetOpportunityAction } from '@/hooks/useOpportunities';
@@ -88,8 +95,9 @@ function compactUsd(n: number): string {
  * Decide → Opportunities (feature 083, FR-5). The ranked opportunity queue over
  * analysis.ListOpportunities, rendered as the handoff's conviction cards: a left edge/conviction
  * number, an action tag, thesis, source + strategy, expiry, and Review/Snooze. Conviction is a
- * defined value (never a fabricated %); rich fields the backend does not return (live price/
- * change, sparkline, per-condition values, R:R) are intentionally omitted rather than faked.
+ * defined value (never a fabricated %). Feature 095 adds the live-market enrichment the backend now
+ * returns — live price + change%, a recent-closes sparkline, and the blocking-condition chip — each
+ * shown only when present (an unavailable quote is omitted, never faked; R:R stays on the ticket).
  */
 export default function OpportunitiesPage() {
   const { data, isLoading, error } = useOpportunities(0);
@@ -533,6 +541,38 @@ function OpportunityRow({
           )}
         </div>
       </div>
+
+      {/* feature 095 — live-market enrichment: price + change%, a recent-closes sparkline, and the
+          blocking-condition chip. When a live field is unset the stat is omitted, never faked (AC-11). */}
+      {(o.livePrice !== undefined || o.sparkline.length > 0 || o.conditions.length > 0) && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          {o.livePrice !== undefined && (
+            <div className="flex items-baseline gap-2">
+              <span
+                className="font-mono text-sm tabular-nums text-foreground"
+                data-testid={`opp-live-price-${o.symbol}`}
+              >
+                {fmtUsd(o.livePrice)}
+              </span>
+              {o.changePct !== undefined && (
+                <span
+                  className={cn('font-mono text-xs tabular-nums', pnlClass(o.changePct))}
+                  data-testid={`opp-change-${o.symbol}`}
+                >
+                  {fmtPct(o.changePct)}
+                </span>
+              )}
+            </div>
+          )}
+          {o.sparkline.length > 0 && (
+            <Sparkline points={o.sparkline} testId={`opp-sparkline-${o.symbol}`} />
+          )}
+          {(() => {
+            const c = blockingCondition(o.conditions);
+            return c ? <ConditionChip c={c} testId={`opp-condition-${o.symbol}`} /> : null;
+          })()}
+        </div>
+      )}
 
       {o.thesis && <p className="text-sm text-muted-foreground">{o.thesis}</p>}
 

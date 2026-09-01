@@ -76,6 +76,9 @@ router.service(MarketDataService, {
   // feature 125 (FR-7) — read-only, ungated (matches GetFundamentals' backend contract); the one
   // genuinely new BFF registration this feature needs (absent from both trader and insights BFFs).
   getFundamentals: forward((req, opts) => marketDataClient.getFundamentals(req, opts)),
+  // feature 095 — Decide-surface live price for the off-queue Signal-detail fallback (AC-13);
+  // wired on both BFFs for cross-surface parity (C-10(b)).
+  getLatestPrice: forward((req, opts) => marketDataClient.getLatestPrice(req, opts)),
 });
 
 router.service(NotifyService, {
@@ -87,6 +90,16 @@ router.service(NotifyService, {
     );
   },
   listAlerts: forward((req, opts) => notifyClient.listAlerts(req, opts)),
+  // Push subscription register/unregister (feature 165). The subscription owner is resolved by the
+  // notify service from the propagated x-user-id header (backendHeaders, applied by forward) — the
+  // request body carries no user_id, so a browser cannot assert another user's identity (IDOR guard).
+  // Unregister is keyed by endpoint only (a possession-proven capability).
+  registerPushSubscription: forward((req, opts) =>
+    notifyClient.registerPushSubscription(req, opts),
+  ),
+  unregisterPushSubscription: forward((req, opts) =>
+    notifyClient.unregisterPushSubscription(req, opts),
+  ),
 });
 
 router.service(AnalysisService, {

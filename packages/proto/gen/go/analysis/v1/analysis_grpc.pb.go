@@ -37,6 +37,7 @@ const (
 	AnalysisService_GetStrategyAnalytics_FullMethodName    = "/xstockstrat.analysis.v1.AnalysisService/GetStrategyAnalytics"
 	AnalysisService_GetIndicatorSeries_FullMethodName      = "/xstockstrat.analysis.v1.AnalysisService/GetIndicatorSeries"
 	AnalysisService_QueryPnLPatterns_FullMethodName        = "/xstockstrat.analysis.v1.AnalysisService/QueryPnLPatterns"
+	AnalysisService_GetAttribution_FullMethodName          = "/xstockstrat.analysis.v1.AnalysisService/GetAttribution"
 )
 
 // AnalysisServiceClient is the client API for AnalysisService service.
@@ -80,6 +81,9 @@ type AnalysisServiceClient interface {
 	// Ranked P&L-attribution factors (feature 042): which indicator value-ranges and signals
 	// correlate with positive vs negative realized P&L, scoped by symbol/strategy/time window.
 	QueryPnLPatterns(ctx context.Context, in *QueryPnLPatternsRequest, opts ...grpc.CallOption) (*QueryPnLPatternsResponse, error)
+	// Per-source trading-performance attribution over closed positions (feature 029). Read-only;
+	// aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
+	GetAttribution(ctx context.Context, in *GetAttributionRequest, opts ...grpc.CallOption) (*GetAttributionResponse, error)
 }
 
 type analysisServiceClient struct {
@@ -270,6 +274,16 @@ func (c *analysisServiceClient) QueryPnLPatterns(ctx context.Context, in *QueryP
 	return out, nil
 }
 
+func (c *analysisServiceClient) GetAttribution(ctx context.Context, in *GetAttributionRequest, opts ...grpc.CallOption) (*GetAttributionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetAttributionResponse)
+	err := c.cc.Invoke(ctx, AnalysisService_GetAttribution_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AnalysisServiceServer is the server API for AnalysisService service.
 // All implementations should embed UnimplementedAnalysisServiceServer
 // for forward compatibility.
@@ -311,6 +325,9 @@ type AnalysisServiceServer interface {
 	// Ranked P&L-attribution factors (feature 042): which indicator value-ranges and signals
 	// correlate with positive vs negative realized P&L, scoped by symbol/strategy/time window.
 	QueryPnLPatterns(context.Context, *QueryPnLPatternsRequest) (*QueryPnLPatternsResponse, error)
+	// Per-source trading-performance attribution over closed positions (feature 029). Read-only;
+	// aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
+	GetAttribution(context.Context, *GetAttributionRequest) (*GetAttributionResponse, error)
 }
 
 // UnimplementedAnalysisServiceServer should be embedded to have
@@ -373,6 +390,9 @@ func (UnimplementedAnalysisServiceServer) GetIndicatorSeries(context.Context, *G
 }
 func (UnimplementedAnalysisServiceServer) QueryPnLPatterns(context.Context, *QueryPnLPatternsRequest) (*QueryPnLPatternsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method QueryPnLPatterns not implemented")
+}
+func (UnimplementedAnalysisServiceServer) GetAttribution(context.Context, *GetAttributionRequest) (*GetAttributionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetAttribution not implemented")
 }
 func (UnimplementedAnalysisServiceServer) testEmbeddedByValue() {}
 
@@ -718,6 +738,24 @@ func _AnalysisService_QueryPnLPatterns_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AnalysisService_GetAttribution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAttributionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalysisServiceServer).GetAttribution(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalysisService_GetAttribution_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalysisServiceServer).GetAttribution(ctx, req.(*GetAttributionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AnalysisService_ServiceDesc is the grpc.ServiceDesc for AnalysisService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -796,6 +834,10 @@ var AnalysisService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "QueryPnLPatterns",
 			Handler:    _AnalysisService_QueryPnLPatterns_Handler,
+		},
+		{
+			MethodName: "GetAttribution",
+			Handler:    _AnalysisService_GetAttribution_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

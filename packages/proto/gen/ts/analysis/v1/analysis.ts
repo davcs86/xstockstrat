@@ -1593,6 +1593,36 @@ export interface Opportunity {
   provenance: string[];
   /** feature 132 — the (symbol, strategy) pair is on the strategy's deny list; surfaced as an explicit muted row (never conviction=0) */
   muted: boolean;
+  /**
+   * Live-market enrichment (feature 095). 13/14/17 are READ-TIME live-market fields (set in
+   * ListOpportunities after ranking — never in the ranking hot path, FR-8/AC-14); 15/16/18 are
+   * COMPUTE-TIME strategy-derived fields (persisted in the row JSONB, carried by _row_to_opportunity).
+   * 15/16 stay unset until the named `strategy-target-stop-authoring` follow-up populates
+   * StrategyDefinition.signal_params.{target,stop}. All explicit-presence — an unset optional models
+   * "unavailable", never a fabricated 0 (P-03, AC-8/AC-11).
+   */
+  livePrice?: number | undefined;
+  changePct?: number | undefined;
+  targetPrice?: number | undefined;
+  stopPrice?: number | undefined;
+  sparkline: SparklinePoint[];
+  conditions: ConditionEval[];
+  /**
+   * feature 110 — the raw max per-signal ExternalSignal.conviction (0.0–1.0) among the symbol's
+   * active signals; the real probability that feeds trading PlaceOrder's confidence sizing.
+   * Explicit-presence optional: UNSET means "no active signal for this symbol" (never a fabricated
+   * 0.0). Deliberately NAMED signal_confidence and kept distinct from the ordinal `conviction = 3`
+   * (NOT a probability) and the decayed/weighted signal_axis. Next free after 095's 13-18 block.
+   */
+  signalConfidence?: number | undefined;
+}
+
+/**
+ * One recent daily-bar close for the Decide-surface sparkline (feature 095). Explicit presence — an
+ * unset `close` models a warm-up/absent bar, never NaN/0 (mirrors IndicatorValue; P-03).
+ */
+export interface SparklinePoint {
+  close?: number | undefined;
 }
 
 /** One evaluated condition leaf from the traced evaluator (feature 083). */
@@ -1781,6 +1811,40 @@ export interface QueryPnLPatternsRequest {
 export interface QueryPnLPatternsResponse {
   positiveFactors: PnLPatternFactor[];
   negativeFactors: PnLPatternFactor[];
+}
+
+/** ── Signal-performance attribution (feature 029) ─────────────────────────────── */
+export interface GetAttributionRequest {
+  start?: Date | undefined;
+  end?:
+    | Date
+    | undefined;
+  /** optional filter — the signal_sources.slug; empty = all sources (open registry, C-04: string not enum) */
+  sourceId: string;
+}
+
+/**
+ * Per-source metrics. trade_count/win_count are DOUBLE (not int32): FR-3's exact-tie case
+ * contributes 0.5 to each tied source (AC-5); winner-takes-all contributes 1.0. total_pnl is
+ * NET of fees (realized_pnl − fees_total). avg_return is a percent over an approximate cost basis.
+ */
+export interface SourceAttribution {
+  /** signal_sources.slug (the snapshot's signal source) */
+  sourceId: string;
+  /** resolved via ingest ListSignalSources; falls back to the slug */
+  sourceName: string;
+  tradeCount: number;
+  winCount: number;
+  /** win_count / trade_count */
+  winRate: number;
+  /** mean per-trade net_pnl / cost_basis (percent, v1 approximation) */
+  avgReturn: number;
+  /** net of fees */
+  totalPnl: number;
+}
+
+export interface GetAttributionResponse {
+  attributions: SourceAttribution[];
 }
 
 function createBaseRunBacktestRequest(): RunBacktestRequest {
@@ -7435,6 +7499,13 @@ function createBaseOpportunity(): Opportunity {
     opportunityKey: "",
     provenance: [],
     muted: false,
+    livePrice: undefined,
+    changePct: undefined,
+    targetPrice: undefined,
+    stopPrice: undefined,
+    sparkline: [],
+    conditions: [],
+    signalConfidence: undefined,
   };
 }
 
@@ -7475,6 +7546,27 @@ export const Opportunity: MessageFns<Opportunity> = {
     }
     if (message.muted !== false) {
       writer.uint32(96).bool(message.muted);
+    }
+    if (message.livePrice !== undefined) {
+      writer.uint32(105).double(message.livePrice);
+    }
+    if (message.changePct !== undefined) {
+      writer.uint32(113).double(message.changePct);
+    }
+    if (message.targetPrice !== undefined) {
+      writer.uint32(121).double(message.targetPrice);
+    }
+    if (message.stopPrice !== undefined) {
+      writer.uint32(129).double(message.stopPrice);
+    }
+    for (const v of message.sparkline) {
+      SparklinePoint.encode(v!, writer.uint32(138).fork()).join();
+    }
+    for (const v of message.conditions) {
+      ConditionEval.encode(v!, writer.uint32(146).fork()).join();
+    }
+    if (message.signalConfidence !== undefined) {
+      writer.uint32(153).double(message.signalConfidence);
     }
     return writer;
   },
@@ -7582,6 +7674,62 @@ export const Opportunity: MessageFns<Opportunity> = {
           message.muted = reader.bool();
           continue;
         }
+        case 13: {
+          if (tag !== 105) {
+            break;
+          }
+
+          message.livePrice = reader.double();
+          continue;
+        }
+        case 14: {
+          if (tag !== 113) {
+            break;
+          }
+
+          message.changePct = reader.double();
+          continue;
+        }
+        case 15: {
+          if (tag !== 121) {
+            break;
+          }
+
+          message.targetPrice = reader.double();
+          continue;
+        }
+        case 16: {
+          if (tag !== 129) {
+            break;
+          }
+
+          message.stopPrice = reader.double();
+          continue;
+        }
+        case 17: {
+          if (tag !== 138) {
+            break;
+          }
+
+          message.sparkline.push(SparklinePoint.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 18: {
+          if (tag !== 146) {
+            break;
+          }
+
+          message.conditions.push(ConditionEval.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 19: {
+          if (tag !== 153) {
+            break;
+          }
+
+          message.signalConfidence = reader.double();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -7629,6 +7777,37 @@ export const Opportunity: MessageFns<Opportunity> = {
         ? object.provenance.map((e: any) => globalThis.String(e))
         : [],
       muted: isSet(object.muted) ? globalThis.Boolean(object.muted) : false,
+      livePrice: isSet(object.livePrice)
+        ? globalThis.Number(object.livePrice)
+        : isSet(object.live_price)
+        ? globalThis.Number(object.live_price)
+        : undefined,
+      changePct: isSet(object.changePct)
+        ? globalThis.Number(object.changePct)
+        : isSet(object.change_pct)
+        ? globalThis.Number(object.change_pct)
+        : undefined,
+      targetPrice: isSet(object.targetPrice)
+        ? globalThis.Number(object.targetPrice)
+        : isSet(object.target_price)
+        ? globalThis.Number(object.target_price)
+        : undefined,
+      stopPrice: isSet(object.stopPrice)
+        ? globalThis.Number(object.stopPrice)
+        : isSet(object.stop_price)
+        ? globalThis.Number(object.stop_price)
+        : undefined,
+      sparkline: globalThis.Array.isArray(object?.sparkline)
+        ? object.sparkline.map((e: any) => SparklinePoint.fromJSON(e))
+        : [],
+      conditions: globalThis.Array.isArray(object?.conditions)
+        ? object.conditions.map((e: any) => ConditionEval.fromJSON(e))
+        : [],
+      signalConfidence: isSet(object.signalConfidence)
+        ? globalThis.Number(object.signalConfidence)
+        : isSet(object.signal_confidence)
+        ? globalThis.Number(object.signal_confidence)
+        : undefined,
     };
   },
 
@@ -7670,6 +7849,27 @@ export const Opportunity: MessageFns<Opportunity> = {
     if (message.muted !== false) {
       obj.muted = message.muted;
     }
+    if (message.livePrice !== undefined) {
+      obj.livePrice = message.livePrice;
+    }
+    if (message.changePct !== undefined) {
+      obj.changePct = message.changePct;
+    }
+    if (message.targetPrice !== undefined) {
+      obj.targetPrice = message.targetPrice;
+    }
+    if (message.stopPrice !== undefined) {
+      obj.stopPrice = message.stopPrice;
+    }
+    if (message.sparkline?.length) {
+      obj.sparkline = message.sparkline.map((e) => SparklinePoint.toJSON(e));
+    }
+    if (message.conditions?.length) {
+      obj.conditions = message.conditions.map((e) => ConditionEval.toJSON(e));
+    }
+    if (message.signalConfidence !== undefined) {
+      obj.signalConfidence = message.signalConfidence;
+    }
     return obj;
   },
 
@@ -7690,6 +7890,71 @@ export const Opportunity: MessageFns<Opportunity> = {
     message.opportunityKey = object.opportunityKey ?? "";
     message.provenance = object.provenance?.map((e) => e) || [];
     message.muted = object.muted ?? false;
+    message.livePrice = object.livePrice ?? undefined;
+    message.changePct = object.changePct ?? undefined;
+    message.targetPrice = object.targetPrice ?? undefined;
+    message.stopPrice = object.stopPrice ?? undefined;
+    message.sparkline = object.sparkline?.map((e) => SparklinePoint.fromPartial(e)) || [];
+    message.conditions = object.conditions?.map((e) => ConditionEval.fromPartial(e)) || [];
+    message.signalConfidence = object.signalConfidence ?? undefined;
+    return message;
+  },
+};
+
+function createBaseSparklinePoint(): SparklinePoint {
+  return { close: undefined };
+}
+
+export const SparklinePoint: MessageFns<SparklinePoint> = {
+  encode(message: SparklinePoint, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.close !== undefined) {
+      writer.uint32(9).double(message.close);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SparklinePoint {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSparklinePoint();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 9) {
+            break;
+          }
+
+          message.close = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SparklinePoint {
+    return { close: isSet(object.close) ? globalThis.Number(object.close) : undefined };
+  },
+
+  toJSON(message: SparklinePoint): unknown {
+    const obj: any = {};
+    if (message.close !== undefined) {
+      obj.close = message.close;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SparklinePoint>, I>>(base?: I): SparklinePoint {
+    return SparklinePoint.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SparklinePoint>, I>>(object: I): SparklinePoint {
+    const message = createBaseSparklinePoint();
+    message.close = object.close ?? undefined;
     return message;
   },
 };
@@ -9986,6 +10251,348 @@ export const QueryPnLPatternsResponse: MessageFns<QueryPnLPatternsResponse> = {
   },
 };
 
+function createBaseGetAttributionRequest(): GetAttributionRequest {
+  return { start: undefined, end: undefined, sourceId: "" };
+}
+
+export const GetAttributionRequest: MessageFns<GetAttributionRequest> = {
+  encode(message: GetAttributionRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.start !== undefined) {
+      Timestamp.encode(toTimestamp(message.start), writer.uint32(10).fork()).join();
+    }
+    if (message.end !== undefined) {
+      Timestamp.encode(toTimestamp(message.end), writer.uint32(18).fork()).join();
+    }
+    if (message.sourceId !== "") {
+      writer.uint32(26).string(message.sourceId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetAttributionRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetAttributionRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.start = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.end = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.sourceId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetAttributionRequest {
+    return {
+      start: isSet(object.start) ? fromJsonTimestamp(object.start) : undefined,
+      end: isSet(object.end) ? fromJsonTimestamp(object.end) : undefined,
+      sourceId: isSet(object.sourceId)
+        ? globalThis.String(object.sourceId)
+        : isSet(object.source_id)
+        ? globalThis.String(object.source_id)
+        : "",
+    };
+  },
+
+  toJSON(message: GetAttributionRequest): unknown {
+    const obj: any = {};
+    if (message.start !== undefined) {
+      obj.start = message.start.toISOString();
+    }
+    if (message.end !== undefined) {
+      obj.end = message.end.toISOString();
+    }
+    if (message.sourceId !== "") {
+      obj.sourceId = message.sourceId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetAttributionRequest>, I>>(base?: I): GetAttributionRequest {
+    return GetAttributionRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetAttributionRequest>, I>>(object: I): GetAttributionRequest {
+    const message = createBaseGetAttributionRequest();
+    message.start = object.start ?? undefined;
+    message.end = object.end ?? undefined;
+    message.sourceId = object.sourceId ?? "";
+    return message;
+  },
+};
+
+function createBaseSourceAttribution(): SourceAttribution {
+  return { sourceId: "", sourceName: "", tradeCount: 0, winCount: 0, winRate: 0, avgReturn: 0, totalPnl: 0 };
+}
+
+export const SourceAttribution: MessageFns<SourceAttribution> = {
+  encode(message: SourceAttribution, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.sourceId !== "") {
+      writer.uint32(10).string(message.sourceId);
+    }
+    if (message.sourceName !== "") {
+      writer.uint32(18).string(message.sourceName);
+    }
+    if (message.tradeCount !== 0) {
+      writer.uint32(25).double(message.tradeCount);
+    }
+    if (message.winCount !== 0) {
+      writer.uint32(33).double(message.winCount);
+    }
+    if (message.winRate !== 0) {
+      writer.uint32(41).double(message.winRate);
+    }
+    if (message.avgReturn !== 0) {
+      writer.uint32(49).double(message.avgReturn);
+    }
+    if (message.totalPnl !== 0) {
+      writer.uint32(57).double(message.totalPnl);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SourceAttribution {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSourceAttribution();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.sourceId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.sourceName = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 25) {
+            break;
+          }
+
+          message.tradeCount = reader.double();
+          continue;
+        }
+        case 4: {
+          if (tag !== 33) {
+            break;
+          }
+
+          message.winCount = reader.double();
+          continue;
+        }
+        case 5: {
+          if (tag !== 41) {
+            break;
+          }
+
+          message.winRate = reader.double();
+          continue;
+        }
+        case 6: {
+          if (tag !== 49) {
+            break;
+          }
+
+          message.avgReturn = reader.double();
+          continue;
+        }
+        case 7: {
+          if (tag !== 57) {
+            break;
+          }
+
+          message.totalPnl = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SourceAttribution {
+    return {
+      sourceId: isSet(object.sourceId)
+        ? globalThis.String(object.sourceId)
+        : isSet(object.source_id)
+        ? globalThis.String(object.source_id)
+        : "",
+      sourceName: isSet(object.sourceName)
+        ? globalThis.String(object.sourceName)
+        : isSet(object.source_name)
+        ? globalThis.String(object.source_name)
+        : "",
+      tradeCount: isSet(object.tradeCount)
+        ? globalThis.Number(object.tradeCount)
+        : isSet(object.trade_count)
+        ? globalThis.Number(object.trade_count)
+        : 0,
+      winCount: isSet(object.winCount)
+        ? globalThis.Number(object.winCount)
+        : isSet(object.win_count)
+        ? globalThis.Number(object.win_count)
+        : 0,
+      winRate: isSet(object.winRate)
+        ? globalThis.Number(object.winRate)
+        : isSet(object.win_rate)
+        ? globalThis.Number(object.win_rate)
+        : 0,
+      avgReturn: isSet(object.avgReturn)
+        ? globalThis.Number(object.avgReturn)
+        : isSet(object.avg_return)
+        ? globalThis.Number(object.avg_return)
+        : 0,
+      totalPnl: isSet(object.totalPnl)
+        ? globalThis.Number(object.totalPnl)
+        : isSet(object.total_pnl)
+        ? globalThis.Number(object.total_pnl)
+        : 0,
+    };
+  },
+
+  toJSON(message: SourceAttribution): unknown {
+    const obj: any = {};
+    if (message.sourceId !== "") {
+      obj.sourceId = message.sourceId;
+    }
+    if (message.sourceName !== "") {
+      obj.sourceName = message.sourceName;
+    }
+    if (message.tradeCount !== 0) {
+      obj.tradeCount = message.tradeCount;
+    }
+    if (message.winCount !== 0) {
+      obj.winCount = message.winCount;
+    }
+    if (message.winRate !== 0) {
+      obj.winRate = message.winRate;
+    }
+    if (message.avgReturn !== 0) {
+      obj.avgReturn = message.avgReturn;
+    }
+    if (message.totalPnl !== 0) {
+      obj.totalPnl = message.totalPnl;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SourceAttribution>, I>>(base?: I): SourceAttribution {
+    return SourceAttribution.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SourceAttribution>, I>>(object: I): SourceAttribution {
+    const message = createBaseSourceAttribution();
+    message.sourceId = object.sourceId ?? "";
+    message.sourceName = object.sourceName ?? "";
+    message.tradeCount = object.tradeCount ?? 0;
+    message.winCount = object.winCount ?? 0;
+    message.winRate = object.winRate ?? 0;
+    message.avgReturn = object.avgReturn ?? 0;
+    message.totalPnl = object.totalPnl ?? 0;
+    return message;
+  },
+};
+
+function createBaseGetAttributionResponse(): GetAttributionResponse {
+  return { attributions: [] };
+}
+
+export const GetAttributionResponse: MessageFns<GetAttributionResponse> = {
+  encode(message: GetAttributionResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.attributions) {
+      SourceAttribution.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetAttributionResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetAttributionResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.attributions.push(SourceAttribution.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetAttributionResponse {
+    return {
+      attributions: globalThis.Array.isArray(object?.attributions)
+        ? object.attributions.map((e: any) => SourceAttribution.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: GetAttributionResponse): unknown {
+    const obj: any = {};
+    if (message.attributions?.length) {
+      obj.attributions = message.attributions.map((e) => SourceAttribution.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetAttributionResponse>, I>>(base?: I): GetAttributionResponse {
+    return GetAttributionResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetAttributionResponse>, I>>(object: I): GetAttributionResponse {
+    const message = createBaseGetAttributionResponse();
+    message.attributions = object.attributions?.map((e) => SourceAttribution.fromPartial(e)) || [];
+    return message;
+  },
+};
+
 export type AnalysisServiceService = typeof AnalysisServiceService;
 export const AnalysisServiceService = {
   runBacktest: {
@@ -10203,6 +10810,21 @@ export const AnalysisServiceService = {
       Buffer.from(QueryPnLPatternsResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): QueryPnLPatternsResponse => QueryPnLPatternsResponse.decode(value),
   },
+  /**
+   * Per-source trading-performance attribution over closed positions (feature 029). Read-only;
+   * aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
+   */
+  getAttribution: {
+    path: "/xstockstrat.analysis.v1.AnalysisService/GetAttribution" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetAttributionRequest): Buffer =>
+      Buffer.from(GetAttributionRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetAttributionRequest => GetAttributionRequest.decode(value),
+    responseSerialize: (value: GetAttributionResponse): Buffer =>
+      Buffer.from(GetAttributionResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetAttributionResponse => GetAttributionResponse.decode(value),
+  },
 } as const;
 
 export interface AnalysisServiceServer extends UntypedServiceImplementation {
@@ -10253,6 +10875,11 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
    * correlate with positive vs negative realized P&L, scoped by symbol/strategy/time window.
    */
   queryPnLPatterns: handleUnaryCall<QueryPnLPatternsRequest, QueryPnLPatternsResponse>;
+  /**
+   * Per-source trading-performance attribution over closed positions (feature 029). Read-only;
+   * aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
+   */
+  getAttribution: handleUnaryCall<GetAttributionRequest, GetAttributionResponse>;
 }
 
 export interface AnalysisServiceClient extends Client {
@@ -10554,6 +11181,25 @@ export interface AnalysisServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: QueryPnLPatternsResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Per-source trading-performance attribution over closed positions (feature 029). Read-only;
+   * aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
+   */
+  getAttribution(
+    request: GetAttributionRequest,
+    callback: (error: ServiceError | null, response: GetAttributionResponse) => void,
+  ): ClientUnaryCall;
+  getAttribution(
+    request: GetAttributionRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetAttributionResponse) => void,
+  ): ClientUnaryCall;
+  getAttribution(
+    request: GetAttributionRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetAttributionResponse) => void,
   ): ClientUnaryCall;
 }
 

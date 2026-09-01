@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/ledger-event-export`
 **Created**: 2026-05-26
-**Last Updated**: 2026-05-26
+**Last Updated**: 2026-08-31
 
 ---
 
@@ -11,13 +11,20 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-26 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-31 | `draft` (regenerated) | /sdd-story (overwrite) | product-spec.md regenerated to current template; acceptance.feature authored |
+| 2026-08-31 | `draft` → `spec-ready` | /sdd-review | Product spec approved; all review blockers addressed |
+| 2026-08-31 | `spec-ready` → `design-approved` | /sdd-design | Design debated (full) and approved; recon.md + design.md written |
+| 2026-08-31 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (13 steps) |
+| 2026-08-31 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1–2 done — additive `ExportEvents` RPC + `user_id` fields; stubs regenerated (buf breaking clean) |
+| 2026-08-31 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done — ledger ExportEvents + per-user stamp + `/trader` BFF route/button; e2e 8/8 green |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec ledger-event-export`_
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Implementation Spec](implementation-spec.md) — numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

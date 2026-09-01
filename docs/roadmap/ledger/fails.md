@@ -1951,3 +1951,153 @@ ambiguity is logged here).
 - **Rule it implies**: a spec's "already exists / already stored" claims must be grep-confirmed against
   the exact execution tree, not assumed from a sibling helper's shape — an advisory impl-spec review is
   the last cheap place to catch it before F-04 bites at execute.
+
+- **2026-08-31 `ledger-event-export` (021) — `assumption`: Node `--experimental-strip-types --test`
+  runs parameter-property services' unit suites VACUOUSLY (green at 0% coverage).** The ledger (and
+  any Node service whose impl uses TS parameter properties, e.g. `constructor(private readonly pool)`)
+  fails to load under `node --experimental-strip-types` ("parameter property is not supported in
+  strip-only mode"); the test file's `try { await import(...) } catch {}` guard swallows it and every
+  `if (!Impl) return;` short-circuits, so `pnpm run test:coverage` prints `All files | 0%` and still
+  **exits 0** (c8 `--lines 40` passes a zero-file run). CI is green but the assertions never ran — the
+  same vacuous-green trap as 2026-07-29 (feature 074).
+- **Evidence**: feature 021 context.md + implementation-spec.md Deviation Log (2026-08-31 sdd-execute).
+  Real red→green was obtained only by compiling (`pnpm run build`) and running
+  `node --test dist/__tests__/*.test.js`.
+- **Rule it implies**: for a Node service, never trust a green `--experimental-strip-types --test` run
+  as coverage — confirm the impl actually imports (non-zero c8 lines), or run the compiled `dist`
+  tests. The configured runner should build-then-`--test` (or use `--experimental-transform-types`
+  with extension resolution); until fixed, treat these suites as characterization-only in CI.
+
+## 2026-08-31 — raw `page.route` e2e mock returned a Timestamp as `{seconds,nanos}`, not RFC3339 (feature 167)
+
+- **What happened**: feature 167 added an `UpdateWatchlistBinding` route to `e2e/helpers/watchlistMock.ts`
+  as a raw `page.route` handler returning `{ binding, updatedAt: { seconds: '0', nanos: 0 } }`. Unlike
+  the `connectNodeAdapter`-backed `mock-backend.ts` (which serializes JS objects to Connect-JSON for
+  you), a raw `page.route` body IS the wire response, so it must already be Connect-JSON. A
+  `google.protobuf.Timestamp` field encodes as an **RFC3339 string** (`"1970-01-01T00:00:00Z"`), not
+  `{seconds,nanos}`. The malformed shape threw on the browser client's response decode → the mutation
+  rejected → `onSuccess` never ran → EVERY test that drives that RPC failed (8 in one file), not just
+  the new one.
+- **Why it hid**: the existing watchlist mock routes never returned a Timestamp (Watchlist's
+  created_at/updated_at were simply omitted), so this was the first raw-`page.route` Timestamp in that
+  helper; the failure surfaced as "the Select never reflects the pick", masking the decode error.
+- **Rule it implies**: in a raw `page.route`/`route.fulfill` mock body, hand-write **Connect-JSON**, not
+  the proto wire/JS shape — Timestamps are RFC3339 strings, `bytes` are base64, enums are the name
+  string or the integer, `int64` is a decimal string. When a field isn't read by the code under test,
+  omit it rather than guess its JSON shape. (Related: also match request URLs on the `/<Method>` segment
+  — the connect path is `<pkg>.<Service>/<Method>`, a DOT precedes the service, so a `'/<Service>/'`
+  `.includes` never matches.)
+
+### 2026-09-01 — 142-fix-fundamentals-upsert-invalid-json — assumption
+- **Mistake**: A `::jsonb` SQL cast was applied to `$14` in `UpsertFundamentals` assuming it would
+  override the pgx wire OID for a `[]byte` parameter. Under `QueryExecModeExec` pgx sends `[]byte` as
+  `bytea` regardless of the SQL text — `bytea::jsonb` goes through hex-escaped representation and is
+  never valid JSON. The cast-only fix (PR #967) was deployed to staging and confirmed broken there,
+  wasting a deploy cycle. Only the live-DB repro (Steps 1/3) would have caught this before merge;
+  those steps were blocked for lack of Docker in the execute sandbox.
+- **Evidence**: feature 142 context.md 2026-08-16 entry ("PR #967 merged and deployed to staging —
+  the `::jsonb`-cast-only fix did NOT resolve the bug"); pgx v5 doc comment on QueryExecModeSimpleProtocol
+  (shared behavior with Exec mode: "string must be used instead for text type values including json and jsonb").
+- **Rule it implies**: a `::jsonb` SQL cast does NOT override the Go wire OID — `[]byte` under
+  `QueryExecModeExec` is always `bytea`. Bind JSON as `string`; confirm with a `DB_PGBOUNCER=true`
+  integration test against a real Postgres before merging, even without Docker.
+
+### 2026-09-01 — 142-fix-fundamentals-upsert-invalid-json — assumption
+- **Mistake**: The mandatory live-DB repro gate (Steps 1 and 3) was marked `blocked` across multiple
+  sessions because the execute sandbox lacked Docker, preventing the full PgBouncer stack. This caused
+  two incomplete deploys. The repro actually needed only `DB_PGBOUNCER=true` + any real Postgres binary
+  — no Docker, no actual PgBouncer. The insight unlocking it (PostgreSQL 16 binaries + Go 1.27 already
+  present) was only discovered in the 2026-08-29 session, after the fix had already shipped to production.
+- **Evidence**: feature 142 context.md 2026-08-29 entry ("Insight that unblocked it: the bug needs only
+  pgx in `QueryExecModeExec` (`DB_PGBOUNCER=true`) against *any* real Postgres"); feature.md Status History.
+- **Rule it implies**: a "needs PgBouncer" execution block should immediately re-evaluate whether
+  `DB_PGBOUNCER=true` + local Postgres satisfies the repro — PgBouncer mode is a driver flag, not an
+  infrastructure requirement.
+
+### 2026-09-01 — 161-surface-signal-weight-decay-config — assumption
+- **Mistake**: The `WEIGHT_KEY_REGISTRY` in `configServiceImpl.ts` was indexed by the bare `r.key`
+  column value (namespace-stripped `key`) rather than the full `namespace.key` path. This caused
+  `SCALAR_BOUNDS_REGISTRY[r.key]` lookups to always return `undefined` in production (the DB `key`
+  is the suffix only), making the bounds validation silently never emit — breaking AC-6. The latent
+  bug existed for the previous `FLOAT_MAP` path and was masked by non-representative full-path test
+  fixtures.
+- **Evidence**: feature 161 context.md Session 2026-08-26 sdd-review impl-spec (warning flagged as
+  "C-01, load-bearing" for Steps 6/7); `services/xstockstrat-config/src/grpc/configServiceImpl.ts:508`
+  (`WEIGHT_KEY_REGISTRY[r.key]` → fixed to `` `${namespace}.${r.key}` ``).
+- **Rule it implies**: config-service registry maps must be indexed by the full `namespace.key` path;
+  using the bare DB key column is a permanent no-validation bug. Test fixtures must use the split-key
+  DB form (not a full-path override) to catch this.
+
+### 2026-09-01 — 161-surface-signal-weight-decay-config — config
+- **Mistake**: The original product spec's scope explicitly said "no proto changes," but the chosen
+  design (server-side enforced bounds for the decay key) required adding `config.v1.ValueType.VALUE_TYPE_FLOAT_SCALAR=2`.
+  This was an operator-approved scope override (Fork 1) but was not anticipated at story time, causing
+  a round-trip back to the user during design. The pre-existing `FLOAT_MAP=1` value's removal from
+  live code also required careful handling (`[deprecated=true]` retention for enum stability).
+- **Evidence**: feature 161 context.md Session 2026-08-26 sdd-design (operator decisions AskUserQuestion
+  P-04, Fork 1); `packages/proto/config/v1/config.proto:80-83`.
+- **Rule it implies**: any feature touching config validation logic should explicitly gate on "do we
+  need new proto enum members?" in the product spec's Constraints section, not assume no-proto by default.
+
+### 2026-09-01 — 163-snapshot-offline-positions — assumption
+- **Mistake**: The `SnapshotOfflinePositions` handler initially was designed without acquiring the
+  per-account `confirmLock` around persist+recompute+emit — missing that `ConfirmOrder` already holds
+  this non-reentrant mutex and that `@AC-10` idempotency requires serialized recompute. Caught only
+  in the 3rd round of design adversarial grilling; if shipped without the lock the snapshot handler
+  could race with `ConfirmOrder`, producing a lost-update / double-emit.
+- **Evidence**: feature 163 context.md Session 2026-08-30 sdd-design (Round-3 blocker); design.md
+  § Chosen Approach; `services/xstockstrat-trading/internal/service/trading.go:842-857,912-914`.
+- **Rule it implies**: any new request handler that shares a recompute+emit path with an existing
+  mutex-protected handler must acquire the same per-account lock around the entire persist→recompute→emit
+  sequence; surfacing this in the design (not the execute) phase is why the 3-round full debate paid off.
+
+### 2026-09-01 — 163-snapshot-offline-positions — assumption
+- **Mistake**: The initial story proposed using an existing ledger `account.positions.synced` event or
+  synthetic fill orders to represent the baseline snapshot. Both were wrong: the ledger's `idempotency_key`
+  returns the original row on re-submit (not overwrite), making replace-semantics impossible; synthetic
+  sell orders would corrupt realized P&L by registering as closing trades. The correct model (a plain
+  mutable `trading.offline_position_baselines` table) was only established during sdd-story's read-only
+  recon, before any spec was written.
+- **Evidence**: feature 163 context.md Session 2026-08-29 sdd-story ("Storage: offline fills are
+  `trading.orders` rows … Decision: the baseline is a **separate table**, NOT synthetic orders — a
+  synthetic sell would register as a closing trade and corrupt realized P&L").
+- **Rule it implies**: before proposing to "add to the ledger" or "model as orders," verify the ledger's
+  idempotency-key semantics and the P&L accumulator's response to synthetic rows — both are non-obvious
+  and contraindicated for replace-semantics use cases.
+
+### 2026-09-01 — 163-snapshot-offline-positions — assumption
+- **Mistake**: The `account.positions.synced` reconciliation payload shipped in feature 157 was missing
+  `user_id` (the add-ikbr-account-support trap from `fails.md`), and the same trap nearly repeated in
+  feature 163's baseline audit event. The `fails.md` ledger entry explicitly flagged this trap at
+  sdd-story time, which led to the `non-empty user_id` requirement being baked into design.md before
+  the execute phase.
+- **Evidence**: feature 163 context.md Session 2026-08-29 sdd-story (Known traps folded into product-spec,
+  citing 2026-08-05 add-ikbr-account-support fails.md entry); design.md ("non-empty user_id on the shared
+  emit (add-ikbr trap)").
+- **Rule it implies**: the `account.positions.*` family of reconciliation payloads must always include
+  `user_id`; any new emitter of these events must verify `user_id` is set before the first emit (reinforces
+  the existing add-ikbr fails.md entry as a repeat class).
+
+### 2026-09-01 — 164-agent-broker-account-tools — assumption
+- **Mistake**: The `tests/test_tools_endpoint.py` file asserts the EXACT set of tool names as a set
+  literal (`names == {...30 names...}`). This was not in the original recon or the initial design; it
+  was caught by `/sdd-spec`'s codebase grounding pass and added to Step 4's instructions before
+  execute. Without catching it at spec time, adding two tools would have broken CI with a test failure
+  not covered by the impl-spec's listed steps.
+- **Evidence**: feature 164 context.md Session 2026-08-27 sdd-spec ("New surface the design missed —
+  folded into Step 4: `tests/test_tools_endpoint.py:22-54` asserts the EXACT set of 30 tool names").
+- **Rule it implies**: any `/sdd-spec` grounding pass for a new agent tool must check `test_tools_endpoint.py`
+  for an exact-set assertion on tool names; missing this surfaces only at CI, not at design time.
+
+### 2026-09-01 — 164-agent-broker-account-tools — config
+- **Mistake**: `services/xstockstrat-ui/src/lib/copilot.ts` `COPILOT_MCP_TOOL_COUNT=24` was already
+  stale (real count was 30) before feature 164 shipped; the design scoped drift discharge to agent
+  surfaces only and left copilot.ts out of scope, but the ledger (fails.md:1530-1532) mandates
+  syncing ALL six tool-count surfaces. Fixed as an operator-approved deviation at execute time
+  (24→32), but should have been in scope from the design.
+- **Evidence**: feature 164 context.md Session 2026-08-27 sdd-execute (Deviation: "also synced
+  `services/xstockstrat-ui/src/lib/copilot.ts` `COPILOT_MCP_TOOL_COUNT` 24 → 32");
+  `services/xstockstrat-ui/src/lib/copilot.ts:14`.
+- **Rule it implies**: the six tool-count surfaces include `COPILOT_MCP_TOOL_COUNT` in copilot.ts;
+  any design or spec for a new agent tool must list it in the Files section, regardless of whether
+  the UI is the "affected service".

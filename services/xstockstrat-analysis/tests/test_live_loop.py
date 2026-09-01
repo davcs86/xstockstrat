@@ -846,3 +846,288 @@ class TestLiveLoopOwnerScoped:
         await loop._run_cycle()
         # AAA is held AND denied → retained in the universe but flagged deny_entry (exit-only)
         assert seen == {"AAA": True}
+
+
+class TestLiveLoopFundamentalsUniverse:
+    """feature 168 — the once-per-cycle fundamentals-universe resolver: symbols with an active
+    signal from the fundamentals source INTERSECTED with symbols that have actual fundamentals data,
+    failing closed to empty on any error (never a broad fallback)."""
+
+    def _cfg_slug(self, loop):
+        # _make_loop's cfg only stubs get_int/get_int_present; add get_str for the source slug.
+        loop._cfg.get_str = MagicMock(side_effect=lambda key, default="": default)
+
+    @pytest.mark.asyncio
+    async def test_intersection_keeps_only_signal_and_fundamentals(self):
+        # AC-1: signals for AAPL/MSFT/ZZZZ (source fundamentals); only AAPL/MSFT have fundamentals.
+        loop = _make_loop()
+        self._cfg_slug(loop)
+        loop._ingest.QuerySignals = AsyncMock(
+            return_value=SimpleNamespace(
+                signals=[SimpleNamespace(symbol=s) for s in ("AAPL", "MSFT", "ZZZZ")],
+                page=SimpleNamespace(next_page_token=""),
+            )
+        )
+        loop._marketdata.GetFundamentalsMulti = AsyncMock(
+            return_value=SimpleNamespace(
+                fundamentals=[SimpleNamespace(symbol=s) for s in ("AAPL", "MSFT")]
+            )
+        )
+
+        result = await loop._resolve_fundamentals_universe()
+
+        assert result == {"AAPL", "MSFT"}  # ZZZZ: has a signal but no fundamentals row → dropped
+        # The QuerySignals call filtered by the fundamentals source slug.
+        assert loop._ingest.QuerySignals.await_args.args[0].source == "fundamentals"
+
+    @pytest.mark.asyncio
+    async def test_querysignals_error_fails_closed_to_empty(self):
+        # AC-6: an ingest failure yields an empty universe — never a broad watchlist/held fallback.
+        loop = _make_loop()
+        self._cfg_slug(loop)
+        loop._ingest.QuerySignals = AsyncMock(side_effect=RuntimeError("ingest down"))
+        loop._marketdata.GetFundamentalsMulti = AsyncMock(
+            return_value=SimpleNamespace(fundamentals=[])
+        )
+        assert await loop._resolve_fundamentals_universe() == set()
+
+    @pytest.mark.asyncio
+    async def test_getfundamentals_error_fails_closed_to_empty(self):
+        # AC-6: a marketdata failure also fails closed to empty.
+        loop = _make_loop()
+        self._cfg_slug(loop)
+        loop._ingest.QuerySignals = AsyncMock(
+            return_value=SimpleNamespace(
+                signals=[SimpleNamespace(symbol=s) for s in ("AAPL", "MSFT")],
+                page=SimpleNamespace(next_page_token=""),
+            )
+        )
+        loop._marketdata.GetFundamentalsMulti = AsyncMock(side_effect=RuntimeError("md down"))
+        assert await loop._resolve_fundamentals_universe() == set()
+
+
+class TestLiveLoopBlendUniverse:
+    """feature 168 — the config-gated fundamentals-universe force-run inside _run_cycle. The
+    governed strategy (analysis.engine.fundamentals_blend_strategy_id) is evaluated over the
+    fundamentals universe (signals from the fundamentals source ∩ symbols with fundamentals data),
+    minus its own deny list; every other strategy is byte-for-byte unchanged, and no fundamentals
+    call is made when the blend strategy is not live this cycle (FR-5/AC-4) or the kill-switch is
+    off (AC-6)."""
+
+    BLEND_ID = "fundamentals_macd_blend"
+    SLUG = "fundamentals"
+
+    def _cfg(self, loop, *, blend_id=BLEND_ID, enabled=True):
+        # _make_loop's cfg stubs only get_int/get_int_present; add the two feature-168 reads.
+        loop._cfg.get_str = MagicMock(
+            side_effect=lambda key, default="": {
+                "analysis.engine.fundamentals_blend_strategy_id": blend_id,
+                "analysis.fundsignal.source_slug": self.SLUG,
+            }.get(key, default)
+        )
+        loop._cfg.get_bool = MagicMock(
+            side_effect=lambda key, default=False: (
+                enabled if key == "analysis.engine.fundamentals_blend_enabled" else default
+            )
+        )
+
+    def _wire(
+        self,
+        loop,
+        *,
+        positions_by_owner=None,
+        watch_by_owner=None,
+        fundamentals_signals=(),
+        fundamentals_rows=None,
+        platform_signals=(),
+        fundamentals_raises=False,
+    ):
+        """Wire portfolio held/watch per owner, the source-filtered fundamentals QuerySignals vs
+        the plain platform drain (keyed on req.source), and GetFundamentalsMulti."""
+        positions_by_owner = positions_by_owner or {}
+        watch_by_owner = watch_by_owner or {}
+        loop._portfolio = AsyncMock()
+
+        async def _list_positions(req, metadata=None):
+            syms = positions_by_owner.get(req.user_id, [])
+            return SimpleNamespace(
+                positions=[SimpleNamespace(symbol=s) for s in syms],
+                page=SimpleNamespace(next_page_token=""),
+            )
+
+        async def _list_watchlists(req, metadata=None):
+            owner = dict(metadata or []).get("x-user-id")
+            syms = watch_by_owner.get(owner, [])
+            return SimpleNamespace(
+                watchlists=[SimpleNamespace(bindings=[], symbols=list(syms))],
+                page=SimpleNamespace(next_page_token=""),
+            )
+
+        loop._portfolio.ListPositions = AsyncMock(side_effect=_list_positions)
+        loop._portfolio.ListWatchlists = AsyncMock(side_effect=_list_watchlists)
+
+        async def _query_signals(req, metadata=None):
+            if req.source == self.SLUG:
+                if fundamentals_raises:
+                    raise RuntimeError("ingest down")
+                syms = fundamentals_signals
+            else:
+                syms = platform_signals
+            return SimpleNamespace(
+                signals=[SimpleNamespace(symbol=s) for s in syms],
+                page=SimpleNamespace(next_page_token=""),
+            )
+
+        loop._ingest.QuerySignals = AsyncMock(side_effect=_query_signals)
+
+        rows = fundamentals_rows if fundamentals_rows is not None else fundamentals_signals
+        loop._marketdata.GetFundamentalsMulti = AsyncMock(
+            return_value=SimpleNamespace(fundamentals=[SimpleNamespace(symbol=s) for s in rows])
+        )
+
+    @staticmethod
+    def _seen_capture(loop):
+        seen: set = set()
+
+        async def fake_eval(defn, symbol, throttle, deny_entry=False):
+            seen.add((defn.strategy_id, symbol))
+
+        loop._eval_pair = fake_eval
+        return seen
+
+    @pytest.mark.asyncio
+    async def test_blend_runs_on_intersection(self):
+        # AC-1: the live blend strategy is evaluated exactly on the fundamentals universe
+        # (signals AAPL/MSFT/ZZZZ ∩ fundamentals AAPL/MSFT), never on ZZZZ (no fundamentals row).
+        loop = _make_loop()
+        self._cfg(loop)
+        loop._db.fetch = AsyncMock(return_value=[_live_row(self.BLEND_ID, "u-1")])
+        self._wire(
+            loop,
+            fundamentals_signals=("AAPL", "MSFT", "ZZZZ"),
+            fundamentals_rows=("AAPL", "MSFT"),
+        )
+        seen = self._seen_capture(loop)
+        await loop._run_cycle()
+        assert {sym for (sid, sym) in seen if sid == self.BLEND_ID} == {"AAPL", "MSFT"}
+        assert (self.BLEND_ID, "ZZZZ") not in seen
+
+    @pytest.mark.asyncio
+    async def test_blend_excluded_outside_universe(self):
+        # AC-2: watchlist GME + held AMC (neither a fundamentals signal) must NOT reach the blend —
+        # its universe is the fundamentals set only, not the owner's watchlist/held.
+        loop = _make_loop()
+        self._cfg(loop)
+        loop._db.fetch = AsyncMock(return_value=[_live_row(self.BLEND_ID, "u-1")])
+        self._wire(
+            loop,
+            positions_by_owner={"u-1": ["AMC"]},
+            watch_by_owner={"u-1": ["GME"]},
+            fundamentals_signals=("AAPL", "MSFT"),
+            fundamentals_rows=("AAPL", "MSFT"),
+        )
+        seen = self._seen_capture(loop)
+        await loop._run_cycle()
+        blend_syms = {sym for (sid, sym) in seen if sid == self.BLEND_ID}
+        assert blend_syms & {"GME", "AMC"} == set()
+        assert blend_syms <= {"AAPL", "MSFT"}  # subset of the fundamentals universe
+
+    @pytest.mark.asyncio
+    async def test_blend_additive_other_strategy_unchanged(self):
+        # AC-3 (no-regression): a co-owner's sma_cross keeps its full watchlist universe
+        # {AAPL, GME}; the blend is ADDED (only AAPL, the fundamentals symbol), never substituted.
+        loop = _make_loop()
+        self._cfg(loop)
+        loop._db.fetch = AsyncMock(
+            return_value=[_live_row("sma_cross", "u-1"), _live_row(self.BLEND_ID, "u-1")]
+        )
+        self._wire(
+            loop,
+            watch_by_owner={"u-1": ["AAPL", "GME"]},
+            fundamentals_signals=("AAPL",),
+            fundamentals_rows=("AAPL",),
+        )
+        seen = self._seen_capture(loop)
+        await loop._run_cycle()
+        assert ("sma_cross", "AAPL") in seen and ("sma_cross", "GME") in seen
+        assert {sym for (sid, sym) in seen if sid == self.BLEND_ID} == {"AAPL"}
+
+    @pytest.mark.asyncio
+    async def test_noop_when_blend_strategy_not_live(self):
+        # AC-4: no blend row live this cycle → the resolver is never invoked (F-06 pacing) and
+        # ordinary strategies evaluate exactly as before.
+        loop = _make_loop()
+        self._cfg(loop)
+        loop._db.fetch = AsyncMock(return_value=[_live_row("sma_cross", "u-1")])
+        self._wire(
+            loop,
+            watch_by_owner={"u-1": ["AAPL", "GME"]},
+            fundamentals_signals=("AAPL",),
+            fundamentals_rows=("AAPL",),
+        )
+        seen = self._seen_capture(loop)
+        await loop._run_cycle()
+        assert ("sma_cross", "AAPL") in seen and ("sma_cross", "GME") in seen
+        assert loop._marketdata.GetFundamentalsMulti.await_count == 0
+
+    @pytest.mark.asyncio
+    async def test_config_retargets_to_other_id(self):
+        # AC-5: retarget the rule to fund_blend_v2 via config. fund_blend_v2 becomes the
+        # fundamentals-universe strategy; fundamentals_macd_blend reverts to an ordinary strategy.
+        loop = _make_loop()
+        self._cfg(loop, blend_id="fund_blend_v2")
+        loop._db.fetch = AsyncMock(
+            return_value=[
+                _live_row("fund_blend_v2", "u-1"),
+                _live_row("fundamentals_macd_blend", "u-1"),
+            ]
+        )
+        self._wire(
+            loop,
+            watch_by_owner={"u-1": ["AAPL", "GME"]},
+            fundamentals_signals=("AAPL",),
+            fundamentals_rows=("AAPL",),
+        )
+        seen = self._seen_capture(loop)
+        await loop._run_cycle()
+        assert {sym for (sid, sym) in seen if sid == "fund_blend_v2"} == {"AAPL"}
+        # fundamentals_macd_blend is now just a normal strategy over its own watchlist.
+        assert {sym for (sid, sym) in seen if sid == "fundamentals_macd_blend"} == {"AAPL", "GME"}
+
+    @pytest.mark.asyncio
+    async def test_resolution_failure_yields_empty_not_broad(self):
+        # AC-6: the source-filtered QuerySignals raises → fundamentals universe fails closed to
+        # empty, so the blend evaluates ZERO symbols (never the owner's watchlist), and the owner's
+        # other live strategies still evaluate normally.
+        loop = _make_loop()
+        self._cfg(loop)
+        loop._db.fetch = AsyncMock(
+            return_value=[_live_row(self.BLEND_ID, "u-1"), _live_row("sma_cross", "u-1")]
+        )
+        self._wire(
+            loop,
+            watch_by_owner={"u-1": ["AAPL", "TSLA"]},
+            fundamentals_raises=True,
+        )
+        seen = self._seen_capture(loop)
+        await loop._run_cycle()
+        assert {sym for (sid, sym) in seen if sid == self.BLEND_ID} == set()
+        assert ("sma_cross", "AAPL") in seen and ("sma_cross", "TSLA") in seen
+
+    @pytest.mark.asyncio
+    async def test_kill_switch_disables_override(self):
+        # AC-6 (kill-switch): fundamentals_blend_enabled=false → the blend gets its ordinary
+        # watchlist/held universe and no fundamentals resolution is attempted.
+        loop = _make_loop()
+        self._cfg(loop, enabled=False)
+        loop._db.fetch = AsyncMock(return_value=[_live_row(self.BLEND_ID, "u-1")])
+        self._wire(
+            loop,
+            watch_by_owner={"u-1": ["AAPL", "GME"]},
+            fundamentals_signals=("AAPL",),
+            fundamentals_rows=("AAPL",),
+        )
+        seen = self._seen_capture(loop)
+        await loop._run_cycle()
+        assert {sym for (sid, sym) in seen if sid == self.BLEND_ID} == {"AAPL", "GME"}
+        assert loop._marketdata.GetFundamentalsMulti.await_count == 0

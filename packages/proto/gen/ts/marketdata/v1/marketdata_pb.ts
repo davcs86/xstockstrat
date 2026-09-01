@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file marketdata/v1/marketdata.proto.
  */
 export const file_marketdata_v1_marketdata: GenFile = /*@__PURE__*/
-  fileDesc("Ch5tYXJrZXRkYXRhL3YxL21hcmtldGRhdGEucHJvdG8SGXhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEiiwIKA0JhchIOCgZzeW1ib2wYASABKAkSKAoEdGltZRgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDAoEb3BlbhgDIAEoARIMCgRoaWdoGAQgASgBEgsKA2xvdxgFIAEoARINCgVjbG9zZRgGIAEoARIOCgZ2b2x1bWUYByABKAMSDAoEdndhcBgIIAEoARITCgt0cmFkZV9jb3VudBgJIAEoBRIVCgl0aW1lZnJhbWUYCiABKAlCAhgBEg4KBnNvdXJjZRgLIAEoCRI4Cg50aW1lZnJhbWVfZW51bRgMIAEoDjIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lZnJhbWUimwEKBVF1b3RlEg4KBnN5bWJvbBgBIAEoCRIoCgR0aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCglhc2tfcHJpY2UYAyABKAESEAoIYXNrX3NpemUYBCABKAUSEQoJYmlkX3ByaWNlGAUgASgBEhAKCGJpZF9zaXplGAYgASgFEg4KBnNvdXJjZRgHIAEoCSKsAQoRU3RyZWFtQmFyc1JlcXVlc3QSDwoHc3ltYm9scxgBIAMoCRIVCgl0aW1lZnJhbWUYAiABKAlCAhgBEhkKEWluY2x1ZGVfcHJlbWFya2V0GAMgASgIEhoKEmluY2x1ZGVfYWZ0ZXJob3VycxgEIAEoCBI4Cg50aW1lZnJhbWVfZW51bRgFIAEoDjIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lZnJhbWUiJgoTU3RyZWFtUXVvdGVzUmVxdWVzdBIPCgdzeW1ib2xzGAEgAygJItQBCg5HZXRCYXJzUmVxdWVzdBIOCgZzeW1ib2wYASABKAkSFQoJdGltZWZyYW1lGAIgASgJQgIYARIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USMAoEcGFnZRgEIAEoCzIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVxdWVzdBI4Cg50aW1lZnJhbWVfZW51bRgFIAEoDjIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lZnJhbWUicgoPR2V0QmFyc1Jlc3BvbnNlEiwKBGJhcnMYASADKAsyHi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkJhchIxCgRwYWdlGAIgASgLMiMueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSInChVHZXRMYXRlc3RRdW90ZVJlcXVlc3QSDgoGc3ltYm9sGAEgASgJIsQBChNCYWNrZmlsbEJhcnNSZXF1ZXN0Eg8KB3N5bWJvbHMYASADKAkSFQoJdGltZWZyYW1lGAIgASgJQgIYARIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USGgoSb3ZlcndyaXRlX2V4aXN0aW5nGAQgASgIEjgKDnRpbWVmcmFtZV9lbnVtGAUgASgOMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVmcmFtZSJbChRCYWNrZmlsbEJhcnNSZXNwb25zZRIUCgxiYXJzX3dyaXR0ZW4YASABKAMSFgoOZmFpbGVkX3N5bWJvbHMYAiADKAkSFQoNZXhwZWN0ZWRfYmFycxgDIAEoAyKOAQoWR2V0RGF0YUNvdmVyYWdlUmVxdWVzdBIOCgZzeW1ib2wYASABKAkSMwoJdGltZWZyYW1lGAIgASgOMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVmcmFtZRIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2UidgoNQ292ZXJhZ2VSYW5nZRIpCgVzdGFydBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJwoDZW5kGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCgliYXJfY291bnQYAyABKAMivgIKF0dldERhdGFDb3ZlcmFnZVJlc3BvbnNlEg4KBnN5bWJvbBgBIAEoCRIzCgl0aW1lZnJhbWUYAiABKA4yIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZWZyYW1lEhIKCmJhcnNfdG90YWwYAyABKAMSLAoIZWFybGllc3QYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEioKBmxhdGVzdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASQAoOY292ZXJlZF9yYW5nZXMYBiADKAsyKC54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkNvdmVyYWdlUmFuZ2USLgoEZ2FwcxgHIAMoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2UiPwoRTGlzdEFzc2V0c1JlcXVlc3QSEwoLYXNzZXRfY2xhc3MYASABKAkSFQoNdHJhZGFibGVfb25seRgCIAEoCCJCChJMaXN0QXNzZXRzUmVzcG9uc2USLAoGYXNzZXRzGAEgAygLMhwueHN0b2Nrc3RyYXQuY29tbW9uLnYxLkFzc2V0IpMBChtEZWxldGVCYWNrZmlsbGVkRGF0YVJlcXVlc3QSDgoGc3ltYm9sGAEgASgJEi8KBXJhbmdlGAIgASgLMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVSYW5nZRIzCgl0aW1lZnJhbWUYAyABKA4yIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZWZyYW1lIjQKHERlbGV0ZUJhY2tmaWxsZWREYXRhUmVzcG9uc2USFAoMcm93c19kZWxldGVkGAEgASgDIt4DCgxGdW5kYW1lbnRhbHMSDgoGc3ltYm9sGAEgASgJEhIKCm1hcmtldF9jYXAYAiABKAESEAoIcGVfcmF0aW8YAyABKAESEAoIcGJfcmF0aW8YBCABKAESFgoOZGl2aWRlbmRfeWllbGQYBSABKAESCwoDZXBzGAYgASgBEgwKBGJldGEYByABKAESCwoDcm9lGAggASgBEhYKDmRlYnRfdG9fZXF1aXR5GAkgASgBEg0KBXByaWNlGAogASgBEhEKCXllYXJfaGlnaBgLIAEoARIQCgh5ZWFyX2xvdxgMIAEoARJQCg1leHRyYV9tZXRyaWNzGA0gAygLMjkueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5GdW5kYW1lbnRhbHMuRXh0cmFNZXRyaWNzRW50cnkSKQoFYXNfb2YYDiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhAKCGN1cnJlbmN5GA8gASgJEg4KBnNvdXJjZRgQIAEoCRINCgVzdGFsZRgRIAEoCBIXCg9taXNzaW5nX21ldHJpY3MYEiADKAkaMwoRRXh0cmFNZXRyaWNzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgBOgI4ASIoChZHZXRGdW5kYW1lbnRhbHNSZXF1ZXN0Eg4KBnN5bWJvbBgBIAEoCSJYChdHZXRGdW5kYW1lbnRhbHNSZXNwb25zZRI9CgxmdW5kYW1lbnRhbHMYASABKAsyJy54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkZ1bmRhbWVudGFscyIuChtHZXRGdW5kYW1lbnRhbHNNdWx0aVJlcXVlc3QSDwoHc3ltYm9scxgBIAMoCSJdChxHZXRGdW5kYW1lbnRhbHNNdWx0aVJlc3BvbnNlEj0KDGZ1bmRhbWVudGFscxgBIAMoCzInLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuRnVuZGFtZW50YWxzMoEJChFNYXJrZXREYXRhU2VydmljZRJcCgpTdHJlYW1CYXJzEiwueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5TdHJlYW1CYXJzUmVxdWVzdBoeLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuQmFyMAESYgoMU3RyZWFtUXVvdGVzEi4ueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5TdHJlYW1RdW90ZXNSZXF1ZXN0GiAueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5RdW90ZTABEmAKB0dldEJhcnMSKS54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldEJhcnNSZXF1ZXN0GioueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5HZXRCYXJzUmVzcG9uc2USZAoOR2V0TGF0ZXN0UXVvdGUSMC54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldExhdGVzdFF1b3RlUmVxdWVzdBogLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuUXVvdGUSbwoMQmFja2ZpbGxCYXJzEi4ueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5CYWNrZmlsbEJhcnNSZXF1ZXN0Gi8ueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5CYWNrZmlsbEJhcnNSZXNwb25zZRJ4Cg9HZXREYXRhQ292ZXJhZ2USMS54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldERhdGFDb3ZlcmFnZVJlcXVlc3QaMi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldERhdGFDb3ZlcmFnZVJlc3BvbnNlEocBChREZWxldGVCYWNrZmlsbGVkRGF0YRI2LnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuRGVsZXRlQmFja2ZpbGxlZERhdGFSZXF1ZXN0GjcueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5EZWxldGVCYWNrZmlsbGVkRGF0YVJlc3BvbnNlEmkKCkxpc3RBc3NldHMSLC54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkxpc3RBc3NldHNSZXF1ZXN0Gi0ueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5MaXN0QXNzZXRzUmVzcG9uc2USeAoPR2V0RnVuZGFtZW50YWxzEjEueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5HZXRGdW5kYW1lbnRhbHNSZXF1ZXN0GjIueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5HZXRGdW5kYW1lbnRhbHNSZXNwb25zZRKHAQoUR2V0RnVuZGFtZW50YWxzTXVsdGkSNi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldEZ1bmRhbWVudGFsc011bHRpUmVxdWVzdBo3LnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuR2V0RnVuZGFtZW50YWxzTXVsdGlSZXNwb25zZUJEWkJnaXRodWIuY29tL3hzdG9ja3N0cmF0L2NvbnRyYWN0cy9nZW4vZ28vbWFya2V0ZGF0YS92MTttYXJrZXRkYXRhdjFiBnByb3RvMw", [file_google_protobuf_timestamp, file_common_v1_common]);
+  fileDesc("Ch5tYXJrZXRkYXRhL3YxL21hcmtldGRhdGEucHJvdG8SGXhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEiiwIKA0JhchIOCgZzeW1ib2wYASABKAkSKAoEdGltZRgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDAoEb3BlbhgDIAEoARIMCgRoaWdoGAQgASgBEgsKA2xvdxgFIAEoARINCgVjbG9zZRgGIAEoARIOCgZ2b2x1bWUYByABKAMSDAoEdndhcBgIIAEoARITCgt0cmFkZV9jb3VudBgJIAEoBRIVCgl0aW1lZnJhbWUYCiABKAlCAhgBEg4KBnNvdXJjZRgLIAEoCRI4Cg50aW1lZnJhbWVfZW51bRgMIAEoDjIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lZnJhbWUimwEKBVF1b3RlEg4KBnN5bWJvbBgBIAEoCRIoCgR0aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCglhc2tfcHJpY2UYAyABKAESEAoIYXNrX3NpemUYBCABKAUSEQoJYmlkX3ByaWNlGAUgASgBEhAKCGJpZF9zaXplGAYgASgFEg4KBnNvdXJjZRgHIAEoCSInChVHZXRMYXRlc3RQcmljZVJlcXVlc3QSDgoGc3ltYm9sGAEgASgJIrIBCgtMYXRlc3RQcmljZRIOCgZzeW1ib2wYASABKAkSFwoKbGFzdF9wcmljZRgCIAEoAUgAiAEBEjMKD2xhc3RfdHJhZGVfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASFwoKcHJldl9jbG9zZRgEIAEoAUgBiAEBEg4KBnNvdXJjZRgFIAEoCUINCgtfbGFzdF9wcmljZUINCgtfcHJldl9jbG9zZSKsAQoRU3RyZWFtQmFyc1JlcXVlc3QSDwoHc3ltYm9scxgBIAMoCRIVCgl0aW1lZnJhbWUYAiABKAlCAhgBEhkKEWluY2x1ZGVfcHJlbWFya2V0GAMgASgIEhoKEmluY2x1ZGVfYWZ0ZXJob3VycxgEIAEoCBI4Cg50aW1lZnJhbWVfZW51bRgFIAEoDjIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lZnJhbWUiJgoTU3RyZWFtUXVvdGVzUmVxdWVzdBIPCgdzeW1ib2xzGAEgAygJItQBCg5HZXRCYXJzUmVxdWVzdBIOCgZzeW1ib2wYASABKAkSFQoJdGltZWZyYW1lGAIgASgJQgIYARIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USMAoEcGFnZRgEIAEoCzIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVxdWVzdBI4Cg50aW1lZnJhbWVfZW51bRgFIAEoDjIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lZnJhbWUicgoPR2V0QmFyc1Jlc3BvbnNlEiwKBGJhcnMYASADKAsyHi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkJhchIxCgRwYWdlGAIgASgLMiMueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSInChVHZXRMYXRlc3RRdW90ZVJlcXVlc3QSDgoGc3ltYm9sGAEgASgJIsQBChNCYWNrZmlsbEJhcnNSZXF1ZXN0Eg8KB3N5bWJvbHMYASADKAkSFQoJdGltZWZyYW1lGAIgASgJQgIYARIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USGgoSb3ZlcndyaXRlX2V4aXN0aW5nGAQgASgIEjgKDnRpbWVmcmFtZV9lbnVtGAUgASgOMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVmcmFtZSJbChRCYWNrZmlsbEJhcnNSZXNwb25zZRIUCgxiYXJzX3dyaXR0ZW4YASABKAMSFgoOZmFpbGVkX3N5bWJvbHMYAiADKAkSFQoNZXhwZWN0ZWRfYmFycxgDIAEoAyKOAQoWR2V0RGF0YUNvdmVyYWdlUmVxdWVzdBIOCgZzeW1ib2wYASABKAkSMwoJdGltZWZyYW1lGAIgASgOMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVmcmFtZRIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2UidgoNQ292ZXJhZ2VSYW5nZRIpCgVzdGFydBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJwoDZW5kGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCgliYXJfY291bnQYAyABKAMivgIKF0dldERhdGFDb3ZlcmFnZVJlc3BvbnNlEg4KBnN5bWJvbBgBIAEoCRIzCgl0aW1lZnJhbWUYAiABKA4yIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZWZyYW1lEhIKCmJhcnNfdG90YWwYAyABKAMSLAoIZWFybGllc3QYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEioKBmxhdGVzdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASQAoOY292ZXJlZF9yYW5nZXMYBiADKAsyKC54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkNvdmVyYWdlUmFuZ2USLgoEZ2FwcxgHIAMoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2UiPwoRTGlzdEFzc2V0c1JlcXVlc3QSEwoLYXNzZXRfY2xhc3MYASABKAkSFQoNdHJhZGFibGVfb25seRgCIAEoCCJCChJMaXN0QXNzZXRzUmVzcG9uc2USLAoGYXNzZXRzGAEgAygLMhwueHN0b2Nrc3RyYXQuY29tbW9uLnYxLkFzc2V0IpMBChtEZWxldGVCYWNrZmlsbGVkRGF0YVJlcXVlc3QSDgoGc3ltYm9sGAEgASgJEi8KBXJhbmdlGAIgASgLMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVSYW5nZRIzCgl0aW1lZnJhbWUYAyABKA4yIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZWZyYW1lIjQKHERlbGV0ZUJhY2tmaWxsZWREYXRhUmVzcG9uc2USFAoMcm93c19kZWxldGVkGAEgASgDIt4DCgxGdW5kYW1lbnRhbHMSDgoGc3ltYm9sGAEgASgJEhIKCm1hcmtldF9jYXAYAiABKAESEAoIcGVfcmF0aW8YAyABKAESEAoIcGJfcmF0aW8YBCABKAESFgoOZGl2aWRlbmRfeWllbGQYBSABKAESCwoDZXBzGAYgASgBEgwKBGJldGEYByABKAESCwoDcm9lGAggASgBEhYKDmRlYnRfdG9fZXF1aXR5GAkgASgBEg0KBXByaWNlGAogASgBEhEKCXllYXJfaGlnaBgLIAEoARIQCgh5ZWFyX2xvdxgMIAEoARJQCg1leHRyYV9tZXRyaWNzGA0gAygLMjkueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5GdW5kYW1lbnRhbHMuRXh0cmFNZXRyaWNzRW50cnkSKQoFYXNfb2YYDiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhAKCGN1cnJlbmN5GA8gASgJEg4KBnNvdXJjZRgQIAEoCRINCgVzdGFsZRgRIAEoCBIXCg9taXNzaW5nX21ldHJpY3MYEiADKAkaMwoRRXh0cmFNZXRyaWNzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgBOgI4ASIoChZHZXRGdW5kYW1lbnRhbHNSZXF1ZXN0Eg4KBnN5bWJvbBgBIAEoCSJYChdHZXRGdW5kYW1lbnRhbHNSZXNwb25zZRI9CgxmdW5kYW1lbnRhbHMYASABKAsyJy54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkZ1bmRhbWVudGFscyIuChtHZXRGdW5kYW1lbnRhbHNNdWx0aVJlcXVlc3QSDwoHc3ltYm9scxgBIAMoCSJdChxHZXRGdW5kYW1lbnRhbHNNdWx0aVJlc3BvbnNlEj0KDGZ1bmRhbWVudGFscxgBIAMoCzInLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuRnVuZGFtZW50YWxzMu0JChFNYXJrZXREYXRhU2VydmljZRJcCgpTdHJlYW1CYXJzEiwueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5TdHJlYW1CYXJzUmVxdWVzdBoeLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuQmFyMAESYgoMU3RyZWFtUXVvdGVzEi4ueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5TdHJlYW1RdW90ZXNSZXF1ZXN0GiAueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5RdW90ZTABEmAKB0dldEJhcnMSKS54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldEJhcnNSZXF1ZXN0GioueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5HZXRCYXJzUmVzcG9uc2USZAoOR2V0TGF0ZXN0UXVvdGUSMC54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldExhdGVzdFF1b3RlUmVxdWVzdBogLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuUXVvdGUSagoOR2V0TGF0ZXN0UHJpY2USMC54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldExhdGVzdFByaWNlUmVxdWVzdBomLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuTGF0ZXN0UHJpY2USbwoMQmFja2ZpbGxCYXJzEi4ueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5CYWNrZmlsbEJhcnNSZXF1ZXN0Gi8ueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5CYWNrZmlsbEJhcnNSZXNwb25zZRJ4Cg9HZXREYXRhQ292ZXJhZ2USMS54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldERhdGFDb3ZlcmFnZVJlcXVlc3QaMi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldERhdGFDb3ZlcmFnZVJlc3BvbnNlEocBChREZWxldGVCYWNrZmlsbGVkRGF0YRI2LnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuRGVsZXRlQmFja2ZpbGxlZERhdGFSZXF1ZXN0GjcueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5EZWxldGVCYWNrZmlsbGVkRGF0YVJlc3BvbnNlEmkKCkxpc3RBc3NldHMSLC54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkxpc3RBc3NldHNSZXF1ZXN0Gi0ueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5MaXN0QXNzZXRzUmVzcG9uc2USeAoPR2V0RnVuZGFtZW50YWxzEjEueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5HZXRGdW5kYW1lbnRhbHNSZXF1ZXN0GjIueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5HZXRGdW5kYW1lbnRhbHNSZXNwb25zZRKHAQoUR2V0RnVuZGFtZW50YWxzTXVsdGkSNi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldEZ1bmRhbWVudGFsc011bHRpUmVxdWVzdBo3LnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuR2V0RnVuZGFtZW50YWxzTXVsdGlSZXNwb25zZUJEWkJnaXRodWIuY29tL3hzdG9ja3N0cmF0L2NvbnRyYWN0cy9nZW4vZ28vbWFya2V0ZGF0YS92MTttYXJrZXRkYXRhdjFiBnByb3RvMw", [file_google_protobuf_timestamp, file_common_v1_common]);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.Bar
@@ -143,6 +143,69 @@ export const QuoteSchema: GenMessage<Quote> = /*@__PURE__*/
   messageDesc(file_marketdata_v1_marketdata, 1);
 
 /**
+ * Latest-trade price + prior-session daily close (feature 095). last_price/prev_close are explicit
+ * presence so absence is distinguishable from a fabricated 0 (AC-11 omit-not-fabricate).
+ *
+ * @generated from message xstockstrat.marketdata.v1.GetLatestPriceRequest
+ */
+export type GetLatestPriceRequest = Message<"xstockstrat.marketdata.v1.GetLatestPriceRequest"> & {
+  /**
+   * @generated from field: string symbol = 1;
+   */
+  symbol: string;
+};
+
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetLatestPriceRequest.
+ * Use `create(GetLatestPriceRequestSchema)` to create a new message.
+ */
+export const GetLatestPriceRequestSchema: GenMessage<GetLatestPriceRequest> = /*@__PURE__*/
+  messageDesc(file_marketdata_v1_marketdata, 2);
+
+/**
+ * @generated from message xstockstrat.marketdata.v1.LatestPrice
+ */
+export type LatestPrice = Message<"xstockstrat.marketdata.v1.LatestPrice"> & {
+  /**
+   * @generated from field: string symbol = 1;
+   */
+  symbol: string;
+
+  /**
+   * latest trade
+   *
+   * @generated from field: optional double last_price = 2;
+   */
+  lastPrice?: number | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp last_trade_time = 3;
+   */
+  lastTradeTime?: Timestamp | undefined;
+
+  /**
+   * prior session daily close
+   *
+   * @generated from field: optional double prev_close = 4;
+   */
+  prevClose?: number | undefined;
+
+  /**
+   * "alpaca"
+   *
+   * @generated from field: string source = 5;
+   */
+  source: string;
+};
+
+/**
+ * Describes the message xstockstrat.marketdata.v1.LatestPrice.
+ * Use `create(LatestPriceSchema)` to create a new message.
+ */
+export const LatestPriceSchema: GenMessage<LatestPrice> = /*@__PURE__*/
+  messageDesc(file_marketdata_v1_marketdata, 3);
+
+/**
  * @generated from message xstockstrat.marketdata.v1.StreamBarsRequest
  */
 export type StreamBarsRequest = Message<"xstockstrat.marketdata.v1.StreamBarsRequest"> & {
@@ -182,7 +245,7 @@ export type StreamBarsRequest = Message<"xstockstrat.marketdata.v1.StreamBarsReq
  * Use `create(StreamBarsRequestSchema)` to create a new message.
  */
 export const StreamBarsRequestSchema: GenMessage<StreamBarsRequest> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 2);
+  messageDesc(file_marketdata_v1_marketdata, 4);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.StreamQuotesRequest
@@ -199,7 +262,7 @@ export type StreamQuotesRequest = Message<"xstockstrat.marketdata.v1.StreamQuote
  * Use `create(StreamQuotesRequestSchema)` to create a new message.
  */
 export const StreamQuotesRequestSchema: GenMessage<StreamQuotesRequest> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 3);
+  messageDesc(file_marketdata_v1_marketdata, 5);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.GetBarsRequest
@@ -239,7 +302,7 @@ export type GetBarsRequest = Message<"xstockstrat.marketdata.v1.GetBarsRequest">
  * Use `create(GetBarsRequestSchema)` to create a new message.
  */
 export const GetBarsRequestSchema: GenMessage<GetBarsRequest> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 4);
+  messageDesc(file_marketdata_v1_marketdata, 6);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.GetBarsResponse
@@ -261,7 +324,7 @@ export type GetBarsResponse = Message<"xstockstrat.marketdata.v1.GetBarsResponse
  * Use `create(GetBarsResponseSchema)` to create a new message.
  */
 export const GetBarsResponseSchema: GenMessage<GetBarsResponse> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 5);
+  messageDesc(file_marketdata_v1_marketdata, 7);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.GetLatestQuoteRequest
@@ -278,7 +341,7 @@ export type GetLatestQuoteRequest = Message<"xstockstrat.marketdata.v1.GetLatest
  * Use `create(GetLatestQuoteRequestSchema)` to create a new message.
  */
 export const GetLatestQuoteRequestSchema: GenMessage<GetLatestQuoteRequest> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 6);
+  messageDesc(file_marketdata_v1_marketdata, 8);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.BackfillBarsRequest
@@ -318,7 +381,7 @@ export type BackfillBarsRequest = Message<"xstockstrat.marketdata.v1.BackfillBar
  * Use `create(BackfillBarsRequestSchema)` to create a new message.
  */
 export const BackfillBarsRequestSchema: GenMessage<BackfillBarsRequest> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 7);
+  messageDesc(file_marketdata_v1_marketdata, 9);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.BackfillBarsResponse
@@ -347,7 +410,7 @@ export type BackfillBarsResponse = Message<"xstockstrat.marketdata.v1.BackfillBa
  * Use `create(BackfillBarsResponseSchema)` to create a new message.
  */
 export const BackfillBarsResponseSchema: GenMessage<BackfillBarsResponse> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 8);
+  messageDesc(file_marketdata_v1_marketdata, 10);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.GetDataCoverageRequest
@@ -376,7 +439,7 @@ export type GetDataCoverageRequest = Message<"xstockstrat.marketdata.v1.GetDataC
  * Use `create(GetDataCoverageRequestSchema)` to create a new message.
  */
 export const GetDataCoverageRequestSchema: GenMessage<GetDataCoverageRequest> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 9);
+  messageDesc(file_marketdata_v1_marketdata, 11);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.CoverageRange
@@ -403,7 +466,7 @@ export type CoverageRange = Message<"xstockstrat.marketdata.v1.CoverageRange"> &
  * Use `create(CoverageRangeSchema)` to create a new message.
  */
 export const CoverageRangeSchema: GenMessage<CoverageRange> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 10);
+  messageDesc(file_marketdata_v1_marketdata, 12);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.GetDataCoverageResponse
@@ -453,7 +516,7 @@ export type GetDataCoverageResponse = Message<"xstockstrat.marketdata.v1.GetData
  * Use `create(GetDataCoverageResponseSchema)` to create a new message.
  */
 export const GetDataCoverageResponseSchema: GenMessage<GetDataCoverageResponse> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 11);
+  messageDesc(file_marketdata_v1_marketdata, 13);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.ListAssetsRequest
@@ -477,7 +540,7 @@ export type ListAssetsRequest = Message<"xstockstrat.marketdata.v1.ListAssetsReq
  * Use `create(ListAssetsRequestSchema)` to create a new message.
  */
 export const ListAssetsRequestSchema: GenMessage<ListAssetsRequest> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 12);
+  messageDesc(file_marketdata_v1_marketdata, 14);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.ListAssetsResponse
@@ -494,7 +557,7 @@ export type ListAssetsResponse = Message<"xstockstrat.marketdata.v1.ListAssetsRe
  * Use `create(ListAssetsResponseSchema)` to create a new message.
  */
 export const ListAssetsResponseSchema: GenMessage<ListAssetsResponse> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 13);
+  messageDesc(file_marketdata_v1_marketdata, 15);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.DeleteBackfilledDataRequest
@@ -527,7 +590,7 @@ export type DeleteBackfilledDataRequest = Message<"xstockstrat.marketdata.v1.Del
  * Use `create(DeleteBackfilledDataRequestSchema)` to create a new message.
  */
 export const DeleteBackfilledDataRequestSchema: GenMessage<DeleteBackfilledDataRequest> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 14);
+  messageDesc(file_marketdata_v1_marketdata, 16);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.DeleteBackfilledDataResponse
@@ -544,7 +607,7 @@ export type DeleteBackfilledDataResponse = Message<"xstockstrat.marketdata.v1.De
  * Use `create(DeleteBackfilledDataResponseSchema)` to create a new message.
  */
 export const DeleteBackfilledDataResponseSchema: GenMessage<DeleteBackfilledDataResponse> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 15);
+  messageDesc(file_marketdata_v1_marketdata, 17);
 
 /**
  * Fundamentals (feature 059; provider made switchable by feature 129) — cached fundamental
@@ -669,7 +732,7 @@ export type Fundamentals = Message<"xstockstrat.marketdata.v1.Fundamentals"> & {
  * Use `create(FundamentalsSchema)` to create a new message.
  */
 export const FundamentalsSchema: GenMessage<Fundamentals> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 16);
+  messageDesc(file_marketdata_v1_marketdata, 18);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.GetFundamentalsRequest
@@ -686,7 +749,7 @@ export type GetFundamentalsRequest = Message<"xstockstrat.marketdata.v1.GetFunda
  * Use `create(GetFundamentalsRequestSchema)` to create a new message.
  */
 export const GetFundamentalsRequestSchema: GenMessage<GetFundamentalsRequest> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 17);
+  messageDesc(file_marketdata_v1_marketdata, 19);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.GetFundamentalsResponse
@@ -703,7 +766,7 @@ export type GetFundamentalsResponse = Message<"xstockstrat.marketdata.v1.GetFund
  * Use `create(GetFundamentalsResponseSchema)` to create a new message.
  */
 export const GetFundamentalsResponseSchema: GenMessage<GetFundamentalsResponse> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 18);
+  messageDesc(file_marketdata_v1_marketdata, 20);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.GetFundamentalsMultiRequest
@@ -720,7 +783,7 @@ export type GetFundamentalsMultiRequest = Message<"xstockstrat.marketdata.v1.Get
  * Use `create(GetFundamentalsMultiRequestSchema)` to create a new message.
  */
 export const GetFundamentalsMultiRequestSchema: GenMessage<GetFundamentalsMultiRequest> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 19);
+  messageDesc(file_marketdata_v1_marketdata, 21);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.GetFundamentalsMultiResponse
@@ -737,7 +800,7 @@ export type GetFundamentalsMultiResponse = Message<"xstockstrat.marketdata.v1.Ge
  * Use `create(GetFundamentalsMultiResponseSchema)` to create a new message.
  */
 export const GetFundamentalsMultiResponseSchema: GenMessage<GetFundamentalsMultiResponse> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 20);
+  messageDesc(file_marketdata_v1_marketdata, 22);
 
 /**
  * MarketDataService — sole Alpaca integration point.
@@ -785,6 +848,16 @@ export const MarketDataService: GenService<{
     methodKind: "unary";
     input: typeof GetLatestQuoteRequestSchema;
     output: typeof QuoteSchema;
+  },
+  /**
+   * Latest trade price + prior-session daily close for the Decide surface (feature 095).
+   *
+   * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetLatestPrice
+   */
+  getLatestPrice: {
+    methodKind: "unary";
+    input: typeof GetLatestPriceRequestSchema;
+    output: typeof LatestPriceSchema;
   },
   /**
    * Trigger historical backfill (used by xstockstrat-ingest)

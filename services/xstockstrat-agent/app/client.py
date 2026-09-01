@@ -698,6 +698,67 @@ async def screen_symbols(
     }
 
 
+def _opportunity_to_dict(o, analysis_pb2) -> dict[str, Any]:
+    """Project one analysis ``Opportunity`` to a JSON dict for the agent (feature 095).
+
+    The live-market enrichment uses **omit-not-fabricate**: an unavailable ``live_price`` /
+    ``change_pct`` / ``target_price`` / ``stop_price`` is omitted entirely (never a fabricated
+    ``0``); a sparkline gap is JSON ``null`` (never ``NaN``); an unattributed row carries no
+    ``conditions``. R:R / suggested size are UI-only (no wire field) and are not projected."""
+    d: dict[str, Any] = {
+        "symbol": o.symbol,
+        "action": analysis_pb2.OpportunityActionTag.Name(o.action),
+        "conviction": o.conviction,
+        "passing_conditions": o.passing_conditions,
+        "total_conditions": o.total_conditions,
+        "thesis": o.thesis,
+        "strategy_id": o.strategy_id,
+        "source": o.source,
+        "opportunity_key": o.opportunity_key,
+        "provenance": list(o.provenance),
+        "muted": o.muted,
+    }
+    if o.HasField("live_price"):
+        d["live_price"] = o.live_price
+    if o.HasField("change_pct"):
+        d["change_pct"] = o.change_pct
+    if o.HasField("target_price"):
+        d["target_price"] = o.target_price
+    if o.HasField("stop_price"):
+        d["stop_price"] = o.stop_price
+    if o.sparkline:
+        d["sparkline"] = [p.close if p.HasField("close") else None for p in o.sparkline]
+    if o.conditions:
+        d["conditions"] = [
+            {
+                "ref_name": c.ref_name,
+                "lhs_value": c.lhs_value,
+                "threshold": c.threshold,
+                "fn": c.fn,
+                "state": analysis_pb2.ConditionState.Name(c.state),
+                "distance_to_threshold": c.distance_to_threshold,
+            }
+            for c in o.conditions
+        ]
+    return d
+
+
+async def list_opportunities(user_id: str, min_conviction: float = 0.0) -> dict[str, Any]:
+    """List the caller's ranked Decide-queue opportunities with live-market enrichment (feature 095,
+    read-only). Caller-scoped via ``x-user-id`` (no admin ``x-access-scope``) — analysis resolves
+    the owner from the header, never a request body id. See ``_opportunity_to_dict`` for the
+    projection's omit-not-fabricate contract."""
+    from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
+        stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
+        resp = await stub.ListOpportunities(
+            analysis_pb2.ListOpportunitiesRequest(min_conviction=min_conviction),
+            metadata=_metadata(("x-user-id", user_id)),
+        )
+    return {"opportunities": [_opportunity_to_dict(o, analysis_pb2) for o in resp.opportunities]}
+
+
 async def manage_strategy(
     user_id: str,
     operation: str,
@@ -1564,8 +1625,13 @@ async def set_config(
     access_scope: int,
     create_key: bool = False,
     user_id: str = "",
+    is_secret: bool = False,
 ) -> dict:
     """ConfigService.SetConfig, forwarding the REAL caller's access scope.
+
+    ``is_secret`` (feature 166) is honored only when CREATING a key (``create_key=true``); on an
+    existing key the stored row's ``is_secret`` is authoritative and the request flag is ignored by
+    the backend. Used to mint the per-source MCP bearer secret ``ingest.mcp_credential.<slug>``.
 
     Feature 073 introduced caller-derived scope here; feature 092 generalized it to every management
     tool (the hardcoded-admin ``_admin_metadata()`` was removed), so this is no longer an exception.
@@ -1584,6 +1650,9 @@ async def set_config(
         cv.bool_val = value.strip().lower() in ("true", "1", "yes")
     else:
         cv.string_val = value
+    # feature 166 — is_secret rides the ConfigValue (SetConfigRequest has no such field); the
+    # backend reads value.is_secret and, for a NEW key (create_key), encrypts at rest accordingly.
+    cv.is_secret = is_secret
 
     async with grpc.aio.insecure_channel(CONFIG_ENDPOINT) as channel:
         stub = config_pb2_grpc.ConfigServiceStub(channel)
@@ -1816,7 +1885,7 @@ async def list_account_positions(user_id: str, account_id: str) -> dict[str, Any
     }
 
 
-# ── Broker account management (feature 162) ──────────────────────────────────
+# ── Broker account management (feature 164) ──────────────────────────────────
 # Thin wrappers over TradingService backing the `manage_account` (write) and `list_accounts` (read)
 # MCP tools. Ownership is always taken from the forwarded `x-user-id`; the trading handler resolves
 # ownership server-side and rejects non-owners PERMISSION_DENIED. Broker credentials pass through to

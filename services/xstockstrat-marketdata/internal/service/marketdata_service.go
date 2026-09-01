@@ -472,6 +472,37 @@ func (s *MarketDataService) GetLatestQuote(ctx context.Context, symbol string) (
 	return live, nil
 }
 
+// GetLatestPrice returns the latest trade price + prior-session daily close for a symbol
+// (feature 095). last_price comes from the live source's latest-trade fetch (when the source
+// supports it); prev_close is read from the stored prior daily bar — no extra Alpaca call. Either
+// value is left UNSET (never 0) when unavailable, so a caller can distinguish "no data" from a real
+// zero (AC-11 omit-not-fabricate). A fetch failure is logged, not fatal.
+func (s *MarketDataService) GetLatestPrice(ctx context.Context, symbol string) (*marketdatav1.LatestPrice, error) {
+	// Track the symbol so the warm poller / bar ingester keep its data fresh.
+	s.markWarm(symbol)
+
+	out := &marketdatav1.LatestPrice{Symbol: symbol, Source: "alpaca"}
+
+	if src, err := s.registry.Get(""); err == nil {
+		if lt, ok := src.(source.LatestTradeSource); ok {
+			if price, ts, tErr := lt.GetLatestTrade(ctx, symbol); tErr == nil {
+				out.LastPrice = &price
+				out.LastTradeTime = timestamppb.New(ts)
+			} else {
+				slog.Warn("GetLatestPrice: latest-trade fetch failed", "symbol", symbol, "error", tErr)
+			}
+		}
+	}
+
+	if prev, ok, err := s.repo.GetPreviousDailyClose(ctx, symbol); err != nil {
+		slog.Warn("GetLatestPrice: prev daily close read failed", "symbol", symbol, "error", err)
+	} else if ok {
+		out.PrevClose = &prev
+	}
+
+	return out, nil
+}
+
 // markWarm adds a symbol to the warm set polled by StartWarmQuotePoller.
 func (s *MarketDataService) markWarm(symbol string) {
 	if symbol == "" {

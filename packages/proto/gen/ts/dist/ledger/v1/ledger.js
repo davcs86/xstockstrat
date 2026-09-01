@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: ledger/v1/ledger.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.LedgerServiceClient = exports.LedgerServiceService = exports.GetEventRequest = exports.StreamEventsRequest = exports.QueryEventsResponse = exports.QueryEventsRequest = exports.AppendEventResponse = exports.AppendEventRequest_MetadataEntry = exports.AppendEventRequest = exports.LedgerEvent_MetadataEntry = exports.LedgerEvent = exports.protobufPackage = void 0;
+exports.LedgerServiceClient = exports.LedgerServiceService = exports.ExportEventsResponse = exports.ExportEventsRequest = exports.GetEventRequest = exports.StreamEventsRequest = exports.QueryEventsResponse = exports.QueryEventsRequest = exports.AppendEventResponse = exports.AppendEventRequest_MetadataEntry = exports.AppendEventRequest = exports.LedgerEvent_MetadataEntry = exports.LedgerEvent = exports.protobufPackage = void 0;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
@@ -25,6 +25,7 @@ function createBaseLedgerEvent() {
         metadata: {},
         sequence: 0,
         streamKey: "",
+        userId: "",
     };
 }
 exports.LedgerEvent = {
@@ -58,6 +59,9 @@ exports.LedgerEvent = {
         }
         if (message.streamKey !== "") {
             writer.uint32(82).string(message.streamKey);
+        }
+        if (message.userId !== "") {
+            writer.uint32(90).string(message.userId);
         }
         return writer;
     },
@@ -141,6 +145,13 @@ exports.LedgerEvent = {
                     message.streamKey = reader.string();
                     continue;
                 }
+                case 11: {
+                    if (tag !== 90) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -194,6 +205,11 @@ exports.LedgerEvent = {
                 : isSet(object.stream_key)
                     ? globalThis.String(object.stream_key)
                     : "",
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
         };
     },
     toJSON(message) {
@@ -234,6 +250,9 @@ exports.LedgerEvent = {
         if (message.streamKey !== "") {
             obj.streamKey = message.streamKey;
         }
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
         return obj;
     },
     create(base) {
@@ -256,6 +275,7 @@ exports.LedgerEvent = {
         }, {});
         message.sequence = object.sequence ?? 0;
         message.streamKey = object.streamKey ?? "";
+        message.userId = object.userId ?? "";
         return message;
     },
 };
@@ -337,6 +357,7 @@ function createBaseAppendEventRequest() {
         metadata: {},
         occurredAt: undefined,
         idempotencyKey: "",
+        userId: "",
     };
 }
 exports.AppendEventRequest = {
@@ -364,6 +385,9 @@ exports.AppendEventRequest = {
         }
         if (message.idempotencyKey !== "") {
             writer.uint32(66).string(message.idempotencyKey);
+        }
+        if (message.userId !== "") {
+            writer.uint32(74).string(message.userId);
         }
         return writer;
     },
@@ -433,6 +457,13 @@ exports.AppendEventRequest = {
                     message.idempotencyKey = reader.string();
                     continue;
                 }
+                case 9: {
+                    if (tag !== 74) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -480,6 +511,11 @@ exports.AppendEventRequest = {
                 : isSet(object.idempotency_key)
                     ? globalThis.String(object.idempotency_key)
                     : "",
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
         };
     },
     toJSON(message) {
@@ -514,6 +550,9 @@ exports.AppendEventRequest = {
         if (message.idempotencyKey !== "") {
             obj.idempotencyKey = message.idempotencyKey;
         }
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
         return obj;
     },
     create(base) {
@@ -534,6 +573,7 @@ exports.AppendEventRequest = {
         }, {});
         message.occurredAt = object.occurredAt ?? undefined;
         message.idempotencyKey = object.idempotencyKey ?? "";
+        message.userId = object.userId ?? "";
         return message;
     },
 };
@@ -1070,6 +1110,146 @@ exports.GetEventRequest = {
         return message;
     },
 };
+function createBaseExportEventsRequest() {
+    return { start: undefined, end: undefined, eventType: "" };
+}
+exports.ExportEventsRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.start !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.start), writer.uint32(10).fork()).join();
+        }
+        if (message.end !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.end), writer.uint32(18).fork()).join();
+        }
+        if (message.eventType !== "") {
+            writer.uint32(26).string(message.eventType);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseExportEventsRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.start = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.end = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.eventType = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            start: isSet(object.start) ? fromJsonTimestamp(object.start) : undefined,
+            end: isSet(object.end) ? fromJsonTimestamp(object.end) : undefined,
+            eventType: isSet(object.eventType)
+                ? globalThis.String(object.eventType)
+                : isSet(object.event_type)
+                    ? globalThis.String(object.event_type)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.start !== undefined) {
+            obj.start = message.start.toISOString();
+        }
+        if (message.end !== undefined) {
+            obj.end = message.end.toISOString();
+        }
+        if (message.eventType !== "") {
+            obj.eventType = message.eventType;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ExportEventsRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseExportEventsRequest();
+        message.start = object.start ?? undefined;
+        message.end = object.end ?? undefined;
+        message.eventType = object.eventType ?? "";
+        return message;
+    },
+};
+function createBaseExportEventsResponse() {
+    return { events: [] };
+}
+exports.ExportEventsResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.events) {
+            exports.LedgerEvent.encode(v, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseExportEventsResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.events.push(exports.LedgerEvent.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            events: globalThis.Array.isArray(object?.events) ? object.events.map((e) => exports.LedgerEvent.fromJSON(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.events?.length) {
+            obj.events = message.events.map((e) => exports.LedgerEvent.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ExportEventsResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseExportEventsResponse();
+        message.events = object.events?.map((e) => exports.LedgerEvent.fromPartial(e)) || [];
+        return message;
+    },
+};
 exports.LedgerServiceService = {
     appendEvent: {
         path: "/xstockstrat.ledger.v1.LedgerService/AppendEvent",
@@ -1106,6 +1286,20 @@ exports.LedgerServiceService = {
         requestDeserialize: (value) => exports.GetEventRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.LedgerEvent.encode(value).finish()),
         responseDeserialize: (value) => exports.LedgerEvent.decode(value),
+    },
+    /**
+     * Export a caller's events over a time window as a server stream of batched pages,
+     * ordered by the global monotonic sequence. Scoped to the caller (x-user-id metadata);
+     * never returns another user's or a pre-migration NULL-user_id event.
+     */
+    exportEvents: {
+        path: "/xstockstrat.ledger.v1.LedgerService/ExportEvents",
+        requestStream: false,
+        responseStream: true,
+        requestSerialize: (value) => Buffer.from(exports.ExportEventsRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ExportEventsRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.ExportEventsResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.ExportEventsResponse.decode(value),
     },
 };
 exports.LedgerServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.LedgerServiceService, "xstockstrat.ledger.v1.LedgerService");

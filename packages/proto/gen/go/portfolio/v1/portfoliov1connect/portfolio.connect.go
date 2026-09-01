@@ -80,6 +80,9 @@ const (
 	// PortfolioServiceListAllWatchlistSymbolsProcedure is the fully-qualified name of the
 	// PortfolioService's ListAllWatchlistSymbols RPC.
 	PortfolioServiceListAllWatchlistSymbolsProcedure = "/xstockstrat.portfolio.v1.PortfolioService/ListAllWatchlistSymbols"
+	// PortfolioServiceUpdateWatchlistBindingProcedure is the fully-qualified name of the
+	// PortfolioService's UpdateWatchlistBinding RPC.
+	PortfolioServiceUpdateWatchlistBindingProcedure = "/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlistBinding"
 )
 
 // PortfolioServiceClient is a client for the xstockstrat.portfolio.v1.PortfolioService service.
@@ -109,6 +112,10 @@ type PortfolioServiceClient interface {
 	// bit (PR #994) — a non-allow-listed caller gets PERMISSION_DENIED. Read-only; intended for
 	// the fundamentals-signal producer's universe resolution.
 	ListAllWatchlistSymbols(context.Context, *connect.Request[v1.ListAllWatchlistSymbolsRequest]) (*connect.Response[v1.ListAllWatchlistSymbolsResponse], error)
+	// Targeted single-symbol rebind (feature 167): change one binding's strategy_id via a single-row
+	// UPDATE — no replace-all. Ownership from the propagated x-user-id header (server-side), never
+	// from the request body. NOT_FOUND if the symbol is not in the watchlist.
+	UpdateWatchlistBinding(context.Context, *connect.Request[v1.UpdateWatchlistBindingRequest]) (*connect.Response[v1.UpdateWatchlistBindingResponse], error)
 }
 
 // NewPortfolioServiceClient constructs a client for the xstockstrat.portfolio.v1.PortfolioService
@@ -218,6 +225,12 @@ func NewPortfolioServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(portfolioServiceMethods.ByName("ListAllWatchlistSymbols")),
 			connect.WithClientOptions(opts...),
 		),
+		updateWatchlistBinding: connect.NewClient[v1.UpdateWatchlistBindingRequest, v1.UpdateWatchlistBindingResponse](
+			httpClient,
+			baseURL+PortfolioServiceUpdateWatchlistBindingProcedure,
+			connect.WithSchema(portfolioServiceMethods.ByName("UpdateWatchlistBinding")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -239,6 +252,7 @@ type portfolioServiceClient struct {
 	removeWatchlistSymbols  *connect.Client[v1.RemoveWatchlistSymbolsRequest, v1.RemoveWatchlistSymbolsResponse]
 	ensureSignalWatchlist   *connect.Client[v1.EnsureSignalWatchlistRequest, v1.EnsureSignalWatchlistResponse]
 	listAllWatchlistSymbols *connect.Client[v1.ListAllWatchlistSymbolsRequest, v1.ListAllWatchlistSymbolsResponse]
+	updateWatchlistBinding  *connect.Client[v1.UpdateWatchlistBindingRequest, v1.UpdateWatchlistBindingResponse]
 }
 
 // GetPortfolio calls xstockstrat.portfolio.v1.PortfolioService.GetPortfolio.
@@ -321,6 +335,11 @@ func (c *portfolioServiceClient) ListAllWatchlistSymbols(ctx context.Context, re
 	return c.listAllWatchlistSymbols.CallUnary(ctx, req)
 }
 
+// UpdateWatchlistBinding calls xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlistBinding.
+func (c *portfolioServiceClient) UpdateWatchlistBinding(ctx context.Context, req *connect.Request[v1.UpdateWatchlistBindingRequest]) (*connect.Response[v1.UpdateWatchlistBindingResponse], error) {
+	return c.updateWatchlistBinding.CallUnary(ctx, req)
+}
+
 // PortfolioServiceHandler is an implementation of the xstockstrat.portfolio.v1.PortfolioService
 // service.
 type PortfolioServiceHandler interface {
@@ -349,6 +368,10 @@ type PortfolioServiceHandler interface {
 	// bit (PR #994) — a non-allow-listed caller gets PERMISSION_DENIED. Read-only; intended for
 	// the fundamentals-signal producer's universe resolution.
 	ListAllWatchlistSymbols(context.Context, *connect.Request[v1.ListAllWatchlistSymbolsRequest]) (*connect.Response[v1.ListAllWatchlistSymbolsResponse], error)
+	// Targeted single-symbol rebind (feature 167): change one binding's strategy_id via a single-row
+	// UPDATE — no replace-all. Ownership from the propagated x-user-id header (server-side), never
+	// from the request body. NOT_FOUND if the symbol is not in the watchlist.
+	UpdateWatchlistBinding(context.Context, *connect.Request[v1.UpdateWatchlistBindingRequest]) (*connect.Response[v1.UpdateWatchlistBindingResponse], error)
 }
 
 // NewPortfolioServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -454,6 +477,12 @@ func NewPortfolioServiceHandler(svc PortfolioServiceHandler, opts ...connect.Han
 		connect.WithSchema(portfolioServiceMethods.ByName("ListAllWatchlistSymbols")),
 		connect.WithHandlerOptions(opts...),
 	)
+	portfolioServiceUpdateWatchlistBindingHandler := connect.NewUnaryHandler(
+		PortfolioServiceUpdateWatchlistBindingProcedure,
+		svc.UpdateWatchlistBinding,
+		connect.WithSchema(portfolioServiceMethods.ByName("UpdateWatchlistBinding")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.portfolio.v1.PortfolioService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PortfolioServiceGetPortfolioProcedure:
@@ -488,6 +517,8 @@ func NewPortfolioServiceHandler(svc PortfolioServiceHandler, opts ...connect.Han
 			portfolioServiceEnsureSignalWatchlistHandler.ServeHTTP(w, r)
 		case PortfolioServiceListAllWatchlistSymbolsProcedure:
 			portfolioServiceListAllWatchlistSymbolsHandler.ServeHTTP(w, r)
+		case PortfolioServiceUpdateWatchlistBindingProcedure:
+			portfolioServiceUpdateWatchlistBindingHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -559,4 +590,8 @@ func (UnimplementedPortfolioServiceHandler) EnsureSignalWatchlist(context.Contex
 
 func (UnimplementedPortfolioServiceHandler) ListAllWatchlistSymbols(context.Context, *connect.Request[v1.ListAllWatchlistSymbolsRequest]) (*connect.Response[v1.ListAllWatchlistSymbolsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.portfolio.v1.PortfolioService.ListAllWatchlistSymbols is not implemented"))
+}
+
+func (UnimplementedPortfolioServiceHandler) UpdateWatchlistBinding(context.Context, *connect.Request[v1.UpdateWatchlistBindingRequest]) (*connect.Response[v1.UpdateWatchlistBindingResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlistBinding is not implemented"))
 }

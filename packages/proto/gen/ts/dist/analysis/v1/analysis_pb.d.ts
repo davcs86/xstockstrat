@@ -1325,12 +1325,70 @@ export type Opportunity = Message<"xstockstrat.analysis.v1.Opportunity"> & {
      * @generated from field: bool muted = 12;
      */
     muted: boolean;
+    /**
+     * Live-market enrichment (feature 095). 13/14/17 are READ-TIME live-market fields (set in
+     * ListOpportunities after ranking — never in the ranking hot path, FR-8/AC-14); 15/16/18 are
+     * COMPUTE-TIME strategy-derived fields (persisted in the row JSONB, carried by _row_to_opportunity).
+     * 15/16 stay unset until the named `strategy-target-stop-authoring` follow-up populates
+     * StrategyDefinition.signal_params.{target,stop}. All explicit-presence — an unset optional models
+     * "unavailable", never a fabricated 0 (P-03, AC-8/AC-11).
+     *
+     * @generated from field: optional double live_price = 13;
+     */
+    livePrice?: number | undefined;
+    /**
+     * @generated from field: optional double change_pct = 14;
+     */
+    changePct?: number | undefined;
+    /**
+     * @generated from field: optional double target_price = 15;
+     */
+    targetPrice?: number | undefined;
+    /**
+     * @generated from field: optional double stop_price = 16;
+     */
+    stopPrice?: number | undefined;
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.SparklinePoint sparkline = 17;
+     */
+    sparkline: SparklinePoint[];
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.ConditionEval conditions = 18;
+     */
+    conditions: ConditionEval[];
+    /**
+     * feature 110 — the raw max per-signal ExternalSignal.conviction (0.0–1.0) among the symbol's
+     * active signals; the real probability that feeds trading PlaceOrder's confidence sizing.
+     * Explicit-presence optional: UNSET means "no active signal for this symbol" (never a fabricated
+     * 0.0). Deliberately NAMED signal_confidence and kept distinct from the ordinal `conviction = 3`
+     * (NOT a probability) and the decayed/weighted signal_axis. Next free after 095's 13-18 block.
+     *
+     * @generated from field: optional double signal_confidence = 19;
+     */
+    signalConfidence?: number | undefined;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.Opportunity.
  * Use `create(OpportunitySchema)` to create a new message.
  */
 export declare const OpportunitySchema: GenMessage<Opportunity>;
+/**
+ * One recent daily-bar close for the Decide-surface sparkline (feature 095). Explicit presence — an
+ * unset `close` models a warm-up/absent bar, never NaN/0 (mirrors IndicatorValue; P-03).
+ *
+ * @generated from message xstockstrat.analysis.v1.SparklinePoint
+ */
+export type SparklinePoint = Message<"xstockstrat.analysis.v1.SparklinePoint"> & {
+    /**
+     * @generated from field: optional double close = 1;
+     */
+    close?: number | undefined;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.SparklinePoint.
+ * Use `create(SparklinePointSchema)` to create a new message.
+ */
+export declare const SparklinePointSchema: GenMessage<SparklinePoint>;
 /**
  * One evaluated condition leaf from the traced evaluator (feature 083).
  *
@@ -1868,6 +1926,98 @@ export type QueryPnLPatternsResponse = Message<"xstockstrat.analysis.v1.QueryPnL
  * Use `create(QueryPnLPatternsResponseSchema)` to create a new message.
  */
 export declare const QueryPnLPatternsResponseSchema: GenMessage<QueryPnLPatternsResponse>;
+/**
+ * ── Signal-performance attribution (feature 029) ───────────────────────────────
+ *
+ * @generated from message xstockstrat.analysis.v1.GetAttributionRequest
+ */
+export type GetAttributionRequest = Message<"xstockstrat.analysis.v1.GetAttributionRequest"> & {
+    /**
+     * @generated from field: google.protobuf.Timestamp start = 1;
+     */
+    start?: Timestamp | undefined;
+    /**
+     * @generated from field: google.protobuf.Timestamp end = 2;
+     */
+    end?: Timestamp | undefined;
+    /**
+     * optional filter — the signal_sources.slug; empty = all sources (open registry, C-04: string not enum)
+     *
+     * @generated from field: string source_id = 3;
+     */
+    sourceId: string;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.GetAttributionRequest.
+ * Use `create(GetAttributionRequestSchema)` to create a new message.
+ */
+export declare const GetAttributionRequestSchema: GenMessage<GetAttributionRequest>;
+/**
+ * Per-source metrics. trade_count/win_count are DOUBLE (not int32): FR-3's exact-tie case
+ * contributes 0.5 to each tied source (AC-5); winner-takes-all contributes 1.0. total_pnl is
+ * NET of fees (realized_pnl − fees_total). avg_return is a percent over an approximate cost basis.
+ *
+ * @generated from message xstockstrat.analysis.v1.SourceAttribution
+ */
+export type SourceAttribution = Message<"xstockstrat.analysis.v1.SourceAttribution"> & {
+    /**
+     * signal_sources.slug (the snapshot's signal source)
+     *
+     * @generated from field: string source_id = 1;
+     */
+    sourceId: string;
+    /**
+     * resolved via ingest ListSignalSources; falls back to the slug
+     *
+     * @generated from field: string source_name = 2;
+     */
+    sourceName: string;
+    /**
+     * @generated from field: double trade_count = 3;
+     */
+    tradeCount: number;
+    /**
+     * @generated from field: double win_count = 4;
+     */
+    winCount: number;
+    /**
+     * win_count / trade_count
+     *
+     * @generated from field: double win_rate = 5;
+     */
+    winRate: number;
+    /**
+     * mean per-trade net_pnl / cost_basis (percent, v1 approximation)
+     *
+     * @generated from field: double avg_return = 6;
+     */
+    avgReturn: number;
+    /**
+     * net of fees
+     *
+     * @generated from field: double total_pnl = 7;
+     */
+    totalPnl: number;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.SourceAttribution.
+ * Use `create(SourceAttributionSchema)` to create a new message.
+ */
+export declare const SourceAttributionSchema: GenMessage<SourceAttribution>;
+/**
+ * @generated from message xstockstrat.analysis.v1.GetAttributionResponse
+ */
+export type GetAttributionResponse = Message<"xstockstrat.analysis.v1.GetAttributionResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.SourceAttribution attributions = 1;
+     */
+    attributions: SourceAttribution[];
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.GetAttributionResponse.
+ * Use `create(GetAttributionResponseSchema)` to create a new message.
+ */
+export declare const GetAttributionResponseSchema: GenMessage<GetAttributionResponse>;
 /**
  * @generated from enum xstockstrat.analysis.v1.BacktestStatus
  */
@@ -2547,5 +2697,16 @@ export declare const AnalysisService: GenService<{
         methodKind: "unary";
         input: typeof QueryPnLPatternsRequestSchema;
         output: typeof QueryPnLPatternsResponseSchema;
+    };
+    /**
+     * Per-source trading-performance attribution over closed positions (feature 029). Read-only;
+     * aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.GetAttribution
+     */
+    getAttribution: {
+        methodKind: "unary";
+        input: typeof GetAttributionRequestSchema;
+        output: typeof GetAttributionResponseSchema;
     };
 }>;

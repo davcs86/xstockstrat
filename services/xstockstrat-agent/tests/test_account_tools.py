@@ -1,4 +1,4 @@
-"""Feature 162 — broker-account MCP tools (tool layer).
+"""Feature 164 — broker-account MCP tools (tool layer).
 
 Drives the registered `manage_account` / `list_accounts` `.fn`s: verb dispatch + argument
 validation, the offline-creation steer, gRPC error mapping, ownership forwarding, and catalog

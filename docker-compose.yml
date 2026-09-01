@@ -224,6 +224,11 @@ services:
       # Feature 020 — external alert fanout credentials (optional; empty ⇒ channel disabled).
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
       SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      # Feature 165 — Web Push (VAPID) credentials (optional; empty ⇒ push channel disabled).
+      # VAPID_PRIVATE_KEY is a secret; VAPID_PUBLIC_KEY / VAPID_SUBJECT are non-secret.
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
     ports:
       - "50059:50059"
     healthcheck:
@@ -486,6 +491,9 @@ services:
       # probes its OAuth discovery endpoint (feature 051). Use the compose service name so the UI
       # can reach the agent over the compose network.
       AGENT_PUBLIC_URL: http://xstockstrat-agent:9000
+      # Feature 165 — the /accounts push toggle needs the VAPID PUBLIC key (only). The private key
+      # stays notify-only. Empty ⇒ the enable control reports push not configured.
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
     ports:
       - "3000:3000"
     depends_on:

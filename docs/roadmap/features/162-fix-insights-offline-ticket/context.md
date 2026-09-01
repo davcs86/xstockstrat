@@ -1,48 +1,50 @@
-# Context Log: fix-insights-offline-ticket
+# Context: fix-insights-offline-ticket  (archived 2026-09-01)
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+## Archive Synthesis — 2026-09-01 — /sdd-archiver
 
----
+**What**: One-line prop fix: `page.tsx:335` (`/trader/positions/[symbol]`) → added
+`allowOfflineRecord={false}` to the inline `OrderForm` mount for the Signal-detail ticket. This
+restored the documented broker-execution intent — `OrderForm` defaults `allowOfflineRecord=true`
+and the missing prop caused an offline-only account auto-selected by `AccountContext` to flip the
+heading from "Place Order" → "Record Offline Order", racing the e2e assertion.
 
-## Session 2026-08-27 (/sdd-triage)
+**Why (irrecoverable rationale)**:
+- The root cause was the feature-125 (unified-symbol-page) implementation of the Signal-detail
+  order ticket. Feature-125 recreated the ticket inline at `page.tsx:335` without `allowOfflineRecord={false}`,
+  which the original `SignalOrderTicket.tsx:22` carried explicitly. The prop regression was invisible
+  until an offline account was auto-selected — an `AccountContext` hydration race made it flaky.
+- Design depth was Track C / inline recon (not a full `/sdd-design quick` subagent debate) because the
+  root cause was already fully pinned with path:line evidence and the fix was structurally a one-prop
+  restoration. This is an explicit record of the design-depth decision for audit purposes.
+- The `/insights/market/[symbol]` page is a redirect-only stub to `/trader/positions/[symbol]`
+  (feature 125); the wrong-prop mount was only on the trader page.
+- Defect hypothesis #1 (mobile SectionRenderer `form` section omitting the prop) did not apply;
+  hypothesis #2 (auto-select re-render race) was the real cause.
 
-- Bug reported via defect report `docs/reports/2026-08-27-insights-signal-ticket-offline-account-flake-defect.md` (GitHub Issues disabled → --from-report path).
-- Severity: SEV-3. Config-only: no. Impact: flaky-e2e-test / possible-ui-misrender.
-- Routed to SDD path (Track C).
-- Created: status.md (draft), feature.md (Type=bug), product-spec.md, acceptance.feature (regression @AC-1), context.md.
-- Affected services (from report): xstockstrat-ui (insights Signal-detail order ticket; feature 159/083/155).
-- Root cause hypothesis: correct direct wiring (SignalOrderTicket allowOfflineRecord={false}); suspect the mobile SectionRenderer `form` mount omits the prop, and/or an AccountContext auto-select hydration race. Under investigation.
-- **Not caused by feature 161** — reproduces on origin/main-dev fixtures; the offline-accounts spec reads no config. Surfaced while driving feature 161 PR #1032 to green.
-- Recommended design depth: **quick** → `/sdd-design fix-insights-offline-ticket quick` (rationale: SEV-3 single service, no proto/migration/config, but root cause not yet pinned — one adversarial round).
-- Development branch: feature/fix-insights-offline-ticket.
+**Rejected alternatives**:
+- Full `/sdd-design quick` debate — overkill for a single-line restoration with fully pinned root
+  cause. Track C inline recon recorded explicitly.
 
-## Session 2026-08-27 (fix — claude)
+**Scars & gotchas**:
+- Feature-125 (unified-symbol-page) is the source; if future edits to `positions/[symbol]/page.tsx`
+  add additional `OrderForm` mounts, each must explicitly set `allowOfflineRecord={false}` for Signal
+  contexts (only the `/trader` and `/trader/orders` flows should allow offline recording).
+- The `e2e/trader/offline-accounts.spec.ts:257` assertion for @AC-1 is the regression guard.
 
-- **Root cause pinned.** `/insights/market/[symbol]` is a redirect-only stub → `/trader/positions/[symbol]`
-  (feature 125). The unified page re-created the Signal-detail order ticket inline at
-  `src/app/trader/positions/[symbol]/page.tsx:335` mounting `OrderForm` **without**
-  `allowOfflineRecord={false}` — the prop the original `SignalOrderTicket.tsx:22` carried.
-  `OrderForm` defaults `allowOfflineRecord=true` (`OrderForm.tsx:55`) and gates
-  `isRecordMode = allowOfflineRecord && selectedAccount?.brokerType === OFFLINE` (`:60`). With an
-  offline-only account auto-selected by `AccountContext`, the auto-select re-render flips the heading
-  from "Place Order" → "Record Offline Order" (`OrderForm.tsx:159`); racing the assertion is the flake.
-- **Not a double-mount.** This page uses `SymbolPanelGroup` (single mount of the ticket node), not the
-  mobile `SectionRenderer`. Defect hypothesis #1 (mobile `form` section omitting the prop) does not
-  apply here; hypothesis #2 (auto-select re-render race) is the real cause. The prop fix makes
-  `isRecordMode` structurally false, so no render timing can surface the record control.
-- **Fix (1 line + rationale comment).** `page.tsx:335` → `allowOfflineRecord={false}`. Restores the
-  documented broker-execution intent; the offline "Record order" affordance stays on `/trader` +
-  `/trader/orders` (feature 159 @AC-1, `offline-accounts.spec.ts:196`, unchanged).
-- **Design depth.** Ran Phase 0 recon inline (grounded, path:line-cited above) rather than the full
-  `/sdd-design quick` subagent debate — a single-line prop restoration with the root cause already
-  pinned by path:line evidence and one regression scenario. No proto/DB/config surface. Recorded here
-  per Track C.
-- Files: `src/app/trader/positions/[symbol]/page.tsx`; SDD artifacts (status.md, feature.md,
-  implementation-spec.md, this log). Branch: `claude/fix-162-gp2epi`.
+**Permanent deviations**: None. Full Track C inline recon documented in prior context.md.
 
-## Session 2026-08-30 (CI: feature status automation)
+**Cross-feature signal**:
+- Insight for Feature-125's offspring: any page that mounts `OrderForm` in a Signal-detail context
+  must pass `allowOfflineRecord={false}` explicitly — the default is true.
 
-- Promotion PR #1047 merged to main
-- Feature promoted and committed: 57e40a310ed09b205ce76ca440ee7a40a87fb7ec
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-08-30
+**Deferred follow-ons**: None.
+
+**Ledger entries written**: insights.md (1), fails.md (1) — see the 2026-09-01 entries for 162-fix-insights-offline-ticket.
+
+**Runtime-invariant recommendations (→ /context-constitution)**: None.
+
+**Pruned artifacts**: product-spec.md, implementation-spec.md — last present at commit preceding
+the archive branch `claude/archive-batch-2026-09-01`. (recon.md and design.md were not generated
+for this Track C bug — not on deletion allowlist.)

@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AuthenticateUserRequest, AuthTokenResponse, ExchangeAuthCodeRequest, GetOAuthClientRequest, GetUserMetadataRequest, GetUserMetadataResponse, IssueAuthCodeRequest, IssueAuthCodeResponse, ListAuthorizedAppsRequest, ListAuthorizedAppsResponse, OAuthClient, OAuthTokenResponse, RefreshOAuthTokenRequest, RefreshTokenRequest, RegisterOAuthClientRequest, RevokeAuthorizedAppRequest, RevokeAuthorizedAppResponse, RevokeTokenRequest, RevokeTokenResponse, TokenClaims, UpdateUserMetadataRequest, UpdateUserMetadataResponse, ValidateTokenRequest } from "./identity_pb.js";
+import { AuthenticateUserRequest, AuthTokenResponse, CreateUserRequest, CreateUserResponse, ExchangeAuthCodeRequest, GetOAuthClientRequest, GetUserMetadataRequest, GetUserMetadataResponse, GetUserRequest, GetUserResponse, IssueAuthCodeRequest, IssueAuthCodeResponse, ListAuthorizedAppsRequest, ListAuthorizedAppsResponse, ListUsersRequest, ListUsersResponse, OAuthClient, OAuthTokenResponse, RefreshOAuthTokenRequest, RefreshTokenRequest, RegisterOAuthClientRequest, RevokeAuthorizedAppRequest, RevokeAuthorizedAppResponse, RevokeTokenRequest, RevokeTokenResponse, SetUserActiveRequest, SetUserActiveResponse, SetUserRolesRequest, SetUserRolesResponse, TokenClaims, UpdatePasswordRequest, UpdatePasswordResponse, UpdateUserMetadataRequest, UpdateUserMetadataResponse, ValidateTokenRequest } from "./identity_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -135,6 +135,63 @@ export const IdentityService = {
       name: "UpdateUserMetadata",
       I: UpdateUserMetadataRequest,
       O: UpdateUserMetadataResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * User management (admin-gated, feature 043). Every RPC requires the admin access-scope bit;
+     * passwords are write-only (never returned). Additive over the existing service.
+     *
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.CreateUser
+     */
+    createUser: {
+      name: "CreateUser",
+      I: CreateUserRequest,
+      O: CreateUserResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.ListUsers
+     */
+    listUsers: {
+      name: "ListUsers",
+      I: ListUsersRequest,
+      O: ListUsersResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.GetUser
+     */
+    getUser: {
+      name: "GetUser",
+      I: GetUserRequest,
+      O: GetUserResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.UpdatePassword
+     */
+    updatePassword: {
+      name: "UpdatePassword",
+      I: UpdatePasswordRequest,
+      O: UpdatePasswordResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.SetUserRoles
+     */
+    setUserRoles: {
+      name: "SetUserRoles",
+      I: SetUserRolesRequest,
+      O: SetUserRolesResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.SetUserActive
+     */
+    setUserActive: {
+      name: "SetUserActive",
+      I: SetUserActiveRequest,
+      O: SetUserActiveResponse,
       kind: MethodKind.Unary,
     },
   }

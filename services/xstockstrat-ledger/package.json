@@ -30,7 +30,8 @@
     "google-protobuf": "^3.21.4",
     "pg": "^8.11.5",
     "uuid": "^9.0.1",
-    "winston": "^3.13.0"
+    "winston": "^3.13.0",
+    "pg-cursor": "^2.11.0"
   },
   "devDependencies": {
     "@types/node": "^20.12.12",
@@ -44,6 +45,7 @@
     "node-pg-migrate": "^7.3.2",
     "prettier": "^3.3.0",
     "ts-node": "^10.9.2",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "@types/pg-cursor": "^2.7.2"
   }
 }

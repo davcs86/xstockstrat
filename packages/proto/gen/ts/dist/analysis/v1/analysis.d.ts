@@ -697,6 +697,35 @@ export interface Opportunity {
     provenance: string[];
     /** feature 132 — the (symbol, strategy) pair is on the strategy's deny list; surfaced as an explicit muted row (never conviction=0) */
     muted: boolean;
+    /**
+     * Live-market enrichment (feature 095). 13/14/17 are READ-TIME live-market fields (set in
+     * ListOpportunities after ranking — never in the ranking hot path, FR-8/AC-14); 15/16/18 are
+     * COMPUTE-TIME strategy-derived fields (persisted in the row JSONB, carried by _row_to_opportunity).
+     * 15/16 stay unset until the named `strategy-target-stop-authoring` follow-up populates
+     * StrategyDefinition.signal_params.{target,stop}. All explicit-presence — an unset optional models
+     * "unavailable", never a fabricated 0 (P-03, AC-8/AC-11).
+     */
+    livePrice?: number | undefined;
+    changePct?: number | undefined;
+    targetPrice?: number | undefined;
+    stopPrice?: number | undefined;
+    sparkline: SparklinePoint[];
+    conditions: ConditionEval[];
+    /**
+     * feature 110 — the raw max per-signal ExternalSignal.conviction (0.0–1.0) among the symbol's
+     * active signals; the real probability that feeds trading PlaceOrder's confidence sizing.
+     * Explicit-presence optional: UNSET means "no active signal for this symbol" (never a fabricated
+     * 0.0). Deliberately NAMED signal_confidence and kept distinct from the ordinal `conviction = 3`
+     * (NOT a probability) and the decayed/weighted signal_axis. Next free after 095's 13-18 block.
+     */
+    signalConfidence?: number | undefined;
+}
+/**
+ * One recent daily-bar close for the Decide-surface sparkline (feature 095). Explicit presence — an
+ * unset `close` models a warm-up/absent bar, never NaN/0 (mirrors IndicatorValue; P-03).
+ */
+export interface SparklinePoint {
+    close?: number | undefined;
 }
 /** One evaluated condition leaf from the traced evaluator (feature 083). */
 export interface ConditionEval {
@@ -869,6 +898,35 @@ export interface QueryPnLPatternsResponse {
     positiveFactors: PnLPatternFactor[];
     negativeFactors: PnLPatternFactor[];
 }
+/** ── Signal-performance attribution (feature 029) ─────────────────────────────── */
+export interface GetAttributionRequest {
+    start?: Date | undefined;
+    end?: Date | undefined;
+    /** optional filter — the signal_sources.slug; empty = all sources (open registry, C-04: string not enum) */
+    sourceId: string;
+}
+/**
+ * Per-source metrics. trade_count/win_count are DOUBLE (not int32): FR-3's exact-tie case
+ * contributes 0.5 to each tied source (AC-5); winner-takes-all contributes 1.0. total_pnl is
+ * NET of fees (realized_pnl − fees_total). avg_return is a percent over an approximate cost basis.
+ */
+export interface SourceAttribution {
+    /** signal_sources.slug (the snapshot's signal source) */
+    sourceId: string;
+    /** resolved via ingest ListSignalSources; falls back to the slug */
+    sourceName: string;
+    tradeCount: number;
+    winCount: number;
+    /** win_count / trade_count */
+    winRate: number;
+    /** mean per-trade net_pnl / cost_basis (percent, v1 approximation) */
+    avgReturn: number;
+    /** net of fees */
+    totalPnl: number;
+}
+export interface GetAttributionResponse {
+    attributions: SourceAttribution[];
+}
 export declare const RunBacktestRequest: MessageFns<RunBacktestRequest>;
 export declare const CoverageGap: MessageFns<CoverageGap>;
 export declare const BacktestResult: MessageFns<BacktestResult>;
@@ -908,6 +966,7 @@ export declare const ScreenSymbolsResponse: MessageFns<ScreenSymbolsResponse>;
 export declare const RunFundamentalsScanRequest: MessageFns<RunFundamentalsScanRequest>;
 export declare const FundamentalsScanSummary: MessageFns<FundamentalsScanSummary>;
 export declare const Opportunity: MessageFns<Opportunity>;
+export declare const SparklinePoint: MessageFns<SparklinePoint>;
 export declare const ConditionEval: MessageFns<ConditionEval>;
 export declare const SymbolReadiness: MessageFns<SymbolReadiness>;
 export declare const StrategyAnalytics: MessageFns<StrategyAnalytics>;
@@ -929,6 +988,9 @@ export declare const OrderSnapshot_IndicatorValuesEntry: MessageFns<OrderSnapsho
 export declare const PnLPatternFactor: MessageFns<PnLPatternFactor>;
 export declare const QueryPnLPatternsRequest: MessageFns<QueryPnLPatternsRequest>;
 export declare const QueryPnLPatternsResponse: MessageFns<QueryPnLPatternsResponse>;
+export declare const GetAttributionRequest: MessageFns<GetAttributionRequest>;
+export declare const SourceAttribution: MessageFns<SourceAttribution>;
+export declare const GetAttributionResponse: MessageFns<GetAttributionResponse>;
 export type AnalysisServiceService = typeof AnalysisServiceService;
 export declare const AnalysisServiceService: {
     readonly runBacktest: {
@@ -1122,6 +1184,19 @@ export declare const AnalysisServiceService: {
         readonly responseSerialize: (value: QueryPnLPatternsResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => QueryPnLPatternsResponse;
     };
+    /**
+     * Per-source trading-performance attribution over closed positions (feature 029). Read-only;
+     * aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
+     */
+    readonly getAttribution: {
+        readonly path: "/xstockstrat.analysis.v1.AnalysisService/GetAttribution";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetAttributionRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetAttributionRequest;
+        readonly responseSerialize: (value: GetAttributionResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => GetAttributionResponse;
+    };
 };
 export interface AnalysisServiceServer extends UntypedServiceImplementation {
     runBacktest: handleUnaryCall<RunBacktestRequest, BacktestResult>;
@@ -1171,6 +1246,11 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
      * correlate with positive vs negative realized P&L, scoped by symbol/strategy/time window.
      */
     queryPnLPatterns: handleUnaryCall<QueryPnLPatternsRequest, QueryPnLPatternsResponse>;
+    /**
+     * Per-source trading-performance attribution over closed positions (feature 029). Read-only;
+     * aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
+     */
+    getAttribution: handleUnaryCall<GetAttributionRequest, GetAttributionResponse>;
 }
 export interface AnalysisServiceClient extends Client {
     runBacktest(request: RunBacktestRequest, callback: (error: ServiceError | null, response: BacktestResult) => void): ClientUnaryCall;
@@ -1256,6 +1336,13 @@ export interface AnalysisServiceClient extends Client {
     queryPnLPatterns(request: QueryPnLPatternsRequest, callback: (error: ServiceError | null, response: QueryPnLPatternsResponse) => void): ClientUnaryCall;
     queryPnLPatterns(request: QueryPnLPatternsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: QueryPnLPatternsResponse) => void): ClientUnaryCall;
     queryPnLPatterns(request: QueryPnLPatternsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: QueryPnLPatternsResponse) => void): ClientUnaryCall;
+    /**
+     * Per-source trading-performance attribution over closed positions (feature 029). Read-only;
+     * aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
+     */
+    getAttribution(request: GetAttributionRequest, callback: (error: ServiceError | null, response: GetAttributionResponse) => void): ClientUnaryCall;
+    getAttribution(request: GetAttributionRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetAttributionResponse) => void): ClientUnaryCall;
+    getAttribution(request: GetAttributionRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetAttributionResponse) => void): ClientUnaryCall;
 }
 export declare const AnalysisServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): AnalysisServiceClient;

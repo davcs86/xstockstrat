@@ -109,6 +109,26 @@ export default function PortfolioPage() {
     [accountName],
   );
 
+  // Feature 021 — export the caller's ledger events (last 90 days, all types by default, AC-9).
+  // Goes through fetch() (not a bare <a href>) so the session-cookie'd refresh interceptor applies;
+  // the blob is handed to a transient download link to present the browser's save dialog.
+  const onExportEvents = async () => {
+    const end = new Date();
+    const start = new Date(end.getTime() - 90 * 24 * 60 * 60 * 1000);
+    const qs = new URLSearchParams({ start: start.toISOString(), end: end.toISOString() });
+    const res = await fetch(`/trader/api/ledger/export?${qs.toString()}`);
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ledger-events.ndjson';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <AppShell>
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 space-y-5">
@@ -120,9 +140,14 @@ export default function PortfolioPage() {
               P&amp;L.
             </p>
           </div>
-          <Button asChild variant="outline" size="sm">
-            <Link href="/trader/positions">See risk in Exposure →</Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={onExportEvents}>
+              Export events
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/trader/positions">See risk in Exposure →</Link>
+            </Button>
+          </div>
         </div>
 
         {isLoading && <CardNotice>Loading portfolio…</CardNotice>}

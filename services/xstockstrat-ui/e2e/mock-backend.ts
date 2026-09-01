@@ -14,6 +14,7 @@
 import * as http2 from 'node:http2';
 import { ConnectError, Code } from '@connectrpc/connect';
 import { connectNodeAdapter } from '@connectrpc/connect-node';
+import { timestampFromDate } from '@bufbuild/protobuf/wkt';
 import { AnalysisService, ReadinessRule } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
 import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
@@ -44,6 +45,7 @@ import {
   FILL_MODEL_SAME_BAR_CLOSE,
   FILL_MODEL_NEXT_BAR_OPEN,
   OPPORTUNITIES,
+  CAPR_LATEST_PRICE,
   symbolReadiness,
   exitReadiness,
   POSITIONS,
@@ -55,10 +57,18 @@ import {
   SIGNAL_SOURCE_WEIGHTED,
   FUNDAMENTALS_AAPL,
 } from './fixtures';
+import { USER_VIEWS, LAST_ADMIN_USER_ID } from './fixtures/users';
+import { Role } from '@xstockstrat/proto/identity/v1/identity_pb';
+import {
+  LEDGER_EXPORT_EVENTS,
+  EXPORT_DISABLED_SENTINEL,
+  CLOSED_POSITION_ROWS,
+} from './fixtures/ledgerEvents';
 import { criterionDetailRow } from './fixtures/screenResults';
 import { backfillJob } from './fixtures/backfillJobs';
 import { INDICATOR_SERIES_AAPL } from './fixtures/indicatorSeries';
 import { PNL_PATTERNS_AAPL } from './fixtures/pnlPatterns';
+import { SOURCE_ATTRIBUTION } from './fixtures/attribution';
 import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 
 export const TRADER_MOCK_PORT = 9091;
@@ -170,6 +180,46 @@ export async function startMockBackend(): Promise<void> {
     },
     async revokeAuthorizedApp() {
       return { success: true };
+    },
+    // ── User management (admin-gated, feature 043) ──────────────────────────
+    // The config-ui BFF (forwardAdmin) admin-gates before these are reached, so non-admin denial
+    // (AC-7) is a BFF concern; these return password-free User views and simulate the last-admin
+    // guard for the AC-11 target.
+    async listUsers() {
+      return { users: USER_VIEWS };
+    },
+    async getUser(req: { userId: string }) {
+      const user = USER_VIEWS.find((u) => u.userId === req.userId);
+      if (!user) throw new ConnectError('user not found', Code.NotFound);
+      return { user };
+    },
+    async createUser(req: { email: string; roles?: Role[] }) {
+      return {
+        user: {
+          userId: 'new-user-001',
+          email: req.email,
+          roles: req.roles && req.roles.length > 0 ? req.roles : [Role.TRADER],
+          isActive: true,
+          createdAt: timestampFromDate(new Date()),
+        },
+      };
+    },
+    async updatePassword() {
+      return {}; // empty — no password echoed (AC-10)
+    },
+    async setUserRoles(req: { userId: string; roles?: Role[] }) {
+      if (req.userId === LAST_ADMIN_USER_ID && !(req.roles ?? []).includes(Role.ADMIN)) {
+        throw new ConnectError('cannot remove last admin', Code.FailedPrecondition);
+      }
+      const base = USER_VIEWS.find((u) => u.userId === req.userId) ?? USER_VIEWS[0];
+      return { user: { ...base, roles: req.roles ?? base.roles } };
+    },
+    async setUserActive(req: { userId: string; active: boolean }) {
+      if (req.userId === LAST_ADMIN_USER_ID && req.active === false) {
+        throw new ConnectError('cannot remove last admin', Code.FailedPrecondition);
+      }
+      const base = USER_VIEWS.find((u) => u.userId === req.userId) ?? USER_VIEWS[0];
+      return { user: { ...base, isActive: req.active } };
     },
   };
 
@@ -306,6 +356,29 @@ export async function startMockBackend(): Promise<void> {
 
       router.service(LedgerService, {
         async queryEvents(req) {
+          // feature 031 — the /insights performance dashboard reads realized closes. The BFF has
+          // already forced streamKey to portfolio:<user_id>; we key off event_type. occurredAt is a
+          // real Timestamp (message-init) and payload is a plain Struct object (the producer's
+          // snake_case keys), so closedTradesFromEvents can map realized_pnl/cost_basis/opened_at.
+          if (req.eventType === 'portfolio.position.closed') {
+            return {
+              events: CLOSED_POSITION_ROWS.map((r) => ({
+                eventId: `evt-closed-${r.sequence}`,
+                eventType: 'portfolio.position.closed',
+                sourceService: 'xstockstrat-portfolio',
+                streamKey: req.streamKey,
+                sequence: BigInt(r.sequence),
+                userId: 'test-user-001',
+                occurredAt: timestampFromDate(new Date(r.occurredAtIso)),
+                payload: {
+                  realized_pnl: r.realizedPnl,
+                  ...(r.costBasis !== undefined ? { cost_basis: r.costBasis } : {}),
+                  ...(r.openedAtIso !== undefined ? { opened_at: r.openedAtIso } : {}),
+                },
+              })),
+              page: { nextPageToken: '' },
+            };
+          }
           if (req.eventType === 'copilot.message' || req.streamKey?.startsWith('copilot:')) {
             const msgs = copilotThreads.get(req.streamKey) ?? [];
             return {
@@ -371,6 +444,49 @@ export async function startMockBackend(): Promise<void> {
           });
           copilotThreads.set(req.streamKey, existing);
           return { eventId: `copilot-${existing.length}`, sequence };
+        },
+        // Feature 021 — ExportEvents server stream. Honors event_type subset + window bound,
+        // simulates the disabled gate via the EXPORT_DISABLED_SENTINEL event_type (no config
+        // service in the mock). Streams the fixture rows batched, ordered by sequence.
+        async *exportEvents(req) {
+          const et = String(req.eventType ?? '');
+          if (et === EXPORT_DISABLED_SENTINEL) {
+            throw new ConnectError('ledger export is disabled', Code.FailedPrecondition);
+          }
+          if (req.start && req.end) {
+            const spanDays = (Number(req.end.seconds) - Number(req.start.seconds)) / 86_400;
+            if (spanDays > 365) {
+              throw new ConnectError(
+                'window exceeds ledger.export.max_window_days',
+                Code.InvalidArgument,
+              );
+            }
+          }
+          const types = et
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
+          const rows = [...LEDGER_EXPORT_EVENTS]
+            .filter((r) => types.length === 0 || types.includes(r.eventType))
+            .sort((a, b) => Number(a.sequence - b.sequence));
+          // Batch per row to prove the client streams (no full-set buffering, AC-7).
+          for (const r of rows) {
+            yield {
+              events: [
+                {
+                  eventId: r.eventId,
+                  eventType: r.eventType,
+                  sourceService: r.sourceService,
+                  correlationId: r.correlationId,
+                  streamKey: r.streamKey,
+                  sequence: r.sequence,
+                  userId: r.userId,
+                  occurredAt: timestampFromDate(new Date(r.occurredAtIso)),
+                  payload: r.payload,
+                },
+              ],
+            };
+          }
         },
       });
 
@@ -438,6 +554,20 @@ export async function startMockBackend(): Promise<void> {
             ],
           };
         },
+        // Feature 165: echo the caller resolved from the propagated x-user-id header back as the
+        // subscription id, so the e2e can assert the notify service derives the owner from the
+        // session-forwarded header (not the request body) — the IDOR guard.
+        async registerPushSubscription(
+          _req: { endpoint?: string },
+          ctx: { requestHeader: Headers },
+        ) {
+          return { subscriptionId: callerUserId(ctx) };
+        },
+        // deleted=true iff an endpoint was provided; the endpoint is echoed via the (absent) body,
+        // so the e2e asserts the call reached here with the right endpoint through the response shape.
+        async unregisterPushSubscription(req: { endpoint?: string }) {
+          return { deleted: !!req.endpoint };
+        },
       });
 
       router.service(MarketDataService, {
@@ -494,6 +624,18 @@ export async function startMockBackend(): Promise<void> {
             return { fundamentals: FUNDAMENTALS_AAPL };
           }
           throw new ConnectError(`fmp: no fundamentals for ${req.symbol}`, Code.Unavailable);
+        },
+        async getLatestPrice(req) {
+          // feature 095: CAPR (in-queue) has a live trade + prior close; ZZZZ is an OFF-queue symbol
+          // that still has a live price (drives the Signal-detail off-queue fallback, AC-13); any
+          // other symbol is unavailable — last_price/prev_close unset (the AC-11 omit-not-fabricate
+          // path), never a fabricated 0.
+          const sym = (req.symbol ?? '').toUpperCase();
+          if (sym === 'CAPR') return CAPR_LATEST_PRICE;
+          if (sym === 'ZZZZ') {
+            return { symbol: 'ZZZZ', lastPrice: 9.87, prevClose: 9.5, source: 'alpaca' };
+          }
+          return { symbol: req.symbol ?? '', source: 'alpaca' };
         },
       });
 
@@ -1019,6 +1161,10 @@ export async function startMockBackend(): Promise<void> {
         async queryPnLPatterns() {
           return PNL_PATTERNS_AAPL;
         },
+        // feature 029 — per-source signal attribution for the Attribution view.
+        async getAttribution() {
+          return SOURCE_ATTRIBUTION;
+        },
       });
 
       router.service(IdentityService, identityHandlers);
@@ -1073,7 +1219,23 @@ export async function startMockBackend(): Promise<void> {
         // (no platform-wide restriction) so the existing suite's happy-path assertions are
         // unaffected. Overridden per-test via page.route() for the REDUCE_ONLY/HALTED cases
         // (positions-reconciliation.spec.ts).
-        async getConfig() {
+        async getConfig(req) {
+          // feature 031 — the /insights performance dashboard reads ui.performance.* one-shot via
+          // GetConfig(namespace:'ui'). The map is keyed by the bare sub-key (namespace filtered),
+          // matching the real service. Values use the oneof message-init shape (connectNodeAdapter
+          // serializes it to Connect-JSON wire).
+          if (req.namespace === 'ui') {
+            const uiValues: Record<
+              string,
+              { value: { case: 'floatVal'; value: number } | { case: 'stringVal'; value: string } }
+            > = {
+              'performance.risk_free_rate_annual': { value: { case: 'floatVal', value: 0.045 } },
+              'performance.equity_curve_start_date': {
+                value: { case: 'stringVal', value: '2026-01-01' },
+              },
+            };
+            return { namespace: 'ui', version: '1', values: uiValues };
+          }
           return {
             namespace: 'platform',
             version: '1',

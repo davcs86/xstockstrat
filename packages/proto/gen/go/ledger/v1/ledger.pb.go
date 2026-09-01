@@ -36,6 +36,7 @@ type LedgerEvent struct {
 	Metadata      map[string]string      `protobuf:"bytes,8,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Sequence      int64                  `protobuf:"varint,9,opt,name=sequence,proto3" json:"sequence,omitempty"`                    // GLOBAL monotonic sequence (nextval('ledger.global_sequence')), ordered across all stream_keys
 	StreamKey     string                 `protobuf:"bytes,10,opt,name=stream_key,json=streamKey,proto3" json:"stream_key,omitempty"` // partition key (e.g. "order:uuid")
+	UserId        string                 `protobuf:"bytes,11,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`          // owning user; empty when platform-scoped or a pre-migration row
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -140,6 +141,13 @@ func (x *LedgerEvent) GetStreamKey() string {
 	return ""
 }
 
+func (x *LedgerEvent) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
 type AppendEventRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EventType     string                 `protobuf:"bytes,1,opt,name=event_type,json=eventType,proto3" json:"event_type,omitempty"`
@@ -154,6 +162,7 @@ type AppendEventRequest struct {
 	// returns the originally-stored event instead of inserting a duplicate. Empty = no
 	// dedup (every call inserts), preserving the prior behavior.
 	IdempotencyKey string `protobuf:"bytes,8,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	UserId         string `protobuf:"bytes,9,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"` // owning user; falls back to the x-user-id metadata when empty
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -240,6 +249,13 @@ func (x *AppendEventRequest) GetOccurredAt() *timestamppb.Timestamp {
 func (x *AppendEventRequest) GetIdempotencyKey() string {
 	if x != nil {
 		return x.IdempotencyKey
+	}
+	return ""
+}
+
+func (x *AppendEventRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
 	}
 	return ""
 }
@@ -544,11 +560,119 @@ func (x *GetEventRequest) GetEventId() string {
 	return ""
 }
 
+type ExportEventsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Start *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=start,proto3" json:"start,omitempty"`
+	End   *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=end,proto3" json:"end,omitempty"`
+	// Comma-joined subset of event types to include (e.g. "fill,signal,pnl_snapshot,config_change,alert").
+	// Empty = all types.
+	EventType     string `protobuf:"bytes,3,opt,name=event_type,json=eventType,proto3" json:"event_type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExportEventsRequest) Reset() {
+	*x = ExportEventsRequest{}
+	mi := &file_ledger_v1_ledger_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportEventsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportEventsRequest) ProtoMessage() {}
+
+func (x *ExportEventsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ledger_v1_ledger_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportEventsRequest.ProtoReflect.Descriptor instead.
+func (*ExportEventsRequest) Descriptor() ([]byte, []int) {
+	return file_ledger_v1_ledger_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ExportEventsRequest) GetStart() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Start
+	}
+	return nil
+}
+
+func (x *ExportEventsRequest) GetEnd() *timestamppb.Timestamp {
+	if x != nil {
+		return x.End
+	}
+	return nil
+}
+
+func (x *ExportEventsRequest) GetEventType() string {
+	if x != nil {
+		return x.EventType
+	}
+	return ""
+}
+
+type ExportEventsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// One cursor page of events per message (batched — a large export is thousands of
+	// messages, not one per row), each page ordered by the global sequence.
+	Events        []*LedgerEvent `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExportEventsResponse) Reset() {
+	*x = ExportEventsResponse{}
+	mi := &file_ledger_v1_ledger_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportEventsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportEventsResponse) ProtoMessage() {}
+
+func (x *ExportEventsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_ledger_v1_ledger_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportEventsResponse.ProtoReflect.Descriptor instead.
+func (*ExportEventsResponse) Descriptor() ([]byte, []int) {
+	return file_ledger_v1_ledger_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ExportEventsResponse) GetEvents() []*LedgerEvent {
+	if x != nil {
+		return x.Events
+	}
+	return nil
+}
+
 var File_ledger_v1_ledger_proto protoreflect.FileDescriptor
 
 const file_ledger_v1_ledger_proto_rawDesc = "" +
 	"\n" +
-	"\x16ledger/v1/ledger.proto\x12\x15xstockstrat.ledger.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x16common/v1/common.proto\"\x88\x04\n" +
+	"\x16ledger/v1/ledger.proto\x12\x15xstockstrat.ledger.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x16common/v1/common.proto\"\xa1\x04\n" +
 	"\vLedgerEvent\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12\x1d\n" +
 	"\n" +
@@ -564,10 +688,11 @@ const file_ledger_v1_ledger_proto_rawDesc = "" +
 	"\bsequence\x18\t \x01(\x03R\bsequence\x12\x1d\n" +
 	"\n" +
 	"stream_key\x18\n" +
-	" \x01(\tR\tstreamKey\x1a;\n" +
+	" \x01(\tR\tstreamKey\x12\x17\n" +
+	"\auser_id\x18\v \x01(\tR\x06userId\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xcb\x03\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe4\x03\n" +
 	"\x12AppendEventRequest\x12\x1d\n" +
 	"\n" +
 	"event_type\x18\x01 \x01(\tR\teventType\x12%\n" +
@@ -579,7 +704,8 @@ const file_ledger_v1_ledger_proto_rawDesc = "" +
 	"\bmetadata\x18\x06 \x03(\v27.xstockstrat.ledger.v1.AppendEventRequest.MetadataEntryR\bmetadata\x12;\n" +
 	"\voccurred_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"occurredAt\x12'\n" +
-	"\x0fidempotency_key\x18\b \x01(\tR\x0eidempotencyKey\x1a;\n" +
+	"\x0fidempotency_key\x18\b \x01(\tR\x0eidempotencyKey\x12\x17\n" +
+	"\auser_id\x18\t \x01(\tR\x06userId\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x89\x01\n" +
@@ -608,12 +734,20 @@ const file_ledger_v1_ledger_proto_rawDesc = "" +
 	"event_type\x18\x02 \x01(\tR\teventType\x12#\n" +
 	"\rfrom_sequence\x18\x03 \x01(\x03R\ffromSequence\",\n" +
 	"\x0fGetEventRequest\x12\x19\n" +
-	"\bevent_id\x18\x01 \x01(\tR\aeventId2\x95\x03\n" +
+	"\bevent_id\x18\x01 \x01(\tR\aeventId\"\x94\x01\n" +
+	"\x13ExportEventsRequest\x120\n" +
+	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
+	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\x12\x1d\n" +
+	"\n" +
+	"event_type\x18\x03 \x01(\tR\teventType\"R\n" +
+	"\x14ExportEventsResponse\x12:\n" +
+	"\x06events\x18\x01 \x03(\v2\".xstockstrat.ledger.v1.LedgerEventR\x06events2\x80\x04\n" +
 	"\rLedgerService\x12d\n" +
 	"\vAppendEvent\x12).xstockstrat.ledger.v1.AppendEventRequest\x1a*.xstockstrat.ledger.v1.AppendEventResponse\x12d\n" +
 	"\vQueryEvents\x12).xstockstrat.ledger.v1.QueryEventsRequest\x1a*.xstockstrat.ledger.v1.QueryEventsResponse\x12`\n" +
 	"\fStreamEvents\x12*.xstockstrat.ledger.v1.StreamEventsRequest\x1a\".xstockstrat.ledger.v1.LedgerEvent0\x01\x12V\n" +
-	"\bGetEvent\x12&.xstockstrat.ledger.v1.GetEventRequest\x1a\".xstockstrat.ledger.v1.LedgerEventB<Z:github.com/xstockstrat/contracts/gen/go/ledger/v1;ledgerv1b\x06proto3"
+	"\bGetEvent\x12&.xstockstrat.ledger.v1.GetEventRequest\x1a\".xstockstrat.ledger.v1.LedgerEvent\x12i\n" +
+	"\fExportEvents\x12*.xstockstrat.ledger.v1.ExportEventsRequest\x1a+.xstockstrat.ledger.v1.ExportEventsResponse0\x01B<Z:github.com/xstockstrat/contracts/gen/go/ledger/v1;ledgerv1b\x06proto3"
 
 var (
 	file_ledger_v1_ledger_proto_rawDescOnce sync.Once
@@ -627,7 +761,7 @@ func file_ledger_v1_ledger_proto_rawDescGZIP() []byte {
 	return file_ledger_v1_ledger_proto_rawDescData
 }
 
-var file_ledger_v1_ledger_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_ledger_v1_ledger_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_ledger_v1_ledger_proto_goTypes = []any{
 	(*LedgerEvent)(nil),           // 0: xstockstrat.ledger.v1.LedgerEvent
 	(*AppendEventRequest)(nil),    // 1: xstockstrat.ledger.v1.AppendEventRequest
@@ -636,40 +770,47 @@ var file_ledger_v1_ledger_proto_goTypes = []any{
 	(*QueryEventsResponse)(nil),   // 4: xstockstrat.ledger.v1.QueryEventsResponse
 	(*StreamEventsRequest)(nil),   // 5: xstockstrat.ledger.v1.StreamEventsRequest
 	(*GetEventRequest)(nil),       // 6: xstockstrat.ledger.v1.GetEventRequest
-	nil,                           // 7: xstockstrat.ledger.v1.LedgerEvent.MetadataEntry
-	nil,                           // 8: xstockstrat.ledger.v1.AppendEventRequest.MetadataEntry
-	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
-	(*structpb.Struct)(nil),       // 10: google.protobuf.Struct
-	(*v1.TimeRange)(nil),          // 11: xstockstrat.common.v1.TimeRange
-	(*v1.PageRequest)(nil),        // 12: xstockstrat.common.v1.PageRequest
-	(*v1.PageResponse)(nil),       // 13: xstockstrat.common.v1.PageResponse
+	(*ExportEventsRequest)(nil),   // 7: xstockstrat.ledger.v1.ExportEventsRequest
+	(*ExportEventsResponse)(nil),  // 8: xstockstrat.ledger.v1.ExportEventsResponse
+	nil,                           // 9: xstockstrat.ledger.v1.LedgerEvent.MetadataEntry
+	nil,                           // 10: xstockstrat.ledger.v1.AppendEventRequest.MetadataEntry
+	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),       // 12: google.protobuf.Struct
+	(*v1.TimeRange)(nil),          // 13: xstockstrat.common.v1.TimeRange
+	(*v1.PageRequest)(nil),        // 14: xstockstrat.common.v1.PageRequest
+	(*v1.PageResponse)(nil),       // 15: xstockstrat.common.v1.PageResponse
 }
 var file_ledger_v1_ledger_proto_depIdxs = []int32{
-	9,  // 0: xstockstrat.ledger.v1.LedgerEvent.occurred_at:type_name -> google.protobuf.Timestamp
-	9,  // 1: xstockstrat.ledger.v1.LedgerEvent.recorded_at:type_name -> google.protobuf.Timestamp
-	10, // 2: xstockstrat.ledger.v1.LedgerEvent.payload:type_name -> google.protobuf.Struct
-	7,  // 3: xstockstrat.ledger.v1.LedgerEvent.metadata:type_name -> xstockstrat.ledger.v1.LedgerEvent.MetadataEntry
-	10, // 4: xstockstrat.ledger.v1.AppendEventRequest.payload:type_name -> google.protobuf.Struct
-	8,  // 5: xstockstrat.ledger.v1.AppendEventRequest.metadata:type_name -> xstockstrat.ledger.v1.AppendEventRequest.MetadataEntry
-	9,  // 6: xstockstrat.ledger.v1.AppendEventRequest.occurred_at:type_name -> google.protobuf.Timestamp
-	9,  // 7: xstockstrat.ledger.v1.AppendEventResponse.recorded_at:type_name -> google.protobuf.Timestamp
-	11, // 8: xstockstrat.ledger.v1.QueryEventsRequest.time_range:type_name -> xstockstrat.common.v1.TimeRange
-	12, // 9: xstockstrat.ledger.v1.QueryEventsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
+	11, // 0: xstockstrat.ledger.v1.LedgerEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	11, // 1: xstockstrat.ledger.v1.LedgerEvent.recorded_at:type_name -> google.protobuf.Timestamp
+	12, // 2: xstockstrat.ledger.v1.LedgerEvent.payload:type_name -> google.protobuf.Struct
+	9,  // 3: xstockstrat.ledger.v1.LedgerEvent.metadata:type_name -> xstockstrat.ledger.v1.LedgerEvent.MetadataEntry
+	12, // 4: xstockstrat.ledger.v1.AppendEventRequest.payload:type_name -> google.protobuf.Struct
+	10, // 5: xstockstrat.ledger.v1.AppendEventRequest.metadata:type_name -> xstockstrat.ledger.v1.AppendEventRequest.MetadataEntry
+	11, // 6: xstockstrat.ledger.v1.AppendEventRequest.occurred_at:type_name -> google.protobuf.Timestamp
+	11, // 7: xstockstrat.ledger.v1.AppendEventResponse.recorded_at:type_name -> google.protobuf.Timestamp
+	13, // 8: xstockstrat.ledger.v1.QueryEventsRequest.time_range:type_name -> xstockstrat.common.v1.TimeRange
+	14, // 9: xstockstrat.ledger.v1.QueryEventsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
 	0,  // 10: xstockstrat.ledger.v1.QueryEventsResponse.events:type_name -> xstockstrat.ledger.v1.LedgerEvent
-	13, // 11: xstockstrat.ledger.v1.QueryEventsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
-	1,  // 12: xstockstrat.ledger.v1.LedgerService.AppendEvent:input_type -> xstockstrat.ledger.v1.AppendEventRequest
-	3,  // 13: xstockstrat.ledger.v1.LedgerService.QueryEvents:input_type -> xstockstrat.ledger.v1.QueryEventsRequest
-	5,  // 14: xstockstrat.ledger.v1.LedgerService.StreamEvents:input_type -> xstockstrat.ledger.v1.StreamEventsRequest
-	6,  // 15: xstockstrat.ledger.v1.LedgerService.GetEvent:input_type -> xstockstrat.ledger.v1.GetEventRequest
-	2,  // 16: xstockstrat.ledger.v1.LedgerService.AppendEvent:output_type -> xstockstrat.ledger.v1.AppendEventResponse
-	4,  // 17: xstockstrat.ledger.v1.LedgerService.QueryEvents:output_type -> xstockstrat.ledger.v1.QueryEventsResponse
-	0,  // 18: xstockstrat.ledger.v1.LedgerService.StreamEvents:output_type -> xstockstrat.ledger.v1.LedgerEvent
-	0,  // 19: xstockstrat.ledger.v1.LedgerService.GetEvent:output_type -> xstockstrat.ledger.v1.LedgerEvent
-	16, // [16:20] is the sub-list for method output_type
-	12, // [12:16] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	15, // 11: xstockstrat.ledger.v1.QueryEventsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
+	11, // 12: xstockstrat.ledger.v1.ExportEventsRequest.start:type_name -> google.protobuf.Timestamp
+	11, // 13: xstockstrat.ledger.v1.ExportEventsRequest.end:type_name -> google.protobuf.Timestamp
+	0,  // 14: xstockstrat.ledger.v1.ExportEventsResponse.events:type_name -> xstockstrat.ledger.v1.LedgerEvent
+	1,  // 15: xstockstrat.ledger.v1.LedgerService.AppendEvent:input_type -> xstockstrat.ledger.v1.AppendEventRequest
+	3,  // 16: xstockstrat.ledger.v1.LedgerService.QueryEvents:input_type -> xstockstrat.ledger.v1.QueryEventsRequest
+	5,  // 17: xstockstrat.ledger.v1.LedgerService.StreamEvents:input_type -> xstockstrat.ledger.v1.StreamEventsRequest
+	6,  // 18: xstockstrat.ledger.v1.LedgerService.GetEvent:input_type -> xstockstrat.ledger.v1.GetEventRequest
+	7,  // 19: xstockstrat.ledger.v1.LedgerService.ExportEvents:input_type -> xstockstrat.ledger.v1.ExportEventsRequest
+	2,  // 20: xstockstrat.ledger.v1.LedgerService.AppendEvent:output_type -> xstockstrat.ledger.v1.AppendEventResponse
+	4,  // 21: xstockstrat.ledger.v1.LedgerService.QueryEvents:output_type -> xstockstrat.ledger.v1.QueryEventsResponse
+	0,  // 22: xstockstrat.ledger.v1.LedgerService.StreamEvents:output_type -> xstockstrat.ledger.v1.LedgerEvent
+	0,  // 23: xstockstrat.ledger.v1.LedgerService.GetEvent:output_type -> xstockstrat.ledger.v1.LedgerEvent
+	8,  // 24: xstockstrat.ledger.v1.LedgerService.ExportEvents:output_type -> xstockstrat.ledger.v1.ExportEventsResponse
+	20, // [20:25] is the sub-list for method output_type
+	15, // [15:20] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_ledger_v1_ledger_proto_init() }
@@ -683,7 +824,7 @@ func file_ledger_v1_ledger_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ledger_v1_ledger_proto_rawDesc), len(file_ledger_v1_ledger_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

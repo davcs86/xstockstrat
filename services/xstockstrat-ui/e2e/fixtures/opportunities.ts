@@ -8,6 +8,49 @@ import { OpportunityActionTag } from '@xstockstrat/proto/analysis/v1/analysis_pb
 const VALID_UNTIL = { seconds: BigInt(1_893_456_000), nanos: 0 }; // 2030-01-01
 const CAPR_VALID_UNTIL = { seconds: BigInt(1_893_508_200), nanos: 0 }; // 2030-01-01T14:30:00Z
 
+/**
+ * feature 095 — the CAPR sparkline: 20 recent daily closes with ONE gap (an unset `close`, `{}`)
+ * at index 5 to prove a warm-up/missing bar renders as a gap, never NaN/0 (AC-4). Connect-JSON: a
+ * SparklinePoint with `close` present is `{ close: n }`; a gap is `{}`.
+ */
+const CAPR_SPARKLINE = Array.from({ length: 20 }, (_v, i) =>
+  i === 5 ? {} : { close: Number((11.9 + i * 0.023).toFixed(3)) },
+);
+
+/** feature 095 — the traced condition leaves persisted on the CAPR quality-dip-buy opportunity. */
+const CAPR_CONDITIONS = [
+  {
+    refName: 'close',
+    lhsValue: 12.34,
+    threshold: 12.0,
+    fn: '>',
+    state: 1,
+    distanceToThreshold: 0.028,
+  },
+  {
+    refName: 'sma_20',
+    lhsValue: 12.34,
+    threshold: 12.1,
+    fn: '>',
+    state: 1,
+    distanceToThreshold: 0.014,
+  },
+];
+
+/**
+ * feature 095 — the LatestPrice the mock marketdata returns for CAPR (AC-1/AC-2/AC-12). change% =
+ * (12.34 − 12.09)/12.09 ≈ +2.07% → displayed +2.1%. Used by the off-queue Signal-detail fallback
+ * (AC-13) and mirrored on the enriched CAPR opportunity rows so both surfaces read one source.
+ */
+export const CAPR_LATEST_PRICE = {
+  symbol: 'CAPR',
+  lastPrice: 12.34,
+  lastTradeTime: { seconds: BigInt(1_893_508_100), nanos: 0 },
+  prevClose: 12.09,
+  source: 'alpaca',
+};
+const CAPR_CHANGE_PCT = (12.34 - 12.09) / 12.09;
+
 export const OPPORTUNITIES = [
   {
     symbol: 'AAPL',
@@ -135,6 +178,15 @@ export const OPPORTUNITIES = [
     validUntil: CAPR_VALID_UNTIL,
     opportunityKey: 'u1|CAPR|quality-dip-buy',
     provenance: ['watchlist'],
+    // feature 095 — live-market enrichment (read-time) + strategy-derived target/stop + conditions.
+    livePrice: 12.34,
+    changePct: CAPR_CHANGE_PCT,
+    sparkline: CAPR_SPARKLINE,
+    targetPrice: 14.0,
+    stopPrice: 11.5,
+    conditions: CAPR_CONDITIONS,
+    // feature 110 — the raw max ExternalSignal.conviction feeding the ticket's confidence auto-sizing.
+    signalConfidence: 0.82,
   },
   {
     symbol: 'CAPR',
@@ -148,6 +200,11 @@ export const OPPORTUNITIES = [
     validUntil: CAPR_VALID_UNTIL,
     opportunityKey: 'u1|CAPR|momentum',
     provenance: ['watchlist'],
+    // feature 095 — symbol-level live fields mirror the quality-dip-buy row (same source, AC-12);
+    // no target/stop on this strategy (AC-8 renders no overlay for it).
+    livePrice: 12.34,
+    changePct: CAPR_CHANGE_PCT,
+    sparkline: CAPR_SPARKLINE,
   },
 ];
 

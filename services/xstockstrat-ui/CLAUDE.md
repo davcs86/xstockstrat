@@ -209,15 +209,15 @@ propagation in `docs/patterns/header-propagation.md`.
 
 | File | Runtime | Purpose |
 |---|---|---|
-| `src/lib/auth.ts` | **Edge-safe** | JWT verify (`jose`, `JWT_SECRET`), cookie helpers, scope bitmap (`ADMIN_SCOPE`, `hasAdminScope`), trace IDs. **Must not import `@connectrpc/connect-node` or any Node-only module** — `middleware.ts` bundles it for the Edge runtime. |
-| `src/lib/identity.ts` | Node | `refreshSession` / `revokeToken` wrapping the identity gRPC client |
+| `src/lib/auth.ts` | Node-safe (was Edge-safe pre-128) | JWT verify (`jose`, `JWT_SECRET`), cookie helpers, scope bitmap (`ADMIN_SCOPE`, `hasAdminScope`), trace IDs. Keeping it free of heavy Node deps stays a preference (small, widely-imported), but since feature 128 flipped `middleware.ts` to the Node.js runtime it is **no longer an Edge-bundling hard requirement**. |
+| `src/lib/identity.ts` | Node | `refreshSession` / `revokeToken` wrapping the identity gRPC client — imported by the Node.js-runtime `middleware.ts` (feature 128) as well as the auth route handlers |
 | `src/lib/connectClients.ts` | Node | Typed gRPC clients (`createGrpcTransport`) from `*_ENDPOINT` env vars |
 | `src/lib/bffShared.ts` | Node | **Canonical** BFF plumbing shared by all three segment routers: `requireSession`, `backendHeaders`, `requireAdminScope`, `createBffRouter`, `createDispatch`. Do not re-implement these per segment (DRY guard rail). |
 | `src/lib/{traderBff,insightsBff,configUiBff}.ts` | Node | Per-segment routers — register `router.service(...)` then `export const dispatchConnect = createDispatch(router, '<prefix>')`; all session/header/dispatch logic comes from `bffShared.ts`. |
 | `src/lib/headers.ts` | shared | **Canonical** propagation header names (`HEADER_USER_ID` / `HEADER_ACCESS_SCOPE` / `HEADER_TRACE_ID`). The DRY guard rail bans the raw `x-*` literals elsewhere. |
 | `src/lib/basepath.ts` | shared | **Canonical** segment base paths (`BASE_PATH_*`) for cross-segment links/fetches. |
 | `src/hooks/useInvalidatingMutation.ts` | Browser | **Canonical** factory for "call a BFF RPC then invalidate query keys" mutation hooks (order + watchlist hooks build on it). |
-| `src/middleware.ts` | Edge | Route protection, token refresh, trace-ID injection; matcher must include `/` |
+| `src/middleware.ts` | **Node.js runtime** (`config.runtime = 'nodejs'`, feature 128) | Route protection, token refresh, trace-ID injection; matcher must include `/`. Near-expiry refresh calls `identity.ts` `refreshSession()` **in-process** (no self-`fetch` to `/api/auth/refresh`); the `api/auth/refresh` matcher exclusion is **kept** because that route still has a live browser caller (`src/lib/authRedirect.ts`). |
 | `src/app/auth/layout.tsx` | Server | `export const dynamic = 'force-dynamic'` — forces every `/auth/*` page uncacheable (`Cache-Control: no-store`). **Do not remove.** Statically prerendered auth pages get `s-maxage=31536000`, and the prod edge (Cloudflare) ignores `Vary: RSC`, so it cross-serves the `text/x-component` RSC/Flight prefetch payload to document navigations — the browser then renders raw Flight text (incl. Next's built-in "404: This page could not be found." string), surfacing as the login route "not found". |
 | `src/app/auth/{login,oauth-login}/page.tsx` | Browser | Unified login (domain root, outside all basePaths) + OAuth agent login. Kept non-static by the segment layout above. |
 | `src/app/api/auth/{login,refresh,logout,me}/route.ts` | Node | Auth endpoints (set/clear cookies, current session) |
@@ -247,6 +247,17 @@ Only the **config-ui audit route** touches the DB: `src/app/config-ui/api/audit/
 part of the platform's 20-connection budget (root CLAUDE.md § Connection Pool Budget) — do not raise it
 without re-checking that table. All other segments are stateless.
 
+## Config Keys Consumed
+
+Namespace: `ui`. Read **one-shot** via `GetConfig(namespace: 'ui')` in `insightsBff.ts` — the UI is a
+stateless BFF with **no `WatchConfig` subscription** (it cannot hold a server stream). Values are read
+with an oneof-presence check (never `value || default`), so a stored `0` / empty string survives.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `ui.performance.risk_free_rate_annual` | float | `0.045` | Annualized risk-free rate for the `/insights/performance` dashboard rolling-30d Sharpe (feature 031, FR-3). A stored `0` is legitimate. Seed migration `023_ui_performance_keys`. |
+| `ui.performance.equity_curve_start_date` | string | `""` (auto = earliest closed-position date) | ISO date the cumulative-P&L equity curve starts from (feature 031, FR-1). Empty ⇒ the UI defaults to the earliest closed-position date. Seed migration `023_ui_performance_keys`. |
+
 ## Environment Variables
 
 Per the root naming convention (`<SERVICE>_ENDPOINT`, gRPC `host:port`).
@@ -263,6 +274,7 @@ ANALYSIS_ENDPOINT=xstockstrat-analysis:50056
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
 CONFIG_ENDPOINT=xstockstrat-config:50060
+VAPID_PUBLIC_KEY            # feature 165 — Web Push public key, exposed to the browser via VapidKeyContext (server→client prop, NOT NEXT_PUBLIC_*); empty ⇒ push enable control reports "not configured"
 DATABASE_URL                # config-ui audit route only
 DB_POOL_MAX=1               # config-ui audit pool cap
 OTEL_ENABLED                # toggle OTel; init errors never block startup
@@ -278,10 +290,44 @@ See `docs/patterns/nextjs-frontends.md` and `docs/patterns/client-api-pattern.md
   (e.g. `/trader/api/...`); the router `PREFIX` must match the segment or every RPC 404s.
 - **Browser `fetch()` is not basePath-aware**: use the full path (`/trader/api/auth/login`), or
   `new URL(path, req.url)` in middleware — never a bare `/api/...`.
-- **Edge-runtime import trap**: keep Node-only code out of `auth.ts` (it bundles to Edge via middleware).
+- **Middleware runs on the Node.js runtime** (feature 128): `middleware.ts` sets `config.runtime = 'nodejs'` and imports Node-only code (`@/lib/identity` `refreshSession()`) directly. The historical Edge-runtime import trap ("keep Node-only code out of `auth.ts` because it bundles to Edge via middleware") no longer applies — see `docs/patterns/frontend-auth.md` § The Edge-runtime trap (HISTORICAL).
 - **Middleware matcher must include `/`** — the negative-lookahead pattern alone does not match the bare root.
 - **Suspense fallbacks** must render real shell/placeholder structure, not `null`, so SSR HTML isn't empty.
 - **Radix primitives** (Select/Dialog) are Client Components (`'use client'`) to avoid hydration mismatch.
+
+## PWA & Push Notifications (feature 165)
+
+The UI is an installable PWA that can receive OS-level Web Push notifications even when closed.
+
+- **Served from `public/` at the domain root** (no `basePath`): `manifest.webmanifest` (`display:
+  standalone`, `start_url: /trader`, 192/512 + maskable icons), the three `icon-*.png`, and a
+  hand-written `sw.js` (no `next-pwa`). **`public/` is NOT auto-included by `output: standalone`** — the
+  `Dockerfile` has an explicit `COPY … public …` step; don't drop it.
+- **`sw.js`** handles `push` (always `showNotification` — the `userVisibleOnly` obligation — with a
+  fallback on parse failure, and a deterministic `tag` for OS coalescing) and `notificationclick`
+  (focus an existing window or open one). Its two decisions (parse-with-fallback, focus-vs-open) are
+  the pure, unit-tested helpers in `src/lib/swHelpers.ts`, mirrored (inlined) into `sw.js` because a
+  service worker can't import from the Next bundle.
+- **`middleware.ts` matcher excludes** `sw.js` / `manifest.webmanifest` / the `icon-*.png` so they're
+  served publicly (else the SW never registers). **`next.config.js headers()`** sends
+  `Cache-Control: no-cache` for `sw.js` + `manifest.webmanifest` so an updated worker reaches clients.
+- **`ServiceWorkerRegistrar`** (mounted in the root layout) registers `/sw.js` at root scope, covering
+  all four segments.
+- **Enable/disable control** at `/accounts/notifications` (Settings group — registered in **both**
+  `PLATFORM_SUBNAV.accounts` and `NAV_GROUPS`). `PushToggle` requests permission, subscribes via the
+  Push API with the VAPID **public** key, and calls `notifyClient.registerPushSubscription` /
+  `unregisterPushSubscription`. Its four states (unsupported/blocked/enabled/default) route through
+  `EmptyState`/`CardNotice`/`Switch` (C-17).
+- **BFF**: `traderBff` `registerPushSubscription`/`unregisterPushSubscription` are plain `forward()`s —
+  the notify service resolves the subscription owner from the propagated `x-user-id` header
+  (`backendHeaders`, applied by `forward`; the request body carries no `user_id`), matching the
+  header-identity convention (#1040/#1041, C-03); unregister is by endpoint only. The `/accounts` page reuses the
+  root-relative `notifyClient` (`/trader/api`) per the "Sanctioned exception" (four facts re-verified).
+- **`VAPID_PUBLIC_KEY`** crosses server→client via `src/app/accounts/VapidKeyContext.tsx` (mirrors
+  `AgentUrlContext`; the `/accounts` layout is already `force-dynamic`) — never `NEXT_PUBLIC_*`. The
+  private key is notify-only.
+- **iOS** requires adding the app to the Home Screen before Web Push works (standard behavior; not
+  separately engineered).
 
 ## Observability
 

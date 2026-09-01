@@ -1,4 +1,4 @@
-"""Feature 162 — app/client.py broker-account gRPC wrappers.
+"""Feature 164 — app/client.py broker-account gRPC wrappers.
 
 Exercises the real dict→proto request builders against a mocked TradingService stub: register /
 update_credentials / deregister / list forward x-user-id and the request fields, credentials are

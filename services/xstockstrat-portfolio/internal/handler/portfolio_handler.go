@@ -227,6 +227,14 @@ func (h *PortfolioHandler) RemoveWatchlistSymbols(ctx context.Context, req *conn
 	return connect.NewResponse(resp), nil
 }
 
+func (h *PortfolioHandler) UpdateWatchlistBinding(ctx context.Context, req *connect.Request[portfoliov1.UpdateWatchlistBindingRequest]) (*connect.Response[portfoliov1.UpdateWatchlistBindingResponse], error) {
+	resp, err := h.svc.UpdateWatchlistBinding(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
 // GRPCHandler returns a gRPC-compatible adapter around this handler.
 func (h *PortfolioHandler) GRPCHandler() *grpcPortfolioAdapter {
 	return &grpcPortfolioAdapter{h: h}
@@ -374,6 +382,14 @@ func (a *grpcPortfolioAdapter) AddWatchlistSymbols(ctx context.Context, req *por
 
 func (a *grpcPortfolioAdapter) RemoveWatchlistSymbols(ctx context.Context, req *portfoliov1.RemoveWatchlistSymbolsRequest) (*portfoliov1.RemoveWatchlistSymbolsResponse, error) {
 	resp, err := a.h.RemoveWatchlistSymbols(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcPortfolioAdapter) UpdateWatchlistBinding(ctx context.Context, req *portfoliov1.UpdateWatchlistBindingRequest) (*portfoliov1.UpdateWatchlistBindingResponse, error) {
+	resp, err := a.h.UpdateWatchlistBinding(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, toGRPCError(err)
 	}

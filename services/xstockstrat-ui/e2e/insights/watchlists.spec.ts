@@ -196,15 +196,20 @@ test.describe('Watchlists (insights)', () => {
     const delayed = new Promise<void>((resolve) => {
       releaseResponse = resolve;
     });
+    // feature 167: a per-symbol rebind now uses UpdateWatchlistBinding (not UpdateWatchlist), so hold
+    // THAT response to observe the in-flight guard. updated_at is a Timestamp → RFC3339 string.
     await page.route(
-      '**/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlist',
+      '**/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlistBinding',
       async (route) => {
         await delayed;
         const req = JSON.parse(route.request().postData() ?? '{}');
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ watchlist: { watchlistId: req.watchlistId, ...req } }),
+          body: JSON.stringify({
+            binding: { symbol: req.symbol, strategyId: req.strategyId },
+            updatedAt: new Date(0).toISOString(),
+          }),
         });
       },
     );
@@ -444,5 +449,64 @@ test.describe('Watchlists (insights)', () => {
     await expect(
       readiness.getByTestId('readiness-row-WATCH1').getByTestId('jump-WATCH1'),
     ).toHaveCount(0);
+  });
+
+  // feature 167 — a single-symbol rebind patches only the changed row and does NOT refetch the
+  // whole list (the ['watchlists'] key is not invalidated).
+  test('rebinding one symbol patches only that row without a full-list refetch (feature 167, AC-6)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // A big list "loaded with 200 symbols in the query cache". Only AAPL/MSFT are bound (so exactly
+    // two rows evaluate); the 198 filler symbols are unbound — they still populate the cached list a
+    // full refetch would have to re-pull, without triggering 198 EvaluateReadiness calls.
+    const filler = Array.from({ length: 198 }, (_, i) => ({ symbol: `SYM${i}`, strategyId: '' }));
+    await mockWatchlists(page, [
+      {
+        watchlistId: 'wl-1',
+        userId: 'test-user-001',
+        name: 'Big List',
+        description: '',
+        symbols: ['AAPL', 'MSFT', ...filler.map((b) => b.symbol)],
+        bindings: [
+          { symbol: 'AAPL', strategyId: 'strat-live-001' },
+          { symbol: 'MSFT', strategyId: 'strat-live-001' },
+          ...filler,
+        ],
+      },
+    ]);
+
+    // Count the two RPCs before navigating so the initial ListWatchlists is captured too.
+    // The connect path is `…xstockstrat.portfolio.v1.PortfolioService/<Method>` — a DOT precedes
+    // `PortfolioService`, so match on the `/<Method>` segment (both method names are unique).
+    let listCalls = 0;
+    let bindCalls = 0;
+    page.on('request', (r) => {
+      if (r.url().includes('/ListWatchlists')) listCalls += 1;
+      if (r.url().includes('/UpdateWatchlistBinding')) bindCalls += 1;
+    });
+
+    await page.goto('/insights/watchlists');
+    // Generous: the 200-row list renders + AAPL/MSFT evaluate readiness; on the dev server the route
+    // also cold-compiles on first hit. CI's production build is far faster.
+    await expect(page.getByTestId('readiness-row-MSFT')).toBeVisible({ timeout: 30000 });
+    // Both bound rows show their initial strategy.
+    const msftSelect = page.getByTestId('readiness-row-MSFT').getByLabel('Strategy for MSFT');
+    const aaplSelect = page.getByTestId('readiness-row-AAPL').getByLabel('Strategy for AAPL');
+    await expect(msftSelect).toContainText('Live Test Strategy', { timeout: 5000 });
+    await expect(aaplSelect).toContainText('Live Test Strategy');
+    const baseline = listCalls;
+
+    // Rebind MSFT to the OTHER live strategy via the targeted single-row RPC.
+    await bindStrategy(page, 'MSFT', 'Deny List Strategy');
+
+    // The MSFT row shows the new strategy…
+    await expect(msftSelect).toContainText('Deny List Strategy');
+    // …via exactly one UpdateWatchlistBinding request…
+    expect(bindCalls).toBe(1);
+    // …with NO ListWatchlists refetch after the rebind (the cache was patched, not invalidated)…
+    expect(listCalls).toBe(baseline);
+    // …and a sampled other row is untouched.
+    await expect(aaplSelect).toContainText('Live Test Strategy');
   });
 });

@@ -162,6 +162,34 @@ export interface ListAlertsResponse {
   nextPageToken: string;
 }
 
+/** Web Push subscription registration (feature 165 — pwa-notifications). */
+export interface RegisterPushSubscriptionRequest {
+  /**
+   * No user_id field — the owner is resolved from the propagated x-user-id metadata header (C-03),
+   * never trusted from the request body.
+   */
+  endpoint: string;
+  /** client public key (PushSubscription.keys.p256dh) */
+  p256dh: string;
+  /** client auth secret (PushSubscription.keys.auth) */
+  auth: string;
+  /** optional device label for debugging */
+  userAgent: string;
+}
+
+export interface RegisterPushSubscriptionResponse {
+  subscriptionId: string;
+}
+
+export interface UnregisterPushSubscriptionRequest {
+  /** delete by endpoint only — no user_id (an endpoint is a possession-proven capability) */
+  endpoint: string;
+}
+
+export interface UnregisterPushSubscriptionResponse {
+  deleted: boolean;
+}
+
 function createBaseAlert(): Alert {
   return {
     alertId: "",
@@ -1203,6 +1231,312 @@ export const ListAlertsResponse: MessageFns<ListAlertsResponse> = {
   },
 };
 
+function createBaseRegisterPushSubscriptionRequest(): RegisterPushSubscriptionRequest {
+  return { endpoint: "", p256dh: "", auth: "", userAgent: "" };
+}
+
+export const RegisterPushSubscriptionRequest: MessageFns<RegisterPushSubscriptionRequest> = {
+  encode(message: RegisterPushSubscriptionRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.endpoint !== "") {
+      writer.uint32(10).string(message.endpoint);
+    }
+    if (message.p256dh !== "") {
+      writer.uint32(18).string(message.p256dh);
+    }
+    if (message.auth !== "") {
+      writer.uint32(26).string(message.auth);
+    }
+    if (message.userAgent !== "") {
+      writer.uint32(34).string(message.userAgent);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RegisterPushSubscriptionRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRegisterPushSubscriptionRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.endpoint = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.p256dh = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.auth = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.userAgent = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): RegisterPushSubscriptionRequest {
+    return {
+      endpoint: isSet(object.endpoint) ? globalThis.String(object.endpoint) : "",
+      p256dh: isSet(object.p256dh) ? globalThis.String(object.p256dh) : "",
+      auth: isSet(object.auth) ? globalThis.String(object.auth) : "",
+      userAgent: isSet(object.userAgent)
+        ? globalThis.String(object.userAgent)
+        : isSet(object.user_agent)
+        ? globalThis.String(object.user_agent)
+        : "",
+    };
+  },
+
+  toJSON(message: RegisterPushSubscriptionRequest): unknown {
+    const obj: any = {};
+    if (message.endpoint !== "") {
+      obj.endpoint = message.endpoint;
+    }
+    if (message.p256dh !== "") {
+      obj.p256dh = message.p256dh;
+    }
+    if (message.auth !== "") {
+      obj.auth = message.auth;
+    }
+    if (message.userAgent !== "") {
+      obj.userAgent = message.userAgent;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<RegisterPushSubscriptionRequest>, I>>(base?: I): RegisterPushSubscriptionRequest {
+    return RegisterPushSubscriptionRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RegisterPushSubscriptionRequest>, I>>(
+    object: I,
+  ): RegisterPushSubscriptionRequest {
+    const message = createBaseRegisterPushSubscriptionRequest();
+    message.endpoint = object.endpoint ?? "";
+    message.p256dh = object.p256dh ?? "";
+    message.auth = object.auth ?? "";
+    message.userAgent = object.userAgent ?? "";
+    return message;
+  },
+};
+
+function createBaseRegisterPushSubscriptionResponse(): RegisterPushSubscriptionResponse {
+  return { subscriptionId: "" };
+}
+
+export const RegisterPushSubscriptionResponse: MessageFns<RegisterPushSubscriptionResponse> = {
+  encode(message: RegisterPushSubscriptionResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.subscriptionId !== "") {
+      writer.uint32(10).string(message.subscriptionId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RegisterPushSubscriptionResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRegisterPushSubscriptionResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.subscriptionId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): RegisterPushSubscriptionResponse {
+    return {
+      subscriptionId: isSet(object.subscriptionId)
+        ? globalThis.String(object.subscriptionId)
+        : isSet(object.subscription_id)
+        ? globalThis.String(object.subscription_id)
+        : "",
+    };
+  },
+
+  toJSON(message: RegisterPushSubscriptionResponse): unknown {
+    const obj: any = {};
+    if (message.subscriptionId !== "") {
+      obj.subscriptionId = message.subscriptionId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<RegisterPushSubscriptionResponse>, I>>(
+    base?: I,
+  ): RegisterPushSubscriptionResponse {
+    return RegisterPushSubscriptionResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RegisterPushSubscriptionResponse>, I>>(
+    object: I,
+  ): RegisterPushSubscriptionResponse {
+    const message = createBaseRegisterPushSubscriptionResponse();
+    message.subscriptionId = object.subscriptionId ?? "";
+    return message;
+  },
+};
+
+function createBaseUnregisterPushSubscriptionRequest(): UnregisterPushSubscriptionRequest {
+  return { endpoint: "" };
+}
+
+export const UnregisterPushSubscriptionRequest: MessageFns<UnregisterPushSubscriptionRequest> = {
+  encode(message: UnregisterPushSubscriptionRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.endpoint !== "") {
+      writer.uint32(10).string(message.endpoint);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UnregisterPushSubscriptionRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseUnregisterPushSubscriptionRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.endpoint = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): UnregisterPushSubscriptionRequest {
+    return { endpoint: isSet(object.endpoint) ? globalThis.String(object.endpoint) : "" };
+  },
+
+  toJSON(message: UnregisterPushSubscriptionRequest): unknown {
+    const obj: any = {};
+    if (message.endpoint !== "") {
+      obj.endpoint = message.endpoint;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<UnregisterPushSubscriptionRequest>, I>>(
+    base?: I,
+  ): UnregisterPushSubscriptionRequest {
+    return UnregisterPushSubscriptionRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UnregisterPushSubscriptionRequest>, I>>(
+    object: I,
+  ): UnregisterPushSubscriptionRequest {
+    const message = createBaseUnregisterPushSubscriptionRequest();
+    message.endpoint = object.endpoint ?? "";
+    return message;
+  },
+};
+
+function createBaseUnregisterPushSubscriptionResponse(): UnregisterPushSubscriptionResponse {
+  return { deleted: false };
+}
+
+export const UnregisterPushSubscriptionResponse: MessageFns<UnregisterPushSubscriptionResponse> = {
+  encode(message: UnregisterPushSubscriptionResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.deleted !== false) {
+      writer.uint32(8).bool(message.deleted);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UnregisterPushSubscriptionResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseUnregisterPushSubscriptionResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.deleted = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): UnregisterPushSubscriptionResponse {
+    return { deleted: isSet(object.deleted) ? globalThis.Boolean(object.deleted) : false };
+  },
+
+  toJSON(message: UnregisterPushSubscriptionResponse): unknown {
+    const obj: any = {};
+    if (message.deleted !== false) {
+      obj.deleted = message.deleted;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<UnregisterPushSubscriptionResponse>, I>>(
+    base?: I,
+  ): UnregisterPushSubscriptionResponse {
+    return UnregisterPushSubscriptionResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UnregisterPushSubscriptionResponse>, I>>(
+    object: I,
+  ): UnregisterPushSubscriptionResponse {
+    const message = createBaseUnregisterPushSubscriptionResponse();
+    message.deleted = object.deleted ?? false;
+    return message;
+  },
+};
+
 /**
  * NotifyService — gRPC server-streaming alert delivery.
  * Services emit alerts via EmitAlert; subscribers receive via StreamAlerts.
@@ -1254,6 +1588,37 @@ export const NotifyServiceService = {
     responseSerialize: (value: ListAlertsResponse): Buffer => Buffer.from(ListAlertsResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): ListAlertsResponse => ListAlertsResponse.decode(value),
   },
+  /**
+   * Register (or upsert) a Web Push subscription for the calling user.
+   * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
+   */
+  registerPushSubscription: {
+    path: "/xstockstrat.notify.v1.NotifyService/RegisterPushSubscription" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: RegisterPushSubscriptionRequest): Buffer =>
+      Buffer.from(RegisterPushSubscriptionRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): RegisterPushSubscriptionRequest =>
+      RegisterPushSubscriptionRequest.decode(value),
+    responseSerialize: (value: RegisterPushSubscriptionResponse): Buffer =>
+      Buffer.from(RegisterPushSubscriptionResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): RegisterPushSubscriptionResponse =>
+      RegisterPushSubscriptionResponse.decode(value),
+  },
+  /** Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()). */
+  unregisterPushSubscription: {
+    path: "/xstockstrat.notify.v1.NotifyService/UnregisterPushSubscription" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: UnregisterPushSubscriptionRequest): Buffer =>
+      Buffer.from(UnregisterPushSubscriptionRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): UnregisterPushSubscriptionRequest =>
+      UnregisterPushSubscriptionRequest.decode(value),
+    responseSerialize: (value: UnregisterPushSubscriptionResponse): Buffer =>
+      Buffer.from(UnregisterPushSubscriptionResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): UnregisterPushSubscriptionResponse =>
+      UnregisterPushSubscriptionResponse.decode(value),
+  },
 } as const;
 
 export interface NotifyServiceServer extends UntypedServiceImplementation {
@@ -1268,6 +1633,13 @@ export interface NotifyServiceServer extends UntypedServiceImplementation {
   acknowledgeAlert: handleUnaryCall<AcknowledgeAlertRequest, AcknowledgeAlertResponse>;
   /** List historical alerts */
   listAlerts: handleUnaryCall<ListAlertsRequest, ListAlertsResponse>;
+  /**
+   * Register (or upsert) a Web Push subscription for the calling user.
+   * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
+   */
+  registerPushSubscription: handleUnaryCall<RegisterPushSubscriptionRequest, RegisterPushSubscriptionResponse>;
+  /** Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()). */
+  unregisterPushSubscription: handleUnaryCall<UnregisterPushSubscriptionRequest, UnregisterPushSubscriptionResponse>;
 }
 
 export interface NotifyServiceClient extends Client {
@@ -1328,6 +1700,41 @@ export interface NotifyServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ListAlertsResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Register (or upsert) a Web Push subscription for the calling user.
+   * The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
+   */
+  registerPushSubscription(
+    request: RegisterPushSubscriptionRequest,
+    callback: (error: ServiceError | null, response: RegisterPushSubscriptionResponse) => void,
+  ): ClientUnaryCall;
+  registerPushSubscription(
+    request: RegisterPushSubscriptionRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: RegisterPushSubscriptionResponse) => void,
+  ): ClientUnaryCall;
+  registerPushSubscription(
+    request: RegisterPushSubscriptionRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: RegisterPushSubscriptionResponse) => void,
+  ): ClientUnaryCall;
+  /** Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()). */
+  unregisterPushSubscription(
+    request: UnregisterPushSubscriptionRequest,
+    callback: (error: ServiceError | null, response: UnregisterPushSubscriptionResponse) => void,
+  ): ClientUnaryCall;
+  unregisterPushSubscription(
+    request: UnregisterPushSubscriptionRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: UnregisterPushSubscriptionResponse) => void,
+  ): ClientUnaryCall;
+  unregisterPushSubscription(
+    request: UnregisterPushSubscriptionRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: UnregisterPushSubscriptionResponse) => void,
   ): ClientUnaryCall;
 }
 

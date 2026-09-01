@@ -228,6 +228,9 @@ type orderFillPayload struct {
 	// (zero) on plain market/limit fills. Learned into the in-memory stop store so the
 	// Exposure surface can show risk-at-stop without a portfolio→trading edge.
 	StopPrice float64 `json:"stop_price"`
+	// Per-fill broker fee (feature 029); absent key ⇒ 0 (net == gross, AC-11). Accumulated into
+	// positions.fees_accum alongside realized_accum and emitted as fees_total on the close event.
+	Fees float64 `json:"fees"`
 }
 
 func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1.LedgerEvent) {
@@ -296,17 +299,20 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 		// The row is about to be deleted, so the cumulative realized goes into the emitted payload
 		// only (never persisted onto the deleted row). Read the prior accum + this closing delta.
 		var sealed float64
+		// feature 029 — seal the cumulative fees alongside realized: prior fees_accum + this fill's
+		// fee. realized_pnl stays GROSS/authoritative; net = realized_pnl - fees_total downstream.
+		var feesSealed float64
 		if existing != nil {
 			priorAccum, _ := s.repo.GetRealizedAccum(ctx, fill.UserID, fill.Symbol, mode, acctID)
 			sealed = priorAccum + delta
+			priorFees, _ := s.repo.GetFeesAccum(ctx, fill.UserID, fill.Symbol, mode, acctID)
+			feesSealed = priorFees + fill.Fees
 		}
 		_ = s.repo.ClosePosition(ctx, fill.UserID, fill.Symbol, mode, acctID)
-		s.emitEvent(ctx, "portfolio.position.closed", "portfolio:"+fill.UserID, map[string]interface{}{
-			"user_id": fill.UserID, "symbol": fill.Symbol, "account_id": acctID,
-			"trading_mode": mode.String(), "realized_pnl": sealed,
-		})
+		s.emitEvent(ctx, "portfolio.position.closed", "portfolio:"+fill.UserID,
+			closedPositionPayload(fill.UserID, fill.Symbol, acctID, mode.String(), sealed, feesSealed, existing))
 	} else {
-		_ = s.repo.UpsertPosition(ctx, fill.UserID, fill.Symbol, newQty, newAvgEntry, newCost, mode, acctID, delta)
+		_ = s.repo.UpsertPosition(ctx, fill.UserID, fill.Symbol, newQty, newAvgEntry, newCost, mode, acctID, delta, fill.Fees)
 		eventType := "portfolio.position.opened"
 		if existing != nil {
 			eventType = "portfolio.position.updated"
@@ -329,6 +335,26 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 // reconciliation) are left untouched so their authoritative mark-to-market figures reconcile
 // with broker equity instead of being overwritten by a marketdata mid-quote. Only positions
 // the broker did not value (e.g. a fresh order-fill position) fall back to mid-quote enrichment.
+// closedPositionPayload builds the portfolio.position.closed emit payload. The base keys are the
+// producer contract — user_id/symbol/account_id/trading_mode/realized_pnl (feature 042) plus
+// fees_total (feature 029) — never dropped/renamed (C-16). cost_basis + opened_at (feature 031) are
+// added ONLY when the closing position row was present (existing != nil): a redelivered post-close
+// fill (existing == nil) omits both, matching the realized_pnl/fees_total 0 it already emits there.
+// opened_at is RFC3339 (structpb.NewValue rejects time.Time; the as_of precedent). The UI /insights
+// performance dashboard reads cost_basis for avg-return-% and opened_at for avg-hold-time.
+func closedPositionPayload(userID, symbol, acctID, mode string, sealed, feesSealed float64, existing *portfoliov1.Position) map[string]interface{} {
+	payload := map[string]interface{}{
+		"user_id": userID, "symbol": symbol, "account_id": acctID,
+		"trading_mode": mode, "realized_pnl": sealed,
+		"fees_total": feesSealed,
+	}
+	if existing != nil {
+		payload["cost_basis"] = existing.CostBasis
+		payload["opened_at"] = existing.OpenedAt.AsTime().Format(time.RFC3339)
+	}
+	return payload
+}
+
 func (s *PortfolioService) enrichPositions(ctx context.Context, positions []*portfoliov1.Position) {
 	for _, p := range positions {
 		if p.CurrentPrice > 0 {
@@ -1220,6 +1246,10 @@ type WatchlistStore interface {
 	Delete(ctx context.Context, watchlistID string) error
 	AddSymbols(ctx context.Context, watchlistID string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error)
 	RemoveSymbols(ctx context.Context, watchlistID string, symbols []string) (*portfoliov1.Watchlist, error)
+	// UpdateBinding rebinds one symbol's strategy_id via a single-row UPDATE (feature 167),
+	// returning the updated binding and the parent list's bumped updated_at; ErrBindingNotFound
+	// when the (watchlist_id, symbol) row is absent.
+	UpdateBinding(ctx context.Context, watchlistID, symbol, strategyID string) (*portfoliov1.WatchlistBinding, time.Time, error)
 	CountByUser(ctx context.Context, userID string) (int, error)
 	EnsureSystemManaged(ctx context.Context, userID, defaultName string) (*portfoliov1.Watchlist, error)
 	// ListAllSymbols returns the distinct union of watchlist symbols across ALL users
@@ -1460,6 +1490,38 @@ func (s *PortfolioService) UpdateWatchlist(ctx context.Context, req *portfoliov1
 		"user_id": userID, "watchlist_id": wl.WatchlistId,
 	})
 	return &portfoliov1.UpdateWatchlistResponse{Watchlist: wl}, nil
+}
+
+// UpdateWatchlistBinding rebinds one symbol's strategy without a replace-all (feature 167, FR-1).
+func (s *PortfolioService) UpdateWatchlistBinding(ctx context.Context, req *portfoliov1.UpdateWatchlistBindingRequest) (*portfoliov1.UpdateWatchlistBindingResponse, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// Ownership: loadOwned yields NotFound(absent list)/PermissionDenied(wrong owner) — AC-4.
+	if _, err := s.loadOwned(ctx, userID, req.GetWatchlistId()); err != nil {
+		return nil, err
+	}
+	// Normalize the request symbol to match stored (uppercased/trimmed) rows — design Open Risk 4.
+	symbol := strings.ToUpper(strings.TrimSpace(req.GetSymbol()))
+	if symbol == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("symbol required"))
+	}
+	// strategy_id == "" passes through as a valid unbind (FR-4/AC-5).
+	binding, updatedAt, err := s.watchlists.UpdateBinding(ctx, req.GetWatchlistId(), symbol, strings.TrimSpace(req.GetStrategyId()))
+	if err != nil {
+		if errors.Is(err, repository.ErrBindingNotFound) {
+			return nil, connect.NewError(connect.CodeNotFound, errors.New("symbol not in watchlist")) // AC-3
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+req.GetWatchlistId(), map[string]interface{}{
+		"user_id": userID, "watchlist_id": req.GetWatchlistId(), "symbol": symbol,
+	})
+	return &portfoliov1.UpdateWatchlistBindingResponse{
+		Binding:   binding,
+		UpdatedAt: timestamppb.New(updatedAt),
+	}, nil
 }
 
 // DeleteWatchlist hard-deletes a watchlist owned by the caller (FR-6).

@@ -5,9 +5,34 @@ import * as jwt from 'jsonwebtoken';
 import * as bcrypt from 'bcrypt';
 import { ConfigWatcher } from '../services/configWatcher';
 import { getLogger } from '../services/logger';
-import { userIdFrom } from './authz';
+import { userIdFrom, hasAdminAccessScope, ADMIN_SCOPE_ERROR } from './authz';
+import { LedgerAudit, NOOP_LEDGER_AUDIT } from './ledgerAudit';
 
 const log = getLogger('identity:impl');
+
+// Role enum (packages/proto identity Role) ↔ DB role strings (feature 043). The generated enum
+// is numeric; identity.users.roles is TEXT[]. ROLE_UNSPECIFIED (0) is never written.
+const ROLE_ENUM_TO_STRING: Record<number, string> = { 1: 'admin', 2: 'trader', 3: 'viewer' };
+const ROLE_STRING_TO_ENUM: Record<string, number> = { admin: 1, trader: 2, viewer: 3 };
+
+function rolesToStrings(roles: number[] | undefined): string[] {
+  return (roles ?? []).map((r) => ROLE_ENUM_TO_STRING[r]).filter((s): s is string => Boolean(s));
+}
+
+function stringsToRoles(roles: string[] | undefined): number[] {
+  // Unknown stored strings map to ROLE_UNSPECIFIED (0) — kept so the view never silently drops a role.
+  return (roles ?? []).map((s) => ROLE_STRING_TO_ENUM[s] ?? 0);
+}
+
+function toUserView(row: any) {
+  return {
+    userId: row.user_id,
+    email: row.email,
+    roles: stringsToRoles(row.roles ?? []),
+    isActive: row.is_active,
+    createdAt: new Date(row.created_at),
+  };
+}
 
 // ts-proto's grpc-js serializer maps `google.protobuf.Timestamp` fields to JS
 // `Date` and calls `.getTime()` on them during encode. Responses must therefore
@@ -24,6 +49,9 @@ export class IdentityServiceImpl {
   constructor(
     private readonly pool: Pool,
     private readonly config: ConfigWatcher,
+    // Best-effort ledger audit sink (feature 043). Optional so existing tests constructing
+    // (pool, config) still work; production injects the real client in index.ts.
+    private readonly audit: LedgerAudit = NOOP_LEDGER_AUDIT,
   ) {}
 
   private get jwtSecret(): string {
@@ -604,6 +632,228 @@ export class IdentityServiceImpl {
       });
     } catch (err: any) {
       log.error('updateUserMetadata failed', { error: err.message });
+      callback({ code: 13, message: err.message });
+    }
+  }
+
+  // ── User management (admin-gated, feature 043) ────────────────────────────
+  // Every RPC below (reads included, a deliberate divergence from config — AC-7) requires the
+  // ADMIN access-scope bit; passwords are write-only (never returned — AC-10). Audit emits are
+  // added in Step 6 after each successful mutation (best-effort, never rolled back).
+
+  /**
+   * Best-effort audit emit (design R5): a throwing/rejecting audit sink is logged and swallowed here
+   * so a ledger outage never surfaces as a mutation failure. Double-guards the LedgerAudit contract
+   * (which also swallows internally) so even a misbehaving sink can't roll back a user change.
+   */
+  private async auditSafe(
+    eventType: string,
+    targetUserId: string,
+    metadata: any,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await this.audit.append(eventType, targetUserId, metadata, payload);
+    } catch (err: any) {
+      log.error('audit emit failed (best-effort)', { eventType, error: err?.message });
+    }
+  }
+
+  /** Guard shared by all six admin RPCs: metadata present + ADMIN bit. Returns false + calls back on denial. */
+  private adminGate(call: any, callback: any): boolean {
+    if (!call.metadata?.get) {
+      callback({ code: 13, message: 'missing metadata' });
+      return false;
+    }
+    if (!hasAdminAccessScope(call.metadata)) {
+      callback(ADMIN_SCOPE_ERROR);
+      return false;
+    }
+    return true;
+  }
+
+  async createUser(call: any, callback: any) {
+    if (!this.adminGate(call, callback)) return;
+    const { email, password } = call.request;
+    if (!email || !password) return callback({ code: 3, message: 'email and password required' });
+    const roles = rolesToStrings(call.request.roles);
+    const roleStrings = roles.length > 0 ? roles : ['trader'];
+    try {
+      const hash = await bcrypt.hash(password, 10);
+      const result = await this.pool.query(
+        `INSERT INTO identity.users (email, password_hash, roles)
+         VALUES ($1, $2, $3)
+         RETURNING user_id, email, roles, is_active, created_at`,
+        [email, hash, roleStrings],
+      );
+      const row = result.rows[0];
+      await this.auditSafe('identity.user.created', row.user_id, call.metadata, {
+        acting_admin_user_id: userIdFrom(call.metadata),
+        target_user_id: row.user_id,
+        target_email: row.email,
+      });
+      callback(null, { user: toUserView(row) });
+    } catch (err: any) {
+      if (err.code === '23505') return callback({ code: 6, message: 'user already exists' });
+      log.error('createUser failed', { error: err.message });
+      callback({ code: 13, message: err.message });
+    }
+  }
+
+  async listUsers(call: any, callback: any) {
+    if (!this.adminGate(call, callback)) return;
+    try {
+      const result = await this.pool.query(
+        `SELECT user_id, email, roles, is_active, created_at FROM identity.users ORDER BY created_at`,
+      );
+      callback(null, { users: result.rows.map(toUserView) });
+    } catch (err: any) {
+      log.error('listUsers failed', { error: err.message });
+      callback({ code: 13, message: err.message });
+    }
+  }
+
+  async getUser(call: any, callback: any) {
+    if (!this.adminGate(call, callback)) return;
+    const userId = call.request.userId;
+    if (!userId) return callback({ code: 3, message: 'user_id required' });
+    try {
+      const result = await this.pool.query(
+        `SELECT user_id, email, roles, is_active, created_at FROM identity.users WHERE user_id = $1`,
+        [userId],
+      );
+      if (result.rows.length === 0) return callback({ code: 5, message: 'user not found' });
+      callback(null, { user: toUserView(result.rows[0]) });
+    } catch (err: any) {
+      log.error('getUser failed', { error: err.message });
+      callback({ code: 13, message: err.message });
+    }
+  }
+
+  async updatePassword(call: any, callback: any) {
+    if (!this.adminGate(call, callback)) return;
+    const { userId, newPassword } = call.request;
+    if (!userId || !newPassword) {
+      return callback({ code: 3, message: 'user_id and new_password required' });
+    }
+    try {
+      const hash = await bcrypt.hash(newPassword, 10);
+      const result = await this.pool.query(
+        `UPDATE identity.users SET password_hash = $1, updated_at = NOW() WHERE user_id = $2 RETURNING email`,
+        [hash, userId],
+      );
+      if (result.rowCount === 0) return callback({ code: 5, message: 'user not found' });
+      // Revoke the target's refresh tokens so a reset forces re-login (design R3), keyed on the
+      // target user_id (sidesteps the unsigned-token revoke finding).
+      await this.pool.query(
+        `UPDATE identity.refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL`,
+        [userId],
+      );
+      await this.auditSafe('identity.user.password_updated', userId, call.metadata, {
+        acting_admin_user_id: userIdFrom(call.metadata),
+        target_user_id: userId,
+        target_email: result.rows[0]?.email,
+      });
+      callback(null, {}); // empty — no password/hash echoed (AC-10)
+    } catch (err: any) {
+      log.error('updatePassword failed', { error: err.message });
+      callback({ code: 13, message: err.message });
+    }
+  }
+
+  async setUserRoles(call: any, callback: any) {
+    if (!this.adminGate(call, callback)) return;
+    const userId = call.request.userId;
+    if (!userId) return callback({ code: 3, message: 'user_id required' });
+    const roleStrings = rolesToStrings(call.request.roles);
+    const newRolesHaveAdmin = roleStrings.includes('admin');
+    try {
+      // Atomic last-admin guard (AC-11/FR-11): the UPDATE only strips admin from the target when it
+      // is NOT the final active admin — no count-then-write TOCTOU.
+      const result = await this.pool.query(
+        `UPDATE identity.users SET roles = $2::text[], updated_at = NOW()
+           WHERE user_id = $1
+             AND (
+               $3 = true
+               OR NOT ('admin' = ANY(roles))
+               OR EXISTS (SELECT 1 FROM identity.users
+                          WHERE user_id <> $1 AND is_active = true AND 'admin' = ANY(roles))
+             )
+         RETURNING user_id, email, roles, is_active, created_at`,
+        [userId, roleStrings, newRolesHaveAdmin],
+      );
+      if (result.rowCount === 0) {
+        const exists = await this.pool.query(
+          `SELECT 1 FROM identity.users WHERE user_id = $1`,
+          [userId],
+        );
+        if (exists.rowCount === 0) return callback({ code: 5, message: 'user not found' });
+        return callback({ code: 9, message: 'cannot remove last admin' });
+      }
+      const row = result.rows[0];
+      await this.auditSafe('identity.user.roles_updated', userId, call.metadata, {
+        acting_admin_user_id: userIdFrom(call.metadata),
+        target_user_id: userId,
+        target_email: row.email,
+        roles: roleStrings,
+      });
+      callback(null, { user: toUserView(row) });
+    } catch (err: any) {
+      log.error('setUserRoles failed', { error: err.message });
+      callback({ code: 13, message: err.message });
+    }
+  }
+
+  async setUserActive(call: any, callback: any) {
+    if (!this.adminGate(call, callback)) return;
+    const userId = call.request.userId;
+    const active = Boolean(call.request.active);
+    if (!userId) return callback({ code: 3, message: 'user_id required' });
+    try {
+      // For active=false, the same atomic last-admin guard (AC-11): only deactivate when the target
+      // is not the final active admin. active=true is unguarded.
+      const result = await this.pool.query(
+        `UPDATE identity.users SET is_active = $2, updated_at = NOW()
+           WHERE user_id = $1
+             AND (
+               $2 = true
+               OR NOT ('admin' = ANY(roles))
+               OR EXISTS (SELECT 1 FROM identity.users
+                          WHERE user_id <> $1 AND is_active = true AND 'admin' = ANY(roles))
+             )
+         RETURNING user_id, email, roles, is_active, created_at`,
+        [userId, active],
+      );
+      if (result.rowCount === 0) {
+        const exists = await this.pool.query(
+          `SELECT 1 FROM identity.users WHERE user_id = $1`,
+          [userId],
+        );
+        if (exists.rowCount === 0) return callback({ code: 5, message: 'user not found' });
+        return callback({ code: 9, message: 'cannot remove last admin' });
+      }
+      if (!active) {
+        // Revoke the deactivated user's refresh tokens (design R3).
+        await this.pool.query(
+          `UPDATE identity.refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL`,
+          [userId],
+        );
+      }
+      const row = result.rows[0];
+      await this.auditSafe(
+        active ? 'identity.user.activated' : 'identity.user.deactivated',
+        userId,
+        call.metadata,
+        {
+          acting_admin_user_id: userIdFrom(call.metadata),
+          target_user_id: userId,
+          target_email: row.email,
+          active,
+        },
+      );
+      callback(null, { user: toUserView(row) });
+    } catch (err: any) {
+      log.error('setUserActive failed', { error: err.message });
       callback({ code: 13, message: err.message });
     }
   }

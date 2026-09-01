@@ -11,6 +11,13 @@ export function getNativeConfigEnv(): 'staging' | 'production' {
   return process.env.APPLICATION_ENV === 'production' ? 'production' : 'staging';
 }
 
+/** This deployment's native scope as the proto Environment enum (feature 166) — so a server-side
+ * caller (e.g. the config-ui BFF) can fill in an UNSPECIFIED environment with the correct native
+ * value instead of forcing every Client Component to thread the resolved env as a prop. */
+export function nativeConfigEnvironment(): Environment {
+  return getNativeConfigEnv() === 'production' ? Environment.PRODUCTION : Environment.STAGING;
+}
+
 /**
  * True when `env` (a SetConfigRequest/ListKeysRequest environment field) matches this
  * deployment's native scope. Environment.UNSPECIFIED and the deprecated Environment.DEV both

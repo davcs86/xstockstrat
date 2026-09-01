@@ -15,6 +15,10 @@ service LedgerService {
   rpc QueryEvents(QueryEventsRequest) returns (QueryEventsResponse);
   rpc StreamEvents(StreamEventsRequest) returns (stream LedgerEvent);
   rpc GetEvent(GetEventRequest) returns (LedgerEvent);
+  // Export a caller's events over a time window as a server stream of batched pages,
+  // ordered by the global monotonic sequence. Scoped to the caller (x-user-id metadata);
+  // never returns another user's or a pre-migration NULL-user_id event.
+  rpc ExportEvents(ExportEventsRequest) returns (stream ExportEventsResponse);
 }
 
 message LedgerEvent {
@@ -28,6 +32,7 @@ message LedgerEvent {
   map<string, string> metadata = 8;
   int64 sequence = 9;           // GLOBAL monotonic sequence (nextval('ledger.global_sequence')), ordered across all stream_keys
   string stream_key = 10;       // partition key (e.g. "order:uuid")
+  string user_id = 11;          // owning user; empty when platform-scoped or a pre-migration row
 }
 
 message AppendEventRequest {
@@ -43,6 +48,7 @@ message AppendEventRequest {
   // returns the originally-stored event instead of inserting a duplicate. Empty = no
   // dedup (every call inserts), preserving the prior behavior.
   string idempotency_key = 8;
+  string user_id = 9;           // owning user; falls back to the x-user-id metadata when empty
 }
 
 message AppendEventResponse {
@@ -73,4 +79,18 @@ message StreamEventsRequest {
 
 message GetEventRequest {
   string event_id = 1;
+}
+
+message ExportEventsRequest {
+  google.protobuf.Timestamp start = 1;
+  google.protobuf.Timestamp end = 2;
+  // Comma-joined subset of event types to include (e.g. "fill,signal,pnl_snapshot,config_change,alert").
+  // Empty = all types.
+  string event_type = 3;
+}
+
+message ExportEventsResponse {
+  // One cursor page of events per message (batched — a large export is thousands of
+  // messages, not one per row), each page ordered by the global sequence.
+  repeated LedgerEvent events = 1;
 }

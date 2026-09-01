@@ -47,12 +47,31 @@ function makePool(rows: any[] = [], throws?: Error) {
 
 function makeImpl(rows: any[] = [], throws?: Error) {
   const pool = makePool(rows, throws);
-  return new NotifyServiceImpl(pool as any, {} as any, noopFanout());
+  return new NotifyServiceImpl(pool as any, {} as any, noopFanout(), noopWebPush());
 }
 
 // A no-op fanout for the existing (non-fanout) cases — dispatch resolves and records nothing.
 function noopFanout(): any {
   return { dispatch: async () => {} };
+}
+
+// A no-op Web Push dispatcher (feature 165) — for the cases that don't exercise the push channel.
+function noopWebPush(): any {
+  return { dispatch: async () => {} };
+}
+
+// A recording Web Push dispatcher: captures the alerts EmitAlert hands it; can be made to hang.
+function recordingWebPush(opts: { hang?: boolean } = {}): { dispatched: any[]; obj: any } {
+  const dispatched: any[] = [];
+  return {
+    dispatched,
+    obj: {
+      dispatch: (alert: any) => {
+        dispatched.push(alert);
+        return opts.hang ? new Promise<void>(() => {}) : Promise.resolve();
+      },
+    },
+  };
 }
 
 // A recording fanout: captures the alerts EmitAlert hands it; can be made to hang (AC-4).
@@ -162,7 +181,7 @@ describe('emitAlert', () => {
         return { rows: [] };
       },
     };
-    const impl = new NotifyServiceImpl(pool as any, {} as any, noopFanout());
+    const impl = new NotifyServiceImpl(pool as any, {} as any, noopFanout(), noopWebPush());
     const call = {
       request: {
         severity: 'ALERT_SEVERITY_WARNING',
@@ -214,7 +233,7 @@ describe('emitAlert', () => {
         return { rows: [] };
       },
     };
-    const impl = new NotifyServiceImpl(pool as any, {} as any, noopFanout());
+    const impl = new NotifyServiceImpl(pool as any, {} as any, noopFanout(), noopWebPush());
     // No `metadata` on the call object at all — the internal-caller shape.
     const call = {
       request: {
@@ -253,7 +272,7 @@ describe('emitAlert', () => {
           return { rows: [] };
         },
       };
-      const impl = new NotifyServiceImpl(pool as any, {} as any, noopFanout());
+      const impl = new NotifyServiceImpl(pool as any, {} as any, noopFanout(), noopWebPush());
       const call = { request: { severity: 'ALERT_SEVERITY_INFO', category: 'c', title, body, sourceService: 's' } };
 
       await new Promise<void>((resolve) => {
@@ -275,7 +294,7 @@ describe('emitAlert', () => {
         return { rows: [] };
       },
     };
-    const impl = new NotifyServiceImpl(pool as any, {} as any, noopFanout());
+    const impl = new NotifyServiceImpl(pool as any, {} as any, noopFanout(), noopWebPush());
     const call = {
       request: { severity: 'ALERT_SEVERITY_INFO', category: 'c', title: 't', body: 'b', sourceService: 's' },
     };
@@ -344,7 +363,7 @@ const REQ = (over: any = {}) => ({
 describe('emitAlert fanout wiring', () => {
   it('AC-1: dispatches the alert to fanout AND still delivers to the in-process subscriber', async () => {
     const rec = recordingFanout();
-    const impl = new NotifyServiceImpl(makePool() as any, {} as any, rec.obj);
+    const impl = new NotifyServiceImpl(makePool() as any, {} as any, rec.obj, noopWebPush());
     const sub = registerSubscriber(impl);
     await emitAndFlush(impl, REQ());
     assert.equal(rec.dispatched.length, 1, 'fanout received the alert');
@@ -354,7 +373,7 @@ describe('emitAlert fanout wiring', () => {
 
   it('AC-4: a hanging fanout never delays the callback or drops the primary delivery', async () => {
     const rec = recordingFanout({ hang: true });
-    const impl = new NotifyServiceImpl(makePool() as any, {} as any, rec.obj);
+    const impl = new NotifyServiceImpl(makePool() as any, {} as any, rec.obj, noopWebPush());
     const sub = registerSubscriber(impl);
     let ok = false;
     await new Promise<void>((resolve, reject) =>
@@ -378,7 +397,7 @@ describe('emitAlert fanout wiring', () => {
     // Mutable config to prove the gate is read live (no restart): flip min_severity between emits.
     const cfg = { minSev: 2 };
     const dispatcher = new FanoutDispatcher(fanoutCfg(cfg)); // no SLACK/SENDGRID env → disabled
-    const impl = new NotifyServiceImpl(makePool() as any, {} as any, dispatcher);
+    const impl = new NotifyServiceImpl(makePool() as any, {} as any, dispatcher, noopWebPush());
     const sub = registerSubscriber(impl);
     await emitAndFlush(impl, REQ({ severity: 'ALERT_SEVERITY_INFO', context: {} }));
     assert.equal(f.calls.length, 0, 'no credentials → nothing fans out');
@@ -388,7 +407,7 @@ describe('emitAlert fanout wiring', () => {
 
   it('AC-5: two byte-identical alerts → exactly one outbound Slack POST (end-to-end dedup)', async () => {
     const f = stubFetch();
-    const impl = new NotifyServiceImpl(makePool() as any, {} as any, realSlackFanout(fanoutCfg()));
+    const impl = new NotifyServiceImpl(makePool() as any, {} as any, realSlackFanout(fanoutCfg()), noopWebPush());
     await emitAndFlush(impl, REQ());
     await emitAndFlush(impl, REQ());
     assert.equal(f.calls.length, 1);
@@ -397,7 +416,7 @@ describe('emitAlert fanout wiring', () => {
 
   it('AC-6: a channel HTTP 500 does not turn EmitAlert into an RPC error', async () => {
     const f = stubFetch(500);
-    const impl = new NotifyServiceImpl(makePool() as any, {} as any, realSlackFanout(fanoutCfg()));
+    const impl = new NotifyServiceImpl(makePool() as any, {} as any, realSlackFanout(fanoutCfg()), noopWebPush());
     let err: any = 'unset';
     await new Promise<void>((resolve) =>
       impl.emitAlert({ request: REQ({ title: 'x', body: 'y', context: {} }) }, (e: any) => {
@@ -413,11 +432,135 @@ describe('emitAlert fanout wiring', () => {
 
   it('flat-Struct conviction: context.conviction gates (0.82 fans out, 0.55 does not)', async () => {
     const f = stubFetch();
-    const impl = new NotifyServiceImpl(makePool() as any, {} as any, realSlackFanout(fanoutCfg({ minConf: 0.7 })));
+    const impl = new NotifyServiceImpl(makePool() as any, {} as any, realSlackFanout(fanoutCfg({ minConf: 0.7 })), noopWebPush());
     await emitAndFlush(impl, REQ({ context: { symbol: 'AAPL', conviction: 0.82 } }));
     await emitAndFlush(impl, REQ({ title: 'other', body: 'z', context: { symbol: 'MSFT', conviction: 0.55 } }));
     assert.equal(f.calls.length, 1, 'only the >= threshold conviction fanned out');
     f.restore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Web Push subscription handlers + emit isolation (feature 165)
+// ---------------------------------------------------------------------------
+
+// A pool fake that records every query(sql, params) so we can assert on the emitted SQL shape.
+// (The makePool fake ignores SQL and cannot prove row-level behavior — design Decision 6.)
+function capturingPool(rows: any[] = []): { calls: { sql: string; params: any[] }[]; obj: any } {
+  const calls: { sql: string; params: any[] }[] = [];
+  return {
+    calls,
+    obj: {
+      async query(sql: string, params: any[] = []) {
+        calls.push({ sql, params });
+        return { rows, rowCount: rows.length };
+      },
+    },
+  };
+}
+
+// A gRPC call whose metadata carries the propagated x-user-id header (mirrors the identity pattern).
+function metaCall(userId: string | null, request: any): any {
+  return {
+    request,
+    metadata: { get: (k: string) => (k === 'x-user-id' && userId ? [userId] : []) },
+  };
+}
+
+describe('registerPushSubscription (AC-2)', () => {
+  it('upserts by endpoint using the x-user-id header as owner, with the full ON CONFLICT SET list', async () => {
+    const pool = capturingPool([{ subscription_id: 'sub-1' }]);
+    const impl = new NotifyServiceImpl(pool.obj as any, {} as any, noopFanout(), noopWebPush());
+    // No user_id in the body — the owner comes from the x-user-id header.
+    const req = { endpoint: 'https://push.example/abc', p256dh: 'k', auth: 'a', userAgent: 'ua' };
+
+    const res = await new Promise<any>((resolve, reject) =>
+      impl.registerPushSubscription(metaCall('user-42', req), (err: any, r: any) => (err ? reject(err) : resolve(r))),
+    );
+
+    assert.equal(pool.calls.length, 1);
+    const sql = pool.calls[0].sql.replace(/\s+/g, ' ');
+    assert.match(sql, /INSERT INTO notify\.push_subscriptions/);
+    assert.match(sql, /ON CONFLICT \(endpoint\) DO UPDATE/);
+    // Every mutable column is refreshed (rotated keys), not just user_id — design Decision 2.
+    for (const col of ['user_id', 'p256dh', 'auth', 'user_agent', 'created_at']) {
+      assert.match(sql, new RegExp(col + ' ='), `upsert must refresh ${col}`);
+    }
+    // The owner bound as user_id is the header value, not anything from the body.
+    assert.deepEqual(pool.calls[0].params, ['user-42', 'https://push.example/abc', 'k', 'a', 'ua']);
+    assert.equal(res.subscriptionId, 'sub-1');
+  });
+
+  it('rejects with code 3 when the x-user-id header is absent (no DB write)', async () => {
+    const pool = capturingPool();
+    const impl = new NotifyServiceImpl(pool.obj as any, {} as any, noopFanout(), noopWebPush());
+    const req = { endpoint: 'https://push.example/abc', p256dh: 'k', auth: 'a' };
+    const err = await new Promise<any>((resolve) =>
+      impl.registerPushSubscription(metaCall(null, req), (e: any) => resolve(e)),
+    );
+    assert.equal(err.code, 3);
+    assert.equal(pool.calls.length, 0, 'no DB write without a caller identity');
+  });
+
+  it('rejects with code 3 when endpoint/keys are missing', async () => {
+    const pool = capturingPool();
+    const impl = new NotifyServiceImpl(pool.obj as any, {} as any, noopFanout(), noopWebPush());
+    const err = await new Promise<any>((resolve) =>
+      impl.registerPushSubscription(metaCall('user-42', { endpoint: '', p256dh: '', auth: '' }), (e: any) => resolve(e)),
+    );
+    assert.equal(err.code, 3);
+    assert.equal(pool.calls.length, 0, 'no DB write on invalid input');
+  });
+});
+
+describe('unregisterPushSubscription (AC-3)', () => {
+  it('deletes by endpoint only — no user_id bind param', async () => {
+    const pool = capturingPool([{}]); // rowCount 1
+    const impl = new NotifyServiceImpl(pool.obj as any, {} as any, noopFanout(), noopWebPush());
+
+    const res = await new Promise<any>((resolve, reject) =>
+      impl.unregisterPushSubscription(
+        { request: { endpoint: 'https://push.example/abc' } },
+        (err: any, r: any) => (err ? reject(err) : resolve(r)),
+      ),
+    );
+
+    assert.equal(pool.calls.length, 1);
+    const sql = pool.calls[0].sql.replace(/\s+/g, ' ');
+    assert.match(sql, /DELETE FROM notify\.push_subscriptions WHERE endpoint = \$1/);
+    assert.doesNotMatch(sql, /user_id/, 'delete must not be scoped by user_id (design Decision 1)');
+    assert.deepEqual(pool.calls[0].params, ['https://push.example/abc'], 'a single positional param');
+    assert.equal(res.deleted, true);
+  });
+
+  it('reports deleted=false when no row matched', async () => {
+    const pool = capturingPool([]); // rowCount 0
+    const impl = new NotifyServiceImpl(pool.obj as any, {} as any, noopFanout(), noopWebPush());
+    const res = await new Promise<any>((resolve, reject) =>
+      impl.unregisterPushSubscription({ request: { endpoint: 'gone' } }, (err: any, r: any) => (err ? reject(err) : resolve(r))),
+    );
+    assert.equal(res.deleted, false);
+  });
+});
+
+describe('emitAlert push isolation (AC-5)', () => {
+  it('a hanging Web Push never delays the callback or drops the primary delivery', async () => {
+    const push = recordingWebPush({ hang: true });
+    const impl = new NotifyServiceImpl(makePool() as any, {} as any, noopFanout(), push.obj);
+    const sub = registerSubscriber(impl);
+    let ok = false;
+    await new Promise<void>((resolve, reject) =>
+      impl.emitAlert({ request: REQ() }, (err: any) => {
+        if (err) return reject(err);
+        ok = true;
+        resolve();
+      }),
+    );
+    // Success callback fired and the subscriber got its write — neither waited on the hanging push.
+    assert.equal(ok, true);
+    assert.equal(sub.received.length, 1);
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(push.dispatched.length, 1, 'push dispatch was scheduled (it just never resolves)');
   });
 });
 

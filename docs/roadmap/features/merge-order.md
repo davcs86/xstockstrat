@@ -63,6 +63,7 @@ cannot open its final integration PR to `main-dev` until the feature in the
 | `strategy-symbol-denylist` (132) | `live-strategy-opportunity-attribution` (131) | **Layer-on dependency + same-function overlap** (user-confirmed decomposition, 2026-08-14): 132 layers on 131's live-attribution machinery — it redefines `strategy_symbols()`→the shared `resolve_universe()` helper that 131's `live_by_symbol` construction consumes, and adds `Opportunity.muted = 12` + a muted-row emission step into the identical `_compute_opportunities` candidate/cut block 131 restructures (`servicer.py:2144-2177`). 132's *design phase* amends 131's `design.md` (132 FR-6) so 131's `/sdd-spec` reflects the deny-list universe; 131 merges **before** 132, which rebases onto 131's landed `_compute_opportunities`/`live_by_symbol` shape. Full engineering/merge order for this cohort: **133 → 134 → 131 → 132** (022 also follows 131, independent of 132) | No |
 | `durable-loop-scheduler` (158) | `fix-fundamentals-signal-producer` (156) | **Hard build-order dependency** (`/sdd-review` product-spec overlap scan, 2026-08-26): 158 generalizes 156's durable-schedule mechanism — it folds 156's `analysis.fundsignal_schedule` table (introduced by migration `019_fundsignal_schedule`) into a generalized `(job_name, user_id)`-keyed table via a new `020` migration, and refactors the `fundsignal_loop.py` logic 156 introduces into a shared helper. 156's table + code must exist first. No field/config collision (158 adds no proto change; its config keys mirror but don't duplicate 156's `analysis.fundsignal.*`). **Resolved 2026-08-26**: 156 merged to `main-dev`; `feature/durable-loop-scheduler` rebased onto it (156's scheduler + migration `019` now present in the branch), and `020` confirmed the next-free analysis migration. (Feature renumbered 157 → 158 at rebase time — `157` was taken by `offline-account-portfolios` on `main-dev`.) | Yes |
 | `daily-bars-only` (143) | `unified-symbol-page` (125) | **Same-region file overlap** (`/sdd-review` impl-spec overlap scan, 2026-08-16): both features' `implementation-spec.md`s edit `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx`'s `SymbolPriceChart` component — 143's Step 9 removes the `timeframe`/`onTimeframe`/`Tabs` selector props and JSX; 125's Step 8 (and 7 other steps) restructures the same component's signature (adds `avg`/`stop`/`last`/`hasStop` props, hoists it, renders it unconditionally). Confirmed live on the current checkout that 125's restructuring has already landed while the `timeframe`/`onTimeframe`/`Tabs` identifiers 143 targets are still present — not a disjoint textual rebase, a same-region conflict. 125 is deep in-progress (most steps `done`); 143 hasn't started execution. 125 merges first; 143's Step 9 re-verifies its `SymbolPriceChart`/`Timeframe` citations against 125's fully-landed structure before executing | No |
+| `wire-signal-confidence-to-position-sizing` (110) | `opportunity-live-market-enrichment` (095) | **Proto field-number collision on `analysis.Opportunity`** (`/sdd-review` product-spec overlap scan, 2026-08-31): both append additive fields after the current max field `12` (`muted = 12`, `packages/proto/analysis/v1/analysis.proto`). 095 pre-assigns a contiguous enrichment block starting at field `13`; 110 adds its single confidence field at the **next free field AFTER** 095's block. `buf breaking` runs per-branch and cannot see the other branch's uncommitted field claim, so 095 must land first — and since these two execute in one `/sdd-execute … sequential` run, 095's steps precede 110's and 110 re-derives next-free from the merged tree. Both also touch the live symbol-page order form `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` `OrderForm` (095 adds R:R/sizing display, 110 adds the scoped signal-confidence blank-qty affordance; same-file, rebase-only). 110 additionally DELETES the orphaned `SignalOrderTicket.tsx` + its `insights/market/[symbol]` redirect stub (grep-verified zero importers) and updates the two e2e specs that `goto` the stub. 029 also touches `analysis.proto` but only adds a new RPC + messages (no `Opportunity` field), so it has no field-number collision with either — re-run `./scripts/buf-gen.sh` after each merge | No |
 
 **Screener initiative build order**: `058 watchlist-management` ∥ `059 fundamentals-data-source`
 (independent to *build*, but their `xstockstrat-config` seed migrations **merge** in number order
@@ -182,3 +183,43 @@ catalog list + count on each merge. Proto: each adds a distinct enum/message (08
 `update_mask`/`deleted`, 088 `SignalSourceOperation`, 089 `StrategyOperation.REACTIVATE`) — no
 proto-field collisions, but re-run `./scripts/buf-gen.sh` after each merge.
 | `consolidate-watchlist-signal` (127) | `order-snapshots-pnl-patterns` (042) | **Portfolio migration-NNN collision on `010`** (`/sdd-review` product-spec overlap scan, 2026-08-19): both add a `services/xstockstrat-portfolio/migrations/` migration and the tip is `009_bracket_order_ids`, so each independently computes next-free `010`. 042 (design-approved) specced `010` first (`realized_accum` on `portfolio.positions`) and keeps it; 127 renumbers to `011` (its `system_managed` column + name-constraint rework + `source` column). No proto-field or config collision (042's portfolio change is migration+Go handler only, no `portfolio.proto` edit; 127 owns the next-free `Watchlist`/`WatchlistBinding` field numbers uncontested). Re-derive the NNN across **all remote branches** at `/sdd-spec` (ledger 081), not the local tree. The two may merge in either order as long as 127 uses `011`. | No |
+
+> **Config-service seed-migration NNN pre-assignment (this batch, 2026-08-31).** Four features in the
+> 021/029/031/043/095/110/128/166/167/168 batch add a seed migration to the shared
+> `services/xstockstrat-config/migrations/` dir (tip on branch = `021_notify_push_min_severity`).
+> To avoid a filename collision the numbers are pre-assigned: **021** `ledger-event-export` →
+> `022_ledger_export_keys`; **031** `strategy-performance-dashboard` → `023_ui_performance_keys`;
+> **168** `fundamentals-blend-universe` → ~~`024_analysis_engine_blend_keys`~~ **renumbered to
+> `026_analysis_engine_blend_keys`** (see below); **166** `mcp-client-signal-source` →
+> `025_ingest_mcp_client_keys`. golang-migrate applies in numeric order;
+> seeded namespaces are disjoint (`ledger`/`ui`/`analysis`/`ingest`), so this is file-ordering only,
+> no key conflict. Each `/sdd-spec` re-derives next-free from the merged tree and honors this split.
+>
+> **Update 2026-09-01 — 168 renumbered `024` → `026`.** The pre-assignment assumed 168 (024) would
+> merge before 166 (025), but **166 merged into `main-dev` first** (PR #1063). A `024` landing after
+> `025` is already applied would sit below the current DB version, and golang-migrate's `migrate up`
+> (versions > current only) would never run it — the two `analysis.engine.fundamentals_blend_*` keys
+> would silently never seed on the persistent dev/prod DBs. 168's migration was renamed to
+> `026_analysis_engine_blend_keys` (next free after 025) in PR #1064; the skipped `024` is a
+> permanent, harmless gap (golang-migrate allows gaps).
+> Non-config migrations are single-owner per service dir: ledger `003_events_user_id` (021);
+> portfolio `014_positions_fees_accum` + analysis `021_pnl_positions_fees_total` (029); ingest
+> `011` mcp_client CHECK (166) — no cross-feature collision.
+
+> **Same-function execution overlaps within this batch (impl-spec overlap scan, 2026-08-31) — WARN,
+> not blocking.** No field/migration/config collision (all deconflicted above). These are shared
+> emit-sites / files where the SECOND feature to land must manually reconcile (not a mechanical
+> rebase); the `/sdd-execute … sequential` run handles them by ordering each second-toucher after the
+> first:
+> - `services/xstockstrat-trading/internal/service/trading.go` fill emit (`order.filled`/`partially_filled`):
+>   **021** adds a `userID` param to `emitLedgerEvent`; **029** adds a `"fees"` key to the same two payload maps. Run 021 before 029.
+> - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` `position.closed` emit:
+>   **029** adds `fees_total`; **031** adds `cost_basis`/`opened_at` (+ extracts `closedPositionPayload`). Run 029 before 031.
+> - `services/xstockstrat-analysis/app/handlers/servicer.py` `_row_to_opportunity`/`_compute_opportunities`
+>   + the `TestOpportunityRowParity` descriptor-parity guard (fails closed): **095** adds Opportunity 13-18,
+>   **110** adds `signal_confidence=19`. Run 095 before 110 (already a blocking row); the second merger MUST
+>   include the other's fields in the parity `_MAPPED` set or the parity test goes red.
+> - `services/xstockstrat-ui/e2e/fixtures/ledgerEvents.ts`: both **021** and **031** "create" it — the second
+>   must merge into the existing module, not re-create.
+>
+> **Recommended single-run execution order** (respects all of the above): `128 > 021 > 043 > 167 > 029 > 095 > 110 > 031 > 166 > 168`.

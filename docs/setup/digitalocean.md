@@ -348,6 +348,13 @@ channel (no `.enabled`-style guard, same as the fundamentals credentials above).
   and `PROD_SENDGRID_API_KEY` as GitHub Actions secrets — they substitute into the
   `YOUR_DEV_SENDGRID_API_KEY` / `YOUR_PROD_SENDGRID_API_KEY` placeholders. Email additionally
   requires the `notify.fanout.sendgrid_from_email` / `sendgrid_to_email` config keys to be set.
+- **Web Push / VAPID** (feature 165) — generate a keypair with `npx web-push generate-vapid-keys`.
+  Add six GitHub Actions secrets: `DEV_VAPID_PRIVATE_KEY` / `PROD_VAPID_PRIVATE_KEY` (the private key),
+  `DEV_VAPID_PUBLIC_KEY` / `PROD_VAPID_PUBLIC_KEY` (the paired public key), and `DEV_VAPID_SUBJECT` /
+  `PROD_VAPID_SUBJECT` (a `mailto:` or `https:` contact URL). They substitute into the
+  `YOUR_{DEV,PROD}_VAPID_{PRIVATE_KEY,PUBLIC_KEY,SUBJECT}` placeholders in both the notify and UI
+  components. Web Push stays disabled until all three are set; the same public key must be set on both
+  services (the deploy substitution handles this automatically).
 
 ### JWT secret
 Set on: `xstockstrat-identity`

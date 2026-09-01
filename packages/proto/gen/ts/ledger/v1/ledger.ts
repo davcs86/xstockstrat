@@ -49,6 +49,8 @@ export interface LedgerEvent {
   sequence: number;
   /** partition key (e.g. "order:uuid") */
   streamKey: string;
+  /** owning user; empty when platform-scoped or a pre-migration row */
+  userId: string;
 }
 
 export interface LedgerEvent_MetadataEntry {
@@ -73,6 +75,8 @@ export interface AppendEventRequest {
    * dedup (every call inserts), preserving the prior behavior.
    */
   idempotencyKey: string;
+  /** owning user; falls back to the x-user-id metadata when empty */
+  userId: string;
 }
 
 export interface AppendEventRequest_MetadataEntry {
@@ -117,6 +121,26 @@ export interface GetEventRequest {
   eventId: string;
 }
 
+export interface ExportEventsRequest {
+  start?: Date | undefined;
+  end?:
+    | Date
+    | undefined;
+  /**
+   * Comma-joined subset of event types to include (e.g. "fill,signal,pnl_snapshot,config_change,alert").
+   * Empty = all types.
+   */
+  eventType: string;
+}
+
+export interface ExportEventsResponse {
+  /**
+   * One cursor page of events per message (batched — a large export is thousands of
+   * messages, not one per row), each page ordered by the global sequence.
+   */
+  events: LedgerEvent[];
+}
+
 function createBaseLedgerEvent(): LedgerEvent {
   return {
     eventId: "",
@@ -129,6 +153,7 @@ function createBaseLedgerEvent(): LedgerEvent {
     metadata: {},
     sequence: 0,
     streamKey: "",
+    userId: "",
   };
 }
 
@@ -163,6 +188,9 @@ export const LedgerEvent: MessageFns<LedgerEvent> = {
     }
     if (message.streamKey !== "") {
       writer.uint32(82).string(message.streamKey);
+    }
+    if (message.userId !== "") {
+      writer.uint32(90).string(message.userId);
     }
     return writer;
   },
@@ -257,6 +285,14 @@ export const LedgerEvent: MessageFns<LedgerEvent> = {
           message.streamKey = reader.string();
           continue;
         }
+        case 11: {
+          if (tag !== 90) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -314,6 +350,11 @@ export const LedgerEvent: MessageFns<LedgerEvent> = {
         : isSet(object.stream_key)
         ? globalThis.String(object.stream_key)
         : "",
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
     };
   },
 
@@ -355,6 +396,9 @@ export const LedgerEvent: MessageFns<LedgerEvent> = {
     if (message.streamKey !== "") {
       obj.streamKey = message.streamKey;
     }
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
     return obj;
   },
 
@@ -381,6 +425,7 @@ export const LedgerEvent: MessageFns<LedgerEvent> = {
     );
     message.sequence = object.sequence ?? 0;
     message.streamKey = object.streamKey ?? "";
+    message.userId = object.userId ?? "";
     return message;
   },
 };
@@ -471,6 +516,7 @@ function createBaseAppendEventRequest(): AppendEventRequest {
     metadata: {},
     occurredAt: undefined,
     idempotencyKey: "",
+    userId: "",
   };
 }
 
@@ -499,6 +545,9 @@ export const AppendEventRequest: MessageFns<AppendEventRequest> = {
     }
     if (message.idempotencyKey !== "") {
       writer.uint32(66).string(message.idempotencyKey);
+    }
+    if (message.userId !== "") {
+      writer.uint32(74).string(message.userId);
     }
     return writer;
   },
@@ -577,6 +626,14 @@ export const AppendEventRequest: MessageFns<AppendEventRequest> = {
           message.idempotencyKey = reader.string();
           continue;
         }
+        case 9: {
+          if (tag !== 74) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -628,6 +685,11 @@ export const AppendEventRequest: MessageFns<AppendEventRequest> = {
         : isSet(object.idempotency_key)
         ? globalThis.String(object.idempotency_key)
         : "",
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
     };
   },
 
@@ -663,6 +725,9 @@ export const AppendEventRequest: MessageFns<AppendEventRequest> = {
     if (message.idempotencyKey !== "") {
       obj.idempotencyKey = message.idempotencyKey;
     }
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
     return obj;
   },
 
@@ -687,6 +752,7 @@ export const AppendEventRequest: MessageFns<AppendEventRequest> = {
     );
     message.occurredAt = object.occurredAt ?? undefined;
     message.idempotencyKey = object.idempotencyKey ?? "";
+    message.userId = object.userId ?? "";
     return message;
   },
 };
@@ -1281,6 +1347,162 @@ export const GetEventRequest: MessageFns<GetEventRequest> = {
   },
 };
 
+function createBaseExportEventsRequest(): ExportEventsRequest {
+  return { start: undefined, end: undefined, eventType: "" };
+}
+
+export const ExportEventsRequest: MessageFns<ExportEventsRequest> = {
+  encode(message: ExportEventsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.start !== undefined) {
+      Timestamp.encode(toTimestamp(message.start), writer.uint32(10).fork()).join();
+    }
+    if (message.end !== undefined) {
+      Timestamp.encode(toTimestamp(message.end), writer.uint32(18).fork()).join();
+    }
+    if (message.eventType !== "") {
+      writer.uint32(26).string(message.eventType);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExportEventsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseExportEventsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.start = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.end = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.eventType = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ExportEventsRequest {
+    return {
+      start: isSet(object.start) ? fromJsonTimestamp(object.start) : undefined,
+      end: isSet(object.end) ? fromJsonTimestamp(object.end) : undefined,
+      eventType: isSet(object.eventType)
+        ? globalThis.String(object.eventType)
+        : isSet(object.event_type)
+        ? globalThis.String(object.event_type)
+        : "",
+    };
+  },
+
+  toJSON(message: ExportEventsRequest): unknown {
+    const obj: any = {};
+    if (message.start !== undefined) {
+      obj.start = message.start.toISOString();
+    }
+    if (message.end !== undefined) {
+      obj.end = message.end.toISOString();
+    }
+    if (message.eventType !== "") {
+      obj.eventType = message.eventType;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ExportEventsRequest>, I>>(base?: I): ExportEventsRequest {
+    return ExportEventsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExportEventsRequest>, I>>(object: I): ExportEventsRequest {
+    const message = createBaseExportEventsRequest();
+    message.start = object.start ?? undefined;
+    message.end = object.end ?? undefined;
+    message.eventType = object.eventType ?? "";
+    return message;
+  },
+};
+
+function createBaseExportEventsResponse(): ExportEventsResponse {
+  return { events: [] };
+}
+
+export const ExportEventsResponse: MessageFns<ExportEventsResponse> = {
+  encode(message: ExportEventsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.events) {
+      LedgerEvent.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExportEventsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseExportEventsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.events.push(LedgerEvent.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ExportEventsResponse {
+    return {
+      events: globalThis.Array.isArray(object?.events) ? object.events.map((e: any) => LedgerEvent.fromJSON(e)) : [],
+    };
+  },
+
+  toJSON(message: ExportEventsResponse): unknown {
+    const obj: any = {};
+    if (message.events?.length) {
+      obj.events = message.events.map((e) => LedgerEvent.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ExportEventsResponse>, I>>(base?: I): ExportEventsResponse {
+    return ExportEventsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExportEventsResponse>, I>>(object: I): ExportEventsResponse {
+    const message = createBaseExportEventsResponse();
+    message.events = object.events?.map((e) => LedgerEvent.fromPartial(e)) || [];
+    return message;
+  },
+};
+
 /**
  * LedgerService — append-only event store.
  * All services write events here. Events are immutable once written.
@@ -1323,6 +1545,21 @@ export const LedgerServiceService = {
     responseSerialize: (value: LedgerEvent): Buffer => Buffer.from(LedgerEvent.encode(value).finish()),
     responseDeserialize: (value: Buffer): LedgerEvent => LedgerEvent.decode(value),
   },
+  /**
+   * Export a caller's events over a time window as a server stream of batched pages,
+   * ordered by the global monotonic sequence. Scoped to the caller (x-user-id metadata);
+   * never returns another user's or a pre-migration NULL-user_id event.
+   */
+  exportEvents: {
+    path: "/xstockstrat.ledger.v1.LedgerService/ExportEvents" as const,
+    requestStream: false as const,
+    responseStream: true as const,
+    requestSerialize: (value: ExportEventsRequest): Buffer => Buffer.from(ExportEventsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ExportEventsRequest => ExportEventsRequest.decode(value),
+    responseSerialize: (value: ExportEventsResponse): Buffer =>
+      Buffer.from(ExportEventsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ExportEventsResponse => ExportEventsResponse.decode(value),
+  },
 } as const;
 
 export interface LedgerServiceServer extends UntypedServiceImplementation {
@@ -1330,6 +1567,12 @@ export interface LedgerServiceServer extends UntypedServiceImplementation {
   queryEvents: handleUnaryCall<QueryEventsRequest, QueryEventsResponse>;
   streamEvents: handleServerStreamingCall<StreamEventsRequest, LedgerEvent>;
   getEvent: handleUnaryCall<GetEventRequest, LedgerEvent>;
+  /**
+   * Export a caller's events over a time window as a server stream of batched pages,
+   * ordered by the global monotonic sequence. Scoped to the caller (x-user-id metadata);
+   * never returns another user's or a pre-migration NULL-user_id event.
+   */
+  exportEvents: handleServerStreamingCall<ExportEventsRequest, ExportEventsResponse>;
 }
 
 export interface LedgerServiceClient extends Client {
@@ -1384,6 +1627,20 @@ export interface LedgerServiceClient extends Client {
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: LedgerEvent) => void,
   ): ClientUnaryCall;
+  /**
+   * Export a caller's events over a time window as a server stream of batched pages,
+   * ordered by the global monotonic sequence. Scoped to the caller (x-user-id metadata);
+   * never returns another user's or a pre-migration NULL-user_id event.
+   */
+  exportEvents(
+    request: ExportEventsRequest,
+    options?: Partial<CallOptions>,
+  ): ClientReadableStream<ExportEventsResponse>;
+  exportEvents(
+    request: ExportEventsRequest,
+    metadata?: Metadata,
+    options?: Partial<CallOptions>,
+  ): ClientReadableStream<ExportEventsResponse>;
 }
 
 export const LedgerServiceClient = makeGenericClientConstructor(

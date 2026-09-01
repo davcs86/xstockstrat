@@ -35,6 +35,7 @@ const (
 	PortfolioService_RemoveWatchlistSymbols_FullMethodName  = "/xstockstrat.portfolio.v1.PortfolioService/RemoveWatchlistSymbols"
 	PortfolioService_EnsureSignalWatchlist_FullMethodName   = "/xstockstrat.portfolio.v1.PortfolioService/EnsureSignalWatchlist"
 	PortfolioService_ListAllWatchlistSymbols_FullMethodName = "/xstockstrat.portfolio.v1.PortfolioService/ListAllWatchlistSymbols"
+	PortfolioService_UpdateWatchlistBinding_FullMethodName  = "/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlistBinding"
 )
 
 // PortfolioServiceClient is the client API for PortfolioService service.
@@ -66,6 +67,10 @@ type PortfolioServiceClient interface {
 	// bit (PR #994) — a non-allow-listed caller gets PERMISSION_DENIED. Read-only; intended for
 	// the fundamentals-signal producer's universe resolution.
 	ListAllWatchlistSymbols(ctx context.Context, in *ListAllWatchlistSymbolsRequest, opts ...grpc.CallOption) (*ListAllWatchlistSymbolsResponse, error)
+	// Targeted single-symbol rebind (feature 167): change one binding's strategy_id via a single-row
+	// UPDATE — no replace-all. Ownership from the propagated x-user-id header (server-side), never
+	// from the request body. NOT_FOUND if the symbol is not in the watchlist.
+	UpdateWatchlistBinding(ctx context.Context, in *UpdateWatchlistBindingRequest, opts ...grpc.CallOption) (*UpdateWatchlistBindingResponse, error)
 }
 
 type portfolioServiceClient struct {
@@ -245,6 +250,16 @@ func (c *portfolioServiceClient) ListAllWatchlistSymbols(ctx context.Context, in
 	return out, nil
 }
 
+func (c *portfolioServiceClient) UpdateWatchlistBinding(ctx context.Context, in *UpdateWatchlistBindingRequest, opts ...grpc.CallOption) (*UpdateWatchlistBindingResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateWatchlistBindingResponse)
+	err := c.cc.Invoke(ctx, PortfolioService_UpdateWatchlistBinding_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PortfolioServiceServer is the server API for PortfolioService service.
 // All implementations should embed UnimplementedPortfolioServiceServer
 // for forward compatibility.
@@ -274,6 +289,10 @@ type PortfolioServiceServer interface {
 	// bit (PR #994) — a non-allow-listed caller gets PERMISSION_DENIED. Read-only; intended for
 	// the fundamentals-signal producer's universe resolution.
 	ListAllWatchlistSymbols(context.Context, *ListAllWatchlistSymbolsRequest) (*ListAllWatchlistSymbolsResponse, error)
+	// Targeted single-symbol rebind (feature 167): change one binding's strategy_id via a single-row
+	// UPDATE — no replace-all. Ownership from the propagated x-user-id header (server-side), never
+	// from the request body. NOT_FOUND if the symbol is not in the watchlist.
+	UpdateWatchlistBinding(context.Context, *UpdateWatchlistBindingRequest) (*UpdateWatchlistBindingResponse, error)
 }
 
 // UnimplementedPortfolioServiceServer should be embedded to have
@@ -330,6 +349,9 @@ func (UnimplementedPortfolioServiceServer) EnsureSignalWatchlist(context.Context
 }
 func (UnimplementedPortfolioServiceServer) ListAllWatchlistSymbols(context.Context, *ListAllWatchlistSymbolsRequest) (*ListAllWatchlistSymbolsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListAllWatchlistSymbols not implemented")
+}
+func (UnimplementedPortfolioServiceServer) UpdateWatchlistBinding(context.Context, *UpdateWatchlistBindingRequest) (*UpdateWatchlistBindingResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateWatchlistBinding not implemented")
 }
 func (UnimplementedPortfolioServiceServer) testEmbeddedByValue() {}
 
@@ -632,6 +654,24 @@ func _PortfolioService_ListAllWatchlistSymbols_Handler(srv interface{}, ctx cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PortfolioService_UpdateWatchlistBinding_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateWatchlistBindingRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PortfolioServiceServer).UpdateWatchlistBinding(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PortfolioService_UpdateWatchlistBinding_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PortfolioServiceServer).UpdateWatchlistBinding(ctx, req.(*UpdateWatchlistBindingRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PortfolioService_ServiceDesc is the grpc.ServiceDesc for PortfolioService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -698,6 +738,10 @@ var PortfolioService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListAllWatchlistSymbols",
 			Handler:    _PortfolioService_ListAllWatchlistSymbols_Handler,
+		},
+		{
+			MethodName: "UpdateWatchlistBinding",
+			Handler:    _PortfolioService_UpdateWatchlistBinding_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

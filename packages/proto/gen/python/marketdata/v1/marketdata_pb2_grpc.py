@@ -56,6 +56,11 @@ class MarketDataServiceStub(object):
                 request_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetLatestQuoteRequest.SerializeToString,
                 response_deserializer=marketdata_dot_v1_dot_marketdata__pb2.Quote.FromString,
                 _registered_method=True)
+        self.GetLatestPrice = channel.unary_unary(
+                '/xstockstrat.marketdata.v1.MarketDataService/GetLatestPrice',
+                request_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetLatestPriceRequest.SerializeToString,
+                response_deserializer=marketdata_dot_v1_dot_marketdata__pb2.LatestPrice.FromString,
+                _registered_method=True)
         self.BackfillBars = channel.unary_unary(
                 '/xstockstrat.marketdata.v1.MarketDataService/BackfillBars',
                 request_serializer=marketdata_dot_v1_dot_marketdata__pb2.BackfillBarsRequest.SerializeToString,
@@ -116,6 +121,13 @@ class MarketDataServiceServicer(object):
 
     def GetLatestQuote(self, request, context):
         """Latest quote snapshot
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetLatestPrice(self, request, context):
+        """Latest trade price + prior-session daily close for the Decide surface (feature 095).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -185,6 +197,11 @@ def add_MarketDataServiceServicer_to_server(servicer, server):
                     servicer.GetLatestQuote,
                     request_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetLatestQuoteRequest.FromString,
                     response_serializer=marketdata_dot_v1_dot_marketdata__pb2.Quote.SerializeToString,
+            ),
+            'GetLatestPrice': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetLatestPrice,
+                    request_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetLatestPriceRequest.FromString,
+                    response_serializer=marketdata_dot_v1_dot_marketdata__pb2.LatestPrice.SerializeToString,
             ),
             'BackfillBars': grpc.unary_unary_rpc_method_handler(
                     servicer.BackfillBars,
@@ -327,6 +344,33 @@ class MarketDataService(object):
             '/xstockstrat.marketdata.v1.MarketDataService/GetLatestQuote',
             marketdata_dot_v1_dot_marketdata__pb2.GetLatestQuoteRequest.SerializeToString,
             marketdata_dot_v1_dot_marketdata__pb2.Quote.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetLatestPrice(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.marketdata.v1.MarketDataService/GetLatestPrice',
+            marketdata_dot_v1_dot_marketdata__pb2.GetLatestPriceRequest.SerializeToString,
+            marketdata_dot_v1_dot_marketdata__pb2.LatestPrice.FromString,
             options,
             channel_credentials,
             insecure,

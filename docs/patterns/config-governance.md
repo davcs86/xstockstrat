@@ -102,6 +102,70 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 168 — fundamentals-blend-universe (`xstockstrat-analysis` / `xstockstrat-config`)
+
+**Registers** two `analysis.engine.*` keys, seeded by migration **`026_analysis_engine_blend_keys`**
+for `staging` + `production` (global, `user_id` NULL), `consuming_service` `xstockstrat-analysis`.
+Both use the **full-dotted-key form** in the `key` column (per migration `021`) — the live loop reads
+them via the existing `analysis`-namespace `WatchConfig` stream (`get_str`/`get_bool`), which keys the
+snapshot by the `key` column with no namespace prefix added, so the seeded key must equal the read
+string; **no new cross-namespace subscription** (unlike feature 154's `marketdata` read):
+
+- `analysis.engine.fundamentals_blend_strategy_id` (string, default `fundamentals_macd_blend`) — the
+  strategy id the fundamentals-universe force-run rule governs. When that strategy is live, the live
+  loop evaluates it over the fundamentals universe (signals from the fundamentals source ∩ symbols
+  with fundamentals data), minus its deny list, instead of its ordinary owner-scoped universe.
+- `analysis.engine.fundamentals_blend_enabled` (bool, default `true`) — the kill-switch. Read via
+  `get_bool` (HasField-based), so an explicit operator `false` is honored and disables the override
+  entirely (the governed strategy then resolves its own universe like any other), independent of
+  whether that strategy is live.
+
+**Migration renumbered `024` → `026`:** `merge-order.md` pre-assigned `024`, but feature 166's
+`025_ingest_mcp_client_keys` merged into `main-dev` first (PR #1063), so a `024` arriving afterward
+would sit **below** the already-applied `025` and golang-migrate (`migrate up` applies only versions
+> current) would never run it on the persistent dev/prod DBs. Bumping to `026` (next free after
+`025`) restores forward-only ordering; the skipped `024` is a permanent, harmless gap. Declared in
+`services/xstockstrat-analysis/CLAUDE.md` § Config Keys Consumed. No other new keys.
+
+### feature 166 — mcp-client-signal-source (`xstockstrat-config` / `xstockstrat-ingest`)
+
+**Registers** two non-secret loop keys (seed migration `025_ingest_mcp_client_keys`, namespace-relative
+`key` column): `ingest.mcp_client.poll_interval_seconds` (int, default `300`) and
+`ingest.mcp_client.request_timeout_seconds` (int, default `30`) — the server-side MCP query loop's
+cadence and per-call timeout, both clamped to ≥1 at read (a loop-side clamp cannot busy-loop on a
+settable 0; the `SCALAR_BOUNDS_REGISTRY` hardening was declined in favor of the clamp). Declared in
+`services/xstockstrat-ingest/CLAUDE.md` § Config Keys Consumed. **NNN pre-assigned `025`** per
+`merge-order.md`; must merge **after** `022`/`023`/`024` (golang-migrate numeric-order apply).
+**Also introduces a dynamic secret key family** `ingest.mcp_credential.<slug>` (`is_secret=true`, one
+per registered `mcp_client` source) — **not seeded**; written at registration via
+`SetConfig(is_secret=true, create_key=true)` and resolvable only by ingest via `GetSecret` under the
+new `SECRET_CALLER_ALLOWLIST` `keyPrefixes: ['mcp_credential.']` grant (`authz.ts`).
+
+### feature 031 — strategy-performance-dashboard (`xstockstrat-ui`)
+
+**Registers** two `ui.performance.*` keys, seeded by migration **`023_ui_performance_keys`** for
+`staging` + `production` (global, `user_id` NULL), `consuming_service` `xstockstrat-ui`:
+
+- `ui.performance.risk_free_rate_annual` (float, default `0.045`) — the annualized risk-free rate for
+  the `/insights/performance` rolling-30d Sharpe (FR-3).
+- `ui.performance.equity_curve_start_date` (string, default `''` = auto) — the ISO start date of the
+  cumulative-P&L equity curve (FR-1); empty ⇒ the UI defaults to the earliest closed-position date.
+
+Both are read **one-shot via `GetConfig(namespace='ui')`** in `insightsBff.ts` (the UI is a stateless
+BFF — no `WatchConfig`), with an oneof-presence check so a stored `0` / empty string is honored (never
+`value || default`). The `key` column stores the sub-key (`performance.…`) so the returned values map
+is keyed as `values['performance.risk_free_rate_annual']` (the `platform`/`trading_state` GetConfig
+precedent). Declared in `services/xstockstrat-ui/CLAUDE.md` § Config Keys Consumed.
+
+### feature 095 — opportunity-live-market-enrichment (`xstockstrat-analysis`)
+
+**Registers** `analysis.opportunity.sparkline_bars` (int, default `20`) — the number of most-recent
+daily bar closes fetched per opportunity for the Decide-surface sparkline (AC-3). Read **live** at
+read-time enrichment via `get_int` with a `max(1, …)` clamp. **No config-service seed migration** —
+this follows the `analysis.opportunity.*` no-seed pattern (features 131/141): the key resolves to the
+code default until an operator `SetConfig`s it, and is env-overridable per F-07. Declared in
+`services/xstockstrat-analysis/CLAUDE.md` § Config Keys Consumed. No other new keys.
+
 ### feature 161 — surface-signal-weight-decay-config (`xstockstrat-config` / `xstockstrat-analysis`)
 
 **Registers** `analysis.scoring.signal_decay_half_life_hours` (float, default `24.0`, migration 019)
@@ -206,6 +270,19 @@ deliberately excludes INFO fill confirmations; an operator lowers it to `1` to f
 | `notify.fanout.dedup_window_seconds` | int | `300` | Suppress a byte-identical alert within this content-hash window |
 | `notify.fanout.sendgrid_from_email` | string | `''` | Fanout email sender; email disabled until from/to set and `SENDGRID_API_KEY` present |
 | `notify.fanout.sendgrid_to_email` | string | `''` | Fanout email recipient; same enable condition |
+
+### feature 165 — pwa-notifications (`xstockstrat-notify`)
+
+Adds a best-effort **Web Push** channel (a third fanout channel) delivering OS notifications to
+installed-PWA devices. The one key below is seeded by config migration `021` for `staging`+`production`
+(global scope). The VAPID credentials (`VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_SUBJECT`) are
+**not** config keys — they are deploy-pipeline env vars (private key `type: SECRET`), like the
+feature-020 fanout credentials. Gating mirrors `notify.fanout.min_severity` but is applied
+independently to the push channel.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `notify.push.min_severity` | int | `2` | Minimum `AlertSeverity` ordinal (0–4, clamped) to send a Web Push; default 2 (WARNING) excludes INFO fills |
 
 ### feature 141 — fix-opportunities-bars-fetch-oom (`xstockstrat-analysis`)
 

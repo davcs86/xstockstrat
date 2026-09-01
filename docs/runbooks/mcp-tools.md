@@ -1,6 +1,6 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the thirty-two tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the thirty-three tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 ---
@@ -34,7 +34,7 @@ directly on port 9000.
 
 **Direct (local):** `http://localhost:9000`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same thirty-two tools' `name`,
+**Tool catalog (UI display).** `GET /api/tools` returns the same thirty-three tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
 capabilities (the same data documented below), never user data or credentials. It powers the
 `xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
@@ -121,7 +121,9 @@ unlike the int64-as-string contract of `run_backtest`/`get_backfill_status`).
 | `mediated_authenticated_website` | `"extract_website_content"` |
 | all other types | `null` |
 
-`credentials_ref` is intentionally omitted from the response — credentials are never exposed to Claude.
+`has_credentials` (boolean) **is** returned (feature 166) — it tells Claude whether a source has a
+bearer/credential configured. The token itself and `credentials_ref` are intentionally omitted from
+the response — the credential value is never exposed to Claude.
 
 **Errors**
 
@@ -659,6 +661,16 @@ gate.
 | `config_json` | `object` | No | Source configuration (on `update`, changed only if supplied) |
 | `extractor_module` | `string` | No | Extractor module name (on `update`, changed only if supplied) |
 | `credentials_ref` | `string` | No | Reference to stored credentials — forwarded, **never echoed**. On `update`, omit to preserve the stored ref; pass `""` to clear it |
+| `bearer_token` | `string` | No | The MCP bearer for a `mcp_client` source (feature 166). Supplied on `register`; written FIRST to an encrypted config secret (`ingest.mcp_credential.<slug>`, `is_secret=true`), then the source is registered with `credentials_ref` pointing at it. Stored encrypted at rest and **never returned** |
+
+> **`mcp_client` source type (feature 166).** A server-side MCP query source. Its `config_json`
+> carries `mcp_endpoint` (the Streamable-HTTP MCP URL) and `mcp_tool` (the tool name), plus optional
+> `mcp_arguments`. A bearer token is **mandatory** — a `register` without `bearer_token` is rejected
+> `INVALID_ARGUMENT` (the type is credential-required). The token is written secret-first (never in
+> `config_json`); a scheduled ingest loop then resolves it via `GetSecret` and calls the tool over
+> Streamable HTTP with `Authorization: Bearer` only. The external tool must return the **fixed
+> xstockstrat response contract**: a list of `{symbol, direction (buy|sell|hold|watchlist),
+> conviction (0–1), headline?, valid_from?, valid_until?, raw_url?, tags?}`.
 
 **Return**
 
@@ -830,6 +842,36 @@ Lists stored strategy definitions via analysis `ListStrategyDefinitions` (featur
 
 **Return** — `{ "strategies": [ <definition>, … ] }`. Each definition is **snake_case**, matching
 `get_strategy` (so a `list_strategies → get_strategy → manage_strategy` edit loop stays consistent).
+
+---
+
+### `list_opportunities`
+
+Lists the caller's ranked Decide-queue opportunities via analysis `ListOpportunities` with the
+feature-095 live-market enrichment. **Read-only**, caller-scoped on the forwarded `x-user-id` (no
+admin scope) — analysis resolves the owner from the header, never a request-body id.
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `min_conviction` | `float` | No | Drop rows below this conviction floor (default `0.0`); muted deny-list rows are exempt |
+
+**Return** — `{ "opportunities": [ <opportunity>, … ] }`. Each opportunity is **snake_case** and
+always carries `symbol`, `action`, `conviction`, `passing_conditions`, `total_conditions`, `thesis`,
+`strategy_id`, `source`, `opportunity_key`, `provenance`, and `muted`. The live-market enrichment is
+**omit-not-fabricate**:
+
+- `live_price`, `change_pct`, `target_price`, `stop_price` — present **only** when the backend has a
+  value; an unavailable field is **omitted entirely**, never a fabricated `0`.
+- `sparkline` — a list of recent daily closes; a warm-up/missing bar is JSON `null` (never `NaN`).
+- `conditions` — the traced `{ref_name, lhs_value, threshold, fn, state, distance_to_threshold}`
+  leaves; an unattributed row omits the key.
+
+Risk/reward and suggested share size are **not** returned — they are a UI-only presentation computed
+client-side, carried on no wire field.
+
+**Errors** — a backend `AioRpcError` surfaces as a `RuntimeError` with the gRPC status message.
 
 ---
 
@@ -1136,7 +1178,7 @@ found`; `permission denied` (non-owner); `FAILED_PRECONDITION` (confirm on a bro
 
 ### `manage_account`
 
-Manage the **caller's own BROKER accounts** (Alpaca / IBKR) in `xstockstrat-trading` (feature 162).
+Manage the **caller's own BROKER accounts** (Alpaca / IBKR) in `xstockstrat-trading` (feature 164).
 All operations act on the **caller's own** accounts (ownership from the verified `x-user-id`); a
 non-owner is rejected `PERMISSION_DENIED`. Broker credentials pass through to the backend (which
 encrypts them at rest) and are **never echoed back** — a `BrokerAccount` carries no credential
@@ -1167,7 +1209,7 @@ required args per operation; offline steer on `register` (`broker_type=offline`)
 
 ### `list_accounts`
 
-List the **caller's own** accounts — broker **and** offline together (read-only, feature 162). No
+List the **caller's own** accounts — broker **and** offline together (read-only, feature 164). No
 parameters. Offline accounts (feature 157) appear alongside broker accounts, each distinguishable by
 its `broker_type` (`BROKER_TYPE_ALPACA` / `BROKER_TYPE_IBKR` / `BROKER_TYPE_OFFLINE`). Ownership is
 resolved server-side from the verified `x-user-id`. Credentials are not part of a `BrokerAccount` and
