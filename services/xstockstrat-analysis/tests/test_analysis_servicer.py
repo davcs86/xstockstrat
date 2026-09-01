@@ -4884,6 +4884,8 @@ class TestOpportunityRowParity:
         "target_price",
         "stop_price",
         "conditions",
+        # feature 110 — raw max ExternalSignal.conviction, carried from readiness_json.
+        "signal_confidence",
     }
     # feature 095 — live-market fields set at read time in ListOpportunities (post-ranking), not by
     # the mapper, so they join _INTENTIONALLY_UNSET rather than _MAPPED.
@@ -5876,3 +5878,62 @@ class TestOpportunityLiveEnrichment:
         asyncio.run(svc._enrich_opportunities_live(ranked, []))
         after = [(o.symbol, o.conviction) for o in ranked]
         assert before == after  # same symbols, same order, same conviction
+
+
+class TestSignalConfidence:
+    """feature 110 — Opportunity.signal_confidence: the raw max ExternalSignal.conviction, carried
+    from readiness_json as explicit-presence, kept distinct from the ordinal conviction (AC-1/4)."""
+
+    def test_mapper_carries_signal_confidence_explicit_presence(self):
+        from app.handlers.servicer import _row_to_opportunity
+
+        with_sig = _row_to_opportunity(
+            {
+                "opportunity_key": "u1|CAPR|",
+                "symbol": "CAPR",
+                "strategy_id": "",
+                "action": int(analysis_pb2.OPPORTUNITY_ACTION_TAG_ENTER),
+                "conviction": 0.5,
+                "readiness_json": {
+                    "passing_conditions": 1,
+                    "total_conditions": 1,
+                    "signal_confidence": 0.82,
+                },
+                "provenance": ["uw"],
+                "thesis": "",
+            }
+        )
+        assert with_sig.HasField("signal_confidence")
+        assert abs(with_sig.signal_confidence - 0.82) < 1e-9
+        # Read distinctly from the ordinal conviction (AC-1/AC-4) — a different value on the row.
+        assert abs(with_sig.conviction - 0.5) < 1e-9
+
+        without = _row_to_opportunity(
+            {
+                "opportunity_key": "u1|AAPL|",
+                "symbol": "AAPL",
+                "strategy_id": "",
+                "action": int(analysis_pb2.OPPORTUNITY_ACTION_TAG_ENTER),
+                "conviction": 0.5,
+                "readiness_json": {"passing_conditions": 0, "total_conditions": 0},
+                "provenance": ["uw"],
+                "thesis": "",
+            }
+        )
+        assert not without.HasField("signal_confidence")  # no active signal → genuine unset (P-03)
+
+    @pytest.mark.asyncio
+    async def test_producer_selects_max_raw_conviction(self):
+        """AC-4 — a symbol with two active signals (raw 0.30 and 0.90) yields signal_confidence 0.90
+        (the max raw ExternalSignal.conviction), the sizing probability that is NOT the ordinal
+        conviction. (The no-active-signal → unset case is covered by the mapper test above.)"""
+        svc = _materialized_svc(
+            signals=[
+                _sig("CAPR", "buy", 0.30, source="uw"),
+                _sig("CAPR", "buy", 0.90, source="uw"),
+            ],
+        )
+        by_symbol, _ = await _list_opps(svc)
+        capr = by_symbol["CAPR"]
+        assert capr.HasField("signal_confidence")
+        assert abs(capr.signal_confidence - 0.90) < 1e-9  # max raw, not the summed/averaged value
