@@ -1842,3 +1842,19 @@ class TestRunFundamentalsScanTool:
         with patch.object(client, "run_fundamentals_scan", AsyncMock(side_effect=err)):
             with pytest.raises(RuntimeError, match="admin scope required"):
                 await fn(_ctx(ADMIN), force=False)
+
+
+# ── list_opportunities (feature 095) ───────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_list_opportunities_caller_scoped_returns_projection():
+    """The tool resolves the caller via _caller_user_id and returns the client's projection verbatim
+    (feature 095) — caller-scoped, read-only."""
+    projected = {"opportunities": [{"symbol": "CAPR", "live_price": 12.34}]}
+    with patch.object(client, "list_opportunities", AsyncMock(return_value=projected)) as m:
+        server = _make_server()
+        result = await _tool_fn(server, "list_opportunities")(_ctx(ADMIN), min_conviction=0.3)
+    assert result == projected
+    # Forwarded the caller's own user id (ADMIN claims → "u-1") + the min_conviction floor.
+    assert m.call_args.args == ("u-1", 0.3)

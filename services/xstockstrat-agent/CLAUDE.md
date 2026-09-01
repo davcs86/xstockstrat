@@ -40,7 +40,7 @@ Python 3.13 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
 
 ## MCP Tools
 
-The agent registers thirty-two tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
+The agent registers thirty-three tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
 reference):
 
 | Tool | Purpose |
@@ -65,6 +65,7 @@ reference):
 | `cancel_backfill` | Cancel a queued/running backfill job (admin-scoped, feature 087) |
 | `test_formula` | Dry-run inline formula source in the sandbox, registers nothing (read-only, feature 087) |
 | `list_strategies` | List stored strategy definitions (read-only, feature 087) |
+| `list_opportunities` | List the caller's ranked Decide-queue opportunities with live-market enrichment (read-only, feature 095) |
 | `get_config` | Read a namespace's current config values, secret values redacted (read-only, feature 073); scoped by an optional per-user `user_id` — the **environment is always this agent deployment's own** (`APPLICATION_ENV`, no caller override, PR #994) |
 | `list_config_keys` | List a namespace's registered config keys, metadata only (read-only, feature 073); environment is the agent's own deployment env (no caller override, PR #994) |
 | `set_config` | Write one config value **including secrets** (admin-scoped write, feature 073; secret values are encrypted at rest by the config service, PR #994); takes an optional `user_id` (per-user override; secrets are global-only) — no `trading_mode`, and no caller-facing `environment` (always the deployment env, PR #994); a write to an unregistered `(namespace,key,environment,user_id)` scope is refused `NOT_FOUND` unless `create_key=true` (feature 091) |
