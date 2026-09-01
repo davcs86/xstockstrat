@@ -1607,6 +1607,14 @@ export interface Opportunity {
   stopPrice?: number | undefined;
   sparkline: SparklinePoint[];
   conditions: ConditionEval[];
+  /**
+   * feature 110 — the raw max per-signal ExternalSignal.conviction (0.0–1.0) among the symbol's
+   * active signals; the real probability that feeds trading PlaceOrder's confidence sizing.
+   * Explicit-presence optional: UNSET means "no active signal for this symbol" (never a fabricated
+   * 0.0). Deliberately NAMED signal_confidence and kept distinct from the ordinal `conviction = 3`
+   * (NOT a probability) and the decayed/weighted signal_axis. Next free after 095's 13-18 block.
+   */
+  signalConfidence?: number | undefined;
 }
 
 /**
@@ -7497,6 +7505,7 @@ function createBaseOpportunity(): Opportunity {
     stopPrice: undefined,
     sparkline: [],
     conditions: [],
+    signalConfidence: undefined,
   };
 }
 
@@ -7555,6 +7564,9 @@ export const Opportunity: MessageFns<Opportunity> = {
     }
     for (const v of message.conditions) {
       ConditionEval.encode(v!, writer.uint32(146).fork()).join();
+    }
+    if (message.signalConfidence !== undefined) {
+      writer.uint32(153).double(message.signalConfidence);
     }
     return writer;
   },
@@ -7710,6 +7722,14 @@ export const Opportunity: MessageFns<Opportunity> = {
           message.conditions.push(ConditionEval.decode(reader, reader.uint32()));
           continue;
         }
+        case 19: {
+          if (tag !== 153) {
+            break;
+          }
+
+          message.signalConfidence = reader.double();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -7783,6 +7803,11 @@ export const Opportunity: MessageFns<Opportunity> = {
       conditions: globalThis.Array.isArray(object?.conditions)
         ? object.conditions.map((e: any) => ConditionEval.fromJSON(e))
         : [],
+      signalConfidence: isSet(object.signalConfidence)
+        ? globalThis.Number(object.signalConfidence)
+        : isSet(object.signal_confidence)
+        ? globalThis.Number(object.signal_confidence)
+        : undefined,
     };
   },
 
@@ -7842,6 +7867,9 @@ export const Opportunity: MessageFns<Opportunity> = {
     if (message.conditions?.length) {
       obj.conditions = message.conditions.map((e) => ConditionEval.toJSON(e));
     }
+    if (message.signalConfidence !== undefined) {
+      obj.signalConfidence = message.signalConfidence;
+    }
     return obj;
   },
 
@@ -7868,6 +7896,7 @@ export const Opportunity: MessageFns<Opportunity> = {
     message.stopPrice = object.stopPrice ?? undefined;
     message.sparkline = object.sparkline?.map((e) => SparklinePoint.fromPartial(e)) || [];
     message.conditions = object.conditions?.map((e) => ConditionEval.fromPartial(e)) || [];
+    message.signalConfidence = object.signalConfidence ?? undefined;
     return message;
   },
 };

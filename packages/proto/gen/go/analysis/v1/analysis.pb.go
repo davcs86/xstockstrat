@@ -3619,14 +3619,20 @@ type Opportunity struct {
 	// 15/16 stay unset until the named `strategy-target-stop-authoring` follow-up populates
 	// StrategyDefinition.signal_params.{target,stop}. All explicit-presence — an unset optional models
 	// "unavailable", never a fabricated 0 (P-03, AC-8/AC-11).
-	LivePrice     *float64          `protobuf:"fixed64,13,opt,name=live_price,json=livePrice,proto3,oneof" json:"live_price,omitempty"`
-	ChangePct     *float64          `protobuf:"fixed64,14,opt,name=change_pct,json=changePct,proto3,oneof" json:"change_pct,omitempty"`
-	TargetPrice   *float64          `protobuf:"fixed64,15,opt,name=target_price,json=targetPrice,proto3,oneof" json:"target_price,omitempty"`
-	StopPrice     *float64          `protobuf:"fixed64,16,opt,name=stop_price,json=stopPrice,proto3,oneof" json:"stop_price,omitempty"`
-	Sparkline     []*SparklinePoint `protobuf:"bytes,17,rep,name=sparkline,proto3" json:"sparkline,omitempty"`
-	Conditions    []*ConditionEval  `protobuf:"bytes,18,rep,name=conditions,proto3" json:"conditions,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	LivePrice   *float64          `protobuf:"fixed64,13,opt,name=live_price,json=livePrice,proto3,oneof" json:"live_price,omitempty"`
+	ChangePct   *float64          `protobuf:"fixed64,14,opt,name=change_pct,json=changePct,proto3,oneof" json:"change_pct,omitempty"`
+	TargetPrice *float64          `protobuf:"fixed64,15,opt,name=target_price,json=targetPrice,proto3,oneof" json:"target_price,omitempty"`
+	StopPrice   *float64          `protobuf:"fixed64,16,opt,name=stop_price,json=stopPrice,proto3,oneof" json:"stop_price,omitempty"`
+	Sparkline   []*SparklinePoint `protobuf:"bytes,17,rep,name=sparkline,proto3" json:"sparkline,omitempty"`
+	Conditions  []*ConditionEval  `protobuf:"bytes,18,rep,name=conditions,proto3" json:"conditions,omitempty"`
+	// feature 110 — the raw max per-signal ExternalSignal.conviction (0.0–1.0) among the symbol's
+	// active signals; the real probability that feeds trading PlaceOrder's confidence sizing.
+	// Explicit-presence optional: UNSET means "no active signal for this symbol" (never a fabricated
+	// 0.0). Deliberately NAMED signal_confidence and kept distinct from the ordinal `conviction = 3`
+	// (NOT a probability) and the decayed/weighted signal_axis. Next free after 095's 13-18 block.
+	SignalConfidence *float64 `protobuf:"fixed64,19,opt,name=signal_confidence,json=signalConfidence,proto3,oneof" json:"signal_confidence,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *Opportunity) Reset() {
@@ -3783,6 +3789,13 @@ func (x *Opportunity) GetConditions() []*ConditionEval {
 		return x.Conditions
 	}
 	return nil
+}
+
+func (x *Opportunity) GetSignalConfidence() float64 {
+	if x != nil && x.SignalConfidence != nil {
+		return *x.SignalConfidence
+	}
+	return 0
 }
 
 // One recent daily-bar close for the Decide-surface sparkline (feature 095). Explicit presence — an
@@ -5638,7 +5651,7 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x0edeferred_count\x18\x05 \x01(\x05R\rdeferredCount\x12\x16\n" +
 	"\x06status\x18\x06 \x01(\tR\x06status\x12;\n" +
 	"\vfinished_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"finishedAt\"\xb4\x06\n" +
+	"finishedAt\"\xfc\x06\n" +
 	"\vOpportunity\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12E\n" +
 	"\x06action\x18\x02 \x01(\x0e2-.xstockstrat.analysis.v1.OpportunityActionTagR\x06action\x12\x1e\n" +
@@ -5669,11 +5682,13 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\tsparkline\x18\x11 \x03(\v2'.xstockstrat.analysis.v1.SparklinePointR\tsparkline\x12F\n" +
 	"\n" +
 	"conditions\x18\x12 \x03(\v2&.xstockstrat.analysis.v1.ConditionEvalR\n" +
-	"conditionsB\r\n" +
+	"conditions\x120\n" +
+	"\x11signal_confidence\x18\x13 \x01(\x01H\x04R\x10signalConfidence\x88\x01\x01B\r\n" +
 	"\v_live_priceB\r\n" +
 	"\v_change_pctB\x0f\n" +
 	"\r_target_priceB\r\n" +
-	"\v_stop_price\"5\n" +
+	"\v_stop_priceB\x14\n" +
+	"\x12_signal_confidence\"5\n" +
 	"\x0eSparklinePoint\x12\x19\n" +
 	"\x05close\x18\x01 \x01(\x01H\x00R\x05close\x88\x01\x01B\b\n" +
 	"\x06_close\"\xe8\x01\n" +
