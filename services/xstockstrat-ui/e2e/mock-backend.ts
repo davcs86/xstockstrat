@@ -59,7 +59,11 @@ import {
 } from './fixtures';
 import { USER_VIEWS, LAST_ADMIN_USER_ID } from './fixtures/users';
 import { Role } from '@xstockstrat/proto/identity/v1/identity_pb';
-import { LEDGER_EXPORT_EVENTS, EXPORT_DISABLED_SENTINEL } from './fixtures/ledgerEvents';
+import {
+  LEDGER_EXPORT_EVENTS,
+  EXPORT_DISABLED_SENTINEL,
+  CLOSED_POSITION_ROWS,
+} from './fixtures/ledgerEvents';
 import { criterionDetailRow } from './fixtures/screenResults';
 import { backfillJob } from './fixtures/backfillJobs';
 import { INDICATOR_SERIES_AAPL } from './fixtures/indicatorSeries';
@@ -352,6 +356,29 @@ export async function startMockBackend(): Promise<void> {
 
       router.service(LedgerService, {
         async queryEvents(req) {
+          // feature 031 — the /insights performance dashboard reads realized closes. The BFF has
+          // already forced streamKey to portfolio:<user_id>; we key off event_type. occurredAt is a
+          // real Timestamp (message-init) and payload is a plain Struct object (the producer's
+          // snake_case keys), so closedTradesFromEvents can map realized_pnl/cost_basis/opened_at.
+          if (req.eventType === 'portfolio.position.closed') {
+            return {
+              events: CLOSED_POSITION_ROWS.map((r) => ({
+                eventId: `evt-closed-${r.sequence}`,
+                eventType: 'portfolio.position.closed',
+                sourceService: 'xstockstrat-portfolio',
+                streamKey: req.streamKey,
+                sequence: BigInt(r.sequence),
+                userId: 'test-user-001',
+                occurredAt: timestampFromDate(new Date(r.occurredAtIso)),
+                payload: {
+                  realized_pnl: r.realizedPnl,
+                  ...(r.costBasis !== undefined ? { cost_basis: r.costBasis } : {}),
+                  ...(r.openedAtIso !== undefined ? { opened_at: r.openedAtIso } : {}),
+                },
+              })),
+              page: { nextPageToken: '' },
+            };
+          }
           if (req.eventType === 'copilot.message' || req.streamKey?.startsWith('copilot:')) {
             const msgs = copilotThreads.get(req.streamKey) ?? [];
             return {
@@ -1192,7 +1219,23 @@ export async function startMockBackend(): Promise<void> {
         // (no platform-wide restriction) so the existing suite's happy-path assertions are
         // unaffected. Overridden per-test via page.route() for the REDUCE_ONLY/HALTED cases
         // (positions-reconciliation.spec.ts).
-        async getConfig() {
+        async getConfig(req) {
+          // feature 031 — the /insights performance dashboard reads ui.performance.* one-shot via
+          // GetConfig(namespace:'ui'). The map is keyed by the bare sub-key (namespace filtered),
+          // matching the real service. Values use the oneof message-init shape (connectNodeAdapter
+          // serializes it to Connect-JSON wire).
+          if (req.namespace === 'ui') {
+            const uiValues: Record<
+              string,
+              { value: { case: 'floatVal'; value: number } | { case: 'stringVal'; value: string } }
+            > = {
+              'performance.risk_free_rate_annual': { value: { case: 'floatVal', value: 0.045 } },
+              'performance.equity_curve_start_date': {
+                value: { case: 'stringVal', value: '2026-01-01' },
+              },
+            };
+            return { namespace: 'ui', version: '1', values: uiValues };
+          }
           return {
             namespace: 'platform',
             version: '1',

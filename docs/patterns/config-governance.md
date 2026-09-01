@@ -116,6 +116,22 @@ per registered `mcp_client` source) — **not seeded**; written at registration 
 `SetConfig(is_secret=true, create_key=true)` and resolvable only by ingest via `GetSecret` under the
 new `SECRET_CALLER_ALLOWLIST` `keyPrefixes: ['mcp_credential.']` grant (`authz.ts`).
 
+### feature 031 — strategy-performance-dashboard (`xstockstrat-ui`)
+
+**Registers** two `ui.performance.*` keys, seeded by migration **`023_ui_performance_keys`** for
+`staging` + `production` (global, `user_id` NULL), `consuming_service` `xstockstrat-ui`:
+
+- `ui.performance.risk_free_rate_annual` (float, default `0.045`) — the annualized risk-free rate for
+  the `/insights/performance` rolling-30d Sharpe (FR-3).
+- `ui.performance.equity_curve_start_date` (string, default `''` = auto) — the ISO start date of the
+  cumulative-P&L equity curve (FR-1); empty ⇒ the UI defaults to the earliest closed-position date.
+
+Both are read **one-shot via `GetConfig(namespace='ui')`** in `insightsBff.ts` (the UI is a stateless
+BFF — no `WatchConfig`), with an oneof-presence check so a stored `0` / empty string is honored (never
+`value || default`). The `key` column stores the sub-key (`performance.…`) so the returned values map
+is keyed as `values['performance.risk_free_rate_annual']` (the `platform`/`trading_state` GetConfig
+precedent). Declared in `services/xstockstrat-ui/CLAUDE.md` § Config Keys Consumed.
+
 ### feature 095 — opportunity-live-market-enrichment (`xstockstrat-analysis`)
 
 **Registers** `analysis.opportunity.sparkline_bars` (int, default `20`) — the number of most-recent

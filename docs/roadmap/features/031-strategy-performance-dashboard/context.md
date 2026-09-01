@@ -165,3 +165,48 @@ consumer unaffected (C-16 additive-extend).
   - Step 7: oneof-read precedent line drift (:131-133 -> :132-134; pattern present). — [ ] note only
   - Step 11: mock-backend.ts already defines getTradingEnvironment/queryEvents/getConfig — reword "add handlers" as "point queryEvents at the ledgerEvents fixture + extend getConfig for the ui namespace". — [ ] note only
 - Overlap findings: batch scan CLEAN; 031 shares portfolio_service.go emit with 029 (029 before 031), navGroups.tsx with 043, ledgerEvents.ts create with 021 (021 before 031) — all in merge-order.md.
+
+## Session 2026-09-01 — sdd-execute (Steps 1–11, code-completed)
+
+Executed all 11 steps on `feature/strategy-performance-dashboard` (branched off `origin/main-dev`
+at 095's tip; feature 110 is NOT yet in this base — its PR is still open). One commit per step-pair.
+
+**Commits:** Steps 1-3 (`2626c645`), 4-5 (`5750b94c`), 6 (`390a51a3`), 7-8 (`45fbd4c1`),
+9 (`56efbe35`), 10 (`97330434`), 11 (`ff9421cf`).
+
+**RED→GREEN evidence (Floor P-06):**
+- Step 8 (metric lib): wrote `performanceMetrics.test.ts` first → RED (module-not-found), then
+  `performanceMetrics.ts` → GREEN (vitest 154 pass, +19 new cases). tsc clean, lint clean, jscpd 0.
+- Step 2 (portfolio emit): pure `closedPositionPayload` helper + `portfolio_close_payload_test.go`
+  (committed in a prior session; `GOWORK=off go build ./...` green).
+- Step 10 (nav) + Step 11 (dashboard e2e): GREEN against the **production** bundle
+  (`CI=1 E2E_PREBUILT=1`) — nav-reachability 4/4, performance 8/8. Local `pnpm dev` cold-route
+  flakiness is a known harness artifact (screener/chart precedent); CI's prebuilt path is authoritative.
+- Regression: ledger-export (021, shares `ledgerEvents.ts`) + positions-reconciliation (shares the
+  `queryEvents`/`getConfig` handlers) 12/12 GREEN — my additive branches don't disturb existing tests.
+
+**impl-review ⚠ resolved:**
+- Step 10 "add `pnpm run lint`" → addressed: ran `pnpm run lint` (exit 0) before the Step 10 commit,
+  and it now gates every UI commit in this feature.
+- Step 4/7/11 notes were confirmed at execute time (023 is the next-free config NNN; oneof-read
+  precedent present; Step 11 reworded from "add handlers" to "extend the existing handlers").
+
+**Deviations** (full detail in implementation-spec.md § Deviation Log):
+1. Step 1: base emit already carried a 6th key `fees_total` (feature 029, merged after this spec) —
+   `closedPositionPayload` preserves all 6 base keys + adds `cost_basis`/`opened_at` (C-16 intact).
+2. Step 9: `TradingModeBadge` renders "live" in production (not "nothing" as the spec's parenthetical
+   said) — added a paper-only `paper-trading-label` span so AC-9/AC-10 are unambiguous; the dashboard
+   mounts its own `AccountProvider` (self-contained, doesn't depend on 110's SignalOrderTicket).
+3. Step 11: fixture + mock handlers pre-existed → extended not created; AC-6 poll via `page.clock`;
+   added `performance-summary` testid to disambiguate stat text from chart Y-axis ticks.
+
+**Stacking note:** 110 (order-predecessor) and 031 both touch `nav-reachability.spec.ts` in
+non-overlapping regions (110 removes the market-redirect test ~L118; 031 adds a Performance nav row
+~L36) and `navGroups.tsx` (110 doesn't touch it). When 110 squash-merges to `main-dev`, rebase this
+branch onto the new `main-dev` and reconcile.
+
+**Teardown:** touched `services/xstockstrat-portfolio/CLAUDE.md`, `services/xstockstrat-ui/CLAUDE.md`
+(Steps 3, 5) and `docs/patterns/config-governance.md` (Step 5). `/context-scrubber` scan run at
+close-out (see PR body if the context-forge plugin was unavailable).
+
+**Status:** `implementation-ready` → `code-completed`. Next: PR → `main-dev`.
