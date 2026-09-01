@@ -3,6 +3,34 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-09-01
+
+### Features
+- ledger-event-export: Adds a streaming export endpoint to the ledger service that produces a structured CSV or JSON file of all events (fills, signals, P&L, config changes) for a given date range and event type filter, enabling tax reporting, manual strategy review, and audit compliance.
+- signal-performance-attribution: Joins ledger fill events to ingest signal records to produce per-source performance metrics (win rate, average return, total realized P&L) so that signal source weights can be tuned with real trading evidence rather than intuition.
+- strategy-performance-dashboard: Adds a dedicated performance panel to the insights UI showing the strategy's cumulative equity curve, maximum drawdown, rolling Sharpe ratio, win rate, and average hold time, computed from paper trading fill events in the ledger — providing the quantitative basis for the paper-to-live trading decision.
+- user-management-ui: Add a user management section to `xstockstrat-config-ui` backed by new admin RPCs on `xstockstrat-identity`, allowing administrators to create users, update passwords, assign roles, and deactivate accounts.
+- opportunity-live-market-enrichment: Fill the backend data gaps (and the UI that consumes them) that feature 083 left as the deliberately un-faked Nocturne handoff extras: live price + intraday change%, a compact price sparkline, per-condition live value chips, target/stop chart-overlay lines, and risk:reward + suggested share sizing on the Decide surface (Opportunities queue + Signal detail).
+- wire-signal-confidence-to-position-sizing: Wires a real, per-order confidence value — sourced from `ExternalSignal.conviction`, not the semantically-mismatched `Opportunity.conviction` — into the `PlaceOrderRequest.confidence` field that 023 (position-sizing-engine) adds, via a scoped blank-qty affordance on the signal-order-ticket UI, so FR-2's confidence-scaling formula is actually exercised instead of shipping permanently inert.
+- ui-middleware-nodejs-runtime: Move `xstockstrat-ui`'s `src/middleware.ts` from the Edge runtime to the Node.js runtime (stable since Next.js 15.5) and have it call `xstockstrat-identity`'s `refreshSession()` directly, removing the self-referential HTTP loopback to `/api/auth/refresh` landed as a hotfix in PR #925.
+- pwa-notifications: Turn `xstockstrat-ui` into an installable PWA (web app manifest + service worker + icons) and add a true Web Push channel so installed users receive OS-level notifications for alerts even when the app or browser is closed — delivered by a new best-effort push fanout channel in `xstockstrat-notify`, gated on VAPID keys the same way Slack/SendGrid fanout is gated on its credentials.
+- mcp-client-signal-source: Let an external MCP (Model Context Protocol) server be registered as a first-class **server-side** signal source: `xstockstrat-ingest` connects to the configured MCP endpoint (bearer-auth header only), queries a configured tool, parses the result into `ExternalSignal`s, and ingests them — without routing the fetch through the Claude agent the way today's `mediated_*` sources do.
+- watchlist-single-strategy-update: Change the strategy bound to a single symbol in a watchlist through a targeted `UpdateWatchlistBinding(watchlist_id, symbol, strategy_id)` RPC (a single-row `UPDATE`), and have the UI patch just that entry in its query cache — instead of re-sending the entire binding array through the replace-all `UpdateWatchlist` and refetching the whole list.
+- fundamentals-blend-universe: In the live strategy evaluation loop, always additionally run the `fundamentals_macd_blend` strategy over the **fundamentals universe** — symbols that both carry an active `source == "fundamentals"` signal and actually have fundamentals data — on top of whatever strategy the user selected, while constraining `fundamentals_macd_blend` to run **only** on that universe (excluded everywhere else).
+
+### Proto Changes
+- analysis/v1/analysis.proto
+- identity/v1/identity.proto
+- ledger/v1/ledger.proto
+- marketdata/v1/marketdata.proto
+- notify/v1/notify.proto
+- portfolio/v1/portfolio.proto
+
+### Summary
+15 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-08-30
 
 ### Features
