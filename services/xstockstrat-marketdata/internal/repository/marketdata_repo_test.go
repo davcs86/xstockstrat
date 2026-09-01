@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/pashagolub/pgxmock/v4"
 
 	"github.com/xstockstrat/marketdata/internal/source"
@@ -138,5 +139,38 @@ func TestUpsertFundamentals_CastsExtraMetricsToJSONB(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("pgxmock expectations unmet (query text missing the ::jsonb cast): %v", err)
+	}
+}
+
+// feature 095 — GetPreviousDailyClose reads the second-newest 1d bar's close (prior session),
+// and reports ok=false (never a fabricated 0) when fewer than two daily bars are stored.
+func TestGetPreviousDailyClose(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+
+	// Present: OFFSET 1 LIMIT 1 returns the prior session's close.
+	mock.ExpectQuery(`OFFSET 1 LIMIT 1`).
+		WithArgs("CAPR").
+		WillReturnRows(pgxmock.NewRows([]string{"close"}).AddRow(12.09))
+	got, ok, err := repo.GetPreviousDailyClose(context.Background(), "CAPR")
+	if err != nil || !ok || got != 12.09 {
+		t.Fatalf("expected (12.09,true,nil), got (%v,%v,%v)", got, ok, err)
+	}
+
+	// Absent: no prior bar → ok=false, value 0, no error (AC-11 omit-not-fabricate).
+	mock.ExpectQuery(`OFFSET 1 LIMIT 1`).
+		WithArgs("NEW").
+		WillReturnError(pgx.ErrNoRows)
+	got, ok, err = repo.GetPreviousDailyClose(context.Background(), "NEW")
+	if err != nil || ok || got != 0 {
+		t.Fatalf("expected (0,false,nil) on no rows, got (%v,%v,%v)", got, ok, err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
 	}
 }

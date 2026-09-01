@@ -28,6 +28,14 @@ type MultiSymbolSource interface {
 	GetLatestQuotesMulti(ctx context.Context, symbols []string) (map[string]*marketdatav1.Quote, error)
 }
 
+// LatestTradeSource is an optional capability a DataSourceClient may implement to fetch the most
+// recent trade price + timestamp (feature 095). Callers type-assert to it and degrade gracefully
+// when a source does not support it, so adding this does not force every provider (or test fake)
+// to implement it — mirroring MultiSymbolSource.
+type LatestTradeSource interface {
+	GetLatestTrade(ctx context.Context, symbol string) (price float64, tradeTime time.Time, err error)
+}
+
 // Fundamentals is the internal, provider-agnostic fundamental-metrics model
 // (feature 059). The FMP client and the repository depend on this struct rather than
 // the generated proto type, so neither imports gen/go marketdata types.

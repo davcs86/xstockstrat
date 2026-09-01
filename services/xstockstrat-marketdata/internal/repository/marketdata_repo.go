@@ -17,12 +17,13 @@ import (
 	tfpkg "github.com/xstockstrat/marketdata/internal/timeframe"
 )
 
-// execer is the subset of *pgxpool.Pool that UpsertFundamentals needs, extracted so
-// its ::jsonb-cast SQL text can be exercised with pgxmock (this service has no
-// live-DB test harness and CI provisions no database). Both *pgxpool.Pool and
-// pgxmock.PgxPoolIface satisfy it; production wires it to the real pool.
+// execer is the subset of *pgxpool.Pool that UpsertFundamentals + GetPreviousDailyClose need,
+// extracted so their SQL can be exercised with pgxmock (this service has no live-DB test harness
+// and CI provisions no database). Both *pgxpool.Pool and pgxmock.PgxPoolIface satisfy it;
+// production wires it to the real pool.
 type execer interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
 // MarketDataRepo handles TimescaleDB reads and writes for OHLCV bars and quotes.
@@ -190,6 +191,27 @@ func (r *MarketDataRepo) QueryRecentBars(ctx context.Context, symbol, timeframe 
 		bars[i], bars[j] = bars[j], bars[i]
 	}
 	return bars, nil
+}
+
+// GetPreviousDailyClose returns the close of the prior session's daily bar for a symbol — the
+// second-newest stored `1d` bar (feature 095). This serves change% (last - prev)/prev without a
+// second Alpaca call. Returns ok=false when fewer than two daily bars are stored, so the caller
+// leaves prev_close unset (never a fabricated 0).
+func (r *MarketDataRepo) GetPreviousDailyClose(ctx context.Context, symbol string) (close float64, ok bool, err error) {
+	const q = `
+		SELECT close
+		FROM marketdata.ohlcv
+		WHERE symbol=$1 AND timeframe='1d'
+		ORDER BY time DESC
+		OFFSET 1 LIMIT 1`
+	row := r.db.QueryRow(ctx, q, symbol)
+	if err := row.Scan(&close); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, false, nil
+		}
+		return 0, false, fmt.Errorf("prev daily close: %w", err)
+	}
+	return close, true, nil
 }
 
 // GetCoverage returns the earliest/latest stored bar timestamps and the bar count for a
