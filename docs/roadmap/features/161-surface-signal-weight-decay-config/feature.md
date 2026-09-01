@@ -5,6 +5,7 @@
 **Last Updated**: 2026-08-26
 **Committed to main**: d52375b58af14eb4718fab73e9aab8020fc92baf
 **Launched date**: 2026-08-27
+**Archived**: 2026-09-01
 
 ---
 
@@ -19,6 +20,7 @@
 | 2026-08-26 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps executed on the harness branch; agent 298 + config 93 tests + 35 config-ui e2e green; buf breaking clean |
 
 | 2026-08-27 | `code-completed` → `launched` | CI workflow | Promoted via PR #1036; committed d52375b58af14eb4718fab73e9aab8020fc92baf |
+| 2026-09-01 | `launched` (unchanged) | /sdd-archiver | Archived — synthesis to context.md + 3 insights + 2 fails to Ledger; product-spec.md, recon.md, design.md, implementation-spec.md pruned; @AC-1..12 promoted to per-service acceptance suites. |
 ---
 
 ## Artifacts

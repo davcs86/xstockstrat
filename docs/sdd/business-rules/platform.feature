@@ -53,3 +53,10 @@ Feature: Platform-wide guarantees
     Then an account.deregistered event is emitted for that account_id
     And the account's positions and its offline_account_realized row are removed
     And the account no longer appears in ListBrokerAccounts
+
+  @AC-18 @FR-8 @feature-163
+  Scenario: Deregistering an offline account purges its baseline rows
+    Given account "acc-1" holds a baseline AAPL qty 100 @ 150.00 with as_of "2026-07-31T23:59:59Z"
+    When the OFFLINE account "acc-1" is deregistered
+    Then no offline_position_baselines rows remain for account "acc-1"
+    And the deregistration also purges the account's positions and realized P&L
