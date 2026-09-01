@@ -697,6 +697,27 @@ export interface Opportunity {
     provenance: string[];
     /** feature 132 — the (symbol, strategy) pair is on the strategy's deny list; surfaced as an explicit muted row (never conviction=0) */
     muted: boolean;
+    /**
+     * Live-market enrichment (feature 095). 13/14/17 are READ-TIME live-market fields (set in
+     * ListOpportunities after ranking — never in the ranking hot path, FR-8/AC-14); 15/16/18 are
+     * COMPUTE-TIME strategy-derived fields (persisted in the row JSONB, carried by _row_to_opportunity).
+     * 15/16 stay unset until the named `strategy-target-stop-authoring` follow-up populates
+     * StrategyDefinition.signal_params.{target,stop}. All explicit-presence — an unset optional models
+     * "unavailable", never a fabricated 0 (P-03, AC-8/AC-11).
+     */
+    livePrice?: number | undefined;
+    changePct?: number | undefined;
+    targetPrice?: number | undefined;
+    stopPrice?: number | undefined;
+    sparkline: SparklinePoint[];
+    conditions: ConditionEval[];
+}
+/**
+ * One recent daily-bar close for the Decide-surface sparkline (feature 095). Explicit presence — an
+ * unset `close` models a warm-up/absent bar, never NaN/0 (mirrors IndicatorValue; P-03).
+ */
+export interface SparklinePoint {
+    close?: number | undefined;
 }
 /** One evaluated condition leaf from the traced evaluator (feature 083). */
 export interface ConditionEval {
@@ -937,6 +958,7 @@ export declare const ScreenSymbolsResponse: MessageFns<ScreenSymbolsResponse>;
 export declare const RunFundamentalsScanRequest: MessageFns<RunFundamentalsScanRequest>;
 export declare const FundamentalsScanSummary: MessageFns<FundamentalsScanSummary>;
 export declare const Opportunity: MessageFns<Opportunity>;
+export declare const SparklinePoint: MessageFns<SparklinePoint>;
 export declare const ConditionEval: MessageFns<ConditionEval>;
 export declare const SymbolReadiness: MessageFns<SymbolReadiness>;
 export declare const StrategyAnalytics: MessageFns<StrategyAnalytics>;

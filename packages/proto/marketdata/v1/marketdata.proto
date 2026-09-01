@@ -22,6 +22,9 @@ service MarketDataService {
   // Latest quote snapshot
   rpc GetLatestQuote(GetLatestQuoteRequest) returns (Quote);
 
+  // Latest trade price + prior-session daily close for the Decide surface (feature 095).
+  rpc GetLatestPrice(GetLatestPriceRequest) returns (LatestPrice);
+
   // Trigger historical backfill (used by xstockstrat-ingest)
   rpc BackfillBars(BackfillBarsRequest) returns (BackfillBarsResponse);
 
@@ -65,6 +68,19 @@ message Quote {
   double bid_price = 5;
   int32 bid_size = 6;
   string source = 7;
+}
+
+// Latest-trade price + prior-session daily close (feature 095). last_price/prev_close are explicit
+// presence so absence is distinguishable from a fabricated 0 (AC-11 omit-not-fabricate).
+message GetLatestPriceRequest {
+  string symbol = 1;
+}
+message LatestPrice {
+  string symbol = 1;
+  optional double last_price = 2;                     // latest trade
+  google.protobuf.Timestamp last_trade_time = 3;
+  optional double prev_close = 4;                     // prior session daily close
+  string source = 5;                                  // "alpaca"
 }
 
 message StreamBarsRequest {

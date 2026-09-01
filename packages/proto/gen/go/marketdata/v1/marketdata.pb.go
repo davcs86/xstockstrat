@@ -251,6 +251,128 @@ func (x *Quote) GetSource() string {
 	return ""
 }
 
+// Latest-trade price + prior-session daily close (feature 095). last_price/prev_close are explicit
+// presence so absence is distinguishable from a fabricated 0 (AC-11 omit-not-fabricate).
+type GetLatestPriceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetLatestPriceRequest) Reset() {
+	*x = GetLatestPriceRequest{}
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetLatestPriceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetLatestPriceRequest) ProtoMessage() {}
+
+func (x *GetLatestPriceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetLatestPriceRequest.ProtoReflect.Descriptor instead.
+func (*GetLatestPriceRequest) Descriptor() ([]byte, []int) {
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *GetLatestPriceRequest) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
+type LatestPrice struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	LastPrice     *float64               `protobuf:"fixed64,2,opt,name=last_price,json=lastPrice,proto3,oneof" json:"last_price,omitempty"` // latest trade
+	LastTradeTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=last_trade_time,json=lastTradeTime,proto3" json:"last_trade_time,omitempty"`
+	PrevClose     *float64               `protobuf:"fixed64,4,opt,name=prev_close,json=prevClose,proto3,oneof" json:"prev_close,omitempty"` // prior session daily close
+	Source        string                 `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`                                // "alpaca"
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LatestPrice) Reset() {
+	*x = LatestPrice{}
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LatestPrice) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LatestPrice) ProtoMessage() {}
+
+func (x *LatestPrice) ProtoReflect() protoreflect.Message {
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LatestPrice.ProtoReflect.Descriptor instead.
+func (*LatestPrice) Descriptor() ([]byte, []int) {
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *LatestPrice) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
+func (x *LatestPrice) GetLastPrice() float64 {
+	if x != nil && x.LastPrice != nil {
+		return *x.LastPrice
+	}
+	return 0
+}
+
+func (x *LatestPrice) GetLastTradeTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastTradeTime
+	}
+	return nil
+}
+
+func (x *LatestPrice) GetPrevClose() float64 {
+	if x != nil && x.PrevClose != nil {
+		return *x.PrevClose
+	}
+	return 0
+}
+
+func (x *LatestPrice) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
 type StreamBarsRequest struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Symbols []string               `protobuf:"bytes,1,rep,name=symbols,proto3" json:"symbols,omitempty"`
@@ -267,7 +389,7 @@ type StreamBarsRequest struct {
 
 func (x *StreamBarsRequest) Reset() {
 	*x = StreamBarsRequest{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[2]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -279,7 +401,7 @@ func (x *StreamBarsRequest) String() string {
 func (*StreamBarsRequest) ProtoMessage() {}
 
 func (x *StreamBarsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[2]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -292,7 +414,7 @@ func (x *StreamBarsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamBarsRequest.ProtoReflect.Descriptor instead.
 func (*StreamBarsRequest) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{2}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *StreamBarsRequest) GetSymbols() []string {
@@ -340,7 +462,7 @@ type StreamQuotesRequest struct {
 
 func (x *StreamQuotesRequest) Reset() {
 	*x = StreamQuotesRequest{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[3]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -352,7 +474,7 @@ func (x *StreamQuotesRequest) String() string {
 func (*StreamQuotesRequest) ProtoMessage() {}
 
 func (x *StreamQuotesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[3]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -365,7 +487,7 @@ func (x *StreamQuotesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamQuotesRequest.ProtoReflect.Descriptor instead.
 func (*StreamQuotesRequest) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{3}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *StreamQuotesRequest) GetSymbols() []string {
@@ -391,7 +513,7 @@ type GetBarsRequest struct {
 
 func (x *GetBarsRequest) Reset() {
 	*x = GetBarsRequest{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[4]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -403,7 +525,7 @@ func (x *GetBarsRequest) String() string {
 func (*GetBarsRequest) ProtoMessage() {}
 
 func (x *GetBarsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[4]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -416,7 +538,7 @@ func (x *GetBarsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBarsRequest.ProtoReflect.Descriptor instead.
 func (*GetBarsRequest) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{4}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetBarsRequest) GetSymbol() string {
@@ -465,7 +587,7 @@ type GetBarsResponse struct {
 
 func (x *GetBarsResponse) Reset() {
 	*x = GetBarsResponse{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[5]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -477,7 +599,7 @@ func (x *GetBarsResponse) String() string {
 func (*GetBarsResponse) ProtoMessage() {}
 
 func (x *GetBarsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[5]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -490,7 +612,7 @@ func (x *GetBarsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBarsResponse.ProtoReflect.Descriptor instead.
 func (*GetBarsResponse) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{5}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GetBarsResponse) GetBars() []*Bar {
@@ -516,7 +638,7 @@ type GetLatestQuoteRequest struct {
 
 func (x *GetLatestQuoteRequest) Reset() {
 	*x = GetLatestQuoteRequest{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[6]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -528,7 +650,7 @@ func (x *GetLatestQuoteRequest) String() string {
 func (*GetLatestQuoteRequest) ProtoMessage() {}
 
 func (x *GetLatestQuoteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[6]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -541,7 +663,7 @@ func (x *GetLatestQuoteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLatestQuoteRequest.ProtoReflect.Descriptor instead.
 func (*GetLatestQuoteRequest) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{6}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetLatestQuoteRequest) GetSymbol() string {
@@ -567,7 +689,7 @@ type BackfillBarsRequest struct {
 
 func (x *BackfillBarsRequest) Reset() {
 	*x = BackfillBarsRequest{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[7]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -579,7 +701,7 @@ func (x *BackfillBarsRequest) String() string {
 func (*BackfillBarsRequest) ProtoMessage() {}
 
 func (x *BackfillBarsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[7]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -592,7 +714,7 @@ func (x *BackfillBarsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackfillBarsRequest.ProtoReflect.Descriptor instead.
 func (*BackfillBarsRequest) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{7}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *BackfillBarsRequest) GetSymbols() []string {
@@ -642,7 +764,7 @@ type BackfillBarsResponse struct {
 
 func (x *BackfillBarsResponse) Reset() {
 	*x = BackfillBarsResponse{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[8]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -654,7 +776,7 @@ func (x *BackfillBarsResponse) String() string {
 func (*BackfillBarsResponse) ProtoMessage() {}
 
 func (x *BackfillBarsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[8]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -667,7 +789,7 @@ func (x *BackfillBarsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackfillBarsResponse.ProtoReflect.Descriptor instead.
 func (*BackfillBarsResponse) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{8}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *BackfillBarsResponse) GetBarsWritten() int64 {
@@ -703,7 +825,7 @@ type GetDataCoverageRequest struct {
 
 func (x *GetDataCoverageRequest) Reset() {
 	*x = GetDataCoverageRequest{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[9]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -715,7 +837,7 @@ func (x *GetDataCoverageRequest) String() string {
 func (*GetDataCoverageRequest) ProtoMessage() {}
 
 func (x *GetDataCoverageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[9]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -728,7 +850,7 @@ func (x *GetDataCoverageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDataCoverageRequest.ProtoReflect.Descriptor instead.
 func (*GetDataCoverageRequest) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{9}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GetDataCoverageRequest) GetSymbol() string {
@@ -763,7 +885,7 @@ type CoverageRange struct {
 
 func (x *CoverageRange) Reset() {
 	*x = CoverageRange{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[10]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -775,7 +897,7 @@ func (x *CoverageRange) String() string {
 func (*CoverageRange) ProtoMessage() {}
 
 func (x *CoverageRange) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[10]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -788,7 +910,7 @@ func (x *CoverageRange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CoverageRange.ProtoReflect.Descriptor instead.
 func (*CoverageRange) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{10}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CoverageRange) GetStart() *timestamppb.Timestamp {
@@ -829,7 +951,7 @@ type GetDataCoverageResponse struct {
 
 func (x *GetDataCoverageResponse) Reset() {
 	*x = GetDataCoverageResponse{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[11]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -841,7 +963,7 @@ func (x *GetDataCoverageResponse) String() string {
 func (*GetDataCoverageResponse) ProtoMessage() {}
 
 func (x *GetDataCoverageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[11]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -854,7 +976,7 @@ func (x *GetDataCoverageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDataCoverageResponse.ProtoReflect.Descriptor instead.
 func (*GetDataCoverageResponse) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{11}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetDataCoverageResponse) GetSymbol() string {
@@ -916,7 +1038,7 @@ type ListAssetsRequest struct {
 
 func (x *ListAssetsRequest) Reset() {
 	*x = ListAssetsRequest{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[12]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -928,7 +1050,7 @@ func (x *ListAssetsRequest) String() string {
 func (*ListAssetsRequest) ProtoMessage() {}
 
 func (x *ListAssetsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[12]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -941,7 +1063,7 @@ func (x *ListAssetsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAssetsRequest.ProtoReflect.Descriptor instead.
 func (*ListAssetsRequest) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{12}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ListAssetsRequest) GetAssetClass() string {
@@ -967,7 +1089,7 @@ type ListAssetsResponse struct {
 
 func (x *ListAssetsResponse) Reset() {
 	*x = ListAssetsResponse{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[13]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -979,7 +1101,7 @@ func (x *ListAssetsResponse) String() string {
 func (*ListAssetsResponse) ProtoMessage() {}
 
 func (x *ListAssetsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[13]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -992,7 +1114,7 @@ func (x *ListAssetsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAssetsResponse.ProtoReflect.Descriptor instead.
 func (*ListAssetsResponse) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{13}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ListAssetsResponse) GetAssets() []*v1.Asset {
@@ -1013,7 +1135,7 @@ type DeleteBackfilledDataRequest struct {
 
 func (x *DeleteBackfilledDataRequest) Reset() {
 	*x = DeleteBackfilledDataRequest{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[14]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1025,7 +1147,7 @@ func (x *DeleteBackfilledDataRequest) String() string {
 func (*DeleteBackfilledDataRequest) ProtoMessage() {}
 
 func (x *DeleteBackfilledDataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[14]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1038,7 +1160,7 @@ func (x *DeleteBackfilledDataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteBackfilledDataRequest.ProtoReflect.Descriptor instead.
 func (*DeleteBackfilledDataRequest) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{14}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *DeleteBackfilledDataRequest) GetSymbol() string {
@@ -1071,7 +1193,7 @@ type DeleteBackfilledDataResponse struct {
 
 func (x *DeleteBackfilledDataResponse) Reset() {
 	*x = DeleteBackfilledDataResponse{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[15]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1083,7 +1205,7 @@ func (x *DeleteBackfilledDataResponse) String() string {
 func (*DeleteBackfilledDataResponse) ProtoMessage() {}
 
 func (x *DeleteBackfilledDataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[15]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1096,7 +1218,7 @@ func (x *DeleteBackfilledDataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteBackfilledDataResponse.ProtoReflect.Descriptor instead.
 func (*DeleteBackfilledDataResponse) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{15}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *DeleteBackfilledDataResponse) GetRowsDeleted() int64 {
@@ -1148,7 +1270,7 @@ type Fundamentals struct {
 
 func (x *Fundamentals) Reset() {
 	*x = Fundamentals{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[16]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1160,7 +1282,7 @@ func (x *Fundamentals) String() string {
 func (*Fundamentals) ProtoMessage() {}
 
 func (x *Fundamentals) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[16]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1173,7 +1295,7 @@ func (x *Fundamentals) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Fundamentals.ProtoReflect.Descriptor instead.
 func (*Fundamentals) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{16}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *Fundamentals) GetSymbol() string {
@@ -1311,7 +1433,7 @@ type GetFundamentalsRequest struct {
 
 func (x *GetFundamentalsRequest) Reset() {
 	*x = GetFundamentalsRequest{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[17]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1323,7 +1445,7 @@ func (x *GetFundamentalsRequest) String() string {
 func (*GetFundamentalsRequest) ProtoMessage() {}
 
 func (x *GetFundamentalsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[17]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1336,7 +1458,7 @@ func (x *GetFundamentalsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFundamentalsRequest.ProtoReflect.Descriptor instead.
 func (*GetFundamentalsRequest) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{17}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *GetFundamentalsRequest) GetSymbol() string {
@@ -1355,7 +1477,7 @@ type GetFundamentalsResponse struct {
 
 func (x *GetFundamentalsResponse) Reset() {
 	*x = GetFundamentalsResponse{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[18]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1367,7 +1489,7 @@ func (x *GetFundamentalsResponse) String() string {
 func (*GetFundamentalsResponse) ProtoMessage() {}
 
 func (x *GetFundamentalsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[18]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1380,7 +1502,7 @@ func (x *GetFundamentalsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFundamentalsResponse.ProtoReflect.Descriptor instead.
 func (*GetFundamentalsResponse) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{18}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *GetFundamentalsResponse) GetFundamentals() *Fundamentals {
@@ -1399,7 +1521,7 @@ type GetFundamentalsMultiRequest struct {
 
 func (x *GetFundamentalsMultiRequest) Reset() {
 	*x = GetFundamentalsMultiRequest{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[19]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1411,7 +1533,7 @@ func (x *GetFundamentalsMultiRequest) String() string {
 func (*GetFundamentalsMultiRequest) ProtoMessage() {}
 
 func (x *GetFundamentalsMultiRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[19]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1424,7 +1546,7 @@ func (x *GetFundamentalsMultiRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFundamentalsMultiRequest.ProtoReflect.Descriptor instead.
 func (*GetFundamentalsMultiRequest) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{19}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *GetFundamentalsMultiRequest) GetSymbols() []string {
@@ -1443,7 +1565,7 @@ type GetFundamentalsMultiResponse struct {
 
 func (x *GetFundamentalsMultiResponse) Reset() {
 	*x = GetFundamentalsMultiResponse{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[20]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1455,7 +1577,7 @@ func (x *GetFundamentalsMultiResponse) String() string {
 func (*GetFundamentalsMultiResponse) ProtoMessage() {}
 
 func (x *GetFundamentalsMultiResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[20]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1468,7 +1590,7 @@ func (x *GetFundamentalsMultiResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFundamentalsMultiResponse.ProtoReflect.Descriptor instead.
 func (*GetFundamentalsMultiResponse) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{20}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *GetFundamentalsMultiResponse) GetFundamentals() []*Fundamentals {
@@ -1505,7 +1627,19 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\bask_size\x18\x04 \x01(\x05R\aaskSize\x12\x1b\n" +
 	"\tbid_price\x18\x05 \x01(\x01R\bbidPrice\x12\x19\n" +
 	"\bbid_size\x18\x06 \x01(\x05R\abidSize\x12\x16\n" +
-	"\x06source\x18\a \x01(\tR\x06source\"\xf4\x01\n" +
+	"\x06source\x18\a \x01(\tR\x06source\"/\n" +
+	"\x15GetLatestPriceRequest\x12\x16\n" +
+	"\x06symbol\x18\x01 \x01(\tR\x06symbol\"\xe7\x01\n" +
+	"\vLatestPrice\x12\x16\n" +
+	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12\"\n" +
+	"\n" +
+	"last_price\x18\x02 \x01(\x01H\x00R\tlastPrice\x88\x01\x01\x12B\n" +
+	"\x0flast_trade_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\rlastTradeTime\x12\"\n" +
+	"\n" +
+	"prev_close\x18\x04 \x01(\x01H\x01R\tprevClose\x88\x01\x01\x12\x16\n" +
+	"\x06source\x18\x05 \x01(\tR\x06sourceB\r\n" +
+	"\v_last_priceB\r\n" +
+	"\v_prev_close\"\xf4\x01\n" +
 	"\x11StreamBarsRequest\x12\x18\n" +
 	"\asymbols\x18\x01 \x03(\tR\asymbols\x12 \n" +
 	"\ttimeframe\x18\x02 \x01(\tB\x02\x18\x01R\ttimeframe\x12+\n" +
@@ -1595,13 +1729,14 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\x1bGetFundamentalsMultiRequest\x12\x18\n" +
 	"\asymbols\x18\x01 \x03(\tR\asymbols\"k\n" +
 	"\x1cGetFundamentalsMultiResponse\x12K\n" +
-	"\ffundamentals\x18\x01 \x03(\v2'.xstockstrat.marketdata.v1.FundamentalsR\ffundamentals2\x81\t\n" +
+	"\ffundamentals\x18\x01 \x03(\v2'.xstockstrat.marketdata.v1.FundamentalsR\ffundamentals2\xed\t\n" +
 	"\x11MarketDataService\x12\\\n" +
 	"\n" +
 	"StreamBars\x12,.xstockstrat.marketdata.v1.StreamBarsRequest\x1a\x1e.xstockstrat.marketdata.v1.Bar0\x01\x12b\n" +
 	"\fStreamQuotes\x12..xstockstrat.marketdata.v1.StreamQuotesRequest\x1a .xstockstrat.marketdata.v1.Quote0\x01\x12`\n" +
 	"\aGetBars\x12).xstockstrat.marketdata.v1.GetBarsRequest\x1a*.xstockstrat.marketdata.v1.GetBarsResponse\x12d\n" +
-	"\x0eGetLatestQuote\x120.xstockstrat.marketdata.v1.GetLatestQuoteRequest\x1a .xstockstrat.marketdata.v1.Quote\x12o\n" +
+	"\x0eGetLatestQuote\x120.xstockstrat.marketdata.v1.GetLatestQuoteRequest\x1a .xstockstrat.marketdata.v1.Quote\x12j\n" +
+	"\x0eGetLatestPrice\x120.xstockstrat.marketdata.v1.GetLatestPriceRequest\x1a&.xstockstrat.marketdata.v1.LatestPrice\x12o\n" +
 	"\fBackfillBars\x12..xstockstrat.marketdata.v1.BackfillBarsRequest\x1a/.xstockstrat.marketdata.v1.BackfillBarsResponse\x12x\n" +
 	"\x0fGetDataCoverage\x121.xstockstrat.marketdata.v1.GetDataCoverageRequest\x1a2.xstockstrat.marketdata.v1.GetDataCoverageResponse\x12\x87\x01\n" +
 	"\x14DeleteBackfilledData\x126.xstockstrat.marketdata.v1.DeleteBackfilledDataRequest\x1a7.xstockstrat.marketdata.v1.DeleteBackfilledDataResponse\x12i\n" +
@@ -1622,90 +1757,95 @@ func file_marketdata_v1_marketdata_proto_rawDescGZIP() []byte {
 	return file_marketdata_v1_marketdata_proto_rawDescData
 }
 
-var file_marketdata_v1_marketdata_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_marketdata_v1_marketdata_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
 var file_marketdata_v1_marketdata_proto_goTypes = []any{
 	(*Bar)(nil),                          // 0: xstockstrat.marketdata.v1.Bar
 	(*Quote)(nil),                        // 1: xstockstrat.marketdata.v1.Quote
-	(*StreamBarsRequest)(nil),            // 2: xstockstrat.marketdata.v1.StreamBarsRequest
-	(*StreamQuotesRequest)(nil),          // 3: xstockstrat.marketdata.v1.StreamQuotesRequest
-	(*GetBarsRequest)(nil),               // 4: xstockstrat.marketdata.v1.GetBarsRequest
-	(*GetBarsResponse)(nil),              // 5: xstockstrat.marketdata.v1.GetBarsResponse
-	(*GetLatestQuoteRequest)(nil),        // 6: xstockstrat.marketdata.v1.GetLatestQuoteRequest
-	(*BackfillBarsRequest)(nil),          // 7: xstockstrat.marketdata.v1.BackfillBarsRequest
-	(*BackfillBarsResponse)(nil),         // 8: xstockstrat.marketdata.v1.BackfillBarsResponse
-	(*GetDataCoverageRequest)(nil),       // 9: xstockstrat.marketdata.v1.GetDataCoverageRequest
-	(*CoverageRange)(nil),                // 10: xstockstrat.marketdata.v1.CoverageRange
-	(*GetDataCoverageResponse)(nil),      // 11: xstockstrat.marketdata.v1.GetDataCoverageResponse
-	(*ListAssetsRequest)(nil),            // 12: xstockstrat.marketdata.v1.ListAssetsRequest
-	(*ListAssetsResponse)(nil),           // 13: xstockstrat.marketdata.v1.ListAssetsResponse
-	(*DeleteBackfilledDataRequest)(nil),  // 14: xstockstrat.marketdata.v1.DeleteBackfilledDataRequest
-	(*DeleteBackfilledDataResponse)(nil), // 15: xstockstrat.marketdata.v1.DeleteBackfilledDataResponse
-	(*Fundamentals)(nil),                 // 16: xstockstrat.marketdata.v1.Fundamentals
-	(*GetFundamentalsRequest)(nil),       // 17: xstockstrat.marketdata.v1.GetFundamentalsRequest
-	(*GetFundamentalsResponse)(nil),      // 18: xstockstrat.marketdata.v1.GetFundamentalsResponse
-	(*GetFundamentalsMultiRequest)(nil),  // 19: xstockstrat.marketdata.v1.GetFundamentalsMultiRequest
-	(*GetFundamentalsMultiResponse)(nil), // 20: xstockstrat.marketdata.v1.GetFundamentalsMultiResponse
-	nil,                                  // 21: xstockstrat.marketdata.v1.Fundamentals.ExtraMetricsEntry
-	(*timestamppb.Timestamp)(nil),        // 22: google.protobuf.Timestamp
-	(v1.Timeframe)(0),                    // 23: xstockstrat.common.v1.Timeframe
-	(*v1.TimeRange)(nil),                 // 24: xstockstrat.common.v1.TimeRange
-	(*v1.PageRequest)(nil),               // 25: xstockstrat.common.v1.PageRequest
-	(*v1.PageResponse)(nil),              // 26: xstockstrat.common.v1.PageResponse
-	(*v1.Asset)(nil),                     // 27: xstockstrat.common.v1.Asset
+	(*GetLatestPriceRequest)(nil),        // 2: xstockstrat.marketdata.v1.GetLatestPriceRequest
+	(*LatestPrice)(nil),                  // 3: xstockstrat.marketdata.v1.LatestPrice
+	(*StreamBarsRequest)(nil),            // 4: xstockstrat.marketdata.v1.StreamBarsRequest
+	(*StreamQuotesRequest)(nil),          // 5: xstockstrat.marketdata.v1.StreamQuotesRequest
+	(*GetBarsRequest)(nil),               // 6: xstockstrat.marketdata.v1.GetBarsRequest
+	(*GetBarsResponse)(nil),              // 7: xstockstrat.marketdata.v1.GetBarsResponse
+	(*GetLatestQuoteRequest)(nil),        // 8: xstockstrat.marketdata.v1.GetLatestQuoteRequest
+	(*BackfillBarsRequest)(nil),          // 9: xstockstrat.marketdata.v1.BackfillBarsRequest
+	(*BackfillBarsResponse)(nil),         // 10: xstockstrat.marketdata.v1.BackfillBarsResponse
+	(*GetDataCoverageRequest)(nil),       // 11: xstockstrat.marketdata.v1.GetDataCoverageRequest
+	(*CoverageRange)(nil),                // 12: xstockstrat.marketdata.v1.CoverageRange
+	(*GetDataCoverageResponse)(nil),      // 13: xstockstrat.marketdata.v1.GetDataCoverageResponse
+	(*ListAssetsRequest)(nil),            // 14: xstockstrat.marketdata.v1.ListAssetsRequest
+	(*ListAssetsResponse)(nil),           // 15: xstockstrat.marketdata.v1.ListAssetsResponse
+	(*DeleteBackfilledDataRequest)(nil),  // 16: xstockstrat.marketdata.v1.DeleteBackfilledDataRequest
+	(*DeleteBackfilledDataResponse)(nil), // 17: xstockstrat.marketdata.v1.DeleteBackfilledDataResponse
+	(*Fundamentals)(nil),                 // 18: xstockstrat.marketdata.v1.Fundamentals
+	(*GetFundamentalsRequest)(nil),       // 19: xstockstrat.marketdata.v1.GetFundamentalsRequest
+	(*GetFundamentalsResponse)(nil),      // 20: xstockstrat.marketdata.v1.GetFundamentalsResponse
+	(*GetFundamentalsMultiRequest)(nil),  // 21: xstockstrat.marketdata.v1.GetFundamentalsMultiRequest
+	(*GetFundamentalsMultiResponse)(nil), // 22: xstockstrat.marketdata.v1.GetFundamentalsMultiResponse
+	nil,                                  // 23: xstockstrat.marketdata.v1.Fundamentals.ExtraMetricsEntry
+	(*timestamppb.Timestamp)(nil),        // 24: google.protobuf.Timestamp
+	(v1.Timeframe)(0),                    // 25: xstockstrat.common.v1.Timeframe
+	(*v1.TimeRange)(nil),                 // 26: xstockstrat.common.v1.TimeRange
+	(*v1.PageRequest)(nil),               // 27: xstockstrat.common.v1.PageRequest
+	(*v1.PageResponse)(nil),              // 28: xstockstrat.common.v1.PageResponse
+	(*v1.Asset)(nil),                     // 29: xstockstrat.common.v1.Asset
 }
 var file_marketdata_v1_marketdata_proto_depIdxs = []int32{
-	22, // 0: xstockstrat.marketdata.v1.Bar.time:type_name -> google.protobuf.Timestamp
-	23, // 1: xstockstrat.marketdata.v1.Bar.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
-	22, // 2: xstockstrat.marketdata.v1.Quote.time:type_name -> google.protobuf.Timestamp
-	23, // 3: xstockstrat.marketdata.v1.StreamBarsRequest.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
-	24, // 4: xstockstrat.marketdata.v1.GetBarsRequest.range:type_name -> xstockstrat.common.v1.TimeRange
-	25, // 5: xstockstrat.marketdata.v1.GetBarsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
-	23, // 6: xstockstrat.marketdata.v1.GetBarsRequest.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
-	0,  // 7: xstockstrat.marketdata.v1.GetBarsResponse.bars:type_name -> xstockstrat.marketdata.v1.Bar
-	26, // 8: xstockstrat.marketdata.v1.GetBarsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
-	24, // 9: xstockstrat.marketdata.v1.BackfillBarsRequest.range:type_name -> xstockstrat.common.v1.TimeRange
-	23, // 10: xstockstrat.marketdata.v1.BackfillBarsRequest.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
-	23, // 11: xstockstrat.marketdata.v1.GetDataCoverageRequest.timeframe:type_name -> xstockstrat.common.v1.Timeframe
-	24, // 12: xstockstrat.marketdata.v1.GetDataCoverageRequest.range:type_name -> xstockstrat.common.v1.TimeRange
-	22, // 13: xstockstrat.marketdata.v1.CoverageRange.start:type_name -> google.protobuf.Timestamp
-	22, // 14: xstockstrat.marketdata.v1.CoverageRange.end:type_name -> google.protobuf.Timestamp
-	23, // 15: xstockstrat.marketdata.v1.GetDataCoverageResponse.timeframe:type_name -> xstockstrat.common.v1.Timeframe
-	22, // 16: xstockstrat.marketdata.v1.GetDataCoverageResponse.earliest:type_name -> google.protobuf.Timestamp
-	22, // 17: xstockstrat.marketdata.v1.GetDataCoverageResponse.latest:type_name -> google.protobuf.Timestamp
-	10, // 18: xstockstrat.marketdata.v1.GetDataCoverageResponse.covered_ranges:type_name -> xstockstrat.marketdata.v1.CoverageRange
-	24, // 19: xstockstrat.marketdata.v1.GetDataCoverageResponse.gaps:type_name -> xstockstrat.common.v1.TimeRange
-	27, // 20: xstockstrat.marketdata.v1.ListAssetsResponse.assets:type_name -> xstockstrat.common.v1.Asset
-	24, // 21: xstockstrat.marketdata.v1.DeleteBackfilledDataRequest.range:type_name -> xstockstrat.common.v1.TimeRange
-	23, // 22: xstockstrat.marketdata.v1.DeleteBackfilledDataRequest.timeframe:type_name -> xstockstrat.common.v1.Timeframe
-	21, // 23: xstockstrat.marketdata.v1.Fundamentals.extra_metrics:type_name -> xstockstrat.marketdata.v1.Fundamentals.ExtraMetricsEntry
-	22, // 24: xstockstrat.marketdata.v1.Fundamentals.as_of:type_name -> google.protobuf.Timestamp
-	16, // 25: xstockstrat.marketdata.v1.GetFundamentalsResponse.fundamentals:type_name -> xstockstrat.marketdata.v1.Fundamentals
-	16, // 26: xstockstrat.marketdata.v1.GetFundamentalsMultiResponse.fundamentals:type_name -> xstockstrat.marketdata.v1.Fundamentals
-	2,  // 27: xstockstrat.marketdata.v1.MarketDataService.StreamBars:input_type -> xstockstrat.marketdata.v1.StreamBarsRequest
-	3,  // 28: xstockstrat.marketdata.v1.MarketDataService.StreamQuotes:input_type -> xstockstrat.marketdata.v1.StreamQuotesRequest
-	4,  // 29: xstockstrat.marketdata.v1.MarketDataService.GetBars:input_type -> xstockstrat.marketdata.v1.GetBarsRequest
-	6,  // 30: xstockstrat.marketdata.v1.MarketDataService.GetLatestQuote:input_type -> xstockstrat.marketdata.v1.GetLatestQuoteRequest
-	7,  // 31: xstockstrat.marketdata.v1.MarketDataService.BackfillBars:input_type -> xstockstrat.marketdata.v1.BackfillBarsRequest
-	9,  // 32: xstockstrat.marketdata.v1.MarketDataService.GetDataCoverage:input_type -> xstockstrat.marketdata.v1.GetDataCoverageRequest
-	14, // 33: xstockstrat.marketdata.v1.MarketDataService.DeleteBackfilledData:input_type -> xstockstrat.marketdata.v1.DeleteBackfilledDataRequest
-	12, // 34: xstockstrat.marketdata.v1.MarketDataService.ListAssets:input_type -> xstockstrat.marketdata.v1.ListAssetsRequest
-	17, // 35: xstockstrat.marketdata.v1.MarketDataService.GetFundamentals:input_type -> xstockstrat.marketdata.v1.GetFundamentalsRequest
-	19, // 36: xstockstrat.marketdata.v1.MarketDataService.GetFundamentalsMulti:input_type -> xstockstrat.marketdata.v1.GetFundamentalsMultiRequest
-	0,  // 37: xstockstrat.marketdata.v1.MarketDataService.StreamBars:output_type -> xstockstrat.marketdata.v1.Bar
-	1,  // 38: xstockstrat.marketdata.v1.MarketDataService.StreamQuotes:output_type -> xstockstrat.marketdata.v1.Quote
-	5,  // 39: xstockstrat.marketdata.v1.MarketDataService.GetBars:output_type -> xstockstrat.marketdata.v1.GetBarsResponse
-	1,  // 40: xstockstrat.marketdata.v1.MarketDataService.GetLatestQuote:output_type -> xstockstrat.marketdata.v1.Quote
-	8,  // 41: xstockstrat.marketdata.v1.MarketDataService.BackfillBars:output_type -> xstockstrat.marketdata.v1.BackfillBarsResponse
-	11, // 42: xstockstrat.marketdata.v1.MarketDataService.GetDataCoverage:output_type -> xstockstrat.marketdata.v1.GetDataCoverageResponse
-	15, // 43: xstockstrat.marketdata.v1.MarketDataService.DeleteBackfilledData:output_type -> xstockstrat.marketdata.v1.DeleteBackfilledDataResponse
-	13, // 44: xstockstrat.marketdata.v1.MarketDataService.ListAssets:output_type -> xstockstrat.marketdata.v1.ListAssetsResponse
-	18, // 45: xstockstrat.marketdata.v1.MarketDataService.GetFundamentals:output_type -> xstockstrat.marketdata.v1.GetFundamentalsResponse
-	20, // 46: xstockstrat.marketdata.v1.MarketDataService.GetFundamentalsMulti:output_type -> xstockstrat.marketdata.v1.GetFundamentalsMultiResponse
-	37, // [37:47] is the sub-list for method output_type
-	27, // [27:37] is the sub-list for method input_type
-	27, // [27:27] is the sub-list for extension type_name
-	27, // [27:27] is the sub-list for extension extendee
-	0,  // [0:27] is the sub-list for field type_name
+	24, // 0: xstockstrat.marketdata.v1.Bar.time:type_name -> google.protobuf.Timestamp
+	25, // 1: xstockstrat.marketdata.v1.Bar.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
+	24, // 2: xstockstrat.marketdata.v1.Quote.time:type_name -> google.protobuf.Timestamp
+	24, // 3: xstockstrat.marketdata.v1.LatestPrice.last_trade_time:type_name -> google.protobuf.Timestamp
+	25, // 4: xstockstrat.marketdata.v1.StreamBarsRequest.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
+	26, // 5: xstockstrat.marketdata.v1.GetBarsRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	27, // 6: xstockstrat.marketdata.v1.GetBarsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
+	25, // 7: xstockstrat.marketdata.v1.GetBarsRequest.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
+	0,  // 8: xstockstrat.marketdata.v1.GetBarsResponse.bars:type_name -> xstockstrat.marketdata.v1.Bar
+	28, // 9: xstockstrat.marketdata.v1.GetBarsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
+	26, // 10: xstockstrat.marketdata.v1.BackfillBarsRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	25, // 11: xstockstrat.marketdata.v1.BackfillBarsRequest.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
+	25, // 12: xstockstrat.marketdata.v1.GetDataCoverageRequest.timeframe:type_name -> xstockstrat.common.v1.Timeframe
+	26, // 13: xstockstrat.marketdata.v1.GetDataCoverageRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	24, // 14: xstockstrat.marketdata.v1.CoverageRange.start:type_name -> google.protobuf.Timestamp
+	24, // 15: xstockstrat.marketdata.v1.CoverageRange.end:type_name -> google.protobuf.Timestamp
+	25, // 16: xstockstrat.marketdata.v1.GetDataCoverageResponse.timeframe:type_name -> xstockstrat.common.v1.Timeframe
+	24, // 17: xstockstrat.marketdata.v1.GetDataCoverageResponse.earliest:type_name -> google.protobuf.Timestamp
+	24, // 18: xstockstrat.marketdata.v1.GetDataCoverageResponse.latest:type_name -> google.protobuf.Timestamp
+	12, // 19: xstockstrat.marketdata.v1.GetDataCoverageResponse.covered_ranges:type_name -> xstockstrat.marketdata.v1.CoverageRange
+	26, // 20: xstockstrat.marketdata.v1.GetDataCoverageResponse.gaps:type_name -> xstockstrat.common.v1.TimeRange
+	29, // 21: xstockstrat.marketdata.v1.ListAssetsResponse.assets:type_name -> xstockstrat.common.v1.Asset
+	26, // 22: xstockstrat.marketdata.v1.DeleteBackfilledDataRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	25, // 23: xstockstrat.marketdata.v1.DeleteBackfilledDataRequest.timeframe:type_name -> xstockstrat.common.v1.Timeframe
+	23, // 24: xstockstrat.marketdata.v1.Fundamentals.extra_metrics:type_name -> xstockstrat.marketdata.v1.Fundamentals.ExtraMetricsEntry
+	24, // 25: xstockstrat.marketdata.v1.Fundamentals.as_of:type_name -> google.protobuf.Timestamp
+	18, // 26: xstockstrat.marketdata.v1.GetFundamentalsResponse.fundamentals:type_name -> xstockstrat.marketdata.v1.Fundamentals
+	18, // 27: xstockstrat.marketdata.v1.GetFundamentalsMultiResponse.fundamentals:type_name -> xstockstrat.marketdata.v1.Fundamentals
+	4,  // 28: xstockstrat.marketdata.v1.MarketDataService.StreamBars:input_type -> xstockstrat.marketdata.v1.StreamBarsRequest
+	5,  // 29: xstockstrat.marketdata.v1.MarketDataService.StreamQuotes:input_type -> xstockstrat.marketdata.v1.StreamQuotesRequest
+	6,  // 30: xstockstrat.marketdata.v1.MarketDataService.GetBars:input_type -> xstockstrat.marketdata.v1.GetBarsRequest
+	8,  // 31: xstockstrat.marketdata.v1.MarketDataService.GetLatestQuote:input_type -> xstockstrat.marketdata.v1.GetLatestQuoteRequest
+	2,  // 32: xstockstrat.marketdata.v1.MarketDataService.GetLatestPrice:input_type -> xstockstrat.marketdata.v1.GetLatestPriceRequest
+	9,  // 33: xstockstrat.marketdata.v1.MarketDataService.BackfillBars:input_type -> xstockstrat.marketdata.v1.BackfillBarsRequest
+	11, // 34: xstockstrat.marketdata.v1.MarketDataService.GetDataCoverage:input_type -> xstockstrat.marketdata.v1.GetDataCoverageRequest
+	16, // 35: xstockstrat.marketdata.v1.MarketDataService.DeleteBackfilledData:input_type -> xstockstrat.marketdata.v1.DeleteBackfilledDataRequest
+	14, // 36: xstockstrat.marketdata.v1.MarketDataService.ListAssets:input_type -> xstockstrat.marketdata.v1.ListAssetsRequest
+	19, // 37: xstockstrat.marketdata.v1.MarketDataService.GetFundamentals:input_type -> xstockstrat.marketdata.v1.GetFundamentalsRequest
+	21, // 38: xstockstrat.marketdata.v1.MarketDataService.GetFundamentalsMulti:input_type -> xstockstrat.marketdata.v1.GetFundamentalsMultiRequest
+	0,  // 39: xstockstrat.marketdata.v1.MarketDataService.StreamBars:output_type -> xstockstrat.marketdata.v1.Bar
+	1,  // 40: xstockstrat.marketdata.v1.MarketDataService.StreamQuotes:output_type -> xstockstrat.marketdata.v1.Quote
+	7,  // 41: xstockstrat.marketdata.v1.MarketDataService.GetBars:output_type -> xstockstrat.marketdata.v1.GetBarsResponse
+	1,  // 42: xstockstrat.marketdata.v1.MarketDataService.GetLatestQuote:output_type -> xstockstrat.marketdata.v1.Quote
+	3,  // 43: xstockstrat.marketdata.v1.MarketDataService.GetLatestPrice:output_type -> xstockstrat.marketdata.v1.LatestPrice
+	10, // 44: xstockstrat.marketdata.v1.MarketDataService.BackfillBars:output_type -> xstockstrat.marketdata.v1.BackfillBarsResponse
+	13, // 45: xstockstrat.marketdata.v1.MarketDataService.GetDataCoverage:output_type -> xstockstrat.marketdata.v1.GetDataCoverageResponse
+	17, // 46: xstockstrat.marketdata.v1.MarketDataService.DeleteBackfilledData:output_type -> xstockstrat.marketdata.v1.DeleteBackfilledDataResponse
+	15, // 47: xstockstrat.marketdata.v1.MarketDataService.ListAssets:output_type -> xstockstrat.marketdata.v1.ListAssetsResponse
+	20, // 48: xstockstrat.marketdata.v1.MarketDataService.GetFundamentals:output_type -> xstockstrat.marketdata.v1.GetFundamentalsResponse
+	22, // 49: xstockstrat.marketdata.v1.MarketDataService.GetFundamentalsMulti:output_type -> xstockstrat.marketdata.v1.GetFundamentalsMultiResponse
+	39, // [39:50] is the sub-list for method output_type
+	28, // [28:39] is the sub-list for method input_type
+	28, // [28:28] is the sub-list for extension type_name
+	28, // [28:28] is the sub-list for extension extendee
+	0,  // [0:28] is the sub-list for field type_name
 }
 
 func init() { file_marketdata_v1_marketdata_proto_init() }
@@ -1713,13 +1853,14 @@ func file_marketdata_v1_marketdata_proto_init() {
 	if File_marketdata_v1_marketdata_proto != nil {
 		return
 	}
+	file_marketdata_v1_marketdata_proto_msgTypes[3].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_marketdata_v1_marketdata_proto_rawDesc), len(file_marketdata_v1_marketdata_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   22,
+			NumMessages:   24,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

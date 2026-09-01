@@ -6,7 +6,7 @@
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ScreenResult_CriterionRawValuesEntry = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.EquityPoint = exports.PortfolioCapitalSkip = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.FactorType = exports.SnapshotEventType = exports.OpportunityAction = exports.ReadinessRule = exports.ConditionState = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.FillModel = exports.SizingMode = exports.BacktestStatus = exports.protobufPackage = void 0;
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.GetAttributionResponse = exports.SourceAttribution = exports.GetAttributionRequest = exports.QueryPnLPatternsResponse = exports.QueryPnLPatternsRequest = exports.PnLPatternFactor = exports.OrderSnapshot_IndicatorValuesEntry = exports.OrderSnapshot = exports.SignalEntry = exports.IndicatorValue = exports.NamedSeries = exports.ComponentSeries = exports.GetIndicatorSeriesResponse = exports.GetIndicatorSeriesRequest = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionPassedEntry = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.GetAttributionResponse = exports.SourceAttribution = exports.GetAttributionRequest = exports.QueryPnLPatternsResponse = exports.QueryPnLPatternsRequest = exports.PnLPatternFactor = exports.OrderSnapshot_IndicatorValuesEntry = exports.OrderSnapshot = exports.SignalEntry = exports.IndicatorValue = exports.NamedSeries = exports.ComponentSeries = exports.GetIndicatorSeriesResponse = exports.GetIndicatorSeriesRequest = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = exports.SparklinePoint = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionPassedEntry = void 0;
 exports.backtestStatusFromJSON = backtestStatusFromJSON;
 exports.backtestStatusToJSON = backtestStatusToJSON;
 exports.backtestStatusToNumber = backtestStatusToNumber;
@@ -6217,6 +6217,12 @@ function createBaseOpportunity() {
         opportunityKey: "",
         provenance: [],
         muted: false,
+        livePrice: undefined,
+        changePct: undefined,
+        targetPrice: undefined,
+        stopPrice: undefined,
+        sparkline: [],
+        conditions: [],
     };
 }
 exports.Opportunity = {
@@ -6256,6 +6262,24 @@ exports.Opportunity = {
         }
         if (message.muted !== false) {
             writer.uint32(96).bool(message.muted);
+        }
+        if (message.livePrice !== undefined) {
+            writer.uint32(105).double(message.livePrice);
+        }
+        if (message.changePct !== undefined) {
+            writer.uint32(113).double(message.changePct);
+        }
+        if (message.targetPrice !== undefined) {
+            writer.uint32(121).double(message.targetPrice);
+        }
+        if (message.stopPrice !== undefined) {
+            writer.uint32(129).double(message.stopPrice);
+        }
+        for (const v of message.sparkline) {
+            exports.SparklinePoint.encode(v, writer.uint32(138).fork()).join();
+        }
+        for (const v of message.conditions) {
+            exports.ConditionEval.encode(v, writer.uint32(146).fork()).join();
         }
         return writer;
     },
@@ -6350,6 +6374,48 @@ exports.Opportunity = {
                     message.muted = reader.bool();
                     continue;
                 }
+                case 13: {
+                    if (tag !== 105) {
+                        break;
+                    }
+                    message.livePrice = reader.double();
+                    continue;
+                }
+                case 14: {
+                    if (tag !== 113) {
+                        break;
+                    }
+                    message.changePct = reader.double();
+                    continue;
+                }
+                case 15: {
+                    if (tag !== 121) {
+                        break;
+                    }
+                    message.targetPrice = reader.double();
+                    continue;
+                }
+                case 16: {
+                    if (tag !== 129) {
+                        break;
+                    }
+                    message.stopPrice = reader.double();
+                    continue;
+                }
+                case 17: {
+                    if (tag !== 138) {
+                        break;
+                    }
+                    message.sparkline.push(exports.SparklinePoint.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 18: {
+                    if (tag !== 146) {
+                        break;
+                    }
+                    message.conditions.push(exports.ConditionEval.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -6396,6 +6462,32 @@ exports.Opportunity = {
                 ? object.provenance.map((e) => globalThis.String(e))
                 : [],
             muted: isSet(object.muted) ? globalThis.Boolean(object.muted) : false,
+            livePrice: isSet(object.livePrice)
+                ? globalThis.Number(object.livePrice)
+                : isSet(object.live_price)
+                    ? globalThis.Number(object.live_price)
+                    : undefined,
+            changePct: isSet(object.changePct)
+                ? globalThis.Number(object.changePct)
+                : isSet(object.change_pct)
+                    ? globalThis.Number(object.change_pct)
+                    : undefined,
+            targetPrice: isSet(object.targetPrice)
+                ? globalThis.Number(object.targetPrice)
+                : isSet(object.target_price)
+                    ? globalThis.Number(object.target_price)
+                    : undefined,
+            stopPrice: isSet(object.stopPrice)
+                ? globalThis.Number(object.stopPrice)
+                : isSet(object.stop_price)
+                    ? globalThis.Number(object.stop_price)
+                    : undefined,
+            sparkline: globalThis.Array.isArray(object?.sparkline)
+                ? object.sparkline.map((e) => exports.SparklinePoint.fromJSON(e))
+                : [],
+            conditions: globalThis.Array.isArray(object?.conditions)
+                ? object.conditions.map((e) => exports.ConditionEval.fromJSON(e))
+                : [],
         };
     },
     toJSON(message) {
@@ -6436,6 +6528,24 @@ exports.Opportunity = {
         if (message.muted !== false) {
             obj.muted = message.muted;
         }
+        if (message.livePrice !== undefined) {
+            obj.livePrice = message.livePrice;
+        }
+        if (message.changePct !== undefined) {
+            obj.changePct = message.changePct;
+        }
+        if (message.targetPrice !== undefined) {
+            obj.targetPrice = message.targetPrice;
+        }
+        if (message.stopPrice !== undefined) {
+            obj.stopPrice = message.stopPrice;
+        }
+        if (message.sparkline?.length) {
+            obj.sparkline = message.sparkline.map((e) => exports.SparklinePoint.toJSON(e));
+        }
+        if (message.conditions?.length) {
+            obj.conditions = message.conditions.map((e) => exports.ConditionEval.toJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -6455,6 +6565,63 @@ exports.Opportunity = {
         message.opportunityKey = object.opportunityKey ?? "";
         message.provenance = object.provenance?.map((e) => e) || [];
         message.muted = object.muted ?? false;
+        message.livePrice = object.livePrice ?? undefined;
+        message.changePct = object.changePct ?? undefined;
+        message.targetPrice = object.targetPrice ?? undefined;
+        message.stopPrice = object.stopPrice ?? undefined;
+        message.sparkline = object.sparkline?.map((e) => exports.SparklinePoint.fromPartial(e)) || [];
+        message.conditions = object.conditions?.map((e) => exports.ConditionEval.fromPartial(e)) || [];
+        return message;
+    },
+};
+function createBaseSparklinePoint() {
+    return { close: undefined };
+}
+exports.SparklinePoint = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.close !== undefined) {
+            writer.uint32(9).double(message.close);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSparklinePoint();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 9) {
+                        break;
+                    }
+                    message.close = reader.double();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { close: isSet(object.close) ? globalThis.Number(object.close) : undefined };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.close !== undefined) {
+            obj.close = message.close;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SparklinePoint.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSparklinePoint();
+        message.close = object.close ?? undefined;
         return message;
     },
 };

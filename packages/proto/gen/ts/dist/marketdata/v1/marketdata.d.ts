@@ -31,6 +31,23 @@ export interface Quote {
     bidSize: number;
     source: string;
 }
+/**
+ * Latest-trade price + prior-session daily close (feature 095). last_price/prev_close are explicit
+ * presence so absence is distinguishable from a fabricated 0 (AC-11 omit-not-fabricate).
+ */
+export interface GetLatestPriceRequest {
+    symbol: string;
+}
+export interface LatestPrice {
+    symbol: string;
+    /** latest trade */
+    lastPrice?: number | undefined;
+    lastTradeTime?: Date | undefined;
+    /** prior session daily close */
+    prevClose?: number | undefined;
+    /** "alpaca" */
+    source: string;
+}
 export interface StreamBarsRequest {
     symbols: string[];
     /**
@@ -186,6 +203,8 @@ export interface GetFundamentalsMultiResponse {
 }
 export declare const Bar: MessageFns<Bar>;
 export declare const Quote: MessageFns<Quote>;
+export declare const GetLatestPriceRequest: MessageFns<GetLatestPriceRequest>;
+export declare const LatestPrice: MessageFns<LatestPrice>;
 export declare const StreamBarsRequest: MessageFns<StreamBarsRequest>;
 export declare const StreamQuotesRequest: MessageFns<StreamQuotesRequest>;
 export declare const GetBarsRequest: MessageFns<GetBarsRequest>;
@@ -251,6 +270,16 @@ export declare const MarketDataServiceService: {
         readonly requestDeserialize: (value: Buffer) => GetLatestQuoteRequest;
         readonly responseSerialize: (value: Quote) => Buffer;
         readonly responseDeserialize: (value: Buffer) => Quote;
+    };
+    /** Latest trade price + prior-session daily close for the Decide surface (feature 095). */
+    readonly getLatestPrice: {
+        readonly path: "/xstockstrat.marketdata.v1.MarketDataService/GetLatestPrice";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetLatestPriceRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetLatestPriceRequest;
+        readonly responseSerialize: (value: LatestPrice) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => LatestPrice;
     };
     /** Trigger historical backfill (used by xstockstrat-ingest) */
     readonly backfillBars: {
@@ -322,6 +351,8 @@ export interface MarketDataServiceServer extends UntypedServiceImplementation {
     getBars: handleUnaryCall<GetBarsRequest, GetBarsResponse>;
     /** Latest quote snapshot */
     getLatestQuote: handleUnaryCall<GetLatestQuoteRequest, Quote>;
+    /** Latest trade price + prior-session daily close for the Decide surface (feature 095). */
+    getLatestPrice: handleUnaryCall<GetLatestPriceRequest, LatestPrice>;
     /** Trigger historical backfill (used by xstockstrat-ingest) */
     backfillBars: handleUnaryCall<BackfillBarsRequest, BackfillBarsResponse>;
     /** Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe */
@@ -350,6 +381,10 @@ export interface MarketDataServiceClient extends Client {
     getLatestQuote(request: GetLatestQuoteRequest, callback: (error: ServiceError | null, response: Quote) => void): ClientUnaryCall;
     getLatestQuote(request: GetLatestQuoteRequest, metadata: Metadata, callback: (error: ServiceError | null, response: Quote) => void): ClientUnaryCall;
     getLatestQuote(request: GetLatestQuoteRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: Quote) => void): ClientUnaryCall;
+    /** Latest trade price + prior-session daily close for the Decide surface (feature 095). */
+    getLatestPrice(request: GetLatestPriceRequest, callback: (error: ServiceError | null, response: LatestPrice) => void): ClientUnaryCall;
+    getLatestPrice(request: GetLatestPriceRequest, metadata: Metadata, callback: (error: ServiceError | null, response: LatestPrice) => void): ClientUnaryCall;
+    getLatestPrice(request: GetLatestPriceRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: LatestPrice) => void): ClientUnaryCall;
     /** Trigger historical backfill (used by xstockstrat-ingest) */
     backfillBars(request: BackfillBarsRequest, callback: (error: ServiceError | null, response: BackfillBarsResponse) => void): ClientUnaryCall;
     backfillBars(request: BackfillBarsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: BackfillBarsResponse) => void): ClientUnaryCall;

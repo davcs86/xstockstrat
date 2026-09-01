@@ -45,6 +45,9 @@ const (
 	// MarketDataServiceGetLatestQuoteProcedure is the fully-qualified name of the MarketDataService's
 	// GetLatestQuote RPC.
 	MarketDataServiceGetLatestQuoteProcedure = "/xstockstrat.marketdata.v1.MarketDataService/GetLatestQuote"
+	// MarketDataServiceGetLatestPriceProcedure is the fully-qualified name of the MarketDataService's
+	// GetLatestPrice RPC.
+	MarketDataServiceGetLatestPriceProcedure = "/xstockstrat.marketdata.v1.MarketDataService/GetLatestPrice"
 	// MarketDataServiceBackfillBarsProcedure is the fully-qualified name of the MarketDataService's
 	// BackfillBars RPC.
 	MarketDataServiceBackfillBarsProcedure = "/xstockstrat.marketdata.v1.MarketDataService/BackfillBars"
@@ -75,6 +78,8 @@ type MarketDataServiceClient interface {
 	GetBars(context.Context, *connect.Request[v1.GetBarsRequest]) (*connect.Response[v1.GetBarsResponse], error)
 	// Latest quote snapshot
 	GetLatestQuote(context.Context, *connect.Request[v1.GetLatestQuoteRequest]) (*connect.Response[v1.Quote], error)
+	// Latest trade price + prior-session daily close for the Decide surface (feature 095).
+	GetLatestPrice(context.Context, *connect.Request[v1.GetLatestPriceRequest]) (*connect.Response[v1.LatestPrice], error)
 	// Trigger historical backfill (used by xstockstrat-ingest)
 	BackfillBars(context.Context, *connect.Request[v1.BackfillBarsRequest]) (*connect.Response[v1.BackfillBarsResponse], error)
 	// Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe
@@ -125,6 +130,12 @@ func NewMarketDataServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(marketDataServiceMethods.ByName("GetLatestQuote")),
 			connect.WithClientOptions(opts...),
 		),
+		getLatestPrice: connect.NewClient[v1.GetLatestPriceRequest, v1.LatestPrice](
+			httpClient,
+			baseURL+MarketDataServiceGetLatestPriceProcedure,
+			connect.WithSchema(marketDataServiceMethods.ByName("GetLatestPrice")),
+			connect.WithClientOptions(opts...),
+		),
 		backfillBars: connect.NewClient[v1.BackfillBarsRequest, v1.BackfillBarsResponse](
 			httpClient,
 			baseURL+MarketDataServiceBackfillBarsProcedure,
@@ -170,6 +181,7 @@ type marketDataServiceClient struct {
 	streamQuotes         *connect.Client[v1.StreamQuotesRequest, v1.Quote]
 	getBars              *connect.Client[v1.GetBarsRequest, v1.GetBarsResponse]
 	getLatestQuote       *connect.Client[v1.GetLatestQuoteRequest, v1.Quote]
+	getLatestPrice       *connect.Client[v1.GetLatestPriceRequest, v1.LatestPrice]
 	backfillBars         *connect.Client[v1.BackfillBarsRequest, v1.BackfillBarsResponse]
 	getDataCoverage      *connect.Client[v1.GetDataCoverageRequest, v1.GetDataCoverageResponse]
 	deleteBackfilledData *connect.Client[v1.DeleteBackfilledDataRequest, v1.DeleteBackfilledDataResponse]
@@ -196,6 +208,11 @@ func (c *marketDataServiceClient) GetBars(ctx context.Context, req *connect.Requ
 // GetLatestQuote calls xstockstrat.marketdata.v1.MarketDataService.GetLatestQuote.
 func (c *marketDataServiceClient) GetLatestQuote(ctx context.Context, req *connect.Request[v1.GetLatestQuoteRequest]) (*connect.Response[v1.Quote], error) {
 	return c.getLatestQuote.CallUnary(ctx, req)
+}
+
+// GetLatestPrice calls xstockstrat.marketdata.v1.MarketDataService.GetLatestPrice.
+func (c *marketDataServiceClient) GetLatestPrice(ctx context.Context, req *connect.Request[v1.GetLatestPriceRequest]) (*connect.Response[v1.LatestPrice], error) {
+	return c.getLatestPrice.CallUnary(ctx, req)
 }
 
 // BackfillBars calls xstockstrat.marketdata.v1.MarketDataService.BackfillBars.
@@ -239,6 +256,8 @@ type MarketDataServiceHandler interface {
 	GetBars(context.Context, *connect.Request[v1.GetBarsRequest]) (*connect.Response[v1.GetBarsResponse], error)
 	// Latest quote snapshot
 	GetLatestQuote(context.Context, *connect.Request[v1.GetLatestQuoteRequest]) (*connect.Response[v1.Quote], error)
+	// Latest trade price + prior-session daily close for the Decide surface (feature 095).
+	GetLatestPrice(context.Context, *connect.Request[v1.GetLatestPriceRequest]) (*connect.Response[v1.LatestPrice], error)
 	// Trigger historical backfill (used by xstockstrat-ingest)
 	BackfillBars(context.Context, *connect.Request[v1.BackfillBarsRequest]) (*connect.Response[v1.BackfillBarsResponse], error)
 	// Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe
@@ -282,6 +301,12 @@ func NewMarketDataServiceHandler(svc MarketDataServiceHandler, opts ...connect.H
 		MarketDataServiceGetLatestQuoteProcedure,
 		svc.GetLatestQuote,
 		connect.WithSchema(marketDataServiceMethods.ByName("GetLatestQuote")),
+		connect.WithHandlerOptions(opts...),
+	)
+	marketDataServiceGetLatestPriceHandler := connect.NewUnaryHandler(
+		MarketDataServiceGetLatestPriceProcedure,
+		svc.GetLatestPrice,
+		connect.WithSchema(marketDataServiceMethods.ByName("GetLatestPrice")),
 		connect.WithHandlerOptions(opts...),
 	)
 	marketDataServiceBackfillBarsHandler := connect.NewUnaryHandler(
@@ -330,6 +355,8 @@ func NewMarketDataServiceHandler(svc MarketDataServiceHandler, opts ...connect.H
 			marketDataServiceGetBarsHandler.ServeHTTP(w, r)
 		case MarketDataServiceGetLatestQuoteProcedure:
 			marketDataServiceGetLatestQuoteHandler.ServeHTTP(w, r)
+		case MarketDataServiceGetLatestPriceProcedure:
+			marketDataServiceGetLatestPriceHandler.ServeHTTP(w, r)
 		case MarketDataServiceBackfillBarsProcedure:
 			marketDataServiceBackfillBarsHandler.ServeHTTP(w, r)
 		case MarketDataServiceGetDataCoverageProcedure:
@@ -365,6 +392,10 @@ func (UnimplementedMarketDataServiceHandler) GetBars(context.Context, *connect.R
 
 func (UnimplementedMarketDataServiceHandler) GetLatestQuote(context.Context, *connect.Request[v1.GetLatestQuoteRequest]) (*connect.Response[v1.Quote], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.GetLatestQuote is not implemented"))
+}
+
+func (UnimplementedMarketDataServiceHandler) GetLatestPrice(context.Context, *connect.Request[v1.GetLatestPriceRequest]) (*connect.Response[v1.LatestPrice], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.GetLatestPrice is not implemented"))
 }
 
 func (UnimplementedMarketDataServiceHandler) BackfillBars(context.Context, *connect.Request[v1.BackfillBarsRequest]) (*connect.Response[v1.BackfillBarsResponse], error) {

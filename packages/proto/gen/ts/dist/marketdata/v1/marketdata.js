@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: marketdata/v1/marketdata.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MarketDataServiceClient = exports.MarketDataServiceService = exports.GetFundamentalsMultiResponse = exports.GetFundamentalsMultiRequest = exports.GetFundamentalsResponse = exports.GetFundamentalsRequest = exports.Fundamentals_ExtraMetricsEntry = exports.Fundamentals = exports.DeleteBackfilledDataResponse = exports.DeleteBackfilledDataRequest = exports.ListAssetsResponse = exports.ListAssetsRequest = exports.GetDataCoverageResponse = exports.CoverageRange = exports.GetDataCoverageRequest = exports.BackfillBarsResponse = exports.BackfillBarsRequest = exports.GetLatestQuoteRequest = exports.GetBarsResponse = exports.GetBarsRequest = exports.StreamQuotesRequest = exports.StreamBarsRequest = exports.Quote = exports.Bar = exports.protobufPackage = void 0;
+exports.MarketDataServiceClient = exports.MarketDataServiceService = exports.GetFundamentalsMultiResponse = exports.GetFundamentalsMultiRequest = exports.GetFundamentalsResponse = exports.GetFundamentalsRequest = exports.Fundamentals_ExtraMetricsEntry = exports.Fundamentals = exports.DeleteBackfilledDataResponse = exports.DeleteBackfilledDataRequest = exports.ListAssetsResponse = exports.ListAssetsRequest = exports.GetDataCoverageResponse = exports.CoverageRange = exports.GetDataCoverageRequest = exports.BackfillBarsResponse = exports.BackfillBarsRequest = exports.GetLatestQuoteRequest = exports.GetBarsResponse = exports.GetBarsRequest = exports.StreamQuotesRequest = exports.StreamBarsRequest = exports.LatestPrice = exports.GetLatestPriceRequest = exports.Quote = exports.Bar = exports.protobufPackage = void 0;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
@@ -406,6 +406,182 @@ exports.Quote = {
         message.askSize = object.askSize ?? 0;
         message.bidPrice = object.bidPrice ?? 0;
         message.bidSize = object.bidSize ?? 0;
+        message.source = object.source ?? "";
+        return message;
+    },
+};
+function createBaseGetLatestPriceRequest() {
+    return { symbol: "" };
+}
+exports.GetLatestPriceRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetLatestPriceRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "" };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetLatestPriceRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetLatestPriceRequest();
+        message.symbol = object.symbol ?? "";
+        return message;
+    },
+};
+function createBaseLatestPrice() {
+    return { symbol: "", lastPrice: undefined, lastTradeTime: undefined, prevClose: undefined, source: "" };
+}
+exports.LatestPrice = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        if (message.lastPrice !== undefined) {
+            writer.uint32(17).double(message.lastPrice);
+        }
+        if (message.lastTradeTime !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.lastTradeTime), writer.uint32(26).fork()).join();
+        }
+        if (message.prevClose !== undefined) {
+            writer.uint32(33).double(message.prevClose);
+        }
+        if (message.source !== "") {
+            writer.uint32(42).string(message.source);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseLatestPrice();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 17) {
+                        break;
+                    }
+                    message.lastPrice = reader.double();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.lastTradeTime = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 33) {
+                        break;
+                    }
+                    message.prevClose = reader.double();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.source = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            lastPrice: isSet(object.lastPrice)
+                ? globalThis.Number(object.lastPrice)
+                : isSet(object.last_price)
+                    ? globalThis.Number(object.last_price)
+                    : undefined,
+            lastTradeTime: isSet(object.lastTradeTime)
+                ? fromJsonTimestamp(object.lastTradeTime)
+                : isSet(object.last_trade_time)
+                    ? fromJsonTimestamp(object.last_trade_time)
+                    : undefined,
+            prevClose: isSet(object.prevClose)
+                ? globalThis.Number(object.prevClose)
+                : isSet(object.prev_close)
+                    ? globalThis.Number(object.prev_close)
+                    : undefined,
+            source: isSet(object.source) ? globalThis.String(object.source) : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.lastPrice !== undefined) {
+            obj.lastPrice = message.lastPrice;
+        }
+        if (message.lastTradeTime !== undefined) {
+            obj.lastTradeTime = message.lastTradeTime.toISOString();
+        }
+        if (message.prevClose !== undefined) {
+            obj.prevClose = message.prevClose;
+        }
+        if (message.source !== "") {
+            obj.source = message.source;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.LatestPrice.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseLatestPrice();
+        message.symbol = object.symbol ?? "";
+        message.lastPrice = object.lastPrice ?? undefined;
+        message.lastTradeTime = object.lastTradeTime ?? undefined;
+        message.prevClose = object.prevClose ?? undefined;
         message.source = object.source ?? "";
         return message;
     },
@@ -2373,6 +2549,16 @@ exports.MarketDataServiceService = {
         requestDeserialize: (value) => exports.GetLatestQuoteRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.Quote.encode(value).finish()),
         responseDeserialize: (value) => exports.Quote.decode(value),
+    },
+    /** Latest trade price + prior-session daily close for the Decide surface (feature 095). */
+    getLatestPrice: {
+        path: "/xstockstrat.marketdata.v1.MarketDataService/GetLatestPrice",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.GetLatestPriceRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.GetLatestPriceRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.LatestPrice.encode(value).finish()),
+        responseDeserialize: (value) => exports.LatestPrice.decode(value),
     },
     /** Trigger historical backfill (used by xstockstrat-ingest) */
     backfillBars: {

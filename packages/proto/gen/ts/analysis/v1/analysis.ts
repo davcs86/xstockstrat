@@ -1593,6 +1593,28 @@ export interface Opportunity {
   provenance: string[];
   /** feature 132 — the (symbol, strategy) pair is on the strategy's deny list; surfaced as an explicit muted row (never conviction=0) */
   muted: boolean;
+  /**
+   * Live-market enrichment (feature 095). 13/14/17 are READ-TIME live-market fields (set in
+   * ListOpportunities after ranking — never in the ranking hot path, FR-8/AC-14); 15/16/18 are
+   * COMPUTE-TIME strategy-derived fields (persisted in the row JSONB, carried by _row_to_opportunity).
+   * 15/16 stay unset until the named `strategy-target-stop-authoring` follow-up populates
+   * StrategyDefinition.signal_params.{target,stop}. All explicit-presence — an unset optional models
+   * "unavailable", never a fabricated 0 (P-03, AC-8/AC-11).
+   */
+  livePrice?: number | undefined;
+  changePct?: number | undefined;
+  targetPrice?: number | undefined;
+  stopPrice?: number | undefined;
+  sparkline: SparklinePoint[];
+  conditions: ConditionEval[];
+}
+
+/**
+ * One recent daily-bar close for the Decide-surface sparkline (feature 095). Explicit presence — an
+ * unset `close` models a warm-up/absent bar, never NaN/0 (mirrors IndicatorValue; P-03).
+ */
+export interface SparklinePoint {
+  close?: number | undefined;
 }
 
 /** One evaluated condition leaf from the traced evaluator (feature 083). */
@@ -7469,6 +7491,12 @@ function createBaseOpportunity(): Opportunity {
     opportunityKey: "",
     provenance: [],
     muted: false,
+    livePrice: undefined,
+    changePct: undefined,
+    targetPrice: undefined,
+    stopPrice: undefined,
+    sparkline: [],
+    conditions: [],
   };
 }
 
@@ -7509,6 +7537,24 @@ export const Opportunity: MessageFns<Opportunity> = {
     }
     if (message.muted !== false) {
       writer.uint32(96).bool(message.muted);
+    }
+    if (message.livePrice !== undefined) {
+      writer.uint32(105).double(message.livePrice);
+    }
+    if (message.changePct !== undefined) {
+      writer.uint32(113).double(message.changePct);
+    }
+    if (message.targetPrice !== undefined) {
+      writer.uint32(121).double(message.targetPrice);
+    }
+    if (message.stopPrice !== undefined) {
+      writer.uint32(129).double(message.stopPrice);
+    }
+    for (const v of message.sparkline) {
+      SparklinePoint.encode(v!, writer.uint32(138).fork()).join();
+    }
+    for (const v of message.conditions) {
+      ConditionEval.encode(v!, writer.uint32(146).fork()).join();
     }
     return writer;
   },
@@ -7616,6 +7662,54 @@ export const Opportunity: MessageFns<Opportunity> = {
           message.muted = reader.bool();
           continue;
         }
+        case 13: {
+          if (tag !== 105) {
+            break;
+          }
+
+          message.livePrice = reader.double();
+          continue;
+        }
+        case 14: {
+          if (tag !== 113) {
+            break;
+          }
+
+          message.changePct = reader.double();
+          continue;
+        }
+        case 15: {
+          if (tag !== 121) {
+            break;
+          }
+
+          message.targetPrice = reader.double();
+          continue;
+        }
+        case 16: {
+          if (tag !== 129) {
+            break;
+          }
+
+          message.stopPrice = reader.double();
+          continue;
+        }
+        case 17: {
+          if (tag !== 138) {
+            break;
+          }
+
+          message.sparkline.push(SparklinePoint.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 18: {
+          if (tag !== 146) {
+            break;
+          }
+
+          message.conditions.push(ConditionEval.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -7663,6 +7757,32 @@ export const Opportunity: MessageFns<Opportunity> = {
         ? object.provenance.map((e: any) => globalThis.String(e))
         : [],
       muted: isSet(object.muted) ? globalThis.Boolean(object.muted) : false,
+      livePrice: isSet(object.livePrice)
+        ? globalThis.Number(object.livePrice)
+        : isSet(object.live_price)
+        ? globalThis.Number(object.live_price)
+        : undefined,
+      changePct: isSet(object.changePct)
+        ? globalThis.Number(object.changePct)
+        : isSet(object.change_pct)
+        ? globalThis.Number(object.change_pct)
+        : undefined,
+      targetPrice: isSet(object.targetPrice)
+        ? globalThis.Number(object.targetPrice)
+        : isSet(object.target_price)
+        ? globalThis.Number(object.target_price)
+        : undefined,
+      stopPrice: isSet(object.stopPrice)
+        ? globalThis.Number(object.stopPrice)
+        : isSet(object.stop_price)
+        ? globalThis.Number(object.stop_price)
+        : undefined,
+      sparkline: globalThis.Array.isArray(object?.sparkline)
+        ? object.sparkline.map((e: any) => SparklinePoint.fromJSON(e))
+        : [],
+      conditions: globalThis.Array.isArray(object?.conditions)
+        ? object.conditions.map((e: any) => ConditionEval.fromJSON(e))
+        : [],
     };
   },
 
@@ -7704,6 +7824,24 @@ export const Opportunity: MessageFns<Opportunity> = {
     if (message.muted !== false) {
       obj.muted = message.muted;
     }
+    if (message.livePrice !== undefined) {
+      obj.livePrice = message.livePrice;
+    }
+    if (message.changePct !== undefined) {
+      obj.changePct = message.changePct;
+    }
+    if (message.targetPrice !== undefined) {
+      obj.targetPrice = message.targetPrice;
+    }
+    if (message.stopPrice !== undefined) {
+      obj.stopPrice = message.stopPrice;
+    }
+    if (message.sparkline?.length) {
+      obj.sparkline = message.sparkline.map((e) => SparklinePoint.toJSON(e));
+    }
+    if (message.conditions?.length) {
+      obj.conditions = message.conditions.map((e) => ConditionEval.toJSON(e));
+    }
     return obj;
   },
 
@@ -7724,6 +7862,70 @@ export const Opportunity: MessageFns<Opportunity> = {
     message.opportunityKey = object.opportunityKey ?? "";
     message.provenance = object.provenance?.map((e) => e) || [];
     message.muted = object.muted ?? false;
+    message.livePrice = object.livePrice ?? undefined;
+    message.changePct = object.changePct ?? undefined;
+    message.targetPrice = object.targetPrice ?? undefined;
+    message.stopPrice = object.stopPrice ?? undefined;
+    message.sparkline = object.sparkline?.map((e) => SparklinePoint.fromPartial(e)) || [];
+    message.conditions = object.conditions?.map((e) => ConditionEval.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseSparklinePoint(): SparklinePoint {
+  return { close: undefined };
+}
+
+export const SparklinePoint: MessageFns<SparklinePoint> = {
+  encode(message: SparklinePoint, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.close !== undefined) {
+      writer.uint32(9).double(message.close);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SparklinePoint {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSparklinePoint();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 9) {
+            break;
+          }
+
+          message.close = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SparklinePoint {
+    return { close: isSet(object.close) ? globalThis.Number(object.close) : undefined };
+  },
+
+  toJSON(message: SparklinePoint): unknown {
+    const obj: any = {};
+    if (message.close !== undefined) {
+      obj.close = message.close;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SparklinePoint>, I>>(base?: I): SparklinePoint {
+    return SparklinePoint.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SparklinePoint>, I>>(object: I): SparklinePoint {
+    const message = createBaseSparklinePoint();
+    message.close = object.close ?? undefined;
     return message;
   },
 };
