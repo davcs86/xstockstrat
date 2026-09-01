@@ -81,6 +81,9 @@ router.service(IngestService, {
 
 router.service(MarketDataService, {
   getBars: forward((req, opts) => marketDataClient.getBars(req, opts)),
+  // feature 095 — Decide-surface live price. Wired on BOTH BFFs so the queue card and the
+  // Signal-detail header read the same source (C-10(b) cross-surface parity).
+  getLatestPrice: forward((req, opts) => marketDataClient.getLatestPrice(req, opts)),
   // Destructive — admin only (FR-7); the marketdata server enforces it again (Step 5).
   deleteBackfilledData: forwardAdmin((req, opts) =>
     marketDataClient.deleteBackfilledData(req, opts),

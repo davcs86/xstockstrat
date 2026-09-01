@@ -110,6 +110,59 @@ export type Quote = Message<"xstockstrat.marketdata.v1.Quote"> & {
  */
 export declare const QuoteSchema: GenMessage<Quote>;
 /**
+ * Latest-trade price + prior-session daily close (feature 095). last_price/prev_close are explicit
+ * presence so absence is distinguishable from a fabricated 0 (AC-11 omit-not-fabricate).
+ *
+ * @generated from message xstockstrat.marketdata.v1.GetLatestPriceRequest
+ */
+export type GetLatestPriceRequest = Message<"xstockstrat.marketdata.v1.GetLatestPriceRequest"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetLatestPriceRequest.
+ * Use `create(GetLatestPriceRequestSchema)` to create a new message.
+ */
+export declare const GetLatestPriceRequestSchema: GenMessage<GetLatestPriceRequest>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.LatestPrice
+ */
+export type LatestPrice = Message<"xstockstrat.marketdata.v1.LatestPrice"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * latest trade
+     *
+     * @generated from field: optional double last_price = 2;
+     */
+    lastPrice?: number | undefined;
+    /**
+     * @generated from field: google.protobuf.Timestamp last_trade_time = 3;
+     */
+    lastTradeTime?: Timestamp | undefined;
+    /**
+     * prior session daily close
+     *
+     * @generated from field: optional double prev_close = 4;
+     */
+    prevClose?: number | undefined;
+    /**
+     * "alpaca"
+     *
+     * @generated from field: string source = 5;
+     */
+    source: string;
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.LatestPrice.
+ * Use `create(LatestPriceSchema)` to create a new message.
+ */
+export declare const LatestPriceSchema: GenMessage<LatestPrice>;
+/**
  * @generated from message xstockstrat.marketdata.v1.StreamBarsRequest
  */
 export type StreamBarsRequest = Message<"xstockstrat.marketdata.v1.StreamBarsRequest"> & {
@@ -652,6 +705,16 @@ export declare const MarketDataService: GenService<{
         methodKind: "unary";
         input: typeof GetLatestQuoteRequestSchema;
         output: typeof QuoteSchema;
+    };
+    /**
+     * Latest trade price + prior-session daily close for the Decide surface (feature 095).
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetLatestPrice
+     */
+    getLatestPrice: {
+        methodKind: "unary";
+        input: typeof GetLatestPriceRequestSchema;
+        output: typeof LatestPriceSchema;
     };
     /**
      * Trigger historical backfill (used by xstockstrat-ingest)

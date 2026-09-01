@@ -264,6 +264,43 @@ func (c *Client) GetLatestQuote(ctx context.Context, symbol string) (*marketdata
 	}, nil
 }
 
+// alpacaLatestTradeResponse is the JSON shape of GET /v2/stocks/{sym}/trades/latest.
+type alpacaLatestTradeResponse struct {
+	Trade struct {
+		T string  `json:"t"`
+		P float64 `json:"p"`
+	} `json:"trade"`
+}
+
+// GetLatestTrade fetches the most recent trade price + timestamp from Alpaca (feature 095).
+// Mirrors GetLatestQuote's auth/rate-limit/feed handling; used by GetLatestPrice to source the
+// Decide-surface live price.
+func (c *Client) GetLatestTrade(ctx context.Context, symbol string) (float64, time.Time, error) {
+	url := fmt.Sprintf("%s/v2/stocks/%s/trades/latest?feed=%s", c.cfg.DataURL, symbol, c.feedParam())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return 0, time.Time{}, err
+	}
+	resp, err := c.do(req)
+	if err != nil {
+		return 0, time.Time{}, fmt.Errorf("get latest trade: %w", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		return 0, time.Time{}, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return 0, time.Time{}, fmt.Errorf("alpaca trade %d: %s", resp.StatusCode, string(body))
+	}
+	var result alpacaLatestTradeResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return 0, time.Time{}, fmt.Errorf("unmarshal trade: %w", err)
+	}
+	t, _ := time.Parse(time.RFC3339, result.Trade.T)
+	return result.Trade.P, t, nil
+}
+
 // multiBarsResponse is the JSON shape of GET /v2/stocks/bars (multi-symbol):
 // bars is keyed by symbol.
 type multiBarsResponse struct {

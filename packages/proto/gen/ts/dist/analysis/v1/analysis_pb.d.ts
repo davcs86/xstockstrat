@@ -1325,12 +1325,60 @@ export type Opportunity = Message<"xstockstrat.analysis.v1.Opportunity"> & {
      * @generated from field: bool muted = 12;
      */
     muted: boolean;
+    /**
+     * Live-market enrichment (feature 095). 13/14/17 are READ-TIME live-market fields (set in
+     * ListOpportunities after ranking — never in the ranking hot path, FR-8/AC-14); 15/16/18 are
+     * COMPUTE-TIME strategy-derived fields (persisted in the row JSONB, carried by _row_to_opportunity).
+     * 15/16 stay unset until the named `strategy-target-stop-authoring` follow-up populates
+     * StrategyDefinition.signal_params.{target,stop}. All explicit-presence — an unset optional models
+     * "unavailable", never a fabricated 0 (P-03, AC-8/AC-11).
+     *
+     * @generated from field: optional double live_price = 13;
+     */
+    livePrice?: number | undefined;
+    /**
+     * @generated from field: optional double change_pct = 14;
+     */
+    changePct?: number | undefined;
+    /**
+     * @generated from field: optional double target_price = 15;
+     */
+    targetPrice?: number | undefined;
+    /**
+     * @generated from field: optional double stop_price = 16;
+     */
+    stopPrice?: number | undefined;
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.SparklinePoint sparkline = 17;
+     */
+    sparkline: SparklinePoint[];
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.ConditionEval conditions = 18;
+     */
+    conditions: ConditionEval[];
 };
 /**
  * Describes the message xstockstrat.analysis.v1.Opportunity.
  * Use `create(OpportunitySchema)` to create a new message.
  */
 export declare const OpportunitySchema: GenMessage<Opportunity>;
+/**
+ * One recent daily-bar close for the Decide-surface sparkline (feature 095). Explicit presence — an
+ * unset `close` models a warm-up/absent bar, never NaN/0 (mirrors IndicatorValue; P-03).
+ *
+ * @generated from message xstockstrat.analysis.v1.SparklinePoint
+ */
+export type SparklinePoint = Message<"xstockstrat.analysis.v1.SparklinePoint"> & {
+    /**
+     * @generated from field: optional double close = 1;
+     */
+    close?: number | undefined;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.SparklinePoint.
+ * Use `create(SparklinePointSchema)` to create a new message.
+ */
+export declare const SparklinePointSchema: GenMessage<SparklinePoint>;
 /**
  * One evaluated condition leaf from the traced evaluator (feature 083).
  *

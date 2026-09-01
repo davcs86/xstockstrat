@@ -182,6 +182,28 @@ test.describe('Opportunities queue', () => {
       'true',
     );
   });
+
+  // feature 095 — live-market enrichment on the queue card.
+  test('the CAPR card shows live price, change%, a 20-point sparkline, and a condition chip', async ({
+    page,
+  }) => {
+    const capr = card(page, 'CAPR');
+    // AC-1 — live price from the enriched Opportunity (both CAPR strategy rows carry it → first()).
+    await expect(capr.getByTestId('opp-live-price-CAPR').first()).toHaveText('$12.34');
+    await expect(capr.getByTestId('opp-change-CAPR').first()).toContainText('%');
+    // AC-3 — a 20-point sparkline (one point is a gap, rendered as a muted bar, not dropped).
+    const spark = capr.getByTestId('opp-sparkline-CAPR').first();
+    await expect(spark).toBeVisible();
+    await expect(spark.locator('> span')).toHaveCount(20);
+    await expect(spark.locator('> span[data-gap]')).toHaveCount(1); // AC-4 the one warm-up gap
+    // AC-5 — the blocking-condition chip reuses an emitted ConditionEval leaf (no client recompute).
+    await expect(capr.getByTestId('opp-condition-CAPR')).toBeVisible();
+  });
+
+  test('a symbol with no live quote omits the price stat (AC-11)', async ({ page }) => {
+    // AAPL carries no enrichment fields → the live-price stat is omitted, never fabricated.
+    await expect(card(page, 'AAPL').getByTestId('opp-live-price-AAPL')).toHaveCount(0);
+  });
 });
 
 // feature 155 (FR-4) — mobile Opportunities parity: signals grouped by symbol like the desktop, and

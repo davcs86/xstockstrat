@@ -555,6 +555,24 @@ message Opportunity {
   string opportunity_key = 10;      // server-authoritative opaque key = user|symbol_norm|strategy_id (feature 097). Client echoes it verbatim to SetOpportunityAction, never derives it.
   repeated string provenance = 11;  // contributing origins for a de-duplicated row (signal source(s) / "position" / "watchlist")
   bool muted = 12;                  // feature 132 — the (symbol, strategy) pair is on the strategy's deny list; surfaced as an explicit muted row (never conviction=0)
+  // Live-market enrichment (feature 095). 13/14/17 are READ-TIME live-market fields (set in
+  // ListOpportunities after ranking — never in the ranking hot path, FR-8/AC-14); 15/16/18 are
+  // COMPUTE-TIME strategy-derived fields (persisted in the row JSONB, carried by _row_to_opportunity).
+  // 15/16 stay unset until the named `strategy-target-stop-authoring` follow-up populates
+  // StrategyDefinition.signal_params.{target,stop}. All explicit-presence — an unset optional models
+  // "unavailable", never a fabricated 0 (P-03, AC-8/AC-11).
+  optional double live_price = 13;
+  optional double change_pct = 14;
+  optional double target_price = 15;
+  optional double stop_price = 16;
+  repeated SparklinePoint sparkline = 17;
+  repeated ConditionEval conditions = 18;
+}
+
+// One recent daily-bar close for the Decide-surface sparkline (feature 095). Explicit presence — an
+// unset `close` models a warm-up/absent bar, never NaN/0 (mirrors IndicatorValue; P-03).
+message SparklinePoint {
+  optional double close = 1;
 }
 
 // One evaluated condition leaf from the traced evaluator (feature 083).

@@ -525,3 +525,55 @@ func TestGetLatestQuotesMulti_Success(t *testing.T) {
 		t.Errorf("unexpected quotes: %+v", out)
 	}
 }
+
+// feature 095 — GetLatestTrade parses the latest-trade price + timestamp from Alpaca's
+// /v2/stocks/{sym}/trades/latest endpoint (single inline body literal, C-13 compliant).
+func TestGetLatestTrade_Success(t *testing.T) {
+	var gotPath, gotFeed string
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotFeed = r.URL.Query().Get("feed")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"symbol": "CAPR",
+			"trade": map[string]interface{}{
+				"t": "2024-01-02T15:30:00Z",
+				"p": 12.34,
+				"s": int32(50),
+				"x": "V",
+			},
+		})
+	})
+	defer srv.Close()
+
+	c := alpaca.NewClient(alpaca.ClientConfig{APIKey: "k", DataURL: srv.URL})
+	price, ts, err := c.GetLatestTrade(context.Background(), "CAPR")
+	if err != nil {
+		t.Fatalf("GetLatestTrade failed: %v", err)
+	}
+	if price != 12.34 {
+		t.Errorf("expected price 12.34, got %f", price)
+	}
+	if want := "2024-01-02T15:30:00Z"; ts.UTC().Format(time.RFC3339) != want {
+		t.Errorf("expected trade time %s, got %s", want, ts.UTC().Format(time.RFC3339))
+	}
+	if gotPath != "/v2/stocks/CAPR/trades/latest" {
+		t.Errorf("unexpected path %q", gotPath)
+	}
+	if gotFeed != "iex" {
+		t.Errorf("expected feed=iex default, got %q", gotFeed)
+	}
+}
+
+func TestGetLatestTrade_HTTPError(t *testing.T) {
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"message":"symbol not found"}`))
+	})
+	defer srv.Close()
+
+	c := alpaca.NewClient(alpaca.ClientConfig{APIKey: "k", DataURL: srv.URL})
+	if _, _, err := c.GetLatestTrade(context.Background(), "UNKNOWN"); err == nil {
+		t.Fatal("expected error for 404 response, got nil")
+	}
+}

@@ -106,6 +106,18 @@ func (h *MarketDataHandler) GetLatestQuote(ctx context.Context, req *connect.Req
 	return connect.NewResponse(q), nil
 }
 
+// GetLatestPrice returns the latest trade price + prior-session daily close (feature 095).
+func (h *MarketDataHandler) GetLatestPrice(ctx context.Context, req *connect.Request[marketdatav1.GetLatestPriceRequest]) (*connect.Response[marketdatav1.LatestPrice], error) {
+	if req.Msg.Symbol == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errorf("symbol required"))
+	}
+	lp, err := h.svc.GetLatestPrice(ctx, req.Msg.Symbol)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(lp), nil
+}
+
 // BackfillBars triggers a historical backfill from Alpaca.
 func (h *MarketDataHandler) BackfillBars(ctx context.Context, req *connect.Request[marketdatav1.BackfillBarsRequest]) (*connect.Response[marketdatav1.BackfillBarsResponse], error) {
 	if len(req.Msg.Symbols) == 0 {
@@ -213,6 +225,14 @@ func (a *grpcMarketDataAdapter) GetBars(ctx context.Context, req *marketdatav1.G
 
 func (a *grpcMarketDataAdapter) GetLatestQuote(ctx context.Context, req *marketdatav1.GetLatestQuoteRequest) (*marketdatav1.Quote, error) {
 	resp, err := a.h.GetLatestQuote(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcMarketDataAdapter) GetLatestPrice(ctx context.Context, req *marketdatav1.GetLatestPriceRequest) (*marketdatav1.LatestPrice, error) {
+	resp, err := a.h.GetLatestPrice(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, toGRPCError(err)
 	}

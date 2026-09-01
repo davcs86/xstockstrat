@@ -27,6 +27,8 @@ import { useIndicatorSeries, type IndicatorSeriesInput } from '@/hooks/useIndica
 import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { BacktestStatus } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { timestampToDate } from '@/lib/protoTime';
+import { Sparkline } from '@/components/shared/Sparkline';
+import { riskReward, suggestedShares } from '@/lib/orderSizing';
 import { SignalReadiness } from '@/components/insights/SignalReadiness';
 import { StrategyPicker } from '@/components/insights/StrategyPicker';
 import { SymbolScreening } from '@/components/trader/SymbolScreening';
@@ -188,6 +190,43 @@ function PositionDetailInner() {
     [oppData, symbol],
   );
 
+  // feature 095 — header live-market context. Prefer the enriched Opportunity for this symbol (the
+  // SAME Opportunity.live_price the queue card reads → cross-surface parity, C-10(b)/AC-12). For an
+  // OFF-queue symbol (no matching opportunity, e.g. opened from Screener) fall back to a direct
+  // GetLatestPrice → symbol + live price only, no chips/overlays/R:R (AC-13). Unavailable → omitted.
+  const headerOpp = symbolOpportunities[0];
+  const [fallbackPrice, setFallbackPrice] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    if (headerOpp || !symbol) {
+      setFallbackPrice(undefined);
+      return;
+    }
+    let cancelled = false;
+    marketDataClient
+      .getLatestPrice({ symbol })
+      .then((r) => {
+        if (!cancelled) setFallbackPrice(r.lastPrice);
+      })
+      .catch(() => {
+        /* live price is best-effort; leave the header price-less (AC-11) */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [headerOpp, symbol]);
+  const headerLivePrice = headerOpp?.livePrice ?? fallbackPrice;
+  const headerChangePct = headerOpp?.changePct;
+  const oppTarget = headerOpp?.targetPrice;
+  const oppStop = headerOpp?.stopPrice;
+  // feature 095 — client-side R:R + suggested size from values already on hand (live price as entry,
+  // the signal's target/stop, buying power). Presentation only — never sent to execution (AC-10).
+  const rr = riskReward(headerLivePrice, oppStop, oppTarget);
+  const suggestedSize = suggestedShares(
+    Number(portfolio?.buyingPower ?? 0),
+    headerLivePrice,
+    oppStop,
+  );
+
   // feature 140: the fetch body is kept in a ref (reassigned every render) so the poll interval
   // below always runs the latest closure over symbol/timeframe/avg/stop, and a stale in-flight
   // response from a superseded load can't overwrite the chart. latestReqRef replaces the prior
@@ -245,6 +284,33 @@ function PositionDetailInner() {
             }),
           );
         }
+        // feature 095 — the opportunity's strategy-derived target/stop overlays. Drawn ONLY when the
+        // enriched Opportunity carries them (AC-7); an absent value draws NO line — never a line at 0
+        // (AC-8, guard on presence, not on `> 0` of a fabricated default).
+        if (oppTarget !== undefined) {
+          priceLinesRef.current.push(
+            series.createPriceLine({
+              price: oppTarget,
+              color: resolveChartColor('--color-buy', 'green'),
+              lineWidth: 1,
+              lineStyle: DASHED,
+              axisLabelVisible: true,
+              title: 'target',
+            }),
+          );
+        }
+        if (oppStop !== undefined) {
+          priceLinesRef.current.push(
+            series.createPriceLine({
+              price: oppStop,
+              color: resolveChartColor('--color-sell', 'red'),
+              lineWidth: 1,
+              lineStyle: DASHED,
+              axisLabelVisible: true,
+              title: 'signal stop',
+            }),
+          );
+        }
       })
       .catch((err: unknown) => {
         if (reqId === latestReqRef.current) setBarsError((err as Error).message);
@@ -253,11 +319,12 @@ function PositionDetailInner() {
   const loadBarsRef = useRef(loadBars);
   loadBarsRef.current = loadBars;
 
-  // Fetch on mount and whenever symbol / timeframe / avg / stop change.
+  // Fetch on mount and whenever symbol / timeframe / avg / stop or the opportunity's target/stop
+  // change (feature 095 — so the target/stop overlays draw once the enriched opportunity arrives).
   useEffect(() => {
     loadBarsRef.current();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol, timeframe, avg, stop]);
+  }, [symbol, timeframe, avg, stop, oppTarget, oppStop]);
 
   // feature 140: poll the daily chart on a bounded interval so new bars appear without a manual
   // reload. Keyed on [symbol] only — so the timer isn't reset on every avg/stop position tick — and
@@ -332,6 +399,34 @@ function PositionDetailInner() {
             <CardTitle>Trade {symbol}</CardTitle>
           </CardHeader>
           <CardContent>
+            {/* feature 095 — R:R + suggested share count from the signal's target/stop + live price
+                + buying power. Presentation only (AC-10) — the OrderForm/usePlaceOrder path below is
+                untouched and never receives these values; rows are omitted when inputs are missing. */}
+            {rr && (
+              <div
+                className="mb-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground"
+                data-testid="rr-sizing"
+              >
+                <span>
+                  R:R{' '}
+                  <span className="font-mono tabular-nums text-foreground" data-testid="rr-ratio">
+                    {rr.ratioLabel}
+                  </span>
+                </span>
+                {suggestedSize > 0 && (
+                  <span>
+                    Suggested{' '}
+                    <span
+                      className="font-mono tabular-nums text-foreground"
+                      data-testid="suggested-shares"
+                    >
+                      {suggestedSize}
+                    </span>{' '}
+                    sh
+                  </span>
+                )}
+              </div>
+            )}
             {/* feature 125 unified the insights Signal-detail ticket onto this page; feature 162
                 restores its broker-execution intent: allowOfflineRecord={false} so an auto-selected
                 offline account can never flip this ticket to the "Record Offline Order" control here
@@ -390,8 +485,31 @@ function PositionDetailInner() {
 
         {/* Minimal always-on page title (feature 125): an unheld symbol has no position header, so
             this is the page's only title in that case; when held, the richer Position panel header
-            renders below it too. */}
-        <h1 className="font-mono text-2xl font-semibold tracking-tight">{symbol}</h1>
+            renders below it too. Feature 095 adds the live price + change% + sparkline beside it —
+            the same Opportunity.live_price the queue card reads (parity, AC-2/AC-12), or a direct
+            GetLatestPrice for an off-queue symbol (AC-13). Unavailable → the stat is omitted. */}
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h1 className="font-mono text-2xl font-semibold tracking-tight">{symbol}</h1>
+          {headerLivePrice !== undefined && (
+            <span
+              className="font-mono text-lg tabular-nums text-foreground"
+              data-testid="detail-live-price"
+            >
+              {fmtUsd(headerLivePrice)}
+            </span>
+          )}
+          {headerChangePct !== undefined && (
+            <span
+              className={cn('font-mono text-sm tabular-nums', pnlClass(headerChangePct))}
+              data-testid="detail-change"
+            >
+              {fmtPct(headerChangePct)}
+            </span>
+          )}
+          {headerOpp && headerOpp.sparkline.length > 0 && (
+            <Sparkline points={headerOpp.sparkline} testId="detail-sparkline" />
+          )}
+        </div>
 
         {/* Section nav (feature 139) — sticky segmented anchor-nav; gated so it never points at
             absent anchors (loading/error render no sections). */}
@@ -419,6 +537,8 @@ function PositionDetailInner() {
             stop={stop}
             last={last}
             hasStop={hasStop}
+            target={oppTarget}
+            signalStop={oppStop}
           />
 
           {/* FR-6 indicator overlay panels beneath the price chart — the resolved strategy's declared
@@ -506,6 +626,8 @@ function SymbolPriceChart({
   stop,
   last,
   hasStop,
+  target,
+  signalStop,
 }: {
   symbol: string;
   chartRef: React.RefObject<HTMLDivElement>;
@@ -514,6 +636,9 @@ function SymbolPriceChart({
   stop: number;
   last: number;
   hasStop: boolean;
+  // feature 095 — the opportunity's strategy-derived target / stop (undefined ⇒ no line, no legend).
+  target?: number;
+  signalStop?: number;
 }) {
   return (
     <Card>
@@ -534,8 +659,11 @@ function SymbolPriceChart({
         {/* Shared chart canvas: candlestick pane 0 + the indicator panes (feature 146). Uses
             min-height so IndicatorPanels can grow it imperatively as panes are added. */}
         <div ref={chartRef} className="w-full" style={{ minHeight: 260 }} />
-        {(avg > 0 || hasStop) && (
-          <div className="flex flex-wrap gap-4 pt-2 font-mono text-[11px] text-muted-foreground">
+        {(avg > 0 || hasStop || target !== undefined || signalStop !== undefined) && (
+          <div
+            className="flex flex-wrap gap-4 pt-2 font-mono text-[11px] text-muted-foreground"
+            data-testid="chart-legend"
+          >
             {avg > 0 && (
               <span>
                 <span className="text-muted-foreground">— —</span> avg cost {fmtUsd(avg)}
@@ -544,6 +672,17 @@ function SymbolPriceChart({
             {hasStop && (
               <span>
                 <span className="text-destructive">— —</span> stop {fmtUsd(stop)}
+              </span>
+            )}
+            {/* feature 095 — the strategy signal's target / stop overlays (AC-7); absent → no entry. */}
+            {target !== undefined && (
+              <span data-testid="legend-target">
+                <span className="text-buy">— —</span> target {fmtUsd(target)}
+              </span>
+            )}
+            {signalStop !== undefined && (
+              <span data-testid="legend-signal-stop">
+                <span className="text-destructive">— —</span> signal stop {fmtUsd(signalStop)}
               </span>
             )}
           </div>

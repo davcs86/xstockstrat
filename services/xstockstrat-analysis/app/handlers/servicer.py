@@ -3125,10 +3125,79 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             offset = 0
         window = rows[offset : offset + page_size]
         next_token = str(offset + page_size) if offset + page_size < len(rows) else ""
+        opps = [_row_to_opportunity(r) for r in window]
+        # feature 095 — read-time live-market enrichment, AFTER ranking + _row_to_opportunity, so
+        # the live quote never enters the conviction/ORDER BY path (FR-8/AC-14 by construction).
+        await self._enrich_opportunities_live(opps, propagation_meta)
         return analysis_pb2.ListOpportunitiesResponse(
-            opportunities=[_row_to_opportunity(r) for r in window],
+            opportunities=opps,
             page=common_pb2.PageResponse(next_page_token=next_token),
         )
+
+    async def _enrich_opportunities_live(self, opps, propagation_meta) -> None:
+        """Attach live_price / change_pct / sparkline to already-ranked Opportunities (feature 095).
+
+        Read-time only — never called from _compute_opportunities, so the live quote is never a
+        ranking input (FR-8/AC-14). Fan-out is bounded by the existing _bars_fetch_sem and deduped
+        per symbol per pass; prev_close/bars are served from marketdata's cache/DB. A GetLatestPrice
+        / GetBars miss or RPC error leaves the live fields UNSET (AC-11) and never aborts the read.
+        A SparklinePoint with an unset close models a warm-up/absent bar, never NaN/0 (AC-4/P-03).
+        """
+        if not opps:
+            return
+        sparkline_bars = max(1, self._cfg.get_int("analysis.opportunity.sparkline_bars", 20))
+        # Dedup the marketdata reads per symbol — several opportunities can share one symbol.
+        by_symbol: dict[str, list] = {}
+        for opp in opps:
+            by_symbol.setdefault(opp.symbol, []).append(opp)
+
+        async def _enrich_symbol(symbol: str, targets: list) -> None:
+            last_price = None
+            prev_close = None
+            spark: list | None = None
+            try:
+                async with self._bars_fetch_sem:
+                    lp = await self._marketdata.GetLatestPrice(
+                        marketdata_pb2.GetLatestPriceRequest(symbol=symbol),
+                        metadata=propagation_meta,
+                    )
+                if lp.HasField("last_price"):
+                    last_price = lp.last_price
+                if lp.HasField("prev_close"):
+                    prev_close = lp.prev_close
+            except Exception as e:  # live price is best-effort; leave unset on any failure (AC-11)
+                log.warning(
+                    "_enrich_opportunities_live: GetLatestPrice failed for %s: %s", symbol, e
+                )
+            try:
+                async with self._bars_fetch_sem:
+                    resp = await self._marketdata.GetBars(
+                        marketdata_pb2.GetBarsRequest(
+                            symbol=symbol,
+                            timeframe="1d",
+                            timeframe_enum=common_pb2.Timeframe.TIMEFRAME_1DAY,
+                            page=common_pb2.PageRequest(page_size=sparkline_bars),
+                        ),
+                        metadata=propagation_meta,
+                    )
+                spark = list(resp.bars)
+            except Exception as e:  # sparkline is best-effort; leave unset on any failure (AC-11)
+                log.warning("_enrich_opportunities_live: GetBars failed for %s: %s", symbol, e)
+            for opp in targets:
+                if last_price is not None:
+                    opp.live_price = last_price
+                    if prev_close is not None and prev_close != 0.0:
+                        opp.change_pct = (last_price - prev_close) / prev_close
+                if spark is not None:
+                    del opp.sparkline[:]
+                    for b in spark:
+                        # Finite close → set it; a warm-up/missing bar → unset close (never NaN/0).
+                        pt = analysis_pb2.SparklinePoint()
+                        if b.close == b.close and b.close not in (float("inf"), float("-inf")):
+                            pt.close = b.close
+                        opp.sparkline.append(pt)
+
+        await asyncio.gather(*(_enrich_symbol(sym, targets) for sym, targets in by_symbol.items()))
 
     # ── Materialized-queue compute (feature 097) ────────────────────────────────
 
@@ -3513,6 +3582,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     if c["is_held"]:
                         total = readiness["total_conditions"]
                         exit_fires = total > 0 and readiness["passing_conditions"] == total
+                    # feature 095 — persist strategy-derived target/stop from signal_params into the
+                    # readiness JSONB (no new column) so _row_to_opportunity carries them. Present →
+                    # store; absent → store nothing (AC-8, never fabricated). This is compute-time
+                    # and ranking-neutral — only live-market fields are read-time (FR-8/AC-14).
+                    _sp = json_format.MessageToDict(definition.signal_params)
+                    for _key, _dst in (("target", "target_price"), ("stop", "stop_price")):
+                        _val = _sp.get(_key)
+                        if isinstance(_val, (int, float)) and not isinstance(_val, bool):
+                            readiness[_dst] = float(_val)
 
             action = _resolve_action_tag(c, exit_fires)
             if action is None:
@@ -4011,6 +4089,28 @@ def _row_to_opportunity(row: dict) -> "analysis_pb2.Opportunity":
     valid_until = row.get("valid_until")
     if valid_until is not None:
         opp.valid_until.FromDatetime(valid_until)
+    # feature 095 — compute-time strategy-derived enrichment, persisted in readiness_json and
+    # carried here so it joins _MAPPED in the OR-F parity guard. conditions = the already-traced
+    # leaves (no recompute, AC-5); an unattributed row has [] (AC-6). target_price/stop_price are
+    # carried ONLY when present (guarded on presence, never a fabricated 0 — AC-8); they stay unset
+    # until the strategy-target-stop-authoring follow-up populates signal_params.{target,stop}.
+    for cond in readiness.get("conditions") or []:
+        opp.conditions.append(
+            analysis_pb2.ConditionEval(
+                ref_name=cond.get("ref_name", ""),
+                lhs_value=float(cond.get("lhs_value", 0.0)),
+                threshold=float(cond.get("threshold", 0.0)),
+                fn=cond.get("fn", ""),
+                state=int(cond.get("state", 0)),
+                distance_to_threshold=float(cond.get("distance_to_threshold", 0.0)),
+            )
+        )
+    target_price = readiness.get("target_price")
+    if target_price is not None:
+        opp.target_price = float(target_price)
+    stop_price = readiness.get("stop_price")
+    if stop_price is not None:
+        opp.stop_price = float(stop_price)
     return opp
 
 

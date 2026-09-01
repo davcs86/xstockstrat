@@ -240,3 +240,59 @@ Operator confirmed the target/stop Open Risk and expanded the consumer surface. 
   - Step 6: persisting strategy-derived target/stop/conditions inside `_compute_opportunities` is ranking-NEUTRAL (only live-market fields are read-time) and guarded by the Step 7.4 parity test — confirmed sound vs design's enrich-at-read/never-at-rank intent. — [ ] confirmed, no change
   - Step 2: `packages/proto/gen/` directory Files entry — codegen convention. — [ ] note only
 - Overlap findings: batch scan CLEAN; 095↔110 analysis servicer.py + parity test recorded in merge-order.md (095 before 110).
+
+## Session 2026-09-01 — sdd-execute (Stage 2, all 13 steps → code-completed)
+
+Executed all 13 steps on `feature/opportunity-live-market-enrichment` (red-before-green on every
+code-bearing step). Status → `code-completed`. Commits (7):
+
+- `steps 1-2` — additive `Opportunity` 13-18 block (`live_price`/`change_pct`/`target_price`/
+  `stop_price` explicit-presence, `sparkline` repeated `SparklinePoint{optional close}`, `conditions`
+  repeated `ConditionEval`) + a dedicated marketdata `GetLatestPrice` RPC returning `LatestPrice`
+  (optional `last_price`/`prev_close`). Field numbers stop at 18 so feature 110 lands at 19+
+  (merge-order intact). buf lint/breaking green; stubs regenerated (proto-freshness clean).
+- `steps 3-4` — marketdata `GetLatestPrice`: `alpaca.GetLatestTrade` (latest-trade endpoint),
+  `LatestTradeSource` optional-capability interface (type-asserted, no fake churn), repo
+  `GetPreviousDailyClose` (second-newest 1d bar via the pgxmock-testable `execer` seam, now with
+  `QueryRow`), service/handler/adapter. Unavailable → unset (AC-11). Coverage 62.8%.
+- `steps 5-7` — config key `analysis.opportunity.sparkline_bars` (no-seed, default 20);
+  `ListOpportunities` read-time enrichment (`_enrich_opportunities_live`) set AFTER ranking so
+  FR-8/AC-14 hold by construction, bounded by `_bars_fetch_sem` + per-symbol dedup; compute-time
+  strategy-derived `target/stop/conditions` persisted in the readiness JSONB and carried by
+  `_row_to_opportunity`; parity guard split (13/14/17 `_INTENTIONALLY_UNSET`, 15/16/18 `_MAPPED`).
+  Full suite 642 passed, coverage 85%.
+- `steps 8-11` — UI: `getLatestPrice` on BOTH BFFs; shared `Sparkline` component (gap → muted bar);
+  queue-card live price/change/sparkline/condition-chip (`opportunityShared.blockingCondition`/
+  `ConditionChip`, `money.ts` token colors); Signal-detail header (same field → parity, AC-2/12) +
+  off-queue direct-fetch fallback (AC-13) + target/stop chart overlays + legend; pure `orderSizing.ts`
+  R:R + suggested size on the ticket (presentation-only, AC-9/10). vitest 4/4, e2e 3+4, build OK,
+  jscpd 0 clones.
+- `steps 12-13` — agent read-only `list_opportunities` MCP tool (caller-scoped, no admin scope) over
+  the existing `ListOpportunities` RPC; `_opportunity_to_dict` omit-not-fabricate projection (absent
+  live values omitted, sparkline gap → JSON null, unattributed → no conditions; R:R/size not
+  projected); tool count thirty-two → thirty-three across all five surfaces (tools.py docstring,
+  mcp-tools.md ×2 + reference entry, agent CLAUDE.md, name-set). Agent suite 325 passed, coverage 78%.
+
+**Honored impl-review `[ ] unaddressed` fixes (both closed):**
+- Step 8 evidence-line correction: both MarketDataService BFF blocks already register more than
+  `getBars`; the `getLatestPrice` addition landed on both regardless (correct as specified).
+- Step 11 vitest coverage: `orderSizing.test.ts` exercises `src/lib/orderSizing.ts` so the client-side
+  R:R math is a covered `src/lib` file, not merely executed.
+
+**Design decisions carried into the shipped code:**
+- Enrichment split: read-time live-market fields (`live_price`/`change_pct`/`sparkline`) never enter
+  the ranking hot path (AC-14 by construction); `change_pct` is DERIVED in analysis
+  `(last−prev)/prev`, never on the marketdata wire.
+- `target_price`/`stop_price` ship WIRED but render nothing until the named follow-up
+  `strategy-target-stop-authoring` populates `StrategyDefinition.signal_params.{target,stop}` — an
+  absent value draws no overlay and omits the R:R block (AC-8, never a 0 line).
+- Alpaca exposes no per-fill/latest-trade fee; `GetLatestPrice` sources the live trade and reads
+  `prev_close` from the stored prior daily bar (no extra Alpaca call) — the read-pressure open risk is
+  bounded by the existing semaphore, with `GetLatestPricesMulti` flagged as the follow-up if needed.
+- **Pre-095 test adjustments (surfaced, not silent):** `ListOpportunities` now also does read-time
+  enrichment, so four pre-existing servicer tests were scoped to compute-path (range-bearing) GetBars
+  calls + given a benign `GetLatestPrice` default in the `_list_opps` helper — the enrichment's extra
+  reads are a real behavior, not a regression.
+
+C-16 acceptance-suite promotion (095 `@AC-*` → the analysis + platform durable suites) is deferred to
+`/promote` at launch — promoted from the launched branch, not mid-execute (same backstop as 029/043/167).

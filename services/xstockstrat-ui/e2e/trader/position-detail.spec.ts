@@ -764,3 +764,56 @@ async function watchlist(
 function readinessCard(page: import('@playwright/test').Page) {
   return page.getByTestId('signal-readiness');
 }
+
+// feature 095 — the Signal-detail live-market enrichment: header price/change/sparkline, the
+// target/stop chart overlays + legend, and the client-side R:R + suggested size on the ticket. CAPR
+// is an in-queue watchlist opportunity carrying livePrice 12.34 / target 14.00 / stop 11.50 (fixtures
+// opportunities.ts); ZZZZ is an off-queue symbol whose only live context is a direct GetLatestPrice.
+test.describe('Signal-detail live-market enrichment (feature 095)', () => {
+  test('CAPR header shows live price + change%, target/stop overlays + legend, and R:R + size', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/trader/positions/CAPR');
+
+    // AC-2 / AC-12 — the header live price is the SAME Opportunity.live_price the queue card reads.
+    await expect(page.getByTestId('detail-live-price')).toHaveText('$12.34', { timeout: 30000 });
+    await expect(page.getByTestId('detail-change')).toContainText('%');
+    await expect(page.getByTestId('detail-sparkline')).toBeVisible();
+
+    // AC-7 — the strategy target/stop overlay legend entries render (the price lines are drawn on the
+    // lightweight-charts canvas; the legend is the queryable proof they were requested).
+    await expect(page.getByTestId('legend-target')).toContainText('target $14.00');
+    await expect(page.getByTestId('legend-signal-stop')).toContainText('signal stop $11.50');
+
+    // AC-9 — client-side R:R (reward 1.66 / risk 0.84 → 2.0:1) + a positive suggested share count.
+    await expect(page.getByTestId('rr-ratio')).toHaveText('2.0:1');
+    const shares = Number(await page.getByTestId('suggested-shares').innerText());
+    expect(shares).toBeGreaterThan(0);
+  });
+
+  test('an off-queue symbol shows symbol + live price only — no overlays, no R:R (AC-13)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // ZZZZ is not in the opportunity queue → the header falls back to a direct GetLatestPrice.
+    await page.goto('/trader/positions/ZZZZ');
+    await expect(page.getByTestId('detail-live-price')).toHaveText('$9.87', { timeout: 30000 });
+    // No opportunity → no target/stop overlay legend, no sparkline, no R:R/sizing block.
+    await expect(page.getByTestId('legend-target')).toHaveCount(0);
+    await expect(page.getByTestId('legend-signal-stop')).toHaveCount(0);
+    await expect(page.getByTestId('detail-sparkline')).toHaveCount(0);
+    await expect(page.getByTestId('rr-sizing')).toHaveCount(0);
+  });
+
+  test('AC-10 — the R:R block is presentation only; the order ticket path is unchanged', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/trader/positions/CAPR');
+    // The R:R block renders beside, not inside, the OrderForm — the ticket still shows its own
+    // controls and the usePlaceOrder submit path is untouched (no R:R/size is sent to execution).
+    await expect(page.getByTestId('rr-sizing')).toBeVisible({ timeout: 30000 });
+    await expect(page.getByText('Trade CAPR')).toBeVisible();
+  });
+});

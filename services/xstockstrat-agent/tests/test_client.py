@@ -1076,3 +1076,76 @@ class TestRunFundamentalsScanClient:
         assert result["symbols_processed"] == 3
         assert result["status"] == "completed"
         assert result["finished_at"].startswith("2023-11-14")
+
+
+# ── list_opportunities projection (feature 095) ────────────────────────────
+
+
+class TestListOpportunitiesClient:
+    @pytest.mark.asyncio
+    async def test_projection_omit_not_fabricate_and_caller_scoped(self):
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+
+        # An enriched row: live_price set, NO target/stop (AC-15/AC-8), a sparkline with a gap
+        # (AC-4), and traced conditions (AC-5).
+        enriched = analysis_pb2.Opportunity(
+            symbol="CAPR",
+            action=analysis_pb2.OPPORTUNITY_ACTION_TAG_ENTER,
+            conviction=0.7,
+            thesis="Quality dip",
+            strategy_id="quality-dip-buy",
+            source="watchlist",
+            opportunity_key="u1|CAPR|quality-dip-buy",
+            provenance=["watchlist"],
+            live_price=12.34,
+            change_pct=0.02,
+            conditions=[
+                analysis_pb2.ConditionEval(
+                    ref_name="close",
+                    lhs_value=12.34,
+                    threshold=12.0,
+                    fn=">",
+                    state=analysis_pb2.CONDITION_STATE_PASS,
+                    distance_to_threshold=0.028,
+                )
+            ],
+        )
+        enriched.sparkline.append(analysis_pb2.SparklinePoint(close=12.0))
+        enriched.sparkline.append(analysis_pb2.SparklinePoint())  # gap → null
+        # A bare row: no live_price (AC-11 → omit), no conditions.
+        bare = analysis_pb2.Opportunity(
+            symbol="AAPL",
+            action=analysis_pb2.OPPORTUNITY_ACTION_TAG_ADD,
+            conviction=0.5,
+            opportunity_key="u1|AAPL|s",
+        )
+        resp = analysis_pb2.ListOpportunitiesResponse(opportunities=[enriched, bare])
+
+        mock_stub = MagicMock()
+        mock_stub.ListOpportunities = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
+                result = await client.list_opportunities(user_id="u1", min_conviction=0.0)
+
+        assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.ANALYSIS_ENDPOINT
+        opps = result["opportunities"]
+        o0, o1 = opps[0], opps[1]
+
+        # Enriched row: live_price present; target/stop OMITTED (never a fabricated 0); a sparkline
+        # gap → JSON null; conditions carry the emitted leaves with the enum NAME.
+        assert o0["live_price"] == pytest.approx(12.34)
+        assert "target_price" not in o0 and "stop_price" not in o0
+        assert o0["sparkline"] == [pytest.approx(12.0), None]
+        assert o0["conditions"][0]["ref_name"] == "close"
+        assert o0["conditions"][0]["state"] == "CONDITION_STATE_PASS"
+        assert o0["action"] == "OPPORTUNITY_ACTION_TAG_ENTER"
+
+        # Bare row: live_price omitted (AC-11), no conditions key.
+        assert "live_price" not in o1
+        assert "conditions" not in o1
+
+        # Caller-scoped: forwards x-user-id, carries NO admin x-access-scope.
+        meta = mock_stub.ListOpportunities.call_args.kwargs["metadata"]
+        assert ("x-user-id", "u1") in meta
+        assert not any(k == "x-access-scope" for k, _ in meta)

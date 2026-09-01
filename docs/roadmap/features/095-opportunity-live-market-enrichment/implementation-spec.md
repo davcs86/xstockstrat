@@ -1,6 +1,6 @@
 # Implementation Spec: opportunity-live-market-enrichment
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-08-31
 **Feature**: `docs/roadmap/features/095-opportunity-live-market-enrichment/feature.md`
 **Total Steps**: 13
@@ -100,7 +100,7 @@ deferral. No config-UI change.
 
 ### Step 1 — proto: additive `Opportunity` enrichment block + marketdata `GetLatestPrice` RPC
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -150,7 +150,7 @@ deferral. No config-UI change.
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/` — modify (generated; never hand-edit)
@@ -175,7 +175,7 @@ deferral. No config-UI change.
 
 ### Step 3 — service: marketdata `GetLatestPrice` (latest trade + prior close)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/alpaca/client.go` — modify (add latest-trade fetch)
@@ -210,7 +210,7 @@ deferral. No config-UI change.
 
 ### Step 4 — test: marketdata `GetLatestPrice`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/alpaca/client_test.go` — modify/create (latest-trade parse)
@@ -238,7 +238,7 @@ deferral. No config-UI change.
 
 ### Step 5 — config: register `analysis.opportunity.sparkline_bars`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify (Config Keys Consumed table)
@@ -266,7 +266,7 @@ deferral. No config-UI change.
 
 ### Step 6 — service: analysis read-time enrichment in `ListOpportunities`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -299,7 +299,7 @@ deferral. No config-UI change.
 
 ### Step 7 — test: analysis enrichment + parity + no-look-ahead
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -329,7 +329,7 @@ deferral. No config-UI change.
 
 ### Step 8 — service: UI marketdata `getLatestPrice` plumbing (BFF + mock + fixtures)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/insightsBff.ts` — modify (add `getLatestPrice` route)
@@ -362,7 +362,7 @@ deferral. No config-UI change.
 
 ### Step 9 — service: UI Opportunities queue cards (price, change%, sparkline, condition chip)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx` — modify
@@ -393,7 +393,7 @@ deferral. No config-UI change.
 
 ### Step 10 — service: UI Signal-detail page (header, target/stop overlays, chips, parity)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
@@ -425,7 +425,7 @@ deferral. No config-UI change.
 
 ### Step 11 — service: UI order ticket R:R + suggested sizing (client-side)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/orderSizing.ts` — create (pure R:R + sizing helpers)
@@ -459,7 +459,7 @@ deferral. No config-UI change.
 
 ### Step 12 — service: agent `list_opportunities` MCP tool + client projection + doc/count surfaces
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify (add `list_opportunities` projection)
@@ -495,7 +495,7 @@ deferral. No config-UI change.
 
 ### Step 13 — test: agent `list_opportunities` projection + tool + catalog name-set
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_client.py` — modify (projection)

@@ -65,6 +65,29 @@ export interface Quote {
   source: string;
 }
 
+/**
+ * Latest-trade price + prior-session daily close (feature 095). last_price/prev_close are explicit
+ * presence so absence is distinguishable from a fabricated 0 (AC-11 omit-not-fabricate).
+ */
+export interface GetLatestPriceRequest {
+  symbol: string;
+}
+
+export interface LatestPrice {
+  symbol: string;
+  /** latest trade */
+  lastPrice?: number | undefined;
+  lastTradeTime?:
+    | Date
+    | undefined;
+  /** prior session daily close */
+  prevClose?:
+    | number
+    | undefined;
+  /** "alpaca" */
+  source: string;
+}
+
 export interface StreamBarsRequest {
   symbols: string[];
   /**
@@ -662,6 +685,200 @@ export const Quote: MessageFns<Quote> = {
     message.askSize = object.askSize ?? 0;
     message.bidPrice = object.bidPrice ?? 0;
     message.bidSize = object.bidSize ?? 0;
+    message.source = object.source ?? "";
+    return message;
+  },
+};
+
+function createBaseGetLatestPriceRequest(): GetLatestPriceRequest {
+  return { symbol: "" };
+}
+
+export const GetLatestPriceRequest: MessageFns<GetLatestPriceRequest> = {
+  encode(message: GetLatestPriceRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetLatestPriceRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetLatestPriceRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetLatestPriceRequest {
+    return { symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "" };
+  },
+
+  toJSON(message: GetLatestPriceRequest): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetLatestPriceRequest>, I>>(base?: I): GetLatestPriceRequest {
+    return GetLatestPriceRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetLatestPriceRequest>, I>>(object: I): GetLatestPriceRequest {
+    const message = createBaseGetLatestPriceRequest();
+    message.symbol = object.symbol ?? "";
+    return message;
+  },
+};
+
+function createBaseLatestPrice(): LatestPrice {
+  return { symbol: "", lastPrice: undefined, lastTradeTime: undefined, prevClose: undefined, source: "" };
+}
+
+export const LatestPrice: MessageFns<LatestPrice> = {
+  encode(message: LatestPrice, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    if (message.lastPrice !== undefined) {
+      writer.uint32(17).double(message.lastPrice);
+    }
+    if (message.lastTradeTime !== undefined) {
+      Timestamp.encode(toTimestamp(message.lastTradeTime), writer.uint32(26).fork()).join();
+    }
+    if (message.prevClose !== undefined) {
+      writer.uint32(33).double(message.prevClose);
+    }
+    if (message.source !== "") {
+      writer.uint32(42).string(message.source);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): LatestPrice {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseLatestPrice();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.lastPrice = reader.double();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.lastTradeTime = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 33) {
+            break;
+          }
+
+          message.prevClose = reader.double();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.source = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): LatestPrice {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      lastPrice: isSet(object.lastPrice)
+        ? globalThis.Number(object.lastPrice)
+        : isSet(object.last_price)
+        ? globalThis.Number(object.last_price)
+        : undefined,
+      lastTradeTime: isSet(object.lastTradeTime)
+        ? fromJsonTimestamp(object.lastTradeTime)
+        : isSet(object.last_trade_time)
+        ? fromJsonTimestamp(object.last_trade_time)
+        : undefined,
+      prevClose: isSet(object.prevClose)
+        ? globalThis.Number(object.prevClose)
+        : isSet(object.prev_close)
+        ? globalThis.Number(object.prev_close)
+        : undefined,
+      source: isSet(object.source) ? globalThis.String(object.source) : "",
+    };
+  },
+
+  toJSON(message: LatestPrice): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.lastPrice !== undefined) {
+      obj.lastPrice = message.lastPrice;
+    }
+    if (message.lastTradeTime !== undefined) {
+      obj.lastTradeTime = message.lastTradeTime.toISOString();
+    }
+    if (message.prevClose !== undefined) {
+      obj.prevClose = message.prevClose;
+    }
+    if (message.source !== "") {
+      obj.source = message.source;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<LatestPrice>, I>>(base?: I): LatestPrice {
+    return LatestPrice.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<LatestPrice>, I>>(object: I): LatestPrice {
+    const message = createBaseLatestPrice();
+    message.symbol = object.symbol ?? "";
+    message.lastPrice = object.lastPrice ?? undefined;
+    message.lastTradeTime = object.lastTradeTime ?? undefined;
+    message.prevClose = object.prevClose ?? undefined;
     message.source = object.source ?? "";
     return message;
   },
@@ -2834,6 +3051,17 @@ export const MarketDataServiceService = {
     responseSerialize: (value: Quote): Buffer => Buffer.from(Quote.encode(value).finish()),
     responseDeserialize: (value: Buffer): Quote => Quote.decode(value),
   },
+  /** Latest trade price + prior-session daily close for the Decide surface (feature 095). */
+  getLatestPrice: {
+    path: "/xstockstrat.marketdata.v1.MarketDataService/GetLatestPrice" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetLatestPriceRequest): Buffer =>
+      Buffer.from(GetLatestPriceRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetLatestPriceRequest => GetLatestPriceRequest.decode(value),
+    responseSerialize: (value: LatestPrice): Buffer => Buffer.from(LatestPrice.encode(value).finish()),
+    responseDeserialize: (value: Buffer): LatestPrice => LatestPrice.decode(value),
+  },
   /** Trigger historical backfill (used by xstockstrat-ingest) */
   backfillBars: {
     path: "/xstockstrat.marketdata.v1.MarketDataService/BackfillBars" as const,
@@ -2914,6 +3142,8 @@ export interface MarketDataServiceServer extends UntypedServiceImplementation {
   getBars: handleUnaryCall<GetBarsRequest, GetBarsResponse>;
   /** Latest quote snapshot */
   getLatestQuote: handleUnaryCall<GetLatestQuoteRequest, Quote>;
+  /** Latest trade price + prior-session daily close for the Decide surface (feature 095). */
+  getLatestPrice: handleUnaryCall<GetLatestPriceRequest, LatestPrice>;
   /** Trigger historical backfill (used by xstockstrat-ingest) */
   backfillBars: handleUnaryCall<BackfillBarsRequest, BackfillBarsResponse>;
   /** Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe */
@@ -2974,6 +3204,22 @@ export interface MarketDataServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: Quote) => void,
+  ): ClientUnaryCall;
+  /** Latest trade price + prior-session daily close for the Decide surface (feature 095). */
+  getLatestPrice(
+    request: GetLatestPriceRequest,
+    callback: (error: ServiceError | null, response: LatestPrice) => void,
+  ): ClientUnaryCall;
+  getLatestPrice(
+    request: GetLatestPriceRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: LatestPrice) => void,
+  ): ClientUnaryCall;
+  getLatestPrice(
+    request: GetLatestPriceRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: LatestPrice) => void,
   ): ClientUnaryCall;
   /** Trigger historical backfill (used by xstockstrat-ingest) */
   backfillBars(

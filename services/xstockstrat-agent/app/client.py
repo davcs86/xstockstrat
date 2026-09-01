@@ -698,6 +698,67 @@ async def screen_symbols(
     }
 
 
+def _opportunity_to_dict(o, analysis_pb2) -> dict[str, Any]:
+    """Project one analysis ``Opportunity`` to a JSON dict for the agent (feature 095).
+
+    The live-market enrichment uses **omit-not-fabricate**: an unavailable ``live_price`` /
+    ``change_pct`` / ``target_price`` / ``stop_price`` is omitted entirely (never a fabricated
+    ``0``); a sparkline gap is JSON ``null`` (never ``NaN``); an unattributed row carries no
+    ``conditions``. R:R / suggested size are UI-only (no wire field) and are not projected."""
+    d: dict[str, Any] = {
+        "symbol": o.symbol,
+        "action": analysis_pb2.OpportunityActionTag.Name(o.action),
+        "conviction": o.conviction,
+        "passing_conditions": o.passing_conditions,
+        "total_conditions": o.total_conditions,
+        "thesis": o.thesis,
+        "strategy_id": o.strategy_id,
+        "source": o.source,
+        "opportunity_key": o.opportunity_key,
+        "provenance": list(o.provenance),
+        "muted": o.muted,
+    }
+    if o.HasField("live_price"):
+        d["live_price"] = o.live_price
+    if o.HasField("change_pct"):
+        d["change_pct"] = o.change_pct
+    if o.HasField("target_price"):
+        d["target_price"] = o.target_price
+    if o.HasField("stop_price"):
+        d["stop_price"] = o.stop_price
+    if o.sparkline:
+        d["sparkline"] = [p.close if p.HasField("close") else None for p in o.sparkline]
+    if o.conditions:
+        d["conditions"] = [
+            {
+                "ref_name": c.ref_name,
+                "lhs_value": c.lhs_value,
+                "threshold": c.threshold,
+                "fn": c.fn,
+                "state": analysis_pb2.ConditionState.Name(c.state),
+                "distance_to_threshold": c.distance_to_threshold,
+            }
+            for c in o.conditions
+        ]
+    return d
+
+
+async def list_opportunities(user_id: str, min_conviction: float = 0.0) -> dict[str, Any]:
+    """List the caller's ranked Decide-queue opportunities with live-market enrichment (feature 095,
+    read-only). Caller-scoped via ``x-user-id`` (no admin ``x-access-scope``) — analysis resolves
+    the owner from the header, never a request body id. See ``_opportunity_to_dict`` for the
+    projection's omit-not-fabricate contract."""
+    from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
+        stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
+        resp = await stub.ListOpportunities(
+            analysis_pb2.ListOpportunitiesRequest(min_conviction=min_conviction),
+            metadata=_metadata(("x-user-id", user_id)),
+        )
+    return {"opportunities": [_opportunity_to_dict(o, analysis_pb2) for o in resp.opportunities]}
+
+
 async def manage_strategy(
     user_id: str,
     operation: str,

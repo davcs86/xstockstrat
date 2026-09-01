@@ -45,6 +45,7 @@ import {
   FILL_MODEL_SAME_BAR_CLOSE,
   FILL_MODEL_NEXT_BAR_OPEN,
   OPPORTUNITIES,
+  CAPR_LATEST_PRICE,
   symbolReadiness,
   exitReadiness,
   POSITIONS,
@@ -596,6 +597,18 @@ export async function startMockBackend(): Promise<void> {
             return { fundamentals: FUNDAMENTALS_AAPL };
           }
           throw new ConnectError(`fmp: no fundamentals for ${req.symbol}`, Code.Unavailable);
+        },
+        async getLatestPrice(req) {
+          // feature 095: CAPR (in-queue) has a live trade + prior close; ZZZZ is an OFF-queue symbol
+          // that still has a live price (drives the Signal-detail off-queue fallback, AC-13); any
+          // other symbol is unavailable — last_price/prev_close unset (the AC-11 omit-not-fabricate
+          // path), never a fabricated 0.
+          const sym = (req.symbol ?? '').toUpperCase();
+          if (sym === 'CAPR') return CAPR_LATEST_PRICE;
+          if (sym === 'ZZZZ') {
+            return { symbol: 'ZZZZ', lastPrice: 9.87, prevClose: 9.5, source: 'alpaca' };
+          }
+          return { symbol: req.symbol ?? '', source: 'alpaca' };
         },
       });
 

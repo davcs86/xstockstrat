@@ -3613,8 +3613,20 @@ type Opportunity struct {
 	OpportunityKey    string                 `protobuf:"bytes,10,opt,name=opportunity_key,json=opportunityKey,proto3" json:"opportunity_key,omitempty"` // server-authoritative opaque key = user|symbol_norm|strategy_id (feature 097). Client echoes it verbatim to SetOpportunityAction, never derives it.
 	Provenance        []string               `protobuf:"bytes,11,rep,name=provenance,proto3" json:"provenance,omitempty"`                               // contributing origins for a de-duplicated row (signal source(s) / "position" / "watchlist")
 	Muted             bool                   `protobuf:"varint,12,opt,name=muted,proto3" json:"muted,omitempty"`                                        // feature 132 — the (symbol, strategy) pair is on the strategy's deny list; surfaced as an explicit muted row (never conviction=0)
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Live-market enrichment (feature 095). 13/14/17 are READ-TIME live-market fields (set in
+	// ListOpportunities after ranking — never in the ranking hot path, FR-8/AC-14); 15/16/18 are
+	// COMPUTE-TIME strategy-derived fields (persisted in the row JSONB, carried by _row_to_opportunity).
+	// 15/16 stay unset until the named `strategy-target-stop-authoring` follow-up populates
+	// StrategyDefinition.signal_params.{target,stop}. All explicit-presence — an unset optional models
+	// "unavailable", never a fabricated 0 (P-03, AC-8/AC-11).
+	LivePrice     *float64          `protobuf:"fixed64,13,opt,name=live_price,json=livePrice,proto3,oneof" json:"live_price,omitempty"`
+	ChangePct     *float64          `protobuf:"fixed64,14,opt,name=change_pct,json=changePct,proto3,oneof" json:"change_pct,omitempty"`
+	TargetPrice   *float64          `protobuf:"fixed64,15,opt,name=target_price,json=targetPrice,proto3,oneof" json:"target_price,omitempty"`
+	StopPrice     *float64          `protobuf:"fixed64,16,opt,name=stop_price,json=stopPrice,proto3,oneof" json:"stop_price,omitempty"`
+	Sparkline     []*SparklinePoint `protobuf:"bytes,17,rep,name=sparkline,proto3" json:"sparkline,omitempty"`
+	Conditions    []*ConditionEval  `protobuf:"bytes,18,rep,name=conditions,proto3" json:"conditions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Opportunity) Reset() {
@@ -3731,6 +3743,94 @@ func (x *Opportunity) GetMuted() bool {
 	return false
 }
 
+func (x *Opportunity) GetLivePrice() float64 {
+	if x != nil && x.LivePrice != nil {
+		return *x.LivePrice
+	}
+	return 0
+}
+
+func (x *Opportunity) GetChangePct() float64 {
+	if x != nil && x.ChangePct != nil {
+		return *x.ChangePct
+	}
+	return 0
+}
+
+func (x *Opportunity) GetTargetPrice() float64 {
+	if x != nil && x.TargetPrice != nil {
+		return *x.TargetPrice
+	}
+	return 0
+}
+
+func (x *Opportunity) GetStopPrice() float64 {
+	if x != nil && x.StopPrice != nil {
+		return *x.StopPrice
+	}
+	return 0
+}
+
+func (x *Opportunity) GetSparkline() []*SparklinePoint {
+	if x != nil {
+		return x.Sparkline
+	}
+	return nil
+}
+
+func (x *Opportunity) GetConditions() []*ConditionEval {
+	if x != nil {
+		return x.Conditions
+	}
+	return nil
+}
+
+// One recent daily-bar close for the Decide-surface sparkline (feature 095). Explicit presence — an
+// unset `close` models a warm-up/absent bar, never NaN/0 (mirrors IndicatorValue; P-03).
+type SparklinePoint struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Close         *float64               `protobuf:"fixed64,1,opt,name=close,proto3,oneof" json:"close,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SparklinePoint) Reset() {
+	*x = SparklinePoint{}
+	mi := &file_analysis_v1_analysis_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SparklinePoint) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SparklinePoint) ProtoMessage() {}
+
+func (x *SparklinePoint) ProtoReflect() protoreflect.Message {
+	mi := &file_analysis_v1_analysis_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SparklinePoint.ProtoReflect.Descriptor instead.
+func (*SparklinePoint) Descriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *SparklinePoint) GetClose() float64 {
+	if x != nil && x.Close != nil {
+		return *x.Close
+	}
+	return 0
+}
+
 // One evaluated condition leaf from the traced evaluator (feature 083).
 type ConditionEval struct {
 	state               protoimpl.MessageState `protogen:"open.v1"`
@@ -3746,7 +3846,7 @@ type ConditionEval struct {
 
 func (x *ConditionEval) Reset() {
 	*x = ConditionEval{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[33]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3758,7 +3858,7 @@ func (x *ConditionEval) String() string {
 func (*ConditionEval) ProtoMessage() {}
 
 func (x *ConditionEval) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[33]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3771,7 +3871,7 @@ func (x *ConditionEval) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConditionEval.ProtoReflect.Descriptor instead.
 func (*ConditionEval) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{33}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ConditionEval) GetRefName() string {
@@ -3830,7 +3930,7 @@ type SymbolReadiness struct {
 
 func (x *SymbolReadiness) Reset() {
 	*x = SymbolReadiness{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[34]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3842,7 +3942,7 @@ func (x *SymbolReadiness) String() string {
 func (*SymbolReadiness) ProtoMessage() {}
 
 func (x *SymbolReadiness) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[34]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3855,7 +3955,7 @@ func (x *SymbolReadiness) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SymbolReadiness.ProtoReflect.Descriptor instead.
 func (*SymbolReadiness) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{34}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *SymbolReadiness) GetSymbol() string {
@@ -3912,7 +4012,7 @@ type StrategyAnalytics struct {
 
 func (x *StrategyAnalytics) Reset() {
 	*x = StrategyAnalytics{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[35]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3924,7 +4024,7 @@ func (x *StrategyAnalytics) String() string {
 func (*StrategyAnalytics) ProtoMessage() {}
 
 func (x *StrategyAnalytics) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[35]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3937,7 +4037,7 @@ func (x *StrategyAnalytics) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StrategyAnalytics.ProtoReflect.Descriptor instead.
 func (*StrategyAnalytics) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{35}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *StrategyAnalytics) GetStrategyId() string {
@@ -4001,7 +4101,7 @@ type ListOpportunitiesRequest struct {
 
 func (x *ListOpportunitiesRequest) Reset() {
 	*x = ListOpportunitiesRequest{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[36]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4013,7 +4113,7 @@ func (x *ListOpportunitiesRequest) String() string {
 func (*ListOpportunitiesRequest) ProtoMessage() {}
 
 func (x *ListOpportunitiesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[36]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4026,7 +4126,7 @@ func (x *ListOpportunitiesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOpportunitiesRequest.ProtoReflect.Descriptor instead.
 func (*ListOpportunitiesRequest) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{36}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ListOpportunitiesRequest) GetPage() *v1.PageRequest {
@@ -4053,7 +4153,7 @@ type ListOpportunitiesResponse struct {
 
 func (x *ListOpportunitiesResponse) Reset() {
 	*x = ListOpportunitiesResponse{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[37]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4065,7 +4165,7 @@ func (x *ListOpportunitiesResponse) String() string {
 func (*ListOpportunitiesResponse) ProtoMessage() {}
 
 func (x *ListOpportunitiesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[37]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4078,7 +4178,7 @@ func (x *ListOpportunitiesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOpportunitiesResponse.ProtoReflect.Descriptor instead.
 func (*ListOpportunitiesResponse) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{37}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *ListOpportunitiesResponse) GetOpportunities() []*Opportunity {
@@ -4110,7 +4210,7 @@ type EvaluateReadinessRequest struct {
 
 func (x *EvaluateReadinessRequest) Reset() {
 	*x = EvaluateReadinessRequest{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[38]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4122,7 +4222,7 @@ func (x *EvaluateReadinessRequest) String() string {
 func (*EvaluateReadinessRequest) ProtoMessage() {}
 
 func (x *EvaluateReadinessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[38]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4135,7 +4235,7 @@ func (x *EvaluateReadinessRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EvaluateReadinessRequest.ProtoReflect.Descriptor instead.
 func (*EvaluateReadinessRequest) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{38}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *EvaluateReadinessRequest) GetStrategyId() string {
@@ -4168,7 +4268,7 @@ type EvaluateReadinessResponse struct {
 
 func (x *EvaluateReadinessResponse) Reset() {
 	*x = EvaluateReadinessResponse{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[39]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4180,7 +4280,7 @@ func (x *EvaluateReadinessResponse) String() string {
 func (*EvaluateReadinessResponse) ProtoMessage() {}
 
 func (x *EvaluateReadinessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[39]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4193,7 +4293,7 @@ func (x *EvaluateReadinessResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EvaluateReadinessResponse.ProtoReflect.Descriptor instead.
 func (*EvaluateReadinessResponse) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{39}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *EvaluateReadinessResponse) GetReadiness() []*SymbolReadiness {
@@ -4216,7 +4316,7 @@ type SetOpportunityActionRequest struct {
 
 func (x *SetOpportunityActionRequest) Reset() {
 	*x = SetOpportunityActionRequest{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[40]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4228,7 +4328,7 @@ func (x *SetOpportunityActionRequest) String() string {
 func (*SetOpportunityActionRequest) ProtoMessage() {}
 
 func (x *SetOpportunityActionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[40]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4241,7 +4341,7 @@ func (x *SetOpportunityActionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetOpportunityActionRequest.ProtoReflect.Descriptor instead.
 func (*SetOpportunityActionRequest) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{40}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *SetOpportunityActionRequest) GetOpportunityKey() string {
@@ -4273,7 +4373,7 @@ type SetOpportunityActionResponse struct {
 
 func (x *SetOpportunityActionResponse) Reset() {
 	*x = SetOpportunityActionResponse{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[41]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4285,7 +4385,7 @@ func (x *SetOpportunityActionResponse) String() string {
 func (*SetOpportunityActionResponse) ProtoMessage() {}
 
 func (x *SetOpportunityActionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[41]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4298,7 +4398,7 @@ func (x *SetOpportunityActionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetOpportunityActionResponse.ProtoReflect.Descriptor instead.
 func (*SetOpportunityActionResponse) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{41}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{42}
 }
 
 type GetStrategyAnalyticsRequest struct {
@@ -4310,7 +4410,7 @@ type GetStrategyAnalyticsRequest struct {
 
 func (x *GetStrategyAnalyticsRequest) Reset() {
 	*x = GetStrategyAnalyticsRequest{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[42]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4322,7 +4422,7 @@ func (x *GetStrategyAnalyticsRequest) String() string {
 func (*GetStrategyAnalyticsRequest) ProtoMessage() {}
 
 func (x *GetStrategyAnalyticsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[42]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4335,7 +4435,7 @@ func (x *GetStrategyAnalyticsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStrategyAnalyticsRequest.ProtoReflect.Descriptor instead.
 func (*GetStrategyAnalyticsRequest) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{42}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *GetStrategyAnalyticsRequest) GetStrategyId() string {
@@ -4360,7 +4460,7 @@ type GetIndicatorSeriesRequest struct {
 
 func (x *GetIndicatorSeriesRequest) Reset() {
 	*x = GetIndicatorSeriesRequest{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[43]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4372,7 +4472,7 @@ func (x *GetIndicatorSeriesRequest) String() string {
 func (*GetIndicatorSeriesRequest) ProtoMessage() {}
 
 func (x *GetIndicatorSeriesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[43]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4385,7 +4485,7 @@ func (x *GetIndicatorSeriesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetIndicatorSeriesRequest.ProtoReflect.Descriptor instead.
 func (*GetIndicatorSeriesRequest) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{43}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *GetIndicatorSeriesRequest) GetStrategyId() string {
@@ -4427,7 +4527,7 @@ type GetIndicatorSeriesResponse struct {
 
 func (x *GetIndicatorSeriesResponse) Reset() {
 	*x = GetIndicatorSeriesResponse{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[44]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4439,7 +4539,7 @@ func (x *GetIndicatorSeriesResponse) String() string {
 func (*GetIndicatorSeriesResponse) ProtoMessage() {}
 
 func (x *GetIndicatorSeriesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[44]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4452,7 +4552,7 @@ func (x *GetIndicatorSeriesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetIndicatorSeriesResponse.ProtoReflect.Descriptor instead.
 func (*GetIndicatorSeriesResponse) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{44}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *GetIndicatorSeriesResponse) GetTimes() []*timestamppb.Timestamp {
@@ -4484,7 +4584,7 @@ type ComponentSeries struct {
 
 func (x *ComponentSeries) Reset() {
 	*x = ComponentSeries{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[45]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4496,7 +4596,7 @@ func (x *ComponentSeries) String() string {
 func (*ComponentSeries) ProtoMessage() {}
 
 func (x *ComponentSeries) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[45]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4509,7 +4609,7 @@ func (x *ComponentSeries) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentSeries.ProtoReflect.Descriptor instead.
 func (*ComponentSeries) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{45}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *ComponentSeries) GetRefName() string {
@@ -4558,7 +4658,7 @@ type NamedSeries struct {
 
 func (x *NamedSeries) Reset() {
 	*x = NamedSeries{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[46]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4570,7 +4670,7 @@ func (x *NamedSeries) String() string {
 func (*NamedSeries) ProtoMessage() {}
 
 func (x *NamedSeries) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[46]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4583,7 +4683,7 @@ func (x *NamedSeries) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NamedSeries.ProtoReflect.Descriptor instead.
 func (*NamedSeries) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{46}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *NamedSeries) GetName() string {
@@ -4610,7 +4710,7 @@ type IndicatorValue struct {
 
 func (x *IndicatorValue) Reset() {
 	*x = IndicatorValue{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[47]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4622,7 +4722,7 @@ func (x *IndicatorValue) String() string {
 func (*IndicatorValue) ProtoMessage() {}
 
 func (x *IndicatorValue) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[47]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4635,7 +4735,7 @@ func (x *IndicatorValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndicatorValue.ProtoReflect.Descriptor instead.
 func (*IndicatorValue) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{47}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *IndicatorValue) GetValue() float64 {
@@ -4657,7 +4757,7 @@ type SignalEntry struct {
 
 func (x *SignalEntry) Reset() {
 	*x = SignalEntry{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[48]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4669,7 +4769,7 @@ func (x *SignalEntry) String() string {
 func (*SignalEntry) ProtoMessage() {}
 
 func (x *SignalEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[48]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4682,7 +4782,7 @@ func (x *SignalEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignalEntry.ProtoReflect.Descriptor instead.
 func (*SignalEntry) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{48}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *SignalEntry) GetName() string {
@@ -4726,7 +4826,7 @@ type OrderSnapshot struct {
 
 func (x *OrderSnapshot) Reset() {
 	*x = OrderSnapshot{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[49]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4738,7 +4838,7 @@ func (x *OrderSnapshot) String() string {
 func (*OrderSnapshot) ProtoMessage() {}
 
 func (x *OrderSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[49]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4751,7 +4851,7 @@ func (x *OrderSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrderSnapshot.ProtoReflect.Descriptor instead.
 func (*OrderSnapshot) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{49}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *OrderSnapshot) GetOrderId() string {
@@ -4846,7 +4946,7 @@ type PnLPatternFactor struct {
 
 func (x *PnLPatternFactor) Reset() {
 	*x = PnLPatternFactor{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[50]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4858,7 +4958,7 @@ func (x *PnLPatternFactor) String() string {
 func (*PnLPatternFactor) ProtoMessage() {}
 
 func (x *PnLPatternFactor) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[50]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4871,7 +4971,7 @@ func (x *PnLPatternFactor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PnLPatternFactor.ProtoReflect.Descriptor instead.
 func (*PnLPatternFactor) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{50}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *PnLPatternFactor) GetFactorName() string {
@@ -4929,7 +5029,7 @@ type QueryPnLPatternsRequest struct {
 
 func (x *QueryPnLPatternsRequest) Reset() {
 	*x = QueryPnLPatternsRequest{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[51]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4941,7 +5041,7 @@ func (x *QueryPnLPatternsRequest) String() string {
 func (*QueryPnLPatternsRequest) ProtoMessage() {}
 
 func (x *QueryPnLPatternsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[51]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4954,7 +5054,7 @@ func (x *QueryPnLPatternsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryPnLPatternsRequest.ProtoReflect.Descriptor instead.
 func (*QueryPnLPatternsRequest) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{51}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *QueryPnLPatternsRequest) GetSymbol() string {
@@ -5002,7 +5102,7 @@ type QueryPnLPatternsResponse struct {
 
 func (x *QueryPnLPatternsResponse) Reset() {
 	*x = QueryPnLPatternsResponse{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[52]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5014,7 +5114,7 @@ func (x *QueryPnLPatternsResponse) String() string {
 func (*QueryPnLPatternsResponse) ProtoMessage() {}
 
 func (x *QueryPnLPatternsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[52]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5027,7 +5127,7 @@ func (x *QueryPnLPatternsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryPnLPatternsResponse.ProtoReflect.Descriptor instead.
 func (*QueryPnLPatternsResponse) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{52}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *QueryPnLPatternsResponse) GetPositiveFactors() []*PnLPatternFactor {
@@ -5056,7 +5156,7 @@ type GetAttributionRequest struct {
 
 func (x *GetAttributionRequest) Reset() {
 	*x = GetAttributionRequest{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[53]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5068,7 +5168,7 @@ func (x *GetAttributionRequest) String() string {
 func (*GetAttributionRequest) ProtoMessage() {}
 
 func (x *GetAttributionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[53]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5081,7 +5181,7 @@ func (x *GetAttributionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAttributionRequest.ProtoReflect.Descriptor instead.
 func (*GetAttributionRequest) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{53}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *GetAttributionRequest) GetStart() *timestamppb.Timestamp {
@@ -5123,7 +5223,7 @@ type SourceAttribution struct {
 
 func (x *SourceAttribution) Reset() {
 	*x = SourceAttribution{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[54]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5135,7 +5235,7 @@ func (x *SourceAttribution) String() string {
 func (*SourceAttribution) ProtoMessage() {}
 
 func (x *SourceAttribution) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[54]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5148,7 +5248,7 @@ func (x *SourceAttribution) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SourceAttribution.ProtoReflect.Descriptor instead.
 func (*SourceAttribution) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{54}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *SourceAttribution) GetSourceId() string {
@@ -5209,7 +5309,7 @@ type GetAttributionResponse struct {
 
 func (x *GetAttributionResponse) Reset() {
 	*x = GetAttributionResponse{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[55]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5221,7 +5321,7 @@ func (x *GetAttributionResponse) String() string {
 func (*GetAttributionResponse) ProtoMessage() {}
 
 func (x *GetAttributionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[55]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5234,7 +5334,7 @@ func (x *GetAttributionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAttributionResponse.ProtoReflect.Descriptor instead.
 func (*GetAttributionResponse) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{55}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *GetAttributionResponse) GetAttributions() []*SourceAttribution {
@@ -5538,7 +5638,7 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x0edeferred_count\x18\x05 \x01(\x05R\rdeferredCount\x12\x16\n" +
 	"\x06status\x18\x06 \x01(\tR\x06status\x12;\n" +
 	"\vfinished_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"finishedAt\"\xd3\x03\n" +
+	"finishedAt\"\xb4\x06\n" +
 	"\vOpportunity\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12E\n" +
 	"\x06action\x18\x02 \x01(\x0e2-.xstockstrat.analysis.v1.OpportunityActionTagR\x06action\x12\x1e\n" +
@@ -5558,7 +5658,25 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\n" +
 	"provenance\x18\v \x03(\tR\n" +
 	"provenance\x12\x14\n" +
-	"\x05muted\x18\f \x01(\bR\x05muted\"\xe8\x01\n" +
+	"\x05muted\x18\f \x01(\bR\x05muted\x12\"\n" +
+	"\n" +
+	"live_price\x18\r \x01(\x01H\x00R\tlivePrice\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"change_pct\x18\x0e \x01(\x01H\x01R\tchangePct\x88\x01\x01\x12&\n" +
+	"\ftarget_price\x18\x0f \x01(\x01H\x02R\vtargetPrice\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"stop_price\x18\x10 \x01(\x01H\x03R\tstopPrice\x88\x01\x01\x12E\n" +
+	"\tsparkline\x18\x11 \x03(\v2'.xstockstrat.analysis.v1.SparklinePointR\tsparkline\x12F\n" +
+	"\n" +
+	"conditions\x18\x12 \x03(\v2&.xstockstrat.analysis.v1.ConditionEvalR\n" +
+	"conditionsB\r\n" +
+	"\v_live_priceB\r\n" +
+	"\v_change_pctB\x0f\n" +
+	"\r_target_priceB\r\n" +
+	"\v_stop_price\"5\n" +
+	"\x0eSparklinePoint\x12\x19\n" +
+	"\x05close\x18\x01 \x01(\x01H\x00R\x05close\x88\x01\x01B\b\n" +
+	"\x06_close\"\xe8\x01\n" +
 	"\rConditionEval\x12\x19\n" +
 	"\bref_name\x18\x01 \x01(\tR\arefName\x12\x1b\n" +
 	"\tlhs_value\x18\x02 \x01(\x01R\blhsValue\x12\x1c\n" +
@@ -5809,7 +5927,7 @@ func file_analysis_v1_analysis_proto_rawDescGZIP() []byte {
 }
 
 var file_analysis_v1_analysis_proto_enumTypes = make([]protoimpl.EnumInfo, 16)
-var file_analysis_v1_analysis_proto_msgTypes = make([]protoimpl.MessageInfo, 63)
+var file_analysis_v1_analysis_proto_msgTypes = make([]protoimpl.MessageInfo, 64)
 var file_analysis_v1_analysis_proto_goTypes = []any{
 	(BacktestStatus)(0),                     // 0: xstockstrat.analysis.v1.BacktestStatus
 	(SizingMode)(0),                         // 1: xstockstrat.analysis.v1.SizingMode
@@ -5860,54 +5978,55 @@ var file_analysis_v1_analysis_proto_goTypes = []any{
 	(*RunFundamentalsScanRequest)(nil),      // 46: xstockstrat.analysis.v1.RunFundamentalsScanRequest
 	(*FundamentalsScanSummary)(nil),         // 47: xstockstrat.analysis.v1.FundamentalsScanSummary
 	(*Opportunity)(nil),                     // 48: xstockstrat.analysis.v1.Opportunity
-	(*ConditionEval)(nil),                   // 49: xstockstrat.analysis.v1.ConditionEval
-	(*SymbolReadiness)(nil),                 // 50: xstockstrat.analysis.v1.SymbolReadiness
-	(*StrategyAnalytics)(nil),               // 51: xstockstrat.analysis.v1.StrategyAnalytics
-	(*ListOpportunitiesRequest)(nil),        // 52: xstockstrat.analysis.v1.ListOpportunitiesRequest
-	(*ListOpportunitiesResponse)(nil),       // 53: xstockstrat.analysis.v1.ListOpportunitiesResponse
-	(*EvaluateReadinessRequest)(nil),        // 54: xstockstrat.analysis.v1.EvaluateReadinessRequest
-	(*EvaluateReadinessResponse)(nil),       // 55: xstockstrat.analysis.v1.EvaluateReadinessResponse
-	(*SetOpportunityActionRequest)(nil),     // 56: xstockstrat.analysis.v1.SetOpportunityActionRequest
-	(*SetOpportunityActionResponse)(nil),    // 57: xstockstrat.analysis.v1.SetOpportunityActionResponse
-	(*GetStrategyAnalyticsRequest)(nil),     // 58: xstockstrat.analysis.v1.GetStrategyAnalyticsRequest
-	(*GetIndicatorSeriesRequest)(nil),       // 59: xstockstrat.analysis.v1.GetIndicatorSeriesRequest
-	(*GetIndicatorSeriesResponse)(nil),      // 60: xstockstrat.analysis.v1.GetIndicatorSeriesResponse
-	(*ComponentSeries)(nil),                 // 61: xstockstrat.analysis.v1.ComponentSeries
-	(*NamedSeries)(nil),                     // 62: xstockstrat.analysis.v1.NamedSeries
-	(*IndicatorValue)(nil),                  // 63: xstockstrat.analysis.v1.IndicatorValue
-	(*SignalEntry)(nil),                     // 64: xstockstrat.analysis.v1.SignalEntry
-	(*OrderSnapshot)(nil),                   // 65: xstockstrat.analysis.v1.OrderSnapshot
-	(*PnLPatternFactor)(nil),                // 66: xstockstrat.analysis.v1.PnLPatternFactor
-	(*QueryPnLPatternsRequest)(nil),         // 67: xstockstrat.analysis.v1.QueryPnLPatternsRequest
-	(*QueryPnLPatternsResponse)(nil),        // 68: xstockstrat.analysis.v1.QueryPnLPatternsResponse
-	(*GetAttributionRequest)(nil),           // 69: xstockstrat.analysis.v1.GetAttributionRequest
-	(*SourceAttribution)(nil),               // 70: xstockstrat.analysis.v1.SourceAttribution
-	(*GetAttributionResponse)(nil),          // 71: xstockstrat.analysis.v1.GetAttributionResponse
-	nil,                                     // 72: xstockstrat.analysis.v1.BarDiagnostic.IndicatorsEntry
-	nil,                                     // 73: xstockstrat.analysis.v1.StrategyScore.ComponentScoresEntry
-	nil,                                     // 74: xstockstrat.analysis.v1.StrategyComponent.ParamsEntry
-	nil,                                     // 75: xstockstrat.analysis.v1.ScreenResult.CriterionScoresEntry
-	nil,                                     // 76: xstockstrat.analysis.v1.ScreenResult.CriterionRawValuesEntry
-	nil,                                     // 77: xstockstrat.analysis.v1.ScreenResult.CriterionPassedEntry
-	nil,                                     // 78: xstockstrat.analysis.v1.OrderSnapshot.IndicatorValuesEntry
-	(*v1.TimeRange)(nil),                    // 79: xstockstrat.common.v1.TimeRange
-	(*structpb.Struct)(nil),                 // 80: google.protobuf.Struct
-	(v1.Timeframe)(0),                       // 81: xstockstrat.common.v1.Timeframe
-	(*timestamppb.Timestamp)(nil),           // 82: google.protobuf.Timestamp
-	(*v1.PageRequest)(nil),                  // 83: xstockstrat.common.v1.PageRequest
-	(*v1.PageResponse)(nil),                 // 84: xstockstrat.common.v1.PageResponse
-	(*fieldmaskpb.FieldMask)(nil),           // 85: google.protobuf.FieldMask
+	(*SparklinePoint)(nil),                  // 49: xstockstrat.analysis.v1.SparklinePoint
+	(*ConditionEval)(nil),                   // 50: xstockstrat.analysis.v1.ConditionEval
+	(*SymbolReadiness)(nil),                 // 51: xstockstrat.analysis.v1.SymbolReadiness
+	(*StrategyAnalytics)(nil),               // 52: xstockstrat.analysis.v1.StrategyAnalytics
+	(*ListOpportunitiesRequest)(nil),        // 53: xstockstrat.analysis.v1.ListOpportunitiesRequest
+	(*ListOpportunitiesResponse)(nil),       // 54: xstockstrat.analysis.v1.ListOpportunitiesResponse
+	(*EvaluateReadinessRequest)(nil),        // 55: xstockstrat.analysis.v1.EvaluateReadinessRequest
+	(*EvaluateReadinessResponse)(nil),       // 56: xstockstrat.analysis.v1.EvaluateReadinessResponse
+	(*SetOpportunityActionRequest)(nil),     // 57: xstockstrat.analysis.v1.SetOpportunityActionRequest
+	(*SetOpportunityActionResponse)(nil),    // 58: xstockstrat.analysis.v1.SetOpportunityActionResponse
+	(*GetStrategyAnalyticsRequest)(nil),     // 59: xstockstrat.analysis.v1.GetStrategyAnalyticsRequest
+	(*GetIndicatorSeriesRequest)(nil),       // 60: xstockstrat.analysis.v1.GetIndicatorSeriesRequest
+	(*GetIndicatorSeriesResponse)(nil),      // 61: xstockstrat.analysis.v1.GetIndicatorSeriesResponse
+	(*ComponentSeries)(nil),                 // 62: xstockstrat.analysis.v1.ComponentSeries
+	(*NamedSeries)(nil),                     // 63: xstockstrat.analysis.v1.NamedSeries
+	(*IndicatorValue)(nil),                  // 64: xstockstrat.analysis.v1.IndicatorValue
+	(*SignalEntry)(nil),                     // 65: xstockstrat.analysis.v1.SignalEntry
+	(*OrderSnapshot)(nil),                   // 66: xstockstrat.analysis.v1.OrderSnapshot
+	(*PnLPatternFactor)(nil),                // 67: xstockstrat.analysis.v1.PnLPatternFactor
+	(*QueryPnLPatternsRequest)(nil),         // 68: xstockstrat.analysis.v1.QueryPnLPatternsRequest
+	(*QueryPnLPatternsResponse)(nil),        // 69: xstockstrat.analysis.v1.QueryPnLPatternsResponse
+	(*GetAttributionRequest)(nil),           // 70: xstockstrat.analysis.v1.GetAttributionRequest
+	(*SourceAttribution)(nil),               // 71: xstockstrat.analysis.v1.SourceAttribution
+	(*GetAttributionResponse)(nil),          // 72: xstockstrat.analysis.v1.GetAttributionResponse
+	nil,                                     // 73: xstockstrat.analysis.v1.BarDiagnostic.IndicatorsEntry
+	nil,                                     // 74: xstockstrat.analysis.v1.StrategyScore.ComponentScoresEntry
+	nil,                                     // 75: xstockstrat.analysis.v1.StrategyComponent.ParamsEntry
+	nil,                                     // 76: xstockstrat.analysis.v1.ScreenResult.CriterionScoresEntry
+	nil,                                     // 77: xstockstrat.analysis.v1.ScreenResult.CriterionRawValuesEntry
+	nil,                                     // 78: xstockstrat.analysis.v1.ScreenResult.CriterionPassedEntry
+	nil,                                     // 79: xstockstrat.analysis.v1.OrderSnapshot.IndicatorValuesEntry
+	(*v1.TimeRange)(nil),                    // 80: xstockstrat.common.v1.TimeRange
+	(*structpb.Struct)(nil),                 // 81: google.protobuf.Struct
+	(v1.Timeframe)(0),                       // 82: xstockstrat.common.v1.Timeframe
+	(*timestamppb.Timestamp)(nil),           // 83: google.protobuf.Timestamp
+	(*v1.PageRequest)(nil),                  // 84: xstockstrat.common.v1.PageRequest
+	(*v1.PageResponse)(nil),                 // 85: xstockstrat.common.v1.PageResponse
+	(*fieldmaskpb.FieldMask)(nil),           // 86: google.protobuf.FieldMask
 }
 var file_analysis_v1_analysis_proto_depIdxs = []int32{
-	79,  // 0: xstockstrat.analysis.v1.RunBacktestRequest.range:type_name -> xstockstrat.common.v1.TimeRange
-	80,  // 1: xstockstrat.analysis.v1.RunBacktestRequest.strategy_params:type_name -> google.protobuf.Struct
+	80,  // 0: xstockstrat.analysis.v1.RunBacktestRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	81,  // 1: xstockstrat.analysis.v1.RunBacktestRequest.strategy_params:type_name -> google.protobuf.Struct
 	35,  // 2: xstockstrat.analysis.v1.RunBacktestRequest.inline_definition:type_name -> xstockstrat.analysis.v1.StrategyDefinition
 	1,   // 3: xstockstrat.analysis.v1.RunBacktestRequest.sizing_mode:type_name -> xstockstrat.analysis.v1.SizingMode
 	2,   // 4: xstockstrat.analysis.v1.RunBacktestRequest.fill_model:type_name -> xstockstrat.analysis.v1.FillModel
-	81,  // 5: xstockstrat.analysis.v1.CoverageGap.timeframe:type_name -> xstockstrat.common.v1.Timeframe
-	79,  // 6: xstockstrat.analysis.v1.CoverageGap.requested_range:type_name -> xstockstrat.common.v1.TimeRange
-	79,  // 7: xstockstrat.analysis.v1.CoverageGap.gap:type_name -> xstockstrat.common.v1.TimeRange
-	82,  // 8: xstockstrat.analysis.v1.BacktestResult.completed_at:type_name -> google.protobuf.Timestamp
+	82,  // 5: xstockstrat.analysis.v1.CoverageGap.timeframe:type_name -> xstockstrat.common.v1.Timeframe
+	80,  // 6: xstockstrat.analysis.v1.CoverageGap.requested_range:type_name -> xstockstrat.common.v1.TimeRange
+	80,  // 7: xstockstrat.analysis.v1.CoverageGap.gap:type_name -> xstockstrat.common.v1.TimeRange
+	83,  // 8: xstockstrat.analysis.v1.BacktestResult.completed_at:type_name -> google.protobuf.Timestamp
 	21,  // 9: xstockstrat.analysis.v1.BacktestResult.trades:type_name -> xstockstrat.analysis.v1.TradeRecord
 	0,   // 10: xstockstrat.analysis.v1.BacktestResult.status:type_name -> xstockstrat.analysis.v1.BacktestStatus
 	17,  // 11: xstockstrat.analysis.v1.BacktestResult.coverage_gaps:type_name -> xstockstrat.analysis.v1.CoverageGap
@@ -5916,125 +6035,127 @@ var file_analysis_v1_analysis_proto_depIdxs = []int32{
 	19,  // 14: xstockstrat.analysis.v1.BacktestResult.capital_skips:type_name -> xstockstrat.analysis.v1.PortfolioCapitalSkip
 	20,  // 15: xstockstrat.analysis.v1.BacktestResult.portfolio_equity_curve:type_name -> xstockstrat.analysis.v1.EquityPoint
 	2,   // 16: xstockstrat.analysis.v1.BacktestResult.fill_model:type_name -> xstockstrat.analysis.v1.FillModel
-	82,  // 17: xstockstrat.analysis.v1.PortfolioCapitalSkip.timestamp:type_name -> google.protobuf.Timestamp
-	82,  // 18: xstockstrat.analysis.v1.EquityPoint.timestamp:type_name -> google.protobuf.Timestamp
-	82,  // 19: xstockstrat.analysis.v1.TradeRecord.entry_time:type_name -> google.protobuf.Timestamp
-	82,  // 20: xstockstrat.analysis.v1.TradeRecord.exit_time:type_name -> google.protobuf.Timestamp
-	82,  // 21: xstockstrat.analysis.v1.BarDiagnostic.timestamp:type_name -> google.protobuf.Timestamp
-	72,  // 22: xstockstrat.analysis.v1.BarDiagnostic.indicators:type_name -> xstockstrat.analysis.v1.BarDiagnostic.IndicatorsEntry
+	83,  // 17: xstockstrat.analysis.v1.PortfolioCapitalSkip.timestamp:type_name -> google.protobuf.Timestamp
+	83,  // 18: xstockstrat.analysis.v1.EquityPoint.timestamp:type_name -> google.protobuf.Timestamp
+	83,  // 19: xstockstrat.analysis.v1.TradeRecord.entry_time:type_name -> google.protobuf.Timestamp
+	83,  // 20: xstockstrat.analysis.v1.TradeRecord.exit_time:type_name -> google.protobuf.Timestamp
+	83,  // 21: xstockstrat.analysis.v1.BarDiagnostic.timestamp:type_name -> google.protobuf.Timestamp
+	73,  // 22: xstockstrat.analysis.v1.BarDiagnostic.indicators:type_name -> xstockstrat.analysis.v1.BarDiagnostic.IndicatorsEntry
 	3,   // 23: xstockstrat.analysis.v1.BarDiagnostic.action:type_name -> xstockstrat.analysis.v1.BarAction
 	22,  // 24: xstockstrat.analysis.v1.SymbolDiagnostics.bars:type_name -> xstockstrat.analysis.v1.BarDiagnostic
 	4,   // 25: xstockstrat.analysis.v1.SymbolDiagnostics.no_trade_reason:type_name -> xstockstrat.analysis.v1.NoTradeReason
-	79,  // 26: xstockstrat.analysis.v1.ScoreStrategyRequest.range:type_name -> xstockstrat.common.v1.TimeRange
-	73,  // 27: xstockstrat.analysis.v1.StrategyScore.component_scores:type_name -> xstockstrat.analysis.v1.StrategyScore.ComponentScoresEntry
+	80,  // 26: xstockstrat.analysis.v1.ScoreStrategyRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	74,  // 27: xstockstrat.analysis.v1.StrategyScore.component_scores:type_name -> xstockstrat.analysis.v1.StrategyScore.ComponentScoresEntry
 	18,  // 28: xstockstrat.analysis.v1.StrategyReport.latest_backtest:type_name -> xstockstrat.analysis.v1.BacktestResult
 	25,  // 29: xstockstrat.analysis.v1.StrategyReport.score:type_name -> xstockstrat.analysis.v1.StrategyScore
-	80,  // 30: xstockstrat.analysis.v1.StrategyReport.metadata:type_name -> google.protobuf.Struct
+	81,  // 30: xstockstrat.analysis.v1.StrategyReport.metadata:type_name -> google.protobuf.Struct
 	0,   // 31: xstockstrat.analysis.v1.BacktestRunSummary.status:type_name -> xstockstrat.analysis.v1.BacktestStatus
-	82,  // 32: xstockstrat.analysis.v1.BacktestRunSummary.completed_at:type_name -> google.protobuf.Timestamp
-	82,  // 33: xstockstrat.analysis.v1.BacktestRunSummary.range_start:type_name -> google.protobuf.Timestamp
-	82,  // 34: xstockstrat.analysis.v1.BacktestRunSummary.range_end:type_name -> google.protobuf.Timestamp
+	83,  // 32: xstockstrat.analysis.v1.BacktestRunSummary.completed_at:type_name -> google.protobuf.Timestamp
+	83,  // 33: xstockstrat.analysis.v1.BacktestRunSummary.range_start:type_name -> google.protobuf.Timestamp
+	83,  // 34: xstockstrat.analysis.v1.BacktestRunSummary.range_end:type_name -> google.protobuf.Timestamp
 	1,   // 35: xstockstrat.analysis.v1.BacktestRunSummary.sizing_mode:type_name -> xstockstrat.analysis.v1.SizingMode
 	2,   // 36: xstockstrat.analysis.v1.BacktestRunSummary.fill_model:type_name -> xstockstrat.analysis.v1.FillModel
 	28,  // 37: xstockstrat.analysis.v1.ListBacktestsResponse.runs:type_name -> xstockstrat.analysis.v1.BacktestRunSummary
-	83,  // 38: xstockstrat.analysis.v1.ListStrategiesRequest.page:type_name -> xstockstrat.common.v1.PageRequest
+	84,  // 38: xstockstrat.analysis.v1.ListStrategiesRequest.page:type_name -> xstockstrat.common.v1.PageRequest
 	25,  // 39: xstockstrat.analysis.v1.ListStrategiesResponse.strategies:type_name -> xstockstrat.analysis.v1.StrategyScore
-	84,  // 40: xstockstrat.analysis.v1.ListStrategiesResponse.page:type_name -> xstockstrat.common.v1.PageResponse
+	85,  // 40: xstockstrat.analysis.v1.ListStrategiesResponse.page:type_name -> xstockstrat.common.v1.PageResponse
 	5,   // 41: xstockstrat.analysis.v1.StrategyComponent.kind:type_name -> xstockstrat.analysis.v1.ComponentKind
-	74,  // 42: xstockstrat.analysis.v1.StrategyComponent.params:type_name -> xstockstrat.analysis.v1.StrategyComponent.ParamsEntry
+	75,  // 42: xstockstrat.analysis.v1.StrategyComponent.params:type_name -> xstockstrat.analysis.v1.StrategyComponent.ParamsEntry
 	34,  // 43: xstockstrat.analysis.v1.StrategyDefinition.components:type_name -> xstockstrat.analysis.v1.StrategyComponent
-	80,  // 44: xstockstrat.analysis.v1.StrategyDefinition.signal_params:type_name -> google.protobuf.Struct
+	81,  // 44: xstockstrat.analysis.v1.StrategyDefinition.signal_params:type_name -> google.protobuf.Struct
 	6,   // 45: xstockstrat.analysis.v1.ManageStrategyRequest.operation:type_name -> xstockstrat.analysis.v1.StrategyOperation
 	35,  // 46: xstockstrat.analysis.v1.ManageStrategyRequest.definition:type_name -> xstockstrat.analysis.v1.StrategyDefinition
-	85,  // 47: xstockstrat.analysis.v1.ManageStrategyRequest.update_mask:type_name -> google.protobuf.FieldMask
+	86,  // 47: xstockstrat.analysis.v1.ManageStrategyRequest.update_mask:type_name -> google.protobuf.FieldMask
 	35,  // 48: xstockstrat.analysis.v1.ListStrategyDefinitionsResponse.definitions:type_name -> xstockstrat.analysis.v1.StrategyDefinition
 	35,  // 49: xstockstrat.analysis.v1.SetStrategyLiveResponse.definition:type_name -> xstockstrat.analysis.v1.StrategyDefinition
 	8,   // 50: xstockstrat.analysis.v1.ScreenCriterion.kind:type_name -> xstockstrat.analysis.v1.ScreenKind
 	34,  // 51: xstockstrat.analysis.v1.ScreenCriterion.component:type_name -> xstockstrat.analysis.v1.StrategyComponent
 	7,   // 52: xstockstrat.analysis.v1.ScreenCriterion.op:type_name -> xstockstrat.analysis.v1.Comparator
-	75,  // 53: xstockstrat.analysis.v1.ScreenResult.criterion_scores:type_name -> xstockstrat.analysis.v1.ScreenResult.CriterionScoresEntry
+	76,  // 53: xstockstrat.analysis.v1.ScreenResult.criterion_scores:type_name -> xstockstrat.analysis.v1.ScreenResult.CriterionScoresEntry
 	9,   // 54: xstockstrat.analysis.v1.ScreenResult.status:type_name -> xstockstrat.analysis.v1.ScreenResultStatus
 	17,  // 55: xstockstrat.analysis.v1.ScreenResult.gap:type_name -> xstockstrat.analysis.v1.CoverageGap
-	76,  // 56: xstockstrat.analysis.v1.ScreenResult.criterion_raw_values:type_name -> xstockstrat.analysis.v1.ScreenResult.CriterionRawValuesEntry
-	77,  // 57: xstockstrat.analysis.v1.ScreenResult.criterion_passed:type_name -> xstockstrat.analysis.v1.ScreenResult.CriterionPassedEntry
+	77,  // 56: xstockstrat.analysis.v1.ScreenResult.criterion_raw_values:type_name -> xstockstrat.analysis.v1.ScreenResult.CriterionRawValuesEntry
+	78,  // 57: xstockstrat.analysis.v1.ScreenResult.criterion_passed:type_name -> xstockstrat.analysis.v1.ScreenResult.CriterionPassedEntry
 	42,  // 58: xstockstrat.analysis.v1.ScreenSymbolsRequest.criteria:type_name -> xstockstrat.analysis.v1.ScreenCriterion
-	79,  // 59: xstockstrat.analysis.v1.ScreenSymbolsRequest.evaluation_window:type_name -> xstockstrat.common.v1.TimeRange
+	80,  // 59: xstockstrat.analysis.v1.ScreenSymbolsRequest.evaluation_window:type_name -> xstockstrat.common.v1.TimeRange
 	43,  // 60: xstockstrat.analysis.v1.ScreenSymbolsResponse.results:type_name -> xstockstrat.analysis.v1.ScreenResult
 	17,  // 61: xstockstrat.analysis.v1.ScreenSymbolsResponse.coverage_gaps:type_name -> xstockstrat.analysis.v1.CoverageGap
-	82,  // 62: xstockstrat.analysis.v1.FundamentalsScanSummary.finished_at:type_name -> google.protobuf.Timestamp
+	83,  // 62: xstockstrat.analysis.v1.FundamentalsScanSummary.finished_at:type_name -> google.protobuf.Timestamp
 	10,  // 63: xstockstrat.analysis.v1.Opportunity.action:type_name -> xstockstrat.analysis.v1.OpportunityActionTag
-	82,  // 64: xstockstrat.analysis.v1.Opportunity.valid_until:type_name -> google.protobuf.Timestamp
-	11,  // 65: xstockstrat.analysis.v1.ConditionEval.state:type_name -> xstockstrat.analysis.v1.ConditionState
-	49,  // 66: xstockstrat.analysis.v1.SymbolReadiness.conditions:type_name -> xstockstrat.analysis.v1.ConditionEval
-	83,  // 67: xstockstrat.analysis.v1.ListOpportunitiesRequest.page:type_name -> xstockstrat.common.v1.PageRequest
-	48,  // 68: xstockstrat.analysis.v1.ListOpportunitiesResponse.opportunities:type_name -> xstockstrat.analysis.v1.Opportunity
-	84,  // 69: xstockstrat.analysis.v1.ListOpportunitiesResponse.page:type_name -> xstockstrat.common.v1.PageResponse
-	12,  // 70: xstockstrat.analysis.v1.EvaluateReadinessRequest.rule:type_name -> xstockstrat.analysis.v1.ReadinessRule
-	50,  // 71: xstockstrat.analysis.v1.EvaluateReadinessResponse.readiness:type_name -> xstockstrat.analysis.v1.SymbolReadiness
-	13,  // 72: xstockstrat.analysis.v1.SetOpportunityActionRequest.action:type_name -> xstockstrat.analysis.v1.OpportunityAction
-	82,  // 73: xstockstrat.analysis.v1.SetOpportunityActionRequest.snooze_until:type_name -> google.protobuf.Timestamp
-	82,  // 74: xstockstrat.analysis.v1.GetIndicatorSeriesRequest.times:type_name -> google.protobuf.Timestamp
-	82,  // 75: xstockstrat.analysis.v1.GetIndicatorSeriesResponse.times:type_name -> google.protobuf.Timestamp
-	61,  // 76: xstockstrat.analysis.v1.GetIndicatorSeriesResponse.components:type_name -> xstockstrat.analysis.v1.ComponentSeries
-	5,   // 77: xstockstrat.analysis.v1.ComponentSeries.kind:type_name -> xstockstrat.analysis.v1.ComponentKind
-	62,  // 78: xstockstrat.analysis.v1.ComponentSeries.series:type_name -> xstockstrat.analysis.v1.NamedSeries
-	63,  // 79: xstockstrat.analysis.v1.NamedSeries.values:type_name -> xstockstrat.analysis.v1.IndicatorValue
-	14,  // 80: xstockstrat.analysis.v1.OrderSnapshot.event_type:type_name -> xstockstrat.analysis.v1.SnapshotEventType
-	82,  // 81: xstockstrat.analysis.v1.OrderSnapshot.event_ts:type_name -> google.protobuf.Timestamp
-	80,  // 82: xstockstrat.analysis.v1.OrderSnapshot.ohlcv_bar:type_name -> google.protobuf.Struct
-	78,  // 83: xstockstrat.analysis.v1.OrderSnapshot.indicator_values:type_name -> xstockstrat.analysis.v1.OrderSnapshot.IndicatorValuesEntry
-	64,  // 84: xstockstrat.analysis.v1.OrderSnapshot.signals:type_name -> xstockstrat.analysis.v1.SignalEntry
-	15,  // 85: xstockstrat.analysis.v1.PnLPatternFactor.factor_type:type_name -> xstockstrat.analysis.v1.FactorType
-	82,  // 86: xstockstrat.analysis.v1.QueryPnLPatternsRequest.from_ts:type_name -> google.protobuf.Timestamp
-	82,  // 87: xstockstrat.analysis.v1.QueryPnLPatternsRequest.to_ts:type_name -> google.protobuf.Timestamp
-	66,  // 88: xstockstrat.analysis.v1.QueryPnLPatternsResponse.positive_factors:type_name -> xstockstrat.analysis.v1.PnLPatternFactor
-	66,  // 89: xstockstrat.analysis.v1.QueryPnLPatternsResponse.negative_factors:type_name -> xstockstrat.analysis.v1.PnLPatternFactor
-	82,  // 90: xstockstrat.analysis.v1.GetAttributionRequest.start:type_name -> google.protobuf.Timestamp
-	82,  // 91: xstockstrat.analysis.v1.GetAttributionRequest.end:type_name -> google.protobuf.Timestamp
-	70,  // 92: xstockstrat.analysis.v1.GetAttributionResponse.attributions:type_name -> xstockstrat.analysis.v1.SourceAttribution
-	16,  // 93: xstockstrat.analysis.v1.AnalysisService.RunBacktest:input_type -> xstockstrat.analysis.v1.RunBacktestRequest
-	24,  // 94: xstockstrat.analysis.v1.AnalysisService.ScoreStrategy:input_type -> xstockstrat.analysis.v1.ScoreStrategyRequest
-	31,  // 95: xstockstrat.analysis.v1.AnalysisService.ListStrategies:input_type -> xstockstrat.analysis.v1.ListStrategiesRequest
-	33,  // 96: xstockstrat.analysis.v1.AnalysisService.GetStrategyReport:input_type -> xstockstrat.analysis.v1.GetStrategyReportRequest
-	27,  // 97: xstockstrat.analysis.v1.AnalysisService.ListBacktests:input_type -> xstockstrat.analysis.v1.ListBacktestsRequest
-	30,  // 98: xstockstrat.analysis.v1.AnalysisService.GetBacktest:input_type -> xstockstrat.analysis.v1.GetBacktestRequest
-	36,  // 99: xstockstrat.analysis.v1.AnalysisService.ManageStrategy:input_type -> xstockstrat.analysis.v1.ManageStrategyRequest
-	37,  // 100: xstockstrat.analysis.v1.AnalysisService.GetStrategy:input_type -> xstockstrat.analysis.v1.GetStrategyRequest
-	38,  // 101: xstockstrat.analysis.v1.AnalysisService.ListStrategyDefinitions:input_type -> xstockstrat.analysis.v1.ListStrategyDefinitionsRequest
-	40,  // 102: xstockstrat.analysis.v1.AnalysisService.SetStrategyLive:input_type -> xstockstrat.analysis.v1.SetStrategyLiveRequest
-	44,  // 103: xstockstrat.analysis.v1.AnalysisService.ScreenSymbols:input_type -> xstockstrat.analysis.v1.ScreenSymbolsRequest
-	46,  // 104: xstockstrat.analysis.v1.AnalysisService.RunFundamentalsScan:input_type -> xstockstrat.analysis.v1.RunFundamentalsScanRequest
-	52,  // 105: xstockstrat.analysis.v1.AnalysisService.ListOpportunities:input_type -> xstockstrat.analysis.v1.ListOpportunitiesRequest
-	54,  // 106: xstockstrat.analysis.v1.AnalysisService.EvaluateReadiness:input_type -> xstockstrat.analysis.v1.EvaluateReadinessRequest
-	56,  // 107: xstockstrat.analysis.v1.AnalysisService.SetOpportunityAction:input_type -> xstockstrat.analysis.v1.SetOpportunityActionRequest
-	58,  // 108: xstockstrat.analysis.v1.AnalysisService.GetStrategyAnalytics:input_type -> xstockstrat.analysis.v1.GetStrategyAnalyticsRequest
-	59,  // 109: xstockstrat.analysis.v1.AnalysisService.GetIndicatorSeries:input_type -> xstockstrat.analysis.v1.GetIndicatorSeriesRequest
-	67,  // 110: xstockstrat.analysis.v1.AnalysisService.QueryPnLPatterns:input_type -> xstockstrat.analysis.v1.QueryPnLPatternsRequest
-	69,  // 111: xstockstrat.analysis.v1.AnalysisService.GetAttribution:input_type -> xstockstrat.analysis.v1.GetAttributionRequest
-	18,  // 112: xstockstrat.analysis.v1.AnalysisService.RunBacktest:output_type -> xstockstrat.analysis.v1.BacktestResult
-	25,  // 113: xstockstrat.analysis.v1.AnalysisService.ScoreStrategy:output_type -> xstockstrat.analysis.v1.StrategyScore
-	32,  // 114: xstockstrat.analysis.v1.AnalysisService.ListStrategies:output_type -> xstockstrat.analysis.v1.ListStrategiesResponse
-	26,  // 115: xstockstrat.analysis.v1.AnalysisService.GetStrategyReport:output_type -> xstockstrat.analysis.v1.StrategyReport
-	29,  // 116: xstockstrat.analysis.v1.AnalysisService.ListBacktests:output_type -> xstockstrat.analysis.v1.ListBacktestsResponse
-	18,  // 117: xstockstrat.analysis.v1.AnalysisService.GetBacktest:output_type -> xstockstrat.analysis.v1.BacktestResult
-	35,  // 118: xstockstrat.analysis.v1.AnalysisService.ManageStrategy:output_type -> xstockstrat.analysis.v1.StrategyDefinition
-	35,  // 119: xstockstrat.analysis.v1.AnalysisService.GetStrategy:output_type -> xstockstrat.analysis.v1.StrategyDefinition
-	39,  // 120: xstockstrat.analysis.v1.AnalysisService.ListStrategyDefinitions:output_type -> xstockstrat.analysis.v1.ListStrategyDefinitionsResponse
-	41,  // 121: xstockstrat.analysis.v1.AnalysisService.SetStrategyLive:output_type -> xstockstrat.analysis.v1.SetStrategyLiveResponse
-	45,  // 122: xstockstrat.analysis.v1.AnalysisService.ScreenSymbols:output_type -> xstockstrat.analysis.v1.ScreenSymbolsResponse
-	47,  // 123: xstockstrat.analysis.v1.AnalysisService.RunFundamentalsScan:output_type -> xstockstrat.analysis.v1.FundamentalsScanSummary
-	53,  // 124: xstockstrat.analysis.v1.AnalysisService.ListOpportunities:output_type -> xstockstrat.analysis.v1.ListOpportunitiesResponse
-	55,  // 125: xstockstrat.analysis.v1.AnalysisService.EvaluateReadiness:output_type -> xstockstrat.analysis.v1.EvaluateReadinessResponse
-	57,  // 126: xstockstrat.analysis.v1.AnalysisService.SetOpportunityAction:output_type -> xstockstrat.analysis.v1.SetOpportunityActionResponse
-	51,  // 127: xstockstrat.analysis.v1.AnalysisService.GetStrategyAnalytics:output_type -> xstockstrat.analysis.v1.StrategyAnalytics
-	60,  // 128: xstockstrat.analysis.v1.AnalysisService.GetIndicatorSeries:output_type -> xstockstrat.analysis.v1.GetIndicatorSeriesResponse
-	68,  // 129: xstockstrat.analysis.v1.AnalysisService.QueryPnLPatterns:output_type -> xstockstrat.analysis.v1.QueryPnLPatternsResponse
-	71,  // 130: xstockstrat.analysis.v1.AnalysisService.GetAttribution:output_type -> xstockstrat.analysis.v1.GetAttributionResponse
-	112, // [112:131] is the sub-list for method output_type
-	93,  // [93:112] is the sub-list for method input_type
-	93,  // [93:93] is the sub-list for extension type_name
-	93,  // [93:93] is the sub-list for extension extendee
-	0,   // [0:93] is the sub-list for field type_name
+	83,  // 64: xstockstrat.analysis.v1.Opportunity.valid_until:type_name -> google.protobuf.Timestamp
+	49,  // 65: xstockstrat.analysis.v1.Opportunity.sparkline:type_name -> xstockstrat.analysis.v1.SparklinePoint
+	50,  // 66: xstockstrat.analysis.v1.Opportunity.conditions:type_name -> xstockstrat.analysis.v1.ConditionEval
+	11,  // 67: xstockstrat.analysis.v1.ConditionEval.state:type_name -> xstockstrat.analysis.v1.ConditionState
+	50,  // 68: xstockstrat.analysis.v1.SymbolReadiness.conditions:type_name -> xstockstrat.analysis.v1.ConditionEval
+	84,  // 69: xstockstrat.analysis.v1.ListOpportunitiesRequest.page:type_name -> xstockstrat.common.v1.PageRequest
+	48,  // 70: xstockstrat.analysis.v1.ListOpportunitiesResponse.opportunities:type_name -> xstockstrat.analysis.v1.Opportunity
+	85,  // 71: xstockstrat.analysis.v1.ListOpportunitiesResponse.page:type_name -> xstockstrat.common.v1.PageResponse
+	12,  // 72: xstockstrat.analysis.v1.EvaluateReadinessRequest.rule:type_name -> xstockstrat.analysis.v1.ReadinessRule
+	51,  // 73: xstockstrat.analysis.v1.EvaluateReadinessResponse.readiness:type_name -> xstockstrat.analysis.v1.SymbolReadiness
+	13,  // 74: xstockstrat.analysis.v1.SetOpportunityActionRequest.action:type_name -> xstockstrat.analysis.v1.OpportunityAction
+	83,  // 75: xstockstrat.analysis.v1.SetOpportunityActionRequest.snooze_until:type_name -> google.protobuf.Timestamp
+	83,  // 76: xstockstrat.analysis.v1.GetIndicatorSeriesRequest.times:type_name -> google.protobuf.Timestamp
+	83,  // 77: xstockstrat.analysis.v1.GetIndicatorSeriesResponse.times:type_name -> google.protobuf.Timestamp
+	62,  // 78: xstockstrat.analysis.v1.GetIndicatorSeriesResponse.components:type_name -> xstockstrat.analysis.v1.ComponentSeries
+	5,   // 79: xstockstrat.analysis.v1.ComponentSeries.kind:type_name -> xstockstrat.analysis.v1.ComponentKind
+	63,  // 80: xstockstrat.analysis.v1.ComponentSeries.series:type_name -> xstockstrat.analysis.v1.NamedSeries
+	64,  // 81: xstockstrat.analysis.v1.NamedSeries.values:type_name -> xstockstrat.analysis.v1.IndicatorValue
+	14,  // 82: xstockstrat.analysis.v1.OrderSnapshot.event_type:type_name -> xstockstrat.analysis.v1.SnapshotEventType
+	83,  // 83: xstockstrat.analysis.v1.OrderSnapshot.event_ts:type_name -> google.protobuf.Timestamp
+	81,  // 84: xstockstrat.analysis.v1.OrderSnapshot.ohlcv_bar:type_name -> google.protobuf.Struct
+	79,  // 85: xstockstrat.analysis.v1.OrderSnapshot.indicator_values:type_name -> xstockstrat.analysis.v1.OrderSnapshot.IndicatorValuesEntry
+	65,  // 86: xstockstrat.analysis.v1.OrderSnapshot.signals:type_name -> xstockstrat.analysis.v1.SignalEntry
+	15,  // 87: xstockstrat.analysis.v1.PnLPatternFactor.factor_type:type_name -> xstockstrat.analysis.v1.FactorType
+	83,  // 88: xstockstrat.analysis.v1.QueryPnLPatternsRequest.from_ts:type_name -> google.protobuf.Timestamp
+	83,  // 89: xstockstrat.analysis.v1.QueryPnLPatternsRequest.to_ts:type_name -> google.protobuf.Timestamp
+	67,  // 90: xstockstrat.analysis.v1.QueryPnLPatternsResponse.positive_factors:type_name -> xstockstrat.analysis.v1.PnLPatternFactor
+	67,  // 91: xstockstrat.analysis.v1.QueryPnLPatternsResponse.negative_factors:type_name -> xstockstrat.analysis.v1.PnLPatternFactor
+	83,  // 92: xstockstrat.analysis.v1.GetAttributionRequest.start:type_name -> google.protobuf.Timestamp
+	83,  // 93: xstockstrat.analysis.v1.GetAttributionRequest.end:type_name -> google.protobuf.Timestamp
+	71,  // 94: xstockstrat.analysis.v1.GetAttributionResponse.attributions:type_name -> xstockstrat.analysis.v1.SourceAttribution
+	16,  // 95: xstockstrat.analysis.v1.AnalysisService.RunBacktest:input_type -> xstockstrat.analysis.v1.RunBacktestRequest
+	24,  // 96: xstockstrat.analysis.v1.AnalysisService.ScoreStrategy:input_type -> xstockstrat.analysis.v1.ScoreStrategyRequest
+	31,  // 97: xstockstrat.analysis.v1.AnalysisService.ListStrategies:input_type -> xstockstrat.analysis.v1.ListStrategiesRequest
+	33,  // 98: xstockstrat.analysis.v1.AnalysisService.GetStrategyReport:input_type -> xstockstrat.analysis.v1.GetStrategyReportRequest
+	27,  // 99: xstockstrat.analysis.v1.AnalysisService.ListBacktests:input_type -> xstockstrat.analysis.v1.ListBacktestsRequest
+	30,  // 100: xstockstrat.analysis.v1.AnalysisService.GetBacktest:input_type -> xstockstrat.analysis.v1.GetBacktestRequest
+	36,  // 101: xstockstrat.analysis.v1.AnalysisService.ManageStrategy:input_type -> xstockstrat.analysis.v1.ManageStrategyRequest
+	37,  // 102: xstockstrat.analysis.v1.AnalysisService.GetStrategy:input_type -> xstockstrat.analysis.v1.GetStrategyRequest
+	38,  // 103: xstockstrat.analysis.v1.AnalysisService.ListStrategyDefinitions:input_type -> xstockstrat.analysis.v1.ListStrategyDefinitionsRequest
+	40,  // 104: xstockstrat.analysis.v1.AnalysisService.SetStrategyLive:input_type -> xstockstrat.analysis.v1.SetStrategyLiveRequest
+	44,  // 105: xstockstrat.analysis.v1.AnalysisService.ScreenSymbols:input_type -> xstockstrat.analysis.v1.ScreenSymbolsRequest
+	46,  // 106: xstockstrat.analysis.v1.AnalysisService.RunFundamentalsScan:input_type -> xstockstrat.analysis.v1.RunFundamentalsScanRequest
+	53,  // 107: xstockstrat.analysis.v1.AnalysisService.ListOpportunities:input_type -> xstockstrat.analysis.v1.ListOpportunitiesRequest
+	55,  // 108: xstockstrat.analysis.v1.AnalysisService.EvaluateReadiness:input_type -> xstockstrat.analysis.v1.EvaluateReadinessRequest
+	57,  // 109: xstockstrat.analysis.v1.AnalysisService.SetOpportunityAction:input_type -> xstockstrat.analysis.v1.SetOpportunityActionRequest
+	59,  // 110: xstockstrat.analysis.v1.AnalysisService.GetStrategyAnalytics:input_type -> xstockstrat.analysis.v1.GetStrategyAnalyticsRequest
+	60,  // 111: xstockstrat.analysis.v1.AnalysisService.GetIndicatorSeries:input_type -> xstockstrat.analysis.v1.GetIndicatorSeriesRequest
+	68,  // 112: xstockstrat.analysis.v1.AnalysisService.QueryPnLPatterns:input_type -> xstockstrat.analysis.v1.QueryPnLPatternsRequest
+	70,  // 113: xstockstrat.analysis.v1.AnalysisService.GetAttribution:input_type -> xstockstrat.analysis.v1.GetAttributionRequest
+	18,  // 114: xstockstrat.analysis.v1.AnalysisService.RunBacktest:output_type -> xstockstrat.analysis.v1.BacktestResult
+	25,  // 115: xstockstrat.analysis.v1.AnalysisService.ScoreStrategy:output_type -> xstockstrat.analysis.v1.StrategyScore
+	32,  // 116: xstockstrat.analysis.v1.AnalysisService.ListStrategies:output_type -> xstockstrat.analysis.v1.ListStrategiesResponse
+	26,  // 117: xstockstrat.analysis.v1.AnalysisService.GetStrategyReport:output_type -> xstockstrat.analysis.v1.StrategyReport
+	29,  // 118: xstockstrat.analysis.v1.AnalysisService.ListBacktests:output_type -> xstockstrat.analysis.v1.ListBacktestsResponse
+	18,  // 119: xstockstrat.analysis.v1.AnalysisService.GetBacktest:output_type -> xstockstrat.analysis.v1.BacktestResult
+	35,  // 120: xstockstrat.analysis.v1.AnalysisService.ManageStrategy:output_type -> xstockstrat.analysis.v1.StrategyDefinition
+	35,  // 121: xstockstrat.analysis.v1.AnalysisService.GetStrategy:output_type -> xstockstrat.analysis.v1.StrategyDefinition
+	39,  // 122: xstockstrat.analysis.v1.AnalysisService.ListStrategyDefinitions:output_type -> xstockstrat.analysis.v1.ListStrategyDefinitionsResponse
+	41,  // 123: xstockstrat.analysis.v1.AnalysisService.SetStrategyLive:output_type -> xstockstrat.analysis.v1.SetStrategyLiveResponse
+	45,  // 124: xstockstrat.analysis.v1.AnalysisService.ScreenSymbols:output_type -> xstockstrat.analysis.v1.ScreenSymbolsResponse
+	47,  // 125: xstockstrat.analysis.v1.AnalysisService.RunFundamentalsScan:output_type -> xstockstrat.analysis.v1.FundamentalsScanSummary
+	54,  // 126: xstockstrat.analysis.v1.AnalysisService.ListOpportunities:output_type -> xstockstrat.analysis.v1.ListOpportunitiesResponse
+	56,  // 127: xstockstrat.analysis.v1.AnalysisService.EvaluateReadiness:output_type -> xstockstrat.analysis.v1.EvaluateReadinessResponse
+	58,  // 128: xstockstrat.analysis.v1.AnalysisService.SetOpportunityAction:output_type -> xstockstrat.analysis.v1.SetOpportunityActionResponse
+	52,  // 129: xstockstrat.analysis.v1.AnalysisService.GetStrategyAnalytics:output_type -> xstockstrat.analysis.v1.StrategyAnalytics
+	61,  // 130: xstockstrat.analysis.v1.AnalysisService.GetIndicatorSeries:output_type -> xstockstrat.analysis.v1.GetIndicatorSeriesResponse
+	69,  // 131: xstockstrat.analysis.v1.AnalysisService.QueryPnLPatterns:output_type -> xstockstrat.analysis.v1.QueryPnLPatternsResponse
+	72,  // 132: xstockstrat.analysis.v1.AnalysisService.GetAttribution:output_type -> xstockstrat.analysis.v1.GetAttributionResponse
+	114, // [114:133] is the sub-list for method output_type
+	95,  // [95:114] is the sub-list for method input_type
+	95,  // [95:95] is the sub-list for extension type_name
+	95,  // [95:95] is the sub-list for extension extendee
+	0,   // [0:95] is the sub-list for field type_name
 }
 
 func init() { file_analysis_v1_analysis_proto_init() }
@@ -6043,14 +6164,16 @@ func file_analysis_v1_analysis_proto_init() {
 		return
 	}
 	file_analysis_v1_analysis_proto_msgTypes[19].OneofWrappers = []any{}
-	file_analysis_v1_analysis_proto_msgTypes[47].OneofWrappers = []any{}
+	file_analysis_v1_analysis_proto_msgTypes[32].OneofWrappers = []any{}
+	file_analysis_v1_analysis_proto_msgTypes[33].OneofWrappers = []any{}
+	file_analysis_v1_analysis_proto_msgTypes[48].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_analysis_v1_analysis_proto_rawDesc), len(file_analysis_v1_analysis_proto_rawDesc)),
 			NumEnums:      16,
-			NumMessages:   63,
+			NumMessages:   64,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

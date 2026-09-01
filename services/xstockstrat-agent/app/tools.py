@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Thirty-two tools:
+Thirty-three tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -22,6 +22,7 @@ Thirty-two tools:
   cancel_backfill     — cancels a queued/running backfill job (admin-scoped)
   test_formula        — dry-runs inline formula source in the sandbox, registers nothing (read-only)
   list_strategies     — lists stored strategy definitions (read-only)
+  list_opportunities  — lists the caller's ranked Decide-queue with live enrichment (read-only)
   get_config          — reads a namespace's current config values, secrets redacted (read-only)
   list_config_keys    — lists a namespace's registered config keys, metadata only (read-only)
   set_config          — writes one config value incl. secrets (encrypted at rest; admin-scoped)
@@ -1138,6 +1139,24 @@ def register_tools(server: MCPServer) -> None:
         user_id = _caller_user_id(ctx, "list_strategies")
         try:
             return {"strategies": await client.list_strategy_definitions(user_id, include_inactive)}
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
+
+    @server.tool()
+    async def list_opportunities(ctx: Context, min_conviction: float = 0.0) -> dict:
+        """List the caller's ranked Decide-queue opportunities with live-market enrichment
+        (xstockstrat-analysis ListOpportunities, feature 095, read-only).
+        min_conviction: drop rows below this conviction floor (muted deny-list rows are exempt).
+        Returns {"opportunities": [<opportunity>, ...]} — each carries symbol, action, conviction,
+            thesis, strategy_id, source, provenance, muted, and (when the backend has them) the live
+            enrichment: live_price, change_pct, target_price, stop_price, a sparkline (recent daily
+            closes; a gap is null), and the traced conditions. Unavailable live values are OMITTED,
+            never fabricated. Only the calling user's OWN queue is returned."""
+        # feature 095: caller-scoped via x-user-id (like list_watchlists/list_strategies); no admin
+        # scope — analysis resolves the owner from the header, never a request-body id.
+        user_id = _caller_user_id(ctx, "list_opportunities")
+        try:
+            return await client.list_opportunities(user_id, min_conviction)
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e)) from e
 

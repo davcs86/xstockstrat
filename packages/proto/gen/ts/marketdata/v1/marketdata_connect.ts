@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BackfillBarsRequest, BackfillBarsResponse, Bar, DeleteBackfilledDataRequest, DeleteBackfilledDataResponse, GetBarsRequest, GetBarsResponse, GetDataCoverageRequest, GetDataCoverageResponse, GetFundamentalsMultiRequest, GetFundamentalsMultiResponse, GetFundamentalsRequest, GetFundamentalsResponse, GetLatestQuoteRequest, ListAssetsRequest, ListAssetsResponse, Quote, StreamBarsRequest, StreamQuotesRequest } from "./marketdata_pb.js";
+import { BackfillBarsRequest, BackfillBarsResponse, Bar, DeleteBackfilledDataRequest, DeleteBackfilledDataResponse, GetBarsRequest, GetBarsResponse, GetDataCoverageRequest, GetDataCoverageResponse, GetFundamentalsMultiRequest, GetFundamentalsMultiResponse, GetFundamentalsRequest, GetFundamentalsResponse, GetLatestPriceRequest, GetLatestQuoteRequest, LatestPrice, ListAssetsRequest, ListAssetsResponse, Quote, StreamBarsRequest, StreamQuotesRequest } from "./marketdata_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -57,6 +57,17 @@ export const MarketDataService = {
       name: "GetLatestQuote",
       I: GetLatestQuoteRequest,
       O: Quote,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Latest trade price + prior-session daily close for the Decide surface (feature 095).
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetLatestPrice
+     */
+    getLatestPrice: {
+      name: "GetLatestPrice",
+      I: GetLatestPriceRequest,
+      O: LatestPrice,
       kind: MethodKind.Unary,
     },
     /**
