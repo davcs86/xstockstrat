@@ -56,6 +56,16 @@ _SS_CREDENTIAL_REQUIRED_TYPES = frozenset(
 )
 
 
+class _SignalValidationError(Exception):
+    """feature 166 — a signal that fails validation. Maps to INVALID_ARGUMENT at the RPC boundary;
+    the scheduled mcp_client loop records it as source health error. Raised by
+    _ingest_external_signal so both the IngestSignal RPC and the loop share one ingest path."""
+
+
+class _SignalIngestError(Exception):
+    """feature 166 — a persistence/dedup failure. Maps to INTERNAL at the RPC boundary."""
+
+
 def _resolve_ss_operation(request) -> str | None:
     """Feature 088: prefer operation_enum; fall back to the deprecated string. Unknown → None."""
     enum_to_str = {
@@ -727,30 +737,38 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         if self._db is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
             return
-
-        signal = request.signal
-        if not signal.source or not signal.symbol or not signal.direction:
-            await context.abort(
-                grpc.StatusCode.INVALID_ARGUMENT, "source, symbol, and direction are required"
+        try:
+            signal_id, deduplicated = await self._ingest_external_signal(
+                request.signal, propagation_meta
             )
+        except _SignalValidationError as e:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
             return
+        except _SignalIngestError as e:
+            await context.abort(grpc.StatusCode.INTERNAL, str(e))
+            return
+        return ingest_pb2.IngestSignalResponse(signal_id=signal_id, deduplicated=deduplicated)
+
+    async def _ingest_external_signal(self, signal, propagation_meta=None) -> tuple[int, bool]:
+        """feature 166 — the validate + persist + dedup + health + ledger core of IngestSignal,
+        raising _SignalValidationError / _SignalIngestError instead of aborting a gRPC context so
+        both the RPC and the scheduled mcp_client loop drive one ingest path. Returns
+        (signal_id, deduplicated)."""
+        propagation_meta = propagation_meta or []
+
+        if not signal.source or not signal.symbol or not signal.direction:
+            raise _SignalValidationError("source, symbol, and direction are required")
 
         valid_directions = {"buy", "sell", "hold", "watchlist"}
         if signal.direction not in valid_directions:
-            await context.abort(
-                grpc.StatusCode.INVALID_ARGUMENT, f"direction must be one of {valid_directions}"
-            )
-            return
+            raise _SignalValidationError(f"direction must be one of {valid_directions}")
 
         # F-9: conviction must be in [0.0, 1.0]. The inverted-range form also rejects NaN
         # (every NaN comparison is False), which the naive `< 0 or > 1` form would leak through
         # to the `> 0.0` NULL-sentinel below and silently store as NULL. 0.0 still passes here
         # and is treated as "not provided" (→ NULL) since conviction is a presence-less double.
         if not (0.0 <= signal.conviction <= 1.0):
-            await context.abort(
-                grpc.StatusCode.INVALID_ARGUMENT, "conviction must be between 0.0 and 1.0"
-            )
-            return
+            raise _SignalValidationError("conviction must be between 0.0 and 1.0")
 
         # FR-3: source slug must be registered and active
         source_row = await self._db.fetchrow(
@@ -758,11 +776,9 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             signal.source,
         )
         if source_row is None:
-            await context.abort(
-                grpc.StatusCode.INVALID_ARGUMENT,
-                f"source slug '{signal.source}' is not a registered active source",
+            raise _SignalValidationError(
+                f"source slug '{signal.source}' is not a registered active source"
             )
-            return
 
         # Convert protobuf Timestamps to Python datetimes
         valid_from = signal.valid_from.ToDatetime(tzinfo=UTC)
@@ -847,8 +863,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             )
             if existing is None:
                 # Unreachable in normal operation — nothing deletes signal_dedup_keys rows.
-                await context.abort(grpc.StatusCode.INTERNAL, "dedup claim lost")
-                return
+                raise _SignalIngestError("dedup claim lost")
             signal_id = existing["signal_id"]
         except Exception as e:
             log.error("failed to insert signal: %s", e)
@@ -858,8 +873,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 log.warning(
                     "failed to record source error for %s: %s", signal.source, bookkeeping_err
                 )
-            await context.abort(grpc.StatusCode.INTERNAL, f"database error: {e}")
-            return
+            raise _SignalIngestError(f"database error: {e}")
 
         if not deduplicated:
             # feature 083 — record a successful feed (last_seen_at + signals_fed++, clear
@@ -919,7 +933,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 signal_id,
             )
 
-        return ingest_pb2.IngestSignalResponse(signal_id=signal_id, deduplicated=deduplicated)
+        return signal_id, deduplicated
 
     async def QuerySignals(self, request, context):
         """Query active signals filtered by source/symbol/direction and time window."""
