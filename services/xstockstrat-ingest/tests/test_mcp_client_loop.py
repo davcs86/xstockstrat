@@ -1,8 +1,9 @@
 """Loop-level tests for the mcp_client scheduled query loop (feature 166, AC-4 + AC-5).
 
 Drives a single deterministic cycle (`run_one_cycle`) against a fake MCP client / cfg-watcher and a
-mocked DB, so no live MCP endpoint or database is needed. AC-4's dedup half runs the REAL shared
-`IngestServicer._ingest_external_signal` over the transaction_conn mock (the same seam the RPC uses).
+mocked DB, so no live MCP endpoint or database is needed. AC-4's dedup half runs the REAL
+shared `IngestServicer._ingest_external_signal` over the transaction_conn mock (the same
+seam the RPC uses).
 """
 
 from datetime import UTC, datetime
