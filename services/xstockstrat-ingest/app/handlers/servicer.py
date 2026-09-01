@@ -52,7 +52,7 @@ _SS_MASKABLE_PATHS = frozenset(
 # slug is the PK; active is column-authoritative (lifecycle via reactivate/deactivate only, RC-6).
 _SS_COLUMN_AUTH_PATHS = frozenset({"slug", "active"})
 _SS_CREDENTIAL_REQUIRED_TYPES = frozenset(
-    {"authenticated_website", "mediated_authenticated_website"}
+    {"authenticated_website", "mediated_authenticated_website", "mcp_client"}
 )
 
 

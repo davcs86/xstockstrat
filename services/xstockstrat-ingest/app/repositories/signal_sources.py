@@ -221,6 +221,16 @@ def validate_config_json(source_type: str, config_json: dict | None) -> str | No
         # producer (feature 062). No extraction config is required (config_json is NULL).
         return None
 
+    elif source_type == "mcp_client":
+        # feature 166 — server-side MCP query source. Fail-closed on both fields (never
+        # default a missing one): the scheduled loop needs the endpoint URL and the tool
+        # name from config_json; the bearer token is a credential (credentials_ref), never
+        # config_json. AC-6: the error names the missing field.
+        if not cfg.get("mcp_endpoint"):
+            return f"{source_type} requires non-empty mcp_endpoint in config_json"
+        if not cfg.get("mcp_tool"):
+            return f"{source_type} requires non-empty mcp_tool in config_json"
+
     else:
         # Fail-closed (feature 062): reject any source_type not explicitly allow-listed
         # above. The allow-list is a superset of the ingest.signal_sources source_type DB
