@@ -76,6 +76,9 @@ router.service(MarketDataService, {
   // feature 125 (FR-7) — read-only, ungated (matches GetFundamentals' backend contract); the one
   // genuinely new BFF registration this feature needs (absent from both trader and insights BFFs).
   getFundamentals: forward((req, opts) => marketDataClient.getFundamentals(req, opts)),
+  // feature 095 — Decide-surface live price for the off-queue Signal-detail fallback (AC-13);
+  // wired on both BFFs for cross-surface parity (C-10(b)).
+  getLatestPrice: forward((req, opts) => marketDataClient.getLatestPrice(req, opts)),
 });
 
 router.service(NotifyService, {

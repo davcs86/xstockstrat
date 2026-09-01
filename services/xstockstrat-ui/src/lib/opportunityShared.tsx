@@ -8,6 +8,7 @@
 // runtime phosphor import there breaks the production build (createContext in the server bundle).
 import type { Icon } from '@phosphor-icons/react';
 import { OpportunityActionTag, ConditionState } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import type { ConditionEval } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { PositionRiskFlag } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { SourceHealthStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { Badge } from '../components/ui/badge';
@@ -69,6 +70,35 @@ export function EnumBadge({ render, testId }: { render: EnumRender; testId?: str
     <Badge variant={render.role} data-testid={testId}>
       {Icon && <Icon weight="fill" role="img" aria-label={render.label} />}
       {render.label}
+    </Badge>
+  );
+}
+
+/**
+ * feature 095 — the single most-blocking traced condition leaf to surface on a compact card: the
+ * first FAIL, else the first SOFT, else the first leaf; `undefined` when there are none (an
+ * unattributed row → render nothing, AC-6). Never recomputes — reads the emitted leaves (AC-5).
+ */
+export function blockingCondition(conditions: ConditionEval[]): ConditionEval | undefined {
+  return (
+    conditions.find((c) => c.state === ConditionState.FAIL) ??
+    conditions.find((c) => c.state === ConditionState.SOFT) ??
+    conditions[0]
+  );
+}
+
+/**
+ * feature 095 — a compact chip for one traced condition leaf, colored by CONDITION_STATE. Renders
+ * the emitted `refName fn threshold` verbatim (no client recompute, AC-5).
+ */
+export function ConditionChip({ c, testId }: { c: ConditionEval; testId?: string }) {
+  return (
+    <Badge
+      variant={CONDITION_STATE[c.state].role}
+      className="font-mono text-[11px]"
+      data-testid={testId}
+    >
+      {c.refName} {c.fn} {c.threshold}
     </Badge>
   );
 }
