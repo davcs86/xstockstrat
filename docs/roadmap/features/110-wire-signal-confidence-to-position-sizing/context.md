@@ -196,3 +196,39 @@ Confirmed operator decision applied to `product-spec.md`, `acceptance.feature`, 
   - Cross-cutting NOTE: 110 Step 4 adds `signal_confidence` onto 095's already-expanded 18-entry `_MAPPED` set (both co-edit servicer.py `_row_to_opportunity` + the parity `_MAPPED`); 110 runs SECOND, so it rebases onto 095's set (additive, low risk). — [ ] note only
   - Step 2 gen wildcard / Step 8 directory-in-Files (filename pinned in Verification) — accepted conventions. — [ ] note only
 - Overlap findings: batch scan CLEAN; 095<110 on analysis servicer.py + parity test + OrderForm (merge-order.md).
+
+## Session 2026-09-01 — sdd-execute (Stage 2, all 8 steps → code-completed)
+
+Executed all 8 steps on `feature/wire-signal-confidence-to-position-sizing` (red-before-green on
+every code step). Status → `code-completed`. Commits (4):
+
+- `steps 1-2` — additive `optional double signal_confidence = 19` on `Opportunity` (the next free
+  number after feature 095's 13-18 — this branch is stacked on 095). buf lint green; stubs regenerated.
+- `steps 3-4` — analysis populates it from the existing max-raw reducer `c["_best_sig_conv"]` into the
+  per-candidate `readiness_json` (JSONB-ride, no column/migration), carried by `_row_to_opportunity` as
+  explicit-presence (unset when the symbol had no active signal, never a fabricated 0.0). Kept distinct
+  from the ordinal `conviction` and the decayed `signal_axis`; post-ranking. RED-first parity guard
+  (field 19 absent from `_MAPPED`) → GREEN; `TestSignalConfidence` covers the mapper (present/absent →
+  HasField) + the producer (two signals raw 0.30/0.90 → max 0.90). Suite 644 passed.
+- `steps 5-8` — UI: a scoped `OrderForm` `signalConfidence?: number` prop (mirrors `allowOfflineRecord`,
+  not keyed on `initialSymbol`) that makes qty optional, coerces a blank/NaN qty to a real 0 (never NaN —
+  Go's `NaN<=0` is false), and attaches `PlaceOrder.confidence` (023 auto-size); the `/trader/positions/
+  [symbol]` render site derives a finite in-[0,1] `signalConfidence` from `symbolOpportunities` (per-symbol);
+  the plain `/trader` + `/trader/orders` forms are byte-identical (FR-3). Deleted the orphaned
+  `SignalOrderTicket.tsx` (zero importers) + the `/insights/market/[symbol]` redirect stub; removed the
+  nav-reachability redirect test and retargeted offline-accounts @AC-1 to the live surface (AC-9).
+  `signal-confidence-ticket.spec.ts` — 6 e2e (AC-2/3/4/5/6/7/8): blank→0+confidence, raw-not-ordinal,
+  explicit override, distinct-per-symbol, plain-form required. CAPR fixture gains `signalConfidence` +
+  INVENTORY note.
+
+**Honored impl-review `[ ] unaddressed` fix:** Step 7's AC-9 verification grep was narrowed from
+`insights/market` (which over-matched a surviving comment) to `goto('/insights/market` (real
+navigations only); also confirmed nothing references `SignalOrderTicket` after the delete.
+
+**Stacked-branch note:** 110 is a genuine dependent of 095 — its proto field 19 follows 095's 13-18,
+and its symbol-page `signalConfidence` derivation sits alongside 095's `headerOpp`. It was rebased onto
+095 twice this session as the base moved: first when 095 re-rooted for its PR, then again when 029
+merged into main-dev and 095 rebased onto the new main-dev. When 095 squash-merges, 110 rebases onto
+the new main-dev (dropping 095's now-squashed commits).
+
+C-16 acceptance-suite promotion (110 `@AC-*`) is deferred to `/promote` at launch.

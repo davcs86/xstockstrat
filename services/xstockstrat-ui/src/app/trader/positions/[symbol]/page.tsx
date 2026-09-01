@@ -218,6 +218,13 @@ function PositionDetailInner() {
   const headerChangePct = headerOpp?.changePct;
   const oppTarget = headerOpp?.targetPrice;
   const oppStop = headerOpp?.stopPrice;
+  // feature 110 — the raw max ExternalSignal.conviction for this symbol (per-symbol: every matched
+  // row carries the same value). Finite in-[0,1] gate → the ticket's blank-qty confidence auto-sizing
+  // (023). Undefined for a held/watchlist-only or off-queue symbol (no active signal) → the ticket
+  // falls back to the ordinary required-qty form, so 023's full-risk footgun cannot occur.
+  const signalConfidence = symbolOpportunities
+    .map((o) => o.signalConfidence)
+    .find((c): c is number => typeof c === 'number' && Number.isFinite(c) && c >= 0 && c <= 1);
   // feature 095 — client-side R:R + suggested size from values already on hand (live price as entry,
   // the signal's target/stop, buying power). Presentation only — never sent to execution (AC-10).
   const rr = riskReward(headerLivePrice, oppStop, oppTarget);
@@ -434,7 +441,12 @@ function PositionDetailInner() {
                 AccountContext auto-select re-render raced the assertion, flaking
                 offline-accounts.spec.ts:257 @AC-1. The trading routing guard still guarantees an
                 offline account is never broker-routed. */}
-            <OrderForm mode={mode} initialSymbol={symbol} allowOfflineRecord={false} />
+            <OrderForm
+              mode={mode}
+              initialSymbol={symbol}
+              allowOfflineRecord={false}
+              signalConfidence={signalConfidence}
+            />
           </CardContent>
         </Card>
       ),

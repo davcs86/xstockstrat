@@ -185,6 +185,8 @@ export const OPPORTUNITIES = [
     targetPrice: 14.0,
     stopPrice: 11.5,
     conditions: CAPR_CONDITIONS,
+    // feature 110 — the raw max ExternalSignal.conviction feeding the ticket's confidence auto-sizing.
+    signalConfidence: 0.82,
   },
   {
     symbol: 'CAPR',

@@ -6223,6 +6223,7 @@ function createBaseOpportunity() {
         stopPrice: undefined,
         sparkline: [],
         conditions: [],
+        signalConfidence: undefined,
     };
 }
 exports.Opportunity = {
@@ -6280,6 +6281,9 @@ exports.Opportunity = {
         }
         for (const v of message.conditions) {
             exports.ConditionEval.encode(v, writer.uint32(146).fork()).join();
+        }
+        if (message.signalConfidence !== undefined) {
+            writer.uint32(153).double(message.signalConfidence);
         }
         return writer;
     },
@@ -6416,6 +6420,13 @@ exports.Opportunity = {
                     message.conditions.push(exports.ConditionEval.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 19: {
+                    if (tag !== 153) {
+                        break;
+                    }
+                    message.signalConfidence = reader.double();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -6488,6 +6499,11 @@ exports.Opportunity = {
             conditions: globalThis.Array.isArray(object?.conditions)
                 ? object.conditions.map((e) => exports.ConditionEval.fromJSON(e))
                 : [],
+            signalConfidence: isSet(object.signalConfidence)
+                ? globalThis.Number(object.signalConfidence)
+                : isSet(object.signal_confidence)
+                    ? globalThis.Number(object.signal_confidence)
+                    : undefined,
         };
     },
     toJSON(message) {
@@ -6546,6 +6562,9 @@ exports.Opportunity = {
         if (message.conditions?.length) {
             obj.conditions = message.conditions.map((e) => exports.ConditionEval.toJSON(e));
         }
+        if (message.signalConfidence !== undefined) {
+            obj.signalConfidence = message.signalConfidence;
+        }
         return obj;
     },
     create(base) {
@@ -6571,6 +6590,7 @@ exports.Opportunity = {
         message.stopPrice = object.stopPrice ?? undefined;
         message.sparkline = object.sparkline?.map((e) => exports.SparklinePoint.fromPartial(e)) || [];
         message.conditions = object.conditions?.map((e) => exports.ConditionEval.fromPartial(e)) || [];
+        message.signalConfidence = object.signalConfidence ?? undefined;
         return message;
     },
 };
