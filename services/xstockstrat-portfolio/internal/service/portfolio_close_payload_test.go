@@ -4,8 +4,9 @@ import (
 	"testing"
 	"time"
 
-	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
 )
 
 // feature 031 — the portfolio.position.closed payload additively carries cost_basis + opened_at when
