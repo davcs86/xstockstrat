@@ -141,3 +141,64 @@
   - C-03 letter: the resolver's outbound QuerySignals/GetFundamentalsMulti carry no x-user-id — justified as platform-global background-loop reads (mirrors _drain_signals). — [ ] note only
   - Minor normalization asymmetry in S&F intersection (`f.symbol.upper()` vs `_normalize_symbol`); optionally use `_normalize_symbol(f.symbol)` for symmetry. — [ ] optional
 - Overlap findings: batch scan CLEAN; 168 shares config-governance.md / analysis CLAUDE.md with 095 (distinct sections).
+
+## Session 2026-09-01 — sdd-execute (all 6 steps, one PR)
+
+Executed the 6-step spec on `feature/fundamentals-blend-universe` (off `main-dev` 0a23b475), one
+commit per step-pair, red-before-green on both code-bearing pairs.
+
+- **Steps 1-3 (commit 816e85c7)** — config seed migration `024_analysis_engine_blend_keys`
+  (`.up`/`.down`, 2 keys × staging/production, full-dotted-key form, `ON CONFLICT … DO NOTHING`) +
+  `_resolve_fundamentals_universe()` in `live_loop.py` (QuerySignals `source=slug` ∩
+  `GetFundamentalsMulti` has-row, chunked by `_FUNDAMENTALS_CHUNK=50`, fail-closed to empty on any
+  error, FR-6/AC-6) + `TestLiveLoopFundamentalsUniverse` (3 tests, RED before Step 2 via
+  AttributeError, GREEN after). **Deviation (impl-review advisory #3, accepted):** used
+  `_normalize_symbol(f.symbol)` for the fundamentals side instead of the spec's `f.symbol.upper()`,
+  for symmetry with the signal side — behavior-equivalent for uppercase tickers, cleaner.
+- **Steps 4-5 (commit cb87285a)** — the config-gated override branch in `_run_cycle`: two
+  cycle-start reads (`get_str` blend id, `get_bool` kill-switch), `blend_active = enabled AND the
+  governed strategy is live this cycle`, resolve the fundamentals universe **once** only when
+  `blend_active` (else no QuerySignals/GetFundamentalsMulti — FR-5/AC-4, F-06 pacing), and for the
+  governed row **only** replace its universe with `(fundamentals_universe − denied) | (held ∩
+  denied)` (strict FR-2; held not unioned in). Every other row keeps `resolve_universe` unchanged
+  (AC-3). `TestLiveLoopBlendUniverse` (7 tests): the 5 substantive AC-1/2/3/5/6 cases authored RED
+  (failed on the pre-Step-4 tree — the blend ran on its ordinary watchlist/held universe) and GREEN
+  after; the 2 no-op guards (blend-not-live AC-4, kill-switch-off) hold both ways
+  (`GetFundamentalsMulti.await_count == 0`).
+  - **RED→GREEN evidence:** `pytest -k BlendUniverse` → 5 failed / 2 passed pre-Step-4; 7 passed
+    post-Step-4. Full `test_live_loop.py` 44 pass (no regression). Analysis suite 654 pass, 85% cov;
+    ruff check + format clean.
+  - **No-regression safety (existing tests):** `_make_loop`'s cfg leaves `get_str`/`get_bool`
+    unstubbed, but MagicMock `__eq__` compares by identity, so `blend_active` resolves to a real
+    `False` for the FairShare/OwnerScoped tests — the override branch is never taken and the resolver
+    is never called there.
+- **Step 6 (commit d1af4a0e)** — registered both keys in the config-governance Per-Feature log
+  (newest-first) and `services/xstockstrat-analysis/CLAUDE.md` § Config Keys Consumed.
+
+**Teardown / context-scrubber:** Step 6 touched two context/governance docs
+(`docs/patterns/config-governance.md`, `services/xstockstrat-analysis/CLAUDE.md`). The
+`context-forge` plugin / `/context-scrubber` skill is **not available in this session**, so the
+scan could not run here — flagged per the root Teardown rule; the edits are limited to the two
+newly-registered `analysis.engine.*` keys.
+
+Status → `code-completed`.
+
+## Session 2026-09-01 — merge main-dev + migration renumber 024 → 026
+
+Feature 166 (PR #1063) merged into `main-dev` (commit c028b852) **before** this branch, landing its
+config migration `025_ingest_mcp_client_keys`. Merged `origin/main-dev` into
+`feature/fundamentals-blend-universe`:
+
+- **Conflict (`docs/patterns/config-governance.md`):** both 166 and 168 had prepended a Per-Feature
+  Registered Keys entry. Resolved newest-first — 168 on top, then 166 (verbatim from main-dev), then
+  031. Append-only rule honored (166's now-historical "must merge after 024" note left untouched).
+- **Migration renumber `024` → `026` (the real fix):** with `025` already applied on the persistent
+  dev/prod DBs, a `024` arriving later is `< current` and golang-migrate's `migrate up` would never
+  run it — the two `analysis.engine.fundamentals_blend_*` keys would silently never seed. Renamed the
+  seed files to `026_analysis_engine_blend_keys.{up,down}.sql` (next free after 025, `git mv` to
+  preserve history), updated their header comments, and updated the durable references
+  (config-governance 168 entry, analysis `CLAUDE.md` § Config Keys Consumed) to `026`. Recorded in the
+  impl-spec Deviation Log. On a fresh CI DB the gap (024 skipped) is harmless — golang-migrate applies
+  by numeric order and allows gaps.
+- Re-verified: analysis suite still green post-merge (no code conflicts — only docs/migration-name
+  changed); `.down.sql` still deletes exactly the two keys by explicit `key IN (...)`.

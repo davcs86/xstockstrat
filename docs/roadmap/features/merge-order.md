@@ -189,10 +189,19 @@ proto-field collisions, but re-run `./scripts/buf-gen.sh` after each merge.
 > `services/xstockstrat-config/migrations/` dir (tip on branch = `021_notify_push_min_severity`).
 > To avoid a filename collision the numbers are pre-assigned: **021** `ledger-event-export` →
 > `022_ledger_export_keys`; **031** `strategy-performance-dashboard` → `023_ui_performance_keys`;
-> **168** `fundamentals-blend-universe` → `024_analysis_engine_blend_keys`; **166**
-> `mcp-client-signal-source` → `025_ingest_mcp_client_keys`. golang-migrate applies in numeric order;
+> **168** `fundamentals-blend-universe` → ~~`024_analysis_engine_blend_keys`~~ **renumbered to
+> `026_analysis_engine_blend_keys`** (see below); **166** `mcp-client-signal-source` →
+> `025_ingest_mcp_client_keys`. golang-migrate applies in numeric order;
 > seeded namespaces are disjoint (`ledger`/`ui`/`analysis`/`ingest`), so this is file-ordering only,
 > no key conflict. Each `/sdd-spec` re-derives next-free from the merged tree and honors this split.
+>
+> **Update 2026-09-01 — 168 renumbered `024` → `026`.** The pre-assignment assumed 168 (024) would
+> merge before 166 (025), but **166 merged into `main-dev` first** (PR #1063). A `024` landing after
+> `025` is already applied would sit below the current DB version, and golang-migrate's `migrate up`
+> (versions > current only) would never run it — the two `analysis.engine.fundamentals_blend_*` keys
+> would silently never seed on the persistent dev/prod DBs. 168's migration was renamed to
+> `026_analysis_engine_blend_keys` (next free after 025) in PR #1064; the skipped `024` is a
+> permanent, harmless gap (golang-migrate allows gaps).
 > Non-config migrations are single-owner per service dir: ledger `003_events_user_id` (021);
 > portfolio `014_positions_fees_accum` + analysis `021_pnl_positions_fees_total` (029); ingest
 > `011` mcp_client CHECK (166) — no cross-feature collision.

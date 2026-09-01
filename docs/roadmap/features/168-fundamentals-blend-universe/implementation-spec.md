@@ -1,6 +1,6 @@
 # Implementation Spec: fundamentals-blend-universe
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-08-31
 **Feature**: `docs/roadmap/features/168-fundamentals-blend-universe/feature.md`
 **Total Steps**: 6
@@ -56,7 +56,7 @@ an omission.
 
 ### Step 1 — config: seed `analysis.engine.fundamentals_blend_*` keys (migration `024_analysis_engine_blend_keys`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/024_analysis_engine_blend_keys.up.sql` — create
@@ -131,7 +131,7 @@ grep -n "analysis.engine.fundamentals_blend" services/xstockstrat-config/migrati
 
 ### Step 2 — service: once-per-cycle fundamentals-universe resolver in `live_loop.py`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/live_loop.py` — modify
@@ -199,7 +199,7 @@ grep -n "analysis.engine.fundamentals_blend" services/xstockstrat-config/migrati
 
 ### Step 3 — test: resolver intersection + fail-closed (RED-before-green)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_live_loop.py` — modify
@@ -253,7 +253,7 @@ inline copy of a domain literal introduced — `grep -n "from .conftest\|conftes
 
 ### Step 4 — service: config-gated universe-override branch in `_run_cycle`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/live_loop.py` — modify
@@ -320,7 +320,7 @@ inline copy of a domain literal introduced — `grep -n "from .conftest\|conftes
 
 ### Step 5 — test: `_run_cycle` override end-to-end (RED-before-green)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_live_loop.py` — modify
@@ -392,7 +392,7 @@ copy / no speculative `conftest.py` home introduced.
 
 ### Step 6 — docs: register both keys (config-governance log + analysis CLAUDE.md)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` + `services/xstockstrat-analysis`
 **Files**:
 - `docs/patterns/config-governance.md` — modify (Per-Feature Registered Keys log)
@@ -440,4 +440,20 @@ grep -n "analysis.engine.fundamentals_blend_strategy_id\|analysis.engine.fundame
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **Step 1 migration renumbered `024` → `026` (post-merge, 2026-09-01):** the spec (and every
+  `024_analysis_engine_blend_keys` reference in Steps 1/verification above) pre-assigned config
+  migration **024**. Feature 166's `025_ingest_mcp_client_keys` merged into `main-dev` first
+  (PR #1063) while this branch was still open, so a `024` landing afterward would sit **below** the
+  already-applied `025`, and golang-migrate (`migrate up` applies only versions > current) would
+  never run it on the persistent dev/prod DBs — the two keys would silently never seed. The
+  migration files were renamed to **`026_analysis_engine_blend_keys.{up,down}.sql`** (next free after
+  025) and every durable reference (config-governance log, analysis `CLAUDE.md`) updated to `026`;
+  the skipped `024` is a permanent, harmless gap (golang-migrate allows gaps). The Step-1 planning
+  text above still reads `024` as authored — those references now denote the shipped `026` file.
+- **Step 2 (accepted, impl-review advisory #3):** the fundamentals-side symbol normalization uses
+  `_normalize_symbol(f.symbol)` rather than the spec's `f.symbol.upper()`, for symmetry with the
+  signal side (`_normalize_symbol(s.symbol)`). Behavior-equivalent for uppercase tickers; both feed
+  the same `signal_symbols & fundamentals_symbols` intersection.
+- No other deviations. All 6 steps landed as specified; both code-bearing pairs passed the
+  red-before-green gate (Step 3 RED via AttributeError pre-Step-2; Step 5's 5 substantive cases RED
+  pre-Step-4). Analysis suite 654 pass, 85% coverage, ruff clean.

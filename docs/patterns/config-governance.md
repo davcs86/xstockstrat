@@ -102,6 +102,31 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 168 — fundamentals-blend-universe (`xstockstrat-analysis` / `xstockstrat-config`)
+
+**Registers** two `analysis.engine.*` keys, seeded by migration **`026_analysis_engine_blend_keys`**
+for `staging` + `production` (global, `user_id` NULL), `consuming_service` `xstockstrat-analysis`.
+Both use the **full-dotted-key form** in the `key` column (per migration `021`) — the live loop reads
+them via the existing `analysis`-namespace `WatchConfig` stream (`get_str`/`get_bool`), which keys the
+snapshot by the `key` column with no namespace prefix added, so the seeded key must equal the read
+string; **no new cross-namespace subscription** (unlike feature 154's `marketdata` read):
+
+- `analysis.engine.fundamentals_blend_strategy_id` (string, default `fundamentals_macd_blend`) — the
+  strategy id the fundamentals-universe force-run rule governs. When that strategy is live, the live
+  loop evaluates it over the fundamentals universe (signals from the fundamentals source ∩ symbols
+  with fundamentals data), minus its deny list, instead of its ordinary owner-scoped universe.
+- `analysis.engine.fundamentals_blend_enabled` (bool, default `true`) — the kill-switch. Read via
+  `get_bool` (HasField-based), so an explicit operator `false` is honored and disables the override
+  entirely (the governed strategy then resolves its own universe like any other), independent of
+  whether that strategy is live.
+
+**Migration renumbered `024` → `026`:** `merge-order.md` pre-assigned `024`, but feature 166's
+`025_ingest_mcp_client_keys` merged into `main-dev` first (PR #1063), so a `024` arriving afterward
+would sit **below** the already-applied `025` and golang-migrate (`migrate up` applies only versions
+> current) would never run it on the persistent dev/prod DBs. Bumping to `026` (next free after
+`025`) restores forward-only ordering; the skipped `024` is a permanent, harmless gap. Declared in
+`services/xstockstrat-analysis/CLAUDE.md` § Config Keys Consumed. No other new keys.
+
 ### feature 166 — mcp-client-signal-source (`xstockstrat-config` / `xstockstrat-ingest`)
 
 **Registers** two non-secret loop keys (seed migration `025_ingest_mcp_client_keys`, namespace-relative
