@@ -167,7 +167,10 @@ function PerformanceDashboardInner() {
 
       {!isLoading && !error && curve.length > 0 && (
         <>
-          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-3 lg:grid-cols-6">
+          <div
+            data-testid="performance-summary"
+            className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-3 lg:grid-cols-6"
+          >
             <StatTile label="Total trades" value={stats.totalTrades} />
             <StatTile label="Win rate" value={`${(stats.winRate * 100).toFixed(1)}%`} />
             <StatTile
