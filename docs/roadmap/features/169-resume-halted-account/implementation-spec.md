@@ -166,7 +166,7 @@ cd services/xstockstrat-trading && GOWORK=off go build ./internal/middleware/
 
 ### Step 4 — service: Add ResumeAccountSvc method to TradingService
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify

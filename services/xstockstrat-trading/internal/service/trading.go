@@ -2974,6 +2974,74 @@ func (s *TradingService) DeregisterBrokerAccountSvc(ctx context.Context, account
 	return nil
 }
 
+// ResumeAccountSvc clears the persistent and in-memory halt on a broker account (feature 169).
+// Admin-scope callers only. Idempotent: a non-halted account returns success with no state change.
+// DB-first ordering: the database halt is cleared BEFORE in-memory maps, inverting haltAccount's
+// memory-first write order so that a crash between the two leaves the account still halted (fail-safe).
+func (s *TradingService) ResumeAccountSvc(ctx context.Context, accountID, reason, callerUserID string) (*tradingv1.BrokerAccount, error) {
+	// (a) Admin scope check.
+	if err := middleware.RequireAdminScope(ctx); err != nil {
+		return nil, err
+	}
+
+	// (b) Fetch account.
+	record, err := s.accountRepo.GetBrokerAccount(ctx, accountID)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.NotFound, "account %s not found: %v", accountID, err)
+	}
+
+	// (c) Idempotent no-op: if the account is not halted, return success immediately (FR-7/AC-6).
+	if !record.Halted {
+		return recordToProtoAccount(record), nil
+	}
+
+	// (d) Capture prior halt state for the ledger event.
+	priorHaltReason := record.HaltReason
+	priorHaltSource := record.HaltSource
+
+	// (e) DB clear FIRST — on failure both DB and memory stay halted (fail-safe).
+	if err := s.accountRepo.UpdateHaltStatus(ctx, accountID, false, "", nil, 0); err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "clear halt in DB: %v", err)
+	}
+
+	// (f) In-memory clear SECOND — only reached after DB success.
+	// Releasing the halted map entry unblocks the reconciliation poller's next tick (AC-7).
+	s.haltedMu.Lock()
+	delete(s.halted, accountID)
+	delete(s.haltReasons, accountID)
+	delete(s.haltedLastPolled, accountID)
+	s.haltedMu.Unlock()
+
+	// (g) Ledger event — best-effort (matches emitLedgerEvent's existing warn-on-fail semantics).
+	s.emitLedgerEvent(ctx, "account.halt.resumed", fmt.Sprintf("account:%s", accountID), callerUserID, map[string]interface{}{
+		"account_id":        accountID,
+		"reason":            reason,
+		"operator":          callerUserID,
+		"prior_halt_reason": priorHaltReason,
+		"prior_halt_source": priorHaltSource,
+	})
+
+	// (h) INFO alert — auditable notification of the resume.
+	_, err = s.notify.EmitAlert(ctx, &notifyv1.EmitAlertRequest{
+		Severity:      notifyv1.AlertSeverity_ALERT_SEVERITY_INFO,
+		Category:      "account",
+		Title:         fmt.Sprintf("Broker account %s resumed", accountID),
+		Body:          fmt.Sprintf("Broker account %s resumed by %s: %s", accountID, callerUserID, reason),
+		SourceService: "xstockstrat-trading",
+	})
+	if err != nil {
+		slog.Warn("resume account: emit alert failed", "account_id", accountID, "error", err)
+	}
+
+	// (i) Re-fetch the now-cleared record and return.
+	refreshed, err := s.accountRepo.GetBrokerAccount(ctx, accountID)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "re-fetch account after resume: %v", err)
+	}
+	slog.Info("account resumed", "account_id", accountID, "operator", callerUserID, "reason", reason)
+	return recordToProtoAccount(refreshed), nil
+}
+
 // instantiateBrokerLocked creates a broker.Broker from plaintext credentials JSON.
 // Caller must not hold brokersMu (it acquires no lock itself).
 func (s *TradingService) instantiateBrokerLocked(rec *repository.BrokerAccountRecord, plaintext []byte) (broker.Broker, error) {
