@@ -6,6 +6,15 @@
 
 ---
 
+## Session 2026-09-02 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 3 warnings (advisory — did not block).
+- Unresolved ⚠ carried into execution:
+  - Step 12: Missing TypeScript lint gate — add `cd services/xstockstrat-ui && pnpm run lint` to Step 12 or Step 13 verification (B2 lint gate / C-08 advisory) — [ ] unaddressed
+  - Step 12: No E2E coverage note for `copilot.ts` touch — add explicit note "no E2E required for bare constant update" (B3 frontend advisory) — [ ] unaddressed
+  - Step 8: `_DESTRUCTIVE_KEYS` frozenset values assumed (not verified) — executor must run sqlglot `.key` verification block before coding; `test_truncate_is_destructive` in Step 9 is the TDD catch (P-03 / C-01 advisory) — [ ] unaddressed
+- Overlap findings: CLEAN — no migration, proto, or config-key collisions; 084 overlap pre-check already embedded in Step 10.
+
 ## Session 2026-09-02T00:00Z — sdd-story
 
 - Created feature.md (status: draft), product-spec.md, acceptance.feature, context.md from user story.
