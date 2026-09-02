@@ -191,3 +191,21 @@ async def test_get_positions_no_claims_raises():
     fn = _tool_fn(_SERVER, "get_positions")
     with pytest.raises(RuntimeError, match="Streamable HTTP"):
         await fn(_ctx(None))
+
+
+# ── Backward compat: manage_offline_account list_positions strips pagination ──
+
+
+@pytest.mark.asyncio
+async def test_manage_offline_account_list_positions_strips_pagination():
+    """Step 6: manage_offline_account list_positions strips next_page_token for backward compat."""
+    mock_result = {
+        "positions": [{"symbol": "AAPL", "qty": 50, "account_id": "off-1"}],
+        "next_page_token": "tok-1",
+    }
+    with patch.object(client, "list_positions", new_callable=AsyncMock, return_value=mock_result):
+        fn = _tool_fn(_SERVER, "manage_offline_account")
+        result = await fn(_ctx(TRADER), operation="list_positions", account_id="off-1")
+    assert "positions" in result
+    assert len(result["positions"]) == 1
+    assert "next_page_token" not in result
