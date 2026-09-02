@@ -100,3 +100,14 @@ Advisory warnings from the third spec review resolved before /sdd-design:
   (encrypted config rows via `GetSecret`). Deviation is legitimate — crystaldba/postgres-mcp is a
   third-party binary that reads its DB URI at process startup from an env var, not via an RPC.
   Impl-spec should note this deviation explicitly (Constitution C-10 / PLAT-4).
+
+## Session 2026-09-02 — sdd-spec
+
+- Implementation spec written: 13 steps, `implementation-spec.md`. Status: `design-approved` → `implementation-ready`.
+- **Step decomposition**: Phase 1 (Steps 1–7): Postgres role runbook, 4 new deps, supervisord.conf + Dockerfile CMD, postgres_mcp_client.py greenfield SSE module. Phase 2 (Steps 8–9): 9 db_* handlers with FR-11 `_is_destructive` gate. Phase 3 (Steps 10–13): env var wiring in 3 deployment files, CLAUDE.md budget table, 6 inventory surfaces, final CI gate.
+- **Admin gate finding**: `trigger_backfill` and `manage_signal_source` use `_caller_access_scope` but delegate the admin check to a gRPC backend that re-enforces it. db_* tools have no gRPC backend — the admin gate (`not (access_scope & 0x04)` → `RuntimeError("PERMISSION_DENIED:...")`) is enforced locally in each handler. This is the correct pattern for agent-side-only tools.
+- **sqlglot .key verification**: Flagged as MANDATORY EXECUTOR PREREQUISITE in Step 8 Instructions. Assumed values `_DESTRUCTIVE_KEYS = frozenset({"update", "delete", "drop", "truncatetable"})` must be verified by running `sqlglot.parse(sql)` for UPDATE/DELETE/DROP/TRUNCATE and recording `.key` output in context.md before coding FR-11.
+- **REPO_ROOT depth in test_deployment_env_vars.py**: `Path(__file__).parent.parent.parent.parent` — test file is at `services/xstockstrat-agent/tests/`, four `.parent` calls reach repo root.
+- **copilot.ts**: `COPILOT_MCP_TOOL_COUNT = 32` → `42` in Step 12; pre-existing stale drift (32 vs actual 33) absorbed in the same change per design.md §6 Inventory Surfaces.
+- **Feature 084 overlap**: Step 10 includes a mandatory pre-check (`cat docs/roadmap/features/084-droplet-compose-deploy/status.md`) before editing `.do/app.dev.yaml`. If 084 has merged, the secrets-injection mechanism for that file may have changed.
+- **Open risk carried forward**: sqlglot `.key` verification output not yet recorded — to be added to this context.md during Step 8 execution.

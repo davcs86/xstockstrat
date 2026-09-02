@@ -4,6 +4,7 @@
 **Created**: 2026-09-02
 **Last Updated**: 2026-09-02
 
+
 ---
 
 ## Status History
@@ -15,6 +16,7 @@
 | 2026-09-02 | `spec-ready` → `draft` | user | Scope change: write access required (DML + FR-11 approval gate); spec revised |
 | 2026-09-02 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 advisory warnings; no blockers) |
 | 2026-09-02 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, quick) and approved; recon.md + design.md written |
+| 2026-09-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated: 13 steps, 13 AC scenarios covered, test-step pairing complete |
 
 ---
 
@@ -24,7 +26,7 @@
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Recon](recon.md) — codebase dossier (Phase 0)
 - [Design](design.md) — debated architecture (Phase 1, 3 rounds)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec agent-postgres-mcp`_
+- [Implementation Spec](implementation-spec.md) — 13-step spec; run `/sdd-review agent-postgres-mcp impl-spec` then `/sdd-execute agent-postgres-mcp`
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -46,4 +48,4 @@ _(Snapshot from reviewer-registry.md at /sdd-story time. Finalized at /sdd-spec 
 
 ## Next Action
 
-`` `/sdd-spec agent-postgres-mcp` `` — generate implementation spec from the approved design
+`` `/sdd-review agent-postgres-mcp impl-spec` `` — advisory quality check + overlap scan, then `` `/sdd-execute agent-postgres-mcp` ``
