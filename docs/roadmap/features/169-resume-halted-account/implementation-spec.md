@@ -273,7 +273,7 @@ cd services/xstockstrat-trading && GOWORK=off go build ./...
 
 ### Step 6 — test: Go unit tests for ResumeAccountSvc and requireAdminScope
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_resume_account_test.go` — create
