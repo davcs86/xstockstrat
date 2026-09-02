@@ -28,13 +28,13 @@ FR-6. Tool names re-exposed from `postgres-mcp` are prefixed with `db_` to preve
 
 FR-7. `docs/runbooks/mcp-tools.md` is updated with the new `db_*` tool table (parameters, return shape, admin-only annotation). The agent `CLAUDE.md` tool-count and tool table are updated. All six tool-inventory surfaces identified in the ledger insight (2026-07-20) are kept in sync.
 
-FR-8. The connection-pool budget is respected: `postgres-mcp` uses at most **1 direct connection** to TimescaleDB (read-only role, direct port `:25060`). This is a new direct slot — update the connection budget table in root `CLAUDE.md`.
+FR-8. The connection-pool budget is respected: `postgres-mcp` uses at most **1 direct connection** to TimescaleDB (DML-capable role `xstockstrat_agent`, direct port `:25060`). This is a new direct slot — update the connection budget table in root `CLAUDE.md`.
 
-FR-9. Local `docker-compose.yml` injects `POSTGRES_MCP_DATABASE_URI` pointing at the local TimescaleDB. DO App Platform dev/prod app specs (`.do/app.dev.yaml`, `.do/app.yaml`) inject the same var from the managed-DB connection string for the `xstockstrat_readonly` role.
+FR-9. Local `docker-compose.yml` injects `POSTGRES_MCP_DATABASE_URI` pointing at the local TimescaleDB. DO App Platform dev/prod app specs (`.do/app.dev.yaml`, `.do/app.yaml`) inject the same var from the managed-DB connection string for the `xstockstrat_agent` role.
 
 FR-10. The `Dockerfile` for `xstockstrat-agent` installs `postgres-mcp` (via `uv` in `pyproject.toml`) and `supervisord` (system package or Python), and replaces the `CMD` entrypoint with a `supervisord.conf` that manages both processes.
 
-FR-11. The agent's `db_execute_sql` tool handler intercepts calls whose `sql` argument contains any of the tokens `UPDATE`, `DELETE`, or `DROP` (case-insensitive, checked before forwarding). On first invocation without `confirm=true`: the agent returns a dry-run response showing the SQL statement, a plain-language description of the destructive operation, and the message `"Destructive operation requires confirmation. Re-invoke with confirm=true to execute."` — the query is **not** forwarded to postgres-mcp. On re-invocation with `confirm=true`: the agent forwards the call to postgres-mcp and returns the result. `INSERT` and `SELECT` are forwarded immediately without a confirmation step. This gate is in the agent tool handler, independent of the postgres-mcp process.
+FR-11. The agent's `db_execute_sql` tool handler intercepts calls whose `sql` argument contains any of the tokens `UPDATE`, `DELETE`, `DROP`, or `TRUNCATE` (case-insensitive, checked before forwarding). On first invocation without `confirm=true`: the agent returns a dry-run response showing the SQL statement, a plain-language description of the destructive operation, and the message `"Destructive operation requires confirmation. Re-invoke with confirm=true to execute."` — the query is **not** forwarded to postgres-mcp. On re-invocation with `confirm=true`: the agent forwards the call to postgres-mcp and returns the result. `INSERT` and `SELECT` are forwarded immediately without a confirmation step. This gate is in the agent tool handler, independent of the postgres-mcp process.
 
 ## Out of Scope
 

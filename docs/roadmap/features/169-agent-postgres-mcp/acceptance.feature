@@ -35,7 +35,7 @@ Feature: agent-postgres-mcp
   Scenario: Admin caller invokes a db_ tool through the agent MCP endpoint
     Given a valid admin OAuth JWT (x-access-scope bit 0x04 set) is presented
     When the caller sends a tools/call request for "db_analyze_db_health" with no arguments
-    Then the agent returns a tool result with a "status" field indicating database connectivity
+    Then the agent returns a tool result containing a top-level "status" key with value "ok" or "healthy" and at least one sub-key (e.g. "connections", "replication_lag", or "table_bloat")
     And the response does not expose the POSTGRES_MCP_DATABASE_URI connection string
 
   @AC-6 @FR-5
@@ -71,9 +71,9 @@ Feature: agent-postgres-mcp
 
   @AC-10 @FR-8
   Scenario: postgres-mcp respects the connection pool budget
-    Given the connection budget table shows 1 new direct slot for postgres-mcp (xstockstrat_readonly)
+    Given the connection budget table shows 1 new direct slot for postgres-mcp (xstockstrat_agent)
     When the agent container is running and postgres-mcp is initialized
-    Then exactly 1 backend connection from the xstockstrat_readonly role appears in pg_stat_activity
+    Then exactly 1 backend connection from the xstockstrat_agent role appears in pg_stat_activity
     And the direct-backend total in root CLAUDE.md is updated to reflect this new slot
 
   @AC-11 @FR-9
