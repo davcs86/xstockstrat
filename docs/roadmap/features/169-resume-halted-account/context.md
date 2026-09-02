@@ -42,6 +42,15 @@
 - TRADING-1 dual-handler invariant carried into Step 5 instructions.
 - Status: design-approved → implementation-ready.
 
+## Session 2026-09-02T00:00:00Z — sdd-review impl-spec (advisory)
+
+- Result: 2 failures, 2 warnings (advisory — did not block).
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 1: `buf breaking` missing from Verification (C-09) — [ ] unaddressed
+  - Step 3: Codebase Evidence wrong path `src/middleware/authz.ts` → actual `src/grpc/authz.ts` (C-01) — [ ] unaddressed
+  - Step 4: Minor line inaccuracy `haltedLastPolled` at `:160` not `:153` — [ ] unaddressed
+- Overlap findings: none (clean across all 7 in-flight features).
+
 ## Open Threads
 
 - [ ] First Go-native access-scope check (`requireAdminScope`) — untested propagation chain. Target: Step 3 + Step 6 (unit test for requireAdminScope + integration-level scope propagation).
