@@ -4,6 +4,7 @@
 **Created**: 2026-09-02
 **Last Updated**: 2026-09-02
 
+
 ---
 
 ## Status History
@@ -11,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-02 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-09-02 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
 
 ---
 
@@ -40,4 +42,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review mcp-get-positions-tools product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design mcp-get-positions-tools quick` — generate recon dossier and design

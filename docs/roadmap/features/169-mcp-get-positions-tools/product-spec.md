@@ -20,7 +20,7 @@ FR-2. A new `get_positions_by_account_id` tool returns positions for a single ac
 
 FR-3. Both tools are **user-bound for everyone** — they forward only `x-user-id` (via `_caller_user_id`), never an admin `x-access-scope`. The portfolio backend enforces ownership on the propagated `x-user-id`, rejecting non-owners with `PERMISSION_DENIED`. Admins see only their own positions, identical to any other caller.
 
-FR-4. Both tools support pagination via the existing `ListPositionsRequest.page_token` / `page_size` fields.
+FR-4. Both tools support pagination via the existing `ListPositionsRequest.page` submessage (`PageRequest.page_token` / `PageRequest.page_size` from `common.v1`) and return `next_page_token` from `ListPositionsResponse.page` (`PageResponse`).
 
 FR-5. Both tools return a response shape consistent with the existing `manage_offline_account list_positions` sub-operation: `{"positions": [...]}` with each position serialized via `MessageToDict(preserving_proto_field_name=True)`.
 
@@ -53,7 +53,7 @@ _Constitution **C-14**._ The end-user-reachable surface(s) this capability is co
 
 - [x] No proto changes required
 
-`PortfolioService.ListPositions` and its request/response messages already exist. The agent will use the existing `ListPositionsRequest` fields (`user_id` deprecated in favor of `x-user-id` header, `account_id`, `page_token`, `page_size`, `side`).
+`PortfolioService.ListPositions` and its request/response messages already exist. The agent will use the existing `ListPositionsRequest` fields (`user_id` deprecated in favor of `x-user-id` header, `account_id`, `page` submessage with `page_token`/`page_size`, `side`).
 
 ## Config Key Changes
 
@@ -78,5 +78,5 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **Known trap (ledger 2026-07-01, 056-open-positions-ui):** `ListPositions` and `buildAccountPortfolio` historically disagreed on mark-to-market enrichment. Confirm which path the new tools use and that the returned position data includes the broker-authoritative valuation fields (`market_value`, `unrealized_pnl`, `current_price`) from the post-056 fix — do not reintroduce the stale mid-quote computation path.
-- [ ] **Pagination token format:** `ListPositionsRequest.page_token` is token-based (opaque numeric offset per the insights ledger). Confirm the agent tools pass through `page_token` / `page_size` and return `next_page_token` in the response so callers can paginate.
+- [x] **Known trap (ledger 2026-07-01, 056-open-positions-ui):** RESOLVED — `ListPositions` returns broker-authoritative values. The DB stores `current_price`, `market_value`, `unrealized_pnl` from broker reconciliation (`portfolio_repo.go:314`). `enrichPositions` (`portfolio_service.go:358`) only fills positions where `CurrentPrice <= 0` using marketdata mid-quotes — broker-valued positions are untouched. The agent's `MessageToDict(preserving_proto_field_name=True)` preserves all three fields as snake_case keys. Note: `MessageToDict` omits zero-value fields by default, so a position with `current_price=0.0` will lack those keys.
+- [x] **Pagination token format:** RESOLVED — Pagination uses nested submessages: `ListPositionsRequest.page` (`common.v1.PageRequest` with `page_size` int32 / `page_token` string) and `ListPositionsResponse.page` (`common.v1.PageResponse` with `next_page_token` string / `total_count` int32). The existing `list_account_positions` in `client.py` does NOT pass pagination — it constructs `ListPositionsRequest` with only `account_id` and discards `resp.page`. The new tools must add `page_size`/`page_token` params and return `next_page_token`.
