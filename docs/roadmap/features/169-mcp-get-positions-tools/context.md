@@ -77,3 +77,10 @@
 - Step 8: Updated all 4 inventory surfaces (33→35): tools.py docstring, CLAUDE.md, mcp-tools.md, test_tools_endpoint.py name-set (5/5 pass).
 - Deviation: coverage threshold (`--cov-fail-under=40`) not in step Verification commands per F-09 immutability; full suite passes 40% threshold. Addressed as deviation per advisory review.
 - Status: implementation-ready → in-progress → code-completed.
+
+## Session 2026-09-02 (CI: feature status automation)
+
+- Promotion PR #1073 merged to main
+- Feature promoted and committed: 0bcd7211c076e062ff51f48329ff0a9b9c1be1fb
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-02

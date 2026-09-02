@@ -96,3 +96,10 @@
 - `in-progress` → `code-completed` (all 9 steps done).
 - Merge-order gate: no entry for `resume-halted-account` — clear.
 - Integration PR targets `main-dev`.
+
+## Session 2026-09-02 (CI: feature status automation)
+
+- Promotion PR #1073 merged to main
+- Feature promoted and committed: 0bcd7211c076e062ff51f48329ff0a9b9c1be1fb
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-02
