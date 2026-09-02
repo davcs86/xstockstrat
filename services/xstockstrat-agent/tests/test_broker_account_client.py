@@ -224,18 +224,24 @@ def test_account_to_dict_covers_every_broker_account_field():
     assert "id" in projected
 
 
-def test_account_to_dict_always_surfaces_is_active_even_when_false():
-    """proto3 omits a scalar bool at its zero value, so a plain MessageToDict drops is_active from
-    every INACTIVE account — the agent then sees the field on active accounts but not inactive ones
-    and cannot distinguish "inactive" from "field absent". The projection must pin is_active on
-    every account so its presence is uniform across the list_accounts output."""
+def test_account_to_dict_always_surfaces_scalar_bools_even_when_false():
+    """AGENT-7: proto3 omits a scalar bool at its zero value, so a plain MessageToDict drops
+    is_active / is_paper / halted from any account where they are false — the agent then sees each
+    field on some accounts but not others and cannot distinguish false from "field absent". The
+    projection must pin all three on every account so their presence is uniform across the
+    list_accounts output."""
     from gen.trading.v1 import trading_pb2  # type: ignore
 
-    inactive = trading_pb2.BrokerAccount(id="acct-inactive", broker_type=1, is_active=False)
-    active = trading_pb2.BrokerAccount(id="acct-active", broker_type=1, is_active=True)
+    all_false = trading_pb2.BrokerAccount(
+        id="acct-false", broker_type=1, is_active=False, is_paper=False, halted=False
+    )
+    all_true = trading_pb2.BrokerAccount(
+        id="acct-true", broker_type=1, is_active=True, is_paper=True, halted=True
+    )
 
-    proj_inactive = client._account_to_dict(inactive)
-    proj_active = client._account_to_dict(active)
+    proj_false = client._account_to_dict(all_false)
+    proj_true = client._account_to_dict(all_true)
 
-    assert "is_active" in proj_inactive and proj_inactive["is_active"] is False
-    assert "is_active" in proj_active and proj_active["is_active"] is True
+    for field in ("is_active", "is_paper", "halted"):
+        assert field in proj_false and proj_false[field] is False, field
+        assert field in proj_true and proj_true[field] is True, field

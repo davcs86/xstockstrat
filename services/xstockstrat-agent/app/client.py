@@ -1702,11 +1702,12 @@ def _account_to_dict(account: Any) -> dict[str, Any]:
     credentials (api_key/api_secret/credentials_json).
     """
     projected = MessageToDict(account, preserving_proto_field_name=True)
-    # is_active is a proto3 scalar bool (no field presence), so MessageToDict OMITS it whenever it
-    # is false. That made the field appear on active accounts but silently vanish on inactive ones,
-    # leaving the agent unable to tell "inactive" from "field absent". Pin it explicitly so every
-    # account in the projection carries is_active regardless of value.
-    projected["is_active"] = account.is_active
+    # proto3 scalar bools have no field presence, so MessageToDict OMITS each one at its false zero
+    # value. That made is_active/is_paper/halted appear on some accounts but silently vanish on
+    # others, leaving the agent unable to tell false from "field absent". Pin all three explicitly
+    # so their presence is uniform across every account in the list_accounts projection (AGENT-7).
+    for _bool_field in ("is_paper", "is_active", "halted"):
+        projected[_bool_field] = getattr(account, _bool_field)
     return projected
 
 
