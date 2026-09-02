@@ -15,7 +15,8 @@ COPY services/xstockstrat-agent/ .
 COPY scripts/wait-for-deps.sh /usr/local/bin/wait-for-deps.sh
 COPY scripts/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/wait-for-deps.sh /docker-entrypoint.sh
+COPY services/xstockstrat-agent/supervisord.conf /app/supervisord.conf
 EXPOSE 9000
 ENV PATH="/app/.venv/bin:$PATH"
 ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD ["python", "-m", "app.main"]
+CMD ["supervisord", "-c", "/app/supervisord.conf"]

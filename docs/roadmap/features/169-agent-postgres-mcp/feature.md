@@ -17,6 +17,7 @@
 | 2026-09-02 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 advisory warnings; no blockers) |
 | 2026-09-02 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, quick) and approved; recon.md + design.md written |
 | 2026-09-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated: 13 steps, 13 AC scenarios covered, test-step pairing complete |
+| 2026-09-02 | `implementation-ready` → `in-progress` | /sdd-execute | Execution started (sequential mode); Steps 1-5 done |
 
 ---
 
@@ -48,4 +49,4 @@ _(Snapshot from reviewer-registry.md at /sdd-story time. Finalized at /sdd-spec 
 
 ## Next Action
 
-`` `/sdd-review agent-postgres-mcp impl-spec` `` — advisory quality check + overlap scan, then `` `/sdd-execute agent-postgres-mcp` ``
+`` `/sdd-execute agent-postgres-mcp next` `` — continue sequential execution (Steps 6–13 pending)

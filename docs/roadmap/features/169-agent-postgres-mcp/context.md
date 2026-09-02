@@ -120,3 +120,14 @@ Advisory warnings from the third spec review resolved before /sdd-design:
 - **copilot.ts**: `COPILOT_MCP_TOOL_COUNT = 32` → `42` in Step 12; pre-existing stale drift (32 vs actual 33) absorbed in the same change per design.md §6 Inventory Surfaces.
 - **Feature 084 overlap**: Step 10 includes a mandatory pre-check (`cat docs/roadmap/features/084-droplet-compose-deploy/status.md`) before editing `.do/app.dev.yaml`. If 084 has merged, the secrets-injection mechanism for that file may have changed.
 - **Open risk carried forward**: sqlglot `.key` verification output not yet recorded — to be added to this context.md during Step 8 execution.
+
+## Session 2026-09-02 — sdd-execute (sequential mode, Steps 1-5)
+
+- **Tooling setup**: Python/uv toolchain confirmed; `uv sync --extra dev` installs; `uv run pytest` and `uv run ruff` verified present; no DB required for Steps 1-5.
+- **Branch divergence**: feature.md names `feature/agent-postgres-mcp`; actual harness branch is `claude/second-mcp-server-systemd-qizn1h` (PR #1068 exists targeting `main-dev`). All commits routed to harness branch.
+- **Step 1 (done)**: Added `## Application-Level Postgres Roles` → `### xstockstrat_agent` subsection to `docs/patterns/database.md`. DML-only (SELECT/INSERT/UPDATE/DELETE); no DDL/TRUNCATE. Verification: grep confirmed section present.
+- **Step 2 (done)**: Added 4 runtime deps to `services/xstockstrat-agent/pyproject.toml` (`httpx2`, `postgres-mcp`, `sqlglot>=25.0.0,<26`, `supervisor`); regenerated `uv.lock` with `uv sync --frozen --no-dev` (then `uv sync --extra dev` for full dev install). sqlglot resolved to v25.34.1, supervisor v4.3.0.
+- **Step 3 (done)**: Created `services/xstockstrat-agent/tests/test_dep_smoke.py` — 4 smoke tests (importable/binary-on-path). RED run confirmed 4 failures before Step 2 deps; GREEN confirmed 4 passes after.
+- **Step 4 (done)**: Created `services/xstockstrat-agent/supervisord.conf` (nodaemon=true; program:app-main python -m app.main; program:postgres-mcp with --unrestricted --transport sse --port %(ENV_POSTGRES_MCP_PORT)s). Modified `Dockerfile` CMD from `["python", "-m", "app.main"]` → `["supervisord", "-c", "/app/supervisord.conf"]`; ENTRYPOINT preserved.
+- **Step 5 (done)**: Created `services/xstockstrat-agent/tests/test_supervisord_conf.py` — 8 structural tests (AC-1/AC-2/AC-3). **Deviation (minor)**: spec listed `configparser.ConfigParser`; actual implementation uses `configparser.RawConfigParser` — required because supervisord's `%(ENV_POSTGRES_MCP_PORT)s` interpolation syntax collides with configparser's own interpolation engine (raises `InterpolationMissingOptionError`). Raw parser returns values verbatim. Disposition: correctness fix within step scope; no spec deviation log entry required (no behavioral change from intent). Test suite: 8 GREEN.
+- **Status transitions**: `implementation-ready` → `in-progress` (status.md overwritten; feature.md history row appended).

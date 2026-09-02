@@ -59,7 +59,7 @@ this named surface. The UI surface is not affected (admin-only JWT path).
 
 ### Step 1 — docs: xstockstrat_agent Postgres role creation runbook
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns/`
 **Files**:
 - `docs/patterns/database.md` — modify (add "Application-Level Postgres Roles" section)
@@ -117,7 +117,7 @@ grep -n "Application-Level Postgres Roles" docs/patterns/database.md
 
 ### Step 2 — service: Add runtime dependencies to pyproject.toml + uv.lock
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/pyproject.toml` — modify
@@ -161,7 +161,7 @@ grep -E "supervisor|postgres-mcp|httpx2|sqlglot" pyproject.toml
 
 ### Step 3 — test: Dependency installation smoke test
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_dep_smoke.py` — create
@@ -217,7 +217,7 @@ pytest --cov=app --cov-fail-under=40
 
 ### Step 4 — service: supervisord.conf (new) + Dockerfile CMD change
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/supervisord.conf` — create
@@ -294,7 +294,7 @@ grep -n "ENTRYPOINT" services/xstockstrat-agent/Dockerfile
 
 ### Step 5 — test: supervisord.conf structural validation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_supervisord_conf.py` — create
