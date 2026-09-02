@@ -28,3 +28,15 @@
   - FR-4 field path corrected: `page_token`/`page_size` are inside `ListPositionsRequest.page` (a `PageRequest` submessage), not top-level.
   - FR-6 "six surfaces" count noted as potentially imprecise — reconcile during design.
 - Overlap findings: CLEAN — no collisions. Feature 010 (`agent-scheduler`, draft) shares `xstockstrat-agent` but targets different modules (`app/scheduler.py` vs `app/tools.py`).
+
+## Session 2026-09-02T00:00:00Z — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-agent, xstockstrat-portfolio; key reuse patterns: list_watchlists user-bound+pagination, descriptor-parity test).
+- Phase 1 Grilling: 2 rounds (quick). Chosen approach: single consolidated `list_positions` client method + two user-bound tool wrappers + frozen-set parity test. Rejected: single tool with optional account_id, client-side ownership guard, backward-compat wrapper (056 dual-path trap).
+- Key decisions:
+  - Consolidate `list_account_positions` into new paginated `list_positions` (eliminates 056 dual-path trap, C-10(b)).
+  - AC-4 amended: backend returns empty list for non-owned accounts (not PERMISSION_DENIED); FR-3 wording corrected.
+  - `manage_offline_account` sub-op strips `next_page_token` to preserve backward compatibility.
+  - `tests/test_offline_client.py` must be updated (two tests reference old method name and shape).
+- Constitution rules touched: C-08, C-10(b), C-14, C-15, C-16, F-04, P-03. Floor breaches: none.
+- Status: spec-ready → design-approved.

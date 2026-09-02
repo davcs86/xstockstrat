@@ -13,6 +13,7 @@
 |---|---|---|---|
 | 2026-09-02 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-02 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
+| 2026-09-02 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, quick) and approved; recon.md + design.md written |
 
 ---
 
@@ -20,6 +21,8 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon Dossier](recon.md) — grounded codebase map, patterns to reuse, risks
+- [Design](design.md) — debated, user-approved architecture (2 rounds, quick)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec mcp-get-positions-tools`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -42,4 +45,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design mcp-get-positions-tools quick` — generate recon dossier and design
+`/sdd-spec mcp-get-positions-tools` — generate implementation spec from the approved design
