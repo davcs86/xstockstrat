@@ -452,8 +452,8 @@ jobs:
           file: Dockerfile.e2e
           tags: xstockstrat-e2e:ci
           load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=e2e-build
+          cache-to: type=gha,scope=e2e-build,mode=max
 
       - name: run e2e tests
         run: |
