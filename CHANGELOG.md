@@ -3,6 +3,16 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-09-02
+
+### Features
+- mcp-get-positions-tools: Add two standalone MCP tools — `get_positions` and `get_positions_by_account_id` — to expose portfolio position data through the agent.
+
+### Summary
+5 commits, 2 feature merges since last promotion.
+
+---
+
 ## 2026-09-01
 
 ### Features
