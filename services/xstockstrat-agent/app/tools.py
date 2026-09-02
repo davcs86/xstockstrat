@@ -1600,7 +1600,9 @@ def register_tools(server: MCPServer) -> None:
             if operation == "list_positions":
                 if not account_id:
                     raise ValueError("list_positions requires an account_id")
-                return await client.list_account_positions(user_id, account_id)
+                result = await client.list_positions(user_id, account_id=account_id)
+                result.pop("next_page_token", None)
+                return result
             if operation == "snapshot_positions":
                 if not account_id or not positions_json:
                     raise ValueError("snapshot_positions requires account_id and positions_json")
