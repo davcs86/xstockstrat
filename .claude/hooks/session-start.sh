@@ -27,6 +27,37 @@ if [ -d "$_UI_DIR/node_modules/.bin" ]; then
   fi
 fi
 
+# ---------------------------------------------------------------------------
+# Plugin marketplace provisioning (Claude Code on the web).
+# The local CLI auto-registers marketplaces declared in .claude/settings.json
+# (extraKnownMarketplaces) at startup, so its project-scoped enabledPlugins
+# resolve and load. The web/remote provisioner does NOT run that registration,
+# leaving enabledPlugins unresolved — context-forge (/context-scrubber,
+# /context-constitution) and design-buddy are then absent from web sessions.
+# Bridge it: register each declared marketplace so settings.json enabledPlugins
+# take effect (no explicit `plugin install` needed — enabling the marketplace
+# is the single missing step). Idempotent + best-effort: an already-registered
+# marketplace is skipped and any failure never aborts session start.
+# ---------------------------------------------------------------------------
+_SETTINGS="${CLAUDE_PROJECT_DIR:-$(git -C "$(dirname "$0")" rev-parse --show-toplevel)}/.claude/settings.json"
+if command -v claude >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 && [ -f "$_SETTINGS" ]; then
+  _known_marketplaces="$(claude plugin marketplace list 2>/dev/null || true)"
+  while IFS=$'\t' read -r _mp_name _mp_repo; do
+    [ -n "$_mp_name" ] || continue
+    if printf '%s\n' "$_known_marketplaces" | grep -qF "$_mp_name"; then
+      continue # already registered (local CLI, or an earlier web provisioning pass)
+    fi
+    echo "[session-start] Registering plugin marketplace: $_mp_name ($_mp_repo)"
+    if ! claude plugin marketplace add "$_mp_repo" >/dev/null 2>&1; then
+      echo "[session-start] WARNING: failed to register marketplace $_mp_name ($_mp_repo) — plugins from it will be unavailable"
+    fi
+  done < <(jq -r '
+      (.extraKnownMarketplaces // {}) | to_entries[]
+      | select(.value.source.source == "github")
+      | [.key, .value.source.repo] | @tsv
+    ' "$_SETTINGS" 2>/dev/null || true)
+fi
+
 SKILLS_DIR="${CLAUDE_PROJECT_DIR:-$(git -C "$(dirname "$0")" rev-parse --show-toplevel)}/.claude/skills"
 
 [ -d "$SKILLS_DIR" ] || exit 0
