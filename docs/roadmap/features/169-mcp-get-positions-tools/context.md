@@ -60,6 +60,6 @@
 
 - Result: 0 failures, 7 warnings (advisory — did not block).
 - Unresolved ⚠ carried into execution:
-  - Steps 2, 4, 6, 7, 8: test Verification blocks missing `--cov-fail-under=40` (C-08) — [ ] unaddressed
-  - Step 4: AC-4 `acceptance.feature:31` still says "PERMISSION_DENIED" but design amended to "empty list" (C-15) — [ ] unaddressed
+  - Steps 2, 4, 6, 7, 8: test Verification blocks missing `--cov-fail-under=40` (C-08) — [x] will be addressed during execution: each test step runs with `--cov-fail-under=40` appended to the verification command (F-09 prevents editing immutable step bodies; deviation logged per step)
+  - Step 4: AC-4 `acceptance.feature:31` still says "PERMISSION_DENIED" but design amended to "empty list" (C-15) — [x] fixed: acceptance.feature + product-spec.md FR-3 amended pre-execution
 - Overlap findings: CLEAN — no collisions.

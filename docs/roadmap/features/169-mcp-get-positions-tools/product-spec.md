@@ -18,7 +18,7 @@ FR-1. A new `get_positions` tool returns all positions for the calling user acro
 
 FR-2. A new `get_positions_by_account_id` tool returns positions for a single account owned by the calling user, accepting an `account_id` parameter. Delegates to `PortfolioService.ListPositions` with the caller's `x-user-id` and the provided `account_id`.
 
-FR-3. Both tools are **user-bound for everyone** — they forward only `x-user-id` (via `_caller_user_id`), never an admin `x-access-scope`. The portfolio backend enforces ownership on the propagated `x-user-id`, rejecting non-owners with `PERMISSION_DENIED`. Admins see only their own positions, identical to any other caller.
+FR-3. Both tools are **user-bound for everyone** — they forward only `x-user-id` (via `_caller_user_id`), never an admin `x-access-scope`. The portfolio backend enforces ownership via `WHERE user_id = $1` (`portfolio_repo.go:148`); when user A passes user B's `account_id`, the query returns zero rows — an empty positions list, not `PERMISSION_DENIED`. This is safe (no data leakage) and consistent with the backend's ownership model. Admins see only their own positions, identical to any other caller.
 
 FR-4. Both tools support pagination via the existing `ListPositionsRequest.page` submessage (`PageRequest.page_token` / `PageRequest.page_size` from `common.v1`) and return `next_page_token` from `ListPositionsResponse.page` (`PageResponse`).
 

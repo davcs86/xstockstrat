@@ -28,7 +28,7 @@ Feature: mcp-get-positions-tools
   Scenario: get_positions_by_account_id rejects non-owned account
     Given user "user-abc" does not own account "acct-other"
     When the MCP caller with x-user-id "user-abc" invokes get_positions_by_account_id with account_id "acct-other"
-    Then the tool returns a PERMISSION_DENIED error
+    Then the response contains {"positions": []} — an empty list, no error
 
   @AC-5 @FR-4
   Scenario: pagination works across both tools
