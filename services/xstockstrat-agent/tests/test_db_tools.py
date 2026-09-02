@@ -69,9 +69,7 @@ async def test_db_analyze_db_health_admin_succeeds():
         "app.tools.postgres_mcp_client.call_tool",
         new=AsyncMock(return_value=mock_result),
     ):
-        result = await _tool_fn(server, "db_analyze_db_health")(
-            ctx=_ctx(ADMIN), health_type="all"
-        )
+        result = await _tool_fn(server, "db_analyze_db_health")(ctx=_ctx(ADMIN), health_type="all")
     assert result is not None
 
 
@@ -79,9 +77,7 @@ async def test_db_analyze_db_health_non_admin_denied():
     """AC-6: non-admin caller receives PERMISSION_DENIED RuntimeError."""
     server = _make_server()
     with pytest.raises(RuntimeError, match="PERMISSION_DENIED"):
-        await _tool_fn(server, "db_analyze_db_health")(
-            ctx=_ctx(TRADER), health_type="all"
-        )
+        await _tool_fn(server, "db_analyze_db_health")(ctx=_ctx(TRADER), health_type="all")
 
 
 # ── FR-11 gate ────────────────────────────────────────────────────────────────
@@ -106,9 +102,7 @@ async def test_db_execute_sql_select_forwards_immediately():
 async def test_db_execute_sql_update_without_confirm_dry_run():
     """AC-12: UPDATE without confirm=True returns dry-run message; postgres-mcp NOT called."""
     server = _make_server()
-    with patch(
-        "app.tools.postgres_mcp_client.call_tool", new=AsyncMock()
-    ) as mock_call:
+    with patch("app.tools.postgres_mcp_client.call_tool", new=AsyncMock()) as mock_call:
         result = await _tool_fn(server, "db_execute_sql")(
             ctx=_ctx(ADMIN), sql="UPDATE foo SET x=1", confirm=False
         )

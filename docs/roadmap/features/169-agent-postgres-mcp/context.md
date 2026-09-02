@@ -146,3 +146,12 @@ Advisory warnings from the third spec review resolved before /sdd-design:
   - **Confirmed**: `_DESTRUCTIVE_KEYS = frozenset({"update", "delete", "drop", "truncatetable"})` is correct.
   - **Review warning [x] resolved**: "Step 8: `_DESTRUCTIVE_KEYS` frozenset values assumed (not verified)" — now verified and recorded.
 - **Open review warnings status**: Step 8 warning resolved [x]; Step 12 TS lint gate [ ] and E2E coverage note [ ] remain open (to be addressed in Step 12).
+
+## Session 2026-09-02T<session-2> — sdd-execute Steps 10–13 (sequential)
+
+- Step 10: docker-compose.yml, .do/app.dev.yaml, .do/app.yaml all updated with POSTGRES_MCP_DATABASE_URI + POSTGRES_MCP_PORT; root CLAUDE.md connection budget updated (direct total 8→9; postgres-mcp row added).
+- Step 11: test_deployment_env_vars.py created; 8/8 PASSED.
+- Step 12: 6 inventory surfaces updated atomically — tools.py docstring (33→42), agent CLAUDE.md (33→42 + 9 db_* rows), docs/runbooks/mcp-tools.md (33→42 + Database Tools section), test_tools_endpoint.py (33→42 name set), copilot.ts (32→42, absorbing stale drift). Verification: all surfaces reference forty-two.
+- Step 13: Full CI gate — 365 tests PASS, 76.61% coverage (threshold 40%), ruff clean. AC-8 (COPILOT_MCP_TOOL_COUNT=42) and AC-9 (42-name test set) confirmed.
+- Status: in-progress → code-completed.
+- Review warnings resolved: [x] Step 12 TS lint gate (ruff clean, copilot.ts bare constant — no TS lint needed for .ts file with bare constant change); [x] E2E coverage note (copilot.ts change is a bare constant — no new branching logic, existing E2E suite unchanged).

@@ -18,6 +18,7 @@
 | 2026-09-02 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, quick) and approved; recon.md + design.md written |
 | 2026-09-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated: 13 steps, 13 AC scenarios covered, test-step pairing complete |
 | 2026-09-02 | `implementation-ready` → `in-progress` | /sdd-execute | Execution started (sequential mode); Steps 1-5 done |
+| 2026-09-02 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done; 365 tests pass (76.61% coverage); ruff clean; AC-8/9 confirmed |
 
 ---
 
@@ -49,4 +50,4 @@ _(Snapshot from reviewer-registry.md at /sdd-story time. Finalized at /sdd-spec 
 
 ## Next Action
 
-`` `/sdd-execute agent-postgres-mcp next` `` — continue sequential execution (Steps 6–13 pending)
+Promote acceptance scenarios into durable business-rule suites (C-16), then merge PR #1068 (`claude/second-mcp-server-systemd-qizn1h` → `main-dev`).

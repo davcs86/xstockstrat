@@ -40,7 +40,7 @@ Python 3.13 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
 
 ## MCP Tools
 
-The agent registers thirty-three tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
+The agent registers forty-two tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
 reference):
 
 | Tool | Purpose |
@@ -78,6 +78,15 @@ reference):
 | `manage_offline_account` | Create a caller-owned OFFLINE account, record its orders, confirm their fills (recomputes positions + realized P&L), snapshot a brokerage-statement baseline (effective-dated opening positions, feature 163), and read its orders/positions (with per-position `source`/`as_of` provenance) — the manual-book reconciliation surface (feature 157) |
 | `manage_account` | Register / update-credentials / deregister a caller-owned BROKER account (Alpaca/IBKR); ownership-gated on `x-user-id`, credentials never echoed back (feature 164) |
 | `list_accounts` | List the caller's own accounts — broker and offline together, each by `broker_type` (read-only, feature 164) |
+| `db_list_schemas` | List all database schemas via postgres-mcp co-process. Admin-only (feature 169) |
+| `db_list_objects` | List objects (tables, views, etc.) in a schema via postgres-mcp. Admin-only (feature 169) |
+| `db_get_object_details` | Get DDL and statistics for a named DB object via postgres-mcp. Admin-only (feature 169) |
+| `db_execute_sql` | Execute SQL via xstockstrat_agent DML role with FR-11 destructive-op gate; destructive statements (UPDATE/DELETE/DROP/TRUNCATE) require `confirm=true`. Admin-only (feature 169) |
+| `db_explain_query` | Get EXPLAIN output for a SQL query via postgres-mcp. Admin-only (feature 169) |
+| `db_get_top_queries` | Get top queries by total execution time from pg_stat_statements. Admin-only (feature 169) |
+| `db_analyze_workload_indexes` | Recommend indexes based on pg_stat_statements workload via postgres-mcp. Admin-only (feature 169) |
+| `db_analyze_query_indexes` | Recommend indexes for a specific SQL query via postgres-mcp. Admin-only (feature 169) |
+| `db_analyze_db_health` | Run comprehensive database health checks via postgres-mcp. Admin-only (feature 169) |
 
 ### Management-tool authorization
 

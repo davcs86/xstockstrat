@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Thirty-three tools:
+Forty-two tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -35,6 +35,15 @@ Thirty-three tools:
   manage_offline_account — offline-account create/record/confirm + read orders/positions
   manage_account       — register/update_credentials/deregister a broker account (ownership-gated)
   list_accounts        — lists the caller's broker + offline accounts together (read-only)
+  db_list_schemas     — list database schemas via postgres-mcp (admin-only)
+  db_list_objects     — list objects in a schema via postgres-mcp (admin-only)
+  db_get_object_details — get DDL/stats for a named DB object via postgres-mcp (admin-only)
+  db_execute_sql      — execute SQL via postgres-mcp with FR-11 destructive-op gate (admin-only)
+  db_explain_query    — explain a query's execution plan via postgres-mcp (admin-only)
+  db_get_top_queries  — get top queries by total_time from pg_stat_statements (admin-only)
+  db_analyze_workload_indexes — recommend indexes based on pg_stat_statements workload (admin-only)
+  db_analyze_query_indexes — recommend indexes for a specific SQL query (admin-only)
+  db_analyze_db_health — run comprehensive DB health checks via postgres-mcp (admin-only)
 """
 
 import base64

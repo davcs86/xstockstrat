@@ -51,9 +51,7 @@ async def test_connect_error_raises_runtime_error():
 
 async def test_connect_timeout_raises_runtime_error():
     with patch("app.postgres_mcp_client.sse_client") as mock_sse:
-        mock_sse.return_value.__aenter__ = AsyncMock(
-            side_effect=httpx2.ConnectTimeout("timed out")
-        )
+        mock_sse.return_value.__aenter__ = AsyncMock(side_effect=httpx2.ConnectTimeout("timed out"))
         mock_sse.return_value.__aexit__ = AsyncMock(return_value=False)
         with pytest.raises(RuntimeError, match="postgres-mcp co-process is unavailable"):
             await call_tool("db_list_schemas", {})

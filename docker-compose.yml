@@ -544,6 +544,10 @@ services:
       JWT_SECRET: "${JWT_SECRET:?JWT_SECRET is required - copy .env.example to .env (run: openssl rand -hex 32)}"
       UI_BASE_URL: http://localhost:3000
       AGENT_PUBLIC_URL: http://localhost:9000
+      # Feature 169: postgres-mcp co-process credentials (env var, not config service — third-party
+      # binary reads URI from env at startup, not via GetSecret RPC; see context.md 2026-09-02T00:01Z)
+      POSTGRES_MCP_DATABASE_URI: "postgresql://xstockstrat_agent:${AGENT_DB_PASSWORD:?AGENT_DB_PASSWORD is required}@timescaledb:5432/xstockstrat?sslmode=disable"
+      POSTGRES_MCP_PORT: "9001"
     ports:
       - "9000:9000"
     healthcheck:

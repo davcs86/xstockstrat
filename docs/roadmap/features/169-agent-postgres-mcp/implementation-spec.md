@@ -1,6 +1,6 @@
 # Implementation Spec: agent-postgres-mcp
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-09-02
 **Feature**: `docs/roadmap/features/169-agent-postgres-mcp/feature.md`
 **Total Steps**: 13
@@ -896,7 +896,7 @@ pytest --cov=app --cov-fail-under=40
 
 ### Step 10 — service: Env var injection in deployment files + connection budget update
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `docker-compose.yml` — modify (add `POSTGRES_MCP_DATABASE_URI` and `POSTGRES_MCP_PORT` to xstockstrat-agent env block)
@@ -971,7 +971,7 @@ grep -n "postgres-mcp.*xstockstrat_agent\|xstockstrat_agent.*direct" CLAUDE.md
 
 ### Step 11 — test: Static-file assertions for env vars and connection budget
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_deployment_env_vars.py` — create
@@ -1068,7 +1068,7 @@ pytest --cov=app --cov-fail-under=40
 
 ### Step 12 — service: 6 tool-inventory surfaces (atomic update)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` (primary); `xstockstrat-ui` (copilot.ts surface)
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify (module docstring: "Thirty-three" → "Forty-two"; add 9 names to the tool list)
@@ -1143,7 +1143,7 @@ grep -c "db_list_schemas\|db_list_objects\|db_get_object_details\|db_execute_sql
 
 ### Step 13 — test: Full CI gate — coverage, tool-name set, lint
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - (no new files — verification only)

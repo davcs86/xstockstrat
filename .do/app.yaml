@@ -298,6 +298,14 @@ services:
       - key: VAPID_PUBLIC_KEY
         scope: RUN_TIME
         value: YOUR_PROD_VAPID_PUBLIC_KEY
+      # Feature 169: postgres-mcp co-process (env var — third-party binary reads URI at startup)
+      - key: POSTGRES_MCP_DATABASE_URI
+        scope: RUN_TIME
+        type: SECRET
+        value: ""
+      - key: POSTGRES_MCP_PORT
+        scope: RUN_TIME
+        value: "9001"
 
   # ── Node.js services ───────────────────────────────────────────────────────
 
