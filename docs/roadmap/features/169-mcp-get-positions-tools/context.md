@@ -55,3 +55,11 @@
   - Four inventory surfaces to update: tools.py docstring, CLAUDE.md, mcp-tools.md, test_tools_endpoint.py (33 → 35).
 - Reviewer roles: Service owner: xstockstrat-agent (Steps 1-8), Service owner: xstockstrat-portfolio (read-only, no steps assigned).
 - Status: design-approved → implementation-ready.
+
+## Session 2026-09-02T00:00:00Z — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 7 warnings (advisory — did not block).
+- Unresolved ⚠ carried into execution:
+  - Steps 2, 4, 6, 7, 8: test Verification blocks missing `--cov-fail-under=40` (C-08) — [ ] unaddressed
+  - Step 4: AC-4 `acceptance.feature:31` still says "PERMISSION_DENIED" but design amended to "empty list" (C-15) — [ ] unaddressed
+- Overlap findings: CLEAN — no collisions.
