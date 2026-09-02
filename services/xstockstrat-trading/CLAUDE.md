@@ -196,12 +196,24 @@ consecutive ticks before it becomes a real finding — a routine partial fill or
 resolves on its own with no ledger event and no halt (self-heal). A real finding emits
 `reconciliation.mismatch_found`, a CRITICAL alert, and routes to the **ordinary, per-account**
 halt (`HaltSource_HALT_SOURCE_RECONCILIATION`, reusing feature 030's `broker_accounts.halted`
-mechanism). `emitReconciliationFinding`/`haltAccount` no-op once the account is already halted
-(any source) — an account with a broker order the platform can never learn about (e.g. one that
-reached a terminal state before `LoadInflightOrders`, which only hydrates NEW/PARTIALLY_FILLED
-orders, last ran) would otherwise re-fire the ledger event, CRITICAL alert, and ERROR log every
-tick, indefinitely, for the same order; nothing in this service ever clears a halt (resuming is a
-manual DB edit), so a later finding against an already-halted account changes no trading behavior.
+mechanism).
+
+The `unknown_broker_order` classification is **DB-grounded, not memory-only**. A broker order the
+in-memory map (`s.orders`) doesn't recognize is not immediately foreign: `s.orders` holds only this
+process's own orders plus `LoadInflightOrders`' NEW/PARTIALLY_FILLED hydrate, so a legitimate order
+the platform placed that has since reached a terminal state (FILLED/CANCELED/EXPIRED/REJECTED) is
+absent from memory yet still persisted in `trading.orders`. Before flagging any unmatched broker
+order, `reconcileTick` calls `reconcileOrderLookup.KnownBrokerOrderIDs` (one DB round-trip per tick,
+scoped to the account's unmatched IDs) — only an order the platform has **no persisted record of at
+all** is a genuine `unknown_broker_order`. Comparing against memory alone previously misclassified
+every historical terminal order the platform itself placed as foreign, halting the account on a
+routine restart; that was an observed production false halt. A transient DB lookup error is
+**fail-safe**: the account's unknown-order check is skipped for that tick (re-evaluated next tick),
+never a false halt. `emitReconciliationFinding`/`haltAccount` still no-op once the account is
+already halted (any source) — defense-in-depth so any residual re-observation of the same order
+can't re-fire the ledger event, CRITICAL alert, and ERROR log every tick; nothing in this service
+ever clears a halt (resuming is a manual DB edit), so a later finding against an already-halted
+account changes no trading behavior.
 `reconcileTick` itself also throttles the broker calls (`ListOrders`/`GetPositions`) for an
 already-halted account to `trading.reconciliation.halted_poll_interval_ms` (default 5 min) instead
 of the ordinary `interval_ms` cadence (`shouldPollHaltedAccount`) — still eventually observing the
