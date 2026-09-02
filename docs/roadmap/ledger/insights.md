@@ -2670,3 +2670,14 @@ reusing.
   copilot.ts 24→32 deviation approved by operator; descriptor-parity test in `test_broker_account_client.py`).
 - **Rule it implies**: always update all six tool-count surfaces in the same PR as any agent tool
   addition; the parity test is the guard that survives refactors.
+
+### 2026-09-02 — resume-halted-account — design
+- **Pattern**: When a service has paired halt/resume operations that span DB + in-memory state, **invert
+  the ordering** between the two directions so that the failure mode is always the safer one. `haltAccount`
+  uses memory-first (a DB failure after memory-halt still blocks trading until restart re-reads DB).
+  `resumeAccount` uses DB-first (a DB failure after memory-clear would let the account trade until restart
+  re-halts from the still-halted DB row — so DB-first keeps "stay halted" as the failure mode).
+- **Evidence**: `services/xstockstrat-trading/internal/service/trading.go` `resumeAccount` (DB-first)
+  vs. `haltAccount` (memory-first); feature 169 `design.md` § Chosen Approach, adversary finding accepted.
+- **Rule it implies**: for any paired enable/disable state spanning persistent+volatile stores, choose
+  the write order that makes the *failure mode* safe — the two directions will have opposite orderings.

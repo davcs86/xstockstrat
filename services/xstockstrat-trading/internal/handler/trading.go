@@ -321,6 +321,18 @@ func (h *TradingHandler) GetTradingEnvironment(
 	return connect.NewResponse(h.svc.GetTradingEnvironment(ctx)), nil
 }
 
+func (h *TradingHandler) ResumeAccount(
+	ctx context.Context,
+	req *connect.Request[tradingv1.ResumeAccountRequest],
+) (*connect.Response[tradingv1.ResumeAccountResponse], error) {
+	callerUserID := extractUserID(ctx)
+	account, err := h.svc.ResumeAccountSvc(ctx, req.Msg.AccountId, req.Msg.Reason, callerUserID)
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return connect.NewResponse(&tradingv1.ResumeAccountResponse{Account: account}), nil
+}
+
 func (a *grpcTradingAdapter) RegisterBrokerAccount(ctx context.Context, req *tradingv1.RegisterBrokerAccountRequest) (*tradingv1.RegisterBrokerAccountResponse, error) {
 	resp, err := a.h.RegisterBrokerAccount(ctx, connect.NewRequest(req))
 	if err != nil {
@@ -355,6 +367,14 @@ func (a *grpcTradingAdapter) UpdateBrokerAccountCredentials(ctx context.Context,
 
 func (a *grpcTradingAdapter) GetTradingEnvironment(ctx context.Context, req *tradingv1.GetTradingEnvironmentRequest) (*tradingv1.GetTradingEnvironmentResponse, error) {
 	resp, err := a.h.GetTradingEnvironment(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcTradingAdapter) ResumeAccount(ctx context.Context, req *tradingv1.ResumeAccountRequest) (*tradingv1.ResumeAccountResponse, error) {
+	resp, err := a.h.ResumeAccount(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, toGRPCError(err)
 	}

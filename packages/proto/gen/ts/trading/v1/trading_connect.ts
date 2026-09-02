@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CancelOrderRequest, CancelOrderResponse, ConfirmOrderRequest, DeregisterBrokerAccountRequest, DeregisterBrokerAccountResponse, GetOrderRequest, GetTradingEnvironmentRequest, GetTradingEnvironmentResponse, ListBrokerAccountsRequest, ListBrokerAccountsResponse, ListOrdersRequest, ListOrdersResponse, Order, PlaceOrderRequest, RegisterBrokerAccountRequest, RegisterBrokerAccountResponse, ReplaceOrderRequest, SnapshotOfflinePositionsRequest, SnapshotOfflinePositionsResponse, StreamOrderUpdatesRequest, UpdateBrokerAccountCredentialsRequest, UpdateBrokerAccountCredentialsResponse } from "./trading_pb.js";
+import { CancelOrderRequest, CancelOrderResponse, ConfirmOrderRequest, DeregisterBrokerAccountRequest, DeregisterBrokerAccountResponse, GetOrderRequest, GetTradingEnvironmentRequest, GetTradingEnvironmentResponse, ListBrokerAccountsRequest, ListBrokerAccountsResponse, ListOrdersRequest, ListOrdersResponse, Order, PlaceOrderRequest, RegisterBrokerAccountRequest, RegisterBrokerAccountResponse, ReplaceOrderRequest, ResumeAccountRequest, ResumeAccountResponse, SnapshotOfflinePositionsRequest, SnapshotOfflinePositionsResponse, StreamOrderUpdatesRequest, UpdateBrokerAccountCredentialsRequest, UpdateBrokerAccountCredentialsResponse } from "./trading_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -147,6 +147,19 @@ export const TradingService = {
       name: "SnapshotOfflinePositions",
       I: SnapshotOfflinePositionsRequest,
       O: SnapshotOfflinePositionsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * ResumeAccount clears the persistent and in-memory halt on a broker account
+     * (feature 169). Admin-scope callers only. Idempotent: a non-halted account
+     * returns success with no state change. Emits a ledger event and INFO alert.
+     *
+     * @generated from rpc xstockstrat.trading.v1.TradingService.ResumeAccount
+     */
+    resumeAccount: {
+      name: "ResumeAccount",
+      I: ResumeAccountRequest,
+      O: ResumeAccountResponse,
       kind: MethodKind.Unary,
     },
   }

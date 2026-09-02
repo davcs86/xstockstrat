@@ -40,7 +40,7 @@ Python 3.13 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
 
 ## MCP Tools
 
-The agent registers thirty-three tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
+The agent registers thirty-five tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
 reference):
 
 | Tool | Purpose |
@@ -78,6 +78,8 @@ reference):
 | `manage_offline_account` | Create a caller-owned OFFLINE account, record its orders, confirm their fills (recomputes positions + realized P&L), snapshot a brokerage-statement baseline (effective-dated opening positions, feature 163), and read its orders/positions (with per-position `source`/`as_of` provenance) — the manual-book reconciliation surface (feature 157) |
 | `manage_account` | Register / update-credentials / deregister a caller-owned BROKER account (Alpaca/IBKR); ownership-gated on `x-user-id`, credentials never echoed back (feature 164) |
 | `list_accounts` | List the caller's own accounts — broker and offline together, each by `broker_type` (read-only, feature 164) |
+| `get_positions` | List the caller's positions across all accounts, broker + offline (read-only, feature 169) |
+| `get_positions_by_account_id` | List the caller's positions for one account (read-only, feature 169) |
 
 ### Management-tool authorization
 
