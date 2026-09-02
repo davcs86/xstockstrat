@@ -50,7 +50,10 @@ FR-10. The `Dockerfile` for `xstockstrat-agent` installs `postgres-mcp` (via `uv
 
 _Constitution **C-14**._
 
-- [x] **Agent** — `xstockstrat-agent` MCP tool(s): `db_health`, `db_explain`, `db_index_recommendations`, `db_schema` (and any additional tools that `postgres-mcp` exposes in restricted mode — exact set confirmed at `/sdd-spec` time by inspecting the crystaldba repo). All are new tools, all admin-only.
+- [x] **Agent** — `xstockstrat-agent` MCP tool(s) — exactly 9 tools, all new, all admin-only (confirmed 2026-09-02 by inspecting crystaldba/postgres-mcp HEAD; restricted mode exposes same tool set but limits `execute_sql` to read-only transactions):
+  `db_list_schemas`, `db_list_objects`, `db_get_object_details`, `db_execute_sql`,
+  `db_explain_query`, `db_get_top_queries`, `db_analyze_workload_indexes`,
+  `db_analyze_query_indexes`, `db_analyze_db_health`.
 - [ ] **UI** — No new UI surface; DB introspection is ops/admin only, agent-only.
 - [ ] **None**
 
@@ -82,9 +85,9 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **Exact postgres-mcp tool names in restricted mode** — the crystaldba repo must be inspected at `/sdd-spec` time to enumerate which tools are available under `--restricted` and confirm their exact names/params. Prefix mapping (`db_*`) will be finalized then.
-- [ ] **supervisord vs. s6/tini** — supervisord is the specified choice; confirm it is available as a `pypi` package (`supervisor`) or needs an `apt-get` step in the Dockerfile. Resolve at spec time.
-- [ ] **`postgres-mcp` SSE transport port** — default is typically `5173`; confirm and set `POSTGRES_MCP_PORT` default. Ensure no collision with existing container ports.
+- [x] **Exact postgres-mcp tool names in restricted mode** — Confirmed 2026-09-02 by inspecting crystaldba/postgres-mcp HEAD. Restricted mode exposes the same 9 tools as unrestricted; `--restricted` limits `execute_sql` to read-only transactions (rejects `COMMIT`/`ROLLBACK`). Full list with `db_` prefix mapping: `db_list_schemas`, `db_list_objects`, `db_get_object_details`, `db_execute_sql`, `db_explain_query`, `db_get_top_queries`, `db_analyze_workload_indexes`, `db_analyze_query_indexes`, `db_analyze_db_health`.
+- [x] **supervisord vs. s6/tini** — `supervisor` v4.3.0 is a pure-Python package on PyPI; installable via `uv add supervisor`. No `apt-get` step required in the Dockerfile — `uv sync` handles it as part of normal Python dependency resolution.
+- [x] **`postgres-mcp` SSE transport port** — Default SSE port is **8000** (confirmed from crystaldba/postgres-mcp docs). The agent's only occupied internal port is 9000 (HTTP MCP endpoint); 8000 is free. Set `POSTGRES_MCP_PORT` default to `8000`.
 
 > **Known trap (MCP surface drift, ledger 2026-08-02):** New `db_*` tools add to the six-surface inventory. Every surface must be updated atomically in the same PR. Use the descriptor-parity test pattern from `test_backtest_view.py` as the guard.
 

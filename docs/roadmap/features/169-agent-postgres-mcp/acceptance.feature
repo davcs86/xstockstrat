@@ -33,16 +33,16 @@ Feature: agent-postgres-mcp
   @AC-5 @FR-4 @FR-6
   Scenario: Admin caller invokes a db_ tool through the agent MCP endpoint
     Given a valid admin OAuth JWT (x-access-scope bit 0x04 set) is presented
-    When the caller sends a tools/call request for "db_health" with no arguments
+    When the caller sends a tools/call request for "db_analyze_db_health" with no arguments
     Then the agent returns a tool result with a "status" field indicating database connectivity
     And the response does not expose the POSTGRES_MCP_DATABASE_URI connection string
 
   @AC-6 @FR-5
   Scenario: Non-admin caller is rejected for any db_ tool
     Given a valid OAuth JWT with non-admin scope (x-access-scope bit 0x04 NOT set) is presented
-    When the caller sends a tools/call request for "db_explain" with arguments {"query": "SELECT 1"}
+    When the caller sends a tools/call request for "db_explain_query" with arguments {"sql": "SELECT 1"}
     Then the agent returns an error response with code "PERMISSION_DENIED"
-    And the db_explain call is NOT forwarded to the local postgres-mcp process
+    And the db_explain_query call is NOT forwarded to the local postgres-mcp process
 
   @AC-7 @FR-5
   Scenario: Unauthenticated caller cannot discover or invoke db_ tools
@@ -60,10 +60,13 @@ Feature: agent-postgres-mcp
 
   @AC-9 @FR-7
   Scenario: Tool inventory surfaces are kept in sync
-    Given the agent exposes N db_ tools (N determined at implementation time)
+    Given the agent exposes exactly 9 db_ tools:
+      | db_list_schemas | db_list_objects | db_get_object_details |
+      | db_execute_sql  | db_explain_query | db_get_top_queries   |
+      | db_analyze_workload_indexes | db_analyze_query_indexes | db_analyze_db_health |
     When docs/runbooks/mcp-tools.md and services/xstockstrat-agent/CLAUDE.md are read
-    Then the tool count in mcp-tools.md header equals the total agent tool count including the N db_ tools
-    And each db_ tool has a section in mcp-tools.md with parameters, return shape, and "Admin-only" annotation
+    Then the tool count in mcp-tools.md header equals the total agent tool count including these 9 db_ tools
+    And each of the 9 db_ tools has a section in mcp-tools.md with parameters, return shape, and "Admin-only" annotation
 
   @AC-10 @FR-8
   Scenario: postgres-mcp respects the connection pool budget
