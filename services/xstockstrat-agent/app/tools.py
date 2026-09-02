@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Thirty-three tools:
+Thirty-five tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -35,6 +35,8 @@ Thirty-three tools:
   manage_offline_account — offline-account create/record/confirm + read orders/positions
   manage_account       — register/update_credentials/deregister a broker account (ownership-gated)
   list_accounts        — lists the caller's broker + offline accounts together (read-only)
+  get_positions        — lists the caller's positions across all accounts (read-only)
+  get_positions_by_account_id — lists the caller's positions for one account (read-only)
 """
 
 import base64
@@ -1600,7 +1602,9 @@ def register_tools(server: MCPServer) -> None:
             if operation == "list_positions":
                 if not account_id:
                     raise ValueError("list_positions requires an account_id")
-                return await client.list_account_positions(user_id, account_id)
+                result = await client.list_positions(user_id, account_id=account_id)
+                result.pop("next_page_token", None)
+                return result
             if operation == "snapshot_positions":
                 if not account_id or not positions_json:
                     raise ValueError("snapshot_positions requires account_id and positions_json")
@@ -1709,6 +1713,52 @@ def register_tools(server: MCPServer) -> None:
         user_id = _caller_user_id(ctx, "list_accounts")
         try:
             return await client.list_broker_accounts(user_id)
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
+
+    # ── xstockstrat-portfolio position tools (feature 169) ─────────────────────────────────
+    # Read-only, user-bound position queries. Both forward ONLY the caller's x-user-id (never
+    # admin x-access-scope) — portfolio enforces ownership via WHERE user_id = $1 and returns
+    # an empty list for non-owned accounts (no data leakage, no PERMISSION_DENIED).
+
+    @server.tool()
+    async def get_positions(ctx: Context, limit: int = 0, page_token: str = "") -> dict:
+        """List ALL positions for the calling user across all accounts — broker and offline
+        (read-only, feature 169). User-bound: forwards only the caller's x-user-id; admins
+        see only their own positions.
+        Fields with zero/default values may be absent (proto3 serialization convention).
+        limit: max positions per page; 0 = server default (100, max 500).
+        page_token: opaque token from a prior call's next_page_token; "" starts at first page.
+        Returns {"positions": [...], "next_page_token": <str>}. Each position uses snake_case
+            proto field names. An empty next_page_token means no more pages."""
+        user_id = _caller_user_id(ctx, "get_positions")
+        try:
+            return await client.list_positions(user_id, limit=limit, page_token=page_token)
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
+
+    @server.tool()
+    async def get_positions_by_account_id(
+        ctx: Context, account_id: str, limit: int = 0, page_token: str = ""
+    ) -> dict:
+        """List positions for a SINGLE ACCOUNT owned by the calling user (read-only,
+        feature 169). User-bound: forwards only the caller's x-user-id. If the caller does
+        not own the account, the backend returns an empty list (no data leakage).
+        Fields with zero/default values may be absent (proto3 serialization convention).
+        account_id: the account to query (required, non-empty).
+        limit: max positions per page; 0 = server default (100, max 500).
+        page_token: opaque token from a prior call's next_page_token; "" starts at first page.
+        Returns {"positions": [...], "next_page_token": <str>}. Same shape as get_positions."""
+        if not account_id:
+            raise ValueError("account_id is required")
+        user_id = _caller_user_id(ctx, "get_positions_by_account_id")
+        try:
+            return await client.list_positions(
+                user_id,
+                account_id=account_id,
+                limit=limit,
+                page_token=page_token,
+            )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e)) from e
 

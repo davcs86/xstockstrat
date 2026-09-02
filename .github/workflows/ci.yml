@@ -426,8 +426,8 @@ jobs:
         working-directory: services/${{ matrix.service }}
         run: pnpm run lint
 
-  frontend-e2e-build:
-    name: Frontend E2E Build
+  frontend-e2e:
+    name: Frontend E2E (shard ${{ matrix.shard }}/2)
     needs: changes
     if: >-
       contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-ui') ||
@@ -435,100 +435,45 @@ jobs:
       contains(fromJson(needs.changes.outputs.matched), 'node-shared') ||
       contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: services/xstockstrat-ui
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 9.15.9
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "24"
-          cache: 'pnpm'
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: build next.js for e2e
-        run: pnpm build
-        env:
-          NEXT_DISABLE_STANDALONE: '1'
-
-      - name: upload build
-        uses: actions/upload-artifact@v7
-        with:
-          name: e2e-nextjs-build
-          path: services/xstockstrat-ui/.next
-          include-hidden-files: true
-          retention-days: 1
-
-  frontend-e2e:
-    name: Frontend E2E (shard ${{ matrix.shard }}/2)
-    needs: frontend-e2e-build
-    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         shard: [1, 2]
-    defaults:
-      run:
-        working-directory: services/xstockstrat-ui
     steps:
       - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v6
+      - name: set up docker buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: build e2e image
+        uses: docker/build-push-action@v6
         with:
-          version: 9.15.9
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "24"
-          cache: 'pnpm'
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: download e2e build
-        uses: actions/download-artifact@v8
-        with:
-          name: e2e-nextjs-build
-          path: services/xstockstrat-ui/.next
-
-      - name: get playwright version
-        id: pw-version
-        run: echo "version=$(pnpm list @playwright/test --json | jq -r '.[0].devDependencies["@playwright/test"].version')" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/cache@v6
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
-
-      - name: install playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install chromium
-
-      - name: install playwright system dependencies
-        run: pnpm exec playwright install-deps chromium
+          context: .
+          file: Dockerfile.e2e
+          tags: xstockstrat-e2e:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: run e2e tests
-        run: pnpm test:e2e --shard=${{ matrix.shard }}/2
-        env:
-          CI: true
-          E2E_PREBUILT: '1'
+        run: |
+          docker run \
+            --name e2e-shard-${{ matrix.shard }} \
+            xstockstrat-e2e:ci \
+            --shard=${{ matrix.shard }}/2
+
+      - name: extract playwright report
+        if: always()
+        run: |
+          docker cp e2e-shard-${{ matrix.shard }}:/workspace/services/xstockstrat-ui/playwright-report ./playwright-report 2>/dev/null || true
+          docker rm e2e-shard-${{ matrix.shard }} 2>/dev/null || true
 
       - name: upload playwright report
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report-shard-${{ matrix.shard }}
-          path: services/xstockstrat-ui/playwright-report/
+          path: playwright-report/
           retention-days: 7
 
   node-test:

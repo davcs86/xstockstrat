@@ -25,14 +25,14 @@ import (
 type mockResumeAccountRepo struct {
 	repository.AccountRepository // embed for interface satisfaction
 
-	mu                sync.Mutex
-	accounts          map[string]*repository.BrokerAccountRecord
-	updateHaltCalls   int
-	updateHaltErr     error
-	getAccountErr     error
-	lastUpdateHalted  bool
-	lastUpdateReason  string
-	lastUpdateSource  int32
+	mu               sync.Mutex
+	accounts         map[string]*repository.BrokerAccountRecord
+	updateHaltCalls  int
+	updateHaltErr    error
+	getAccountErr    error
+	lastUpdateHalted bool
+	lastUpdateReason string
+	lastUpdateSource int32
 }
 
 func newMockResumeAccountRepo() *mockResumeAccountRepo {

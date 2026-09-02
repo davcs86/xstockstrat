@@ -95,11 +95,14 @@ theme values come entirely from the preset).
 
 ## Docker Build Pattern
 
-Next.js pattern — see `docs/patterns/docker-build.md`. Multi-stage `node:24-alpine` build
-(`base` → `deps` → `builder` → `runner`); production emits `output: 'standalone'` (`next.config.js`)
-and the runner serves it on port 3000. **E2E builds set `NEXT_DISABLE_STANDALONE=1`** so the Playwright
-`webServer` can use `next start` (unsupported with `output: 'standalone'`) — every other build keeps
-standalone.
+**Production:** Next.js pattern — see `docs/patterns/docker-build.md`. Multi-stage `node:24-alpine`
+build (`base` → `deps` → `builder` → `runner`); production emits `output: 'standalone'`
+(`next.config.js`) and the runner serves it on port 3000.
+
+**E2E tests:** `Dockerfile.e2e` (repo root) — hermetic Playwright container with baked Chromium,
+non-standalone Next.js build, and the in-process mock gRPC backend. Run locally via
+`scripts/run-e2e.sh`; CI uses the same image with `docker/build-push-action` + GHA layer cache.
+See `docs/patterns/docker-build.md` § E2E Test Container.
 
 ## Ports
 
@@ -347,11 +350,12 @@ covered by the Playwright e2e suite below.
 
 **E2E (Playwright).** In `e2e/`, organized by segment (`e2e/{trader,insights,config-ui,accounts}/`,
 `e2e/auth.spec.ts`) against a mock gRPC backend (`e2e/mock-backend.ts`, `e2e/global-setup.ts`,
-`e2e/helpers/`). Run `pnpm test:e2e` (or `pnpm test:e2e:ui`).
+`e2e/helpers/`). Run `pnpm test:e2e` (or `pnpm test:e2e:ui`) locally, or `./scripts/run-e2e.sh`
+for a hermetic Docker-based run (no local Node/Playwright/Chromium needed — see `Dockerfile.e2e`).
 
 **CI runs chromium only** — Firefox is excluded in CI (the suite tests BFF RPC call chains and
-React UI logic, not browser-specific rendering). CI is sharded across 2 parallel runners with a
-shared pre-built Next.js bundle (`E2E_PREBUILT`). Locally, Firefox is included when available.
+React UI logic, not browser-specific rendering). CI uses the `Dockerfile.e2e` container, sharded
+across 2 parallel runners with GitHub Actions Docker layer caching.
 
 E2E harness internals — SSR pre-warming (`e2e/warmup.setup.ts` `ROUTES`), the serial-`describe` page-reuse optimization, and Playwright browser resolution (`launchOptions.executablePath`, Firefox drop, exact-version pin) — live on-demand in this service's `docs/` folder (**`e2e-testing.md`**).
 
@@ -362,11 +366,13 @@ pnpm install
 pnpm dev            # http://localhost:3000 (→ /trader)
 pnpm build && pnpm start
 pnpm lint           # next lint
-pnpm test:e2e       # Playwright
+pnpm test:e2e       # Playwright (requires local Node + Chromium)
+../../scripts/run-e2e.sh   # Playwright via Docker (no local deps needed)
 ```
 
 Requires backend gRPC services on 50051–50060 (and TimescaleDB for the config-ui audit route), plus
-`JWT_SECRET` and the `*_ENDPOINT` vars.
+`JWT_SECRET` and the `*_ENDPOINT` vars. E2E tests use the in-process mock backend and do not require
+real services — `pnpm test:e2e` and `scripts/run-e2e.sh` are fully self-contained.
 
 ## Key File Paths Reference
 

@@ -118,6 +118,41 @@ func (r *TradingRepo) GetOrder(ctx context.Context, orderID string) (*tradingv1.
 	return scanOrder(row)
 }
 
+// KnownBrokerOrderIDs returns the subset of the given broker order IDs that this account has a
+// persisted record of in trading.orders. The reconciliation poller (feature 102) uses it to tell a
+// genuinely foreign broker order (placed outside the platform — a real unknown_broker_order finding)
+// apart from one the platform itself placed that has since reached a terminal state and been evicted
+// from the in-memory order map: LoadInflightOrders only hydrates NEW/PARTIALLY_FILLED orders into
+// s.orders, so a legitimate terminal order is absent from memory yet still present here. Comparing
+// broker truth against memory alone misclassified every such historical order as unknown, halting
+// the account. Scoped to account_id to mirror reconcileTick's own in-memory (o.AccountId == accountID)
+// comparison. Empty input returns an empty map with no query round-trip.
+func (r *TradingRepo) KnownBrokerOrderIDs(ctx context.Context, accountID string, brokerOrderIDs []string) (map[string]bool, error) {
+	known := make(map[string]bool, len(brokerOrderIDs))
+	if len(brokerOrderIDs) == 0 {
+		return known, nil
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT DISTINCT broker_order_id
+		FROM trading.orders
+		WHERE account_id = $1
+		  AND broker_order_id = ANY($2)
+	`, accountID, brokerOrderIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		known[id] = true
+	}
+	return known, rows.Err()
+}
+
 // ListOrders returns orders filtered by optional userID, status, tradingMode, and strategyID.
 func (r *TradingRepo) ListOrders(
 	ctx context.Context,

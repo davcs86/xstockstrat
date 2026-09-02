@@ -1,6 +1,6 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the thirty-three tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the thirty-five tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 ---
@@ -34,7 +34,7 @@ directly on port 9000.
 
 **Direct (local):** `http://localhost:9000`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same thirty-three tools' `name`,
+**Tool catalog (UI display).** `GET /api/tools` returns the same thirty-five tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
 capabilities (the same data documented below), never user data or credentials. It powers the
 `xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
@@ -1227,6 +1227,43 @@ are never returned.
 Returns `{"accounts": [...]}` — the caller's accounts; empty list when the caller owns none.
 
 **Errors:** `permission denied`; `RuntimeError` → no verified caller claims.
+
+---
+
+### `get_positions`
+
+List **all positions** for the calling user across all accounts — broker and offline (read-only,
+feature 169). User-bound: forwards only the caller's `x-user-id`; admins see only their own
+positions.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `limit` | int | `0` | Max positions per page; 0 = server default (100, max 500) |
+| `page_token` | string | `""` | Opaque token from a prior call's `next_page_token` |
+
+Returns `{"positions": [...], "next_page_token": "<str>"}` — each position uses snake_case proto
+field names. Fields with zero/default values may be absent (proto3 serialization convention). An
+empty `next_page_token` means no more pages.
+
+**Errors:** `RuntimeError` → no verified caller claims.
+
+---
+
+### `get_positions_by_account_id`
+
+List positions for a **single account** owned by the calling user (read-only, feature 169).
+User-bound: forwards only the caller's `x-user-id`. If the caller does not own the account,
+the backend returns an empty list (no data leakage).
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `account_id` | string | _(required)_ | The account to query |
+| `limit` | int | `0` | Max positions per page; 0 = server default (100, max 500) |
+| `page_token` | string | `""` | Opaque token from a prior call's `next_page_token` |
+
+Returns `{"positions": [...], "next_page_token": "<str>"}` — same shape as `get_positions`.
+
+**Errors:** `ValueError` → `account_id` is empty; `RuntimeError` → no verified caller claims.
 
 ---
 
