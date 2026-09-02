@@ -6,19 +6,19 @@
 
 ## Problem Statement
 
-Platform operators and admins have no direct, authenticated path to introspect the live TimescaleDB cluster — checking slow-query candidates, reviewing index health, or running EXPLAIN plans requires raw DB access credentials and a psql session. The `crystaldba/postgres-mcp` server solves this generically; wiring it into the agent exposes those capabilities through the same OAuth-protected surface Claude.ai already uses, without opening a new public port or bypassing the admin gate.
+Platform operators and admins have no direct, authenticated path to diagnose and fix issues in the live TimescaleDB cluster — checking slow-query candidates, reviewing index health, running EXPLAIN plans, or making targeted data corrections requires raw DB credentials and a psql session. The `crystaldba/postgres-mcp` server solves this generically; wiring it into the agent exposes those capabilities — including controlled DML writes — through the same OAuth-protected surface Claude.ai already uses, without opening a new public port or bypassing the admin gate.
 
 ## User Story
 
-As an **admin operator**, I want to invoke Postgres analysis tools (EXPLAIN, index recommendations, schema introspection, DB health checks) through the existing xstockstrat MCP endpoint, so that I can diagnose query performance and schema issues without needing direct DB credentials or a separate tool connection.
+As an **admin operator**, I want to invoke Postgres analysis and data-manipulation tools (EXPLAIN, index recommendations, schema introspection, DB health checks, and targeted INSERT/UPDATE/DELETE) through the existing xstockstrat MCP endpoint, so that I can diagnose query performance, inspect schemas, and make targeted data fixes without needing direct DB credentials or a separate tool connection.
 
 ## Functional Requirements
 
 FR-1. `postgres-mcp` runs as a **second process** inside the `xstockstrat-agent` container, managed by **supervisord** (replacing the current single `CMD` entrypoint). Both processes — `app.main` (the existing MCP/OAuth server) and `postgres-mcp` (the DB analysis server) — must be supervised: crash of either triggers a restart; supervisord is PID 1.
 
-FR-2. `postgres-mcp` runs in **restricted mode** (read-only, safe query analysis — no DDL/DML), bound to `localhost` only, inaccessible from outside the container.
+FR-2. `postgres-mcp` runs in **unrestricted mode** (`--transport sse` without `--restricted`), bound to `localhost` only, inaccessible from outside the container. Safety is enforced by the Postgres role's privilege grants (FR-3) and the agent-layer approval gate (FR-11) — not by postgres-mcp's own mode restriction.
 
-FR-3. `postgres-mcp` connects to the shared TimescaleDB via a **dedicated read-only Postgres role** (`xstockstrat_readonly`) whose credentials are injected at runtime via the `POSTGRES_MCP_DATABASE_URI` env var. This role has `SELECT` only on all schemas; `CONNECT` on the database; no `INSERT`, `UPDATE`, `DELETE`, `CREATE`, `DROP`, or `TRUNCATE`. The role must not reuse any existing service-write credentials.
+FR-3. `postgres-mcp` connects to the shared TimescaleDB via a **dedicated DML-capable Postgres role** (`xstockstrat_agent`) whose credentials are injected at runtime via the `POSTGRES_MCP_DATABASE_URI` env var. This role has `SELECT`, `INSERT`, `UPDATE`, `DELETE` on all schemas; `CONNECT` on the database; explicitly no `CREATE`, `DROP`, `ALTER`, or `TRUNCATE`. The role must not reuse any existing service credentials.
 
 FR-4. The `xstockstrat-agent` (`app.main`) connects to the local `postgres-mcp` instance as an **MCP client** (SSE transport on `localhost:<POSTGRES_MCP_PORT>`) and re-exposes its tools under the existing Streamable HTTP endpoint (`/`) — no new public port, no new auth surface.
 
@@ -34,10 +34,12 @@ FR-9. Local `docker-compose.yml` injects `POSTGRES_MCP_DATABASE_URI` pointing at
 
 FR-10. The `Dockerfile` for `xstockstrat-agent` installs `postgres-mcp` (via `uv` in `pyproject.toml`) and `supervisord` (system package or Python), and replaces the `CMD` entrypoint with a `supervisord.conf` that manages both processes.
 
+FR-11. The agent's `db_execute_sql` tool handler intercepts calls whose `sql` argument contains any of the tokens `UPDATE`, `DELETE`, or `DROP` (case-insensitive, checked before forwarding). On first invocation without `confirm=true`: the agent returns a dry-run response showing the SQL statement, a plain-language description of the destructive operation, and the message `"Destructive operation requires confirmation. Re-invoke with confirm=true to execute."` — the query is **not** forwarded to postgres-mcp. On re-invocation with `confirm=true`: the agent forwards the call to postgres-mcp and returns the result. `INSERT` and `SELECT` are forwarded immediately without a confirmation step. This gate is in the agent tool handler, independent of the postgres-mcp process.
+
 ## Out of Scope
 
-- Creating the `xstockstrat_readonly` Postgres role is a **one-time DBA step** documented in the implementation spec as a migration/runbook entry; it is not automated by this feature's application code.
-- Write-mode (`unrestricted`) `postgres-mcp` access — explicitly rejected.
+- Creating the `xstockstrat_agent` Postgres role is a **one-time DBA step** documented in the implementation spec as a runbook entry; it is not automated by this feature's application code.
+- **DDL and TRUNCATE** (`CREATE TABLE`, `DROP TABLE`, `ALTER TABLE`, `CREATE INDEX`, `TRUNCATE`) — the `xstockstrat_agent` role is granted no DDL privileges; any DDL attempt will be rejected at the Postgres level.
 - Any new public port or separate DO App Platform component for `postgres-mcp`.
 - UI segment for the DB tools — operator access is via Claude.ai → agent MCP only.
 - Exposing `postgres-mcp` to non-admin MCP callers.
@@ -50,8 +52,8 @@ FR-10. The `Dockerfile` for `xstockstrat-agent` installs `postgres-mcp` (via `uv
 
 _Constitution **C-14**._
 
-- [x] **Agent** — `xstockstrat-agent` MCP tool(s) — exactly 9 tools, all new, all admin-only (confirmed 2026-09-02 by inspecting crystaldba/postgres-mcp HEAD; restricted mode exposes same tool set but limits `execute_sql` to read-only transactions):
-  `db_list_schemas`, `db_list_objects`, `db_get_object_details`, `db_execute_sql`,
+- [x] **Agent** — `xstockstrat-agent` MCP tool(s) — exactly 9 tools, all new, all admin-only (confirmed 2026-09-02 by inspecting crystaldba/postgres-mcp HEAD; unrestricted mode, DML writes enabled):
+  `db_list_schemas`, `db_list_objects`, `db_get_object_details`, `db_execute_sql` (SELECT+INSERT immediate; UPDATE/DELETE/DROP gated by FR-11 confirmation step),
   `db_explain_query`, `db_get_top_queries`, `db_analyze_workload_indexes`,
   `db_analyze_query_indexes`, `db_analyze_db_health`.
 - [ ] **UI** — No new UI surface; DB introspection is ops/admin only, agent-only.
@@ -67,17 +69,17 @@ _Constitution **C-14**._
 
 ## Database Changes
 
-- [x] No schema changes — the `xstockstrat_readonly` role creation is a Postgres-level DBA operation (DDL run once against the cluster), not a golang-migrate migration against a service schema.
+- [x] No schema changes — the `xstockstrat_agent` role creation is a Postgres-level DBA operation (DDL run once against the cluster), not a golang-migrate migration against a service schema.
 
-> **Known trap (DBA gate):** The DBA approval gate applies here for the read-only role creation even though it does not touch service-schema migration files. Document the `CREATE ROLE` / `GRANT SELECT` SQL in the implementation spec so DBA review can happen before execution.
+> **Known trap (DBA gate):** The DBA approval gate applies here for the role creation even though it does not touch service-schema migration files. Document the `CREATE ROLE` / `GRANT SELECT, INSERT, UPDATE, DELETE` SQL in the implementation spec so DBA review can happen before execution. DBA should also confirm that granting DML (not just SELECT) on all schemas to a new role meets the platform's data-access policy.
 
 ## Feature Workflow Notes
 
 Branch to create: `feature/agent-postgres-mcp` (branch from `main-dev`)
 Approval gates required:
 - [x] 1 service owner approval (`xstockstrat-agent` — non-breaking, no proto change)
-- [x] DBA review + service owner (read-only Postgres role creation — no golang-migrate migration but a real DB privilege change)
-- [x] Security review (admin gate, credential injection, read-only role scoping)
+- [x] DBA review + service owner (`xstockstrat_agent` role creation with DML privileges — no golang-migrate migration but a real DB privilege change granting writes)
+- [x] Security review (admin gate, credential injection, DML role scoping, FR-11 approval-gate implementation)
 
 ## Acceptance Criteria
 
@@ -85,7 +87,7 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [x] **Exact postgres-mcp tool names in restricted mode** — Confirmed 2026-09-02 by inspecting crystaldba/postgres-mcp HEAD. Restricted mode exposes the same 9 tools as unrestricted; `--restricted` limits `execute_sql` to read-only transactions (rejects `COMMIT`/`ROLLBACK`). Full list with `db_` prefix mapping: `db_list_schemas`, `db_list_objects`, `db_get_object_details`, `db_execute_sql`, `db_explain_query`, `db_get_top_queries`, `db_analyze_workload_indexes`, `db_analyze_query_indexes`, `db_analyze_db_health`.
+- [x] **Exact postgres-mcp tool names (unrestricted mode)** — Confirmed 2026-09-02 by inspecting crystaldba/postgres-mcp HEAD. Unrestricted mode exposes 9 tools; DML safety enforced by `xstockstrat_agent` role privileges + FR-11 agent gate. Full list with `db_` prefix mapping: `db_list_schemas`, `db_list_objects`, `db_get_object_details`, `db_execute_sql`, `db_explain_query`, `db_get_top_queries`, `db_analyze_workload_indexes`, `db_analyze_query_indexes`, `db_analyze_db_health`.
 - [x] **supervisord vs. s6/tini** — `supervisor` v4.3.0 is a pure-Python package on PyPI; installable via `uv add supervisor`. No `apt-get` step required in the Dockerfile — `uv sync` handles it as part of normal Python dependency resolution.
 - [x] **`postgres-mcp` SSE transport port** — Default SSE port is **8000** (confirmed from crystaldba/postgres-mcp docs). The agent's only occupied internal port is 9000 (HTTP MCP endpoint); 8000 is free. Set `POSTGRES_MCP_PORT` default to `8000`.
 

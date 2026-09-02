@@ -33,3 +33,19 @@
   - @AC-9: replaced non-concrete 'N determined at implementation time' with exact enumeration of 9 db_* tools confirmed from crystaldba/postgres-mcp HEAD.
   - @AC-5/@AC-6: corrected placeholder tool names (db_health→db_analyze_db_health, db_explain→db_explain_query).
   - OQ-1/OQ-2/OQ-3: all closed via crystaldba repo inspection + PyPI lookup.
+
+## Session 2026-09-02T00:00Z — scope revision (write access)
+
+User clarified the ultimate goal: agents need to **debug and make targeted data fixes directly on the DB**, not just read-only introspection. This invalidated three locked design decisions:
+
+- postgres-mcp mode: `--restricted` → `--unrestricted` (restricted mode blocks writes; safety delegated to role privileges + agent gate)
+- Postgres role: `xstockstrat_readonly` (SELECT only) → `xstockstrat_agent` (SELECT + INSERT + UPDATE + DELETE; no DDL, no TRUNCATE)
+- New FR-11: approval gate in the agent tool handler — `db_execute_sql` calls containing UPDATE/DELETE/DROP tokens return a dry-run response requiring `confirm=true` before forwarding to postgres-mcp
+
+Design decisions (from AskUserQuestion before revision):
+- Write scope: DML only (no DDL/TRUNCATE)
+- Approval gate: destructive ops only (UPDATE/DELETE/DROP) — SELECT/INSERT execute immediately
+- Topology: remains co-process inside agent, proxied through existing OAuth-protected endpoint
+
+Status reverted to `draft` for re-review (`/sdd-review agent-postgres-mcp product-spec`).
+Files changed: product-spec.md (FR-2, FR-3, FR-11, Out-of-Scope, Consumer Surfaces, DB Changes, Workflow Notes, OQ-1), acceptance.feature (@AC-4, @AC-11, +@AC-12, +@AC-13).

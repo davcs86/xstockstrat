@@ -24,11 +24,12 @@ Feature: agent-postgres-mcp
     Then the connection is refused
 
   @AC-4 @FR-3
-  Scenario: postgres-mcp connects using the read-only role
-    Given POSTGRES_MCP_DATABASE_URI points to the xstockstrat_readonly Postgres role
+  Scenario: postgres-mcp connects using the DML-capable role and DDL is rejected
+    Given POSTGRES_MCP_DATABASE_URI points to the xstockstrat_agent Postgres role
     When postgres-mcp initializes its database connection
-    Then a query "SELECT current_user" returns "xstockstrat_readonly"
-    And an attempt to execute "INSERT INTO config.config_keys(namespace) VALUES ('test')" raises "permission denied"
+    Then a query "SELECT current_user" returns "xstockstrat_agent"
+    And an INSERT statement on an existing table succeeds
+    And an attempt to execute "CREATE TABLE _test_forbidden (id int)" raises "permission denied"
 
   @AC-5 @FR-4 @FR-6
   Scenario: Admin caller invokes a db_ tool through the agent MCP endpoint
@@ -81,4 +82,20 @@ Feature: agent-postgres-mcp
     When each file's xstockstrat-agent environment block is inspected
     Then POSTGRES_MCP_DATABASE_URI is present in all three files
     And the docker-compose value points to the local timescaledb service
-    And the DO app spec values reference the managed-DB read-only connection string
+    And the DO app spec values reference the managed-DB connection string for the xstockstrat_agent role
+
+  @AC-12 @FR-11
+  Scenario: Destructive DML (UPDATE) is blocked without confirmation
+    Given a valid admin OAuth JWT (x-access-scope bit 0x04 set) is presented
+    When the caller sends a tools/call request for "db_execute_sql" with arguments {"sql": "UPDATE config.config_keys SET value_data = 'x' WHERE id = 1"}
+    And the request does not include "confirm": true
+    Then the agent returns a response containing the message "Destructive operation requires confirmation. Re-invoke with confirm=true to execute."
+    And no rows are modified in the database
+    And the db_execute_sql call is NOT forwarded to the local postgres-mcp process
+
+  @AC-13 @FR-11
+  Scenario: Destructive DML executes after explicit confirmation
+    Given a valid admin OAuth JWT (x-access-scope bit 0x04 set) is presented
+    When the caller sends a tools/call request for "db_execute_sql" with arguments {"sql": "UPDATE config.config_keys SET value_data = 'x' WHERE id = 1", "confirm": true}
+    Then the agent forwards the call to postgres-mcp
+    And the result includes the number of rows affected (e.g. "1 row updated")
