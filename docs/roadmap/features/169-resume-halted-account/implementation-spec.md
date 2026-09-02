@@ -48,7 +48,7 @@ twin) is honored in Step 5 — without the adapter twin, the RPC is unreachable 
 
 ### Step 1 — proto: Add ResumeAccount RPC and messages to trading.proto
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/trading/v1/trading.proto` — modify
