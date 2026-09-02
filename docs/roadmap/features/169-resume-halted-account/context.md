@@ -32,7 +32,17 @@
 - **Silent no-op on non-halted**: Consistency with haltAccount's already-halted short-circuit. Idempotent, safe for automation/retry.
 - **reason parameter optional**: Default empty string; operator may provide context but it's not required.
 
+## Session 2026-09-02T00:00:00Z — sdd-spec
+
+- Re-grounded all 31 symbols to current HEAD line numbers via codebase-discovery subagent.
+- Wrote implementation-spec.md: 9 steps (proto → proto-gen → Go authz helper → Go service method → Go handler twin → Go tests → Python client+dispatch → Python tests → docs).
+- Scenario coverage: AC-1..AC-4,AC-6,AC-7 → Step 6 (Go tests); AC-5,AC-8 → Step 8 (Python tests) + Step 9 (docs).
+- Consumer surface (C-14): Agent `manage_account` → Step 7.
+- DB-first ordering invariant carried into Step 4 instructions as critical design constraint.
+- TRADING-1 dual-handler invariant carried into Step 5 instructions.
+- Status: design-approved → implementation-ready.
+
 ## Open Threads
 
-- [ ] First Go-native access-scope check (`requireAdminScope`) — untested propagation chain. Target: implementation step (unit test + integration verification).
-- [ ] Stale line citations (~44 lines off) — re-ground at `/sdd-spec` discovery. Target: /sdd-spec.
+- [ ] First Go-native access-scope check (`requireAdminScope`) — untested propagation chain. Target: Step 3 + Step 6 (unit test for requireAdminScope + integration-level scope propagation).
+- [x] Stale line citations (~44 lines off) — re-grounded at /sdd-spec discovery against current HEAD. All 31 symbols confirmed.
