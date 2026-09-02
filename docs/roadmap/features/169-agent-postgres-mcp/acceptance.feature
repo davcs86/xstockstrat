@@ -34,8 +34,8 @@ Feature: agent-postgres-mcp
   @AC-5 @FR-4 @FR-6
   Scenario: Admin caller invokes a db_ tool through the agent MCP endpoint
     Given a valid admin OAuth JWT (x-access-scope bit 0x04 set) is presented
-    When the caller sends a tools/call request for "db_analyze_db_health" with no arguments
-    Then the agent returns a tool result containing a top-level "status" key with value "ok" or "healthy" and at least one sub-key (e.g. "connections", "replication_lag", or "table_bloat")
+    When the caller sends a tools/call request for "db_analyze_db_health" with arguments {"health_type": "all"}
+    Then the agent returns a non-empty text tool result containing at least one of the labeled section keywords ("index", "connection", "vacuum", "sequence", "replication", "buffer", or "constraint") confirming postgres-mcp produced output
     And the response does not expose the POSTGRES_MCP_DATABASE_URI connection string
 
   @AC-6 @FR-5
@@ -75,13 +75,14 @@ Feature: agent-postgres-mcp
     Then every surface reflects the same total agent tool count (prior count + 9)
     And each of the 9 db_ tools has a section in mcp-tools.md with parameters, return shape, and "Admin-only" annotation
     And COPILOT_MCP_TOOL_COUNT in copilot.ts equals the new total tool count
+    And documentation surfaces (app/tools.py docstring, CLAUDE.md tool table, mcp-tools.md header count, mcp-tools.md per-tool entries) are verified by PR diff review; runtime surfaces (tests/test_tools_endpoint.py exact-name set and copilot.ts COPILOT_MCP_TOOL_COUNT constant) are enforced by the CI test suite
 
   @AC-10 @FR-8
   Scenario: postgres-mcp respects the connection pool budget
     Given the connection budget table shows 1 new direct slot for postgres-mcp (xstockstrat_agent)
     When the agent container is running and postgres-mcp is initialized
     Then exactly 1 backend connection from the xstockstrat_agent role appears in pg_stat_activity
-    And the direct-backend total in root CLAUDE.md is updated to reflect this new slot
+    And the direct-backend total in root CLAUDE.md is updated to reflect this new slot (verified by PR diff review)
 
   @AC-11 @FR-9
   Scenario: POSTGRES_MCP_DATABASE_URI is injected in all deployment environments

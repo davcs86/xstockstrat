@@ -65,3 +65,30 @@ Files changed: product-spec.md (FR-2, FR-3, FR-11, Out-of-Scope, Consumer Surfac
   - AC-5: qualitative Then replaced with concrete field-shape assertion
   - AC-10: both xstockstrat_readonly references → xstockstrat_agent
   - FR-7 / AC-9: enumerated all 6 inventory surfaces, added copilot.ts explicitly
+
+## Session 2026-09-02T00:01Z — warning fixes (pre-design)
+
+Advisory warnings from the third spec review resolved before /sdd-design:
+
+- **@AC-5 return-shape correction**: Inspected crystaldba/postgres-mcp HEAD
+  (`src/postgres_mcp/database_health/database_health.py`). `db_analyze_db_health` does NOT
+  return a JSON object with a "status" key — it returns a plain text string with labeled section
+  headers (index, connection, vacuum, sequence, replication, buffer, constraint). The prior
+  assertion ("top-level 'status' key with value 'ok' or 'healthy'") was factually wrong.
+  Fixed `Then` in @AC-5: "non-empty text tool result containing at least one of the labeled
+  section keywords ('index', 'connection', 'vacuum', 'sequence', 'replication', 'buffer', or
+  'constraint')". Arguments also made explicit: `{"health_type": "all"}` (the upstream default).
+
+- **@AC-9 static vs. runtime enforcement**: Added a fourth `Then` clause explicitly distinguishing
+  documentation surfaces (verified by PR diff review) from runtime surfaces
+  (tests/test_tools_endpoint.py + copilot.ts constant, enforced by CI test suite). No scenario
+  logic changed — only the enforcement mechanism is now documented inline.
+
+- **@AC-10 CLAUDE.md assertion**: Added "(verified by PR diff review)" to the `Then` clause
+  about the connection budget table in root CLAUDE.md, distinguishing it from the runtime
+  pg_stat_activity assertion above it.
+
+- **Credential deviation note**: `POSTGRES_MCP_DATABASE_URI` deviates from the feature-147 pattern
+  (encrypted config rows via `GetSecret`). Deviation is legitimate — crystaldba/postgres-mcp is a
+  third-party binary that reads its DB URI at process startup from an env var, not via an RPC.
+  Impl-spec should note this deviation explicitly (Constitution C-10 / PLAT-4).
