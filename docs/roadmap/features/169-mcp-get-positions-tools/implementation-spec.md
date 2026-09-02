@@ -1,6 +1,6 @@
 # Implementation Spec: mcp-get-positions-tools
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-09-02
 **Feature**: `docs/roadmap/features/169-mcp-get-positions-tools/feature.md`
 **Total Steps**: 8
@@ -42,7 +42,7 @@ call-site update (Steps 5-6), then parity + doc (Steps 7-8).
 
 ### Step 1 — service: Consolidate `list_account_positions` into paginated `list_positions` client method
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -76,7 +76,7 @@ cd services/xstockstrat-agent && ruff check app/client.py && ruff format --check
 
 ### Step 2 — test: Unit tests for consolidated `list_positions` client method + update existing tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_offline_client.py` — modify
@@ -109,7 +109,7 @@ cd services/xstockstrat-agent && uv run pytest tests/test_offline_client.py -v -
 
 ### Step 3 — service: Register `get_positions` and `get_positions_by_account_id` MCP tools
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -156,7 +156,7 @@ cd services/xstockstrat-agent && ruff check app/tools.py && ruff format --check 
 
 ### Step 4 — test: Unit tests for `get_positions` and `get_positions_by_account_id` tools
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify
@@ -198,7 +198,7 @@ cd services/xstockstrat-agent && uv run pytest tests/test_position_tools.py -v -
 
 ### Step 5 — service: Update `manage_offline_account` call-site to use consolidated `list_positions`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -242,7 +242,7 @@ cd services/xstockstrat-agent && ruff check app/tools.py && ruff format --check 
 
 ### Step 6 — test: Verify `manage_offline_account list_positions` backward compatibility
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify (or `tests/test_position_tools.py`)
@@ -270,7 +270,7 @@ cd services/xstockstrat-agent && uv run pytest tests/test_tools.py -v -k "manage
 
 ### Step 7 — test: Descriptor-parity test for Position proto fields
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_position_parity.py` — create
@@ -302,7 +302,7 @@ cd services/xstockstrat-agent && uv run pytest tests/test_position_parity.py -v 
 
 ### Step 8 — docs: Update all tool inventory surfaces (FR-6) and name-set test
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`, `docs/runbooks/`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify (module docstring only)

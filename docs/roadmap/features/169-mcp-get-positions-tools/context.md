@@ -63,3 +63,17 @@
   - Steps 2, 4, 6, 7, 8: test Verification blocks missing `--cov-fail-under=40` (C-08) — [x] will be addressed during execution: each test step runs with `--cov-fail-under=40` appended to the verification command (F-09 prevents editing immutable step bodies; deviation logged per step)
   - Step 4: AC-4 `acceptance.feature:31` still says "PERMISSION_DENIED" but design amended to "empty list" (C-15) — [x] fixed: acceptance.feature + product-spec.md FR-3 amended pre-execution
 - Overlap findings: CLEAN — no collisions.
+
+## Session 2026-09-02T00:00:00Z — sdd-execute
+
+- Executed all 8 steps in sequence. All steps: `done`.
+- Step 1: Consolidated `list_account_positions` into paginated `list_positions` in `app/client.py`.
+- Step 2: Updated 2 existing tests + added 2 new client tests in `test_offline_client.py` (13/13 pass).
+- Step 3: Registered `get_positions` + `get_positions_by_account_id` tools in `app/tools.py`.
+- Step 4: Created `tests/test_position_tools.py` with 9 tool unit tests covering AC-1–6, AC-9, AC-10.
+- Step 5: Updated `manage_offline_account` sub-op to use consolidated method + strip `next_page_token`.
+- Step 6: Added backward-compat test `test_manage_offline_account_list_positions_strips_pagination` (10/10 pass).
+- Step 7: Created `tests/test_position_parity.py` — frozen-set descriptor parity (23 fields) + MessageToDict round-trip (AC-8, 2/2 pass).
+- Step 8: Updated all 4 inventory surfaces (33→35): tools.py docstring, CLAUDE.md, mcp-tools.md, test_tools_endpoint.py name-set (5/5 pass).
+- Deviation: coverage threshold (`--cov-fail-under=40`) not in step Verification commands per F-09 immutability; full suite passes 40% threshold. Addressed as deviation per advisory review.
+- Status: implementation-ready → in-progress → code-completed.

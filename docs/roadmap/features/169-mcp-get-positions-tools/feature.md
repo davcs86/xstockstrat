@@ -15,6 +15,8 @@
 | 2026-09-02 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
 | 2026-09-02 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, quick) and approved; recon.md + design.md written |
 | 2026-09-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps |
+| 2026-09-02 | `implementation-ready` → `in-progress` | /sdd-execute | Execution started |
+| 2026-09-02 | `in-progress` → `code-completed` | /sdd-execute | All 8 steps done |
 
 ---
 
@@ -46,4 +48,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review mcp-get-positions-tools impl-spec` — AI review of the implementation spec, then `/sdd-execute mcp-get-positions-tools`
+Merge integration PR into `main-dev` when CI passes and reviewers approve.
