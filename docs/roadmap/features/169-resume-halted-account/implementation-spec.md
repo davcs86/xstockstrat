@@ -450,7 +450,7 @@ cd services/xstockstrat-agent && pytest --cov=app --cov-fail-under=40
 
 ### Step 9 — docs: Update mcp-tools.md with resume operation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify
