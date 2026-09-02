@@ -325,7 +325,7 @@ cd services/xstockstrat-trading && GOWORK=off COVERPKGS=$(go list ./... | grep -
 
 ### Step 7 — service: Add resume_broker_account client wrapper and manage_account dispatch
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify

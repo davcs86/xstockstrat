@@ -1625,13 +1625,17 @@ def register_tools(server: MCPServer) -> None:
         display_name: str = "",
         broker_type: str = "",
         credentials_json: str = "",
+        reason: str = "",
     ) -> dict:
-        """Manage the CALLER's own BROKER accounts (Alpaca / IBKR) — feature 164.
+        """Manage BROKER accounts (Alpaca / IBKR) — feature 164.
 
-        All operations act on the caller's own accounts (ownership from the verified identity's
-        x-user-id); a non-owner is rejected PERMISSION_DENIED by the trading backend. Broker
-        credentials pass through to the backend (encrypted at rest) and are NEVER echoed back — the
-        returned account carries no credential field.
+        register/update_credentials/deregister act on the CALLER's own accounts (ownership from the
+        verified identity's x-user-id); a non-owner is rejected PERMISSION_DENIED by the trading
+        backend. resume requires ADMIN scope (0x04) and can act on any account — it clears a
+        reconciliation halt so the poller resumes ticking (feature 169).
+
+        Broker credentials pass through to the backend (encrypted at rest) and are NEVER echoed
+        back — the returned account carries no credential field.
 
         operation:
           'register'          — register a new broker account. Requires display_name, broker_type
@@ -1645,6 +1649,9 @@ def register_tools(server: MCPServer) -> None:
               (FAILED_PRECONDITION) and invalid JSON (INVALID_ARGUMENT).
           'deregister'        — deactivate an account. Requires account_id. Works for broker and
               offline accounts. Returns {"deregistered": true, "account_id": …}.
+          'resume'            — clear a reconciliation halt on a broker account (admin-only,
+              feature 169). Requires account_id; optional reason. Returns {"account": …}.
+              Idempotent — resuming an already-running account is a no-op success.
 
         For a read of all your accounts (broker + offline together), use list_accounts."""
         user_id = _caller_user_id(ctx, "manage_account")
@@ -1673,8 +1680,20 @@ def register_tools(server: MCPServer) -> None:
                 if not account_id:
                     raise ValueError("deregister requires an account_id")
                 return await client.deregister_broker_account(user_id, account_id)
+            if operation == "resume":
+                if not account_id:
+                    raise ValueError("resume requires an account_id")
+                scope = _caller_access_scope(ctx, "manage_account")
+                if not (scope & 0x04):
+                    raise PermissionError("manage_account resume requires admin scope")
+                return await client.resume_broker_account(
+                    user_id=user_id,
+                    account_id=account_id,
+                    reason=reason,
+                )
             raise ValueError(
-                f"unknown operation '{operation}' (expected register/update_credentials/deregister)"
+                f"unknown operation '{operation}' "
+                "(expected register/update_credentials/deregister/resume)"
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="broker account not found")) from e

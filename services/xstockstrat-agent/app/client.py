@@ -1969,6 +1969,23 @@ async def deregister_broker_account(user_id: str, account_id: str) -> dict[str, 
     return {"deregistered": True, "account_id": account_id}
 
 
+async def resume_broker_account(user_id: str, account_id: str, reason: str = "") -> dict[str, Any]:
+    """Resume (un-halt) a broker account via ResumeAccount (feature 169).
+
+    Clears the persisted and in-memory halt on the account so the reconciliation poller
+    resumes ticking. Admin scope is enforced server-side from the forwarded x-access-scope.
+    """
+    from gen.trading.v1 import trading_pb2, trading_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+        stub = trading_pb2_grpc.TradingServiceStub(channel)
+        resp = await stub.ResumeAccount(
+            trading_pb2.ResumeAccountRequest(account_id=account_id, reason=reason),
+            metadata=_metadata(("x-user-id", user_id)),
+        )
+    return {"account": _account_to_dict(resp.account)}
+
+
 async def list_broker_accounts(user_id: str) -> dict[str, Any]:
     """List the caller's own accounts (broker + offline) via ListBrokerAccounts (read-only).
 
