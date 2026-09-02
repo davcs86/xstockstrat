@@ -60,14 +60,21 @@ Feature: agent-postgres-mcp
     And no postgres-mcp tool name appears without the "db_" prefix
 
   @AC-9 @FR-7
-  Scenario: Tool inventory surfaces are kept in sync
+  Scenario: All six tool-inventory surfaces are kept in sync
     Given the agent exposes exactly 9 db_ tools:
       | db_list_schemas | db_list_objects | db_get_object_details |
       | db_execute_sql  | db_explain_query | db_get_top_queries   |
       | db_analyze_workload_indexes | db_analyze_query_indexes | db_analyze_db_health |
-    When docs/runbooks/mcp-tools.md and services/xstockstrat-agent/CLAUDE.md are read
-    Then the tool count in mcp-tools.md header equals the total agent tool count including these 9 db_ tools
+    When all six tool-inventory surfaces are read:
+      | app/tools.py module docstring |
+      | services/xstockstrat-agent/CLAUDE.md tool table |
+      | docs/runbooks/mcp-tools.md header count |
+      | docs/runbooks/mcp-tools.md per-tool entries |
+      | tests/test_tools_endpoint.py exact-name set |
+      | services/xstockstrat-ui/src/lib/copilot.ts COPILOT_MCP_TOOL_COUNT |
+    Then every surface reflects the same total agent tool count (prior count + 9)
     And each of the 9 db_ tools has a section in mcp-tools.md with parameters, return shape, and "Admin-only" annotation
+    And COPILOT_MCP_TOOL_COUNT in copilot.ts equals the new total tool count
 
   @AC-10 @FR-8
   Scenario: postgres-mcp respects the connection pool budget

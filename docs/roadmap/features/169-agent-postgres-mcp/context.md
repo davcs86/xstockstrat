@@ -49,3 +49,19 @@ Design decisions (from AskUserQuestion before revision):
 
 Status reverted to `draft` for re-review (`/sdd-review agent-postgres-mcp product-spec`).
 Files changed: product-spec.md (FR-2, FR-3, FR-11, Out-of-Scope, Consumer Surfaces, DB Changes, Workflow Notes, OQ-1), acceptance.feature (@AC-4, @AC-11, +@AC-12, +@AC-13).
+
+## Session 2026-09-02T00:00Z — sdd-review product-spec (third pass, post-DML revision)
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings (advisory, no blockers):
+  - @AC-5 Then clause accepts "ok" or "healthy" — dual-value expected result driven by upstream postgres-mcp return shape; impl-spec should narrow or document the range.
+  - FR-7 previously cited stale 2026-07-20 ledger entry (5 surfaces); fixed inline to enumerate all 6 surfaces explicitly, naming copilot.ts (the surface with documented miss history, fails.md).
+  - @AC-9/@AC-10 Then clauses are static-file assertions (not runtime) — impl-spec should wire CI/grep enforcement.
+- Overlap: same 3 WARN-level file clashes with 084-droplet-compose-deploy (unchanged). No FAIL-level collision.
+- Fixes applied before gate passed:
+  - FR-8: 'read-only role' → 'DML-capable role (xstockstrat_agent)'
+  - FR-9: xstockstrat_readonly → xstockstrat_agent in DO app spec reference
+  - FR-11: added TRUNCATE to destructive-token gate
+  - AC-5: qualitative Then replaced with concrete field-shape assertion
+  - AC-10: both xstockstrat_readonly references → xstockstrat_agent
+  - FR-7 / AC-9: enumerated all 6 inventory surfaces, added copilot.ts explicitly

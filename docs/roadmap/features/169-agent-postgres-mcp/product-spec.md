@@ -26,7 +26,13 @@ FR-5. Every postgres-mcp tool re-exposed through the agent is **admin-gated**: t
 
 FR-6. Tool names re-exposed from `postgres-mcp` are prefixed with `db_` to prevent collisions with existing xstockstrat tool names and to make their origin self-documenting (e.g. `db_health`, `db_explain`, `db_index_recommendations`).
 
-FR-7. `docs/runbooks/mcp-tools.md` is updated with the new `db_*` tool table (parameters, return shape, admin-only annotation). The agent `CLAUDE.md` tool-count and tool table are updated. All six tool-inventory surfaces identified in the ledger insight (2026-07-20) are kept in sync.
+FR-7. All **six** tool-inventory surfaces must be updated atomically in the same PR (ledger insight 2026-07-20, extended by feature 164 2026-09-01 — copilot.ts is the sixth surface with a documented history of being missed, `docs/roadmap/ledger/fails.md`):
+  1. `services/xstockstrat-agent/app/tools.py` — module docstring tool count + enumeration
+  2. `services/xstockstrat-agent/CLAUDE.md` — tool count + table rows
+  3. `docs/runbooks/mcp-tools.md` — header tool count
+  4. `docs/runbooks/mcp-tools.md` — per-tool reference entries (parameters, return shape, "Admin-only" annotation for all `db_*` tools)
+  5. `tests/test_tools_endpoint.py` — exact-name set assertion
+  6. `services/xstockstrat-ui/src/lib/copilot.ts` — `COPILOT_MCP_TOOL_COUNT` constant
 
 FR-8. The connection-pool budget is respected: `postgres-mcp` uses at most **1 direct connection** to TimescaleDB (DML-capable role `xstockstrat_agent`, direct port `:25060`). This is a new direct slot — update the connection budget table in root `CLAUDE.md`.
 

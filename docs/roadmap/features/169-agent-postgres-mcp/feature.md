@@ -13,6 +13,7 @@
 | 2026-09-02 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-02 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning: @AC-5 qualitative Then clause) |
 | 2026-09-02 | `spec-ready` → `draft` | user | Scope change: write access required (DML + FR-11 approval gate); spec revised |
+| 2026-09-02 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 advisory warnings; no blockers) |
 
 ---
 
@@ -42,4 +43,4 @@ _(Snapshot from reviewer-registry.md at /sdd-story time. Finalized at /sdd-spec 
 
 ## Next Action
 
-`` `/sdd-spec agent-postgres-mcp` `` — generate implementation spec
+`` `/sdd-design agent-postgres-mcp quick` `` — recon + adversarial design debate, then `/sdd-spec`
