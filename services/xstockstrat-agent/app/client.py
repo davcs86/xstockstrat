@@ -1701,7 +1701,14 @@ def _account_to_dict(account: Any) -> dict[str, Any]:
     BrokerAccount carries no credential field, so this projection can never echo submitted
     credentials (api_key/api_secret/credentials_json).
     """
-    return MessageToDict(account, preserving_proto_field_name=True)
+    projected = MessageToDict(account, preserving_proto_field_name=True)
+    # proto3 scalar bools have no field presence, so MessageToDict OMITS each one at its false zero
+    # value. That made is_active/is_paper/halted appear on some accounts but silently vanish on
+    # others, leaving the agent unable to tell false from "field absent". Pin all three explicitly
+    # so their presence is uniform across every account in the list_accounts projection (AGENT-7).
+    for _bool_field in ("is_paper", "is_active", "halted"):
+        projected[_bool_field] = getattr(account, _bool_field)
+    return projected
 
 
 async def register_offline_account(user_id: str, display_name: str) -> dict[str, Any]:
