@@ -66,6 +66,14 @@ Files changed: product-spec.md (FR-2, FR-3, FR-11, Out-of-Scope, Consumer Surfac
   - AC-10: both xstockstrat_readonly references → xstockstrat_agent
   - FR-7 / AC-9: enumerated all 6 inventory surfaces, added copilot.ts explicitly
 
+## Session 2026-09-02 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-agent, xstockstrat-ui; key reuse patterns: `_caller_access_scope` admin gate, uv/Dockerfile layering discipline).
+- Phase 1 Grilling: 3 rounds (quick; user-extended to 3). Chosen approach: supervisord as PID 1, per-call SSE client, fail-closed three-tier FR-11 gate (sqlglot primary → Command-node safe-default → regex fallback on ParseError). Rejected: long-lived SSE session, separate service, fail-open Command-node branch, regex-only FR-11.
+- Constitution rules touched: C-01, C-02, C-10/PLAT-4, C-11, C-14, C-16, F-04, F-11, P-01, P-03. Floor breaches: none.
+- Open risks carried to /sdd-spec: (1) sqlglot `.key` value verification (executor prerequisite before FR-11); (2) 084-droplet-compose-deploy overlap on docker-compose/app.yaml/app.dev.yaml; (3) unit test TRUNCATE→True regardless of branch.
+- Status: spec-ready → design-approved.
+
 ## Session 2026-09-02T00:01Z — warning fixes (pre-design)
 
 Advisory warnings from the third spec review resolved before /sdd-design:

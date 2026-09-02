@@ -14,6 +14,7 @@
 | 2026-09-02 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning: @AC-5 qualitative Then clause) |
 | 2026-09-02 | `spec-ready` → `draft` | user | Scope change: write access required (DML + FR-11 approval gate); spec revised |
 | 2026-09-02 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 advisory warnings; no blockers) |
+| 2026-09-02 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, quick) and approved; recon.md + design.md written |
 
 ---
 
@@ -21,6 +22,8 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon](recon.md) — codebase dossier (Phase 0)
+- [Design](design.md) — debated architecture (Phase 1, 3 rounds)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec agent-postgres-mcp`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -43,4 +46,4 @@ _(Snapshot from reviewer-registry.md at /sdd-story time. Finalized at /sdd-spec 
 
 ## Next Action
 
-`` `/sdd-design agent-postgres-mcp quick` `` — recon + adversarial design debate, then `/sdd-spec`
+`` `/sdd-spec agent-postgres-mcp` `` — generate implementation spec from the approved design
