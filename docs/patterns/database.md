@@ -94,3 +94,48 @@ only after re-checking the ~22-slot cluster budget.
 ## Approval
 
 DB schema migrations require DBA review + service owner approval (see `docs/runbooks/approval-flow.md`).
+
+## Application-Level Postgres Roles
+
+Application-level roles are created **once** by the DBA against the managed TimescaleDB cluster and
+are **not** tracked by `golang-migrate` (which manages schema objects, not login roles). Creating,
+altering, or dropping a role is a one-time DBA action — not a migration file.
+
+### xstockstrat_agent
+
+DML-capable role for the `postgres-mcp` co-process inside the `xstockstrat-agent` container.
+Grants SELECT, INSERT, UPDATE, DELETE on all tables. DDL and TRUNCATE are explicitly excluded;
+the FR-11 approval gate in the agent enforces `confirm=true` for UPDATE/DELETE/DROP/TRUNCATE before
+forwarding any destructive SQL to postgres-mcp.
+
+Run the following against the `xstockstrat` database on the managed cluster (substitute
+`<set-at-provision-time>` with the actual password; store the password in
+`POSTGRES_MCP_DATABASE_URI` as a deploy secret — see Step 10 of the `169-agent-postgres-mcp`
+implementation spec):
+
+```sql
+-- xstockstrat_agent: DML-capable role for the postgres-mcp co-process.
+-- Privileges: CONNECT, USAGE on all schemas, SELECT/INSERT/UPDATE/DELETE on all tables.
+-- Explicitly excluded: CREATE, DROP, ALTER, TRUNCATE (no DDL, no destructive schema ops).
+-- The FR-11 approval gate in the agent enforces confirm=true for UPDATE/DELETE/DROP/TRUNCATE.
+
+CREATE ROLE xstockstrat_agent WITH LOGIN PASSWORD '<set-at-provision-time>';
+GRANT CONNECT ON DATABASE xstockstrat TO xstockstrat_agent;
+
+-- Repeat for each application schema (public, and any TimescaleDB data schemas):
+GRANT USAGE ON SCHEMA public TO xstockstrat_agent;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO xstockstrat_agent;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO xstockstrat_agent;
+
+-- Sequences (required for INSERT into SERIAL/BIGSERIAL columns):
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO xstockstrat_agent;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT USAGE, SELECT ON SEQUENCES TO xstockstrat_agent;
+```
+
+> **Password provisioning**: set in the DigitalOcean managed-database UI; store it in
+> `POSTGRES_MCP_DATABASE_URI` as a deploy secret (see FR-9 / Step 10 of the
+> `169-agent-postgres-mcp` implementation spec).
+>
+> **Do NOT grant** CREATE, DROP, ALTER, TRUNCATE, or superuser to this role.

@@ -1,6 +1,6 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the thirty-three tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the forty-two tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 ---
@@ -34,7 +34,7 @@ directly on port 9000.
 
 **Direct (local):** `http://localhost:9000`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same thirty-three tools' `name`,
+**Tool catalog (UI display).** `GET /api/tools` returns the same forty-two tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
 capabilities (the same data documented below), never user data or credentials. It powers the
 `xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
@@ -1291,3 +1291,146 @@ emit_alert(severity="info", category="system",
 | `agent.signal.alert_threshold` | `0.6` | Minimum `conviction` to trigger auto-alert on `ingest_signal` |
 | `agent.oauth.client_id` | `xstockstrat-agent` | OAuth client ID (future: feature `agent-mcp-oauth`) |
 | `agent.oauth.allowed_redirect_uris` | _(empty — any https:// URI)_ | OAuth redirect URI allowlist |
+
+
+---
+
+## Database Tools (Admin-only)
+
+Nine tools that proxy to the `postgres-mcp` co-process running as a supervisord-managed subprocess
+inside the `xstockstrat-agent` container. All nine require `x-access-scope` bit `0x04` (admin) — a
+non-admin caller receives `PERMISSION_DENIED` without the call reaching postgres-mcp.
+
+The co-process connects as the `xstockstrat_agent` DB role (DML-only: SELECT, INSERT, UPDATE,
+DELETE; no DDL or TRUNCATE). Connection credentials are injected via `POSTGRES_MCP_DATABASE_URI`
+(env var, not a config-service key — third-party binary reads at startup).
+
+### db_list_schemas
+
+List all database schemas.
+
+**Admin-only: requires `x-access-scope` bit `0x04`**
+
+| Parameter | Type | Description |
+|---|---|---|
+| _(none)_ | — | — |
+
+**Returns**: Plain text from postgres-mcp listing all schemas.
+
+---
+
+### db_list_objects
+
+List objects (tables, views, sequences, etc.) within a schema.
+
+**Admin-only: requires `x-access-scope` bit `0x04`**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `schema` | string | Schema name (e.g. `public`) |
+
+**Returns**: Plain text listing of objects in the schema.
+
+---
+
+### db_get_object_details
+
+Get DDL definition and statistics for a named database object.
+
+**Admin-only: requires `x-access-scope` bit `0x04`**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `schema` | string | Schema name |
+| `name` | string | Object name (table, view, index, etc.) |
+
+**Returns**: Plain text with DDL and statistics.
+
+---
+
+### db_execute_sql
+
+Execute a SQL statement via the `xstockstrat_agent` DML role. Includes the **FR-11 destructive-op
+gate**: if the SQL contains a destructive statement (UPDATE, DELETE, DROP, or TRUNCATE), the tool
+returns a dry-run explanation and does **not** forward the call to postgres-mcp unless `confirm=true`.
+
+**Admin-only: requires `x-access-scope` bit `0x04`**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `sql` | string | SQL statement to execute |
+| `confirm` | bool (default `false`) | Must be `true` to execute destructive statements (UPDATE/DELETE/DROP/TRUNCATE); non-destructive statements (SELECT/INSERT) ignore this flag |
+
+**Returns**: Plain text query result, or a DRY RUN message describing what would have been executed when `confirm=false` on a destructive statement.
+
+**Error**: `PERMISSION_DENIED` if caller is not admin; `RuntimeError` if postgres-mcp co-process is unavailable.
+
+---
+
+### db_explain_query
+
+Get the EXPLAIN (query execution plan) output for a SQL query.
+
+**Admin-only: requires `x-access-scope` bit `0x04`**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `sql` | string | SQL query to explain |
+
+**Returns**: Plain text EXPLAIN output.
+
+---
+
+### db_get_top_queries
+
+Get the top queries by total execution time from `pg_stat_statements`.
+
+**Admin-only: requires `x-access-scope` bit `0x04`**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `limit` | int (default `10`) | Maximum number of queries to return |
+
+**Returns**: Plain text list of top queries with execution statistics.
+
+---
+
+### db_analyze_workload_indexes
+
+Recommend indexes based on workload patterns captured in `pg_stat_statements`.
+
+**Admin-only: requires `x-access-scope` bit `0x04`**
+
+| Parameter | Type | Description |
+|---|---|---|
+| _(none)_ | — | — |
+
+**Returns**: Plain text index recommendations for the current workload.
+
+---
+
+### db_analyze_query_indexes
+
+Recommend indexes for a specific SQL query.
+
+**Admin-only: requires `x-access-scope` bit `0x04`**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `sql` | string | SQL query to analyze for index recommendations |
+
+**Returns**: Plain text index recommendations for the given query.
+
+---
+
+### db_analyze_db_health
+
+Run comprehensive database health checks (connections, bloat, replication lag, slow queries, etc.).
+
+**Admin-only: requires `x-access-scope` bit `0x04`**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `health_type` | string | Health check type: `"all"`, `"connections"`, `"bloat"`, `"indexes"`, `"vacuum"`, or `"replication"` |
+
+**Returns**: Plain text health report.

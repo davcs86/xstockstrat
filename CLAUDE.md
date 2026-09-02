@@ -239,10 +239,11 @@ rationale, the direct-vs-pooled split, and the `DB_PGBOUNCER` driver requirement
 | xstockstrat-config | Node | direct `:25060` | 2 | |
 | xstockstrat-notify | Node | direct `:25060` | 1 | Light DB use (alert history only) |
 | xstockstrat-ui | Next.js | direct `:25060` | 1 | config-ui audit route only |
-| **Direct backend total** | | | **8** | Real cluster connections held by the direct services (per environment) |
+| xstockstrat-agent (postgres-mcp) | Python | direct `:25060` | 1 | postgres-mcp co-process connects as xstockstrat_agent; direct because third-party binary; 1 connection (feature 169) |
+| **Direct backend total** | | | **9** | Real cluster connections held by the direct services (per environment) |
 | **Pooled (PgBouncer)** | | | **pool `size` (5)** | The six services above multiplex onto ≤ the pool size, regardless of their client-pool maxes |
 
-Effective backend usage per environment ≈ **8 direct + ≤5 pool = ~13**, leaving headroom under the
+Effective backend usage per environment ≈ **9 direct + ≤5 pool = ~14**, leaving headroom under the
 ~22-slot cluster even with both environments live. The six pooled rows no longer count 1:1 against the
 budget — that was the point of the PgBouncer split.
 
