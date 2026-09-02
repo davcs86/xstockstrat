@@ -127,7 +127,7 @@ cd packages/proto && buf lint
 
 ### Step 3 — service: Create requireAdminScope helper in trading middleware
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/middleware/authz.go` — create
