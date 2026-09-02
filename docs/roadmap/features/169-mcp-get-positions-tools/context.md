@@ -40,3 +40,18 @@
   - `tests/test_offline_client.py` must be updated (two tests reference old method name and shape).
 - Constitution rules touched: C-08, C-10(b), C-14, C-15, C-16, F-04, P-03. Floor breaches: none.
 - Status: spec-ready → design-approved.
+
+## Session 2026-09-02T00:00:00Z — sdd-spec
+
+- Implementation spec generated: 8 steps, all `pending`.
+- Step order: client consolidation (Steps 1-2) → tool registration (Steps 3-4) → manage_offline_account backward-compat update (Steps 5-6) → parity test (Step 7) → doc updates + name-set test (Step 8).
+- All 10 AC scenarios mapped: AC-1 through AC-6 and AC-9/AC-10 → Step 4 (tool unit tests), AC-7 → Step 8 (inventory surfaces), AC-8 → Step 7 (parity test).
+- Key codebase findings confirmed during spec:
+  - Insertion point in tools.py: after `list_accounts` at line 1694, before `_get_source` at line 1697.
+  - Client consolidation replaces `list_account_positions` (client.py:1880-1892) with `list_positions` following `list_watchlists` pagination pattern (client.py:357-371).
+  - manage_offline_account sub-op (tools.py:1600-1603) switches to consolidated method, strips `next_page_token`.
+  - Two existing tests in test_offline_client.py (lines 136 and 281) must rename call target.
+  - Parity test mirrors test_backtest_view.py:189-212 pattern with 23 Position proto fields.
+  - Four inventory surfaces to update: tools.py docstring, CLAUDE.md, mcp-tools.md, test_tools_endpoint.py (33 → 35).
+- Reviewer roles: Service owner: xstockstrat-agent (Steps 1-8), Service owner: xstockstrat-portfolio (read-only, no steps assigned).
+- Status: design-approved → implementation-ready.
