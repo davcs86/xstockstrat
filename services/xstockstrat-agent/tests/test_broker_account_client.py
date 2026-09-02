@@ -191,6 +191,62 @@ async def test_list_broker_accounts_returns_broker_and_offline_together():
     assert by_id["acct-9"]["broker_type"] == "BROKER_TYPE_OFFLINE"
 
 
+@pytest.mark.asyncio
+async def test_resume_broker_account_calls_rpc_and_returns_account():
+    """Feature 169 — resume_broker_account forwards account_id, reason, x-user-id to
+    ResumeAccount and returns the account dict via _account_to_dict."""
+    from gen.trading.v1 import trading_pb2  # type: ignore
+
+    mock_stub = MagicMock()
+    mock_stub.ResumeAccount = AsyncMock(
+        return_value=trading_pb2.ResumeAccountResponse(
+            account=trading_pb2.BrokerAccount(
+                id="acct-7", display_name="My Alpaca", broker_type=1, halted=False, is_active=True
+            )
+        )
+    )
+    grpc_patch, stub_patch = _patch_trading_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with stub_patch:
+            out = await client.resume_broker_account("admin-1", "acct-7", "false alarm")
+
+    # Verify the correct endpoint was used.
+    assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.TRADING_ENDPOINT
+    # Verify RPC request fields.
+    sent = mock_stub.ResumeAccount.call_args.args[0]
+    assert sent.account_id == "acct-7"
+    assert sent.reason == "false alarm"
+    # Verify x-user-id metadata.
+    meta = mock_stub.ResumeAccount.call_args.kwargs["metadata"]
+    assert ("x-user-id", "admin-1") in meta
+    # Verify the returned dict is a proper account projection.
+    assert out["account"]["id"] == "acct-7"
+    assert out["account"]["halted"] is False
+    assert out["account"]["display_name"] == "My Alpaca"
+
+
+@pytest.mark.asyncio
+async def test_resume_broker_account_default_reason():
+    """When no reason is given, the RPC request carries an empty reason."""
+    from gen.trading.v1 import trading_pb2  # type: ignore
+
+    mock_stub = MagicMock()
+    mock_stub.ResumeAccount = AsyncMock(
+        return_value=trading_pb2.ResumeAccountResponse(
+            account=trading_pb2.BrokerAccount(id="acct-7", broker_type=1)
+        )
+    )
+    grpc_patch, stub_patch = _patch_trading_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with stub_patch:
+            await client.resume_broker_account("admin-1", "acct-7")
+
+    sent = mock_stub.ResumeAccount.call_args.args[0]
+    assert sent.reason == ""
+
+
 def test_account_to_dict_covers_every_broker_account_field():
     """F-12 field-parity guard: freeze the BrokerAccount contract so a future proto field cannot
     silently vanish from list_accounts, and assert the id field is `id` (not `accountId`)."""

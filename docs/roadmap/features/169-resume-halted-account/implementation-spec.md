@@ -399,7 +399,7 @@ cd services/xstockstrat-agent && python -c "from app.client import resume_broker
 
 ### Step 8 — test: Agent tool and client tests for resume operation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_account_tools.py` — modify
