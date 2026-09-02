@@ -48,7 +48,7 @@ twin) is honored in Step 5 — without the adapter twin, the RPC is unreachable 
 
 ### Step 1 — proto: Add ResumeAccount RPC and messages to trading.proto
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/trading/v1/trading.proto` — modify
@@ -95,7 +95,7 @@ cd packages/proto && buf lint
 
 ### Step 2 — proto-gen: Regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/trading/v1/` — regenerated
@@ -127,7 +127,7 @@ cd packages/proto && buf lint
 
 ### Step 3 — service: Create requireAdminScope helper in trading middleware
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/middleware/authz.go` — create
@@ -166,7 +166,7 @@ cd services/xstockstrat-trading && GOWORK=off go build ./internal/middleware/
 
 ### Step 4 — service: Add ResumeAccountSvc method to TradingService
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -212,7 +212,7 @@ cd services/xstockstrat-trading && GOWORK=off go build ./internal/service/
 
 ### Step 5 — service: Add ResumeAccount handler + grpcTradingAdapter twin
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/handler/trading.go` — modify
@@ -273,7 +273,7 @@ cd services/xstockstrat-trading && GOWORK=off go build ./...
 
 ### Step 6 — test: Go unit tests for ResumeAccountSvc and requireAdminScope
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_resume_account_test.go` — create
@@ -325,7 +325,7 @@ cd services/xstockstrat-trading && GOWORK=off COVERPKGS=$(go list ./... | grep -
 
 ### Step 7 — service: Add resume_broker_account client wrapper and manage_account dispatch
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -399,7 +399,7 @@ cd services/xstockstrat-agent && python -c "from app.client import resume_broker
 
 ### Step 8 — test: Agent tool and client tests for resume operation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_account_tools.py` — modify
@@ -450,7 +450,7 @@ cd services/xstockstrat-agent && pytest --cov=app --cov-fail-under=40
 
 ### Step 9 — docs: Update mcp-tools.md with resume operation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify

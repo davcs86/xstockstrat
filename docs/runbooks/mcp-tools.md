@@ -1178,19 +1178,22 @@ found`; `permission denied` (non-owner); `FAILED_PRECONDITION` (confirm on a bro
 
 ### `manage_account`
 
-Manage the **caller's own BROKER accounts** (Alpaca / IBKR) in `xstockstrat-trading` (feature 164).
-All operations act on the **caller's own** accounts (ownership from the verified `x-user-id`); a
-non-owner is rejected `PERMISSION_DENIED`. Broker credentials pass through to the backend (which
-encrypts them at rest) and are **never echoed back** — a `BrokerAccount` carries no credential
-field. Offline accounts are **not** created here — use `manage_offline_account` (`create_account`).
+Manage **BROKER accounts** (Alpaca / IBKR) in `xstockstrat-trading` (feature 164, resume added by
+feature 169). `register` / `update_credentials` / `deregister` act on the **caller's own** accounts
+(ownership from the verified `x-user-id`); a non-owner is rejected `PERMISSION_DENIED`. `resume`
+requires **admin scope** and can act on any account. Broker credentials pass through to the backend
+(which encrypts them at rest) and are **never echoed back** — a `BrokerAccount` carries no
+credential field. Offline accounts are **not** created here — use `manage_offline_account`
+(`create_account`).
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `operation` | string | yes | `register` \| `update_credentials` \| `deregister` |
-| `account_id` | string | update/deregister | The broker account to act on |
+| `operation` | string | yes | `register` \| `update_credentials` \| `deregister` \| `resume` |
+| `account_id` | string | update/deregister/resume | The broker account to act on |
 | `display_name` | string | `register` | Name for the new account |
 | `broker_type` | string | `register` | `alpaca` \| `ibkr` (offline is rejected) |
 | `credentials_json` | string | register/update | Broker-specific credential blob (Alpaca `{"api_key":…,"api_secret":…}`; IBKR `{"consumer_key":…,"access_token":…,"access_token_secret":…,"ibkr_account_id":…}`) |
+| `reason` | string | no | Operator-supplied context for why the halt is being cleared (resume only; default `""`) |
 
 - **register** → `{"account": …}` with `credential_status`; the submitted credentials are never
   returned.
@@ -1198,12 +1201,18 @@ field. Offline accounts are **not** created here — use `manage_offline_account
   account (`FAILED_PRECONDITION`) and invalid JSON (`INVALID_ARGUMENT`).
 - **deregister** → `{"deregistered": true, "account_id": …}`. Works for broker **and** offline
   accounts (the RPC returns nothing; the confirmation is synthesized from the input).
+- **resume** → `{"account": …}` with `halted: false` (feature 169). Clears the persistent and
+  in-memory halt on the specified broker account so the reconciliation poller resumes ticking.
+  Idempotent — resuming an already-running account is a no-op success. Emits an
+  `account.halt.resumed` ledger event and an INFO-level alert via xstockstrat-notify. **Requires
+  admin scope** (`x-access-scope` bit `0x04`); unlike the other operations which use ownership
+  gating, `resume` acts on **any** account (the admin is un-halting on behalf of the platform).
 
-**Errors:** `unknown operation '<op>'` (expected `register/update_credentials/deregister`); missing
-required args per operation; offline steer on `register` (`broker_type=offline`); unsupported
-`broker_type`; `broker account not found`; `permission denied` (non-owner); `FAILED_PRECONDITION`
-(update_credentials on an offline account); `INVALID_ARGUMENT` (malformed `credentials_json`);
-`RuntimeError` → no verified caller claims.
+**Errors:** `unknown operation '<op>'` (expected `register/update_credentials/deregister/resume`);
+missing required args per operation; `PermissionError` (resume without admin scope); offline steer on
+`register` (`broker_type=offline`); unsupported `broker_type`; `broker account not found`;
+`permission denied` (non-owner); `FAILED_PRECONDITION` (update_credentials on an offline account);
+`INVALID_ARGUMENT` (malformed `credentials_json`); `RuntimeError` → no verified caller claims.
 
 ---
 

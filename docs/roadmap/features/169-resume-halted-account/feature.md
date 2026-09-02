@@ -13,6 +13,8 @@
 | 2026-09-02 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-02 | `draft` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written |
 | 2026-09-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (9 steps) |
+| 2026-09-02 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (proto) done — sequential mode |
+| 2026-09-02 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done — sequential mode |
 
 ---
 
