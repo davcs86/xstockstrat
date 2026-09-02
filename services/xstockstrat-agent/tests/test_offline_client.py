@@ -148,7 +148,7 @@ async def test_list_account_positions_forwards_user_id_via_header():
     with grpc_patch as mock_grpc:
         mock_grpc.aio.insecure_channel.return_value = _channel_cm()
         with stub_patch:
-            out = await client.list_account_positions("user-42", "off-1")
+            out = await client.list_positions("user-42", "off-1")
 
     sent = mock_stub.ListPositions.call_args.args[0]
     # user_id is resolved server-side from the x-user-id header, so the deprecated request-body
@@ -157,7 +157,7 @@ async def test_list_account_positions_forwards_user_id_via_header():
     assert sent.account_id == "off-1"
     meta = mock_stub.ListPositions.call_args.kwargs["metadata"]
     assert ("x-user-id", "user-42") in meta
-    assert out == {"positions": []}
+    assert out == {"positions": [], "next_page_token": ""}
 
 
 @pytest.mark.asyncio
@@ -303,10 +303,60 @@ async def test_list_positions_provenance_passthrough():
     with grpc_patch as mock_grpc:
         mock_grpc.aio.insecure_channel.return_value = _channel_cm()
         with stub_patch:
-            out = await client.list_account_positions("user-42", "off-1")
+            out = await client.list_positions("user-42", "off-1")
 
     assert len(out["positions"]) == 1
     p = out["positions"][0]
     assert p["source"] == "POSITION_SOURCE_BASELINE"
     assert "as_of" in p  # timestamp is present
     assert p["symbol"] == "AAPL"
+    assert "next_page_token" in out
+
+
+@pytest.mark.asyncio
+async def test_list_positions_pagination_passthrough():
+    """Feature 169: pagination params are forwarded to the backend and next_page_token returned."""
+    from gen.common.v1 import common_pb2  # type: ignore
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+
+    pos = portfolio_pb2.Position(symbol="AAPL", qty=10, account_id="off-1")
+    mock_stub = MagicMock()
+    mock_stub.ListPositions = AsyncMock(
+        return_value=portfolio_pb2.ListPositionsResponse(
+            positions=[pos],
+            page=common_pb2.PageResponse(next_page_token="tok-2"),
+        )
+    )
+    grpc_patch, stub_patch = _patch_portfolio_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with stub_patch:
+            out = await client.list_positions(
+                "user-42", account_id="off-1", limit=10, page_token="tok-1"
+            )
+
+    sent = mock_stub.ListPositions.call_args.args[0]
+    assert sent.page.page_size == 10
+    assert sent.page.page_token == "tok-1"
+    assert out["next_page_token"] == "tok-2"
+    assert len(out["positions"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_list_positions_all_accounts():
+    """Feature 169: omitting account_id returns positions across all user accounts."""
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+
+    mock_stub = MagicMock()
+    mock_stub.ListPositions = AsyncMock(
+        return_value=portfolio_pb2.ListPositionsResponse(positions=[])
+    )
+    grpc_patch, stub_patch = _patch_portfolio_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with stub_patch:
+            out = await client.list_positions("user-42")
+
+    sent = mock_stub.ListPositions.call_args.args[0]
+    assert sent.account_id == ""
+    assert out == {"positions": [], "next_page_token": ""}

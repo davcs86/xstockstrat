@@ -1877,18 +1877,28 @@ async def list_account_orders(user_id: str, account_id: str) -> dict[str, Any]:
     return {"orders": [_order_to_dict(o) for o in resp.orders]}
 
 
-async def list_account_positions(user_id: str, account_id: str) -> dict[str, Any]:
-    """List an account's positions via PortfolioService.ListPositions (read-only)."""
+async def list_positions(
+    user_id: str, account_id: str = "", limit: int = 0, page_token: str = ""
+) -> dict[str, Any]:
+    """List positions via PortfolioService.ListPositions (read-only, paginated).
+
+    When *account_id* is empty the backend returns positions across all the
+    user's accounts (broker + offline).  Pagination follows the nested
+    ``PageRequest``/``PageResponse`` submessage convention.
+    """
+    from gen.common.v1 import common_pb2  # noqa: PLC0415
     from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
 
+    req = portfolio_pb2.ListPositionsRequest(
+        account_id=account_id,
+        page=common_pb2.PageRequest(page_size=limit, page_token=page_token),
+    )
     async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
-        resp = await stub.ListPositions(
-            portfolio_pb2.ListPositionsRequest(account_id=account_id),
-            metadata=_metadata(("x-user-id", user_id)),
-        )
+        resp = await stub.ListPositions(req, metadata=_metadata(("x-user-id", user_id)))
     return {
-        "positions": [MessageToDict(p, preserving_proto_field_name=True) for p in resp.positions]
+        "positions": [MessageToDict(p, preserving_proto_field_name=True) for p in resp.positions],
+        "next_page_token": resp.page.next_page_token,
     }
 
 
