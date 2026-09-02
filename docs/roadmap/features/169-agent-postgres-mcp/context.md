@@ -21,3 +21,15 @@
 - Known traps from ledger incorporated into product-spec Open Questions:
   - MCP surface drift (6 inventory surfaces — ledger 2026-08-02).
   - Dockerfile entrypoint replacement pattern (ledger 2026-08-05).
+
+## Session 2026-09-02T00:00Z — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: @AC-5 Then clause uses qualitative language ("a 'status' field indicating database connectivity") — spec reviewer recommends naming the concrete expected field value before impl-spec is written (advisory C-15; not a blocker).
+- Overlap findings:
+  - WARN: `docker-compose.yml` — shared with `084-droplet-compose-deploy` (FR-3 restructures all port bindings + Caddy). Whichever merges second does a manual integration merge.
+  - WARN: `.do/app.dev.yaml` — semantic incompatibility if 084 merges first: 084 abandons `.do/app.dev.yaml` for dev deploys (replaces with Droplet SSH). If 084 lands first, 169's FR-9 dev-env wiring must switch to 084's secrets-injection mechanism (`.env` or secrets manager on Droplet) rather than editing `.do/app.dev.yaml`. Executor must check 084 merge status before executing FR-9.
+- Blockers fixed before review:
+  - @AC-9: replaced non-concrete 'N determined at implementation time' with exact enumeration of 9 db_* tools confirmed from crystaldba/postgres-mcp HEAD.
+  - @AC-5/@AC-6: corrected placeholder tool names (db_health→db_analyze_db_health, db_explain→db_explain_query).
+  - OQ-1/OQ-2/OQ-3: all closed via crystaldba repo inspection + PyPI lookup.

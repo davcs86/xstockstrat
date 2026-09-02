@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-02 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-09-02 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning: @AC-5 qualitative Then clause) |
 
 ---
 
@@ -40,4 +41,4 @@ _(Snapshot from reviewer-registry.md at /sdd-story time. Finalized at /sdd-spec 
 
 ## Next Action
 
-`/sdd-review agent-postgres-mcp product-spec` — AI review of product spec before running /sdd-spec
+`` `/sdd-spec agent-postgres-mcp` `` — generate implementation spec
