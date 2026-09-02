@@ -212,7 +212,7 @@ cd services/xstockstrat-trading && GOWORK=off go build ./internal/service/
 
 ### Step 5 — service: Add ResumeAccount handler + grpcTradingAdapter twin
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/handler/trading.go` — modify
