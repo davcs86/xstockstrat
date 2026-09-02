@@ -481,6 +481,8 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon
 | DB migration script | `scripts/db-migrate.sh` |
 | User management script | `scripts/manage-users.sh` — also at `/app/scripts/manage-users.sh` inside the identity container |
 | Proto gen script | `scripts/buf-gen.sh` |
+| E2E test container | `Dockerfile.e2e` |
+| E2E test runner script | `scripts/run-e2e.sh` |
 | Integration tests | `scripts/integration-test.sh` |
 | DRY duplication check (jscpd) | `scripts/check-duplication.sh`, `.jscpd.json` |
 | DRY pre-commit hook | `.husky/pre-commit` |
