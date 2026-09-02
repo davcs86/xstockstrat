@@ -394,7 +394,7 @@ pytest --cov=app --cov-fail-under=40
 
 ### Step 6 — service: postgres_mcp_client.py — per-call SSE client module (greenfield)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/postgres_mcp_client.py` — create
@@ -470,7 +470,7 @@ ruff check app/postgres_mcp_client.py && ruff format --check app/postgres_mcp_cl
 
 ### Step 7 — test: Unit tests for postgres_mcp_client
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_postgres_mcp_client.py` — create
@@ -575,7 +575,7 @@ pytest --cov=app --cov-fail-under=40
 
 ### Step 8 — service: 9 db_* handlers + _is_destructive helper in tools.py
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify (add imports, `_is_destructive` helper, 9 handlers)
@@ -739,7 +739,7 @@ ruff check app/tools.py && ruff format --check app/tools.py
 
 ### Step 9 — test: Unit tests for db_* handlers (admin gate + FR-11 gate)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_db_tools.py` — create

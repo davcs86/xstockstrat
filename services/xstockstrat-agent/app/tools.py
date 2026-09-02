@@ -40,14 +40,17 @@ Thirty-three tools:
 import base64
 import json
 import logging
+import re
 import uuid
 from typing import Literal
 
 import grpc
+import sqlglot
+import sqlglot.errors
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.types import TextContent
 
-from app import backtest_view, client
+from app import backtest_view, client, postgres_mcp_client
 from app.scopes import MCP_CLAIMS_SCOPE_KEY, resolve_scope, roles_to_access_scope
 
 _ALERT_THRESHOLD_DEFAULT = 0.6
@@ -208,6 +211,46 @@ _EXTRACTOR_TOOL_MAP: dict[str, str | None] = {
     "mediated_authenticated_website": "extract_website_content",
     # All other types (mediated_simple_email and all non-mediated) → null
 }
+
+
+# ---------------------------------------------------------------------------
+# FR-11 approval gate — fail-closed three-tier SQL destructiveness check.
+# _DESTRUCTIVE_KEYS values verified via sqlglot v25.34.1 (context.md, Step 8):
+#   UPDATE → 'update', DELETE → 'delete', DROP → 'drop', TRUNCATE TABLE → 'truncatetable'
+# ---------------------------------------------------------------------------
+_DESTRUCTIVE_KEYS = frozenset({"update", "delete", "drop", "truncatetable"})
+
+_COMMENT_RE = re.compile(r"/\*.*?\*/|--[^\n]*", re.DOTALL)
+_DESTRUCTIVE_RE = re.compile(r"\b(?:UPDATE|DELETE|DROP|TRUNCATE)\b", re.IGNORECASE)
+
+
+def _is_destructive(sql: str) -> bool:
+    """Return True if sql contains a destructive statement (UPDATE, DELETE, DROP, TRUNCATE).
+
+    Three-tier fail-closed (design.md §FR-11):
+    1. sqlglot AST parse: match .key values against _DESTRUCTIVE_KEYS
+    2. Command-node safe-default: unrecognized SQL (VACUUM, REINDEX, etc.) → True
+    3. Regex fallback on sqlglot.ParseError (strips comments first)
+    """
+    try:
+        exprs = sqlglot.parse(sql)
+        if any(e.key in _DESTRUCTIVE_KEYS for e in exprs if e is not None):
+            return True
+        if any(e.key == "command" for e in exprs if e is not None):
+            log.warning("sqlglot Command node in FR-11 gate; safe-defaulting destructive=True")
+            return True
+        return False
+    except MemoryError:
+        raise
+    except sqlglot.errors.ParseError:
+        log.warning("sqlglot ParseError in FR-11 gate; falling to regex fallback")
+        return bool(_DESTRUCTIVE_RE.search(_COMMENT_RE.sub(" ", sql)))
+    except Exception as exc:
+        log.warning(
+            "sqlglot unexpected error in FR-11 gate (%s); falling to regex fallback",
+            type(exc).__name__,
+        )
+        return bool(_DESTRUCTIVE_RE.search(_COMMENT_RE.sub(" ", sql)))
 
 
 def register_tools(server: MCPServer) -> None:
@@ -1692,6 +1735,134 @@ def register_tools(server: MCPServer) -> None:
             return await client.list_broker_accounts(user_id)
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e)) from e
+
+    # -----------------------------------------------------------------------
+    # db_* tools — postgres-mcp co-process, admin-scoped, feature 169
+    # -----------------------------------------------------------------------
+
+    @server.tool()
+    async def db_list_schemas(ctx: Context) -> list[TextContent]:
+        """List all schemas in the TimescaleDB database. Admin-only (bit 0x04).
+        Returns a text summary of schemas available to the xstockstrat_agent role."""
+        tool = "db_list_schemas"
+        access_scope = _caller_access_scope(ctx, tool)
+        if not (access_scope & 0x04):
+            raise RuntimeError(f"PERMISSION_DENIED: {tool} requires admin scope (bit 0x04)")
+        result = await postgres_mcp_client.call_tool("list_schemas", {})
+        return [TextContent(type="text", text=str(result))]
+
+    @server.tool()
+    async def db_list_objects(ctx: Context, schema: str = "public") -> list[TextContent]:
+        """List tables, views, and other objects within a schema. Admin-only (bit 0x04).
+        schema: target schema name (default 'public')."""
+        tool = "db_list_objects"
+        access_scope = _caller_access_scope(ctx, tool)
+        if not (access_scope & 0x04):
+            raise RuntimeError(f"PERMISSION_DENIED: {tool} requires admin scope (bit 0x04)")
+        result = await postgres_mcp_client.call_tool("list_objects", {"schema": schema})
+        return [TextContent(type="text", text=str(result))]
+
+    @server.tool()
+    async def db_get_object_details(
+        ctx: Context, schema: str = "public", name: str = ""
+    ) -> list[TextContent]:
+        """Get detailed DDL and statistics for a specific table or view. Admin-only (bit 0x04).
+        schema: target schema (default 'public'); name: table/view name."""
+        tool = "db_get_object_details"
+        access_scope = _caller_access_scope(ctx, tool)
+        if not (access_scope & 0x04):
+            raise RuntimeError(f"PERMISSION_DENIED: {tool} requires admin scope (bit 0x04)")
+        result = await postgres_mcp_client.call_tool(
+            "get_object_details", {"schema": schema, "name": name}
+        )
+        return [TextContent(type="text", text=str(result))]
+
+    @server.tool()
+    async def db_execute_sql(
+        ctx: Context, sql: str = "", confirm: bool = False
+    ) -> list[TextContent]:
+        """Execute SQL via the xstockstrat_agent DML role. Admin-only (bit 0x04).
+
+        Destructive statements (UPDATE / DELETE / DROP / TRUNCATE) return a dry-run preview
+        and are NOT forwarded unless confirm=True is passed (FR-11 approval gate).
+        SELECT and INSERT execute immediately without confirmation.
+        sql: the SQL statement to execute.
+        confirm: set True to execute a destructive statement (default False — dry run)."""
+        tool = "db_execute_sql"
+        access_scope = _caller_access_scope(ctx, tool)
+        if not (access_scope & 0x04):
+            raise RuntimeError(f"PERMISSION_DENIED: {tool} requires admin scope (bit 0x04)")
+
+        if _is_destructive(sql) and not confirm:
+            return [
+                TextContent(
+                    type="text",
+                    text=(
+                        "DRY RUN — destructive SQL detected. "
+                        "Re-call with confirm=True to execute:\n\n" + sql
+                    ),
+                )
+            ]
+
+        result = await postgres_mcp_client.call_tool("execute_sql", {"sql": sql})
+        return [TextContent(type="text", text=str(result))]
+
+    @server.tool()
+    async def db_explain_query(ctx: Context, sql: str = "") -> list[TextContent]:
+        """Return the EXPLAIN ANALYZE plan for a SQL query. Admin-only (bit 0x04).
+        sql: the query to explain."""
+        tool = "db_explain_query"
+        access_scope = _caller_access_scope(ctx, tool)
+        if not (access_scope & 0x04):
+            raise RuntimeError(f"PERMISSION_DENIED: {tool} requires admin scope (bit 0x04)")
+        result = await postgres_mcp_client.call_tool("explain_query", {"sql": sql})
+        return [TextContent(type="text", text=str(result))]
+
+    @server.tool()
+    async def db_get_top_queries(ctx: Context, limit: int = 10) -> list[TextContent]:
+        """Return the top slow queries from pg_stat_statements. Admin-only (bit 0x04).
+        limit: number of queries to return (default 10)."""
+        tool = "db_get_top_queries"
+        access_scope = _caller_access_scope(ctx, tool)
+        if not (access_scope & 0x04):
+            raise RuntimeError(f"PERMISSION_DENIED: {tool} requires admin scope (bit 0x04)")
+        result = await postgres_mcp_client.call_tool("get_top_queries", {"limit": limit})
+        return [TextContent(type="text", text=str(result))]
+
+    @server.tool()
+    async def db_analyze_workload_indexes(ctx: Context) -> list[TextContent]:
+        """Recommend indexes based on pg_stat_statements workload. Admin-only (bit 0x04)."""
+        tool = "db_analyze_workload_indexes"
+        access_scope = _caller_access_scope(ctx, tool)
+        if not (access_scope & 0x04):
+            raise RuntimeError(f"PERMISSION_DENIED: {tool} requires admin scope (bit 0x04)")
+        result = await postgres_mcp_client.call_tool("analyze_workload_indexes", {})
+        return [TextContent(type="text", text=str(result))]
+
+    @server.tool()
+    async def db_analyze_query_indexes(ctx: Context, sql: str = "") -> list[TextContent]:
+        """Recommend indexes for a specific SQL query. Admin-only (bit 0x04).
+        sql: the query to analyze."""
+        tool = "db_analyze_query_indexes"
+        access_scope = _caller_access_scope(ctx, tool)
+        if not (access_scope & 0x04):
+            raise RuntimeError(f"PERMISSION_DENIED: {tool} requires admin scope (bit 0x04)")
+        result = await postgres_mcp_client.call_tool("analyze_query_indexes", {"sql": sql})
+        return [TextContent(type="text", text=str(result))]
+
+    @server.tool()
+    async def db_analyze_db_health(ctx: Context, health_type: str = "all") -> list[TextContent]:
+        """Run a comprehensive database health analysis. Admin-only (bit 0x04).
+        health_type: 'all' (default) | 'index' | 'connection' | 'vacuum' | 'sequence' |
+            'replication' | 'buffer' | 'constraint'."""
+        tool = "db_analyze_db_health"
+        access_scope = _caller_access_scope(ctx, tool)
+        if not (access_scope & 0x04):
+            raise RuntimeError(f"PERMISSION_DENIED: {tool} requires admin scope (bit 0x04)")
+        result = await postgres_mcp_client.call_tool(
+            "analyze_db_health", {"health_type": health_type}
+        )
+        return [TextContent(type="text", text=str(result))]
 
 
 async def _get_source(source_slug: str) -> dict:

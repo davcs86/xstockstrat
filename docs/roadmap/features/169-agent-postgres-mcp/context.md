@@ -131,3 +131,18 @@ Advisory warnings from the third spec review resolved before /sdd-design:
 - **Step 4 (done)**: Created `services/xstockstrat-agent/supervisord.conf` (nodaemon=true; program:app-main python -m app.main; program:postgres-mcp with --unrestricted --transport sse --port %(ENV_POSTGRES_MCP_PORT)s). Modified `Dockerfile` CMD from `["python", "-m", "app.main"]` → `["supervisord", "-c", "/app/supervisord.conf"]`; ENTRYPOINT preserved.
 - **Step 5 (done)**: Created `services/xstockstrat-agent/tests/test_supervisord_conf.py` — 8 structural tests (AC-1/AC-2/AC-3). **Deviation (minor)**: spec listed `configparser.ConfigParser`; actual implementation uses `configparser.RawConfigParser` — required because supervisord's `%(ENV_POSTGRES_MCP_PORT)s` interpolation syntax collides with configparser's own interpolation engine (raises `InterpolationMissingOptionError`). Raw parser returns values verbatim. Disposition: correctness fix within step scope; no spec deviation log entry required (no behavioral change from intent). Test suite: 8 GREEN.
 - **Status transitions**: `implementation-ready` → `in-progress` (status.md overwritten; feature.md history row appended).
+
+## Session 2026-09-02 — sdd-execute Steps 6-8 prerequisite
+
+- **Step 6 (done)**: Created `services/xstockstrat-agent/app/postgres_mcp_client.py` — per-call SSE client (`call_tool`). Ruff clean; import verified.
+- **Step 7 (done)**: Created `services/xstockstrat-agent/tests/test_postgres_mcp_client.py` — 5 tests (URL construction, happy path, ConnectError, ConnectTimeout, OSError). 5 GREEN.
+- **sqlglot .key verification (Step 8 mandatory prerequisite, now resolved)** — ran `sqlglot.parse(sql)` for UPDATE/DELETE/DROP/TRUNCATE/SELECT/INSERT on sqlglot v25.34.1:
+  - `UPDATE` → `key='update'` ✓
+  - `DELETE` → `key='delete'` ✓
+  - `DROP` → `key='drop'` ✓
+  - `TRUNCATE TABLE` → `key='truncatetable'` ✓
+  - `SELECT` → `key='select'` (safe, not destructive) ✓
+  - `INSERT` → `key='insert'` (safe, not destructive) ✓
+  - **Confirmed**: `_DESTRUCTIVE_KEYS = frozenset({"update", "delete", "drop", "truncatetable"})` is correct.
+  - **Review warning [x] resolved**: "Step 8: `_DESTRUCTIVE_KEYS` frozenset values assumed (not verified)" — now verified and recorded.
+- **Open review warnings status**: Step 8 warning resolved [x]; Step 12 TS lint gate [ ] and E2E coverage note [ ] remain open (to be addressed in Step 12).
