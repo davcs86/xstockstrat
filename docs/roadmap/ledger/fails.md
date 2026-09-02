@@ -2101,3 +2101,114 @@ ambiguity is logged here).
 - **Rule it implies**: the six tool-count surfaces include `COPILOT_MCP_TOOL_COUNT` in copilot.ts;
   any design or spec for a new agent tool must list it in the Files section, regardless of whether
   the UI is the "affected service".
+
+### 2026-09-02 — 021-ledger-event-export — scope-creep
+- **Mistake**: Adding a parameter to a shared emit helper (`emitLedgerEvent`) silently broke a second
+  call site (`internal/service/order_intent.go:166`) that the design/spec Files list omitted; the
+  `service` package would not compile and it was caught only at impl-spec review, not design. 26 total
+  call sites had to change.
+- **Evidence**: feature 021 `services/xstockstrat-trading/internal/service/{trading.go,order_intent.go}`;
+  context.md (2026-08-31 sdd-execute).
+- **Rule it implies**: before changing a shared helper's signature, grep **all** call sites and list
+  every one in the step's Files — a partial list fails at compile, not review.
+
+### 2026-09-02 — 029-signal-performance-attribution — assumption
+- **Mistake**: A spec/design `path:line` reference for an event emit was stale — the fee stamp pointed
+  at `trading.go:731-732` (the submit path, which emits `order.broker_submitted`), not the true
+  `order.filled` emit sites in `pollFills` (`:1712`/`:1728`).
+- **Evidence**: feature 029 implementation-spec Step 5; context.md (sdd-spec session).
+- **Rule it implies**: verify the *actual* emit site by grepping the event string, not the nearest
+  place the payload struct is populated.
+
+### 2026-09-02 — 031-strategy-performance-dashboard — assumption
+- **Mistake**: `/sdd-spec`/design described a **reused** primitive's behavior from memory —
+  "`TradingModeBadge` shows nothing in production" — but it actually renders a "live" badge, forcing a
+  shipped deviation (a dedicated paper-only `data-testid` span so AC-9/AC-10 had an unambiguous target).
+- **Evidence**: feature 031 implementation-spec Deviation Log; context.md.
+- **Rule it implies**: verify a reused component's actual render behavior (read the component) before
+  writing an AC that depends on its negative/absent state.
+
+### 2026-09-02 — 043-user-management-ui — assumption
+- **Mistake**: The design spec set the audit `idempotency_key` to include `Date.now()`, which silently
+  defeats ledger dedup — a retry produces a new key and a duplicate event. Caught in impl-review, not by
+  tests; shipped `${eventType}:${targetUserId}:${traceId}` (stable) instead.
+- **Evidence**: feature 043 context.md; design.md idempotency_key.
+- **Rule it implies**: idempotency keys must derive only from stable inputs (event type + target id +
+  correlation id), never a timestamp.
+
+### 2026-09-02 — 095-opportunity-live-market-enrichment — assumption
+- **Mistake**: Adding read-time side-reads to an existing RPC (`ListOpportunities` gained
+  `GetLatestPrice`/`GetBars` calls) silently broke 4 pre-existing tests that asserted the exact set of
+  downstream calls — hidden test coupling to call patterns, a real behavior change not a regression.
+- **Evidence**: feature 095 context.md (4 re-scoped servicer tests).
+- **Rule it implies**: when an RPC gains new downstream reads, expect and re-scope any test asserting
+  its exact outbound-call set; treat call-count assertions as brittle coupling.
+
+### 2026-09-02 — 095-opportunity-live-market-enrichment — scope-creep
+- **Mistake**: The design flagged a governance note for `signal_params.{target,stop}` as a new
+  convention (ad-hoc-sentinel risk, fails 063/C-10(c)), but no execute session confirmed it was written —
+  a grep of `config-governance.md` post-launch found it absent, so the convention shipped undocumented.
+- **Evidence**: feature 095 design.md Open Risks; `docs/patterns/config-governance.md` (no `signal_params`
+  entry).
+- **Rule it implies**: a "governance note required" Open Risk must be closed with a cited doc edit before
+  launch, or it silently becomes an undocumented convention.
+
+### 2026-09-02 — 110-wire-signal-confidence-to-position-sizing — assumption
+- **Mistake**: A "blank means auto-size" input coerced via `parseFloat('')` yields `NaN`; Go's
+  `NaN <= 0` is false, so it bypasses the `qty <= 0` sizing gate and sends `NaN` to the broker. Blank
+  must be coerced to a real `0`.
+- **Evidence**: feature 110 `services/xstockstrat-trading/.../trading.go:457`; `OrderForm.tsx`.
+- **Rule it implies**: when a sentinel drives a `<= 0` (or similar) numeric gate, coerce empty input to
+  an explicit in-band value; never rely on `NaN` comparisons.
+
+### 2026-09-02 — 110-wire-signal-confidence-to-position-sizing — scope-creep
+- **Mistake**: The product-spec named an orphaned, feature-125-superseded component
+  (`SignalOrderTicket.tsx`, zero importers) as the consumer surface. Wiring it would have been a silent
+  C-14 miss (backend wired, no live consumer). Recon caught it; design retargeted to the live `OrderForm`
+  render site and deleted the orphan + redirect stub in-scope.
+- **Evidence**: feature 110 recon.md; `trader/positions/[symbol]/page.tsx:342`.
+- **Rule it implies**: before wiring a spec-named UI surface, grep-verify it has live importers/routes —
+  a spec name is not proof the component is reachable.
+
+### 2026-09-02 — 110-wire-signal-confidence-to-position-sizing — config
+- **Mistake**: A deletion-verification guard `grep -rn "insights/market"` over-matched a surviving
+  comment in a preserved sibling test, failing CI even on a correct implementation; narrowed to
+  `goto('/insights/market` (real navigations only).
+- **Evidence**: feature 110 `e2e/nav-reachability.spec.ts`; context.md (sdd-review + sdd-execute).
+- **Rule it implies**: scope "absence" verification greps to the specific construct being removed (e.g.
+  `goto('/path`), not the bare substring, so surviving comments/siblings don't false-fail.
+
+### 2026-09-02 — 165-pwa-notifications — config
+- **Mistake**: Regenerating stubs with a locally-installed toolchain produced an unrelated cosmetic
+  `analysis.pb.go` whitespace change from a `protoc-gen-go` version difference vs CI; had to revert it
+  and pin the plugin to v1.36.11 to keep the gen diff scoped to the changed proto.
+- **Evidence**: feature 165 context.md (buf-on-host regen).
+- **Rule it implies**: before committing regenerated stubs, verify `git diff packages/proto/gen/` is
+  scoped to your proto and that local plugin pins match CI's — an out-of-scope gen diff means a
+  plugin-version mismatch, not a real change.
+
+### 2026-09-02 — 166-mcp-client-signal-source — assumption
+- **Mistake**: Design/spec assumed `is_secret` is a field of `SetConfigRequest`; it is on the
+  `ConfigValue` message. A write that sets it on the request silently fails to mark the row secret (the
+  config backend reads `value.is_secret` on write).
+- **Evidence**: feature 166 `services/xstockstrat-config/src/.../configServiceImpl.ts:458`; impl-spec
+  Deviation Log.
+- **Rule it implies**: when writing a config secret, set `ConfigValue.is_secret`, not a request-level
+  flag — verify against `config.proto` before coding.
+
+### 2026-09-02 — 167-watchlist-single-strategy-update — assumption
+- **Mistake**: A Connect request-path counter keyed on `.includes('/PortfolioService/<Method>')` never
+  matched and read 0 — the Connect path is `...xstockstrat.portfolio.v1.PortfolioService/<Method>` with
+  a **dot** before the service name — silently corrupting an AC-6 request-count assertion.
+- **Evidence**: feature 167 implementation-spec Deviation Log (e2e mock request counter).
+- **Rule it implies**: match Connect request URLs on the unique `/<Method>` segment (or the full dotted
+  path), never on `/<ServiceName>/`.
+
+### 2026-09-02 — 167-watchlist-single-strategy-update — assumption
+- **Mistake**: Relocating a write to a new mutation hook silently dropped it from the Layer-1 in-flight
+  guard — `writeInFlight` only counted the old `updateWatchlist.isPending`; the new hook's `isPending`
+  and a delayed-response concurrency-test override both had to be re-pointed or the guard regressed
+  unnoticed.
+- **Evidence**: feature 167 recon.md; implementation-spec Deviation Log.
+- **Rule it implies**: when moving an operation to a new mutation hook, audit every guard/aggregator
+  (`writeInFlight`, `useIsMutating` keys, concurrency tests) that referenced the old hook.

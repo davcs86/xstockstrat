@@ -2681,3 +2681,196 @@ reusing.
   vs. `haltAccount` (memory-first); feature 169 `design.md` § Chosen Approach, adversary finding accepted.
 - **Rule it implies**: for any paired enable/disable state spanning persistent+volatile stores, choose
   the write order that makes the *failure mode* safe — the two directions will have opposite orderings.
+
+### 2026-09-02 — 021-ledger-event-export — perf
+- **Pattern**: For a server-streaming export over an unbounded row set, batch the response message as
+  `repeated <Row>` per DB-cursor page rather than one message per row — identical streaming semantics,
+  but a 1M-row export becomes thousands of messages instead of millions.
+- **Evidence**: feature 021 `ExportEvents` on `xstockstrat-ledger` (streams NDJSON/CSV via `/trader`
+  BFF `route.ts`); design chose cursor-page batching over one-event-per-message.
+- **Rule it implies**: server-streaming RPCs over large scans batch by cursor page, never one message
+  per row.
+
+### 2026-09-02 — 021-ledger-event-export — design
+- **Pattern**: A raw Next.js BFF `route.ts` (a plain GET, not a `connectNodeAdapter` handler) owns its
+  own gRPC-code→HTTP-status mapping when acceptance codes diverge from the shared `connectCodeToHttp`
+  defaults (e.g. `FailedPrecondition`→403 for a config-disabled export, not the mapper's 400); it also
+  has no Connect `HandlerContext`, so the propagation headers (`x-user-id`/`x-access-scope`/`x-trace-id`)
+  must be rebuilt inline (`rolesToAccessScope`/`generateTraceId`) rather than via `backendHeaders`.
+- **Evidence**: feature 021 `services/xstockstrat-ui/src/app/trader/api/ledger/export/route.ts`;
+  design specified `connectCodeToHttp` but shipped an explicit map (context.md).
+- **Rule it implies**: BFF routes own their status mapping when acceptance codes diverge from
+  `connectCodeToHttp`; treat the shared mapper as a default, not a contract.
+
+### 2026-09-02 — 029-signal-performance-attribution — design
+- **Pattern**: When a value a feature needs may not exist upstream yet, build the carrier seam
+  end-to-end and correct (source → event `Struct` key → DB column → read-time computation), default it
+  to `0` where the source is absent, and name the follow-up — rather than blocking on the missing
+  source or faking it. The computation becomes exact the moment a real source populates it; unit tests
+  inject a value to prove the math today.
+- **Evidence**: feature 029 fee seam `broker.BrokerOrder.Fees` → `order.filled` `"fees"` key →
+  portfolio `fees_accum` → analysis `fees_total` → `net = realized_pnl - fees_total`; ships subtracting
+  a hard 0 in prod (Alpaca exposes no per-fill fee) with a named Activities-API follow-up.
+- **Rule it implies**: a seam populated with an honest 0 plus a named follow-up beats redefining the
+  acceptance criterion away — provided the absence is grep-established and surfaced in UI/docs, not
+  silently papered over (P-03).
+
+### 2026-09-02 — 029-signal-performance-attribution — reuse
+- **Pattern**: Realize a new "producer-side" attribution/analytics requirement as a read-only
+  aggregation over a *prior launched feature's already-persisted capture*, instead of stamping new
+  columns on the upstream producer — avoids duplicate storage and new runtime gRPC edges.
+- **Evidence**: feature 029 `GetAttribution` aggregates feature-042's `analysis.pnl_positions` +
+  `order_snapshots.signals`; the original producer-side plan (stamp a weight vector on `trading.orders`
+  + migration 010) was dropped in design.
+- **Rule it implies**: before adding a producer-side attribution column, check whether a sibling
+  consumer already seals the needed inputs at query-time granularity (adjacent to C-10(b)).
+
+### 2026-09-02 — 043-user-management-ui — design
+- **Pattern**: For a last-of-kind invariant (e.g. "≥1 active admin"), use an atomic conditional
+  `UPDATE` guarded by `EXISTS(other qualifying row)` and treat 0-rows-affected as the rejection,
+  instead of count-then-write — avoids the TOCTOU where two concurrent mutations both pass a count check.
+- **Evidence**: feature 043 identity `setUserRoles`/`setUserActive` last-admin guard.
+- **Rule it implies**: last-of-kind guards must be a single guarded write, never read-then-write.
+
+### 2026-09-02 — 043-user-management-ui — reuse
+- **Pattern**: A best-effort-after-commit cross-service audit is `await` + try/catch + log-on-failure
+  (never roll back — no cross-service transaction exists), with a stable `idempotency_key` derived from
+  the correlation id (not a timestamp) and a payload built from an explicit safe-field allow-list
+  (never spread the request → no secret leak). This is the correct default when a mutation must be
+  audited but the audit sink is a separate service.
+- **Evidence**: feature 043 identity admin handlers append a redacted `AppendEvent` to ledger after the
+  user mutation commits.
+- **Rule it implies**: audit sinks are best-effort post-commit with allow-listed, secret-free payloads
+  and correlation-derived idempotency keys.
+
+### 2026-09-02 — 095-opportunity-live-market-enrichment — design
+- **Pattern**: To guarantee an enrichment does not perturb a ranked/persisted result, attach the live
+  values at **read time, after** the persisted rows are read and ordered — the "unchanged ranking" /
+  no-look-ahead property then holds by construction, not by a test you might forget.
+- **Evidence**: feature 095 `ListOpportunities` attaches `live_price`/`change_pct`/sparkline after
+  `_compute_opportunities` has computed+persisted conviction/`signal_axis`/ORDER BY.
+- **Rule it implies**: a no-look-ahead / ranking-frozen invariant should be enforced structurally
+  (post-ranking decoration), not just asserted.
+
+### 2026-09-02 — 095-opportunity-live-market-enrichment — design
+- **Pattern**: A proto message pinned by an exhaustive mapper-parity test can absorb new fields by
+  classifying each into two sets — compute-time-persisted (join `_MAPPED`, carried by the row mapper)
+  vs read-time-decorated (join `_INTENTIONALLY_UNSET`, set on the returned message). This satisfies the
+  parity guard *and* keeps ranking-neutral fields out of the persisted path.
+- **Evidence**: feature 095 `_row_to_opportunity` pinned by `TestOpportunityRowParity`
+  (`_MAPPED | _INTENTIONALLY_UNSET == Opportunity.DESCRIPTOR.fields_by_name`); fields 13/14/17 read-time,
+  15/16/18 compute-time-persisted.
+- **Rule it implies**: when adding a field to a parity-guarded message, decide its set membership
+  first; a read-time field must never be added to `_MAPPED`.
+
+### 2026-09-02 — 095-opportunity-live-market-enrichment — reuse
+- **Pattern**: When a message is served from a cache/table that lacks the new columns, prefer a
+  **dedicated additive RPC** over adding fields — added fields return a fabricated `0` on cache hits,
+  indistinguishable from "no data". The "additive fields need no wiring" argument is also false when the
+  read is on no BFF yet.
+- **Evidence**: feature 095 chose a new marketdata `GetLatestPrice` RPC over adding last-trade/prev-close
+  fields to the `marketdata.quotes`-cache-served `Quote`.
+- **Rule it implies**: adding fields to a cache-served proto message requires proving the cache can
+  populate them, else use a new RPC with explicit presence.
+
+### 2026-09-02 — 110-wire-signal-confidence-to-position-sizing — design
+- **Pattern**: Name a new field for its *semantics*, not its surface shape, when siblings share a
+  plausible name/range. `signal_confidence` (raw 0–1 probability) was named to be unmistakable against
+  the `conviction` ordinal ("NOT a probability") and the decayed×source-weighted `signal_axis`.
+- **Evidence**: feature 110 `analysis.Opportunity.signal_confidence` field 19, populated from
+  `ExternalSignal.conviction`; three same-shaped 0–1 candidates, only one semantically correct.
+- **Rule it implies**: when ≥2 fields on a message share a plausible name/range, disambiguate the new
+  one by name — restating an existing collision trap in a comment is not enough.
+
+### 2026-09-02 — 110-wire-signal-confidence-to-position-sizing — design
+- **Pattern**: Scope a shared component's new behavior via a dedicated explicit prop
+  (`signalConfidence`, mirroring `allowOfflineRecord`), never via an incidental data prop
+  (`initialSymbol`) that other mounts also pass — otherwise the behavior leaks into every mount.
+- **Evidence**: feature 110 `OrderForm` blank-qty affordance gated on an explicit `signalConfidence`
+  prop; scoping on `initialSymbol` would have leaked blank-qty into non-signal `/trader` tickets.
+- **Rule it implies**: behavior-scoping props must be purpose-built and presence-checked, not
+  overloaded onto data props shared by other call sites.
+
+### 2026-09-02 — 128-ui-middleware-nodejs-runtime — design
+- **Pattern**: Moving `middleware.ts` to Next.js's stable Node.js runtime (`config.runtime='nodejs'`)
+  lets it import `@connectrpc/connect-node` and call backend gRPC (`refreshSession()`) in-process; a
+  real `output:'standalone'` build proved `serverExternalPackages` externalization covers the
+  Node-runtime middleware chunk (no `node:http` Edge bundling error, no `next.config.js` change). This
+  **supersedes/qualifies** the older Edge-only import ban at `insights.md:777-780` (`wire-fe-auth`) for
+  the Node runtime specifically.
+- **Evidence**: feature 128 `services/xstockstrat-ui/src/middleware.ts`; the self-referential loopback
+  `fetch()` to `/api/auth/refresh` (PR #925 TLS hotfix) and `buildInternalRefreshUrl()` were deleted.
+- **Rule it implies**: an Edge-runtime import ban on a Node-only transport is lifted by opting that
+  entry point into the Node.js runtime — but prove the standalone/Docker build before relying; treat
+  the old "never import" rule as runtime-scoped, not absolute.
+
+### 2026-09-02 — 128-ui-middleware-nodejs-runtime — design
+- **Pattern**: Treat a load-bearing feasibility claim (here: Node middleware lifts the bundling ban) as
+  a red-before-green **build gate** rather than a doc-supported assumption — docs confirmed runtime
+  stability but were silent on the standalone `.nft.json`/`serverExternalPackages` coverage of the
+  middleware chunk, which only a real build could prove.
+- **Evidence**: feature 128 AC-6 made the standalone build the proof; `/sdd-spec` was not allowed to
+  trace acceptance off a doc citation alone.
+- **Rule it implies**: when docs support a premise "in principle" but are silent on the exact
+  bundling/packaging edge, make the build the gate.
+
+### 2026-09-02 — 165-pwa-notifications — reuse
+- **Pattern**: Prove a BFF ownership/IDOR guard by driving the Connect endpoint directly with a spoofed
+  identity plus an echo mock, when the browser capability can't be minted in headless Chromium (Push
+  API, non-override-able `navigator.serviceWorker`). The mock echoes the received `user_id`; a response
+  stamped with the *session* user rather than the spoofed one is a stronger IDOR proof than any
+  browser-level assertion.
+- **Evidence**: feature 165 push-subscription IDOR e2e drives the `/accounts` BFF Connect endpoint with
+  `userId:'attacker-999'`; `callerUserId(ctx)` mock echoes back the session user.
+- **Rule it implies**: header-derived identity guards should be verified adversarially at the BFF/RPC
+  seam, not only through the happy-path UI.
+
+### 2026-09-02 — 166-mcp-client-signal-source — design
+- **Pattern**: Add a new registry "type" (a new `source_type`) with **zero proto change** by riding the
+  existing `config_json` `Struct` + a string type governed by a DB CHECK, and keep any credential in
+  encrypted config (`credentials_ref` only on the row) rather than adding typed or secret proto fields —
+  a proto `bearer_token` field would be a plaintext secret in transit, and `config_json` is returned
+  verbatim by `ListSignalSources`.
+- **Evidence**: feature 166 `mcp_client` source_type (`ingest` migration `011` CHECK); bearer stored as
+  encrypted config secret `ingest.mcp_credential.<slug>`, ingest holds only the `credentials_ref`.
+- **Rule it implies**: source-specific/credential config belongs in `config_json` + encrypted config,
+  never in new proto fields — proto churn and on-wire plaintext are the failure modes it avoids.
+
+### 2026-09-02 — 166-mcp-client-signal-source — design
+- **Pattern**: **Secret-first two-write** to register a credentialed entity — write the encrypted
+  `SetConfig(is_secret=true, create_key=true)` first, then register the entity referencing only the key;
+  skip the compensating saga because a failed register leaves only a harmless *redacted* orphan secret.
+- **Evidence**: feature 166 agent `manage_signal_source` + config-ui `useSignalSourceMutations.ts` both
+  write the secret before registering the source.
+- **Rule it implies**: order two-write credential registrations secret-first and accept the
+  redacted-orphan over saga complexity.
+
+### 2026-09-02 — 167-watchlist-single-strategy-update — design
+- **Pattern**: Resolve authz with the existing ownership read (`loadOwned`) before a targeted single-row
+  `UPDATE`, rather than folding ownership into the `UPDATE ... FROM` — a joined update returning 0 rows
+  collapses absent-parent (`NOT_FOUND`) and wrong-owner (`PERMISSION_DENIED`) into one indistinguishable
+  result, losing the per-case error codes siblings guarantee.
+- **Evidence**: feature 167 `UpdateWatchlistBinding` reuses `loadOwned` to keep AC-3 `NOT_FOUND` vs
+  AC-4 `PERMISSION_DENIED` distinct.
+- **Rule it implies**: when adding a targeted mutation, resolve authz with the existing read helper
+  rather than a joined update, to preserve per-case error semantics.
+
+### 2026-09-02 — 167-watchlist-single-strategy-update — design
+- **Pattern**: A single-column `UPDATE ... RETURNING <untouched-provenance-col>` makes the "provenance
+  reset" trap structurally impossible — writing only `strategy_id` and reading `source` back via
+  `RETURNING` (instead of reconstructing the row) means provenance can't be clobbered, with no guard
+  code.
+- **Evidence**: feature 167 `UpdateWatchlistBinding` writes `strategy_id` only and returns the
+  untouched `source` (avoids the fails-080 reset class).
+- **Rule it implies**: prefer narrow single-column writes with `RETURNING` of the untouched columns over
+  read-modify-write of the full row when provenance/flags must survive.
+
+### 2026-09-02 — 167-watchlist-single-strategy-update — perf
+- **Pattern**: A non-invalidating `queryClient.setQueryData` cache-patch replaces invalidate-and-refetch
+  for single-entry mutations when the RPC's response fully describes the changed entry — a plain
+  `useMutation` that patches one list entry avoids the full `listWatchlists` refetch that
+  `useInvalidatingMutation` forces.
+- **Evidence**: feature 167 rebind hook patches one watchlist binding from the
+  `UpdateWatchlistBinding` response instead of invalidating `['watchlists']`.
+- **Rule it implies**: when a mutation's response fully describes the changed entry, patch the cache
+  instead of invalidating the collection key.
