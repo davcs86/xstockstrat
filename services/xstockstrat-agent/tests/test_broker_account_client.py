@@ -222,3 +222,20 @@ def test_account_to_dict_covers_every_broker_account_field():
     projected = set(client._account_to_dict(acct))
     assert projected <= fields
     assert "id" in projected
+
+
+def test_account_to_dict_always_surfaces_is_active_even_when_false():
+    """proto3 omits a scalar bool at its zero value, so a plain MessageToDict drops is_active from
+    every INACTIVE account — the agent then sees the field on active accounts but not inactive ones
+    and cannot distinguish "inactive" from "field absent". The projection must pin is_active on
+    every account so its presence is uniform across the list_accounts output."""
+    from gen.trading.v1 import trading_pb2  # type: ignore
+
+    inactive = trading_pb2.BrokerAccount(id="acct-inactive", broker_type=1, is_active=False)
+    active = trading_pb2.BrokerAccount(id="acct-active", broker_type=1, is_active=True)
+
+    proj_inactive = client._account_to_dict(inactive)
+    proj_active = client._account_to_dict(active)
+
+    assert "is_active" in proj_inactive and proj_inactive["is_active"] is False
+    assert "is_active" in proj_active and proj_active["is_active"] is True

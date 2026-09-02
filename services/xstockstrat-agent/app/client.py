@@ -1701,7 +1701,13 @@ def _account_to_dict(account: Any) -> dict[str, Any]:
     BrokerAccount carries no credential field, so this projection can never echo submitted
     credentials (api_key/api_secret/credentials_json).
     """
-    return MessageToDict(account, preserving_proto_field_name=True)
+    projected = MessageToDict(account, preserving_proto_field_name=True)
+    # is_active is a proto3 scalar bool (no field presence), so MessageToDict OMITS it whenever it
+    # is false. That made the field appear on active accounts but silently vanish on inactive ones,
+    # leaving the agent unable to tell "inactive" from "field absent". Pin it explicitly so every
+    # account in the projection carries is_active regardless of value.
+    projected["is_active"] = account.is_active
+    return projected
 
 
 async def register_offline_account(user_id: str, display_name: str) -> dict[str, Any]:
