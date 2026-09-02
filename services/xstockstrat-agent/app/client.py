@@ -1701,7 +1701,14 @@ def _account_to_dict(account: Any) -> dict[str, Any]:
     BrokerAccount carries no credential field, so this projection can never echo submitted
     credentials (api_key/api_secret/credentials_json).
     """
-    return MessageToDict(account, preserving_proto_field_name=True)
+    projected = MessageToDict(account, preserving_proto_field_name=True)
+    # proto3 scalar bools have no field presence, so MessageToDict OMITS each one at its false zero
+    # value. That made is_active/is_paper/halted appear on some accounts but silently vanish on
+    # others, leaving the agent unable to tell false from "field absent". Pin all three explicitly
+    # so their presence is uniform across every account in the list_accounts projection (AGENT-7).
+    for _bool_field in ("is_paper", "is_active", "halted"):
+        projected[_bool_field] = getattr(account, _bool_field)
+    return projected
 
 
 async def register_offline_account(user_id: str, display_name: str) -> dict[str, Any]:
@@ -1870,18 +1877,28 @@ async def list_account_orders(user_id: str, account_id: str) -> dict[str, Any]:
     return {"orders": [_order_to_dict(o) for o in resp.orders]}
 
 
-async def list_account_positions(user_id: str, account_id: str) -> dict[str, Any]:
-    """List an account's positions via PortfolioService.ListPositions (read-only)."""
+async def list_positions(
+    user_id: str, account_id: str = "", limit: int = 0, page_token: str = ""
+) -> dict[str, Any]:
+    """List positions via PortfolioService.ListPositions (read-only, paginated).
+
+    When *account_id* is empty the backend returns positions across all the
+    user's accounts (broker + offline).  Pagination follows the nested
+    ``PageRequest``/``PageResponse`` submessage convention.
+    """
+    from gen.common.v1 import common_pb2  # noqa: PLC0415
     from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
 
+    req = portfolio_pb2.ListPositionsRequest(
+        account_id=account_id,
+        page=common_pb2.PageRequest(page_size=limit, page_token=page_token),
+    )
     async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
-        resp = await stub.ListPositions(
-            portfolio_pb2.ListPositionsRequest(account_id=account_id),
-            metadata=_metadata(("x-user-id", user_id)),
-        )
+        resp = await stub.ListPositions(req, metadata=_metadata(("x-user-id", user_id)))
     return {
-        "positions": [MessageToDict(p, preserving_proto_field_name=True) for p in resp.positions]
+        "positions": [MessageToDict(p, preserving_proto_field_name=True) for p in resp.positions],
+        "next_page_token": resp.page.next_page_token,
     }
 
 
@@ -1960,6 +1977,23 @@ async def deregister_broker_account(user_id: str, account_id: str) -> dict[str, 
             metadata=_metadata(("x-user-id", user_id)),
         )
     return {"deregistered": True, "account_id": account_id}
+
+
+async def resume_broker_account(user_id: str, account_id: str, reason: str = "") -> dict[str, Any]:
+    """Resume (un-halt) a broker account via ResumeAccount (feature 169).
+
+    Clears the persisted and in-memory halt on the account so the reconciliation poller
+    resumes ticking. Admin scope is enforced server-side from the forwarded x-access-scope.
+    """
+    from gen.trading.v1 import trading_pb2, trading_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+        stub = trading_pb2_grpc.TradingServiceStub(channel)
+        resp = await stub.ResumeAccount(
+            trading_pb2.ResumeAccountRequest(account_id=account_id, reason=reason),
+            metadata=_metadata(("x-user-id", user_id)),
+        )
+    return {"account": _account_to_dict(resp.account)}
 
 
 async def list_broker_accounts(user_id: str) -> dict[str, Any]:

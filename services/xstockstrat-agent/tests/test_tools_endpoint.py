@@ -54,6 +54,8 @@ def test_list_tools_returns_all_registered_tools():
         "manage_offline_account",
         "manage_account",
         "list_accounts",
+        "get_positions",
+        "get_positions_by_account_id",
     }
 
 

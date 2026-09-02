@@ -93,6 +93,63 @@ func TestListOrders_ExercisesIntentLateralJoinWithMultipleFilters(t *testing.T) 
 	}
 }
 
+// TestKnownBrokerOrderIDs_ReturnsPersistedSubset proves the reconciliation DB-grounding query:
+// only the account's persisted broker_order_ids come back, scoped by account_id + = ANY($2), so
+// the reconciliation poller can tell a platform-placed terminal order (present here, absent from
+// the in-memory map) from a genuinely foreign one.
+func TestKnownBrokerOrderIDs_ReturnsPersistedSubset(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+
+	repo := &TradingRepo{db: mock}
+	// The account knows bo-1 but not bo-2 (bo-2 is genuinely foreign).
+	rows := pgxmock.NewRows([]string{"broker_order_id"}).AddRow("bo-1")
+
+	mock.ExpectQuery(`(?s)SELECT DISTINCT broker_order_id.*FROM trading\.orders.*WHERE account_id = \$1.*broker_order_id = ANY\(\$2\)`).
+		WithArgs("acct-1", []string{"bo-1", "bo-2"}).
+		WillReturnRows(rows)
+
+	known, err := repo.KnownBrokerOrderIDs(context.Background(), "acct-1", []string{"bo-1", "bo-2"})
+	if err != nil {
+		t.Fatalf("KnownBrokerOrderIDs: %v", err)
+	}
+	if !known["bo-1"] {
+		t.Error("bo-1 should be reported as known")
+	}
+	if known["bo-2"] {
+		t.Error("bo-2 must NOT be reported as known (genuinely foreign)")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+// TestKnownBrokerOrderIDs_EmptyInputShortCircuits proves no query is issued for an empty ID set —
+// the common case (no unmatched broker orders this tick) must not touch the DB.
+func TestKnownBrokerOrderIDs_EmptyInputShortCircuits(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+
+	repo := &TradingRepo{db: mock}
+	known, err := repo.KnownBrokerOrderIDs(context.Background(), "acct-1", nil)
+	if err != nil {
+		t.Fatalf("KnownBrokerOrderIDs: %v", err)
+	}
+	if len(known) != 0 {
+		t.Errorf("known = %v, want empty", known)
+	}
+	// No ExpectQuery registered → ExpectationsWereMet passes only if no query ran.
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations (a query was issued for empty input): %v", err)
+	}
+}
+
 // TestListSubmittedOrders_ExercisesIntentLateralJoin covers the third and final caller of
 // intentLateralJoinSQL — no filter args, but the same LATERAL-join ambiguity risk.
 func TestListSubmittedOrders_ExercisesIntentLateralJoin(t *testing.T) {

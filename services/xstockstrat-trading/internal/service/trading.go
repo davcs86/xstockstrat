@@ -57,6 +57,15 @@ type offlineBaselineStore interface {
 	ListConfirmedOfflineOrdersByAccount(ctx context.Context, accountID string) ([]*tradingv1.Order, error)
 }
 
+// brokerOrderIDLookup is the seam reconcileTick calls through to confirm, against the persisted
+// trading.orders table, whether a broker order the in-memory map doesn't recognize is nonetheless
+// one the platform itself placed (now terminal, evicted from s.orders) rather than a genuinely
+// foreign order. *repository.TradingRepo satisfies it in production; tests inject a fake — the same
+// hoisting-for-testability approach as configSetConfigForwarder / offlineBaselineStore.
+type brokerOrderIDLookup interface {
+	KnownBrokerOrderIDs(ctx context.Context, accountID string, brokerOrderIDs []string) (map[string]bool, error)
+}
+
 // brokerPoolEntry holds a broker client and its type tag for a registered account.
 type brokerPoolEntry struct {
 	client     broker.Broker
@@ -109,6 +118,11 @@ type TradingService struct {
 	// baselineStore is the narrow seam for offline-baseline persistence (feature 163).
 	// *repository.TradingRepo satisfies it in production; tests inject a fake.
 	baselineStore offlineBaselineStore
+	// reconcileOrderLookup is the narrow seam reconcileTick uses to DB-ground its
+	// unknown_broker_order classification against trading.orders (so a legitimate terminal
+	// order absent from the in-memory map is not misclassified as foreign). *repository.TradingRepo
+	// satisfies it in production; tests inject a fake.
+	reconcileOrderLookup brokerOrderIDLookup
 	// orderIntentRepo is the insert-or-return-existing dedup store (feature 101). Struct
 	// field added here (Step 9) so order_intent.go's sweeper compiles; NewTradingService's
 	// constructor parameter and main.go wiring land in Step 11.
@@ -198,30 +212,31 @@ func NewTradingService(
 		return nil, fmt.Errorf("dial marketdata: %w", err)
 	}
 	return &TradingService{
-		cfg:                 cfg,
-		cfgW:                cfgW,
-		configSetter:        cfgW,
-		brokers:             make(map[string]brokerPoolEntry),
-		accountRepo:         accountRepo,
-		encKey:              encKey,
-		ledger:              ledgerv1.NewLedgerServiceClient(ledgerConn),
-		notify:              notifyv1.NewNotifyServiceClient(notifyConn),
-		portfolio:           portfoliov1.NewPortfolioServiceClient(portfolioConn),
-		marketdata:          marketdatav1.NewMarketDataServiceClient(marketdataConn),
-		repo:                repo,
-		baselineStore:       repo,
-		orderIntentRepo:     orderIntentRepo,
-		bracketRepo:         bracketRepo,
-		orders:              make(map[string]*tradingv1.Order),
-		subs:                make(map[string]chan *tradingv1.Order),
-		credStatus:          make(map[string]int32),
-		credSkipLoggedAt:    make(map[string]time.Time),
-		halted:              make(map[string]bool),
-		haltReasons:         make(map[string]string),
-		haltedLastPolled:    make(map[string]time.Time),
-		flattenInFlight:     make(map[string]bool),
-		reconcileCandidates: make(map[string]int),
-		confirmLocks:        make(map[string]*sync.Mutex),
+		cfg:                  cfg,
+		cfgW:                 cfgW,
+		configSetter:         cfgW,
+		brokers:              make(map[string]brokerPoolEntry),
+		accountRepo:          accountRepo,
+		encKey:               encKey,
+		ledger:               ledgerv1.NewLedgerServiceClient(ledgerConn),
+		notify:               notifyv1.NewNotifyServiceClient(notifyConn),
+		portfolio:            portfoliov1.NewPortfolioServiceClient(portfolioConn),
+		marketdata:           marketdatav1.NewMarketDataServiceClient(marketdataConn),
+		repo:                 repo,
+		baselineStore:        repo,
+		reconcileOrderLookup: repo,
+		orderIntentRepo:      orderIntentRepo,
+		bracketRepo:          bracketRepo,
+		orders:               make(map[string]*tradingv1.Order),
+		subs:                 make(map[string]chan *tradingv1.Order),
+		credStatus:           make(map[string]int32),
+		credSkipLoggedAt:     make(map[string]time.Time),
+		halted:               make(map[string]bool),
+		haltReasons:          make(map[string]string),
+		haltedLastPolled:     make(map[string]time.Time),
+		flattenInFlight:      make(map[string]bool),
+		reconcileCandidates:  make(map[string]int),
+		confirmLocks:         make(map[string]*sync.Mutex),
 	}, nil
 }
 
@@ -1969,15 +1984,44 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 				s.clearReconciliationCandidate(key)
 			}
 		}
-		for boID, bo := range brokerByID {
-			if knownBrokerIDs[boID] {
-				continue
+		// Broker orders the in-memory map doesn't recognize. The in-memory map (s.orders) only
+		// holds this process's own orders plus LoadInflightOrders' NEW/PARTIALLY_FILLED hydrate,
+		// so it is NOT the platform's full record — a legitimate order the platform placed that
+		// has since reached a terminal state (FILLED/CANCELED/EXPIRED/REJECTED) is absent from
+		// memory yet still persisted in trading.orders. Before flagging any unmatched broker order
+		// as an unknown_broker_order (a halt-worthy "traded outside the platform" finding, AC-1),
+		// confirm the platform truly has no persisted record of it — comparing against memory alone
+		// misclassified every such historical order as foreign and halted the account.
+		var unmatchedBrokerIDs []string
+		for boID := range brokerByID {
+			if !knownBrokerIDs[boID] {
+				unmatchedBrokerIDs = append(unmatchedBrokerIDs, boID)
 			}
-			// An order the broker knows about that the platform has no record of at all —
-			// detected regardless of fill state (AC-1), the primary reason ListOrders exists.
-			key := accountID + ":order:" + boID
-			if s.recordReconciliationCandidate(key, graceTicks) {
-				s.emitReconciliationFinding(ctx, accountID, mismatchClassUnknownBrokerOrder, boID, 0, bo.FilledQty)
+		}
+		if len(unmatchedBrokerIDs) > 0 {
+			dbKnown, lookupErr := s.reconcileOrderLookup.KnownBrokerOrderIDs(ctx, accountID, unmatchedBrokerIDs)
+			if lookupErr != nil {
+				// Fail-safe: a transient DB error must never cause a false unknown_broker_order
+				// halt. Skip this account's unknown-order classification this tick and leave its
+				// candidate counters untouched — a genuine foreign order still persists and is
+				// re-evaluated next tick, so the grace window is unaffected.
+				slog.Warn("reconcileTick: broker-order-id DB lookup failed; skipping unknown-order check this tick",
+					"account_id", accountID, "error", lookupErr)
+			} else {
+				for _, boID := range unmatchedBrokerIDs {
+					key := accountID + ":order:" + boID
+					if dbKnown[boID] {
+						// Platform-placed, now terminal and evicted from memory — not a mismatch.
+						// Clear any in-flight candidate so a prior tick's observation doesn't linger.
+						s.clearReconciliationCandidate(key)
+						continue
+					}
+					// An order the broker knows about that the platform has no record of at all —
+					// detected regardless of fill state (AC-1), the primary reason ListOrders exists.
+					if s.recordReconciliationCandidate(key, graceTicks) {
+						s.emitReconciliationFinding(ctx, accountID, mismatchClassUnknownBrokerOrder, boID, 0, brokerByID[boID].FilledQty)
+					}
+				}
 			}
 		}
 
@@ -2972,6 +3016,74 @@ func (s *TradingService) DeregisterBrokerAccountSvc(ctx context.Context, account
 		})
 	}
 	return nil
+}
+
+// ResumeAccountSvc clears the persistent and in-memory halt on a broker account (feature 169).
+// Admin-scope callers only. Idempotent: a non-halted account returns success with no state change.
+// DB-first ordering: the database halt is cleared BEFORE in-memory maps, inverting haltAccount's
+// memory-first write order so that a crash between the two leaves the account still halted (fail-safe).
+func (s *TradingService) ResumeAccountSvc(ctx context.Context, accountID, reason, callerUserID string) (*tradingv1.BrokerAccount, error) {
+	// (a) Admin scope check.
+	if err := middleware.RequireAdminScope(ctx); err != nil {
+		return nil, err
+	}
+
+	// (b) Fetch account.
+	record, err := s.accountRepo.GetBrokerAccount(ctx, accountID)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.NotFound, "account %s not found: %v", accountID, err)
+	}
+
+	// (c) Idempotent no-op: if the account is not halted, return success immediately (FR-7/AC-6).
+	if !record.Halted {
+		return recordToProtoAccount(record), nil
+	}
+
+	// (d) Capture prior halt state for the ledger event.
+	priorHaltReason := record.HaltReason
+	priorHaltSource := record.HaltSource
+
+	// (e) DB clear FIRST — on failure both DB and memory stay halted (fail-safe).
+	if err := s.accountRepo.UpdateHaltStatus(ctx, accountID, false, "", nil, 0); err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "clear halt in DB: %v", err)
+	}
+
+	// (f) In-memory clear SECOND — only reached after DB success.
+	// Releasing the halted map entry unblocks the reconciliation poller's next tick (AC-7).
+	s.haltedMu.Lock()
+	delete(s.halted, accountID)
+	delete(s.haltReasons, accountID)
+	delete(s.haltedLastPolled, accountID)
+	s.haltedMu.Unlock()
+
+	// (g) Ledger event — best-effort (matches emitLedgerEvent's existing warn-on-fail semantics).
+	s.emitLedgerEvent(ctx, "account.halt.resumed", fmt.Sprintf("account:%s", accountID), callerUserID, map[string]interface{}{
+		"account_id":        accountID,
+		"reason":            reason,
+		"operator":          callerUserID,
+		"prior_halt_reason": priorHaltReason,
+		"prior_halt_source": priorHaltSource,
+	})
+
+	// (h) INFO alert — auditable notification of the resume.
+	_, err = s.notify.EmitAlert(ctx, &notifyv1.EmitAlertRequest{
+		Severity:      notifyv1.AlertSeverity_ALERT_SEVERITY_INFO,
+		Category:      "account",
+		Title:         fmt.Sprintf("Broker account %s resumed", accountID),
+		Body:          fmt.Sprintf("Broker account %s resumed by %s: %s", accountID, callerUserID, reason),
+		SourceService: "xstockstrat-trading",
+	})
+	if err != nil {
+		slog.Warn("resume account: emit alert failed", "account_id", accountID, "error", err)
+	}
+
+	// (i) Re-fetch the now-cleared record and return.
+	refreshed, err := s.accountRepo.GetBrokerAccount(ctx, accountID)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "re-fetch account after resume: %v", err)
+	}
+	slog.Info("account resumed", "account_id", accountID, "operator", callerUserID, "reason", reason)
+	return recordToProtoAccount(refreshed), nil
 }
 
 // instantiateBrokerLocked creates a broker.Broker from plaintext credentials JSON.

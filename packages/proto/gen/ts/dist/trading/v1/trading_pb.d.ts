@@ -667,6 +667,38 @@ export type DeregisterBrokerAccountResponse = Message<"xstockstrat.trading.v1.De
  */
 export declare const DeregisterBrokerAccountResponseSchema: GenMessage<DeregisterBrokerAccountResponse>;
 /**
+ * @generated from message xstockstrat.trading.v1.ResumeAccountRequest
+ */
+export type ResumeAccountRequest = Message<"xstockstrat.trading.v1.ResumeAccountRequest"> & {
+    /**
+     * @generated from field: string account_id = 1;
+     */
+    accountId: string;
+    /**
+     * @generated from field: string reason = 2;
+     */
+    reason: string;
+};
+/**
+ * Describes the message xstockstrat.trading.v1.ResumeAccountRequest.
+ * Use `create(ResumeAccountRequestSchema)` to create a new message.
+ */
+export declare const ResumeAccountRequestSchema: GenMessage<ResumeAccountRequest>;
+/**
+ * @generated from message xstockstrat.trading.v1.ResumeAccountResponse
+ */
+export type ResumeAccountResponse = Message<"xstockstrat.trading.v1.ResumeAccountResponse"> & {
+    /**
+     * @generated from field: xstockstrat.trading.v1.BrokerAccount account = 1;
+     */
+    account?: BrokerAccount | undefined;
+};
+/**
+ * Describes the message xstockstrat.trading.v1.ResumeAccountResponse.
+ * Use `create(ResumeAccountResponseSchema)` to create a new message.
+ */
+export declare const ResumeAccountResponseSchema: GenMessage<ResumeAccountResponse>;
+/**
  * A single position row from a brokerage statement to be used as a baseline.
  *
  * @generated from message xstockstrat.trading.v1.PositionBaseline
@@ -1109,5 +1141,17 @@ export declare const TradingService: GenService<{
         methodKind: "unary";
         input: typeof SnapshotOfflinePositionsRequestSchema;
         output: typeof SnapshotOfflinePositionsResponseSchema;
+    };
+    /**
+     * ResumeAccount clears the persistent and in-memory halt on a broker account
+     * (feature 169). Admin-scope callers only. Idempotent: a non-halted account
+     * returns success with no state change. Emits a ledger event and INFO alert.
+     *
+     * @generated from rpc xstockstrat.trading.v1.TradingService.ResumeAccount
+     */
+    resumeAccount: {
+        methodKind: "unary";
+        input: typeof ResumeAccountRequestSchema;
+        output: typeof ResumeAccountResponseSchema;
     };
 }>;

@@ -22,6 +22,13 @@ func FromContext(ctx context.Context) PropagationData {
 	return v
 }
 
+// WithPropagationData injects PropagationData into ctx — used by tests outside
+// this package that need to set x-user-id / x-access-scope without routing through
+// the gRPC interceptor chain.
+func WithPropagationData(ctx context.Context, data PropagationData) context.Context {
+	return context.WithValue(ctx, propKey{}, data)
+}
+
 // UnaryServerInterceptor extracts x-user-id, x-access-scope, x-trace-id from incoming
 // metadata and stores them in context for use by client interceptors downstream.
 func UnaryServerInterceptor(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
