@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-09-02 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-02 | `draft` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written |
+| 2026-09-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (9 steps) |
 
 ---
 
@@ -21,7 +22,7 @@
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Recon Dossier](recon.md) — grounded codebase map (Phase 0)
 - [Design](design.md) — debated architecture (Phase 1)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec resume-halted-account`_
+- [Implementation Spec](implementation-spec.md) — 9 steps, proto → Go service → Go tests → Python agent → Python tests → docs
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -46,4 +47,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec resume-halted-account` — generate implementation spec from the approved design
+`/sdd-review resume-halted-account impl-spec` — AI review of implementation spec, then `/sdd-execute resume-halted-account`
