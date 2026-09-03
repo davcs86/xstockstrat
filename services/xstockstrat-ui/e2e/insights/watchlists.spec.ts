@@ -116,7 +116,7 @@ test.describe('Watchlists (insights)', () => {
 
     // Bound add: choose a strategy in the add-time picker before adding — the symbol should land
     // already evaluated, proving the single-call add-already-bound path (no separate rebind step).
-    const addStrategySelect = page.getByLabel('Strategy for new symbols');
+    const addStrategySelect = page.getByLabel('Strategy for new symbols', { exact: true });
     await addStrategySelect.click();
     await page.getByRole('option', { name: 'Live Test Strategy' }).click();
     await page.getByPlaceholder('Add symbols (e.g. AAPL MSFT)').fill('AAPL');
@@ -166,7 +166,7 @@ test.describe('Watchlists (insights)', () => {
     // display mode (not stuck mid-edit) and the add-time picker back to "Unbound" (the
     // key={selected.watchlistId} remount closes both leaks in one mechanism, design.md §4).
     await createList(page, 'Second List');
-    await page.getByLabel('Strategy for new symbols').click();
+    await page.getByLabel('Strategy for new symbols', { exact: true }).click();
     await page.getByRole('option', { name: 'Live Test Strategy' }).click();
 
     const master = page.getByTestId('watchlist-master');
@@ -176,7 +176,9 @@ test.describe('Watchlists (insights)', () => {
     });
     await expect(page.getByRole('button', { name: /^Rename /i })).toBeVisible();
     await expect(page.getByLabel('Watchlist name', { exact: true })).toHaveCount(0);
-    await expect(page.getByLabel('Strategy for new symbols')).toHaveText('Unbound');
+    await expect(page.getByLabel('Strategy for new symbols', { exact: true })).toHaveText(
+      'Unbound',
+    );
   });
 
   test('concurrency guard disables controls while a write is in flight (Layers 1 and 2)', async ({
