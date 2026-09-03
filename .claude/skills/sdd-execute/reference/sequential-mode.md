@@ -202,16 +202,18 @@ In `sequential` mode, when the sanctioned verification tool is unavailable, use 
 fallback and log a `## Deviation Log` entry (`**Disposition**: CI-equivalent fallback`). In the
 default modes, surface these as a deviation question instead of auto-applying.
 
-- **Proto codegen — prefer host-native (Docker also works).** For a lone proto step the host
-  toolchain is the fastest path; the container path is available too — a daemon can be started here
-  (`dockerd &` as root) and `./scripts/localenv-setup.sh` auto-trusts the agent-proxy CA
+- **Proto codegen — prefer Docker (host-native is the fallback).** Run
+  `./scripts/localenv-setup.sh`, which builds the version-pinned `Dockerfile.codegen` image once
+  (cached for the session) and generates the stubs inside it — no host toolchain install. Start the
+  daemon first if needed (`dockerd &` as root); the script auto-trusts the agent-proxy CA
   (`/root/.ccr/ca-bundle.crt`) via a BuildKit secret, so its Node/buf downloads verify TLS (see the
-  host-setup runbook's "Using Docker" note). For the host route, install the codegen toolchain on
-  the host pinned to the **CI `proto-freshness` job versions** in `.github/workflows/ci.yml` — `buf`,
-  `protoc-gen-go` / `protoc-gen-go-grpc` / `protoc-gen-connect-go` (the exact pinned versions),
-  `grpcio-tools` + a `protobuf` runtime matching the committed stubs, and the TS plugins from the
-  committed lockfile — then run `./scripts/buf-gen.sh` and confirm `git diff --exit-code
-  packages/proto/gen/` is limited to the intended service (mirrors CI's stale-stub check).
+  host-setup runbook's "Using Docker" note). **Host-native fallback**, only when the Docker daemon is
+  genuinely unavailable: install the codegen toolchain on the host pinned to the **CI
+  `proto-freshness` job versions** in `.github/workflows/ci.yml` — `buf`, `protoc-gen-go` /
+  `protoc-gen-go-grpc` / `protoc-gen-connect-go` (the exact pinned versions), `grpcio-tools` + a
+  `protobuf` runtime matching the committed stubs, and the TS plugins from the committed lockfile —
+  then run `./scripts/buf-gen.sh`. Either way, confirm `git diff --exit-code packages/proto/gen/` is
+  limited to the intended service (mirrors CI's stale-stub check).
 - **Migration steps are verified offline — never start a database.** Do **not** spin up a
   `postgres` container or run a `migrate`/`psql` apply against a live instance (that is exactly the
   step that hangs waiting on the container to become ready). Verify reversibility **statically**:
@@ -219,7 +221,9 @@ default modes, surface these as a deviation question instead of auto-applying.
   to confirm every `CREATE`/`ALTER`/`ADD` in `.up` has an inverse `DROP`/`ALTER` in `.down`. The real
   apply-and-rollback runs in CI / at deploy against the managed database. (This is a HARD CONSTRAINT
   in every mode, not a sequential-only fallback — see SKILL.md Phase 3 / HARD CONSTRAINTS.)
-- **Playwright dev-server harness times out / browsers unavailable**: fall back to
+- **Playwright dev-server harness times out / browsers unavailable**: first try the **Docker e2e
+  runner** `./scripts/run-e2e.sh` (it runs its own dev-server + Chromium inside the container, so a
+  flaky host harness doesn't block it). Only if Docker is also unavailable, fall back to
   `pnpm --filter <svc> exec tsc --noEmit` + `pnpm --filter <svc> run lint` (the spec's documented e2e
   fallback).
 - **Lockfiles**: whenever a step changes `pyproject.toml` / `package.json`, regenerate and stage

@@ -37,10 +37,17 @@ Domain data comes from `e2e/fixtures/` per **C-12**; scenario one-offs stay inli
 `{ ...FIXTURE, field: value }` spreads.
 
 ```bash
-pnpm --filter xstockstrat-ui exec playwright test <spec>       # one spec
-pnpm --filter xstockstrat-ui exec playwright test              # full suite (slow — 23 specs)
+pnpm --filter xstockstrat-ui exec playwright test <spec>       # one spec — host-native (fast; Chromium pre-provisioned)
+./scripts/run-e2e.sh                                           # full suite — Docker image (builds once, no host pnpm install)
+./scripts/run-e2e.sh --grep "auth"                             # filtered full-suite run in the container
 pnpm --filter xstockstrat-ui exec tsc --noEmit                 # typecheck gate
 ```
+
+The full 23-spec suite (and any CI-parity run) goes through **`./scripts/run-e2e.sh`**, which builds
+the `Dockerfile.e2e` image **once** (cached) and runs Playwright inside it — nothing is installed on
+the host. **Single-spec iteration and `flake` hunting stay host-native** (`pnpm … exec playwright
+test <spec>`): Chromium is pre-provisioned, so rebuilding the app image per spec would only add
+latency — **never run `playwright install`**.
 
 **Adding a route?** Register it in `ROUTES` in `e2e/warmup.setup.ts`. The `setup` project pre-warms
 every route so SSR/JIT compilation does not surface as a first-hit timeout. An unregistered new route
