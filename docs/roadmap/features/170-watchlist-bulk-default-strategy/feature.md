@@ -14,6 +14,7 @@
 | 2026-09-03 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning, reclassified; overlap CLEAN) |
 | 2026-09-03 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds) and approved; recon.md + design.md written |
 | 2026-09-03 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 14 steps |
+| 2026-09-03 | `implementation-ready` → `code-completed` | /sdd-execute | All 15 steps implemented on the claude/* branch; portfolio Go + UI e2e + agent pytest all green |
 
 ---
 

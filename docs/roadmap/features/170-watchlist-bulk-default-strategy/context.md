@@ -95,10 +95,10 @@
 
 ## Open Threads
 
-- [ ] Bulk NOT_FOUND count check compares the **deduped** (post-normalizeSymbols) count — assert in bulk RED tests. Target: portfolio bulk-RPC step.
-- [ ] Existing UpdateWatchlist callers (UI/agent name/desc/binding edits) must keep `update_mask` unset — assert at UI/agent steps. Target: UI + agent steps.
-- [ ] Agent `get_watchlist` must echo `default_strategy_id` (C-14 read-surface) — assert in agent client test. Target: agent step.
-- [ ] Anti-rebind guarantee is SQL-level (`insertBindingsTx` ON CONFLICT DO NOTHING), modeled in `fakeWatchlistStore`, not DB-tested — record caveat on the scenario. Target: portfolio test step.
+- [x] Bulk NOT_FOUND count check compares the **deduped** (post-normalizeSymbols) count — assert in bulk RED tests. Target: portfolio bulk-RPC step.
+- [x] Existing UpdateWatchlist callers (UI/agent name/desc/binding edits) must keep `update_mask` unset — assert at UI/agent steps. Target: UI + agent steps.
+- [x] Agent `get_watchlist` must echo `default_strategy_id` (C-14 read-surface) — assert in agent client test. Target: agent step.
+- [x] Anti-rebind guarantee is SQL-level (`insertBindingsTx` ON CONFLICT DO NOTHING), modeled in `fakeWatchlistStore`, not DB-tested — record caveat on the scenario. Target: portfolio test step.
 
 ## Session 2026-09-03T19:45Z — sdd-review impl-spec (advisory)
 
@@ -124,3 +124,28 @@ pushing elsewhere. So the 14 spec steps are implemented DIRECTLY on this branch 
 red-before-green intent and per-step structure), committed incrementally, landing as ONE integration
 PR to main-dev — instead of /sdd-execute's per-step feature-steps/* branches (which would violate the
 assigned-branch constraint).
+
+## Session 2026-09-03T20:03Z — sdd-execute (all 15 steps, on claude/* branch)
+
+- Implemented the full feature on the harness-assigned `claude/watchlist-bulk-default-strategy-zxx6su`
+  branch (harness forbids feature-steps/* per-step branches), committed as ordered slices:
+  1. proto (additive default_strategy_id ×3 + FieldMask update_mask + UpdateWatchlistBindings RPC) +
+     regenerated Go/TS/Python stubs. Provisioned the codegen toolchain (buf 1.72.0 + pinned plugins);
+     `buf lint`/`buf breaking` green. Note: `analysis.pb.go` picked up a comment-whitespace delta that
+     is the pinned toolchain's current output (CI uses the same pins), committed to keep proto-freshness green.
+  2. migration 015 (portfolio.watchlists.default_strategy_id).
+  3. portfolio Go: repo UpdatePartial (static allowlist SET) + UpdateBindings (set-based atomic) +
+     widened reads/Create; service add-time default (applyDefaultStrategy at requestBindings, Option B,
+     source!=SIGNAL) + field-mask UpdateWatchlist (presence-gate, scalar allowlist, no-mask+default→
+     InvalidArgument) + bulk UpdateWatchlistBindings servicer; two-layer handler; +9 mask/bulk/add-time
+     Go tests (go test ./... + vet green).
+  4. UI: useUpdateWatchlistBindings (cache-patch) + updateMask on useUpdateWatchlist + BFF proxy;
+     WatchlistReadiness checkboxes; WatchlistDetail selection Set + bulk bar + default control;
+     watchlistMock extension; 5 Playwright specs (AC-1/2/3/6/13) — all green (next lint clean).
+  5. agent: create/update default_strategy_id (masked update path) + update_watchlist_bindings wrapper;
+     manage_watchlist_symbols "assign" verb; mcp-tools.md parity; client+tool tests (pytest 358 green, 80% cov).
+- **Test-predicate bug caught + fixed during e2e**: waitForRequest regex used `/PortfolioService/`
+  (slash) but the Connect path is `.PortfolioService/` (dot) — switched to `endsWith`. The feature
+  itself was correct (AC-13 passed without a spy); this was purely the assertion.
+- All four design Open Threads resolved (see above).
+- Status: implementation-ready → code-completed.
