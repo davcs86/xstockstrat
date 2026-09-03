@@ -64,6 +64,35 @@
   Floor breaches: none across all 4 rounds. Business rules: all PRESERVE/EXTEND, no CHANGE.
 - Status: spec-ready → design-approved.
 
+## Session 2026-09-03T19:30Z — sdd-spec
+
+- Generated implementation-spec.md with **14 steps**. Status → implementation-ready.
+- Consumed recon.md + design.md; verified every cited `path:line` against the current tree (proto
+  next-free numbers, portfolio service/repo/handler anchors, UI hooks/components/mock, agent
+  tools/client). No design deviations — the five design slices map to Steps 1/2, 3, 4–5, 6–7, 8–9
+  (portfolio), 10–11 (UI), 12–13 (agent), 14 (docs).
+- Key codebase findings (grounding for /sdd-execute):
+  - Proto: `Watchlist` next-free field = **10**, `CreateWatchlistRequest` = **5**, `UpdateWatchlistRequest`
+    = **6** (`portfolio.proto:224/242/269`). FieldMask precedent to import: `analysis.proto:9` /
+    `ingest.proto:10` / `indicators.proto:9`. Mirror RPC `UpdateWatchlistBinding` at `:39`, req/resp `:318-326`.
+  - `scanWatchlist` (`watchlist_repo.go:380`) has **exactly two** SELECT consumers — `GetByID:92`,
+    `ListByUser:115` — both must gain `default_strategy_id` (F-04). Legacy `Update` SET (`:164-166`)
+    deliberately omits the column so it is preserved-for-free on the no-mask path.
+  - Add-time default chokepoint = `requestBindings` two branches (`portfolio_service.go:1313-1322`),
+    `normalizeBindings` preserves `Source` (`:1300-1304`) → Option B (MANUAL-only) skips `source==SIGNAL`.
+  - Bulk RPC mirrors single-row servicer (`:1496`) + repo (`:247`, set-based via `symbol = ANY($2)`
+    precedent at `RemoveSymbols:230-235`); two-layer handler (`portfolio_handler.go:230`/`:391`);
+    `loadOwned` (`:1352`) is the ownership gate (repo stays ownership-agnostic — closes fails.md:1147).
+  - Last portfolio migration = `014` → **015** free. ADD COLUMN precedent = `008` (`TEXT NOT NULL DEFAULT ''`).
+  - UI: `ui/checkbox.tsx` primitive **exists**; selection reset is **free** via `key={watchlistId}`
+    remount (`page.tsx:198`, closes fails.md:1372); no-invalidate cache-patch model = `useUpdateWatchlistBinding`
+    (`useWatchlists.ts:116-150`); one `forward()` BFF line (`insightsBff.ts:109`); mock handlers in `watchlistMock.ts`.
+  - Agent: `_watchlist_to_dict = MessageToDict(..., preserving_proto_field_name=True)` (`client.py:328`)
+    **auto-echoes** `default_strategy_id` (closes the C-14 read-surface open risk); new `"assign"` verb on
+    `manage_watchlist_symbols` dispatch (`tools.py:1512`) + new `client.update_watchlist_bindings` wrapper.
+    Tool count stays **35** (verb, not a new tool). `mcp-tools.md:1065/1103` doc parity in the same PR (C-10).
+- No new env vars/ports → **no** docker-compose / `.do/app*.yaml` changes (recon Dependencies).
+
 ## Open Threads
 
 - [ ] Bulk NOT_FOUND count check compares the **deduped** (post-normalizeSymbols) count — assert in bulk RED tests. Target: portfolio bulk-RPC step.
