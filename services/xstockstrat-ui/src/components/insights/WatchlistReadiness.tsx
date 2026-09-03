@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useQueries } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import {
   Select,
@@ -157,6 +158,8 @@ export function WatchlistReadiness({
   onRemoveSymbol,
   onRebindSymbol,
   disabled = false,
+  selected,
+  onSelectionChange,
 }: {
   bindings: Binding[];
   inQueue?: Set<string>;
@@ -164,7 +167,33 @@ export function WatchlistReadiness({
   onRemoveSymbol: (symbol: string) => void;
   onRebindSymbol: (symbol: string, strategyId: string) => void;
   disabled?: boolean;
+  // feature 170 — multi-select. When onSelectionChange is provided, each row grows a leading
+  // checkbox and a "Select all" header checkbox appears; the parent owns the Set (so it resets on
+  // the per-watchlist key remount). Absent → no checkboxes (backward-compatible for other callers).
+  selected?: Set<string>;
+  onSelectionChange?: (next: Set<string>) => void;
 }) {
+  const selectable = Boolean(onSelectionChange);
+  const sel = selected ?? new Set<string>();
+  const toggleOne = (symbol: string) => {
+    if (!onSelectionChange) return;
+    const next = new Set(sel);
+    if (next.has(symbol)) next.delete(symbol);
+    else next.add(symbol);
+    onSelectionChange(next);
+  };
+  // Leading checkbox cell for a row, rendered only in selection mode.
+  const rowCheckbox = (symbol: string) =>
+    selectable ? (
+      <Checkbox
+        className="shrink-0"
+        checked={sel.has(symbol)}
+        onCheckedChange={() => toggleOne(symbol)}
+        disabled={disabled}
+        aria-label={`Select ${symbol}`}
+        data-testid={`select-${symbol}`}
+      />
+    ) : null;
   const bound = bindings.filter((b) => b.strategyId);
   const unbound = bindings.filter((b) => !b.strategyId);
 
@@ -201,10 +230,30 @@ export function WatchlistReadiness({
 
   if (bindings.length === 0) return null;
 
+  // Symbols in render order (bound evaluated rows first, then unbound) — the set "Select all" spans.
+  const renderedSymbols = [
+    ...evaluatedRows.map((x) => x.binding.symbol),
+    ...unbound.map((b) => b.symbol),
+  ];
+  const allSelected = renderedSymbols.length > 0 && renderedSymbols.every((s) => sel.has(s));
+  const toggleAll = () => {
+    if (!onSelectionChange) return;
+    onSelectionChange(allSelected ? new Set<string>() : new Set(renderedSymbols));
+  };
+
   return (
     <div className="mt-3 border-t border-border pt-3" data-testid="watchlist-readiness">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-xs text-muted-foreground">
+        <span className="flex items-center gap-2 text-xs text-muted-foreground">
+          {selectable && (
+            <Checkbox
+              checked={allSelected}
+              onCheckedChange={toggleAll}
+              disabled={disabled}
+              aria-label="Select all symbols"
+              data-testid="select-all"
+            />
+          )}
           Readiness — each symbol against its bound strategy
           {bound.length > 0 && (
             <span className="ml-1" data-testid="readiness-rollup">
@@ -233,6 +282,7 @@ export function WatchlistReadiness({
                   className="flex items-center gap-3 px-3 py-2 text-xs"
                   data-testid={`readiness-row-${binding.symbol}`}
                 >
+                  {rowCheckbox(binding.symbol)}
                   <span className="w-14 shrink-0 font-mono font-semibold">{r.symbol}</span>
                   <SignalSourceBadge source={binding.source} />
                   <div className="flex shrink-0 items-center gap-2">
@@ -287,6 +337,7 @@ export function WatchlistReadiness({
               className="flex items-center gap-3 px-3 py-2 text-xs"
               data-testid={`readiness-row-${b.symbol}`}
             >
+              {rowCheckbox(b.symbol)}
               <span className="w-14 shrink-0 font-mono font-semibold">{b.symbol}</span>
               <SignalSourceBadge source={b.source} />
               <span
