@@ -104,7 +104,12 @@ async def test_manage_watchlist_create_dispatches():
         )
     assert out["watchlist"]["watchlist_id"] == "wl-new"
     mock.assert_awaited_once_with(
-        "u-2", name="Breakouts", description="", symbols=["TSLA"], bindings=None
+        "u-2",
+        name="Breakouts",
+        description="",
+        symbols=["TSLA"],
+        bindings=None,
+        default_strategy_id="",
     )
 
 
@@ -124,7 +129,13 @@ async def test_manage_watchlist_update_dispatches_with_none_preserved():
             ctx=_ctx(TRADER), operation="update", watchlist_id="wl-1", name="New Name"
         )
     mock.assert_awaited_once_with(
-        "u-2", "wl-1", name="New Name", description=None, symbols=None, bindings=None
+        "u-2",
+        "wl-1",
+        name="New Name",
+        description=None,
+        symbols=None,
+        bindings=None,
+        default_strategy_id=None,
     )
 
 
@@ -229,6 +240,70 @@ async def test_manage_symbols_unknown_operation_no_rpc():
             )
     add_mock.assert_not_called()
     rm_mock.assert_not_called()
+
+
+# ── feature 170: default strategy + bulk assign verb (AC-11, AC-12) ──────────
+
+
+@pytest.mark.asyncio
+async def test_manage_watchlist_create_forwards_default_strategy():
+    mock = AsyncMock(return_value={"watchlist": {"watchlist_id": "wl-new"}})
+    with patch.object(client, "create_watchlist", mock):
+        server = _make_server()
+        await _tool_fn(server, "manage_watchlist")(
+            ctx=_ctx(TRADER), operation="create", name="Breakouts", default_strategy_id="swing"
+        )
+    mock.assert_awaited_once_with(
+        "u-2",
+        name="Breakouts",
+        description="",
+        symbols=None,
+        bindings=None,
+        default_strategy_id="swing",
+    )
+
+
+@pytest.mark.asyncio
+async def test_manage_watchlist_update_forwards_default_strategy():
+    mock = AsyncMock(return_value={"watchlist": {"watchlist_id": "wl-1"}})
+    with patch.object(client, "update_watchlist", mock):
+        server = _make_server()
+        await _tool_fn(server, "manage_watchlist")(
+            ctx=_ctx(TRADER), operation="update", watchlist_id="wl-1", default_strategy_id="swing"
+        )
+    mock.assert_awaited_once_with(
+        "u-2",
+        "wl-1",
+        name=None,
+        description=None,
+        symbols=None,
+        bindings=None,
+        default_strategy_id="swing",
+    )
+
+
+@pytest.mark.asyncio
+async def test_manage_symbols_assign_dispatches():
+    mock = AsyncMock(return_value={"watchlist": {"watchlist_id": "wl-1"}})
+    with patch.object(client, "update_watchlist_bindings", mock):
+        server = _make_server()
+        await _tool_fn(server, "manage_watchlist_symbols")(
+            ctx=_ctx(TRADER),
+            operation="assign",
+            watchlist_id="wl-1",
+            symbols=["AAPL", "MSFT"],
+            strategy_id="swing",
+        )
+    mock.assert_awaited_once_with("u-2", "wl-1", symbols=["AAPL", "MSFT"], strategy_id="swing")
+
+
+@pytest.mark.asyncio
+async def test_manage_symbols_assign_requires_symbols():
+    server = _make_server()
+    with pytest.raises(ValueError, match="requires symbols"):
+        await _tool_fn(server, "manage_watchlist_symbols")(
+            ctx=_ctx(TRADER), operation="assign", watchlist_id="wl-1", strategy_id="swing"
+        )
 
 
 # ── doc parity (AC-10 / F-12) — docstring AND mcp-tools.md both document each tool ──

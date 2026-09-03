@@ -116,7 +116,7 @@ test.describe('Watchlists (insights)', () => {
 
     // Bound add: choose a strategy in the add-time picker before adding — the symbol should land
     // already evaluated, proving the single-call add-already-bound path (no separate rebind step).
-    const addStrategySelect = page.getByLabel('Strategy for new symbols');
+    const addStrategySelect = page.getByLabel('Strategy for new symbols', { exact: true });
     await addStrategySelect.click();
     await page.getByRole('option', { name: 'Live Test Strategy' }).click();
     await page.getByPlaceholder('Add symbols (e.g. AAPL MSFT)').fill('AAPL');
@@ -166,7 +166,7 @@ test.describe('Watchlists (insights)', () => {
     // display mode (not stuck mid-edit) and the add-time picker back to "Unbound" (the
     // key={selected.watchlistId} remount closes both leaks in one mechanism, design.md §4).
     await createList(page, 'Second List');
-    await page.getByLabel('Strategy for new symbols').click();
+    await page.getByLabel('Strategy for new symbols', { exact: true }).click();
     await page.getByRole('option', { name: 'Live Test Strategy' }).click();
 
     const master = page.getByTestId('watchlist-master');
@@ -176,7 +176,9 @@ test.describe('Watchlists (insights)', () => {
     });
     await expect(page.getByRole('button', { name: /^Rename /i })).toBeVisible();
     await expect(page.getByLabel('Watchlist name', { exact: true })).toHaveCount(0);
-    await expect(page.getByLabel('Strategy for new symbols')).toHaveText('Unbound');
+    await expect(page.getByLabel('Strategy for new symbols', { exact: true })).toHaveText(
+      'Unbound',
+    );
   });
 
   test('concurrency guard disables controls while a write is in flight (Layers 1 and 2)', async ({
@@ -508,5 +510,158 @@ test.describe('Watchlists (insights)', () => {
     expect(listCalls).toBe(baseline);
     // …and a sampled other row is untouched.
     await expect(aaplSelect).toContainText('Live Test Strategy');
+  });
+
+  // ── feature 170: bulk operations + default strategy ─────────────────────────
+
+  const seedMomentum = {
+    watchlistId: 'wl-b1',
+    userId: 'test-user-001',
+    name: 'Momentum',
+    description: '',
+    symbols: ['AAPL', 'MSFT', 'NVDA', 'TSLA'],
+    bindings: [
+      { symbol: 'AAPL', strategyId: '' },
+      { symbol: 'MSFT', strategyId: '' },
+      { symbol: 'NVDA', strategyId: '' },
+      { symbol: 'TSLA', strategyId: '' },
+    ],
+  };
+  const openList = async (page: Page, name: string) => {
+    await page
+      .getByTestId('watchlist-master')
+      .getByRole('button', { name: new RegExp(name) })
+      .click();
+    await expect(page.getByRole('heading', { name })).toBeVisible({ timeout: 5000 });
+  };
+
+  test('bulk-remove selected symbols in one action (feature 170, AC-1)', async ({ page }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page, [seedMomentum]);
+    await page.goto('/insights/watchlists');
+    await openList(page, 'Momentum');
+    await expect(page.getByTestId('readiness-row-AAPL')).toBeVisible({ timeout: 5000 });
+
+    await page.getByTestId('select-MSFT').click();
+    await page.getByTestId('select-TSLA').click();
+    await expect(page.getByTestId('bulk-selection-count')).toHaveText('2 selected');
+
+    const reqP = page.waitForRequest((r) => r.url().endsWith('/RemoveWatchlistSymbols'));
+    await page.getByTestId('bulk-remove').click();
+    const body = JSON.parse((await reqP).postData() ?? '{}');
+    expect((body.symbols ?? []).slice().sort()).toEqual(['MSFT', 'TSLA']);
+
+    await expect(page.getByTestId('readiness-row-MSFT')).toHaveCount(0, { timeout: 5000 });
+    await expect(page.getByTestId('readiness-row-TSLA')).toHaveCount(0);
+    await expect(page.getByTestId('readiness-row-AAPL')).toBeVisible();
+    await expect(page.getByTestId('readiness-row-NVDA')).toBeVisible();
+    // Selection cleared → the bulk bar is gone (AC-1).
+    await expect(page.getByTestId('bulk-action-bar')).toHaveCount(0);
+  });
+
+  test('bulk-assign one strategy across the selection atomically (feature 170, AC-2)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page, [seedMomentum]);
+    await page.goto('/insights/watchlists');
+    await openList(page, 'Momentum');
+
+    await page.getByTestId('select-AAPL').click();
+    await page.getByTestId('select-MSFT').click();
+    await page.getByLabel('Strategy for selected symbols').click();
+    await page.getByRole('option', { name: 'Live Test Strategy' }).click();
+
+    const reqP = page.waitForRequest((r) => r.url().endsWith('/UpdateWatchlistBindings'));
+    await page.getByTestId('bulk-apply-strategy').click();
+    const body = JSON.parse((await reqP).postData() ?? '{}');
+    // One atomic call carrying the whole selection and the chosen strategy.
+    expect((body.symbols ?? []).slice().sort()).toEqual(['AAPL', 'MSFT']);
+    expect(body.strategyId).toBe('strat-live-001');
+    await expect(page.getByTestId('bulk-action-bar')).toHaveCount(0);
+  });
+
+  test('bulk-assign the unbound sentinel clears strategy on the selection (feature 170, AC-3)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page, [seedMomentum]);
+    await page.goto('/insights/watchlists');
+    await openList(page, 'Momentum');
+
+    await page.getByTestId('select-AAPL').click();
+    await page.getByTestId('select-MSFT').click();
+    // The bulk Select defaults to "Unbound"; pick it explicitly to prove the sentinel → '' path.
+    await page.getByLabel('Strategy for selected symbols').click();
+    await page.getByRole('option', { name: 'Unbound' }).click();
+
+    const reqP = page.waitForRequest((r) => r.url().endsWith('/UpdateWatchlistBindings'));
+    await page.getByTestId('bulk-apply-strategy').click();
+    const body = JSON.parse((await reqP).postData() ?? '{}');
+    expect((body.symbols ?? []).slice().sort()).toEqual(['AAPL', 'MSFT']);
+    // Connect-JSON omits an empty string field, so strategyId is either '' or absent — both = unbind.
+    expect(body.strategyId ?? '').toBe('');
+  });
+
+  test('set/read the watchlist default strategy via a masked update; edits stay unmasked (feature 170, AC-6)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page, [seedMomentum]);
+    await page.goto('/insights/watchlists');
+    await openList(page, 'Momentum');
+
+    const control = page.getByTestId('default-strategy-control');
+    await control.getByLabel('Default strategy for new symbols').click();
+    const defReqP = page.waitForRequest((r) => r.url().endsWith('/UpdateWatchlist'));
+    await page.getByRole('option', { name: 'Live Test Strategy' }).click();
+    const defBody = JSON.parse((await defReqP).postData() ?? '{}');
+    // A masked partial update: FieldMask serializes to a canonical comma-joined camelCase STRING.
+    expect(typeof defBody.updateMask).toBe('string');
+    expect(defBody.updateMask).toContain('defaultStrategyId');
+    expect(defBody.defaultStrategyId).toBe('strat-live-001');
+    // After the round-trip the control reflects the persisted default.
+    await expect(control).toContainText('Live Test Strategy', { timeout: 5000 });
+
+    // Mask discipline (design Open Risk): a legacy rename must NOT carry update_mask.
+    await page.getByRole('button', { name: /^Rename / }).click();
+    const nameInput = page.getByLabel('Watchlist name');
+    await nameInput.fill('Momentum 2');
+    const renameReqP = page.waitForRequest((r) => r.url().endsWith('/UpdateWatchlist'));
+    await nameInput.press('Enter');
+    const renameBody = JSON.parse((await renameReqP).postData() ?? '{}');
+    expect(renameBody.updateMask ?? '').toBe('');
+  });
+
+  test('switching the active watchlist clears the pending selection (feature 170, AC-13)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page, [
+      seedMomentum,
+      {
+        watchlistId: 'wl-b2',
+        userId: 'test-user-001',
+        name: 'Breakouts',
+        description: '',
+        symbols: ['GOOG', 'AMZN'],
+        bindings: [
+          { symbol: 'GOOG', strategyId: '' },
+          { symbol: 'AMZN', strategyId: '' },
+        ],
+      },
+    ]);
+    await page.goto('/insights/watchlists');
+    await openList(page, 'Momentum');
+    await page.getByTestId('select-AAPL').click();
+    await page.getByTestId('select-MSFT').click();
+    await expect(page.getByTestId('bulk-action-bar')).toBeVisible();
+
+    // Switch to the other list — the detail remounts (key={watchlistId}), so selection resets.
+    await openList(page, 'Breakouts');
+    await expect(page.getByTestId('readiness-row-GOOG')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('bulk-action-bar')).toHaveCount(0);
+    await expect(page.getByTestId('select-GOOG')).not.toBeChecked();
+    await expect(page.getByTestId('select-AMZN')).not.toBeChecked();
   });
 });

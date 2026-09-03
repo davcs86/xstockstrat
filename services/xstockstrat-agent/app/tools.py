@@ -1421,6 +1421,7 @@ def register_tools(server: MCPServer) -> None:
         description: str | None = None,
         symbols: list[str] | None = None,
         bindings: list[dict] | None = None,
+        default_strategy_id: str | None = None,
     ) -> dict:
         """Create, update, or delete one of the caller's watchlists in xstockstrat-portfolio.
         operation: 'create' | 'update' | 'delete'.
@@ -1431,18 +1432,23 @@ def register_tools(server: MCPServer) -> None:
         bindings: optional list of {"symbol": <ticker>, "strategy_id": <id or "">} objects — a set
             strategy_id makes the symbol a ready-made strategy candidate; "" (or omitted) is an
             unbound bare symbol. symbols and bindings may be combined in one call.
+        default_strategy_id: (feature 170) the watchlist-level default strategy. It is stamped onto
+            newly-added, otherwise-unbound MANUAL symbols at add time only (no retroactive rebind,
+            no read-time fallback); "" clears it.
 
         CREATE: makes a new list owned by the caller from name (+ optional description/symbols/
-            bindings). New entries are recorded as MANUAL (user-curated).
+            bindings/default_strategy_id). New entries are recorded as MANUAL (user-curated); a
+            default_strategy_id binds the initial bare symbols.
 
-        UPDATE IS A READ-MODIFY-WRITE MERGE. The backend UpdateWatchlist is replace-all and requires
-            a name, so this tool fetches the current list first and preserves every field you do NOT
-            pass: an omitted name/description keeps the stored value, and omitting BOTH symbols and
-            bindings preserves the existing stocks exactly (so 'update' with only a new name renames
-            the list WITHOUT clearing its stocks). Passing symbols and/or bindings REPLACES the
-            whole stock set with those MANUAL entries. To add or remove individual stocks without
-            replacing the set, use manage_watchlist_symbols instead. (The read-then-write is not
-            atomic — a concurrent add between the two steps could be lost by the replace.)
+        UPDATE has two modes. Passing default_strategy_id does a PARTIAL field-mask write of the
+            scalar fields only (default_strategy_id, plus name/description when supplied); bindings
+            are untouched and it cannot also replace symbols/bindings in the same call. Otherwise
+            update is a READ-MODIFY-WRITE MERGE: the backend UpdateWatchlist is replace-all and
+            requires a name, so this fetches the current list first and preserves every field you do
+            NOT pass (omitting BOTH symbols and bindings keeps the existing stocks, so a name-only
+            update renames WITHOUT clearing stocks). Passing symbols and/or bindings REPLACES the
+            whole stock set with MANUAL entries; to add/remove individual stocks use
+            manage_watchlist_symbols instead. (The read-then-write is not atomic.)
 
         DELETE: removes the list. The one system-managed signals watchlist per user is
             delete-protected and its deletion is refused by the backend.
@@ -1461,6 +1467,7 @@ def register_tools(server: MCPServer) -> None:
                     description=description or "",
                     symbols=symbols,
                     bindings=bindings,
+                    default_strategy_id=default_strategy_id or "",
                 )
             if operation == "update":
                 if not watchlist_id:
@@ -1472,6 +1479,7 @@ def register_tools(server: MCPServer) -> None:
                     description=description,
                     symbols=symbols,
                     bindings=bindings,
+                    default_strategy_id=default_strategy_id,
                 )
             if operation == "delete":
                 if not watchlist_id:
@@ -1488,20 +1496,24 @@ def register_tools(server: MCPServer) -> None:
         watchlist_id: str,
         symbols: list[str] | None = None,
         bindings: list[dict] | None = None,
+        strategy_id: str = "",
     ) -> dict:
-        """Add or remove stocks on one of the caller's watchlists in xstockstrat-portfolio.
-        operation: 'add' | 'remove'.
+        """Add, remove, or bulk-assign a strategy to stocks on a caller-owned watchlist.
+        operation: 'add' | 'remove' | 'assign'.
         watchlist_id: required — the list to mutate.
-        symbols: bare ticker symbols. For 'add' these are unbound entries; for 'remove' these are
-            the symbols to drop.
+        symbols: bare ticker symbols. For 'add' these are unbound entries; for 'remove' the symbols
+            to drop; for 'assign' the symbols to rebind (they must already be on the list).
         bindings: (add only) list of {"symbol": <ticker>, "strategy_id": <id or "">} objects to add
             with a strategy binding. symbols and bindings may be combined in one add call.
+        strategy_id: (assign only) the strategy to apply across all `symbols`; "" unbinds them.
 
         ADD unions the given symbols/bindings into the list (an already-present symbol keeps its
             stored binding — first-writer-wins) and records new entries as MANUAL (user-curated),
             distinct from the SIGNAL entries the ingest_signal watchlist path adds. The per-list
             symbol cap is enforced by the backend. REMOVE drops the given symbols; symbols not on
-            the list are ignored.
+            the list are ignored. ASSIGN (feature 170) atomically sets `strategy_id` on every
+            listed symbol in one transaction — all-or-nothing: if any symbol is not on the list the
+            whole call is rejected NOT_FOUND with no partial write; "" unbinds the whole selection.
 
         Returns {"watchlist": <watchlist>} — the updated list (snake_case, as get_watchlist).
         Acting on a list the caller does not own is rejected (permission denied)."""
@@ -1517,7 +1529,15 @@ def register_tools(server: MCPServer) -> None:
                 return await client.remove_watchlist_symbols(
                     user_id, watchlist_id, symbols=symbols or []
                 )
-            raise ValueError(f"unknown operation '{operation}' (expected add/remove)")
+            if operation == "assign":
+                if not symbols:
+                    raise ValueError(
+                        "manage_watchlist_symbols(operation='assign') requires symbols"
+                    )
+                return await client.update_watchlist_bindings(
+                    user_id, watchlist_id, symbols=symbols, strategy_id=strategy_id
+                )
+            raise ValueError(f"unknown operation '{operation}' (expected add/remove/assign)")
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="watchlist not found")) from e
 

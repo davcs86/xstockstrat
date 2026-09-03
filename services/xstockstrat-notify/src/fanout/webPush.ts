@@ -21,8 +21,17 @@ import { getLogger } from '../services/logger';
 
 const log = getLogger('notify:webpush');
 
-// Fixed code constant — push endpoints (FCM/Mozilla/Apple) are slower than Slack; NOT a config key (F-07).
-const WEBPUSH_HTTP_TIMEOUT_MS = 10000;
+// Two distinct concerns, previously conflated in one mis-named constant (defect 2026-09-03):
+//   - WEBPUSH_TTL_SECONDS: how long the push service (FCM/Mozilla/Apple) RETAINS an alert for a
+//     device that is currently offline before dropping it. 1 hour — a trading alert older than that
+//     is stale, but a brief disconnect (lock screen, tunnel) still receives it. Product decision
+//     2026-09-03. The prior code passed the 10s HTTP-timeout value here, giving a 10-second TTL that
+//     silently dropped every alert to a device offline for more than ~10s.
+//   - WEBPUSH_SEND_TIMEOUT_MS: a REAL socket timeout on the outbound push HTTP request, so a
+//     slow/black-holed push endpoint fails fast instead of hanging the best-effort dispatch.
+// Both are fixed code constants — NOT config keys (F-07).
+const WEBPUSH_TTL_SECONDS = 3600;
+const WEBPUSH_SEND_TIMEOUT_MS = 10000;
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n));
@@ -136,7 +145,10 @@ export class WebPushDispatcher {
    * while the surrounding gate, subscription query, and prune logic run for real.
    */
   protected async deliver(subscription: webpush.PushSubscription, body: string): Promise<void> {
-    await webpush.sendNotification(subscription, body, { TTL: WEBPUSH_HTTP_TIMEOUT_MS / 1000 });
+    await webpush.sendNotification(subscription, body, {
+      TTL: WEBPUSH_TTL_SECONDS,
+      timeout: WEBPUSH_SEND_TIMEOUT_MS,
+    });
   }
 
   private async sendOne(row: SubscriptionRow, body: string, alertId: string): Promise<void> {

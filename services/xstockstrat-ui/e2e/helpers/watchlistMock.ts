@@ -24,7 +24,11 @@ export type MockWatchlist = {
   bindings: MockBinding[];
   // feature 127 — system-managed signals watchlist (delete-protected, its entries source-tagged).
   systemManaged?: boolean;
+  // feature 170 — watchlist-level default strategy ("" = none).
+  defaultStrategyId?: string;
 };
+
+const SOURCE_SIGNAL = 2; // WATCHLIST_ENTRY_SOURCE_SIGNAL
 
 export async function mockWatchlists(page: Page, seed: MockWatchlist[] = []): Promise<void> {
   const state: { lists: MockWatchlist[]; seq: number } = {
@@ -51,6 +55,19 @@ export async function mockWatchlists(page: Page, seed: MockWatchlist[] = []): Pr
   const sync = (wl: MockWatchlist) => {
     wl.symbols = wl.bindings.map((b) => b.symbol);
   };
+  // feature 170 add-time default (Option B): fill strategyId on bare, non-SIGNAL bindings only.
+  const applyDefault = (bindings: MockBinding[], def: string): MockBinding[] => {
+    if (!def) return bindings;
+    return bindings.map((b) =>
+      b.strategyId === '' && b.source !== SOURCE_SIGNAL ? { ...b, strategyId: def } : b,
+    );
+  };
+  // Connect-JSON encodes google.protobuf.FieldMask as a canonical comma-joined camelCase string
+  // (e.g. "defaultStrategyId,name"), NOT an object — a present, non-empty string = a partial update.
+  const maskPaths = (req: { updateMask?: unknown }): string[] =>
+    typeof req.updateMask === 'string' && req.updateMask.length > 0
+      ? req.updateMask.split(',')
+      : [];
   const find = (id: string) => state.lists.find((w) => w.watchlistId === id);
   const json = (route: Parameters<Parameters<Page['route']>[1]>[0], body: unknown) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
@@ -62,7 +79,8 @@ export async function mockWatchlists(page: Page, seed: MockWatchlist[] = []): Pr
   await page.route('**/xstockstrat.portfolio.v1.PortfolioService/CreateWatchlist', (route) => {
     const req = JSON.parse(route.request().postData() ?? '{}');
     state.seq += 1;
-    const bindings = normBindings(toBindings(req));
+    const def = req.defaultStrategyId ?? '';
+    const bindings = applyDefault(normBindings(toBindings(req)), def);
     const wl: MockWatchlist = {
       watchlistId: `wl-${state.seq}`,
       userId: 'test-user-001',
@@ -70,6 +88,7 @@ export async function mockWatchlists(page: Page, seed: MockWatchlist[] = []): Pr
       description: req.description ?? '',
       symbols: bindings.map((b) => b.symbol),
       bindings,
+      defaultStrategyId: def,
     };
     state.lists.push(wl);
     return json(route, { watchlist: wl });
@@ -79,11 +98,19 @@ export async function mockWatchlists(page: Page, seed: MockWatchlist[] = []): Pr
     const req = JSON.parse(route.request().postData() ?? '{}');
     const wl = find(req.watchlistId);
     if (wl) {
-      if (req.name !== undefined) wl.name = req.name;
-      if (req.description !== undefined) wl.description = req.description;
-      // Replace the binding set (the per-symbol re-bind write path — FR-6).
-      wl.bindings = normBindings(toBindings(req));
-      sync(wl);
+      const paths = maskPaths(req);
+      if (paths.length > 0) {
+        // feature 170 partial (field-mask) path: write ONLY masked scalar fields; bindings untouched.
+        if (paths.includes('name') && req.name !== undefined) wl.name = req.name;
+        if (paths.includes('description')) wl.description = req.description ?? '';
+        if (paths.includes('defaultStrategyId')) wl.defaultStrategyId = req.defaultStrategyId ?? '';
+      } else {
+        // Legacy replace-all path — name/description/bindings; defaultStrategyId is NOT written here.
+        if (req.name !== undefined) wl.name = req.name;
+        if (req.description !== undefined) wl.description = req.description;
+        wl.bindings = normBindings(toBindings(req));
+        sync(wl);
+      }
     }
     return json(route, { watchlist: wl });
   });
@@ -134,6 +161,28 @@ export async function mockWatchlists(page: Page, seed: MockWatchlist[] = []): Pr
       // (NOT {seconds,nanos}); this raw page.route body must match that wire shape or the client's
       // response decode throws and the mutation never resolves.
       return json(route, { binding, updatedAt: new Date(0).toISOString() });
+    },
+  );
+
+  // feature 170 — atomic bulk rebind: patch strategyId on every requested symbol (source untouched)
+  // and return { bindings: <changed rows>, updated_at }. Happy-path e2e assumes all symbols exist.
+  await page.route(
+    '**/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlistBindings',
+    (route) => {
+      const req = JSON.parse(route.request().postData() ?? '{}');
+      const wl = find(req.watchlistId);
+      const syms = (req.symbols ?? []).map((s: string) => (s ?? '').trim().toUpperCase());
+      const changed: MockBinding[] = [];
+      if (wl) {
+        for (const b of wl.bindings) {
+          if (syms.includes(b.symbol)) {
+            b.strategyId = req.strategyId ?? ''; // single-column patch; source untouched
+            changed.push({ symbol: b.symbol, strategyId: b.strategyId, source: b.source });
+          }
+        }
+        sync(wl);
+      }
+      return json(route, { bindings: changed, updatedAt: new Date(0).toISOString() });
     },
   );
 

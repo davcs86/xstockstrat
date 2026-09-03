@@ -45,32 +45,47 @@ export function useCreateWatchlist() {
       description?: string;
       symbols?: string[];
       bindings?: WatchlistBindingInput[];
+      // feature 170 — watchlist-level default strategy applied to initial bare symbols at add time.
+      defaultStrategyId?: string;
     }) =>
       insightsPortfolioClient.createWatchlist({
         name: input.name,
         description: input.description ?? '',
         symbols: input.symbols ?? [],
         bindings: input.bindings ?? [],
+        defaultStrategyId: input.defaultStrategyId ?? '',
       }),
     [WATCHLISTS_KEY],
   );
 }
 
+/**
+ * feature 097 replace-all update, extended with the feature-170 field mask. Pass `updateMask` (proto
+ * field-name paths, e.g. `['default_strategy_id']`) for a PARTIAL update that writes only those
+ * scalar fields and leaves bindings untouched; omit it for the legacy replace-all of
+ * name/description/bindings. `defaultStrategyId` is only persisted on the masked path — the backend
+ * rejects it without a mask. Existing name/binding edits MUST omit `updateMask` to stay on the
+ * legacy path (design.md Open Risk — asserted by the e2e mask-discipline spy).
+ */
 export function useUpdateWatchlist() {
   return useInvalidatingMutation(
     (input: {
       watchlistId: string;
-      name: string;
+      name?: string;
       description?: string;
       symbols?: string[];
       bindings?: WatchlistBindingInput[];
+      defaultStrategyId?: string;
+      updateMask?: string[];
     }) =>
       insightsPortfolioClient.updateWatchlist({
         watchlistId: input.watchlistId,
-        name: input.name,
+        name: input.name ?? '',
         description: input.description ?? '',
         symbols: input.symbols ?? [],
         bindings: input.bindings ?? [],
+        defaultStrategyId: input.defaultStrategyId ?? '',
+        updateMask: input.updateMask ? { paths: input.updateMask } : undefined,
       }),
     [WATCHLISTS_KEY],
     { mutationKey: WATCHLIST_WRITE_KEY },
@@ -145,6 +160,45 @@ export function useUpdateWatchlistBinding() {
         };
       });
       // NO invalidateQueries(['watchlists']) — the whole point of AC-6.
+    },
+  });
+}
+
+/**
+ * feature 170 — atomic bulk rebind. One transactional RPC assigns `strategyId` across all `symbols`;
+ * on success it PATCHES every changed row in the cached ['watchlists'] list from the response
+ * `bindings` array, with NO invalidateQueries → no listWatchlists refetch (preserves AC-6). Carries
+ * WATCHLIST_WRITE_KEY so the Layer-2 in-flight guard serializes it against other writes.
+ */
+export function useUpdateWatchlistBindings() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    Awaited<ReturnType<typeof insightsPortfolioClient.updateWatchlistBindings>>,
+    Error,
+    { watchlistId: string; symbols: string[]; strategyId: string }
+  >({
+    mutationKey: WATCHLIST_WRITE_KEY,
+    mutationFn: (input) =>
+      insightsPortfolioClient.updateWatchlistBindings({
+        watchlistId: input.watchlistId,
+        symbols: input.symbols,
+        strategyId: input.strategyId,
+      }),
+    onSuccess: (result, input) => {
+      const changed = new Map(result.bindings.map((b) => [b.symbol, b]));
+      if (changed.size === 0) return;
+      queryClient.setQueryData(WATCHLISTS_KEY, (old: ListWatchlistsResult | undefined) => {
+        if (!old) return old;
+        return {
+          ...old,
+          watchlists: old.watchlists.map((wl) =>
+            wl.watchlistId === input.watchlistId
+              ? { ...wl, bindings: wl.bindings.map((b) => changed.get(b.symbol) ?? b) }
+              : wl,
+          ),
+        };
+      });
+      // NO invalidateQueries(['watchlists']) — bulk patch mirrors the single-row AC-6 guarantee.
     },
   });
 }

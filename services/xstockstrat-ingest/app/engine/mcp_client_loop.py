@@ -130,7 +130,9 @@ async def run_one_cycle(servicer, cfg_watcher, mcp_client: McpClientProtocol) ->
     extractor = McpClientExtractor()
     sources = await list_all_sources(servicer._db, include_inactive=False)
     timeout = max(
-        cfg_watcher.get_int("mcp_client.request_timeout_seconds", _DEFAULT_REQUEST_TIMEOUT_SECONDS),
+        cfg_watcher.get_int(
+            "ingest.mcp_client.request_timeout_seconds", _DEFAULT_REQUEST_TIMEOUT_SECONDS
+        ),
         1,
     )
     for src in sources:
@@ -157,7 +159,9 @@ async def run_mcp_client_loop(servicer, cfg_watcher, mcp_client: McpClientProtoc
 
     while True:
         interval = max(
-            cfg_watcher.get_int("mcp_client.poll_interval_seconds", _DEFAULT_POLL_INTERVAL_SECONDS),
+            cfg_watcher.get_int(
+                "ingest.mcp_client.poll_interval_seconds", _DEFAULT_POLL_INTERVAL_SECONDS
+            ),
             1,
         )
         await asyncio.sleep(interval)

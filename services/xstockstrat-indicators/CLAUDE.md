@@ -134,10 +134,6 @@ reference a formula series as `<ref_name>.<series>` and lets the sandbox enforce
   `SANDBOX_EXIT_REASON_RUNTIME_ERROR` and an error naming the missing series. Inline
   `formula_source` runs have no stored definition, so no output enforcement applies.
 
-## Webhooks
-
-_No webhooks. Call the gRPC RPCs on port 50054 directly._
-
 ## Environment Variables
 
 ```text

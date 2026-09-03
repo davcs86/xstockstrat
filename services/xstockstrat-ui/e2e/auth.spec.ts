@@ -52,10 +52,57 @@ test.describe('Extended session — "Remember me" (feature 153)', () => {
       .map((h) => h.value);
     const access = cookies.find((v) => v.startsWith('access_token='));
     const refresh = cookies.find((v) => v.startsWith('refresh_token='));
+    const marker = cookies.find((v) => v.startsWith('remember_me='));
     expect(access).toBeTruthy();
     expect(refresh).toBeTruthy();
     expect(access!.toLowerCase()).toContain('max-age=1209600');
     expect(refresh!.toLowerCase()).toContain('max-age=1209600');
+    // The server-readable remember-me marker is set persistent so the refresh paths can re-apply
+    // the extended Max-Age on rotation (the bug this fixed: refresh silently dropped persistence).
+    expect(marker).toBeTruthy();
+    expect(marker).toContain('remember_me=1');
+    expect(marker!.toLowerCase()).toContain('max-age=1209600');
+  });
+
+  // Regression guard for the fix: a token refresh must NOT downgrade a persistent "Remember me"
+  // session to session cookies. The browser never echoes a cookie's Max-Age, so /api/auth/refresh
+  // recovers the intent from the remember_me marker and re-applies the rolling 14-day Max-Age.
+  test('POST /api/auth/refresh preserves the extended Max-Age when the remember_me marker is present', async ({
+    request,
+  }) => {
+    const res = await request.post('/api/auth/refresh', {
+      headers: { cookie: 'refresh_token=test-refresh-token; remember_me=1' },
+    });
+    expect(res.status()).toBe(200);
+    const cookies = res
+      .headersArray()
+      .filter((h) => h.name.toLowerCase() === 'set-cookie')
+      .map((h) => h.value);
+    const access = cookies.find((v) => v.startsWith('access_token='));
+    const refresh = cookies.find((v) => v.startsWith('refresh_token='));
+    const marker = cookies.find((v) => v.startsWith('remember_me='));
+    for (const cookie of [access, refresh, marker]) {
+      expect(cookie).toBeTruthy();
+      expect(cookie!.toLowerCase()).toContain('max-age=1209600');
+    }
+  });
+
+  // Complementary guard: a transient (no marker) session refresh stays session cookies.
+  test('POST /api/auth/refresh keeps session cookies when no remember_me marker is present', async ({
+    request,
+  }) => {
+    const res = await request.post('/api/auth/refresh', {
+      headers: { cookie: 'refresh_token=test-refresh-token' },
+    });
+    expect(res.status()).toBe(200);
+    const cookies = res
+      .headersArray()
+      .filter((h) => h.name.toLowerCase() === 'set-cookie')
+      .map((h) => h.value.toLowerCase());
+    const access = cookies.find((v) => v.startsWith('access_token='));
+    const refresh = cookies.find((v) => v.startsWith('refresh_token='));
+    expect(access).not.toContain('max-age');
+    expect(refresh).not.toContain('max-age');
   });
 
   // AC-3: default (no opt-in) keeps session cookies — no Max-Age / Expires.
@@ -76,6 +123,9 @@ test.describe('Extended session — "Remember me" (feature 153)', () => {
     expect(access).not.toContain('expires=');
     expect(refresh).not.toContain('max-age');
     expect(refresh).not.toContain('expires=');
+    // No persistent remember-me marker: if emitted at all it is a Max-Age=0 wipe of any prior one.
+    const marker = cookies.find((v) => v.startsWith('remember_me='));
+    if (marker) expect(marker).toContain('max-age=0');
   });
 
   // AC-1: the operator login page shows an unchecked Remember me control by default.

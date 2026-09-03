@@ -105,10 +105,6 @@ All config values are served by **xstockstrat-config** namespace `trading`.
 per-call `context` deadline, matching the credential-health poller), so a black-holed connection can
 never wedge the sync loop. Likewise every ledger `AppendEvent` is bounded (`ledgerEmitTimeout`, 10s).
 
-## Webhooks
-
-*No webhooks. Call the gRPC RPCs on port 50051 directly.*
-
 ## Database
 
 - Schema: `trading`
@@ -250,7 +246,6 @@ PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052
 INDICATORS_ENDPOINT=xstockstrat-indicators:50054
 MARKETDATA_ENDPOINT=xstockstrat-marketdata:50053
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
-DATABASE_URL=postgres://xstockstrat:${POSTGRES_PASSWORD}@timescaledb:5432/xstockstrat?sslmode=disable  # constructed by docker-compose from POSTGRES_PASSWORD in .env
 APPLICATION_ENV=development            # development | production
 TRADING_MODE=paper                     # paper | live
 BROKER_ACCOUNTS_ENCRYPTION_KEY=<hex>  # hex-encoded 32-byte AES-256 key; required when broker_accounts table is in use. Generate: openssl rand -hex 32

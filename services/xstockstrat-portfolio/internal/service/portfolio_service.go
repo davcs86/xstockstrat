@@ -1239,10 +1239,13 @@ const (
 // WatchlistStore is the persistence surface the watchlist RPCs depend on. The
 // concrete implementation is *repository.WatchlistRepo; tests inject a stub.
 type WatchlistStore interface {
-	Create(ctx context.Context, userID, name, description string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error)
+	Create(ctx context.Context, userID, name, description, defaultStrategyID string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error)
 	GetByID(ctx context.Context, watchlistID string) (*portfoliov1.Watchlist, error)
 	ListByUser(ctx context.Context, userID string, pageSize int, pageToken string) ([]*portfoliov1.Watchlist, string, error)
 	Update(ctx context.Context, watchlistID, name, description string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error)
+	// UpdatePartial writes only the flagged scalar columns of a watchlist (feature 170 field-mask
+	// path); bindings are untouched. ErrWatchlistNotFound when the row is absent.
+	UpdatePartial(ctx context.Context, watchlistID string, patch repository.WatchlistPatch) (*portfoliov1.Watchlist, error)
 	Delete(ctx context.Context, watchlistID string) error
 	AddSymbols(ctx context.Context, watchlistID string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error)
 	RemoveSymbols(ctx context.Context, watchlistID string, symbols []string) (*portfoliov1.Watchlist, error)
@@ -1250,6 +1253,10 @@ type WatchlistStore interface {
 	// returning the updated binding and the parent list's bumped updated_at; ErrBindingNotFound
 	// when the (watchlist_id, symbol) row is absent.
 	UpdateBinding(ctx context.Context, watchlistID, symbol, strategyID string) (*portfoliov1.WatchlistBinding, time.Time, error)
+	// UpdateBindings atomically rebinds a set of symbols to one strategy_id (feature 170); returns
+	// the changed bindings and the parent list's bumped updated_at, or ErrBindingNotFound when any
+	// requested symbol is absent (whole batch rolled back — zero partial writes).
+	UpdateBindings(ctx context.Context, watchlistID string, symbols []string, strategyID string) ([]*portfoliov1.WatchlistBinding, time.Time, error)
 	CountByUser(ctx context.Context, userID string) (int, error)
 	EnsureSystemManaged(ctx context.Context, userID, defaultName string) (*portfoliov1.Watchlist, error)
 	// ListAllSymbols returns the distinct union of watchlist symbols across ALL users
@@ -1310,15 +1317,37 @@ func normalizeBindings(in []*portfoliov1.WatchlistBinding) []*portfoliov1.Watchl
 // takes precedence (feature 097); an empty `bindings` falls back to the legacy flat
 // `symbols` mapped to unbound bindings (strategy_id=""). This is the write-path re-plumb
 // the fails-080 trap requires — a `bindings` write carries the strategy through.
-func requestBindings(bindings []*portfoliov1.WatchlistBinding, symbols []string) []*portfoliov1.WatchlistBinding {
+func requestBindings(bindings []*portfoliov1.WatchlistBinding, symbols []string, defaultStrategyID string) []*portfoliov1.WatchlistBinding {
+	var out []*portfoliov1.WatchlistBinding
 	if len(bindings) > 0 {
-		return normalizeBindings(bindings)
+		out = normalizeBindings(bindings)
+	} else {
+		tmp := make([]*portfoliov1.WatchlistBinding, 0, len(symbols))
+		for _, s := range symbols {
+			tmp = append(tmp, &portfoliov1.WatchlistBinding{Symbol: s})
+		}
+		out = normalizeBindings(tmp)
 	}
-	out := make([]*portfoliov1.WatchlistBinding, 0, len(symbols))
-	for _, s := range symbols {
-		out = append(out, &portfoliov1.WatchlistBinding{Symbol: s})
+	// Single fill site — wraps BOTH branches so a flat-`symbols` add inherits the default too.
+	return applyDefaultStrategy(out, defaultStrategyID)
+}
+
+// applyDefaultStrategy stamps the watchlist-level default strategy onto add-time bindings that are
+// otherwise-unbound MANUAL entries (feature 170, Option B — MANUAL-only). It fills strategy_id ONLY
+// when the default is non-empty, the binding is currently unbound ("") AND its source is NOT SIGNAL,
+// so a system-managed signals watchlist's auto-added symbols are never silently bound to a user's
+// manual default. Source is always preserved. This is add-time only: the replace-all UpdateWatchlist
+// path passes "" here so setting a default never retroactively rebinds existing rows.
+func applyDefaultStrategy(bindings []*portfoliov1.WatchlistBinding, defaultStrategyID string) []*portfoliov1.WatchlistBinding {
+	if defaultStrategyID == "" {
+		return bindings
 	}
-	return normalizeBindings(out)
+	for _, b := range bindings {
+		if b.GetStrategyId() == "" && b.GetSource() != portfoliov1.WatchlistEntrySource_WATCHLIST_ENTRY_SOURCE_SIGNAL {
+			b.StrategyId = defaultStrategyID
+		}
+	}
+	return bindings
 }
 
 // bindingSymbols flattens bindings to their symbols (for cap counting / union math).
@@ -1375,7 +1404,8 @@ func (s *PortfolioService) CreateWatchlist(ctx context.Context, req *portfoliov1
 	if strings.TrimSpace(req.GetName()) == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name required"))
 	}
-	bindings := requestBindings(req.GetBindings(), req.GetSymbols())
+	// Add-time default (feature 170): the create-request default binds initial bare/MANUAL symbols.
+	bindings := requestBindings(req.GetBindings(), req.GetSymbols(), req.GetDefaultStrategyId())
 	if len(bindings) > s.maxSymbolsPerList() {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("too many symbols: %d exceeds max %d", len(bindings), s.maxSymbolsPerList()))
@@ -1388,7 +1418,7 @@ func (s *PortfolioService) CreateWatchlist(ctx context.Context, req *portfoliov1
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("watchlist limit reached: %d", s.maxWatchlistsPerUser()))
 	}
-	wl, err := s.watchlists.Create(ctx, userID, req.GetName(), req.GetDescription(), bindings)
+	wl, err := s.watchlists.Create(ctx, userID, req.GetName(), req.GetDescription(), strings.TrimSpace(req.GetDefaultStrategyId()), bindings)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -1465,7 +1495,23 @@ func (s *PortfolioService) ListWatchlists(ctx context.Context, req *portfoliov1.
 	}, nil
 }
 
-// UpdateWatchlist replaces name/description/symbols (FR-1).
+// watchlistMaskPaths is the closed allowlist of maskable UpdateWatchlist paths (feature 170).
+// Scalar only — bindings/symbols are deliberately excluded: a full binding replace uses the no-mask
+// path and a bulk rebind uses UpdateWatchlistBindings. The dynamic SET in repository.UpdatePartial
+// keys its column identifiers off this map, never off raw request strings (injection-safe).
+var watchlistMaskPaths = map[string]bool{
+	"name":                true,
+	"description":         true,
+	"default_strategy_id": true,
+}
+
+// UpdateWatchlist has two contracts, selected by update_mask PRESENCE (feature 170):
+//   - update_mask UNSET → legacy replace-all of name/description/bindings (FR-1), byte-for-byte the
+//     prior behavior. default_strategy_id is NOT written here (a no-mask request that sets it is
+//     rejected loud), so a name/binding edit can never clobber a previously-set default.
+//   - update_mask SET → partial update: only the masked scalar paths of {name, description,
+//     default_strategy_id} are written; bindings are untouched. Empty-present or unknown-path masks
+//     are rejected. The name-required guard fires only when "name" is masked.
 func (s *PortfolioService) UpdateWatchlist(ctx context.Context, req *portfoliov1.UpdateWatchlistRequest) (*portfoliov1.UpdateWatchlistResponse, error) {
 	userID, err := requireUserID(ctx)
 	if err != nil {
@@ -1474,10 +1520,54 @@ func (s *PortfolioService) UpdateWatchlist(ctx context.Context, req *portfoliov1
 	if _, err := s.loadOwned(ctx, userID, req.GetWatchlistId()); err != nil {
 		return nil, err
 	}
+
+	if mask := req.GetUpdateMask(); mask != nil {
+		// ── Partial (field-mask) path ──────────────────────────────────────────────
+		paths := mask.GetPaths()
+		if len(paths) == 0 {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("update_mask present but empty"))
+		}
+		var patch repository.WatchlistPatch
+		for _, p := range paths {
+			if !watchlistMaskPaths[p] {
+				return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown update_mask path: %q", p))
+			}
+			switch p {
+			case "name":
+				if strings.TrimSpace(req.GetName()) == "" {
+					return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name required"))
+				}
+				patch.SetName, patch.Name = true, req.GetName()
+			case "description":
+				patch.SetDescription, patch.Description = true, req.GetDescription()
+			case "default_strategy_id":
+				patch.SetDefaultStrategy, patch.DefaultStrategyID = true, strings.TrimSpace(req.GetDefaultStrategyId())
+			}
+		}
+		wl, err := s.watchlists.UpdatePartial(ctx, req.GetWatchlistId(), patch)
+		if err != nil {
+			if errors.Is(err, repository.ErrWatchlistNotFound) {
+				return nil, connect.NewError(connect.CodeNotFound, errors.New("watchlist not found"))
+			}
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+wl.WatchlistId, map[string]interface{}{
+			"user_id": userID, "watchlist_id": wl.WatchlistId,
+		})
+		return &portfoliov1.UpdateWatchlistResponse{Watchlist: wl}, nil
+	}
+
+	// ── Legacy replace-all path (no mask) ────────────────────────────────────────
+	// default_strategy_id is never written on this path; setting it without a mask would be a silent
+	// no-op, so fail loud instead (feature 170 — steers callers to the masked write).
+	if strings.TrimSpace(req.GetDefaultStrategyId()) != "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("default_strategy_id requires update_mask"))
+	}
 	if strings.TrimSpace(req.GetName()) == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name required"))
 	}
-	bindings := requestBindings(req.GetBindings(), req.GetSymbols())
+	// Replace-all opts out of the add-time default (pass "") — setting a default never retroactively rebinds.
+	bindings := requestBindings(req.GetBindings(), req.GetSymbols(), "")
 	if len(bindings) > s.maxSymbolsPerList() {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("too many symbols: %d exceeds max %d", len(bindings), s.maxSymbolsPerList()))
@@ -1524,6 +1614,41 @@ func (s *PortfolioService) UpdateWatchlistBinding(ctx context.Context, req *port
 	}, nil
 }
 
+// UpdateWatchlistBindings atomically assigns one strategy_id across a set of symbols in a single
+// set-based UPDATE (feature 170). Ownership is enforced via loadOwned (NotFound/PermissionDenied —
+// AC-5). The request symbols are normalized+deduped before the repo call so the repo's
+// returned-vs-requested count check is exact; an empty normalized set is rejected. Any symbol not in
+// the watchlist rolls back the whole batch → NotFound (zero partial writes — AC-4). strategy_id == ""
+// unbinds the whole set (AC-3). The response carries only the changed bindings + the list updated_at.
+func (s *PortfolioService) UpdateWatchlistBindings(ctx context.Context, req *portfoliov1.UpdateWatchlistBindingsRequest) (*portfoliov1.UpdateWatchlistBindingsResponse, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.loadOwned(ctx, userID, req.GetWatchlistId()); err != nil {
+		return nil, err
+	}
+	symbols := normalizeSymbols(req.GetSymbols())
+	if len(symbols) == 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("symbols required"))
+	}
+	// strategy_id == "" passes through as a valid bulk unbind (AC-3).
+	bindings, updatedAt, err := s.watchlists.UpdateBindings(ctx, req.GetWatchlistId(), symbols, strings.TrimSpace(req.GetStrategyId()))
+	if err != nil {
+		if errors.Is(err, repository.ErrBindingNotFound) {
+			return nil, connect.NewError(connect.CodeNotFound, errors.New("one or more symbols not in watchlist")) // AC-4
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+req.GetWatchlistId(), map[string]interface{}{
+		"user_id": userID, "watchlist_id": req.GetWatchlistId(),
+	})
+	return &portfoliov1.UpdateWatchlistBindingsResponse{
+		Bindings:  bindings,
+		UpdatedAt: timestamppb.New(updatedAt),
+	}, nil
+}
+
 // DeleteWatchlist hard-deletes a watchlist owned by the caller (FR-6).
 func (s *PortfolioService) DeleteWatchlist(ctx context.Context, req *portfoliov1.DeleteWatchlistRequest) (*portfoliov1.DeleteWatchlistResponse, error) {
 	userID, err := requireUserID(ctx)
@@ -1558,7 +1683,9 @@ func (s *PortfolioService) AddWatchlistSymbols(ctx context.Context, req *portfol
 	if err != nil {
 		return nil, err
 	}
-	add := requestBindings(req.GetBindings(), req.GetSymbols())
+	// Add-time default (feature 170): a bare/MANUAL add inherits the watchlist's persisted default
+	// (from the loadOwned row); SIGNAL-sourced adds are skipped inside applyDefaultStrategy.
+	add := requestBindings(req.GetBindings(), req.GetSymbols(), existing.GetDefaultStrategyId())
 	// Resulting count = union of current symbols + newly-added symbols (both normalized).
 	resulting := normalizeSymbols(append(append([]string{}, existing.Symbols...), bindingSymbols(add)...)) //nolint:staticcheck // SA1019: deprecated symbols mirror intentionally retained for old clients (feature 097)
 	if len(resulting) > s.maxSymbolsPerList() {
