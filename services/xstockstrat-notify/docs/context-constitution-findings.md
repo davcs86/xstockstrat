@@ -15,7 +15,6 @@ _None currently open_ — the 3 unwired config keys (`notify.stream.max_subscrib
 | Issue | Impact | Evidence |
 |---|---|---|
 | Severity filter type/runtime mismatch: `StreamSubscriber.severities: number[]` vs the runtime string enum under `stringEnums`; the only test covers the numeric path | A subscriber that sets a `severities` filter compares string-vs-string, but the `number[]` annotation invites a "fix" that breaks the filter; CI won't catch it | `notifyServiceImpl.ts:14,141,247`, `notifyServiceImpl.test.ts:295-303` |
-| **`WEBPUSH_HTTP_TIMEOUT_MS` is named/commented as an HTTP request timeout but is actually consumed as the Web Push message TTL** (2026-09-02): `webpush.sendNotification(..., { TTL: WEBPUSH_HTTP_TIMEOUT_MS / 1000 })` → TTL **10 seconds**. So (a) no real HTTP/send timeout is enforced despite the name, and (b) a 10-second push TTL means any device offline >10s never receives the notification — very likely not intended for OS alerts. | No send timeout; OS pushes silently expire after 10s of device-offline | `src/fanout/webPush.ts:25,139` — action: separate the two concerns (real send timeout vs. an intentional TTL) and pick a deliberate TTL; ask maintainer for intended value |
 
 ## Dead / orphaned code
 
@@ -27,7 +26,11 @@ _None currently open_ — the 3 unwired config keys (`notify.stream.max_subscrib
 ## Open questions (unresolved *why* — needs a maintainer)
 
 - Fan-out ignores `call.write()` backpressure (drops only on thrown exception, no `drain`) — is unbounded per-slow-subscriber server-side buffering acceptable, or should an over-buffered subscriber be dropped? `notifyServiceImpl.ts:90` — status: **open**
-- ⚠ An empty `targetUserId` broadcasts a Web Push to **EVERY subscription of EVERY user** (unfiltered `SELECT … FROM notify.push_subscriptions`) — consistent with `StreamAlerts` broadcast semantics, but for OS-level device notifications one untargeted alert pings all users' installed PWAs. Is cross-user push broadcast intended, or should untargeted alerts skip push? `src/fanout/webPush.ts:108-114` — status: **open**
+- ⚠ An empty `targetUserId` broadcasts a Web Push to **EVERY subscription of EVERY user** (unfiltered `SELECT … FROM notify.push_subscriptions`) — consistent with `StreamAlerts` broadcast semantics, but for OS-level device notifications one untargeted alert pings all users' installed PWAs. Is cross-user push broadcast intended, or should untargeted alerts skip push? `src/fanout/webPush.ts:117-121` (unfiltered branch; targeted branch `:110-116`) — status: **open**
+
+## Resolved
+
+- **RESOLVED 2026-09-03 — `WEBPUSH_HTTP_TIMEOUT_MS` was named as an HTTP timeout but consumed as the Web Push message TTL (10s), so any device offline > 10s silently missed OS alerts and no real send timeout was enforced (latent bug, 2026-09-02).** The mis-named constant is gone; current code splits it into `WEBPUSH_TTL_SECONDS = 3600` and `WEBPUSH_SEND_TIMEOUT_MS = 10000` (`src/fanout/webPush.ts:33-34`), passes both distinctly to `webpush.sendNotification({ TTL, timeout })` (`:148-151`), and adds a regression test asserting the deliberate 1h TTL + a real socket timeout (`src/__tests__/webPush.test.ts:200-224`). Both prongs — "no send timeout" and "10s TTL drops offline devices" — are fixed. Confirmed by re-resolving the citations against current code. The invariant is now captured as the TTL-vs-send-timeout scar in the constitution.
 
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

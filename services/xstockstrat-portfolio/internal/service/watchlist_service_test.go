@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
@@ -64,13 +65,60 @@ func setBindings(wl *portfoliov1.Watchlist, binds []*portfoliov1.WatchlistBindin
 	wl.Symbols = fakeSymbols(binds) //nolint:staticcheck // SA1019: deprecated symbols mirror intentionally retained for old clients (feature 097)
 }
 
-func (f *fakeWatchlistStore) Create(_ context.Context, userID, name, description string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error) {
+func (f *fakeWatchlistStore) Create(_ context.Context, userID, name, description, defaultStrategyID string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error) {
 	f.seq++
 	id := fmt.Sprintf("wl-%d", f.seq)
-	wl := &portfoliov1.Watchlist{WatchlistId: id, UserId: userID, Name: name, Description: description}
+	wl := &portfoliov1.Watchlist{WatchlistId: id, UserId: userID, Name: name, Description: description, DefaultStrategyId: defaultStrategyID}
 	setBindings(wl, append([]*portfoliov1.WatchlistBinding{}, bindings...))
 	f.byID[id] = wl
 	return clone(wl), nil
+}
+
+// UpdatePartial models the field-mask path (feature 170): only the flagged scalar columns are
+// written; bindings are left untouched.
+func (f *fakeWatchlistStore) UpdatePartial(_ context.Context, watchlistID string, patch repository.WatchlistPatch) (*portfoliov1.Watchlist, error) {
+	wl, ok := f.byID[watchlistID]
+	if !ok {
+		return nil, repository.ErrWatchlistNotFound
+	}
+	if patch.SetName {
+		wl.Name = patch.Name
+	}
+	if patch.SetDescription {
+		wl.Description = patch.Description
+	}
+	if patch.SetDefaultStrategy {
+		wl.DefaultStrategyId = patch.DefaultStrategyID
+	}
+	return clone(wl), nil
+}
+
+// UpdateBindings models the set-based UPDATE ... WHERE symbol = ANY RETURNING (feature 170):
+// all-or-nothing. `symbols` is pre-deduped by the service, so a matched count below len(symbols)
+// means some symbol is absent → ErrBindingNotFound with zero writes (no partial application).
+func (f *fakeWatchlistStore) UpdateBindings(_ context.Context, watchlistID string, symbols []string, strategyID string) ([]*portfoliov1.WatchlistBinding, time.Time, error) {
+	wl, ok := f.byID[watchlistID]
+	if !ok {
+		return nil, time.Time{}, repository.ErrWatchlistNotFound
+	}
+	idx := map[string]*portfoliov1.WatchlistBinding{}
+	for _, b := range wl.Bindings {
+		idx[b.GetSymbol()] = b
+	}
+	matched := make([]*portfoliov1.WatchlistBinding, 0, len(symbols))
+	for _, s := range symbols {
+		b, present := idx[s]
+		if !present {
+			return nil, time.Time{}, repository.ErrBindingNotFound // count mismatch → no partial writes
+		}
+		matched = append(matched, b)
+	}
+	out := make([]*portfoliov1.WatchlistBinding, 0, len(matched))
+	for _, b := range matched {
+		b.StrategyId = strategyID // single-column update; source untouched (models RETURNING source)
+		out = append(out, &portfoliov1.WatchlistBinding{Symbol: b.GetSymbol(), StrategyId: strategyID, Source: b.GetSource()})
+	}
+	return out, time.Now(), nil
 }
 
 func (f *fakeWatchlistStore) GetByID(_ context.Context, watchlistID string) (*portfoliov1.Watchlist, error) {
@@ -767,5 +815,410 @@ func TestUpdateWatchlistBinding_EmptyStrategyUnbinds(t *testing.T) {
 	}
 	if got := storeBinding(store, "wl-1", "MSFT").GetStrategyId(); got != "macd" {
 		t.Errorf("MSFT strategy_id = %q, want unchanged macd", got)
+	}
+}
+
+// ─── feature 170: add-time default strategy (Option B, MANUAL-only) ──────────
+
+// AC-10: CreateWatchlist stamps the create-request default onto initial bare symbols.
+func TestCreateWatchlist_DefaultAppliedToBareSymbols(t *testing.T) {
+	store := newFakeStore()
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	resp, err := svc.CreateWatchlist(ctxWithUser(t, "u-1"), &portfoliov1.CreateWatchlistRequest{
+		Name:              "Breakouts",
+		Symbols:           []string{"AAPL", "MSFT"},
+		DefaultStrategyId: "breakout",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if got := resp.GetWatchlist().GetDefaultStrategyId(); got != "breakout" {
+		t.Errorf("default_strategy_id = %q, want breakout", got)
+	}
+	for _, b := range resp.GetWatchlist().GetBindings() {
+		if b.GetStrategyId() != "breakout" {
+			t.Errorf("%s strategy_id = %q, want breakout (add-time default)", b.GetSymbol(), b.GetStrategyId())
+		}
+	}
+}
+
+// AC-8: an explicit per-symbol strategy in the create/add request overrides the default.
+func TestCreateWatchlist_ExplicitStrategyOverridesDefault(t *testing.T) {
+	store := newFakeStore()
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	resp, err := svc.CreateWatchlist(ctxWithUser(t, "u-1"), &portfoliov1.CreateWatchlistRequest{
+		Name:              "Mix",
+		DefaultStrategyId: "breakout",
+		Bindings: []*portfoliov1.WatchlistBinding{
+			{Symbol: "AMD", StrategyId: "swing"}, // explicit
+			{Symbol: "AAPL"},                     // bare → default
+		},
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	got := map[string]string{}
+	for _, b := range resp.GetWatchlist().GetBindings() {
+		got[b.GetSymbol()] = b.GetStrategyId()
+	}
+	if got["AMD"] != "swing" {
+		t.Errorf("AMD strategy_id = %q, want explicit swing", got["AMD"])
+	}
+	if got["AAPL"] != "breakout" {
+		t.Errorf("AAPL strategy_id = %q, want default breakout", got["AAPL"])
+	}
+}
+
+// AC-7: adding a bare symbol to a watchlist with a persisted default binds it at add time.
+func TestAddWatchlistSymbols_BareInheritsPersistedDefault(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, nil)
+	store.byID["wl-1"].DefaultStrategyId = "swing"
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	resp, err := svc.AddWatchlistSymbols(ctxWithUser(t, "u-1"), &portfoliov1.AddWatchlistSymbolsRequest{
+		WatchlistId: "wl-1", Symbols: []string{"AMD"},
+	})
+	if err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if got := storeBinding(store, "wl-1", "AMD").GetStrategyId(); got != "swing" {
+		t.Errorf("AMD strategy_id = %q, want persisted default swing", got)
+	}
+	_ = resp
+}
+
+// Option B: a SIGNAL-sourced bare add is NOT bound to the manual default (source preserved).
+func TestAddWatchlistSymbols_SignalSourceSkipsDefault(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", true, nil)
+	store.byID["wl-1"].DefaultStrategyId = "swing"
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	_, err := svc.AddWatchlistSymbols(ctxWithUser(t, "u-1"), &portfoliov1.AddWatchlistSymbolsRequest{
+		WatchlistId: "wl-1",
+		Bindings: []*portfoliov1.WatchlistBinding{
+			{Symbol: "NVDA", Source: portfoliov1.WatchlistEntrySource_WATCHLIST_ENTRY_SOURCE_SIGNAL},
+		},
+	})
+	if err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	b := storeBinding(store, "wl-1", "NVDA")
+	if b.GetStrategyId() != "" {
+		t.Errorf("NVDA strategy_id = %q, want \"\" (SIGNAL add skips manual default)", b.GetStrategyId())
+	}
+	if b.GetSource() != portfoliov1.WatchlistEntrySource_WATCHLIST_ENTRY_SOURCE_SIGNAL {
+		t.Errorf("NVDA source = %v, want SIGNAL (preserved)", b.GetSource())
+	}
+}
+
+// AC-9 (add path) + anti-rebind: re-adding an already-present bare symbol while a default is set
+// leaves the existing bare row untouched (repo ON CONFLICT DO NOTHING, modeled in the fake), while a
+// genuinely new bare symbol inherits the default. NOTE: the no-rebind guarantee is SQL-level
+// (insertBindingsTx ON CONFLICT (watchlist_id,symbol) DO NOTHING) and is only *modeled* here in
+// fakeWatchlistStore.AddSymbols — it is not exercised against a live DB (portfolio ships no repo
+// harness). A future change of that clause to DO UPDATE would not be caught by this test.
+func TestAddWatchlistSymbols_DefaultDoesNotRebindExisting(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, []*portfoliov1.WatchlistBinding{{Symbol: "AAPL"}}) // bare
+	store.byID["wl-1"].DefaultStrategyId = "swing"
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	_, err := svc.AddWatchlistSymbols(ctxWithUser(t, "u-1"), &portfoliov1.AddWatchlistSymbolsRequest{
+		WatchlistId: "wl-1", Symbols: []string{"AAPL", "MSFT"},
+	})
+	if err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if got := storeBinding(store, "wl-1", "AAPL").GetStrategyId(); got != "" {
+		t.Errorf("existing AAPL strategy_id = %q, want unchanged \"\" (no retroactive rebind)", got)
+	}
+	if got := storeBinding(store, "wl-1", "MSFT").GetStrategyId(); got != "swing" {
+		t.Errorf("new MSFT strategy_id = %q, want default swing", got)
+	}
+}
+
+// ─── feature 170: field-mask partial UpdateWatchlist ─────────────────────────
+
+// AC-6: a masked update sets default_strategy_id only; bindings + name untouched, and GetWatchlist
+// reads it back.
+func TestUpdateWatchlist_MaskDefault_Sets(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, []*portfoliov1.WatchlistBinding{{Symbol: "AAPL", StrategyId: "macd"}})
+	store.byID["wl-1"].Name = "Momentum"
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	_, err := svc.UpdateWatchlist(ctxWithUser(t, "u-1"), &portfoliov1.UpdateWatchlistRequest{
+		WatchlistId:       "wl-1",
+		DefaultStrategyId: "swing",
+		UpdateMask:        &fieldmaskpb.FieldMask{Paths: []string{"default_strategy_id"}},
+	})
+	if err != nil {
+		t.Fatalf("masked update: %v", err)
+	}
+	wl := store.byID["wl-1"]
+	if wl.GetDefaultStrategyId() != "swing" {
+		t.Errorf("default_strategy_id = %q, want swing", wl.GetDefaultStrategyId())
+	}
+	if wl.GetName() != "Momentum" {
+		t.Errorf("name = %q, want unchanged Momentum", wl.GetName())
+	}
+	if got := storeBinding(store, "wl-1", "AAPL").GetStrategyId(); got != "macd" {
+		t.Errorf("AAPL strategy_id = %q, want unchanged macd (bindings untouched by mask)", got)
+	}
+}
+
+// A masked default of "" clears the default.
+func TestUpdateWatchlist_MaskDefault_ClearsToEmpty(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, nil)
+	store.byID["wl-1"].DefaultStrategyId = "swing"
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	_, err := svc.UpdateWatchlist(ctxWithUser(t, "u-1"), &portfoliov1.UpdateWatchlistRequest{
+		WatchlistId: "wl-1",
+		UpdateMask:  &fieldmaskpb.FieldMask{Paths: []string{"default_strategy_id"}},
+	})
+	if err != nil {
+		t.Fatalf("masked clear: %v", err)
+	}
+	if got := store.byID["wl-1"].GetDefaultStrategyId(); got != "" {
+		t.Errorf("default_strategy_id = %q, want cleared \"\"", got)
+	}
+}
+
+// A name-only masked update leaves description, bindings, and the default untouched.
+func TestUpdateWatchlist_MaskNameOnly_LeavesOthersUntouched(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, []*portfoliov1.WatchlistBinding{{Symbol: "AAPL", StrategyId: "macd"}})
+	store.byID["wl-1"].Name, store.byID["wl-1"].Description = "Old", "keep"
+	store.byID["wl-1"].DefaultStrategyId = "swing"
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	_, err := svc.UpdateWatchlist(ctxWithUser(t, "u-1"), &portfoliov1.UpdateWatchlistRequest{
+		WatchlistId:       "wl-1",
+		Name:              "New",
+		Description:       "SHOULD-BE-IGNORED",
+		DefaultStrategyId: "SHOULD-BE-IGNORED",
+		UpdateMask:        &fieldmaskpb.FieldMask{Paths: []string{"name"}},
+	})
+	if err != nil {
+		t.Fatalf("masked name: %v", err)
+	}
+	wl := store.byID["wl-1"]
+	if wl.GetName() != "New" {
+		t.Errorf("name = %q, want New", wl.GetName())
+	}
+	if wl.GetDescription() != "keep" {
+		t.Errorf("description = %q, want unchanged keep", wl.GetDescription())
+	}
+	if wl.GetDefaultStrategyId() != "swing" {
+		t.Errorf("default_strategy_id = %q, want unchanged swing", wl.GetDefaultStrategyId())
+	}
+	if got := storeBinding(store, "wl-1", "AAPL").GetStrategyId(); got != "macd" {
+		t.Errorf("AAPL strategy_id = %q, want unchanged macd", got)
+	}
+}
+
+// An unknown mask path (incl. bindings/symbols) is rejected before any write.
+func TestUpdateWatchlist_MaskUnknownPath_InvalidArgument(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, []*portfoliov1.WatchlistBinding{{Symbol: "AAPL"}})
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	_, err := svc.UpdateWatchlist(ctxWithUser(t, "u-1"), &portfoliov1.UpdateWatchlistRequest{
+		WatchlistId: "wl-1",
+		UpdateMask:  &fieldmaskpb.FieldMask{Paths: []string{"bindings"}},
+	})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("code = %v, want InvalidArgument for unknown mask path", connect.CodeOf(err))
+	}
+}
+
+// An empty-but-present mask is rejected.
+func TestUpdateWatchlist_MaskEmptyPresent_InvalidArgument(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, nil)
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	_, err := svc.UpdateWatchlist(ctxWithUser(t, "u-1"), &portfoliov1.UpdateWatchlistRequest{
+		WatchlistId: "wl-1",
+		UpdateMask:  &fieldmaskpb.FieldMask{Paths: []string{}},
+	})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("code = %v, want InvalidArgument for empty mask", connect.CodeOf(err))
+	}
+}
+
+// A masked name of "" is rejected (the name-required guard fires only under the mask).
+func TestUpdateWatchlist_MaskNameEmpty_InvalidArgument(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, nil)
+	store.byID["wl-1"].Name = "Keep"
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	_, err := svc.UpdateWatchlist(ctxWithUser(t, "u-1"), &portfoliov1.UpdateWatchlistRequest{
+		WatchlistId: "wl-1",
+		Name:        "  ",
+		UpdateMask:  &fieldmaskpb.FieldMask{Paths: []string{"name"}},
+	})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("code = %v, want InvalidArgument for empty masked name", connect.CodeOf(err))
+	}
+}
+
+// AC-9: a no-mask update carrying default_strategy_id is rejected (no silent no-op).
+func TestUpdateWatchlist_NoMaskWithDefault_InvalidArgument(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, nil)
+	store.byID["wl-1"].Name = "Keep"
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	_, err := svc.UpdateWatchlist(ctxWithUser(t, "u-1"), &portfoliov1.UpdateWatchlistRequest{
+		WatchlistId:       "wl-1",
+		Name:              "Keep",
+		DefaultStrategyId: "swing",
+	})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("code = %v, want InvalidArgument (default requires update_mask)", connect.CodeOf(err))
+	}
+}
+
+// AC-9: a legacy no-mask replace-all update never writes default_strategy_id, so a name/binding edit
+// leaves a previously-set default untouched.
+func TestUpdateWatchlist_NoMask_LeavesDefaultUntouched(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, []*portfoliov1.WatchlistBinding{{Symbol: "AAPL"}})
+	store.byID["wl-1"].Name = "Old"
+	store.byID["wl-1"].DefaultStrategyId = "swing"
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	_, err := svc.UpdateWatchlist(ctxWithUser(t, "u-1"), &portfoliov1.UpdateWatchlistRequest{
+		WatchlistId: "wl-1",
+		Name:        "Renamed",
+		Symbols:     []string{"AAPL", "MSFT"},
+	})
+	if err != nil {
+		t.Fatalf("replace-all: %v", err)
+	}
+	if got := store.byID["wl-1"].GetDefaultStrategyId(); got != "swing" {
+		t.Errorf("default_strategy_id = %q, want unchanged swing (legacy path never writes it)", got)
+	}
+}
+
+// ─── feature 170: atomic bulk UpdateWatchlistBindings ────────────────────────
+
+// AC-2: bulk-assign one strategy across the selected symbols; others untouched.
+func TestUpdateWatchlistBindings_AssignsAcrossSelection(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, []*portfoliov1.WatchlistBinding{
+		{Symbol: "AAPL"}, {Symbol: "MSFT"}, {Symbol: "NVDA", StrategyId: "swing"},
+	})
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	resp, err := svc.UpdateWatchlistBindings(ctxWithUser(t, "u-1"), &portfoliov1.UpdateWatchlistBindingsRequest{
+		WatchlistId: "wl-1", Symbols: []string{"AAPL", "MSFT"}, StrategyId: "swing",
+	})
+	if err != nil {
+		t.Fatalf("bulk assign: %v", err)
+	}
+	if len(resp.GetBindings()) != 2 {
+		t.Errorf("changed bindings = %d, want 2", len(resp.GetBindings()))
+	}
+	for _, sym := range []string{"AAPL", "MSFT", "NVDA"} {
+		if got := storeBinding(store, "wl-1", sym).GetStrategyId(); got != "swing" {
+			t.Errorf("%s strategy_id = %q, want swing", sym, got)
+		}
+	}
+}
+
+// AC-3: an empty strategy_id bulk-unbinds the whole selection.
+func TestUpdateWatchlistBindings_EmptyStrategyUnbindsSet(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, []*portfoliov1.WatchlistBinding{
+		{Symbol: "AAPL", StrategyId: "swing"}, {Symbol: "MSFT", StrategyId: "swing"},
+	})
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	_, err := svc.UpdateWatchlistBindings(ctxWithUser(t, "u-1"), &portfoliov1.UpdateWatchlistBindingsRequest{
+		WatchlistId: "wl-1", Symbols: []string{"AAPL", "MSFT"}, StrategyId: "",
+	})
+	if err != nil {
+		t.Fatalf("bulk unbind: %v", err)
+	}
+	for _, sym := range []string{"AAPL", "MSFT"} {
+		if got := storeBinding(store, "wl-1", sym).GetStrategyId(); got != "" {
+			t.Errorf("%s strategy_id = %q, want \"\" (unbound)", sym, got)
+		}
+	}
+}
+
+// AC-4: an absent symbol rejects the whole batch (NOT_FOUND) with zero partial writes.
+func TestUpdateWatchlistBindings_AbsentSymbolNotFoundNoPartialWrite(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, []*portfoliov1.WatchlistBinding{
+		{Symbol: "AAPL"}, {Symbol: "MSFT"},
+	})
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	_, err := svc.UpdateWatchlistBindings(ctxWithUser(t, "u-1"), &portfoliov1.UpdateWatchlistBindingsRequest{
+		WatchlistId: "wl-1", Symbols: []string{"AAPL", "GOOG"}, StrategyId: "swing",
+	})
+	if connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("code = %v, want NotFound", connect.CodeOf(err))
+	}
+	if got := storeBinding(store, "wl-1", "AAPL").GetStrategyId(); got != "" {
+		t.Errorf("AAPL strategy_id = %q, want unchanged \"\" (no partial write)", got)
+	}
+}
+
+// AC-5: a non-owner cannot bulk-rebind another user's watchlist.
+func TestUpdateWatchlistBindings_NonOwnerDenied(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, []*portfoliov1.WatchlistBinding{{Symbol: "AAPL"}})
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	_, err := svc.UpdateWatchlistBindings(ctxWithUser(t, "u-2"), &portfoliov1.UpdateWatchlistBindingsRequest{
+		WatchlistId: "wl-1", Symbols: []string{"AAPL"}, StrategyId: "swing",
+	})
+	if code := connect.CodeOf(err); code != connect.CodePermissionDenied && code != connect.CodeNotFound {
+		t.Fatalf("code = %v, want PermissionDenied or NotFound", code)
+	}
+	if got := storeBinding(store, "wl-1", "AAPL").GetStrategyId(); got != "" {
+		t.Errorf("AAPL strategy_id = %q, want unchanged", got)
+	}
+}
+
+// A duplicate symbol in the request is deduped and does NOT falsely trip NOT_FOUND (Open Risk guard).
+func TestUpdateWatchlistBindings_DuplicateSymbolDoesNotTripNotFound(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, []*portfoliov1.WatchlistBinding{{Symbol: "AAPL"}})
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	_, err := svc.UpdateWatchlistBindings(ctxWithUser(t, "u-1"), &portfoliov1.UpdateWatchlistBindingsRequest{
+		WatchlistId: "wl-1", Symbols: []string{"AAPL", "aapl", " AAPL "}, StrategyId: "swing",
+	})
+	if err != nil {
+		t.Fatalf("dedup bulk assign: %v", err)
+	}
+	if got := storeBinding(store, "wl-1", "AAPL").GetStrategyId(); got != "swing" {
+		t.Errorf("AAPL strategy_id = %q, want swing", got)
+	}
+}
+
+// An empty (or all-blank) symbol set is rejected with InvalidArgument.
+func TestUpdateWatchlistBindings_EmptySet_InvalidArgument(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, []*portfoliov1.WatchlistBinding{{Symbol: "AAPL"}})
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+	_, err := svc.UpdateWatchlistBindings(ctxWithUser(t, "u-1"), &portfoliov1.UpdateWatchlistBindingsRequest{
+		WatchlistId: "wl-1", Symbols: []string{"", "  "}, StrategyId: "swing",
+	})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("code = %v, want InvalidArgument for empty symbol set", connect.CodeOf(err))
 	}
 }

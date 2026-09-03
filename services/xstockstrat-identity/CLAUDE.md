@@ -70,10 +70,6 @@ Namespace: `identity`
 
 > The JWT signing key's env-only sourcing (never config) is IDENTITY-1 in `docs/context-constitution.md`.
 
-## Webhooks
-
-_No webhooks. Call the gRPC RPCs on port 50058 directly._
-
 ## Environment Variables
 
 Source: hardcoded in docker-compose `environment:` unless noted. `APPLICATION_ENV` and `NODE_ENV` come from `.env.local` (committed). `DATABASE_URL` is constructed by docker-compose from `POSTGRES_PASSWORD` in `.env`. `JWT_SECRET` comes from `.env` (see `.env.example`).
@@ -81,7 +77,6 @@ Source: hardcoded in docker-compose `environment:` unless noted. `APPLICATION_EN
 ```text
 GRPC_PORT=50058
 CONFIG_ENDPOINT=xstockstrat-config:50060
-DATABASE_URL=postgres://xstockstrat:${POSTGRES_PASSWORD}@timescaledb:5432/xstockstrat?sslmode=disable  # constructed by docker-compose from POSTGRES_PASSWORD in .env
 JWT_SECRET=<secret>                    # .env — generate: openssl rand -hex 32
 APPLICATION_ENV=development            # .env.local
 TRADING_MODE=paper                     # paper | live

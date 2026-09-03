@@ -1076,16 +1076,21 @@ Create, update, or delete one of the caller's watchlists in `xstockstrat-portfol
 | `description` | string | no | List description. On `update`, omit to keep the current value |
 | `symbols` | string[] | no | Bare (unbound) ticker symbols |
 | `bindings` | dict[] | no | `{"symbol": <ticker>, "strategy_id": <id or "">}` objects; may combine with `symbols` |
+| `default_strategy_id` | string | no | Watchlist-level default strategy (feature 170). Stamped onto newly-added, otherwise-unbound `MANUAL` symbols at add time only (no retroactive rebind, no read-time fallback); `""` clears it |
 
 - **create** — makes a new caller-owned list from `name` (+ optional `description`/`symbols`/
-  `bindings`); new entries are recorded as `MANUAL` (user-curated).
-- **update — READ-MODIFY-WRITE MERGE.** The backend `UpdateWatchlist` is replace-all (it clears then
-  re-inserts the list's stocks) and requires a name, so this tool fetches the current list first and
-  **preserves every field you do not pass**: an omitted `name`/`description` keeps the stored value,
-  and omitting **both** `symbols` and `bindings` preserves the existing stocks exactly — so an
-  `update` with only a new `name` renames the list **without** clearing its stocks. Passing `symbols`
-  and/or `bindings` **replaces** the whole stock set with those `MANUAL` entries. Use
-  `manage_watchlist_symbols` to add/remove individual stocks without a full replace. (The
+  `bindings`/`default_strategy_id`); new entries are recorded as `MANUAL` (user-curated), and a
+  `default_strategy_id` binds the initial bare symbols.
+- **update — two modes.** Passing `default_strategy_id` does a **partial field-mask write** of the
+  scalar fields only (`default_strategy_id`, plus `name`/`description` when supplied) — bindings are
+  left untouched, and it **cannot** also replace `symbols`/`bindings` in the same call (rejected).
+  Otherwise `update` is a **READ-MODIFY-WRITE MERGE**: the backend `UpdateWatchlist` is replace-all
+  (it clears then re-inserts the list's stocks) and requires a name, so this tool fetches the current
+  list first and **preserves every field you do not pass** — an omitted `name`/`description` keeps the
+  stored value, and omitting **both** `symbols` and `bindings` preserves the existing stocks exactly,
+  so an `update` with only a new `name` renames the list **without** clearing its stocks. Passing
+  `symbols` and/or `bindings` **replaces** the whole stock set with those `MANUAL` entries. Use
+  `manage_watchlist_symbols` to add/remove/assign individual stocks without a full replace. (The
   read-then-write is **not atomic** — a concurrent add between the two steps could be lost.)
 - **delete** — removes the list. The one per-user **system-managed** signals watchlist is
   delete-protected and its deletion is refused (`FAILED_PRECONDITION`).
@@ -1102,27 +1107,34 @@ a name`/`a watchlist_id`; `watchlist not found`; `permission denied` (non-owner)
 
 ### `manage_watchlist_symbols`
 
-Add or remove stocks on one of the caller's watchlists in `xstockstrat-portfolio`. Wraps
-`AddWatchlistSymbols` / `RemoveWatchlistSymbols`. Ownership-gated on the caller's `x-user-id`.
+Add, remove, or bulk-assign a strategy to stocks on one of the caller's watchlists in
+`xstockstrat-portfolio`. Wraps `AddWatchlistSymbols` / `RemoveWatchlistSymbols` /
+`UpdateWatchlistBindings`. Ownership-gated on the caller's `x-user-id`.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `operation` | string | yes | `add` \| `remove` |
+| `operation` | string | yes | `add` \| `remove` \| `assign` |
 | `watchlist_id` | string | yes | The list to mutate |
-| `symbols` | string[] | no | For `add`: unbound tickers to add. For `remove`: tickers to drop |
+| `symbols` | string[] | no | For `add`: unbound tickers to add. For `remove`: tickers to drop. For `assign`: tickers to rebind (must already be on the list) |
 | `bindings` | dict[] | `add` only | `{"symbol": <ticker>, "strategy_id": <id or "">}` objects to add; may combine with `symbols` |
+| `strategy_id` | string | `assign` only | Strategy to apply across all `symbols`; `""` unbinds them |
 
 - **add** — unions the given symbols/bindings into the list (an already-present symbol keeps its
   stored binding — first-writer-wins) and records new entries as `MANUAL`, distinct from the `SIGNAL`
   entries `ingest_signal` (`direction='watchlist'`) adds. The per-list symbol cap is enforced by the
   backend.
 - **remove** — drops the given `symbols`; symbols not on the list are ignored.
+- **assign** (feature 170) — **atomically** sets `strategy_id` on every listed symbol in one
+  transaction: all-or-nothing, so if any symbol is not on the list the whole call is rejected
+  `NOT_FOUND` with **no partial write**; `""` unbinds the whole selection.
 
 Returns `{"watchlist": <watchlist>}` — the updated list.
 
-**Errors:** `unknown operation '<op>' (expected add/remove)`; `manage_watchlist_symbols requires a
-watchlist_id`; `watchlist not found`; `permission denied` (non-owner); `invalid argument` (per-list
-cap exceeded); `RuntimeError` → no verified caller claims.
+**Errors:** `unknown operation '<op>' (expected add/remove/assign)`;
+`manage_watchlist_symbols requires a watchlist_id`; `manage_watchlist_symbols(operation='assign')
+requires symbols`; `watchlist not found` (incl. an `assign` symbol absent from the list);
+`permission denied` (non-owner); `invalid argument` (per-list cap exceeded); `RuntimeError` → no
+verified caller claims.
 
 ---
 

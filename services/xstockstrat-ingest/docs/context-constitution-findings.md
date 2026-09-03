@@ -24,12 +24,15 @@ also recorded at the root.
 
 | Issue | Impact | Evidence |
 |---|---|---|
-| **The two `ingest.mcp_client.*` config keys are read WITHOUT the `ingest.` prefix, so they never take effect** (2026-09-02): the loop calls `get_int("mcp_client.poll_interval_seconds", …)` / `get_int("mcp_client.request_timeout_seconds", …)` (`mcp_client_loop.py:133,160`) — missing the `ingest.` prefix every other consumed key uses (`watcher.py:170,178,183,196`). `get_int` does a raw `snapshot.values.get(key)` with no prefixing (`watcher.py:109-115`), so both keys always miss and the loop silently uses the hardcoded 300s/30s defaults. Also makes CLAUDE.md's "Clamped to ≥1 at read"/config-tunable claim a doc-lie, and leaves seed keys `025_ingest_mcp_client_keys` with zero effective readers. | The two feature-166 tuning knobs are silently inert; operators can't change the poll cadence / timeout | `app/engine/mcp_client_loop.py:133,160` vs `app/config/watcher.py:109-115,170` — fix: prefix both reads with `ingest.` (or add watcher properties mirroring the backfill helpers) |
 | **`ConfigWatcher` carries indicators identity** (worse 2026-09-02): module docstring still "Config watcher for xstockstrat-**indicators**" (`watcher.py:2`) and `client_id=f"indicators-{id(self)}"` (`:75`); the file also still carries dead indicators-only helpers `sandbox_timeout_ms`/`sandbox_memory_bytes`/`sandbox_allowed_imports` (`watcher.py:152-165`) that no ingest code calls | ingest registers with the config service under an "indicators-…" client id (copy-paste) + dead helpers | `app/config/watcher.py:2,75,152-165` |
 
 ## Open questions (unresolved *why* — needs a maintainer)
 
 - The `mcp_client` loop drives `_ingest_external_signal` with **no `propagation_meta`** (`mcp_client_loop.py:124`), so loop-emitted `ingest.signal.ingested` ledger events carry empty `x-user-id`/`x-trace-id` (`servicer.py:915`). Likely intentional (server-initiated, no inbound request) — confirm whether ledger/analysis expect a trace id on these rows. — status: **open**
+
+## Resolved
+
+- **RESOLVED 2026-09-03 — the two `ingest.mcp_client.*` config keys were read without the `ingest.` prefix (latent bug, 2026-09-02).** Both reads now carry the full prefix: `app/engine/mcp_client_loop.py:134` (`"ingest.mcp_client.request_timeout_seconds"`) and `:163` (`"ingest.mcp_client.poll_interval_seconds"`), guarded by a regression test `tests/test_mcp_client_loop.py:109-124` ("defect 2026-09-03"). This also un-lies the CLAUDE.md "clamped ≥1 / config-tunable" claim and gives seed migration `025_ingest_mcp_client_keys` effective readers. Confirmed by re-resolving both citations against current code (they now include the prefix) plus the new test. The generalized rule now lives as INGEST-9 in the constitution.
 
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

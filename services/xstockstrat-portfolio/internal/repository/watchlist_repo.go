@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -36,7 +37,8 @@ func NewWatchlistRepo(pool *pgxpool.Pool) *WatchlistRepo {
 }
 
 // Create inserts a new watchlist plus its (already normalized) bindings in one tx.
-func (r *WatchlistRepo) Create(ctx context.Context, userID, name, description string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error) {
+// defaultStrategyID persists the watchlist-level default (feature 170); "" = none.
+func (r *WatchlistRepo) Create(ctx context.Context, userID, name, description, defaultStrategyID string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin: %w", err)
@@ -45,9 +47,9 @@ func (r *WatchlistRepo) Create(ctx context.Context, userID, name, description st
 
 	var id string
 	err = tx.QueryRow(ctx,
-		`INSERT INTO portfolio.watchlists (user_id, name, description)
-		 VALUES ($1, $2, $3) RETURNING watchlist_id`,
-		userID, name, description).Scan(&id)
+		`INSERT INTO portfolio.watchlists (user_id, name, description, default_strategy_id)
+		 VALUES ($1, $2, $3, $4) RETURNING watchlist_id`,
+		userID, name, description, defaultStrategyID).Scan(&id)
 	if err != nil {
 		return nil, fmt.Errorf("insert watchlist: %w", err)
 	}
@@ -89,7 +91,7 @@ func (r *WatchlistRepo) EnsureSystemManaged(ctx context.Context, userID, default
 // GetByID returns a single watchlist with its symbols, or ErrWatchlistNotFound.
 func (r *WatchlistRepo) GetByID(ctx context.Context, watchlistID string) (*portfoliov1.Watchlist, error) {
 	wl, err := scanWatchlist(r.pool.QueryRow(ctx,
-		`SELECT watchlist_id, user_id, name, description, created_at, updated_at, system_managed
+		`SELECT watchlist_id, user_id, name, description, created_at, updated_at, system_managed, default_strategy_id
 		 FROM portfolio.watchlists WHERE watchlist_id = $1`, watchlistID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -112,7 +114,7 @@ func (r *WatchlistRepo) ListByUser(ctx context.Context, userID string, pageSize 
 		pageSize = 100
 	}
 	rows, err := r.pool.Query(ctx,
-		`SELECT watchlist_id, user_id, name, description, created_at, updated_at, system_managed
+		`SELECT watchlist_id, user_id, name, description, created_at, updated_at, system_managed, default_strategy_id
 		 FROM portfolio.watchlists
 		 WHERE user_id = $1 AND ($2 = '' OR watchlist_id > $2::uuid)
 		 ORDER BY watchlist_id ASC LIMIT $3`,
@@ -178,6 +180,53 @@ func (r *WatchlistRepo) Update(ctx context.Context, watchlistID, name, descripti
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit: %w", err)
+	}
+	return r.GetByID(ctx, watchlistID)
+}
+
+// WatchlistPatch carries the optional scalar fields of a masked partial update (feature 170).
+// Each Set* flag says whether the paired value is written; unflagged columns are left untouched.
+// Bindings are never part of a partial update (the mask allowlist is scalar-only).
+type WatchlistPatch struct {
+	SetName            bool
+	Name               string
+	SetDescription     bool
+	Description        string
+	SetDefaultStrategy bool
+	DefaultStrategyID  string
+}
+
+// UpdatePartial writes only the flagged scalar columns of a watchlist plus updated_at, in one
+// statement (feature 170). Column identifiers come from this fixed allowlist — never interpolated
+// from caller input — and every value is a bound $N parameter, so the dynamic SET is injection-safe.
+// Callers must set at least one flag (the servicer rejects an empty mask before reaching here).
+func (r *WatchlistRepo) UpdatePartial(ctx context.Context, watchlistID string, patch WatchlistPatch) (*portfoliov1.Watchlist, error) {
+	setClauses := []string{"updated_at = now()"}
+	args := []any{watchlistID}
+	if patch.SetName {
+		args = append(args, patch.Name)
+		setClauses = append(setClauses, fmt.Sprintf("name = $%d", len(args)))
+	}
+	if patch.SetDescription {
+		args = append(args, patch.Description)
+		setClauses = append(setClauses, fmt.Sprintf("description = $%d", len(args)))
+	}
+	if patch.SetDefaultStrategy {
+		args = append(args, patch.DefaultStrategyID)
+		setClauses = append(setClauses, fmt.Sprintf("default_strategy_id = $%d", len(args)))
+	}
+	if len(setClauses) == 1 { // only updated_at — no real masked column
+		return nil, fmt.Errorf("update partial: empty patch")
+	}
+	query := fmt.Sprintf(
+		`UPDATE portfolio.watchlists SET %s WHERE watchlist_id = $1`,
+		strings.Join(setClauses, ", "))
+	ct, err := r.pool.Exec(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("update partial: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return nil, ErrWatchlistNotFound
 	}
 	return r.GetByID(ctx, watchlistID)
 }
@@ -278,6 +327,62 @@ func (r *WatchlistRepo) UpdateBinding(ctx context.Context, watchlistID, symbol, 
 		StrategyId: strat,
 		Source:     portfoliov1.WatchlistEntrySource(source),
 	}, updatedAt, nil
+}
+
+// UpdateBindings atomically rebinds a set of symbols to one strategy_id in a single set-based
+// UPDATE (feature 170). It writes ONLY strategy_id; RETURNING reads the untouched source back per
+// row. `symbols` MUST be pre-normalized and deduped by the caller. If the number of RETURNING rows
+// does not equal len(symbols) — i.e. some requested symbol is not in the watchlist — the whole tx is
+// rolled back (zero partial writes) and ErrBindingNotFound is returned. On success it bumps the
+// parent watchlists.updated_at once and returns the changed bindings plus that list-level timestamp.
+func (r *WatchlistRepo) UpdateBindings(ctx context.Context, watchlistID string, symbols []string, strategyID string) ([]*portfoliov1.WatchlistBinding, time.Time, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, time.Time{}, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	rows, err := tx.Query(ctx,
+		`UPDATE portfolio.watchlist_symbols SET strategy_id = $3
+		 WHERE watchlist_id = $1 AND symbol = ANY($2)
+		 RETURNING symbol, strategy_id, source`,
+		watchlistID, symbols, strategyID)
+	if err != nil {
+		return nil, time.Time{}, fmt.Errorf("update bindings: %w", err)
+	}
+	var binds []*portfoliov1.WatchlistBinding
+	for rows.Next() {
+		var (
+			sym, strat string
+			source     int16
+		)
+		if err := rows.Scan(&sym, &strat, &source); err != nil {
+			rows.Close()
+			return nil, time.Time{}, fmt.Errorf("scan binding: %w", err)
+		}
+		binds = append(binds, &portfoliov1.WatchlistBinding{
+			Symbol:     sym,
+			StrategyId: strat,
+			Source:     portfoliov1.WatchlistEntrySource(source),
+		})
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, time.Time{}, fmt.Errorf("update bindings rows: %w", err)
+	}
+	// A requested symbol that is not in the watchlist yields fewer RETURNING rows than requested —
+	// reject the whole batch (no partial writes), mirroring the single-row NOT_FOUND semantics.
+	if len(binds) != len(symbols) {
+		return nil, time.Time{}, ErrBindingNotFound
+	}
+	updatedAt, err := touchWatchlistTx(ctx, tx, watchlistID)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, time.Time{}, fmt.Errorf("commit: %w", err)
+	}
+	return binds, updatedAt, nil
 }
 
 // CountByUser returns how many watchlists a user owns (for the per-user cap).
@@ -382,17 +487,19 @@ func scanWatchlist(row pgxRow) (*portfoliov1.Watchlist, error) {
 		id, userID, name, description string
 		createdAt, updatedAt          time.Time
 		systemManaged                 bool
+		defaultStrategyID             string
 	)
-	if err := row.Scan(&id, &userID, &name, &description, &createdAt, &updatedAt, &systemManaged); err != nil {
+	if err := row.Scan(&id, &userID, &name, &description, &createdAt, &updatedAt, &systemManaged, &defaultStrategyID); err != nil {
 		return nil, err
 	}
 	return &portfoliov1.Watchlist{
-		WatchlistId:   id,
-		UserId:        userID,
-		Name:          name,
-		Description:   description,
-		CreatedAt:     timestamppb.New(createdAt),
-		UpdatedAt:     timestamppb.New(updatedAt),
-		SystemManaged: systemManaged,
+		WatchlistId:       id,
+		UserId:            userID,
+		Name:              name,
+		Description:       description,
+		CreatedAt:         timestamppb.New(createdAt),
+		UpdatedAt:         timestamppb.New(updatedAt),
+		SystemManaged:     systemManaged,
+		DefaultStrategyId: defaultStrategyID,
 	}, nil
 }

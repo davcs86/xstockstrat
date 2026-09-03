@@ -1,5 +1,5 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import type { FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
 import type { PageRequest, PageResponse, TimeRange, TradingMode } from "../../common/v1/common_pb";
 import type { Message } from "@bufbuild/protobuf";
 /**
@@ -580,6 +580,13 @@ export type Watchlist = Message<"xstockstrat.portfolio.v1.Watchlist"> & {
      * @generated from field: bool system_managed = 9;
      */
     systemManaged: boolean;
+    /**
+     * Watchlist-level default strategy (feature 170): stamped onto newly-added, otherwise-unbound
+     * MANUAL symbols at add time only — no retroactive rebind, no read-time fallback. "" = none.
+     *
+     * @generated from field: string default_strategy_id = 10;
+     */
+    defaultStrategyId: string;
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.Watchlist.
@@ -611,6 +618,13 @@ export type CreateWatchlistRequest = Message<"xstockstrat.portfolio.v1.CreateWat
      * @generated from field: repeated xstockstrat.portfolio.v1.WatchlistBinding bindings = 4;
      */
     bindings: WatchlistBinding[];
+    /**
+     * Watchlist-level default strategy (feature 170) applied to initial bare/MANUAL symbols at
+     * creation. "" = none.
+     *
+     * @generated from field: string default_strategy_id = 5;
+     */
+    defaultStrategyId: string;
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.CreateWatchlistRequest.
@@ -692,7 +706,9 @@ export type ListWatchlistsResponse = Message<"xstockstrat.portfolio.v1.ListWatch
  */
 export declare const ListWatchlistsResponseSchema: GenMessage<ListWatchlistsResponse>;
 /**
- * Replace semantics for name/description/symbols per FR-1.
+ * Replace semantics for name/description/symbols per FR-1 when `update_mask` is UNSET. When
+ * `update_mask` IS set (feature 170), this is a PARTIAL update: only masked paths of
+ * {name, description, default_strategy_id} are written; bindings are left untouched.
  *
  * @generated from message xstockstrat.portfolio.v1.UpdateWatchlistRequest
  */
@@ -719,6 +735,20 @@ export type UpdateWatchlistRequest = Message<"xstockstrat.portfolio.v1.UpdateWat
      * @generated from field: repeated xstockstrat.portfolio.v1.WatchlistBinding bindings = 5;
      */
     bindings: WatchlistBinding[];
+    /**
+     * Watchlist-level default strategy (feature 170). Only written on the masked path (requires
+     * `update_mask` to name "default_strategy_id"); a no-mask request carrying this → InvalidArgument.
+     *
+     * @generated from field: string default_strategy_id = 6;
+     */
+    defaultStrategyId: string;
+    /**
+     * Partial-update mask (feature 170). Unset/absent = legacy replace-all of name/description/bindings.
+     * Present = write only the masked paths; allowed paths: {name, description, default_strategy_id}.
+     *
+     * @generated from field: google.protobuf.FieldMask update_mask = 7;
+     */
+    updateMask?: FieldMask | undefined;
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.UpdateWatchlistRequest.
@@ -932,6 +962,56 @@ export type UpdateWatchlistBindingResponse = Message<"xstockstrat.portfolio.v1.U
  * Use `create(UpdateWatchlistBindingResponseSchema)` to create a new message.
  */
 export declare const UpdateWatchlistBindingResponseSchema: GenMessage<UpdateWatchlistBindingResponse>;
+/**
+ * user_id intentionally absent — ownership from the x-user-id header (feature 170).
+ *
+ * @generated from message xstockstrat.portfolio.v1.UpdateWatchlistBindingsRequest
+ */
+export type UpdateWatchlistBindingsRequest = Message<"xstockstrat.portfolio.v1.UpdateWatchlistBindingsRequest"> & {
+    /**
+     * @generated from field: string watchlist_id = 1;
+     */
+    watchlistId: string;
+    /**
+     * deduped/normalized server-side; empty → InvalidArgument
+     *
+     * @generated from field: repeated string symbols = 2;
+     */
+    symbols: string[];
+    /**
+     * "" = unbind the whole set (matches WatchlistBinding.strategy_id)
+     *
+     * @generated from field: string strategy_id = 3;
+     */
+    strategyId: string;
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.UpdateWatchlistBindingsRequest.
+ * Use `create(UpdateWatchlistBindingsRequestSchema)` to create a new message.
+ */
+export declare const UpdateWatchlistBindingsRequestSchema: GenMessage<UpdateWatchlistBindingsRequest>;
+/**
+ * @generated from message xstockstrat.portfolio.v1.UpdateWatchlistBindingsResponse
+ */
+export type UpdateWatchlistBindingsResponse = Message<"xstockstrat.portfolio.v1.UpdateWatchlistBindingsResponse"> & {
+    /**
+     * changed rows only (symbol/strategy_id/source)
+     *
+     * @generated from field: repeated xstockstrat.portfolio.v1.WatchlistBinding bindings = 1;
+     */
+    bindings: WatchlistBinding[];
+    /**
+     * list-level watchlists.updated_at, bumped in-tx
+     *
+     * @generated from field: google.protobuf.Timestamp updated_at = 2;
+     */
+    updatedAt?: Timestamp | undefined;
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.UpdateWatchlistBindingsResponse.
+ * Use `create(UpdateWatchlistBindingsResponseSchema)` to create a new message.
+ */
+export declare const UpdateWatchlistBindingsResponseSchema: GenMessage<UpdateWatchlistBindingsResponse>;
 /**
  * A risk cue surfaced on the Exposure surface (feature 083). Closed set → enum (C-04).
  *
@@ -1203,5 +1283,17 @@ export declare const PortfolioService: GenService<{
         methodKind: "unary";
         input: typeof UpdateWatchlistBindingRequestSchema;
         output: typeof UpdateWatchlistBindingResponseSchema;
+    };
+    /**
+     * Atomic set-based rebind (feature 170): assign ONE strategy_id across a symbol set in a single
+     * UPDATE ... WHERE symbol = ANY(...). All-or-nothing — an absent symbol → NOT_FOUND with zero
+     * partial writes. Ownership from the x-user-id header; empty strategy_id unbinds the whole set.
+     *
+     * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlistBindings
+     */
+    updateWatchlistBindings: {
+        methodKind: "unary";
+        input: typeof UpdateWatchlistBindingsRequestSchema;
+        output: typeof UpdateWatchlistBindingsResponseSchema;
     };
 }>;

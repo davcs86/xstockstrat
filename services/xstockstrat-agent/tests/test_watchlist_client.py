@@ -273,3 +273,114 @@ async def test_remove_symbols_sends_symbol_list():
     sent = mock_stub.RemoveWatchlistSymbols.call_args.args[0]
     assert sent.watchlist_id == "wl-momentum"
     assert list(sent.symbols) == ["AAPL"]
+
+
+# ── feature 170: default strategy (create) + field-mask update + bulk assign ──
+
+
+@pytest.mark.asyncio
+async def test_create_forwards_default_strategy_id():
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+
+    mock_stub = MagicMock()
+    mock_stub.CreateWatchlist = AsyncMock(
+        return_value=portfolio_pb2.CreateWatchlistResponse(
+            watchlist=portfolio_pb2.Watchlist(watchlist_id="wl-1", default_strategy_id="swing")
+        )
+    )
+    grpc_patch, stub_patch = _patch_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with stub_patch:
+            out = await client.create_watchlist(
+                "user-42", name="Breakouts", symbols=["AAPL"], default_strategy_id="swing"
+            )
+    sent = mock_stub.CreateWatchlist.call_args.args[0]
+    assert sent.default_strategy_id == "swing"
+    assert out["watchlist"]["default_strategy_id"] == "swing"
+
+
+@pytest.mark.asyncio
+async def test_update_with_default_is_masked_scalar_write_no_rmw():
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+
+    mock_stub = MagicMock()
+    mock_stub.GetWatchlist = AsyncMock()  # must NOT be called on the masked path
+    mock_stub.UpdateWatchlist = AsyncMock(
+        return_value=portfolio_pb2.UpdateWatchlistResponse(
+            watchlist=portfolio_pb2.Watchlist(watchlist_id="wl-1", default_strategy_id="swing")
+        )
+    )
+    grpc_patch, stub_patch = _patch_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with stub_patch:
+            await client.update_watchlist("user-42", "wl-1", default_strategy_id="swing")
+
+    mock_stub.GetWatchlist.assert_not_called()  # no read-modify-write on the masked path
+    sent = mock_stub.UpdateWatchlist.call_args.args[0]
+    assert sent.default_strategy_id == "swing"
+    assert list(sent.update_mask.paths) == ["default_strategy_id"]
+    assert len(sent.bindings) == 0  # bindings untouched by a masked write
+
+
+@pytest.mark.asyncio
+async def test_update_with_default_and_name_masks_both():
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+
+    mock_stub = MagicMock()
+    mock_stub.UpdateWatchlist = AsyncMock(
+        return_value=portfolio_pb2.UpdateWatchlistResponse(watchlist=portfolio_pb2.Watchlist())
+    )
+    grpc_patch, stub_patch = _patch_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with stub_patch:
+            await client.update_watchlist(
+                "user-42", "wl-1", name="New", default_strategy_id="swing"
+            )
+    sent = mock_stub.UpdateWatchlist.call_args.args[0]
+    assert set(sent.update_mask.paths) == {"default_strategy_id", "name"}
+    assert sent.name == "New"
+
+
+@pytest.mark.asyncio
+async def test_update_with_default_and_bindings_is_rejected():
+    with pytest.raises(ValueError, match="separate call"):
+        await client.update_watchlist(
+            "user-42", "wl-1", default_strategy_id="swing", symbols=["AAPL"]
+        )
+
+
+@pytest.mark.asyncio
+async def test_update_watchlist_bindings_assigns_then_rereads():
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+
+    updated = portfolio_pb2.Watchlist(
+        watchlist_id="wl-1",
+        bindings=[
+            portfolio_pb2.WatchlistBinding(symbol="AAPL", strategy_id="swing"),
+            portfolio_pb2.WatchlistBinding(symbol="MSFT", strategy_id="swing"),
+        ],
+    )
+    mock_stub = MagicMock()
+    mock_stub.UpdateWatchlistBindings = AsyncMock(
+        return_value=portfolio_pb2.UpdateWatchlistBindingsResponse(bindings=updated.bindings)
+    )
+    mock_stub.GetWatchlist = AsyncMock(
+        return_value=portfolio_pb2.GetWatchlistResponse(watchlist=updated)
+    )
+    grpc_patch, stub_patch = _patch_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        with stub_patch:
+            out = await client.update_watchlist_bindings(
+                "user-42", "wl-1", symbols=["AAPL", "MSFT"], strategy_id="swing"
+            )
+    sent = mock_stub.UpdateWatchlistBindings.call_args.args[0]
+    assert list(sent.symbols) == ["AAPL", "MSFT"]
+    assert sent.strategy_id == "swing"
+    meta = mock_stub.UpdateWatchlistBindings.call_args.kwargs["metadata"]
+    assert ("x-user-id", "user-42") in meta
+    # returns the full re-read watchlist (as get_watchlist), not just the changed rows
+    assert {b["symbol"] for b in out["watchlist"]["bindings"]} == {"AAPL", "MSFT"}

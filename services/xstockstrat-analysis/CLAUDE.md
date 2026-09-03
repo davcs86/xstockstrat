@@ -370,7 +370,6 @@ PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052   # feature 062 — fundamentals 
 TRADING_ENDPOINT=xstockstrat-trading:50051       # feature 083 — GetStrategyAnalytics ListOrders "taken" count
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
-DATABASE_URL=postgres://xstockstrat:${POSTGRES_PASSWORD}@timescaledb:5432/xstockstrat?sslmode=disable  # constructed by docker-compose from POSTGRES_PASSWORD in .env
 APPLICATION_ENV=development         # development | production
 TRADING_MODE=paper                     # paper | live
 ```
