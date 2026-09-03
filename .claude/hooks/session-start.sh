@@ -52,10 +52,14 @@ _SETTINGS="${CLAUDE_PROJECT_DIR:-$(git -C "$(dirname "$0")" rev-parse --show-top
 # Resolve a runnable `claude` binary without depending on PATH (see note above).
 _claude=""
 for _cand in "${CLAUDE_CODE_EXECPATH:-}" "$(command -v claude 2>/dev/null || true)" \
-             /opt/claude-code/bin/claude /opt/node22/bin/claude; do
-  if [ -n "$_cand" ] && [ -x "$_cand" ]; then _claude="$_cand"; break; fi
+  /opt/claude-code/bin/claude /opt/node22/bin/claude; do
+  if [ -n "$_cand" ] && [ -x "$_cand" ]; then
+    _claude="$_cand"
+    break
+  fi
 done
-_jq="$(command -v jq 2>/dev/null || true)"; [ -x "$_jq" ] || _jq="/usr/bin/jq"
+_jq="$(command -v jq 2>/dev/null || true)"
+[ -x "$_jq" ] || _jq="/usr/bin/jq"
 
 if [ -n "$_claude" ] && [ -x "$_jq" ] && [ -f "$_SETTINGS" ]; then
   _known_marketplaces="$("$_claude" plugin marketplace list 2>/dev/null || true)"
