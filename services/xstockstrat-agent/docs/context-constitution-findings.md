@@ -28,7 +28,7 @@ _None currently open_ — ~~CLAUDE.md "Config Keys Consumed" lists only `agent.o
 
 ## Open questions (unresolved *why* — needs a maintainer)
 
-- `snapshot_offline_positions` sets **both** a request-body `user_id` (`app/client.py:1839`) **and** the `x-user-id` header (`:1850`), while the CLAUDE.md caller-identity contract does not list snapshot among the body-`user_id` builders. Is the body `user_id` on `SnapshotOfflinePositionsRequest` a deliberate target selector, or leftover caller-identity duplication to drop (like the feature-164/133 builders)? — status: **open**
+- `snapshot_offline_positions` sets **both** a request-body `user_id` (`app/client.py:1899`) **and** the `x-user-id` header (`:1910`), while the CLAUDE.md caller-identity contract does not list snapshot among the body-`user_id` builders. Is the body `user_id` on `SnapshotOfflinePositionsRequest` a deliberate target selector, or leftover caller-identity duplication to drop (like the feature-164/133 builders)? — status: **open**
 - `manage_signal_source` bearer-token orchestration writes the encrypted secret **before** registering the source, with **no compensating cleanup** on a failed register (`app/tools.py:976-991`, "leaves only a harmless redacted orphan secret"). Confirm the orphan-secret-on-partial-failure is an accepted trade-off, not a reconciliation gap. — status: **open**
 
 ## MCP tool ↔ backend alignment audit (2026-08-01) — 13/13 resolved
