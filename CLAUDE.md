@@ -2,7 +2,7 @@
 ## How to Act
 
 Read this first — it governs *how* you work here; everything below is the *what* you work with.
-These four behaviors are the operating defaults; the rest of this file (and the constitution) is
+These five behaviors are the operating defaults; the rest of this file (and the constitution) is
 context you load per task.
 
 1. **Don't assume — ask, and surface tradeoffs.** On ambiguity, a missing detail, or a design fork,
@@ -16,6 +16,12 @@ context you load per task.
 4. **Define success up front, then loop until verified.** State the pass condition before you start,
    then run to it — write the check, run it, fix, re-run — and don't declare victory mid-loop.
    *(Enforced by the best-effort/verify norms **PLAT-N1** and the migration/proto CI gates.)*
+5. **Comments state constraints, not mechanism or history — cap 2 lines.** A comment earns its place
+   only if deleting it would silently break something (a caller's unstated assumption, a non-obvious
+   invariant, a load-bearing directive). How the system *works*, and why it got that way, goes in the
+   commit/PR description or the context files (`PLAT-*` constitution, findings, ledger, per-feature
+   `context.md`) — where it is read on purpose — never as inline narration. Apply the Litmus test
+   below to every comment you write or keep. *(Enforced in review; the durable homes are §Context Guide.)*
 
 > Litmus test for any future line in this file: *does it shape how the agent thinks (a behavior), or
 > restate a fact the agent can read from the code?* If it's a fact already in the repo, leave it out.
