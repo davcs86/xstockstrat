@@ -6,6 +6,7 @@ import {
   generateTraceId,
   setSessionCookies,
   clearSessionCookies,
+  rememberMeOptsFromRequest,
 } from '@/lib/auth';
 import { refreshSession } from '@/lib/identity';
 import { HEADER_TRACE_ID } from '@/lib/headers';
@@ -59,7 +60,14 @@ export async function middleware(req: NextRequest) {
         headers: new Headers({ ...Object.fromEntries(req.headers), [HEADER_TRACE_ID]: traceId }),
       },
     });
-    setSessionCookies(response, result.accessToken, result.refreshToken);
+    // Preserve extended-session persistence across the rotation: a "Remember me" session keeps its
+    // rolling Max-Age instead of being silently downgraded to a session cookie on every refresh.
+    setSessionCookies(
+      response,
+      result.accessToken,
+      result.refreshToken,
+      rememberMeOptsFromRequest(req),
+    );
     return response;
   }
 

@@ -1,13 +1,14 @@
 # xstockstrat-ui — Constitution Findings
 
-Defects and drift surfaced by `/context-constitution` on 2026-07-24. For triage/fixing, not
-governance.
+Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-09-02 (branch
+`claude/loaded-plugins-list-d120nl` @ `82a0549`). For triage/fixing, not governance.
 
 ## Documentation that lies (docs claim behavior the code lacks)
 
 | What the docs say | What the code does | Evidence | Suggested action |
 |---|---|---|---|
 | `src/lib/basepath.ts` is the canonical home for segment base paths | Defines only `TRADER`/`INSIGHTS`/`CONFIG_UI` — no `BASE_PATH_ACCOUNTS` though `/accounts` is a shipped fourth segment | `src/lib/basepath.ts` | Add `BASE_PATH_ACCOUNTS` or document the omission |
+| Module CLAUDE.md cites `insights/market/[symbol]` as a live route in TWO places (§ "Opportunities-first shell → Decide screens": "the Signal-detail page `insights/market/[symbol]`"; § Styling charting bullet: "`insights/market/[symbol]/page.tsx` renders **no** chart") | The page was retired by feature 125 and its logic relocated onto `/trader/positions/[symbol]` — `Glob src/app/insights/market/**` returns zero files | `src/components/insights/MuteForStrategy.tsx:22-23` (documents the relocation) vs CLAUDE.md § Decide screens + § Styling; note this contradicts the *newer* "Sanctioned exception" block in the same file, which correctly names `/trader/positions/[symbol]` | Update both references to `/trader/positions/[symbol]` (or drop the charting parenthetical) |
 
 ## Latent bugs (looks broken, not merely non-obvious)
 

@@ -35,11 +35,15 @@ async function signNearExpiryToken(): Promise<string> {
     .sign(new TextEncoder().encode(TEST_SECRET));
 }
 
-async function nearExpiryRequest(refreshToken = 'rt'): Promise<NextRequest> {
+async function nearExpiryRequest(
+  refreshToken = 'rt',
+  opts: { rememberMe?: boolean } = {},
+): Promise<NextRequest> {
   const access = await signNearExpiryToken();
-  return new NextRequest(new URL('http://localhost/trader'), {
-    headers: { cookie: `access_token=${access}; refresh_token=${refreshToken}` },
-  });
+  const cookie =
+    `access_token=${access}; refresh_token=${refreshToken}` +
+    (opts.rememberMe ? '; remember_me=1' : '');
+  return new NextRequest(new URL('http://localhost/trader'), { headers: { cookie } });
 }
 
 describe('middleware matcher', () => {
@@ -107,7 +111,7 @@ describe('middleware near-expiry refresh (@AC-2/@AC-3/@AC-4)', () => {
     expect(setCookies.some((c) => c.startsWith('access_token=newAccess'))).toBe(true);
   });
 
-  // @AC-3: refreshed cookies keep the same attributes as the pre-change route flow.
+  // @AC-3: a transient (no remember-me) session stays session cookies through the rotation.
   it('sets rotated cookies via setSessionCookies with unchanged attributes (session cookies)', async () => {
     refreshSession.mockResolvedValue({
       accessToken: 'newAccess',
@@ -129,6 +133,29 @@ describe('middleware near-expiry refresh (@AC-2/@AC-3/@AC-4)', () => {
     }
     expect(access).toContain('access_token=newAccess');
     expect(refresh).toContain('refresh_token=newRefresh');
+  });
+
+  // @AC-2 regression guard: a remember-me session must NOT be downgraded to session cookies on the
+  // near-expiry rotation. Before the fix, middleware called setSessionCookies without persistence, so
+  // the first refresh (guaranteed after a redeploy/restart expired the access token) dropped Max-Age.
+  it('preserves the extended-session Max-Age on rotation when the remember_me marker is present', async () => {
+    refreshSession.mockResolvedValue({
+      accessToken: 'newAccess',
+      refreshToken: 'newRefresh',
+      claims: { user_id: 'u1' },
+    });
+    const res = await middleware(await nearExpiryRequest('rt', { rememberMe: true }));
+
+    const setCookies = res.headers.getSetCookie();
+    const access = setCookies.find((c) => c.startsWith('access_token='));
+    const refresh = setCookies.find((c) => c.startsWith('refresh_token='));
+    const marker = setCookies.find((c) => c.startsWith('remember_me='));
+    for (const cookie of [access, refresh, marker]) {
+      expect(cookie).toBeDefined();
+      // Rolling 14-day window re-applied on every rotation (matches identity refresh-token TTL rotation).
+      expect(cookie!.toLowerCase()).toContain('max-age=1209600');
+    }
+    expect(marker).toContain('remember_me=1');
   });
 
   // @AC-4: an expired/invalid session redirects to login with cookies cleared.

@@ -22,6 +22,16 @@ export const ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS = 60;
 // lower this constant to match. 14 days is well under the 30-day default.
 export const REMEMBER_ME_MAX_AGE_SECONDS = 1_209_600; // 14 days
 
+// Server-readable marker that the current session opted into "Remember me". A browser sends only a
+// cookie's name=value on subsequent requests — never its Max-Age — so the token-refresh paths
+// (middleware in-process refresh + /api/auth/refresh) cannot otherwise tell a persistent session
+// from a transient one, and would silently downgrade persistent cookies back to session cookies on
+// the first rotation (the feature-153 regression this fixes). This marker is the only server-side
+// record of that intent. It carries no secret and gates cookie *persistence* only, not authorization:
+// a forged `remember_me=1` grants persistence bounded by the server refresh-token TTL and nothing
+// more, so it needs no signing.
+export const REMEMBER_ME_COOKIE = 'remember_me';
+
 export async function verifyAccessToken(token: string): Promise<JwtClaims | null> {
   try {
     const secret = process.env.JWT_SECRET;
@@ -51,28 +61,37 @@ export function setSessionCookies(
   opts?: { maxAge?: number },
 ): void {
   const isProduction = process.env.NODE_ENV === 'production';
+  const base = { httpOnly: true, secure: isProduction, sameSite: 'lax' as const, path: '/' };
   // With no maxAge the cookies stay session cookies (cleared on browser close) — the default.
   // When maxAge is supplied (extended session), both cookies become persistent (feature 153).
   const persistence = opts?.maxAge ? { maxAge: opts.maxAge } : {};
-  res.cookies.set('access_token', accessToken, {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: 'lax',
-    path: '/',
-    ...persistence,
-  });
-  res.cookies.set('refresh_token', refreshToken, {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: 'lax',
-    path: '/',
-    ...persistence,
-  });
+  res.cookies.set('access_token', accessToken, { ...base, ...persistence });
+  res.cookies.set('refresh_token', refreshToken, { ...base, ...persistence });
+  // Keep the remember-me marker in lockstep with the auth cookies so the refresh paths can re-apply
+  // persistence on rotation. When persisted, its Max-Age rolls forward on every write, mirroring the
+  // identity service's own refresh-token TTL rotation. When not persisted, wipe any stale marker left
+  // by a prior remember-me login on this browser so a fresh transient login isn't treated as extended.
+  if (opts?.maxAge) {
+    res.cookies.set(REMEMBER_ME_COOKIE, '1', { ...base, maxAge: opts.maxAge });
+  } else {
+    res.cookies.set(REMEMBER_ME_COOKIE, '', { ...base, maxAge: 0 });
+  }
+}
+
+// Resolve the persistence options to carry into a token refresh from the inbound request's
+// remember-me marker. Present ⇒ re-apply the rolling extended-session Max-Age; absent ⇒ undefined
+// (session cookies preserved). This is what stops a rotation from silently downgrading a persistent
+// "Remember me" session — the browser never echoes a cookie's Max-Age, so this marker is the source.
+export function rememberMeOptsFromRequest(req: NextRequest): { maxAge: number } | undefined {
+  return req.cookies.get(REMEMBER_ME_COOKIE)?.value === '1'
+    ? { maxAge: REMEMBER_ME_MAX_AGE_SECONDS }
+    : undefined;
 }
 
 export function clearSessionCookies(res: NextResponse): void {
   res.cookies.set('access_token', '', { maxAge: 0, path: '/' });
   res.cookies.set('refresh_token', '', { maxAge: 0, path: '/' });
+  res.cookies.set(REMEMBER_ME_COOKIE, '', { maxAge: 0, path: '/' });
 }
 
 // Access-scope bitmap. ADMIN_SCOPE is the single source of truth for the admin bit —

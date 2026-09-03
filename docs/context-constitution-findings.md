@@ -1,7 +1,8 @@
 # xstockstrat (root) — Constitution Findings
 
 Defects and drift surfaced by `/context-constitution` (context-forge) on 2026-07-24 while deriving the
-constitution — the things an agent trusting the docs or the surface would get **wrong**. These are for
+constitution — the things an agent trusting the docs or the surface would get **wrong**; refreshed
+2026-09-02 (branch `claude/loaded-plugins-list-d120nl` @ `82a0549`). These are for
 triage/fixing (feed them to your issue tracker), not governance: a defect is not a rule. Every entry
 cites the code. Refresh by re-running `/context-constitution`.
 
@@ -13,8 +14,8 @@ module's `context-constitution-findings.md`.
 
 | What the docs say | What the code does | Evidence | Suggested action |
 |---|---|---|---|
-| `docs/patterns/observability.md` states all services push OTLP to `otel-collector:4317` | 5 Node/Next services actually export to `:4318` (OTLP/HTTP); the split is by runtime (constitution PLAT-3) | `observability.md:5,16` vs `docker-compose.yml:127,158,190,223,484` | Correct the doc to encode the 4317-gRPC / 4318-HTTP split |
-| Root `CLAUDE.md` §Header Propagation says Node services thread `x-user-id/...` via **AsyncLocalStorage** | `middleware/propagation.ts` (`propagationStore`, `extractFromHttpRequest`) has **zero** importers in all 4 Node services; the comment references the removed Connect-RPC HTTP path | `services/xstockstrat-{ledger,identity,notify,config}/src/middleware/propagation.ts` (grep: only self-references) | Delete the dead module and scope the doc rule to outbound-per-request callers (constitution PLAT-4) |
+| `docs/patterns/observability.md` states all services push OTLP to `otel-collector:4317` | 5 Node/Next services actually export to `:4318` (OTLP/HTTP); the split is by runtime (constitution PLAT-3) | `observability.md:5,16` vs `docker-compose.yml:127,158,190,223,489` | Correct the doc to encode the 4317-gRPC / 4318-HTTP split |
+| Root `CLAUDE.md` §Header Propagation says the 4 Node leaf services (ledger/identity/notify/config) make **no outbound per-request calls** so their `propagation.ts` is unused | **No longer true for identity** (feature 043): identity now makes outbound per-request gRPC calls to ledger for admin audit, forwarding the `x-user-id/x-access-scope/x-trace-id` trio (`ledgerAudit.ts:44-48`, wired `index.ts`). The dead-module claim now holds only for ledger/notify/config. | `services/xstockstrat-identity/src/grpc/ledgerAudit.ts:44-48` vs root `CLAUDE.md` §Header Propagation ("Node leaf services … currently make no outbound per-request calls") | Correct the root `CLAUDE.md` statement to except identity; delete `propagation.ts` only from ledger/notify/config (PLAT-4 amended) |
 | All 3 Go service CLAUDE.md files say **"Go 1.22"** | `go.mod` is `go 1.25.0`, Dockerfiles `FROM golang:1.25-alpine`, root table pins Go 1.25 | `services/xstockstrat-{trading,portfolio,marketdata}/CLAUDE.md` "Go 1.22" vs each `go.mod:3` | ✓ **RESOLVED** (2026-08-02; re-grounded 2026-08-27) — all three service CLAUDE.md now read "Go 1.27" (`go.mod:3` = `go 1.27.0`, root table pins Go 1.27) |
 | notify/identity/indicators/ingest CLAUDE.md list a **ledger/notify gRPC dependency** + "Ledger Events Emitted" tables + `LEDGER_ENDPOINT`/`NOTIFY_ENDPOINT` env vars | No ledger/notify client code exists in any of them; the env vars are read by no code; events are only `log.info` lines (or nothing) | notify/identity/indicators `CLAUDE.md` deps tables (grep-zero in `src/`/`app/`); ingest `CLAUDE.md` "Ledger Events Emitted" | ✓ **RESOLVED** (2026-08-02; re-grounded 2026-08-27) — identity/notify/indicators dropped the fictional deps; ingest now genuinely emits (`ingest/app/handlers/servicer.py:274,894` ledger `AppendEvent`; `:298` notify `EmitAlert`), so its deps are real |
 | Several Node service CLAUDE.md say **"Node.js 20"** and pin `@types/node ^20` | Root standardizes on Node 24 | `services/xstockstrat-{ledger,identity,notify,config}/CLAUDE.md:9` + `package.json` `@types/node ^20` | ◐ **PARTIAL** (2026-08-02; re-grounded 2026-08-27) — CLAUDE.md Language lines now say "Node.js 24" (root table + `ledger/CLAUDE.md:13`); the `@types/node ^20.12.12` pin still remains (`services/xstockstrat-ledger/package.json:36`) |
@@ -30,7 +31,7 @@ module's `context-constitution-findings.md`.
 | What | Why it looks dead | Evidence |
 |---|---|---|
 | `getEnvBool` in all 3 Go services | referenced only by a `var _ = getEnvBool` suppressor or its own test; zero production call sites | `trading/internal/config/config.go:55`, `portfolio/.../config.go:195-208`, `marketdata/internal/config/config.go:201` |
-| `middleware/propagation.ts` in all 4 Node services | zero importers (see doc-lie above) | `services/xstockstrat-{ledger,identity,notify,config}/src/middleware/propagation.ts` |
+| `middleware/propagation.ts` in ledger/notify/config (no longer identity — feature 043 wired identity's live via `ledgerAudit`) | zero importers in the remaining three (see doc-lie above) | `services/xstockstrat-{ledger,notify,config}/src/middleware/propagation.ts` |
 
 ## Open questions (unresolved *why* — needs a maintainer)
 
