@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { clearSessionCookies, setSessionCookies } from '@/lib/auth';
+import { clearSessionCookies, setSessionCookies, rememberMeOptsFromRequest } from '@/lib/auth';
 import { refreshSession } from '@/lib/identity';
 
 export async function POST(req: NextRequest) {
@@ -14,6 +14,12 @@ export async function POST(req: NextRequest) {
     return response;
   }
   const response = NextResponse.json({ ok: true });
-  setSessionCookies(response, result.accessToken, result.refreshToken);
+  // Preserve extended-session persistence across the rotation (see middleware.ts / auth.ts).
+  setSessionCookies(
+    response,
+    result.accessToken,
+    result.refreshToken,
+    rememberMeOptsFromRequest(req),
+  );
   return response;
 }
