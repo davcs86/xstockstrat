@@ -219,6 +219,42 @@ async def test_add_symbols_stamps_manual_and_merges_bindings():
 
 
 @pytest.mark.asyncio
+async def test_ensure_signal_watchlist_dedups_user_id_under_bound_caller():
+    """Regression (defect 2026-09-03): the feature-127 auto-add wrappers must build metadata via the
+    de-duplicating ``_metadata(("x-user-id", user_id))`` form, not the ``[*_metadata(), (...)]``
+    splat. Under a bound caller context ``_metadata()`` already emits ``x-user-id``, so the splat
+    sent it TWICE. Bind a caller and assert it appears exactly once."""
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+
+    mock_stub = MagicMock()
+    mock_stub.EnsureSignalWatchlist = AsyncMock(
+        return_value=portfolio_pb2.EnsureSignalWatchlistResponse(
+            watchlist=portfolio_pb2.Watchlist(watchlist_id="wl-sig")
+        )
+    )
+    mock_stub.AddWatchlistSymbols = AsyncMock(
+        return_value=portfolio_pb2.AddWatchlistSymbolsResponse(
+            watchlist=portfolio_pb2.Watchlist(watchlist_id="wl-sig")
+        )
+    )
+    grpc_patch, stub_patch = _patch_stub(mock_stub)
+    token = client.set_caller("user-42", 1, "trace-1")
+    try:
+        with grpc_patch as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with stub_patch:
+                await client.ensure_signal_watchlist("user-42")
+                await client.add_watchlist_symbol("user-42", "wl-sig", "AAPL")
+    finally:
+        client.reset_caller(token)
+
+    for method in (mock_stub.EnsureSignalWatchlist, mock_stub.AddWatchlistSymbols):
+        meta = method.call_args.kwargs["metadata"]
+        assert [k for k, _ in meta].count("x-user-id") == 1, meta
+        assert ("x-user-id", "user-42") in meta
+
+
+@pytest.mark.asyncio
 async def test_remove_symbols_sends_symbol_list():
     from gen.portfolio.v1 import portfolio_pb2  # type: ignore
 
