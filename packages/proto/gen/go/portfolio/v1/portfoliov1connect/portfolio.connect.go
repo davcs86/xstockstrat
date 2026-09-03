@@ -83,6 +83,9 @@ const (
 	// PortfolioServiceUpdateWatchlistBindingProcedure is the fully-qualified name of the
 	// PortfolioService's UpdateWatchlistBinding RPC.
 	PortfolioServiceUpdateWatchlistBindingProcedure = "/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlistBinding"
+	// PortfolioServiceUpdateWatchlistBindingsProcedure is the fully-qualified name of the
+	// PortfolioService's UpdateWatchlistBindings RPC.
+	PortfolioServiceUpdateWatchlistBindingsProcedure = "/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlistBindings"
 )
 
 // PortfolioServiceClient is a client for the xstockstrat.portfolio.v1.PortfolioService service.
@@ -116,6 +119,10 @@ type PortfolioServiceClient interface {
 	// UPDATE — no replace-all. Ownership from the propagated x-user-id header (server-side), never
 	// from the request body. NOT_FOUND if the symbol is not in the watchlist.
 	UpdateWatchlistBinding(context.Context, *connect.Request[v1.UpdateWatchlistBindingRequest]) (*connect.Response[v1.UpdateWatchlistBindingResponse], error)
+	// Atomic set-based rebind (feature 170): assign ONE strategy_id across a symbol set in a single
+	// UPDATE ... WHERE symbol = ANY(...). All-or-nothing — an absent symbol → NOT_FOUND with zero
+	// partial writes. Ownership from the x-user-id header; empty strategy_id unbinds the whole set.
+	UpdateWatchlistBindings(context.Context, *connect.Request[v1.UpdateWatchlistBindingsRequest]) (*connect.Response[v1.UpdateWatchlistBindingsResponse], error)
 }
 
 // NewPortfolioServiceClient constructs a client for the xstockstrat.portfolio.v1.PortfolioService
@@ -231,6 +238,12 @@ func NewPortfolioServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(portfolioServiceMethods.ByName("UpdateWatchlistBinding")),
 			connect.WithClientOptions(opts...),
 		),
+		updateWatchlistBindings: connect.NewClient[v1.UpdateWatchlistBindingsRequest, v1.UpdateWatchlistBindingsResponse](
+			httpClient,
+			baseURL+PortfolioServiceUpdateWatchlistBindingsProcedure,
+			connect.WithSchema(portfolioServiceMethods.ByName("UpdateWatchlistBindings")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -253,6 +266,7 @@ type portfolioServiceClient struct {
 	ensureSignalWatchlist   *connect.Client[v1.EnsureSignalWatchlistRequest, v1.EnsureSignalWatchlistResponse]
 	listAllWatchlistSymbols *connect.Client[v1.ListAllWatchlistSymbolsRequest, v1.ListAllWatchlistSymbolsResponse]
 	updateWatchlistBinding  *connect.Client[v1.UpdateWatchlistBindingRequest, v1.UpdateWatchlistBindingResponse]
+	updateWatchlistBindings *connect.Client[v1.UpdateWatchlistBindingsRequest, v1.UpdateWatchlistBindingsResponse]
 }
 
 // GetPortfolio calls xstockstrat.portfolio.v1.PortfolioService.GetPortfolio.
@@ -340,6 +354,11 @@ func (c *portfolioServiceClient) UpdateWatchlistBinding(ctx context.Context, req
 	return c.updateWatchlistBinding.CallUnary(ctx, req)
 }
 
+// UpdateWatchlistBindings calls xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlistBindings.
+func (c *portfolioServiceClient) UpdateWatchlistBindings(ctx context.Context, req *connect.Request[v1.UpdateWatchlistBindingsRequest]) (*connect.Response[v1.UpdateWatchlistBindingsResponse], error) {
+	return c.updateWatchlistBindings.CallUnary(ctx, req)
+}
+
 // PortfolioServiceHandler is an implementation of the xstockstrat.portfolio.v1.PortfolioService
 // service.
 type PortfolioServiceHandler interface {
@@ -372,6 +391,10 @@ type PortfolioServiceHandler interface {
 	// UPDATE — no replace-all. Ownership from the propagated x-user-id header (server-side), never
 	// from the request body. NOT_FOUND if the symbol is not in the watchlist.
 	UpdateWatchlistBinding(context.Context, *connect.Request[v1.UpdateWatchlistBindingRequest]) (*connect.Response[v1.UpdateWatchlistBindingResponse], error)
+	// Atomic set-based rebind (feature 170): assign ONE strategy_id across a symbol set in a single
+	// UPDATE ... WHERE symbol = ANY(...). All-or-nothing — an absent symbol → NOT_FOUND with zero
+	// partial writes. Ownership from the x-user-id header; empty strategy_id unbinds the whole set.
+	UpdateWatchlistBindings(context.Context, *connect.Request[v1.UpdateWatchlistBindingsRequest]) (*connect.Response[v1.UpdateWatchlistBindingsResponse], error)
 }
 
 // NewPortfolioServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -483,6 +506,12 @@ func NewPortfolioServiceHandler(svc PortfolioServiceHandler, opts ...connect.Han
 		connect.WithSchema(portfolioServiceMethods.ByName("UpdateWatchlistBinding")),
 		connect.WithHandlerOptions(opts...),
 	)
+	portfolioServiceUpdateWatchlistBindingsHandler := connect.NewUnaryHandler(
+		PortfolioServiceUpdateWatchlistBindingsProcedure,
+		svc.UpdateWatchlistBindings,
+		connect.WithSchema(portfolioServiceMethods.ByName("UpdateWatchlistBindings")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.portfolio.v1.PortfolioService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PortfolioServiceGetPortfolioProcedure:
@@ -519,6 +548,8 @@ func NewPortfolioServiceHandler(svc PortfolioServiceHandler, opts ...connect.Han
 			portfolioServiceListAllWatchlistSymbolsHandler.ServeHTTP(w, r)
 		case PortfolioServiceUpdateWatchlistBindingProcedure:
 			portfolioServiceUpdateWatchlistBindingHandler.ServeHTTP(w, r)
+		case PortfolioServiceUpdateWatchlistBindingsProcedure:
+			portfolioServiceUpdateWatchlistBindingsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -594,4 +625,8 @@ func (UnimplementedPortfolioServiceHandler) ListAllWatchlistSymbols(context.Cont
 
 func (UnimplementedPortfolioServiceHandler) UpdateWatchlistBinding(context.Context, *connect.Request[v1.UpdateWatchlistBindingRequest]) (*connect.Response[v1.UpdateWatchlistBindingResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlistBinding is not implemented"))
+}
+
+func (UnimplementedPortfolioServiceHandler) UpdateWatchlistBindings(context.Context, *connect.Request[v1.UpdateWatchlistBindingsRequest]) (*connect.Response[v1.UpdateWatchlistBindingsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlistBindings is not implemented"))
 }
