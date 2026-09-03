@@ -2874,3 +2874,31 @@ reusing.
   `UpdateWatchlistBinding` response instead of invalidating `['watchlists']`.
 - **Rule it implies**: when a mutation's response fully describes the changed entry, patch the cache
   instead of invalidating the collection key.
+
+### 2026-09-03 — 170-watchlist-bulk-default-strategy — design
+- **Pattern**: To add a surgical single-field write to an existing **replace-all** RPC without a new
+  single-purpose RPC and without a clobber footgun, add a `google.protobuf.FieldMask update_mask` and
+  gate on mask **presence** (`req.UpdateMask != nil`), not emptiness: mask-absent runs the legacy
+  replace-all path **byte-for-byte unchanged** (strongest zero-regression story), mask-present routes to
+  a partial-update path that writes only masked columns via a **static `path→column` allowlist map**
+  (never interpolate mask strings; unknown path → `InvalidArgument`). Deliberately excluding the new
+  field from the legacy SET makes it "preserved-for-free" on every legacy edit (no RMW preserve-set
+  needed). Reuses the platform's existing FieldMask precedent (analysis/ingest/indicators servicers).
+- **Evidence**: feature 170 UpdateWatchlist gains `update_mask`; Connect-JSON serializes an empty
+  FieldMask to a present-but-empty value, so gating on emptiness (not presence) would misroute an
+  explicit empty mask into a destructive replace-all — presence-gate + empty-present→`InvalidArgument`.
+- **Rule it implies**: when field-masking a replace-all RPC, gate on mask presence and reject
+  empty-present + unknown-path + set-field-without-mask loudly; keep the no-mask path literally the old
+  code path so every existing `@AC` is preserved with zero new surface.
+
+### 2026-09-03 — 170-watchlist-bulk-default-strategy — design
+- **Pattern**: A watchlist/collection "default" that must be **add-time only** (no retroactive rebind,
+  no read-time fallback) belongs at the single shared insert chokepoint, applied source-aware: fill the
+  child's field only when it is empty AND `source != SIGNAL`, wrapping **every** return branch of the
+  normalize helper, with the replace-all caller passing an empty default to opt out. This keeps the fill
+  single-sourced (no dual-path divergence, fails-056) while the auto-add/replace paths opt out by
+  argument, not by a forked helper.
+- **Evidence**: feature 170 `applyDefaultStrategy` wraps both `requestBindings` returns; Create/Add pass
+  the default, legacy Update passes `""`; `source==SIGNAL` (system-managed signal auto-adds) skipped.
+- **Rule it implies**: implement an add-time default at the one insert chokepoint with a source guard and
+  a per-caller default argument, never as a read-time fallback or a second write path.

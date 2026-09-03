@@ -39,3 +39,34 @@
   `UpdateWatchlistBinding` (portfolio.proto:39, launched feature 167).
 - Overlap findings: CLEAN (feature-overlap). Only in-flight peer is 084-droplet-compose-deploy
   (infra-only, no resource overlap). No merge-order row required.
+
+## Session 2026-09-03T18:55Z — sdd-design (quick, extended to 4 rounds by operator)
+
+- Phase 0 Recon: wrote recon.md (services: portfolio/proto/ui/agent). Key reuse patterns: the single
+  `requestBindings`/`normalizeBindings` add-time chokepoint; `loadOwned` service-layer ownership gate;
+  `touchWatchlistTx` single updated_at bump; FieldMask precedent in analysis/ingest/indicators.
+- Phase 1 Grilling: 4 rounds. Chosen approach: additive proto (`default_strategy_id` + set-based
+  atomic `UpdateWatchlistBindings` RPC + `google.protobuf.FieldMask update_mask` on UpdateWatchlist),
+  migration 015, add-time default at the chokepoint (Option B), scalar field-mask partial update.
+  Rejected: SIGNAL-inclusive default (Option A), single-row loop bulk, fold-default-into-replace-all,
+  dedicated SetDefaultStrategy RPC, mask-scope narrow/binding-inclusive, dedicated agent bulk tool.
+- **Operator decisions recorded (P-04/P-05):**
+  1. Fork 1 (default scope) → **Option B, MANUAL-only** (source==SIGNAL skipped). Removes the C-16
+     CHANGE; no sign-off needed.
+  2. Bulk strategy assignment → **new atomic `UpdateWatchlistBindings` RPC** (set-based UPDATE ... ANY).
+  3. Bulk delete → symbols within a watchlist only (reuse `RemoveWatchlistSymbols`).
+  4. Write path for `default_strategy_id` → **introduce `google.protobuf.FieldMask` in UpdateWatchlist**
+     (operator steer over both fold-in and dedicated-RPC options). Design B (presence-gated, no-mask =
+     legacy replace-all verbatim; default excluded from legacy SET so preserved-for-free).
+  5. Mask scope → **scalar set {name, description, default_strategy_id}** (bindings/symbols NOT maskable).
+  6. Fork 2 (agent bulk surface) → **new `"assign"` verb** on `manage_watchlist_symbols` (not a new tool).
+- Constitution rules touched: C-01/07/08/09/10/14/16/17, P-01/02/03/06, F-01/04 — all honored.
+  Floor breaches: none across all 4 rounds. Business rules: all PRESERVE/EXTEND, no CHANGE.
+- Status: spec-ready → design-approved.
+
+## Open Threads
+
+- [ ] Bulk NOT_FOUND count check compares the **deduped** (post-normalizeSymbols) count — assert in bulk RED tests. Target: portfolio bulk-RPC step.
+- [ ] Existing UpdateWatchlist callers (UI/agent name/desc/binding edits) must keep `update_mask` unset — assert at UI/agent steps. Target: UI + agent steps.
+- [ ] Agent `get_watchlist` must echo `default_strategy_id` (C-14 read-surface) — assert in agent client test. Target: agent step.
+- [ ] Anti-rebind guarantee is SQL-level (`insertBindingsTx` ON CONFLICT DO NOTHING), modeled in `fakeWatchlistStore`, not DB-tested — record caveat on the scenario. Target: portfolio test step.

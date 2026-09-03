@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-09-03 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-03 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning, reclassified; overlap CLEAN) |
+| 2026-09-03 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds) and approved; recon.md + design.md written |
 
 ---
 
@@ -19,6 +20,8 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon Dossier](recon.md) — grounded codebase map (Phase 0)
+- [Design](design.md) — debated architecture, rejected alternatives, open risks (Phase 1)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec watchlist-bulk-default-strategy`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -47,4 +50,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design watchlist-bulk-default-strategy quick` — ground the design (recon + one adversarial round) before /sdd-spec
+`/sdd-spec watchlist-bulk-default-strategy` — generate implementation spec from the approved design
