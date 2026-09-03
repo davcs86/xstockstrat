@@ -295,7 +295,7 @@ async def ensure_signal_watchlist(user_id: str) -> str:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
         resp = await stub.EnsureSignalWatchlist(
             portfolio_pb2.EnsureSignalWatchlistRequest(),
-            metadata=[*_metadata(), ("x-user-id", user_id)],
+            metadata=_metadata(("x-user-id", user_id)),
         )
     return resp.watchlist.watchlist_id
 
@@ -313,7 +313,7 @@ async def add_watchlist_symbol(user_id: str, watchlist_id: str, symbol: str) -> 
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
         await stub.AddWatchlistSymbols(
             portfolio_pb2.AddWatchlistSymbolsRequest(watchlist_id=watchlist_id, bindings=[binding]),
-            metadata=[*_metadata(), ("x-user-id", user_id)],
+            metadata=_metadata(("x-user-id", user_id)),
         )
 
 

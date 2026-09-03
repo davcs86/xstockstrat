@@ -28,7 +28,14 @@ class _FakeMcpClient:
         self.calls = []
 
     async def fetch(self, endpoint, tool, arguments, bearer, timeout_seconds):
-        self.calls.append({"endpoint": endpoint, "tool": tool, "bearer": bearer})
+        self.calls.append(
+            {
+                "endpoint": endpoint,
+                "tool": tool,
+                "bearer": bearer,
+                "timeout_seconds": timeout_seconds,
+            }
+        )
         return self._result
 
 
@@ -46,12 +53,13 @@ class _SelectiveMcpClient:
 
 
 class _FakeCfgWatcher:
-    def __init__(self, *, bearer=("sk-live-abc123", True)):
+    def __init__(self, *, bearer=("sk-live-abc123", True), ints=None):
         self._bearer = bearer
+        self._ints = ints or {}
         self.resolve_calls = []
 
     def get_int(self, key, default=0):
-        return default
+        return self._ints.get(key, default)
 
     async def resolve_secret(self, key):
         self.resolve_calls.append(key)
@@ -96,6 +104,24 @@ async def test_cycle_parses_and_ingests_signal(monkeypatch):
     # The bearer was resolved via GetSecret with the split key and sent to the client.
     assert cfg.resolve_calls == ["mcp_credential.acme-mcp"]
     assert mcp.calls[0]["bearer"] == "sk-live-abc123"
+
+
+async def test_cycle_reads_namespace_prefixed_request_timeout_key(monkeypatch):
+    # Regression (defect 2026-09-03): the request-timeout config key must be read under its full
+    # `ingest.`-prefixed name — the WatchConfig snapshot is keyed by the raw dotted key with no
+    # namespace auto-prefix, so a bare `mcp_client.request_timeout_seconds` read always misses and
+    # silently falls back to the hardcoded default. Configure ONLY the prefixed key and assert the
+    # loop honours it (30 default would prove the bug is back).
+    monkeypatch.setattr(loop, "list_all_sources", AsyncMock(return_value=[_mcp_source()]))
+    servicer = MagicMock()
+    servicer._db = MagicMock()
+    servicer._ingest_external_signal = AsyncMock(return_value=(42, False))
+    mcp = _FakeMcpClient(result=_FakeResult([{"symbol": "AAPL", "direction": "buy"}]))
+    cfg = _FakeCfgWatcher(ints={"ingest.mcp_client.request_timeout_seconds": 7})
+
+    await loop.run_one_cycle(servicer, cfg, mcp)
+
+    assert mcp.calls[0]["timeout_seconds"] == 7.0
 
 
 async def test_second_identical_cycle_deduplicates(monkeypatch):

@@ -189,3 +189,37 @@ describe('WebPushDispatcher.dispatch', () => {
     });
   });
 });
+
+// A dispatcher that exposes the protected network seam so the REAL send options can be asserted.
+class ExposedDispatcher extends WebPushDispatcher {
+  public deliverPublic(sub: webpush.PushSubscription, body: string): Promise<void> {
+    return this.deliver(sub, body);
+  }
+}
+
+describe('WebPushDispatcher.deliver — send options (defect 2026-09-03)', () => {
+  it('sends a deliberate 1h message TTL and a real socket timeout, not the old 10s TTL', async () => {
+    const pool = capturingPool();
+    const d = new ExposedDispatcher(pool.obj as any, cfg());
+    let opts: any = null;
+    const orig = webpush.sendNotification;
+    (webpush as any).sendNotification = async (_sub: any, _body: any, options: any) => {
+      opts = options;
+      return { statusCode: 201 } as any;
+    };
+    try {
+      await d.deliverPublic(
+        { endpoint: 'https://push.example/x', keys: { p256dh: 'k', auth: 'a' } },
+        '{"t":1}',
+      );
+    } finally {
+      (webpush as any).sendNotification = orig;
+    }
+    // Regression: the old code passed the 10s HTTP-timeout value as the TTL (=> TTL 10), silently
+    // dropping every alert to a device offline >10s. The TTL must now be the deliberate 3600s.
+    assert.equal(opts.TTL, 3600, 'push message TTL must be the deliberate 1h value, not the old 10s');
+    // And a real socket send timeout must be set (separate concern from the retention TTL).
+    assert.equal(typeof opts.timeout, 'number', 'a real send timeout must be passed');
+    assert.ok(opts.timeout >= 1000, 'the send timeout must be a sane socket timeout');
+  });
+});
