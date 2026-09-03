@@ -1,6 +1,7 @@
 # xstockstrat-marketdata — Constitution Findings
 
-Defects and drift surfaced by `/context-constitution` on 2026-07-24. For triage/fixing, not
+Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-09-02 (branch
+`claude/loaded-plugins-list-d120nl` @ `82a0549`). For triage/fixing, not
 governance. Repo-wide defects (Go 1.22 doc-lie, `getEnvBool` dead) live in the root findings log.
 
 ## Documentation that lies (docs claim behavior the code lacks)
@@ -9,13 +10,17 @@ governance. Repo-wide defects (Go 1.22 doc-lie, `getEnvBool` dead) live in the r
 |---|---|---|---|
 | Migration 001 column comment `timeframe TEXT -- '1m','5m','1h','1d'` | Lists removed 1m/5m and omits the canonical 15m | `migrations/001_marketdata_hypertables.up.sql:11` vs `internal/timeframe` | Fix the comment |
 | `handler.go` doc comment: "implements both Connect-RPC (HTTP) and gRPC" | Service is gRPC-only (HTTP/8053 removed) | `internal/handler/marketdata_handler.go:20-23` | Fix the stale comment |
+| `newFundamentalsSource` comment: fmpAPIKey/finnhubAPIKey are the "FMP_API_KEY/FINNHUB_API_KEY secret env vars, never config values" | False since feature 147 — they are resolved via `GetSecret` from encrypted config | `cmd/server/main.go:206-207` vs `:81-82` | Fix the comment to reference `ResolveSecret` |
+| Alpaca placeholder WARN tells the operator to "set the real ALPACA_API_KEY/ALPACA_API_SECRET **secrets**" | Those env vars were removed (feature 147); remediation is now to set the `marketdata.alpaca.api_key`/`api_secret` **config** secrets | `cmd/server/main.go:112-116` | Update the WARN text |
+| `NewWatcher` comment: applicationEnv/tradingMode "passed on every WatchConfig request" | `trading_mode` is no longer sent (feature 147) | `internal/config/config.go:71-72` vs `:224` | Fix the comment |
 
 ## Dead / orphaned code
 
 | What | Why it looks dead | Evidence |
 |---|---|---|
 | `marketdata.retention.quotes_days` / `retention.ohlcv_years` config keys | read by no code | `CLAUDE.md:81-82` (grep zero) |
-| `AlpacaAsset` struct "kept for backward compatibility" | zero references in-repo | `internal/alpaca/client.go:426` |
+| `AlpacaAsset` struct "kept for backward compatibility" | zero references in-repo | `internal/alpaca/client.go:463-471` |
+| `Watcher.tradingMode` field + `resolveTradingMode` function | write-only — `tradingMode` assigned (`config.go:85`) but never read; `resolveTradingMode` exists only to feed it (still unit-tested at `config_test.go:299`); `stream()` no longer sends `trading_mode` (feature 147) | `internal/config/config.go:62,103` — action: remove, or document as test-only vestige |
 
 ## Open questions (unresolved *why* — needs a maintainer)
 

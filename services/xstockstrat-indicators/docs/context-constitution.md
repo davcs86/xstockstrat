@@ -1,6 +1,8 @@
 # xstockstrat-indicators — Constitution
 
-Derived by `/context-constitution` (context-forge) on 2026-07-24. Captures the **non-obvious** local
+Derived by `/context-constitution` (context-forge) on 2026-07-24; refreshed 2026-09-02 (branch
+`claude/loaded-plugins-list-d120nl` @ `82a0549` — no source change since last forge; `servicer.py`
+line anchors for INDICATORS-3/-5 re-grounded). Captures the **non-obvious** local
 invariants of the indicators service (formula engine + subprocess-isolated sandbox, gRPC 50054). The
 sandbox is the security crown jewel — most rules here protect it. Does not restate documented/CI-enforced
 rules (see `## Pointers`).
@@ -14,9 +16,9 @@ rules (see `## Pointers`).
 |---|---|---|---|---|
 | **INDICATORS-1** | **Pin BLAS/OMP/MKL/NUMEXPR/VECLIB thread counts to 1 in the child subprocess env, *before* numpy is imported** (passed via `subprocess.run(env=...)`, not set inside the formula). | Numeric libs spawn one worker thread per core on import, each reserving a large buffer that overflows the sandbox rlimit → `OpenBLAS error: Memory allocation still failed after 10 retries`. Days lost to a "flaky sandbox." | `_THREAD_LIMIT_ENV` `app/services/sandbox.py:40-46`, applied `:206-210`; PR #663 | `app/services/sandbox.py:40-46` |
 | **INDICATORS-2** | **The sandbox memory cap uses `RLIMIT_DATA`, never `RLIMIT_AS`.** | `RLIMIT_AS` counts virtual address space, which numpy/pandas over-reserve on import (hundreds of MiB never resident) → the 128 MiB cap rejects pandas with `MemoryError` before any real allocation. `RLIMIT_DATA` tracks actual allocation, keeping the budget enforceable. | `app/services/sandbox.py:125`; PR #663 | `app/services/sandbox.py:125` |
-| **INDICATORS-3** | **Deserialize a protobuf `Struct` with `MessageToDict()`, never `dict()`.** | `dict()` unwraps only the top level; nested `ListValue`/`Struct` fields stay as protobuf objects and crash the sandbox at `json.dumps(input_data)` with "Object of type ListValue is not JSON serializable". | `app/handlers/servicer.py:132`; `app/services/parameters.py:50,137`; PR #650 | `app/handlers/servicer.py:132` |
+| **INDICATORS-3** | **Deserialize a protobuf `Struct` with `MessageToDict()`, never `dict()`.** | `dict()` unwraps only the top level; nested `ListValue`/`Struct` fields stay as protobuf objects and crash the sandbox at `json.dumps(input_data)` with "Object of type ListValue is not JSON serializable". | `app/handlers/servicer.py:143`; `app/services/parameters.py:50,137`; PR #650 | `app/handlers/servicer.py:143` |
 | **INDICATORS-4** | **Restricted builtins are built by copying a safe subset into a fresh `__builtins__`, never by deleting names off the shared `builtins` module.** | Mutating/`del`-ing names off `builtins` breaks the interpreter (import machinery, `delattr`) so even `result = 1` fails with `NameError`. | `app/services/sandbox.py:113-153` | `app/services/sandbox.py:113-153` |
-| **INDICATORS-5** | **Header authz is read per-method off `context.invocation_metadata()` (admin = `x-access-scope & 0x04`; author = `x-user-id`) — there is no interceptor.** | Python services thread propagation per method (not via a Go-style interceptor); this service only *reads* inbound metadata and makes no outbound per-request calls. | `app/handlers/servicer.py:36` (`_has_admin_scope`), author read `:214-219` | `app/handlers/servicer.py:36` |
+| **INDICATORS-5** | **Header authz is read per-method off `context.invocation_metadata()` (admin = `x-access-scope & 0x04`; author = `x-user-id`) — there is no interceptor.** | Python services thread propagation per method (not via a Go-style interceptor); this service only *reads* inbound metadata and makes no outbound per-request calls. | `app/handlers/servicer.py:36` (`_has_admin_scope`), author read `:225-230` | `app/handlers/servicer.py:36` |
 
 ## Gotchas & scars
 

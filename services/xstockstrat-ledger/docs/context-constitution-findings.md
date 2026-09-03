@@ -1,6 +1,7 @@
 # xstockstrat-ledger — Constitution Findings
 
-Defects and drift surfaced by `/context-constitution` on 2026-07-24. For triage/fixing, not
+Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-09-02 (branch
+`claude/loaded-plugins-list-d120nl` @ `82a0549`). For triage/fixing, not
 governance. Repeated defects (dead `middleware/propagation.ts`, Node-20 drift) live in the root
 findings log.
 
@@ -22,6 +23,10 @@ findings log.
 |---|---|---|
 | 3 documented config keys (`ledger.stream.notify_enabled`, `ledger.retention.years`, `ledger.compression.after_days`) | Read by no code; `ConfigWatcher` is a startup gate only. `ledger.stream.notify_enabled=false` is a no-op (the DB trigger fires unconditionally). **Reframed 2026-08-09** — no longer a "docs that lie" issue: CLAUDE.md's Config Keys table already says "Documented, not yet enforced/implemented — no code reads it" for all three (fixed by commit `06e451c`); the underlying dead-key gap is unchanged. | `CLAUDE.md:62-67` vs `src/` (grep zero), `migrations/001_…up.sql:87-89` — action: wire or delete the keys |
 | `package.json`'s `migrate` npm script (`node-pg-migrate up`) | Migration files use the golang-migrate `NNN_*.up/.down.sql` convention driven by `scripts/db-migrate.sh`; `node-pg-migrate` has no config here and would not apply them. **Reframed 2026-08-09** — no longer a "docs mismatch": CLAUDE.md's Running Locally section already tells the reader to run `../../scripts/db-migrate.sh` (golang-migrate), so nobody is currently pointed at the broken script — it's just a dead leftover. | `package.json:11` vs `CLAUDE.md` (Running Locally section) — action: delete the dead `migrate` script |
+
+## Cross-module contract notes (not a bug — for consumers)
+
+- **`ledger.events.user_id` is permanently NULL for all pre-feature-021 rows and CANNOT be backfilled** (an `UPDATE` is denied by the `deny_mutation` trigger). Any future consumer that assumes `user_id` is populated for historical events is wrong by construction; consumers must tolerate NULL `user_id`. `migrations/003_events_user_id.up.sql:8-12`. Not fixable — document as a contract.
 
 ## Open questions (unresolved *why* — needs a maintainer)
 

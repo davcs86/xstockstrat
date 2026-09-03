@@ -1,7 +1,8 @@
 # xstockstrat-portfolio — Constitution Findings
 
-Defects and drift surfaced by `/context-constitution` on 2026-07-24. For triage/fixing, not
-governance. Repo-wide defects (Go 1.22 doc-lie, `getEnvBool` dead) live in the root findings log.
+Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-09-02 (branch
+`claude/loaded-plugins-list-d120nl` @ `82a0549` — all open rows re-verified, still reproduce). For
+triage/fixing, not governance. Repo-wide defects (Go 1.22 doc-lie, `getEnvBool` dead) live in the root findings log.
 
 ## Latent bugs (looks broken, not merely non-obvious)
 
