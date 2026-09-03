@@ -390,13 +390,19 @@ async def create_watchlist(
     description: str = "",
     symbols: list[str] | None = None,
     bindings: list[dict] | None = None,
+    default_strategy_id: str = "",
 ) -> dict[str, Any]:
-    """Create a new watchlist for the caller via gRPC CreateWatchlist."""
+    """Create a new watchlist for the caller via gRPC CreateWatchlist.
+
+    ``default_strategy_id`` (feature 170) is the watchlist-level default applied to initial
+    bare/MANUAL symbols at add time; "" = none.
+    """
     from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
 
     req = portfolio_pb2.CreateWatchlistRequest(
         name=name,
         description=description,
+        default_strategy_id=default_strategy_id,
         bindings=_watchlist_bindings_pb(
             symbols, bindings, portfolio_pb2.WATCHLIST_ENTRY_SOURCE_MANUAL
         ),
@@ -414,27 +420,58 @@ async def update_watchlist(
     description: str | None = None,
     symbols: list[str] | None = None,
     bindings: list[dict] | None = None,
+    default_strategy_id: str | None = None,
 ) -> dict[str, Any]:
-    """Update a watchlist via a READ-MODIFY-WRITE merge over the replace-only UpdateWatchlist RPC.
+    """Update a watchlist.
 
-    The backend UpdateWatchlist is replace-all — its repo DELETEs every symbol row then re-inserts
-    the request's bindings, and it requires a non-empty name (feature 058). So this fetches the
-    current watchlist first and preserves each field the caller did not supply: an omitted name /
-    description keeps the stored value, and an omitted symbol set (both ``symbols`` and ``bindings``
-    None) preserves the existing bindings verbatim (original ``source`` intact). Supplying either
-    ``symbols`` or ``bindings`` does an explicit full replace with MANUAL-sourced entries.
+    Two contracts, selected by whether ``default_strategy_id`` is supplied (feature 170):
 
-    NOT atomic — a concurrent add between the read and the write could be lost by the resend;
-    acceptable for single-user agent curation.
+    * ``default_strategy_id`` is None → the legacy READ-MODIFY-WRITE merge over the replace-only
+      UpdateWatchlist RPC. The backend replace-all path DELETEs every symbol row then re-inserts the
+      request's bindings and requires a non-empty name, so this fetches the current watchlist first
+      and preserves each field the caller did not supply (omitted name/description keep the stored
+      value; omitting both ``symbols`` and ``bindings`` preserves the existing bindings verbatim).
+      Supplying either does an explicit full replace with MANUAL-sourced entries. NOT atomic —
+      acceptable for single-user agent curation.
+    * ``default_strategy_id`` is not None → a PARTIAL (field-mask) write of the scalar fields only
+      (``default_strategy_id`` plus ``name``/``description`` when supplied). Bindings are left
+      untouched and no GetWatchlist round-trip is needed. The backend rejects a default without a
+      mask, so this is the only path that sets it. Supplying ``symbols``/``bindings`` here is
+      rejected — do the binding replace in a separate call (or use manage_watchlist_symbols).
     """
     from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
+    from google.protobuf import field_mask_pb2  # noqa: PLC0415
+
+    meta = _metadata(("x-user-id", user_id))
+
+    if default_strategy_id is not None:
+        if symbols is not None or bindings is not None:
+            raise ValueError(
+                "update with default_strategy_id is a scalar field-mask write and cannot also "
+                "replace symbols/bindings — do the binding change in a separate call"
+            )
+        paths = ["default_strategy_id"]
+        if name is not None:
+            paths.append("name")
+        if description is not None:
+            paths.append("description")
+        req = portfolio_pb2.UpdateWatchlistRequest(
+            watchlist_id=watchlist_id,
+            name=name or "",
+            description=description or "",
+            default_strategy_id=default_strategy_id,
+            update_mask=field_mask_pb2.FieldMask(paths=paths),
+        )
+        async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+            stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
+            resp = await stub.UpdateWatchlist(req, metadata=meta)
+        return {"watchlist": _watchlist_to_dict(resp.watchlist)}
 
     replace = None
     if symbols is not None or bindings is not None:
         replace = _watchlist_bindings_pb(
             symbols, bindings, portfolio_pb2.WATCHLIST_ENTRY_SOURCE_MANUAL
         )
-    meta = _metadata(("x-user-id", user_id))
     async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
         current = await stub.GetWatchlist(
@@ -499,6 +536,29 @@ async def remove_watchlist_symbols(
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
         resp = await stub.RemoveWatchlistSymbols(req, metadata=_metadata(("x-user-id", user_id)))
     return {"watchlist": _watchlist_to_dict(resp.watchlist)}
+
+
+async def update_watchlist_bindings(
+    user_id: str, watchlist_id: str, symbols: list[str], strategy_id: str = ""
+) -> dict[str, Any]:
+    """Atomically assign one ``strategy_id`` across ``symbols`` via gRPC UpdateWatchlistBindings
+    (feature 170). All-or-nothing — a symbol not on the list is rejected NOT_FOUND with no partial
+    write; ``strategy_id=""`` unbinds the whole set. Then re-reads the list so the tool returns the
+    full updated watchlist (as get_watchlist), matching the add/remove tools' return shape.
+    """
+    from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
+
+    meta = _metadata(("x-user-id", user_id))
+    req = portfolio_pb2.UpdateWatchlistBindingsRequest(
+        watchlist_id=watchlist_id, symbols=symbols, strategy_id=strategy_id
+    )
+    async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+        stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
+        await stub.UpdateWatchlistBindings(req, metadata=meta)
+        current = await stub.GetWatchlist(
+            portfolio_pb2.GetWatchlistRequest(watchlist_id=watchlist_id), metadata=meta
+        )
+    return {"watchlist": _watchlist_to_dict(current.watchlist)}
 
 
 async def run_backtest(
