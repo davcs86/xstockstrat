@@ -149,3 +149,10 @@ assigned-branch constraint).
   itself was correct (AC-13 passed without a spy); this was purely the assertion.
 - All four design Open Threads resolved (see above).
 - Status: implementation-ready → code-completed.
+
+## Session 2026-09-03 (CI: feature status automation)
+
+- Promotion PR #1087 merged to main
+- Feature promoted and committed: 69c5f9c9d18d9c34d6053bceeef2edf261498ced
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-03
