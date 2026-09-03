@@ -22,7 +22,7 @@ rules (see `## Pointers`).
 
 ## Gotchas & scars
 
-- **The seed formula id is a deterministic UUIDv5 that xstockstrat-analysis consumes as config.** `FORMULA_ID = d1ff5e6b-6d9c-589d-b95e-defd862c702b` (`app/formulas/fundamentals_value_quality.py`, seeded `app/services/seed_formulas.py:35`) is read by analysis as `analysis.fundsignal.scoring_formula_id` (feature 062). Changing the UUID or the `SYSTEM_AUTHOR` breaks the cross-service link. Evidence: `servicer.py:311,410`.
+- **The seed formula id is a deterministic UUIDv5 that xstockstrat-analysis consumes as config.** `FORMULA_ID = d1ff5e6b-6d9c-589d-b95e-defd862c702b` (`app/formulas/fundamentals_value_quality.py`, seeded `app/services/seed_formulas.py:35`) is read by analysis as `analysis.fundsignal.scoring_formula_id` (feature 062). Changing the UUID or the `SYSTEM_AUTHOR` breaks the cross-service link. Evidence: `servicer.py:322,422`.
 - **A stored formula that declares `outputs` must emit every series or the run fails; inline `formula_source` runs are exempt.** `value` is the reserved implicit primary series. Evidence: `servicer.py:157-172`, `parameters.py:32,94`.
 
 ## Candidate rules (unverified)

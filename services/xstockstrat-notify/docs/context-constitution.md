@@ -2,7 +2,7 @@
 
 Derived by `/context-constitution` (context-forge) on 2026-07-24; refreshed 2026-09-02 (branch
 `claude/loaded-plugins-list-d120nl` @ `82a0549` — feature 165 added the Web Push channel; added
-NOTIFY-5/6/7/8, re-grounded NOTIFY-1/3/4 as ~120 push-RPC lines shifted anchors). Captures the **non-obvious** local
+NOTIFY-5/6 (+ severity-only-gate and VAPID-fail-loud gotchas), re-grounded NOTIFY-1/3/4 as ~120 push-RPC lines shifted anchors). Captures the **non-obvious** local
 invariants of the notify service (gRPC server-streaming alert fan-out + history, gRPC 50059). Does not
 restate documented/CI-enforced rules (see `## Pointers`).
 

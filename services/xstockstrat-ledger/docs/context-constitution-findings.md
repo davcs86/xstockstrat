@@ -15,7 +15,7 @@ findings log.
 
 | Issue | Impact | Evidence |
 |---|---|---|
-| Large-payload events (>~7000 chars) streamed live arrive as a **trimmed stub** with `payload=undefined` and `occurredAt=new Date(undefined)` → Invalid Date; replay/query of the same event is correct | Live-tail consumers of big events get silently corrupt rows | `migrations/001_…up.sql:71-80`, `ledgerServiceImpl.ts:304-316` |
+| Large-payload events (>~7000 chars) streamed live arrive as a **trimmed stub** with `payload=undefined` and `occurredAt=new Date(undefined)` → Invalid Date; replay/query of the same event is correct | Live-tail consumers of big events get silently corrupt rows | `migrations/001_…up.sql:71-80`, `ledgerServiceImpl.ts:416,418` |
 
 ## Dead / orphaned code
 
@@ -30,7 +30,7 @@ findings log.
 
 ## Open questions (unresolved *why* — needs a maintainer)
 
-- The NOTIFY 8KB-trim path vs the live-tail stub it produces — is the truncated live event intended (consumers expected to re-`GetEvent` on a partial row), or should `StreamEvents` re-fetch the full row before `call.write` when the NOTIFY payload was trimmed? `migrations/001_…up.sql:71-80`, `ledgerServiceImpl.ts:304-316` — status: **open**
+- The NOTIFY 8KB-trim path vs the live-tail stub it produces — is the truncated live event intended (consumers expected to re-`GetEvent` on a partial row), or should `StreamEvents` re-fetch the full row before `call.write` when the NOTIFY payload was trimmed? `migrations/001_…up.sql:71-80`, `ledgerServiceImpl.ts:416,418` — status: **open**
 
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._
