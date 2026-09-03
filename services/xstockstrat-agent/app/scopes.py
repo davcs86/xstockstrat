@@ -13,10 +13,8 @@ verifies admin instead of trusting an asserted constant.
 
 import os
 
-#: ASGI ``scope["state"]`` key under which app/main.py's `_authorized` publishes the verified
-#: caller claims for the current request, and from which app/tools.py reads them. Defined here so
-#: neither module has to import the other. Present on every tool-call request, since feature
-#: 079 removed the legacy SSE transport whose `POST /messages` bypassed `_authorized`.
+#: ASGI ``scope["state"]`` key carrying the verified caller claims from app/main.py's `_authorized`
+#: to app/tools.py. Defined here so neither module imports the other.
 MCP_CLAIMS_SCOPE_KEY = "mcp_claims"
 
 

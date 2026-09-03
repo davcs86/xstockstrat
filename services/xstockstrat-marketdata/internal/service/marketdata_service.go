@@ -39,22 +39,18 @@ type MarketDataService struct {
 	barSubs   map[string]chan *marketdatav1.Bar
 	quoteSubs map[string]chan *marketdatav1.Quote
 
-	// warmSymbols is the set of symbols GetLatestQuote has been asked for; a
-	// background poller (StartWarmQuotePoller) keeps their latest quote fresh in
-	// the DB so subsequent reads hit the cache instead of a live Alpaca call.
+	// warmSymbols is the demand-driven set GetLatestQuote/GetBars mark; the warm poller and bar
+	// ingester keep their data fresh so later reads hit the cache, not a live Alpaca call.
 	warmMu      sync.Mutex
 	warmSymbols map[string]struct{}
 
-	// lastStaleCheck rate-limits FR-3's stale-bar refetch (GetBars) to at most one live Alpaca
-	// fetch per (symbol|timeframe) per bar interval. Without it, a weekend/holiday — where the
-	// newest real bar is legitimately older than one interval — would refetch on every chart poll.
+	// lastStaleCheck rate-limits the stale-bar refetch to one live fetch per (symbol|timeframe)
+	// per interval, so a weekend (newest bar legitimately old) doesn't refetch on every poll.
 	staleMu        sync.Mutex
 	lastStaleCheck map[string]time.Time
 
-	// fundamentals is the active fundamentals source (feature 059; provider made
-	// switchable by feature 129), held separately from the OHLCV registry (FR-2).
-	// Always non-nil since feature 082 — marketdata.<fundProvider>.enabled gates use
-	// (fundamentalsEnabled()), not construction.
+	// fundamentals is the active fundamentals source, held separately from the OHLCV registry
+	// (FR-2). Always non-nil (feature 082); marketdata.<fundProvider>.enabled gates use, not construction.
 	fundamentals source.FundamentalsSource
 	// fundProvider names the active fundamentals provider ("fmp" or "finnhub"),
 	// frozen once at construction (never re-read live) — see NewMarketDataService.
@@ -63,9 +59,8 @@ type MarketDataService struct {
 	// behind interfaces so the cache/quota/gate logic is unit-testable with stubs.
 	fundCfg  fundamentalsConfig
 	fundRepo fundamentalsRepo
-	// quotaAlert dedupes the FR-7 80%-quota WARNING to one emit per active window
-	// (a UTC day for FMP, a rolling rate_window_seconds for Finnhub — see
-	// maybeAlertQuota/fundamentalsQuota).
+	// quotaAlert dedupes the 80%-quota WARNING to one emit per active window (UTC day for FMP,
+	// rolling window for Finnhub — see maybeAlertQuota/fundamentalsQuota).
 	quotaAlertMu     sync.Mutex
 	quotaAlertBucket string
 }
@@ -85,11 +80,8 @@ type fundamentalsRepo interface {
 	CountFundamentalsFetchedSince(ctx context.Context, since time.Time) (int, error)
 }
 
-// NewMarketDataService creates the service and dials ledger + notify. fundamentals is
-// the active fundamentals source, always non-nil via the sole boot-time construction
-// path since feature 082 (cmd/server/main.go's newFundamentalsSource). provider names
-// which source it is ("fmp" or "finnhub", feature 129) — frozen here, never re-read
-// live, so the client object and the config-key dispatch it drives can never diverge.
+// NewMarketDataService creates the service and dials ledger + notify. fundamentals is the
+// active source (always non-nil); provider names it and is frozen here, never re-read live.
 func NewMarketDataService(
 	registry *source.Registry,
 	repo *repository.MarketDataRepo,
@@ -126,22 +118,16 @@ func NewMarketDataService(
 
 // GetBars retrieves historical OHLCV bars, querying from TimescaleDB.
 func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBarsRequest) (*marketdatav1.GetBarsResponse, error) {
-	// Normalize the requested interval to the canonical DB spelling ("1Day"→"1d",
-	// "15Min"→"15m", …). The always-on ingester and backfill store canonical strings;
-	// without this, QueryBars searches for the literal alias and never matches them, so
-	// the chart renders empty for every ingested symbol. Unresolvable inputs (e.g. the
-	// dead "10Min"/"30Min" aliases) fall back to the raw string — they have no stored
-	// bars either way. Prefer timeframe_enum; fall back to the deprecated string field.
+	// Normalize the requested interval to the canonical DB spelling (ingester/backfill store
+	// canonical); without it QueryBars never matches. Prefer the enum, fall back to the string.
 	legacyTf := req.Timeframe //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
 	canonicalTf := legacyTf
 	if c, rErr := timeframe.Resolve(req.GetTimeframeEnum(), legacyTf); rErr == nil {
 		canonicalTf = c
 	}
 
-	// Feature 143: only "1d" is servable going forward. Reject before markWarm/DB/live-fallback
-	// so a rejected request never marks a symbol warm or spends an Alpaca call. GetDataCoverage
-	// and DeleteBackfilledData stay deliberately permissive (see their own doc comments) so
-	// historical 15m/1h rows remain inspectable/deletable.
+	// Only "1d" is servable — reject before markWarm/DB/live so a rejected request never warms a
+	// symbol or spends an Alpaca call. Coverage/Delete stay permissive (see their docs).
 	if canonicalTf != "1d" {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("timeframe %q not supported; only \"1d\" is servable", canonicalTf))
@@ -168,19 +154,15 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 			end = req.Range.End.AsTime()
 		}
 	}
-	// A request with no explicit range START is a "latest bars" read (charts, screener): serve the
-	// most-recent page (FR-7 — QueryRecentBars). A request WITH an explicit start is a
-	// historical/paginated read (backtest): keep the oldest-page-forward pagination unchanged.
-	// startImplicit also gates the FR-3 staleness refetch below (current-window reads only).
+	// No explicit range START = "latest bars" read (charts/screener) → newest page; WITH a start =
+	// paginated backtest → oldest-page-forward. startImplicit also gates the staleness refetch below.
 	startImplicit := req.Range == nil || req.Range.Start == nil
 	if end.IsZero() {
 		end = time.Now()
 	}
 	if start.IsZero() {
-		// Size the implicit history window to the requested page of bars for this
-		// timeframe — not a flat 24h, which yields ~0 bars for a 1d/1h chart (a daily
-		// chart requested on a weekend has no bar inside the last 24h at all). The 3×
-		// slack absorbs weekends/holidays/market-closed gaps so a full page still loads.
+		// Size the implicit window to the requested page for this timeframe (not a flat 24h, which
+		// yields ~0 bars for a daily chart on a weekend); 3× slack absorbs market-closed gaps.
 		start = end.Add(-defaultBarLookback(canonicalTf, pageSize))
 	}
 
@@ -190,9 +172,8 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 		err       error
 	)
 	if startImplicit && pageToken == "" {
-		// FR-7: the newest page (ascending), independent of how much history is stored — the
-		// chart/screener fetch only the first page, so an oldest-page-forward read here (QueryBars)
-		// would render months-old bars for any symbol with more than pageSize stored bars.
+		// Newest page (ascending): charts/screener fetch only page one, so QueryBars' oldest-page-forward
+		// read would render months-old bars for any symbol with more than pageSize stored.
 		bars, err = s.repo.QueryRecentBars(ctx, req.Symbol, canonicalTf, end, pageSize)
 	} else {
 		bars, nextToken, err = s.repo.QueryBars(ctx, req.Symbol, canonicalTf, start, end, pageSize, pageToken)
@@ -201,14 +182,8 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 		return nil, fmt.Errorf("query bars: %w", err)
 	}
 
-	// Live-fetch fallback (first page only — a later empty page is end-of-data, not a miss). Two
-	// triggers, both routed through fetchAndCacheBars (live → cache → re-read):
-	//   (1) DB miss — no stored bars at all (existing behavior; every window).
-	//   (2) FR-3 staleness — current-window (implicit-start) read whose newest stored bar is older
-	//       than one bar interval, so today's bar is missing. On the FR-7 path bars are ascending, so
-	//       bars[len-1] is the globally newest stored bar. Rate-limited to one live fetch per
-	//       (symbol,tf) per interval (staleCheckDue) so a weekend — where the newest real bar is
-	//       legitimately older than one interval — does not refetch on every poll.
+	// Live-fetch fallback (first page only), via fetchAndCacheBars: (1) DB miss — no stored bars;
+	// (2) staleness — implicit-window read whose newest bar is older than one interval (rate-limited).
 	if pageToken == "" {
 		refetch := len(bars) == 0
 		if !refetch && startImplicit && len(bars) > 0 {
@@ -220,8 +195,8 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 			}
 		}
 		if refetch {
-			// Keep the stale-but-present bars if the refetch yields nothing (e.g. a weekend with no
-			// newer bar) rather than blanking a chart that has data.
+			// Keep stale-but-present bars if the refetch yields nothing (e.g. a weekend) rather
+			// than blanking a chart that has data.
 			if fresh, freshToken := s.fetchAndCacheBars(ctx, req.Symbol, canonicalTf, start, end, pageSize, startImplicit); len(fresh) > 0 {
 				bars, nextToken = fresh, freshToken
 			}
@@ -234,10 +209,8 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 	}, nil
 }
 
-// staleCheckDue reports whether a FR-3 stale-bar refetch may run now for this (symbol,timeframe),
-// and atomically marks it done — so at most one live Alpaca fetch runs per interval even when the
-// newest stored bar is legitimately older than one interval (weekend/holiday) and every poll would
-// otherwise see it as stale. Mirrors the warmSymbols map+mutex pattern.
+// staleCheckDue reports whether a stale-bar refetch may run now for this (symbol,timeframe) and
+// atomically marks it done — so at most one live Alpaca fetch runs per interval.
 func (s *MarketDataService) staleCheckDue(symbol, tf string, interval time.Duration, now time.Time) bool {
 	key := symbol + "|" + tf
 	s.staleMu.Lock()
@@ -249,12 +222,8 @@ func (s *MarketDataService) staleCheckDue(symbol, tf string, interval time.Durat
 	return true
 }
 
-// fetchAndCacheBars fetches bars for a symbol from the live source, persists them, and returns a
-// page from the DB. When recent is true (the implicit-window chart/screener path) it re-reads the
-// NEWEST page (FR-7) with no page token; otherwise it re-reads the oldest-page-forward window so
-// pagination stays consistent for historical/backtest callers. On any failure it logs and returns no
-// bars — GetBars then yields an empty (but valid) response rather than erroring. If caching fails the
-// freshly fetched bars are still served, truncated to pageSize (newest slice when recent).
+// fetchAndCacheBars fetches from the live source, persists, and re-reads a page: newest page when
+// recent, else oldest-page-forward. On any failure it logs and returns no bars (GetBars → empty response).
 func (s *MarketDataService) fetchAndCacheBars(ctx context.Context, symbol, tf string, start, end time.Time, pageSize int, recent bool) ([]*marketdatav1.Bar, string) {
 	src, err := s.registry.Get("")
 	if err != nil {
@@ -301,10 +270,8 @@ func truncateBars(live []*marketdatav1.Bar, pageSize int, recent bool) []*market
 	return live[:pageSize]
 }
 
-// defaultBarLookback sizes the implicit history window (when the caller supplies no
-// explicit range) to cover at least `bars` bars of the given canonical timeframe, times a
-// slack multiplier so non-continuous market hours (overnight gaps, weekends, holidays)
-// still yield a full page. Unknown timeframes fall back to a day-sized interval.
+// defaultBarLookback sizes the implicit window to cover at least `bars` bars of the timeframe,
+// times a slack multiplier for market-closed gaps. Unknown timeframes fall back to a day.
 func defaultBarLookback(canonicalTf string, bars int) time.Duration {
 	interval := timeframe.Interval(canonicalTf)
 	if interval <= 0 {
@@ -317,11 +284,8 @@ func defaultBarLookback(canonicalTf string, bars int) time.Duration {
 	return time.Duration(bars) * interval * slack
 }
 
-// GetDataCoverage reports stored OHLCV coverage (earliest/latest/count + gaps) for a
-// symbol+timeframe. Read-only DB query — no outbound gRPC call, so no header propagation needed.
-// GetDataCoverage stays deliberately permissive on 15m/1h by design (feature 143): unlike
-// GetBars/BackfillBars it does NOT reject non-1d timeframes, so an operator can still inspect
-// coverage of historically-stored 15m/1h rows. Do not "fix" this asymmetry as a bug.
+// GetDataCoverage reports stored OHLCV coverage for a symbol+timeframe. Deliberately permissive
+// on 15m/1h (unlike GetBars) so historical rows stay inspectable — do not "fix" this asymmetry.
 func (s *MarketDataService) GetDataCoverage(ctx context.Context, req *marketdatav1.GetDataCoverageRequest) (*marketdatav1.GetDataCoverageResponse, error) {
 	if req.Symbol == "" {
 		return nil, fmt.Errorf("symbol required")
@@ -376,15 +340,8 @@ func (s *MarketDataService) GetDataCoverage(ctx context.Context, req *marketdata
 	return resp, nil
 }
 
-// resolveDeletePlan validates a delete request and computes the scoped (timeframe, start, end)
-// to hand to the repo. Pure: it takes the propagated access scope and the configured
-// max-delete-days directly (not a ctx or config.Watcher) so the FR-5 guards — symbol required,
-// admin-only (0x04), and the optional delete-window cap — are unit-testable without a DB or
-// config server. Returns connect-coded errors that the handler forwards.
-//
-// Stays deliberately permissive on 15m/1h by design (feature 143): unlike GetBars/BackfillBars
-// it does NOT reject non-1d timeframes, so an operator can still scope a delete to historical
-// 15m/1h rows. Do not "fix" this asymmetry as a bug.
+// resolveDeletePlan validates a delete and computes the scoped (timeframe,start,end). Pure/testable;
+// enforces symbol-required + admin-only (scope&0x04) + optional window cap. Permissive on 15m/1h — don't "fix".
 func resolveDeletePlan(symbol, accessScope string, tf commonv1.Timeframe, rng *commonv1.TimeRange, maxDays int64) (canonical string, start, end time.Time, err error) {
 	if symbol == "" {
 		return "", time.Time{}, time.Time{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("symbol required; refusing unbounded delete"))
@@ -420,9 +377,7 @@ func resolveDeletePlan(symbol, accessScope string, tf commonv1.Timeframe, rng *c
 }
 
 // DeleteBackfilledData performs a scoped, admin-only delete of backfilled OHLCV bars (FR-5).
-// The symbol is required (server-side guard against an unbounded delete); range and timeframe
-// are optional. A whole-symbol delete (no range) is allowed at the server — the UI double-confirms
-// it — but is still bounded by the symbol predicate. Emits an audit ledger event.
+// Symbol required (guards against unbounded delete); range/timeframe optional. Emits an audit event.
 func (s *MarketDataService) DeleteBackfilledData(ctx context.Context, req *marketdatav1.DeleteBackfilledDataRequest) (*marketdatav1.DeleteBackfilledDataResponse, error) {
 	canonical, start, end, err := resolveDeletePlan(
 		req.Symbol,
@@ -472,11 +427,8 @@ func (s *MarketDataService) GetLatestQuote(ctx context.Context, symbol string) (
 	return live, nil
 }
 
-// GetLatestPrice returns the latest trade price + prior-session daily close for a symbol
-// (feature 095). last_price comes from the live source's latest-trade fetch (when the source
-// supports it); prev_close is read from the stored prior daily bar — no extra Alpaca call. Either
-// value is left UNSET (never 0) when unavailable, so a caller can distinguish "no data" from a real
-// zero (AC-11 omit-not-fabricate). A fetch failure is logged, not fatal.
+// GetLatestPrice returns the latest trade price + prior-session daily close. Either value is left
+// UNSET (never 0) when unavailable so callers can tell "no data" from a real zero (AC-11).
 func (s *MarketDataService) GetLatestPrice(ctx context.Context, symbol string) (*marketdatav1.LatestPrice, error) {
 	// Track the symbol so the warm poller / bar ingester keep its data fresh.
 	s.markWarm(symbol)
@@ -513,12 +465,8 @@ func (s *MarketDataService) markWarm(symbol string) {
 	s.warmMu.Unlock()
 }
 
-// warmSnapshot returns the current warm-symbol set as a slice. This is the demand-driven set that
-// GetBars / GetLatestQuote populate (via markWarm) and that the always-on bar ingester consumes each
-// cycle — so any symbol a caller has queried gets its bars refreshed. This coupling is the
-// autonomous-freshness contract (feature 140): the analysis live loop and the opportunities refresh
-// query GetBars for every symbol they evaluate, which warms exactly those symbols, so the ingester
-// keeps their daily bars fresh with no chart view / portal interaction required.
+// warmSnapshot returns the warm-symbol set (marked by GetBars/GetLatestQuote) that the bar
+// ingester consumes — the autonomous-freshness contract: querying a symbol keeps its bars fresh.
 func (s *MarketDataService) warmSnapshot() []string {
 	s.warmMu.Lock()
 	defer s.warmMu.Unlock()
@@ -529,10 +477,8 @@ func (s *MarketDataService) warmSnapshot() []string {
 	return symbols
 }
 
-// StartWarmQuotePoller periodically refreshes the latest quote for every symbol
-// that has been queried via GetLatestQuote, writing it to the DB so reads serve
-// from the cache instead of a live Alpaca call. Interval is configurable via
-// marketdata.stream.warm_interval_ms (default 30s); set to 0 to pause.
+// StartWarmQuotePoller periodically refreshes every queried symbol's latest quote into the DB
+// so reads serve from cache. Interval via marketdata.stream.warm_interval_ms (default 30s; 0 pauses).
 func (s *MarketDataService) StartWarmQuotePoller(ctx context.Context) {
 	const defaultIntervalMs = 30000
 	interval := time.Duration(s.cfg.GetInt("marketdata.stream.warm_interval_ms", defaultIntervalMs)) * time.Millisecond
@@ -596,11 +542,8 @@ func (s *MarketDataService) StartWarmQuotePoller(ctx context.Context) {
 					slog.Warn("warm poller: cache insert failed", "symbol", sym, "error", err)
 				}
 			}
-			// Per-symbol fetch errors used to be dropped silently, which hid
-			// whole-feed failures (e.g. invalid/placeholder Alpaca credentials, where
-			// every call gets the same 401). Surface them once per cycle with a sample
-			// error instead of staying quiet — a high failed count with fetched==0 is
-			// the signature of a credential/feed problem, not a bad ticker.
+			// Surface per-symbol fetch failures once per cycle (a high failed count with fetched==0
+			// is the signature of a credential/feed problem) instead of dropping them silently.
 			if failed > 0 {
 				slog.Warn("warm poller: per-symbol quote fetch failures",
 					"failed", failed, "fetched", fetched, "total", len(symbols), "sample_error", firstErr)
@@ -609,11 +552,8 @@ func (s *MarketDataService) StartWarmQuotePoller(ctx context.Context) {
 	}
 }
 
-// StartBarIngestPoller continuously ingests recent bars for every symbol that has been
-// queried (the same warm set StartWarmQuotePoller tracks — populated by GetLatestQuote and
-// GetBars), upserting them into marketdata.ohlcv. This gives the platform an always-on feed
-// instead of one that only runs while a client holds a StreamBars RPC open. Interval is
-// configurable via marketdata.stream.bar_ingest_interval_ms (default 5m); set to 0 to pause.
+// StartBarIngestPoller continuously ingests recent bars for every warm symbol into marketdata.ohlcv —
+// an always-on feed. Interval via marketdata.stream.bar_ingest_interval_ms (default 5m; 0 pauses).
 func (s *MarketDataService) StartBarIngestPoller(ctx context.Context) {
 	const defaultIntervalMs = 300000
 	interval := time.Duration(s.cfg.GetInt("marketdata.stream.bar_ingest_interval_ms", defaultIntervalMs)) * time.Millisecond
@@ -640,28 +580,12 @@ func (s *MarketDataService) StartBarIngestPoller(ctx context.Context) {
 	}
 }
 
-// defaultBarIngestTimeframe is the declared default of
-// marketdata.stream.bar_ingest_timeframe (see the service CLAUDE.md config table).
-//
-// Only "1d" is requestable/ingested going forward (feature 143 narrowed this from "15m,1d";
-// feature 140 flipped the default to 1d and added the GetBars newest-page/staleness reads that
-// keep the served bars current): GetBars/BackfillBars reject any other timeframe, so continuously
-// ingesting 15m served no live consumer (the live loop's _eval_pair, the screener's technical
-// criteria, and the default SMA strategy all evaluate daily bars only). The value stays a
-// comma-separated LIST, parsed by resolveIngestTimeframes, which is count-agnostic — an existing
-// single-value config override ("1d", or even a legacy "15m,1d") remains valid; the default is
-// simply one element now. Continuous 1d ingestion keeps daily bars fresh (GetBars's live-fallback
-// fires on a first-page DB cache MISS or, per feature 140, when the newest cached bar is stale).
+// defaultBarIngestTimeframe defaults marketdata.stream.bar_ingest_timeframe to "1d" — the only
+// requestable interval (feature 143). Stays a comma-separated LIST, parsed by resolveIngestTimeframes.
 const defaultBarIngestTimeframe = "1d"
 
-// resolveIngestTimeframes parses+canonicalizes the configured bar-ingest timeframe list.
-// Bars fetched with these values are PERSISTED (InsertBars), so an out-of-vocabulary config
-// entry would write rows that no GetBars query can ever match (MARKETDATA-1). Empty means
-// "not configured" and falls back silently; an unresolvable entry is skipped with a WARN
-// (once per cycle) rather than aborting the whole list. If nothing resolves, falls back to
-// the default list. Dedupes so a caller listing the same timeframe twice doesn't double-fetch.
-// The documented way to pause ingestion is bar_ingest_interval_ms <= 0 (MARKETDATA-5), never
-// a bogus timeframe.
+// resolveIngestTimeframes parses+canonicalizes the ingest-timeframe list. Fetched bars are
+// PERSISTED, so an out-of-vocab entry is skipped with a WARN (MARKETDATA-1); pause via interval<=0.
 func resolveIngestTimeframes(raw string) []string {
 	if raw == "" {
 		raw = defaultBarIngestTimeframe
@@ -692,13 +616,8 @@ func resolveIngestTimeframes(raw string) []string {
 	return out
 }
 
-// minIngestLookback is the floor lookback window for a given canonical timeframe,
-// regardless of the configured marketdata.stream.bar_ingest_lookback_ms: that key is sized
-// for the 15m default (900000ms = 15min) and is far too short to ever re-cover a "1d" bar
-// (whose own interval is 24h) — using it unmodified for "1d" would ingest an empty window on
-// almost every cycle and reproduce this same staleness bug for daily bars. 2x the
-// timeframe's own interval comfortably covers the current (possibly still-open) session
-// plus the prior one, so a weekend/holiday gap still self-heals on the next trading day.
+// minIngestLookback floors a timeframe's lookback at 2× its interval: the configured
+// bar_ingest_lookback_ms is sized for 15m and too short to ever re-cover a 1d bar.
 func minIngestLookback(canonicalTf string) time.Duration {
 	interval := timeframe.Interval(canonicalTf)
 	if interval <= 0 {
@@ -707,13 +626,8 @@ func minIngestLookback(canonicalTf string) time.Duration {
 	return 2 * interval
 }
 
-// ingestRecentBars fetches the recent bar window for every warm symbol, for every
-// configured ingest timeframe, and upserts it. The lookback
-// (marketdata.stream.bar_ingest_lookback_ms, default 15m) is re-fetched each cycle;
-// overlap is harmless because InsertBars upserts, and a window wider than the poll interval
-// lets the feed self-heal after a brief pause or restart. Each timeframe's actual window is
-// at least minIngestLookback(tf) — see its doc comment for why the flat configured value
-// alone isn't sufficient for anything coarser than "15m".
+// ingestRecentBars upserts the recent bar window for every warm symbol × configured timeframe.
+// Overlap is harmless (InsertBars upserts); each window is at least minIngestLookback(tf).
 func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
 	symbols := s.warmSnapshot()
 	if len(symbols) == 0 {
@@ -805,23 +719,19 @@ func (s *MarketDataService) BackfillBars(ctx context.Context, req *marketdatav1.
 		start = end.Add(-365 * 24 * time.Hour)
 	}
 
-	// The per-request bar limit (marketdata.backfill.batch_size) and rate limit are
-	// applied inside the Alpaca client (configured at startup); pagination is handled
-	// transparently by GetBars/GetBarsMulti, so no batching is needed here.
+	// Batch size and rate limit are applied inside the Alpaca client; pagination is transparent,
+	// so no batching is needed here.
 
-	// Resolve once, same raw-fallback shape as GetBars (feature 080 FR-11). Previously
-	// every site below read req.Timeframe raw and never called Resolve, so an enum-only
-	// caller (Timeframe unset) reached Alpaca with "" and persisted rows GetBars could
-	// never find again. Kept as a fallback rather than an error for consistency with
-	// GetBars (design Open Risk 2).
+	// Resolve once (same raw-fallback shape as GetBars): an enum-only caller would otherwise reach
+	// Alpaca with "" and persist rows GetBars could never find again.
 	legacyTf := req.Timeframe //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
 	canonicalTf := legacyTf
 	if c, rErr := timeframe.Resolve(req.GetTimeframeEnum(), legacyTf); rErr == nil {
 		canonicalTf = c
 	}
 
-	// Feature 143: reject anything but "1d" — mirrors GetBars. Rejecting before emitEvent
-	// avoids a started/failed ledger-event pair for a request that never touched Alpaca.
+	// Reject anything but "1d" (mirrors GetBars). Before emitEvent, so a rejected request emits no
+	// started/failed ledger pair.
 	if canonicalTf != "1d" {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("timeframe %q not supported; only \"1d\" is servable", canonicalTf))
@@ -876,11 +786,8 @@ func (s *MarketDataService) BackfillBars(ctx context.Context, req *marketdatav1.
 	}, nil
 }
 
-// estimateExpectedBars approximates the total bar count across the requested
-// symbols/range, used by xstockstrat-ingest as a progress denominator (FR-6).
-// It counts weekdays (Mon–Fri) in [start, end] as a trading-day approximation
-// (a US-holiday calendar is out of scope for a progress estimate) and multiplies
-// by a per-day bar factor keyed off the timeframe and by the number of symbols.
+// estimateExpectedBars approximates total bars across symbols/range (weekdays × per-day factor ×
+// symbols) as a progress denominator for xstockstrat-ingest. No US-holiday calendar (FR-6).
 func estimateExpectedBars(symbols []string, timeframe string, start, end time.Time) int64 {
 	if len(symbols) == 0 || !end.After(start) {
 		return 0
@@ -966,13 +873,8 @@ func (s *MarketDataService) StartBarStream(ctx context.Context, symbols []string
 		"symbols": symbols, "timeframe": timeframe,
 	})
 	go func() {
-		// Streamed bars are Alpaca's native 1-minute bars (see alpaca.streamBarTimeframe);
-		// they are forwarded to live subscribers only. Persisting the platform's continuously
-		// ingested timeframes (marketdata.stream.bar_ingest_timeframe, default "15m,1d") is
-		// owned by the always-on REST bar ingester (StartBarIngestPoller), so we do not write
-		// streamed minute bars into the ohlcv table here. "1h" is not continuously ingested —
-		// it is only ever populated on demand (GetBars' live-fallback) or by an explicit
-		// backfill.
+		// Streamed bars are Alpaca's 1-minute bars — forwarded to live subscribers only, never
+		// persisted here; continuous ingestion is owned by StartBarIngestPoller.
 		for bar := range feed {
 			s.mu.RLock()
 			for _, ch := range s.barSubs {
@@ -1047,11 +949,9 @@ func (s *MarketDataService) emitAlert(ctx context.Context, msg string) {
 	}
 }
 
-// ── Fundamentals (feature 059; provider made switchable by feature 129) ─────
-// Read-through cache → quota guard → provider fetch → 80%-quota WARNING, mirroring
-// the GetBars/fetchAndCacheBars idiom. The active provider (s.fundProvider, "fmp" or
-// "finnhub") is gated behind marketdata.<fundProvider>.enabled and reached only via
-// this service (the single fundamentals chokepoint).
+// ── Fundamentals (feature 059; switchable provider 129) ─────
+// Read-through cache → quota guard → fetch → 80% WARNING; the active provider is the single
+// fundamentals chokepoint, gated by marketdata.<fundProvider>.enabled.
 
 // GetFundamentals returns cached-or-fetched fundamentals for one symbol.
 func (s *MarketDataService) GetFundamentals(ctx context.Context, symbol string) (*marketdatav1.Fundamentals, error) {
@@ -1165,12 +1065,8 @@ func (s *MarketDataService) resolveFundamentals(ctx context.Context, symbol stri
 	return s.toProtoFundamentals(fresh, false), nil
 }
 
-// fundamentalsEnabled returns FailedPrecondition when the active fundamentals provider
-// is disabled (or unbuilt), making NO external call (FR-6). Since feature 082,
-// s.fundamentals is always non-nil via the sole construction path (cmd/server/main.go's
-// newFundamentalsSource) — the "|| s.fundamentals == nil" half of this guard is
-// defensive-only and not reachable through that path today; kept in case a future
-// caller constructs the service directly with a nil source.
+// fundamentalsEnabled returns FailedPrecondition (no external call) when the active provider is
+// disabled. The "s.fundamentals == nil" half is defensive-only — always non-nil via boot (feature 082).
 func (s *MarketDataService) fundamentalsEnabled() error {
 	if !s.fundCfg.GetBool("marketdata."+s.fundProvider+".enabled", false) || s.fundamentals == nil {
 		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("%s fundamentals source disabled", s.fundProvider))
@@ -1178,10 +1074,8 @@ func (s *MarketDataService) fundamentalsEnabled() error {
 	return nil
 }
 
-// fundamentalsQuota returns the active provider's current fetch count, cap, and window
-// (seconds) for the 80%-WARNING/at-cap logic. FMP keeps its exact pre-existing daily-cap
-// shape (unchanged config key, unchanged repo method); Finnhub uses the new rolling
-// window (feature 129).
+// fundamentalsQuota returns the active provider's current count, cap, and window (seconds) for the
+// 80%-WARNING/at-cap logic: FMP uses a fixed daily cap, Finnhub a rolling window (feature 129).
 func (s *MarketDataService) fundamentalsQuota(ctx context.Context) (count, cap int, windowSeconds int64, err error) {
 	switch s.fundProvider {
 	case "finnhub":
@@ -1197,13 +1091,8 @@ func (s *MarketDataService) fundamentalsQuota(ctx context.Context) (count, cap i
 	return count, cap, windowSeconds, err
 }
 
-// maybeAlertQuota emits one WARNING per active window (see fundamentalsQuota) once the
-// fetch count crosses 80% of the cap (FR-7). Uses the request ctx so the propagation
-// interceptor carries headers. The dedup bucket is a window-floor, not a UTC-date
-// string — for FMP's 86400s window this is UTC-midnight-aligned (Unix epoch starts at
-// UTC midnight), identical behavior to the pre-feature-129 UTC-day dedup; for a shorter
-// window (e.g. Finnhub's 60s) it correctly re-fires once per new window instead of
-// firing once and going silent until the next UTC day.
+// maybeAlertQuota emits one WARNING per active window once the count crosses 80% of cap. The dedup
+// bucket is a window-floor, so a short window (Finnhub) re-fires per window instead of once per UTC day.
 func (s *MarketDataService) maybeAlertQuota(ctx context.Context, count, cap int, windowSeconds int64) {
 	if cap <= 0 || count < (cap*8)/10 {
 		return
@@ -1235,18 +1124,15 @@ func (s *MarketDataService) emitWarning(ctx context.Context, msg string) {
 	}
 }
 
-// fundamentalMetricPtr names one of source.Fundamentals' 11 nullable metric fields
-// alongside its canonical wire name (matches marketdata.proto's field names verbatim,
-// which in turn matches analysis' screener `_FUNDAMENTAL_FIELDS` metric_name set).
+// fundamentalMetricPtr pairs a nullable metric with its wire name (matching marketdata.proto's
+// field names verbatim, which match analysis' screener metric_name set).
 type fundamentalMetricPtr struct {
 	name string
 	val  *float64
 }
 
-// derefOrZero reads a nullable metric for the proto's plain-double field — the wire
-// value is 0.0 when nil, exactly like before this fix. The actual presence signal is
-// missing_metrics, appended separately by toProtoFundamentals; callers must not infer
-// "present" from a non-zero reading alone.
+// derefOrZero reads a nullable metric as 0.0 when nil. Presence is signaled by missing_metrics
+// (set separately), so callers must not infer "present" from a non-zero reading alone.
 func derefOrZero(p *float64) float64 {
 	if p == nil {
 		return 0
@@ -1254,9 +1140,8 @@ func derefOrZero(p *float64) float64 {
 	return *p
 }
 
-// toProtoFundamentals maps the internal source.Fundamentals to the wire message. It is
-// a method (not a free function) so its empty-Source fallback can name the actually
-// active provider (feature 129) instead of hardcoding "fmp".
+// toProtoFundamentals maps source.Fundamentals to the wire message. A method (not a free
+// function) so its empty-Source fallback names the active provider (feature 129), not "fmp".
 func (s *MarketDataService) toProtoFundamentals(f *source.Fundamentals, stale bool) *marketdatav1.Fundamentals {
 	if f == nil {
 		return nil

@@ -22,25 +22,19 @@ from urllib.parse import quote
 
 from mcp.types import Annotations, EmbeddedResource, TextResourceContents
 
-# Presentation constants, not config: nothing here is operationally tunable, so F-07 does not apply.
-# (A size/bar-count threshold *would* cross it — that variant was rejected at design time.)
+# Presentation constants, not config — nothing here is operationally tunable.
 _ATTACHMENT_MIME = "application/json"
 _URI_TEMPLATE = "xstockstrat:///backtest/{backtest_id}/result.json"
 _ATTACHMENT_PRIORITY = 0.1
 
-# The BacktestResult fields `summarize` drops on purpose. Named so the descriptor-parity test can
-# assert `kept | dropped == fields_by_name` — a bare equality would be red by construction.
-# feature 150: `portfolio_equity_curve` is O(bars) like `trades`, so it too is routed to the
-# attachment (dropped from the inline summary), while `capital_skips` is surfaced inline as a count.
+# Fields `summarize` drops on purpose (asserted by the descriptor-parity test: kept | dropped ==
+# fields_by_name). portfolio_equity_curve is O(bars) like trades, so it too rides the attachment.
 _INTENTIONALLY_DROPPED = frozenset({"trades", "portfolio_equity_curve"})
 
-# feature 150: `sizing_mode` belongs in the compact head block so the mode always reaches the
-# caller (even with no attachment) — a portfolio-mode return is never silently read as a legacy one.
-# feature 151: `fill_model` likewise — the effective fill model always reaches the caller inline, so
-# a next-bar-open run is never silently compared against a legacy same-bar-close one.
+# sizing_mode and fill_model live in the head block so the mode/model always reach the caller inline
+# (a portfolio or next-bar-open run is never silently read as legacy).
 _HEAD_KEYS = ("backtest_id", "strategy_id", "status", "completed_at", "sizing_mode", "fill_model")
 
-# FR-2's headline metric set.
 _METRIC_KEYS = (
     "total_return",
     "annualized_return",
@@ -52,8 +46,8 @@ _METRIC_KEYS = (
     "initial_capital",
 )
 
-# FR-2's per-symbol 0-trade diagnosis set. `bars` is deliberately excluded — dropping it is what
-# makes the summary O(symbols) instead of O(symbols x bars).
+# Per-symbol 0-trade diagnosis set. `bars` is deliberately excluded — that keeps the summary
+# O(symbols), not O(symbols x bars).
 _SYMBOL_KEYS = ("symbol", "no_trade_reason", "bars_total", "warmup_bars")
 
 
@@ -70,22 +64,21 @@ def summarize(result: dict[str, Any]) -> dict[str, Any]:
     """
     summary: dict[str, Any] = {k: result[k] for k in _HEAD_KEYS + _METRIC_KEYS if k in result}
 
-    # AC-4: the only path an INSUFFICIENT_DATA run has to report itself — it gets no attachment.
+    # The only path an INSUFFICIENT_DATA run has to report itself — it gets no attachment.
     if "coverage_gaps" in result:
         summary["coverage_gaps"] = result["coverage_gaps"]
 
-    # Feature 086: surface run warnings inline (e.g. a referenced formula was soft-deleted). Small
-    # and must reach the caller even on an INSUFFICIENT_DATA run with no attachment.
+    # Surface run warnings inline (e.g. a soft-deleted formula) — must reach the caller even on an
+    # INSUFFICIENT_DATA run with no attachment.
     if "warnings" in result:
         summary["warnings"] = result["warnings"]
 
-    # feature 150: surface a portfolio capital-skip COUNT inline (small, diagnostic) — the full
-    # PortfolioCapitalSkip list rides in the attachment via the verbatim `result` dump. Mirrors the
-    # coverage_gaps guard: present-key test, not truthiness, so a real `[]` collapses to 0.
+    # Surface a capital-skip COUNT inline (the full list rides the attachment). Present-key test,
+    # not truthiness, so a real `[]` collapses to 0.
     if "capital_skips" in result:
         summary["capital_skips"] = len(result["capital_skips"] or [])
 
-    # Same key name as feature 064 so existing readers keep their path — only `bars` is dropped.
+    # Same key name as the full result so existing readers keep their path — only `bars` is dropped.
     if "diagnostics" in result:
         summary["diagnostics"] = [
             {k: d[k] for k in _SYMBOL_KEYS if k in d} for d in result["diagnostics"] or []
@@ -111,10 +104,8 @@ def build_blocks(result: dict[str, Any]) -> list[EmbeddedResource]:
             type="resource",
             annotations=Annotations(audience=["user"], priority=_ATTACHMENT_PRIORITY),
             resource=TextResourceContents(
-                # quote() is byte-identical for a uuid today, but AnyUrl silently NORMALISES a
-                # path — `bt/../../etc/passwd` becomes `xstockstrat:///etc/passwd/result.json`,
-                # losing `backtest` entirely. Harmless while nothing dereferences the URI; this
-                # pre-hardens the escalation recorded in design.md rather than leaving a note.
+                # quote() the id: AnyUrl silently normalises a path, so an un-quoted `../` could
+                # collapse `xstockstrat:///backtest/<id>/...` into a different URI (path traversal).
                 uri=_URI_TEMPLATE.format(
                     backtest_id=quote(result.get("backtest_id") or "unknown", safe="")
                 ),

@@ -15,10 +15,7 @@ import (
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
 )
 
-// queryRower is the subset of *pgxpool.Pool that GetPosition needs, extracted so the
-// account-scoped query can be exercised with pgxmock (this service has no live-DB test
-// harness and CI provisions no database). Both *pgxpool.Pool and pgxmock.PgxPoolIface
-// satisfy it; production wires it to the real pool.
+// queryRower is the subset of *pgxpool.Pool GetPosition needs, so it can be exercised with pgxmock.
 type queryRower interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
@@ -26,9 +23,8 @@ type queryRower interface {
 // PortfolioRepo handles reads and writes for positions and snapshots.
 type PortfolioRepo struct {
 	pool *pgxpool.Pool
-	// db is the query surface GetPosition executes against — the same *pgxpool.Pool in
-	// production, a pgxmock in the repository test. Kept alongside pool (not replacing it)
-	// so Pool() still returns the concrete *pgxpool.Pool that sibling repos reuse.
+	// db is the mockable query surface (pool in prod, pgxmock in tests); kept alongside pool so
+	// Pool() still returns the concrete *pgxpool.Pool sibling repos reuse.
 	db queryRower
 }
 
@@ -44,18 +40,14 @@ func NewPortfolioRepo(connStr string) (*PortfolioRepo, error) {
 	return &PortfolioRepo{pool: pool, db: pool}, nil
 }
 
-// Pool exposes the underlying connection pool so sibling repositories in this
-// package (e.g. WatchlistRepo) can reuse the single portfolio pgxpool rather than
-// opening a second pool (keeps the connection-pool budget at 2).
+// Pool exposes the underlying pool so sibling repos (e.g. WatchlistRepo) reuse the single portfolio
+// pgxpool instead of opening a second — keeps the connection-pool budget at 2.
 func (r *PortfolioRepo) Pool() *pgxpool.Pool {
 	return r.pool
 }
 
-// UpsertPosition inserts or updates a position row. realizedDelta (feature 042) is the realized
-// P&L this fill contributed by reducing the position; it accumulates into realized_accum on
-// conflict (attribution-stats-only, never a user-facing figure).
-// feesDelta (feature 029) accumulates into fees_accum on conflict, the exact parallel of
-// realizedDelta/realized_accum — attribution-stats-only, sealed onto the close event as fees_total.
+// UpsertPosition inserts or updates a position row. realizedDelta/feesDelta accumulate into
+// realized_accum/fees_accum on conflict — attribution-stats-only, never a user-facing figure.
 func (r *PortfolioRepo) UpsertPosition(ctx context.Context, userID, symbol string, qty, avgEntry, costBasis float64, mode commonv1.TradingMode, accountID string, realizedDelta, feesDelta float64) error {
 	const q = `
 		INSERT INTO portfolio.positions (user_id, symbol, qty, avg_entry_price, cost_basis, trading_mode, account_id, realized_accum, fees_accum, opened_at, updated_at)
@@ -66,9 +58,7 @@ func (r *PortfolioRepo) UpsertPosition(ctx context.Context, userID, symbol strin
 	return err
 }
 
-// GetRealizedAccum returns the position's accumulated realized P&L (feature 042). 0 when the row
-// does not exist. Read just before a full close, so the sealed realized figure is accum + the
-// closing fill's delta without re-reading it onto the about-to-be-deleted row.
+// GetRealizedAccum returns the position's accumulated realized P&L, or 0 when the row does not exist.
 func (r *PortfolioRepo) GetRealizedAccum(ctx context.Context, userID, symbol string, mode commonv1.TradingMode, accountID string) (float64, error) {
 	q := `SELECT COALESCE(realized_accum, 0) FROM portfolio.positions
 	      WHERE user_id=$1 AND symbol=$2 AND trading_mode=$3`
@@ -86,9 +76,7 @@ func (r *PortfolioRepo) GetRealizedAccum(ctx context.Context, userID, symbol str
 	return accum, err
 }
 
-// GetFeesAccum returns the position's accumulated broker fees (feature 029), the exact parallel of
-// GetRealizedAccum. 0 when the row does not exist. Read just before a full close so the sealed
-// fees_total is accum + the closing fill's fee.
+// GetFeesAccum returns the position's accumulated broker fees, or 0 when the row does not exist.
 func (r *PortfolioRepo) GetFeesAccum(ctx context.Context, userID, symbol string, mode commonv1.TradingMode, accountID string) (float64, error) {
 	q := `SELECT COALESCE(fees_accum, 0) FROM portfolio.positions
 	      WHERE user_id=$1 AND symbol=$2 AND trading_mode=$3`
@@ -106,8 +94,8 @@ func (r *PortfolioRepo) GetFeesAccum(ctx context.Context, userID, symbol string,
 	return accum, err
 }
 
-// ClosePosition removes a position row (called when qty reaches zero). Account-scoped (feature 042)
-// so a multi-account user's other-account position for the same (user, symbol, mode) survives.
+// ClosePosition removes a position row (qty reached zero). Account-scoped so a multi-account user's
+// other-account position for the same (user, symbol, mode) survives.
 func (r *PortfolioRepo) ClosePosition(ctx context.Context, userID, symbol string, mode commonv1.TradingMode, accountID string) error {
 	const q = `DELETE FROM portfolio.positions WHERE user_id=$1 AND symbol=$2 AND trading_mode=$3 AND account_id=$4`
 	_, err := r.pool.Exec(ctx, q, userID, symbol, mode.String(), accountID)
@@ -116,10 +104,8 @@ func (r *PortfolioRepo) ClosePosition(ctx context.Context, userID, symbol string
 
 // GetPosition returns a single position for a user/symbol/mode.
 func (r *PortfolioRepo) GetPosition(ctx context.Context, userID, symbol string, mode commonv1.TradingMode, accountID string) (*portfoliov1.Position, error) {
-	// Scope to a specific account when one is requested, mirroring ListPositions' optional
-	// account_id predicate (portfolio_repo.go ListPositions). Without it, a multi-account user's
-	// GetPosition would fall through to ORDER BY opened_at DESC LIMIT 1 and silently return
-	// whichever account's position opened most recently — not the account actually asked for.
+	// Scope to a specific account when requested: without it a multi-account user's GetPosition falls
+	// through to ORDER BY opened_at DESC LIMIT 1 and returns the wrong account's most-recent position.
 	q := `
 		SELECT ` + positionColumns + `
 		FROM portfolio.positions
@@ -141,10 +127,6 @@ func (r *PortfolioRepo) ListPositions(ctx context.Context, userID string, mode c
 		pageSize = 100
 	}
 
-	// Build the WHERE clause dynamically: optional trading_mode / account_id / symbol
-	// filters (each a placeholder param), a static qty-sign side filter, and the keyset
-	// pagination predicate (symbol > pageToken). ORDER BY symbol + pageSize+1 overflow probe
-	// are preserved so keyset pagination still works.
 	conds := []string{"user_id = $1"}
 	args := []any{userID}
 	add := func(condFmt string, val any) {
@@ -171,13 +153,8 @@ func (r *PortfolioRepo) ListPositions(ctx context.Context, userID string, mode c
 	args = append(args, pageSize+1)
 	limitIdx := len(args)
 
-	// Select the broker's mark-to-market valuation (current_price / market_value /
-	// unrealized_pnl / unrealized_pnl_pct) and intraday day_pnl figures via the shared
-	// positionColumns/scanPositionRow so broker-valued positions return authoritative figures.
-	// The service only falls back to marketdata mid-quote enrichment for positions the broker
-	// did not value (current_price <= 0) — previously this query omitted these columns, so the
-	// service always recomputed them from mid-quotes and the positions table diverged from the
-	// broker (e.g. market value / current price / P&L disagreeing with the Alpaca dashboard).
+	// Select broker valuation columns (via positionColumns) so broker-valued positions return
+	// authoritative figures; the service only re-enriches from marketdata when current_price <= 0.
 	q := fmt.Sprintf(`
 		SELECT `+positionColumns+`
 		FROM portfolio.positions
@@ -255,10 +232,8 @@ func (r *PortfolioRepo) CountPositions(ctx context.Context, userID string, mode 
 	return count, err
 }
 
-// ErrPositionNotFound is returned when a position row does not exist — mirrors
-// ErrWatchlistNotFound (watchlist_repo.go:17). Lets GetPosition's Connect handler
-// distinguish "no position" (NotFound) from a genuine backend failure (Internal),
-// which scanPositionRow could not do before (feature 100).
+// ErrPositionNotFound is returned when a position row does not exist — lets the handler distinguish
+// "no position" (NotFound) from a backend failure (Internal).
 var ErrPositionNotFound = errors.New("position not found")
 
 type pgxRow interface {
@@ -307,15 +282,12 @@ func scanPositionRow(row pgxRow) (*portfoliov1.Position, error) {
 	return pos, nil
 }
 
-// positionColumns is the SELECT column list backing scanPositionRow — kept in one place so
-// the column order stays in lockstep with the Scan call above. stop_order_id/take_profit_order_id
-// are nullable TEXT (feature 030); COALESCE'd to ” so scanPositionRow can use plain strings,
-// matching the "empty = no active bracket" contract on Position (portfolio.proto).
+// positionColumns is the SELECT list backing scanPositionRow — column order MUST stay in lockstep
+// with the Scan call. Nullable bracket IDs are COALESCE'd to "" ("empty = no active bracket").
 const positionColumns = `symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id, current_price, market_value, unrealized_pnl, unrealized_pnl_pct, day_pnl, day_pnl_pct, COALESCE(stop_order_id, ''), COALESCE(take_profit_order_id, ''), source, as_of`
 
-// PositionValuation is the broker's mark-to-market snapshot for a single position,
-// carried on account.positions.synced. Zero fields mean the broker did not report a
-// value (e.g. a legacy sync event), in which case the service falls back to marketdata.
+// PositionValuation is the broker's mark-to-market snapshot for a position (from
+// account.positions.synced). Zero fields = not reported; the service then falls back to marketdata.
 type PositionValuation struct {
 	CurrentPrice     float64
 	MarketValue      float64
@@ -325,22 +297,17 @@ type PositionValuation struct {
 	// previous close. Distinct from UnrealizedPnl (total since entry); zero = not reported.
 	DayPnl    float64
 	DayPnlPct float64
-	// Source is the PositionSource enum integer (feature 163): 0=UNSPECIFIED, 1=ORDERS,
-	// 2=BASELINE, 3=MIXED. Legacy events default to 0 (safe, additive).
+	// Source is the PositionSource enum integer: 0=UNSPECIFIED, 1=ORDERS, 2=BASELINE, 3=MIXED.
+	// Legacy events default to 0.
 	Source int
 	// AsOf is the baseline snapshot effective date (RFC3339 or empty). Empty/zero = unset.
 	AsOf string
 }
 
-// UpsertPositionFromSync inserts or updates a position from a broker position sync.
-// Unlike UpsertPosition, opened_at is never overwritten on conflict. cost_basis is
-// the total cost (qty × avg_cost) to match the per-fill path and the P&L math in
-// GetPortfolio/ListPortfolios (which compute market_value − cost_basis). The broker's
-// mark-to-market valuation (val) is stored so ListPortfolios can show figures that
-// reconcile with broker equity instead of recomputing from marketdata mid-quotes.
+// UpsertPositionFromSync upserts a position from a broker sync. Unlike UpsertPosition, opened_at is
+// never overwritten on conflict; cost_basis is total (qty × avg_cost) to match the per-fill P&L math.
 func (r *PortfolioRepo) UpsertPositionFromSync(ctx context.Context, userID, symbol, tradingMode, accountID string, qty, avgCost float64, val PositionValuation) error {
 	costBasis := qty * avgCost
-	// Parse the optional as_of timestamp (RFC3339 or empty).
 	var asOf *time.Time
 	if val.AsOf != "" {
 		if t, err := time.Parse(time.RFC3339Nano, val.AsOf); err == nil {
@@ -358,10 +325,8 @@ func (r *PortfolioRepo) UpsertPositionFromSync(ctx context.Context, userID, symb
 	return err
 }
 
-// UpdatePositionBracket sets (or clears) the bracket leg order IDs for a position, sourced
-// from trading's order.bracket_updated ledger event (feature 030). An empty stopOrderID/
-// takeProfitOrderID means "cleared" — NULLIF maps it to NULL so scanPositionRow's COALESCE
-// round-trips back to "".
+// UpdatePositionBracket sets or clears a position's bracket leg order IDs. Empty ID = "cleared":
+// NULLIF maps it to NULL so scanPositionRow's COALESCE round-trips back to "".
 func (r *PortfolioRepo) UpdatePositionBracket(ctx context.Context, userID, symbol, tradingMode, accountID, stopOrderID, takeProfitOrderID string) error {
 	_, err := r.pool.Exec(ctx, `
 		UPDATE portfolio.positions
@@ -371,19 +336,14 @@ func (r *PortfolioRepo) UpdatePositionBracket(ctx context.Context, userID, symbo
 	return err
 }
 
-// DeletePositionsNotInSync reconciles an account against a broker snapshot: it
-// deletes every position row for the account that is not (userID, symbol-in-snapshot).
-// This removes both symbols the broker no longer reports AND stale rows left under a
-// different user_id (e.g. the legacy "default" placeholder used before user_id was
-// carried on the sync event), which would otherwise surface as duplicate positions.
-// When presentSymbols is empty, all positions for the account are deleted.
+// DeletePositionsNotInSync reconciles an account to a broker snapshot: deletes account rows not in
+// (userID, present-symbols), including stale rows under another user_id. Empty presentSymbols = delete all.
 func (r *PortfolioRepo) DeletePositionsNotInSync(ctx context.Context, accountID, userID string, presentSymbols []string) error {
 	if len(presentSymbols) == 0 {
 		const q = `DELETE FROM portfolio.positions WHERE account_id=$1`
 		_, err := r.pool.Exec(ctx, q, accountID)
 		return err
 	}
-	// $1=accountID, $2=userID, $3.. = present symbols.
 	args := make([]interface{}, 0, len(presentSymbols)+2)
 	args = append(args, accountID, userID)
 	placeholders := make([]string, len(presentSymbols))
@@ -445,8 +405,8 @@ func (r *PortfolioRepo) GetAccountBalance(ctx context.Context, accountID string)
 	return &b, nil
 }
 
-// UpsertOfflineRealized records an offline account's account-grain cumulative realized P&L
-// (feature 157). account_id is the PK, so this survives the position-row wipe on a full close.
+// UpsertOfflineRealized records an offline account's cumulative realized P&L. account_id is the PK,
+// so it survives the position-row wipe on a full close.
 func (r *PortfolioRepo) UpsertOfflineRealized(ctx context.Context, accountID, userID, tradingMode string, realizedPnl float64) error {
 	const q = `
 		INSERT INTO portfolio.offline_account_realized (account_id, user_id, trading_mode, realized_pnl, updated_at)
@@ -475,7 +435,7 @@ func (r *PortfolioRepo) GetOfflineRealized(ctx context.Context, accountID string
 	return v, true, nil
 }
 
-// DeleteOfflineRealized removes an offline account's realized row (feature 157 deregister purge).
+// DeleteOfflineRealized removes an offline account's realized row.
 func (r *PortfolioRepo) DeleteOfflineRealized(ctx context.Context, accountID string) error {
 	_, err := r.pool.Exec(ctx, `DELETE FROM portfolio.offline_account_realized WHERE account_id=$1`, accountID)
 	return err
@@ -487,9 +447,8 @@ type UserAccountBalance struct {
 	Balance   AccountBalance
 }
 
-// ListAccountBalancesByUser returns the latest balance snapshot for every account
-// owned by a user, ordered by account_id. Used to aggregate the "all accounts"
-// portfolio view, where no single account_id is supplied.
+// ListAccountBalancesByUser returns the latest balance snapshot for every account a user owns,
+// ordered by account_id (backs the "all accounts" portfolio view).
 func (r *PortfolioRepo) ListAccountBalancesByUser(ctx context.Context, userID string) ([]UserAccountBalance, error) {
 	const q = `
 		SELECT account_id, cash, buying_power, equity, last_equity
@@ -513,10 +472,8 @@ func (r *PortfolioRepo) ListAccountBalancesByUser(ctx context.Context, userID st
 	return result, rows.Err()
 }
 
-// ListOfflineAccountIdsByUser returns the account IDs of a user's offline accounts — those with a
-// portfolio.offline_account_realized row (feature 159). That row is the offline-exclusive marker
-// (broker accounts never get one), so unioning this set with ListAccountBalancesByUser introduces no
-// false broker entries and closes the ListPositions↔ListPortfolios combined-view parity gap.
+// ListOfflineAccountIdsByUser returns a user's offline account IDs — those with an
+// offline_account_realized row, the offline-exclusive marker (broker accounts never get one).
 func (r *PortfolioRepo) ListOfflineAccountIdsByUser(ctx context.Context, userID string) ([]string, error) {
 	const q = `SELECT account_id FROM portfolio.offline_account_realized WHERE user_id=$1 ORDER BY account_id ASC`
 	rows, err := r.pool.Query(ctx, q, userID)

@@ -19,34 +19,21 @@ type DataSourceClient interface {
 	StreamQuotes(ctx context.Context, symbols []string) (<-chan *marketdatav1.Quote, error)
 }
 
-// MultiSymbolSource is an optional capability a DataSourceClient may also implement to
-// fetch several symbols in one request. Callers type-assert to it and fall back to the
-// per-symbol DataSourceClient methods when a source does not support batching, so adding
-// this does not force every provider (or test fake) to implement it.
+// MultiSymbolSource is an optional capability to fetch several symbols in one request. Callers
+// type-assert and fall back to per-symbol methods, so a source need not implement it.
 type MultiSymbolSource interface {
 	GetBarsMulti(ctx context.Context, symbols []string, timeframe string, start, end time.Time) (map[string][]*marketdatav1.Bar, error)
 	GetLatestQuotesMulti(ctx context.Context, symbols []string) (map[string]*marketdatav1.Quote, error)
 }
 
-// LatestTradeSource is an optional capability a DataSourceClient may implement to fetch the most
-// recent trade price + timestamp (feature 095). Callers type-assert to it and degrade gracefully
-// when a source does not support it, so adding this does not force every provider (or test fake)
-// to implement it — mirroring MultiSymbolSource.
+// LatestTradeSource is an optional capability to fetch the most recent trade price + timestamp.
+// Callers type-assert and degrade gracefully, so a source need not implement it.
 type LatestTradeSource interface {
 	GetLatestTrade(ctx context.Context, symbol string) (price float64, tradeTime time.Time, err error)
 }
 
-// Fundamentals is the internal, provider-agnostic fundamental-metrics model
-// (feature 059). The FMP client and the repository depend on this struct rather than
-// the generated proto type, so neither imports gen/go marketdata types.
-//
-// The 11 metric fields are `*float64`, not `float64`: a nil pointer means the active
-// provider genuinely did not supply that metric for this symbol (or, for FMP, that the
-// metric's tier — core vs extended — was never fetched), distinct from a real `0.0`
-// (bug fix — see marketdata.proto's `Fundamentals.missing_metrics` doc comment). Every
-// producer (fmp_client.go, finnhub_client.go, marketdata_repo.go) must leave the pointer
-// nil rather than defaulting to a zero value, and toProtoFundamentals derives
-// missing_metrics from exactly these nils.
+// Fundamentals is the provider-agnostic fundamental-metrics model. The metric fields are
+// *float64: nil means the provider did not supply it (distinct from a real 0.0) — never default to 0.
 type Fundamentals struct {
 	Symbol        string
 	MarketCap     *float64
@@ -66,10 +53,8 @@ type Fundamentals struct {
 	Source        string
 }
 
-// FundamentalsSource fetches fundamental metrics for symbols (FMP-backed).
-// Separate from DataSourceClient (OHLCV-shaped) — FR-2: the Alpaca/OHLCV path is
-// untouched, and an FMP provider is held as its own service field, never registered
-// in the OHLCV Registry below.
+// FundamentalsSource fetches fundamental metrics for symbols. Separate from DataSourceClient
+// (OHLCV) and never registered in the OHLCV Registry (FR-2); held as its own service field.
 type FundamentalsSource interface {
 	GetFundamentals(ctx context.Context, symbol string) (*Fundamentals, error)
 	GetFundamentalsMulti(ctx context.Context, symbols []string) ([]*Fundamentals, error)

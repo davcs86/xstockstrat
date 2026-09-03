@@ -17,10 +17,8 @@ import (
 	tfpkg "github.com/xstockstrat/marketdata/internal/timeframe"
 )
 
-// execer is the subset of *pgxpool.Pool that UpsertFundamentals + GetPreviousDailyClose need,
-// extracted so their SQL can be exercised with pgxmock (this service has no live-DB test harness
-// and CI provisions no database). Both *pgxpool.Pool and pgxmock.PgxPoolIface satisfy it;
-// production wires it to the real pool.
+// execer is the *pgxpool.Pool subset UpsertFundamentals + GetPreviousDailyClose need, extracted
+// so their SQL is testable with pgxmock (no live-DB harness in CI). Production wires the real pool.
 type execer interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
@@ -29,8 +27,8 @@ type execer interface {
 // MarketDataRepo handles TimescaleDB reads and writes for OHLCV bars and quotes.
 type MarketDataRepo struct {
 	pool *pgxpool.Pool
-	// db is the query surface UpsertFundamentals executes against — the same
-	// *pgxpool.Pool in production, a pgxmock in the repository test.
+	// db is the query surface UpsertFundamentals executes against — the real pool in
+	// production, a pgxmock in tests.
 	db execer
 }
 
@@ -123,9 +121,8 @@ func (r *MarketDataRepo) QueryBars(ctx context.Context, symbol, timeframe string
 	return bars, nextToken, nil
 }
 
-// scanBars materializes OHLCV rows into Bar protos in the order the query returned them. Shared by
-// QueryBars (oldest-page-forward pagination) and QueryRecentBars (newest-page) so the row→proto
-// mapping lives in exactly one place (DRY guard rail).
+// scanBars materializes OHLCV rows into Bar protos in query order. Shared by QueryBars and
+// QueryRecentBars so the row→proto mapping lives in one place.
 func scanBars(rows pgx.Rows) ([]*marketdatav1.Bar, error) {
 	var bars []*marketdatav1.Bar
 	for rows.Next() {
@@ -162,11 +159,8 @@ func scanBars(rows pgx.Rows) ([]*marketdatav1.Bar, error) {
 	return bars, nil
 }
 
-// QueryRecentBars returns the most-recent `pageSize` bars for a symbol/timeframe at or before `end`,
-// in ASCENDING time order (the order lightweight-charts requires for display). Unlike QueryBars —
-// which pages the OLDEST bars forward from a `start` cursor and, for an oversized default window,
-// returns ancient bars — this is the read a live chart/screener actually wants: "the latest N bars,"
-// independent of how much history is stored. No pagination token: these are already the newest bars.
+// QueryRecentBars returns the most-recent pageSize bars for a symbol/timeframe at or before
+// `end`, in ASCENDING time order (what a live chart wants). No pagination token.
 func (r *MarketDataRepo) QueryRecentBars(ctx context.Context, symbol, timeframe string, end time.Time, pageSize int) ([]*marketdatav1.Bar, error) {
 	if pageSize <= 0 || pageSize > 5000 {
 		pageSize = 500
@@ -193,10 +187,8 @@ func (r *MarketDataRepo) QueryRecentBars(ctx context.Context, symbol, timeframe 
 	return bars, nil
 }
 
-// GetPreviousDailyClose returns the close of the prior session's daily bar for a symbol — the
-// second-newest stored `1d` bar (feature 095). This serves change% (last - prev)/prev without a
-// second Alpaca call. Returns ok=false when fewer than two daily bars are stored, so the caller
-// leaves prev_close unset (never a fabricated 0).
+// GetPreviousDailyClose returns the prior session's daily close (second-newest 1d bar) for
+// change% without a second Alpaca call. ok=false when fewer than two daily bars exist.
 func (r *MarketDataRepo) GetPreviousDailyClose(ctx context.Context, symbol string) (close float64, ok bool, err error) {
 	const q = `
 		SELECT close
@@ -214,10 +206,8 @@ func (r *MarketDataRepo) GetPreviousDailyClose(ctx context.Context, symbol strin
 	return close, true, nil
 }
 
-// GetCoverage returns the earliest/latest stored bar timestamps and the bar count for a
-// symbol+timeframe within [start, end]. The PRIMARY KEY (symbol, timeframe, time) backs an
-// efficient MIN/MAX/COUNT scan. When no rows match, earliest/latest are zero and count is 0.
-// timeframe must be the canonical DB string (resolved via internal/timeframe.Resolve).
+// GetCoverage returns earliest/latest stored timestamps and bar count for a symbol+timeframe
+// in [start,end]; zeros when no rows. timeframe must be the canonical DB string.
 func (r *MarketDataRepo) GetCoverage(ctx context.Context, symbol, timeframe string, start, end time.Time) (earliest, latest time.Time, barCount int64, err error) {
 	const sql = `
 		SELECT MIN(time), MAX(time), COUNT(*)
@@ -237,10 +227,8 @@ func (r *MarketDataRepo) GetCoverage(ctx context.Context, symbol, timeframe stri
 	return earliest, latest, barCount, nil
 }
 
-// buildDeleteBarsQuery assembles the scoped DELETE statement and its args. Extracted as a pure
-// function (no pool) so the predicate scoping — crucially that the symbol predicate is ALWAYS
-// present and is always $1 — is unit-testable without a database (FR-5, DBA gate). timeframe and
-// the time bounds are appended only when supplied.
+// buildDeleteBarsQuery assembles the scoped DELETE. Pure/unit-testable, and the symbol
+// predicate is ALWAYS present as $1 so it can never become a full-table delete (FR-5).
 func buildDeleteBarsQuery(symbol, timeframe string, start, end time.Time) (string, []any) {
 	sql := "DELETE FROM marketdata.ohlcv WHERE symbol=$1"
 	args := []any{symbol}
@@ -259,9 +247,8 @@ func buildDeleteBarsQuery(symbol, timeframe string, start, end time.Time) (strin
 	return sql, args
 }
 
-// DeleteBars performs a bounded, symbol-scoped delete of OHLCV bars (FR-5). The symbol
-// predicate is ALWAYS present — callers must never pass an empty symbol — so this can never
-// issue a full-table delete. Returns the number of rows deleted.
+// DeleteBars performs a bounded, symbol-scoped delete of OHLCV bars — the symbol predicate is
+// always present (never an empty symbol) so it can never issue a full-table delete. Returns rows deleted.
 func (r *MarketDataRepo) DeleteBars(ctx context.Context, symbol, timeframe string, start, end time.Time) (int64, error) {
 	sql, args := buildDeleteBarsQuery(symbol, timeframe, start, end)
 	tag, err := r.pool.Exec(ctx, sql, args...)
@@ -345,9 +332,8 @@ func (r *MarketDataRepo) GetFundamentals(ctx context.Context, symbol string) (f 
 	if len(extraJSON) > 0 {
 		_ = json.Unmarshal(extraJSON, &extra)
 	}
-	// The scanned locals are already *float64 (NULL-preserving) — pass them straight
-	// through instead of collapsing a real SQL NULL to 0.0 (bug fix; source.Fundamentals'
-	// metric fields are pointers for exactly this reason).
+	// The scanned locals are already *float64 (NULL-preserving) — pass them through rather than
+	// collapsing a real SQL NULL to 0.0 (metric fields are pointers for exactly this reason).
 	return &source.Fundamentals{
 		Symbol:        sym,
 		AsOf:          asOf,
@@ -378,15 +364,8 @@ func (r *MarketDataRepo) UpsertFundamentals(ctx context.Context, f *source.Funda
 	if len(extraJSON) == 0 {
 		extraJSON = []byte("{}")
 	}
-	// pgx's QueryExecModeExec (active under DB_PGBOUNCER=true, this service's PgBouncer-pooled
-	// connection mode) infers each parameter's wire type from its Go type with no server
-	// round-trip. A []byte value is encoded as bytea — and bytea::jsonb does NOT decode the bytes
-	// as UTF-8 text, it casts through bytea's hex-escaped ("\x...") text representation, which is
-	// never valid JSON, producing this exact SQLSTATE 22P02 regardless of the ::jsonb cast below.
-	// pgx's own docs are explicit about this (QueryExecModeSimpleProtocol's doc comment, which
-	// QueryExecModeExec shares behavior with): "string must be used instead for text type values
-	// including json and jsonb." Binding as string (→ pgx's `text` OID) makes the ::jsonb cast a
-	// genuine text→jsonb parse instead of a bytea→text→jsonb hex-garble.
+	// Under QueryExecModeExec (DB_PGBOUNCER) a []byte binds as bytea, and bytea::jsonb hex-garbles
+	// to SQLSTATE 22P02 — bind jsonb as string so the ::jsonb cast is a real text→jsonb parse.
 	extraJSONText := string(extraJSON)
 	src := f.Source
 	if src == "" {
@@ -430,9 +409,8 @@ func (r *MarketDataRepo) CountFundamentalsFetchedToday(ctx context.Context) (int
 	return n, nil
 }
 
-// CountFundamentalsFetchedSince counts rows fetched since the given time — the rolling-window
-// quota shape a per-minute-limited provider (e.g. Finnhub) needs, as opposed to
-// CountFundamentalsFetchedToday's fixed UTC-day window (feature 129).
+// CountFundamentalsFetchedSince counts rows fetched since `since` — the rolling-window quota
+// shape a per-minute-limited provider (Finnhub) needs, vs CountFundamentalsFetchedToday's UTC day.
 func (r *MarketDataRepo) CountFundamentalsFetchedSince(ctx context.Context, since time.Time) (int, error) {
 	var n int
 	err := r.pool.QueryRow(ctx,

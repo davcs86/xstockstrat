@@ -43,11 +43,8 @@ func LoadFromEnv() *Config {
 		DBConnStr:      getEnv("DATABASE_URL", ""),
 		AlpacaBaseURL:  getEnv("ALPACA_BASE_URL", "https://paper-api.alpaca.markets"),
 		AlpacaDataURL:  getEnv("ALPACA_DATA_URL", "https://data.alpaca.markets"),
-		// Vendor credentials (Alpaca key/secret, FMP, Finnhub) are no longer env vars (feature
-		// 147). They are stored ENCRYPTED in the config service and resolved at startup via
-		// Watcher.ResolveSecret (GetSecret RPC, gated to this service's x-internal-caller). The
-		// four fields below start empty here and are populated in cmd/server/main.go after the
-		// config connection is established, before the Alpaca/FMP/Finnhub clients are built.
+		// Vendor credentials (Alpaca/FMP/Finnhub) are not env vars: they start empty here and are
+		// populated in cmd/server/main.go via Watcher.ResolveSecret before the vendor clients build.
 		ApplicationEnv: getEnv("APPLICATION_ENV", "development"),
 		TradingMode:    getEnv("TRADING_MODE", "paper"),
 	}
@@ -67,10 +64,8 @@ type Watcher struct {
 	once     sync.Once
 }
 
-// NewWatcher dials the config service and starts the background watch loop.
-// applicationEnv/tradingMode are this deployment's own resolved scope (Config.ApplicationEnv /
-// Config.TradingMode) — passed on every WatchConfig request so the server serves this
-// deployment's config rows instead of the zero-value dev/all default.
+// NewWatcher dials the config service and starts the background watch loop. applicationEnv/
+// tradingMode scope every WatchConfig request to this deployment's rows, not the dev/all default.
 func NewWatcher(endpoint, namespace, applicationEnv, tradingMode string) (*Watcher, error) {
 	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -88,9 +83,8 @@ func NewWatcher(endpoint, namespace, applicationEnv, tradingMode string) (*Watch
 	return w, nil
 }
 
-// resolveEnvironment maps Config.ApplicationEnv ("development" | "production") to the proto
-// Environment enum. Anything other than "production" resolves to STAGING (feature 147: the config
-// scope is production/staging; the config server also treats the deprecated DEV as staging).
+// resolveEnvironment maps ApplicationEnv to the proto Environment enum; anything but
+// "production" → STAGING.
 func resolveEnvironment(applicationEnv string) commonv1.Environment {
 	if applicationEnv == "production" {
 		return commonv1.Environment_ENVIRONMENT_PRODUCTION
@@ -98,8 +92,7 @@ func resolveEnvironment(applicationEnv string) commonv1.Environment {
 	return commonv1.Environment_ENVIRONMENT_STAGING
 }
 
-// resolveTradingMode maps Config.TradingMode ("paper" | "live") to the proto TradingMode enum.
-// Anything other than "live" resolves to paper, matching the default in LoadFromEnv.
+// resolveTradingMode maps TradingMode to the proto enum; anything but "live" → paper.
 func resolveTradingMode(tradingMode string) commonv1.TradingMode {
 	if tradingMode == "live" {
 		return commonv1.TradingMode_TRADING_MODE_LIVE
@@ -107,16 +100,12 @@ func resolveTradingMode(tradingMode string) commonv1.TradingMode {
 	return commonv1.TradingMode_TRADING_MODE_PAPER
 }
 
-// InternalCallerID is the identity this service presents to the config service's GetSecret
-// allow-list (feature 147). The config service grants it the marketdata.* vendor-credential keys.
+// InternalCallerID is the x-internal-caller identity this service presents to the config
+// service's GetSecret allow-list for its marketdata.* vendor-credential keys.
 const InternalCallerID = "marketdata"
 
-// ResolveSecret fetches a decrypted secret from the config service via the GetSecret RPC. The
-// config service decrypts server-side and returns the plaintext only to an allow-listed
-// x-internal-caller (feature 147); secret plaintext is never on the WatchConfig stream. Returns
-// (value, found, error): found=false means the secret is unset (never written), which the caller
-// treats exactly like the old empty env var (warn-and-start); a non-nil error is an RPC/decrypt
-// failure.
+// ResolveSecret fetches a decrypted secret via GetSecret (plaintext never on the WatchConfig
+// stream). found=false means unset — the caller treats it like an empty env var (warn-and-start).
 func (w *Watcher) ResolveSecret(ctx context.Context, key string) (string, bool, error) {
 	octx := metadata.NewOutgoingContext(ctx, metadata.New(map[string]string{
 		"x-internal-caller": InternalCallerID,
@@ -221,8 +210,8 @@ func (w *Watcher) stream() error {
 		Namespace:   w.namespace,
 		ClientId:    fmt.Sprintf("go-marketdata-%d", os.Getpid()),
 		Environment: w.environment,
-		// trading_mode is deprecated and ignored by the config server (feature 147); paper/live
-		// derives from environment. user_id is left empty — services subscribe at global scope.
+		// trading_mode is ignored by the config server (paper/live derives from environment);
+		// user_id left empty — this service subscribes at global scope.
 	}
 	stream, err := w.client.WatchConfig(ctx, req)
 	if err != nil {

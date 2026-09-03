@@ -1,7 +1,5 @@
-// Package fmp is the Financial Modeling Prep (FMP) fundamentals integration for
-// xstockstrat-marketdata (feature 059). It implements source.FundamentalsSource and
-// is held as a dedicated service field — it is NEVER registered in the OHLCV
-// source.Registry (FR-2: the Alpaca/OHLCV path stays untouched).
+// Package fmp is the Financial Modeling Prep fundamentals integration for xstockstrat-marketdata.
+// It implements source.FundamentalsSource and is NEVER registered in the OHLCV source.Registry (FR-2).
 package fmp
 
 import (
@@ -21,9 +19,8 @@ import (
 type ClientConfig struct {
 	BaseURL string // e.g. https://financialmodelingprep.com
 	APIKey  string // FMP API key (resolved from secret config at startup)
-	// Metrics is the allowlist of metric tiers to fetch ("core", "extended").
-	// Core metrics come from the batchable quote endpoint (1 call/scan chunk);
-	// extended metrics add per-symbol ratios-ttm + profile calls.
+	// Metrics is the tier allowlist ("core","extended"): core = batchable quote (1 call/chunk),
+	// extended adds per-symbol ratios-ttm + profile calls.
 	Metrics []string
 	// HTTPClient is injectable so tests can assert call counts and stub responses.
 	HTTPClient *http.Client
@@ -185,9 +182,8 @@ func (c *Client) fetchProfile(ctx context.Context, symbol string) (*fmpProfile, 
 
 // ── FMP response shapes ──────────────────────────────────────────────────────
 
-// fmpQuote is the subset of the /stable/quote object carrying core metrics. The metric
-// fields are pointers so a key FMP omits (or sends `null`) decodes to nil — distinct from
-// a genuine `0` — rather than silently collapsing to Go's float64 zero value (bug fix).
+// fmpQuote is the core-metric subset of /stable/quote. Pointer fields: a key FMP omits or
+// sends null decodes to nil, distinct from a real 0.
 type fmpQuote struct {
 	Symbol    string   `json:"symbol"`
 	Price     *float64 `json:"price"`
