@@ -3,7 +3,7 @@
 **Status**: `pending`
 **Created**: 2026-09-03
 **Feature**: `docs/roadmap/features/170-watchlist-bulk-default-strategy/feature.md`
-**Total Steps**: 14
+**Total Steps**: 15 (Step 10 split into 10 + 10b to keep each step ≤3 files — advisory review 2026-09-03)
 **Feature Branch**: `feature/watchlist-bulk-default-strategy`
 
 ---
@@ -53,8 +53,9 @@ are introduced (all wiring is over the existing portfolio gRPC endpoint), so **n
 - Steps 4/6/8 require Step 3 (migration 015) at runtime (the column must exist); the Go tests
   (Steps 5/7/9) run offline against `fakeWatchlistStore` and do not need the DB.
 - Step 5 [test] covers Step 4 [service]; Step 7 covers Step 6; Step 9 covers Step 8.
-- Step 10 (UI) requires Step 2 (proto stubs power the browser typed client) and Steps 6+8 (it calls
-  the masked `UpdateWatchlist` and `UpdateWatchlistBindings`). Step 11 [test] covers Step 10.
+- Step 10 (UI data layer: hooks + BFF + e2e mock) requires Step 2 (proto stubs power the browser
+  typed client) and Steps 6+8 (it wires the masked `UpdateWatchlist` and `UpdateWatchlistBindings`).
+  Step 10b (UI components) requires Step 10 (consumes the new hooks). Step 11 [test] covers 10 + 10b.
 - Step 12 (agent) requires Steps 6+8 (masked update + bulk RPC). Step 13 [test] covers Step 12.
 - Step 14 (docs) requires Step 12 (documents the shipped tool surface) — same PR as the agent change
   (C-10 tool-doc parity).
@@ -393,28 +394,21 @@ New tests pass; `total:` ≥ 40% (new logic is in coverage-excluded packages —
 
 ---
 
-### Step 10 — service: UI multi-select, bulk action bar, and default-strategy control (`/insights`)
+### Step 10 — service: UI data layer — bulk/default hooks, BFF proxy, e2e mock (`/insights`)
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
-- `services/xstockstrat-ui/src/hooks/useWatchlists.ts` — modify
 - `services/xstockstrat-ui/src/lib/insightsBff.ts` — modify
-- `services/xstockstrat-ui/src/components/insights/WatchlistDetail.tsx` — modify
-- `services/xstockstrat-ui/src/components/insights/WatchlistReadiness.tsx` — modify
+- `services/xstockstrat-ui/src/hooks/useWatchlists.ts` — modify
 - `services/xstockstrat-ui/e2e/helpers/watchlistMock.ts` — modify
 
-**Reviewers**: xstockstrat-ui owner — Connect-RPC call safety, no-whole-list-invalidate preservation, C-17 tokens/primitives/a11y.
+**Reviewers**: xstockstrat-ui owner — Connect-RPC call safety, no-whole-list-invalidate preservation.
 
 **Codebase Evidence**:
 - BFF `forward()` proxy (one line per portfolio RPC; header-propagating): `insightsBff.ts:101-109` (`updateWatchlistBinding` at `:109` is the mirror line).
 - Browser typed client is generated off proto (no change needed): `insightsPortfolioClient` referenced in `useWatchlists.ts:2`.
 - Hooks: `WATCHLIST_WRITE_KEY` `useWatchlists.ts:13`; `UNBOUND`/`toApiStrategyId` `:23-26`; `useCreateWatchlist` `:41`; `useUpdateWatchlist` `:59`; single-row cache-patch `useUpdateWatchlistBinding` (no invalidate — the model for the bulk hook) `:116-150`; `useInvalidatingMutation` import `:3`.
-- `useWatchlists` exposes `isFetching` `:32`.
-- `WatchlistDetail`: `writeInFlight` guard `:81-85`; add-form strategy `Select` pattern to reuse for the default control `:224-236`; `useStrategyDefinitions`→`allStrategies`/`liveStrategies` `:67-72`; passes props to `WatchlistReadiness` `:242-251`.
-- `WatchlistReadiness`: stateless rows; `data-testid={`readiness-row-${symbol}`}` `:234`/`:288`; `BindingRowControls` `:88-142`; symbol cell `:236`/`:290`.
-- Selection reset is **free**: `WatchlistDetail` is remounted per watchlist via `key={selected.watchlistId}` `page.tsx:198-201` (any in-detail selection state auto-resets on switch — closes fails.md:1372, **AC-13**). Page-level guard `anyWatchlistWriteInFlight` `page.tsx:29-30`.
-- `ui/checkbox.tsx` primitive **exists** (`services/xstockstrat-ui/src/components/ui/checkbox.tsx`) — reuse it (C-17, no near-duplicate).
 - e2e mock handlers keyed on RPC path + `MockWatchlist`/`MockBinding` types: `watchlistMock.ts:17-27`, `UpdateWatchlistBinding` handler `:118-138`, `UpdateWatchlist` handler `:78-89`, `CreateWatchlist` `:62-76`.
 
 **TDD**: `red-green required` (paired e2e is Step 11).
@@ -427,12 +421,40 @@ New tests pass; `total:` ≥ 40% (new logic is in coverage-excluded packages —
    (reuses `forward` → `backendHeaders` propagation, C-03; no new outbound-header wiring).
 2. **Hook — bulk assign** — add `useUpdateWatchlistBindings()` in `useWatchlists.ts` modeled on `useUpdateWatchlistBinding` (`:116-150`): a plain `useMutation` carrying `mutationKey: WATCHLIST_WRITE_KEY`, calling `insightsPortfolioClient.updateWatchlistBindings({ watchlistId, symbols, strategyId })`; on success **cache-patch** the changed rows into `['watchlists']` from the response `bindings` array (map each returned binding onto the matching symbol) with **no** `invalidateQueries` (preserves the AC-6 feature-167 "no whole-list invalidate" guarantee).
 3. **Hook — default strategy** — extend `useCreateWatchlist` (`:41`) input with optional `defaultStrategyId` (sent on `createWatchlist`), and `useUpdateWatchlist` (`:59`) to accept an optional `updateMask?: string[]` + `defaultStrategyId`, forwarding `updateMask`/`defaultStrategyId` to `updateWatchlist`. **Existing callers must keep `updateMask` unset** so they stay on the legacy replace-all path (design Open Risk — asserted in Step 11).
-4. **Default-strategy control** — in `WatchlistDetail.tsx` add a watchlist-level `Select` (reuse the `:224-236` add-form Select pattern + `useStrategyDefinitions`), unique `aria-label="Default strategy for new symbols"`, firing `useUpdateWatchlist({ watchlistId, updateMask: ['default_strategy_id'], defaultStrategyId: toApiStrategyId(v) })`; show the current `watchlist.defaultStrategyId`. Use design tokens only (C-17).
-5. **Multi-select + bulk bar** — lift selection state (a `Set<string>` of symbols) into `WatchlistDetail` (resets free on the `key` remount — AC-13); pass a checkbox column into `WatchlistReadiness` rows via `ui/checkbox.tsx`, each with unique `aria-label={`Select ${symbol}`}` and a "Select all symbols" header checkbox. Render a bulk action bar (shown only when the selection is non-empty) using `ui/button.tsx` + tokens: **"Remove selected"** → `useRemoveWatchlistSymbols` with the selected array (**AC-1**), and a strategy `Select` + **"Apply strategy"** → `useUpdateWatchlistBindings` (**AC-2/AC-3**). Both bulk actions must honor `writeInFlight` (`:81`) and the page-level `anyWatchlistWriteInFlight` (`page.tsx:29`); clear the selection on success.
-6. **e2e mock** — in `watchlistMock.ts` add `defaultStrategyId?: string` to `MockWatchlist` (`:18-27`), teach the `CreateWatchlist`/`UpdateWatchlist` handlers to persist/echo it (UpdateWatchlist must honor an `updateMask` partial write for `default_strategy_id` without clearing bindings), and add an `UpdateWatchlistBindings` handler (mirror the `UpdateWatchlistBinding` handler `:118-138`) that patches `strategy_id` on every requested symbol and returns `{ bindings: <changed rows>, updatedAt: <RFC3339 string> }`.
+4. **e2e mock** — in `watchlistMock.ts` add `defaultStrategyId?: string` to `MockWatchlist` (`:18-27`), teach the `CreateWatchlist`/`UpdateWatchlist` handlers to persist/echo it (UpdateWatchlist must honor an `updateMask` partial write for `default_strategy_id` without clearing bindings), and add an `UpdateWatchlistBindings` handler (mirror the `UpdateWatchlistBinding` handler `:118-138`) that patches `strategy_id` on every requested symbol and returns `{ bindings: <changed rows>, updatedAt: <RFC3339 string> }`.
 
-**Verification**: covered by Step 11 (Playwright e2e + lint). `xstockstrat-ui` has no unit-coverage
-threshold for this component logic (e2e-covered) — the lint gate + e2e are the code-quality check.
+**Verification**: `cd services/xstockstrat-ui && pnpm run lint` (type/lint clean); behavior covered by Step 11.
+
+---
+
+### Step 10b — service: UI multi-select, bulk action bar, and default-strategy control (`/insights`)
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/components/insights/WatchlistDetail.tsx` — modify
+- `services/xstockstrat-ui/src/components/insights/WatchlistReadiness.tsx` — modify
+
+**Reviewers**: xstockstrat-ui owner — C-17 tokens/primitives/a11y, no-whole-list-invalidate preservation.
+
+**Codebase Evidence**:
+- `WatchlistDetail`: `writeInFlight` guard `:81-85`; add-form strategy `Select` pattern to reuse for the default control `:224-236`; `useStrategyDefinitions`→`allStrategies`/`liveStrategies` `:67-72`; passes props to `WatchlistReadiness` `:242-251`.
+- `WatchlistReadiness`: stateless rows; `data-testid={`readiness-row-${symbol}`}` `:234`/`:288`; `BindingRowControls` `:88-142`; symbol cell `:236`/`:290`.
+- New hooks from Step 10: `useUpdateWatchlistBindings`, `useUpdateWatchlist({updateMask})` in `useWatchlists.ts`.
+- Selection reset is **free**: `WatchlistDetail` is remounted per watchlist via `key={selected.watchlistId}` `page.tsx:198-201` (any in-detail selection state auto-resets on switch — closes fails.md:1372, **AC-13**). Page-level guard `anyWatchlistWriteInFlight` `page.tsx:29-30`.
+- `ui/checkbox.tsx` primitive **exists** (`services/xstockstrat-ui/src/components/ui/checkbox.tsx`) — reuse it (C-17, no near-duplicate).
+
+**TDD**: `red-green required` (paired e2e is Step 11).
+
+**Covers**: —
+
+**Instructions**:
+1. **Default-strategy control** — in `WatchlistDetail.tsx` add a watchlist-level `Select` (reuse the `:224-236` add-form Select pattern + `useStrategyDefinitions`), unique `aria-label="Default strategy for new symbols"`, firing `useUpdateWatchlist({ watchlistId, updateMask: ['default_strategy_id'], defaultStrategyId: toApiStrategyId(v) })`; show the current `watchlist.defaultStrategyId`. Use design tokens only (C-17).
+2. **Multi-select + bulk bar** — lift selection state (a `Set<string>` of symbols) into `WatchlistDetail` (resets free on the `key` remount — AC-13); pass a checkbox column into `WatchlistReadiness` rows via `ui/checkbox.tsx`, each with unique `aria-label={`Select ${symbol}`}` and a "Select all symbols" header checkbox. Render a bulk action bar (shown only when the selection is non-empty) using `ui/button.tsx` + tokens: **"Remove selected"** → `useRemoveWatchlistSymbols` with the selected array (**AC-1**), and a strategy `Select` + **"Apply strategy"** → `useUpdateWatchlistBindings` (**AC-2/AC-3**). Both bulk actions must honor `writeInFlight` (`:81`) and the page-level `anyWatchlistWriteInFlight` (`page.tsx:29`); clear the selection on success.
+
+**Verification**: `cd services/xstockstrat-ui && pnpm run lint`; behavior covered by Step 11 (Playwright
+e2e). `xstockstrat-ui` has no unit-coverage threshold for this component logic (e2e-covered) — the
+lint gate + the Step 11 scenario-completeness gate are the code-quality check.
 
 ---
 
@@ -462,13 +484,20 @@ threshold for this component logic (e2e-covered) — the lint gate + e2e are the
 5. **AC-13** — check two rows in one list, switch to another seeded list; assert no rows are checked in the second list and the bulk bar is hidden until a new selection is made (the `key`-remount reset).
 6. Reuse `mockWatchlists`; do not add duplicate inline domain literals (C-12) — extend the seed array shape (`MockWatchlist`).
 
+**Coverage gate (C-15 — the e2e equivalent of a numeric threshold):** `xstockstrat-ui` Playwright e2e
+has no line-coverage gate by design (it is behavioral, not unit-covered). The gate for this step is
+therefore **scenario completeness**: every `@AC` listed in **Covers** above (AC-1, AC-2, AC-3, AC-6,
+AC-13) MUST have a named, passing spec in this file, and each spec must fail against the pre-Step-10/10b
+UI (red-before-green). A missing or non-red scenario is the gate failure — this replaces the numeric
+`--cov-fail-under` used by the coverage-gated services (portfolio/agent).
+
 **Verification**:
 ```
 cd services/xstockstrat-ui && pnpm run lint
 cd services/xstockstrat-ui && pnpm test:e2e -- watchlists
 ```
-(or `../../scripts/run-e2e.sh` for the hermetic Docker run). New scenarios pass; existing watchlist
-e2e stays green.
+(or `../../scripts/run-e2e.sh` for the hermetic Docker run). All five AC scenarios above pass; existing
+watchlist e2e stays green.
 
 ---
 

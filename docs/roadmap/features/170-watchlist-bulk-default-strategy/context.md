@@ -99,3 +99,28 @@
 - [ ] Existing UpdateWatchlist callers (UI/agent name/desc/binding edits) must keep `update_mask` unset — assert at UI/agent steps. Target: UI + agent steps.
 - [ ] Agent `get_watchlist` must echo `default_strategy_id` (C-14 read-surface) — assert in agent client test. Target: agent step.
 - [ ] Anti-rebind guarantee is SQL-level (`insertBindingsTx` ON CONFLICT DO NOTHING), modeled in `fakeWatchlistStore`, not DB-tested — record caveat on the scenario. Target: portfolio test step.
+
+## Session 2026-09-03T19:45Z — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 2 warnings (advisory — did not block). Overlap CLEAN.
+- Warnings — both ADDRESSED per operator request ("address all review warnings"):
+  - Step 10: was 5 files (at the >5 split-advisory boundary) — [x] RESOLVED: split into Step 10 (UI data
+    layer: insightsBff.ts + useWatchlists.ts + watchlistMock.ts, 3 files) and Step 10b (components:
+    WatchlistDetail.tsx + WatchlistReadiness.tsx, 2 files). Total steps 14 → 15. Dependencies + coverage
+    table updated.
+  - Step 11: Playwright e2e has no numeric coverage threshold — [x] RESOLVED: added an explicit
+    **scenario-completeness coverage gate** to Step 11 (every listed @AC must have a named, red-before-green
+    passing spec) as the e2e equivalent of `--cov-fail-under`, so it reads as a deliberate gate, not an omission.
+- spec-reviewer PASS: every anchor in all 14 steps resolves to a real path:line; C-08 test-pairing,
+  P-06 red-before-green, C-15 @AC traceability (all 13 covered), B3 ordering, C-14 surfaces all satisfied;
+  no Floor risk. feature-overlap CLEAN: field numbers (10/5/6/7), migration 015, config, file paths all free.
+- Note (informational): Step 8 bulk rebind writes only watchlist_symbols.strategy_id (existing col from
+  008), not the new watchlists.default_strategy_id — only Steps 4/6 need migration 015 at runtime.
+
+## Execution note — branch model
+
+Harness assigns branch `claude/watchlist-bulk-default-strategy-zxx6su` (PR → main-dev) and forbids
+pushing elsewhere. So the 14 spec steps are implemented DIRECTLY on this branch (honoring the spec's
+red-before-green intent and per-step structure), committed incrementally, landing as ONE integration
+PR to main-dev — instead of /sdd-execute's per-step feature-steps/* branches (which would violate the
+assigned-branch constraint).
