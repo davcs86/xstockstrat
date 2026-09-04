@@ -344,7 +344,7 @@ confirmed nothing in-repo queries the attribute; `OTEL_ENABLED=false` in both `.
 
 ### Step 7 — service: Remove the one `trading_mode` line from `xstockstrat-ui` telemetry (frontend)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/telemetry.ts` — modify
@@ -371,7 +371,7 @@ confirmed nothing in-repo queries the attribute; `OTEL_ENABLED=false` in both `.
 
 ### Step 8 — docs: Drop `trading_mode` from the dashboards README attribute list
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/otel/dashboards/`
 **Files**:
 - `packages/otel/dashboards/README.md` — modify

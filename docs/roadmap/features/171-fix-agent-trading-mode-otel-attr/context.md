@@ -169,3 +169,11 @@ Fleet-wide removal of the redundant `trading_mode` OTel resource attribute + dea
 - New `src/__tests__/telemetry.test.ts` in all 4 (node:test + node:assert/strict, static `buildResource` import) asserting the built Resource omits `trading_mode`, keeps the trio. ledger/identity import `../telemetry.ts` (ESM), config/notify `../telemetry` (CJS) — per-runner extension.
 - Red→green: RED (require-undefined / buildResource missing) → all pass after the Step 5 static-import fix. Coverage: ledger 46%, identity 46%, config 80.16%, notify 88.57% (all ≥40). lint 0 errors. grep `trading_mode` clean.
 - Files: `services/xstockstrat-{ledger,identity,config,notify}/src/__tests__/telemetry.test.ts`. Deviations: static-import + import-extension (Deviation Log).
+
+### Step 7 — UI telemetry: one-line trading_mode deletion (frontend) [done]
+- Deleted the `trading_mode: process.env.TRADING_MODE ?? 'paper',` line from `resourceFromAttributes({...})`; kept `resourceFromAttributes` + the trio. No builder extraction (frontend, C-08 backend pairing exempt). grep clean. `tsc --noEmit` shows telemetry.ts clean (the only tsc error is a PRE-EXISTING, unrelated `src/middleware.test.ts` MockInstance type issue — not introduced here; the UI runs vitest/next lint in CI).
+- Files: `services/xstockstrat-ui/src/telemetry.ts`.
+
+### Step 8 — docs: drop trading_mode from dashboards README (AC-3) [done]
+- Dropped `trading_mode` from the Resource-attributes bullet; kept service.name/deployment.environment/platform. AC-3 grep `grep -rn 'trading_mode' packages/otel/` returns no matches.
+- Files: `packages/otel/dashboards/README.md`.
