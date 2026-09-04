@@ -127,7 +127,7 @@ is required — this is a decision, not an omission.
 
 ### Step 2 — service: ingest servicer — extract the `_effective_max_attempts()` seam
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify

@@ -510,6 +510,9 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         state = await self._run_chunks(job_id, req, timeframe, chunks, ())
         await self._finalize_backfill(job_id, state, len(chunks), ())
 
+    def _effective_max_attempts(self) -> int:
+        return self._cfg.backfill_max_retry_attempts if self._cfg.backfill_retry_on_failure else 0
+
     async def _run_chunks(self, job_id, request, timeframe, chunks, propagation_meta):
         """Execute chunks concurrently under the chunk-level semaphore (FR-6).
 
@@ -517,9 +520,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         Job progress (bars_processed / chunks_completed) is advanced after each chunk.
         """
         sem = asyncio.Semaphore(self._cfg.backfill_max_concurrent_chunks)
-        max_attempts = (
-            self._cfg.backfill_max_retry_attempts if self._cfg.backfill_retry_on_failure else 0
-        )
+        max_attempts = self._effective_max_attempts()
         tf_enum = _STR_TO_ENUM.get(timeframe, 0)
         state = {"bars": 0, "chunks_done": 0, "chunks_failed": 0, "failed_symbols": set()}
         lock = asyncio.Lock()

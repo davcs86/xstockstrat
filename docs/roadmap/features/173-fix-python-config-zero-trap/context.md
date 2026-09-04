@@ -159,3 +159,9 @@ Order 173→174→172→171→175, one stacked PR per feature (operator-approved
 - Files modified: `services/xstockstrat-ingest/app/config/watcher.py`
 - TDD (cluster 1+2 covered by Step 3): AC-3 red — `get_int_present` AttributeError; AC-2 red — `dedup_window_hours == 24` not 0 → green after Steps 1-2.
 - Deviations: none
+
+### Step 2 — ingest servicer: extract `_effective_max_attempts()` seam [done]
+- Added `_effective_max_attempts()` on `IngestServicer` and replaced the inline `max_attempts = (... if backfill_retry_on_failure else 0)` in `_run_chunks` with a single call to it — the sole definition of `max_attempts` (no duplicate inline copy; seam-integrity per design.md Open Risk).
+- Files modified: `services/xstockstrat-ingest/app/handlers/servicer.py`
+- TDD (covered by Step 3): AC-1 red — `_effective_max_attempts` AttributeError → green after seam added.
+- Deviations: none
