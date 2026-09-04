@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-04 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from comment-audit report item 3 (re-confirms CF-N10) |
+| 2026-09-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings); overlap CLEAN; blockers C-14/C-15 fixed |
 
 ---
 
@@ -37,4 +38,4 @@ unset, so this is a consumer defect, not a contract limit.
 
 ## Next Action
 
-`/sdd-design fix-python-config-zero-trap` — recommended design depth (full — SEV-2, ≥2 services); see context.md
+`/sdd-design fix-python-config-zero-trap` — full design debate (SEV-2, ≥2 services); resolves OQ-1..OQ-4
