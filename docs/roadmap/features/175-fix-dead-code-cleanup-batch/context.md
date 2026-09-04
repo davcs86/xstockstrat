@@ -184,3 +184,14 @@ Dead-code cleanup batch + @types/node type-pin. Stacked on 171 (final of the seq
 - Fresh re-grep: zero external importers. `git rm` the 4 `src/middleware/propagation.ts` (ledger/notify/config/identity); struck `src/middleware/propagation.ts` from config `.eslintrc.json` override (kept `src/grpc/authz.ts`). identity's live `ledgerAudit.ts`/`PROPAGATED_HEADERS` untouched.
 ### Step 6 — Node leaves still build (tsc) + pass (AC-2) [done]
 - Absence: `git ls-files` 0, eslintrc grep 0. All 4 `pnpm build` (tsc type gate) green; lint 0; test:coverage pass ≥40 (ledger 46, notify 88.57, config 80.16, identity 46).
+
+### Step 7 — teardown (6 docs) + landed-diff gate [done]
+- Reconciled 6 docs (NARROW): removed root findings getEnvBool row; marked both propagation.ts findings RESOLVED (all four deleted); reworded root CLAUDE.md §Header Propagation; neutralised header-propagation.md Node "Reference store" pointer to a template (LIVE Go propagation.go ref at :50 untouched); dropped the getEnvBool clause from the 3 per-service Go findings. Left the unrelated 173-era zero-trap finding row out of scope.
+- Teardown: context-forge refresh not invocable; manual reconciliation performed (Deviation Log + PR body).
+
+## Session 2026-09-04 — sdd-execute summary (feature 175)
+**Steps this session**: 1–7 (all)
+**Progress**: 7 done / 7 total
+**Stopped at**: all complete → code-completed
+**Accountability**: out-of-scope changes: none in 175's own diff. Open questions: none. **Surfaced (fixed on 171/PR #1095)**: a latent tsc-build break from feature 171's ledger/identity telemetry test `.ts` import — fixed there, inherited via the stack, not a 175 diff-gate path. C-16: deliberate NON-promotion (one-time removal guards).
+**Next**: stacked integration PR #5 (base `feature/fix-agent-trading-mode-otel-attr`) — end of sequence.

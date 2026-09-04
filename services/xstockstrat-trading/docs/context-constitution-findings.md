@@ -2,7 +2,7 @@
 
 Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-09-02 (branch
 `claude/loaded-plugins-list-d120nl` @ `82a0549`). For triage/fixing, not
-governance. Repo-wide/repeated defects (Go 1.22 doc-lie, `getEnvBool` dead) live in the root
+governance. Repo-wide/repeated defects (Go 1.22 doc-lie) live in the root
 findings log; this file holds trading-specific defects.
 
 ## Documentation that lies (docs claim behavior the code lacks)

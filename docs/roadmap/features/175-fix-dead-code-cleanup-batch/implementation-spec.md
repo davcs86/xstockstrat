@@ -1,6 +1,6 @@
 # Implementation Spec: fix-dead-code-cleanup-batch
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-09-04
 **Feature**: `docs/roadmap/features/175-fix-dead-code-cleanup-batch/feature.md`
 **Total Steps**: 7
@@ -308,7 +308,7 @@ cd services/xstockstrat-identity && pnpm run lint && pnpm run test:coverage
 
 ### Step 7 — docs: teardown reconciliation (six docs) + landed-diff gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` (+ root `CLAUDE.md` + per-service Go findings)
 **Files**:
 - `docs/context-constitution-findings.md` — modify (reconcile the `getEnvBool` + `propagation.ts` rows)
@@ -396,4 +396,17 @@ git diff --name-only main-dev...HEAD | sort
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **Landed-diff gate run against the PR base (171 branch), not `main-dev`.** This is stacked PR #5;
+  the branch contains all four prior features' commits, so `git diff main-dev...HEAD` would list
+  hundreds of files. The gate's intent ("this PR touches exactly the 23 paths") is preserved by
+  diffing against the PR base `feature/fix-agent-trading-mode-otel-attr` — that is exactly PR #5's
+  diff. Verified equal to the 23 enumerated paths. **Disposition**: stacked-PR base substitution.
+- **Step 7 teardown — context-forge plugin unavailable.** `/context-forge:context-constitution refresh`
+  is not an invocable skill this session. **Manual reconciliation performed** on the six touched docs:
+  the getEnvBool dead-code finding removed and the propagation.ts findings marked RESOLVED (all four
+  deleted); root `CLAUDE.md` §Header Propagation reworded (helper removed, identity uses ledgerAudit's
+  own const); `header-propagation.md` Node "Reference store" pointer neutralised to a template (the
+  LIVE Go `propagation.go` reference at `:50` left untouched); the three per-service Go findings
+  pointers dropped the getEnvBool clause. NARROW discipline held — the unrelated 173-era zero-trap
+  finding row (root findings `:27`) was left as out-of-scope. **Disposition**: manual teardown
+  equivalent (plugin unavailable).
