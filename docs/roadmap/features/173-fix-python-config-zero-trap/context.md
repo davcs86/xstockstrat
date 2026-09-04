@@ -138,3 +138,12 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Deferred DRY (OQ-2): the ~11-line `get_int_present` copy across analysis+ingest may trip jscpd —
   accepted per-service duplication, waivable at execute time (note for `dry-reviewer`).
 - Step 6 teardown: context-constitution refresh scoped to the two edited service `CLAUDE.md` files.
+
+---
+
+## Session 2026-09-04T18:52:00Z — sdd-review impl-spec (advisory)
+
+- Result: **PASS** — 0 failures, 1 warning (advisory — did not block). ConfigValue oneof premise + seam sites + excluded semaphore keys verified; tests non-vacuous with genuine RED; no Floor risk.
+- Carried into execution:
+  - Step 6: the FR-3 audit grep over ingest/app/config/watcher.py will also surface the DEAD `indicators.sandbox.*` helper copy at ingest watcher.py:149-163 (a get_str read of indicators.sandbox.allowed_imports) — [ ] unaddressed: pre-declare this dead copy as known-out-of-scope in the Step 6 enumeration so the "stop and reconcile" instruction does not false-stop on it (C-01 evidence completeness). It is dead code (ingest runs no sandbox); NOT a correctness/security/Floor issue. Same dead helper 174 deliberately leaves open.
+- Overlap findings: SOFT (WARN, rebase-only) — 173 and 174 both edit three xstockstrat-ingest files (app/config/watcher.py, tests/test_ingest_servicer.py, CLAUDE.md) at DISJOINT line ranges. Recommend sequencing: land 173 (SEV-2 correctness) BEFORE 174 (cosmetic); 174 rebases. No shared migration/proto/config. No merge-order row written (WARN-level, not FAIL) — pending operator decision.

@@ -149,3 +149,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     per-service Go findings pointers (trading:5 / portfolio:7 / marketdata:5).
 - Consumer surface None (C-14, internal/platform-only) and C-16 non-promotion both restated in the spec
   Execution Summary as recorded decisions.
+
+---
+
+## Session 2026-09-04T18:52:00Z — sdd-review impl-spec (advisory)
+
+- Result: **PASS WITH WARNINGS** — 0 failures, 4 warnings (advisory — did not block). Every code citation verified exact (getEnvBool ×3, propagation.ts ×4, @types/node ×5, config_test.go function loci, eslintrc:31, identity ledgerAudit, stale findings rows); no Floor risk.
+- Carried into execution:
+  - Steps 1/3/7 touch >5 files — [x] no action (inherent to a workspace-wide bump / 3-service parallel deletion / 6-doc teardown; not splittable).
+  - Step 2: no coverage threshold stated — [x] no action (a devDep type-pin changes no runtime source; discharge is compile-green via tsc/next build, not coverage; Node-leaf coverage discharge is in Step 6).
+  - Step 7: header-propagation.md:123 "Reference store" line re-home — [ ] unaddressed refinement: also NEUTRALIZE the snippet BODY at :125-145 (it shows the gRPC extractFromMetadata form; a pre-existing doc/code drift), not only the "Reference store:" pointer line. Leave the LIVE Go reference at :50 untouched.
+- Overlap findings: CLEAN — no proto/migration/config possible; all source files disjoint. Soft, disjoint-region findings-doc overlaps only: with 172 on portfolio findings, with 174 on root findings — rebase-only, non-blocking.

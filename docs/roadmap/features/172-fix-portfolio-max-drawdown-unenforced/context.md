@@ -109,3 +109,12 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   path only, no new UI/Agent step (restated in Execution Summary).
 - Note: all new Go code lands in coverage-excluded packages (`internal/repository/`, `internal/service/`);
   no threshold moves, paired RED-before-green tests still required and specced.
+
+---
+
+## Session 2026-09-04T18:52:00Z — sdd-review impl-spec (advisory)
+
+- Result: **PASS** — 0 failures, 0 substantive warnings, 1 informational note (advisory — did not block). Migration 016 + down-pair verified; trading_mode literal pin confirmed; stale findings lines reconciled; no Floor risk.
+- Carried into execution:
+  - Steps 3/5: coverage threshold not stated — [x] no action (internal/repository + internal/service EXCLUDED by ci.yml:244 COVERPKGS filter; pgxmock + unit assertions are the C-08 gate). Reviewer-verified exception.
+- Overlap findings: CLEAN — migration 016 uncontested; one SOFT, disjoint-region overlap with 175 on services/xstockstrat-portfolio/docs/context-constitution-findings.md (172 = drawdown row, 175 = getEnvBool row) — rebase-only, non-blocking.

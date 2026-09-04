@@ -86,3 +86,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Teardown grounded to **5** locations (design listed 4; found a 5th): analysis findings `:18` (stale client_id `:61`→`:60`), ingest findings `:27` (stale `:75`→`:73`, dead `sandbox_*` helpers actual `:150-163` — KEEP open, NARROW only the identity clause), analysis+ingest `CLAUDE.md:**4**` (not :3 as design said — off-by-one; blockquote defect list), and root `docs/context-constitution-findings.md:39` (open significance question — resolved as cosmetic; stale `:61`/`:61`).
   - ingest watcher legitimately keeps `indicators.sandbox.*` config-key strings (L150-161) — verification greps must not flag those; only the client_id/docstring `indicators-` identity is removed.
 - Reviewers snapshot written to feature.md: analysis owner (service/test), ingest owner (service/test), docs none.
+
+---
+
+## Session 2026-09-04T18:52:00Z — sdd-review impl-spec (advisory)
+
+- Result: **PASS** — 5 steps 0 failures, 0 warnings, 2 informational notes (advisory — did not block). Wire-object test seam non-vacuous; Step 5 teardown correctly NARROWS (keeps the dead sandbox_* helper defect open); no Floor risk.
+- Carried into execution:
+  - Note: test comments tag environment/trading_mode assertions `@AC-10`, which is NOT a scenario in this feature's acceptance.feature (only AC-1/AC-2) — [x] no action (comment-only; **Covers** correctly cites AC-1/AC-2; C-15 intact). Cosmetic; may mislead a reader grepping this feature's ACs.
+  - Note: WatchConfigRequest.trading_mode may be vestigial (root CLAUDE.md: the trading_mode config axis was removed by feature 147) — [x] no action (preserving it verbatim is the correct minimal-change choice for a cosmetic fix; out of scope).
+- Overlap findings: SOFT (WARN, rebase-only) — shares three xstockstrat-ingest files with 173 (disjoint line ranges) and the root findings log with 175 (disjoint rows). Recommend landing 173 BEFORE 174 (see 173 note); 174 rebases the shared ingest files. No FAIL-level collision.

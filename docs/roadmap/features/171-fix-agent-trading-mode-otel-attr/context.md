@@ -126,3 +126,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Findings reconciliation carried from design: close the open `trading_mode` OTel entries in
   `docs/context-constitution-findings.md` / `context-scrubber-findings.md` when 171 lands (P-03), so the
   next comment audit doesn't re-file.
+
+---
+
+## Session 2026-09-04T18:52:00Z — sdd-review impl-spec (advisory)
+
+- Result: **PASS** — 0 failures, 2 warnings (advisory — did not block). All 12 telemetry modules + line numbers verified; no Floor risk.
+- Carried into execution:
+  - Step 2: coverage threshold not stated — [x] no action (telemetry/ is coverage-EXCLUDED from Go -coverpkg; direct `go test` is the C-08 gate). Reviewer-verified exception.
+  - Step 8: AC-3 covered by a grep in Verification rather than a test-step/RED (C-15 prefers a RED assertion) — [x] no action (pure-docs scenario, justified).
+- Overlap findings: CLEAN — no migration/proto/config/file collision. Shared service dirs with 175 (config vs telemetry files) and 172/173/174 are different files; courtesy merge coordination only.
