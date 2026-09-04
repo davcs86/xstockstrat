@@ -43,3 +43,33 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   173 the accessor bodies, 174 the client_id line); no merge-order row required.
 - Design depth: quick (SEV-3, 2 services, one significance question — DRY shared-prefix helper worth
   weighing at design).
+
+---
+
+## Session 2026-09-04 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: analysis, ingest; config investigation-only).
+- **Significance RESOLVED — cosmetic.** xstockstrat-config never keys on client_id (opaque subId
+  segment + logs; subscriber map keys on Date.now()-unique subId; id(self) already unique). The shared
+  `indicators-` prefix is a log-mislabel, not a collision. Field number 2; no test asserts it.
+- Phase 1 Grilling: **2 rounds (quick base + 1 extra)**, approved, no Floor breach.
+  - R1: proposer = _client_id() str seam. Adversary APPROVE-READY but flagged: (a) a str-only seam
+    asserts the source not the wire → prefer `_build_watch_request() -> WatchConfigRequest` (asserts
+    the real request + gives @AC-10 a live assertion); (b) teardown must include the CLAUDE.md:3 lines.
+  - **User decision (R1 gate): run another round.**
+  - R2: locked `_build_watch_request()` wire-object seam; also fix the module docstring line 2
+    (`-indicators` → `-analysis`/`-ingest`, bound to the same finding); teardown NARROWS the ingest
+    findings entry (strike the identity clause, KEEP the separate dead `sandbox_*` helper clause open —
+    a different change class, out of scope; wholesale-resolving would drop a live defect).
+  - **User decision (R2 gate): approve.**
+- Chosen approach: extract `_build_watch_request()` per watcher (byte-identical except the client_id
+  prefix), flip `indicators-` → `analysis-`/`ingest-`, fix docstring; RED-before-green wire-object test
+  via the existing non-dialing `_StubWatcher` (sets `_environment`/`_trading_mode`, asserts client_id
+  prefix + environment + trading_mode). No shared DRY helper. No proto/config/migration change.
+- Constitution: C-08/P-06/C-15 (wire-object test, non-vacuous), C-16 (@AC-10 preserved + asserted),
+  C-14 (internal-only), C-13/DRY (no helper), C-01/F-04 (sites confirmed; stale findings line numbers
+  corrected). No Floor breach.
+- Status: spec-ready → design-approved.
+- Open Threads (→ /sdd-spec / execute): teardown 4 locations (analysis/ingest CLAUDE.md:3 +
+  findings.md), NARROW the ingest finding (keep dead sandbox_* helpers open), stale line-number
+  correction (analysis findings :61→:60, ingest :75→:73), _StubWatcher location confirm.

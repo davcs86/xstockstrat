@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-09-04 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from comment-audit report item 4 (re-confirms open question) |
 | 2026-09-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS); overlap CLEAN (soft-rebase w/173); FRs + Consumer Surface added |
+| 2026-09-04 | `spec-ready` → `design-approved` | /sdd-design | 2 rounds (quick); cosmetic client_id relabel via _build_watch_request() seam approved; recon.md + design.md written; no Floor breach |
 
 ---
 
@@ -22,6 +23,8 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon Dossier](recon.md) — grounded codebase facts (client_id significance resolved: cosmetic)
+- [Design](design.md) — debated, approved architecture (2 rounds; wire-object test seam)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-config-watcher-client-id`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -38,4 +41,4 @@ to `analysis-` / `ingest-`?
 
 ## Next Action
 
-`/sdd-design fix-config-watcher-client-id quick` — recommended design depth (quick); see context.md
+`/sdd-spec fix-config-watcher-client-id` — generate the implementation spec from the approved design
