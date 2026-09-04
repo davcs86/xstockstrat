@@ -414,3 +414,14 @@ confirmed nothing in-repo queries the attribute; `OTEL_ENABLED=false` in both `.
   import `from '../telemetry.ts'` (explicit extension required by ESM); config/notify (tsc → dist CJS)
   import `from '../telemetry'`. Matches each service's existing harness. **Disposition**: runner-specific
   extension resolved at execute (spec Step 6 anticipated this).
+- **Step 6 follow-up — exclude test files from the ledger/identity production `tsc` build.** The
+  `from '../telemetry.ts'` import that the ESM strip-types test runner requires is rejected by the `tsc`
+  **build** (`TS5097: An import path can only end with '.ts' when allowImportingTsExtensions is enabled`),
+  which an emitting build cannot set. ledger/identity's single `tsconfig.json` (`include: src/**/*`)
+  compiled the test files incidentally — but test files are never shipped and their strip-types runner
+  runs them from source, not `dist`. Added `"src/**/*.test.ts"` to `exclude` in
+  `services/xstockstrat-{ledger,identity}/tsconfig.json` so the production build no longer type-checks
+  test sources; `pnpm run build` (tsc) and `pnpm run test` (strip-types) both pass. config/notify are
+  unaffected (they compile-first with an extensionless import). Surfaced by feature 175's `@types/node`
+  build gate, the first `tsc` build run after Step 6. **Disposition**: in-scope fix to make Step 6's own
+  test approach compatible with the production build.

@@ -187,3 +187,6 @@ Fleet-wide removal of the redundant `trading_mode` OTel resource attribute + dea
 **Stopped at**: all complete → code-completed
 **Accountability**: out-of-scope changes: none (TRADING_MODE env var + .do/compose values untouched, as specced). Open questions: none. Unaddressed review warnings: none. **Deviation (surfaced)**: Node `buildResource` uses static top-level imports of two hard-dep OTel packages instead of deferred `require`, so the C-08 per-module test runs under both the CJS and ESM Node test runners — see Deviation Log.
 **Next**: stacked integration PR #4 (base `feature/fix-portfolio-max-drawdown-unenforced`); then feature 175.
+
+### Follow-up 2026-09-04 — tsc-build fix (surfaced by feature 175's build gate)
+- The Step 6 ledger/identity `../telemetry.ts` import (needed by their ESM strip-types test runner) broke their `tsc` **build** (`TS5097` — `.ts` extension not allowed in an emitting build). Their single tsconfig `include: src/**/*` was compiling test sources incidentally. Fixed by excluding `src/**/*.test.ts` from `services/xstockstrat-{ledger,identity}/tsconfig.json` (tests aren't shipped; the runner runs them from source). Verified: all 4 leaf `pnpm run build` (tsc) pass AND ledger/identity `pnpm run test` (strip-types, 37/53 pass) stay green. Committed to this branch (PR #1095) as a separate follow-up commit. See Deviation Log.
