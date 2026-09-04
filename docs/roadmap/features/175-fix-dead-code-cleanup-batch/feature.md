@@ -17,6 +17,7 @@
 | 2026-09-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS, 0 warnings); overlap CLEAN; FRs + Consumer Surface added |
 | 2026-09-04 | `spec-ready` → `design-approved` | /sdd-design | 4 rounds (quick base + 3 operator-elected); identity propagation.ts DELETE, @types/node bump widened to 5 services incl. ui (+@AC-4), verification mechanics locked; recon.md + design.md written; no Floor breach |
 | 2026-09-04 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 7 steps (A→E order: bump+verify → Go delete+verify → Node delete+verify → teardown+23-path gate); all evidence re-grepped fresh |
+| 2026-09-04 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run (stacked PR #5 on 171); Steps 1-2 (@types/node ^24 bump ×5 + build gate: 4 leaf tsc + ui next build all green, no FR-3 bounce) done |
 
 ---
 

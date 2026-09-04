@@ -160,3 +160,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Step 2: no coverage threshold stated — [x] no action (a devDep type-pin changes no runtime source; discharge is compile-green via tsc/next build, not coverage; Node-leaf coverage discharge is in Step 6).
   - Step 7: header-propagation.md:123 "Reference store" line re-home — [ ] unaddressed refinement: also NEUTRALIZE the snippet BODY at :125-145 (it shows the gRPC extractFromMetadata form; a pre-existing doc/code drift), not only the "Reference store:" pointer line. Leave the LIVE Go reference at :50 untouched.
 - Overlap findings: CLEAN — no proto/migration/config possible; all source files disjoint. Soft, disjoint-region findings-doc overlaps only: with 172 on portfolio findings, with 174 on root findings — rebase-only, non-blocking.
+
+---
+
+## Session 2026-09-04 — sdd-execute (sequential; stacked PR #5 of 5, base feature/fix-agent-trading-mode-otel-attr)
+
+Dead-code cleanup batch + @types/node type-pin. Stacked on 171 (final of the sequence). The 23-path landed-diff gate is run against the PR base (171's branch), NOT main-dev, because the stacked branch contains all prior features' commits — the diff vs 171 is exactly 175's change. Auto-proceed.
+
+### Step 1 — bump @types/node ^20 → ^24 across 5 Node workspaces + root lock [done]
+- ledger/notify/config/identity/ui package.json `@types/node` → `^24` (resolves 24.13.3); root `pnpm install` regenerated ONLY the root `pnpm-lock.yaml` (vestigial per-service locks untouched — verified via git status).
+- No FR-3 bounce: `@types/node ^24` needed no sibling dep bump.
+
+### Step 2 — @types/node ^24 resolution + pre-delete build gate (AC-3, AC-4) [done]
+- AC-3: 4 leaves resolve @types/node 24.x; `pnpm --filter {ledger,notify,config,identity} build` (tsc) all green. AC-4: ui resolves 24.x; `pnpm --filter ui build` (next build) green.
+- NOTE: surfaced a pre-existing tsc-build break from feature 171 (ledger/identity telemetry.test.ts `.ts` import rejected by tsc build) — fixed on the 171 branch (PR #1095) by excluding `src/**/*.test.ts` from those two tsconfigs; 175 inherits the fix via the stack. Not a 175 diff-gate path.

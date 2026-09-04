@@ -67,7 +67,7 @@ build/tsc/`next build` is a green-before-**and**-after regression guard, never a
 
 ### Step 1 — service: bump `@types/node ^20 → ^24` across five Node workspaces + regenerate root lockfile
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-{ledger,notify,config,identity,ui}` (workspace-wide devDependency)
 **Files**:
 - `services/xstockstrat-ledger/package.json` — modify
@@ -111,7 +111,7 @@ git diff --name-only | grep -E 'pnpm-lock.yaml$'   # → root pnpm-lock.yaml onl
 
 ### Step 2 — test: verify `@types/node ^24` resolution + Node/ui pre-delete build gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-{ledger,notify,config,identity,ui}`
 **Files**: none (verification only)
 
