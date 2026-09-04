@@ -118,3 +118,23 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Carried into execution:
   - Steps 3/5: coverage threshold not stated — [x] no action (internal/repository + internal/service EXCLUDED by ci.yml:244 COVERPKGS filter; pgxmock + unit assertions are the C-08 gate). Reviewer-verified exception.
 - Overlap findings: CLEAN — migration 016 uncontested; one SOFT, disjoint-region overlap with 175 on services/xstockstrat-portfolio/docs/context-constitution-findings.md (172 = drawdown row, 175 = getEnvBool row) — rebase-only, non-blocking.
+
+---
+
+## Session 2026-09-04 — sdd-execute (sequential; stacked PR #3 of 5, base feature/fix-config-watcher-client-id)
+
+Path A per-account drawdown enforcement. Go 1.27; golangci-lint v2.13.1 rebuilt from source with GOTOOLCHAIN=go1.27.0 (the packaged 2.5.0 refuses go 1.27 — see Deviation Log). Auto-proceed.
+
+### Step 1 — migration 016: peak_equity HWM column [done]
+- `016_account_balance_peak_equity.up.sql` adds `peak_equity DOUBLE PRECISION NOT NULL DEFAULT 0` (matches `equity` type) + seeds `peak_equity = equity`; `.down.sql` drops it. Offline-verified (up/down inverse, next free NNN 016). No DB apply — real apply runs in CI/deploy.
+- Files: `migrations/016_account_balance_peak_equity.{up,down}.sql`. TDD: N/A (migration).
+- Migration needs DBA + owner approval at the PR (noted).
+
+### Step 2 — repository: HWM upsert + GetAccountDrawdowns + interface widening [done]
+- Widened `queryRower` with `Query` + `Exec` (added `pgconn` import); switched `UpsertAccountBalance` to `r.db.Exec` and added `peak_equity` (bound to $6) + `peak_equity = GREATEST(...EXCLUDED.equity)` on conflict — HWM rises each sync, never falls; no Go signature change. Added `AccountDrawdown` struct + `GetAccountDrawdowns(user, mode)` via `r.db.Query`.
+- Files: `internal/repository/portfolio_repo.go`. Build clean; golangci-lint 0 issues.
+
+### Step 3 — pgxmock repository tests (AC-1 fetch shape, AC-2 GREATEST contract) [done]
+- `TestGetAccountDrawdowns_ScopesToUserAndMode` (SELECT projection + user_id/trading_mode filter, 2 rows) and `TestUpsertAccountBalance_RaisesPeakEquityWithGreatest` (ExpectExec regex requires peak_equity + GREATEST clause). C-13: inline row literals, single consumer.
+- Red→green: compile-RED (`GetAccountDrawdowns undefined`) on pre-Step-2 tree → both pass after Step 2 (`-race`). golangci-lint 0 issues.
+- Files: `internal/repository/portfolio_repo_test.go`. Deviations: none.

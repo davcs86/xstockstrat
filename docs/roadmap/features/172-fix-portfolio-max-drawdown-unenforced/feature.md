@@ -17,6 +17,7 @@
 | 2026-09-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS); overlap CLEAN; FRs + Consumer Surface added |
 | 2026-09-04 | `spec-ready` → `design-approved` | /sdd-design | 3 rounds; Path A (enforce, per-account, migration 016) approved; recon.md + design.md written; no Floor breach |
 | 2026-09-04 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
+| 2026-09-04 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run (stacked PR #3 on 174); Steps 1-3 (migration 016 + HWM upsert + GetAccountDrawdowns + pgxmock tests) done |
 
 ---
 

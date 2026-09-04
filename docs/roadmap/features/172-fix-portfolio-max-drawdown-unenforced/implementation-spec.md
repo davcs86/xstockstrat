@@ -52,7 +52,7 @@ paired tests are still required (C-08) and are the RED-before-green regression g
 
 ### Step 1 — migration: add `peak_equity` high-water-mark column to `account_balances`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/migrations/016_account_balance_peak_equity.up.sql` — create
@@ -97,7 +97,7 @@ database — the real apply/rollback runs in CI/deploy.
 
 ### Step 2 — service: HWM upsert + `GetAccountDrawdowns` read + interface widening (repository)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go` — modify
@@ -173,7 +173,7 @@ queries via `r.db.Query`. (Coverage/lint gate is exercised together with the pai
 
 ### Step 3 — test: pgxmock repository tests for `GetAccountDrawdowns` + `UpsertAccountBalance` HWM
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo_test.go` — modify
