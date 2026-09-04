@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-09-04 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from comment-audit report item 2 (re-confirms portfolio module findings) |
 | 2026-09-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS); overlap CLEAN; FRs + Consumer Surface added |
+| 2026-09-04 | `spec-ready` → `design-approved` | /sdd-design | 3 rounds; Path A (enforce, per-account, migration 016) approved; recon.md + design.md written; no Floor breach |
 
 ---
 
@@ -22,6 +23,8 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon Dossier](recon.md) — grounded codebase facts (Path-A-cheap premise disproven)
+- [Design](design.md) — debated, approved architecture (3 rounds; per-account, migration 016)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-portfolio-max-drawdown-unenforced`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -37,4 +40,4 @@ decision: implement the drawdown halt, or formally mark the key **Documented, no
 
 ## Next Action
 
-`/sdd-design fix-portfolio-max-drawdown-unenforced quick` — recommended design depth (quick); see context.md
+`/sdd-spec fix-portfolio-max-drawdown-unenforced` — generate the implementation spec from the approved design

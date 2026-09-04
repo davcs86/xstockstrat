@@ -43,3 +43,42 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   (findings cites :769/:797; actual :722/:750).
 - Overlap: CLEAN (portfolio migration tip 015 → next 016, no contention; 175 touches a different
   portfolio file). Design depth: quick (SEV-3, one Path A/B decision + blast-radius).
+
+---
+
+## Session 2026-09-04 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (service: xstockstrat-portfolio; notify reused not modified).
+- Phase 1 Grilling: **3 rounds**, approved, no Floor breach.
+  - R1: proposer recommended Path A citing recon's "cheap" premise (snapshots.equity). Adversary
+    DISPROVED it — `snapshots.equity` is cashless position value (`portfolio_service.go:706` cash=0),
+    so drawdown on it fires false alerts when a user de-risks to cash. Correct basis = broker
+    `account_balances.equity`.
+  - **User decision (R1 gate): Path A done correctly (re-scope).**
+  - R2: corrected Path A — peak_equity HWM column (migration 016) + GREATEST at balance-sync +
+    GetAccountDrawdowns query + evalDrawdown. Adversary: NEEDS WORK — (a) @AC-1 vacuous-green (evalDrawdown→bool
+    never reaches emit) → extract `evaluateDrawdowns(rows,limit) []string` seam; (b) per-account vs
+    portfolio-wide is a real fork (concentration sibling is portfolio-wide); (c) trading_mode string
+    confirmable NOW (`trading.go:2119-2122` = mode.String(), matches — not a silent-no-op); (d) cash-flow
+    contamination to document.
+  - **User decision (R2 gate): per-account grain.** @AC reworded to per-account.
+  - R3: cash-flow question — grep proves the platform models NO deposits/withdrawals (zero code hits);
+    account_balances.equity is broker-synced verbatim; last_equity is prior-day close, not a cash delta.
+    Nothing to net against. Cheap heuristics are net-negative (a masking heuristic in a risk alert is worse
+    than the false positive). **Accept + document + named follow-up 'model funding events'**; scope @AC to
+    trading-loss drawdown.
+  - **User decision (R3 gate): approve.**
+- Chosen approach: per-account drawdown over broker-authoritative `account_balances.equity` + persisted
+  `peak_equity` HWM (migration 016, GREATEST at the existing balance-sync upsert, no Go signature change)
+  + `GetAccountDrawdowns` query + pure `evaluateDrawdowns` seam (honest @AC-1 RED) + reuse `emitRiskAlert`
+  (WARNING/"risk", honors notify PRESERVE gates). pgxmock query test + evaluateDrawdowns unit test.
+- Migration 016 backfill: `SET peak_equity = equity` (no last_equity ref); `peak_equity` type must equal
+  the `equity` column type (pin at /sdd-spec). trading_mode literal pinned to `trading.go:2119-2122`;
+  pgxmock WithArgs binds it; cross-service string contract → portfolio findings log.
+- Constitution: C-07 (016 + down), F-01 (new migration), C-08/P-06/C-15 (evaluateDrawdowns seam + pgxmock,
+  no vacuous-green), C-16 (notify gates preserved; net-new portfolio @AC), C-14 (notify consumer surface),
+  C-01 (trading_mode pinned). No Floor breach.
+- Status: spec-ready → design-approved.
+- Open Threads (→ /sdd-spec / execute): peak_equity column type; cash-flow contamination (accepted) +
+  named follow-up; trading_mode cross-service string contract; migration DBA+owner approval at PR;
+  findings-doc line-number refresh (cites :769/:797; actual :722/:750) at execute (teardown).

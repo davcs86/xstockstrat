@@ -68,14 +68,15 @@ and `@AC-1`/`@AC-2` collapse to the chosen path's scenario.
 ## Fix Scope
 
 - [x] No proto changes anticipated (either fix path)
-- [ ] Database migrations — **depends on decision**: the "implement" path likely needs durable
-      historical P&L / drawdown-peak state; the "document-only" path needs none.
+- [x] **Database migration REQUIRED** (resolved at design): migration `016` adds a `peak_equity`
+      high-water-mark column to `portfolio.account_balances`. DBA + service-owner approval at PR.
 - [x] No config key changes anticipated (the key already exists; no new key)
-- [ ] **Open decision (design gate)**: (A) implement the drawdown halt/alert — larger, needs
-      historical P&L tracking and possibly a migration + notify wiring; or (B) mark
-      `portfolio.risk.max_drawdown_pct` **Documented, not yet implemented** in the portfolio
-      `CLAUDE.md` and remove/annotate the misleading read, mirroring `daily_loss_limit`. Choice
-      dictates whether this stays a doc-only fix or grows into a real risk-control feature.
+- [x] **Decision resolved (design gate, user sign-off): Path A — enforce, per-account.** Drawdown is
+      computed **per account** over broker-authoritative `account_balances.equity` (cash+positions)
+      against the persisted `peak_equity` HWM, emitting a WARNING alert on breach via the existing
+      `emitRiskAlert`. Path B (document-only) and the cashless-`snapshots.equity` basis were rejected;
+      cash-flow-aware netting is a named follow-up (the platform models no funding events). Full
+      rationale + rejected alternatives + accepted cash-flow limitation → `design.md`.
 
 ## Acceptance Criteria
 
