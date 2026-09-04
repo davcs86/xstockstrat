@@ -112,6 +112,20 @@ class ConfigWatcher:
             return default
         return v.int_val or default
 
+    def get_int_present(self, key: str, default: int) -> int:
+        """Presence-aware int read: returns the stored ``int_val`` whenever the field is set —
+        **including a legitimate 0** — else the default. Mirrors ``get_bool``'s ``HasField``
+        pattern; use this (never ``get_int``) for keys where 0 is a meaningful value, e.g.
+        ``ingest.backfill.max_retry_attempts`` (0 = no retries) and
+        ``ingest.signals.dedup_window_hours`` (0 = disable the dedup window), which the
+        ``get_int`` zero-trap would otherwise swallow into the default."""
+        if self._snapshot is None:
+            return default
+        v = self._snapshot.values.get(key)
+        if v is None:
+            return default
+        return v.int_val if v.HasField("int_val") else default
+
     def get_bool(self, key: str, default: bool = False) -> bool:
         if self._snapshot is None:
             return default
@@ -165,6 +179,8 @@ class ConfigWatcher:
     # Backfill config helpers — ingest.backfill.*
     @property
     def backfill_max_concurrent_jobs(self) -> int:
+        # get_int (zero-trap intentional): a configured 0 → default 3; 0 would reach
+        # asyncio.Semaphore(0) at servicer.py:191 and deadlock. Do NOT switch to get_int_present.
         return self.get_int("ingest.backfill.max_concurrent_jobs", default=3)
 
     @property
@@ -173,7 +189,7 @@ class ConfigWatcher:
 
     @property
     def backfill_max_retry_attempts(self) -> int:
-        return self.get_int("ingest.backfill.max_retry_attempts", default=3)
+        return self.get_int_present("ingest.backfill.max_retry_attempts", default=3)
 
     # Chunked-backfill config helpers — ingest.backfill.*
     @property
@@ -186,9 +202,11 @@ class ConfigWatcher:
 
     @property
     def backfill_max_concurrent_chunks(self) -> int:
+        # get_int (zero-trap intentional): a configured 0 → default 3; 0 would reach
+        # asyncio.Semaphore(0) at servicer.py:519 and deadlock. Do NOT switch to get_int_present.
         return self.get_int("ingest.backfill.max_concurrent_chunks", default=3)
 
     # Signal dedup config helper — ingest.signals.*
     @property
     def dedup_window_hours(self) -> int:
-        return self.get_int("ingest.signals.dedup_window_hours", default=24)
+        return self.get_int_present("ingest.signals.dedup_window_hours", default=24)

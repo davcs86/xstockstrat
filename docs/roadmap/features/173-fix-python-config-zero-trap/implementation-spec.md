@@ -57,7 +57,7 @@ is required — this is a decision, not an omission.
 
 ### Step 1 — service: ingest watcher — add `get_int_present`, re-point the two 0-meaningful keys, annotate the semaphore-key retentions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/config/watcher.py` — modify

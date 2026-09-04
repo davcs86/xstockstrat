@@ -17,6 +17,7 @@
 | 2026-09-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings); overlap CLEAN; blockers C-14/C-15 fixed |
 | 2026-09-04 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written; no Floor breach |
 | 2026-09-04 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
+| 2026-09-04 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run started; Step 1 (ingest watcher `get_int_present`) done |
 
 ---
 
