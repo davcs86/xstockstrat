@@ -94,3 +94,47 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Status: spec-ready → design-approved.
 - Open Threads (carry into /sdd-spec): FR-1 int-only; `_effective_max_attempts()` sole-definition seam;
   `_snapshot`-injection vs `_StubWatcher` fallback; @AC-4 subprocess-sandbox test cost; deferred DRY.
+
+---
+
+## Session 2026-09-04 — sdd-spec
+
+- Generated implementation-spec.md with 6 steps. Status → implementation-ready.
+- Structure: ingest first (Steps 1-3: watcher `get_int_present` + `_effective_max_attempts()` seam +
+  paired regression test), indicators second (Steps 4-5: net-new `get_str_present` + `allowed_imports`
+  re-point + paired test), then Step 6 docs/FR-3 audit. Consumer surface confirmed internal-only (C-14),
+  restated in Execution Summary — no consumer-surface step.
+- FR-1 int-only narrowing honored: `get_float_present` NOT ported into ingest (dead public API).
+- Key codebase findings (grep/Read-confirmed against the current tree):
+  - Ingest watcher (`services/xstockstrat-ingest/app/config/watcher.py`): `get_int` `:107-113`
+    (`v.int_val or default`); `get_bool` `:115-121` HasField-safe; `backfill_max_retry_attempts`
+    `:174-176` and `dedup_window_hours` `:192-194` are the two keys to re-point;
+    `backfill_max_concurrent_jobs` `:166-168` / `backfill_max_concurrent_chunks` `:187-189` stay on
+    `get_int` (Semaphore-deadlock keys, annotate). This file carries the documented copy-paste defect
+    (docstring + `client_id="indicators-"` + leftover sandbox helpers) but its accessor/property line
+    numbers match recon/design exactly.
+  - Port source: `services/xstockstrat-analysis/app/config/watcher.py:102-113` `get_int_present`
+    (verbatim). No `get_str_present` exists anywhere → net-new in indicators.
+  - Ingest servicer seam site: `servicer.py:520-522` inline `max_attempts` expression inside
+    `_run_chunks` (`:513`), consumed at loop guard `:568` and short-circuit `:564`; real backoff
+    `asyncio.sleep(2**attempt)` at `:571` (~14s) — the reason for the seam. Jobs semaphore `:191`,
+    chunks semaphore `:519`, dedup SQL `$7` at `:809-810`/`:823`.
+  - Indicators watcher: `get_str` `:86-92`, `get_bool` `:102-108` (mirror idiom),
+    `sandbox_allowed_imports` `:126-131`; consumer `app/handlers/servicer.py:127`.
+  - Tests: analysis `test_config_watcher.py` has NO accessor tests (only resolve_* helpers) → the
+    accessor/property tests here are net-new. `test_ingest_servicer.py:31-63` `make_servicer` is the
+    consumer scaffold (imports `config_pb2` + `ConfigWatcher`); indicators `test_formulas.py`
+    `IndicatorsServicer(config_watcher=…)` is the optional end-to-end scaffold.
+  - Test discipline applied: real `config_pb2.ConfigSnapshot`/`ConfigValue` + dial-free
+    `ConfigWatcher.__new__` (insights-069/1060 real-proto rule; fails-074 no-live-watcher / no
+    zero-assertion rule). `int_val=0` / `string_val=""` set the oneof case so `HasField` is True.
+
+## Open Threads (carry into /sdd-execute)
+
+- Step 2 seam must be the SOLE definition of `max_attempts` (delete the inline expr; keep the
+  `make_servicer(max_retry=…)` loop tests green) — design.md Open Risk.
+- `@AC-4` primary is the deterministic property assertion (`sandbox_allowed_imports == []`); the
+  subprocess end-to-end run is optional/reviewer-gated (flake fallback per design.md Open Risk).
+- Deferred DRY (OQ-2): the ~11-line `get_int_present` copy across analysis+ingest may trip jscpd —
+  accepted per-service duplication, waivable at execute time (note for `dry-reviewer`).
+- Step 6 teardown: context-constitution refresh scoped to the two edited service `CLAUDE.md` files.

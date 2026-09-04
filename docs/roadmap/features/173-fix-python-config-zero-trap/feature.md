@@ -16,6 +16,7 @@
 | 2026-09-04 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from comment-audit report item 3 (re-confirms CF-N10) |
 | 2026-09-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings); overlap CLEAN; blockers C-14/C-15 fixed |
 | 2026-09-04 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written; no Floor breach |
+| 2026-09-04 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
 
 ---
 
@@ -25,8 +26,18 @@
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
 - [Recon Dossier](recon.md) — grounded codebase facts (Phase 0)
 - [Design](design.md) — debated, approved architecture (3 rounds, full)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-python-config-zero-trap`_
+- [Implementation Spec](implementation-spec.md) — numbered steps with codebase evidence (6 steps)
 - [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Reviewers
+
+| Step category | Service | Reviewers |
+|---|---|---|
+| service, test | `xstockstrat-ingest` | xstockstrat-ingest — signal normalization correctness, idempotent ingestion, newsletter source schema stability |
+| service, test | `xstockstrat-indicators` | xstockstrat-indicators — formula sandboxing, numeric precision, timeout enforcement, no side-effects from formula execution |
+| docs | — | none |
 
 ---
 
@@ -41,4 +52,4 @@ unset, so this is a consumer defect, not a contract limit.
 
 ## Next Action
 
-`/sdd-spec fix-python-config-zero-trap` — generate the implementation spec from the approved design
+`/sdd-review fix-python-config-zero-trap impl-spec` — validate the implementation spec, then `/sdd-execute fix-python-config-zero-trap`
