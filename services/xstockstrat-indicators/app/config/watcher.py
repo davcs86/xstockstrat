@@ -91,6 +91,19 @@ class ConfigWatcher:
             return default
         return v.string_val or default
 
+    def get_str_present(self, key: str, default: str) -> str:
+        """Presence-aware string read: returns the stored ``string_val`` whenever the field is set —
+        **including a legitimate ""** — else the default. Mirrors ``get_bool``'s ``HasField``
+        pattern; use this (never ``get_str``) for keys where an empty string is meaningful, e.g.
+        ``indicators.sandbox.allowed_imports`` ("" = allow no imports), which the ``get_str``
+        zero-trap would otherwise swallow into the permissive default."""
+        if self._snapshot is None:
+            return default
+        v = self._snapshot.values.get(key)
+        if v is None:
+            return default
+        return v.string_val if v.HasField("string_val") else default
+
     def get_int(self, key: str, default: int = 0) -> int:
         if self._snapshot is None:
             return default
@@ -125,7 +138,7 @@ class ConfigWatcher:
 
     @property
     def sandbox_allowed_imports(self) -> list[str]:
-        raw = self.get_str(
+        raw = self.get_str_present(
             "indicators.sandbox.allowed_imports", default="numpy,pandas,math,statistics"
         )
         return [m.strip() for m in raw.split(",") if m.strip()]

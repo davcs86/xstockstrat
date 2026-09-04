@@ -171,3 +171,15 @@ Order 173→174→172→171→175, one stacked PR per feature (operator-approved
 - Red→green: 5 tests failed on pre-fix tree (AttributeError ×3, `24 != 0`) → 5 passed after Steps 1-2. Full suite: 212 passed, coverage 78.15% (≥40). ruff check + format clean.
 - Files modified: `services/xstockstrat-ingest/tests/test_config_watcher.py`, `services/xstockstrat-ingest/tests/test_ingest_servicer.py`
 - Deviations: none. Existing `make_servicer(max_retry=…)` loop tests left untouched and green (seam-integrity).
+
+### Step 4 — indicators watcher: add net-new `get_str_present`, re-point `sandbox_allowed_imports` [done]
+- Added `get_str_present` (net-new; no `get_str_present` existed in any watcher) after `get_str`, mirroring `get_bool`'s HasField idiom. Re-pointed `sandbox_allowed_imports` to it, leaving the split unchanged so a stored "" resolves to `[]` (deny all imports) instead of the permissive 4-module default. No numeric present accessor (OQ-3: indicators numeric keys not 0-meaningful).
+- Files modified: `services/xstockstrat-indicators/app/config/watcher.py`
+- TDD (covered by Step 5): AC-4 red — `get_str_present` AttributeError / `sandbox_allowed_imports == [4-module default]` → green after.
+- Deviations: none
+
+### Step 5 — indicators `get_str_present` + deny-all `allowed_imports` tests (AC-4) [done]
+- Added dial-free `_str_watcher` builder + cases: `get_str_present` honors "", defaults when absent, `sandbox_allowed_imports == []`. Property assertion is the primary AC-4 check (subprocess end-to-end left out per design.md Open Risk — flake/cost).
+- Red→green: 3 failed pre-fix (AttributeError ×2, 4-module list != []) → 3 passed. Full suite: 128 passed, coverage 81.10% (≥50). ruff check + format clean (formatted my own AC-4 assertion line).
+- Files modified: `services/xstockstrat-indicators/tests/test_config_watcher.py`
+- Deviations: none

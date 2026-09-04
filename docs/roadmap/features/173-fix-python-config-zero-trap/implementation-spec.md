@@ -269,7 +269,7 @@ method is absent → `AttributeError`) and pass after.
 
 ### Step 4 — service: indicators watcher — add net-new `get_str_present`, re-point `sandbox_allowed_imports`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/config/watcher.py` — modify
