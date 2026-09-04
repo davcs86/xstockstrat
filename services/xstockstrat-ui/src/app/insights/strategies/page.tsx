@@ -34,9 +34,8 @@ import { scoreColor } from '@/lib/scoreDisplay';
 export default function StrategiesPage() {
   const router = useRouter();
   const { data: isAdmin } = useIsAdmin();
-  // Registered strategy definitions drive the list — a strategy appears here as
-  // soon as it is registered, whether or not it has been backtested/scored yet.
-  // Admins additionally see inactive (deactivated) definitions.
+  // Registered definitions drive the list — a strategy appears as soon as it is registered, scored
+  // or not. Admins additionally see inactive (deactivated) definitions.
   const { data: defsData, isLoading, error } = useStrategyDefinitions(!!isAdmin);
   // Scores are merged in by id; a definition without a score renders a
   // "not scored yet" state instead of being hidden.
@@ -45,9 +44,8 @@ export default function StrategiesPage() {
 
   const scoreById = new Map((scoresData?.strategies ?? []).map((s) => [s.strategyId, s]));
   const definitions = defsData?.definitions ?? [];
-  // Aggregate stats + the Active/Paused/Off state vocabulary (never Live/Paper — that would
-  // collide with the account trading mode; design.md § Strategies). "Active" = running live;
-  // "Paused" = registered-active but not live-enabled — counted separately, not folded in.
+  // State vocabulary is Active/Paused/Off (never Live/Paper — that collides with the account trading
+  // mode). Active = running live; Paused = registered-active but not live-enabled.
   const activeCount = definitions.filter((d) => d.active && d.liveEnabled).length;
   const pausedCount = definitions.filter((d) => d.active && !d.liveEnabled).length;
   const scoredDefs = definitions.filter((d) => scoreById.has(d.strategyId));
@@ -210,7 +208,6 @@ export default function StrategiesPage() {
           )}
         </div>
 
-        {/* Aggregate stat row (feature 083) — from the definitions + merged scores. */}
         {definitions.length > 0 && (
           <div className="mb-6 grid grid-cols-2 overflow-hidden rounded-md border border-border sm:grid-cols-4">
             <StatTile
@@ -257,9 +254,8 @@ export default function StrategiesPage() {
 
 /**
  * Per-cell strategy-analytics reader. Each of the 6 analytics columns renders its own instance
- * rather than hoisting `useStrategyAnalytics` above the row loop (design.md) — React Query
- * dedupes identical concurrent queries by key, so 6 independent calls with the same `strategyId`
- * cost one network round-trip, not six.
+ * rather than hoisting the hook above the row loop: React Query dedupes identical concurrent queries
+ * by key, so 6 calls with the same `strategyId` cost one round-trip, not six.
  */
 function AnalyticsCell({
   strategyId,

@@ -2,9 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { analysisClient } from '@/lib/browserClients/analysisClient';
 
 /**
- * feature 042 — P&L pattern attribution. Read-only query against the insights BFF
- * (AnalysisService.QueryPnLPatterns), which resolves the ranked positive/negative factors
- * server-side. Scoped by symbol (and optionally limit); strategy/time filters are additive.
+ * P&L pattern attribution. Read-only QueryPnLPatterns query that resolves the ranked
+ * positive/negative factors server-side. Scoped by symbol (and optionally limit).
  */
 type QueryPnLPatternsResult = Awaited<ReturnType<typeof analysisClient.queryPnLPatterns>>;
 

@@ -30,10 +30,8 @@ import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import type { BackfillJob } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { Timeframe } from '@xstockstrat/proto/common/v1/common_pb';
 
-// Feature 143: used ONLY by the delete-scope <select> now (the create-form select was removed —
-// daily is the only backfillable timeframe). The three options remain here because
-// DeleteBackfilledData stays deliberately permissive: an operator must still be able to scope a
-// delete to historically-stored 15m/1h rows.
+// Used only by the delete-scope <select>: create is daily-only, but DeleteBackfilledData stays
+// permissive so an operator can scope a delete to historically-stored 15m/1h rows.
 const TIMEFRAMES: { label: string; value: Timeframe }[] = [
   { label: '1 day', value: Timeframe.TIMEFRAME_1DAY },
   { label: '1 hour', value: Timeframe.TIMEFRAME_1HOUR },
@@ -100,19 +98,17 @@ function rangeLabel(range: BackfillJob['range']): string {
 export default function BackfillsPage() {
   const { data: isAdmin } = useIsAdmin();
 
-  // Create-form state (FR-1). Feature 143: no timeframe selector — daily is the only servable
-  // interval, so create always sends TIMEFRAME_1DAY (the create-form <select> was removed).
+  // Create-form state: no timeframe selector — daily is the only servable interval, so create
+  // always sends TIMEFRAME_1DAY.
   const [symbols, setSymbols] = useState('');
   const [createStart, setCreateStart] = useState('');
   const [createEnd, setCreateEnd] = useState('');
   const [overwrite, setOverwrite] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
 
-  // Filter state (FR-3).
   const [statusFilter, setStatusFilter] = useState<BackfillStatus>(BackfillStatus.UNSPECIFIED);
   const [symbolFilter, setSymbolFilter] = useState('');
 
-  // Delete-panel state (FR-5).
   const [delSymbol, setDelSymbol] = useState('');
   const [delStart, setDelStart] = useState('');
   const [delEnd, setDelEnd] = useState('');
@@ -160,7 +156,7 @@ export default function BackfillsPage() {
 
   const delRange = buildRange(delStart, delEnd);
   const isWholeSymbolDelete = !delRange;
-  // FR-5: operator must type the exact symbol; a whole-symbol delete needs a second typed confirm.
+  // Operator must type the exact symbol; a whole-symbol delete needs a second typed confirm.
   const deleteEnabled =
     delSymbol.trim().length > 0 &&
     delConfirm.trim().toUpperCase() === delSymbol.trim().toUpperCase() &&
@@ -263,7 +259,6 @@ export default function BackfillsPage() {
           </div>
         </div>
 
-        {/* Job stat row (feature 083) — from the polled BackfillJob list. */}
         {(() => {
           const jobs = data?.jobs ?? [];
           if (jobs.length === 0) return null;
@@ -316,7 +311,6 @@ export default function BackfillsPage() {
             </TabsList>
           )}
           <TabsContent value="history" className="space-y-4">
-            {/* Filters (FR-3) */}
             <div className="flex flex-wrap items-center gap-3">
               <select
                 className="h-10 rounded-md border border-input bg-secondary px-3 text-sm"
@@ -337,7 +331,6 @@ export default function BackfillsPage() {
               />
             </div>
 
-            {/* Job list + monitor (FR-2/FR-6) */}
             {isLoading && <p className="text-sm text-muted-foreground">Loading jobs…</p>}
             {error && <p className="text-sm text-destructive">Failed to load backfill jobs</p>}
             {data && (
@@ -415,7 +408,7 @@ export default function BackfillsPage() {
             )}
           </TabsContent>
 
-          {/* Delete backfilled data (FR-5) — admin only, destructive */}
+          {/* Delete backfilled data — admin only, destructive */}
           {isAdmin && (
             <TabsContent value="delete">
               <Card className="border-destructive/40">

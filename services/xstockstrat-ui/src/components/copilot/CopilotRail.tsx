@@ -28,10 +28,8 @@ interface ThreadMessage {
 }
 
 /**
- * Copilot shallow-beta rail (feature 083, FR-4/FR-19). 310px, default off, toggled from the
- * PlatformHeader. Two client-side templated reads (queue summary + concentration flag, no LLM),
- * an append-only note thread replayed from the ledger, and a read-only beta input. No agent
- * tool call, no agent DB, no new pool (F-06).
+ * Copilot beta rail: two client-side templated reads (queue summary + concentration flag, no LLM)
+ * and an append-only note thread replayed from the ledger. No agent tool call, no agent DB, no new pool.
  */
 export function CopilotRail() {
   const { showCopilot, setShowCopilot } = useChrome();

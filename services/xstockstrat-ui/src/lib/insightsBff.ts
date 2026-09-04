@@ -29,9 +29,8 @@ const router = createBffRouter();
 
 router.service(AnalysisService, {
   async listStrategies(req, ctx) {
-    // feature 133: send req as-is — analysis filters to the caller's own strategies from the
-    // propagated x-user-id header (backendHeaders), so the request body carries no user_id
-    // (design.md decision 3 removed the dead wire field).
+    // Send req as-is — analysis filters to the caller's own strategies from the propagated
+    // x-user-id header, so the body carries no user_id.
     const claims = await requireSession(ctx);
     return analysisClient.listStrategies(req, { headers: backendHeaders(claims, ctx) });
   },
@@ -40,29 +39,26 @@ router.service(AnalysisService, {
   screenSymbols: forward((req, opts) => analysisClient.screenSymbols(req, opts)),
   getStrategyReport: forward((req, opts) => analysisClient.getStrategyReport(req, opts)),
   listBacktests: forward((req, opts) => analysisClient.listBacktests(req, opts)),
-  // feature 068: persisted full result of a past run; NOT_FOUND for legacy/evicted runs.
+  // Persisted full result of a past run; NOT_FOUND for legacy/evicted runs.
   getBacktest: forward((req, opts) => analysisClient.getBacktest(req, opts)),
-  // feature 133: no admin gate. Strategy ownership is per-user now — analysis resolves the caller
-  // from the propagated x-user-id header and returns PERMISSION_DENIED for a non-owner (design.md
-  // decision 4). The old admin-only mutation gate (FR-8) is removed.
+  // No admin gate — ownership is per-user; analysis resolves the caller from x-user-id and returns
+  // PERMISSION_DENIED for a non-owner.
   manageStrategy: forward((req, opts) => analysisClient.manageStrategy(req, opts)),
   getStrategy: forward((req, opts) => analysisClient.getStrategy(req, opts)),
   listStrategyDefinitions: forward((req, opts) =>
     analysisClient.listStrategyDefinitions(req, opts),
   ),
-  // feature 133: no admin gate — owner-scoped server-side (design.md decision 4, C-10(a)).
+  // No admin gate — owner-scoped server-side.
   setStrategyLive: forward((req, opts) => analysisClient.setStrategyLive(req, opts)),
-  // feature 083 — opportunity queue + readiness + per-strategy analytics. All read-only;
-  // ListOpportunities takes its user from the propagated x-user-id header (forward → backendHeaders).
+  // Opportunity queue + readiness + analytics. All read-only; user comes from the x-user-id header.
   listOpportunities: forward((req, opts) => analysisClient.listOpportunities(req, opts)),
   evaluateReadiness: forward((req, opts) => analysisClient.evaluateReadiness(req, opts)),
   getStrategyAnalytics: forward((req, opts) => analysisClient.getStrategyAnalytics(req, opts)),
-  // feature 125 (FR-6): per-component indicator series for the Symbol page's overlay panels.
+  // Per-component indicator series for the Symbol page's overlay panels.
   getIndicatorSeries: forward((req, opts) => analysisClient.getIndicatorSeries(req, opts)),
-  // feature 042: ranked P&L-attribution factors. Read-only; no admin gate.
+  // Ranked P&L-attribution factors. Read-only; no admin gate.
   queryPnLPatterns: forward((req, opts) => analysisClient.queryPnLPatterns(req, opts)),
-  // feature 029: per-source signal-performance attribution. Read-only; owner-scoped server-side
-  // from the propagated x-user-id header (forward → backendHeaders).
+  // Per-source signal-performance attribution. Read-only; owner-scoped from the x-user-id header.
   getAttribution: forward((req, opts) => analysisClient.getAttribution(req, opts)),
 });
 
@@ -70,25 +66,24 @@ router.service(IngestService, {
   listSignalSources: forward((req, opts) => ingestClient.listSignalSources(req, opts)),
   triggerBackfill: forward((req, opts) => ingestClient.triggerBackfill(req, opts)),
   async getBackfillStatus(req, ctx) {
-    // Read-only progress poll — operators monitor jobs, so no admin gate (FR-2/FR-3).
+    // Read-only progress poll — operators monitor jobs, so no admin gate.
     const claims = await requireSession(ctx);
     return ingestClient.getBackfillStatus(req, { headers: backendHeaders(claims, ctx) });
   },
   async listBackfillJobs(req, ctx) {
-    // Read-only listing; forwards the optional `symbol` filter transparently (FR-3).
+    // Read-only listing; forwards the optional `symbol` filter transparently.
     const claims = await requireSession(ctx);
     return ingestClient.listBackfillJobs(req, { headers: backendHeaders(claims, ctx) });
   },
-  // Mutating — admin only (FR-7); the ingest server re-checks the scope (Step 3).
+  // Mutating — admin only; the ingest server re-checks the scope.
   cancelBackfill: forwardAdmin((req, opts) => ingestClient.cancelBackfill(req, opts)),
 });
 
 router.service(MarketDataService, {
   getBars: forward((req, opts) => marketDataClient.getBars(req, opts)),
-  // feature 095 — Decide-surface live price. Wired on BOTH BFFs so the queue card and the
-  // Signal-detail header read the same source (C-10(b) cross-surface parity).
+  // Live price wired on BOTH BFFs so the queue card and Signal-detail header read the same source.
   getLatestPrice: forward((req, opts) => marketDataClient.getLatestPrice(req, opts)),
-  // Destructive — admin only (FR-7); the marketdata server enforces it again (Step 5).
+  // Destructive — admin only; the marketdata server enforces it again.
   deleteBackfilledData: forwardAdmin((req, opts) =>
     marketDataClient.deleteBackfilledData(req, opts),
   ),
@@ -96,8 +91,7 @@ router.service(MarketDataService, {
 
 router.service(PortfolioService, {
   listPortfolios: forward((req, opts) => portfolioClient.listPortfolios(req, opts)),
-  // Watchlists (feature 058). Ownership is enforced server-side from the propagated
-  // x-user-id header (forwarded by backendHeaders) — request messages carry no user_id.
+  // Watchlists — ownership enforced server-side from the x-user-id header; messages carry no user_id.
   createWatchlist: forward((req, opts) => portfolioClient.createWatchlist(req, opts)),
   getWatchlist: forward((req, opts) => portfolioClient.getWatchlist(req, opts)),
   listWatchlists: forward((req, opts) => portfolioClient.listWatchlists(req, opts)),
@@ -105,9 +99,9 @@ router.service(PortfolioService, {
   deleteWatchlist: forward((req, opts) => portfolioClient.deleteWatchlist(req, opts)),
   addWatchlistSymbols: forward((req, opts) => portfolioClient.addWatchlistSymbols(req, opts)),
   removeWatchlistSymbols: forward((req, opts) => portfolioClient.removeWatchlistSymbols(req, opts)),
-  // Targeted single-symbol rebind (feature 167) — same header-propagating forward as its siblings.
+  // Targeted single-symbol rebind — same header-propagating forward as its siblings.
   updateWatchlistBinding: forward((req, opts) => portfolioClient.updateWatchlistBinding(req, opts)),
-  // Atomic bulk rebind (feature 170) — same header-propagating forward.
+  // Atomic bulk rebind — same header-propagating forward.
   updateWatchlistBindings: forward((req, opts) =>
     portfolioClient.updateWatchlistBindings(req, opts),
   ),
@@ -115,12 +109,12 @@ router.service(PortfolioService, {
 
 router.service(TradingService, {
   listBrokerAccounts: forward((req, opts) => tradingClient.listBrokerAccounts(req, opts)),
-  // feature 031 — the /insights performance dashboard reads the env-derived paper/live mode for its
-  // "Paper Trading" label; wire it on this segment's BFF (mirrors traderBff) so /insights is self-contained.
+  // The /insights dashboard reads env-derived paper/live mode here (mirrors traderBff) so the segment
+  // is self-contained.
   getTradingEnvironment: forward((req, opts) => tradingClient.getTradingEnvironment(req, opts)),
 });
 
-// feature 031 — the /insights performance dashboard reads its equity-curve source events + config here.
+// The /insights performance dashboard reads its equity-curve source events + config here.
 router.service(LedgerService, {
   // queryEvents forces the caller's own portfolio stream key SERVER-SIDE from the verified session
   // (IDOR guard — the browser must not supply it), mirroring the traderBff copilot force pattern.
@@ -149,9 +143,8 @@ router.service(IndicatorsService, {
   },
   getFormula: forward((req, opts) => indicatorsClient.getFormula(req, opts)),
   listFormulas: forward((req, opts) => indicatorsClient.listFormulas(req, opts)),
-  // The author-ownership check resolves the caller from the propagated x-user-id header
-  // (backendHeaders); the request-body user_id is deprecated, so these forward unchanged. A caller
-  // still cannot impersonate another user — the header is set from the verified session, not the body.
+  // Author-ownership resolves the caller from the x-user-id header (set from the verified session, not
+  // the body), so a caller cannot impersonate another user.
   updateFormula: forward((req, opts) => indicatorsClient.updateFormula(req, opts)),
   deleteFormula: forward((req, opts) => indicatorsClient.deleteFormula(req, opts)),
   executeFormula: forward((req, opts) => indicatorsClient.executeFormula(req, opts)),

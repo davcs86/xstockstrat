@@ -1,10 +1,6 @@
 /**
- * swHelpers.ts — pure, unit-testable logic mirrored inside `public/sw.js` (feature 165).
- *
- * The service worker itself is a standalone static script served from `public/` (it cannot import
- * from the Next bundle), so it inlines a copy of this logic. These pure functions are the tested
- * source of truth for the two decisions that are easy to get wrong: parsing the push payload with a
- * safe fallback, and choosing focus-existing-window vs open-new-window on notification click.
+ * Pure, unit-testable logic MIRRORED inside `public/sw.js` — the service worker is a standalone static
+ * script that can't import from the Next bundle, so it inlines a copy. Keep the two in sync.
  */
 
 export interface PushNotificationData {
@@ -24,10 +20,9 @@ const FALLBACK: PushNotificationData = {
 };
 
 /**
- * Parse a push event's data text into a renderable notification, never throwing. A push subscribed
- * with `userVisibleOnly: true` MUST show a notification for every push or the browser may show a
- * generic message and revoke the subscription — so a malformed/empty payload falls back to a generic
- * but valid notification.
+ * Parse a push event's data text into a renderable notification, never throwing. `userVisibleOnly`
+ * requires a notification for EVERY push (else the browser may revoke the subscription), so a
+ * malformed/empty payload falls back to a generic but valid one.
  */
 export function parsePushPayload(raw: string | null | undefined): PushNotificationData {
   if (!raw) return { ...FALLBACK };

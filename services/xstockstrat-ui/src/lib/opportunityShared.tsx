@@ -1,11 +1,8 @@
-// Shared render maps for the feature-083 opportunity/readiness/risk/source-health enums.
-// Single source of truth (DRY guard rail — docs/patterns/dry-guard-rail.md) and the
-// exhaustive `Record<Enum,…>` maps the C-10(a/d) trap requires: adding a proto enum value
-// without a map entry breaks `tsc` here (mirrors BacktestDiagnostics.tsx ACTION_LABEL).
+// Shared render maps for the opportunity/readiness/risk/source-health enums (DRY). Exhaustive
+// Record<Enum,…> maps — adding a proto enum value without a map entry breaks `tsc` here.
 
-// Type-only phosphor import (erased at build) — the icon *values* live in `readinessCue.ts`, kept
-// out of this module because it is transitively imported by server code (traderBff → copilot), and a
-// runtime phosphor import there breaks the production build (createContext in the server bundle).
+// Type-only phosphor import (erased at build) — this module is imported by server code (traderBff →
+// copilot), and a runtime phosphor import there breaks the production build.
 import type { Icon } from '@phosphor-icons/react';
 import { OpportunityActionTag, ConditionState } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import type { ConditionEval } from '@xstockstrat/proto/analysis/v1/analysis_pb';
@@ -20,8 +17,8 @@ export interface EnumRender {
   label: string;
   role: SemanticRole;
   /**
-   * Optional leading icon (feature 155). A component *reference* (a Phosphor glyph), so the map
-   * stays pure data and node-env unit-testable; `EnumBadge` renders it as a direct Badge child.
+   * Optional leading icon — a component reference (Phosphor glyph), so the map stays pure data and
+   * node-env unit-testable; `EnumBadge` renders it as a direct Badge child.
    */
   icon?: Icon;
 }
@@ -58,11 +55,8 @@ export const SOURCE_HEALTH: Record<SourceHealthStatus, EnumRender> = {
 };
 
 /**
- * Render an EnumRender entry as a Badge (role is a valid Badge variant). When the render carries an
- * `icon` (the readiness/queue cues, feature 155), it is drawn as a leading **direct child** svg —
- * never `<span>`-wrapped, which would break the Badge `[&>svg]` icon slot. The icon carries
- * `role="img"` + a distinct `aria-label` (the cue label) and an optional `data-testid` so the e2e
- * has a queryable hook (Phosphor svgs have no accessible name by default).
+ * Render an EnumRender as a Badge. Any icon is a leading direct-child svg (span-wrapping breaks the
+ * Badge `[&>svg]` slot) with `role="img"` + an aria-label, since Phosphor svgs have no accessible name.
  */
 export function EnumBadge({ render, testId }: { render: EnumRender; testId?: string }) {
   const Icon = render.icon;
@@ -75,9 +69,8 @@ export function EnumBadge({ render, testId }: { render: EnumRender; testId?: str
 }
 
 /**
- * feature 095 — the single most-blocking traced condition leaf to surface on a compact card: the
- * first FAIL, else the first SOFT, else the first leaf; `undefined` when there are none (an
- * unattributed row → render nothing, AC-6). Never recomputes — reads the emitted leaves (AC-5).
+ * The most-blocking traced condition leaf: first FAIL, else first SOFT, else first leaf; `undefined`
+ * when none. Never recomputes — reads the emitted leaves.
  */
 export function blockingCondition(conditions: ConditionEval[]): ConditionEval | undefined {
   return (
@@ -88,8 +81,8 @@ export function blockingCondition(conditions: ConditionEval[]): ConditionEval | 
 }
 
 /**
- * feature 095 — a compact chip for one traced condition leaf, colored by CONDITION_STATE. Renders
- * the emitted `refName fn threshold` verbatim (no client recompute, AC-5).
+ * A compact chip for one traced condition leaf, colored by CONDITION_STATE. Renders the emitted
+ * `refName fn threshold` verbatim (no client recompute).
  */
 export function ConditionChip({ c, testId }: { c: ConditionEval; testId?: string }) {
   return (

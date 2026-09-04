@@ -1,8 +1,7 @@
 import { Role } from '@xstockstrat/proto/identity/v1/identity_pb';
 
-// Exhaustive Role → display label map (feature 043, C-10(a/d)): adding a proto Role value without a
-// label here fails `tsc` in this file, so a new role can never render as a bare number. Mirrors the
-// enum-render-map convention in src/lib/opportunityShared.tsx.
+// Exhaustive Role → display label map (C-10(a/d)): adding a proto Role value without a label here
+// fails `tsc`, so a new role can never render as a bare number.
 export const ROLE_LABELS: Record<Role, string> = {
   [Role.UNSPECIFIED]: '—',
   [Role.ADMIN]: 'Admin',

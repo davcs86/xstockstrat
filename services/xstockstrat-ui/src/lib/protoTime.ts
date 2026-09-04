@@ -1,9 +1,6 @@
 /**
- * Canonical proto-Timestamp → JS time conversions (feature 068).
- *
- * The generated ts-proto Timestamp carries bigint seconds; components had been inlining
- * `new Date(Number(ts.seconds) * 1000)` per call site (DRY guard rail — this is the one
- * shared home). Node-environment-safe: no DOM usage.
+ * Canonical proto-Timestamp → JS time conversions. The generated Timestamp carries bigint seconds;
+ * this is the one shared home (DRY guard rail). Node-environment-safe: no DOM usage.
  */
 
 export interface ProtoTimestamp {

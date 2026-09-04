@@ -3,20 +3,16 @@ import { Comparator, ComponentKind, ScreenKind } from '@xstockstrat/proto/analys
 import { DEFAULT_FUNDAMENTAL_METRIC } from './strategyCatalog';
 
 /**
- * Shared screening-criteria vocabulary — the comparator/kind option lists, the editable
- * `CriterionRow` shape, the new-row factory, the criteria-list state hook, and the wire-criterion
- * builder. Consumed by both the full Screener page (`insights/screener/page.tsx`) and the
- * single-symbol Screening section on the Symbol page (`components/trader/SymbolScreening.tsx`), which
- * would otherwise carry byte-identical copies (DRY guard rail).
+ * Shared screening-criteria vocabulary — comparator/kind option lists, the `CriterionRow` shape, the
+ * new-row factory, the criteria-list state hook, and the wire-criterion builder. Shared by the
+ * Screener page and the single-symbol Screening section (DRY guard rail).
  */
 
 /**
- * FUNDAMENTAL (a marketdata fundamentals field/extra_metric, e.g. "pe_ratio") or
- * TECHNICAL_INDICATOR (a built-in indicator computed from bars, e.g. "RSI"). The `kind` decides
- * whether `metricName` resolves against fundamentals (sent as `metric_name`) or is computed from
- * bars (sent as `component.indicator`) — sending an indicator name as a fundamental field silently
- * skips it server-side, and a skipped criterion never fails a hard filter, so the distinction is
- * load-bearing.
+ * FUNDAMENTAL (a marketdata fundamentals field, e.g. "pe_ratio") or TECHNICAL_INDICATOR (a built-in
+ * indicator computed from bars, e.g. "RSI"). `kind` decides whether `metricName` is sent as
+ * `metric_name` or as `component.indicator` — sending an indicator name as a fundamental field
+ * silently skips it server-side, and a skipped criterion never fails a hard filter, so this is load-bearing.
  */
 export type CriterionRow = {
   refName: string;

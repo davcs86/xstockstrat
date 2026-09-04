@@ -141,9 +141,8 @@ export default function OpportunitiesPage() {
     [opportunities],
   );
 
-  // Effective filter = stored selection ∩ sources still in the (interval-refetched) queue, intersected
-  // at render (not a mutating effect): a vanished source can't silently empty the queue, and the stored
-  // selection survives so a returning source re-activates.
+  // Effective filter = stored selection ∩ sources still in the queue, intersected at render (not a
+  // mutating effect): a vanished source can't silently empty the queue, and the selection survives.
   const effectiveSources = useMemo(
     () => activeSources.filter((s) => sources.includes(s)),
     [activeSources, sources],

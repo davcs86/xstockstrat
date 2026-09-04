@@ -33,7 +33,7 @@ function placedLabel(createdAt: { seconds: bigint } | undefined): string {
   return new Date(Number(createdAt.seconds) * 1000).toTimeString().slice(0, 5);
 }
 
-// Terminal statuses cannot be edited or canceled (FR-4/FR-8).
+// Terminal statuses cannot be edited or canceled.
 const TERMINAL = new Set<OrderStatus>([
   OrderStatus.FILLED,
   OrderStatus.CANCELED,
@@ -55,14 +55,13 @@ export function OrdersTable({
   emptyLabel = 'No orders',
 }: OrdersTableProps) {
   // Live updates pushed via StreamOrderUpdates override the listed snapshot so status
-  // transitions appear without a manual refresh (FR-5/FR-6).
+  // transitions appear without a manual refresh.
   const liveUpdates = useOrderUpdates();
   const { mutate: cancelOrder } = useCancelOrder();
   const [editing, setEditing] = useState<Order | null>(null);
   const [cancelling, setCancelling] = useState<Order | null>(null);
 
-  // Wrapped in useMemo — TanStack Table requires a referentially-stable `data` array (ledger
-  // fails.md 2026-08-08); this was previously recomputed inline on every render.
+  // Wrapped in useMemo — TanStack Table requires a referentially-stable `data` array.
   const merged = useMemo(
     () => orders.map((o) => liveUpdates[o.orderId] ?? o),
     [orders, liveUpdates],

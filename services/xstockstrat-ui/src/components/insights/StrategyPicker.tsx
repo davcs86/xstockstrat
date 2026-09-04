@@ -10,16 +10,12 @@ import {
 import { useStrategyDefinitions } from '@/hooks/useStrategyDefinitions';
 
 /**
- * Shared strategy picker (feature 145) — the single source of the "which strategy drives the
- * strategy-scoped panels" control, lifted out of `SignalReadiness` so the Indicators, Backtests, and
- * "Why this fired" panels all render the same synced dropdown. Lists only strategies eligible to
- * trade live (`useStrategyDefinitions()` default `includeInactive=false` → active, then
- * `.filter(liveEnabled)`) — the exact filter `SignalReadiness` used before this feature. Controlled:
- * the page owns the selected id, so all three instances stay in lockstep.
+ * Shared strategy picker — the single source of the "which strategy drives the strategy-scoped panels"
+ * control, so the Indicators, Backtests, and "Why this fired" panels render the same synced dropdown.
+ * Lists only live-eligible strategies. Controlled: the page owns the selected id, so all instances stay in lockstep.
  *
- * `ariaLabel` MUST be distinct per instance ("Strategy for Indicators" / "…Backtests" /
- * "…Why this fired") — three identically-labeled comboboxes would make `getByLabel('Strategy')`
- * ambiguous across the page (the 2026-08-09 Breadcrumb implicit-label trap).
+ * `ariaLabel` MUST be distinct per instance — identically-labeled comboboxes make `getByLabel('Strategy')`
+ * ambiguous across the page.
  */
 export function StrategyPicker({
   value,

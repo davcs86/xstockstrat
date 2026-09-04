@@ -1,7 +1,6 @@
-// Copilot rail — shared constants + pure, no-LLM summary helpers (feature 083, Step 27).
-// The rail persists notes in the ledger append-only store (F-06: no agent DB, no LLM, no new
-// pool); these helpers only template already-fetched queue data. Kept pure so the vitest unit
-// layer (feature 065) can exercise them without React or the network.
+// Copilot rail — shared constants + pure, no-LLM summary helpers. Notes persist in the ledger
+// append-only store (F-06: no agent DB, LLM, or new pool); these helpers only template fetched
+// queue data, kept pure for the vitest unit layer.
 
 import { OpportunityActionTag } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { OPPORTUNITY_ACTION } from './opportunityShared';
@@ -14,9 +13,8 @@ export const COPILOT_THREAD = 'default';
 export const COPILOT_MCP_TOOL_COUNT = 32;
 
 /**
- * Per-user append-only thread key. The BFF derives {userId} from the verified session and
- * forces this key server-side, so the browser never learns another user's id and can never
- * write outside its own thread (append-only — the UX exposes no edit/delete/clear).
+ * Per-user append-only thread key. The BFF forces this key server-side from the verified session, so
+ * the browser never learns another user's id and can't write outside its own thread.
  */
 export function copilotStreamKey(userId: string): string {
   return `${COPILOT_STREAM_PREFIX}${userId}:${COPILOT_THREAD}`;
@@ -53,9 +51,8 @@ export interface ConcentrationFlag {
 }
 
 /**
- * Client-side concentration heuristic over the queue (beta): flags when a single symbol
- * recurs across queued signals. The shallow-beta rail reads the queue only — no position-book
- * fold-in — so this is a queue-concentration read, not portfolio exposure.
+ * Client-side concentration heuristic over the queue: flags when a single symbol recurs across
+ * queued signals. Queue-only — not portfolio exposure (no position-book fold-in).
  */
 export function buildConcentrationFlag(opps: QueueLike[]): ConcentrationFlag {
   if (opps.length === 0) {

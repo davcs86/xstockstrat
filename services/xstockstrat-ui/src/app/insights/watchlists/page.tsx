@@ -20,31 +20,24 @@ export default function WatchlistsPage() {
   const { data, isLoading, isFetching, error } = useWatchlists();
   const createWl = useCreateWatchlist();
   const deleteWl = useDeleteWatchlist();
-  // Layer 2 of the concurrency guard (design.md §5) — closes the race a WatchlistDetail-per-switch
-  // `key` remount would otherwise reopen: since page.tsx is never remounted, this sees an in-flight
-  // write even if the WatchlistDetail instance that started it has since unmounted. The
-  // `|| isFetching` clause closes the residual window between a mutation settling and its
-  // invalidated `['watchlists']` query actually refetching (useIsMutating alone only covers the
-  // RPC's own duration).
+  // Concurrency guard that survives WatchlistDetail remounts (page.tsx is never remounted): blocks
+  // switching while a watchlist write is in flight; `|| isFetching` covers the settle→refetch window.
   const anyWatchlistWriteInFlight =
     useIsMutating({ mutationKey: WATCHLIST_WRITE_KEY }) > 0 || isFetching;
 
   const [newName, setNewName] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  // Email-inbox navigation on mobile: the list and the detail are two panes side-by-side on md+,
-  // but on a phone only one shows at a time — tap a list to open its detail, "back" to the list.
+  // Mobile inbox nav: two panes on md+, one at a time on a phone (tap to open detail, back to list).
   const [mobileView, setMobileView] = useState<'list' | 'detail'>('list');
-  // A just-created list id we want to select as soon as it lands in the refetched list. Setting
-  // selectedId directly in create's onSuccess would race the ListWatchlists refetch — the reconcile
-  // effect would see an id "not in the list yet" and clobber it back to the first list.
+  // A just-created list id to select once it lands in the refetched list. Setting selectedId in
+  // create's onSuccess would race the refetch and get clobbered to the first list.
   const pendingSelectRef = useRef<string | null>(null);
 
   const watchlists = useMemo(() => data?.watchlists ?? [], [data]);
 
-  // Keep the selection valid: honor a pending just-created id once it appears, default to the first
-  // list, and reconcile to the first remaining / null when the selected list is deleted or the set
-  // empties (a dangling id → blank detail).
+  // Keep the selection valid: honor a pending just-created id, default to the first list, and
+  // reconcile to the first remaining / null when the selected list is deleted or the set empties.
   useEffect(() => {
     const pending = pendingSelectRef.current;
     if (pending && watchlists.some((wl) => wl.watchlistId === pending)) {
@@ -148,8 +141,7 @@ export default function WatchlistsPage() {
 
         {watchlists.length > 0 && (
           <div className="grid gap-4 md:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
-            {/* Master column (inbox) — select a list to see its detail. Hidden on mobile while a
-                detail is open. */}
+            {/* Master column (inbox) — hidden on mobile while a detail is open. */}
             <Card className={cn(mobileView === 'detail' && 'hidden md:block')}>
               <CardContent className="p-2" data-testid="watchlist-master">
                 <ul className="space-y-1">
@@ -182,8 +174,7 @@ export default function WatchlistsPage() {
               </CardContent>
             </Card>
 
-            {/* Detail column (reading pane) — the selected list. Hidden on mobile until a list is
-                opened from the inbox. */}
+            {/* Detail column (reading pane) — hidden on mobile until a list is opened. */}
             <Card className={cn('min-w-0', mobileView === 'list' && 'hidden md:block')}>
               <CardContent className="p-0">
                 <button

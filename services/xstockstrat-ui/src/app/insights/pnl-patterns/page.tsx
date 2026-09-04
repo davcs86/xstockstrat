@@ -8,9 +8,9 @@ import { usePnLPatterns } from '@/hooks/usePnLPatterns';
 import { FactorType } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
 /**
- * feature 042 — P&L Patterns view. Renders the ranked top positive- and negative-contributing
- * attribution factors (indicator value-ranges and signals) for a symbol, plus a per-order snapshot
- * timeline placeholder (FR-5). Reads QueryPnLPatterns via the insights BFF (usePnLPatterns).
+ * P&L Patterns view: the ranked top positive- and negative-contributing attribution factors
+ * (indicator value-ranges and signals) for a symbol, plus a per-order snapshot timeline placeholder.
+ * Reads QueryPnLPatterns via the insights BFF (usePnLPatterns).
  */
 
 type Factor = {

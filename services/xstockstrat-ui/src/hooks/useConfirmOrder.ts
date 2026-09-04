@@ -4,9 +4,7 @@ import { useInvalidatingMutation } from './useInvalidatingMutation';
 
 type ConfirmOrderInput = Parameters<typeof tradingClient.confirmOrder>[0];
 
-// useConfirmOrder calls the BFF confirmOrder RPC (offline accounts only, feature 157) and
-// invalidates the orders list, the single-order query, and the portfolio queries on success so the
-// confirmed fill and the recomputed positions/realized P&L are reflected.
+// confirmOrder RPC (offline accounts only); invalidates orders + portfolio queries on success.
 export function useConfirmOrder() {
   return useInvalidatingMutation<ConfirmOrderInput, Order>(
     (req) => tradingClient.confirmOrder(req),

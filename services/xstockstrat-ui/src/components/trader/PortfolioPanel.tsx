@@ -22,11 +22,11 @@ export function PortfolioPanel() {
     const portfolio = portfolios[0];
     const account = accounts.find((a) => a.id === selectedAccountId);
     const pnlPositive = portfolio ? Number(portfolio.dayPnl) >= 0 : true;
-    // Offline accounts have no account_balances row (feature 157), so Cash / Buying Power / Day P&L are
-    // broker-only concepts that render as a misleading $0 for them (feature 159 / FR-3) — gate them off.
+    // Offline accounts have no account_balances row, so Cash / Buying Power / Day P&L are broker-only
+    // concepts that render as a misleading $0 for them — gate them off.
     const isOffline = account?.brokerType === BrokerType.OFFLINE;
-    // Realized P&L is offline-only (feature 157): the account-type gate is the primary guard against
-    // a fake $0 on broker cards; the proto `optional` presence (realizedPnl !== undefined) is secondary.
+    // Realized P&L is offline-only: the account-type gate is the primary guard against a fake $0 on
+    // broker cards; the proto `optional` presence (realizedPnl !== undefined) is secondary.
     const showRealized = isOffline && portfolio?.realizedPnl !== undefined;
 
     return (
@@ -119,8 +119,8 @@ export function PortfolioPanel() {
       {portfolios.map((portfolio) => {
         const account = accounts.find((a) => a.id === portfolio.accountId);
         const pnlPositive = Number(portfolio.dayPnl) >= 0;
-        // FR-4: an offline account appears in the combined view (feature 159 backend) with only
-        // meaningful fields — hide the broker-only Day P&L on its card.
+        // An offline account appears in the combined view with only meaningful fields — hide the
+        // broker-only Day P&L on its card.
         const isOffline = account?.brokerType === BrokerType.OFFLINE;
         return (
           <Card key={portfolio.portfolioId ?? portfolio.accountId}>

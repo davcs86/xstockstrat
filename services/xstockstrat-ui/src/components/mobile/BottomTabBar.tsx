@@ -21,8 +21,7 @@ function isGroupActive(pathname: string | null, hrefs: string[]): boolean {
 }
 
 /**
- * Fixed mobile bottom tab bar (feature 083, FR-16). Mirrors the desktop shell's four primary
- * groups, mobile-only (`sm:hidden`). Every tab is ≥44px tall (tap-target floor) and links to the
+ * Fixed mobile bottom tab bar, mobile-only (`sm:hidden`). Every tab is ≥44px tall and links to the
  * group's first screen. Mounted globally by PlatformHeader so it rides every route.
  */
 export function BottomTabBar() {

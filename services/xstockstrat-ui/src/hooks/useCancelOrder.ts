@@ -4,9 +4,8 @@ import { useInvalidatingMutation } from './useInvalidatingMutation';
 
 type CancelOrderInput = Parameters<typeof tradingClient.cancelOrder>[0];
 
-// useCancelOrder calls the BFF cancelOrder RPC and invalidates the orders list + single-order
-// query on success. Live status transitions also arrive via the useOrderUpdates stream
-// (FR-5/FR-6), so the row reflects CANCELED without a manual refresh.
+// cancelOrder RPC; invalidates orders + single-order queries. Live CANCELED also arrives via the
+// useOrderUpdates stream, so the row updates without a manual refresh.
 export function useCancelOrder() {
   return useInvalidatingMutation<CancelOrderInput, CancelOrderResponse>(
     (req) => tradingClient.cancelOrder(req),

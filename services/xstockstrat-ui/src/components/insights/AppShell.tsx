@@ -10,8 +10,8 @@ interface AppShellProps {
 
 export function AppShell({ children, actions }: AppShellProps) {
   const { data: isAdmin } = useIsAdmin();
-  // Backfill management is an admin/operator surface (FR-7) — the entry is hidden from non-admins;
-  // the BFF + backend re-enforce the scope on every mutating call.
+  // Backfill management is an admin surface — the entry is hidden from non-admins; the BFF + backend
+  // re-enforce the scope on every mutating call.
   const subNav = isAdmin
     ? [...PLATFORM_SUBNAV.insights, { label: 'Backfills', href: '/insights/backfills' }]
     : PLATFORM_SUBNAV.insights;

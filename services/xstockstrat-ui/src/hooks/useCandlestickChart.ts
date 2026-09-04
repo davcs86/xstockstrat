@@ -6,21 +6,19 @@ import { CHART_GRID_TOKEN, resolveChartColor } from '@/lib/chartColors';
 
 /**
  * Creates a lightweight-charts **v5** candlestick chart inside the returned container ref and manages
- * its lifecycle (dynamic import, ResizeObserver, teardown). Single source of truth for the chart
- * setup shared by ChartPanel and the trader symbol page (DRY guard rail).
+ * its lifecycle (dynamic import, ResizeObserver, teardown). Shared by ChartPanel and the trader
+ * symbol page (DRY guard rail).
  *
- * Colors come from the theme `--chart-*` tokens via `resolveChartColor` (feature 146) — no hardcoded
- * hex. The fallbacks are CSS named colors, not brand hex, and are effectively unreachable: the chart
- * is created only client-side (useEffect) where the static dark-only tokens always resolve.
+ * Colors come from the theme `--chart-*` tokens via `resolveChartColor` — no hardcoded hex; the CSS
+ * named-color fallbacks are effectively unreachable (the chart is created client-side only).
  *
  * Returns:
  * - `containerRef` — attach to the chart div.
  * - `seriesRef` — the candlestick series (pane 0); call `.setData(bars)` / `.createPriceLine(...)`.
- *   Left as `any` to preserve the existing consumer contract (callers pass plain-`number` bar times,
- *   not the branded `UTCTimestamp`).
+ *   Left as `any` to preserve the consumer contract (callers pass plain-`number` bar times).
  * - `chartRef` — the underlying v5 chart instance, so the symbol page can add native indicator
- *   **panes** to the SAME instance (shared time scale + one native crosshair, feature 146 Step 5).
- *   Null until the async chart is created and again after teardown.
+ *   **panes** to the SAME instance (shared time scale + one native crosshair). Null until created and
+ *   again after teardown.
  */
 export function useCandlestickChart(height: number) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -46,14 +44,12 @@ export function useCandlestickChart(height: number) {
         layout: { background: { color: 'transparent' }, textColor },
         grid: { vertLines: { color: gridColor }, horzLines: { color: gridColor } },
         crosshair: { mode: 1 },
-        // A fixed minimum price-scale width keeps every pane's plot area left edge aligned once the
-        // symbol page stacks indicator panes on this instance (feature 146 Step 5) — differing
-        // y-label widths (price vs RSI vs MACD) would otherwise shift the left edge per pane.
+        // Fixed minimum price-scale width keeps every stacked pane's plot-area left edge aligned;
+        // differing y-label widths (price vs RSI vs MACD) would otherwise shift it per pane.
         rightPriceScale: { borderColor, minimumWidth: 64 },
         timeScale: { borderColor, timeVisible: true },
       });
       chartRef.current = chart;
-      // v5 API: addSeries(CandlestickSeries, …) — replaces v4 addCandlestickSeries.
       const series = chart.addSeries(CandlestickSeries, {
         upColor,
         downColor,

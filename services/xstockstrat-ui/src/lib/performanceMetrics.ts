@@ -1,12 +1,6 @@
 /**
- * Metric lib for the /insights strategy-performance dashboard (feature 031).
- *
- * Pure functions over the generated ledger/config types — no JSX, Node-safe (vitest coverage is
- * scoped to src/lib/**). Every metric is derived from `portfolio.position.closed` ledger events, so
- * the dashboard is **realized-only by construction** (Constitution C-5): there is no unrealized/
- * mark-to-market path here. The two per-trade averages additionally need the feature-031 payload
- * keys (`cost_basis`, `opened_at`); a legacy event lacking them is excluded from those two averages
- * but still counts toward totals, win rate, and the equity curve (AC-13).
+ * Metric lib for the /insights strategy-performance dashboard. Pure, Node-safe functions over
+ * `portfolio.position.closed` ledger events — realized-only by construction (Constitution C-5).
  */
 
 import type { JsonObject } from '@bufbuild/protobuf';
@@ -18,11 +12,11 @@ const MS_PER_DAY = 86_400_000;
 const TRADING_DAYS_PER_YEAR = 252;
 
 /** Fallback risk-free rate — mirrors the seeded `ui.performance.risk_free_rate_annual` default. The
- * live value comes from GetConfig (F-07); this is used only when the key is absent. */
+ * live value comes from GetConfig; used only when the key is absent. */
 export const DEFAULT_RISK_FREE_ANNUAL = 0.045;
 
 /** A closed position, normalized from a `portfolio.position.closed` ledger event. `costBasis` /
- * `openedAtMs` are optional — a legacy event (pre-feature-031) omits both. */
+ * `openedAtMs` are optional — a legacy event omits both. */
 export interface ClosedTrade {
   occurredAtMs: number;
   realizedPnl: number;
@@ -56,9 +50,8 @@ export interface SummaryStats {
 }
 
 /**
- * Map `portfolio.position.closed` ledger events → normalized ClosedTrade[], sorted ascending by
- * close time. Reads `realized_pnl` / optional `cost_basis` / optional `opened_at` (RFC3339) from the
- * event payload Struct and `occurred_at` for the close time.
+ * Map `portfolio.position.closed` events → normalized ClosedTrade[], sorted ascending by close time.
+ * Reads `realized_pnl` / optional `cost_basis` / optional `opened_at` from the payload.
  */
 export function closedTradesFromEvents(events: LedgerEvent[]): ClosedTrade[] {
   const trades: ClosedTrade[] = [];
@@ -83,14 +76,14 @@ export function closedTradesFromEvents(events: LedgerEvent[]): ClosedTrade[] {
   return trades;
 }
 
-/** Inclusive date-window filter; either bound may be omitted (FR-1 base date + FR-7 picker). */
+/** Inclusive date-window filter; either bound may be omitted. */
 export function filterByWindow(trades: ClosedTrade[], startMs?: number, endMs?: number): ClosedTrade[] {
   return trades.filter(
     (t) => (startMs === undefined || t.occurredAtMs >= startMs) && (endMs === undefined || t.occurredAtMs <= endMs),
   );
 }
 
-/** Cumulative running sum of realizedPnl in close-time order (realized-only, C-5; AC-1). */
+/** Cumulative running sum of realizedPnl in close-time order (realized-only, C-5). */
 export function buildEquityCurve(trades: ClosedTrade[]): EquityPoint[] {
   const sorted = [...trades].sort((a, b) => a.occurredAtMs - b.occurredAtMs);
   let cum = 0;
@@ -100,7 +93,7 @@ export function buildEquityCurve(trades: ClosedTrade[]): EquityPoint[] {
   });
 }
 
-/** Largest peak-to-trough decline of the cumulative curve (AC-2). Empty/monotonic-up → 0/0. */
+/** Largest peak-to-trough decline of the cumulative curve. Empty/monotonic-up → 0/0. */
 export function maxDrawdown(curve: EquityPoint[]): Drawdown | null {
   if (curve.length === 0) return null;
   let peak = curve[0].value;
@@ -119,8 +112,7 @@ export function maxDrawdown(curve: EquityPoint[]): Drawdown | null {
 
 /**
  * Fractional day-over-day change of the cumulative equity, `(e_i − e_{i-1}) / |e_{i-1}|`, skipping
- * any step whose prior cumulative equity is 0 (zero-base div guard — the twin of the |costBasis|
- * guard). Resolves design.md R2: the output is the returns series `rollingSharpe` consumes.
+ * any step whose prior equity is 0 (zero-base div guard). The returns series `rollingSharpe` consumes.
  */
 export function dailyReturns(curve: EquityPoint[]): number[] {
   const returns: number[] = [];
@@ -132,7 +124,7 @@ export function dailyReturns(curve: EquityPoint[]): number[] {
   return returns;
 }
 
-/** Population standard deviation `sqrt(mean((r−mean)^2))` — pinned so AC-3's reference is deterministic. */
+/** Population standard deviation `sqrt(mean((r−mean)^2))`. */
 function populationStd(xs: number[]): number {
   const mean = xs.reduce((a, b) => a + b, 0) / xs.length;
   return Math.sqrt(xs.reduce((a, b) => a + (b - mean) * (b - mean), 0) / xs.length);
@@ -140,7 +132,7 @@ function populationStd(xs: number[]): number {
 
 /**
  * Annualized Sharpe over a returns series: `(mean − riskFreeAnnual/252) / popStd * sqrt(252)`.
- * Returns null when the series has < 2 points, zero variance, or a non-finite result (AC-4).
+ * Returns null when the series has < 2 points, zero variance, or a non-finite result.
  */
 export function rollingSharpe(returns: number[], riskFreeAnnual: number): number | null {
   if (returns.length < 2) return null;
@@ -152,9 +144,8 @@ export function rollingSharpe(returns: number[], riskFreeAnnual: number): number
 }
 
 /**
- * Mean of `realizedPnl / |costBasis|` over trades with a present, non-zero cost basis (AC-11). Trades
- * with a missing cost basis (AC-13) or a zero cost basis (R5 div guard) are excluded; null when none
- * qualify.
+ * Mean of `realizedPnl / |costBasis|` over trades with a present, non-zero cost basis. Trades with a
+ * missing or zero cost basis are excluded; null when none qualify.
  */
 export function avgReturnPct(trades: ClosedTrade[]): number | null {
   const pcts = trades
@@ -165,8 +156,8 @@ export function avgReturnPct(trades: ClosedTrade[]): number | null {
 }
 
 /**
- * Mean hold time in days, `(occurredAtMs − openedAtMs) / 86_400_000`, over trades with an open date
- * (AC-12). Trades missing an open date (AC-13) are excluded; null when none qualify.
+ * Mean hold time in days, `(occurredAtMs − openedAtMs) / 86_400_000`, over trades with an open date.
+ * Trades missing an open date are excluded; null when none qualify.
  */
 export function avgHoldTimeDays(trades: ClosedTrade[]): number | null {
   const days = trades
@@ -177,8 +168,8 @@ export function avgHoldTimeDays(trades: ClosedTrade[]): number | null {
 }
 
 /**
- * Aggregate summary (AC-5). totalTrades / winCount / winRate / totalRealizedPnl count **every** trade
- * (legacy events included); only the two averages exclude trades missing the extended fields (AC-13).
+ * Aggregate summary. totalTrades/winCount/winRate/totalRealizedPnl count every trade (legacy
+ * included); only the two averages exclude trades missing the extended fields.
  */
 export function summaryStats(trades: ClosedTrade[]): SummaryStats {
   const totalTrades = trades.length;
@@ -195,8 +186,8 @@ export function summaryStats(trades: ClosedTrade[]): SummaryStats {
 }
 
 /**
- * Read `performance.risk_free_rate_annual` with an oneof-presence check so a stored 0 survives
- * (never `value || default`, F-07). Falls back to DEFAULT_RISK_FREE_ANNUAL when the key is absent.
+ * Read `performance.risk_free_rate_annual` with an oneof-presence check so a stored 0 survives (never
+ * `value || default`). Falls back to DEFAULT_RISK_FREE_ANNUAL when the key is absent.
  */
 export function readRiskFreeRate(values: Record<string, ConfigValue>): number {
   const v = values['performance.risk_free_rate_annual']?.value;
@@ -204,8 +195,8 @@ export function readRiskFreeRate(values: Record<string, ConfigValue>): number {
 }
 
 /**
- * Read `performance.equity_curve_start_date` (ISO date) → epoch millis. Empty / absent / unparseable
- * → `earliestMs` (the earliest closed-position date, the documented auto default, FR-1).
+ * Read `performance.equity_curve_start_date` (ISO date) → epoch millis. Empty/absent/unparseable →
+ * `earliestMs` (the earliest closed-position date, the auto default).
  */
 export function readStartDateMs(values: Record<string, ConfigValue>, earliestMs: number): number {
   const v = values['performance.equity_curve_start_date']?.value;

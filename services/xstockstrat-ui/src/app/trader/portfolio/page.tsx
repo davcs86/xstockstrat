@@ -17,10 +17,9 @@ import { BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
 import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
 
 /**
- * Book → Portfolio (feature 083, FR-14). A read-only mirror of what the brokers report — Alpaca
- * and IBKR own the ledger and P&L; xstockstrat never writes to it (AC-8, C-10(b)). Combined
- * balances + one card per account + the broker-reported positions table, all polled at 10s. The
- * valuation source is the single broker-authoritative one shared with Exposure.
+ * Book → Portfolio: a read-only mirror of what the brokers report — the brokers own the ledger and
+ * P&L; xstockstrat never writes to it. Combined balances + one card per account + the broker-reported
+ * positions table, polled at 10s. The valuation source is the broker-authoritative one shared with Exposure.
  */
 export default function PortfolioPage() {
   const { accounts, selectedAccountId, environmentMode } = useAccountContext();
@@ -109,9 +108,8 @@ export default function PortfolioPage() {
     [accountName],
   );
 
-  // Feature 021 — export the caller's ledger events (last 90 days, all types by default, AC-9).
-  // Goes through fetch() (not a bare <a href>) so the session-cookie'd refresh interceptor applies;
-  // the blob is handed to a transient download link to present the browser's save dialog.
+  // Export the caller's ledger events (last 90 days). Goes through fetch() (not a bare <a href>) so
+  // the session-cookie refresh interceptor applies; the blob feeds a transient download link.
   const onExportEvents = async () => {
     const end = new Date();
     const start = new Date(end.getTime() - 90 * 24 * 60 * 60 * 1000);
@@ -155,7 +153,6 @@ export default function PortfolioPage() {
 
         {!isLoading && !error && portfolios.length > 0 && (
           <>
-            {/* Combined 5-stat row */}
             <div className="grid grid-cols-2 overflow-hidden rounded-md border border-border sm:grid-cols-5">
               <StatTile
                 label="Combined equity"
@@ -182,13 +179,11 @@ export default function PortfolioPage() {
               />
             </div>
 
-            {/* Account cards */}
             <div className="grid gap-4 md:grid-cols-2">
               {portfolios.map((p) => {
                 const acct = accounts.find((a) => a.id === p.accountId);
-                // Offline accounts have no account_balances row (feature 157), so Cash / Buying power /
-                // Day P&L / Total P&L are broker-only concepts that misrepresent them as $0 (feature 159 /
-                // FR-3). Show only the meaningful fields on an offline account's card.
+                // Offline accounts have no account_balances row, so Cash / Buying power / Day P&L /
+                // Total P&L would misrepresent as $0 — show only the meaningful fields on their card.
                 const isOffline = acct?.brokerType === BrokerType.OFFLINE;
                 return (
                   <Card key={p.portfolioId || p.accountId}>
@@ -235,7 +230,6 @@ export default function PortfolioPage() {
               })}
             </div>
 
-            {/* Broker-reported positions (selected account) */}
             <div>
               <Eyebrow as="p" className="mb-2">
                 Positions · reported by broker

@@ -178,8 +178,8 @@ function PositionDetailInner() {
     [oppData, symbol],
   );
 
-  // Header live price: prefer the enriched Opportunity (parity with the queue card, C-10(b)), else a
-  // direct GetLatestPrice for an off-queue symbol (price only, no chips/overlays); omitted when unavailable.
+  // Header live price: prefer the enriched Opportunity (parity with the queue card), else a direct
+  // GetLatestPrice for an off-queue symbol (price only, no chips/overlays); omitted when unavailable.
   const headerOpp = symbolOpportunities[0];
   const [fallbackPrice, setFallbackPrice] = useState<number | undefined>(undefined);
   useEffect(() => {
@@ -373,8 +373,8 @@ function PositionDetailInner() {
             <CardTitle>Trade {symbol}</CardTitle>
           </CardHeader>
           <CardContent>
-            {/* Presentation only (AC-10) — never fed into the OrderForm/usePlaceOrder path below;
-                rows are omitted when inputs are missing. */}
+            {/* Presentation only — never fed into the OrderForm/usePlaceOrder path below; rows are
+                omitted when inputs are missing. */}
             {rr && (
               <div
                 className="mb-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground"
@@ -525,9 +525,9 @@ function PositionDetailInner() {
             <Skeleton className="h-24 w-full" />
           ) : (
             <div className="space-y-4">
-              {/* All live-strategy opportunities, tabbed (feature 145) — for held/watchlisted/ad-hoc alike. */}
+              {/* All live-strategy opportunities, tabbed — for held/watchlisted/ad-hoc alike. */}
               <SymbolPanelGroup panels={opportunityPanels} ariaLabel="Opportunities" />
-              {/* Fundamentals is symbol-level, strategy-independent → always-on (feature 145, FR-5). */}
+              {/* Fundamentals is symbol-level, strategy-independent → always-on. */}
               <FundamentalsSection symbol={symbol} />
               {isSymbolWatchlisted ? (
                 <>
@@ -548,8 +548,8 @@ function PositionDetailInner() {
           )}
         </section>
 
-        {/* Analysis (feature 139): merges Backtests (FR-9) + Backfill coverage (FR-10) into one
-            clustered pair — always-on for any symbol, keyed on the resolved strategy. */}
+        {/* Analysis: Backtests + Backfill coverage clustered — always-on for any symbol, keyed on the
+            resolved strategy. */}
         <section id="analysis" className={cn('space-y-4', SECTION_SCROLL_MT)}>
           <SymbolPanelGroup panels={analysisPanels} ariaLabel="Analysis panels" />
         </section>
@@ -567,9 +567,8 @@ function PositionDetailInner() {
   );
 }
 
-// The price chart section — rendered for every symbol (feature 125), so its captions read the
-// page-level avg/stop/last/hasStop locals (which no-op safely with no position) rather than a
-// Position object.
+// The price chart section — rendered for every symbol, so its captions read the page-level
+// avg/stop/last/hasStop locals (which no-op with no position), not a Position object.
 function SymbolPriceChart({
   symbol,
   chartRef,
@@ -588,7 +587,7 @@ function SymbolPriceChart({
   stop: number;
   last: number;
   hasStop: boolean;
-  // feature 095 — the opportunity's strategy-derived target / stop (undefined ⇒ no line, no legend).
+  // The opportunity's strategy-derived target / stop (undefined ⇒ no line, no legend).
   target?: number;
   signalStop?: number;
 }) {
@@ -608,8 +607,8 @@ function SymbolPriceChart({
       </CardHeader>
       <CardContent>
         {barsError && <p className="mb-2 text-xs text-destructive">{barsError}</p>}
-        {/* Shared chart canvas: candlestick pane 0 + the indicator panes (feature 146). Uses
-            min-height so IndicatorPanels can grow it imperatively as panes are added. */}
+        {/* Shared chart canvas: candlestick pane 0 + the indicator panes. Uses min-height so
+            IndicatorPanels can grow it imperatively as panes are added. */}
         <div ref={chartRef} className="w-full" style={{ minHeight: 260 }} />
         {(avg > 0 || hasStop || target !== undefined || signalStop !== undefined) && (
           <div
@@ -626,7 +625,7 @@ function SymbolPriceChart({
                 <span className="text-destructive">— —</span> stop {fmtUsd(stop)}
               </span>
             )}
-            {/* feature 095 — the strategy signal's target / stop overlays (AC-7); absent → no entry. */}
+            {/* The strategy signal's target / stop overlays; absent → no entry. */}
             {target !== undefined && (
               <span data-testid="legend-target">
                 <span className="text-buy">— —</span> target {fmtUsd(target)}
@@ -644,8 +643,8 @@ function SymbolPriceChart({
   );
 }
 
-// Orders & fills — rendered for every symbol (feature 125), reading only the top-level orders list
-// and the page-level symbol (never a Position field).
+// Orders & fills — rendered for every symbol, reading only the top-level orders list and the
+// page-level symbol (never a Position field).
 function SymbolOrdersCard({
   symbol,
   orders,
@@ -739,10 +738,8 @@ const SYMBOL_ORDERS_COLUMNS: ColumnDef<Order>[] = [
   },
 ];
 
-// Held-position detail (feature 145) — split from the former `PositionBody` into three self-contained
-// Card panels that join the Trade panel group. Manage + Broker were removed (redundant/broken); the
-// 2-column sidebar layout is gone. The price chart, orders, and trade widget stay hoisted to the page
-// level (feature 125) so they render for unheld symbols too.
+// Held-position detail — three self-contained Card panels for the Trade group. The chart, orders,
+// and trade widget stay hoisted to the page level so they render for unheld symbols too.
 
 // Position panel — the header (symbol/side/price/day/weight + Unrealized + Open R) and the stat grid.
 function PositionPanel({
@@ -764,7 +761,6 @@ function PositionPanel({
         <CardTitle>Position</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Header — symbol, side + qty, price, day change, weight; big Unrealized + Open R. */}
         <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-4">
           <div className="min-w-0 space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
@@ -813,7 +809,6 @@ function PositionPanel({
           </div>
         </div>
 
-        {/* Stat grid (position-specific figures). */}
         <div className="grid grid-cols-2 overflow-hidden rounded-md border border-border sm:grid-cols-3">
           <StatTile size="md" label="Avg cost" value={fmtUsd(position.avgEntryPrice)} />
           <StatTile size="md" label="Last" value={fmtUsd(position.currentPrice)} />
@@ -862,8 +857,7 @@ function RiskExitPanel({ position }: { position: Position }) {
             />
           </div>
         </div>
-        {/* Numeric readings share the same StatTile grid as Position/Fundamentals (feature: UI
-            consistency); the id/rule/flag reference values stay a label↔value list below. */}
+        {/* Numeric readings share the StatTile grid; id/rule/flag stay a label↔value list below. */}
         <div className="grid grid-cols-2 overflow-hidden rounded-md border border-border sm:grid-cols-3">
           <StatTile
             size="md"
@@ -903,9 +897,8 @@ function RiskExitPanel({ position }: { position: Position }) {
   );
 }
 
-// Why-it's-held panel — the orders-derived owning strategy (kept as a DISPLAY value in feature 145;
-// dropped only as a resolution source for the strategy-scoped panels). Rendered only when an owning
-// strategy is derivable, so the panel is never fabricated.
+// Why-it's-held panel — the orders-derived owning strategy (a DISPLAY value only). Rendered only
+// when an owning strategy is derivable, so the panel is never fabricated.
 function WhyHeldPanel({
   position,
   owningStrategy,
@@ -932,9 +925,8 @@ function WhyHeldPanel({
   );
 }
 
-// Opportunity/conviction section (FR-5) for a watchlisted symbol — reuses the same Opportunity
-// fields and deterministic-ordinal conviction display the former Signal-detail page used (now
-// redirected here). When no opportunity matches the symbol, an explicit no-data notice (P-03).
+// Opportunity/conviction section for a watchlisted symbol. When no opportunity matches, an explicit
+// no-data notice (never fabricated).
 function OpportunitySection({
   opportunity,
   symbol,
@@ -942,9 +934,8 @@ function OpportunitySection({
   opportunity: Opportunity | undefined;
   symbol: string;
 }) {
-  // Edge (BT) — the strategy's backtested expectancy (feature 083 header grammar, relocated from the
-  // retired Signal-detail page). Hook is called unconditionally (before the early return) to satisfy
-  // the rules of hooks; it no-ops when there's no strategy.
+  // Edge (BT) — the strategy's backtested expectancy. Hook is called unconditionally (before the
+  // early return) to satisfy the rules of hooks; it no-ops when there's no strategy.
   const { data: analytics } = useStrategyAnalytics(opportunity?.strategyId || undefined);
   if (!opportunity) {
     return <CardNotice>No current opportunity for {symbol}.</CardNotice>;
@@ -1002,9 +993,8 @@ function OpportunitySection({
   );
 }
 
-// Fundamentals section (FR-7) — GetFundamentals ratios/metrics for a watchlisted symbol. A no-data
-// symbol surfaces as an error (Unavailable/FailedPrecondition/ResourceExhausted, never NotFound), so
-// ANY error renders the explicit no-data state with the provider's message (P-03: no fabricated 0s).
+// Fundamentals section — GetFundamentals ratios/metrics. A no-data symbol surfaces as an error, so
+// ANY error renders the explicit no-data state (no fabricated 0s).
 function FundamentalsSection({ symbol }: { symbol: string }) {
   const { data, isLoading, error } = useFundamentals(symbol);
   const f = data?.fundamentals;
@@ -1052,9 +1042,8 @@ function FundamentalsSection({ symbol }: { symbol: string }) {
   );
 }
 
-// Backtests section (FR-9) — the run history for the resolved strategy, client-side filtered to the
-// runs that included this symbol (the accepted narrower coverage), plus a "Run backtest" action.
-// History-list only: no embedded per-run detail (that stays on /insights/strategies/[id]).
+// Backtests section — run history for the resolved strategy, client-side filtered to runs including
+// this symbol, plus a "Run backtest" action. History-list only (per-run detail stays on strategies/[id]).
 function BacktestsSection({
   symbol,
   strategyId,
@@ -1074,7 +1063,7 @@ function BacktestsSection({
   );
 
   // No strategy selected → nothing to back-test against, but the picker is still offered so the user
-  // can resolve one from here (feature 145 — Backtests no longer a dead-end).
+  // can resolve one from here.
   if (!strategyId) {
     return (
       <Card>
@@ -1145,10 +1134,8 @@ function BacktestsSection({
           </span>
         </div>
         {errorMessage && <p className="text-sm text-destructive">{errorMessage}</p>}
-        {/* Surface the run's own outcome inline (feature: UI operability). A data-less symbol returns
-            a successful RPC with status INSUFFICIENT_DATA + coverage_gaps rather than an error — the
-            gaps were previously discarded, so the click looked inert. Point the user at the Backfill
-            panel (its own admin trigger, below/beside) to ingest the missing history. */}
+        {/* A data-less symbol returns a successful RPC with status INSUFFICIENT_DATA + coverage_gaps,
+            not an error — surface it inline and point at the Backfill panel to ingest the history. */}
         {runResult && runResult.status === BacktestStatus.INSUFFICIENT_DATA && (
           <div
             className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
@@ -1224,11 +1211,8 @@ function BacktestsSection({
   );
 }
 
-// Indicator overlay panels section (FR-6) — resolves the FR-6 strategy (watchlist binding, else the
-// orders-derived owning strategy, same precedence as Backtests/Readiness), fetches its declared
-// components, and charts each component's series over the page's own bars. No fabricated panels: when
-// no strategy resolves or it has zero components, an explicit no-data state; the RPC never fires with
-// an empty strategy.
+// Indicator overlay panels section — resolves the strategy (watchlist binding, else owning
+// strategy) and charts its components. No strategy/zero components → no-data; RPC never fires empty.
 function IndicatorSection({
   symbol,
   strategyId,
@@ -1257,8 +1241,8 @@ function IndicatorSection({
     times,
   });
 
-  // Stable Card shell (feature 145): the "Indicators" title + strategy picker persist on every branch
-  // so the user can select a strategy even from the default-empty / no-strategy state.
+  // Stable Card shell: the "Indicators" title + strategy picker persist on every branch so the user
+  // can select a strategy even from the empty / no-strategy state.
   const loading =
     (strategyId && strategyLoading) || (strategyId && hasComponents && (seriesLoading || !series));
   let body: React.ReactNode;
@@ -1300,9 +1284,8 @@ function IndicatorSection({
   );
 }
 
-// Backfill coverage section (FR-10) — the symbol's ingested OHLCV date span, dates only (no chart).
-// Always-on for any symbol. Reduces the completed backfill jobs carrying a range into one covered
-// window (earliest start … latest end); an empty job list is an explicit no-coverage state.
+// Backfill coverage section — the symbol's ingested OHLCV date span (dates only). Reduces completed
+// jobs into one covered window; an empty job list is an explicit no-coverage state.
 function BackfillSection({ symbol }: { symbol: string }) {
   const queryClient = useQueryClient();
   const { data, isLoading } = useBackfillJobs({ symbol });
@@ -1330,9 +1313,8 @@ function BackfillSection({ symbol }: { symbol: string }) {
   const hasCoverage = completed.length > 0;
   const fmtDay = (secs: number) => new Date(secs * 1000).toISOString().slice(0, 10);
 
-  // Full daily history for this one symbol — the same defaults the /insights/backfills create form
-  // sends (feature 143: daily is the only servable interval; omitting range = full history). Admin
-  // only, mirroring that page's gate; the BFF + ingest server re-check server-side (defense in depth).
+  // Full daily history for this symbol (daily is the only servable interval; omitting range = full
+  // history). Admin-only; the BFF + ingest server re-check server-side.
   function handleTrigger() {
     triggerBackfill(
       {

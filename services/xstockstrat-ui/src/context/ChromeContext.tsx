@@ -2,10 +2,9 @@
 import React from 'react';
 
 /**
- * Chrome (app-shell) UI state shared across every segment via the PlatformHeader (feature 083,
- * FR-19). Presently just the Copilot rail toggle — default OFF (FR-4). Mounted inside
- * PlatformHeader so all four segments (trader/insights/config-ui/accounts) get it without a
- * per-layout provider.
+ * Chrome (app-shell) UI state shared across every segment via the PlatformHeader — presently just
+ * the Copilot rail toggle (default OFF). Mounted in PlatformHeader so all four segments get it
+ * without a per-layout provider.
  */
 interface ChromeContextValue {
   showCopilot: boolean;

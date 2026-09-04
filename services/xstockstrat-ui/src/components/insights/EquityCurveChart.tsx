@@ -37,8 +37,7 @@ interface TooltipEntry {
   color?: string;
 }
 
-/** Shared tooltip: a trade-marker point renders the full trade payload (FR-4, unchanged, since
- * `ChartTooltipContent`'s default rendering can't express this branch without a custom override);
+/** Shared tooltip: a trade-marker point renders the full trade payload (needs a custom override);
  * a plain curve point delegates to `ui/chart.tsx`'s `ChartTooltipContent`. */
 function CurveTooltip({
   active,
@@ -97,10 +96,9 @@ function CurveTooltip({
 }
 
 /**
- * Time-based equity curve shared by the fresh-run and historical-run views (feature 068,
- * AC-5 — one component, no divergent render paths). One time-aligned line per symbol
- * (normalized % for multi-symbol runs — absolute dollars would encode symbol iteration
- * order, not information); trade entry/exit markers resolve to the nearest bar.
+ * Time-based equity curve shared by the fresh-run and historical-run views (one component, no
+ * divergent render paths). One line per symbol, normalized % for multi-symbol runs (absolute dollars
+ * would encode symbol iteration order, not information); trade markers resolve to the nearest bar.
  */
 export function EquityCurveChart({
   diagnostics,
@@ -114,7 +112,7 @@ export function EquityCurveChart({
     return { ...curve, markers: buildTradeMarkers(trades, curve.series) };
   }, [diagnostics, trades]);
 
-  // One ChartConfig entry per symbol line, colors matching LINE_COLORS unchanged (FR-3).
+  // One ChartConfig entry per symbol line, colors matching LINE_COLORS.
   const chartConfig: ChartConfig = useMemo(
     () =>
       Object.fromEntries(

@@ -34,10 +34,10 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   if (!resolvedSearchParams.env) {
     redirect('/config-ui?env=staging');
   }
-  // Feature 147: environment is production/staging (paper/live derives from it); the second axis
-  // is global vs per-user (user_id), not trading_mode.
+  // Environment is production/staging (paper/live derives from it); the second axis is
+  // global vs per-user (user_id).
   const env = resolvedSearchParams.env === 'production' ? 'production' : 'staging';
-  // Per-user config is owner-only self-service: clamp the scope to the caller's own id (PR #994).
+  // Per-user config is owner-only self-service: clamp the scope to the caller's own id.
   const { selfUserId, user } = await resolveConfigScope(resolvedSearchParams.user ?? '');
   const nativeEnv = getNativeConfigEnv();
 
@@ -83,9 +83,8 @@ function EnvSwitcher({
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs">
       <span className="text-muted-foreground font-medium">ENV:</span>
-      {/* Not wrapped in ui/tabs.tsx: Radix Tabs.Trigger hardcodes role="tab", overriding the
-          child <Link>'s implicit role="link" — semantically wrong here since a click does a full
-          page navigation via the href's query params, not a tab-panel switch (feature 121). */}
+      {/* Not wrapped in ui/tabs.tsx: Radix Tabs.Trigger hardcodes role="tab", overriding the child
+          <Link>'s role="link" — wrong here, since a click does a full page navigation, not a tab switch. */}
       <div className="flex gap-1">
         {['staging', 'production'].map((e) =>
           e === nativeEnv ? (

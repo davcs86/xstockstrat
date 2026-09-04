@@ -7,19 +7,12 @@ import { resolveChartColor } from '@/lib/chartColors';
 import { toLineData } from '@/lib/indicatorChart';
 import type { IndicatorSeriesInput } from '@/hooks/useIndicatorSeries';
 
-// Indicator overlay panes (feature 146). Every chartable strategy component is drawn as its own
-// native lightweight-charts v5 PANE on the SAME chart instance as the OHLCV candlestick (pane 0),
-// so price + indicators share one time scale and one native crosshair — one coherent instrument,
-// superseding the previous recharts card-per-panel. A component that failed to compute renders a DOM
-// error strip and gets no pane (per-component fault isolation). Warm-up/gap points render as gaps,
-// never a fabricated 0 (the src/lib/indicatorChart mapper; FR-3/AC-3). This component owns the
-// imperative pane lifecycle on the shared chart and renders the DOM legend + error strips; the actual
-// lines live in the price card's canvas above.
+// Each chartable component draws as its own native lightweight-charts pane on the shared OHLCV chart
+// (pane 0), sharing one time scale + crosshair; warm-up/gap points render as gaps, never a fabricated 0.
 
 const PRICE_PANE_HEIGHT = 260;
 const INDICATOR_PANE_HEIGHT = 120;
-// Theme tokens per named sub-series; fallbacks are CSS named colors (no brand hex), unreachable
-// client-side where the static dark tokens always resolve.
+// Theme tokens per named sub-series; fallbacks are CSS named colors (no brand hex).
 const SERIES_TOKENS = ['--chart-1', '--chart-2', '--chart-3', '--chart-4', '--chart-5'] as const;
 const SERIES_FALLBACK = ['teal', 'slateblue', 'goldenrod', 'indianred', 'silver'] as const;
 
@@ -29,8 +22,7 @@ function isChartable(c: ComponentSeries): boolean {
 
 type ReadoutRow = { label: string; value: string };
 
-// Read one series' value at the crosshair from the event's per-series data. Candlestick → close;
-// line → value; a whitespace/gap point (time only, no value) → em dash, never a fabricated 0.
+// Value at the crosshair; a gap point (time only, no value) → em dash, never a fabricated 0.
 function readoutValue(data: unknown): string {
   if (data && typeof data === 'object') {
     if ('close' in data && typeof (data as { close: unknown }).close === 'number') {
@@ -54,17 +46,15 @@ export function IndicatorPanels({
   chartRef: React.RefObject<IChartApi | null>;
   containerRef: React.RefObject<HTMLDivElement | null>;
 }) {
-  // Unified crosshair readout: the single v5 instance already draws ONE native crosshair across every
-  // pane; this shows one combined price + per-indicator value at the hovered bar (feature 146 Step 6).
+  // Unified crosshair readout: one combined price + per-indicator value at the hovered bar.
   const [readout, setReadout] = useState<ReadoutRow[] | null>(null);
 
-  // Draw one pane per chartable component on the shared chart. Disposal-safe: removes its own series
-  // + panes and restores the price-only height on unmount / strategy switch — never calls into a
-  // disposed chart (guarded), so re-resolving the strategy (IndicatorSection) can't crash the chart.
+  // Draws one pane per chartable component on the shared chart. Disposal-safe: never calls into a
+  // disposed chart, so a strategy switch can't crash it.
   useEffect(() => {
     let cancelled = false;
-    // Capture the async-created chart/container the draw actually used, so cleanup operates on that
-    // instance rather than reading a possibly-changed ref at teardown time.
+    // Capture the chart/container the draw used, so cleanup operates on that instance, not a
+    // possibly-changed ref at teardown.
     let usedChart: IChartApi | null = null;
     let usedContainer: HTMLDivElement | null = null;
     let crosshairHandler: ((param: MouseEventParams) => void) | null = null;
@@ -120,9 +110,8 @@ export function IndicatorPanels({
           .forEach((p, i) =>
             p.setStretchFactor(i === 0 ? PRICE_PANE_HEIGHT : INDICATOR_PANE_HEIGHT),
           );
-        // Fit the union of price + indicator data into the visible range so the shared time axis
-        // (and the crosshair that reads it) lands on the drawn bars — sparse series would otherwise
-        // sit off-screen with no hoverable time.
+        // Fit the union of price + indicator data into view so the shared time axis lands on drawn
+        // bars — else sparse series sit off-screen with no hoverable time.
         chart.timeScale().fitContent();
 
         // One tooltip for the whole instrument: read each series' value at the crosshair time.

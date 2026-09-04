@@ -4,8 +4,6 @@ import { useInvalidatingMutation } from './useInvalidatingMutation';
 
 type ReplaceOrderInput = Parameters<typeof tradingClient.replaceOrder>[0];
 
-// useReplaceOrder calls the BFF replaceOrder RPC and invalidates the orders list + the
-// single-order query on success so the UI reflects the change.
 export function useReplaceOrder() {
   return useInvalidatingMutation<ReplaceOrderInput, Order>(
     (req) => tradingClient.replaceOrder(req),
