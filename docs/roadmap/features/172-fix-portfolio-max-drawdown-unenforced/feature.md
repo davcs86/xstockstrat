@@ -16,6 +16,7 @@
 | 2026-09-04 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from comment-audit report item 2 (re-confirms portfolio module findings) |
 | 2026-09-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS); overlap CLEAN; FRs + Consumer Surface added |
 | 2026-09-04 | `spec-ready` → `design-approved` | /sdd-design | 3 rounds; Path A (enforce, per-account, migration 016) approved; recon.md + design.md written; no Floor breach |
+| 2026-09-04 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
 
 ---
 
@@ -25,7 +26,7 @@
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
 - [Recon Dossier](recon.md) — grounded codebase facts (Path-A-cheap premise disproven)
 - [Design](design.md) — debated, approved architecture (3 rounds; per-account, migration 016)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-portfolio-max-drawdown-unenforced`_
+- [Implementation Spec](implementation-spec.md) — numbered steps with codebase evidence (6 steps)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -38,6 +39,13 @@ enforced. An operator setting `max_drawdown_pct` gets no protection and no error
 decision: implement the drawdown halt, or formally mark the key **Documented, not yet implemented**
 (as `trading.risk.daily_loss_limit` already is).
 
+## Reviewers
+
+| Role | Focus |
+|---|---|
+| DBA | Migration NNN numbering (no gaps, no conflicts), up+down pair present, index correctness |
+| xstockstrat-portfolio (service owner) | P&L calculation accuracy, position snapshot consistency, concurrent write safety |
+
 ## Next Action
 
-`/sdd-spec fix-portfolio-max-drawdown-unenforced` — generate the implementation spec from the approved design
+`/sdd-review fix-portfolio-max-drawdown-unenforced impl-spec` — validate the implementation spec, then `/sdd-execute fix-portfolio-max-drawdown-unenforced`

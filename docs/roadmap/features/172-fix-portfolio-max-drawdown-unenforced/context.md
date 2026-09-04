@@ -82,3 +82,30 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Open Threads (→ /sdd-spec / execute): peak_equity column type; cash-flow contamination (accepted) +
   named follow-up; trading_mode cross-service string contract; migration DBA+owner approval at PR;
   findings-doc line-number refresh (cites :769/:797; actual :722/:750) at execute (teardown).
+
+---
+
+## Session 2026-09-04 — sdd-spec
+
+- Generated implementation-spec.md with 6 steps. Status → implementation-ready.
+- Key codebase findings (all path:line verified this session):
+  - `account_balances.equity` is **DOUBLE PRECISION** (`migrations/004_account_balances.up.sql:11`),
+    so migration 016's `peak_equity` is `DOUBLE PRECISION` (resolves the design open-risk column-type pin).
+  - Last portfolio migration is `015_watchlist_default_strategy` → next free is **016** (confirmed).
+  - **New discovery affecting the plan:** the `queryRower` mockable interface (`portfolio_repo.go:19-21`)
+    declares **only `QueryRow`**. Multi-row reads (`ListPositions`, `ListAccountBalancesByUser`) use
+    `r.pool.Query` and the write `UpsertAccountBalance:380` uses `r.pool.Exec` — none pgxmock-testable.
+    To honor the design's C-08 pgxmock mandate for the new multi-row `GetAccountDrawdowns` and the
+    `GREATEST` upsert, Step 2 widens `queryRower` with `Query` + `Exec` (both satisfied by
+    `*pgxpool.Pool` and pgxmock/v4 v4.9.0) and switches `UpsertAccountBalance` to `r.db.Exec`.
+  - `checkRiskLimits` at `portfolio_service.go:721-751` (read `:722`, discard `:750`), caller `:305`;
+    `emitRiskAlert:753-767` (WARNING/"risk" + ledger `portfolio.risk.drawdown_breach`) reused verbatim.
+  - `trading_mode` literal pinned: `trading.go:2119-2121` writes `"TRADING_MODE_PAPER"`/`"TRADING_MODE_LIVE"`
+    == `commonv1.TradingMode.String()`; `checkRiskLimits` passes `mode.String()` for the `$2` filter — matches.
+  - Findings-doc stale line refresh (teardown, Step 6): `context-constitution-findings.md:20` cites
+    `:769`/`:797`; actual `:722`/`:750` — corrected + marked resolved in the docs step.
+- Scenario coverage (C-15): @AC-1 → Step 5 (evaluateDrawdowns seam) + Step 3 (GetAccountDrawdowns fetch);
+  @AC-2 → Step 3 (UpsertAccountBalance GREATEST SQL-contract). Consumer surface (C-14): existing notify
+  path only, no new UI/Agent step (restated in Execution Summary).
+- Note: all new Go code lands in coverage-excluded packages (`internal/repository/`, `internal/service/`);
+  no threshold moves, paired RED-before-green tests still required and specced.
