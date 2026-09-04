@@ -29,3 +29,11 @@ Feature: fix-python-config-zero-trap (bug fix)
       | ingest.backfill.max_retry_attempts  | present  | 0      | 3       | 0        |
       | ingest.signals.dedup_window_hours   | present  | 0      | 24      | 0        |
       | ingest.backfill.max_retry_attempts  | absent   | -      | 3       | 3        |
+
+  @AC-4 @FR-2 @FR-3 @regression
+  Scenario: An empty allowed_imports denies all sandbox imports instead of reverting to the permissive default
+    Given the indicators config watcher has a snapshot where "indicators.sandbox.allowed_imports" is present with string value ""
+    When a formula that imports numpy is executed in the indicators sandbox
+    Then the import is rejected because the resolved allow-list is empty
+    And the allow-list is NOT the coded default "numpy,pandas,math,statistics"
+
