@@ -21,7 +21,7 @@ def resolve_environment(application_env: str) -> int:
     return (
         common_pb2.ENVIRONMENT_PRODUCTION
         if application_env == "production"
-        else common_pb2.ENVIRONMENT_STAGING  # feature 147: non-production => staging
+        else common_pb2.ENVIRONMENT_STAGING
     )
 
 
@@ -41,9 +41,8 @@ class ConfigWatcher:
     def __init__(self, endpoint: str, namespace: str):
         self.endpoint = endpoint
         self.namespace = namespace
-        # This deployment's own resolved scope (APPLICATION_ENV/TRADING_MODE) — passed on
-        # every WatchConfig request so the server serves this deployment's config rows
-        # instead of the zero-value dev/all default.
+        # Must be sent on every WatchConfig request, else the server serves the
+        # zero-value dev/all default rows instead of this deployment's.
         self._environment = resolve_environment(os.environ.get("APPLICATION_ENV", "development"))
         self._trading_mode = resolve_trading_mode(os.environ.get("TRADING_MODE", "paper"))
         self._snapshot: config_pb2.ConfigSnapshot | None = None
@@ -142,7 +141,6 @@ class ConfigWatcher:
             return default
         return v.float_val if v.HasField("float_val") else default
 
-    # Sandbox config helpers — indicators.sandbox.*
     @property
     def sandbox_timeout_ms(self) -> int:
         return self.get_int("indicators.sandbox.timeout_ms", default=5000)

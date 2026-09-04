@@ -42,22 +42,20 @@ type PortfolioService struct {
 	marketdata marketdatav1.MarketDataServiceClient
 	notify     notifyv1.NotifyServiceClient
 
-	// Watchlists (feature 058). Held behind interfaces so the cap/ownership business
-	// rules can be unit-tested with a stubbed store + config.
+	// Watchlists — held behind interfaces so cap/ownership rules can be unit-tested with stubs.
 	watchlists WatchlistStore
 	wlCfg      watchlistConfig
 
 	mu   sync.RWMutex
 	subs map[string]chan *portfoliov1.PortfolioSnapshot
 
-	// Resting-stop prices learned from trading's order events via the ledger (feature 083).
-	// In-memory, rebuilt on boot from a ledger replay (HydrateStops) — no portfolio migration,
-	// no synchronous portfolio→trading edge (which would create a trading↔portfolio cycle).
+	// stops holds resting-stop prices learned from ledger order events, in-memory and rebuilt on boot
+	// (HydrateStops) — deliberately no portfolio→trading edge, which would create a trading↔portfolio cycle.
 	stops *stopStore
 }
 
 // stopNearThresholdPct — a position whose stop sits within this fraction of current price is
-// flagged POSITION_RISK_FLAG_STOP_NEAR on the Exposure surface (feature 083).
+// flagged POSITION_RISK_FLAG_STOP_NEAR.
 const stopNearThresholdPct = 0.03
 
 // stopKey identifies a resting stop by (user, symbol, trading mode).
@@ -94,10 +92,8 @@ func (st *stopStore) get(k stopKey) (float64, bool) {
 	return p, ok
 }
 
-// NewPortfolioService creates the service, opens the DB pool, and dials dependencies.
-// clientKeepAlive pings idle inter-service connections so a silently-dropped link
-// (e.g. an idle ledger connection the server GOAWAYs) is detected and re-established
-// promptly instead of failing the next call.
+// clientKeepAlive pings idle inter-service connections so a silently-dropped link (e.g. an idle
+// ledger connection the server GOAWAYs) is detected and re-established before the next call.
 var clientKeepAlive = grpc.WithKeepaliveParams(keepalive.ClientParameters{
 	Time:                30 * time.Second,
 	Timeout:             10 * time.Second,
@@ -145,15 +141,8 @@ func (s *PortfolioService) ConsumeOrderFills(ctx context.Context) {
 	s.consumeEventStream(ctx, "order fill", "order.filled", s.processOrderFill)
 }
 
-// consumeEventStream subscribes to a filtered ledger StreamEvents and dispatches
-// each event to handle, reconnecting on disconnect. It tracks the highest sequence
-// processed and resumes from there (from_sequence = lastSeq+1) across reconnects,
-// so a recycled connection neither re-replays history — which would double-count
-// incremental updates such as order fills — nor drops events that arrived during
-// the gap. The first connection still replays from sequence 0 to build initial
-// state. Graceful HTTP/2 disconnects (GOAWAY / Unavailable), which the DO App
-// Platform issues routinely on long-lived streams, are logged below ERROR so they
-// don't trip alerting; genuine errors stay at ERROR.
+// consumeEventStream dispatches a filtered ledger StreamEvents to handle, reconnecting on disconnect
+// and resuming from lastSeq+1 so a recycled stream neither double-counts nor drops events.
 func (s *PortfolioService) consumeEventStream(ctx context.Context, name, eventType string, handle func(context.Context, *ledgerv1.LedgerEvent)) {
 	var lastSeq int64
 	for {
@@ -173,10 +162,8 @@ func (s *PortfolioService) consumeEventStream(ctx context.Context, name, eventTy
 	}
 }
 
-// streamEventsFrom opens one StreamEvents call and dispatches events until the
-// stream ends or errors. It returns the highest sequence processed so the caller
-// can resume past it on reconnect. lastSeq == 0 replays full history (initial
-// connect); lastSeq > 0 resumes from lastSeq+1.
+// streamEventsFrom opens one StreamEvents call and returns the highest sequence processed.
+// lastSeq == 0 replays full history; lastSeq > 0 resumes from lastSeq+1.
 func (s *PortfolioService) streamEventsFrom(ctx context.Context, eventType string, lastSeq int64, handle func(context.Context, *ledgerv1.LedgerEvent)) (int64, error) {
 	fromSeq := int64(0)
 	if lastSeq > 0 {
@@ -204,9 +191,8 @@ func (s *PortfolioService) streamEventsFrom(ctx context.Context, eventType strin
 	}
 }
 
-// isGracefulStreamClose reports whether a stream error is an expected, benign
-// disconnect (a GOAWAY / transport recycle surfaced as codes.Unavailable) rather
-// than a real failure worth alerting on.
+// isGracefulStreamClose reports whether a stream error is a benign disconnect (GOAWAY / transport
+// recycle as codes.Unavailable) rather than a real failure worth alerting on.
 func isGracefulStreamClose(err error) bool {
 	if st, ok := status.FromError(err); ok {
 		return st.Code() == codes.Unavailable
@@ -224,12 +210,11 @@ type orderFillPayload struct {
 	Mode      string  `json:"trading_mode"` // "TRADING_MODE_PAPER" | "TRADING_MODE_LIVE"
 	AccountId string  `json:"account_id"`
 	OrderID   string  `json:"order_id"`
-	// Resting-stop price carried by a stop/stop-limit order event (feature 083). Absent
-	// (zero) on plain market/limit fills. Learned into the in-memory stop store so the
-	// Exposure surface can show risk-at-stop without a portfolio→trading edge.
+	// StopPrice is carried by a stop/stop-limit order event; zero on plain market/limit fills.
+	// Learned into the in-memory stop store for the Exposure surface.
 	StopPrice float64 `json:"stop_price"`
-	// Per-fill broker fee (feature 029); absent key ⇒ 0 (net == gross, AC-11). Accumulated into
-	// positions.fees_accum alongside realized_accum and emitted as fees_total on the close event.
+	// Fees is the per-fill broker fee; absent key ⇒ 0 (net == gross). Accumulated into fees_accum
+	// and emitted as fees_total on the close event.
 	Fees float64 `json:"fees"`
 }
 
@@ -252,16 +237,12 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 		mode = commonv1.TradingMode_TRADING_MODE_LIVE
 	}
 
-	// feature 083 — learn the resting stop from the order event (if it carried one).
 	if fill.StopPrice > 0 && s.stops != nil {
 		s.stops.set(stopKey{user: fill.UserID, symbol: fill.Symbol, mode: mode}, fill.StopPrice)
 	}
 
-	// Get existing position to compute new avg entry, scoped to the fill's account — the same
-	// fill.AccountId this path upserts under below. Without account scoping a multi-account user's
-	// fill would compute the new average entry from whichever account's position opened most
-	// recently, not the account the fill actually belongs to (the write-path twin of the read-path
-	// bug feature 125 FR-14 fixes; extended to this caller by explicit user decision, 2026-08-15).
+	// Fetch the existing position scoped to the fill's account: without account scoping a multi-account
+	// user's fill would compute the new avg entry from the wrong account's most-recent position.
 	existing, _ := s.repo.GetPosition(ctx, fill.UserID, fill.Symbol, mode, fill.AccountId)
 	var (
 		newQty      float64
@@ -288,19 +269,18 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 		acctID = "alpaca-default"
 	}
 
-	// feature 042 — realized P&L this fill contributed by reducing the position (0 when opening/
-	// adding, or when no prior position exists — a redelivered post-close sell must not nil-deref).
+	// Realized P&L this fill contributed by reducing the position — 0 when opening/adding or when no
+	// prior position exists (a redelivered post-close sell must not nil-deref).
 	var delta float64
 	if existing != nil {
 		delta = pnl.RealizedDelta(existing.Qty, existing.CostBasis, fill.Qty, fill.FillPrice)
 	}
 
 	if newQty <= 0 {
-		// The row is about to be deleted, so the cumulative realized goes into the emitted payload
-		// only (never persisted onto the deleted row). Read the prior accum + this closing delta.
+		// Row is about to be deleted: the sealed realized goes into the emitted payload only, never
+		// persisted. Read prior accum + this closing delta.
 		var sealed float64
-		// feature 029 — seal the cumulative fees alongside realized: prior fees_accum + this fill's
-		// fee. realized_pnl stays GROSS/authoritative; net = realized_pnl - fees_total downstream.
+		// realized_pnl stays GROSS/authoritative; net = realized_pnl - fees_total downstream.
 		var feesSealed float64
 		if existing != nil {
 			priorAccum, _ := s.repo.GetRealizedAccum(ctx, fill.UserID, fill.Symbol, mode, acctID)
@@ -326,22 +306,8 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 	s.broadcastSnapshot(ctx, fill.UserID, mode)
 }
 
-// enrichPositions fills CurrentPrice / MarketValue / UnrealizedPnl on each position
-// from the latest market-data quote. A failed lookup or an empty (zero) quote leaves
-// the position's price fields at zero, but is logged so the gap is diagnosable rather
-// than silently masked (otherwise positions render at $0.00 with no explanation).
-//
-// Positions the broker already valued (CurrentPrice > 0, set by the account.positions.synced
-// reconciliation) are left untouched so their authoritative mark-to-market figures reconcile
-// with broker equity instead of being overwritten by a marketdata mid-quote. Only positions
-// the broker did not value (e.g. a fresh order-fill position) fall back to mid-quote enrichment.
 // closedPositionPayload builds the portfolio.position.closed emit payload. The base keys are the
-// producer contract — user_id/symbol/account_id/trading_mode/realized_pnl (feature 042) plus
-// fees_total (feature 029) — never dropped/renamed (C-16). cost_basis + opened_at (feature 031) are
-// added ONLY when the closing position row was present (existing != nil): a redelivered post-close
-// fill (existing == nil) omits both, matching the realized_pnl/fees_total 0 it already emits there.
-// opened_at is RFC3339 (structpb.NewValue rejects time.Time; the as_of precedent). The UI /insights
-// performance dashboard reads cost_basis for avg-return-% and opened_at for avg-hold-time.
+// producer contract — never dropped/renamed (C-16); cost_basis + opened_at are added only when existing != nil.
 func closedPositionPayload(userID, symbol, acctID, mode string, sealed, feesSealed float64, existing *portfoliov1.Position) map[string]interface{} {
 	payload := map[string]interface{}{
 		"user_id": userID, "symbol": symbol, "account_id": acctID,
@@ -375,9 +341,8 @@ func (s *PortfolioService) enrichPositions(ctx context.Context, positions []*por
 	s.enrichRisk(ctx, positions)
 }
 
-// enrichRisk fills the feature-083 risk/factor fields on each position from the learned
-// resting stop (in-memory store) + the operator factor map, computed on read off the same
-// broker-authoritative CurrentPrice the valuation seam uses (C-10(b)). No DB access.
+// enrichRisk fills risk/factor fields from the learned resting stop + operator factor map, computed
+// on read off the broker-authoritative CurrentPrice. No DB access.
 func (s *PortfolioService) enrichRisk(ctx context.Context, positions []*portfoliov1.Position) {
 	userID := middleware.FromContext(ctx).UserID
 	var factorMap map[string]string
@@ -389,9 +354,8 @@ func (s *PortfolioService) enrichRisk(ctx context.Context, positions []*portfoli
 	}
 }
 
-// enrichPositionRisk sets the factor + stop-derived risk fields on a single position. Pure
-// (no ctx / service), so the mapping + arithmetic are unit-testable. An empty/absent factor
-// map leaves Factor "" (the UI groups those as "Unclassified").
+// enrichPositionRisk sets the factor + stop-derived risk fields on one position (pure). An empty/absent
+// factor map leaves Factor "" (the UI groups those as "Unclassified").
 func enrichPositionRisk(p *portfoliov1.Position, userID string, factorMap map[string]string, stops *stopStore) {
 	if f, ok := factorMap[p.Symbol]; ok {
 		p.Factor = f
@@ -404,9 +368,8 @@ func enrichPositionRisk(p *portfoliov1.Position, userID string, factorMap map[st
 	}
 }
 
-// applyStopRisk sets stop-derived fields on a position from a resting stop price. Kept pure
-// (no ctx/store) so the arithmetic is unit-testable. stop_distance_pct and risk_at_stop both
-// come off CurrentPrice — the broker-authoritative value shared with the valuation path.
+// applyStopRisk sets stop-derived fields from a resting stop price (pure). stop_distance_pct and
+// risk_at_stop both come off CurrentPrice — the broker-authoritative value.
 func applyStopRisk(p *portfoliov1.Position, stop float64) {
 	if stop <= 0 || p.CurrentPrice <= 0 {
 		return
@@ -420,9 +383,8 @@ func applyStopRisk(p *portfoliov1.Position, stop float64) {
 	}
 }
 
-// HydrateStops rebuilds the in-memory stop store at boot by replaying order events from the
-// ledger (best-effort — a ledger failure leaves the store empty rather than blocking startup).
-// Mirrors the existing position-state-from-events pattern; no portfolio migration.
+// HydrateStops rebuilds the in-memory stop store at boot by replaying ledger order events —
+// best-effort: a ledger failure leaves the store empty rather than blocking startup.
 func (s *PortfolioService) HydrateStops(ctx context.Context) {
 	if s.stops == nil {
 		return
@@ -484,8 +446,7 @@ func sideOf(qty float64) portfoliov1.PositionSide {
 
 // GetPortfolio aggregates all open positions with live prices.
 func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.GetPortfolioRequest) (*portfoliov1.Portfolio, error) {
-	// Caller identity comes from the trusted x-user-id header (propagated by the edge), never the
-	// deprecated request body user_id field.
+	// Caller identity comes from the trusted x-user-id header, never the deprecated request-body user_id.
 	userID := middleware.FromContext(ctx).UserID
 	positions, _, err := s.repo.ListPositions(ctx, userID, req.TradingMode, 500, "", req.GetAccountId(), "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
 	if err != nil {
@@ -506,9 +467,8 @@ func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.Ge
 		Positions:   positions,
 		AccountId:   req.GetAccountId(),
 	}
-	// Account-grain realized P&L for offline accounts (feature 157) — set with proto3 presence so an
-	// offline $0 is distinguishable from a broker unset. Populated on BOTH read paths (this one and
-	// buildAccountPortfolio) for parity (@AC-7 / C-10(b)).
+	// Offline-account realized P&L set with proto3 presence so an offline $0 differs from a broker unset.
+	// Populated on BOTH read paths (here + buildAccountPortfolio) for parity.
 	if v, ok, err := s.repo.GetOfflineRealized(ctx, req.GetAccountId()); err == nil && ok {
 		portfolio.RealizedPnl = proto.Float64(v)
 	}
@@ -541,9 +501,8 @@ func (s *PortfolioService) ListPositions(ctx context.Context, req *portfoliov1.L
 	if err != nil {
 		return nil, err
 	}
-	// Preserve the broker's mark-to-market valuation for positions it valued; only fall back to
-	// marketdata mid-quote enrichment for positions the broker did not value (CurrentPrice <= 0).
-	// The UI winners/losers P&L filter and detail view read these enriched figures.
+	// Preserve the broker's valuation for positions it valued; fall back to marketdata mid-quote
+	// enrichment only for positions the broker did not value (CurrentPrice <= 0).
 	s.enrichPositions(ctx, positions)
 	return &portfoliov1.ListPositionsResponse{
 		Positions: positions,
@@ -551,13 +510,8 @@ func (s *PortfolioService) ListPositions(ctx context.Context, req *portfoliov1.L
 	}, nil
 }
 
-// GetPnL computes realized + unrealized P&L for a user over a time range.
-//
-// Realized P&L uses the signed average-cost fold in the shared pnl package
-// (github.com/xstockstrat/contracts/pnl) — the ONE realized-P&L implementation (feature 042/157;
-// C-10(b)). GetPnL folds its collected fills through pnl.Fold; ConsumeOrderFills' close-event
-// enrichment routes through pnl.RealizedDelta; xstockstrat-trading's ConfirmOrder recompute uses
-// the same pnl.Fold. No second formula lives in this tree (the feature-056 dual-source fix).
+// GetPnL computes realized + unrealized P&L over a time range. Realized uses the shared pnl package
+// (the ONE realized-P&L implementation) — no second formula lives here (the feature-056 dual-source fix).
 func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRequest) (*portfoliov1.PnLResponse, error) {
 	userID := middleware.FromContext(ctx).UserID
 	positions, _, err := s.repo.ListPositions(ctx, userID, req.TradingMode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
@@ -573,9 +527,8 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 		}
 	}
 
-	// Collect fills in application order and fold once through the shared pnl package (the ONE
-	// realized-P&L implementation — feature 056 dual-source fix). accs state is never read between
-	// passes, so batching the fold is behavior-identical to the former incremental applyFill.
+	// Collect fills in application order and fold once through the shared pnl package. Batching the fold
+	// is behavior-identical to the former incremental applyFill (no state read between passes).
 	var fills []pnl.Fill
 	filledOrderIDs := make(map[string]bool)
 	latestPartials := make(map[string]orderFillPayload)
@@ -825,16 +778,13 @@ func (s *PortfolioService) emitEvent(ctx context.Context, eventType, streamKey s
 		StreamKey:     streamKey,
 		OccurredAt:    timestamppb.Now(),
 		Payload:       &structpb.Struct{Fields: fields},
-		// Stable per-emit dedup key. Reused across the retries below so a retry that
-		// follows an append the ledger actually committed (but whose response was lost)
-		// returns the stored event instead of writing a duplicate audit event.
+		// Stable per-emit dedup key, reused across the retries below so a retry after a committed-but-
+		// unacked append returns the stored event instead of writing a duplicate.
 		IdempotencyKey: uuid.NewString(),
 	}
 
-	// Retry transient transport failures. A ledger restart sends an HTTP/2 GOAWAY that
-	// fails the in-flight append with codes.Unavailable; without a retry the event was
-	// silently dropped (it was only logged), so a deploy-time ledger bounce lost audit
-	// events. The idempotency key above makes the retry safe against duplication.
+	// Retry transient codes.Unavailable (a ledger GOAWAY) so a deploy-time ledger bounce doesn't drop
+	// audit events; the idempotency key above makes the retry safe against duplication.
 	const maxAttempts = 4
 	backoff := 100 * time.Millisecond
 	var err error
@@ -864,13 +814,12 @@ type positionSyncPayload struct {
 		Symbol  string  `json:"symbol"`
 		Qty     float64 `json:"qty"`
 		AvgCost float64 `json:"avg_cost"`
-		// Provenance (feature 163): source is the PositionSource enum integer; as_of is
-		// the baseline snapshot effective date (RFC3339 or empty for ORDERS-only positions).
+		// Provenance: source is the PositionSource enum integer; as_of is the baseline snapshot
+		// effective date (RFC3339, or empty for ORDERS-only positions).
 		Source int    `json:"source"`
 		AsOf   string `json:"as_of"`
-		// Broker mark-to-market valuation (zero when the broker did not report it, e.g.
-		// legacy events emitted before these fields existed). When present these are
-		// authoritative and used verbatim so the card reconciles with broker equity.
+		// Broker mark-to-market valuation; zero when not reported (e.g. legacy events). When present
+		// these are authoritative and used verbatim so the card reconciles with broker equity.
 		CurrentPrice     float64 `json:"current_price"`
 		MarketValue      float64 `json:"market_value"`
 		UnrealizedPnl    float64 `json:"unrealized_pl"`
@@ -880,9 +829,8 @@ type positionSyncPayload struct {
 		DayPnl    float64 `json:"day_pnl"`
 		DayPnlPct float64 `json:"day_pnl_pct"`
 	} `json:"positions"`
-	// RealizedPnl is the account-grain cumulative realized P&L, set ONLY by an offline
-	// ConfirmOrder recompute (feature 157). A broker position sync never carries the key, so this
-	// stays nil for broker syncs — the pointer's presence is exactly the offline/broker disjointness.
+	// RealizedPnl is the account-grain cumulative realized P&L, set ONLY by an offline ConfirmOrder
+	// recompute; a broker sync never carries it (nil) — the pointer's presence marks offline/broker.
 	RealizedPnl *float64 `json:"realized_pnl"`
 }
 
@@ -892,15 +840,14 @@ func (s *PortfolioService) ConsumePositionSyncs(ctx context.Context) {
 	s.consumeEventStream(ctx, "position sync", "account.positions.synced", s.processPositionSync)
 }
 
-// accountDeregisteredPayload is the shape of trading's account.deregistered event (feature 157).
+// accountDeregisteredPayload is the shape of trading's account.deregistered event.
 type accountDeregisteredPayload struct {
 	AccountID string `json:"account_id"`
 	UserID    string `json:"user_id"`
 }
 
-// ConsumeAccountDeregistrations subscribes to "account.deregistered" and purges the account's
-// positions + account-grain realized P&L when an offline account is deregistered (feature 157) —
-// no broker sync will ever reconcile it away, so the purge must be event-driven.
+// ConsumeAccountDeregistrations purges an offline account's positions + realized P&L on
+// account.deregistered — no broker sync reconciles an offline account away, so the purge is event-driven.
 func (s *PortfolioService) ConsumeAccountDeregistrations(ctx context.Context) {
 	s.consumeEventStream(ctx, "account deregistration", "account.deregistered", s.processAccountDeregistered)
 }
@@ -951,8 +898,7 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 		return
 	}
 
-	// Store synced positions under the account owner's user_id so they reconcile
-	// with order-fill positions and are visible to per-user portfolio queries.
+	// Store synced positions under the owner's user_id so they reconcile with order-fill positions.
 	// Fall back to "default" for legacy events emitted before user_id was carried.
 	userID := sync.UserID
 	if userID == "" {
@@ -979,10 +925,8 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 		slog.Warn("delete positions not in sync failed", "account_id", sync.AccountID, "error", err)
 	}
 
-	// Account-grain realized P&L (feature 157) — set ONLY by offline ConfirmOrder recomputes. The
-	// upsert lands OUTSIDE the positions loop and AFTER DeletePositionsNotInSync so a flat/full-close
-	// recompute (positions: []) still records realized; gated on the pointer so broker syncs (nil)
-	// never touch the table (@AC-13/@AC-14 disjointness).
+	// Realized P&L upsert lands OUTSIDE the positions loop and AFTER DeletePositionsNotInSync so a
+	// flat/full-close recompute (positions: []) still records; the nil pointer keeps broker syncs out.
 	if sync.RealizedPnl != nil {
 		if err := s.repo.UpsertOfflineRealized(ctx, sync.AccountID, userID, sync.TradingMode, *sync.RealizedPnl); err != nil {
 			slog.Warn("upsert offline realized failed", "account_id", sync.AccountID, "error", err)
@@ -990,10 +934,8 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 	}
 }
 
-// bracketUpdatePayload is the expected shape of the order.bracket_updated event payload
-// (emitted by trading's maybeSubmitBracket/CancelOrder — feature 030). An empty
-// StopOrderID/TakeProfitOrderID means "cleared" (bracket canceled or the leg was never
-// created), not "leave the existing value alone" — see processBracketUpdate.
+// bracketUpdatePayload is the shape of the order.bracket_updated event payload. An empty
+// StopOrderID/TakeProfitOrderID means "cleared", not "leave the existing value alone".
 type bracketUpdatePayload struct {
 	UserID            string `json:"user_id"`
 	AccountID         string `json:"account_id"`
@@ -1023,12 +965,8 @@ func (s *PortfolioService) processBracketUpdate(ctx context.Context, event *ledg
 	}
 }
 
-// parseBracketUpdatePayload extracts the JSON-marshal/unmarshal step out of
-// processBracketUpdate as a pure function so it can be unit-tested without a live DB —
-// PortfolioService.repo is a concrete *repository.PortfolioRepo (not an interface), the
-// same constraint xstockstrat-trading's TradingRepo has (see that service's Step 3/12
-// precedent), so a full round-trip through UpdatePositionBracket cannot be exercised
-// against a hand-constructed service in a unit test.
+// parseBracketUpdatePayload is the pure JSON-parse step of processBracketUpdate, split out so it can
+// be unit-tested (repo is a concrete type, not a mockable interface).
 func parseBracketUpdatePayload(payload *structpb.Struct) (bracketUpdatePayload, error) {
 	if payload == nil {
 		return bracketUpdatePayload{}, fmt.Errorf("nil payload")
@@ -1086,21 +1024,14 @@ func (s *PortfolioService) processBalanceSync(ctx context.Context, event *ledger
 	}
 }
 
-// buildAccountPortfolio assembles a Portfolio for a single broker account: its
-// positions (enriched with live prices) overlaid with the broker-synced balance
-// snapshot. The broker is authoritative for cash, buying power, and total equity
-// (cash + positions); day P&L is derived from equity vs. previous-close equity.
-// When bal is nil, equity falls back to the summed position market value.
+// buildAccountPortfolio assembles a Portfolio for one account. The broker is authoritative for cash,
+// buying power, and equity; when bal is nil, equity falls back to the summed position market value.
 func (s *PortfolioService) buildAccountPortfolio(ctx context.Context, accountID string, bal *repository.AccountBalance) (*portfoliov1.Portfolio, error) {
 	positions, err := s.repo.ListPositionsByAccount(ctx, accountID, "")
 	if err != nil {
 		return nil, err
 	}
-	// Positions synced from the broker carry its authoritative mark-to-market valuation
-	// (current_price/market_value/unrealized_pnl), which reconciles with the broker equity
-	// shown below. enrichPositions only falls back to marketdata mid-quote enrichment for
-	// positions the broker did not value — e.g. a fresh order-fill position not yet reconciled
-	// by the sync poller.
+	// enrichPositions keeps broker-valued positions and mid-quote-enriches only those the broker didn't value.
 	s.enrichPositions(ctx, positions)
 
 	var positionsValue, unrealizedPnl float64
@@ -1126,19 +1057,16 @@ func (s *PortfolioService) buildAccountPortfolio(ctx context.Context, accountID 
 			portfolio.DayPnlPct = portfolio.DayPnl / bal.LastEquity
 		}
 	}
-	// Account-grain realized P&L for offline accounts (feature 157). Set with proto3 presence so an
-	// offline $0 differs from a broker unset; populated identically in GetPortfolio for read-path
-	// parity (@AC-7 / C-10(b)). Broker accounts have no row → left unset.
+	// Offline-account realized P&L set with proto3 presence so an offline $0 differs from a broker unset;
+	// populated identically in GetPortfolio for parity. Broker accounts have no row → left unset.
 	if v, ok, err := s.repo.GetOfflineRealized(ctx, accountID); err == nil && ok {
 		portfolio.RealizedPnl = proto.Float64(v)
 	}
 	return portfolio, nil
 }
 
-// ListPortfolios returns a Portfolio per broker account. With a specific account_id
-// it returns just that account; without one it aggregates every account owned by the
-// requesting user (resolved from the propagated x-user-id header), so the "All
-// Accounts" view sums real per-account equity instead of showing $0.00.
+// ListPortfolios returns a Portfolio per broker account: a specific account_id returns just that one;
+// without one it aggregates every account owned by the requesting user (from x-user-id).
 func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.ListPortfoliosRequest) (*portfoliov1.ListPortfoliosResponse, error) {
 	accountID := req.GetAccountId()
 	if accountID != "" {
@@ -1155,7 +1083,6 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 		}, nil
 	}
 
-	// All-accounts view: discover every account owned by the requesting user.
 	userID := middleware.FromContext(ctx).UserID
 	if userID == "" {
 		return &portfoliov1.ListPortfoliosResponse{}, nil
@@ -1177,12 +1104,8 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 		balanceIDs = append(balanceIDs, acct.AccountID)
 	}
 
-	// Include offline accounts (feature 159): they have no account_balances row, so the balances-sourced
-	// enumeration above omits them entirely — breaking the ListPositions↔ListPortfolios combined-view
-	// parity (C-10(b), fails.md 056). Append every offline account not already present; passing a nil
-	// balance yields Cash/BuyingPower/DayPnl = 0 and Equity = summed position market value, so the summed
-	// broker aggregates naturally exclude offline accounts while their equity may still contribute. A
-	// lookup failure is non-fatal — it must not break the existing broker-accounts view.
+	// Offline accounts have no account_balances row, so append them separately for combined-view parity.
+	// A nil balance yields 0 cash/BP/day-P&L and equity = summed market value; a lookup failure is non-fatal.
 	if offlineIDs, err := s.repo.ListOfflineAccountIdsByUser(ctx, userID); err != nil {
 		slog.Warn("ListPortfolios: list offline account ids failed", "user_id", userID, "error", err)
 	} else {
@@ -1198,10 +1121,8 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 	return &portfoliov1.ListPortfoliosResponse{Portfolios: portfolios}, nil
 }
 
-// offlineIDsToAppend returns the offline account IDs not already represented in the balances-sourced
-// set — the additive offline accounts the combined ListPortfolios view must include (feature 159).
-// Dedup covers both an offline id that also has a balances row and repeats within offlineIDs, so an
-// account is never built twice.
+// offlineIDsToAppend returns the offline account IDs not already in the balances-sourced set,
+// deduped so an account is never built twice.
 func offlineIDsToAppend(balanceAccountIDs, offlineIDs []string) []string {
 	seen := make(map[string]struct{}, len(balanceAccountIDs))
 	for _, id := range balanceAccountIDs {
@@ -1219,20 +1140,14 @@ func offlineIDsToAppend(balanceAccountIDs, offlineIDs []string) []string {
 }
 
 // ─── Watchlists (feature 058) ────────────────────────────────────────────────
-//
-// Ownership (FR-2) is enforced from the propagated x-user-id header, never from the
-// wire: every mutation loads the row, compares its user_id to the caller, and returns
-// PermissionDenied on mismatch. Caps (FR-3/FR-7) are read fresh from config on every
-// mutation so a lowered limit is honored immediately. Ledger emission (FR-6) is
-// non-fatal — emitEvent logs and drops on failure, never failing the mutation.
+// Ownership is enforced from x-user-id (load row, compare user_id, else PermissionDenied). Caps are
+// read fresh from config per mutation. Ledger emission is non-fatal (logs and drops, never fails the write).
 
 const (
 	defaultMaxWatchlistsPerUser = 50
 	defaultMaxSymbolsPerList    = 500
-	// signalWatchlistDefaultName is the cosmetic display name for a user's single
-	// system-managed signals watchlist (feature 127). It is not identity — the list
-	// is identified by the system_managed flag — so it may coexist with a user's own
-	// same-named manual list. Not a config key (fixed display string).
+	// signalWatchlistDefaultName is the cosmetic display name for the system-managed signals watchlist —
+	// NOT identity (the system_managed flag is), so it may coexist with a user's same-named manual list.
 	signalWatchlistDefaultName = "Signals"
 )
 
@@ -1243,35 +1158,32 @@ type WatchlistStore interface {
 	GetByID(ctx context.Context, watchlistID string) (*portfoliov1.Watchlist, error)
 	ListByUser(ctx context.Context, userID string, pageSize int, pageToken string) ([]*portfoliov1.Watchlist, string, error)
 	Update(ctx context.Context, watchlistID, name, description string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error)
-	// UpdatePartial writes only the flagged scalar columns of a watchlist (feature 170 field-mask
-	// path); bindings are untouched. ErrWatchlistNotFound when the row is absent.
+	// UpdatePartial writes only the flagged scalar columns; bindings untouched. ErrWatchlistNotFound
+	// when the row is absent.
 	UpdatePartial(ctx context.Context, watchlistID string, patch repository.WatchlistPatch) (*portfoliov1.Watchlist, error)
 	Delete(ctx context.Context, watchlistID string) error
 	AddSymbols(ctx context.Context, watchlistID string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error)
 	RemoveSymbols(ctx context.Context, watchlistID string, symbols []string) (*portfoliov1.Watchlist, error)
-	// UpdateBinding rebinds one symbol's strategy_id via a single-row UPDATE (feature 167),
-	// returning the updated binding and the parent list's bumped updated_at; ErrBindingNotFound
-	// when the (watchlist_id, symbol) row is absent.
+	// UpdateBinding rebinds one symbol's strategy_id, returning the updated binding and the parent list's
+	// bumped updated_at; ErrBindingNotFound when the (watchlist_id, symbol) row is absent.
 	UpdateBinding(ctx context.Context, watchlistID, symbol, strategyID string) (*portfoliov1.WatchlistBinding, time.Time, error)
-	// UpdateBindings atomically rebinds a set of symbols to one strategy_id (feature 170); returns
-	// the changed bindings and the parent list's bumped updated_at, or ErrBindingNotFound when any
-	// requested symbol is absent (whole batch rolled back — zero partial writes).
+	// UpdateBindings atomically rebinds a set of symbols to one strategy_id; returns the changed bindings
+	// and parent updated_at, or ErrBindingNotFound if any symbol is absent (whole batch rolled back).
 	UpdateBindings(ctx context.Context, watchlistID string, symbols []string, strategyID string) ([]*portfoliov1.WatchlistBinding, time.Time, error)
 	CountByUser(ctx context.Context, userID string) (int, error)
 	EnsureSystemManaged(ctx context.Context, userID, defaultName string) (*portfoliov1.Watchlist, error)
-	// ListAllSymbols returns the distinct union of watchlist symbols across ALL users
-	// (feature 154) — cross-user, not scoped to a caller.
+	// ListAllSymbols returns the distinct union of watchlist symbols across ALL users — cross-user,
+	// not scoped to a caller.
 	ListAllSymbols(ctx context.Context) ([]string, error)
 }
 
-// watchlistConfig is the slice of the config watcher the watchlist caps read. Lets
-// tests inject chosen caps without a live config stream.
+// watchlistConfig is the config slice the watchlist caps read (injectable in tests).
 type watchlistConfig interface {
 	GetInt(key string, defaultVal int64) int64
 }
 
-// normalizeSymbols uppercases, trims, and de-duplicates a symbol list, dropping
-// empties while preserving first-seen order (FR-3).
+// normalizeSymbols uppercases, trims, and de-duplicates a symbol list, dropping empties and
+// preserving first-seen order.
 func normalizeSymbols(in []string) []string {
 	seen := make(map[string]struct{}, len(in))
 	out := make([]string, 0, len(in))
@@ -1289,9 +1201,8 @@ func normalizeSymbols(in []string) []string {
 	return out
 }
 
-// normalizeBindings is the binding analog of normalizeSymbols: it uppercases/trims the
-// symbol, drops empties, and de-duplicates by symbol (first-seen wins, keeping that
-// occurrence's strategy_id), preserving first-seen order.
+// normalizeBindings is the binding analog of normalizeSymbols: uppercase/trim symbol, drop empties,
+// dedupe by symbol (first-seen wins, keeping its strategy_id), preserving first-seen order.
 func normalizeBindings(in []*portfoliov1.WatchlistBinding) []*portfoliov1.WatchlistBinding {
 	seen := make(map[string]struct{}, len(in))
 	out := make([]*portfoliov1.WatchlistBinding, 0, len(in))
@@ -1307,16 +1218,14 @@ func normalizeBindings(in []*portfoliov1.WatchlistBinding) []*portfoliov1.Watchl
 		out = append(out, &portfoliov1.WatchlistBinding{
 			Symbol:     sym,
 			StrategyId: strings.TrimSpace(b.GetStrategyId()),
-			Source:     b.GetSource(), // preserve provenance (feature 127) so SIGNAL survives to insert
+			Source:     b.GetSource(), // preserve provenance so SIGNAL survives to insert
 		})
 	}
 	return out
 }
 
-// requestBindings resolves the authoritative binding set for a write request: `bindings`
-// takes precedence (feature 097); an empty `bindings` falls back to the legacy flat
-// `symbols` mapped to unbound bindings (strategy_id=""). This is the write-path re-plumb
-// the fails-080 trap requires — a `bindings` write carries the strategy through.
+// requestBindings resolves the authoritative binding set: `bindings` takes precedence; an empty
+// `bindings` falls back to legacy flat `symbols` mapped to unbound bindings (strategy_id="").
 func requestBindings(bindings []*portfoliov1.WatchlistBinding, symbols []string, defaultStrategyID string) []*portfoliov1.WatchlistBinding {
 	var out []*portfoliov1.WatchlistBinding
 	if len(bindings) > 0 {
@@ -1332,12 +1241,8 @@ func requestBindings(bindings []*portfoliov1.WatchlistBinding, symbols []string,
 	return applyDefaultStrategy(out, defaultStrategyID)
 }
 
-// applyDefaultStrategy stamps the watchlist-level default strategy onto add-time bindings that are
-// otherwise-unbound MANUAL entries (feature 170, Option B — MANUAL-only). It fills strategy_id ONLY
-// when the default is non-empty, the binding is currently unbound ("") AND its source is NOT SIGNAL,
-// so a system-managed signals watchlist's auto-added symbols are never silently bound to a user's
-// manual default. Source is always preserved. This is add-time only: the replace-all UpdateWatchlist
-// path passes "" here so setting a default never retroactively rebinds existing rows.
+// applyDefaultStrategy stamps the default strategy onto add-time bindings only when the default is
+// non-empty, the binding is unbound, AND its source is NOT SIGNAL. Add-time only — never retroactive.
 func applyDefaultStrategy(bindings []*portfoliov1.WatchlistBinding, defaultStrategyID string) []*portfoliov1.WatchlistBinding {
 	if defaultStrategyID == "" {
 		return bindings
@@ -1376,8 +1281,8 @@ func requireUserID(ctx context.Context) (string, error) {
 	return userID, nil
 }
 
-// loadOwned fetches a watchlist and enforces FR-2 ownership against the caller.
-// Returns NotFound if it does not exist, PermissionDenied if owned by someone else.
+// loadOwned fetches a watchlist and enforces ownership: NotFound if absent, PermissionDenied if
+// owned by someone else.
 func (s *PortfolioService) loadOwned(ctx context.Context, userID, watchlistID string) (*portfoliov1.Watchlist, error) {
 	if watchlistID == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("watchlist_id required"))
@@ -1395,7 +1300,7 @@ func (s *PortfolioService) loadOwned(ctx context.Context, userID, watchlistID st
 	return wl, nil
 }
 
-// CreateWatchlist creates a new watchlist for the calling user (FR-1).
+// CreateWatchlist creates a new watchlist for the calling user.
 func (s *PortfolioService) CreateWatchlist(ctx context.Context, req *portfoliov1.CreateWatchlistRequest) (*portfoliov1.CreateWatchlistResponse, error) {
 	userID, err := requireUserID(ctx)
 	if err != nil {
@@ -1404,7 +1309,7 @@ func (s *PortfolioService) CreateWatchlist(ctx context.Context, req *portfoliov1
 	if strings.TrimSpace(req.GetName()) == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name required"))
 	}
-	// Add-time default (feature 170): the create-request default binds initial bare/MANUAL symbols.
+	// Add-time default: the create-request default binds initial bare/MANUAL symbols.
 	bindings := requestBindings(req.GetBindings(), req.GetSymbols(), req.GetDefaultStrategyId())
 	if len(bindings) > s.maxSymbolsPerList() {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
@@ -1428,9 +1333,8 @@ func (s *PortfolioService) CreateWatchlist(ctx context.Context, req *portfoliov1
 	return &portfoliov1.CreateWatchlistResponse{Watchlist: wl}, nil
 }
 
-// EnsureSignalWatchlist find-or-creates the caller's single system-managed signals
-// watchlist (feature 127, FR-2). Ownership is taken from the propagated x-user-id
-// header — the request carries no body. Idempotent and race-safe (repo ON CONFLICT).
+// EnsureSignalWatchlist find-or-creates the caller's single system-managed signals watchlist.
+// Ownership from x-user-id; idempotent and race-safe.
 func (s *PortfolioService) EnsureSignalWatchlist(ctx context.Context, _ *portfoliov1.EnsureSignalWatchlistRequest) (*portfoliov1.EnsureSignalWatchlistResponse, error) {
 	userID, err := requireUserID(ctx)
 	if err != nil {
@@ -1443,11 +1347,8 @@ func (s *PortfolioService) EnsureSignalWatchlist(ctx context.Context, _ *portfol
 	return &portfoliov1.EnsureSignalWatchlistResponse{Watchlist: wl}, nil
 }
 
-// ListAllWatchlistSymbols returns the distinct union of watchlist symbols across ALL
-// users (feature 154) — the fundamentals-signal producer's universe source. This is a
-// cross-user read of per-user data, so it is gated by the x-internal-caller allow-list
-// (grant analysis-fundsignal), NOT the admin x-access-scope bit (PR #994). A caller
-// without that grant gets PERMISSION_DENIED (which the grpc adapter maps via toGRPCError).
+// ListAllWatchlistSymbols returns the cross-user distinct union of watchlist symbols. Gated by the
+// x-internal-caller allow-list (NOT the admin x-access-scope bit); no grant → PermissionDenied.
 func (s *PortfolioService) ListAllWatchlistSymbols(ctx context.Context, _ *portfoliov1.ListAllWatchlistSymbolsRequest) (*portfoliov1.ListAllWatchlistSymbolsResponse, error) {
 	if !hasInternalCallerAuthority(ctx, "ListAllWatchlistSymbols") {
 		return nil, connect.NewError(connect.CodePermissionDenied,
@@ -1460,7 +1361,7 @@ func (s *PortfolioService) ListAllWatchlistSymbols(ctx context.Context, _ *portf
 	return &portfoliov1.ListAllWatchlistSymbolsResponse{Symbols: syms}, nil
 }
 
-// GetWatchlist returns a single watchlist owned by the caller (FR-2).
+// GetWatchlist returns a single watchlist owned by the caller.
 func (s *PortfolioService) GetWatchlist(ctx context.Context, req *portfoliov1.GetWatchlistRequest) (*portfoliov1.GetWatchlistResponse, error) {
 	userID, err := requireUserID(ctx)
 	if err != nil {
@@ -1495,23 +1396,16 @@ func (s *PortfolioService) ListWatchlists(ctx context.Context, req *portfoliov1.
 	}, nil
 }
 
-// watchlistMaskPaths is the closed allowlist of maskable UpdateWatchlist paths (feature 170).
-// Scalar only — bindings/symbols are deliberately excluded: a full binding replace uses the no-mask
-// path and a bulk rebind uses UpdateWatchlistBindings. The dynamic SET in repository.UpdatePartial
-// keys its column identifiers off this map, never off raw request strings (injection-safe).
+// watchlistMaskPaths is the closed allowlist of maskable UpdateWatchlist paths (scalar only —
+// bindings excluded). repository.UpdatePartial keys column identifiers off this map (injection-safe).
 var watchlistMaskPaths = map[string]bool{
 	"name":                true,
 	"description":         true,
 	"default_strategy_id": true,
 }
 
-// UpdateWatchlist has two contracts, selected by update_mask PRESENCE (feature 170):
-//   - update_mask UNSET → legacy replace-all of name/description/bindings (FR-1), byte-for-byte the
-//     prior behavior. default_strategy_id is NOT written here (a no-mask request that sets it is
-//     rejected loud), so a name/binding edit can never clobber a previously-set default.
-//   - update_mask SET → partial update: only the masked scalar paths of {name, description,
-//     default_strategy_id} are written; bindings are untouched. Empty-present or unknown-path masks
-//     are rejected. The name-required guard fires only when "name" is masked.
+// UpdateWatchlist selects by update_mask PRESENCE: unset → legacy replace-all of name/description/
+// bindings (default_strategy_id rejected); set → partial update of masked scalar paths only.
 func (s *PortfolioService) UpdateWatchlist(ctx context.Context, req *portfoliov1.UpdateWatchlistRequest) (*portfoliov1.UpdateWatchlistResponse, error) {
 	userID, err := requireUserID(ctx)
 	if err != nil {
@@ -1558,8 +1452,7 @@ func (s *PortfolioService) UpdateWatchlist(ctx context.Context, req *portfoliov1
 	}
 
 	// ── Legacy replace-all path (no mask) ────────────────────────────────────────
-	// default_strategy_id is never written on this path; setting it without a mask would be a silent
-	// no-op, so fail loud instead (feature 170 — steers callers to the masked write).
+	// default_strategy_id is not written here — fail loud rather than silently no-op.
 	if strings.TrimSpace(req.GetDefaultStrategyId()) != "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("default_strategy_id requires update_mask"))
 	}
@@ -1588,16 +1481,15 @@ func (s *PortfolioService) UpdateWatchlistBinding(ctx context.Context, req *port
 	if err != nil {
 		return nil, err
 	}
-	// Ownership: loadOwned yields NotFound(absent list)/PermissionDenied(wrong owner) — AC-4.
 	if _, err := s.loadOwned(ctx, userID, req.GetWatchlistId()); err != nil {
 		return nil, err
 	}
-	// Normalize the request symbol to match stored (uppercased/trimmed) rows — design Open Risk 4.
+	// Normalize the request symbol to match stored (uppercased/trimmed) rows.
 	symbol := strings.ToUpper(strings.TrimSpace(req.GetSymbol()))
 	if symbol == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("symbol required"))
 	}
-	// strategy_id == "" passes through as a valid unbind (FR-4/AC-5).
+	// strategy_id == "" passes through as a valid unbind.
 	binding, updatedAt, err := s.watchlists.UpdateBinding(ctx, req.GetWatchlistId(), symbol, strings.TrimSpace(req.GetStrategyId()))
 	if err != nil {
 		if errors.Is(err, repository.ErrBindingNotFound) {
@@ -1614,12 +1506,8 @@ func (s *PortfolioService) UpdateWatchlistBinding(ctx context.Context, req *port
 	}, nil
 }
 
-// UpdateWatchlistBindings atomically assigns one strategy_id across a set of symbols in a single
-// set-based UPDATE (feature 170). Ownership is enforced via loadOwned (NotFound/PermissionDenied —
-// AC-5). The request symbols are normalized+deduped before the repo call so the repo's
-// returned-vs-requested count check is exact; an empty normalized set is rejected. Any symbol not in
-// the watchlist rolls back the whole batch → NotFound (zero partial writes — AC-4). strategy_id == ""
-// unbinds the whole set (AC-3). The response carries only the changed bindings + the list updated_at.
+// UpdateWatchlistBindings atomically assigns one strategy_id across a normalized+deduped symbol set.
+// Any symbol absent → whole batch rolled back → NotFound; strategy_id == "" unbinds the set.
 func (s *PortfolioService) UpdateWatchlistBindings(ctx context.Context, req *portfoliov1.UpdateWatchlistBindingsRequest) (*portfoliov1.UpdateWatchlistBindingsResponse, error) {
 	userID, err := requireUserID(ctx)
 	if err != nil {
@@ -1632,7 +1520,7 @@ func (s *PortfolioService) UpdateWatchlistBindings(ctx context.Context, req *por
 	if len(symbols) == 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("symbols required"))
 	}
-	// strategy_id == "" passes through as a valid bulk unbind (AC-3).
+	// strategy_id == "" passes through as a valid bulk unbind.
 	bindings, updatedAt, err := s.watchlists.UpdateBindings(ctx, req.GetWatchlistId(), symbols, strings.TrimSpace(req.GetStrategyId()))
 	if err != nil {
 		if errors.Is(err, repository.ErrBindingNotFound) {
@@ -1649,7 +1537,7 @@ func (s *PortfolioService) UpdateWatchlistBindings(ctx context.Context, req *por
 	}, nil
 }
 
-// DeleteWatchlist hard-deletes a watchlist owned by the caller (FR-6).
+// DeleteWatchlist hard-deletes a watchlist owned by the caller.
 func (s *PortfolioService) DeleteWatchlist(ctx context.Context, req *portfoliov1.DeleteWatchlistRequest) (*portfoliov1.DeleteWatchlistResponse, error) {
 	userID, err := requireUserID(ctx)
 	if err != nil {
@@ -1659,8 +1547,8 @@ func (s *PortfolioService) DeleteWatchlist(ctx context.Context, req *portfoliov1
 	if err != nil {
 		return nil, err
 	}
-	// A system-managed signals watchlist is delete-protected (feature 127, FR-8):
-	// the caller owns it, so this is refused on resource state, not authorization.
+	// A system-managed watchlist is delete-protected — refused on resource state (FailedPrecondition),
+	// not authorization.
 	if wl.GetSystemManaged() {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("cannot delete a system-managed watchlist"))
 	}
@@ -1673,7 +1561,7 @@ func (s *PortfolioService) DeleteWatchlist(ctx context.Context, req *portfoliov1
 	return &portfoliov1.DeleteWatchlistResponse{}, nil
 }
 
-// AddWatchlistSymbols adds symbols, enforcing the per-list cap on the resulting set (FR-3).
+// AddWatchlistSymbols adds symbols, enforcing the per-list cap on the resulting set.
 func (s *PortfolioService) AddWatchlistSymbols(ctx context.Context, req *portfoliov1.AddWatchlistSymbolsRequest) (*portfoliov1.AddWatchlistSymbolsResponse, error) {
 	userID, err := requireUserID(ctx)
 	if err != nil {
@@ -1683,8 +1571,8 @@ func (s *PortfolioService) AddWatchlistSymbols(ctx context.Context, req *portfol
 	if err != nil {
 		return nil, err
 	}
-	// Add-time default (feature 170): a bare/MANUAL add inherits the watchlist's persisted default
-	// (from the loadOwned row); SIGNAL-sourced adds are skipped inside applyDefaultStrategy.
+	// Add-time default: a bare/MANUAL add inherits the watchlist's persisted default; SIGNAL-sourced
+	// adds are skipped inside applyDefaultStrategy.
 	add := requestBindings(req.GetBindings(), req.GetSymbols(), existing.GetDefaultStrategyId())
 	// Resulting count = union of current symbols + newly-added symbols (both normalized).
 	resulting := normalizeSymbols(append(append([]string{}, existing.Symbols...), bindingSymbols(add)...)) //nolint:staticcheck // SA1019: deprecated symbols mirror intentionally retained for old clients (feature 097)

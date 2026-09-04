@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const db = getPool();
-    // Feature 147: config.config_audit dropped trading_mode and gained user_id (NULL = global).
+    // config.config_audit has user_id (NULL = global).
     const query = namespace
       ? `SELECT id, namespace, key, old_value, new_value, changed_by, reason, changed_at, environment, user_id
          FROM config.config_audit WHERE namespace = $1 ORDER BY changed_at DESC LIMIT $2`

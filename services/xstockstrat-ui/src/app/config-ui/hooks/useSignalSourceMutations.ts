@@ -21,11 +21,10 @@ export function useManageSignalSource() {
 }
 
 /**
- * feature 166 — register a `mcp_client` source with a bearer token, SECRET-FIRST: write the token to
- * the encrypted config key `ingest.mcp_credential.<slug>` (`is_secret`, `create_key`), then register
- * the source pointing at it via `credentials_ref`. The token is never placed in `config_json`. The
- * environment is left UNSPECIFIED — the config-ui BFF fills this deployment's native scope. A failed
- * register after a successful secret write leaves only a harmless redacted orphan secret.
+ * Register a `mcp_client` source with a bearer token, SECRET-FIRST: write the token to the encrypted
+ * config key `ingest.mcp_credential.<slug>` (`is_secret`, `create_key`), then register the source via
+ * `credentials_ref`. The token is never placed in `config_json`; environment is left UNSPECIFIED (the
+ * BFF fills the native scope). A failed register after the secret write leaves a harmless redacted orphan.
  */
 export function useRegisterMcpClientSource() {
   const queryClient = useQueryClient();

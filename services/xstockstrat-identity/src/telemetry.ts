@@ -1,7 +1,6 @@
 /**
- * OpenTelemetry initialisation for xstockstrat-identity.
- * Activated only when OTEL_ENABLED=true.
- * Must be called before any other imports to ensure auto-instrumentation works.
+ * OpenTelemetry initialisation for xstockstrat-identity. Must be called before any other imports
+ * so auto-instrumentation can patch modules.
  */
 export function initTelemetry(): void {
   if (process.env.OTEL_ENABLED !== 'true') return;

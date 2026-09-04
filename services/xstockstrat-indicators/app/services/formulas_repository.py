@@ -1,9 +1,8 @@
 """
 FormulasRepository — asyncpg-backed persistence for indicators.formulas.
 
-Mirrors the DB-query style of services/xstockstrat-ingest/app/handlers/servicer.py
-(fetchrow / fetch / fetchval / execute). The servicer keeps an in-memory cache and
-delegates durable storage to this repository when a DB pool is available.
+The servicer keeps an in-memory cache and delegates durable storage to this repository
+when a DB pool is available.
 
 JSONB `input_schema` is encoded/decoded as JSON here so callers always work with a
 plain ``dict``. `formula_id` is a string UUID (the servicer generates it via
@@ -89,11 +88,8 @@ class FormulasRepository:
         outputs=None,
         warmup_period=0,
     ) -> dict:
-        """Idempotent insert-or-update keyed on the formula_id PK.
-
-        Used by the startup seeding hook (feature 063): re-seeding the same well-known
-        id on every restart is safe, and a band/param/source change takes effect on the
-        next deploy. Mirrors ``create``'s JSONB encoding.
+        """Idempotent insert-or-update keyed on the formula_id PK; re-seeding the same
+        well-known id on every restart is safe.
         """
         row = await self._db.fetchrow(
             """
@@ -141,9 +137,8 @@ class FormulasRepository:
         page_size: int,
         page_offset: int,
     ) -> tuple[list[dict], int]:
-        # An empty author_filter never matches the author column, so when no filter
-        # is supplied only the include_public branch returns rows. Soft-deleted formulas
-        # (deleted_at IS NOT NULL, feature 086) are hidden from listing.
+        # Empty author_filter matches no author, so only the include_public branch returns rows.
+        # Soft-deleted formulas (deleted_at IS NOT NULL) are hidden from listing.
         where = "WHERE deleted_at IS NULL AND (author = $1 OR ($2 AND is_public = TRUE))"
         total = await self._db.fetchval(
             f"SELECT COUNT(*) FROM indicators.formulas {where}",
@@ -193,9 +188,8 @@ class FormulasRepository:
         return _to_dict(row)
 
     async def delete(self, formula_id) -> bool:
-        # Feature 086: soft-delete — stamp deleted_at instead of a hard DELETE so strategies that
-        # already reference it keep evaluating (get_by_id stays deleted-agnostic). Idempotent:
-        # a second delete of an already-deleted formula affects no row and returns False.
+        # Soft-delete (stamp deleted_at, not a hard DELETE) so strategies referencing it keep
+        # evaluating; idempotent — a second delete affects no row and returns False.
         result = await self._db.execute(
             "UPDATE indicators.formulas SET deleted_at = NOW() "
             "WHERE formula_id = $1::uuid AND deleted_at IS NULL",

@@ -60,9 +60,8 @@ async def run_once(live_loop, db_pool, trading_stub, cfg_watcher):
     )
 
     async def _backfill_pair(user_id, strategy_id, symbol):
-        # feature 133: key parity with live_loop's 3-tuple (user_id, strategy_id, symbol) state so
-        # the backfill seeds the SAME slot the live loop reads (a mismatched key would silently
-        # never be seen by the loop). ListOrders stays owner-implicit via the order's own user_id.
+        # Key must match live_loop's 3-tuple (user_id, strategy_id, symbol) or the seeded slot is
+        # never read by the loop. ListOrders stays owner-implicit via the order's own user_id.
         key = (user_id, strategy_id, symbol)
         if live_loop._last_entry_at.get(key) is not None:
             return
@@ -81,14 +80,8 @@ async def run_once(live_loop, db_pool, trading_stub, cfg_watcher):
         live_loop._last_entry_at[key] = entry_time
         await live_loop._write_entry_cooldown(key, entry_time)
 
-    # feature 132: the firing universe is resolve_universe(...).union (owner watchlist ∪ held ∪
-    # signals-iff-eligible, or an explicit allowlist). Use `.union`, NOT `.universe` — a held-denied
-    # position still needs its entry anchor (deny is entry-only, never applied on this hydration
-    # path). Reuse the live loop's own owner-scoped, best-effort drains (memoized per owner; signals
-    # once) so an allowlist-bearing strategy is backfilled even during a cold-boot portfolio outage
-    # (its union ignores the empty drains), while an allowlist-free one degrades gracefully — its
-    # union is empty, so those held pairs are missed this boot (accepted residual; self-heals next
-    # boot, logged once per key by the live loop).
+    # Use resolved.union, NOT .universe — deny is entry-only, so a held-denied position still
+    # needs its entry anchor here (a cold-boot portfolio outage misses held pairs; self-heals).
     signal_symbols = await live_loop._drain_signals()
     held_cache: dict[str, set] = {}
     watch_cache: dict[str, set] = {}

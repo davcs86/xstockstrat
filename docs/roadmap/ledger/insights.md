@@ -12,7 +12,7 @@ reusing.
 
 ## Rules
 
-- **Append-only.** Add new entries at the bottom; never rewrite or delete an existing one.
+- **Append newest-at-bottom; periodic lossless curation permitted.** New entries are still appended at the bottom (newest last). A periodic curation pass MAY merge duplicate/near-duplicate entries, normalize categories, and compress superseded entries — but only when every distinct lesson, every distinct piece of evidence, and a `- **Merged from**: …` provenance line are preserved. Curation is destructive-but-lossless; it never drops a unique lesson or citation.
 - **One entry, one lesson.** Keep it scannable.
 - **Cite evidence.** Point to a `path:line`, PR, or step so the reader can see the real thing.
 - **Categories:** `reuse` · `perf` · `design` · `ordering`.
@@ -30,16 +30,7 @@ reusing.
 
 <!-- Append entries below. Newest at the bottom. -->
 
-### 2026-07-03 — persist-strategy-scores — design
-- **Pattern**: To add DB durability to volatile in-memory service state without changing (and risking)
-  the read path, use **write-through + hydrate-at-boot**: keep the in-memory dict as the sole read
-  source, add a best-effort DB upsert on write, and hydrate the dict from the DB once at startup. Avoids
-  the false-success hazard of "best-effort write + read-from-DB" (a swallowed write then a DB read →
-  NOT_FOUND for a value the caller was just told succeeded).
-- **Evidence**: `services/xstockstrat-analysis/app/handlers/servicer.py` (`hydrate_scores`, best-effort
-  upsert in `ScoreStrategy`), `app/main.py` boot call; design.md § Chosen Approach (feature 064).
-- **Rule it implies**: prefer write-through+hydrate over DB-direct reads when a best-effort write and a
-  durable read path must coexist; reuse the existing repo/pool (no new pool — F-06).
+> Curated 2026-09-03: normalized 14 category labels to the canonical set (`execute`→`design`/`ordering`; `design round 2`→`design`; `pattern`→`design`; one `assumption` mislabel→`design`; `reuse (candidate follow-up…)`→`reuse`; and description-slot categories — "derive precedence, don't seed it", "align charts on one engine, not two", "proto/fingerprint-stability" — →`design`, with the descriptive detail already present in each entry body); merged 3 duplicate clusters (persist-strategy-scores write-through+hydrate, trigger-backfill five-discovery-surfaces, and the 069 shared-pure-gate-module loose bullet folded into its `###` entry); compressed 0 superseded entries. Lossless — every distinct lesson, evidence citation, and provenance retained. Entry count: 363→361 `### ` headings (two merges removed one duplicate `###` each; the third folded a non-`###` loose bullet).
 
 ### 2026-07-08 — backtest-debug-info — design
 - **Pattern**: To add a per-bar/observability read to an engine consumed by a live loop, keep the
@@ -93,22 +84,6 @@ reusing.
 - **Rule it implies**: when adding coverage gates to a codebase with large untested surface, gate on
   tested files, not the whole tree — a floor you can't reach on day one gets disabled, not met.
 
-### 2026-07-20 — trigger-backfill-mcp-tool — design
-- **Pattern**: A new MCP agent tool has **five** discovery/documentation surfaces, not one: the
-  `app/tools.py` module-docstring tool count + enumeration, the agent `CLAUDE.md` tool table, the
-  `docs/runbooks/mcp-tools.md` reference (header count + per-tool section), the
-  `docs/runbooks/CLAUDE.md` index line, and any **operational runbook** that documents how to do
-  the underlying task (e.g. `historical-backfill.md` for a backfill tool). Recon found four; the
-  adversarial round caught the fifth — the operational runbook is the surface that makes the
-  capability *findable* by an operator solving a problem. The `/api/tools` catalog itself is
-  automatic (FastMCP registration), but its name-set test is the built-in reachability proof.
-- **Evidence**: feature 066 design.md § Chosen Approach (Docs — five surfaces); adversary round-1
-  C-10(a) finding; `services/xstockstrat-agent/app/main.py:180` (auto catalog);
-  `tests/test_tools_endpoint.py:23-35` (name-set test).
-- **Rule it implies**: C-10(a) applies to tool/CLI/API additions, not just UI routes — enumerate
-  the discovery surfaces (including task-oriented runbooks) at recon time and prove the shared one
-  with a test.
-
 ### 2026-07-21 — fix-custom-formula-allnone — reuse
 - **Pattern**: Decoding a `google.protobuf.Struct` response field with `dict(resp.field)` +
   `isinstance(raw, (list, tuple))` silently **drops every list value** — `Struct.update()` marshals a
@@ -141,16 +116,20 @@ reusing.
 - **Pattern**: When two code paths must apply the *same* rule via a shared helper (here: backtest and
   live loop both calling `is_cooldown_active`), sharing the *function* is not enough — a cross-cutting
   input invariant (tz-aware-UTC datetimes) will silently drift if it is enforced by a comment at each
-  call site. Enforce the invariant **inside the helper** (raise `ValueError` on a naive datetime) and
-  unit-test the guard directly, so a third call site or a careless edit fails loudly instead of
-  reintroducing the two-paths-drift failure the shared helper was meant to prevent. Complements C-10(b):
-  the parity test proves the callers agree; the internal guard proves they *can't* feed the helper
-  incompatible inputs.
+  call site. Make the shared piece a single **pure** gate module (`app/services/cooldown.py`, no
+  DB/proto/gRPC imports) consumed identically by both engines, and enforce the invariant **inside the
+  helper** (raise `ValueError` on a naive datetime) with a direct unit test on the guard, so a third
+  call site or a careless edit fails loudly instead of reintroducing the two-paths-drift failure the
+  shared helper was meant to prevent (cf. fails 056). This made backtest/live parity (FR-4) directly
+  unit-testable. Complements C-10(b): the parity test proves the callers agree; the internal guard
+  proves they *can't* feed the helper incompatible inputs. Corollary: feed both call sites the **same**
+  time source (bar time), never one wall-clock + one bar-time.
 - **Evidence**: `docs/roadmap/features/069-strategy-reentry-cooldown/design.md` § Chosen Approach
   (`cooldown.py` `_require_aware`); 5-round design debate (the naive/aware split was flagged R2, "fix by
   comment" rejected R3, moved inside the helper R4).
 - **Rule it implies**: a shared helper reused across paths owns its input-contract enforcement (assert
   inside + a dedicated guard test), not a convention repeated at each call site — reinforces C-10(b), no new ID.
+- **Merged from**: 2 entries (both 2026-07-24) — the `### ` design entry and a loose bullet restating the same shared-pure-gate-module lesson (added: the pure/no-imports module detail and the same-time-source corollary).
 
 ### 2026-07-24 — 069-strategy-reentry-cooldown — design
 - **Pattern**: A proto3 scalar where the zero value is a *meaningful distinct choice* from "unset" (here:
@@ -168,13 +147,6 @@ reusing.
 - **Rule it implies**: if a scalar's zero is a real choice, declare it `optional` and check presence at
   every read/write layer — never `?? 0`, `x or default`, or a truthy guard; reinforces P-03 (verify the
   decoder/codegen contract), no new ID.
-
-- 2026-07-24 (069 strategy-reentry-cooldown): A single shared **pure** gate module
-  (`app/services/cooldown.py`, no DB/proto/gRPC imports) consumed identically by the backtest engine
-  and the live loop, with the tz-awareness invariant enforced *inside* the helper (`_require_aware`)
-  rather than by a per-call-site comment, made backtest/live parity (FR-4) directly unit-testable and
-  killed the class of "two enforcement paths drift apart" bugs (cf. fails 056). Feed both call sites the
-  **same** time source (bar time), never one wall-clock + one bar-time.
 
 ### 2026-07-26 — 071-backtest-time-window — design
 - **Pattern**: A "warm-up is verified at runtime, so the constant is safe" defense must be checked
@@ -243,7 +215,7 @@ reusing.
 - **Rule it implies**: reinforces **P-03** — verify the serializer's omission contract before designing
   merge semantics on top of it; presence rules differ per field kind and a two-rule merge will diverge.
 
-### 2026-07-27 — 071-backtest-time-window — execute
+### 2026-07-27 — 071-backtest-time-window — design
 - **Pattern**: When a value is **read at the top** of a per-item loop but **written at the bottom**,
   memoizing it in a shared cache silently makes item 1 behave differently from items 2+.
   `warmup.required_prefix_bars` reads the declared-formula-warm-up cache before fetching bars, while
@@ -259,7 +231,7 @@ reusing.
   than it is written needs a **multi-item** test asserting item 1 and item N behave identically. A
   docstring stating "caller must pre-populate" is a claim, not a guarantee.
 
-### 2026-07-27 — 071-backtest-time-window — execute
+### 2026-07-27 — 071-backtest-time-window — design
 - **Pattern**: A determinism assertion over a protobuf message must **clear the fields that differ
   per run by construction** (`backtest_id` uuid, `completed_at` stamp) rather than fall back to a
   field-by-field comparison. Left in, byte-identity is vacuously false and the natural next move —
@@ -271,7 +243,7 @@ reusing.
 - **Rule it implies**: extends **P-06** — when a test asserts "X does not change Y", add the
   companion assertion that something *does* change Y, so a no-op harness can't masquerade as a pass.
 
-### 2026-07-27 — 071-backtest-time-window — execute
+### 2026-07-27 — 071-backtest-time-window — design
 - **Pattern**: A mock that **echoes a request field back** as its response cannot distinguish a
   correct consumer from an incorrect one. `mock-backend.ts` returned `req.range` as both
   `requestedRange` and `gap`, so an e2e asserting the backfill action's range would pass whichever
@@ -312,7 +284,7 @@ reusing.
   best-effort, check whether the referrer can *detect* a failed persist. If it cannot, prefer
   carrying the value over referencing it.
 
-### 2026-07-27 — 072-backtest-result-attachment — design round 2
+### 2026-07-27 — 072-backtest-result-attachment — design
 - **Pattern**: A second grilling round on an **already-approved, already-specced** design is worth
   running when the first round closed on estimates. Round 2 here left the chosen approach untouched
   but still paid for itself: measuring the payload (5 symbols × 504 bars) showed the inline summary
@@ -327,7 +299,7 @@ reusing.
   measured, not estimated. If a design closes with figures nobody ran, a follow-up round that only
   measures them is a good trade even when the decision does not change.
 
-### 2026-07-27 — 072-backtest-result-attachment — design round 2
+### 2026-07-27 — 072-backtest-result-attachment — design
 - **Pattern**: When a feature writes a decision rule into the ledger, later rounds of that **same
   feature** must be checked against it. Round 2 proposed swapping the attachment to gzip, which would
   have inverted the failure-asymmetry rule this feature had recorded one day earlier and used to
@@ -340,7 +312,7 @@ reusing.
 - **Rule it implies**: reinforces **P-03** — a self-authored ledger rule binds the feature that wrote
   it. Re-read your own entries before adopting a change that trades the same axis.
 
-### 2026-07-27 — 072-backtest-result-attachment — execute
+### 2026-07-27 — 072-backtest-result-attachment — ordering
 - **Pattern**: When a step's verification cannot pass standalone because a *later* step adapts the
   test it breaks, the F-05-clean split is to carry **only the minimum adaptation** in the breaking
   step's commit, not to merge the two steps or to commit red. 072's step 3 changed
@@ -520,7 +492,7 @@ reusing.
 - **Evidence**: `docs/roadmap/features/086-fix-mcp-formula-lifecycle/design.md` §§ Chosen Approach 2/4, Rejected Alternatives; analysis `_fetch_formula_outputs` (`servicer.py:194-201`), `_declared_formula_warmup` (`servicer.py:1151`); root CLAUDE.md dep graph (analysis→indicators already exists, reverse edge would cycle — ledger 2026-07-31 083).
 - **Rule it implies**: extends **C-10(b)** and **F-06** — for a deletable resource another service depends on, prefer soft-delete + surfaced flag + run-flag at the consumer's existing fetch site over a reverse referential-delete edge; and "soft delete" is not honest unless the deleted state is observable in reads and flagged in runs.
 
-### 2026-08-02 — 097-remove-x-mcp-secret-header — execute
+### 2026-08-02 — 097-remove-x-mcp-secret-header — design
 - **Pattern**: Writing a **removal feature's** replacement doc/comment text is easy to get subtly
   wrong twice, both caught only at execute time, not spec time. First: when a step's own
   `**Verification**` demands a hard zero-count of the removed vocabulary in a set of files, the
@@ -680,7 +652,7 @@ reusing.
 - **Pattern**: A feature whose implementation step targets a service directory owned by an in-flight consolidation/rewrite feature (e.g. 045) should wait for that feature to merge before speccing file paths, not spec against the soon-to-be-deleted path and re-spec later.
 - **Evidence**: `docs/roadmap/features/016-config-ui-weight-validation/context.md` Session 2026-06-01 (W3 decision) + Session 2026-06-04 (actual re-spec of Steps 5-6 from `xstockstrat-config-ui` to `xstockstrat-ui`).
 - **Rule it implies**: At `/sdd-spec` time, check `merge-order.md` and in-flight feature statuses for the target service directory; if a consolidation feature is `draft`/`in-progress` and targets the same directory, flag it for re-spec-after-merge rather than speccing now.
-### 2026-08-05 — unified-login-page — assumption
+### 2026-08-05 — unified-login-page — design
 - **Pattern**: An implementation spec written before a prerequisite feature (045) fully landed assumed a structure that main-dev no longer matched by execution time, forcing a mid-execution re-spec.
 - **Evidence**: `docs/roadmap/features/019-unified-login-page/context.md:76-80`.
 - **Rule it implies**: When a feature's spec has a hard "must follow feature X being launched" dependency, re-verify the actual landed structure of X at execute-time (not just at spec-time) before trusting the spec's file list.
@@ -990,9 +962,20 @@ reusing.
 - **Rule it implies**: Before seeding any resource at startup, grep for an existing uniqueness constraint/upsert path; if absent, build one rather than re-inserting on restart.
 
 ### 2026-08-06 — persist-strategy-scores — design
-- **Pattern**: a best-effort write (FR-7-style) paired with a read path hitting the same store risks a false success ack on next read.
-- **Evidence**: design.md:12-16, 85-87.
-- **Rule it implies**: keep reads served from the in-memory/already-acked state (write-through), not the just-written durable store, unless the write is confirmed synchronous.
+- **Pattern**: To add DB durability to volatile in-memory service state without changing (and risking)
+  the read path, use **write-through + hydrate-at-boot**: keep the in-memory dict as the sole read
+  source, add a best-effort DB upsert on write, and hydrate the dict from the DB once at startup. A
+  best-effort write (FR-7-style) paired with a read path hitting the *same* store risks a false success
+  ack on the next read — the false-success hazard of "best-effort write + read-from-DB" (a swallowed
+  write then a DB read → NOT_FOUND for a value the caller was just told succeeded). Keep reads served
+  from the in-memory/already-acked state (write-through), not the just-written durable store, unless the
+  write is confirmed synchronous.
+- **Evidence**: `services/xstockstrat-analysis/app/handlers/servicer.py` (`hydrate_scores`, best-effort
+  upsert in `ScoreStrategy`), `app/main.py` boot call; design.md § Chosen Approach (feature 064);
+  design.md:12-16, 85-87.
+- **Rule it implies**: prefer write-through+hydrate over DB-direct reads when a best-effort write and a
+  durable read path must coexist; reuse the existing repo/pool (no new pool — F-06).
+- **Merged from**: 2 entries (2026-07-03, 2026-08-06) — the same write-through+hydrate / false-success-ack lesson for feature 064's persist-strategy-scores.
 
 ### 2026-08-06 — persist-strategy-scores — reuse
 - **Pattern**: DOUBLE PRECISION columns silently accept NaN/Infinity; JSONB columns reject them and fail the write.
@@ -1010,9 +993,23 @@ reusing.
 - **Rule it implies**: Record such standing approvals inline in context.md instead of re-prompting; only prompt when a real unresolved tradeoff remains.
 
 ### 2026-08-06 — trigger-backfill-mcp-tool — design
-- **Pattern**: Phase 0 Recon undercounted required docs-discovery surfaces (found 4 of 5); the mandated Phase 1 adversarial round is what caught the missing one (`historical-backfill.md`), not recon itself.
-- **Evidence**: design.md:72, context.md:53 (066).
-- **Rule it implies**: Treat recon's discovery-surface list as provisional, not final — the adversarial round is a required backstop for doc-surface completeness, so don't skip or shortcut it even in quick mode.
+- **Pattern**: A new MCP agent tool has **five** discovery/documentation surfaces, not one: the
+  `app/tools.py` module-docstring tool count + enumeration, the agent `CLAUDE.md` tool table, the
+  `docs/runbooks/mcp-tools.md` reference (header count + per-tool section), the
+  `docs/runbooks/CLAUDE.md` index line, and any **operational runbook** that documents how to do
+  the underlying task (e.g. `historical-backfill.md` for a backfill tool). Recon found only four; the
+  mandated Phase 1 adversarial round caught the fifth (`historical-backfill.md`) — the operational
+  runbook is the surface that makes the capability *findable* by an operator solving a problem, so
+  treat recon's own discovery-surface list as provisional, not final. The `/api/tools` catalog itself
+  is automatic (FastMCP registration), but its name-set test is the built-in reachability proof.
+- **Evidence**: feature 066 design.md § Chosen Approach (Docs — five surfaces); adversary round-1
+  C-10(a) finding; `services/xstockstrat-agent/app/main.py:180` (auto catalog);
+  `tests/test_tools_endpoint.py:23-35` (name-set test); design.md:72, context.md:53.
+- **Rule it implies**: C-10(a) applies to tool/CLI/API additions, not just UI routes — enumerate
+  the discovery surfaces (including task-oriented runbooks) at recon time and prove the shared one
+  with a test; the adversarial round is a required backstop for doc-surface completeness, so don't
+  skip or shortcut it even in quick mode.
+- **Merged from**: 2 entries (2026-07-20, 2026-08-06) — the detailed "five discovery surfaces" entry and its re-distillation ("recon's surface list is provisional; the adversarial round is the backstop"), both feature 066.
 
 ### 2026-08-06 — trigger-backfill-mcp-tool — reuse
 - **Pattern**: `MessageToDict` renders proto int64 fields as strings.
@@ -1304,7 +1301,7 @@ reusing.
 - **Evidence**: `docs/roadmap/features/123-shadcn-migration-custom-composites/design.md` § Round 3 (Step 1 restructured into 4 nested `Questionnaire.Item` sub-screens inside an unchanged outer "Step 1 — Identity" heading, while Steps 2-4 keep their existing step-number identity).
 - **Rule it implies**: when a partial-scope override changes one part of an already-speced component's internal structure, check whether nesting the change inside the unchanged outer framing preserves more of the existing e2e contract than flattening does — the nesting choice is often the lower-e2e-risk option even when it's structurally less "clean."
 
-### 2026-08-08 — shadcn-migration-custom-composites — reuse (candidate follow-up, not this feature's scope)
+### 2026-08-08 — shadcn-migration-custom-composites — reuse
 - **Pattern**: `useCandlestickChart.ts` hardcodes this app's dark-theme colors as literal hex values (`#22c55e`/`#ef4444`/`#94a3b8`/etc.) rather than reading the app's CSS custom properties, the same way `ui/chart.tsx`'s `ChartContainer`/`ChartConfig` composition does for the `recharts`-based charts. Swapping the hardcoded hex for the CSS variables would get `ChartPanel.tsx` (which stays on `lightweight-charts`, see the FR-5 sanctioned exception in `services/xstockstrat-ui/CLAUDE.md` § Styling) partial visual theming consistency with the rest of the app's charts, without a full chart-library migration.
 - **Evidence**: `docs/roadmap/features/123-shadcn-migration-custom-composites/design.md` § Round 2 (FR-5 discussion) and Open Risks; `services/xstockstrat-ui/src/hooks/useCandlestickChart.ts`.
 - **Rule it implies**: a candidate low-risk follow-up feature, not a rule to apply now — recorded here so it isn't lost, since it surfaced during design but is explicitly out of this feature's scope.
@@ -1429,7 +1426,7 @@ reusing.
   brief, and passes that brief — never a bare URL a tool-less subagent can't follow — into the
   proposer/adversary prompts.
 
-### 2026-08-13 — fundamentals-provider-alternative — execute
+### 2026-08-13 — fundamentals-provider-alternative — design
 - **Pattern**: When a spec step's open risk can only be closed by a **live call to a
   credential-gated external API** (not just docs research — a design-time `WebFetch`/`WebSearch`
   pass had already exhausted what secondary sources could confirm, per this feature's own
@@ -1740,7 +1737,7 @@ reusing.
 - **Evidence**: `docs/roadmap/features/122-shadcn-migration-low-confidence/context.md` sdd-design Rounds 1-2 (react-hook-form/zod dependency sweep; decision to decline `ui/form.tsx` in favor of `ui/field.tsx` to avoid a 2-call-site dependency)
 - **Rule it implies**: Treat `npx shadcn add` as a tentative installation; always review and trim collateral installs that the feature's actual call sites don't need before committing the result.
 
-### 2026-08-16 — symbol-page-section-nav — pattern
+### 2026-08-16 — symbol-page-section-nav — design
 
 - **Pattern**: For same-page section navigation over a long stack of cards, a sticky **anchor-nav**
   (shadcn `ToggleGroup type="single"` + native `scrollIntoView` + an `IntersectionObserver` scroll-spy,
@@ -1758,7 +1755,7 @@ reusing.
   existing "multiple sections visible" e2e or drop live queries; always co-locate sticky-offset +
   scroll-margin constants and pick a collision-free nav `aria-label`.
 
-### 2026-08-18 — 145-symbol-page-panel-refinements — derive precedence, don't seed it
+### 2026-08-18 — 145-symbol-page-panel-refinements — design
 - **Insight**: When a UI value has a precedence chain of sources (URL query → server-derived binding →
   user pick, default empty), model it as a PURE DERIVATION `effective = picked ?? url ?? bound ?? ''`
   with the user's pick as the only React state — not `useState(seed)` + a `watchlistsLoading`-gated
@@ -1772,7 +1769,7 @@ reusing.
 - **Rule it implies**: a precedence chain of read-only sources feeding one user-overridable selection is
   a derivation, not synchronized state; the only state is the override, defaulted `undefined`.
 
-### 2026-08-18 — 146-unify-symbol-chart-libraries — align charts on one engine, not two
+### 2026-08-18 — 146-unify-symbol-chart-libraries — design
 - **Insight**: To make two stacked charts share a time axis so a vertical at bar D lines up across all
   of them (a hard "lines up" AC), put them on the SAME rendering engine driven by the SAME time array —
   do not sync two different engines (e.g. lightweight-charts + recharts). Cross-engine tick algorithms
@@ -2065,7 +2062,7 @@ reusing.
   in the single backend owner. Candidate to fold into the `xstockstrat-agent` MCP-tool-contract review
   focus.
 
-### 2026-08-24 — market-regime-benchmark-operand — proto/fingerprint-stability
+### 2026-08-24 — market-regime-benchmark-operand — design
 - **Insight**: When adding an OPTIONAL field to a proto message whose serialized JSON feeds a
   definition **fingerprint** (here `StrategyComponent.source_symbol=6` → `definition_json` →
   `_definition_fingerprint`, `services/xstockstrat-analysis/app/handlers/servicer.py:3994`), use a

@@ -7,11 +7,8 @@ interface AgentTool {
   inputSchema: unknown;
 }
 
-// GET /accounts/api/mcp-tools — proxies the agent's public GET /api/tools catalog so the
-// "MCP Tools" page can render it. Mirrors agent-health's degrade-gracefully pattern: on any
-// fetch failure it returns { tools: [], reachable: false } with HTTP 200 so the page still
-// renders. The agent route itself is unauthenticated (capability metadata, never user data),
-// but this BFF route still requires a session like every other /accounts page.
+// GET /accounts/api/mcp-tools — proxies the agent's public GET /api/tools catalog; any fetch failure
+// returns { tools: [], reachable: false } (HTTP 200). Requires a session like every /accounts page.
 export async function GET(req: NextRequest) {
   const claims = await getSessionFromRequest(req);
   if (!claims) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

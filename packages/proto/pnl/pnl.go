@@ -1,12 +1,5 @@
 // Package pnl is the single realized-P&L fold shared by xstockstrat-trading and
-// xstockstrat-portfolio (feature 157). It is deliberately dependency-free (float math only —
-// no proto/DB imports) so both Go services can route their signed average-cost realized-P&L
-// computation through one implementation, eliminating the dual-source drift that feature 056
-// caused when two copies of the reduce formula disagreed.
-//
-// This is a small hand-written, NON-generated helper hosted inside the contracts module. Its
-// tests live in the consuming service test modules because no CI job runs `go test` inside
-// packages/proto/ (proto-freshness only diffs gen/).
+// xstockstrat-portfolio. Dependency-free (float math only — no proto/DB imports).
 package pnl
 
 import "math"
@@ -46,12 +39,9 @@ type FoldResult struct {
 	Realized  float64        // cumulative realized P&L across all reducing fills
 }
 
-// Fold applies fills in the order given and returns the resulting net positions plus cumulative
-// realized P&L. The caller is responsible for economic ordering (e.g. filled_at ASC). It uses the
-// signed average-cost method: same-direction fills accumulate; opposite-direction fills realize via
-// RealizedDelta, flip through zero with the remainder re-opening the reversed side. Net-negative
-// (short) lots are retained (no oversell guard — shorts are in scope). A lot whose |qty| drops below
-// 1e-9 is treated as flat and dropped from Positions.
+// Fold applies fills in caller-supplied economic order (e.g. filled_at ASC) and returns net
+// positions plus cumulative realized P&L. Short lots are retained (no oversell guard); a lot with
+// |qty| < 1e-9 is treated as flat and dropped from Positions.
 func Fold(fills []Fill) FoldResult {
 	return foldInto(make(map[string]Lot), fills)
 }
@@ -66,8 +56,7 @@ func FoldFrom(baseline map[string]Lot, fills []Fill) FoldResult {
 	return foldInto(accs, fills)
 }
 
-// foldInto folds fills onto the given accumulator map and returns the result. The caller owns
-// the map — foldInto mutates it in place.
+// foldInto mutates accs in place (the caller owns the map) and returns the fold result.
 func foldInto(accs map[string]Lot, fills []Fill) FoldResult {
 	var realized float64
 

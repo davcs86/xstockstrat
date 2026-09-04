@@ -78,10 +78,8 @@ type Watcher struct {
 	once     sync.Once
 }
 
-// NewWatcher dials the config service and starts the background watch loop.
-// applicationEnv/tradingMode are this deployment's own resolved scope (Config.ApplicationEnv /
-// Config.TradingMode) — passed on every WatchConfig request so the server serves this
-// deployment's config rows instead of the zero-value dev/all default.
+// NewWatcher dials the config service and starts the background watch loop. applicationEnv/
+// tradingMode scope every WatchConfig request to this deployment's own config rows.
 func NewWatcher(endpoint, namespace, applicationEnv, tradingMode string) (*Watcher, error) {
 	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -99,18 +97,17 @@ func NewWatcher(endpoint, namespace, applicationEnv, tradingMode string) (*Watch
 	return w, nil
 }
 
-// resolveEnvironment maps Config.ApplicationEnv ("development" | "production") to the proto
-// Environment enum. Anything other than "production" resolves to dev, matching the default in
-// LoadFromEnv.
+// resolveEnvironment maps Config.ApplicationEnv to the proto Environment enum;
+// anything other than "production" resolves to staging.
 func resolveEnvironment(applicationEnv string) commonv1.Environment {
 	if applicationEnv == "production" {
 		return commonv1.Environment_ENVIRONMENT_PRODUCTION
 	}
-	return commonv1.Environment_ENVIRONMENT_STAGING // feature 147: non-production => staging
+	return commonv1.Environment_ENVIRONMENT_STAGING // non-production => staging
 }
 
-// resolveTradingMode maps Config.TradingMode ("paper" | "live") to the proto TradingMode enum.
-// Anything other than "live" resolves to paper, matching the default in LoadFromEnv.
+// resolveTradingMode maps Config.TradingMode to the proto TradingMode enum;
+// anything other than "live" resolves to paper.
 func resolveTradingMode(tradingMode string) commonv1.TradingMode {
 	if tradingMode == "live" {
 		return commonv1.TradingMode_TRADING_MODE_LIVE
@@ -121,8 +118,8 @@ func resolveTradingMode(tradingMode string) commonv1.TradingMode {
 func (w *Watcher) watchLoop() {
 	backoff := 2 * time.Second
 	for {
-		// stream() only ever returns on error (it loops until the stream breaks), so a
-		// reconnect+backoff always applies — there is no nil-error branch to guard (SA4023).
+		// stream() only ever returns on error, so a reconnect+backoff always applies —
+		// there is no nil-error branch to guard (SA4023).
 		err := w.stream()
 		slog.Warn("config watcher stream error, reconnecting", "error", err, "backoff", backoff)
 		time.Sleep(backoff)
@@ -137,8 +134,8 @@ func (w *Watcher) stream() error {
 		Namespace:   w.namespace,
 		ClientId:    fmt.Sprintf("go-trading-%d", os.Getpid()),
 		Environment: w.environment,
-		// trading_mode is deprecated and ignored by the config server (feature 147); paper/live
-		// derives from environment. user_id is left empty — services subscribe at global scope.
+		// trading_mode is deprecated and ignored by the config server; paper/live derives from
+		// environment. user_id is left empty — services subscribe at global scope.
 	}
 	stream, err := w.client.WatchConfig(context.Background(), req)
 	if err != nil {
@@ -215,12 +212,8 @@ func (w *Watcher) GetFloat(key string, def float64) float64 {
 	return v.GetFloatVal()
 }
 
-// SetConfig forwards to xstockstrat-config's SetConfig RPC, attaching the x-internal-caller
-// metadata header the receiving service's internal-caller authz channel checks (feature 102 —
-// see docs/roadmap/features/102-broker-state-reconciliation/design.md § "Internal-caller authz").
-// callerID identifies the automated caller (e.g. "trading-reconciliation-poller"); a fresh
-// x-trace-id is minted per call for audit correlation, since this is a distinct outbound edge
-// from the WatchConfig stream every other call on w.client uses.
+// SetConfig forwards to xstockstrat-config's SetConfig RPC, attaching the x-internal-caller authz
+// header (callerID) and a fresh per-call x-trace-id for audit correlation.
 func (w *Watcher) SetConfig(ctx context.Context, callerID string, req *configv1.SetConfigRequest) (*configv1.SetConfigResponse, error) {
 	md := metadata.Pairs(
 		"x-internal-caller", callerID,

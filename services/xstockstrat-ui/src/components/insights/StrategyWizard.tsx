@@ -23,16 +23,14 @@ import { useManageStrategy } from '@/hooks/useStrategyDefinitions';
 import { useFormulas } from '@/hooks/useFormulas';
 import { operandRefs, type FormulaOutputsMap } from '@/lib/strategyCatalog';
 
-// feature 097: the "Signal Params" blend step was removed — a strategy's backtest score is
-// technical-only (Option 2), so the wizard no longer exposes signal-weight controls. Any existing
-// `signal_params` (the live-loop symbol universe, ANALYSIS-3) is preserved untouched on save.
+// The wizard exposes no signal-weight controls (score is technical-only); any existing signal_params
+// (the live-loop symbol universe) is preserved untouched on save.
 const STEPS = ['Identity', 'Components', 'Rules', 'Review'] as const;
 
 const STRATEGY_ID_RE = /^[a-z0-9_]+$/;
 
-// Parse the cooldown-days input honestly w.r.t. proto explicit presence (feature 069):
-// blank → OMIT the field (server applies the platform default 31); "0" → explicit 0 (no cooldown);
-// a non-negative integer → that value; anything else → invalid. Never collapses blank into 0.
+// Presence-honest parse: blank → omit (server default 31), "0" → explicit 0, else the value or
+// invalid. Never collapses blank into 0.
 function parseCooldownDays(
   raw: string,
 ): { valid: true; value: number | undefined } | { valid: false; error: string } {
@@ -44,8 +42,7 @@ function parseCooldownDays(
   return { valid: true, value: n };
 }
 
-// feature 116: same presence-honest shape as parseCooldownDays, for the exit-side minimum
-// holding period (blank → omit → platform default 0; "0" → explicit no minimum hold).
+// Same presence-honest shape as parseCooldownDays, for the exit-side minimum holding period.
 function parseExitCooldownDays(
   raw: string,
 ): { valid: true; value: number | undefined } | { valid: false; error: string } {
@@ -57,9 +54,7 @@ function parseExitCooldownDays(
   return { valid: true, value: n };
 }
 
-// FR-10 (Round 3): where a validation error routes on the "Go to Step" jump — Step 1 targets
-// carry which of the 4 native sub-screens owns the field, since Step 1 is no longer one flat
-// screen.
+// Where a validation error routes on the "Go to Step" jump; Step 1 targets carry the sub-screen.
 type ErrorTarget = { step: number; identitySubStep?: 1 | 2 | 3 | 4 };
 
 // Heuristic mapping of a server validation message to the step (and, for Step 1, the
@@ -75,7 +70,7 @@ function stepForError(msg: string): ErrorTarget {
   return { step: 4 };
 }
 
-/** Back/Next pair for one of Step 1's 4 native sub-screens (FR-10, Round 3). */
+/** Back/Next pair for one of Step 1's 4 native sub-screens. */
 function IdentityNav({
   backDisabled,
   onBack,
@@ -107,17 +102,16 @@ interface StrategyWizardProps {
 
 export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardProps) {
   const [step, setStep] = useState(1);
-  // Which of Step 1's 4 native sub-screens is showing. Persists across outer-step transitions
-  // (never reset except by its own initial value) so Back from outer Step 2 lands on sub-screen 4,
-  // the one that just handed off to Step 2 (FR-10, Round 3).
+  // Which of Step 1's 4 sub-screens is showing. Persists across outer-step transitions so Back
+  // from outer Step 2 lands on sub-screen 4, the one that handed off to Step 2.
   const [identitySubStep, setIdentitySubStep] = useState<1 | 2 | 3 | 4>(1);
   const { mutate, isPending, error: errorObj } = useManageStrategy();
   const { data: formulasData } = useFormulas({ includePublic: true, pageSize: 50 });
 
   const [strategyId, setStrategyId] = useState(initial?.strategyId ?? '');
   const [displayName, setDisplayName] = useState(initial?.displayName ?? '');
-  // Seed from explicit presence, NOT `?? 0`: an unset strategy must stay blank so an unrelated edit
-  // never silently writes cooldown_days: 0 over the strategy's implicit platform default (feature 069).
+  // Seed from explicit presence, NOT `?? 0`: an unset strategy stays blank so an unrelated edit never
+  // writes cooldown_days: 0 over the platform default.
   const [cooldownDaysRaw, setCooldownDaysRaw] = useState(
     initial?.cooldownDays !== undefined ? String(initial.cooldownDays) : '',
   );
@@ -135,7 +129,7 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
   );
   const [entryRule, setEntryRule] = useState(initial?.entryRule ?? '');
   const [exitRule, setExitRule] = useState(initial?.exitRule ?? '');
-  // feature 132 — entry-only deny list (normalized uppercase) + platform-signal eligibility toggle.
+  // Entry-only deny list (normalized uppercase) + platform-signal eligibility toggle.
   const [deniedSymbols, setDeniedSymbols] = useState<string[]>(() =>
     (initial?.deniedSymbols ?? []).map((s) => s.toUpperCase()),
   );
@@ -164,9 +158,7 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
     }
   }
 
-  // Rule operands = one entry per component, plus a `<ref>.<series>` entry for each
-  // selectable output series of multi-output indicators (e.g. bb.upper / bb.lower)
-  // and declared custom-formula outputs.
+  // Rule operands: one per component, plus a `<ref>.<series>` entry for each multi-output series.
   const operands = operandRefs(components, formulaOutputs);
 
   const idValid = STRATEGY_ID_RE.test(strategyId);
@@ -190,16 +182,13 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
       components,
       entryRule,
       exitRule,
-      // feature 097: preserve any EXISTING signal_params verbatim — it holds the live-loop
-      // signal_params.symbols universe (ANALYSIS-3). A wholesale rewrite here would drop those
-      // symbols (the design's clobber). On a create with no prior signal_params, omit the key
-      // entirely — don't invent blend fields the technical-only score no longer uses.
+      // Preserve any EXISTING signal_params verbatim — it holds the live-loop symbol universe a
+      // wholesale rewrite would drop; on a create with none, omit the key entirely.
       ...(initial?.signalParams !== undefined ? { signalParams: initial.signalParams } : {}),
       // Presence-honest: blank omits the key (server default drives the gate); "0" sends cooldownDays: 0.
       ...(cd.valid && cd.value !== undefined ? { cooldownDays: cd.value } : {}),
       ...(cd2.valid && cd2.value !== undefined ? { exitCooldownDays: cd2.value } : {}),
-      // feature 132 — the wizard is a full replace, so it always sends both (empty deny list clears
-      // any prior; signalEligible defaults false). The masked Symbol-page control is the partial path.
+      // The wizard is a full replace, so it always sends both (empty deny list clears any prior).
       deniedSymbols,
       signalEligible,
     };
@@ -214,15 +203,8 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
 
   return (
     <div className="max-w-2xl space-y-4">
-      {/* FR-11: step indicator via Questionnaire.Progress. This Root registers no Items — the
-          primitive's own current/total tracking is per-Root item registration, and the outer
-          step/STEPS model spans Step 1's separate Root plus Steps 2-4's plain state, so adopting
-          Questionnaire.Root's own controlled item/onItemChange model here (the only way to get
-          its current/total to genuinely match our 4-step model) would repeat Step 13's
-          Next/Previous-visibility mismatch and is explicitly out of scope (Instruction 1). With
-          zero registered items, Progress's own aria-value* attributes are simply omitted
-          (total=0), so its `children` override — driven directly by the outer `step`/`STEPS`
-          state below — is the only rendered content; no misleading aria-valuetext is produced. */}
+      {/* Progress Root registers no Items on purpose: with total=0 its aria-value* are omitted, so the
+          children override (driven by the outer step/STEPS state) is the only rendered content. */}
       <Questionnaire onSubmit={(e) => e.preventDefault()}>
         <QuestionnaireProgress
           className="flex w-full min-w-0 flex-wrap gap-2 text-xs"
@@ -250,15 +232,8 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* FR-10 (Round 3): Step 1 restructured onto Questionnaire's native Choice/Input answer
-              model — 4 nested sub-screens, one per field, each its own separately-scoped
-              Questionnaire/QuestionnaireItem (distinct from Steps 2-4's chrome-only shell). Fields
-              stay controlled-React-state-driven (not FormData-read-at-submit) so live validation
-              and edit-mode pre-population/disabling are unchanged. `onSubmit` on each Questionnaire
-              guards against the underlying <form>'s native Enter-key submission, since we render
-              our own Next/Back rather than Questionnaire's own nav parts (see IdentityNav — the
-              primitive's Next/Previous/Submit visibility is computed from the Root's total item
-              count, which would hide Next entirely for a single-item Root). */}
+          {/* Each sub-screen's onSubmit guards the form's native Enter-key submit — we render our own
+              Next/Back (IdentityNav), since a single-item Questionnaire Root would hide its own Next. */}
           {step === 1 && identitySubStep === 1 && (
             <Questionnaire onSubmit={(e) => e.preventDefault()}>
               <QuestionnaireItem name="strategyId">
@@ -270,10 +245,8 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
                     placeholder="e.g. sma_crossover"
                     onChange={(e) => setStrategyId(e.target.value)}
                   />
-                  {/* Regex validation only applies in create mode — in edit mode the field above
-                      is disabled/immutable, so gating on a client-side format rule for
-                      server-sourced data (which may predate this rule) would strand an existing
-                      strategy on this sub-screen with no way to proceed. */}
+                  {/* Regex validation is create-mode only — edit-mode data may predate this rule and
+                      would otherwise strand an existing strategy on this sub-screen. */}
                   {mode === 'create' && !idValid && strategyId !== '' && (
                     <p className="mt-1 text-xs text-destructive">
                       Use lowercase letters, digits, and underscores only.
@@ -356,9 +329,8 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
                     <p className="mt-1 text-xs text-destructive">{exitCooldownParsed.error}</p>
                   )}
                 </div>
-                {/* feature 132 — deny list + signal-eligible live in the SAME sub-screen item as
-                    exit cooldown (a separate QuestionnaireItem would be hidden — the primitive
-                    shows one item at a time). */}
+                {/* Deny list + signal-eligible share the exit-cooldown item — the primitive shows one
+                    item at a time, so a separate QuestionnaireItem would be hidden. */}
                 <div className="mt-4">
                   <label className="mb-1 block text-xs text-muted-foreground">
                     Denied symbols (entry-only — held positions still exit)
@@ -508,8 +480,7 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
         </CardContent>
       </Card>
 
-      {/* Navigation — hidden for Step 1, whose 4 native sub-screens (above) each carry their own
-          Back/Next via IdentityNav; reachable from Step 2 onward, per FR-10 (Round 3). */}
+      {/* Navigation hidden for Step 1 — its sub-screens carry their own Back/Next via IdentityNav. */}
       {step > 1 && (
         <div className="flex items-center justify-between">
           <Button type="button" variant="ghost" onClick={() => setStep((s) => s - 1)}>

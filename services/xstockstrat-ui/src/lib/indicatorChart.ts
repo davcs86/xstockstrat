@@ -1,8 +1,5 @@
-// Pure mapper (feature 146): one indicator NamedSeries' values + the shared parity `times` →
-// lightweight-charts v5 line-series data. This is now the single source of the "unset → gap, never a
-// fabricated 0" contract (FR-3 / AC-3 / P-03), moved out of the old recharts `?? null` +
-// `connectNulls={false}` rendering in IndicatorPanels.tsx so it is unit-testable off the DOM — a
-// lightweight-charts canvas has no per-point DOM, so this contract cannot be asserted in e2e.
+// Pure mapper: one indicator series' values + the shared parity `times` → lightweight-charts v5
+// line-series data. Single source of the "unset → gap, never a fabricated 0" contract (P-03).
 
 import type { LineData, UTCTimestamp, WhitespaceData } from 'lightweight-charts';
 
@@ -20,14 +17,12 @@ export interface IndicatorValueLike {
 export type IndicatorLinePoint = LineData<UTCTimestamp> | WhitespaceData<UTCTimestamp>;
 
 /**
- * Map one series' `values` over the shared parity `times` (the aligned candlestick time axis, from
- * the page's single bars fetch — no re-fetch, FR-4).
+ * Map one series' `values` over the shared parity `times` (the aligned candlestick axis).
  *
- * - `values[i].value === undefined` (an UNSET IndicatorValue — warm-up head / gap) → a whitespace
- *   point `{ time }` with no `value`, so the v5 line series breaks the line across it. A genuine `0`
- *   reading → `{ time, value: 0 }` (kept, never dropped).
- * - Iterated over `times` (the axis is the source of truth). If `values` is shorter than `times`,
- *   the trailing positions become gaps — never invented data.
+ * - `values[i].value === undefined` (UNSET — warm-up head / gap) → a whitespace point `{ time }`, so
+ *   the v5 line breaks across it. A genuine `0` → `{ time, value: 0 }` (kept, never dropped).
+ * - Iterated over `times` (the axis is the source of truth); if `values` is shorter, the trailing
+ *   positions become gaps — never invented data.
  */
 export function toLineData(
   values: readonly IndicatorValueLike[],
@@ -43,9 +38,8 @@ export function toLineData(
 
 /**
  * Normalize to STRICTLY-ASCENDING, UNIQUE time — lightweight-charts v5 `setData` throws on a
- * non-monotonic or duplicate timestamp (a crash the old synthetic integer-index axis never had).
- * Stable ascending sort, then collapse duplicate timestamps: **the last point for a timestamp wins**
- * (the latest value provided). Exported so the monotonicity guard is unit-tested directly.
+ * non-monotonic or duplicate timestamp. Stable ascending sort, then collapse duplicates: the last
+ * point for a timestamp wins.
  */
 export function normalizeAscendingUnique(
   points: readonly IndicatorLinePoint[],

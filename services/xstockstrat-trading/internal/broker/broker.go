@@ -5,10 +5,8 @@ import (
 	"errors"
 )
 
-// ErrInvalidCredentials is returned by ValidateCredentials when the broker
-// actively rejects the stored API secrets (HTTP 401/403). Callers use it to
-// distinguish a definitive auth failure from a transient/network error, which
-// is reported as a wrapped error instead.
+// ErrInvalidCredentials is returned by ValidateCredentials on a definitive broker auth
+// rejection (HTTP 401/403); transient/network failures are returned as wrapped errors instead.
 var ErrInvalidCredentials = errors.New("broker rejected credentials")
 
 // BrokerOrder is the normalized order representation returned by any broker.
@@ -17,30 +15,19 @@ type BrokerOrder struct {
 	Status         string
 	FilledQty      float64 // cumulative filled quantity; zero for unfilled orders
 	FilledAvgPrice float64 // zero for unfilled orders
-	// Fees is the cumulative broker fee for the order (feature 029); 0 when the broker exposes none.
-	// US equities are commission-free and Alpaca/IBKR return no per-fill fee on the order/fill path
-	// (SEC/TAF regulatory fees live only in Alpaca's end-of-day Account Activities API, not per-fill),
-	// so both adapters leave this at 0 today — a named follow-up will source regulatory fees from the
-	// Activities API. The fee seam is correct end-to-end regardless.
+	// Fees is the cumulative broker fee for the order; 0 when the broker exposes none.
 	Fees float64
-	// StopLegOrderID / TakeProfitLegOrderID are populated when the broker returned bracket
-	// child order IDs on the same submit response (Alpaca only; empty otherwise).
+	// StopLegOrderID / TakeProfitLegOrderID hold the broker's bracket child order IDs
+	// (Alpaca only; empty otherwise).
 	StopLegOrderID       string
 	TakeProfitLegOrderID string
-	// ClientOrderID is the broker's echo of the client-supplied order nonce, when the broker
-	// supports/returns one. Populated for Alpaca (its API always echoes client_order_id); left empty
-	// for IBKR, which is never sent a customer-order tag on submission (feature 102 — see
-	// implementation-spec.md's Execution Summary for the confirmed gap).
+	// ClientOrderID is the broker's echo of the client-supplied order nonce.
+	// Populated for Alpaca; always empty for IBKR.
 	ClientOrderID string
 }
 
-// BrokerPosition is a normalized position snapshot from a broker.
-//
-// CurrentPrice / MarketValue / UnrealizedPnl / UnrealizedPnlPct are the broker's own
-// mark-to-market valuation (Alpaca and IBKR both return them on their positions endpoints).
-// Carrying them through lets the portfolio card show figures that reconcile with the broker's
-// authoritative equity instead of recomputing from marketdata mid-quotes, which use a
-// different price basis and never tie out. Zero means the broker did not report a value.
+// BrokerPosition is a normalized position snapshot from a broker. A zero valuation field
+// (CurrentPrice/MarketValue/UnrealizedPnl/UnrealizedPnlPct) means the broker did not report it.
 type BrokerPosition struct {
 	Symbol           string
 	Quantity         float64
@@ -49,18 +36,14 @@ type BrokerPosition struct {
 	MarketValue      float64
 	UnrealizedPnl    float64
 	UnrealizedPnlPct float64
-	// DayPnl / DayPnlPct are the broker's intraday (today's) P&L — the change since the
-	// previous trading day's close (Alpaca unrealized_intraday_pl / unrealized_intraday_plpc).
-	// Distinct from UnrealizedPnl, which is total P&L since entry. Zero means the broker did
-	// not report an intraday figure (e.g. IBKR's positions endpoint omits it).
+	// DayPnl / DayPnlPct are the broker's intraday (today's) P&L, distinct from UnrealizedPnl
+	// (total since entry). Zero means the broker did not report it (e.g. IBKR omits it).
 	DayPnl    float64
 	DayPnlPct float64
 }
 
-// BrokerBalance is a normalized account-balance snapshot from a broker.
-// LastEquity is the account equity at the previous trading day's close; it is
-// used to derive intraday (day) P&L as Equity - LastEquity. When a broker does
-// not report a previous-close equity, LastEquity equals Equity (day P&L = 0).
+// BrokerBalance is a normalized account-balance snapshot from a broker. LastEquity is the
+// previous close equity; it equals Equity when the broker reports no previous close.
 type BrokerBalance struct {
 	Cash        float64
 	BuyingPower float64
@@ -72,33 +55,22 @@ type BrokerBalance struct {
 type Broker interface {
 	SubmitOrder(ctx context.Context, req OrderRequest) (*BrokerOrder, error)
 	CancelOrder(ctx context.Context, brokerOrderID string) error
-	// ReplaceOrder modifies a working order at the broker. req carries only the
-	// fields to change; a zero Qty/LimitPrice/StopPrice or empty TimeInForce means
-	// "leave unchanged". Routing to the correct broker is the caller's job (per the
-	// persisted order's broker_type).
+	// ReplaceOrder modifies a working order; a zero Qty/LimitPrice/StopPrice or empty
+	// TimeInForce means "leave unchanged". Routing to the correct broker is the caller's job.
 	ReplaceOrder(ctx context.Context, brokerOrderID string, req OrderRequest) (*BrokerOrder, error)
 	GetOrder(ctx context.Context, brokerOrderID string) (*BrokerOrder, error)
-	// SubmitBracketLegs submits a stop-loss + optional take-profit as a linked pair
-	// referencing an already-placed parent order (feature 030). Only meaningful for
-	// brokers that cannot attach a bracket atomically at entry submission (IBKR);
-	// Alpaca's implementation returns an error and is never called for Alpaca accounts —
-	// its bracket attaches via OrderRequest.BracketStopPrice/BracketTakeProfitPrice on
-	// the original SubmitOrder instead.
+	// SubmitBracketLegs submits a stop-loss + optional take-profit as a linked pair for a
+	// parent order. IBKR only; Alpaca returns an error here (its bracket attaches at SubmitOrder).
 	SubmitBracketLegs(ctx context.Context, parentBrokerOrderID, parentClientOrderID string, legs BracketLegsRequest) (*BracketLegsResponse, error)
-	// ListOrders returns every order currently known to the broker for this account (feature 102 —
-	// broker-state-reconciliation). Unlike GetOrder, this is a single bulk call, not a per-order
-	// fetch — it is the detection primitive that makes "an order placed directly through the
-	// broker's own dashboard" detectable within one reconciliation tick regardless of fill state.
+	// ListOrders returns every order the broker currently knows for this account (bulk, single call).
 	ListOrders(ctx context.Context) ([]BrokerOrder, error)
 	GetPositions(ctx context.Context) ([]BrokerPosition, error)
 	// GetAccount returns a normalized account-balance snapshot (cash, buying
 	// power, equity, and previous-close equity for day-P&L derivation).
 	GetAccount(ctx context.Context) (*BrokerBalance, error)
 	IsPaper() bool
-	// ValidateCredentials performs a lightweight authenticated request to confirm
-	// the stored API secrets still work. It returns nil when valid,
-	// ErrInvalidCredentials when the broker rejects the credentials, and a wrapped
-	// error for transient/network failures.
+	// ValidateCredentials returns nil when the stored API secrets authenticate,
+	// ErrInvalidCredentials when the broker rejects them, a wrapped error for transient failures.
 	ValidateCredentials(ctx context.Context) error
 }
 
@@ -115,21 +87,19 @@ type OrderRequest struct {
 	// Exactly one is non-zero for a trailing_stop order; both are zero otherwise.
 	TrailPrice   float64
 	TrailPercent float64
-	// Trail is the new trailing-stop offset on a replace (Alpaca's PATCH body uses a
-	// single `trail` value); zero means "leave unchanged".
+	// Trail is the new trailing-stop offset on a replace; zero means "leave unchanged".
 	Trail float64
 	// ClientOrderID is forwarded to the broker for idempotency so a retried
 	// submission is de-duplicated instead of placing a second order.
 	ClientOrderID string
-	// BracketStopPrice / BracketTakeProfitPrice, when non-zero, request a bracket order
-	// (Alpaca-native atomic attach at submit time; feature 030). Distinct from StopPrice,
-	// which carries a STOP/STOP_LIMIT entry's own real broker-trigger price.
+	// BracketStopPrice / BracketTakeProfitPrice, when non-zero, request an Alpaca-native bracket
+	// order — distinct from StopPrice, which is a STOP/STOP_LIMIT entry's real broker-trigger price.
 	BracketStopPrice       float64
 	BracketTakeProfitPrice float64
 }
 
 // BracketLegsRequest carries the stop-loss + optional take-profit leg parameters for
-// a broker that submits bracket children as a follow-up call (feature 030).
+// a broker that submits bracket children as a follow-up call.
 type BracketLegsRequest struct {
 	Symbol          string
 	Side            string // opposite of the entry side — "sell" to close a long, "buy" to close a short

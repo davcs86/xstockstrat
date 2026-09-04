@@ -1,10 +1,7 @@
-// Readiness/queue state cue maps (feature 155, FR-1). Split out of `opportunityShared.tsx` so the
-// **value** import of `@phosphor-icons/react` (which evaluates `createContext` at module scope)
-// stays out of the server bundle: `opportunityShared` is transitively imported by server code
-// (`traderBff.ts` → `copilot.ts` → `opportunityShared`), and pulling a client-only icon lib into
-// that graph breaks the production build ("createContext is not a function" while collecting page
-// data for /trader/api/[...connect]). Only the client cue consumers import this module; the shared
-// data maps + `EnumBadge` stay in `opportunityShared` (which now imports the phosphor *type* only).
+// Readiness/queue state cue maps. Split out of `opportunityShared.tsx` so the **value** import of
+// `@phosphor-icons/react` (which runs `createContext` at module scope) stays out of the server bundle:
+// `opportunityShared` is server-imported (traderBff → copilot), where a client-only icon lib breaks
+// the production build. Only client cue consumers import this module.
 
 import { Lightning, Eye, Moon, Question, Stack } from '@phosphor-icons/react';
 import type { EnumRender } from './opportunityShared';

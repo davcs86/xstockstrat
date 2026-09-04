@@ -37,8 +37,6 @@ from app.repositories.signal_sources import (
 
 log = logging.getLogger(__name__)
 
-# Feature 088 — honest ManageSignalSource verbs (AIP-161 partial update).
-# Feature 134 — reliability_weight is a maskable field (per-source ranking multiplier).
 _SS_MASKABLE_PATHS = frozenset(
     {
         "display_name",
@@ -49,7 +47,7 @@ _SS_MASKABLE_PATHS = frozenset(
         "reliability_weight",
     }
 )
-# slug is the PK; active is column-authoritative (lifecycle via reactivate/deactivate only, RC-6).
+# slug is the PK; active is column-authoritative (lifecycle via reactivate/deactivate only).
 _SS_COLUMN_AUTH_PATHS = frozenset({"slug", "active"})
 _SS_CREDENTIAL_REQUIRED_TYPES = frozenset(
     {"authenticated_website", "mediated_authenticated_website", "mcp_client"}
@@ -89,7 +87,7 @@ def _cfg_to_dict(value) -> dict | None:
     return json.loads(str(value))
 
 
-# feature 083 — source-health string → SourceHealthStatus enum.
+# Source-health string → SourceHealthStatus enum.
 _HEALTH_ENUM = {
     "live": ingest_pb2.SOURCE_HEALTH_STATUS_LIVE,
     "stale": ingest_pb2.SOURCE_HEALTH_STATUS_STALE,
@@ -97,18 +95,12 @@ _HEALTH_ENUM = {
     "unspecified": ingest_pb2.SOURCE_HEALTH_STATUS_UNSPECIFIED,
 }
 
-# Canonical timeframe <-> Timeframe enum int (mirrors marketdata internal/timeframe + 053).
-# 15m is the smallest supported interval; the deprecated 1m/5m enums (1/2) are intentionally
-# omitted so sub-15m intervals no longer resolve. 15MIN is enum value 5.
+# Canonical timeframe <-> marketdata Timeframe enum int (mirrors marketdata's table).
+# 1m/5m enums intentionally omitted so sub-15m intervals no longer resolve.
 _STR_TO_ENUM = {"15m": 5, "1h": 3, "1d": 4}
 _ENUM_TO_STR = {v: k for k, v in _STR_TO_ENUM.items()}
-# Only "1d" is a requestable timeframe going forward (feature 143) — TriggerBackfill's own
-# reject check above is the actual gate (it consults _ENUM_TO_STR first via
-# _canonical_timeframe, so this table's contents don't determine acceptance). This table's
-# remaining job is normalizing the "1Day" legacy spelling for the read path
-# (_row_timeframe) — kept because test_legacy_alias_row_resolves_but_string_is_untouched
-# proves real "1Day" rows exist. "15Min"/"1Hour" are dropped: no test, fixture, or
-# migration in this repo ever exercises those raw spellings as a stored value.
+# Normalizes the legacy "1Day" spelling on the read path (_row_timeframe); real "1Day"
+# rows exist. Only "1d" is servable, so no other legacy spellings are mapped.
 _TF_ALIASES = {
     "1d": "1d",
     "1Day": "1d",
@@ -155,9 +147,8 @@ def job_row_to_proto(row: dict) -> ingest_pb2.BackfillJob:
         job_id=str(row["job_id"]),
         symbols=list(row["symbols"] or []),
         timeframe=row["timeframe"] or "",
-        # The deprecated string is scheduled for removal, so populate its replacement too
-        # (feature 080 FR-1). Unknown/empty degrades to TIMEFRAME_UNSPECIFIED rather than
-        # raising, matching the .get(…, 0) idiom already used for chunk dispatch.
+        # Populate timeframe_enum too (the string field is deprecated); unknown/empty
+        # degrades to TIMEFRAME_UNSPECIFIED rather than raising.
         timeframe_enum=_STR_TO_ENUM.get(_row_timeframe(row["timeframe"] or ""), 0),
         status=row["status"],
         bars_processed=row["bars_processed"] or 0,
@@ -195,11 +186,11 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         self._ledger = ledger_pb2_grpc.LedgerServiceStub(ledger_channel)
         self._notify = notify_pb2_grpc.NotifyServiceStub(notify_channel) if notify_channel else None
         self._db = db_pool
-        # Concurrency gate (FR-9): read once at init. Jobs above the limit stay QUEUED in
-        # the table until the semaphore is acquired. Live re-read of the key is out of scope.
+        # Concurrency gate: read once at init (not live-reread). Jobs above the limit stay
+        # QUEUED until the semaphore is acquired.
         self._backfill_sem = asyncio.Semaphore(self._cfg.backfill_max_concurrent_jobs)
-        # In-process cancellation registry (FR-4): job_ids canceled via CancelBackfill. Checked
-        # by run_one before launching further chunks so completed-chunk bars are retained.
+        # In-process registry of canceled job_ids; checked before launching further chunks
+        # so completed-chunk bars are retained.
         self._canceled_jobs: set[str] = set()
 
     @staticmethod
@@ -230,23 +221,18 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         if self._db is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
             return
-        # Feature 092 (F-11): admin-gate the quota-spending backfill, mirroring CancelBackfill /
-        # ManageSignalSource. Placed after the _db check so an unconfigured DB still returns
-        # UNAVAILABLE.
+        # Admin-gate this quota-spending op. After the _db check so an unconfigured DB still
+        # returns UNAVAILABLE.
         if not self._has_admin_scope(context):
             await context.abort(grpc.StatusCode.PERMISSION_DENIED, "admin scope required")
             return
         job_id = str(uuid.uuid4())
         propagation_meta = self._propagation_meta(context)
-        # Canonicalize BEFORE persisting (feature 080 FR-13). _canonical_timeframe prefers the
-        # request's enum, so an enum-only caller — which is what the UI sends
-        # (insights/backfills/page.tsx passes timeframeEnum with no string) — no longer stores ''.
-        # Previously this wrote request.timeframe raw and only canonicalized later, inside
-        # _execute_backfill, so every UI-created row held '' and both the derived enum and the
-        # resume path were wrong (a 15m job resumed as 1d).
+        # Canonicalize BEFORE persisting: _canonical_timeframe prefers the request enum, so an
+        # enum-only caller (the UI) no longer stores '' as the timeframe.
         canonical_tf = _canonical_timeframe(request)
-        # Feature 143: only "1d" is a servable timeframe going forward — reject before persisting
-        # a job or spending any provider quota. Mirrors marketdata's own GetBars/BackfillBars gate.
+        # Only "1d" is servable — reject before persisting a job or spending quota.
+        # Mirrors marketdata's own GetBars/BackfillBars gate.
         if canonical_tf != "1d":
             await context.abort(
                 grpc.StatusCode.INVALID_ARGUMENT,
@@ -265,8 +251,8 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         await self._emit_backfill_event(
             "ingest.backfill.queued",
             job_id,
-            # Untyped Struct payload — append-only in the ledger, and no lint or type check
-            # covers it, so it must carry the canonical value too.
+            # Untyped Struct payload — no lint/type check covers it, so it must carry the
+            # canonical value too.
             {"symbols": list(request.symbols), "timeframe": canonical_tf},
             propagation_meta,
         )
@@ -323,8 +309,8 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
     async def _run_backfill(self, job_id: str, request, propagation_meta=()):
         symbols = list(request.symbols)
         try:
-            # Concurrency gate: a job above max_concurrent_jobs blocks here, staying QUEUED
-            # in the table until the semaphore is free, then transitions to RUNNING.
+            # A job above max_concurrent_jobs blocks on the semaphore here, staying QUEUED
+            # until it is free, then transitions to RUNNING.
             async with self._backfill_sem:
                 await backfill_jobs.update_job(
                     self._db,
@@ -338,7 +324,6 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 log.info("backfill job %s running symbols=%s", job_id, symbols)
                 await self._execute_backfill(job_id, request, symbols, propagation_meta)
         except Exception as e:
-            # Total failure (e.g. marketdata RPC error) → FAILED + failed event + alert.
             log.error("backfill job %s failed: %s", job_id, e)
             await backfill_jobs.update_job(
                 self._db,
@@ -440,9 +425,8 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         Shared by a fresh run and resume-on-startup. COMPLETED (clean) / PARTIAL (progress made
         but some symbols/chunks failed) / FAILED (no chunk made progress).
         """
-        # If a cancel landed while in-flight chunks were draining, do not overwrite CANCELED
-        # back to a terminal completed/partial status (FR-4). The in-process registry is set by
-        # CancelBackfill before it writes CANCELED, so it is authoritative for the live run.
+        # If a cancel landed while chunks were draining, don't overwrite CANCELED with a
+        # completed/partial status. The in-process registry is authoritative for the live run.
         if job_id in self._canceled_jobs:
             self._canceled_jobs.discard(job_id)
             return
@@ -513,9 +497,8 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         row = await backfill_jobs.get_job(self._db, job_id)
         if row is None:
             return
-        # backfill_jobs has no timeframe_enum column, so the stored string is the only source
-        # (feature 080 FR-4 — the former row.get("timeframe_enum") read was permanently None).
-        # _ENUM_TO_STR itself stays: _canonical_timeframe reads it on the write path.
+        # backfill_jobs has no timeframe_enum column, so the stored string is the only source.
+        # _ENUM_TO_STR stays because _canonical_timeframe reads it on the write path.
         timeframe = _row_timeframe(row.get("timeframe") or "") or "1d"
         # Re-fetch is idempotent (marketdata upsert), so resume always uses overwrite=False.
         from types import SimpleNamespace
@@ -543,8 +526,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
 
         async def run_one(chunk):
             chunk_id = str(chunk["chunk_id"])
-            # Cancellation gate (FR-4): if the job was canceled, stop scheduling further chunks
-            # before acquiring the semaphore / issuing the marketdata BackfillBars call.
+            # If the job was canceled, stop before acquiring the semaphore / issuing BackfillBars.
             # Already-completed chunks keep their bars; this chunk is simply not fetched.
             if job_id in self._canceled_jobs:
                 return
@@ -577,8 +559,8 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                         last_exc = e
                         failed = remaining
                         if e.code() == grpc.StatusCode.INVALID_ARGUMENT:
-                            # Permanent rejection (e.g. marketdata's 1d-only gate, feature
-                            # 143) — retrying the identical request cannot succeed.
+                            # Permanent rejection (e.g. marketdata's 1d-only gate) — retrying
+                            # cannot succeed.
                             attempt = max_attempts
                     except Exception as e:  # transient RPC error — retry the whole chunk
                         last_exc = e
@@ -642,7 +624,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             offset = int(request.page.page_token) if request.page.page_token else 0
         except ValueError:
             offset = 0
-        symbol_filter = request.symbol or None  # FR-3: optional ticker filter
+        symbol_filter = request.symbol or None
         rows = await backfill_jobs.list_jobs(
             self._db,
             status_filter=status_filter,
@@ -699,7 +681,6 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         return job_row_to_proto(await backfill_jobs.get_job(self._db, request.job_id))
 
     async def NormalizeRawData(self, request, context):
-        # Normalise CSV/JSON/alpaca_v2 payloads into ledger events
         rows = 0
         errors = []
         try:
@@ -763,14 +744,12 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         if signal.direction not in valid_directions:
             raise _SignalValidationError(f"direction must be one of {valid_directions}")
 
-        # F-9: conviction must be in [0.0, 1.0]. The inverted-range form also rejects NaN
-        # (every NaN comparison is False), which the naive `< 0 or > 1` form would leak through
-        # to the `> 0.0` NULL-sentinel below and silently store as NULL. 0.0 still passes here
-        # and is treated as "not provided" (→ NULL) since conviction is a presence-less double.
+        # Inverted-range form also rejects NaN (all NaN comparisons are False), which `<0 or >1`
+        # would leak to the `>0.0` NULL-sentinel below. 0.0 passes and is stored as NULL.
         if not (0.0 <= signal.conviction <= 1.0):
             raise _SignalValidationError("conviction must be between 0.0 and 1.0")
 
-        # FR-3: source slug must be registered and active
+        # Source slug must be registered and active.
         source_row = await self._db.fetchrow(
             "SELECT slug FROM ingest.signal_sources WHERE slug = $1 AND active = TRUE",
             signal.source,
@@ -780,7 +759,6 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 f"source slug '{signal.source}' is not a registered active source"
             )
 
-        # Convert protobuf Timestamps to Python datetimes
         valid_from = signal.valid_from.ToDatetime(tzinfo=UTC)
         valid_until = None
         if signal.HasField("valid_until") and signal.valid_until.seconds > 0:
@@ -845,11 +823,8 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                     self._cfg.dedup_window_hours,
                 )
                 if claim is None:
-                    # Raising here — still inside `async with conn.transaction():` — is what
-                    # forces the ROLLBACK. This except clause must stay ordered BEFORE the
-                    # generic `except Exception` below (_DuplicateSignal is itself an
-                    # Exception subclass) — reordering would silently defeat "MUST NOT insert
-                    # a second row" while still reporting deduplicated=true.
+                    # Raising inside the transaction forces the ROLLBACK; this except MUST stay
+                    # ordered before the generic `except Exception`, or dedup inserts a 2nd row.
                     raise _DuplicateSignal()
                 signal_id = candidate_id
         except _DuplicateSignal:
@@ -867,7 +842,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             signal_id = existing["signal_id"]
         except Exception as e:
             log.error("failed to insert signal: %s", e)
-            try:  # feature 083 — record the source's last error (best-effort)
+            try:  # record the source's last error (best-effort)
                 await mark_source_error(self._db, signal.source, str(e))
             except Exception as bookkeeping_err:
                 log.warning(
@@ -876,9 +851,8 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             raise _SignalIngestError(f"database error: {e}")
 
         if not deduplicated:
-            # feature 083 — record a successful feed (last_seen_at + signals_fed++, clear
-            # last_error). GATED to the non-duplicate path only — a dedup hit performed no
-            # new ingest.
+            # Record a successful feed (best-effort). Gated to the non-duplicate path — a
+            # dedup hit performed no new ingest.
             try:
                 await mark_source_fed(self._db, signal.source)
             except Exception as e:
@@ -892,7 +866,6 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 signal.direction,
             )
 
-            # Emit ledger event
             from google.protobuf.struct_pb2 import Struct
 
             payload = Struct()
@@ -917,10 +890,8 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             except Exception as e:
                 log.warning("failed to emit ledger event for signal %d: %s", signal_id, e)
         else:
-            # feature 111 — a dedup hit still means the source is alive; bump last_seen_at
-            # (but NOT signals_fed, which counts genuinely new signals) so a source that
-            # legitimately keeps resending the same still-current recommendation doesn't
-            # read as STALE/DOWN in ListSignalSources health derivation.
+            # A dedup hit still means the source is alive: bump last_seen_at but NOT
+            # signals_fed, so a source resending a still-current signal doesn't read as STALE.
             try:
                 await touch_source_last_seen(self._db, signal.source)
             except Exception as e:
@@ -941,7 +912,6 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
             return
 
-        # Build dynamic WHERE clauses
         conditions = []
         params = []
         idx = 1
@@ -983,7 +953,6 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
 
         where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
 
-        # Pagination
         limit = request.page.page_size if request.page.page_size > 0 else 100
         offset_val = request.page.page_token  # reuse as integer offset for simplicity
 
@@ -1022,17 +991,15 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 raw_url=row["raw_url"] or "",
                 tags=list(row["tags"]) if row["tags"] else [],
             )
-            # Set valid_from timestamp
             vf = Timestamp()
             vf.FromDatetime(row["valid_from"])
             sig.valid_from.CopyFrom(vf)
-            # Set valid_until if present
             if row["valid_until"] is not None:
                 vu = Timestamp()
                 vu.FromDatetime(row["valid_until"])
                 sig.valid_until.CopyFrom(vu)
-            # feature 022: platform ingestion time (NOT NULL column, DB default NOW()) — the age
-            # input for analysis's signal_axis decay. No null guard needed (column is NOT NULL).
+            # ingested_at is NOT NULL (DB default NOW()) so no null guard is needed; it's the
+            # age input for analysis's signal decay.
             sig.ingested_at.FromDatetime(row["ingested_at"])
             signals.append(sig)
 
@@ -1063,7 +1030,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                     if isinstance(row["config_json"], dict)
                     else json.loads(row["config_json"])
                 )
-            # feature 083 — health is derived on read from last_seen_at freshness + last_error.
+            # Health is derived on read from last_seen_at freshness + last_error.
             last_seen = row.get("last_seen_at")
             last_error = row.get("last_error")
             health = _HEALTH_ENUM[derive_health_status(last_seen, last_error, now)]
@@ -1078,7 +1045,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 health=health,
                 last_error=last_error or "",
                 signals_fed=row.get("signals_fed") or 0,
-                reliability_weight=row.get("reliability_weight", 1.0),  # feature 134
+                reliability_weight=row.get("reliability_weight", 1.0),
             )
             if last_seen is not None:
                 source.last_seen_at.FromDatetime(last_seen)
@@ -1125,7 +1092,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 await context.abort(grpc.StatusCode.NOT_FOUND, f"source '{src.slug}' not found")
                 return
         elif op == "register":
-            # Strict create: an existing slug is a conflict, not a silent overwrite (feature 088).
+            # Strict create: an existing slug is a conflict, not a silent overwrite.
             if await get_source(self._db, src.slug) is not None:
                 await context.abort(
                     grpc.StatusCode.ALREADY_EXISTS, f"source '{src.slug}' already exists"
@@ -1139,9 +1106,8 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             if err:
                 await context.abort(grpc.StatusCode.INVALID_ARGUMENT, err)
                 return
-            # feature 134 — reject an out-of-range explicit weight (mirrors conviction at ~719); an
-            # omitted field resolves to the neutral 1.0 default. Never pass None — the NOT NULL
-            # column is named in the INSERT, so a bound NULL would raise NotNullViolationError.
+            # Reject an out-of-range explicit weight; an omitted field resolves to the 1.0 default.
+            # Never pass None — the NOT NULL column would raise NotNullViolationError.
             if src.HasField("reliability_weight") and not (0.0 <= src.reliability_weight <= 1.0):
                 await context.abort(
                     grpc.StatusCode.INVALID_ARGUMENT,
@@ -1160,7 +1126,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 active=True,
                 reliability_weight=weight,
             )
-        else:  # update — AIP-161 partial merge onto the stored row (feature 088)
+        else:  # update — AIP-161 partial merge onto the stored row
             stored = await get_source(self._db, src.slug)
             if stored is None:
                 await context.abort(grpc.StatusCode.NOT_FOUND, f"source '{src.slug}' not found")
@@ -1210,8 +1176,8 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             if err:
                 await context.abort(grpc.StatusCode.INVALID_ARGUMENT, err)
                 return
-            # feature 134 — reject an out-of-range explicit weight, then merge: masked + present →
-            # request value; else preserve the stored weight (never None on the NOT NULL column).
+            # Reject an out-of-range explicit weight, then merge: masked + present → request
+            # value; else preserve the stored weight (never None on the NOT NULL column).
             if src.HasField("reliability_weight") and not (0.0 <= src.reliability_weight <= 1.0):
                 await context.abort(
                     grpc.StatusCode.INVALID_ARGUMENT,
@@ -1252,6 +1218,6 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             active=row["active"],
             has_credentials=(row["credentials_ref"] is not None),
             config_json=cfg_out,
-            reliability_weight=row["reliability_weight"],  # feature 134
+            reliability_weight=row["reliability_weight"],
         )
         return ingest_pb2.ManageSignalSourceResponse(source=result)

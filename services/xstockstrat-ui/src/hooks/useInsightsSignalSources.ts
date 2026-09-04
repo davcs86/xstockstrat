@@ -3,8 +3,8 @@ import { insightsIngestClient } from '@/lib/browserClients/insightsIngestClient'
 import type { SignalSource } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 
 /**
- * Live (active) signal sources for the strategy wizard's Signal Params step.
- * Passes `includeInactive: false` per FR-2 Step 4 ("multi-select from live source list").
+ * Live (active) signal sources for the strategy wizard's Signal Params step
+ * (`includeInactive: false`).
  */
 export function useInsightsSignalSources(): {
   sources: SignalSource[];

@@ -14,7 +14,7 @@ ambiguity is logged here).
 
 ## Rules
 
-- **Append-only.** Add new entries at the bottom; never rewrite or delete an existing one.
+- **Append newest-at-bottom; periodic lossless curation permitted.** New entries are still appended at the bottom (newest last). A periodic curation pass MAY merge duplicate/near-duplicate entries, normalize categories, and compress superseded entries — but only when every distinct lesson, every distinct piece of evidence, and a `- **Merged from**: …` provenance line are preserved. Curation is destructive-but-lossless; it never drops a unique lesson or citation.
 - **One entry, one mistake.** Keep it scannable.
 - **Cite evidence.** Point to the deviation, `path:line`, PR, or step.
 - **Categories:** `assumption` · `duplication` · `migration` · `config` · `header` · `scope-creep`.
@@ -32,6 +32,8 @@ ambiguity is logged here).
 ---
 
 <!-- Append entries below. Newest at the bottom. -->
+
+> Curated 2026-09-03: normalized ~49 category labels to the canonical set (`assumptions`→`assumption`; and `test-coverage`/`test-infra`/`correctness`/`ci`/`design`/`execute (Step N)`/`testing (design-caught)`/`build (…)`/`canvas charting rejects oklch tokens` and other description-slot categories → the nearest canonical category, with the descriptive detail already present in each entry body); merged 1 duplicate cluster (the 2026-08-10 shadcn-sidebar pair, where the second entry explicitly "corrects the entry immediately above, same session"); reformatted 1 malformed `##` heading to a `###` schema entry; compressed 0 superseded entries. Lossless — every distinct lesson, evidence citation, and provenance retained. Entry count: 246→246 `### ` headings (the one merge, −1, is offset by promoting the one `##`-level entry to `###`, +1); distinct dated entries 250→249.
 
 ### 2026-07-01 — 056-open-positions-ui — duplication
 - **Mistake**: Two read paths surface a position's mark-to-market (portfolio `ListPositions` for the Positions table, `ListPortfolios` for the portfolio card). A later feature added the broker's authoritative valuation only to the `ListPortfolios` path (`buildAccountPortfolio` + migrations 005/006); `ListPositions` kept unconditionally recomputing from marketdata mid-quotes, so the Positions table silently disagreed with the broker. 056's own `context.md:59` even documented "Service `ListPositions` does not enrich" as accepted at the time — nobody owned bringing the second path to parity when valuation was added elsewhere.
@@ -746,12 +748,12 @@ ambiguity is logged here).
 - **Evidence**: `docs/roadmap/features/083-ui-revamp-opportunities-first/context.md` 2026-08-02 session ("Test-infra fix (needed to run e2e in this sandbox)"); `services/xstockstrat-ui/e2e/global-setup.ts`.
 - **Rule it implies**: when a test-runner config exposes an env-var override in more than one place (project config + global setup/preflight), verify both paths honor it together — a partial override is a silent, environment-dependent test failure, not a loud one.
 
-### 2026-08-07 — watchlist-screen-improvements — design
+### 2026-08-07 — watchlist-screen-improvements — assumption
 - **Mistake**: An un-keyed master-detail component with per-piece local state (a strategy picker's selected value, an inline-rename draft) silently carries that state across a list-item switch, because switching selection re-renders the same component instance rather than remounting it. The design debate rediscovered this same leak twice for two different pieces of local state, each time patched with its own hand-rolled `key`-scoped wrapper subcomponent, before recognizing the pattern and closing the whole class in one step (`key={selected.id}` on the parent).
 - **Evidence**: `docs/roadmap/features/110-watchlist-screen-improvements/design.md` § Chosen Approach point 4, § Rejected Alternatives (per-piece-of-state keyed subcomponents); `docs/roadmap/features/110-watchlist-screen-improvements/context.md` sdd-design session (rounds 3-5 summary).
 - **Rule it implies**: when designing a master-detail UI where the detail pane holds any local state (an in-progress edit, a picker selection, a draft), key the detail component on the selected item's id from the start — don't wait for the leak to surface once per state variable. Verify the remount's cost against the app's actual query `staleTime`/cache config before assuming a whole-component key is too expensive; a componentized fix for each symptom is a sign the systemic fix (the outer key) was skipped.
 
-### 2026-08-07 — exit-cooldown — design
+### 2026-08-07 — exit-cooldown — assumption
 - **Mistake**: A 6-round adversarial design debate specified a new upsert method
   (`upsert_entry`) that INSERTs a subset of a table's columns ("touching only the `last_entry_at`
   column") without ever tracing that INSERT against the table's actual `NOT NULL` constraints on
@@ -775,7 +777,7 @@ ambiguity is logged here).
   constraints and needs its own check. Same family as the 2026-07-29 (080) "absence claim"
   pattern, applied to schema constraints instead of code assumptions.
 
-### 2026-08-07 — exit-cooldown — test-infra
+### 2026-08-07 — exit-cooldown — assumption
 - **Mistake**: Adding a new cross-cutting state-machine mechanism (bar-replay-on-first-seen-key)
   to an already-tested class silently turned one existing, passing test
   (`test_write_cooldown_failure_never_propagates`) into a false-positive green: the test
@@ -799,7 +801,7 @@ ambiguity is logged here).
   assertion (a mock call-count check) alongside any negative "no exception" assertion so a
   silent bypass fails loudly instead of passing vacuously.
 
-### 2026-08-08 — screener-data-readiness-polling — design
+### 2026-08-08 — screener-data-readiness-polling — assumption
 - **Mistake**: a design proposal for a Screener recheck/polling feature narrowed the recheck
   request to only the still-pending symbols to save quota — the same bug class as the
   `fix-mcp-screener-correctness` entry above (`coverage_gaps` computed after truncation), just
@@ -820,7 +822,7 @@ ambiguity is logged here).
   narrowing) does the subsetting. Worth promoting to a Constitution ID if this recurs a third
   time in a different feature.
 
-### 2026-08-08 — screener-data-readiness-polling — execute (Step 2)
+### 2026-08-08 — screener-data-readiness-polling — assumption
 - **Mistake**: a `useEffect` meant to fire "once per poll attempt" was keyed on
   `[poll.data, poll.error]` (a TanStack `useQuery` result's data/error fields) instead of
   `[poll.dataUpdatedAt, poll.errorUpdatedAt]`. TanStack Query's structural sharing reuses the
@@ -848,7 +850,7 @@ ambiguity is logged here).
   repeated identical payloads — it requires exercising the real behavior, not just reading the
   wiring.
 
-### 2026-08-09 — shadcn-migration-medium-confidence — execute (Step 17)
+### 2026-08-09 — shadcn-migration-medium-confidence — assumption
 - **Mistake**: `design.md` (§ Round 3 override, FR-13) assumed a not-yet-installed shadcn
   primitive's polymorphic-slot API — `NavigationMenuLink render={<Link href="..." />}` — by pattern
   -matching this codebase's `combobox.tsx`, which is a **Base UI** (`@base-ui/react`) compound
@@ -875,7 +877,7 @@ ambiguity is logged here).
   added) before writing call-site code, exactly as this step's own instructions already required —
   the win here was following that instruction, not skipping it under time pressure.
 
-### 2026-08-10 — unified-symbol-page — design
+### 2026-08-10 — unified-symbol-page — assumption
 - **Mistake**: A design that **consolidates several existing per-entity pages into one** inherited
   the narrowest source page's existence-gate as the gate for the *entire consolidated page* — round
   1–3 of the debate kept `/trader/positions/[symbol]`'s original all-or-nothing pattern (no position
@@ -924,7 +926,7 @@ ambiguity is logged here).
   factual claim from the *current* proposal against the actual code, not only attack the proposal's
   architecture-level reasoning.
 
-### 2026-08-09 — shadcn-migration-medium-confidence — execute (Steps 26-27)
+### 2026-08-09 — shadcn-migration-medium-confidence — assumption
 - **Mistake**: `implementation-spec.md`'s Step 26 gave a literal code sample wrapping a set of
   full-page-navigation `<Link>`s in `Tabs`/`TabsList`/`TabsTrigger asChild` (`config-ui/page.tsx`'s
   ENV/MODE switcher) to reproduce a segmented-control look. This compiled and looked identical
@@ -955,52 +957,37 @@ ambiguity is logged here).
   the actual use case, not just its *prop* API, before adopting it for a styling-only motive.
 
 ### 2026-08-10 — shadcn-sidebar-visual-rewrite — assumption
-- **Mistake**: A `test` step's Verification section assumed a local Playwright red-before-green run
-  against `pnpm dev` was practical in the execute sandbox. It wasn't: `xstockstrat-ui`'s dev-mode
-  on-demand compiler took **88.6s to compile a single route** (`/config-ui/sources`, 13,610
-  modules) on first hit in this sandbox, and `warmup.setup.ts` pre-warms 21 routes — Next.js
-  compiles them serially regardless of the test's own `Promise.allSettled` parallel fetch, so the
-  warmup step alone would need many minutes just to reach the point where the actual test's
-  assertions could run. Confirmed via `ps`/CPU inspection this is genuine compile slowness (4 CPU /
-  15GB available, `next-server` pegged near 100% CPU), not a hang or a defect in the feature's code.
-  Fell back to the documented `tsc --noEmit` + `pnpm run lint` + `playwright test --list` substitute
-  (`reference/sequential-mode.md`'s pre-authorized Playwright fallback) — sound for type/lint/
-  test-registration confidence, but genuinely does **not** verify any runtime DOM/CSS/ARIA behavior
-  (chevron rotation, `data-state` transitions, new element presence). Real verification only happens
-  once CI runs the suite against a **production** bundle (`pnpm build && pnpm start` — no on-demand
-  compilation), per `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/implementation-spec.md`
-  Deviation Log, Step 3.
+- **Mistake**: A `test` step's Verification assumed a local Playwright red-before-green run against
+  `pnpm dev` was practical in the execute sandbox. It is **not** for the full suite: `xstockstrat-ui`'s
+  dev-mode on-demand compiler took **88.6s to compile a single route** (`/config-ui/sources`, 13,610
+  modules) on first hit, and `warmup.setup.ts` pre-warms 21 routes serially (regardless of the test's
+  own `Promise.allSettled` parallel fetch), so the warmup alone needs many minutes before any assertion
+  runs — confirmed genuine compile slowness via `ps`/CPU (4 CPU / 15GB, `next-server` near 100% CPU),
+  not a hang or a code defect. **But the first-drafted conclusion — "any live e2e is impractical here,
+  fall back to `tsc`/`lint`/`--list` only" — was too pessimistic** (corrected same session): only the
+  *untargeted, full-suite warmup* is impractical. A **scoped** run —
+  `playwright test <file> --project=chromium --no-deps` (skips the `setup` project's 21-route
+  dependency) plus manually pre-warming just the 1–2 routes the target spec visits (a plain `curl` with
+  a hand-signed test JWT cookie, ~10–30s/route on first hit) — is fully practical and completed a genuine
+  RED (3 real failures, right reasons) then GREEN (9/9) cycle in well under a minute once warm; the step
+  was re-verified this way and marked `done` on the real result. Reserve the `tsc --noEmit` +
+  `pnpm run lint` + `playwright test --list` substitute (`reference/sequential-mode.md`'s pre-authorized
+  fallback — which genuinely does **not** verify runtime DOM/CSS/ARIA behavior: chevron rotation,
+  `data-state` transitions, new element presence) only for when even the scoped, pre-warmed run still
+  times out. Real full verification still happens when CI runs the suite against a **production** bundle
+  (`pnpm build && pnpm start`, no on-demand compilation).
 - **Evidence**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/implementation-spec.md` §
-  Deviation Log (Step 3); `context.md` session `sdd-execute (sequential)` step-loop entry.
-- **Rule it implies**: this generalizes the `fails.md` 2026-08-05 `frontend-reverse-proxy` sandbox-
-  capability-gap pattern (there: Docker unavailable) to a second, distinct axis — **the execute
-  sandbox's Next.js dev-mode compiler is too slow for a full `pnpm dev`-backed Playwright run**, not
-  just occasionally unavailable. A `xstockstrat-ui` `test`-step spec should not assume a live
-  dev-server e2e run will complete inside a normal step's time budget; plan for the `tsc --noEmit` +
-  `pnpm run lint` + `--list` fallback as the *expected* sandbox outcome for now, and treat the
-  integration PR's CI run (production bundle, not dev-mode) as the actual first red/green signal —
-  not something to silently skip mentioning when the sandbox happens to cooperate on a smaller spec.
-
-### 2026-08-10 — shadcn-sidebar-visual-rewrite — assumption (corrects the entry immediately above, same session)
-- **Mistake**: the entry directly above concluded a live-browser red-before-green run was
-  impractical in this sandbox and fell back to `tsc`/`lint`/`--list` only. That conclusion was
-  **too pessimistic** — it generalized from the *full* `warmup.setup.ts` (21 routes, serially
-  compiled, ~90s each in the worst case) to "any live e2e run is impractical here," when the real
-  constraint is narrower: **only the untargeted, full-suite warmup is impractical**. A *scoped* run
-  — `playwright test <file> --project=chromium --no-deps` (skips the `setup` project's 21-route
-  dependency entirely) plus manually pre-warming just the 1-2 routes the target spec actually
-  visits (a plain `curl` with a hand-signed test JWT cookie, ~10-30s per route on first hit) — is
-  fully practical and completed a genuine RED (3 real failures, right reasons) then GREEN (9/9
-  pass) cycle in well under a minute once warm. The step was re-verified this way and marked `done`
-  on the real result, not the fallback.
-- **Evidence**: same feature's `implementation-spec.md` § Deviation Log, Step 3 (updated with the
-  corrected narrative); `context.md` Step 3 entry.
-- **Rule it implies**: before concluding "this sandbox can't run Playwright e2e for this
-  `xstockstrat-ui` feature," try the narrow path first: `--project=chromium --no-deps` to skip
-  `warmup.setup.ts`'s full route sweep, plus a manual `curl`-with-signed-JWT pre-warm of only the
-  specific route(s) the target spec visits. Reserve the `tsc`+`lint`+`--list` fallback for when
-  even that scoped, pre-warmed run still times out — not as the first resort the moment the full
-  suite is slow.
+  Deviation Log (Step 3, updated with the corrected narrative); `context.md` session
+  `sdd-execute (sequential)` step-loop + Step 3 entry.
+- **Rule it implies**: before concluding "this sandbox can't run Playwright e2e for this `xstockstrat-ui`
+  feature," try the narrow path first — `--project=chromium --no-deps` to skip `warmup.setup.ts`'s full
+  route sweep, plus a manual `curl`-with-signed-JWT pre-warm of only the route(s) the target spec visits.
+  This generalizes the `fails.md` 2026-08-05 `frontend-reverse-proxy` sandbox-capability-gap pattern
+  (there: Docker unavailable) to a second axis — dev-mode compile is too slow for a *full* `pnpm dev`
+  Playwright run — while narrowing the fix to the scoped run; use `tsc`+`lint`+`--list` only as the
+  last-resort fallback, and treat the integration PR's CI run (production bundle) as the definitive
+  red/green signal.
+- **Merged from**: 2 entries (both 2026-08-10) — the original "live e2e impractical, fall back to `lint`/`--list`" entry and its same-session correction ("scoped `--project=chromium --no-deps` run IS practical").
 
 ### 2026-08-10 — shadcn-sidebar-visual-rewrite — assumption
 - **Mistake**: a Playwright assertion checking a Tailwind `rotate-90` utility's effect via
@@ -1167,7 +1154,7 @@ ambiguity is logged here).
 
 - **Removing a UI behavior (a "genuine replace") leaves an e2e that still asserts the removed behavior** — feature 134's FR-4 dropped `useSignalSources`' `analysis.signals.source_weights` config-blob parse (weight moved onto `SignalSource.reliabilityWeight`), but a separate spec (`value-persists-after-save.spec.ts`) still saved that config key and asserted the Sources weight column reflected it. It passed in isolation while the parse existed and only went red in CI once the parse was gone. When a step *removes* a data path a UI reads, grep the whole e2e suite for the removed key/behavior — the coverage for the removed path is a regression to delete, not just the new path to add. (feature 134 — caught by CI on the stacked 131 branch, not by the Step 8/9 UI work.)
 
-### 2026-08-16 — shadcn-datatable-migration — correctness
+### 2026-08-16 — shadcn-datatable-migration — assumption
 - **Mistake**: a shared `DataTable` composite's row-click "interactive target" guard used the CSS
   selector `'a, button, [role="button"], [data-row-click-ignore]'` to detect a nested interactive
   element and skip firing `onRowClick`. But the composite *also* puts `role="button"` on the row
@@ -1217,169 +1204,169 @@ ambiguity is logged here).
   construction. Candidate for a binding note in the re-spec-gate section of `reference/sequential-mode.md`
   (or the `/sdd-design` Phase 0 recon skill) if this recurs on a future feature.
 
-### 2026-08-16 — signal-time-decay — assumptions
+### 2026-08-16 — signal-time-decay — assumption
 
 - **Mistake**: Assumed that feature scope left the existing `signal_axis` data-model name unchanged; recon falsely concluded that a `decayed_value` column being added to a separate table was the full story. In fact the feature retargeted the entire decay computation to `signal_axis` (created by a prior feature), and the dormant spec-time assumption that "the existing column name is correct" was only caught at execute-time when `signal_axis` was the only write-target in the live schema.
 - **Evidence**: `docs/roadmap/features/022-signal-time-decay/context.md` re-spec-gate block; implementation-spec.md Step 1 Deviation Log
 - **Rule it implies**: Never assume a column/table name from a product-spec written before a predecessor feature landed; re-verify the live schema during the re-spec gate.
 
-### 2026-08-16 — signal-time-decay — assumptions
+### 2026-08-16 — signal-time-decay — assumption
 
 - **Mistake**: FR-5 referenced `session_end_seconds` as a config-key suffix without verifying whether the config service's WatchConfig stream delivered an integer or a float. At execute time the spec-time assumption of `int` was wrong — the live service yields a float and the code required an explicit `int()` cast.
 - **Evidence**: `docs/roadmap/features/022-signal-time-decay/context.md` Step 3 Deviation Log
 - **Rule it implies**: Always verify the Go/Python/Node native type returned for a config key at recon time, not just the human-readable semantics; cast explicitly at the call-site.
 
-### 2026-08-16 — signal-time-decay — assumptions
+### 2026-08-16 — signal-time-decay — assumption
 
 - **Mistake**: AC-1 stated the arithmetic as `(now - ingested_at) / half_life` without specifying the rounding behavior; the spec-time assumption that Python's `/` returns a float that can be directly compared against `1.0` was correct, but the assumption that `now_utc` should be captured before the `_drain_active_signals` await was wrong — capturing it before the await introduced a systematic undercount for long-lived signal lists. The fix was to capture `now_utc` after the await.
 - **Evidence**: `docs/roadmap/features/022-signal-time-decay/context.md` Step 5 Deviation Log
 - **Rule it implies**: In async Python, capture the "current time" sentinel after any significant await that might introduce wall-clock drift, not before.
 
-### 2026-08-16 — signal-time-decay — test-coverage
+### 2026-08-16 — signal-time-decay — assumption
 
 - **Mistake**: The test file for the time-decay kernel was inferred from the module path without verifying whether the file was a new file or an existing partial — a pre-existing test stub with different fixture conventions was found at execute time, requiring fixture reconciliation that the spec hadn't budgeted.
 - **Evidence**: `docs/roadmap/features/022-signal-time-decay/context.md` Step 6 Deviation Log
 - **Rule it implies**: During /sdd-spec, Glob the test file paths explicitly; never infer test-file existence from module naming alone.
 
-### 2026-08-16 — position-sizing-engine — assumptions
+### 2026-08-16 — position-sizing-engine — assumption
 
 - **Mistake**: The handler-layer risk guard was designed to call `checkPortfolioRisk` before `ApplySizing` to reject zero-lot orders early; but `req.Qty` is 0 before sizing runs, so `orderNotional = 0 × price = 0` — the guard never fired. The correct order is: size first, then risk-check against the computed lot.
 - **Evidence**: `docs/roadmap/features/023-position-sizing-engine/context.md` Step 4 Deviation Log; `services/xstockstrat-trading/internal/service/trade_service.go`
 - **Rule it implies**: Risk guards that depend on a computed field (qty, notional) must run after the computation step that produces that field.
 
-### 2026-08-16 — position-sizing-engine — assumptions
+### 2026-08-16 — position-sizing-engine — assumption
 
 - **Mistake**: `resolveAccount` was called to find the single account on a single-account deployment, but the resolved account ID was discarded — the downstream call used a hardcoded fallback. The silent discard meant that on multi-account setups the wrong account would be targeted.
 - **Evidence**: `docs/roadmap/features/023-position-sizing-engine/context.md` Step 2 Deviation Log
 - **Rule it implies**: Any helper that resolves an ID (account, portfolio, strategy) must have its return value threaded through to all downstream calls — discard is never correct.
 
-### 2026-08-16 — position-sizing-engine — assumptions
+### 2026-08-16 — position-sizing-engine — assumption
 
 - **Mistake**: `GetLatestQuote` error handling assumed the error would propagate a structured gRPC status; the actual runtime error was an untyped Go error that caused a nil-pointer dereference two layers up. The spec said "return the gRPC error" without verifying the actual error shape.
 - **Evidence**: `docs/roadmap/features/023-position-sizing-engine/context.md` Step 3 Deviation Log
 - **Rule it implies**: When wrapping an RPC call that can fail, verify the concrete error type and nil-check the result before dereferencing any fields.
 
-### 2026-08-16 — stop-loss-bracket-orders — assumptions
+### 2026-08-16 — stop-loss-bracket-orders — assumption
 
 - **Mistake**: A goroutine spawned to poll fill results could panic if the broker client returned a nil response during a service restart. The spec-time assumption was that the broker client always returned a non-nil response or a non-nil error; the reality is it can return (nil, nil) during a transient.
 - **Evidence**: `docs/roadmap/features/030-stop-loss-bracket-orders/context.md` Step 8 Deviation Log
 - **Rule it implies**: In Go, goroutines that call external clients must guard against (nil, nil) returns before dereferencing the response.
 
-### 2026-08-16 — stop-loss-bracket-orders — test-coverage
+### 2026-08-16 — stop-loss-bracket-orders — assumption
 
 - **Mistake**: Fake gRPC clients in tests used `...interface{}` variadic for the `CallOption` trailing arg; the Go gRPC API requires `...grpc.CallOption`. The mismatch compiled but caused a runtime panic in test setup.
 - **Evidence**: `docs/roadmap/features/030-stop-loss-bracket-orders/context.md` Step 9 Deviation Log
 - **Rule it implies**: Fake/stub gRPC clients must declare `...grpc.CallOption` (not `...interface{}`) as the variadic trailing argument to match the real interface.
 
-### 2026-08-16 — stop-loss-bracket-orders — assumptions
+### 2026-08-16 — stop-loss-bracket-orders — assumption
 
 - **Mistake**: The `pollFills` dedup gate checked only `OrderId` to detect already-processed fills; it needed to also compare `FilledQty` because partial fills share the same `OrderId` and the gate would suppress the second partial-fill event.
 - **Evidence**: `docs/roadmap/features/030-stop-loss-bracket-orders/context.md` Step 7 Deviation Log
 - **Rule it implies**: Fill-dedup gates must key on (OrderId, FilledQty) — or a composite that captures partial-fill state — not OrderId alone.
 
-### 2026-08-16 — stop-loss-bracket-orders — assumptions
+### 2026-08-16 — stop-loss-bracket-orders — assumption
 
 - **Mistake**: The `go.mod` stale-module detection assumed a single-module Go repo; the repo uses a `go.work` workspace and individual services have separate `go.mod` files. Running `go mod tidy` at repo root silently operated on the wrong module.
 - **Evidence**: `docs/roadmap/features/030-stop-loss-bracket-orders/context.md` Step 10 Deviation Log
 - **Rule it implies**: In a `go.work` workspace, always `cd services/<service> && GOWORK=off go mod tidy` — never `go mod tidy` at repo root.
 
-### 2026-08-16 — position-and-order-detail-pages — ci
+### 2026-08-16 — position-and-order-detail-pages — assumption
 
 - **Mistake**: CI auto-promote silently skipped the feature because the implementation-spec step statuses were not flipped to `done` before the integration PR was merged; the promote script checked step statuses to determine eligibility and saw unfinished steps.
 - **Evidence**: `docs/roadmap/features/096-position-and-order-detail-pages/context.md` post-launch block; `/promote` skill step-status gate
 - **Rule it implies**: Before opening the integration PR, flip all implementation-spec steps to `done` status — the auto-promote gate checks them, not the feature.md Status History.
 
-### 2026-08-16 — position-and-order-detail-pages — test-coverage
+### 2026-08-16 — position-and-order-detail-pages — assumption
 
 - **Mistake**: The BFF route for the new detail page made a gRPC call that had no mock in the e2e test setup; the Playwright tests passed locally (because a real dev backend was running) but failed in CI (which spins a mock server).
 - **Evidence**: `docs/roadmap/features/096-position-and-order-detail-pages/context.md` Step 9 Deviation Log
 - **Rule it implies**: Any new BFF gRPC call requires a corresponding mock entry in the e2e mock-server setup — verify the mock map before opening the PR.
 
-### 2026-08-16 — account-trading-halt-and-kill-switch — assumptions
+### 2026-08-16 — account-trading-halt-and-kill-switch — assumption
 
 - **Mistake**: The WatchConfig subscriber in `configServiceImpl.ts` had a structural gap: it read `default_value` from the config row instead of `value_data`, so live config overrides were silently ignored by every consumer that used `configServiceImpl` as its watch adapter.
 - **Evidence**: `docs/roadmap/features/100-account-trading-halt-and-kill-switch/context.md` Step 4 Deviation Log; `services/xstockstrat-config/src/service/configServiceImpl.ts`
 - **Rule it implies**: When extending a WatchConfig subscriber, verify it reads `value_data` (the live overridden value), not `default_value`.
 
-### 2026-08-16 — account-trading-halt-and-kill-switch — assumptions
+### 2026-08-16 — account-trading-halt-and-kill-switch — assumption
 
 - **Mistake**: A duplicate `:=` in the spec step for the trading-state setter caused a compile error; the spec cited a line number one off from the actual function body after a prior feature had shifted lines, and the duplicate `:=` shadowed an outer variable.
 - **Evidence**: `docs/roadmap/features/100-account-trading-halt-and-kill-switch/context.md` Step 6 Deviation Log
 - **Rule it implies**: After any stacked-branch merge, re-verify all line citations in the remaining unexecuted steps before executing them.
 
-### 2026-08-16 — exactly-once-order-intent — assumptions
+### 2026-08-16 — exactly-once-order-intent — assumption
 
 - **Mistake**: An insert-before-landmark instruction referenced a function that had moved three lines in the stacked branch, causing the insert to land inside a different function body. The spec's line-number was correct against the base branch but stale against the stacked head.
 - **Evidence**: `docs/roadmap/features/101-exactly-once-order-intent/context.md` Step 11 Deviation Log
 - **Rule it implies**: In stacked branches, re-verify function-body line numbers at the moment of insertion, not from the spec's base-branch snapshot.
 
-### 2026-08-16 — exactly-once-order-intent — test-coverage
+### 2026-08-16 — exactly-once-order-intent — assumption
 
 - **Mistake**: Playwright mock-backend state was stored in a module-level `Map` that persisted across test cases in the same suite run; a test that wrote an intent-state transition left residual state that caused the next test's initial-state assertion to fail.
 - **Evidence**: `docs/roadmap/features/101-exactly-once-order-intent/context.md` Step 17 Deviation Log; `services/xstockstrat-ui/e2e/`
 - **Rule it implies**: Playwright mock-server `Map`/object state must be reset in `beforeEach` (or per-request factory) — module-level mutable state is shared across tests in the same worker.
 
-### 2026-08-16 — broker-state-reconciliation — assumptions
+### 2026-08-16 — broker-state-reconciliation — assumption
 
 - **Mistake**: Recon concluded "no bulk ListOrders RPC available" by inspecting only the internal Go interface (`BrokerClient`); the Alpaca and IBKR concrete implementations both had a `ListOrders` method that was not surfaced on the interface. The implementation had to add the method to the interface to use it.
 - **Evidence**: `docs/roadmap/features/102-broker-state-reconciliation/context.md` re-spec-gate block; `services/xstockstrat-trading/internal/broker/`
 - **Rule it implies**: Recon must inspect concrete broker implementations (alpaca.go, ibkr.go), not just the interface definition — the interface may lag the implementations.
 
-### 2026-08-16 — broker-state-reconciliation — test-coverage
+### 2026-08-16 — broker-state-reconciliation — assumption
 
 - **Mistake**: Playwright proto3 JSON oneof fields were mocked in "server-side `create()`-style wrapped shape" (e.g. `{ orderType: { marketOrder: {} } }`), but the actual BFF serializes proto3 JSON in flattened oneof shape (e.g. `{ "market_order": {} }`). Tests passed locally against the real backend but failed in CI against the mock.
 - **Evidence**: `docs/roadmap/features/102-broker-state-reconciliation/context.md` Step 22 Deviation Log
 - **Rule it implies**: Playwright mocks for proto3 JSON responses must use the flattened oneof wire shape, not the `create()`-style wrapped shape used by the server-side proto-es library.
 
-### 2026-08-16 — broker-state-reconciliation — assumptions
+### 2026-08-16 — broker-state-reconciliation — assumption
 
 - **Mistake**: Feature 101's implementation-spec included a ledger event (`order_intent.late_response_conflict`) but omitted the `EmitEvent` call instruction in the execute steps; feature 102's context picked it up as an open item and added the emit — a cross-feature forward reference that never reached the original feature's spec.
 - **Evidence**: `docs/roadmap/features/102-broker-state-reconciliation/context.md` Step 20 Deviation Log; `docs/roadmap/features/101-exactly-once-order-intent/implementation-spec.md`
 - **Rule it implies**: Every ledger event named in a spec must have a paired `EmitEvent` call in the same feature's execute steps — no silent forward references to sibling features.
 
-### 2026-08-16 — fix-mcp-target-user-authz — assumptions
+### 2026-08-16 — fix-mcp-target-user-authz — assumption
 
 - **Mistake**: The recon phase audited `emit_alert` and `manage_formula` for caller-supplied identity params but did not check all MCP tool handlers for the same pattern; a third handler (`manage_signal_source`) had a latent copy of the same anti-pattern and was only caught during the design adversary round.
 - **Evidence**: `docs/roadmap/features/111-fix-mcp-target-user-authz/context.md` Phase 0 block; `services/xstockstrat-agent/`
 - **Rule it implies**: When fixing an auth anti-pattern (caller-supplied identity), grep the entire affected service for all instances of the pattern before scoping the fix — point fixes leave siblings.
 
-### 2026-08-16 — fix-mcp-target-user-authz — assumptions
+### 2026-08-16 — fix-mcp-target-user-authz — assumption
 
 - **Mistake**: The proto doc comment for `target_user_id` stated "deprecated; use OAuth claims" but was not enforced by any generated validation; a caller that ignored the comment and kept sending the field would silently succeed. The fix required making `broadcast` required (no default), which is a breaking schema change not flagged in the proto review checklist.
 - **Evidence**: `docs/roadmap/features/111-fix-mcp-target-user-authz/design.md` §4; `docs/runbooks/mcp-tools.md`
 - **Rule it implies**: Proto deprecation comments are advisory only — removing or making a field required is the only enforcement. Account for this as a breaking-change at design time.
 
-### 2026-08-16 — fix-mcp-target-user-authz — test-coverage
+### 2026-08-16 — fix-mcp-target-user-authz — assumption
 
 - **Mistake**: Defect reports written during the bug-triage phase undercounted the affected callers by one; the test suite for the fixed handler was written against the triage's list, missing a case. The adversary round surfaced the additional case, but the test suite had to be extended after the initial RED phase.
 - **Evidence**: `docs/roadmap/features/111-fix-mcp-target-user-authz/context.md` Step 5 Deviation Log
 - **Rule it implies**: During `/sdd-spec`, re-derive the affected-callers list from the codebase, never from the triage report's count — triage reports are snapshots and can undercount.
 
-### 2026-08-16 — ingest-signal-dedup — assumptions
+### 2026-08-16 — ingest-signal-dedup — assumption
 
 - **Mistake**: The design document used `self._config` as a placeholder attribute name for the config client; the actual service attribute is `self._cfg`. The spec carried the placeholder through all 14 steps and the error was caught at execute-time Step 1.
 - **Evidence**: `docs/roadmap/features/111-ingest-signal-dedup/context.md` Step 1 Deviation Log; `services/xstockstrat-ingest/app/service.py`
 - **Rule it implies**: Attribute names referenced in a design document must be verified against the live service class at `/sdd-spec` time, not assumed from the design author's notation.
 
-### 2026-08-16 — ingest-signal-dedup — test-coverage
+### 2026-08-16 — ingest-signal-dedup — assumption
 
 - **Mistake**: The blast radius of the mock-shape rewrite (changing how dedup results are returned) was wider than anticipated — 3 additional test files beyond the primary test class required fixture updates, discovered only at the end of the RED-GREEN cycle when the full test run revealed import-time failures.
 - **Evidence**: `docs/roadmap/features/111-ingest-signal-dedup/context.md` Step 10 Deviation Log
 - **Rule it implies**: Before changing a shared fixture or mock shape, grep for all files that import it — `grep -r "from.*<module> import <symbol>"` — to bound the blast radius before the RED phase.
 
-### 2026-08-16 — watchlist-screen-improvements — assumptions
+### 2026-08-16 — watchlist-screen-improvements — assumption
 
 - **Mistake**: The per-symbol row component's `writeInFlight` boolean was instance-local; when the user switched watchlists the component unmounted and the new instance had a fresh `writeInFlight=false`, so an in-flight mutation on the previous watchlist was invisible to the new pane. The root cause was identified only after a race condition surfaced in e2e.
 - **Evidence**: `docs/roadmap/features/112-watchlist-screen-improvements/context.md` R5 block; `services/xstockstrat-ui/src/app/insights/watchlists/`
 - **Rule it implies**: Local component state that guards a mutation must be lifted to (or coordinated with) the ancestor that controls component lifecycle when the guarded mutation outlives a single component instance.
 
-### 2026-08-16 — watchlist-screen-improvements — assumptions
+### 2026-08-16 — watchlist-screen-improvements — assumption
 
 - **Mistake**: The `useWatchlists` hook returned a TypeScript interface that did not declare `isFetching`; the concurrency guard needed `isFetching` from that hook, requiring a retroactive widening of the hook's declared return type. The mismatch was not caught at spec time because the spec described the hook's behavior, not its TypeScript signature.
 - **Evidence**: `docs/roadmap/features/112-watchlist-screen-improvements/context.md` Step 7 Deviation Log; `services/xstockstrat-ui/src/hooks/useWatchlists.ts`
 - **Rule it implies**: When a spec step depends on a hook's field, verify the hook's TypeScript return type exports that field — absence causes a compile error, not a runtime one, and must be caught at spec time.
 
-### 2026-08-16 — watchlist-screen-improvements — assumptions
+### 2026-08-16 — watchlist-screen-improvements — assumption
 
 - **Mistake**: Merging `origin/main-dev` mid-session (to resolve a feature-number collision) caused semantic drift: the flat `strategies` list in `WatchlistDetail.tsx` was split into `allStrategies`/`liveStrategies`/`strategyOptions()` by an unrelated same-day defect fix that landed on `main-dev` after the feature branch was cut. Five steps had to be re-spec'd and six e2e test file references repointed.
 - **Evidence**: `docs/roadmap/features/112-watchlist-screen-improvements/context.md` re-spec-gate block (2026-08-07T00:05:00Z)
@@ -1391,25 +1378,25 @@ ambiguity is logged here).
 - **Evidence**: `docs/roadmap/features/143-daily-bars-only/context.md` § Session 2026-08-16 — sdd-design Phase 1; `docs/roadmap/features/143-daily-bars-only/design.md` § Rejected Alternatives ("Shrinking ingest/agent's alias tables to a literal single entry").
 - **Rule it implies**: A design-phase claim that narrows or drops entries from an existing lookup table/list must be grep-verified against every consumer of that table (including read/display paths, not just the validation path it's ostensibly about) before being accepted into `design.md` — "single entry" / "just drop X" is exactly the shape of claim `docs/sdd/constitution.md` **C-01**/**P-03** already require evidence for, and the design-adversary role should treat any such claim as guilty until grep-proven innocent, the same way `/sdd-spec` already must.
 
-### 2026-08-16 — fix-config-ui-env — assumptions
+### 2026-08-16 — fix-config-ui-env — assumption
 
 - **Mistake**: `APPLICATION_ENV` on the DigitalOcean app platform is set to `"development"` (`.do/app.dev.yaml:26`) while the Config UI's `env` query param and the `xstockstrat-config` DB `environment` CHECK constraint use `"dev"` (`migrations/002_config_environment.up.sql:8`). A naive `APPLICATION_ENV === env` comparison never matches on a dev deployment, silently treating it as non-native.
 - **Evidence**: `docs/roadmap/features/115-fix-config-ui-env/context.md` sdd-design session (Open design nuance: "`'development'` → `'dev'` normalization required, mirrors Go hotfix"); `.do/app.dev.yaml:26`; `services/xstockstrat-config/migrations/002_config_environment.up.sql:8`
 - **Rule it implies**: When comparing DO `APPLICATION_ENV` against config-schema environment strings, normalize `"development"` → `"dev"` before the comparison — the DO platform vocabulary differs from the DB CHECK constraint vocabulary.
 
-### 2026-08-16 — fix-config-ui-env — assumptions
+### 2026-08-16 — fix-config-ui-env — assumption
 
 - **Mistake**: `APPLICATION_ENV` is not a `NEXT_PUBLIC_*` variable and is therefore absent from the client bundle; reading it inside a Client Component returns `undefined` at runtime with no build-time error.
 - **Evidence**: `docs/roadmap/features/115-fix-config-ui-env/context.md` Steps 7-8 design rationale (Server Component wrapper required to safely read the variable); `services/xstockstrat-ui/src/app/config-ui/[namespace]/page.tsx`
 - **Rule it implies**: Before reading `process.env.X` in a Next.js component, check whether `X` is `NEXT_PUBLIC_*`; non-public variables read in Client Components are `undefined` at runtime — use a Server Component wrapper to pass the value as a prop.
 
-### 2026-08-16 — exit-cooldown — test-coverage
+### 2026-08-16 — exit-cooldown — assumption
 
 - **Mistake**: The test-helper factory for `xstockstrat-analysis` service tests did not include a stub for `get_int_present` (the config accessor for `exit_cooldown_days`). Tests that exercised the exit-cooldown gate path failed with a missing-stub error, not a logical failure — the gap was not caught at spec time because the factory was audited against the more common `get_string`/`get_float` accessors, not the integer-present variant.
 - **Evidence**: `docs/roadmap/features/116-exit-cooldown/context.md` sdd-execute session (get_int_present factory gap discovery); `services/xstockstrat-analysis/tests/` helper factories
 - **Rule it implies**: When writing a test-helper factory that stubs a service's config client, enumerate all accessor-method variants the service uses (`get_string`, `get_float`, `get_int`, `get_int_present`, `get_bool`) — omitting a less-common variant surfaces only at runtime, not at spec time.
 
-### 2026-08-16 — screener-fundamental-metric-selector — assumptions
+### 2026-08-16 — screener-fundamental-metric-selector — assumption
 
 - **Mistake**: `_validate_fundamental_metrics` in `screener.py` was read as validating only the 11-field `_FUNDAMENTAL_FIELDS` constant set. It actually accepts `_FUNDAMENTAL_FIELDS` **union** any keys present in `extra_metrics` observed in the fetched batch. A UI select built from only the 11 constants would reject valid server-observed `extra_metrics` keys at validation time.
 - **Evidence**: `docs/roadmap/features/117-screener-fundamental-metric-selector/context.md` sdd-review session (FR-5 wording corrected); `services/xstockstrat-analysis/app/services/screener.py:31-44` (`_validate_fundamental_metrics`)
@@ -1421,13 +1408,13 @@ ambiguity is logged here).
 - **Evidence**: `docs/roadmap/features/122-shadcn-migration-low-confidence/context.md` sdd-execute Steps 9-12; `services/xstockstrat-ui/src/components/ui/alert.tsx`
 - **Rule it implies**: Before migrating a success/error message to `ui/alert.tsx`, verify which variants the installed file exports — the default shadcn Alert has only `default` and `destructive`; a `success` variant requires a manual addition or a custom class workaround.
 
-### 2026-08-16 — shadcn-sidebar-visual-rewrite — assumptions
+### 2026-08-16 — shadcn-sidebar-visual-rewrite — assumption
 
 - **Mistake**: `data-active={isActive}` always renders the `data-active` attribute in the DOM (with value `"false"` when the prop is falsy). Tailwind's bare `data-active:bg-sidebar-accent` variant matches on attribute **presence**, not value — so every nav item was permanently painted with the accent background regardless of state. The fix is `data-active={isActive || undefined}`; `undefined` suppresses attribute rendering. This pattern generalises to any bare `data-*:` Tailwind variant.
 - **Evidence**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/context.md` post-checkpoint correction; `services/xstockstrat-ui/src/components/ui/sidebar.tsx` (data-active fix)
 - **Rule it implies**: For any bare `data-*:` Tailwind variant, use `data-x={value || undefined}` — `{false}` still renders the attribute and activates presence-based variants. Applies to all vendored shadcn primitives using this pattern.
 
-### 2026-08-16 — shadcn-sidebar-visual-rewrite — assumptions
+### 2026-08-16 — shadcn-sidebar-visual-rewrite — assumption
 
 - **Mistake**: Playwright's `fullPage: true` screenshot option extends the capture to the full scroll height of the page; for fixed-position overlays (mobile sidebar, drawers, modals), this makes the overlay appear at the top of a taller-than-viewport image, which visually reads as "not filling the screen" even when it correctly fills the viewport.
 - **Evidence**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/context.md` post-checkpoint correction investigation (`fullPage: true` artifact, confirmed non-bug via `boundingBox()` measurement); `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/design.md` ADDENDUM
@@ -1445,7 +1432,7 @@ ambiguity is logged here).
 - **Evidence**: `docs/roadmap/features/139-symbol-page-section-nav/implementation-spec.md` Deviation Log D-3; `services/xstockstrat-ui/src/components/ui/toggle-group.tsx`; caught by the first GREEN e2e run (fix: `getByRole('radio', …)` + `toBeChecked()`).
 - **Rule it implies**: match the e2e locator to the ToggleGroup's `type` — `type="single"` → `getByRole('radio')` + `toBeChecked()`; `type="multiple"` → `getByRole('button')` + `aria-pressed`/`data-state`. Don't reuse a `getByRole('button')` locator from a `type="multiple"` exemplar for a `type="single"` control. A real e2e run (not just build/lint) is what surfaces this.
 
-### 2026-08-17 — symbol-page-section-nav (amendment) — assumptions
+### 2026-08-17 — symbol-page-section-nav (amendment) — assumption
 
 - **Mistake**: Two recurring UI-layout traps hit at once when grouping stacked sections into responsive panel clusters (desktop columns / mobile tabbed panel). (1) An `IntersectionObserver` "topmost section intersecting a thin band near the top" scroll-spy silently depends on the page being **taller** than the offset line + the last section — column-grouping shortens the page, so the last section can never scroll under the offset line, and a band observer both fails to highlight it and steals `active` back from a deep-link to it. (2) CSS grid items default to `min-width: auto`, so a wide child (a stat grid / an orders table) forces horizontal page overflow — a block layout doesn't, so the regression appears only after wrapping panels in a `grid`. (3) New mobile-tab labels (`Opportunity`, `Place order`) case-insensitively substring-match existing bare `getByText('…').first()` gates in **sibling** specs; because the `md:hidden` tab bar renders before the columns, `.first()` resolves the hidden tab and fails `toBeVisible` at the desktop viewport.
 - **Evidence**: `docs/roadmap/features/139-symbol-page-section-nav/implementation-spec.md` Deviation Log D-5/D-6; `services/xstockstrat-ui/src/components/trader/SymbolSectionNav.tsx` (scroll-spy rewritten to a scroll-position read + bottom-of-page rule), `SymbolPanelGroup.tsx` (`min-w-0` on grid items); `e2e/trader/position-detail.spec.ts:109` + `order-parity.spec.ts:155` (gates scoped to `heading` role / the `<form>` field). All three caught by re-running the **broad** trader+insights+mobile e2e scope, not the changed files' narrow run.
@@ -1473,7 +1460,7 @@ ambiguity is logged here).
   paginated read whose consumer only ever fetches page 1 as a red flag. Before attributing a staleness
   symptom to the *write/ingest* side, confirm the *read* returns what the consumer assumes.
 
-### 2026-08-19 — 146-unify-symbol-chart-libraries — canvas charting rejects oklch tokens
+### 2026-08-19 — 146-unify-symbol-chart-libraries — assumption
 - **Mistake**: Fed theme color tokens (this app's `--chart-*`/`--muted-foreground`/`--border` are
   `oklch(...)`) straight into lightweight-charts (a **canvas** renderer). v5 `createChart`/`addSeries`
   **throws** `Failed to parse color: oklch(...)`, so every chart silently failed to render (no
@@ -1657,17 +1644,17 @@ ambiguity is logged here).
 - **Rule it implies**: a column-drop completeness sweep must grep **every** reader of the schema —
   including cross-service / BFF direct queries — not just the owning service's code and its triggers.
 
-### 2026-08-25 — 155-watchlist-opportunity-signal-cues — testing (design-caught)
+### 2026-08-25 — 155-watchlist-opportunity-signal-cues — assumption
 - **Mistake (caught in design, not shipped)**: The proposed RED for a "stale filter" fix drove the second fetch via `page.reload()` with a swapped mock payload. A reload **remounts** the page and resets the `useState` filter selection (`activeSources` → `[]`), so the stuck-empty-list state the bug depends on can never form — the test would pass **green against unfixed code**, proving nothing (same vacuous-green family as 2026-07-29/074 and 2026-07-30/080). The defect is a *mount-persistent* state (`activeSources`) never reconciled against an *in-place* refetch (`refetchInterval`), so the repro must keep the component mounted.
 - **Evidence**: `docs/roadmap/features/155-watchlist-opportunity-signal-cues/design.md` (FR-5, FIX D); `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx:90,129-153`, `src/hooks/useOpportunities.ts:17-23`.
 - **Rule it implies**: to reproduce a bug in state that survives a refetch, trigger the refetch **in place** (window `focus` / `refetchQueries`), never a `reload()`/remount — a remount resets the very state under test and yields a vacuous green (P-06 red-before-green must be proven on the mounted component).
 
-### 2026-08-25 — 155-watchlist-opportunity-signal-cues — build (client-lib in server bundle)
+### 2026-08-25 — 155-watchlist-opportunity-signal-cues — assumption
 - **Mistake**: Added a **value** import of `@phosphor-icons/react` (which calls `React.createContext` at module scope) to `services/xstockstrat-ui/src/lib/opportunityShared.tsx` for the new cue maps. That module is transitively imported by **server** code — `src/lib/traderBff.ts:24` imports copilot stream constants from `src/lib/copilot.ts`, which imports `OPPORTUNITY_ACTION` from `opportunityShared` — so the icon lib landed in the `/trader/api/[...connect]` route's server bundle. `tsc`, lint, unit, and the dev-server e2e all passed; only the **production build** caught it: `TypeError: (0 , d.createContext) is not a function` while "Collecting page data" (CI `Frontend E2E Build`, green on the base branch). Same "shipped it to the client surface, forgot it also rides a server import chain" family as the C-10 shared-consumer entries, specialized to a client-only lib crossing the RSC boundary.
 - **Evidence**: `services/xstockstrat-ui/src/lib/opportunityShared.tsx` (phosphor value import, now type-only); `src/lib/copilot.ts:7` → `src/lib/traderBff.ts:24`; fix `src/lib/readinessCue.ts` (the phosphor value import + cue maps, imported only by `'use client'` cue consumers); PR #1012 CI run 32908124461.
 - **Rule it implies**: a module imported (even transitively) by a route handler / server plumbing must not statically import a **client-only** library that evaluates React (`createContext`, hooks) at module scope. Keep such value imports in a leaf only client components reach, and verify with a real `next build` (not just tsc/lint/dev-server e2e) — `pnpm build` is the only local check that exercises server-bundle "collect page data". Grep the server import chain (`traderBff`/`*Bff`/`route.ts` → its `@/lib/*` imports) before adding a client lib to a shared `lib/` module.
 
-### 2026-08-26 — fix-signal-screen-crash — assumption (recurrence of 2026-08-06/backtest-debug-info)
+### 2026-08-26 — fix-signal-screen-crash — assumption
 - **Mistake**: The exact `bar.timestamp`-does-not-exist / `MagicMock`-hides-it fail recorded on
   2026-08-06 recurred. Feature 064 fixed the six `servicer.py` sites and added real-`Bar` fixtures there,
   but the signal-blend scorer had been **extracted** to `app/services/scoring.py` (feature 060) with its
@@ -1968,7 +1955,7 @@ ambiguity is logged here).
   tests. The configured runner should build-then-`--test` (or use `--experimental-transform-types`
   with extension resolution); until fixed, treat these suites as characterization-only in CI.
 
-## 2026-08-31 — raw `page.route` e2e mock returned a Timestamp as `{seconds,nanos}`, not RFC3339 (feature 167)
+### 2026-08-31 — 167-watchlist-single-strategy-update — assumption
 
 - **What happened**: feature 167 added an `UpdateWatchlistBinding` route to `e2e/helpers/watchlistMock.ts`
   as a raw `page.route` handler returning `{ binding, updatedAt: { seconds: '0', nanos: 0 } }`. Unlike

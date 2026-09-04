@@ -26,8 +26,8 @@ type Binding = { symbol: string; strategyId: string; source?: number };
 type StrategyDef = { strategyId: string; displayName?: string; liveEnabled: boolean };
 
 /**
- * Provenance badge (feature 127, FR-10): a small "Signal" tag on an entry the agent auto-added
- * from an ingest_signal(direction="watchlist"). Manual/unspecified entries render nothing.
+ * Provenance badge: a "Signal" tag on an entry the agent auto-added from an
+ * ingest_signal(direction="watchlist"). Manual/unspecified entries render nothing.
  */
 function SignalSourceBadge({ source }: { source?: number }) {
   if (source !== WatchlistEntrySource.SIGNAL) return null;
@@ -38,8 +38,7 @@ function SignalSourceBadge({ source }: { source?: number }) {
   );
 }
 
-/** Green = firing (all pass), paper = partway, sell = none pass, muted = no data (feature 083/097).
- * Derived from the shared `readinessState` bucketer (feature 155) — one 4-way decision site. */
+/** buy = firing (all pass), paper = partway, sell = none pass, muted = no data. */
 function barVariant(r: Readiness): 'buy' | 'paper' | 'sell' | 'muted' {
   switch (readinessState(r)) {
     case 'firing':
@@ -60,9 +59,8 @@ function blockingCondition(r: Readiness): string {
   return `${c.refName} ${c.fn} ${c.threshold.toFixed(2)}`;
 }
 
-/** Per-symbol state label: firing / N away / quiet / no data. Derived from the shared
- * `readinessState` bucketer so the text always agrees with the cue icon (feature 155, FIX B — a
- * 0-passing evaluated row now reads "quiet", not "N away"). */
+/** Per-symbol state label: firing / N away / quiet / no data. Derived from readinessState so the
+ * text always agrees with the cue icon. */
 function stateLabel(r: Readiness): string {
   switch (readinessState(r)) {
     case 'firing':
@@ -77,14 +75,8 @@ function stateLabel(r: Readiness): string {
 }
 
 /**
- * Remove + rebind controls for one readiness row (feature 110, FR-1/FR-2) — shared by the bound
- * and unbound row branches below. Stateless (no internal `useState`, matches this file's own
- * "never a fabricated binding" discipline). `strategies` is the full, unfiltered list; this
- * component replicates the live-strategy filter (+ keep the currently-bound strategy visible even
- * if it's gone non-live) that `WatchlistDetail.tsx`'s own `strategyOptions()` already applies to
- * the chip row this replaces, so relocating the control doesn't silently drop that behavior.
- * `onRebind`'s `onValueChange` is the ONE place the Select's UNBOUND sentinel is translated to the
- * wire-level '' strategyId before calling back up.
+ * Remove + rebind controls for one readiness row. Offers live strategies (+ the currently-bound one
+ * even if non-live); onRebind translates the UNBOUND sentinel to the wire-level '' strategyId.
  */
 function BindingRowControls({
   symbol,
@@ -143,13 +135,8 @@ function BindingRowControls({
 }
 
 /**
- * Per-watchlist readiness overlay (feature 083/098, per-symbol bindings by feature 097). Each
- * symbol is evaluated against **its own bound strategy** (FR-6) — the transient whole-list
- * `useState('')` strategy picker is gone. Symbols are grouped by their bound `strategyId` and one
- * `EvaluateReadiness` runs per distinct strategy (via `useQueries`); results merge into a per-symbol
- * map. An **unbound** symbol (`strategyId === ''`) is shown as *not evaluated* — never given a
- * fabricated binding (P-03). The ready/watching/quiet/no-data roll-up (over bound symbols) and the
- * "in queue" mark are preserved.
+ * Per-watchlist readiness overlay. Each symbol is evaluated against its own bound strategy (one
+ * EvaluateReadiness per distinct strategy); an unbound symbol is shown "not evaluated", never faked.
  */
 export function WatchlistReadiness({
   bindings,
@@ -167,9 +154,8 @@ export function WatchlistReadiness({
   onRemoveSymbol: (symbol: string) => void;
   onRebindSymbol: (symbol: string, strategyId: string) => void;
   disabled?: boolean;
-  // feature 170 — multi-select. When onSelectionChange is provided, each row grows a leading
-  // checkbox and a "Select all" header checkbox appears; the parent owns the Set (so it resets on
-  // the per-watchlist key remount). Absent → no checkboxes (backward-compatible for other callers).
+  // When onSelectionChange is provided, rows grow checkboxes and the parent owns the Set; absent →
+  // no checkboxes (backward-compatible for other callers).
   selected?: Set<string>;
   onSelectionChange?: (next: Set<string>) => void;
 }) {
@@ -269,7 +255,6 @@ export function WatchlistReadiness({
           pane instead of forcing the whole page to scroll horizontally. */}
       <div className="overflow-x-auto">
         <ul className="min-w-[22rem] divide-y divide-border rounded-md border border-border">
-          {/* Bound symbols, ranked by conviction. */}
           {[...evaluatedRows]
             .sort((a, b) => b.r.conviction - a.r.conviction)
             .map(({ binding, r }) => {
@@ -291,8 +276,8 @@ export function WatchlistReadiness({
                       className="h-1.5 w-20"
                       variant={barVariant(r)}
                     />
-                    {/* Icon + color + text state cue (feature 155, FR-1) — the dynamic "N away"
-                        label overrides the map's fallback; icon is never the sole differentiator. */}
+                    {/* Icon + color + text state cue — the dynamic label overrides the map's fallback;
+                        icon is never the sole differentiator. */}
                     <EnumBadge
                       render={{ ...READINESS_CUE[state], label: stateLabel(r) }}
                       testId={`readiness-cue-${state}`}
@@ -306,8 +291,7 @@ export function WatchlistReadiness({
                   <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">
                     {blockingCondition(r)}
                   </span>
-                  {/* FR-2: a firing row jumps straight to the symbol's order/position detail
-                      (same target as Opportunities "Review & add"); non-firing rows show nothing. */}
+                  {/* A firing row jumps to the symbol's detail; non-firing rows show nothing. */}
                   {firing && (
                     <Link
                       href={`/trader/positions/${r.symbol}?strategy=${binding.strategyId}`}
@@ -330,7 +314,7 @@ export function WatchlistReadiness({
               );
             })}
 
-          {/* Unbound symbols — shown as not-evaluated, never given a fabricated binding (P-03). */}
+          {/* Unbound symbols — shown as not-evaluated, never given a fabricated binding. */}
           {unbound.map((b) => (
             <li
               key={b.symbol}

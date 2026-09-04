@@ -15,10 +15,8 @@ interface ConfirmFillDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-// ConfirmFillDialog records the fill a broker would otherwise report onto an OFFLINE order
-// (feature 157): filled qty, average price, and an optional fill time. The resulting order status
-// is derived server-side from filled_qty vs qty — never chosen here. Offline accounts only; the
-// trading service rejects a confirm on a broker account with FailedPrecondition.
+// Records the fill a broker would otherwise report onto an OFFLINE order (filled qty, avg price, time).
+// Status is derived server-side from filled_qty vs qty; broker accounts are rejected with FailedPrecondition.
 export function ConfirmFillDialog({ order, open, onOpenChange }: ConfirmFillDialogProps) {
   const { mutate: confirmOrder, isPending } = useConfirmOrder();
   const [filledQty, setFilledQty] = useState('');

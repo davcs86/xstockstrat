@@ -35,15 +35,8 @@ import {
   ScreenResultStatus,
 } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
-// Single-symbol Screening section (feature 125, FR-8). Shown only for a NON-watchlisted symbol
-// (the inverse of the watchlisted Opportunity/Readiness/Fundamentals branch): a minimal ad hoc
-// criteria builder that runs the *same* ScreenSymbols RPC the full Screener page uses (shared
-// vocabulary in `@/lib/screenCriteria`), but scoped to this one symbol.
-//
-// The composite universe-relative rank fields are meaningless on a one-symbol scan —
-// `_normalize_universe` collapses every criterion to a content-free 0.5 when `lo == hi` (screener.py)
-// — so this section displays ONLY the per-criterion `criterion_raw_values`/`criterion_passed` maps
-// (feature 125 Step 3's additive fields), never the collapsed rank readings.
+// Single-symbol Screening section (non-watchlisted symbols only), running the same ScreenSymbols RPC as the
+// Screener page. Rank fields collapse to a content-free 0.5 on a one-symbol scan, so it shows ONLY the per-criterion raw/passed maps.
 
 export function SymbolScreening({ symbol }: { symbol: string }) {
   const screen = useScreenSymbols();

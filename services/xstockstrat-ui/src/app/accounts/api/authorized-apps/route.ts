@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   try {
     const headers = restBackendHeaders(req, claims.user_id, claims.roles);
     const data = await identityClient.listAuthorizedApps({ userId: claims.user_id }, { headers });
-    // Return only the non-sensitive AuthorizedApp metadata — never tokens/secrets (FR-7).
+    // Return only the non-sensitive AuthorizedApp metadata — never tokens/secrets.
     return NextResponse.json({
       apps: data.apps.map((a) => ({
         clientId: a.clientId,

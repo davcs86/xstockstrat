@@ -1,10 +1,7 @@
 'use client';
 
-// Shared filter-controls row for AccountsModule.tsx and OrderFilters.tsx (feature 121, FR-12).
-// Slot-based, not a layout-mode switch (see 121-shadcn-migration-medium-confidence design.md §4 —
-// the round-1/round-2 debate rejected a `layout` variant enum as a leaky abstraction): it renders
-// only the controls themselves; the surrounding Card/CardHeader/grid-vs-flex chrome stays owned by
-// each call site.
+// Shared filter-controls row for AccountsModule.tsx and OrderFilters.tsx. Slot-based: it renders only
+// the controls themselves; each call site owns the surrounding Card/CardHeader/grid-vs-flex chrome.
 
 import React from 'react';
 import { Search } from 'lucide-react';
@@ -17,8 +14,7 @@ export interface FilterToolbarFilter {
   onValueChange: (value: string) => void;
   options: { value: string; label: string }[];
   ariaLabel: string;
-  /** Optional per-select width tuning (AccountsModule.tsx's three selects each had a distinct
-   *  fixed width) — kept optional so callers that don't need it (OrderFilters.tsx) can omit it. */
+  /** Optional per-select width tuning; callers that don't need it can omit it. */
   className?: string;
 }
 
@@ -42,11 +38,8 @@ export interface FilterToolbarProps {
   clearPlacement: 'inline' | 'trailing';
 }
 
-// `activeFilterCount` is part of the approved props surface (design.md §4) for callers/future
-// clearPlacement modes, but neither current mode reads it inside this component — 'inline'
-// callers render their own count+Clear button entirely outside FilterToolbar (AccountsModule.tsx),
-// and 'trailing' renders its Clear button unconditionally (see below) — so it is intentionally not
-// destructured here.
+// `activeFilterCount` is part of the props surface but neither current mode reads it here — 'inline'
+// callers render their own count+Clear outside, 'trailing' renders unconditionally — so it's not destructured.
 export function FilterToolbar({
   search,
   filters,
@@ -99,8 +92,7 @@ export function FilterToolbar({
           </>
         )}
       </div>
-      {/* 'trailing' always renders (today's OrderFilters.tsx behavior is unconditional — no
-          activeFilterCount guard here, to keep this a like-for-like substitution). */}
+      {/* 'trailing' renders unconditionally — no activeFilterCount guard. */}
       {clearPlacement === 'trailing' && (
         <div className="mt-3 flex justify-end">
           <Button type="button" variant="outline" size="sm" onClick={onClear}>

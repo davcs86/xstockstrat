@@ -28,10 +28,8 @@ function formatQty(v: number | undefined | null): string {
   return String(v);
 }
 
-// A working order (NEW / PARTIALLY_FILLED) can still be replaced or canceled; a terminal one
-// cannot. Also gated on intentState !== UNKNOWN (feature 101): the write handlers reject on
-// their own dedup terms server-side, but a proactive UI disable avoids a pointless round trip
-// when the platform doesn't know whether the underlying command reached the broker.
+// A working order (NEW / PARTIALLY_FILLED) can still be replaced or canceled; a terminal one cannot.
+// Also gated on intentState !== UNKNOWN — a proactive UI disable when the command's broker state is unknown.
 function isWorking(status: OrderStatus, intentState: IntentState): boolean {
   return (
     (status === OrderStatus.NEW || status === OrderStatus.PARTIALLY_FILLED) &&
@@ -50,8 +48,8 @@ export default function OrderDetailPage() {
   const [actionError, setActionError] = useState('');
 
   const working = order ? isWorking(order.status, order.intentState) : false;
-  // Offline orders (feature 157) are hand-confirmed: the fill can be set or re-edited at any time
-  // (recompute-from-all-orders is idempotent), so the control is not gated on working state.
+  // Offline orders are hand-confirmed: the fill can be set or re-edited at any time (recompute is
+  // idempotent), so the control is not gated on working state.
   const isOffline = order ? order.brokerType === BrokerType.OFFLINE : false;
   // Order preview figures — all derived from the order's own fields (no new data source).
   const refPrice = order ? Number(order.limitPrice || order.filledAvgPrice || 0) : 0;
@@ -99,7 +97,6 @@ export default function OrderDetailPage() {
 
         {order && (
           <>
-            {/* Header — symbol, side, status, order id + working-order actions. */}
             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
               <div className="min-w-0 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
@@ -160,7 +157,6 @@ export default function OrderDetailPage() {
             {actionError && <p className="text-sm text-destructive">{actionError}</p>}
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_300px]">
-              {/* Ticket field grid. */}
               <Card>
                 <CardHeader>
                   <CardTitle>Order ticket</CardTitle>
@@ -188,7 +184,6 @@ export default function OrderDetailPage() {
                 </CardContent>
               </Card>
 
-              {/* Order-preview sidebar — derived from the order's own fields. */}
               <div className="space-y-4">
                 <Card>
                   <CardHeader>

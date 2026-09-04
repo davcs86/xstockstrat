@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-# Source-health freshness thresholds (feature 083). Health is derived on read from
-# last_seen_at: fed within LIVE → live; within STALE → stale; older / never / errored → down.
+# Source-health freshness thresholds: fed within LIVE → live; within STALE → stale;
+# older / never / errored → down.
 _HEALTH_LIVE_SECONDS = 24 * 3600
 _HEALTH_STALE_SECONDS = 7 * 24 * 3600
 
@@ -217,24 +217,20 @@ def validate_config_json(source_type: str, config_json: dict | None) -> str | No
             return f"{source_type} requires non-empty scrape_selector in config_json"
 
     elif source_type == "derived":
-        # Internally-produced (non-extraction) signal — e.g. the fundamentals signal
-        # producer (feature 062). No extraction config is required (config_json is NULL).
+        # Internally-produced signal (e.g. fundamentals producer); no extraction config required.
         return None
 
     elif source_type == "mcp_client":
-        # feature 166 — server-side MCP query source. Fail-closed on both fields (never
-        # default a missing one): the scheduled loop needs the endpoint URL and the tool
-        # name from config_json; the bearer token is a credential (credentials_ref), never
-        # config_json. AC-6: the error names the missing field.
+        # Fail-closed on both fields (never default): the loop needs mcp_endpoint + mcp_tool
+        # from config_json; the bearer is a credential (credentials_ref), never config_json.
         if not cfg.get("mcp_endpoint"):
             return f"{source_type} requires non-empty mcp_endpoint in config_json"
         if not cfg.get("mcp_tool"):
             return f"{source_type} requires non-empty mcp_tool in config_json"
 
     else:
-        # Fail-closed (feature 062): reject any source_type not explicitly allow-listed
-        # above. The allow-list is a superset of the ingest.signal_sources source_type DB
-        # CHECK, so no CHECK-valid type is wrongly rejected.
+        # Fail-closed: reject any source_type not allow-listed above. The allow-list is a
+        # superset of the signal_sources source_type DB CHECK, so no valid type is rejected.
         return f"unsupported source_type {source_type!r}"
 
     return None

@@ -9,9 +9,7 @@ export function useSignalSources(): {
 } {
   const { data, isLoading, error } = useQuery({
     queryKey: ['signal-sources'],
-    // feature 134: the reliability weight now lives on each SignalSource as `reliabilityWeight`
-    // (ingest.SignalSource.reliability_weight), so the former `analysis.signals.source_weights`
-    // config combine is gone — one RPC, no listKeys parse.
+    // Reliability weight lives on each SignalSource (reliability_weight) — one RPC, no listKeys parse.
     queryFn: async () => {
       const s = await ingestClient.listSignalSources({ includeInactive: true });
       return { sources: s.sources ?? [] };

@@ -58,9 +58,8 @@ type Watcher struct {
 }
 
 // NewWatcher dials the config service and starts the background watch loop.
-// applicationEnv/tradingMode are this deployment's own resolved scope (Config.ApplicationEnv /
-// Config.TradingMode) — passed on every WatchConfig request so the server serves this
-// deployment's config rows instead of the zero-value dev/all default.
+// applicationEnv/tradingMode set this deployment's WatchConfig scope (else the server serves the
+// zero-value dev/all default rows).
 func NewWatcher(endpoint, namespace, applicationEnv, tradingMode string) (*Watcher, error) {
 	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -78,18 +77,15 @@ func NewWatcher(endpoint, namespace, applicationEnv, tradingMode string) (*Watch
 	return w, nil
 }
 
-// resolveEnvironment maps Config.ApplicationEnv ("development" | "production") to the proto
-// Environment enum. Anything other than "production" resolves to dev, matching the default in
-// LoadFromEnv.
+// resolveEnvironment maps ApplicationEnv to the proto Environment enum; non-"production" → staging.
 func resolveEnvironment(applicationEnv string) commonv1.Environment {
 	if applicationEnv == "production" {
 		return commonv1.Environment_ENVIRONMENT_PRODUCTION
 	}
-	return commonv1.Environment_ENVIRONMENT_STAGING // feature 147: non-production => staging
+	return commonv1.Environment_ENVIRONMENT_STAGING
 }
 
-// resolveTradingMode maps Config.TradingMode ("paper" | "live") to the proto TradingMode enum.
-// Anything other than "live" resolves to paper, matching the default in LoadFromEnv.
+// resolveTradingMode maps TradingMode to the proto TradingMode enum; non-"live" → paper.
 func resolveTradingMode(tradingMode string) commonv1.TradingMode {
 	if tradingMode == "live" {
 		return commonv1.TradingMode_TRADING_MODE_LIVE
@@ -151,9 +147,8 @@ func (w *Watcher) GetFloat(key string, defaultVal float64) float64 {
 	return defaultVal
 }
 
-// FactorMapKey is the config key holding a JSON object mapping symbol → factor name
-// (feature 083). marketdata exposes no sector, so this operator-defined map is the factor
-// source for the Exposure screen's factor grouping. Default "{}" (empty → "Unclassified").
+// FactorMapKey holds a JSON object mapping symbol → factor for the Exposure screen's grouping.
+// Default "{}"; unmapped symbols group as "Unclassified".
 const FactorMapKey = "portfolio.exposure.factor_map"
 
 // FactorMap returns the parsed portfolio.exposure.factor_map (symbol → factor), or an empty
@@ -185,8 +180,8 @@ func (w *Watcher) GetBool(key string, defaultVal bool) bool {
 func (w *Watcher) watchLoop() {
 	backoff := 2 * time.Second
 	for {
-		// stream() only ever returns on error (it loops until the stream breaks), so a
-		// reconnect+backoff always applies — there is no nil-error branch to guard (SA4023).
+		// stream() only returns on error, so reconnect+backoff always applies — a nil-error guard
+		// would be dead code (SA4023).
 		err := w.stream()
 		slog.Warn("config watcher stream error, reconnecting", "error", err, "backoff", backoff)
 		time.Sleep(backoff)
@@ -202,8 +197,7 @@ func (w *Watcher) stream() error {
 		Namespace:   w.namespace,
 		ClientId:    fmt.Sprintf("go-portfolio-%d", os.Getpid()),
 		Environment: w.environment,
-		// trading_mode is deprecated and ignored by the config server (feature 147); paper/live
-		// derives from environment. user_id is left empty — services subscribe at global scope.
+		// trading_mode is deprecated/ignored server-side; user_id left empty = global-scope subscription.
 	}
 	stream, err := w.client.WatchConfig(ctx, req)
 	if err != nil {
@@ -248,5 +242,4 @@ func getEnvBool(key string, def bool) bool {
 	return b
 }
 
-// ensure getEnvBool is used (suppress unused warning)
 var _ = getEnvBool

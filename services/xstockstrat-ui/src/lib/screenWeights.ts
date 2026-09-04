@@ -1,9 +1,5 @@
-// Screener criterion weight display helpers (feature 098).
-//
-// The screener sends RAW weights on the wire — `ScreenCriterion.weight` — and the analysis scorer
-// normalizes them server-side. This helper is DISPLAY-ONLY: it turns the raw weights the trader
-// entered into the normalized shares shown beneath each criterion row ("weights normalize to 1.0"),
-// so the UI never has to imply the wire values are already normalized.
+// Screener criterion weight display helpers. The wire weights (`ScreenCriterion.weight`) are RAW —
+// the analysis scorer normalizes them server-side; this helper is DISPLAY-ONLY.
 
 /**
  * Normalized display shares for a set of criterion weights, summing to 1.0.

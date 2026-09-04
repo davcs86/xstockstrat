@@ -1,10 +1,8 @@
 import React from 'react';
 import { Target, MagnifyingGlass, Gauge, BookOpen, GearSix } from '@phosphor-icons/react';
 
-// The Decide / Discover / Engine / Book (+ Settings) nav model — the single source of truth for
-// both the desktop PlatformHeader and the mobile BottomTabBar (feature 083). Extracted into its
-// own module so BottomTabBar can consume NAV_GROUPS without importing PlatformHeader (which would
-// form an import cycle → a "Cannot access before initialization" TDZ error at prerender).
+// Single source of truth for the nav model (desktop PlatformHeader + mobile BottomTabBar). Its own
+// module so BottomTabBar needn't import PlatformHeader — that cycle causes a prerender TDZ crash.
 
 /** A secondary, in-segment navigation link. */
 export interface SubNavItem {
@@ -15,7 +13,7 @@ export interface SubNavItem {
 }
 
 export interface NavItem extends SubNavItem {
-  /** Admin-only entry (FR-7) — hidden from non-admins; the BFF re-enforces on every call. */
+  /** Admin-only entry — hidden from non-admins; the BFF re-enforces on every call. */
   adminOnly?: boolean;
 }
 
@@ -25,11 +23,8 @@ export interface NavGroup {
   icon: React.ReactNode;
   items: NavItem[];
   /**
-   * Text for a muted, non-interactive SidebarGroupLabel rendered immediately before this
-   * group in the mobile offcanvas nav (FR-3, feature 126). Purely visual — no id, no
-   * aria-labelledby. Invariant: must be set on the FIRST NAV_GROUPS entry of the section it
-   * starts, or the label silently attaches to the wrong group — not enforced at compile/
-   * runtime, only by this comment.
+   * Muted label rendered before this group in the mobile offcanvas nav. Invariant: set it on the
+   * FIRST entry of the section it starts, else it attaches to the wrong group (not enforced in code).
    */
   sectionStart?: string;
 }

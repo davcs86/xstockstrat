@@ -22,9 +22,8 @@ func FromContext(ctx context.Context) PropagationData {
 	return v
 }
 
-// WithPropagationData injects PropagationData into ctx — used by tests outside
-// this package that need to set x-user-id / x-access-scope without routing through
-// the gRPC interceptor chain.
+// WithPropagationData injects PropagationData into ctx (test seam for setting
+// x-user-id / x-access-scope without the gRPC interceptor chain).
 func WithPropagationData(ctx context.Context, data PropagationData) context.Context {
 	return context.WithValue(ctx, propKey{}, data)
 }

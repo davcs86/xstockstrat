@@ -60,10 +60,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Feature 147: vendor credentials now live encrypted in the config service, not env vars.
-	// Resolve them via GetSecret on the already-open config connection, before building the
-	// vendor clients. A resolve failure or an unset secret leaves the field empty — the same
-	// warn-and-start behavior as the old empty env var (the Alpaca guard below still fires).
+	// A resolve failure or unset secret must leave the credential empty (warn-and-start), never
+	// fail startup — the Alpaca placeholder guard below is the only hard check.
 	resolveSecret := func(key string) string {
 		v, found, err := cfgWatcher.ResolveSecret(ctx, key)
 		if err != nil {
@@ -87,14 +85,11 @@ func main() {
 		APISecret: cfg.AlpacaAPISecret,
 		BaseURL:   cfg.AlpacaBaseURL,
 		DataURL:   cfg.AlpacaDataURL,
-		// Data feed (iex/sip/otc). Default "iex" so the free/basic paper data
-		// plan works; deployments on a paid SIP plan can override.
+		// Default "iex": the free/basic paper data plan rejects Alpaca's SIP default with 403.
 		Feed: cfgWatcher.GetString("marketdata.alpaca.feed", "iex"),
-		// Corporate-action adjustment for historical bars (default "all") so
-		// splits/dividends do not distort backtest OHLCV.
+		// Default "all" so splits/dividends do not distort backtest OHLCV.
 		Adjustment: cfgWatcher.GetString("marketdata.alpaca.adjustment", "all"),
-		// Bars-per-request limit (clamped to the Alpaca spec max of 10000) and
-		// outbound REST rate limit.
+		// Per-request bar limit (clamped to the spec max 10000) and outbound REST rate limit.
 		BatchSize:    int(cfgWatcher.GetInt("marketdata.backfill.batch_size", 1000)),
 		RateLimitRPS: int(cfgWatcher.GetInt("marketdata.backfill.rate_limit_rps", 200)),
 		// Streaming WebSocket reconnect tuning.
@@ -103,11 +98,8 @@ func main() {
 		Paper:            cfg.TradingMode == "paper",
 	})
 
-	// Fail loud if the Alpaca credentials are missing or still set to the DO app-spec
-	// placeholders (e.g. "YOUR_DEV_ALPACA_API_KEY"). A placeholder makes every Alpaca
-	// call get rejected at the edge with an opaque 401, whose only later symptom is a
-	// warm-poller fetch warning. The service still starts — cached reads and non-Alpaca
-	// RPCs keep working — but the operator gets an unambiguous startup signal.
+	// Fail loud on empty/placeholder Alpaca creds: they 401 every call with only an opaque
+	// warm-poller warning otherwise. Non-fatal — cached reads and non-Alpaca RPCs still work.
 	if looksLikePlaceholderCred(cfg.AlpacaAPIKey) || looksLikePlaceholderCred(cfg.AlpacaAPISecret) {
 		slog.Warn("ALPACA credentials look empty or are still set to a placeholder — "+
 			"every Alpaca market-data call will fail with a 401; set the real "+
@@ -126,12 +118,8 @@ func main() {
 	reg := source.NewRegistry()
 	reg.Register("alpaca", alpacaClient)
 
-	// Fundamentals source (feature 059; provider made switchable by feature 129) —
-	// always constructed; per-RPC enablement is enforced live by fundamentalsEnabled()
-	// (marketdata_service.go:960), not at boot (feature 082 fix — see CLAUDE.md
-	// marketdata.<fundProvider>.enabled). fundProvider is read once here, at boot, and
-	// passed to both the client constructor and the service — see marketdata_service.go's
-	// fundProvider doc comment for why the two must stay coupled.
+	// fundProvider is read once at boot and passed to BOTH the client constructor and the
+	// service — they must stay coupled. Per-RPC enablement is live (fundamentalsEnabled), not here.
 	fundProvider := cfgWatcher.GetString("marketdata.fundamentals.provider", "finnhub")
 	fundamentalsSrc := newFundamentalsSource(cfgWatcher, fundProvider, cfg.FMPAPIKey, cfg.FinnhubAPIKey)
 
@@ -142,12 +130,8 @@ func main() {
 	}
 	hdl := handler.NewMarketDataHandler(svc)
 
-	// Keep latest quotes for queried symbols warm in the DB so per-position P&L
-	// reads hit the cache instead of a live Alpaca call on every request.
 	go svc.StartWarmQuotePoller(ctx)
 
-	// Always-on bar ingestion: continuously upsert recent bars for queried symbols so
-	// the feed runs without a client holding a StreamBars RPC open.
 	go svc.StartBarIngestPoller(ctx)
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.GRPCPort))
@@ -185,10 +169,8 @@ func main() {
 	}
 }
 
-// looksLikePlaceholderCred reports whether an Alpaca credential is empty or one of the
-// placeholder values shipped in the DO app specs (e.g. "YOUR_DEV_ALPACA_API_KEY"). It is
-// intentionally conservative — only blank values and the obvious "YOUR_…"/"…PLACEHOLDER…"
-// forms — so a real key is never misflagged.
+// looksLikePlaceholderCred reports whether an Alpaca credential is empty or a DO app-spec
+// placeholder ("YOUR_…"/"…PLACEHOLDER…"). Conservative by design so a real key is never flagged.
 func looksLikePlaceholderCred(v string) bool {
 	v = strings.TrimSpace(v)
 	if v == "" {
@@ -198,13 +180,8 @@ func looksLikePlaceholderCred(v string) bool {
 	return strings.HasPrefix(upper, "YOUR_") || strings.Contains(upper, "PLACEHOLDER")
 }
 
-// newFundamentalsSource constructs the active fundamentals client (feature 129), selected by
-// marketdata.fundamentals.provider (read once at boot — see marketdata_service.go's
-// fundProvider doc comment for why this is startup-only, not a live per-call read). Always
-// constructed regardless of the provider's own .enabled flag — that flag is a live per-RPC
-// gate (fundamentalsEnabled(), internal/service/marketdata_service.go), not a boot-time gate
-// (feature 082 fix). fmpAPIKey/finnhubAPIKey are the FMP_API_KEY/FINNHUB_API_KEY secret env
-// vars, never config values (see internal/config/config.go).
+// newFundamentalsSource builds the active fundamentals client selected by
+// marketdata.fundamentals.provider (boot-only). Always constructed; .enabled gates use, not this.
 func newFundamentalsSource(cfgWatcher *config.Watcher, provider, fmpAPIKey, finnhubAPIKey string) source.FundamentalsSource {
 	switch provider {
 	case "finnhub":

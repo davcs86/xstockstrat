@@ -13,7 +13,7 @@ import { DataTable } from '../ui/data-table';
 import { Collapsible, CollapsibleContent } from '../ui/collapsible';
 
 interface LiveStrategiesPanelProps {
-  /** When false, the live-toggle action column is hidden (admin-only, FR-10). */
+  /** When false, the live-toggle action column is hidden (admin-only). */
   isAdmin: boolean;
 }
 

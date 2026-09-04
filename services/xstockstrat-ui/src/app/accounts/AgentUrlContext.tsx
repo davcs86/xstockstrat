@@ -2,9 +2,8 @@
 
 import { createContext, useContext } from 'react';
 
-// Carries the server-resolved AGENT_PUBLIC_URL (read in the accounts layout's server scope) down
-// to the client "My Authorized Apps" page. This keeps the value off NEXT_PUBLIC_* — it crosses the
-// server→client boundary as a prop, not a build-time public env var (feature 051, FR-9).
+// Carries the server-resolved AGENT_PUBLIC_URL to the client "My Authorized Apps" page as a prop —
+// off NEXT_PUBLIC_*, so it stays a runtime (not build-time public) value.
 const AgentUrlContext = createContext<string>('');
 
 export function AgentUrlProvider({

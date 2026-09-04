@@ -15,7 +15,6 @@ import (
 	"github.com/xstockstrat/trading/internal/service"
 )
 
-// Ensure TradingHandler implements the Connect interface at compile time.
 var _ tradingv1connect.TradingServiceHandler = (*TradingHandler)(nil)
 
 // TradingHandler implements the Connect-RPC TradingServiceHandler interface.
@@ -32,9 +31,8 @@ func (h *TradingHandler) PlaceOrder(ctx context.Context, req *connect.Request[tr
 	if req.Msg.Symbol == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("symbol is required"))
 	}
-	// qty <= 0 is no longer rejected here (feature 023): it now means "auto-size this
-	// order" — TradingService.PlaceOrder's own sizing gate (trading.risk.sizing_enabled)
-	// decides whether that's allowed.
+	// qty <= 0 is deliberately not rejected here: it means "auto-size", gated downstream by
+	// TradingService.PlaceOrder (trading.risk.sizing_enabled).
 	order, err := h.svc.PlaceOrder(ctx, req.Msg)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -60,7 +58,7 @@ func (h *TradingHandler) ReplaceOrder(ctx context.Context, req *connect.Request[
 	order, err := h.svc.ReplaceOrder(ctx, req.Msg)
 	if err != nil {
 		// Preserve the service's gRPC status code (NotFound / FailedPrecondition) so the
-		// UI can distinguish "missing order" from "not replaceable in this state" (FR-8).
+		// UI can distinguish "missing order" from "not replaceable in this state".
 		return nil, connect.NewError(connectCodeFromErr(err), err)
 	}
 	return connect.NewResponse(order), nil
@@ -70,9 +68,8 @@ func (h *TradingHandler) ConfirmOrder(ctx context.Context, req *connect.Request[
 	if req.Msg.OrderId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("order_id is required"))
 	}
-	// Ownership is enforced from the trusted x-user-id metadata the edge injects — never a
-	// client-supplied request field (feature 157; the offline-only guard is order-sourced in the
-	// service, which reads the caller identity from the propagated header, not the deprecated body).
+	// Ownership is enforced in the service from the trusted x-user-id header, never a
+	// client-supplied request field.
 	order, err := h.svc.ConfirmOrder(ctx, req.Msg)
 	if err != nil {
 		// Preserve the service's gRPC status code (NotFound / FailedPrecondition / InvalidArgument).
@@ -85,7 +82,7 @@ func (h *TradingHandler) SnapshotOfflinePositions(ctx context.Context, req *conn
 	if req.Msg.AccountId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("account_id is required"))
 	}
-	// Caller identity from the trusted x-user-id header the edge injects (mirroring RegisterBrokerAccount).
+	// Caller identity from the trusted x-user-id header the edge injects.
 	req.Msg.UserId = extractUserID(ctx)
 	resp, err := h.svc.SnapshotOfflinePositions(ctx, req.Msg)
 	if err != nil {

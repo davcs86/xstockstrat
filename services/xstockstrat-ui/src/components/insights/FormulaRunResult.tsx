@@ -5,8 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { ChartContainer, type ChartConfig } from '@/components/ui/chart';
 import { EXIT_REASON } from './formulaReference';
 
-// Single-series sparkline config (feature 123 FR-4) — 'value' color mirrors the original
-// `text-primary`/`currentColor` styling via the design token, not a new color.
+// Single-series sparkline config — 'value' color uses the design token, not a new hardcoded color.
 const SPARKLINE_CONFIG: ChartConfig = {
   value: { label: 'Value', color: 'var(--primary)' },
 };

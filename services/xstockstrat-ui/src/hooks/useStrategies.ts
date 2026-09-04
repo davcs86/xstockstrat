@@ -28,9 +28,8 @@ export function useStrategyReport(strategyId: string | undefined): {
     queryKey: ['analysis-report', strategyId],
     queryFn: () => analysisClient.getStrategyReport({ strategyId: strategyId! }),
     enabled: !!strategyId,
-    // feature 065: an unscored strategy now answers NOT_FOUND (derived grade cleared / never
-    // earned). That is a terminal state, not a transient error — do not retry it; the detail page
-    // renders a cleared-grade card. Any other error still gets the global one retry.
+    // An unscored strategy answers NOT_FOUND (terminal, not transient) — don't retry it; other
+    // errors still get the global one retry.
     retry: (failureCount, err) => !isNotFoundError(err) && failureCount < 1,
   });
 }
@@ -48,9 +47,8 @@ export function useBacktestHistory(strategyId: string | undefined): {
   });
 }
 
-// feature 068: the persisted full result of one past run (analysis.backtest_details).
-// NOT_FOUND is the terminal legacy/evicted/insufficient state, not a transient error —
-// the page renders the "no detailed data" empty state for it (FR-6).
+// Persisted full result of one past run. NOT_FOUND is terminal (legacy/evicted/insufficient), not
+// transient — don't retry it.
 export function useBacktestDetail(backtestId: string | undefined): {
   data: GetBacktestResult | undefined;
   isLoading: boolean;

@@ -6,7 +6,7 @@ import { ScreenResultStatus } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 export type ScreenSymbolsInput = Parameters<typeof analysisClient.screenSymbols>[0];
 export type ScreenSymbolsResult = Awaited<ReturnType<typeof analysisClient.screenSymbols>>;
 
-// On-demand screener scan (feature 060, FR-9) — a mutation, not a polling query.
+// On-demand screener scan — a mutation, not a polling query.
 export function useScreenSymbols() {
   return useMutation<ScreenSymbolsResult, Error, ScreenSymbolsInput>({
     mutationFn: (req) => analysisClient.screenSymbols(req),
@@ -21,17 +21,13 @@ function hasPendingRows(results: ScreenSymbolsResult['results'] | undefined): bo
   return (results ?? []).some((r) => r.status === ScreenResultStatus.INSUFFICIENT_DATA);
 }
 
-// Feature 118 — background data-readiness polling. Plain TS constants (not a WatchConfig key),
-// matching the `TOP_N` precedent in screener/page.tsx: this cadence protects nothing shared —
-// see design.md § Chosen Approach for the cost analysis that ruled out a config key.
+// Background data-readiness polling cadence. Plain TS constants, deliberately not a WatchConfig key
+// (this cadence protects nothing shared).
 export const POLL_INTERVAL_MS = 60_000;
 export const MAX_POLL_ATTEMPTS = 5;
 
-// Re-issues the exact same ScreenSymbols request on an interval while any row is
-// INSUFFICIENT_DATA, stopping once everything resolves or the attempt cap is hit. `generation`
-// is the scan-generation guard (design.md): bump it on every new runScan() so a still-in-flight
-// poll from a superseded scan gets a fresh query cache entry instead of merging stale data into
-// the new scan's table.
+// Re-issues the same request while any row is INSUFFICIENT_DATA, up to the attempt cap. Bump
+// `generation` per runScan() so a superseded in-flight poll gets a fresh cache entry, not a stale merge.
 export function useScreenSymbolsPoll(
   req: ScreenSymbolsInput | null,
   generation: number,

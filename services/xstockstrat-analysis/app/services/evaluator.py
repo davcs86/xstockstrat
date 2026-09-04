@@ -25,10 +25,8 @@ from google.protobuf.struct_pb2 import Struct
 
 log = logging.getLogger(__name__)
 
-# Feature 152 — below this in-window match ratio between a benchmark (source_symbol)
-# component's dates and the evaluated symbol's trading days, a WARN is logged so the
-# silent-sparsity degradation (a benchmark gate reading hold on most bars because the
-# calendars barely overlap) is observable rather than invisible.
+# Below this in-window overlap ratio between a benchmark (source_symbol) component's dates and
+# the evaluated symbol's trading days, log a WARN so silent calendar-sparsity is observable.
 _SOURCE_JOIN_SPARSITY_WARN = 0.5
 
 
@@ -71,10 +69,8 @@ def _finite_or_none(v) -> float | None:
 
 _SUPPORTED_INDICATORS = {"SMA", "EMA", "RSI", "MACD", "BB", "ATR", "VWAP", "STOCH"}
 
-# Output series each built-in indicator emits. The first entry ("value") is the
-# primary series a bare ref_name resolves to; the rest are addressable in rules via
-# the dotted form "<ref_name>.<series>" (e.g. "bb.upper", "macd.signal", "stoch.d").
-# Mirrors the extra-key shape produced by xstockstrat-indicators' indicators_engine.py.
+# First entry ("value") is the primary series a bare ref_name resolves to; the rest are
+# addressable as "<ref_name>.<series>". Must mirror xstockstrat-indicators' indicators_engine.py.
 _INDICATOR_SERIES = {
     "SMA": ("value",),
     "EMA": ("value",),
@@ -86,7 +82,6 @@ _INDICATOR_SERIES = {
     "STOCH": ("value", "d"),
 }
 
-# Supported condition functions in leaf nodes (FR-3)
 _SUPPORTED_FNS = {"crosses_above", "crosses_below", ">", "<", ">=", "<="}
 
 
@@ -95,7 +90,7 @@ class BarDecision:
     bar_index: int
     entry: bool
     exit: bool
-    conviction: float  # 0.0–1.0 combined conviction
+    conviction: float  # 0.0–1.0
 
 
 class StrategyEvaluator:
@@ -107,7 +102,6 @@ class StrategyEvaluator:
     - Accepts StrategyDefinition proto message, a list of OHLCV bar dicts, and an
       active signals_map (dict[source, list[signal]]) matching the RunBacktest convention.
     - Returns per-bar BarDecision list; no look-ahead (bar i only uses data from bars 0..i).
-    - feature 048 calls evaluate() directly with no signature changes.
     """
 
     def __init__(self, indicators_stub, propagation_meta=()):
@@ -164,40 +158,30 @@ class StrategyEvaluator:
         if not bars:
             return [], {}
 
-        # Step 1: validate definition
         _validate_definition(definition)
 
         closes = [b.close for b in bars]
-        # eval_dates is only needed to align a benchmark (source_symbol) component; compute
-        # it lazily so the no-source path never touches bar.time (preserves byte-identity and
-        # keeps list-mocked bars without a .time field working).
+        # Computed lazily: the no-source path must never touch bar.time, or list-mocked bars
+        # without a .time field break and byte-identity is lost.
         eval_dates = (
             [_bar_date(b) for b in bars]
             if any(c.source_symbol for c in definition.components)
             else None
         )
 
-        # Step 2: compute component series
-        # Each component may emit several series (e.g. Bollinger Bands → value/upper/lower).
-        # A bare ref_name resolves to the primary "value" series; every emitted series is
-        # also addressable in rules as "<ref_name>.<series>" (e.g. "bb.upper").
-        # A component with a source_symbol (feature 152) is computed on the benchmark's
-        # bars and aligned onto eval_dates via _assemble_component_series.
         component_series = {}
         for comp in definition.components:
             series_map = await self._assemble_component_series(
                 comp, closes, eval_dates, benchmark_bars
             )
             primary = series_map.get("value", [None] * len(closes))
-            component_series[comp.ref_name] = primary  # bare ref → primary series
+            component_series[comp.ref_name] = primary
             for series_name, series in series_map.items():
                 component_series[f"{comp.ref_name}.{series_name}"] = series
 
-        # Step 3: parse rules
         entry_rule = json.loads(definition.entry_rule) if definition.entry_rule else None
         exit_rule = json.loads(definition.exit_rule) if definition.exit_rule else None
 
-        # Step 4: evaluate bar by bar
         decisions = []
         for i in range(len(bars)):
             entry = _eval_condition(entry_rule, component_series, i) if entry_rule else False
@@ -236,11 +220,8 @@ class StrategyEvaluator:
         ``{symbol, conviction, passing_conditions, total_conditions, conditions:[…]}``.
         """
         if not bars:
-            # feature 140 FR-6: empty-bars logging is the CALLER's responsibility, not this
-            # shared function's. It is also called from _compute_opportunities' background
-            # per-user compute (up to analysis.opportunity.max_universe_size symbols), where a
-            # per-call WARN here would flood the logs; the in-scope callers that need visibility
-            # (live loop, EvaluateReadiness, screener) log the gap at their own call site.
+            # Empty-bars logging is the CALLER's responsibility, not this shared function's: it
+            # also runs in _compute_opportunities' per-user compute, where a WARN here would flood.
             return _empty_readiness(symbol)
         _validate_definition(definition)
         closes = [b.close for b in bars]
@@ -289,9 +270,7 @@ class StrategyEvaluator:
         elif comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA:
             input_struct = Struct()
             input_struct.update({"close": closes})
-            # Numeric component params travel in input_params (not input_data); the
-            # series stays in input_data. The engine applies declared defaults for
-            # anything omitted (FR-7).
+            # Numeric params go in input_params, never input_data (which carries only the series).
             params_struct = Struct()
             params_struct.update(dict(comp.params))
             resp = await self._indicators.ExecuteFormula(
@@ -303,31 +282,21 @@ class StrategyEvaluator:
                 metadata=self._meta,
             )
             if not resp.success:
-                # feature 067: a failed formula is a genuine error, not an all-None series.
+                # A failed formula is a genuine error, not an all-None series.
                 raise FormulaExecutionError(comp.formula_id, resp.error)
-            # feature 067: MessageToDict recursively converts the Struct (incl. ListValue)
-            # to native python — dict(resp.output) leaves a list output as a ListValue,
-            # which the old isinstance(list, tuple) gate dropped → all-None (canonical
-            # decode: screener.py). Formula output must contain a "value" key with a list;
-            # any additional list-valued outputs become secondary series ("<ref_name>.<key>").
-            # MessageToDict refuses to serialize NaN/Inf number_values (JSON has no such
-            # literal); a formula emitting them is out-of-contract, so surface it as a
-            # visible FORMULA_ERROR rather than letting the ValueError degrade silently.
-            # A legitimate warm-up head is a null (None) element, which decodes cleanly.
+            # MessageToDict (not dict(resp.output), which drops a ListValue → all-None) decodes the
+            # Struct; it raises ValueError on NaN/Inf, surfaced as FORMULA_ERROR not silent degrade.
             try:
                 output = MessageToDict(resp.output)
             except ValueError as e:
                 raise FormulaExecutionError(comp.formula_id, resp.error or str(e)) from e
             series: dict[str, list[float | None]] = {}
             for key, raw in output.items():
-                # Non-list (scalar) values are dropped; scalar-broadcast is deferred
-                # (design § Rejected).
+                # Scalar (non-list) values are dropped; scalar-broadcast is deferred.
                 if not isinstance(raw, list):
                     continue
-                # Custom-formula length policy: require len == n and raise on any
-                # mismatch (len<n, len>n, empty). Unlike the builtin path, an arbitrary
-                # user formula has no contiguous warm-up-head invariant to tail-align
-                # against, so tail-aligning a short list would silently misalign bars.
+                # Require len == n and raise on any mismatch: a user formula has no warm-up-head
+                # invariant to tail-align against, so tail-aligning a short list misaligns bars.
                 if len(raw) != n:
                     raise FormulaExecutionError(
                         comp.formula_id,
@@ -335,9 +304,7 @@ class StrategyEvaluator:
                     )
                 series[key] = [_finite_or_none(v) for v in raw]
             if "value" not in series:
-                # An absent/empty "value" series is the AC-3 failure, not a silent
-                # [None] * n. (An all-None/all-NaN len==n series passes through above as
-                # a legitimate warm-up range.)
+                # An absent/empty "value" series is a failure, not a silent [None] * n.
                 raise FormulaExecutionError(
                     comp.formula_id, resp.error or "formula output missing a 'value' series"
                 )
@@ -490,21 +457,16 @@ def _validate_definition(definition, formula_outputs: dict | None = None) -> Non
         else:
             raise ValueError(f"Unknown ComponentKind: {comp.kind}")
 
-    # Re-entry cooldown (feature 069, FR-6): a negative value is rejected at write time. Unset never
-    # triggers this (no HasField); an explicit 0 (no-cooldown) passes.
+    # Negative rejected at write; unset (no HasField) and an explicit 0 (no cooldown) both pass.
     if definition.HasField("cooldown_days") and definition.cooldown_days < 0:
         raise ValueError("cooldown_days must be >= 0")
 
-    # Exit cooldown (feature 116, FR-2): a negative value is rejected at write time. Unset
-    # never triggers this (no HasField); an explicit 0 (no minimum hold) passes.
+    # Negative rejected at write; unset (no HasField) and an explicit 0 (no min hold) both pass.
     if definition.HasField("exit_cooldown_days") and definition.exit_cooldown_days < 0:
         raise ValueError("exit_cooldown_days must be >= 0")
 
-    # Deny list × signal eligibility (feature 132, design decision 4): a non-empty
-    # signal_params.symbols allowlist is already an explicit universe override, so pairing it with
-    # signal_eligible=true (which folds in the platform-wide active-signal term) is contradictory.
-    # Rejected at write time. Runs on the MERGED definition (servicer passes to_write), so a
-    # two-step masked update — set the allowlist in call 1, flip the flag in call 2 — is caught.
+    # A non-empty signal_params.symbols allowlist and signal_eligible=true are contradictory (both
+    # set the universe) — rejected on the MERGED definition, so a two-step masked update is caught.
     _allowlist = []
     if definition.HasField("signal_params"):
         _allowlist = MessageToDict(definition.signal_params).get("symbols") or []
@@ -514,7 +476,6 @@ def _validate_definition(definition, formula_outputs: dict | None = None) -> Non
             "(the allowlist is already an explicit universe override)"
         )
 
-    # Validate rule JSON parsability and ref_name references
     for rule_name, rule_json in [
         ("entry_rule", definition.entry_rule),
         ("exit_rule", definition.exit_rule),
@@ -627,7 +588,6 @@ def _eval_condition(node: Any, series: dict[str, list], i: int) -> bool:
     if "op" in node and node["op"] == "OR":
         return any(_eval_condition(c, series, i) for c in node.get("conditions", []))
 
-    # Leaf node
     lhs_ref = node.get("lhs")
     rhs = node.get("rhs")
     fn = node.get("fn", "")
@@ -673,16 +633,11 @@ def _resolve_term(term: Any, series: dict[str, list], i: int) -> float | None:
     return float(term) if term is not None else None
 
 
-# ── Traced readiness / conviction (feature 083) ──────────────────────────────
-#
-# The conviction/readiness formula is PINNED here as a pure, unit-testable function
-# (design.md Open Risk "Conviction/readiness formula", C-01). Conviction is a
-# DETERMINISTIC ORDINAL — passing/total leaves plus a normalized worst-distance
-# tie-breaker — NOT a probability. The UI renders "N/M conditions" + strength bars,
-# never a fabricated %.
+# ── Traced readiness / conviction ────────────────────────────────────────────
+# Conviction is a DETERMINISTIC ORDINAL (passing/total leaves + normalized worst-distance
+# tie-breaker), NOT a probability — the UI renders "N/M conditions", never a fabricated %.
 
-# Fraction of the threshold within which a not-yet-passing leaf counts as SOFT
-# (a "configurable" soft-band, exposed as a parameter for tests; default here).
+# Fraction of the threshold within which a not-yet-passing leaf counts as SOFT.
 _READINESS_SOFT_BAND = 0.05
 
 

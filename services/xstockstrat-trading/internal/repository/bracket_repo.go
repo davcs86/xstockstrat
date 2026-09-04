@@ -10,7 +10,7 @@ import (
 )
 
 // OrderBracketRecord is the DB representation of one order's bracket (stop-loss +
-// optional take-profit) state machine (feature 030).
+// optional take-profit) state machine.
 type OrderBracketRecord struct {
 	ID                     string
 	OrderID                string
@@ -31,11 +31,10 @@ type BracketRepository interface {
 	CreateBracket(ctx context.Context, rec *OrderBracketRecord) error
 	GetBracketByOrderID(ctx context.Context, orderID string) (*OrderBracketRecord, error)
 	UpdateBracketStatus(ctx context.Context, id string, status int32, stopLegID, takeProfitLegID, failReason string) error
-	// ReArmProtection updates protection_deadline (called at every transition that
-	// leaves ACTIVE — design.md's "re-armed... not just the initial one").
+	// ReArmProtection updates protection_deadline — called at every transition that leaves ACTIVE.
 	ReArmProtection(ctx context.Context, id string, deadline time.Time) error
 	// ListExpiredProtection finds non-ACTIVE, non-terminal brackets past their deadline
-	// (the watchdog's scan target — order_brackets_protection_watch_idx backs this).
+	// (the watchdog's scan target).
 	ListExpiredProtection(ctx context.Context, now time.Time) ([]*OrderBracketRecord, error)
 }
 
@@ -43,8 +42,7 @@ type pgBracketRepo struct {
 	pool *pgxpool.Pool
 }
 
-// NewBracketRepo creates a new BracketRepository backed by the given pool (reused from
-// TradingRepo.Pool() — no new DB_POOL_MAX, per F-06).
+// NewBracketRepo creates a new BracketRepository backed by the given (shared) pool.
 func NewBracketRepo(pool *pgxpool.Pool) BracketRepository {
 	return &pgBracketRepo{pool: pool}
 }
@@ -81,9 +79,7 @@ func (r *pgBracketRepo) GetBracketByOrderID(ctx context.Context, orderID string)
 		&rec.ProtectionDeadline, &rec.FailReason, &rec.CreatedAt, &rec.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
-		// No bracket exists yet for this order — not an error, the caller's own
-		// no-op branch handles it (order was never auto-sized, or hasn't reached the
-		// fill-confirmed hook yet).
+		// No bracket yet for this order — not an error; returns nil,nil for the caller's no-op branch.
 		return nil, nil
 	}
 	if err != nil {

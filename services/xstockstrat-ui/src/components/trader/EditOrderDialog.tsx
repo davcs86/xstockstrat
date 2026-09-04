@@ -15,9 +15,8 @@ interface EditOrderDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-// EditOrderDialog edits a working order's qty / limit price / stop price / TIF and calls
-// ReplaceOrder (FR-4). It is broker-agnostic — the service routes by broker_type, so there
-// is no Alpaca/IBKR branch here. A zero/empty field is sent as "leave unchanged".
+// Edits a working order's qty / limit price / stop price / TIF via ReplaceOrder. Broker-agnostic —
+// the service routes by broker_type, so no Alpaca/IBKR branch here. A zero/empty field means "leave unchanged".
 export function EditOrderDialog({ order, open, onOpenChange }: EditOrderDialogProps) {
   const { mutate: replaceOrder, isPending } = useReplaceOrder();
   const [qty, setQty] = useState('');

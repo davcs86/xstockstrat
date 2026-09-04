@@ -29,7 +29,7 @@ import {
 } from '@/components/insights/EquityCurveChart';
 import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
 
-// feature 064: cap the backtest range to 2 calendar years (matches the analysis service cap).
+// Cap the backtest range to 2 calendar years (matches the analysis service cap).
 const MAX_RANGE_DAYS = 730;
 function shiftDay(iso: string, days: number): string {
   const ms = new Date(iso).getTime();
@@ -73,8 +73,7 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
     initial_capital: '100000',
   });
 
-  // feature 068: an opened Past Runs row; its persisted detail feeds the same results
-  // surface the fresh run uses (single render path, AC-5).
+  // An opened Past Runs row; its persisted detail feeds the same results surface the fresh run uses.
   const [selectedRunId, setSelectedRunId] = useState<string | undefined>(undefined);
   const {
     data: selectedDetail,
@@ -95,18 +94,15 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
     runBacktestMutate(
       {
         strategyId: id,
-        // feature 065: run the strategy's registered definition so the run earns fingerprinted
-        // evidence toward the derived headline grade (parity with the agent caller).
+        // strategyIdRef runs the registered definition so the run earns evidence toward the grade.
         strategyIdRef: id,
         symbols: form.symbol ? [form.symbol] : [],
         initialCapital: parseFloat(form.initial_capital),
         range: { start: isoToTimestamp(form.start), end: isoToTimestamp(form.end) },
       },
       {
-        // The run now persists a score + a history row server-side; refetch the report and
-        // the history so the Strategy Score card and Past Runs list reflect the new run.
-        // feature 068: also clear any opened historical run so the fresh result is never
-        // shadowed by a stale selection (design.md seam-clear; e2e-asserted).
+        // The run persists a score + history row; refetch report/history and clear any opened historical
+        // run so the fresh result isn't shadowed by a stale selection.
         onSuccess: () => {
           setSelectedRunId(undefined);
           queryClient.invalidateQueries({ queryKey: ['analysis-report', id] });
@@ -116,14 +112,12 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
     );
   }
 
-  // feature 068: with a historical run open, the results surface renders ONLY that run's
-  // persisted detail (or its explicit empty/loading state) — the fresh-run/latest fallback
-  // applies only when no row is selected, so a NOT_FOUND legacy row never leaks another
-  // run's metrics.
+  // With a historical run open, render ONLY that run's detail — the fresh-run/latest fallback applies
+  // only when no row is selected, so a NOT_FOUND legacy row never leaks another run's metrics.
   const result = selectedRunId ? selectedDetail : (backtestResult ?? report?.latestBacktest);
   const pastRuns = history?.runs ?? [];
-  // feature 065: the derived grade is cleared (NOT_FOUND) or absent for an unscored strategy — the
-  // backtest form + Past Runs stay rendered so the user can earn evidence.
+  // The derived grade is cleared (NOT_FOUND) or absent for an unscored strategy — the form + Past Runs
+  // stay rendered so the user can earn evidence.
   const gradeCleared = isNotFoundError(reportError) || (!!report && !report.score);
 
   type BacktestRun = (typeof pastRuns)[number];
@@ -145,8 +139,7 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
         cell: ({ row }) => row.original.symbols.join(', ') || '—',
       },
       {
-        // feature 150: distinguish cross-mode rows so a portfolio return is never silently read
-        // against a legacy one (the product spec's minimum comparability guard — label, not block).
+        // Label the sizing mode so a portfolio return is never silently read against a legacy one.
         id: 'mode',
         header: 'Mode',
         accessorFn: (run) => SIZING_MODE_LABEL[run.sizingMode],
@@ -154,8 +147,7 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
         cell: ({ row }) => SIZING_MODE_LABEL[row.original.sizingMode],
       },
       {
-        // feature 151: label the fill model so cross-mode history rows are visibly distinguished
-        // (a next-bar-open run is never silently compared against a legacy same-bar-close one).
+        // Label the fill model so a next-bar-open run isn't silently compared against a same-bar-close one.
         id: 'fillModel',
         header: 'Fill model',
         accessorFn: (run) => FILL_MODEL_LABEL[run.fillModel],
@@ -230,10 +222,8 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
         </div>
 
         <div className="flex flex-col lg:flex-row gap-4">
-          {/* Left sidebar: score + backtest runner */}
           <div className="w-full lg:w-80 shrink-0 space-y-4">
-            {/* Strategy Grade card (feature 065) — derived from cross-stock evidence, distinct
-                from a single run's "Run score" in the Past Runs table below. */}
+            {/* Strategy Grade — cross-stock evidence, distinct from a run's "Run score" below. */}
             {report?.score ? (
               <Card>
                 <CardHeader>
@@ -279,7 +269,7 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
               </Card>
             ) : null}
 
-            {/* Feature 086: live-status warning when a referenced formula was soft-deleted. */}
+            {/* Live-status warning when a referenced formula was soft-deleted. */}
             {definition && definition.warnings.length > 0 && (
               <Card data-testid="strategy-warnings">
                 <CardHeader>
@@ -295,7 +285,6 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
               </Card>
             )}
 
-            {/* Live evaluation toggle */}
             {definition && (
               <Card>
                 <CardHeader>
@@ -350,7 +339,7 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
               </Card>
             )}
 
-            {/* feature 083 — per-strategy analytics + Active/Paused/Off state (AC-5). */}
+            {/* Per-strategy analytics + Active/Paused/Off state. */}
             {definition && (
               <Card>
                 <CardHeader>
@@ -395,7 +384,6 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
               </Card>
             )}
 
-            {/* Backtest runner form */}
             <Card>
               <CardHeader>
                 <CardTitle>Run Backtest</CardTitle>
@@ -449,10 +437,8 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
             </Card>
           </div>
 
-          {/* Right: results */}
           <div className="flex-1 min-w-0 space-y-4">
-            {/* feature 068: a legacy/evicted run has no persisted detail — explicit empty
-                state; the row's summary metrics remain visible in the Past Runs table. */}
+            {/* A legacy/evicted run has no persisted detail — explicit empty state (summary in Past Runs). */}
             {selectedRunId && detailNotFound && (
               <Card>
                 <CardContent className="pt-5">
@@ -532,13 +518,11 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
 
             {result && result.status !== BacktestStatus.INSUFFICIENT_DATA && (
               <>
-                {/* Metrics grid */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       Backtest Results
-                      {/* feature 150: label the sizing mode so a portfolio-mode return is never
-                          silently compared against a legacy one. */}
+                      {/* Label the sizing mode so a portfolio return isn't read against a legacy one. */}
                       <Badge
                         variant={
                           result.sizingMode === SizingMode.PORTFOLIO ? 'default' : 'secondary'
@@ -547,8 +531,7 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                       >
                         {SIZING_MODE_LABEL[result.sizingMode]}
                       </Badge>
-                      {/* feature 151: label the fill model so a next-bar-open run is never silently
-                          compared against a legacy same-bar-close one. */}
+                      {/* Label the fill model so a next-bar-open run isn't read against a same-bar-close one. */}
                       <Badge variant="secondary" data-testid="fill-model-badge">
                         {FILL_MODEL_LABEL[result.fillModel]}
                       </Badge>
@@ -586,23 +569,21 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                   </CardContent>
                 </Card>
 
-                {/* Equity curve — time-based, per-symbol, with trade markers (feature 068).
-                    Shared by the fresh-run and historical views (AC-5). */}
+                {/* Equity curve — per-symbol, with trade markers. Shared by fresh-run + historical views. */}
                 <EquityCurveChart diagnostics={result.diagnostics} trades={result.trades} />
 
-                {/* feature 150: in portfolio mode, also plot the shared-pool equity curve — the
-                    authoritative aggregate in that mode (per-symbol BarDiagnostic.equity is not). */}
+                {/* In portfolio mode, plot the shared-pool equity curve — the authoritative aggregate
+                    (per-symbol equity is not). */}
                 {result.sizingMode === SizingMode.PORTFOLIO &&
                   result.portfolioEquityCurve.length > 0 && (
                     <PortfolioEquityCurveChart curve={result.portfolioEquityCurve} />
                   )}
 
-                {/* Day-by-day debug diagnostics (feature 064) */}
+                {/* Day-by-day debug diagnostics. */}
                 <BacktestDiagnostics diagnostics={result.diagnostics} />
               </>
             )}
 
-            {/* Past runs — durable backtest history for this strategy */}
             {pastRuns.length > 0 && (
               <Card data-testid="past-runs">
                 <CardHeader>

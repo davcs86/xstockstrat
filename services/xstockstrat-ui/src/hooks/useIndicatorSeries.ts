@@ -3,10 +3,8 @@ import { analysisClient } from '@/lib/browserClients/analysisClient';
 
 export type IndicatorSeriesInput = Parameters<typeof analysisClient.getIndicatorSeries>[0];
 
-// Per-component indicator series for the unified Symbol page's overlay panels (feature 125, FR-6).
-// Cross-segment browser client (`/insights/api`, Step 7's sanctioned exception). The page passes the
-// exact candlestick closes + their times it already drew, so the panels' x-axis is parity-aligned
-// and the server never re-fetches bars. Enabled only when a strategy resolves AND there are bars.
+// Cross-segment `/insights/api` client (sanctioned exception). The page passes the exact closes+times
+// it drew, so the panels' x-axis is parity-aligned and the server never re-fetches bars.
 export function useIndicatorSeries(req: {
   strategyId: string;
   symbol: string;

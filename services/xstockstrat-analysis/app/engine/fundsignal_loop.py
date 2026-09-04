@@ -31,9 +31,7 @@ from app.engine.durable_schedule import DurableSchedule
 log = logging.getLogger(__name__)
 
 # Fundamental metric → (good_endpoint, bad_endpoint) for the built-in default score.
-# Lower-is-better when good < bad; higher-is-better when good > bad. Mirrors the spirit of
-# the 063 value+quality formula but is a self-contained, deterministic built-in default
-# (used when analysis.fundsignal.scoring_formula_id is empty).
+# Lower-is-better when good < bad; higher-is-better when good > bad.
 _BUILTIN_BANDS = {
     "pe_ratio": (10.0, 35.0),  # lower better; <=0 handled specially
     "pb_ratio": (1.0, 5.0),  # lower better; <0 handled specially
@@ -73,10 +71,7 @@ class FundamentalsSignalLoop:
     ):
         self._cfg = config_watcher
         self._db = db_pool
-        # Feature 158: the durable, crash-safe schedule now lives in the shared DurableSchedule
-        # helper (interval mode) backed by analysis.job_schedule — the three private seams below
-        # delegate to it, keeping this loop's _tick/run_forever (disabled gate, overlap lock,
-        # config reads) local so feature 156's @AC-1..7 behavior stays here.
+        # Durable crash-safe schedule (interval mode) backed by analysis.job_schedule.
         self._schedule = DurableSchedule(self._db, self._SCHEDULE_JOB, "interval")
         self._marketdata = marketdata_stub
         self._ingest = ingest_stub
@@ -86,11 +81,8 @@ class FundamentalsSignalLoop:
         self._ledger = ledger_stub
         self._lock = asyncio.Lock()
         self._source_registered = False
-        # FMP-gated truncation (feature 154): the max_symbols cap exists solely to protect FMP's
-        # daily request budget, so it applies ONLY when FMP is the active fundamentals provider.
-        # The provider is read boot-frozen from the marketdata namespace (marketdata itself freezes
-        # it at boot — never diverge mid-process), via a second ConfigWatcher. Unknown/absent
-        # provider selects the conservative capped path WITHOUT baking in a provider literal.
+        # The max_symbols cap protects FMP's daily budget, so it applies ONLY when FMP is active.
+        # Provider is read boot-frozen from marketdata's namespace (never diverge mid-process).
         provider = (
             md_config_watcher.get_str("marketdata.fundamentals.provider", "")
             if md_config_watcher
@@ -101,13 +93,8 @@ class FundamentalsSignalLoop:
 
     # ── scheduler ────────────────────────────────────────────────────────────
 
-    # The schedule lives in analysis.fundsignal_schedule (feature 156): a durable, crash-safe
-    # "next-due" row that survives redeploys. blocked_until_ms is advanced ONLY after a cycle
-    # completes, so a crash before the advance leaves the row due and the restarted process
-    # re-runs promptly (never a fresh full-interval sleep on every restart, the original bug).
-    # run_once itself never reads/writes this row, so a manual RunFundamentalsScan cannot move
-    # the scheduled cadence. At instance_count:1 the in-process _lock guards overlap; process_name
-    # is a diagnostic last-runner column, not a fencing token this design relies on.
+    # blocked_until_ms advances ONLY after a cycle completes, so a crash before the advance leaves
+    # the row due; the restart re-runs promptly. run_once never touches it (manual scan ≠ cadence).
 
     _SCHEDULE_JOB = "fundsignal"
 
@@ -174,7 +161,7 @@ class FundamentalsSignalLoop:
         source_slug = self._cfg.get_str("analysis.fundsignal.source_slug", "fundamentals")
         as_of_date = datetime.now(UTC).date()
 
-        # Universe (dedup, then FMP-gated cap — feature 154).
+        # Universe (dedup, then FMP-gated cap).
         max_symbols = self._cfg.get_int("analysis.fundsignal.max_symbols_per_run", default=200)
         universe = override_symbols or await self._resolve_universe(metadata)
         universe = self._apply_symbol_cap(self._dedup(universe), max_symbols)
@@ -270,7 +257,7 @@ class FundamentalsSignalLoop:
             signals_emitted=emitted,
         )
 
-    # ── helpers (Step 8) ─────────────────────────────────────────────────────
+    # ── helpers ────────────────────────────────────────────────────────────────
 
     async def _resolve_universe(self, metadata):
         """Distinct symbol universe per analysis.fundsignal.universe_source (FR-3, feature 154).
@@ -321,7 +308,7 @@ class FundamentalsSignalLoop:
         apply_cap = self._fmp_active or not self._provider_known
         if not apply_cap or len(deduped) <= max_symbols:
             return deduped
-        offset = datetime.now(UTC).toordinal() % len(deduped)  # stateless rotating offset (R3)
+        offset = datetime.now(UTC).toordinal() % len(deduped)  # stateless rotating offset
         rotated = deduped[offset:] + deduped[:offset]
         kept = rotated[:max_symbols]
         dropped = [s for s in deduped if s not in set(kept)]
@@ -410,7 +397,6 @@ class FundamentalsSignalLoop:
         return sum(parts) / len(parts) if parts else 0.5
 
     async def _score_via_formula(self, formula_id, fundamentals_by_symbol, metadata):
-        # Reuse the 063 consumer helper (analysis-side) over the indicators ExecuteFormula RPC.
         from app.services.fundamentals_scoring import score_fundamentals
 
         out = {}
@@ -476,9 +462,8 @@ class FundamentalsSignalLoop:
             )
             self._source_registered = True
         except grpc.aio.AioRpcError as e:
-            # Feature 088: register is now strict, so a restart re-registering the source gets
-            # ALREADY_EXISTS — that means it IS registered, so set the flag (no per-cycle spam).
-            # Any other code is a real (still non-fatal) failure and must not look registered.
+            # A strict register returns ALREADY_EXISTS on restart — it IS registered, so set the
+            # flag (no per-cycle spam). Any other code is a real failure; stay unregistered.
             if e.code() == grpc.StatusCode.ALREADY_EXISTS:
                 self._source_registered = True
             else:

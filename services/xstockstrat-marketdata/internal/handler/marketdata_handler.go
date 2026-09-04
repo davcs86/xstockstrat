@@ -14,12 +14,10 @@ import (
 	"github.com/xstockstrat/marketdata/internal/service"
 )
 
-// Ensure MarketDataHandler implements both interfaces at compile time.
 var _ marketdatav1connect.MarketDataServiceHandler = (*MarketDataHandler)(nil)
 
-// MarketDataHandler implements both the Connect-RPC and gRPC service interfaces.
-// Connect-RPC (HTTP) and gRPC share the same handler via the Connect framework which
-// supports gRPC protocol natively over HTTP/2.
+// MarketDataHandler implements both the Connect-RPC and gRPC service interfaces, which share
+// the same handler via Connect's native gRPC-over-HTTP/2 support.
 type MarketDataHandler struct {
 	marketdatav1connect.UnimplementedMarketDataServiceHandler
 	svc *service.MarketDataService
@@ -106,7 +104,7 @@ func (h *MarketDataHandler) GetLatestQuote(ctx context.Context, req *connect.Req
 	return connect.NewResponse(q), nil
 }
 
-// GetLatestPrice returns the latest trade price + prior-session daily close (feature 095).
+// GetLatestPrice returns the latest trade price + prior-session daily close.
 func (h *MarketDataHandler) GetLatestPrice(ctx context.Context, req *connect.Request[marketdatav1.GetLatestPriceRequest]) (*connect.Response[marketdatav1.LatestPrice], error) {
 	if req.Msg.Symbol == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errorf("symbol required"))
@@ -168,9 +166,8 @@ func (h *MarketDataHandler) ListAssets(ctx context.Context, req *connect.Request
 	return connect.NewResponse(resp), nil
 }
 
-// GetFundamentals returns cached/fetched fundamental metrics for a symbol (feature 059).
-// Connect-coded errors from the service (FailedPrecondition/ResourceExhausted/Unavailable)
-// are forwarded as-is; only un-coded errors are wrapped as Internal.
+// GetFundamentals returns cached/fetched fundamental metrics for a symbol. Connect-coded
+// errors from the service are forwarded as-is; only un-coded errors are wrapped as Internal.
 func (h *MarketDataHandler) GetFundamentals(ctx context.Context, req *connect.Request[marketdatav1.GetFundamentalsRequest]) (*connect.Response[marketdatav1.GetFundamentalsResponse], error) {
 	if req.Msg.Symbol == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errorf("symbol required"))
@@ -182,7 +179,7 @@ func (h *MarketDataHandler) GetFundamentals(ctx context.Context, req *connect.Re
 	return connect.NewResponse(&marketdatav1.GetFundamentalsResponse{Fundamentals: f}), nil
 }
 
-// GetFundamentalsMulti returns batched fundamentals for a watchlist scan (feature 059).
+// GetFundamentalsMulti returns batched fundamentals for a watchlist scan.
 func (h *MarketDataHandler) GetFundamentalsMulti(ctx context.Context, req *connect.Request[marketdatav1.GetFundamentalsMultiRequest]) (*connect.Response[marketdatav1.GetFundamentalsMultiResponse], error) {
 	if len(req.Msg.Symbols) == 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errorf("symbols required"))
@@ -204,7 +201,6 @@ func forwardConnectErr(err error) error {
 }
 
 // GRPCHandler returns a gRPC-compatible adapter around this handler.
-// Used for the native gRPC server registration.
 func (h *MarketDataHandler) GRPCHandler() *grpcMarketDataAdapter {
 	return &grpcMarketDataAdapter{h: h}
 }

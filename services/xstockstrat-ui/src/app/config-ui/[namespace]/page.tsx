@@ -10,10 +10,10 @@ type Props = {
 export default async function NamespacePage({ params, searchParams }: Props) {
   const { namespace } = await params;
   const resolvedSearchParams = await searchParams;
-  // Feature 147: environment production/staging x optional per-user (user_id).
+  // Environment production/staging x optional per-user (user_id).
   const env = resolvedSearchParams.env === 'production' ? 'production' : 'staging';
-  // Per-user config is owner-only self-service: clamp the scope to the caller's own id (PR #994),
-  // so a hand-edited `?user=<someone-else>` cannot target another user's overrides here.
+  // Per-user config is owner-only self-service: clamp the scope to the caller's own id, so a
+  // hand-edited `?user=<someone-else>` cannot target another user's overrides here.
   const { user } = await resolveConfigScope(resolvedSearchParams.user ?? '');
   const nativeEnv = getNativeConfigEnv();
 

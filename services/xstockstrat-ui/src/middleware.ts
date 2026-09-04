@@ -15,15 +15,10 @@ export const config = {
   runtime: 'nodejs',
   matcher: [
     '/',
-    // api/auth/refresh is excluded alongside login/health because it retains a LIVE browser
-    // caller — src/lib/authRedirect.ts:40 (feature 153) POSTs to it with an expired/invalid
-    // access token when a data call gets Unauthenticated. Matching it here would run the auth
-    // gate on that already-expired cookie and redirect the browser's refresh POST to
-    // /auth/login, regressing the durable @AC-5/@AC-6 guarantees (C-16). It is no longer a
-    // middleware self-call — the near-expiry refresh below now runs in-process via
-    // refreshSession(), never by fetching this route.
-    // sw.js / manifest.webmanifest / icon-*.png (feature 165) are public PWA assets — they must be
-    // served without the auth gate, or the service worker never registers and install fails.
+    // api/auth/refresh must stay excluded: a live browser caller (authRedirect.ts) POSTs an
+    // expired token to it, and matching it here would redirect that refresh POST to /auth/login.
+    // sw.js / manifest.webmanifest / icon-*.png are public PWA assets — must bypass the auth gate,
+    // or the service worker never registers.
     '/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|sw.js|manifest.webmanifest|icon-192.png|icon-512.png|icon-512-maskable.png|api/auth/login|api/auth/refresh|api/health|health|auth/login|auth/oauth-login|\\.well-known|api/oauth).+)',
   ],
 };
@@ -44,8 +39,8 @@ export async function middleware(req: NextRequest) {
   }
 
   if (claims.expires_at - Math.floor(Date.now() / 1000) < ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS) {
-    // In-process refresh: call the identity gRPC client directly (Node.js runtime) instead of
-    // self-fetching /api/auth/refresh. Rotated cookies are set on the same response we return.
+    // In-process refresh via the identity client (Node runtime), not a self-fetch to
+    // /api/auth/refresh; rotated cookies are set on the same response.
     const refreshToken = req.cookies.get('refresh_token')?.value;
     const result = refreshToken ? await refreshSession(refreshToken) : null;
     if (!result) {
@@ -60,8 +55,8 @@ export async function middleware(req: NextRequest) {
         headers: new Headers({ ...Object.fromEntries(req.headers), [HEADER_TRACE_ID]: traceId }),
       },
     });
-    // Preserve extended-session persistence across the rotation: a "Remember me" session keeps its
-    // rolling Max-Age instead of being silently downgraded to a session cookie on every refresh.
+    // Preserve "Remember me" persistence across rotation — keep the rolling Max-Age, don't
+    // downgrade to a session cookie.
     setSessionCookies(
       response,
       result.accessToken,

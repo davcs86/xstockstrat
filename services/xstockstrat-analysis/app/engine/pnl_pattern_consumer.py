@@ -35,8 +35,8 @@ log = logging.getLogger(__name__)
 
 CONSUMER_NAME = "pnl_pattern"
 
-# trading emits the American one-`l` "order.canceled" (trading.go:828,1248) — matching the British
-# spelling would silently never capture cancels.
+# trading emits the American one-`l` "order.canceled"; the British spelling would silently never
+# capture cancels.
 ORDER_EVENTS = {
     "order.created": "created",
     "order.filled": "filled",
@@ -45,8 +45,7 @@ ORDER_EVENTS = {
 }
 CLOSE_EVENT = "portfolio.position.closed"
 
-# The default indicator set captured per snapshot (v1). Strategy-component-driven resolution is the
-# named v2 refinement (Step 14 docs) — recorded, not silently dropped.
+# Default indicator set captured per snapshot.
 DEFAULT_INDICATORS = ("RSI", "ATR")
 
 
@@ -132,8 +131,7 @@ class PnLPatternConsumer:
         self._ledger = ledger_stub
         self._cfg = config_watcher
         self._composer = composer
-        # Repos default to the real asyncpg-backed implementations; tests inject fakes (the pool is
-        # a concrete asyncpg pool in prod, so this seam keeps the seal logic unit-testable).
+        # Repos default to the real asyncpg-backed implementations; tests inject fakes.
         self._snapshots = snapshots or OrderSnapshotsRepository(db_pool)
         self._positions = positions or PnLPositionsRepository(db_pool)
         self._samples = samples or PnLPatternSamplesRepository(db_pool)
@@ -198,7 +196,7 @@ class PnLPatternConsumer:
         position_id = self._synth_position_id(user_id, account_id, symbol, trading_mode)
         event_type = ORDER_EVENTS[event.event_type]
 
-        # Compose BEFORE the txn — best-effort, timeout-bounded (FR-6).
+        # Compose BEFORE the txn — best-effort, timeout-bounded.
         bar, closes, indicators, signals, degraded = await self._compose(symbol, strategy_id)
 
         async with self._pool.acquire() as conn:
@@ -221,8 +219,7 @@ class PnLPatternConsumer:
                     indicators=indicators,
                     signals=signals,
                 )
-                # Open the position window on the first order event of a cycle
-                # (no-op if already open).
+                # Open the position window on the first order event (no-op if already open).
                 if event_type in ("created", "filled", "partially_filled") and user_id:
                     await self._positions.open(
                         conn,
@@ -259,8 +256,8 @@ class PnLPatternConsumer:
         account_id = payload.get("account_id", "") or "alpaca-default"
         trading_mode = payload.get("trading_mode") or payload.get("mode") or ""
         realized_pnl = _num(payload.get("realized_pnl"))
-        # feature 029 — total broker fees for the closed position (absent key ⇒ 0.0 via _num(None),
-        # so a legacy close with no fees_total seals net == gross, AC-11). realized_pnl stays gross.
+        # Broker fees for the closed position; absent ⇒ 0.0, so a legacy close with no fees_total
+        # seals net == gross. realized_pnl stays gross.
         fees_total = _num(payload.get("fees_total"))
         closed_at = event.recorded_at.ToDatetime() if event.HasField("recorded_at") else None
 
@@ -288,7 +285,6 @@ class PnLPatternConsumer:
 
         # An empty-window close (pre-deploy open, no snapshots) no-ops — nothing sealed.
         if sealed is not None:
-            # Seal-time completeness diagnostic (v1 named limitation — Step 14 docs).
             count = await self._snapshots.count_for_position(sealed["position_id"])
             if count < 2:
                 log.warning(
@@ -387,8 +383,8 @@ class PnLPatternConsumer:
 
     @staticmethod
     def _synth_position_id(user_id, account_id, symbol, trading_mode) -> str:
-        # Order carries no position_id — synthesize from the identity key (recon Risk). v1: one
-        # logical window per identity; the pnl_positions partial unique index enforces one open row.
+        # Order carries no position_id — synthesize from the identity key. One logical window per
+        # identity; the pnl_positions partial unique index enforces one open row.
         return f"{user_id}:{account_id}:{symbol}:{trading_mode}"
 
     async def _advance_cursor(self, sequence) -> None:
