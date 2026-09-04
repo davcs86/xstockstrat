@@ -73,3 +73,29 @@ These were stale *comments* fixed during the comment reduction itself (comment-o
 ---
 
 _Generated during the inline-comment reduction audit. Route actionable items with `/sdd-triage --from-report docs/reports/2026-09-04-comment-audit-triage.md`._
+
+---
+
+## Routing outcome (2026-09-04, `/sdd-triage --from-report`)
+
+All actionable items routed to Track C (SDD path). Feature directories created under
+`docs/roadmap/features/`:
+
+| Report item | Feature dir | Severity | Design depth |
+|---|---|---|---|
+| 1 — agent `trading_mode` OTel attr | `171-fix-agent-trading-mode-otel-attr` | SEV-3 | quick |
+| 2 — `max_drawdown_pct` read then discarded | `172-fix-portfolio-max-drawdown-unenforced` | SEV-3 | quick |
+| 3 — Python config zero-trap (indicators+ingest) | `173-fix-python-config-zero-trap` | SEV-2 | full |
+| 4 — `client_id` copy-paste (analysis+ingest) | `174-fix-config-watcher-client-id` | SEV-3 | quick |
+| 5–7 — dead-code cleanup batch | `175-fix-dead-code-cleanup-batch` | SEV-3 | quick |
+
+The "Doc-drift corrected in-pass" section needed no routing (already fixed in PR #1088).
+
+**Correction recorded during triage** — item 6 (dead `middleware/propagation.ts`): the report names
+the dead copies as ledger/notify/config and asserts identity's is "live via `ledgerAudit`". Triage
+grep shows identity's `propagation.ts` exports (`propagationStore`, `extractFromHttpRequest`) have
+**zero importers**, and `ledgerAudit.ts` reads `x-trace-id` from gRPC call metadata inline rather than
+importing `propagation.ts` — so identity's copy is unused too (corroborated by the root `CLAUDE.md`
+Header Propagation section). Feature 175 deletes the three confirmed-dead copies and carries identity's
+as an explicit design-gate decision rather than silently expanding scope. See
+`docs/roadmap/features/175-fix-dead-code-cleanup-batch/context.md`.

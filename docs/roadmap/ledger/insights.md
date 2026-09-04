@@ -2899,3 +2899,59 @@ reusing.
   the default, legacy Update passes `""`; `source==SIGNAL` (system-managed signal auto-adds) skipped.
 - **Rule it implies**: implement an add-time default at the one insert chokepoint with a source guard and
   a per-caller default argument, never as a read-time fallback or a second write path.
+
+### 2026-09-04 — 173-fix-python-config-zero-trap — design
+- **Pattern**: Fixing a Python config-watcher zero-trap (`v.int_val or default` collapsing a stored 0)
+  is a **targeted per-key** switch, not a blanket accessor swap: port the `HasField`-based
+  `get_int_present`/`get_str_present` alongside the trapping accessor and re-point only the keys whose 0
+  is meaningful. Keys whose 0 is nonsensical (a value feeding `asyncio.Semaphore(N)` — `Semaphore(0)`
+  deadlocks) and keys intentionally clamped ≥1 at read must STAY on the trapping accessor, each carrying
+  a ≤2-line "zero-trap intentional, cites the real consumer site" comment (fails-151) so the next sweep
+  doesn't "fix" them into a hang. A blanket swap silently un-clamps those and widens the blast radius.
+- **Evidence**: `services/xstockstrat-ingest/app/config/watcher.py` (route `max_retry_attempts`/
+  `dedup_window_hours`, leave `max_concurrent_*` at `servicer.py:191`/`:519`); `ConfigValue` oneof
+  `packages/proto/config/v1/config.proto:60-71` makes `HasField` legal; analysis precedent
+  `xstockstrat-analysis/app/config/watcher.py:102,131`.
+- **Rule it implies**: (a) route only the confirmed 0-meaningful keys through a present-aware accessor;
+  annotate every intentional retention. (b) To make an INLINE config-consumer expression RED-provable
+  without driving a slow loop (e.g. a `2**attempt` retry backoff), extract it into a named seam that
+  becomes the SOLE definition the loop consumes — not a parallel echo (that would re-open fails-074's
+  vacuous-green trap); prove wiring with the pre-existing loop tests. Reinforces C-08/P-06, no new ID.
+
+### 2026-09-04 — 171-fix-agent-trading-mode-otel-attr — design
+- **Pattern**: A comment-audit item filed as a single-service defect can be a **fleet-wide convention** —
+  recon before assuming scope. Here `trading_mode` was flagged as an agent-only stale OTel attribute but
+  is emitted identically by all 12 telemetry modules and is redundant with `deployment.environment` 1:1
+  in every deploy target. Agent-only "fixing" it creates divergence; the honest fix is fleet-wide or none.
+  Also: a removed **OTel resource attribute**'s real consumers are **out-of-repo** Grafana dashboards/alerts
+  (grep clears only in-repo dashboards/collector config) — an unavoidable blind spot (fails-1638 analog);
+  record it as an examined, accepted residual, de-risked here by `OTEL_ENABLED=false` in both `.do` specs.
+- **Evidence**: 12 `**/telemetry.{py,ts},**/otel.go` emit it; `.do/app.yaml:31`/`.do/app.dev.yaml:31`
+  (env↔mode 1:1, OTEL off); `packages/otel/dashboards/README.md:40` the only in-repo reference.
+- **Rule it implies**: for a "stale attribute/label" bug, grep the fleet for the same emission before
+  scoping to one service, and treat out-of-repo observability consumers as an examined residual, not a
+  grep-clean all-clear. Reinforces P-03, no new ID.
+
+### 2026-09-04 — 175-fix-dead-code-cleanup-batch — design
+- **Pattern**: For a **pure-deletion** feature, three traps recur and each has a cheap guard. (1) A
+  "dedicated test" is often a FUNCTION inside a SHARED test file — deleting the *file* nukes live
+  regressions. Verify with `grep -c '^func Test'` (here config_test.go held 7/9/15 funcs); the step
+  must say "delete the `TestX` function," never the file. (2) The AC "X no longer exists" has NO
+  build-RED (a pre-deletion tree is fully green) — the honest RED→GREEN is a **construct-scoped**
+  presence assertion (`grep 'func getEnvBool'`, `git ls-files '*/propagation.ts'` empty), living as a
+  named `**Covers**: AC-N` impl-spec step, NOT a permanent CI guard (overbuild) and NOT "recorded in
+  context.md" (C-15 wants a re-run step). (3) A doc pattern's **"Reference store"** cite (here
+  `header-propagation.md:123` → ledger `propagation.ts` + snippet) is a teardown target the deletion
+  orphans — recon must list it or `/sdd-spec` misses it (fails-670).
+- **Also**: a **`@types/node` major bump** verifies ONLY via a real `tsc` (a service whose CI runs
+  `node --experimental-strip-types --test` type-checks NOTHING — fails-021 — so gate on `pnpm build`,
+  not `test`); a Next.js service's sole type gate is `next build` (a bare `tsc --noEmit` false-REDs
+  because the `next` tsconfig plugin is LSP-only and `.next/types` exist only post-build — fails-155).
+  And per-service `pnpm-lock.yaml` can be **vestigial**: check the Dockerfile's actual `COPY … pnpm-lock`
+  source before regenerating or gating on them (here all leaf Dockerfiles use the ROOT lock).
+- **Evidence**: config_test.go func counts (grep); ledger/identity `package.json` `build`=tsc vs
+  `test`=strip-types; `xstockstrat-ui/next.config.js` (no `ignoreBuildErrors`); leaf `Dockerfile:13,17`
+  (root lock + `--frozen-lockfile`); `header-propagation.md:123`/`:126-151`.
+- **Rule it implies**: a deletion PR's AC discharge is `(construct-scoped presence RED→GREEN as a named
+  step) + (the service's REAL compile gate)`; verify the compile gate and lockfile source per service,
+  never assume. Reinforces C-08/C-15/P-06 and fails-021/110/155/670; no new ID.

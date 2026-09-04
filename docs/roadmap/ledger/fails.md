@@ -2199,3 +2199,23 @@ ambiguity is logged here).
 - **Evidence**: feature 167 recon.md; implementation-spec Deviation Log.
 - **Rule it implies**: when moving an operation to a new mutation hook, audit every guard/aggregator
   (`writeInFlight`, `useIsMutating` keys, concurrency tests) that referenced the old hook.
+
+### 2026-09-04 — 172-fix-portfolio-max-drawdown-unenforced — assumption
+- **Mistake**: A design (and the recon feeding it) assumed a persisted column named `equity` held
+  account equity, and scoped a cheap fix ("one repo read, reuse the series") on that basis. Grounding
+  the *writer* disproved it: `portfolio.snapshots.equity` is **cashless position mark-to-market**
+  (`portfolio_service.go:686-706`, `InsertSnapshot(... equity, cash=0 ...)`), not account equity — the
+  authoritative cash+positions figure lives in a **different** table, `account_balances.equity`
+  (broker-synced). Computing a drawdown risk control on the cashless column would fire false alerts when
+  a user de-risks to cash (position value craters, account equity intact) — the exact "looks wired,
+  misleads" state the fix existed to prevent. The "cheap" cost estimate was an artifact of the wrong
+  column: the correct basis needs a persisted true-equity high-water-mark (a new migration), turning a
+  SEV-3 one-liner into a medium change. Same family as the annualized-return metric computed on a
+  misassumed series shape.
+- **Evidence**: `services/xstockstrat-portfolio/internal/service/portfolio_service.go:686-706` (cashless
+  snapshot writer) vs `internal/repository/portfolio_repo.go:376-398` (broker-authoritative
+  `account_balances.equity`); disproven in feature 172's `/sdd-design` R1.
+- **Rule it implies**: before reusing a persisted column as the basis for a computed metric (esp. a
+  financial/risk one), read the code that WRITES it and confirm it contains the quantity the name implies
+  — a column named `equity` is not necessarily account equity. A "cheap because we can reuse X" cost
+  estimate is only as good as the verification that X is what you think. Reinforces C-01/P-03, no new ID.
