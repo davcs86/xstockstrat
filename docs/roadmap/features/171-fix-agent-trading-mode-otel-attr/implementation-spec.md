@@ -151,7 +151,7 @@ confirmed nothing in-repo queries the attribute; `OTEL_ENABLED=false` in both `.
 
 ### Step 3 — service: Remove `trading_mode` from the four Python telemetry modules (extract `_build_resource`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`, `xstockstrat-ingest`, `xstockstrat-indicators`, `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-agent/app/telemetry.py` — modify
@@ -197,7 +197,7 @@ confirmed nothing in-repo queries the attribute; `OTEL_ENABLED=false` in both `.
 
 ### Step 4 — test: Per-module Python Resource-attribute assertions + agent non-blocking init
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`, `xstockstrat-ingest`, `xstockstrat-indicators`, `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-agent/tests/test_telemetry.py` — create

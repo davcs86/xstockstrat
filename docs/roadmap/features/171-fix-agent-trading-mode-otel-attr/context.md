@@ -151,3 +151,12 @@ Fleet-wide removal of the redundant `trading_mode` OTel resource attribute + dea
 - New `otel_test.go` (package telemetry, calls unexported `newResource`) in all 3 services asserting the built SDK Resource omits `trading_mode` and keeps service.name/deployment.environment/platform.
 - Red→green: compile-RED (`undefined: newResource`) → all 3 pass. golangci-lint 0 issues; grep `trading_mode` clean in Go telemetry. Coverage: telemetry/ is Go -coverpkg-excluded (direct `go test` is the C-08 gate).
 - Files: `services/xstockstrat-{trading,portfolio,marketdata}/internal/telemetry/otel_test.go`. Deviations: none.
+
+### Step 3 — Python telemetry: extract _build_resource, drop trading_mode (agent/ingest/indicators/analysis) [done]
+- Each `app/telemetry.py`: extracted module-level `_build_resource()` (deferred SDK import) as the sole Resource input to `init_telemetry`; deleted the `trading_mode`/`environment` locals and the inline `Resource.create({...})` dict (dropping the `trading_mode` key). `svc_name`/`endpoint` kept (exporter + log). No `.do`/compose env changes.
+- Files: `services/xstockstrat-{agent,ingest,indicators,analysis}/app/telemetry.py`.
+
+### Step 4 — Python telemetry per-module tests (AC-1) + agent non-blocking init (AC-2) [done]
+- New `tests/test_telemetry.py` in all 4 asserting the built Resource omits `trading_mode`, keeps the trio. Agent adds `test_init_telemetry_non_blocking_on_error`: patches the source-module `OTLPSpanExporter` to raise (the name is locally imported inside init's try) → `init_telemetry()` swallows it and sets no global provider (AC-2).
+- Red→green: ImportError (`_build_resource` absent) → all pass. Coverage: agent 81.18%, ingest 76.69%, indicators 81.10% (≥50), analysis 85.19% (all ≥ threshold). ruff clean (fixed a docstring line length). grep `trading_mode` clean.
+- Files: `services/xstockstrat-{agent,ingest,indicators,analysis}/tests/test_telemetry.py`. Deviations: none (agent env needed `uv sync --extra dev` first — no dep/lock change).
