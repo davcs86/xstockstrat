@@ -65,7 +65,7 @@ Namespace: `portfolio`
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `portfolio.snapshot.interval_minutes` | int | `5` | How often to write portfolio snapshots |
-| `portfolio.risk.max_drawdown_pct` | float | `0.10` | **Read but not yet enforced** — intended drawdown alert; the value is currently read then discarded (`_ = maxDrawdownPct`) |
+| `portfolio.risk.max_drawdown_pct` | float | `0.10` | Per-account drawdown alert — a WARNING alert is emitted when an account's peak-to-current drawdown (broker `account_balances.equity` vs persisted `peak_equity` HWM) exceeds this pct (feature 172) |
 | `portfolio.risk.concentration_limit_pct` | float | `0.20` | Alert if single position > 20% of portfolio |
 | `portfolio.watchlist.max_per_user` | int | `50` | Max watchlists a single user may own (feature 058) |
 | `portfolio.watchlist.max_symbols_per_list` | int | `500` | Max symbols allowed in one watchlist (feature 058) |
