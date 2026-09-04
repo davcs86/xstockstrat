@@ -196,3 +196,6 @@ Order 173→174→172→171→175, one stacked PR per feature (operator-approved
 **Stopped at**: all complete → code-completed
 **Accountability**: out-of-scope changes: none. Open questions: none. Unaddressed review warnings: none (the pre-declared known-dead ingest sandbox copy was handled in the Step 6 audit as planned).
 **Next**: stacked integration PR #1 (base `main-dev`); then feature 174.
+
+### C-16 promotion (integration)
+- Promoted AC-1/AC-2/AC-3 → `services/xstockstrat-ingest/acceptance/fix-python-config-zero-trap.feature`; AC-4 → `services/xstockstrat-indicators/acceptance/fix-python-config-zero-trap.feature` (new dir), each tagged `@feature-173`. All PRESERVE-class additive regression guards (no CHANGE to existing guarantees); staged into PR #1. Operator pre-authorized auto-proceed; surfaced in the per-feature summary.
