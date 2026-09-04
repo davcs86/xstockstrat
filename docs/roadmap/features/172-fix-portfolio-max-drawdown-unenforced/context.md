@@ -26,3 +26,20 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   adversarial round decides implement-vs-document before spec, avoiding rework. If Path A is chosen and
   a migration/second service enters scope, re-run design at `full` depth.
 - Development branch: `feature/fix-portfolio-max-drawdown-unenforced`.
+
+---
+
+## Session 2026-09-04 — sdd-review product-spec
+
+- Product spec approved (PASS WITH WARNINGS). Status: draft → spec-ready.
+- Added FR-1 (end the read-then-discard via Path A enforce OR Path B document) + path-dependent
+  `## Consumer Surface(s)`; tagged @AC-1 @FR-1 (path A) / @AC-2 @FR-1 (path B).
+- All code claims verified: portfolio_service.go:722 (GetFloat) / :750 (`_ = maxDrawdownPct`);
+  trading.risk.daily_loss_limit is a real documented-not-implemented sibling.
+- Warnings (advisory, carry to design): (a) criterion-9 — the Path A/B fork MUST be collapsed and
+  recorded in context.md at /sdd-design; (b) @AC-2's code-state `Then` is slightly implementation-
+  flavored (acceptable for a Path-B doc fix). NOTE for /sdd-spec: if Path A, state migration NNN
+  (next free portfolio migration is 016) per C-07; refresh the stale findings-doc line numbers
+  (findings cites :769/:797; actual :722/:750).
+- Overlap: CLEAN (portfolio migration tip 015 → next 016, no contention; 175 touches a different
+  portfolio file). Design depth: quick (SEV-3, one Path A/B decision + blast-radius).

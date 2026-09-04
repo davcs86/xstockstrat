@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-04 | `bug-reported` → `draft` | /sdd-triage | Consolidated Cleanup batch from comment-audit report items 5–7 |
+| 2026-09-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS, 0 warnings); overlap CLEAN; FRs + Consumer Surface added |
 
 ---
 

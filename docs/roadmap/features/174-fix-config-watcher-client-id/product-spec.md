@@ -65,12 +65,14 @@ label with no `xstockstrat-ui` segment or Agent MCP tool surface. No consumer-su
 - [x] No proto changes anticipated
 - [x] No database migrations anticipated
 - [x] No config key changes anticipated
-- [ ] **Open question (design/spec gate)**: determine whether `xstockstrat-config` uses `client_id`
-      for subscriber identification, dedup, or per-client fan-out.
-      - If **significant**: the shared `indicators-` prefix is a genuine collision defect — correct
-        each watcher to its own prefix and add the regression guard.
-      - If **cosmetic**: correct the prefix per service for correctness/observability hygiene; no
-        behavioral change, lower priority.
+- [x] FR-1 fix (correct each watcher's `client_id` prefix) — direction is unconditional; see the
+      design-phase investigation note below, which only affects priority, not the fix.
+
+**Design-phase investigation (not a requirement fork):** `/sdd-design` recon determines whether
+`xstockstrat-config` keys on `client_id` for subscriber identification / dedup / per-client fan-out.
+If **significant**, the shared `indicators-` prefix is a genuine collision defect (raises priority);
+if **cosmetic**, it is correctness/observability hygiene. Either way FR-1 — per-service prefixes — is
+the same fix.
 
 ## Acceptance Criteria
 

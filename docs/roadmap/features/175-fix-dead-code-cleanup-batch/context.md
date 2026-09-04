@@ -44,3 +44,20 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `docs/context-constitution-findings.md` files (root + per-module). Removing the code obliges a
   context-constitution refresh in the SAME PR (root `CLAUDE.md` Teardown rule).
 - Development branch: `feature/fix-dead-code-cleanup-batch`.
+
+---
+
+## Session 2026-09-04 — sdd-review product-spec
+
+- Product spec approved (PASS, 0 blockers/0 warnings). Status: draft → spec-ready.
+- Added FR-1 (remove getEnvBool ×3 Go) / FR-2 (delete propagation.ts ×3 Node + identity decision) /
+  FR-3 (@types/node ^24 ×4 Node); `## Consumer Surface(s)` None — internal/platform-only; tagged
+  @AC-1 @FR-1 @item-5 / @AC-2 @FR-2 @item-6 / @AC-3 @FR-3 @item-7.
+- Reviewer confirmed the report correction: all FOUR propagation.ts copies (incl. identity) are
+  unused; ledgerAudit.ts uses its own PROPAGATED_HEADERS, does not import propagation.ts. Batching
+  the three cleanups is acceptable (independent, per-item testable). Identity delete-vs-document fork
+  is a genuine binary decision to settle before /sdd-spec.
+- NOTE for execute: reconcile the getEnvBool-dead references in
+  services/xstockstrat-{trading,marketdata,portfolio}/docs/context-constitution-findings.md in the
+  same PR (teardown).
+- Overlap: CLEAN (all 175 files disjoint from 172/173/174/084).
