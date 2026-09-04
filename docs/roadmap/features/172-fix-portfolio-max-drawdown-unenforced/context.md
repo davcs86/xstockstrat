@@ -147,3 +147,15 @@ Path A per-account drawdown enforcement. Go 1.27; golangci-lint v2.13.1 rebuilt 
 - Table-driven `TestEvaluateDrawdowns`: breach (3%>2%, names acc-1), sub-limit (1%<=2%, silent), no-history (peak 0, skipped, no panic), mixed slice (per-account grain — only breaching named). C-13: inline literals, single consumer.
 - Red→green: compile-RED (`undefined: evaluateDrawdowns`) on pre-Step-4 tree → passed after Step 4 (`-race`). gofmt-fixed my own comment alignment. golangci-lint 0 issues (whole module); full portfolio suite green (no regression from the interface widening / upsert change).
 - Files: `internal/service/portfolio_risk_test.go`. Deviations: none.
+
+### Step 6 — docs: config-key note + findings + durable acceptance suite (C-16) [done]
+- `CLAUDE.md` `max_drawdown_pct` row → enforcement description; portfolio findings `:20` marked RESOLVED with corrected `:769`/`:797` → `:740`/`:769-771` citations; created `acceptance/drawdown-enforcement.feature` promoting AC-1/AC-2 (`@feature-172`).
+- Teardown: context-forge refresh not invocable; manual reconciliation performed (see Deviation Log + PR body).
+- Files: `services/xstockstrat-portfolio/CLAUDE.md`, `.../docs/context-constitution-findings.md`, `.../acceptance/drawdown-enforcement.feature`
+
+## Session 2026-09-04 — sdd-execute summary (feature 172)
+**Steps this session**: 1–6 (all)
+**Progress**: 6 done / 6 total
+**Stopped at**: all complete → code-completed
+**Accountability**: out-of-scope changes: none. Open questions: cash-flow-funding drawdown is an accepted known limitation with a named follow-up ('model funding events') — recorded at design, not this PR's scope. Unaddressed review warnings: none. Migration 016 needs DBA + service-owner approval at the PR.
+**Next**: stacked integration PR #3 (base `feature/fix-config-watcher-client-id`); then feature 171.
