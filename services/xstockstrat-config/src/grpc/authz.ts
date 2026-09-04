@@ -36,7 +36,7 @@ export const ADMIN_SCOPE_ERROR = {
 
 /**
  * Denial for a per-user write whose target user_id is not the caller's own — per-user config is
- * self-service; an ADMIN bit grants no override for another user's row (PR #994).
+ * self-service; an ADMIN bit grants no override for another user's row.
  */
 export const PER_USER_SCOPE_ERROR = {
   code: status.PERMISSION_DENIED,
@@ -50,8 +50,8 @@ export const MISSING_AUTHOR_ERROR = {
 };
 
 /**
- * Metadata header for the internal-caller write channel (feature 102) — structurally separate from
- * x-access-scope, direction-restricted per grant (a caller may only move a value toward restriction).
+ * Metadata header for the internal-caller write channel — structurally separate from x-access-scope,
+ * direction-restricted per grant (a caller may only move a value toward restriction).
  */
 export const HEADER_INTERNAL_CALLER = 'x-internal-caller';
 
@@ -94,8 +94,8 @@ export function hasInternalCallerAuthority(
 }
 
 /**
- * GetSecret read-direction allow-list (feature 147): which internal caller may resolve which
- * secret's plaintext. Secret plaintext is served only through this gate. Fails closed.
+ * GetSecret read-direction allow-list: which internal caller may resolve which secret's plaintext.
+ * Secret plaintext is served only through this gate. Fails closed.
  */
 interface SecretCallerGrant {
   callerID: string;

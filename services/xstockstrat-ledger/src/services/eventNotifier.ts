@@ -18,10 +18,9 @@ export interface NotifySubscription {
 }
 
 /**
- * EventNotifier owns a single dedicated LISTEN connection (separate from the query pool)
- * that tails `ledger_stream_all` — where the DB trigger emits every insert — and fans each
- * event out to in-process subscribers, filtered per-subscriber. Decoupling streaming from
- * the pool keeps concurrent StreamEvents subscriptions from starving AppendEvent.
+ * EventNotifier owns a single dedicated LISTEN connection (separate from the query pool) that tails
+ * `ledger_stream_all` and fans each insert out to in-process subscribers, filtered per-subscriber.
+ * Decoupling from the pool keeps concurrent StreamEvents subscriptions from starving AppendEvent.
  */
 export class EventNotifier {
   private client: Client | null = null;
@@ -36,9 +35,8 @@ export class EventNotifier {
     private readonly reconnectDelayMs = 2000,
   ) {}
 
-  /** Open the dedicated listener connection. Best-effort: a connect failure
-   *  schedules a retry instead of throwing, so a transient DB blip at startup
-   *  never crashes the service. */
+  /** Open the dedicated listener connection. Best-effort: a connect failure schedules a retry instead
+   *  of throwing, so a transient DB blip at startup never crashes the service. */
   async start(): Promise<void> {
     await this.connect();
   }

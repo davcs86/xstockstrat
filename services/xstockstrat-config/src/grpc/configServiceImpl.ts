@@ -28,8 +28,7 @@ type EnvStr = 'staging' | 'production';
 // ENVIRONMENT_DEV(1) and ENVIRONMENT_STAGING(3) both map to 'staging'.
 const ENV_MAP: Record<number, EnvStr> = { 0: 'staging', 1: 'staging', 2: 'production', 3: 'staging' };
 
-// Convert the internal snapshot to the ts-proto shape ConfigSnapshot.encode() serializes. Accepts
-// both snake_case and camelCase field shapes. Values are already redacted by buildConfigValue.
+// Accepts both snake_case and camelCase field shapes; values are already redacted by buildConfigValue.
 function toProtoSnapPayload(snap: any, overrideUpdateType?: ConfigUpdateType): any {
   const env = snap.environment === 'production'
     ? Environment.ENVIRONMENT_PRODUCTION
@@ -42,8 +41,7 @@ function toProtoSnapPayload(snap: any, overrideUpdateType?: ConfigUpdateType): a
     ConfigUpdateType.CONFIG_UPDATE_TYPE_SNAPSHOT
   );
 
-  // Convert snake_case ConfigValue fields to the camelCase ts-proto encodes. isSecret rides through
-  // so consumers know the value must not be displayed.
+  // snake_case ConfigValue fields → camelCase ts-proto; isSecret rides through so it's never displayed.
   const values: Record<string, any> = {};
   for (const [k, v] of Object.entries(snap.values ?? {})) {
     const cv = v as any;
@@ -66,8 +64,8 @@ function toProtoSnapPayload(snap: any, overrideUpdateType?: ConfigUpdateType): a
 }
 
 /**
- * Resolve the request's environment scope, accepting both the ts-proto string constant and the
- * numeric wire value — decode both or every request silently collapses to the zero-value (scar).
+ * Accept both the ts-proto string constant and the numeric wire value — decode both or every
+ * request silently collapses to the zero-value (scar).
  */
 function resolveEnv(v: number | string | undefined): EnvStr {
   if (typeof v === 'string') {
@@ -81,8 +79,7 @@ function requestUserId(req: any): string {
   return (req?.userId ?? req?.user_id ?? '') as string;
 }
 
-// Cache key for the GLOBAL snapshot ("namespace:env"). Per-user overlays are resolved on demand,
-// never cached.
+// GLOBAL-snapshot cache key ("namespace:env"). Per-user overlays are resolved on demand, never cached.
 function snapKey(ns: string, env: EnvStr): string {
   return `${ns}:${env}`;
 }
@@ -124,8 +121,7 @@ export class ConfigServiceImpl {
   }
 
   private async reloadAll() {
-    // Only global rows (user_id IS NULL) populate the shared cache; per-user overrides are overlaid
-    // on demand at read/subscribe time.
+    // Only global rows (user_id IS NULL) populate the shared cache; per-user rows are overlaid on demand.
     const result = await this.pool.query(
       `SELECT namespace, key, value_type, value_data, is_secret, description, default_value, environment
        FROM config.config_values
@@ -398,14 +394,8 @@ export class ConfigServiceImpl {
       [namespace, key, env, userIdParam]
     );
 
-    // A per-user override of an already-registered GLOBAL key is not minting a new key, so it must
-    // not trip the feature-091 typo guard. That gate was scope-exact on (ns,key,env,<mode>) when the
-    // second axis was trading_mode; feature 147 swapped that axis for user_id, which mechanically
-    // made every FIRST per-user write of a registered key fail NOT_FOUND (no exact per-user row
-    // exists yet). Fix: when the exact per-user row is absent, fall back to the global
-    // (user_id IS NULL) row — if the key is registered there, the override is legitimate. create_key
-    // stays the escape hatch for a genuinely unregistered key (absent at BOTH the exact and the
-    // global scope).
+    // A first per-user override of an already-registered GLOBAL key is legitimate: when no exact per-user
+    // row exists, fall back to the global (user_id IS NULL) row; create_key covers a key absent at BOTH.
     let globalRow: any = null;
     if (existing.rows.length === 0 && userIdParam !== null) {
       const globalExisting = await this.pool.query(
@@ -425,10 +415,8 @@ export class ConfigServiceImpl {
       return;
     }
 
-    // Row-authoritative secret flag: the exact-scope row wins; for a first per-user override it comes
-    // from the global row (so a per-user write to a secret key is still caught by the global-only
-    // guard below, not silently treated as a non-secret create); on a genuine create, honor the
-    // request flag.
+    // Row-authoritative secret flag: exact-scope row wins, else the global row (so a per-user write to a
+    // secret key still hits the global-only guard below), else the request flag on a genuine create.
     const requestIsSecret = (value?.is_secret ?? value?.isSecret) === true;
     const isSecret =
       existing.rows.length > 0
@@ -437,7 +425,7 @@ export class ConfigServiceImpl {
           ? globalRow.is_secret === true
           : requestIsSecret;
 
-    // Secrets are global-scope only (feature 147). Reject a per-user secret write.
+    // Secrets are global-scope only — reject a per-user secret write.
     if (isSecret && userIdParam !== null) {
       callback({ code: 3, message: 'secret keys are global-scope only; per-user secret overrides are not supported' });
       return;
@@ -488,8 +476,7 @@ export class ConfigServiceImpl {
     const env = resolveEnv(call.request.environment);
     const userId = requestUserId(call.request);
     try {
-      // Global keys, overlaid with the caller's per-user rows when user_id is set (per-user row
-      // wins over the global row for the same key).
+      // Global keys overlaid with the caller's per-user rows (per-user wins over global for the same key).
       const result = await this.pool.query(
         `SELECT DISTINCT ON (key)
                 key, description, default_value, value_data, is_secret, consuming_service, environment
@@ -500,19 +487,15 @@ export class ConfigServiceImpl {
       );
       callback(null, {
         keys: result.rows.map((r) => {
-          // Feature 161: index the registry with the FULL key path. The DB `key` column is
-          // namespace-stripped (e.g. `scoring.signal_decay_half_life_hours`), so a bare `r.key`
-          // lookup would miss the full-path registry key and emit no validation — the latent bug
-          // the former `WEIGHT_KEY_REGISTRY[r.key]` carried, masked only by a non-representative
-          // full-path test fixture.
+          // Index the registry with the FULL key path: the DB `key` column is namespace-stripped, so a
+          // bare `r.key` lookup would miss the full-path registry key and skip validation.
           const scalarBounds = SCALAR_BOUNDS_REGISTRY[`${call.request.namespace}.${r.key}`];
           const secret = r.is_secret === true;
           return {
             key: r.key,
             description: r.description ?? '',
             defaultValue: r.default_value ?? '',
-            // Secret rows never expose their value at this edge — the sentinel, not value_data
-            // (which is already the sentinel, but redact defensively).
+            // Secret rows never expose their value at this edge — redact defensively (value_data is already the sentinel).
             currentValue: secret ? REDACTED : (r.value_data ?? ''),
             isSecret: secret,
             consumingService: r.consuming_service ?? '',
@@ -537,9 +520,8 @@ export class ConfigServiceImpl {
 }
 
 function buildConfigValue(row: any): any {
-  // Redaction choke point (feature 147): a secret row never yields its value here, so plaintext
-  // never enters the in-memory broadcast cache or any snapshot. is_secret rides along so consumers
-  // know the value must not be displayed and must be resolved via GetSecret.
+  // Redaction choke point: a secret row never yields its value here, so plaintext never enters the
+  // broadcast cache or any snapshot. is_secret rides along; plaintext is resolved only via GetSecret.
   const secret = row.is_secret === true;
   if (secret) {
     return { string_val: REDACTED, is_secret: true };

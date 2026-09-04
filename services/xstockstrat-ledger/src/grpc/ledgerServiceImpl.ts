@@ -7,7 +7,7 @@ import { getLogger } from '../services/logger';
 
 const log = getLogger('ledger:impl');
 
-// ExportEvents cursor page size — one response message per page (feature 021, AC-7).
+// ExportEvents cursor page size — one response message per page.
 const EXPORT_BATCH_SIZE = 1000;
 
 function readCursor(cursor: Cursor, rowCount: number): Promise<any[]> {
@@ -25,9 +25,8 @@ export class LedgerServiceImpl {
   ) {}
 
   /**
-   * AppendEvent — core write path; events are immutable once written.
-   * A non-empty `idempotency_key` appends at most once (a retry returns the stored
-   * event); an empty key inserts on every call.
+   * AppendEvent — core write path; events are immutable once written. A non-empty `idempotency_key`
+   * appends at most once (a retry returns the stored event); an empty key inserts on every call.
    */
   async appendEvent(call: any, callback: any) {
     const req = call.request;
@@ -35,7 +34,7 @@ export class LedgerServiceImpl {
     const eventId = uuidv4();
     const now = new Date();
 
-    // Owner precedence (feature 021): request field, else x-user-id metadata, else NULL.
+    // Owner precedence: request field, else x-user-id metadata, else NULL.
     const userId: string | null =
       (req.userId && String(req.userId)) || call.metadata?.get?.('x-user-id')?.[0] || null;
 
@@ -177,9 +176,8 @@ export class LedgerServiceImpl {
   }
 
   /**
-   * StreamEvents — server-streaming; replays from sequence, then tails live.
-   * Live tailing uses the shared EventNotifier, not a pooled connection, so an open
-   * stream never holds one; replay borrows and releases a pool connection.
+   * StreamEvents — server-streaming; replays from sequence, then tails live. Live tailing uses the
+   * shared EventNotifier, not a pooled connection, so an open stream never holds one (replay borrows one).
    */
   async streamEvents(call: any) {
     const req = call.request;
@@ -278,14 +276,11 @@ export class LedgerServiceImpl {
   }
 
   /**
-   * ExportEvents — server-streaming export of the caller's events over a time window,
-   * batched by cursor page, ordered by global sequence (feature 021).
-   * Scope is the inbound x-user-id: `WHERE user_id = $1` never matches other users' or
-   * NULL-user_id rows (FR-10). Reads run on a dedicated pg.Client, never the pool, so a
-   * long export can't hold the single write slot and freeze AppendEvent (F-06).
+   * ExportEvents — server-streaming export scoped to the inbound x-user-id (`WHERE user_id = $1` never
+   * matches other users' or NULL rows). Reads run on a dedicated pg.Client, never the pool, so a long export can't freeze AppendEvent.
    */
   async exportEvents(call: any) {
-    // Config gate (AC-10) — FAILED_PRECONDITION (code 9) when disabled.
+    // Config gate — FAILED_PRECONDITION (code 9) when disabled.
     if (!this.config.getBool('ledger.export.enabled', true)) {
       call.destroy({ code: 9, message: 'ledger export is disabled' });
       return;
@@ -295,7 +290,7 @@ export class LedgerServiceImpl {
     const start = toValidDate(req.start, new Date(0));
     const end = toValidDate(req.end, new Date());
 
-    // Window bound (AC-5) — INVALID_ARGUMENT (code 3) with the exact message.
+    // Window bound — INVALID_ARGUMENT (code 3) with the exact message.
     const maxDays = this.config.getInt('ledger.export.max_window_days', 365);
     const spanDays = (end.getTime() - start.getTime()) / 86_400_000;
     if (spanDays > maxDays) {
@@ -303,10 +298,10 @@ export class LedgerServiceImpl {
       return;
     }
 
-    // Empty caller matches nothing (user_id = '' never true), excluding historical NULL-user_id rows (FR-10).
+    // Empty caller matches nothing (user_id = '' never true), excluding historical NULL-user_id rows.
     const caller: string = call.metadata?.get?.('x-user-id')?.[0] ?? '';
 
-    // Optional event_type subset (FR-3/AC-3/AC-4).
+    // Optional event_type subset.
     const types = String(req.eventType || '')
       .split(',')
       .map((s) => s.trim())
