@@ -177,3 +177,13 @@ Fleet-wide removal of the redundant `trading_mode` OTel resource attribute + dea
 ### Step 8 — docs: drop trading_mode from dashboards README (AC-3) [done]
 - Dropped `trading_mode` from the Resource-attributes bullet; kept service.name/deployment.environment/platform. AC-3 grep `grep -rn 'trading_mode' packages/otel/` returns no matches.
 - Files: `packages/otel/dashboards/README.md`.
+
+### C-16 promotion + finalize
+- Promoted AC-1 (outline, 11 backend modules) / AC-2 / AC-3 → `docs/sdd/business-rules/platform.feature` (`@feature-171`, cross-cutting telemetry guarantee). Findings reconciliation: grep found NO open `trading_mode` OTel entries in root findings / scrubber-findings (design thread was "close if present" — none exist; other doc `trading_mode` mentions are the config axis/env var, unchanged). Teardown: no CLAUDE.md/constitution context file touched (only telemetry code + dashboards README, not a scrubberExtraTarget) → no context-forge refresh owed.
+
+## Session 2026-09-04 — sdd-execute summary (feature 171)
+**Steps this session**: 1–8 (all)
+**Progress**: 8 done / 8 total
+**Stopped at**: all complete → code-completed
+**Accountability**: out-of-scope changes: none (TRADING_MODE env var + .do/compose values untouched, as specced). Open questions: none. Unaddressed review warnings: none. **Deviation (surfaced)**: Node `buildResource` uses static top-level imports of two hard-dep OTel packages instead of deferred `require`, so the C-08 per-module test runs under both the CJS and ESM Node test runners — see Deviation Log.
+**Next**: stacked integration PR #4 (base `feature/fix-portfolio-max-drawdown-unenforced`); then feature 175.

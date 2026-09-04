@@ -1,6 +1,6 @@
 # Implementation Spec: fix-agent-trading-mode-otel-attr
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-09-04
 **Feature**: `docs/roadmap/features/171-fix-agent-trading-mode-otel-attr/feature.md`
 **Total Steps**: 8

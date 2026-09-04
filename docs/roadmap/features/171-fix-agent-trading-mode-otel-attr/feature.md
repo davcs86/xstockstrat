@@ -18,6 +18,7 @@
 | 2026-09-04 | `spec-ready` → `design-approved` | /sdd-design | Re-scoped agent-only → fleet-wide (user); 3 rounds; approved (test all 12 modules, no C-08 waiver); recon.md + design.md written |
 | 2026-09-04 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps (language-grouped; per-module tests, no C-08 waiver) |
 | 2026-09-04 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run (stacked PR #4 on 172); Steps 1-2 (Go telemetry: newResource extraction, trading_mode removed, per-module tests) done |
+| 2026-09-04 | `in-progress` → `code-completed` | /sdd-execute | All 8 steps done: trading_mode OTel attr removed fleet-wide (12 modules) + per-module tests + README; C-16 platform promotion. Deviation: Node buildResource uses static top-level imports (Deviation Log) |
 
 ---
 
