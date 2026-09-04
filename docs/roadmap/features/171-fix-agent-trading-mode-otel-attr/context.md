@@ -27,3 +27,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   (Grafana dashboards may query `trading_mode`). One adversarial round settles drop-vs-rename and the
   dashboard-dependency check before spec.
 - Development branch: `feature/fix-agent-trading-mode-otel-attr`.
+
+---
+
+## Session 2026-09-04 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- First pass FAILED (2 blockers): C-15 (no numbered FR / no @FR tags), C-14 (no Consumer Surface).
+  Fixed: added FR-1 (drop-or-rename the trading_mode OTel attr, decided at design) + FR-2 (non-blocking
+  init), tagged @AC-1 @FR-1 / @AC-2 @FR-2, added `## Consumer Surface(s)` (None — internal/platform-only,
+  a telemetry resource attribute). Re-review PASS (0 blockers, 0 warnings).
+- All code claims verified against telemetry.py:33/38/39. Drop-vs-rename correctly deferred to design (OQ-1).
+- Overlap: CLEAN. (Feature 084 references the `TRADING_MODE` compose env var — a different resource than
+  the OTel attribute — no clash.)
+- Warnings carried into design: none. Design depth: quick (SEV-3, single service, one open decision).

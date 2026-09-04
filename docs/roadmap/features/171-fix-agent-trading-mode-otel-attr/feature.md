@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-04 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from comment-audit report item 1 |
+| 2026-09-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings, re-review); overlap CLEAN; blockers C-14/C-15 fixed |
 
 ---
 
