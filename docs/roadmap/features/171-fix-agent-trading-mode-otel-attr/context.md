@@ -136,3 +136,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Step 2: coverage threshold not stated — [x] no action (telemetry/ is coverage-EXCLUDED from Go -coverpkg; direct `go test` is the C-08 gate). Reviewer-verified exception.
   - Step 8: AC-3 covered by a grep in Verification rather than a test-step/RED (C-15 prefers a RED assertion) — [x] no action (pure-docs scenario, justified).
 - Overlap findings: CLEAN — no migration/proto/config/file collision. Shared service dirs with 175 (config vs telemetry files) and 172/173/174 are different files; courtesy merge coordination only.
+
+---
+
+## Session 2026-09-04 — sdd-execute (sequential; stacked PR #4 of 5, base feature/fix-portfolio-max-drawdown-unenforced)
+
+Fleet-wide removal of the redundant `trading_mode` OTel resource attribute + dead local read across 12 telemetry modules. TRADING_MODE env var kept (live routing axis). golangci-lint v2.13.1@go1.27 reused. Auto-proceed.
+
+### Step 1 — Go telemetry: extract newResource, drop trading_mode (trading/portfolio/marketdata) [done]
+- Each `internal/telemetry/otel.go`: extracted `newResource(ctx)` as the sole Resource input to `Init` (moved the svcName block in), deleted the `attribute.String("trading_mode", ...)` line. `attribute`/`os` imports still used. Comment trimmed to state the sole-input invariant (test guards the omission). No `.do`/compose env changes.
+- Files: `services/xstockstrat-{trading,portfolio,marketdata}/internal/telemetry/otel.go`.
+
+### Step 2 — Go telemetry per-module absence tests (AC-1) [done]
+- New `otel_test.go` (package telemetry, calls unexported `newResource`) in all 3 services asserting the built SDK Resource omits `trading_mode` and keeps service.name/deployment.environment/platform.
+- Red→green: compile-RED (`undefined: newResource`) → all 3 pass. golangci-lint 0 issues; grep `trading_mode` clean in Go telemetry. Coverage: telemetry/ is Go -coverpkg-excluded (direct `go test` is the C-08 gate).
+- Files: `services/xstockstrat-{trading,portfolio,marketdata}/internal/telemetry/otel_test.go`. Deviations: none.

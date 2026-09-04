@@ -56,7 +56,7 @@ confirmed nothing in-repo queries the attribute; `OTEL_ENABLED=false` in both `.
 
 ### Step 1 — service: Remove `trading_mode` from the three Go telemetry modules (extract `newResource`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/otel.go` — modify
@@ -106,7 +106,7 @@ confirmed nothing in-repo queries the attribute; `OTEL_ENABLED=false` in both `.
 
 ### Step 2 — test: Per-module Go Resource-attribute assertions (trading/portfolio/marketdata)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/otel_test.go` — create

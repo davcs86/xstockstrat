@@ -17,6 +17,7 @@
 | 2026-09-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings, re-review); overlap CLEAN; blockers C-14/C-15 fixed |
 | 2026-09-04 | `spec-ready` → `design-approved` | /sdd-design | Re-scoped agent-only → fleet-wide (user); 3 rounds; approved (test all 12 modules, no C-08 waiver); recon.md + design.md written |
 | 2026-09-04 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps (language-grouped; per-module tests, no C-08 waiver) |
+| 2026-09-04 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run (stacked PR #4 on 172); Steps 1-2 (Go telemetry: newResource extraction, trading_mode removed, per-module tests) done |
 
 ---
 
