@@ -2931,3 +2931,27 @@ reusing.
 - **Rule it implies**: for a "stale attribute/label" bug, grep the fleet for the same emission before
   scoping to one service, and treat out-of-repo observability consumers as an examined residual, not a
   grep-clean all-clear. Reinforces P-03, no new ID.
+
+### 2026-09-04 — 175-fix-dead-code-cleanup-batch — design
+- **Pattern**: For a **pure-deletion** feature, three traps recur and each has a cheap guard. (1) A
+  "dedicated test" is often a FUNCTION inside a SHARED test file — deleting the *file* nukes live
+  regressions. Verify with `grep -c '^func Test'` (here config_test.go held 7/9/15 funcs); the step
+  must say "delete the `TestX` function," never the file. (2) The AC "X no longer exists" has NO
+  build-RED (a pre-deletion tree is fully green) — the honest RED→GREEN is a **construct-scoped**
+  presence assertion (`grep 'func getEnvBool'`, `git ls-files '*/propagation.ts'` empty), living as a
+  named `**Covers**: AC-N` impl-spec step, NOT a permanent CI guard (overbuild) and NOT "recorded in
+  context.md" (C-15 wants a re-run step). (3) A doc pattern's **"Reference store"** cite (here
+  `header-propagation.md:123` → ledger `propagation.ts` + snippet) is a teardown target the deletion
+  orphans — recon must list it or `/sdd-spec` misses it (fails-670).
+- **Also**: a **`@types/node` major bump** verifies ONLY via a real `tsc` (a service whose CI runs
+  `node --experimental-strip-types --test` type-checks NOTHING — fails-021 — so gate on `pnpm build`,
+  not `test`); a Next.js service's sole type gate is `next build` (a bare `tsc --noEmit` false-REDs
+  because the `next` tsconfig plugin is LSP-only and `.next/types` exist only post-build — fails-155).
+  And per-service `pnpm-lock.yaml` can be **vestigial**: check the Dockerfile's actual `COPY … pnpm-lock`
+  source before regenerating or gating on them (here all leaf Dockerfiles use the ROOT lock).
+- **Evidence**: config_test.go func counts (grep); ledger/identity `package.json` `build`=tsc vs
+  `test`=strip-types; `xstockstrat-ui/next.config.js` (no `ignoreBuildErrors`); leaf `Dockerfile:13,17`
+  (root lock + `--frozen-lockfile`); `header-propagation.md:123`/`:126-151`.
+- **Rule it implies**: a deletion PR's AC discharge is `(construct-scoped presence RED→GREEN as a named
+  step) + (the service's REAL compile gate)`; verify the compile gate and lockfile source per service,
+  never assume. Reinforces C-08/C-15/P-06 and fails-021/110/155/670; no new ID.

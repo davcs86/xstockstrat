@@ -96,6 +96,12 @@ The dead symbols are cited in several context files; a delete that leaves the ci
 - **Root `CLAUDE.md:335`** (Header Propagation Convention) — says the Node leaf services' `propagation.ts`
   is "presently unused"; after deletion the file no longer exists, so update the sentence (the module is
   gone, not merely unused). Note identity still propagates via `ledgerAudit`'s own const — keep that true.
+- **`docs/patterns/header-propagation.md:123`** (added post-recon, round-1 adversary catch) — the Node
+  section hard-cites `Reference store: services/xstockstrat-ledger/src/middleware/propagation.ts` with a
+  live copy-this `propagationStore`/`AsyncLocalStorage` snippet at `:126-151`. Deleting all four copies
+  leaves that a **dangling reference** (fails-670). Re-home in-PR: inline/neutralize the snippet or
+  re-point the "Reference store" line (the Go reference at `:50` — `trading/internal/middleware/propagation.go`
+  — is LIVE and NOT in scope; leave it). This is the sixth teardown doc.
 - **Per-service Go findings:** trading `docs/context-constitution-findings.md:5`, portfolio `:7`,
   marketdata `:5` each point at the root `getEnvBool` entry — refresh/remove to match.
 - Teardown must **NARROW, not over-resolve** (the 174 discipline): reconcile only the `getEnvBool` /

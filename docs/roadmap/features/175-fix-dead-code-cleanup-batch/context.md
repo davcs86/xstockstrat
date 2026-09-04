@@ -97,6 +97,24 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     refactor bounces to the operator); Affected Services + Out of Scope updated (incl. explicit
     no-permanent-CI-guard line). Identity propagation.ts delete recorded as resolved (mechanism
     mismatch: HTTP IncomingMessage scaffolding vs ledgerAudit's gRPC Metadata + own const; C-03 intact).
-  - R3 (in progress): locking exact verification mechanics (C-15 `**Covers**` blocks with
-    construct-scoped greps; ledger/identity `pnpm build` gate; ui `next build`; fails-082 landed-diff
-    gate). design.md pending R3 synthesis + gate.
+  - R3: locked the exact verification mechanics (C-15 `**Covers**` blocks with construct-scoped greps;
+    ledger/identity `pnpm build` gate; ui `next build`; fails-082 landed-diff gate). Adversary NEEDS
+    WORK on wording only (drop the redundant ui `tsc --noEmit` gate — fails-155; scope `pnpm why` to the
+    five DIRECT deps; Node-only pre-delete pass; explicit Go `-cover` ≥40; honest RED-locus for the
+    version-bump ACs). **Operator (R3 gate): run another round.**
+  - R4 (terminal): APPROVE-READY — adversary found no vacuous-green, no false-RED, no Floor breach; sole
+    residual = recon Teardown Targets omitted `docs/patterns/header-propagation.md:123` (the Node
+    "Reference store" cite + snippet :126-151) → **fixed in recon.md** (now 6 teardown docs; 23-path gate
+    intact). Independent verification this round OVERTURNED the per-service-lockfile concern: all four
+    leaf Dockerfiles copy the **root** `pnpm-lock.yaml` + `--frozen-lockfile` (`Dockerfile:13,17`), so
+    `services/{config,identity,ledger,notify}/pnpm-lock.yaml` are **vestigial**, deliberately untouched,
+    excluded from the gate (do NOT run a per-service install). **Operator (R4 gate): approve.**
+- Wrote design.md (chosen approach + locked A→E execution + 23-path landed-diff gate + rejected
+  alternatives + open risks + C-16 non-promotion). Status: spec-ready → **design-approved**.
+- Reconciled during design (operator-authorized, pre-approval): acceptance.feature (@AC-4), product-spec
+  (FR-3 five services + bounce rule), recon.md (header-propagation.md teardown target). Two duplicate
+  commits (e1906a7 + b117fe9) were this session's own interrupted-then-resumed executions — no competing
+  session (verified via list_sessions); context.md de-duplicated (commit f2efd4f).
+- Open threads (→ /sdd-spec): FR-3 sibling-dep bounce; vestigial per-service locks untouched; re-grep all
+  deletion targets + confirm the exact @types/node line / root lockfile path / config-only eslint override
+  at spec; narrow teardown (leave the LIVE Go `header-propagation.md:50` reference).
