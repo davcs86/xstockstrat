@@ -233,7 +233,7 @@ cd services/xstockstrat-<svc> && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev
 
 ### Step 5 — service: delete dead `propagation.ts` from all four Node leaf services + prune config eslint override
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-{ledger,notify,config,identity}`
 **Files**:
 - `services/xstockstrat-ledger/src/middleware/propagation.ts` — delete
@@ -270,7 +270,7 @@ grep -n 'propagation.ts' services/xstockstrat-config/.eslintrc.json           # 
 
 ### Step 6 — test: `propagation.ts` gone; Node leaf services still build (tsc) and pass (AC-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-{ledger,notify,config,identity}`
 **Files**: none (verification only)
 

@@ -179,3 +179,8 @@ Dead-code cleanup batch + @types/node type-pin. Stacked on 171 (final of the seq
 - Removed `func getEnvBool` from trading (config.go:60), portfolio (:233 + `var _ = getEnvBool` suppressor + orphaned `strconv` import :9), marketdata (:247); removed the dedicated `TestGetEnvBool` function from each config_test.go (never the file). Zero production callers.
 ### Step 4 — Go config still builds/lints/tests (AC-1) [done]
 - getEnvBool absent (grep 0). All 3: `go build ./...` clean, `golangci-lint` 0 issues (incl. no orphan-strconv failure), `go test ./internal/config/...` pass. Coverage ≥40: trading 69.0%, portfolio 49.0%, marketdata 62.6%.
+
+### Step 5 — delete dead propagation.ts from 4 Node leaves + prune config eslintrc [done]
+- Fresh re-grep: zero external importers. `git rm` the 4 `src/middleware/propagation.ts` (ledger/notify/config/identity); struck `src/middleware/propagation.ts` from config `.eslintrc.json` override (kept `src/grpc/authz.ts`). identity's live `ledgerAudit.ts`/`PROPAGATED_HEADERS` untouched.
+### Step 6 — Node leaves still build (tsc) + pass (AC-2) [done]
+- Absence: `git ls-files` 0, eslintrc grep 0. All 4 `pnpm build` (tsc type gate) green; lint 0; test:coverage pass ≥40 (ledger 46, notify 88.57, config 80.16, identity 46).
