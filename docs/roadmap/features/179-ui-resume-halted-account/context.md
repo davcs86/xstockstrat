@@ -20,3 +20,11 @@
   flagged because the control reaches a broker account.
 - Known trap folded in: C-10 nav/surface reachability (fails.md:71) — ensure the indicator/control
   land on the rendered account-management surface, not an orphan component.
+
+## Session 2026-09-04 — sdd-review product-spec
+
+- FIRST PASS: FAIL. Blocker: criterion 9 — four unresolved Open Questions, chiefly the admin-vs-operator scope contradiction (ResumeAccount is code-confirmed admin-only, RequireAdminScope at trading.go:2749; feature 169 FR-5 intended operator-or-admin).
+- RESOLUTION (recorded decisions): (1) SCOPE — conservative: this UI feature matches the RPC's current admin-only enforcement (FR-5), does NOT modify the RPC; widening ResumeAccount to operator-or-admin is a separate xstockstrat-trading authz change, Out of Scope, FLAGGED FOR OPERATOR OVERRIDE. (2) confirm-UX — yes, folded into FR-3 + AC-6 (surfaces halt_reason). (3) action-site duplication — Resume control solely on account-mgmt surface; positions page stays indicator-only. (4) nav-reachability — deferred to /sdd-design recon (verify AccountsModule/AccountSelector/accountShared is the rendered surface). Added C-2 broker-agnostic note to FR-2; rephrased AC-1/AC-5.
+- RE-REVIEW: PASS (no blockers, no warnings). Status: draft → spec-ready.
+- OPEN DECISION carried to design + surfaced to operator: whether to keep admin-only (this feature's scope) or widen the RPC per 169's original intent. Design/recon must carry the override flag forward.
+- Overlap: CLEAN.

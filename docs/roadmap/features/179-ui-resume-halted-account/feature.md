@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-04 | `idea` → `draft` | /sdd-story | Product spec generated from performance audit Track D |
+| 2026-09-04 | `draft` → `spec-ready` | /sdd-review | FAILED first pass (criterion 9, scope contradiction); resolved all Open Questions (admin-only scope, conservative), re-review PASS; overlap CLEAN |
 
 ---
 
@@ -44,4 +45,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review ui-resume-halted-account product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design ui-resume-halted-account quick` — recon + adversarial design debate

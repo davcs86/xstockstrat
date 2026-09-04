@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-04 | `idea` → `draft` | /sdd-story | Product spec generated from performance audit Track C |
+| 2026-09-04 | `draft` → `spec-ready` | /sdd-review | FAILED first pass (false "batch RPC exists" premise); reworked to additive GetLatestQuotes RPC, re-review PASS; overlap = soft rebase w/172 |
 
 ---
 
@@ -45,4 +46,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review quote-fanout-batching product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design quote-fanout-batching quick` — recon + adversarial design debate
