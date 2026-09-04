@@ -113,12 +113,8 @@ class ConfigWatcher:
         return v.int_val or default
 
     def get_int_present(self, key: str, default: int) -> int:
-        """Presence-aware int read: returns the stored ``int_val`` whenever the field is set —
-        **including a legitimate 0** — else the default. Mirrors ``get_bool``'s ``HasField``
-        pattern; use this (never ``get_int``) for keys where 0 is a meaningful value, e.g.
-        ``ingest.backfill.max_retry_attempts`` (0 = no retries) and
-        ``ingest.signals.dedup_window_hours`` (0 = disable the dedup window), which the
-        ``get_int`` zero-trap would otherwise swallow into the default."""
+        """Use this (never get_int) for keys where a stored 0 is meaningful: HasField honors
+        a present 0 instead of collapsing it to the default."""
         if self._snapshot is None:
             return default
         v = self._snapshot.values.get(key)
