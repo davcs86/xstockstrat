@@ -33,7 +33,7 @@ class McpClientExtractor(BaseExtractor):
             if not symbol or direction not in _VALID_DIRECTIONS:
                 log.warning("mcp_client: skipping item with bad symbol/direction: %r", item)
                 continue
-            # Inverted-range form also rejects NaN (fails.md fix-mcp-server-input-validation).
+            # Inverted-range form (not (0<=x<=1)) also rejects NaN.
             if not isinstance(conviction, (int, float)) or not (0.0 <= float(conviction) <= 1.0):
                 log.warning("mcp_client: skipping item with out-of-range conviction: %r", item)
                 continue

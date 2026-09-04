@@ -87,7 +87,7 @@ def _cfg_to_dict(value) -> dict | None:
     return json.loads(str(value))
 
 
-# feature 083 — source-health string → SourceHealthStatus enum.
+# Source-health string → SourceHealthStatus enum.
 _HEALTH_ENUM = {
     "live": ingest_pb2.SOURCE_HEALTH_STATUS_LIVE,
     "stale": ingest_pb2.SOURCE_HEALTH_STATUS_STALE,
@@ -1030,7 +1030,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                     if isinstance(row["config_json"], dict)
                     else json.loads(row["config_json"])
                 )
-            # feature 083 — health is derived on read from last_seen_at freshness + last_error.
+            # Health is derived on read from last_seen_at freshness + last_error.
             last_seen = row.get("last_seen_at")
             last_error = row.get("last_error")
             health = _HEALTH_ENUM[derive_health_status(last_seen, last_error, now)]

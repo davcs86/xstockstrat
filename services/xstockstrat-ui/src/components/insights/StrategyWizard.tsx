@@ -188,8 +188,7 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
       // Presence-honest: blank omits the key (server default drives the gate); "0" sends cooldownDays: 0.
       ...(cd.valid && cd.value !== undefined ? { cooldownDays: cd.value } : {}),
       ...(cd2.valid && cd2.value !== undefined ? { exitCooldownDays: cd2.value } : {}),
-      // feature 132 — the wizard is a full replace, so it always sends both (empty deny list clears
-      // any prior; signalEligible defaults false). The masked Symbol-page control is the partial path.
+      // The wizard is a full replace, so it always sends both (empty deny list clears any prior).
       deniedSymbols,
       signalEligible,
     };
@@ -204,15 +203,8 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
 
   return (
     <div className="max-w-2xl space-y-4">
-      {/* FR-11: step indicator via Questionnaire.Progress. This Root registers no Items — the
-          primitive's own current/total tracking is per-Root item registration, and the outer
-          step/STEPS model spans Step 1's separate Root plus Steps 2-4's plain state, so adopting
-          Questionnaire.Root's own controlled item/onItemChange model here (the only way to get
-          its current/total to genuinely match our 4-step model) would repeat Step 13's
-          Next/Previous-visibility mismatch and is explicitly out of scope (Instruction 1). With
-          zero registered items, Progress's own aria-value* attributes are simply omitted
-          (total=0), so its `children` override — driven directly by the outer `step`/`STEPS`
-          state below — is the only rendered content; no misleading aria-valuetext is produced. */}
+      {/* Progress Root registers no Items on purpose: with total=0 its aria-value* are omitted, so the
+          children override (driven by the outer step/STEPS state) is the only rendered content. */}
       <Questionnaire onSubmit={(e) => e.preventDefault()}>
         <QuestionnaireProgress
           className="flex w-full min-w-0 flex-wrap gap-2 text-xs"
@@ -240,15 +232,8 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* FR-10 (Round 3): Step 1 restructured onto Questionnaire's native Choice/Input answer
-              model — 4 nested sub-screens, one per field, each its own separately-scoped
-              Questionnaire/QuestionnaireItem (distinct from Steps 2-4's chrome-only shell). Fields
-              stay controlled-React-state-driven (not FormData-read-at-submit) so live validation
-              and edit-mode pre-population/disabling are unchanged. `onSubmit` on each Questionnaire
-              guards against the underlying <form>'s native Enter-key submission, since we render
-              our own Next/Back rather than Questionnaire's own nav parts (see IdentityNav — the
-              primitive's Next/Previous/Submit visibility is computed from the Root's total item
-              count, which would hide Next entirely for a single-item Root). */}
+          {/* Each sub-screen's onSubmit guards the form's native Enter-key submit — we render our own
+              Next/Back (IdentityNav), since a single-item Questionnaire Root would hide its own Next. */}
           {step === 1 && identitySubStep === 1 && (
             <Questionnaire onSubmit={(e) => e.preventDefault()}>
               <QuestionnaireItem name="strategyId">
@@ -260,10 +245,8 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
                     placeholder="e.g. sma_crossover"
                     onChange={(e) => setStrategyId(e.target.value)}
                   />
-                  {/* Regex validation only applies in create mode — in edit mode the field above
-                      is disabled/immutable, so gating on a client-side format rule for
-                      server-sourced data (which may predate this rule) would strand an existing
-                      strategy on this sub-screen with no way to proceed. */}
+                  {/* Regex validation is create-mode only — edit-mode data may predate this rule and
+                      would otherwise strand an existing strategy on this sub-screen. */}
                   {mode === 'create' && !idValid && strategyId !== '' && (
                     <p className="mt-1 text-xs text-destructive">
                       Use lowercase letters, digits, and underscores only.
@@ -346,9 +329,8 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
                     <p className="mt-1 text-xs text-destructive">{exitCooldownParsed.error}</p>
                   )}
                 </div>
-                {/* feature 132 — deny list + signal-eligible live in the SAME sub-screen item as
-                    exit cooldown (a separate QuestionnaireItem would be hidden — the primitive
-                    shows one item at a time). */}
+                {/* Deny list + signal-eligible share the exit-cooldown item — the primitive shows one
+                    item at a time, so a separate QuestionnaireItem would be hidden. */}
                 <div className="mt-4">
                   <label className="mb-1 block text-xs text-muted-foreground">
                     Denied symbols (entry-only — held positions still exit)
@@ -498,8 +480,7 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
         </CardContent>
       </Card>
 
-      {/* Navigation — hidden for Step 1, whose 4 native sub-screens (above) each carry their own
-          Back/Next via IdentityNav; reachable from Step 2 onward, per FR-10 (Round 3). */}
+      {/* Navigation hidden for Step 1 — its sub-screens carry their own Back/Next via IdentityNav. */}
       {step > 1 && (
         <div className="flex items-center justify-between">
           <Button type="button" variant="ghost" onClick={() => setStep((s) => s - 1)}>

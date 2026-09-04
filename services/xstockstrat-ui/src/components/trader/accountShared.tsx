@@ -1,9 +1,7 @@
 'use client';
 
-// Shared broker-account building blocks used by both AccountManagementPanel (compact
-// trader-dashboard panel) and AccountsModule (full accounts page). Extracted so the
-// credential helpers, the per-account row, and the add-account form exist in exactly one
-// place (DRY guard rail — see docs/patterns/dry-guard-rail.md).
+// Shared broker-account building blocks used by both AccountManagementPanel and AccountsModule
+// (extracted so the credential helpers, row, and add-account form live in one place — DRY).
 
 import React from 'react';
 import { useForm, Controller, useWatch } from 'react-hook-form';
@@ -43,7 +41,7 @@ export const EMPTY_CREDENTIALS: CredentialState = {
 
 /** Builds the broker-type-specific credentials_json blob from form state. */
 export function buildCredentialsJson(brokerType: BrokerType, creds: CredentialState): string {
-  // Offline accounts (feature 157) have no broker credentials — register with an empty blob.
+  // Offline accounts have no broker credentials — register with an empty blob.
   if (brokerType === BrokerType.OFFLINE) return '';
   return brokerType === BrokerType.IBKR
     ? JSON.stringify({
@@ -55,14 +53,11 @@ export function buildCredentialsJson(brokerType: BrokerType, creds: CredentialSt
     : JSON.stringify({ api_key: creds.apiKey, api_secret: creds.apiSecret });
 }
 
-// feature 122 FR-3/FR-4: the single zod-schema expression of CredentialState's broker-conditional
-// required fields, shared by AddAccountForm and EditCredentialsForm (DRY guard rail — do not write
-// an independent schema at either consumer's call site). Fields outside the given broker's branch
-// stay unconstrained `z.string()` rather than absent, so the schema's inferred type always matches
-// the full `CredentialState` shape.
+// Shared broker-conditional credential schema (don't duplicate at call sites). Fields outside the
+// given broker's branch stay unconstrained z.string() so the inferred type matches CredentialState.
 export function credentialSchema(brokerType: BrokerType) {
   const requiredMsg = 'This field is required';
-  // Offline accounts (feature 157) have no credentials — every field is unconstrained.
+  // Offline accounts have no credentials — every field is unconstrained.
   if (brokerType === BrokerType.OFFLINE) {
     return z.object({
       apiKey: z.string(),
@@ -104,7 +99,7 @@ export function CredentialFields({
 }) {
   const set = (patch: Partial<CredentialState>) => onChange({ ...creds, ...patch });
 
-  // Offline accounts (feature 157) have no credentials — render no secret inputs.
+  // Offline accounts have no credentials — render no secret inputs.
   if (brokerType === BrokerType.OFFLINE) {
     return null;
   }
@@ -179,16 +174,13 @@ export function EditCredentialsForm({
     reset,
     formState: { isSubmitting },
   } = useForm<CredentialState>({
-    // Shared with Step 6's AddAccountForm (accountShared.tsx credentialSchema factory) — this
-    // consumer's broker is a fixed prop, not user-selectable, so (unlike AddAccountForm) a static
-    // call is enough; no ref/watch indirection needed to track a changing broker.
+    // This consumer's broker is a fixed prop (not user-selectable), so a static credentialSchema
+    // call is enough — no ref/watch indirection like AddAccountForm needs.
     resolver: zodResolver(credentialSchema(account.brokerType)),
     defaultValues: EMPTY_CREDENTIALS,
   });
 
-  // Watched only to drive CredentialFields' controlled `value` prop — bridges the individual
-  // RHF-registered fields back into its existing creds/onChange contract (CredentialFields itself
-  // stays react-hook-form-unaware), same pattern as Step 6's AddAccountForm.
+  // Watched only to drive CredentialFields' controlled value — it stays react-hook-form-unaware.
   const creds = useWatch({
     control,
     name: [
@@ -259,9 +251,8 @@ export function EditCredentialsForm({
 }
 
 /**
- * One registered-account row: identity badges + edit-keys / remove (with inline confirm)
- * actions + the edit-credentials form. Owns its own confirm/edit/remove state so it can be
- * dropped into any account list. `className` tunes the row padding per host layout.
+ * One registered-account row: identity badges + edit-keys/remove actions + edit-credentials form.
+ * Owns its confirm/edit/remove state; `className` tunes row padding per host.
  */
 export function AccountRow({
   account,
@@ -277,8 +268,7 @@ export function AccountRow({
     useAccountContext();
   const [editing, setEditing] = React.useState(false);
   const [removing, setRemoving] = React.useState(false);
-  // Offline accounts (feature 157) have no broker credentials — hide the "Edit keys" action and its
-  // dialog (the backend rejects UpdateBrokerAccountCredentials for offline with FailedPrecondition).
+  // Offline accounts have no credentials — hide "Edit keys" (the backend rejects the update for offline).
   const isOffline = account.brokerType === BrokerType.OFFLINE;
 
   async function handleRemove() {
@@ -306,7 +296,6 @@ export function AccountRow({
             <span className="text-sm font-medium">{account.displayName}</span>
             <Badge variant="secondary">{brokerLabel(account.brokerType)}</Badge>
             <CredentialStatusBadge status={account.credentialStatus} />
-            {/* The account's internal UUID, inline beside the name. */}
             {showId && (
               <span className="font-mono text-[11px] break-all text-muted-foreground">
                 {account.id}
@@ -341,7 +330,6 @@ export function AccountRow({
         )}
       </div>
 
-      {/* Edit-credentials modal, opened from the row's actions menu. Offline accounts have no keys. */}
       {account.isActive && !isOffline && (
         <FormDialog
           open={editing}
@@ -357,8 +345,7 @@ export function AccountRow({
 
 /**
  * The "Add Account" form (display name + broker select + credential fields). Self-contained:
- * owns its form state and registers via the trading client. `className` tunes the form layout
- * per host.
+ * owns its form state and registers via the trading client.
  */
 type AddAccountValues = { displayName: string; brokerType: string } & CredentialState;
 
@@ -381,11 +368,8 @@ export function AddAccountForm({
 }) {
   const { setSelectedAccountId, refreshAccounts } = useAccountContext();
   const [error, setError] = React.useState<string | null>(null);
-  // The broker select determines which credential fields are required, so the resolver schema is
-  // broker-dependent. Read via a ref (updated by the Select's onValueChange below) rather than
-  // baking the initial broker into the schema passed to useForm: the resolver function is invoked
-  // fresh on every validation, so this always validates against the currently-selected broker
-  // without needing to reconstruct/rewire the form instance when the broker changes.
+  // The resolver reads the broker via a ref (set by the Select below), not a baked-in schema, so
+  // each validation runs against the currently-selected broker without rewiring the form instance.
   const brokerTypeRef = React.useRef<BrokerType>(BrokerType.ALPACA);
   const {
     control,
