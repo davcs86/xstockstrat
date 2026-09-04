@@ -78,3 +78,51 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `docs/context-constitution-findings.md`/`context-scrubber-findings.md` re: the `trading_mode` OTel
   label are being resolved by THIS feature (fleet-wide removal) — annotate/close them when 171 lands so
   the next comment audit doesn't re-file (P-03). The triage report already routes item 1 → feature 171.
+
+---
+
+## Session 2026-09-04 — sdd-spec
+
+- Generated implementation-spec.md with **8 steps**. Status: design-approved → implementation-ready.
+- Structure: language-grouped (Go / Python / Node backend each a paired `service`+`test` step) +
+  UI one-line deletion (frontend, no paired backend test, C-08 exempt) + README `docs` step. Grouping
+  by language (not 24 per-module steps) because the edit is grep-confirmed byte-identical within each
+  language; per-module **test files** still land for every backend module (design's no-C-08-waiver
+  thoroughness = per-module coverage, satisfied by test files, not step count).
+- Builder-extraction guardrail encoded in every service step (design Open Risk): init must **call** the
+  extracted builder as the sole Resource input — Go `newResource(ctx)`, Python `_build_resource()`,
+  Node `buildResource()` — no inlined attribute list/dict/object left behind (else the paired test is
+  vacuous). Tests assert the **real SDK Resource** `.Attributes()`/`.attributes`, never a proxy map
+  (design R2/R3, fails-1648/1653).
+- Key codebase findings (all grep/Read-confirmed):
+  - 12 modules, exact `trading_mode` lines: Go `trading|portfolio|marketdata/internal/telemetry/otel.go:46`;
+    Python `agent/app/telemetry.py:33,39`, `ingest|indicators|analysis/app/telemetry.py:29,35`;
+    Node backend `ledger:27`, `identity:27`, `config:26`, `notify:28` (`src/telemetry.ts`);
+    Node frontend `ui/src/telemetry.ts:21`. README `packages/otel/dashboards/README.md:40`.
+  - Node runner split (matters for the Node test step): ledger/identity run `.ts` directly
+    (`node --experimental-strip-types --test src/__tests__/*.test.ts`); config/notify compile-first
+    (`tsc && node --test dist/__tests__/*.test.js`). All test source lives in `src/__tests__/*.test.ts`
+    regardless; `pnpm run test:coverage` (c8 ≥40) is the per-service verification either way.
+  - UI telemetry uses `resourceFromAttributes` (not `new Resource` like the 4 Node backends) → kept as a
+    one-line deletion, not extracted (design).
+  - Go telemetry lands in the `telemetry/` package, which CI's Go `-coverpkg` **excludes** — noted in the
+    Go test step: no coverage threshold applies, direct `go test ./internal/telemetry/` is the C-08 gate.
+  - indicators pytest threshold is **50** (not 40); agent/ingest/analysis are 40.
+  - AC-2 (non-blocking) covered by the agent forced-`except` test only (sole module with process-wide
+    init side effects: `set_tracer_provider` + `GrpcAioInstrumentorClient().instrument()`); exact
+    monkeypatch seam for `OTLPSpanExporter` (module-local vs source-module) resolved at execute.
+  - AC-3 (README) covered by the docs step's `grep -rn 'trading_mode' packages/otel/` verification (the
+    one non-test-step coverage — pure-docs scenario, justified in Execution Summary).
+- No proto/migration/config changes. `TRADING_MODE` env var + its docker-compose/.do values are
+  explicitly NOT touched (live routing axis) — each service step says so.
+
+### Open Threads (→ /sdd-review impl-spec / execute)
+
+- Python test import `from opentelemetry.sdk.resources import Resource` needs `opentelemetry-sdk`
+  importable in each service's dev/test env — if a service's dev extras lack it, add + `uv lock` in the
+  same step (flagged in Step 4).
+- Exact `buildResource` import extension (`../telemetry.ts` vs dist-resolved `../telemetry`) per Node
+  runner — resolve at execute to match each service's harness.
+- Findings reconciliation carried from design: close the open `trading_mode` OTel entries in
+  `docs/context-constitution-findings.md` / `context-scrubber-findings.md` when 171 lands (P-03), so the
+  next comment audit doesn't re-file.
