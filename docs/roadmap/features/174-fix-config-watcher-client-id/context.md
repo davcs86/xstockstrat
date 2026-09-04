@@ -73,3 +73,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Open Threads (→ /sdd-spec / execute): teardown 4 locations (analysis/ingest CLAUDE.md:3 +
   findings.md), NARROW the ingest finding (keep dead sandbox_* helpers open), stale line-number
   correction (analysis findings :61→:60, ingest :75→:73), _StubWatcher location confirm.
+
+---
+
+## Session 2026-09-04 — sdd-spec
+
+- Generated implementation-spec.md with 5 steps. Status → implementation-ready.
+- Step map: 1 service(analysis) + 2 test(analysis, @AC-1) + 3 service(ingest) + 4 test(ingest, @AC-2) + 5 docs(teardown).
+- Key codebase findings (grep/Read-confirmed):
+  - analysis `app/config/watcher.py`: `client_id=f"indicators-{id(self)}"` at **L60** (docstring L2); request also carries `trading_mode=self._trading_mode` (L62) — the design's byte-verbatim move is accurate. Ingest counterpart at **L73** (docstring L2, trading_mode L75).
+  - Test seams confirmed: existing non-dialing `_StubWatcher(ConfigWatcher)` at analysis `tests/test_analysis_servicer.py:475` and ingest `tests/test_ingest_servicer.py:1017`; neither `__init__` sets `_environment`/`_trading_mode`, so the wire-object test sets them explicitly. Reused per design (no new stub). Each service also has a `tests/test_config_watcher.py` (resolve_* helpers) — left untouched; the new test lives with `_StubWatcher`.
+  - Teardown grounded to **5** locations (design listed 4; found a 5th): analysis findings `:18` (stale client_id `:61`→`:60`), ingest findings `:27` (stale `:75`→`:73`, dead `sandbox_*` helpers actual `:150-163` — KEEP open, NARROW only the identity clause), analysis+ingest `CLAUDE.md:**4**` (not :3 as design said — off-by-one; blockquote defect list), and root `docs/context-constitution-findings.md:39` (open significance question — resolved as cosmetic; stale `:61`/`:61`).
+  - ingest watcher legitimately keeps `indicators.sandbox.*` config-key strings (L150-161) — verification greps must not flag those; only the client_id/docstring `indicators-` identity is removed.
+- Reviewers snapshot written to feature.md: analysis owner (service/test), ingest owner (service/test), docs none.

@@ -16,6 +16,7 @@
 | 2026-09-04 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from comment-audit report item 4 (re-confirms open question) |
 | 2026-09-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS); overlap CLEAN (soft-rebase w/173); FRs + Consumer Surface added |
 | 2026-09-04 | `spec-ready` → `design-approved` | /sdd-design | 2 rounds (quick); cosmetic client_id relabel via _build_watch_request() seam approved; recon.md + design.md written; no Floor breach |
+| 2026-09-04 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
 
 ---
 
@@ -25,10 +26,21 @@
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
 - [Recon Dossier](recon.md) — grounded codebase facts (client_id significance resolved: cosmetic)
 - [Design](design.md) — debated, approved architecture (2 rounds; wire-object test seam)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-config-watcher-client-id`_
+- [Implementation Spec](implementation-spec.md) — 5 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
+
+## Reviewers
+
+Canonical snapshot from `docs/runbooks/reviewer-registry.md` (deduped across all steps). Stable
+unless `/sdd-spec` re-runs.
+
+| Step category | Reviewer | Focus |
+|---|---|---|
+| `service` / `test` (analysis) | xstockstrat-analysis service owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias |
+| `service` / `test` (ingest) | xstockstrat-ingest service owner | Signal normalization correctness, idempotent ingestion, newsletter source schema stability |
+| `docs` | none | — |
 
 ## Summary
 
@@ -41,4 +53,4 @@ to `analysis-` / `ingest-`?
 
 ## Next Action
 
-`/sdd-spec fix-config-watcher-client-id` — generate the implementation spec from the approved design
+`/sdd-review fix-config-watcher-client-id impl-spec` — validate the implementation spec, then `/sdd-execute fix-config-watcher-client-id`
