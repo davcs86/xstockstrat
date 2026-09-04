@@ -54,9 +54,11 @@ the equivalent. Analysis added `_present` variants for **int and float only** �
 
 ## Functional Requirements
 
-- **FR-1** — Add `HasField`-based present-aware numeric accessors (`get_int_present`,
-  `get_float_present`) to the **ingest** config watcher (and to the **indicators** watcher subject to
-  OQ-3), porting the proven `xstockstrat-analysis` implementation rather than reinventing it.
+- **FR-1** — Add the `HasField`-based present-aware accessors needed by the confirmed 0-meaningful
+  keys, porting the proven `xstockstrat-analysis` implementation rather than reinventing it.
+  **Resolved in design (2026-09-04, signed off)**: `get_int_present` → **ingest** only (its two
+  0-meaningful keys are int; `get_float_present` is dropped as consumerless dead API — OQ-3);
+  a net-new `get_str_present` → **indicators** only (for `allowed_imports=""`). See `design.md`.
 - **FR-2** — Route each confirmed **0-meaningful** ingest key through the present-aware accessor so a
   stored `0` is honored end-to-end. Confirmed set: `ingest.backfill.max_retry_attempts`,
   `ingest.signals.dedup_window_hours`. Design confirms whether `max_concurrent_jobs` /

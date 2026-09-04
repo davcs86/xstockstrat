@@ -54,3 +54,43 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `ingest/app/config/watcher.py` (disjoint regions — 173 the accessor bodies, 174 the `client_id` line);
   not a live collision, no merge-order row required. Whichever lands second rebases.
 - Warnings carried into design: none blocking. Open questions OQ-1..OQ-4 to be closed by `/sdd-design`.
+
+---
+
+## Session 2026-09-04 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-ingest, xstockstrat-indicators; key reuse
+  patterns: analysis `get_int_present`/`get_float_present` port, `get_bool` `HasField` idiom, the
+  `ConfigValue` oneof `config.proto:60-71`). Confirmed both ingest 0-meaningful sites have no downstream
+  re-clamp; the mcp_client keys are intentionally clamped ≥1 (must not un-clamp).
+- Phase 1 Grilling: **3 rounds (full), approved**, no Floor breach.
+  - Chosen approach: targeted add-not-replace port — `get_int_present` → ingest (route
+    `max_retry_attempts` + `dedup_window_hours`); net-new `get_str_present` → indicators (route
+    `allowed_imports=""` → deny-all); per-service copies; excluded `max_concurrent_*` semaphore keys
+    annotated with intentional-zero-trap comments at their real Semaphore sites (`servicer.py:191` jobs,
+    `:519` chunks); extract `_effective_max_attempts()` seam so the retry consumer is testably RED.
+  - Rejected: blanket accessor swap (would un-clamp mcp_client keys); shared `_present` package (services
+    share no importable lib; classes diverge); the "assert inline expression" test fallback (vacuous,
+    fails-074); loop-driving @AC-1 (14s backoff).
+- **Decisions closing the open questions**:
+  - OQ-1 (string escape hatch): **RESOLVED — in scope.** Add `get_str_present`, fix
+    `indicators.sandbox.allowed_imports=""` (a live security-relevant trap: today the empty allow-list
+    reverts to the permissive 4-module default, making the sandbox MORE permissive than configured).
+    User-approved at the R1 gate; `@AC-4` authored in acceptance.feature.
+  - OQ-2 (DRY shared home): **RESOLVED — per-service copy.** No shared importable Python package exists;
+    watcher classes diverge. Deferred jscpd waiver noted for the `dry-reviewer` (design.md Open Risks).
+  - OQ-3 (indicators numeric port): **RESOLVED — no numeric port** (indicators numeric keys aren't
+    0-meaningful → dead code). Indicators is in scope for the string fix only.
+  - OQ-4 (retry semantics): **RESOLVED — intended least-surprise.** `max_retry_attempts=0` with
+    `retry_on_failure=true` converging to the same 0-attempt outcome as `retry_on_failure=false` is a
+    respected independent knob, not a defect.
+  - **FR-1 narrowing (signed off)**: drop the consumerless `get_float_present` from ingest — int-only
+    port. Deliberate narrowing of product-spec FR-1's literal text (which named both); `/sdd-spec` must
+    honor int-only. Recorded here + design.md Open Risks (How-to-Act #2).
+- Constitution rules touched: C-05, C-08, C-13, C-15, C-16, P-06, F-04, F-07 (all honored). Floor
+  breaches: none in any round.
+- Business rules: 3 PRESERVE (platform.feature @AC-1/@AC-3 auto-add; ingest @AC-4 dedup) — held at the
+  default window; no CHANGE, no sign-off owed.
+- Status: spec-ready → design-approved.
+- Open Threads (carry into /sdd-spec): FR-1 int-only; `_effective_max_attempts()` sole-definition seam;
+  `_snapshot`-injection vs `_StubWatcher` fallback; @AC-4 subprocess-sandbox test cost; deferred DRY.

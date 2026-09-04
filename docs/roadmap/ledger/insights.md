@@ -2899,3 +2899,21 @@ reusing.
   the default, legacy Update passes `""`; `source==SIGNAL` (system-managed signal auto-adds) skipped.
 - **Rule it implies**: implement an add-time default at the one insert chokepoint with a source guard and
   a per-caller default argument, never as a read-time fallback or a second write path.
+
+### 2026-09-04 — 173-fix-python-config-zero-trap — design
+- **Pattern**: Fixing a Python config-watcher zero-trap (`v.int_val or default` collapsing a stored 0)
+  is a **targeted per-key** switch, not a blanket accessor swap: port the `HasField`-based
+  `get_int_present`/`get_str_present` alongside the trapping accessor and re-point only the keys whose 0
+  is meaningful. Keys whose 0 is nonsensical (a value feeding `asyncio.Semaphore(N)` — `Semaphore(0)`
+  deadlocks) and keys intentionally clamped ≥1 at read must STAY on the trapping accessor, each carrying
+  a ≤2-line "zero-trap intentional, cites the real consumer site" comment (fails-151) so the next sweep
+  doesn't "fix" them into a hang. A blanket swap silently un-clamps those and widens the blast radius.
+- **Evidence**: `services/xstockstrat-ingest/app/config/watcher.py` (route `max_retry_attempts`/
+  `dedup_window_hours`, leave `max_concurrent_*` at `servicer.py:191`/`:519`); `ConfigValue` oneof
+  `packages/proto/config/v1/config.proto:60-71` makes `HasField` legal; analysis precedent
+  `xstockstrat-analysis/app/config/watcher.py:102,131`.
+- **Rule it implies**: (a) route only the confirmed 0-meaningful keys through a present-aware accessor;
+  annotate every intentional retention. (b) To make an INLINE config-consumer expression RED-provable
+  without driving a slow loop (e.g. a `2**attempt` retry backoff), extract it into a named seam that
+  becomes the SOLE definition the loop consumes — not a parallel echo (that would re-open fails-074's
+  vacuous-green trap); prove wiring with the pre-existing loop tests. Reinforces C-08/P-06, no new ID.

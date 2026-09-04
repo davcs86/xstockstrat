@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-09-04 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from comment-audit report item 3 (re-confirms CF-N10) |
 | 2026-09-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings); overlap CLEAN; blockers C-14/C-15 fixed |
+| 2026-09-04 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written; no Floor breach |
 
 ---
 
@@ -22,6 +23,8 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon Dossier](recon.md) — grounded codebase facts (Phase 0)
+- [Design](design.md) — debated, approved architecture (3 rounds, full)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-python-config-zero-trap`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -38,4 +41,4 @@ unset, so this is a consumer defect, not a contract limit.
 
 ## Next Action
 
-`/sdd-design fix-python-config-zero-trap` — full design debate (SEV-2, ≥2 services); resolves OQ-1..OQ-4
+`/sdd-spec fix-python-config-zero-trap` — generate the implementation spec from the approved design
