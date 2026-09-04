@@ -13,9 +13,8 @@ def test_build_resource_omits_trading_mode(monkeypatch):
 
 
 def test_init_telemetry_non_blocking_on_error(monkeypatch):
-    # Force the exporter constructor to raise inside init_telemetry's try; init must swallow it
-    # (AC-2) and set no global tracer provider. Patch the source-module symbol because the name is
-    # imported locally inside the try (a module-attr patch would not intercept the local import).
+    # Force the exporter to raise inside init_telemetry's try: init must swallow it (AC-2). Patch
+    # the source module — OTLPSpanExporter is imported locally, so a module patch would miss it.
     monkeypatch.setenv("OTEL_ENABLED", "true")
 
     def _boom(*a, **k):
