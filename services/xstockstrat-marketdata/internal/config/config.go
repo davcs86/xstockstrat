@@ -243,11 +243,3 @@ func getEnv(key, def string) string {
 	}
 	return def
 }
-
-func getEnvBool(key string, def bool) bool {
-	v := os.Getenv(key)
-	if v == "" {
-		return def
-	}
-	return v == "true" || v == "1" || v == "yes"
-}

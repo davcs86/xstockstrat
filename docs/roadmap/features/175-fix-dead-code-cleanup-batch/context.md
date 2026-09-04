@@ -174,3 +174,8 @@ Dead-code cleanup batch + @types/node type-pin. Stacked on 171 (final of the seq
 ### Step 2 — @types/node ^24 resolution + pre-delete build gate (AC-3, AC-4) [done]
 - AC-3: 4 leaves resolve @types/node 24.x; `pnpm --filter {ledger,notify,config,identity} build` (tsc) all green. AC-4: ui resolves 24.x; `pnpm --filter ui build` (next build) green.
 - NOTE: surfaced a pre-existing tsc-build break from feature 171 (ledger/identity telemetry.test.ts `.ts` import rejected by tsc build) — fixed on the 171 branch (PR #1095) by excluding `src/**/*.test.ts` from those two tsconfigs; 175 inherits the fix via the stack. Not a 175 diff-gate path.
+
+### Step 3 — delete dead getEnvBool from 3 Go config packages [done]
+- Removed `func getEnvBool` from trading (config.go:60), portfolio (:233 + `var _ = getEnvBool` suppressor + orphaned `strconv` import :9), marketdata (:247); removed the dedicated `TestGetEnvBool` function from each config_test.go (never the file). Zero production callers.
+### Step 4 — Go config still builds/lints/tests (AC-1) [done]
+- getEnvBool absent (grep 0). All 3: `go build ./...` clean, `golangci-lint` 0 issues (incl. no orphan-strconv failure), `go test ./internal/config/...` pass. Coverage ≥40: trading 69.0%, portfolio 49.0%, marketdata 62.6%.

@@ -152,7 +152,7 @@ pnpm --filter xstockstrat-ui build                                              
 
 ### Step 3 — service: delete dead `getEnvBool` from the three Go config packages
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-{trading,portfolio,marketdata}`
 **Files**:
 - `services/xstockstrat-trading/internal/config/config.go` — modify (remove `getEnvBool`)
@@ -193,7 +193,7 @@ grep -n '"strconv"' services/xstockstrat-portfolio/internal/config/config.go    
 
 ### Step 4 — test: `getEnvBool` gone; Go config packages still build, lint, and pass (AC-1)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-{trading,portfolio,marketdata}`
 **Files**: none (verification only)
 
