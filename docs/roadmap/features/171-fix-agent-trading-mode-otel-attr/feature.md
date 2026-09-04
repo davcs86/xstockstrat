@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-09-04 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from comment-audit report item 1 |
 | 2026-09-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings, re-review); overlap CLEAN; blockers C-14/C-15 fixed |
+| 2026-09-04 | `spec-ready` → `design-approved` | /sdd-design | Re-scoped agent-only → fleet-wide (user); 3 rounds; approved (test all 12 modules, no C-08 waiver); recon.md + design.md written |
 
 ---
 
@@ -22,6 +23,8 @@
 
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
+- [Recon Dossier](recon.md) — grounded codebase facts (fleet-wide finding)
+- [Design](design.md) — debated, approved architecture (3 rounds; fleet-wide)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-agent-trading-mode-otel-attr`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -37,4 +40,4 @@ attribute or rename it to `deployment.environment` parity — not a mechanical c
 
 ## Next Action
 
-`/sdd-design fix-agent-trading-mode-otel-attr quick` — recommended design depth (quick); see context.md
+`/sdd-spec fix-agent-trading-mode-otel-attr` — generate the fleet-wide implementation spec from the approved design

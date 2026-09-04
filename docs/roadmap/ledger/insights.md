@@ -2917,3 +2917,17 @@ reusing.
   without driving a slow loop (e.g. a `2**attempt` retry backoff), extract it into a named seam that
   becomes the SOLE definition the loop consumes — not a parallel echo (that would re-open fails-074's
   vacuous-green trap); prove wiring with the pre-existing loop tests. Reinforces C-08/P-06, no new ID.
+
+### 2026-09-04 — 171-fix-agent-trading-mode-otel-attr — design
+- **Pattern**: A comment-audit item filed as a single-service defect can be a **fleet-wide convention** —
+  recon before assuming scope. Here `trading_mode` was flagged as an agent-only stale OTel attribute but
+  is emitted identically by all 12 telemetry modules and is redundant with `deployment.environment` 1:1
+  in every deploy target. Agent-only "fixing" it creates divergence; the honest fix is fleet-wide or none.
+  Also: a removed **OTel resource attribute**'s real consumers are **out-of-repo** Grafana dashboards/alerts
+  (grep clears only in-repo dashboards/collector config) — an unavoidable blind spot (fails-1638 analog);
+  record it as an examined, accepted residual, de-risked here by `OTEL_ENABLED=false` in both `.do` specs.
+- **Evidence**: 12 `**/telemetry.{py,ts},**/otel.go` emit it; `.do/app.yaml:31`/`.do/app.dev.yaml:31`
+  (env↔mode 1:1, OTEL off); `packages/otel/dashboards/README.md:40` the only in-repo reference.
+- **Rule it implies**: for a "stale attribute/label" bug, grep the fleet for the same emission before
+  scoping to one service, and treat out-of-repo observability consumers as an examined residual, not a
+  grep-clean all-clear. Reinforces P-03, no new ID.

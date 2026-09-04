@@ -10,11 +10,20 @@ Feature: fix-agent-trading-mode-otel-attr (bug fix — fleet-wide, re-scoped)
     Then the resource attributes do NOT include "trading_mode"
     And they still include "service.name", "deployment.environment", and "platform"
 
+    # Every backend telemetry module is tested (no representative waiver) — one assertion per module.
     Examples:
-      | service              |
-      | xstockstrat-agent    |
-      | xstockstrat-trading  |
-      | xstockstrat-ledger   |
+      | service                 |
+      | xstockstrat-trading     |
+      | xstockstrat-portfolio   |
+      | xstockstrat-marketdata  |
+      | xstockstrat-agent       |
+      | xstockstrat-ingest      |
+      | xstockstrat-indicators  |
+      | xstockstrat-analysis    |
+      | xstockstrat-ledger      |
+      | xstockstrat-identity    |
+      | xstockstrat-config      |
+      | xstockstrat-notify      |
 
   @AC-2 @FR-3 @regression
   Scenario: Telemetry init remains non-blocking after the attribute is removed

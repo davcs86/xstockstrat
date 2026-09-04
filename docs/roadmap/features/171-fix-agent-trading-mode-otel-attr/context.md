@@ -41,3 +41,40 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Overlap: CLEAN. (Feature 084 references the `TRADING_MODE` compose env var — a different resource than
   the OTel attribute — no clash.)
 - Warnings carried into design: none. Design depth: quick (SEV-3, single service, one open decision).
+
+---
+
+## Session 2026-09-04 — sdd-design (fleet-wide re-scope)
+
+- Phase 0 Recon: wrote recon.md. PIVOTAL finding — `trading_mode` is a fleet-wide OTel attribute
+  (12 telemetry modules emit it identically; documented `packages/otel/dashboards/README.md:40`),
+  NOT an agent-local defect. No dashboard/alert queries it (grep of `packages/otel/**` → README only;
+  `otel-collector-config.yaml` does not group on it). Mirrors `deployment.environment` 1:1 in both
+  deploy targets (`.do/app.yaml:31` prod=live, `.do/app.dev.yaml:31` dev=paper). `OTEL_ENABLED=false`
+  in both `.do` specs. C-16 inert (no @AC governs telemetry).
+- Phase 1 Grilling: **3 rounds**, approved, no Floor breach.
+  - R1: de-scope-vs-agent-only-vs-fleet. Proposer recommended de-scope; adversary proved the label is
+    redundant-but-harmless (not "carries signal") and the docs-only variant would enshrine a false claim.
+  - **User decision (R1 gate): fleet-wide removal** — the only internally-consistent fix.
+  - R2: fleet structure. Adversary flagged the plain-map test as vacuous-green (fails-1648/1653) and
+    @AC-2 needing real init.
+  - R3: locked real-Resource assertions (builder = sole init input), agent @AC-2 via forced-except
+    branch (monkeypatch OTLPSpanExporter to raise at telemetry.py:43, before set_tracer_provider:46 /
+    instrument:48 → except:52, zero global mutation), ledger Node rep confirmed, out-of-repo Grafana
+    accepted residual. Adversary R3: SOUND — APPROVE-READY.
+  - **User decision (R3 gate): test ALL 12 modules — NO C-08 waiver.** Every backend module (Go×3,
+    Python×4, Node×4) gets its own builder extraction + real-Resource absence test; UI (frontend)
+    gets the one-line deletion verified by tsc/vitest. @AC-1 outline expanded to all 11 backend modules.
+- Chosen approach: fleet-wide delete of the `trading_mode` attr + dead local TRADING_MODE read from all
+  12 telemetry modules + README line; keep TRADING_MODE env var (live routing axis). UI = one-line
+  deletion (not whole-file). Single PR.
+- Constitution: C-08/P-06 honored WITHOUT waiver (per-module tests); C-14 internal-only; C-16 inert;
+  F-04 (non-rep exact lines pinned at /sdd-spec); no Floor breach.
+- Status: spec-ready → design-approved.
+- Open Threads (→ /sdd-spec / execute): call-site builder guardrail (init must CALL the builder, no
+  inlined copy); UI exact line + dead-module question; per-module test runner pickup; out-of-repo
+  Grafana accepted residual.
+- Findings reconciliation (do at execute/PR, with the teardown audit): the open finding entries
+  `docs/context-constitution-findings.md`/`context-scrubber-findings.md` re: the `trading_mode` OTel
+  label are being resolved by THIS feature (fleet-wide removal) — annotate/close them when 171 lands so
+  the next comment audit doesn't re-file (P-03). The triage report already routes item 1 → feature 171.
