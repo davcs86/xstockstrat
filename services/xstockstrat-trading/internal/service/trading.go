@@ -255,9 +255,8 @@ func (s *TradingService) LoadBrokerPool(ctx context.Context) error {
 	return nil
 }
 
-// LoadInflightOrders repopulates s.orders from the DB with orders still in-flight at the broker
-// (NEW/PARTIALLY_FILLED with a broker_order_id) so the fill poller resumes tracking them after a
-// restart. Called once before StartFillPoller; best-effort (a DB read failure is logged).
+// LoadInflightOrders repopulates s.orders with NEW/PARTIALLY_FILLED orders still in-flight at the
+// broker so the fill poller resumes tracking after a restart. Best-effort (a DB read failure is logged).
 func (s *TradingService) LoadInflightOrders(ctx context.Context) error {
 	orders, err := s.repo.ListSubmittedOrders(ctx)
 	if err != nil {
@@ -369,9 +368,8 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		return nil, err
 	}
 
-	// Route on the authoritative persisted broker_type as well as the in-memory pool tag, so an
-	// offline account can never fall through to a broker path if its pool entry is stale. A DB read
-	// error is non-fatal — fall back to the pool tag alone (best-effort).
+	// Route on the authoritative persisted broker_type as well as the pool tag, so a stale pool
+	// entry can't send an offline account down a broker path. A DB read error falls back to the tag.
 	persistedOffline := false
 	if s.accountRepo != nil {
 		if rec, gErr := s.accountRepo.GetBrokerAccount(ctx, resolvedAccountID); gErr != nil {
@@ -382,9 +380,8 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		}
 	}
 
-	// Offline account: record the order as manual bookkeeping — this branch precedes every
-	// broker-routing path and deliberately skips broker submit, sizing, bracket, and the
-	// halt/trading-state gates. A NEW offline order becomes real only when ConfirmOrder writes its fill.
+	// Offline account: record as manual bookkeeping. Precedes every broker path and skips broker
+	// submit, sizing, bracket, and halt/trading-state gates; a NEW offline order is real only after ConfirmOrder.
 	if accountEntry.brokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) || persistedOffline {
 		return s.recordOfflineOrder(ctx, req, resolvedAccountID, accountEntry.userID)
 	}
@@ -429,9 +426,8 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		equity, equityErr = s.resolveAccountEquity(ctx, resolvedAccountID)
 	}
 
-	// sizedStopPrice is the informational stop from ComputePositionSize — set only on auto-sized
-	// MARKET/LIMIT orders, never a real broker STOP/STOP_LIMIT/TRAILING_STOP trigger.
-	// entryPriceProxy is the bracket take-profit formula's entry-price estimate.
+	// sizedStopPrice is ComputePositionSize's informational stop (auto-sized MARKET/LIMIT only, never
+	// a broker trigger); entryPriceProxy is the bracket take-profit formula's entry estimate.
 	var sizedStopPrice, entryPriceProxy float64
 	if needSizing {
 		// Fail-closed — unlike checkPortfolioRisk below, missing/zero equity aborts the order.
@@ -477,9 +473,8 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		requestHashHex, needSizing, sizedStopPrice, entryPriceProxy)
 }
 
-// submitOrder is PlaceOrder's broker-submission seam, shared with flattenAndHalt so a flatten
-// gets the same safety machinery (intent dedup, ledger events, bracket submission). requestHashHex
-// MUST be the caller's pre-sizing hash (see PlaceOrder) — never recomputed here against a mutated req.
+// submitOrder is PlaceOrder's broker-submission seam, shared with flattenAndHalt for the same
+// safety machinery. requestHashHex MUST be the caller's pre-sizing hash, never recomputed here.
 func (s *TradingService) submitOrder(
 	ctx context.Context,
 	req *tradingv1.PlaceOrderRequest,
@@ -691,9 +686,8 @@ func (s *TradingService) submitOrder(
 	return order, nil
 }
 
-// recordOfflineOrder persists a manually-entered order for an offline account — never contacts a
-// broker. Reuses client_order_id dedup (a retried record returns the stored order) but finalizes the
-// intent synchronously. The order lands NEW (filled_qty 0, empty broker_order_id) until ConfirmOrder.
+// recordOfflineOrder persists a manually-entered offline order (never contacts a broker), reusing
+// client_order_id dedup but finalizing synchronously. Lands NEW (filled_qty 0) until ConfirmOrder.
 func (s *TradingService) recordOfflineOrder(ctx context.Context, req *tradingv1.PlaceOrderRequest, accountID, userID string) (*tradingv1.Order, error) {
 	mode := s.resolveTradingMode(req.TradingMode)
 
@@ -815,9 +809,8 @@ func offlineFillsFromOrders(orders []*tradingv1.Order) []pnl.Fill {
 	return fills
 }
 
-// ConfirmOrder writes a fill onto an OFFLINE order, then recomputes the account's net positions and
-// emits account.positions.synced — never order.filled (that would double-count in portfolio's fold).
-// Order-sourced: rejects broker accounts and non-owners from the persisted order alone.
+// ConfirmOrder writes a fill onto an OFFLINE order, then recomputes net positions and emits
+// account.positions.synced — never order.filled (which would double-count in portfolio's fold).
 func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.ConfirmOrderRequest) (*tradingv1.Order, error) {
 	if req.OrderId == "" {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "order_id is required")
@@ -872,9 +865,8 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 	return order, nil
 }
 
-// recomputeAndEmitOfflinePositions recomputes an offline account's net positions (from all confirmed
-// orders, seeded by the baseline) and emits account.positions.synced. Fail-closed: a query error skips
-// the emit (an empty snapshot would make portfolio wipe the account). Caller must hold confirmLock(accountID).
+// recomputeAndEmitOfflinePositions recomputes an offline account's net positions and emits
+// account.positions.synced. Fail-closed (a query error skips the emit). Caller must hold confirmLock(accountID).
 func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, accountID, userID string) error {
 	// --- Load baseline (fail-closed: error → skip emit) ---
 	asOf, seedLots, hasBaseline, err := s.baselineStore.EffectiveBaselineByAccount(ctx, accountID)
@@ -960,8 +952,7 @@ func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, a
 		posEntries = append(posEntries, entry)
 	}
 	// Emit account.positions.synced ONLY (never order.filled) — the disjointness invariant that keeps
-	// portfolio from double-folding. realized_pnl carries account-grain cumulative realized (broker
-	// syncs never set it). Run on the inbound request ctx for header propagation.
+	// portfolio from double-folding. Run on the inbound request ctx for header propagation.
 	s.emitLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", accountID), userID, map[string]interface{}{
 		"account_id":   accountID,
 		"user_id":      userID,
@@ -1475,9 +1466,8 @@ func (s *TradingService) StreamOrderUpdates(req *tradingv1.StreamOrderUpdatesReq
 	return nil
 }
 
-// StartFillPoller polls submitted broker orders to detect fills.
-// Interval is read from the live config key `trading.fill_poller.interval_ms`
-// (default 5000 ms) so it can be adjusted without restarting the service.
+// StartFillPoller polls submitted broker orders to detect fills. Interval is live-reloaded from
+// trading.fill_poller.interval_ms (default 5000 ms).
 func (s *TradingService) StartFillPoller(ctx context.Context) {
 	const defaultIntervalMs = 5000.0
 	currentInterval := time.Duration(defaultIntervalMs) * time.Millisecond
@@ -1673,11 +1663,9 @@ func (s *TradingService) StartReconciliationPoller(ctx context.Context) {
 	}
 }
 
-// recordReconciliationCandidate increments the consecutive-tick counter for a candidate
-// mismatch and reports whether it has now crossed the grace window (1+graceTicks
-// observations) and become a real finding. A real finding is cleared immediately, so a
-// persisting mismatch starts a fresh episode on its next occurrence rather than re-firing
-// every tick indefinitely.
+// recordReconciliationCandidate increments a candidate mismatch's consecutive-tick counter and
+// reports whether it crossed the grace window (1+graceTicks) into a real finding. A finding clears
+// the counter, so a persisting mismatch re-fires as a fresh episode, not every tick.
 func (s *TradingService) recordReconciliationCandidate(key string, graceTicks int) bool {
 	s.reconcileCandidatesMu.Lock()
 	defer s.reconcileCandidatesMu.Unlock()
@@ -1689,9 +1677,8 @@ func (s *TradingService) recordReconciliationCandidate(key string, graceTicks in
 	return false
 }
 
-// clearReconciliationCandidate drops a candidate no longer observed this tick — the
-// propagation delay passed and the mismatch resolved on its own (self-heal; no ledger event,
-// no halt, per design.md).
+// clearReconciliationCandidate drops a candidate no longer observed this tick — the mismatch
+// resolved on its own (self-heal: no ledger event, no halt).
 func (s *TradingService) clearReconciliationCandidate(key string) {
 	s.reconcileCandidatesMu.Lock()
 	delete(s.reconcileCandidates, key)
@@ -1699,16 +1686,8 @@ func (s *TradingService) clearReconciliationCandidate(key string) {
 }
 
 // emitReconciliationFinding records a real (past-grace-window) mismatch: a ledger event, a
-// CRITICAL alert, and the ordinary per-account halt (feature 030's mechanism, reused — no
-// SetConfig/authz call for this common case; that is Step 19's rare systemic escalation).
-//
-// No-ops once the account is already halted: isAccountHalted already gates PlaceOrder/
-// ReplaceOrder for every halt source, so a later finding against an already-halted account
-// changes no trading behavior — only a human clearing the halt (a manual DB edit; nothing in
-// this service ever un-halts) can resume it. Without this guard, an account with a handful of
-// pre-existing broker orders the poller can never learn about (see LoadInflightOrders, which
-// only hydrates NEW/PARTIALLY_FILLED orders) re-triggers this full sequence — ledger event,
-// CRITICAL alert, ERROR log — every reconciliation tick, forever, for the same orders.
+// CRITICAL alert, and the ordinary per-account halt. No-ops once the account is already halted
+// (any source), so re-observing the same mismatch can't re-fire the event/alert/log.
 func (s *TradingService) emitReconciliationFinding(ctx context.Context, accountID, mismatchClass, orderID string, expected, brokerReported float64) {
 	if s.isAccountHalted(accountID) {
 		return
@@ -1733,30 +1712,10 @@ func (s *TradingService) emitReconciliationFinding(ctx context.Context, accountI
 	}
 }
 
-// reconcileTick compares each registered account's open orders and positions against broker
-// truth (feature 102). Returns the number of accounts that errored this tick (systemicCount)
-// out of the total registered accounts (totalAccounts) — Step 19's systemic-escalation trigger
-// reads these.
-//
-// Deviation from design.md's literal "Qty - FilledQty on both sides" plan: broker.BrokerOrder
-// (the ListOrders/GetOrder result shape) carries only a cumulative FilledQty, not a total
-// order Qty — there is nothing to derive a broker-side "remaining" quantity from. The
-// quantity-discrepancy check below compares FilledQty directly (platform vs. broker-reported),
-// the only remaining-quantity-adjacent figure ListOrders actually returns.
-//
-// The "unprotected/impossible" bucket (an order/position under an account ID not present in
-// s.brokers at all) is not implemented: every Broker client is constructed scoped to one
-// account's own credentials (ibkrAccountID / the Alpaca key pair), so a ListOrders/GetPositions
-// call can only ever return records for that same account — there is no code path by which a
-// call scoped to account A could surface a record under a different, unregistered account B.
-// This bucket is architecturally unreachable given this feature's broker-client design, not a
-// skipped implementation; a genuine per-step finding, not a silent gap.
-// graceTicks is hoisted as an explicit parameter (not read live via s.cfgW inside this
-// function) — config.Watcher has no exported snapshot setter (an established limitation in
-// this service; see 030/023/101's own identical hoisting of a config-read value for the same
-// reason), so a live read here would make the "grace window not yet crossed" test case
-// untestable against a hand-constructed service. The one real caller (StartReconciliationPoller)
-// still reads the live config value and passes it in.
+// reconcileTick compares each registered account's open orders and positions against broker truth,
+// returning how many accounts errored this tick (systemicCount) out of the total (totalAccounts) —
+// the systemic-escalation trigger reads both. graceTicks/systemicThresholdPct are parameters, not
+// live s.cfgW reads, so the grace-window and threshold paths stay testable.
 func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, systemicThresholdPct float64) (systemicCount, totalAccounts int) {
 	s.brokersMu.RLock()
 	brokerMap := make(map[string]brokerPoolEntry, len(s.brokers))
@@ -1839,14 +1798,9 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 				s.clearReconciliationCandidate(key)
 			}
 		}
-		// Broker orders the in-memory map doesn't recognize. The in-memory map (s.orders) only
-		// holds this process's own orders plus LoadInflightOrders' NEW/PARTIALLY_FILLED hydrate,
-		// so it is NOT the platform's full record — a legitimate order the platform placed that
-		// has since reached a terminal state (FILLED/CANCELED/EXPIRED/REJECTED) is absent from
-		// memory yet still persisted in trading.orders. Before flagging any unmatched broker order
-		// as an unknown_broker_order (a halt-worthy "traded outside the platform" finding, AC-1),
-		// confirm the platform truly has no persisted record of it — comparing against memory alone
-		// misclassified every such historical order as foreign and halted the account.
+		// s.orders is not the platform's full record (terminal orders are evicted from memory yet
+		// stay in trading.orders), so before flagging an unmatched broker order as unknown_broker_order,
+		// DB-ground it via KnownBrokerOrderIDs — memory alone misclassifies historical orders as foreign.
 		var unmatchedBrokerIDs []string
 		for boID := range brokerByID {
 			if !knownBrokerIDs[boID] {
@@ -1856,10 +1810,8 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 		if len(unmatchedBrokerIDs) > 0 {
 			dbKnown, lookupErr := s.reconcileOrderLookup.KnownBrokerOrderIDs(ctx, accountID, unmatchedBrokerIDs)
 			if lookupErr != nil {
-				// Fail-safe: a transient DB error must never cause a false unknown_broker_order
-				// halt. Skip this account's unknown-order classification this tick and leave its
-				// candidate counters untouched — a genuine foreign order still persists and is
-				// re-evaluated next tick, so the grace window is unaffected.
+				// Fail-safe: a transient DB error skips this account's unknown-order check for the
+				// tick (counters untouched) — never a false halt; a real foreign order re-evaluates next tick.
 				slog.Warn("reconcileTick: broker-order-id DB lookup failed; skipping unknown-order check this tick",
 					"account_id", accountID, "error", lookupErr)
 			} else {
@@ -1924,9 +1876,8 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 			}
 		}
 
-		// FR-6: resolve 101's own deferred "who resolves an UNKNOWN order intent" question,
-		// reusing this tick's already-fetched ListOrders result (brokerOrders) — not a second
-		// broker round-trip.
+		// Resolve UNKNOWN order intents against this tick's already-fetched ListOrders result
+		// (brokerOrders) — no second broker round-trip.
 		s.resolveUnknownIntents(ctx, accountID, entry, brokerOrders)
 	}
 
@@ -1941,13 +1892,9 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 	return systemicCount, totalAccounts
 }
 
-// escalateSystemic sets platform.trading_state=REDUCE_ONLY via the internal-caller authz
-// channel (feature 102's own trading -> config edge, Step 13) and pages an operator — a
-// config value must never silently change with no alert. Environment is set from this
-// deployment's own s.cfg.ApplicationEnv; TradingMode is deliberately left UNSPECIFIED
-// (resolves server-side to trading_mode='all') — a systemic broker-communication breakdown is
-// by definition platform-wide, not scoped to one trading mode, so REDUCE_ONLY must apply to
-// both paper and live simultaneously.
+// escalateSystemic sets platform.trading_state=REDUCE_ONLY via the internal-caller authz channel
+// and pages an operator (a config value must never silently change with no alert). TradingMode is
+// left UNSPECIFIED so REDUCE_ONLY applies platform-wide — a systemic breakdown is not mode-scoped.
 func (s *TradingService) escalateSystemic(ctx context.Context, systemicCount, totalAccounts int) {
 	env := commonv1.Environment_ENVIRONMENT_STAGING // feature 147: non-production => staging
 	if s.cfg.ApplicationEnv == "production" {
@@ -1977,21 +1924,10 @@ func (s *TradingService) escalateSystemic(ctx context.Context, systemicCount, to
 	}
 }
 
-// resolveUnknownIntents implements FR-6: resolve 101's UNKNOWN-state order intents against
-// broker truth (feature 102). For each UNKNOWN intent on this account:
-//  1. First check the ledger for an order_intent.late_response_conflict event at stream key
-//     order:{order_id} — resolves via the real recorded outcome. NOTE: 101's own
-//     implementation-spec.md never actually emits this event anywhere in its Instructions (only
-//     named in a forward-reference dependency note) — confirmed by direct grep of this
-//     service's tree, zero hits for "late_response_conflict". This branch can therefore never
-//     match today; it is left in place, not removed, because it is cheap, correct once 101 gains
-//     an emit site, and documents the intended two-source design rather than silently degrading
-//     to fallback-only. A one-time WARN fires if a full sweep finds zero such events ever
-//     recorded, signaling the upstream gap needs fixing in 101, not 102.
-//  2. Fallback (Alpaca only — IBKR's SubmitOrder never sends a customer-order tag, so
-//     BrokerOrder.ClientOrderID is always "" for IBKR, see Steps 9/11): scan this tick's
-//     already-fetched ListOrders result for a ClientOrderID matching the intent's derived nonce.
-//  3. Genuinely inconclusive: no write this tick — never guess an outcome (FR-3).
+// resolveUnknownIntents resolves each UNKNOWN-state order intent on this account against broker
+// truth: first a ledger order_intent.late_response_conflict event (no emit site exists yet, so it
+// never matches today); else an Alpaca-only ListOrders scan by the derived client-order-id nonce
+// (IBKR never carries that tag); else no write — a genuinely inconclusive intent is never guessed.
 func (s *TradingService) resolveUnknownIntents(ctx context.Context, accountID string, entry brokerPoolEntry, brokerOrders []broker.BrokerOrder) {
 	if s.orderIntentRepo == nil {
 		return
@@ -2078,9 +2014,8 @@ func (s *TradingService) resolveUnknownIntents(ctx context.Context, accountID st
 	}
 }
 
-// StartPositionSyncPoller polls all registered broker accounts for open positions
-// and emits ledger events. Interval is live-reloaded from config key
-// `trading.position_sync.interval_ms` (default 300000 ms).
+// StartPositionSyncPoller polls all registered broker accounts for positions and emits ledger
+// events. Interval is live-reloaded from trading.position_sync.interval_ms (default 300000 ms).
 func (s *TradingService) StartPositionSyncPoller(ctx context.Context) {
 	const defaultIntervalMs = 300000.0
 	currentInterval := time.Duration(defaultIntervalMs) * time.Millisecond
@@ -2098,15 +2033,12 @@ func (s *TradingService) StartPositionSyncPoller(ctx context.Context) {
 			if synced > 0 {
 				lastOK = time.Now()
 			}
-			// Heartbeat: make a healthy sync loop observable and a stalled one
-			// diagnosable from logs alone. Previously a silent stall (e.g. every
-			// account skipped for invalid credentials, or a wedged broker/ledger
-			// call) looked identical to a healthy idle service — zero log output.
+			// Heartbeat: make a healthy sync loop observable and a stalled one diagnosable
+			// from logs alone (a silent stall otherwise looks identical to a healthy idle service).
 			slog.Info("position sync cycle complete",
 				"accounts_synced", synced, "accounts_skipped", skipped, "accounts_failed", failed)
-			// Watchdog: accounts are registered but none have synced for several
-			// intervals. lastOK guards against a false positive before the first
-			// successful sync (it stays zero until then).
+			// Watchdog: accounts registered but none synced for several intervals. lastOK stays
+			// zero until the first successful sync, guarding against a false positive before then.
 			if synced == 0 && (skipped > 0 || failed > 0) && !lastOK.IsZero() {
 				if stale := time.Since(lastOK); stale > 3*currentInterval {
 					slog.Warn("position sync stalled: no account has synced recently",
@@ -2126,11 +2058,8 @@ func (s *TradingService) StartPositionSyncPoller(ctx context.Context) {
 	}
 }
 
-// syncPositions polls every registered broker account for positions and balance
-// and emits the corresponding ledger snapshots. It returns per-cycle counts —
-// synced (positions emitted), skipped (credentials marked invalid), and failed
-// (broker fetch errored) — so the poller can emit a liveness heartbeat and detect
-// a silent stall.
+// syncPositions polls every registered broker account for positions and balance, emits the
+// ledger snapshots, and returns per-cycle counts (synced/skipped/failed) for the heartbeat.
 func (s *TradingService) syncPositions(ctx context.Context) (synced, skipped, failed int) {
 	type syncAccount struct {
 		client broker.Broker
@@ -2148,11 +2077,8 @@ func (s *TradingService) syncPositions(ctx context.Context) (synced, skipped, fa
 	}
 	s.brokersMu.RUnlock()
 
-	// Snapshot the last-known credential health so we can skip accounts whose secrets
-	// already failed validation. Calling GetPositions on a known-INVALID account just
-	// returns an unrecoverable 401 every cycle, hammering the broker and spamming logs.
-	// The credential-health poller (StartCredentialHealthPoller) keeps re-checking and
-	// flips the status back to OK once the secrets are fixed, at which point sync resumes.
+	// Snapshot credential health so known-INVALID accounts are skipped — GetPositions on them
+	// just 401s every cycle. The credential-health poller flips them back to OK once fixed.
 	s.credStatusMu.Lock()
 	credStatus := make(map[string]int32, len(s.credStatus))
 	for id, st := range s.credStatus {
@@ -2175,14 +2101,10 @@ func (s *TradingService) syncPositions(ctx context.Context) (synced, skipped, fa
 	return synced, skipped, failed
 }
 
-// syncAccountPositions fetches one account's positions and balance from the broker
-// and emits the account.positions.synced / account.balance.synced ledger snapshots.
-// Every broker call runs under an explicit per-call deadline so a black-holed
-// connection can never wedge the position-sync poller indefinitely — the
-// credential-health poller already wraps its broker call this way, and this brings
-// position sync to parity (the ledger emit is bounded inside emitLedgerEvent).
-// Returns true when the positions snapshot was fetched and emitted; balance is
-// best-effort and its failure does not flip the result to false.
+// syncAccountPositions fetches one account's positions and balance and emits the
+// account.positions.synced / account.balance.synced snapshots. Every broker call is under an
+// explicit per-call deadline so a black-holed connection can't wedge the poller. Returns true
+// once positions are emitted; balance is best-effort and its failure does not flip the result.
 func (s *TradingService) syncAccountPositions(ctx context.Context, accountID string, client broker.Broker, userID string) bool {
 	timeout := s.brokerCallTimeout()
 
@@ -2205,9 +2127,8 @@ func (s *TradingService) syncAccountPositions(ctx context.Context, accountID str
 			"symbol":   p.Symbol,
 			"qty":      p.Quantity,
 			"avg_cost": p.AvgCost,
-			// Broker mark-to-market valuation — lets the portfolio card reconcile with
-			// the broker's authoritative equity instead of recomputing from marketdata
-			// mid-quotes (a different price basis that never ties out).
+			// Broker mark-to-market valuation — portfolio reconciles against the broker's
+			// authoritative equity instead of marketdata mid-quotes (a basis that never ties out).
 			"current_price":   p.CurrentPrice,
 			"market_value":    p.MarketValue,
 			"unrealized_pl":   p.UnrealizedPnl,
@@ -2246,10 +2167,8 @@ func (s *TradingService) syncAccountPositions(ctx context.Context, accountID str
 	return true
 }
 
-// brokerCallTimeout is the per-call deadline for broker REST calls made by the
-// sync pollers, sourced from the same live config key as the broker HTTP client's
-// own timeout (trading.broker.timeout_ms, default 5000 ms). It is a context-level
-// backstop so a stalled connection surfaces as an error instead of blocking forever.
+// brokerCallTimeout is the per-call deadline for the sync pollers' broker REST calls,
+// from trading.broker.timeout_ms (default 5000 ms) — a backstop against a stalled connection.
 func (s *TradingService) brokerCallTimeout() time.Duration {
 	ms := s.cfgW.GetFloat("trading.broker.timeout_ms", 5000)
 	if ms <= 0 {
@@ -2259,13 +2178,7 @@ func (s *TradingService) brokerCallTimeout() time.Duration {
 }
 
 // haltedPollInterval is how often reconcileTick re-polls an already-halted account's broker
-// state (trading.reconciliation.halted_poll_interval_ms, default 300000 ms / 5 min) — read
-// live, like brokerCallTimeout above. Unlike graceTicks/systemicThresholdPct (see
-// reconcileTick's own doc comment for why those are hoisted explicit parameters instead),
-// this value has no test that needs to substitute an arbitrary override through
-// config.Watcher's absent snapshot setter: the default itself is what a hand-constructed
-// service in tests gets, and shouldPollHaltedAccount's own throttle/edge-case behavior is
-// unit-tested directly against an explicit intervalMs argument.
+// state (trading.reconciliation.halted_poll_interval_ms, default 300000 ms / 5 min), read live.
 func (s *TradingService) haltedPollInterval() float64 {
 	return s.cfgW.GetFloat("trading.reconciliation.halted_poll_interval_ms", 300000)
 }
@@ -2274,9 +2187,8 @@ func (s *TradingService) haltedPollInterval() float64 {
 // warning so a persistently invalid account is visible without logging every cycle.
 const credSkipLogInterval = 15 * time.Minute
 
-// warnCredSkip logs that position sync is skipping an account for invalid
-// credentials, throttled to once per credSkipLogInterval per account. Called only
-// from the single-goroutine position-sync poller, so credSkipLoggedAt needs no lock.
+// warnCredSkip logs a skipped-for-invalid-credentials account, throttled per credSkipLogInterval.
+// Called only from the single-goroutine position-sync poller, so credSkipLoggedAt needs no lock.
 func (s *TradingService) warnCredSkip(accountID string) {
 	now := time.Now()
 	if last, ok := s.credSkipLoggedAt[accountID]; ok && now.Sub(last) < credSkipLogInterval {
@@ -2288,12 +2200,10 @@ func (s *TradingService) warnCredSkip(accountID string) {
 }
 
 // RegisterBrokerAccount registers a new broker account, encrypts credentials, and adds it to the pool.
-// Paper vs. live is derived from the deployment environment (req.IsPaper is ignored)
-// so users cannot register an account in a mode the environment does not allow.
+// Paper vs. live is derived from the environment (req.IsPaper is ignored).
 func (s *TradingService) RegisterBrokerAccount(ctx context.Context, req *tradingv1.RegisterBrokerAccountRequest, userID string) (*tradingv1.BrokerAccount, error) {
-	// Offline account (feature 157): no broker credentials, no broker client. Skip the
-	// json.Valid/EncryptCredentials/instantiateBrokerLocked/validateAndRecordCredential path
-	// entirely and persist with credentials_enc = NULL (migration 008 made the column nullable).
+	// Offline account: no credentials, no broker client. Skip the encrypt/instantiate/validate
+	// path and persist with credentials_enc = NULL (migration 008 made the column nullable).
 	if req.BrokerType == commonv1.BrokerType_BROKER_TYPE_OFFLINE {
 		accountID := uuid.NewString()
 		rec := &repository.BrokerAccountRecord{
@@ -2381,9 +2291,8 @@ func (s *TradingService) UpdateBrokerAccountCredentials(ctx context.Context, acc
 	rec.CredentialsEnc = encCreds
 	rec.CredentialStatus = 0
 	rec.CredentialCheckedAt = nil
-	// UpdateCredentials reset the persisted status to UNSPECIFIED; mirror that in
-	// the cache so the re-validation below always writes the fresh status, even
-	// if it matches the pre-update value.
+	// Mirror UpdateCredentials' status reset in the cache so the re-validation below always
+	// writes the fresh status, even when it matches the pre-update value.
 	s.credStatusMu.Lock()
 	s.credStatus[accountID] = 0
 	s.credStatusMu.Unlock()
@@ -2420,11 +2329,8 @@ func (s *TradingService) environmentIsPaper() bool {
 	return s.cfgW.GetBool("trading.broker.paper", s.cfg.TradingMode == "paper")
 }
 
-// validateAndRecordCredential validates a broker client's credentials, persists
-// the resulting status, and returns it along with the check time. Best-effort:
-// persistence failures are logged but do not surface to the caller. The DB write
-// is skipped when the status has not changed since the last check (tracked in
-// s.credStatus), so steady-state polling does no DB work.
+// validateAndRecordCredential validates credentials and persists the resulting status (best-effort).
+// The DB write is skipped when the status is unchanged (s.credStatus), so steady-state polling is DB-free.
 func (s *TradingService) validateAndRecordCredential(ctx context.Context, accountID string, b broker.Broker) (int32, *time.Time) {
 	valCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -2467,12 +2373,9 @@ const credentialHealthDisabledRecheck = 60 * time.Second
 // parallel per poll cycle, so a large pool cannot exhaust connections.
 const maxConcurrentCredentialChecks = 8
 
-// StartCredentialHealthPoller periodically re-validates every registered broker
-// account's credentials and records the result, so the UI can surface accounts
-// whose secrets stopped working. The interval is read from config key
-// trading.credential_health.interval_ms (default 300000 ms) on every cycle;
-// setting it to 0 or a negative value disables (pauses) the poller, which keeps
-// re-checking config so it can be re-enabled live.
+// StartCredentialHealthPoller periodically re-validates every registered account's credentials.
+// Interval is trading.credential_health.interval_ms (default 300000 ms), read live; <= 0 pauses
+// the poller while it keeps re-reading config so it can be re-enabled without a restart.
 func (s *TradingService) StartCredentialHealthPoller(ctx context.Context) {
 	for {
 		intervalMs := s.cfgW.GetFloat("trading.credential_health.interval_ms", credentialHealthDefaultIntervalMs)
@@ -2531,15 +2434,8 @@ func (s *TradingService) isAccountHalted(accountID string) bool {
 	return s.halted[accountID]
 }
 
-// shouldPollHaltedAccount reports whether reconcileTick should poll the broker for an
-// already-halted account this tick, throttling to intervalMs
-// (trading.reconciliation.halted_poll_interval_ms) instead of the ordinary tick rate — an
-// already-halted account can't place new orders regardless (isAccountHalted gates
-// PlaceOrder/ReplaceOrder), so there is no need to re-check its broker state at full
-// frequency, only to eventually notice broker-side drift (e.g. a manual order placed via
-// the broker's own dashboard). Records now as the new last-polled time whenever it returns
-// true, including the first observation (intervalMs <= 0 always polls, matching
-// StartReconciliationPoller's own "<=0 disables the override" convention for interval_ms).
+// shouldPollHaltedAccount throttles reconcileTick's broker poll of an already-halted account to
+// intervalMs, recording now as last-polled whenever it returns true. intervalMs <= 0 always polls.
 func (s *TradingService) shouldPollHaltedAccount(accountID string, intervalMs float64) bool {
 	now := time.Now()
 	s.haltedMu.Lock()
@@ -2560,20 +2456,10 @@ func (s *TradingService) haltReason(accountID string) string {
 	return s.haltReasons[accountID]
 }
 
-// haltAccount sets the in-memory halt flag first, releases the mutex, then issues the
-// bounded DB write — round-5-corrected ordering (design.md): never hold the mutex
-// across the DB round-trip, and never roll back the in-memory flag on a write
-// failure (fail-safe — the halt itself must never be undone by a persistence
-// hiccup; this differs from validateAndRecordCredential's own rollback-on-failure,
-// which is a deliberate, different choice for that unrelated concern).
-//
-// An already-halted account short-circuits before the DB write/alert/error-log: nothing
-// in this service ever clears halted (resuming trading is a manual DB edit — see
-// TestLoadBrokerPool_HydratesHaltedFromDB), so once set, re-running the full sequence for
-// every later finding is pure noise, not a new signal — e.g. the reconciliation poller
-// (StartReconciliationPoller) re-observing the same handful of pre-existing broker orders
-// as "unknown" every tick previously re-halted, re-alerted (CRITICAL), and re-logged at
-// ERROR indefinitely for an account that was already halted.
+// haltAccount sets the in-memory halt flag first (mutex not held across the DB round-trip), then
+// the bounded DB write — the flag is never rolled back on a write failure (fail-safe: a halt must
+// never be undone by a persistence hiccup). An already-halted account short-circuits before the
+// write/alert/log so a repeated finding can't re-fire them.
 func (s *TradingService) haltAccount(ctx context.Context, accountID, reason string, haltSource int32) {
 	now := time.Now().UTC()
 	s.haltedMu.Lock()
@@ -2583,9 +2469,8 @@ func (s *TradingService) haltAccount(ctx context.Context, accountID, reason stri
 	}
 	s.halted[accountID] = true
 	s.haltReasons[accountID] = reason
-	// Start the halted-account poll cooldown now, not on the next tick — otherwise
-	// reconcileTick would still poll this account at full rate for one more tick before
-	// shouldPollHaltedAccount's first observation kicks in.
+	// Start the halted-account poll cooldown now, else reconcileTick polls at full rate for one
+	// more tick before shouldPollHaltedAccount's first observation kicks in.
 	s.haltedLastPolled[accountID] = now
 	s.haltedMu.Unlock()
 
@@ -2608,11 +2493,8 @@ func (s *TradingService) haltAccount(ctx context.Context, accountID, reason stri
 	slog.Error("account halted", "account_id", accountID, "reason", reason)
 }
 
-// flattenAndHalt closes the given bracket's underlying position at market (the
-// protection window expired with no confirmed bracket) and, if that fails after
-// exhausting retries, halts the account. Reuses PlaceOrder's own submission path
-// (submitOrder) so the flatten gets the exact same broker-safety machinery as any
-// other order.
+// flattenAndHalt closes the bracket's underlying position at market (protection window expired
+// unprotected) and halts the account if that fails after retries. Reuses submitOrder's broker-safety path.
 func (s *TradingService) flattenAndHalt(ctx context.Context, bracket *repository.OrderBracketRecord) {
 	s.brokersMu.RLock()
 	accountEntry, ok := s.brokers[bracket.AccountID]
@@ -2669,10 +2551,8 @@ func (s *TradingService) flattenAndHalt(ctx context.Context, bracket *repository
 	}
 	mode := s.resolveTradingMode(order.TradingMode)
 
-	// A flatten order is never auto-sized (it always carries an explicit qty), so
-	// needSizing/sizedStopPrice/entryPriceProxy are all zero-valued — matches
-	// maybeSubmitBracket's own no-op-when-stopPrice<=0 guard, so no new bracket is
-	// ever opened on a position-closing flatten order.
+	// A flatten order carries an explicit qty (never auto-sized), so needSizing/sizedStopPrice are
+	// zero — maybeSubmitBracket's stopPrice<=0 guard means no bracket is opened on the flatten.
 	hashDigest, hashErr := placeOrderRequestHash(flattenReq)
 	if hashErr != nil {
 		slog.Warn("flattenAndHalt: compute request hash failed", "order_id", bracket.OrderID, "error", hashErr)
@@ -2705,10 +2585,8 @@ func (s *TradingService) flattenAndHalt(ctx context.Context, bracket *repository
 		int32(tradingv1.HaltSource_HALT_SOURCE_BRACKET_PROTECTION))
 }
 
-// StartBracketProtectionWatchdog periodically scans for brackets whose protection
-// window has expired (non-ACTIVE, non-terminal rows past protection_deadline) and
-// flattens the underlying position. Piggybacks on the fill poller's own tick
-// (trading.fill_poller.interval_ms) — no separate cadence config key, per design.md.
+// StartBracketProtectionWatchdog scans for brackets past their protection_deadline (non-ACTIVE,
+// non-terminal) and flattens the position. Piggybacks on the fill-poller tick (trading.fill_poller.interval_ms).
 func (s *TradingService) StartBracketProtectionWatchdog(ctx context.Context) {
 	for {
 		intervalMs := s.cfgW.GetFloat("trading.fill_poller.interval_ms", 5000)
@@ -2725,9 +2603,8 @@ func (s *TradingService) StartBracketProtectionWatchdog(ctx context.Context) {
 	}
 }
 
-// checkBracketProtection is StartBracketProtectionWatchdog's per-tick body: a bounded
-// scan for expired brackets, then one detached goroutine per row so a slow flatten on
-// one account never blocks the next tick's scan or another account's flatten.
+// checkBracketProtection scans for expired brackets and flattens each in a detached goroutine, so
+// a slow flatten on one account never blocks the next tick or another account's flatten.
 func (s *TradingService) checkBracketProtection(ctx context.Context) {
 	scanCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	expired, err := s.bracketRepo.ListExpiredProtection(scanCtx, time.Now())
@@ -2806,20 +2683,14 @@ func credentialStatusFromError(err error) int32 {
 	}
 }
 
-// credentialsKnownInvalid reports whether an account's last-validated credential
-// status is INVALID. syncPositions skips such accounts: calling GetPositions on
-// them just returns an unrecoverable 401 every cycle, hammering the broker and
-// spamming logs. UNKNOWN/UNSPECIFIED/OK are not skipped — only a confirmed
-// failure is, and the credential-health poller re-enables the account once the
-// secrets are fixed (status flips back to OK).
+// credentialsKnownInvalid reports whether an account's last-validated status is INVALID (the
+// syncPositions skip set). UNKNOWN/UNSPECIFIED/OK are not skipped — only a confirmed failure.
 func credentialsKnownInvalid(status int32) bool {
 	return status == int32(tradingv1.CredentialStatus_CREDENTIAL_STATUS_INVALID)
 }
 
-// logCredentialStatusTransition records a broker credential health change so an
-// account whose secrets stop (or start) working is visible in logs, not only in the
-// UI. OK→INVALID is logged at WARN because position/balance sync silently stops for
-// that account; first observations and recoveries are INFO.
+// logCredentialStatusTransition logs a broker credential health change. OK→INVALID is WARN
+// (position/balance sync silently stops for the account); first observations and recoveries are INFO.
 func logCredentialStatusTransition(accountID string, seen bool, prev, status int32) {
 	if seen && prev == status {
 		return
@@ -2856,9 +2727,8 @@ func (s *TradingService) DeregisterBrokerAccountSvc(ctx context.Context, account
 	delete(s.credStatus, accountID)
 	s.credStatusMu.Unlock()
 
-	// Offline accounts (feature 157/163): purge the baseline table BEFORE the deregistered emit
-	// so downstream consumers never see a stale baseline for a deregistered account (FR-8/AC-18).
-	// Fail the RPC on error (retry-safe: both ops are idempotent).
+	// Offline accounts: purge the baseline table BEFORE the deregistered emit so consumers never
+	// see a stale baseline. Fail the RPC on error (retry-safe: both ops are idempotent).
 	if rec.BrokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) {
 		if err := s.baselineStore.DeleteBaselinesByAccount(ctx, accountID); err != nil {
 			return grpcstatus.Errorf(codes.Internal, "purge baselines for account %s: %v", accountID, err)
@@ -2873,45 +2743,39 @@ func (s *TradingService) DeregisterBrokerAccountSvc(ctx context.Context, account
 	return nil
 }
 
-// ResumeAccountSvc clears the persistent and in-memory halt on a broker account (feature 169).
-// Admin-scope callers only. Idempotent: a non-halted account returns success with no state change.
-// DB-first ordering: the database halt is cleared BEFORE in-memory maps, inverting haltAccount's
-// memory-first write order so that a crash between the two leaves the account still halted (fail-safe).
+// ResumeAccountSvc clears the persistent and in-memory halt on a broker account. Admin-scope only,
+// idempotent. DB-first ordering (inverting haltAccount): a crash between the two leaves it halted (fail-safe).
 func (s *TradingService) ResumeAccountSvc(ctx context.Context, accountID, reason, callerUserID string) (*tradingv1.BrokerAccount, error) {
-	// (a) Admin scope check.
 	if err := middleware.RequireAdminScope(ctx); err != nil {
 		return nil, err
 	}
 
-	// (b) Fetch account.
 	record, err := s.accountRepo.GetBrokerAccount(ctx, accountID)
 	if err != nil {
 		return nil, grpcstatus.Errorf(codes.NotFound, "account %s not found: %v", accountID, err)
 	}
 
-	// (c) Idempotent no-op: if the account is not halted, return success immediately (FR-7/AC-6).
+	// Idempotent: a non-halted account returns success immediately.
 	if !record.Halted {
 		return recordToProtoAccount(record), nil
 	}
 
-	// (d) Capture prior halt state for the ledger event.
 	priorHaltReason := record.HaltReason
 	priorHaltSource := record.HaltSource
 
-	// (e) DB clear FIRST — on failure both DB and memory stay halted (fail-safe).
+	// DB clear FIRST — on failure both DB and memory stay halted (fail-safe).
 	if err := s.accountRepo.UpdateHaltStatus(ctx, accountID, false, "", nil, 0); err != nil {
 		return nil, grpcstatus.Errorf(codes.Internal, "clear halt in DB: %v", err)
 	}
 
-	// (f) In-memory clear SECOND — only reached after DB success.
-	// Releasing the halted map entry unblocks the reconciliation poller's next tick (AC-7).
+	// In-memory clear SECOND — only after DB success.
 	s.haltedMu.Lock()
 	delete(s.halted, accountID)
 	delete(s.haltReasons, accountID)
 	delete(s.haltedLastPolled, accountID)
 	s.haltedMu.Unlock()
 
-	// (g) Ledger event — best-effort (matches emitLedgerEvent's existing warn-on-fail semantics).
+	// Ledger event — best-effort.
 	s.emitLedgerEvent(ctx, "account.halt.resumed", fmt.Sprintf("account:%s", accountID), callerUserID, map[string]interface{}{
 		"account_id":        accountID,
 		"reason":            reason,
@@ -2920,7 +2784,6 @@ func (s *TradingService) ResumeAccountSvc(ctx context.Context, accountID, reason
 		"prior_halt_source": priorHaltSource,
 	})
 
-	// (h) INFO alert — auditable notification of the resume.
 	_, err = s.notify.EmitAlert(ctx, &notifyv1.EmitAlertRequest{
 		Severity:      notifyv1.AlertSeverity_ALERT_SEVERITY_INFO,
 		Category:      "account",
@@ -2932,7 +2795,6 @@ func (s *TradingService) ResumeAccountSvc(ctx context.Context, accountID, reason
 		slog.Warn("resume account: emit alert failed", "account_id", accountID, "error", err)
 	}
 
-	// (i) Re-fetch the now-cleared record and return.
 	refreshed, err := s.accountRepo.GetBrokerAccount(ctx, accountID)
 	if err != nil {
 		return nil, grpcstatus.Errorf(codes.Internal, "re-fetch account after resume: %v", err)
@@ -2973,19 +2835,9 @@ func (s *TradingService) instantiateBrokerLocked(rec *repository.BrokerAccountRe
 	}
 }
 
-// checkPortfolioRisk makes a non-blocking GetPortfolio call to validate position
-// concentration limits before placing an order. Warnings are logged but never
-// block order placement — portfolio unavailability must not halt trading.
-// checkPortfolioRisk is non-blocking (warn-only) — it logs when an order's notional exceeds
-// trading.risk.max_position_pct but never rejects. Unlike ComputePositionSize (feature 023,
-// fail-closed by design.md's explicit choice), this pre-existing check stays fail-open:
-// "portfolio unavailability must not halt trading" on this single-instance, no-HA topology.
-// equity/equityErr are now passed in (feature 023) rather than fetched here, so this and
-// ComputePositionSize share one ListPortfolios call per PlaceOrder — fixing the pre-existing
-// two-equity-sources bug (fails.md 2026-07-01 C-10(b)): this used to call GetPortfolio
-// (position-value-summed, $0 for a flat funded account) while ComputePositionSize's sibling
-// call uses ListPortfolios (the real account equity), so a flat account's order could silently
-// bypass this check.
+// checkPortfolioRisk warns (never rejects) when an order's notional exceeds
+// trading.risk.max_position_pct — fail-open: portfolio unavailability must not halt trading.
+// equity/equityErr are passed in so this and ComputePositionSize share one ListPortfolios call.
 func (s *TradingService) checkPortfolioRisk(ctx context.Context, req *tradingv1.PlaceOrderRequest, mode commonv1.TradingMode, equity float64, equityErr error) {
 	callerID := middleware.FromContext(ctx).UserID
 	if callerID == "" {
@@ -3021,10 +2873,8 @@ func (s *TradingService) checkPortfolioRisk(ctx context.Context, req *tradingv1.
 	}
 }
 
-// resolveAccountEquity fetches the given account's real equity via ListPortfolios (not
-// GetPortfolio — see checkPortfolioRisk's comment above for why). Shared by
-// checkPortfolioRisk and ComputePositionSize so both risk checks agree on one number per
-// PlaceOrder call.
+// resolveAccountEquity fetches the account's real equity via ListPortfolios (not GetPortfolio),
+// shared by checkPortfolioRisk and ComputePositionSize so both agree on one number per PlaceOrder.
 func (s *TradingService) resolveAccountEquity(ctx context.Context, accountID string) (float64, error) {
 	eqCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
@@ -3039,10 +2889,8 @@ func (s *TradingService) resolveAccountEquity(ctx context.Context, accountID str
 	return resp.Portfolios[0].Equity, nil
 }
 
-// wilderATR computes Wilder's true-range Average True Range over the given period from a
-// chronologically-ascending (oldest-first) slice of bars. Requires len(bars) >= period+1 (the
-// first true range needs a previous close, so period bars of TR need period+1 bars of price
-// data).
+// wilderATR computes Wilder's ATR over the given period from oldest-first bars.
+// Requires len(bars) >= period+1 (the first true range needs a previous close).
 func wilderATR(bars []*marketdatav1.Bar, period int) (float64, error) {
 	if len(bars) < period+1 {
 		return 0, fmt.Errorf("wilderATR: need at least %d bars, got %d", period+1, len(bars))
@@ -3074,16 +2922,12 @@ func wilderATR(bars []*marketdatav1.Bar, period int) (float64, error) {
 	return atr, nil
 }
 
-// ComputePositionSize computes an auto-sized order's quantity, dollar risk, and informational
-// stop price (feature 023) from account equity, ATR(14)-derived stop distance, signal
-// confidence, and a portfolio concentration cap. Fail-closed by design (unlike
-// checkPortfolioRisk above): any error or insufficient-data condition returns a non-nil error
-// and no quantity — this is the enforcing counterpart to that warn-only check.
+// ComputePositionSize computes an auto-sized order's quantity, dollar risk, and informational stop
+// price from equity, an ATR(14) stop distance, confidence, and a concentration cap. Fail-closed:
+// any error or insufficient-data condition returns a non-nil error and no quantity.
 func (s *TradingService) ComputePositionSize(ctx context.Context, req *tradingv1.PlaceOrderRequest, equity, confidence float64) (qty float64, dollarRisk float64, stopPrice float64, currentPrice float64, err error) {
-	// Belt-and-suspenders: PlaceOrder already fail-closes on equity<=0 before calling this
-	// (its equityErr/equity<=0 check ahead of ComputePositionSize), but ComputePositionSize
-	// is a public method other callers could invoke directly — it must not silently size to
-	// a zero-quantity result for a non-positive equity input.
+	// A public method other callers can invoke directly, so it must fail-close on non-positive
+	// equity here too rather than silently sizing to zero quantity.
 	if equity <= 0 {
 		return 0, 0, 0, 0, grpcstatus.Errorf(codes.FailedPrecondition, "cannot size position: equity must be positive, got %v", equity)
 	}
@@ -3165,9 +3009,8 @@ func (s *TradingService) ComputePositionSize(ctx context.Context, req *tradingv1
 
 // ── Bracket state machine (feature 030) ─────────────────────────────────────────
 
-// bracketStatus values match trading.order_brackets' status SMALLINT encoding
-// (migration 005) and design.md's state diagram: NONE→SUBMITTING→PENDING_VERIFY→
-// ACTIVE→CANCELING→CANCELED, with a FAILED terminal on any submission error.
+// bracketStatus values match trading.order_brackets' status SMALLINT encoding:
+// NONE→SUBMITTING→PENDING_VERIFY→ACTIVE→CANCELING→CANCELED, plus a FAILED terminal.
 const (
 	bracketStatusNone int32 = iota
 	bracketStatusSubmitting
@@ -3187,12 +3030,8 @@ func oppositeSide(s tradingv1.OrderSide) string {
 	return "sell"
 }
 
-// computeTakeProfitPriceFromRR is the pure core of FR-2's take-profit formula
-// (extracted, like feature 101's computeStaleThreshold, so it's directly
-// unit-testable across every rr value — config.Watcher has no exported snapshot
-// setter, so a live s.cfgW read can only ever be tested against its code default).
-// Direction-aware off side: BUY (long) profits above entry, SELL (short) profits
-// below. rr<=0 disables the leg (returns 0).
+// computeTakeProfitPriceFromRR is the pure take-profit formula. Direction-aware: BUY (long)
+// profits above entry, SELL (short) below. rr<=0 disables the leg (returns 0).
 func computeTakeProfitPriceFromRR(side tradingv1.OrderSide, stopPrice, entryPriceProxy, rr float64) float64 {
 	if rr <= 0 {
 		return 0
@@ -3203,19 +3042,15 @@ func computeTakeProfitPriceFromRR(side tradingv1.OrderSide, stopPrice, entryPric
 	return entryPriceProxy + (entryPriceProxy-stopPrice)*rr
 }
 
-// computeTakeProfitPrice reads the live trading.risk.take_profit_rr_multiple config
-// key and delegates to computeTakeProfitPriceFromRR. Shared by the entry-submission
-// call site (Alpaca's atomic attach needs it before the fill is even known) and
-// maybeSubmitBracket (recomputes the same deterministic value from the same
-// inputs — pure given a fixed rr, safe to call twice).
+// computeTakeProfitPrice reads live trading.risk.take_profit_rr_multiple and delegates to
+// computeTakeProfitPriceFromRR. Deterministic given fixed inputs, so it is safe to call twice.
 func (s *TradingService) computeTakeProfitPrice(side tradingv1.OrderSide, stopPrice, entryPriceProxy float64) float64 {
 	rr := s.cfgW.GetFloat("trading.risk.take_profit_rr_multiple", 2.0)
 	return computeTakeProfitPriceFromRR(side, stopPrice, entryPriceProxy, rr)
 }
 
-// bracketUpdatedPayload builds the order.bracket_updated ledger event payload (Step 9
-// Instruction 6). An empty stopLegID/takeProfitLegID means "cleared" — portfolio's
-// consumer (Step 20) treats an empty string as null-out, not "leave unchanged".
+// bracketUpdatedPayload builds the order.bracket_updated ledger payload. An empty
+// stopLegID/takeProfitLegID means "cleared" — portfolio's consumer null-outs, not "leave unchanged".
 func bracketUpdatedPayload(order *tradingv1.Order, stopLegID, takeProfitLegID string) map[string]interface{} {
 	return map[string]interface{}{
 		"user_id": order.UserId, "account_id": order.AccountId, "symbol": order.Symbol,
@@ -3224,9 +3059,8 @@ func bracketUpdatedPayload(order *tradingv1.Order, stopLegID, takeProfitLegID st
 	}
 }
 
-// emitBracketFailureAlert pages the operator immediately on any bracket-submission
-// failure (FR-6) — the position filled but is not protected. Body always includes the
-// order ID (never empty, per notify's non-empty-body validation).
+// emitBracketFailureAlert pages the operator on any bracket-submission failure — the position
+// filled but is unprotected. Body always includes the order ID (notify rejects an empty body).
 func (s *TradingService) emitBracketFailureAlert(ctx context.Context, order *tradingv1.Order, reason string) {
 	_, err := s.notify.EmitAlert(ctx, &notifyv1.EmitAlertRequest{
 		Severity: notifyv1.AlertSeverity_ALERT_SEVERITY_CRITICAL,
@@ -3242,19 +3076,10 @@ func (s *TradingService) emitBracketFailureAlert(ctx context.Context, order *tra
 	}
 }
 
-// maybeSubmitBracket creates (or, for an IBKR position that fills incrementally,
-// resizes) a stop-loss/take-profit bracket for an auto-sized MARKET/LIMIT entry order
-// once a fill is confirmed (feature 030). No-op when stopPrice<=0 — order.StopPrice
-// is only ever nonzero here for an auto-sized MARKET/LIMIT entry (023's order
-// construction); a real STOP/STOP_LIMIT broker-trigger price is never mistaken for
-// this, since those order types never reach this call site (see the two call sites'
-// own order-type guard) — or when bracket orders are disabled.
-//
-// bracketOrdersEnabled is resolved by the caller (trading.risk.bracket_orders_enabled)
-// rather than read internally — a deliberate deviation, mirroring 023's needSizing/
-// sizingEnabled hoisting and 101's computeStaleThreshold extraction: config.Watcher
-// has no exported snapshot setter, so hoisting the read is what makes the disabled
-// branch (TestMaybeSubmitBracket_BracketOrdersDisabled) actually testable.
+// maybeSubmitBracket creates (or, for an incrementally-filling IBKR position, resizes) a
+// stop-loss/take-profit bracket for an auto-sized MARKET/LIMIT entry once a fill is confirmed.
+// No-op when stopPrice<=0 or bracket orders are disabled. bracketOrdersEnabled is caller-resolved
+// (trading.risk.bracket_orders_enabled) so the disabled branch stays testable.
 func (s *TradingService) maybeSubmitBracket(ctx context.Context, order *tradingv1.Order, accountEntry brokerPoolEntry, brokerOrder *broker.BrokerOrder, stopPrice, entryPriceProxy float64, bracketOrdersEnabled bool) {
 	if stopPrice <= 0 || !bracketOrdersEnabled {
 		return
@@ -3274,9 +3099,8 @@ func (s *TradingService) maybeSubmitBracket(ctx context.Context, order *tradingv
 		s.createBracket(ctx, order, accountEntry, brokerOrder, stopPrice, takeProfitPrice, deadline)
 	case existing.Status == bracketStatusActive &&
 		commonv1.BrokerType(accountEntry.brokerType) == commonv1.BrokerType_BROKER_TYPE_IBKR:
-		// Partial-fill resize (design.md's "explicitly resized on each subsequent
-		// partial-fill delta") — IBKR only; Alpaca's native bracket resizes itself and
-		// is only ever read back via GetOrder, never re-submitted.
+		// Partial-fill resize — IBKR only; Alpaca's native bracket resizes itself and is
+		// only read back via GetOrder, never re-submitted.
 		s.resizeBracket(ctx, order, accountEntry, existing, stopPrice, takeProfitPrice, deadline)
 	default:
 		// Already SUBMITTING/PENDING_VERIFY/CANCELING/FAILED/CANCELED, or an Alpaca
@@ -3284,9 +3108,8 @@ func (s *TradingService) maybeSubmitBracket(ctx context.Context, order *tradingv
 	}
 }
 
-// createBracket is maybeSubmitBracket's fresh-bracket path: persist the row first
-// (SUBMITTING), then dispatch by broker. A row-creation failure is itself a
-// bracket-submission failure per FR-6's literal wording and must page the operator.
+// createBracket persists the row (SUBMITTING) first, then dispatches by broker. A row-creation
+// failure is itself a bracket-submission failure and must page the operator.
 func (s *TradingService) createBracket(ctx context.Context, order *tradingv1.Order, accountEntry brokerPoolEntry, brokerOrder *broker.BrokerOrder, stopPrice, takeProfitPrice float64, deadline time.Time) {
 	rec := &repository.OrderBracketRecord{
 		OrderID: order.OrderId, AccountID: order.AccountId, BrokerType: int32(order.BrokerType),
@@ -3328,10 +3151,8 @@ func (s *TradingService) createBracket(ctx context.Context, order *tradingv1.Ord
 	}
 }
 
-// resizeBracket is maybeSubmitBracket's IBKR partial-fill-resize path (design.md:
-// "re-armed... at every transition that leaves ACTIVE, not just the initial one"):
-// cancel both existing legs (best-effort), resubmit with the new cumulative filled
-// quantity, and re-arm protection_deadline at this transition too.
+// resizeBracket is maybeSubmitBracket's IBKR partial-fill-resize path: cancel both legs
+// (best-effort), resubmit at the new cumulative filled qty, and re-arm protection_deadline.
 func (s *TradingService) resizeBracket(ctx context.Context, order *tradingv1.Order, accountEntry brokerPoolEntry, existing *repository.OrderBracketRecord, stopPrice, takeProfitPrice float64, deadline time.Time) {
 	if err := s.bracketRepo.UpdateBracketStatus(ctx, existing.ID, bracketStatusCanceling, existing.StopLegOrderID, existing.TakeProfitLegOrderID, ""); err != nil {
 		slog.Warn("update bracket status (canceling) failed", "order_id", order.OrderId, "error", err)
@@ -3371,8 +3192,8 @@ func (s *TradingService) resizeBracket(ctx context.Context, order *tradingv1.Ord
 		bracketUpdatedPayload(order, resp.StopLegOrderID, resp.TakeProfitLegOrderID))
 }
 
-// tradingState is the richer platform.trading_state enum (feature 100), independent of
-// and parallel to platform.maintenance_mode.
+// tradingState is the richer platform.trading_state enum, independent of and parallel to
+// platform.maintenance_mode.
 type tradingState int
 
 const (
@@ -3382,7 +3203,7 @@ const (
 )
 
 // parseTradingState maps the raw config string to a tradingState. Unrecognized or empty
-// values fail to HALTED — the maximally conservative state — per design.md § Chosen Approach.
+// values fail closed to HALTED (the maximally conservative state).
 func parseTradingState(raw string) tradingState {
 	switch raw {
 	case "ACTIVE":
@@ -3394,17 +3215,14 @@ func parseTradingState(raw string) tradingState {
 	}
 }
 
-// currentTradingState reads platform.trading_state live. The GetString default of "HALTED"
-// (not "ACTIVE") means an unseeded/unreachable key fails closed, matching parseTradingState's
-// own fail-closed default for an unrecognized value.
+// currentTradingState reads platform.trading_state live, defaulting to "HALTED" so an
+// unseeded/unreachable key fails closed.
 func (s *TradingService) currentTradingState() tradingState {
 	return parseTradingState(s.cfgW.GetString("platform.trading_state", "HALTED"))
 }
 
-// isExposureIncreasing reports whether an order on the given side increases net exposure
-// given the account's existing position qty in that symbol (0 = flat). A flat account
-// increasing in either direction; a long position increases only on BUY; a short position
-// increases only on SELL.
+// isExposureIncreasing reports whether an order side increases net exposure given the existing
+// position qty (0 = flat): flat increases either way, long only on BUY, short only on SELL.
 func isExposureIncreasing(side tradingv1.OrderSide, existingQty float64) bool {
 	switch {
 	case existingQty == 0:
@@ -3416,9 +3234,8 @@ func isExposureIncreasing(side tradingv1.OrderSide, existingQty float64) bool {
 	}
 }
 
-// isReplaceRiskReducing reports whether a ReplaceOrder request is safe under REDUCE_ONLY:
-// requestedQty == 0 means "leave qty unchanged" (trading.go:482's existing convention) —
-// never exposure-increasing. Otherwise safe only when the new qty is <= the current qty.
+// isReplaceRiskReducing reports whether a ReplaceOrder is safe under REDUCE_ONLY: requestedQty == 0
+// means "leave qty unchanged" (never increasing); otherwise safe only when new qty <= current qty.
 func isReplaceRiskReducing(currentQty, requestedQty float64) bool {
 	if requestedQty == 0 {
 		return true
@@ -3426,11 +3243,9 @@ func isReplaceRiskReducing(currentQty, requestedQty float64) bool {
 	return requestedQty <= currentQty
 }
 
-// checkTradingStateForPlaceOrder blocks PlaceOrder when platform.trading_state is HALTED,
-// or when it is REDUCE_ONLY and the order would increase exposure. REDUCE_ONLY fails
-// closed on any GetPosition error (not just NotFound) — this gate is the enforcement
-// point, not an advisory warning (design.md § Chosen Approach, a deliberate divergence
-// from checkPortfolioRisk's fail-open philosophy).
+// checkTradingStateForPlaceOrder blocks PlaceOrder when trading_state is HALTED, or REDUCE_ONLY
+// and the order increases exposure. REDUCE_ONLY fails closed on any GetPosition error — this is
+// the enforcement point, not a warning.
 func (s *TradingService) checkTradingStateForPlaceOrder(ctx context.Context, userID, symbol string, mode commonv1.TradingMode, side tradingv1.OrderSide) error {
 	switch s.currentTradingState() {
 	case tradingStateActive:
@@ -3460,9 +3275,8 @@ func (s *TradingService) checkTradingStateForPlaceOrder(ctx context.Context, use
 	}
 }
 
-// checkTradingStateForReplace mirrors checkTradingStateForPlaceOrder for ReplaceOrder,
-// using a pure local qty comparison instead of a GetPosition call (the order's own current
-// qty is already loaded — no cross-service call needed).
+// checkTradingStateForReplace mirrors checkTradingStateForPlaceOrder for ReplaceOrder, using a
+// local qty comparison instead of a GetPosition call (the order's current qty is already loaded).
 func (s *TradingService) checkTradingStateForReplace(order *tradingv1.Order, req *tradingv1.ReplaceOrderRequest) error {
 	switch s.currentTradingState() {
 	case tradingStateActive:
@@ -3523,13 +3337,8 @@ func (s *TradingService) buildBrokerRequest(req *tradingv1.PlaceOrderRequest) br
 	}
 }
 
-// normalizeFilledQty enforces the orders-table invariant that a fully-filled order reports
-// its full quantity. A FILLED order (Alpaca/IBKR) executed in full, so filled_qty must equal
-// qty. Historical rows persisted before the fill-qty write guards existed — and any fill the
-// poller missed across a restart (it skips terminal orders and never reloads them into memory)
-// — can leave filled_qty at 0, which renders as "Filled 0" in the orders table. Coercing on
-// read keeps the figure correct for every consumer without a data migration. Partial/canceled/
-// expired states are left untouched: a sub-qty filled amount is legitimate there.
+// normalizeFilledQty coerces a FILLED order's filled_qty to qty on read (a full fill must report
+// its full quantity; some historical/poller-missed rows persisted 0). Other states are untouched.
 func normalizeFilledQty(o *tradingv1.Order) {
 	if o == nil {
 		return
@@ -3539,10 +3348,8 @@ func normalizeFilledQty(o *tradingv1.Order) {
 	}
 }
 
-// alpacaStatusToProto maps broker order status strings to proto OrderStatus values.
-// A broker status we recognize as transient/non-terminal — or one we don't recognize
-// at all — maps to ORDER_STATUS_UNSPECIFIED, which callers must treat as "no actionable
-// status change, keep reconciling" rather than overwriting the order's current status.
+// alpacaStatusToProto maps broker status strings to proto OrderStatus. A transient or unrecognized
+// status maps to UNSPECIFIED, which callers must treat as "keep reconciling", never an overwrite.
 func alpacaStatusToProto(s string) tradingv1.OrderStatus {
 	switch s {
 	case "new", "accepted", "pending_new":
@@ -3557,11 +3364,8 @@ func alpacaStatusToProto(s string) tradingv1.OrderStatus {
 		return tradingv1.OrderStatus_ORDER_STATUS_EXPIRED
 	case "rejected", "stopped", "suspended", "calculated":
 		return tradingv1.OrderStatus_ORDER_STATUS_REJECTED
-	// "done_for_day" is NOT terminal and NOT a cancellation — Alpaca reports it for a
-	// `day` order at market close, then settles the order to its real terminal state
-	// ("expired" or "filled") later. Mapping it to CANCELED used to freeze the order in
-	// a wrong terminal status, after which the fill poller stopped reconciling and never
-	// captured the eventual "expired". Treat it as UNSPECIFIED so reconciliation continues.
+	// "done_for_day" is NOT terminal and NOT a cancellation — Alpaca reports it at market close
+	// before a `day` order settles to "expired"/"filled". Map to UNSPECIFIED so reconciliation continues.
 	case "done_for_day":
 		return tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED
 	default:
@@ -3569,17 +3373,12 @@ func alpacaStatusToProto(s string) tradingv1.OrderStatus {
 	}
 }
 
-// ledgerEmitTimeout bounds a single AppendEvent. gRPC keepalive already detects a
-// dead transport, but a half-open connection or a server stalled mid-RPC can leave
-// an unary call blocked; an explicit deadline guarantees the append surfaces as a
-// logged error within the window instead of silently wedging the calling goroutine
-// (which previously froze the position-sync poller with zero log output).
+// ledgerEmitTimeout bounds a single AppendEvent so a half-open connection or a server stalled
+// mid-RPC surfaces as a logged error instead of silently wedging the calling goroutine.
 const ledgerEmitTimeout = 10 * time.Second
 
-// emitLedgerEvent appends an event to the ledger. userID is the owning user (feature 021):
-// pass the order/account owner for user-owned events so the ledger stamps AppendEventRequest.UserId
-// (fills are emitted from background pollers with no inbound x-user-id, so the owner must be threaded
-// explicitly or every fill would persist NULL); pass "" for genuinely platform-scoped events.
+// emitLedgerEvent appends an event to the ledger. Pass the order/account owner as userID for
+// user-owned events (background pollers have no inbound x-user-id); pass "" for platform-scoped events.
 func (s *TradingService) emitLedgerEvent(ctx context.Context, eventType, streamKey, userID string, payload map[string]interface{}) {
 	p, _ := structpb.NewStruct(payload)
 	emitCtx, cancel := context.WithTimeout(ctx, ledgerEmitTimeout)
