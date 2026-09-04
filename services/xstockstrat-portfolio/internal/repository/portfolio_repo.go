@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -15,9 +16,12 @@ import (
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
 )
 
-// queryRower is the subset of *pgxpool.Pool GetPosition needs, so it can be exercised with pgxmock.
+// queryRower is the subset of *pgxpool.Pool the mockable reads/writes need, so they can be
+// exercised with pgxmock. Both *pgxpool.Pool and pgxmock/v4 satisfy all three methods.
 type queryRower interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
 // PortfolioRepo handles reads and writes for positions and snapshots.
@@ -379,12 +383,49 @@ type AccountBalance struct {
 // UpsertAccountBalance inserts or updates the latest balance snapshot for an account.
 func (r *PortfolioRepo) UpsertAccountBalance(ctx context.Context, accountID, userID, tradingMode string, cash, buyingPower, equity, lastEquity float64) error {
 	const q = `
-		INSERT INTO portfolio.account_balances (account_id, user_id, trading_mode, cash, buying_power, equity, last_equity, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+		INSERT INTO portfolio.account_balances (account_id, user_id, trading_mode, cash, buying_power, equity, last_equity, peak_equity, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $6, NOW())
 		ON CONFLICT (account_id) DO UPDATE
-		SET user_id=$2, trading_mode=$3, cash=$4, buying_power=$5, equity=$6, last_equity=$7, updated_at=NOW()`
-	_, err := r.pool.Exec(ctx, q, accountID, userID, tradingMode, cash, buyingPower, equity, lastEquity)
+		SET user_id=$2, trading_mode=$3, cash=$4, buying_power=$5, equity=$6, last_equity=$7,
+			peak_equity = GREATEST(portfolio.account_balances.peak_equity, EXCLUDED.equity),
+			updated_at=NOW()`
+	_, err := r.db.Exec(ctx, q, accountID, userID, tradingMode, cash, buyingPower, equity, lastEquity)
 	return err
+}
+
+// AccountDrawdown is one account's current equity against its persisted high-water-mark, used by
+// the per-account drawdown risk check (feature 172).
+type AccountDrawdown struct {
+	AccountID  string
+	Equity     float64
+	PeakEquity float64
+}
+
+// GetAccountDrawdowns returns current-vs-peak equity for every account a user holds in the given
+// trading mode, so the risk path can flag per-account drawdown breaches.
+func (r *PortfolioRepo) GetAccountDrawdowns(ctx context.Context, userID, tradingMode string) ([]AccountDrawdown, error) {
+	const q = `
+		SELECT account_id, equity, peak_equity
+		FROM portfolio.account_balances
+		WHERE user_id=$1 AND trading_mode=$2`
+	rows, err := r.db.Query(ctx, q, userID, tradingMode)
+	if err != nil {
+		return nil, fmt.Errorf("get account drawdowns: %w", err)
+	}
+	defer rows.Close()
+
+	var result []AccountDrawdown
+	for rows.Next() {
+		var d AccountDrawdown
+		if err := rows.Scan(&d.AccountID, &d.Equity, &d.PeakEquity); err != nil {
+			return nil, fmt.Errorf("scan account drawdown: %w", err)
+		}
+		result = append(result, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("account drawdown rows: %w", err)
+	}
+	return result, nil
 }
 
 // GetAccountBalance returns the latest balance snapshot for an account, or
