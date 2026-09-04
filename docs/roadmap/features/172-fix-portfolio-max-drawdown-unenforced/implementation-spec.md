@@ -225,7 +225,7 @@ test-pairing is satisfied by this step for Step 2.
 
 ### Step 4 — service: `evaluateDrawdowns` seam + wire into `checkRiskLimits`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -298,7 +298,7 @@ exercised with the paired Step 5 test.)
 
 ### Step 5 — test: `evaluateDrawdowns` decision-logic unit test
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_risk_test.go` — modify

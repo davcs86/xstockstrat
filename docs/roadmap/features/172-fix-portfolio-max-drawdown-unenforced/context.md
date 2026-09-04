@@ -138,3 +138,12 @@ Path A per-account drawdown enforcement. Go 1.27; golangci-lint v2.13.1 rebuilt 
 - `TestGetAccountDrawdowns_ScopesToUserAndMode` (SELECT projection + user_id/trading_mode filter, 2 rows) and `TestUpsertAccountBalance_RaisesPeakEquityWithGreatest` (ExpectExec regex requires peak_equity + GREATEST clause). C-13: inline row literals, single consumer.
 - Red→green: compile-RED (`GetAccountDrawdowns undefined`) on pre-Step-2 tree → both pass after Step 2 (`-race`). golangci-lint 0 issues.
 - Files: `internal/repository/portfolio_repo_test.go`. Deviations: none.
+
+### Step 4 — service: evaluateDrawdowns seam + wire into checkRiskLimits [done]
+- Added pure package-level `evaluateDrawdowns([]repository.AccountDrawdown, limit) []string` (skips peak<=0, guards divide-by-zero). Replaced the `_ = maxDrawdownPct` discard with a thin fetch (`GetAccountDrawdowns(userID, mode.String())`) → per-breach `emitRiskAlert` (reused verbatim: WARNING/"risk" + ledger `portfolio.risk.drawdown_breach`, honors notify gates). No new outbound gRPC (DB read + already-wired clients).
+- Files: `internal/service/portfolio_service.go`. Build clean.
+
+### Step 5 — service: evaluateDrawdowns unit test (AC-1) [done]
+- Table-driven `TestEvaluateDrawdowns`: breach (3%>2%, names acc-1), sub-limit (1%<=2%, silent), no-history (peak 0, skipped, no panic), mixed slice (per-account grain — only breaching named). C-13: inline literals, single consumer.
+- Red→green: compile-RED (`undefined: evaluateDrawdowns`) on pre-Step-4 tree → passed after Step 4 (`-race`). gofmt-fixed my own comment alignment. golangci-lint 0 issues (whole module); full portfolio suite green (no regression from the interface widening / upsert change).
+- Files: `internal/service/portfolio_risk_test.go`. Deviations: none.
