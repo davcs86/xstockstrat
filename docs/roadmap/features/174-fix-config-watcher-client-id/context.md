@@ -113,3 +113,14 @@ Stacked directly on 173's branch (so the ingest watcher already carries 173's `g
 - Red→green: AttributeError (`_build_watch_request` absent) on pre-fix tree → passed after Step 1. Full suite: 655 passed, coverage 85.01% (≥40). ruff clean.
 - Files modified: `services/xstockstrat-analysis/tests/test_analysis_servicer.py`
 - Deviations: none
+
+### Step 3 — ingest watcher: extract `_build_watch_request()`, flip prefix, fix docstring [done]
+- Byte-identical to analysis except the prefix `ingest-`; docstring L2 → `xstockstrat-ingest`. Left the dead `sandbox_*` helpers and `resolve_secret` untouched (out of scope — kept as an open findings item per Step 5). The ingest watcher already carried 173's `get_int_present` (stacked); no conflict — the client_id sits in `_watch` above 173's edits.
+- Files modified: `services/xstockstrat-ingest/app/config/watcher.py`
+- Deviations: none
+
+### Step 4 — ingest wire-object test (AC-2) [done]
+- Reused the existing non-dialing `_StubWatcher`; asserts `client_id` starts `ingest-` (not `indicators-`), preserves environment/trading_mode/namespace.
+- Red→green: AttributeError on pre-fix tree → passed after Step 3. Full suite: 213 passed, coverage 78.19% (≥40). ruff clean.
+- Files modified: `services/xstockstrat-ingest/tests/test_ingest_servicer.py`
+- Deviations: none

@@ -165,7 +165,7 @@ in `product-spec.md § Consumer Surface(s)`, not an omission.
 
 ### Step 3 — service: ingest — extract `_build_watch_request()` and correct the `indicators-` identity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/config/watcher.py` — modify
@@ -225,7 +225,7 @@ in `product-spec.md § Consumer Surface(s)`, not an omission.
 
 ### Step 4 — test: ingest — wire-object assertion on the built `WatchConfigRequest`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_ingest_servicer.py` — modify
