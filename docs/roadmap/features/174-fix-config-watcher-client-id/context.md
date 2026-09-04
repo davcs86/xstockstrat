@@ -124,3 +124,16 @@ Stacked directly on 173's branch (so the ingest watcher already carries 173's `g
 - Red→green: AttributeError on pre-fix tree → passed after Step 3. Full suite: 213 passed, coverage 78.19% (≥40). ruff clean.
 - Files modified: `services/xstockstrat-ingest/tests/test_ingest_servicer.py`
 - Deviations: none
+
+### Step 5 — docs teardown: narrow findings, reconcile CLAUDE.md defect refs [done]
+- 5 files: analysis findings row RESOLVED; ingest findings row NARROWED (identity struck, dead `sandbox_*` helpers KEPT open at actual `:164-176`); analysis+ingest `CLAUDE.md:4` dropped the fixed `client_id` copy-paste item; root findings `:39` significance question resolved as cosmetic (recon rationale). Verified: no live unfixed identity claim; dead-helper clause retained; no `indicators-` client_id/docstring in either watcher source.
+- Teardown: context-forge refresh not invocable; manual reconciliation performed (see Deviation Log + PR body).
+- Files modified: analysis+ingest `docs/context-constitution-findings.md`, analysis+ingest `CLAUDE.md`, root `docs/context-constitution-findings.md`
+- Deviations: teardown-manual (Deviation Log)
+
+## Session 2026-09-04 — sdd-execute summary (feature 174)
+**Steps this session**: 1–5 (all)
+**Progress**: 5 done / 5 total
+**Stopped at**: all complete → code-completed
+**Accountability**: out-of-scope changes: none (dead ingest `sandbox_*` helpers deliberately left open — a separate change class). Open questions: none. Unaddressed review warnings: none.
+**Next**: stacked integration PR #2 (base `feature/fix-python-config-zero-trap`); then feature 172.

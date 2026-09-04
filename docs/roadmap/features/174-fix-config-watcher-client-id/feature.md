@@ -18,6 +18,7 @@
 | 2026-09-04 | `spec-ready` → `design-approved` | /sdd-design | 2 rounds (quick); cosmetic client_id relabel via _build_watch_request() seam approved; recon.md + design.md written; no Floor breach |
 | 2026-09-04 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
 | 2026-09-04 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run (stacked PR #2 on 173); Steps 1-2 (analysis `_build_watch_request`) done |
+| 2026-09-04 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done (analysis + ingest client_id identity fix, wire-object tests, findings teardown) |
 
 ---
 

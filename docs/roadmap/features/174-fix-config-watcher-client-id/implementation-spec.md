@@ -1,6 +1,6 @@
 # Implementation Spec: fix-config-watcher-client-id
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-09-04
 **Feature**: `docs/roadmap/features/174-fix-config-watcher-client-id/feature.md`
 **Total Steps**: 5
@@ -277,7 +277,7 @@ in `product-spec.md § Consumer Surface(s)`, not an omission.
 
 ### Step 5 — docs: teardown — narrow the findings entries and reconcile the CLAUDE.md defect references
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (per-service context files)
 **Files**:
 - `services/xstockstrat-analysis/docs/context-constitution-findings.md` — modify
@@ -348,4 +348,11 @@ in `product-spec.md § Consumer Surface(s)`, not an omission.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **Step 5 teardown — context-forge plugin unavailable.** `/context-forge:context-constitution refresh`
+  is not an invocable skill this session. **Manual reconciliation performed** across the 5 touched
+  context files: analysis findings row marked RESOLVED (matches `analysis-` prefix via
+  `_build_watch_request`); ingest findings row NARROWED (identity struck, dead `sandbox_*` helper clause
+  retained at the actual `:164-176`); both service `CLAUDE.md:4` blockquotes dropped the fixed
+  `client_id` copy-paste item; root findings `:39` significance question resolved as cosmetic with the
+  recon rationale. No drift; the dead-helper defect deliberately kept open (out of scope).
+  **Disposition**: manual teardown equivalent (plugin unavailable).
