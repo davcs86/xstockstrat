@@ -481,6 +481,19 @@ class _StubWatcher(ConfigWatcher):
 
 
 class TestConfigWatcherGetters:
+    def test_build_watch_request_client_id_and_scope(self):
+        # Feature 174 — the analysis watcher must identify as analysis-<id>, not the
+        # copy-pasted indicators- prefix, while keeping environment + trading_mode on the wire.
+        w = _StubWatcher()
+        w._environment = common_pb2.ENVIRONMENT_STAGING
+        w._trading_mode = common_pb2.TRADING_MODE_PAPER
+        req = w._build_watch_request()
+        assert req.client_id.startswith("analysis-")
+        assert not req.client_id.startswith("indicators-")
+        assert req.environment == common_pb2.ENVIRONMENT_STAGING
+        assert req.trading_mode == common_pb2.TRADING_MODE_PAPER
+        assert req.namespace == "analysis"
+
     def test_get_str_no_snapshot(self):
         w = _StubWatcher()
         assert w.get_str("any.key", default="x") == "x"
