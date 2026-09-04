@@ -63,8 +63,7 @@ const (
 )
 
 // classifyIntentLookup decides what to do with an existing order_intents row (reactive dedup path).
-// isStale is meaningful only for intentActionRejectPending — whether to attempt ReclaimOrphanIntent
-// before returning the rejection, not which action to return.
+// isStale is meaningful only for intentActionRejectPending (whether to attempt reclaim first).
 func classifyIntentLookup(existing *repository.OrderIntentRecord, requestHashHex string, now time.Time, staleThreshold time.Duration) (action intentAction, isStale bool) {
 	if existing.RequestHash != requestHashHex {
 		return intentActionRejectHashMismatch, false
@@ -80,8 +79,7 @@ func classifyIntentLookup(existing *repository.OrderIntentRecord, requestHashHex
 	}
 }
 
-// computeStaleThreshold applies the floor-clamped multiplier formula — a pure function so the
-// clamp is unit-testable (config.Watcher has no exported snapshot setter to inject through).
+// computeStaleThreshold applies the floor-clamped multiplier formula (pure, unit-testable).
 func computeStaleThreshold(floorMs int64, multiplier float64) time.Duration {
 	if multiplier < 1.5 {
 		multiplier = 1.5

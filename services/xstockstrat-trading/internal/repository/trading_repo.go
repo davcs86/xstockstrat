@@ -115,8 +115,7 @@ func (r *TradingRepo) GetOrder(ctx context.Context, orderID string) (*tradingv1.
 }
 
 // KnownBrokerOrderIDs returns the subset of brokerOrderIDs this account has a persisted record of
-// in trading.orders — the reconciliation poller's DB-grounding check so a platform-placed order now
-// terminal (evicted from memory) is not misclassified as foreign. Empty input returns empty, no query.
+// in trading.orders. Empty input returns empty, no query.
 func (r *TradingRepo) KnownBrokerOrderIDs(ctx context.Context, accountID string, brokerOrderIDs []string) (map[string]bool, error) {
 	known := make(map[string]bool, len(brokerOrderIDs))
 	if len(brokerOrderIDs) == 0 {
@@ -240,7 +239,6 @@ func (r *TradingRepo) ListOrders(
 
 // ListSubmittedOrders returns orders that are in-flight at the broker
 // (status NEW or PARTIALLY_FILLED with a broker_order_id set).
-// Used by the fill poller to detect fills.
 func (r *TradingRepo) ListSubmittedOrders(ctx context.Context) ([]*tradingv1.Order, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT order_id, client_order_id, broker_order_id, symbol, side, order_type,
@@ -271,8 +269,7 @@ func (r *TradingRepo) ListSubmittedOrders(ctx context.Context) ([]*tradingv1.Ord
 }
 
 // ListConfirmedOfflineOrdersByAccount returns an offline account's confirmed orders (PARTIALLY_FILLED
-// or FILLED, filled_qty > 0), ordered by fill time — the set ConfirmOrder folds into net positions
-// (idempotent: re-editing one fill yields the same fold).
+// or FILLED, filled_qty > 0), ordered by fill time — the set ConfirmOrder folds into net positions.
 func (r *TradingRepo) ListConfirmedOfflineOrdersByAccount(ctx context.Context, accountID string) ([]*tradingv1.Order, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT order_id, client_order_id, broker_order_id, symbol, side, order_type,

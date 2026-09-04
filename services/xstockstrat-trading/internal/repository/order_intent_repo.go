@@ -101,8 +101,7 @@ func (r *pgOrderIntentRepo) GetIntentByID(ctx context.Context, intentID string) 
 	return &out, nil
 }
 
-// reclaimOrphanIntentSQL is the single CAS shared by the reactive path and the sweeper —
-// one statement for both call sites, deliberately, to avoid two divergent implementations.
+// reclaimOrphanIntentSQL is the single CAS shared by the reactive path and the sweeper.
 const reclaimOrphanIntentSQL = `
 UPDATE trading.order_intents
 SET state = $1, updated_at = now()

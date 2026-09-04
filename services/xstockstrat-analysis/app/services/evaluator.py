@@ -102,7 +102,6 @@ class StrategyEvaluator:
     - Accepts StrategyDefinition proto message, a list of OHLCV bar dicts, and an
       active signals_map (dict[source, list[signal]]) matching the RunBacktest convention.
     - Returns per-bar BarDecision list; no look-ahead (bar i only uses data from bars 0..i).
-    - feature 048 calls evaluate() directly with no signature changes.
     """
 
     def __init__(self, indicators_stub, propagation_meta=()):

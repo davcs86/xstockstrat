@@ -16,20 +16,18 @@ type BrokerOrder struct {
 	FilledQty      float64 // cumulative filled quantity; zero for unfilled orders
 	FilledAvgPrice float64 // zero for unfilled orders
 	// Fees is the cumulative broker fee for the order; 0 when the broker exposes none.
-	// Both Alpaca and IBKR leave it 0 today (US equities are commission-free per-fill).
 	Fees float64
 	// StopLegOrderID / TakeProfitLegOrderID hold the broker's bracket child order IDs
 	// (Alpaca only; empty otherwise).
 	StopLegOrderID       string
 	TakeProfitLegOrderID string
 	// ClientOrderID is the broker's echo of the client-supplied order nonce.
-	// Populated for Alpaca; always empty for IBKR (never sent a customer-order tag on submission).
+	// Populated for Alpaca; always empty for IBKR.
 	ClientOrderID string
 }
 
-// BrokerPosition is a normalized position snapshot from a broker.
-// CurrentPrice/MarketValue/UnrealizedPnl/UnrealizedPnlPct are the broker's own mark-to-market
-// valuation; zero means the broker did not report that value.
+// BrokerPosition is a normalized position snapshot from a broker. A zero valuation field
+// (CurrentPrice/MarketValue/UnrealizedPnl/UnrealizedPnlPct) means the broker did not report it.
 type BrokerPosition struct {
 	Symbol           string
 	Quantity         float64
@@ -44,9 +42,8 @@ type BrokerPosition struct {
 	DayPnlPct float64
 }
 
-// BrokerBalance is a normalized account-balance snapshot from a broker.
-// LastEquity is the previous trading day's close equity; it equals Equity when the broker
-// does not report a previous close (so derived day P&L = 0).
+// BrokerBalance is a normalized account-balance snapshot from a broker. LastEquity is the
+// previous close equity; it equals Equity when the broker reports no previous close.
 type BrokerBalance struct {
 	Cash        float64
 	BuyingPower float64
@@ -90,8 +87,7 @@ type OrderRequest struct {
 	// Exactly one is non-zero for a trailing_stop order; both are zero otherwise.
 	TrailPrice   float64
 	TrailPercent float64
-	// Trail is the new trailing-stop offset on a replace (Alpaca's PATCH body uses a
-	// single `trail` value); zero means "leave unchanged".
+	// Trail is the new trailing-stop offset on a replace; zero means "leave unchanged".
 	Trail float64
 	// ClientOrderID is forwarded to the broker for idempotency so a retried
 	// submission is de-duplicated instead of placing a second order.

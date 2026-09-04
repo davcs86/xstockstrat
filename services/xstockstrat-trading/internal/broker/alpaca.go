@@ -12,7 +12,6 @@ import (
 )
 
 // ClientConfig holds Alpaca broker API credentials and routing config.
-// xstockstrat-trading is the ONLY service that imports or uses this package.
 type ClientConfig struct {
 	APIKey    string
 	APISecret string
@@ -28,7 +27,6 @@ type ClientConfig struct {
 const defaultTimeoutMs = 5000
 
 // Client submits and manages orders via Alpaca's broker REST API.
-// Paper and live modes share the same API surface; only the base URL differs.
 type Client struct {
 	cfg        ClientConfig
 	httpClient *http.Client

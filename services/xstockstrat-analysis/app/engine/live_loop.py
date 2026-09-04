@@ -45,15 +45,14 @@ log = logging.getLogger(__name__)
 _LOOKBACK_DAYS = 365  # window of bars fetched per (strategy, symbol) for warm-up + evaluation
 _DRAIN_PAGES = 50  # max pages when draining owner-scoped positions/watchlists/signals per cycle
 _DRAIN_PAGE_SIZE = 1000
-# symbols per GetFundamentalsMulti chunk (mirrors fundsignal_loop's chunk_size)
+# symbols per GetFundamentalsMulti chunk
 _FUNDAMENTALS_CHUNK = 50
 
 # Sentinel _eval_pair returns when GetBars came back empty, so _run_cycle can distinguish a
 # genuine data gap (worth a WARN) from an evaluated-but-no-decision pair.
 _EVAL_NO_BARS = "no_bars"
 
-# Bounded observability for the fair-share scheduler: how many live (strategy, symbol) pairs
-# were deferred past max_strategies_per_cycle in a cycle (no-op meter when OTel is disabled).
+# Live (strategy, symbol) pairs deferred past max_strategies_per_cycle in a cycle.
 _TRUNCATION_COUNTER = metrics.get_meter(__name__).create_counter(
     "analysis.live_loop.truncated_pairs",
     description="Live (strategy, symbol) pairs deferred past max_strategies_per_cycle in one cycle",
@@ -118,18 +117,16 @@ def _apply_transition(
     deny_entry: bool = False,
 ) -> tuple[bool, datetime | None, datetime | None, str | None]:
     """Pure edge-triggered transition step — the ONE shared core for both the live bar
-    (_eval_pair) and historical replay (_replay_state), so live/replay parity is structural
-    (feature 116 design.md § Live loop — shared transition core). Returns (new_in_position,
-    new_entry_time, new_last_exit_at, trigger_or_None). `trigger` is "entry"/"exit" only on an
-    actual transition; None on steady state OR a gated (cooldown-suppressed) transition attempt
-    — including the "known open, entry time unknown" skip (design.md round-4 correctness fix):
-    a None entry_time while in_position is treated as an active gate, never as "never entered".
+    (_eval_pair) and historical replay (_replay_state), so live/replay parity is structural.
+    Returns (new_in_position, new_entry_time, new_last_exit_at, trigger_or_None). `trigger` is
+    "entry"/"exit" only on an actual transition; None on steady state OR a gated
+    (cooldown-suppressed) attempt. A None entry_time while in_position is an active gate, never
+    "never entered".
 
-    feature 132 — ``deny_entry`` (entry-only deny): when True the entry branch is short-circuited
-    (this symbol is on the strategy's deny list) while the exit branch is byte-for-byte untouched,
-    so a held position on a denied symbol can always still be exited. Historical replay
-    (_replay_state) never passes it (default False), so a held-denied symbol reconstructs a
-    truthful entry_time on restart and its exit still fires.
+    ``deny_entry`` (entry-only deny): when True the entry branch is short-circuited while the
+    exit branch is byte-for-byte untouched, so a held position on a denied symbol can always
+    still be exited. Historical replay never passes it (default False), so a held-denied symbol
+    reconstructs a truthful entry_time on restart and its exit still fires.
     """
     if not in_position and decision.entry:
         if deny_entry:
@@ -153,18 +150,14 @@ def _replay_state(
     initial_last_exit_at: datetime | None = None,
 ):
     """Fold _apply_transition over historical (bar, decision) pairs to seed state for a key
-    reached for the first time since restart (feature 116). Pure — plain data in, plain data
-    out; cannot emit an alert or ledger write by construction.
+    reached for the first time since restart. Pure — plain data in, plain data out; cannot emit
+    an alert or ledger write by construction.
 
-    Starts from ``initial_entry_time``/``initial_last_exit_at`` (the caller's already-hydrated
-    or already-known anchors for this key) rather than unconditionally blank — a short or empty
-    replay window (e.g. a restart moments after boot, or the real transition predating the
-    lookback window) must never regress an already-known anchor back to ``None``. `in_position`
-    always starts `False` regardless: only the replayed decisions can establish "currently
-    open", never durable state (hydration has no concept of it). Found necessary during Step 10
-    implementation — design.md's original text folds from an unconditional `(False, None,
-    None)`, which would silently discard hydrated `last_exit_at`/`last_entry_at` whenever the
-    replay window itself shows no crossing (see implementation-spec.md Deviation Log, Step 10).
+    Starts from ``initial_entry_time``/``initial_last_exit_at`` (the caller's already-known
+    anchors for this key) rather than unconditionally blank — a short or empty replay window
+    must never regress an already-known anchor back to ``None``. `in_position` always starts
+    `False` regardless: only the replayed decisions can establish "currently open", never
+    durable state (hydration has no concept of it).
     """
     in_position, entry_time, last_exit_at = False, initial_entry_time, initial_last_exit_at
     for bar, decision in zip(bars, decisions, strict=True):
@@ -222,21 +215,18 @@ class LiveEvaluationLoop:
         self._lock = asyncio.Lock()
 
     async def hydrate_cooldowns(self):
-        """Load persisted last-exit/last-entry timestamps at boot (like hydrate_scores).
+        """Load persisted last-exit/last-entry timestamps at boot.
 
-        Does NOT touch `_last_state`/`_replayed` — hydration only recovers durable anchors, never
-        `in_position` (a restart-durability concept the re-entry gate never needed and this
-        feature adds via bar-replay, not hydration). Marking a hydrated key as "already replayed"
-        here would skip replay and leave `in_position` at its `False` default forever for that
-        key — exactly the restart gap this feature exists to close.
+        Does NOT touch `_last_state`/`_replayed` — hydration recovers durable anchors only, never
+        `in_position`. Marking a hydrated key "already replayed" here would skip replay and leave
+        `in_position` at its `False` default forever — the restart gap bar-replay exists to close.
         """
         if self._cooldowns_repo is None:
             return
         for r in await self._cooldowns_repo.list_all():
             key = (r["user_id"], r["strategy_id"], r["symbol"])
             self._last_exit_at[key] = r["last_exit_at"]
-            # .get (not r["last_entry_at"]) tolerates a pre-migration-012 row shape or test double;
-            # NULL/absent alike mean "no known entry anchor yet".
+            # .get tolerates an absent last_entry_at (old row / test double); absent = no anchor.
             last_entry_at = r.get("last_entry_at")
             if last_entry_at is not None:
                 self._last_entry_at[key] = last_entry_at

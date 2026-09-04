@@ -7,23 +7,17 @@ would (FR-3), and never injects signals/fundamentals into the indicators sandbox
 NOT touch ``RunBacktest``/``ScoreStrategy`` (FR-8).
 
 Fundamental criteria consume marketdata's cached ``GetFundamentalsMulti`` (feature 059). When
-that RPC is unavailable — FMP disabled by default (``FailedPrecondition``), quota-exhausted, or
-the method absent — a symbol needing a fundamental criterion is reported
-``SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`` (``passed=False``, no score) rather than a misleading
-``OK``/passed result: a hard filter can never be confirmed passing on data that was never
-fetched, and a criterion silently missing from ``criterion_scores`` with no other signal made the
-whole screen look inert to the caller (bug fix — previously this degraded *too* gracefully: the
-scan always reported OK/passed=true regardless of whether any fundamental criterion was ever
-evaluated). The same fail-closed rule applies per-symbol when fundamentals were fetched for the
-batch but a specific symbol's value is still missing (e.g. FMP omitted that symbol, or the metric
-is an ``extra_metrics`` key that symbol doesn't carry): a hard-filter criterion with no raw value
-never silently passes.
+that RPC is unavailable (FMP disabled, quota-exhausted, or the method absent), a symbol needing a
+fundamental criterion is reported ``SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`` (``passed=False``, no
+score) rather than a misleading ``OK``: a hard filter can never be confirmed passing on data that
+was never fetched. The same fail-closed rule applies per-symbol when the batch was fetched but a
+specific symbol's value is still missing (FMP omitted it, or it is an absent ``extra_metrics``
+key): a hard-filter criterion with no raw value never silently passes.
 
-A *known* field (``_FUNDAMENTAL_FIELDS``) that is present for the symbol but individually
-missing from the provider (e.g. ``dividend_yield`` never fetched because the extended metric
-tier was off) is also fail-closed rather than read as its wire-default ``0.0`` (bug fix — a
-known field has no wire presence, so the marketdata proto instead marks per-field absence via
-``Fundamentals.missing_metrics``; ``_fundamental_value`` checks it before reading).
+A *known* field (``_FUNDAMENTAL_FIELDS``) present for the symbol but individually missing from the
+provider is also fail-closed rather than read as its wire-default ``0.0`` — a known field has no
+wire presence, so the marketdata proto marks per-field absence via ``Fundamentals.missing_metrics``
+and ``_fundamental_value`` checks it before reading.
 """
 
 import asyncio
