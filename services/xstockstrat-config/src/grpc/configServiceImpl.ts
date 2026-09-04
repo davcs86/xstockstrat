@@ -18,24 +18,18 @@ import { decryptSecret, encryptSecret } from '../crypto';
 
 const log = getLogger('config:impl');
 
-// Redaction sentinel — the value_data stored for a secret row and the value served at every
-// broadcast/read edge (feature 147). Secret plaintext lives only in value_encrypted and is served
-// only via GetSecret. Kept in sync with the migration-017 seed sentinel.
+// Redaction sentinel stored in value_data for secret rows; must match the migration-017 seed.
 const REDACTED = '[redacted]';
 
-// Canonical environment string values matching the DB CHECK constraint (feature 147:
-// dev/production -> staging/production). paper/live is derived from environment, not a config axis.
+// Environment string values must match the DB CHECK constraint.
 type EnvStr = 'staging' | 'production';
 
-// Proto enum wire numbers (buf.gen.yaml stringEnums=true, so a decoded request usually carries the
-// string constant; the numeric map is the fallback). ENVIRONMENT_DEV(1) is deprecated and treated
-// as 'staging'; ENVIRONMENT_STAGING(3) is the new value.
+// Proto enum wire numbers → env string (fallback when a decoded request isn't the string constant).
+// ENVIRONMENT_DEV(1) and ENVIRONMENT_STAGING(3) both map to 'staging'.
 const ENV_MAP: Record<number, EnvStr> = { 0: 'staging', 1: 'staging', 2: 'production', 3: 'staging' };
 
-// Convert the internal snapshot representation to a ts-proto-compatible object that
-// ConfigSnapshot.encode() can serialize correctly. Handles both legacy snake_case (update_type,
-// changed_keys) and camelCase (updateType, changedKeys). Values are already redacted by
-// buildConfigValue, so no plaintext secret can be present here.
+// Convert the internal snapshot to the ts-proto shape ConfigSnapshot.encode() serializes. Accepts
+// both snake_case and camelCase field shapes. Values are already redacted by buildConfigValue.
 function toProtoSnapPayload(snap: any, overrideUpdateType?: ConfigUpdateType): any {
   const env = snap.environment === 'production'
     ? Environment.ENVIRONMENT_PRODUCTION
@@ -48,9 +42,8 @@ function toProtoSnapPayload(snap: any, overrideUpdateType?: ConfigUpdateType): a
     ConfigUpdateType.CONFIG_UPDATE_TYPE_SNAPSHOT
   );
 
-  // Convert snake_case ConfigValue fields to the camelCase fields ts-proto encodes.
-  // isSecret is carried through deliberately: it is how a consumer knows a value must not be
-  // displayed. buildConfigValue already replaced any secret's value with the redaction sentinel.
+  // Convert snake_case ConfigValue fields to the camelCase ts-proto encodes. isSecret rides through
+  // so consumers know the value must not be displayed.
   const values: Record<string, any> = {};
   for (const [k, v] of Object.entries(snap.values ?? {})) {
     const cv = v as any;
@@ -73,10 +66,8 @@ function toProtoSnapPayload(snap: any, overrideUpdateType?: ConfigUpdateType): a
 }
 
 /**
- * Resolve the request's environment scope. Accepts BOTH the ts-proto string constant
- * ('ENVIRONMENT_PRODUCTION') and the numeric wire value (feature 078 scar — decode both shapes or
- * every request silently collapses to a zero-value). ENVIRONMENT_DEV and ENVIRONMENT_STAGING both
- * map to the 'staging' DB scope (feature 147).
+ * Resolve the request's environment scope, accepting both the ts-proto string constant and the
+ * numeric wire value — decode both or every request silently collapses to the zero-value (scar).
  */
 function resolveEnv(v: number | string | undefined): EnvStr {
   if (typeof v === 'string') {
@@ -90,8 +81,8 @@ function requestUserId(req: any): string {
   return (req?.userId ?? req?.user_id ?? '') as string;
 }
 
-// Snapshot cache key for the GLOBAL snapshot of a namespace/environment: "namespace:env".
-// Per-user overlays are resolved on demand from the DB, never cached here.
+// Cache key for the GLOBAL snapshot ("namespace:env"). Per-user overlays are resolved on demand,
+// never cached.
 function snapKey(ns: string, env: EnvStr): string {
   return `${ns}:${env}`;
 }
@@ -105,12 +96,8 @@ interface Subscriber {
   lastVersion: string;
 }
 
-// Scalar-float keys and their [min, max] bounds (feature 161). Keyed on the FULL config key path
-// (`namespace.key`, the semantic identity), NOT the DB `value_type` storage column. Bounds are both
-// surfaced to config-ui via ListKeys.validation AND enforced server-side at SetConfig, so every
-// write path (config-ui, agent set_config, direct SetConfig) is guarded, not just the UI.
-// (Replaces the former FLOAT_MAP WEIGHT_KEY_REGISTRY, whose sole key `analysis.signals.source_weights`
-// was removed by migration 020; the FLOAT_MAP validation path is retired with it.)
+// Scalar-float bounds, keyed on the FULL config key path (namespace.key), NOT the namespace-stripped
+// DB `key` column — a bare `key` lookup would miss the registry and skip validation.
 const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: number }> = {
   'analysis.scoring.signal_decay_half_life_hours': { minValue: 0, maxValue: 8760 },
 };
@@ -137,8 +124,8 @@ export class ConfigServiceImpl {
   }
 
   private async reloadAll() {
-    // Only global rows (user_id IS NULL) populate the shared snapshot cache; per-user overrides are
-    // overlaid on demand at read/subscribe time.
+    // Only global rows (user_id IS NULL) populate the shared cache; per-user overrides are overlaid
+    // on demand at read/subscribe time.
     const result = await this.pool.query(
       `SELECT namespace, key, value_type, value_data, is_secret, description, default_value, environment
        FROM config.config_values
@@ -187,10 +174,8 @@ export class ConfigServiceImpl {
   }
 
   /**
-   * Build the effective values map for a caller: the global snapshot overlaid with the caller's
-   * per-user rows (feature 147, FR-9). Secrets are global-scope only and already redacted by
-   * buildConfigValue, so a per-user overlay never carries secret plaintext (AC-14). Returns a plain
-   * values map suitable for toProtoSnapPayload. userId '' returns the global snapshot values as-is.
+   * Effective values for a caller: the global snapshot overlaid with the caller's per-user rows.
+   * Secrets are global-only (already redacted), so an overlay never carries plaintext. '' = global.
    */
   private async resolveOverlayValues(namespace: string, env: EnvStr, userId: string): Promise<Record<string, any>> {
     const global = this.snapshots.get(snapKey(namespace, env));
@@ -240,10 +225,8 @@ export class ConfigServiceImpl {
   }
 
   /**
-   * WatchConfig — server-streaming RPC.
-   * Sends initial SNAPSHOT immediately, then streams DELTA updates as config changes.
-   * A request may carry user_id to receive the per-user overlay (global overlaid with the user's
-   * own values); an empty user_id yields the global snapshot (the common case for services).
+   * WatchConfig — server-streaming RPC: initial SNAPSHOT, then DELTA on each change. A user_id yields
+   * the per-user overlay; empty user_id yields the global snapshot.
    */
   watchConfig(call: any) {
     const req = call.request;
@@ -296,10 +279,8 @@ export class ConfigServiceImpl {
   }
 
   /**
-   * GetSecret — resolve a secret's decrypted plaintext (feature 147). Gated to allow-listed
-   * internal callers (x-internal-caller). Distinguishes an unset secret (row absent OR ciphertext
-   * NULL → found=false) from a decrypt failure (INTERNAL, never a partial value). Secrets are
-   * global-scope only, so this reads the user_id IS NULL row.
+   * GetSecret — resolve a secret's decrypted plaintext, gated to allow-listed internal callers.
+   * Distinguishes an unset secret (found=false) from a decrypt failure (INTERNAL); global-scope only.
    */
   async getSecret(call: any, callback: any) {
     const { namespace, key } = call.request;
@@ -337,11 +318,8 @@ export class ConfigServiceImpl {
   }
 
   async setConfig(call: any, callback: any) {
-    // Scope-aware authorization gate (feature 074/102 + PR #994).
-    //   • GLOBAL write (user_id empty): admin scope OR an internal-caller-authorized write.
-    //   • PER-USER write (user_id set): self-service — only the OWNER (propagated x-user-id ==
-    //     target user_id) may write their own row. Unlike a global write, an ADMIN caller earns NO
-    //     override for another user's per-user row (admins reach only globals + their own rows).
+    // Scope-aware write gate: GLOBAL needs admin scope OR internal-caller authority; PER-USER is
+    // self-service (owner only) — an ADMIN bit grants no override for another user's row.
     const userId = requestUserId(call.request); // '' = global
     const userIdParam = userId === '' ? null : userId;
     const callerUserId = userIdFrom(call.metadata); // propagated x-user-id (edge-injected)
@@ -384,7 +362,7 @@ export class ConfigServiceImpl {
       return;
     }
 
-    // Feature 100: platform.trading_state is a closed 3-literal string enum.
+    // platform.trading_state is a closed 3-literal string enum.
     if (namespace === 'platform' && key === 'trading_state') {
       const raw = value?.string_val ?? value?.stringVal ?? '';
       const ALLOWED = ['ACTIVE', 'REDUCE_ONLY', 'HALTED'];
@@ -397,11 +375,8 @@ export class ConfigServiceImpl {
       }
     }
 
-    // Feature 161: server-side scalar-float bounds enforcement — the authoritative gate that closes
-    // the agent set_config / direct SetConfig / stale-config-ui fail-open window. Parse via
-    // extractValueData (ALL oneof shapes), NOT a string-only read: the agent writes this key as
-    // float_val, and a string-only read would coerce it to '' → Number('') === 0 → pass unchecked.
-    // 0 is a valid value (min inclusive, "disable decay") — never a `!n` / falsy-zero trap.
+    // Server-side scalar-float bounds — the authoritative gate. Parse via extractValueData (all oneof
+    // shapes), NOT string-only: the agent writes float_val, and 0 is valid (no falsy-zero trap).
     const scalarBounds = SCALAR_BOUNDS_REGISTRY[`${namespace}.${key}`];
     if (scalarBounds) {
       const n = Number(extractValueData(value));
@@ -414,9 +389,8 @@ export class ConfigServiceImpl {
       }
     }
 
-    // Feature 091 existence gate + feature 147 row-authoritative is_secret: read the exact-scope
-    // row's is_secret so encryption is decided by the STORED flag, never a request field (a request
-    // that omitted is_secret on a secret key must still encrypt — never land plaintext in value_data).
+    // Existence gate + row-authoritative is_secret: encryption is decided by the STORED flag, never
+    // a request field, so a secret key can never land plaintext in value_data.
     const createKey = call.request.createKey ?? call.request.create_key ?? false;
     const existing = await this.pool.query(
       `SELECT is_secret FROM config.config_values

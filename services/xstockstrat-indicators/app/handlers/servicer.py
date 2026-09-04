@@ -17,8 +17,8 @@ from app.services.formulas_repository import FormulasRepository
 
 log = logging.getLogger(__name__)
 
-# Feature 086: fields an UpdateFormula update_mask may name (AIP-161 partial update). Any other path
-# is rejected with INVALID_ARGUMENT. formula_id/user_id/author/created_at are not maskable.
+# Fields an UpdateFormula update_mask may name (AIP-161 partial update); any other path is
+# rejected INVALID_ARGUMENT. formula_id/user_id/author/created_at are not maskable.
 _FORMULA_MASKABLE_PATHS = frozenset(
     {"name", "description", "source", "is_public", "parameters", "outputs", "warmup_period"}
 )
@@ -36,9 +36,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
     def _has_admin_scope(context) -> bool:
         """Role check on the propagated x-access-scope ADMIN bit (0x04).
 
-        Formula management keeps author-ownership as its primary authorization model;
-        this helper adds an admin-scope override (feature 049 Part A, OQ-A) for
-        Update/Delete and mirrors the analysis/ingest servicers' gate.
+        An admin-scope override on top of the primary author-ownership model for Update/Delete.
         """
         metadata = dict(context.invocation_metadata())
         try:
@@ -49,11 +47,8 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
 
     @staticmethod
     def _caller_user_id(context, request) -> str:
-        """Resolve the caller's author identity from the trusted x-user-id header.
-
-        The request-body ``user_id`` field is deprecated (identity comes from the propagated
-        header at the edge, which a client cannot spoof); it is kept only as a fallback for any
-        caller not yet forwarding the header, so this stays non-breaking.
+        """Resolve the caller's author identity from the trusted x-user-id header,
+        falling back to the deprecated request-body user_id when no header is present.
         """
         x_user_id = dict(context.invocation_metadata()).get("x-user-id", "")
         return x_user_id or request.user_id
@@ -88,7 +83,6 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         )
 
     async def ExecuteFormula(self, request, context):
-        # Resolve source
         formula = None
         if request.formula_id:
             formula = self._formulas.get(request.formula_id)
@@ -111,10 +105,8 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             )
             return
 
-        # Validate parameter VALUES (input_params) against declared definitions
-        # before invoking the sandbox. A saved formula uses its stored definitions;
-        # an inline formula_source run (authoring "Run" with an unsaved buffer)
-        # validates against the definitions supplied on the request instead.
+        # Validate input_params before the sandbox: a saved formula validates against its stored
+        # definitions, an inline formula_source run against the request-supplied definitions.
         declared_params = (
             list(formula.parameters) if formula is not None else list(request.parameters)
         )
@@ -135,11 +127,8 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         memory_bytes = request.memory_bytes_override or self._cfg.sandbox_memory_bytes
         allowed_imports = self._cfg.sandbox_allowed_imports
 
-        # Convert protobuf Struct to a fully-native Python dict. A plain dict()
-        # only unwraps the top level — nested list/struct fields stay as protobuf
-        # ListValue/Struct objects, which are not JSON-serializable and would blow
-        # up in the sandbox's json.dumps(input_data). MessageToDict recurses to
-        # native types (lists, dicts, scalars).
+        # MessageToDict, not dict(): dict() leaves nested list/struct fields as protobuf objects
+        # that aren't JSON-serializable and break the sandbox's json.dumps(input_data).
         input_data = MessageToDict(request.input_data)
 
         log.info(
@@ -165,10 +154,8 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             "import_blocked": indicators_pb2.SANDBOX_EXIT_REASON_IMPORT_BLOCKED,
         }
 
-        # Enforce the declared output contract: a stored formula that declares output
-        # series must actually emit each one (the primary "value" series is implicit
-        # and checked separately by callers). Missing a declared series turns an
-        # otherwise-successful run into a failure so strategies can rely on the schema.
+        # A stored formula that declares output series must emit each one, else the run fails
+        # (the implicit "value" series is checked by callers, not here).
         declared_outputs = list(formula.outputs) if formula is not None else []
         if result.success and declared_outputs:
             missing = [o.name for o in declared_outputs if o.name not in result.output]
@@ -221,8 +208,8 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         now = Timestamp()
         now.GetCurrentTime()
 
-        # Require an authenticated author: explicit request.author wins, else fall back
-        # to the propagated x-user-id. No silent default (feature 049 Part A, OQ-A).
+        # Require an authenticated author: explicit request.author wins, else the propagated
+        # x-user-id; no silent default.
         if request.author:
             author = request.author
         else:
@@ -283,7 +270,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             row = await self._repo.get_by_id(request.formula_id)
             if row is not None:
                 formula = _row_to_formula(row)
-                self._formulas[request.formula_id] = formula  # cache
+                self._formulas[request.formula_id] = formula
         if formula is None:
             await context.abort(
                 grpc.StatusCode.NOT_FOUND, f"formula {request.formula_id} not found"
@@ -331,16 +318,15 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 grpc.StatusCode.PERMISSION_DENIED, "user_id does not match formula author"
             )
             return
-        # Feature 086: a soft-deleted formula is not updatable.
+        # A soft-deleted formula is not updatable.
         if row.get("deleted_at") is not None:
             await context.abort(
                 grpc.StatusCode.FAILED_PRECONDITION,
                 "formula is deleted and cannot be updated",
             )
             return
-        # Feature 086: AIP-161 partial update. Absent update_mask keeps the pre-086 full-replace
-        # (back-compat: the UI sends a complete payload every call). A present mask merges only the
-        # named paths onto the stored row; unlisted fields are preserved.
+        # Absent update_mask = full replace (the UI sends a complete payload); a present mask
+        # merges only the named paths onto the stored row, preserving unlisted fields.
         has_mask = request.HasField("update_mask")
         mask = set(request.update_mask.paths) if has_mask else None
         if has_mask:
@@ -376,8 +362,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             if _use_req("warmup_period")
             else (row.get("warmup_period", 0) or 0)
         )
-        # Erasure guard (mirrors analysis _guard_erasure, scoped to the required `source` column):
-        # a masked update may not blank source. parameters/outputs/warmup can be cleared.
+        # A masked update may not blank the required source; params/outputs/warmup can be cleared.
         if has_mask and "source" in mask and not eff_source:
             await context.abort(
                 grpc.StatusCode.INVALID_ARGUMENT,
@@ -385,8 +370,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             )
             return
         try:
-            # Validate only the fields actually being written from the request (the stored values
-            # for unmasked fields are already valid from a prior write).
+            # Validate only masked fields; stored unmasked values are already valid.
             if _use_req("parameters"):
                 params_validation.validate_definitions(request.parameters)
             if _use_req("outputs"):

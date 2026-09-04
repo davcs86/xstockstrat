@@ -11,29 +11,17 @@ export interface NotifySubscription {
   /** Called for each matching inserted-event row (snake_case DB-column shape). */
   onEvent: (row: any) => void;
   /**
-   * Called after the listener transparently reconnects following a dropped
-   * connection. Live NOTIFYs sent while disconnected were lost, so subscribers
-   * use this to re-sync — the StreamEvents handler ends its call so the client
-   * reconnects and replays the gap from the durable events table.
+   * Called after the listener reconnects following a dropped connection; NOTIFYs sent
+   * while disconnected were lost, so subscribers re-sync (replay the gap).
    */
   onReconnect?: () => void;
 }
 
 /**
- * EventNotifier owns a single dedicated LISTEN connection (separate from the
- * query pool) that tails the `ledger_stream_all` channel and fans every
- * inserted event out to in-process subscribers.
- *
- * This decouples live streaming from the DB query pool: a StreamEvents
- * subscriber no longer holds a pooled connection for its entire lifetime, so N
- * concurrent streams can no longer exhaust the pool and wedge AppendEvent. That
- * starvation was the root cause of position/balance-sync ledger writes silently
- * timing out (DeadlineExceeded) — `xstockstrat-portfolio` holds three permanent
- * StreamEvents subscriptions, which alone exceeded the 2-connection pool.
- *
- * The DB trigger (`ledger.notify_event_inserted`) emits every insert to both a
- * per-stream-key channel and `ledger_stream_all`, so listening on the latter
- * sees all events; per-subscriber filtering happens in-process.
+ * EventNotifier owns a single dedicated LISTEN connection (separate from the query pool)
+ * that tails `ledger_stream_all` — where the DB trigger emits every insert — and fans each
+ * event out to in-process subscribers, filtered per-subscriber. Decoupling streaming from
+ * the pool keeps concurrent StreamEvents subscriptions from starving AppendEvent.
  */
 export class EventNotifier {
   private client: Client | null = null;
@@ -101,8 +89,7 @@ export class EventNotifier {
       this.connectedOnce = true;
       log.info('notify listener connected', { channel: this.channel, reconnected });
       if (reconnected) {
-        // NOTIFYs sent while we were disconnected were lost — tell subscribers
-        // to re-sync from the durable event table.
+        // NOTIFYs sent while disconnected were lost — tell subscribers to re-sync.
         for (const sub of this.subscribers) {
           try {
             sub.onReconnect?.();

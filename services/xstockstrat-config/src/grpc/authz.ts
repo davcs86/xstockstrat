@@ -1,20 +1,6 @@
 /**
- * Authorization helpers for the config gRPC service.
- *
- * Platform model (docs/patterns/header-propagation.md § "Authorization model"):
- * entry points authenticate and set `x-access-scope` from verified claims; internal
- * services role-check only — they do not re-validate a credential. Admin-gated RPCs
- * check the ADMIN bit and abort PERMISSION_DENIED ("admin scope required").
- *
- * This is the first role check in a Node backend service on the platform; the Python
- * reference is `_has_admin_scope` in the ingest/analysis/indicators servicers. The
- * metadata accessor deliberately matches the published Node shape in
- * docs/patterns/header-propagation.md so the other Node services copy one convention.
- *
- * NOTE: this module intentionally does NOT revive `src/middleware/propagation.ts`.
- * That file is an unused HTTP-era AsyncLocalStorage store duplicated across all four
- * Node services; config makes no outbound per-request calls, so it needs the role
- * check, not the propagation store.
+ * Authorization helpers for the config gRPC service — role checks only (entry points authenticate
+ * and set x-access-scope). See docs/patterns/header-propagation.md § "Authorization model".
  */
 import { Metadata, status } from '@grpc/grpc-js';
 
@@ -24,23 +10,13 @@ export const ADMIN_SCOPE = 0x04;
 export const HEADER_ACCESS_SCOPE = 'x-access-scope';
 export const HEADER_USER_ID = 'x-user-id';
 
-/**
- * Read a single metadata value, or '' when absent. Exported (feature 102) so
- * `configServiceImpl.ts` can resolve the raw `x-internal-caller` value for
- * `caller_identity` persistence — mirrors `userIdFrom`'s existing wrapper for `x-user-id`,
- * but `x-internal-caller` has no dedicated wrapper of its own since
- * `hasInternalCallerAuthority` already consumes it internally.
- */
+/** Read a single metadata value, or '' when absent. */
 export function first(md: Metadata | undefined, key: string): string {
   if (!md) return '';
   return (md.get(key)[0] as string) ?? '';
 }
 
-/**
- * True when the propagated access scope carries the ADMIN bit.
- * Absent metadata, an absent header, and an unparseable value all resolve to scope 0
- * (denied) — the check fails closed on the value of the header.
- */
+/** True when the propagated access scope carries the ADMIN bit. Fails closed on absent/unparseable. */
 export function hasAdminAccessScope(md?: Metadata): boolean {
   const parsed = Number.parseInt(first(md, HEADER_ACCESS_SCOPE) || '0', 10);
   if (Number.isNaN(parsed)) return false;
@@ -52,43 +28,30 @@ export function userIdFrom(md?: Metadata): string {
   return first(md, HEADER_USER_ID);
 }
 
-/** Denial for a caller lacking the ADMIN bit. Message matches the platform convention. */
+/** Denial for a caller lacking the ADMIN bit. */
 export const ADMIN_SCOPE_ERROR = {
   code: status.PERMISSION_DENIED,
   message: 'admin scope required',
 };
 
 /**
- * Denial for a per-user write whose target `user_id` is not the caller's own (PR #994). A per-user
- * config row is **self-service**: only its owner may write it, and — unlike a global write — an
- * ADMIN caller earns NO override for someone else's per-user row (admins reach only globals and
- * their own per-user rows). The gate compares the propagated `x-user-id` against the request's
- * `user_id`, so an edge that fails to propagate the caller id lands here rather than silently
- * writing another user's row.
+ * Denial for a per-user write whose target user_id is not the caller's own — per-user config is
+ * self-service; an ADMIN bit grants no override for another user's row (PR #994).
  */
 export const PER_USER_SCOPE_ERROR = {
   code: status.PERMISSION_DENIED,
   message: 'per-user config is self-service: you may only write your own user_id',
 };
 
-/**
- * Denial when a write carries no attributable author at all — neither an explicit
- * `author` field nor a propagated `x-user-id`. Mirrors the indicators servicer, where
- * `request.author` wins and the propagated id is the fallback.
- */
+/** Denial when a write carries no attributable author — neither request.author nor x-user-id. */
 export const MISSING_AUTHOR_ERROR = {
   code: status.INVALID_ARGUMENT,
   message: 'author required: set request.author or propagate x-user-id',
 };
 
 /**
- * Internal-caller channel for a background/automated process to write a normally
- * human-operator-gated key without extending x-access-scope's user-role bitmap (which only ever
- * carries a value *forwarded* from a real authenticated human — see docs/patterns/
- * header-propagation.md). Structurally separate: a distinct metadata field, a hardcoded
- * {callerID, namespace, key, allowedTargetValues} allow-list, and — critically — a
- * direction restriction so a caller can only ever move a value *toward* restriction, never
- * back toward an unrestricted state (feature 102).
+ * Metadata header for the internal-caller write channel (feature 102) — structurally separate from
+ * x-access-scope, direction-restricted per grant (a caller may only move a value toward restriction).
  */
 export const HEADER_INTERNAL_CALLER = 'x-internal-caller';
 
@@ -110,9 +73,8 @@ const INTERNAL_CALLER_ALLOWLIST: ReadonlyArray<InternalCallerGrant> = [
 ];
 
 /**
- * True when the propagated internal-caller identity is allow-listed to write targetValue at
- * (namespace, key). Fails closed: an absent header, an unlisted callerID, or a targetValue
- * outside that caller's allowed set all return false.
+ * True when the internal-caller identity is allow-listed to write targetValue at (namespace, key).
+ * Fails closed on an absent header, unlisted callerID, or a targetValue outside the caller's set.
  */
 export function hasInternalCallerAuthority(
   md: Metadata | undefined,
@@ -132,22 +94,15 @@ export function hasInternalCallerAuthority(
 }
 
 /**
- * GetSecret allow-list (feature 147). Structurally identical to the internal-caller write
- * allow-list above, but for the READ direction: which internal service (`x-internal-caller`) may
- * resolve a secret's decrypted plaintext for which (namespace, key). Secret plaintext is served
- * only through this gate — never on WatchConfig/GetConfig/ListKeys — so an un-allow-listed caller
- * can never read a credential. Fails closed on an absent/unlisted caller.
+ * GetSecret read-direction allow-list (feature 147): which internal caller may resolve which
+ * secret's plaintext. Secret plaintext is served only through this gate. Fails closed.
  */
 interface SecretCallerGrant {
   callerID: string;
   namespace: string;
   /** The exact keys (within namespace) this caller may resolve. */
   keys?: ReadonlyArray<string>;
-  /**
-   * Key prefixes (within namespace) this caller may resolve — for callers whose secret keys are
-   * dynamic (e.g. ingest's per-source `mcp_credential.<slug>`, feature 166) and cannot be
-   * enumerated as exact `keys`. A key is granted when it `startsWith` one of these.
-   */
+  /** Key prefixes this caller may resolve (for dynamic keys); a key is granted when it startsWith one. */
   keyPrefixes?: ReadonlyArray<string>;
 }
 
@@ -158,8 +113,6 @@ const SECRET_CALLER_ALLOWLIST: ReadonlyArray<SecretCallerGrant> = [
     keys: ['alpaca.api_key', 'alpaca.api_secret', 'fmp.api_key', 'finnhub.api_key'],
   },
   {
-    // feature 166 — ingest resolves its per-source MCP bearer secrets, keyed by source slug, so
-    // the grant is a prefix (never an exact enumerable set). Read-side only.
     callerID: 'ingest',
     namespace: 'ingest',
     keyPrefixes: ['mcp_credential.'],
@@ -167,9 +120,8 @@ const SECRET_CALLER_ALLOWLIST: ReadonlyArray<SecretCallerGrant> = [
 ];
 
 /**
- * True when the propagated internal-caller identity is allow-listed to resolve the secret at
- * (namespace, key) via GetSecret. Fails closed: an absent `x-internal-caller`, an unlisted
- * callerID, or a key outside that caller's grant all return false.
+ * True when the internal-caller identity is allow-listed to resolve the secret at (namespace, key).
+ * Fails closed on an absent header, unlisted callerID, or a key outside the caller's grant.
  */
 export function hasSecretCallerAuthority(
   md: Metadata | undefined,

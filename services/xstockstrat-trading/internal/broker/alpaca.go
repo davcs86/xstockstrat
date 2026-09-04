@@ -53,7 +53,6 @@ func NewClient(cfg ClientConfig) *Client {
 	}
 }
 
-// baseURL returns the correct base URL based on the Paper flag.
 func (c *Client) baseURL() string {
 	if c.cfg.Paper {
 		return c.cfg.PaperURL
@@ -66,8 +65,7 @@ func (c *Client) IsPaper() bool {
 	return c.cfg.Paper
 }
 
-// HTTPTimeout returns the configured HTTP client timeout (exposed for tests verifying
-// trading.broker.timeout_ms wiring).
+// HTTPTimeout returns the configured HTTP client timeout.
 func (c *Client) HTTPTimeout() time.Duration {
 	return c.httpClient.Timeout
 }
@@ -89,7 +87,7 @@ type AlpacaOrder struct {
 	CreatedAt      string `json:"created_at"`
 	UpdatedAt      string `json:"updated_at"`
 	// Legs carries a bracket order's child (stop-loss/take-profit) order IDs on the
-	// entry order's own submit response (feature 030).
+	// entry order's own submit response.
 	Legs []struct {
 		ID   string `json:"id"`
 		Type string `json:"type"` // "stop", "limit"
@@ -116,9 +114,8 @@ func (c *Client) SubmitOrder(ctx context.Context, req OrderRequest) (*BrokerOrde
 		TrailPrice    string `json:"trail_price,omitempty"`
 		TrailPercent  string `json:"trail_percent,omitempty"`
 		ClientOrderID string `json:"client_order_id,omitempty"`
-		// OrderClass/StopLoss/TakeProfit request an Alpaca-native bracket order
-		// (feature 030) — distinct from the plain top-level StopPrice above, which
-		// carries a STOP/STOP_LIMIT entry's own real broker-trigger price.
+		// OrderClass/StopLoss/TakeProfit request an Alpaca-native bracket order — distinct from
+		// the top-level StopPrice above (a STOP/STOP_LIMIT entry's real broker-trigger price).
 		OrderClass string         `json:"order_class,omitempty"`
 		StopLoss   *stopLossLeg   `json:"stop_loss,omitempty"`
 		TakeProfit *takeProfitLeg `json:"take_profit,omitempty"`
@@ -185,9 +182,8 @@ func (c *Client) SubmitOrder(ctx context.Context, req OrderRequest) (*BrokerOrde
 	if err := json.Unmarshal(respBody, &alpacaResp); err != nil {
 		return nil, fmt.Errorf("decode order response: %w", err)
 	}
-	// Market orders can fill immediately, so the submit response may already carry
-	// filled_qty / filled_avg_price. Parse them so an order that fills on submit is
-	// not left at filled_qty=0 (the fill poller skips orders already in FILLED state).
+	// A market order may already carry filled_qty/filled_avg_price on the submit response;
+	// parse them so an order filled on submit isn't left at 0 (the fill poller skips FILLED orders).
 	var filledAvgPrice float64
 	if alpacaResp.FilledAvgPrice != "" {
 		filledAvgPrice, _ = strconv.ParseFloat(alpacaResp.FilledAvgPrice, 64)
@@ -197,8 +193,7 @@ func (c *Client) SubmitOrder(ctx context.Context, req OrderRequest) (*BrokerOrde
 		filledQty, _ = strconv.ParseFloat(alpacaResp.FilledQty, 64)
 	}
 	out := &BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status, FilledQty: filledQty, FilledAvgPrice: filledAvgPrice}
-	// A bracket order's response nests its child (stop-loss/take-profit) leg IDs under
-	// "legs" on the same entry order object (feature 030).
+	// A bracket order nests its child (stop-loss/take-profit) leg IDs under "legs".
 	for _, leg := range alpacaResp.Legs {
 		switch leg.Type {
 		case "stop":
@@ -235,9 +230,8 @@ func (c *Client) CancelOrder(ctx context.Context, brokerOrderID string) error {
 	return nil
 }
 
-// ReplaceOrder modifies a working order via PATCH /v2/orders/{order_id}.
-// Only the changed fields are sent; a zero Qty/LimitPrice/StopPrice or empty
-// TimeInForce is omitted so the broker leaves that field unchanged.
+// ReplaceOrder modifies a working order via PATCH /v2/orders/{order_id}. Only changed fields
+// are sent; a zero Qty/LimitPrice/StopPrice or empty TimeInForce is omitted (left unchanged).
 func (c *Client) ReplaceOrder(ctx context.Context, brokerOrderID string, req OrderRequest) (*BrokerOrder, error) {
 	alpacaReq := struct {
 		Qty         string `json:"qty,omitempty"`
@@ -338,9 +332,8 @@ func (c *Client) GetOrder(ctx context.Context, brokerOrderID string) (*BrokerOrd
 		filledQty, _ = strconv.ParseFloat(alpacaResp.FilledQty, 64)
 	}
 	out := &BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status, FilledQty: filledQty, FilledAvgPrice: filledAvgPrice}
-	// A bracket entry order's status response also nests its child leg IDs under "legs"
-	// (feature 030) — needed here so the fill poller can record them for an entry that
-	// fills asynchronously (not on the original SubmitOrder response).
+	// A bracket entry's status response also nests its child leg IDs under "legs" — needed so the
+	// fill poller can record them for an entry that fills asynchronously (not on SubmitOrder).
 	for _, leg := range alpacaResp.Legs {
 		switch leg.Type {
 		case "stop":
@@ -352,11 +345,8 @@ func (c *Client) GetOrder(ctx context.Context, brokerOrderID string) (*BrokerOrd
 	return out, nil
 }
 
-// ListOrders fetches every order currently known to Alpaca for this account via
-// GET /v2/orders (feature 102). status=all so a just-filled or just-canceled order (which
-// dropped out of the default open-only view) is still detectable within one reconciliation
-// tick; limit=500 matches this platform's other bulk-list pagination ceiling
-// (marketdata's GetBars default page size).
+// ListOrders fetches every order Alpaca knows for this account via GET /v2/orders.
+// status=all keeps just-filled/canceled orders visible; limit=500 is the bulk-list ceiling.
 func (c *Client) ListOrders(ctx context.Context) ([]BrokerOrder, error) {
 	endpoint := fmt.Sprintf("%s/v2/orders?status=all&limit=500", c.baseURL())
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
@@ -417,11 +407,8 @@ func (c *Client) GetPositions(ctx context.Context) ([]BrokerPosition, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("alpaca GetPositions: status %d: %s", resp.StatusCode, body)
 	}
-	// Alpaca returns these monetary fields as decimal strings. current_price / market_value /
-	// unrealized_pl / unrealized_plpc are the broker's mark-to-market valuation — carried
-	// through so the portfolio card reconciles with the broker's authoritative equity.
-	// unrealized_intraday_pl / unrealized_intraday_plpc are today's (intraday) P&L — the
-	// change since the previous close — surfaced as the positions table's "Today's P/L".
+	// Alpaca returns these monetary fields as decimal strings (parsed below). current_price/
+	// market_value/unrealized_pl(pc) are mark-to-market; intraday_pl(pc) is today's P&L.
 	var raw []struct {
 		Symbol         string `json:"symbol"`
 		Qty            string `json:"qty"`
@@ -461,9 +448,8 @@ func (c *Client) GetPositions(ctx context.Context) ([]BrokerPosition, error) {
 	return positions, nil
 }
 
-// GetAccount fetches the account balance snapshot via GET /v2/account.
-// Alpaca returns monetary fields as decimal strings; `last_equity` is the
-// equity at the previous trading day's close, used to derive day P&L.
+// GetAccount fetches the account balance via GET /v2/account. Alpaca returns monetary fields
+// as decimal strings; last_equity is the previous close, used to derive day P&L.
 func (c *Client) GetAccount(ctx context.Context) (*BrokerBalance, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL()+"/v2/account", nil)
 	if err != nil {
@@ -503,9 +489,8 @@ func (c *Client) GetAccount(ctx context.Context) (*BrokerBalance, error) {
 	}, nil
 }
 
-// ValidateCredentials confirms the API key/secret still authenticate by calling
-// GET /v2/account. A 401/403 maps to ErrInvalidCredentials; other non-200
-// responses and transport errors are returned as transient (wrapped) errors.
+// ValidateCredentials confirms the API key/secret via GET /v2/account: 401/403 maps to
+// ErrInvalidCredentials; other non-200s and transport errors return as wrapped (transient) errors.
 func (c *Client) ValidateCredentials(ctx context.Context) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL()+"/v2/account", nil)
 	if err != nil {
@@ -533,9 +518,8 @@ func (c *Client) setAuthHeaders(req *http.Request) {
 	req.Header.Set("APCA-API-SECRET-KEY", c.cfg.APISecret)
 }
 
-// SubmitBracketLegs is unsupported for Alpaca — its bracket attaches atomically at
-// entry submission (see SubmitOrder's order_class/stop_loss/take_profit fields), not
-// as a follow-up call (feature 030).
+// SubmitBracketLegs is unsupported for Alpaca — its bracket attaches atomically at entry
+// submission (SubmitOrder's order_class/stop_loss/take_profit fields), not as a follow-up call.
 func (c *Client) SubmitBracketLegs(ctx context.Context, parentBrokerOrderID, parentClientOrderID string, legs BracketLegsRequest) (*BracketLegsResponse, error) {
 	return nil, fmt.Errorf("alpaca: bracket legs attach atomically at order submission; SubmitBracketLegs is not supported")
 }

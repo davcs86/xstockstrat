@@ -42,7 +42,7 @@ from app.services import scoring
 
 log = logging.getLogger(__name__)
 
-# Fundamental metric_name → attribute on the marketdata Fundamentals message (feature 059).
+# Fundamental metric_name → attribute on the marketdata Fundamentals message.
 _FUNDAMENTAL_FIELDS = {
     "market_cap",
     "pe_ratio",
@@ -93,7 +93,7 @@ class ScreenerEngine:
 
     async def screen(self, request, propagation_meta=()) -> analysis_pb2.ScreenSymbolsResponse:
         max_universe = self._cfg.get_int("analysis.screener.max_universe_size", 100)
-        symbols = list(request.symbols)[:max_universe]  # OQ-060-d: truncate over-cap
+        symbols = list(request.symbols)[:max_universe]
 
         criteria = list(request.criteria)
         fundamental_criteria = [c for c in criteria if c.kind in _FUNDAMENTAL_KINDS]
@@ -107,14 +107,11 @@ class ScreenerEngine:
                 symbols, propagation_meta
             )
 
-        # feature 090: reject a fundamental criterion whose metric_name is neither a closed
-        # `_FUNDAMENTAL_FIELDS` field nor a key any fetched symbol actually carries in its open
-        # `extra_metrics` map — catches a typo (e.g. `pe_ration`) that would otherwise be silently
-        # skipped. Only enforceable when fundamentals are available (can't validate absent data).
+        # Reject a fundamental criterion whose metric_name is neither a closed _FUNDAMENTAL_FIELDS
+        # field nor any fetched symbol's extra_metrics key — only when fundamentals exist.
         if fundamental_criteria and fundamentals_available:
             self._validate_fundamental_metrics(fundamental_criteria, fundamentals)
 
-        # Evaluate every symbol; collect raw per-criterion values for universe normalization.
         per_symbol = []  # list of dicts: {symbol, raws, passes, signal_score, status, gap}
         for symbol in symbols:
             per_symbol.append(
@@ -128,10 +125,8 @@ class ScreenerEngine:
                 )
             )
 
-        # feature 140 FR-6: surface bars gaps in the runtime logs (they were previously carried
-        # only in the per-row INSUFFICIENT_DATA status + coverage_gaps response fields the UI
-        # reads). One summarized WARN per scan with a bounded sample; excludes symbols whose
-        # GetBars raised (already logged per-symbol above) so an RPC failure is not double-reported.
+        # One summarized WARN per scan for insufficient-bars symbols; excludes symbols whose GetBars
+        # raised (already logged per-symbol) so an RPC failure is not double-reported.
         dataless_bars = [
             r["symbol"]
             for r in per_symbol
@@ -148,39 +143,32 @@ class ScreenerEngine:
                 dataless_bars[:10],
             )
 
-        # FR-6: min-max normalize each criterion's raw values across the scanned universe.
+        # Min-max normalize each criterion's raw values across the scanned universe.
         norm = self._normalize_universe(criteria, per_symbol)
 
         results = []
         for row in per_symbol:
             results.append(self._build_result(row, criteria, request, norm))
 
-        # Rank descending by score. A `score_unavailable` result's `score` is a neutral
-        # placeholder, not real evidence (bug fix, feature 144) — sort it after every genuinely-
-        # scored result regardless of its numeric value, so it can never outrank real data.
+        # A score_unavailable result's score is a neutral placeholder, not real evidence — sort it
+        # after every genuinely-scored result so it can never outrank real data.
         results.sort(key=lambda r: (r.score_unavailable, -r.score))
 
-        # feature 090 (AC-4): coverage_gaps come from the FULL sorted list, BEFORE min_conviction
-        # and rank_limit truncation — an INSUFFICIENT_DATA symbol ranked below the cut must still
-        # surface its gap so the caller knows to backfill it. `HasField` excludes the
-        # fundamentals-unavailable INSUFFICIENT_DATA case (no CoverageGap — that message is
-        # bars-specific; see `_eval_symbol`), so this list stays exactly the bars-backfill signal
-        # it always was.
+        # coverage_gaps come from the FULL sorted list, BEFORE min_conviction/rank_limit truncation,
+        # so a below-cut symbol still surfaces its gap; HasField skips bars-specific no-gap case.
         coverage_gaps = [
             r.gap
             for r in results
             if r.status == analysis_pb2.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA and r.HasField("gap")
         ]
 
-        # feature 090 (AC-2): honor min_conviction as a hard floor. `r.score` is a min-max
-        # normalized relative conviction in [0,1], so filter against the same transform a backtest
-        # applies to its entry decision — `scoring.buy_threshold` — for one platform-wide meaning
-        # of the field (rather than a raw-scale `score >= min_conviction`).
+        # Honor min_conviction as a hard floor: r.score is a min-max normalized [0,1] conviction, so
+        # filter against scoring.buy_threshold (backtest entry transform), not a raw-scale compare.
         if request.min_conviction > 0:
             thr = scoring.buy_threshold(request.min_conviction)
             results = [r for r in results if r.score >= thr]
 
-        # Cap to rank_limit (default config) LAST.
+        # Cap to rank_limit LAST — after coverage_gaps and the min_conviction floor.
         rank_limit = request.rank_limit or self._cfg.get_int(
             "analysis.screener.default_rank_limit", 50
         )
@@ -218,12 +206,10 @@ class ScreenerEngine:
             "signal_score": 0.5,
             "status": analysis_pb2.SCREEN_RESULT_STATUS_OK,
             "gap": None,
-            # feature 140 FR-6: True when GetBars itself raised (already logged per-symbol below),
-            # so the per-scan missing-data summary can exclude it and not double-log an RPC failure.
+            # True when GetBars raised; kept out of the missing-data summary to avoid a double-log.
             "bars_errored": False,
         }
 
-        # 1. Bars (latest window) for technical criteria.
         closes = []
         try:
             bars_resp = await self._marketdata.GetBars(
@@ -250,16 +236,14 @@ class ScreenerEngine:
             )
             return row
 
-        # A fundamental criterion was requested but the whole-batch fetch failed/was disabled
-        # (FR-5) — bail the same way the bars-insufficient case does, rather than silently
-        # scoring the symbol on zero evaluated criteria and reporting it OK/passed (bug fix; see
-        # module docstring). No CoverageGap: that message is bars-specific.
+        # A requested fundamental criterion with a failed/disabled batch fetch bails like the bars
+        # case, rather than scoring on zero criteria and reporting OK/passed. No CoverageGap here.
         needs_fundamentals = any(c.kind in _FUNDAMENTAL_KINDS for c in criteria)
         if needs_fundamentals and not fundamentals_available:
             row["status"] = analysis_pb2.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA
             return row
 
-        # 2. Signals for the source-weighted blend (same path as backtest).
+        # Signals for the source-weighted blend (same path as backtest).
         signals_map = await self._fetch_signals(symbol, request, propagation_meta)
         if signals_map:
             latest_bar = bars_resp.bars[-1] if closes else None
@@ -268,13 +252,13 @@ class ScreenerEngine:
                     signals_map, latest_bar, list(request.signal_sources), self._source_weights
                 )
 
-        # 3. Per-criterion raw values + hard-filter gating. `needs_fundamentals` already
-        # guaranteed fundamentals_available above when any FUNDAMENTAL criterion is present.
+        # Per-criterion raw values + hard-filter gating. needs_fundamentals already guaranteed
+        # fundamentals_available above when any FUNDAMENTAL criterion is present.
         for c in criteria:
             if c.kind in _FUNDAMENTAL_KINDS:
                 raw = self._fundamental_value(fundamentals.get(symbol.upper()), c.metric_name)
                 if raw is None:
-                    continue  # this symbol's value missing (e.g. FMP omitted it) → skipped
+                    continue  # this symbol's value missing → skipped
             elif c.kind in _TECHNICAL_KINDS:
                 raw = await self._technical_value(c, symbol, closes, propagation_meta)
                 if raw is None:
@@ -287,9 +271,7 @@ class ScreenerEngine:
             row["raws"][c.ref_name] = raw
             row["passes"][c.ref_name] = _comparator_passes(c.op, raw, c.threshold, c.threshold_high)
 
-        # feature 083 (FR-8) — raw display columns for the screener results table, best-effort.
-        # pe/rev_growth come from the cached fundamentals (populated when the scan fetched them);
-        # rsi/atr from the existing indicators edge. ATR is a close-only approximation
+        # Raw display columns for the results table, best-effort. ATR is a close-only approximation
         # (indicators_engine.py) — surfaced as a known accuracy caveat, not exact.
         fund = fundamentals.get(symbol.upper()) if fundamentals_available else None
         row["pe"] = float(getattr(fund, "pe_ratio", 0.0)) if fund is not None else 0.0
@@ -365,8 +347,7 @@ class ScreenerEngine:
                     return None
             if not resp.success:
                 return None
-            # MessageToDict recursively converts the Struct (incl. ListValue) to native
-            # python — dict(Struct) leaves a list output as a ListValue.
+            # MessageToDict decodes the Struct; dict(Struct) leaves a list as a ListValue.
             return _latest_value(MessageToDict(resp.output).get("value"))
         if comp.indicator:
             try:
@@ -411,17 +392,11 @@ class ScreenerEngine:
         if fund is None or not metric_name:
             return None
         if metric_name in _FUNDAMENTAL_FIELDS:
-            # A known field has no wire presence (plain double) — the provider marks a
-            # genuinely-missing value via `missing_metrics` instead (bug fix: previously
-            # this unconditionally read the field, so a missing value's wire-default 0.0
-            # was indistinguishable from a real 0.0, and an `lte` hard filter silently
-            # "passed" data that was never actually fetched). None here routes through the
-            # same fail-closed path `_eval_symbol`/`_build_result` already apply to any
-            # other unavailable raw value.
+            # A known field has no wire presence; check missing_metrics first. Else a missing
+            # value's wire-default 0.0 reads as a real 0.0 and an lte hard filter silently passes.
             if metric_name in fund.missing_metrics:
                 return None
             return float(getattr(fund, metric_name))
-        # Fall back to the open-ended extra_metrics map.
         if metric_name in fund.extra_metrics:
             return float(fund.extra_metrics[metric_name])
         return None
@@ -468,10 +443,8 @@ class ScreenerEngine:
             return result
 
         criterion_scores = {}
-        # feature 125 (FR-8): raw per-criterion readings + pass/fail for single-symbol screening,
-        # where the universe-relative `criterion_scores` collapse to a content-free 0.5. Built from
-        # the same per-symbol `raws`/`passes` dicts every other field here already reads — no new
-        # computation. Same "present only for evaluated criteria" contract as `criterion_scores`.
+        # Raw readings + pass/fail per criterion, for single-symbol screening where the relative
+        # criterion_scores collapse to 0.5. Present only for evaluated criteria.
         criterion_raw_values = {}
         criterion_passed = {}
         weighted_sum = 0.0
@@ -481,9 +454,8 @@ class ScreenerEngine:
 
         for c in criteria:
             if c.ref_name not in row["raws"]:
-                # Skipped (this symbol's value was unavailable) — never counts toward the score,
-                # and a hard filter can't be confirmed passing on data that was never evaluated
-                # (bug fix; see module docstring) — fail closed rather than silently passing.
+                # Skipped (value unavailable): never scored, and a hard filter can't be confirmed
+                # on data never evaluated, so fail closed rather than silently passing.
                 if c.hard_filter:
                     passed = False
                 continue
@@ -497,20 +469,13 @@ class ScreenerEngine:
             if c.hard_filter and not row["passes"].get(c.ref_name, False):
                 passed = False
 
-        # Bug fix (feature 144): `weight_total` stays 0 whenever every criterion configured for
-        # this scan was skipped for this candidate specifically (e.g. an ETF with no P/E ratio
-        # scanned against a `pe_ratio` criterion) — distinct from a scan configured with zero
-        # criteria at all (`criteria` empty), which is a harmless no-op left as-is. The `else 0.5`
-        # fallback below is kept (it's still what feeds `tech_signal`/`combine_score`, unchanged,
-        # so a real independent signal-weighted score can still blend normally) but is flagged via
-        # `score_unavailable` so callers stop treating it as a genuinely-computed mid-range result
-        # indistinguishable from real evidence (soft-criterion sibling of the hard-filter
-        # null-as-zero fix above — that one covers `passed`, this one covers `score`).
+        # weight_total==0 means every criterion was skipped for THIS candidate (not a zero-criteria
+        # scan); the 0.5 fallback still feeds combine_score but is flagged score_unavailable.
         score_unavailable = weight_total <= 0 and len(criteria) > 0
         technical_score = weighted_sum / weight_total if weight_total > 0 else 0.5
 
-        # Blend technical + signal exactly as a backtest does (FR-4). Map the technical
-        # aggregate [0,1] → tech_signal [-1,1] so combine_score recovers a clean weighted blend.
+        # Blend technical + signal exactly as a backtest does. Map the [0,1] aggregate → tech_signal
+        # [-1,1] so combine_score recovers a clean weighted blend.
         tech_signal = 2.0 * technical_score - 1.0
         score = scoring.combine_score(
             tech_signal,
@@ -529,7 +494,7 @@ class ScreenerEngine:
             passed=passed,
             status=analysis_pb2.SCREEN_RESULT_STATUS_OK,
             score_unavailable=score_unavailable,
-            # feature 083 raw display columns (FR-8); held is set by the servicer cross-ref.
+            # Raw display columns; held is set by the servicer cross-ref.
             pe=row.get("pe", 0.0),
             rsi=row.get("rsi", 0.0),
             atr=row.get("atr", 0.0),

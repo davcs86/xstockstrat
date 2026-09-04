@@ -31,33 +31,23 @@ type OrderIntentRecord struct {
 	UpdatedAt       time.Time
 }
 
-// OrderIntentRepository is the insert-or-return-existing dedup store (design.md §
-// Concurrency). Defined as an interface (mirroring AccountRepository) so
+// OrderIntentRepository is the insert-or-return-existing dedup store. An interface so
 // internal/service tests can substitute a fake without a live DB.
 type OrderIntentRepository interface {
-	// InsertIntent attempts the ON CONFLICT DO NOTHING RETURNING insert. ok=true means
-	// this call owns the intent (proceed to the broker); ok=false means an existing row
-	// was found and the caller must GetIntentByID and branch (design.md's reactive path).
+	// InsertIntent does an ON CONFLICT DO NOTHING RETURNING insert. ok=true means this call owns
+	// the intent (proceed to broker); ok=false means an existing row was found (GetIntentByID + branch).
 	InsertIntent(ctx context.Context, rec *OrderIntentRecord) (ok bool, err error)
 	GetIntentByID(ctx context.Context, intentID string) (*OrderIntentRecord, error)
-	// ReclaimOrphanIntent is the single CAS shared by the reactive path and the sweeper
-	// (design.md § Reclaim CAS). reclaimed=false means someone else already reclaimed it
-	// or it is no longer stale — a safe no-op, not an error.
+	// ReclaimOrphanIntent is the single CAS shared by the reactive path and the sweeper.
+	// reclaimed=false means already reclaimed or no longer stale — a safe no-op, not an error.
 	ReclaimOrphanIntent(ctx context.Context, intentID string, staleBefore time.Time) (reclaimed bool, rec *OrderIntentRecord, err error)
 	FinalizeIntent(ctx context.Context, intentID, orderID string, state int16, response []byte) error
-	// SweepStalePending returns up to limit PENDING intents older than staleBefore, for
-	// StartOrderIntentSweeper (internal/service/order_intent.go).
+	// SweepStalePending returns up to limit PENDING intents older than staleBefore.
 	SweepStalePending(ctx context.Context, staleBefore time.Time, limit int) ([]*OrderIntentRecord, error)
-	// ListUnknownForAccount returns every UNKNOWN-state intent for one broker account
-	// (feature 102 — FR-6, resolves 101's own deferred "who resolves an UNKNOWN order
-	// intent" question).
+	// ListUnknownForAccount returns every UNKNOWN-state intent for one broker account.
 	ListUnknownForAccount(ctx context.Context, brokerAccountID string) ([]*OrderIntentRecord, error)
-	// ResolveUnknownIntent CAS-transitions an UNKNOWN intent to a definite outcome
-	// (IntentStateCompleted or IntentStateRejected) once broker truth is known (feature 102).
-	// Guarded on state=Unknown, mirroring FinalizeIntent's own state-guard CAS pattern
-	// (design.md § Late-broker-response race) applied to the UNKNOWN->definite transition
-	// instead of Pending->definite. resolved=false means the row was no longer UNKNOWN when
-	// this ran (already resolved by a concurrent caller) — a safe no-op, not an error.
+	// ResolveUnknownIntent CAS-transitions an UNKNOWN intent to COMPLETED/REJECTED, guarded on
+	// state=Unknown. resolved=false means it was no longer UNKNOWN — a safe no-op, not an error.
 	ResolveUnknownIntent(ctx context.Context, intentID string, newState int16, response []byte) (resolved bool, err error)
 }
 
@@ -111,9 +101,8 @@ func (r *pgOrderIntentRepo) GetIntentByID(ctx context.Context, intentID string) 
 	return &out, nil
 }
 
-// reclaimOrphanIntentSQL is the single CAS shared by the reactive path and the sweeper
-// (design.md § Reclaim CAS) — one SQL statement for both call sites, deliberately, to
-// avoid two divergent implementations of the same safety-critical transition.
+// reclaimOrphanIntentSQL is the single CAS shared by the reactive path and the sweeper —
+// one statement for both call sites, deliberately, to avoid two divergent implementations.
 const reclaimOrphanIntentSQL = `
 UPDATE trading.order_intents
 SET state = $1, updated_at = now()
@@ -133,11 +122,8 @@ func (r *pgOrderIntentRepo) ReclaimOrphanIntent(ctx context.Context, intentID st
 	return true, &out, nil
 }
 
-// finalizeIntentSQL's WHERE state=$5(Pending) guard means this CAS can only ever fire
-// once per row (state leaves PENDING permanently after) — see design.md § Late-broker-
-// response race for why a 0-row affect here (a reclaimed row) is a deliberate no-op, not
-// an error: resurrecting a reclaimed row would reintroduce the ambiguity this design
-// exists to prevent.
+// finalizeIntentSQL's WHERE state=Pending guard fires the CAS at most once per row; a 0-row
+// affect (a reclaimed row) is a deliberate no-op — resurrecting it reintroduces the ambiguity.
 const finalizeIntentSQL = `
 UPDATE trading.order_intents
 SET state = $1, order_id = $2,
@@ -151,8 +137,7 @@ func (r *pgOrderIntentRepo) FinalizeIntent(ctx context.Context, intentID, orderI
 	err := row.Scan(&discard)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			// Deliberate no-op (design.md § Late-broker-response race) — the intent was
-			// already reclaimed to UNKNOWN (or otherwise left PENDING) between this
+			// Deliberate no-op — the intent was already reclaimed to UNKNOWN between this
 			// handler's broker call starting and returning. Not an error.
 			return nil
 		}

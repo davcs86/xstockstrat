@@ -38,17 +38,14 @@ import (
 	"github.com/xstockstrat/trading/internal/repository"
 )
 
-// configSetConfigForwarder is the seam TradingService.escalateSystemic calls through — see the
-// TradingService.configSetter field doc comment for why this exists. *config.Watcher's real
-// SetConfig method already matches this signature exactly.
+// configSetConfigForwarder is the seam escalateSystemic calls through (see the configSetter field
+// doc). *config.Watcher's real SetConfig satisfies it in production.
 type configSetConfigForwarder interface {
 	SetConfig(ctx context.Context, callerID string, req *configv1.SetConfigRequest) (*configv1.SetConfigResponse, error)
 }
 
-// offlineBaselineStore is the seam SnapshotOfflinePositions and recomputeAndEmitOfflinePositions
-// call through for baseline-related persistence. *repository.TradingRepo satisfies it in
-// production. Extracted for testability — same hoisting-for-testability approach as
-// configSetConfigForwarder and AccountRepository (feature 163, Step 9).
+// offlineBaselineStore is the seam for offline-baseline persistence, extracted for testability.
+// *repository.TradingRepo satisfies it in production; tests inject a fake.
 type offlineBaselineStore interface {
 	UpsertBaselineSnapshot(ctx context.Context, accountID, clientSnapshotID string, asOf time.Time, rows []repository.BaselineRow) error
 	EffectiveBaselineByAccount(ctx context.Context, accountID string) (asOf time.Time, lots map[string]pnl.Lot, ok bool, err error)
@@ -57,11 +54,8 @@ type offlineBaselineStore interface {
 	ListConfirmedOfflineOrdersByAccount(ctx context.Context, accountID string) ([]*tradingv1.Order, error)
 }
 
-// brokerOrderIDLookup is the seam reconcileTick calls through to confirm, against the persisted
-// trading.orders table, whether a broker order the in-memory map doesn't recognize is nonetheless
-// one the platform itself placed (now terminal, evicted from s.orders) rather than a genuinely
-// foreign order. *repository.TradingRepo satisfies it in production; tests inject a fake — the same
-// hoisting-for-testability approach as configSetConfigForwarder / offlineBaselineStore.
+// brokerOrderIDLookup is the seam reconcileTick uses to DB-ground its unknown_broker_order check
+// against trading.orders. *repository.TradingRepo satisfies it in production; tests inject a fake.
 type brokerOrderIDLookup interface {
 	KnownBrokerOrderIDs(ctx context.Context, accountID string, brokerOrderIDs []string) (map[string]bool, error)
 }
@@ -95,12 +89,7 @@ type TradingService struct {
 	cfg  *config.Config
 	cfgW *config.Watcher
 	// configSetter is the narrow seam escalateSystemic calls through instead of cfgW.SetConfig
-	// directly (feature 102). *config.Watcher satisfies it in production. config.Watcher's
-	// underlying gRPC client field is unexported (package config), so a test in this package
-	// has no way to construct a *config.Watcher around a fake client — extracting this
-	// interface lets a test substitute a fake without touching the config package, the same
-	// hoisting-for-testability approach this codebase has used repeatedly (030/023/101's own
-	// config-value hoists), applied here to a client dependency instead of a config value.
+	// directly — extracted so a test can substitute a fake (config.Watcher's client is unexported).
 	configSetter configSetConfigForwarder
 	// Multi-broker pool: key is account_id.
 	brokers     map[string]brokerPoolEntry
@@ -115,20 +104,15 @@ type TradingService struct {
 	marketdata marketdatav1.MarketDataServiceClient
 	// repo persists orders to trading.orders hypertable.
 	repo *repository.TradingRepo
-	// baselineStore is the narrow seam for offline-baseline persistence (feature 163).
+	// baselineStore is the narrow seam for offline-baseline persistence.
 	// *repository.TradingRepo satisfies it in production; tests inject a fake.
 	baselineStore offlineBaselineStore
 	// reconcileOrderLookup is the narrow seam reconcileTick uses to DB-ground its
-	// unknown_broker_order classification against trading.orders (so a legitimate terminal
-	// order absent from the in-memory map is not misclassified as foreign). *repository.TradingRepo
-	// satisfies it in production; tests inject a fake.
+	// unknown_broker_order classification against trading.orders. Tests inject a fake.
 	reconcileOrderLookup brokerOrderIDLookup
-	// orderIntentRepo is the insert-or-return-existing dedup store (feature 101). Struct
-	// field added here (Step 9) so order_intent.go's sweeper compiles; NewTradingService's
-	// constructor parameter and main.go wiring land in Step 11.
+	// orderIntentRepo is the insert-or-return-existing order-intent dedup store.
 	orderIntentRepo repository.OrderIntentRepository
-	// bracketRepo persists the per-order bracket (stop-loss/take-profit) state machine
-	// (feature 030).
+	// bracketRepo persists the per-order bracket (stop-loss/take-profit) state machine.
 	bracketRepo repository.BracketRepository
 	// In-memory order store for active fan-out and fill polling.
 	// Orders are also written to DB on every state change.
@@ -136,45 +120,32 @@ type TradingService struct {
 	// Fan-out channels for StreamOrderUpdates
 	mu   sync.Mutex
 	subs map[string]chan *tradingv1.Order
-	// credStatus tracks the last-persisted CredentialStatus per account so the
-	// health poller can skip DB writes when the status has not changed. Seeded
-	// from the DB in LoadBrokerPool.
+	// credStatus tracks the last-persisted CredentialStatus per account so the health poller
+	// skips DB writes when unchanged. Seeded from the DB in LoadBrokerPool.
 	credStatus   map[string]int32
 	credStatusMu sync.Mutex
-	// credSkipLoggedAt throttles the "skipping account: credentials invalid" warning
-	// to once per credSkipLogInterval per account. Accessed only from the single
-	// position-sync poller goroutine (syncPositions), so it needs no lock.
+	// credSkipLoggedAt throttles the invalid-credentials skip warning per account. Accessed only
+	// from the single position-sync poller goroutine, so it needs no lock.
 	credSkipLoggedAt map[string]time.Time
-	// halted / haltReasons track each account's persisted automated halt (feature 030).
-	// Seeded from the DB in LoadBrokerPool. Mirrors credStatus/credStatusMu's shape.
+	// halted / haltReasons track each account's persisted automated halt.
+	// Seeded from the DB in LoadBrokerPool.
 	halted      map[string]bool
 	haltReasons map[string]string
-	// haltedLastPolled records when reconcileTick last polled the broker for an already-
-	// halted account, so it can be throttled to trading.reconciliation.halted_poll_interval_ms
-	// (a slower cadence than the ordinary tick interval) instead of the full-rate poll a
-	// still-tradeable account gets — an already-halted account can't place new orders
-	// regardless (isAccountHalted gates PlaceOrder/ReplaceOrder), so there is no need to
-	// re-check broker state at the same frequency. Set the instant an account becomes
-	// halted (haltAccount) so the cooldown starts immediately rather than after one more
-	// free poll.
+	// haltedLastPolled throttles reconcileTick's broker polls for an already-halted account to
+	// trading.reconciliation.halted_poll_interval_ms. Set on halt so the cooldown starts at once.
 	haltedLastPolled map[string]time.Time
 	haltedMu         sync.Mutex
 	// flattenInFlight dedups the protection-window watchdog's per-bracket flatten
 	// goroutines — a slow flatten must not be re-triggered by the next tick.
 	flattenInFlight   map[string]bool
 	flattenInFlightMu sync.Mutex
-	// reconcileCandidates tracks how many consecutive ticks a candidate mismatch has been
-	// observed (feature 102), keyed by "accountID:order:orderID" or "accountID:pos:symbol".
-	// Cleared once resolved (no longer observed on a later tick) or once it crosses the
-	// grace window and becomes a real finding. reconcileTick runs on a single poller
-	// goroutine, but this is guarded by its own mutex anyway per design.md's instruction
-	// (defensive — a future caller from another goroutine must not silently race).
+	// reconcileCandidates counts consecutive ticks a candidate mismatch has been observed, keyed
+	// "accountID:order:orderID" or "accountID:pos:symbol"; cleared on resolve or when it becomes a
+	// finding. Guarded by its own mutex defensively (reconcileTick is single-goroutine today).
 	reconcileCandidates   map[string]int
 	reconcileCandidatesMu sync.Mutex
-	// confirmLocks serializes ConfirmOrder's persist→recompute→emit per offline account
-	// (feature 157). Request-driven confirm lacks the poller's one-goroutine-per-account
-	// serialization, so two concurrent edits on the same account would otherwise lost-update
-	// the recomputed position snapshot. Keyed by account_id.
+	// confirmLocks serializes ConfirmOrder's persist→recompute→emit per offline account (keyed by
+	// account_id) — concurrent edits would otherwise lost-update the recomputed position snapshot.
 	confirmLocks   map[string]*sync.Mutex
 	confirmLocksMu sync.Mutex
 }
@@ -252,9 +223,8 @@ func (s *TradingService) LoadBrokerPool(ctx context.Context) error {
 	defer s.brokersMu.Unlock()
 
 	for _, rec := range accounts {
-		// Offline accounts (feature 157) have no credentials and no broker client. Load them into
-		// the pool with a nil client (tagged OFFLINE) so PlaceOrder/ConfirmOrder resolve them after
-		// a restart; every broker poller skips OFFLINE entries.
+		// Offline accounts have no credentials and no broker client — loaded with a nil client
+		// (tagged OFFLINE) so they resolve after a restart; every broker poller skips OFFLINE entries.
 		if rec.BrokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) {
 			s.brokers[rec.ID] = brokerPoolEntry{client: nil, brokerType: rec.BrokerType, userID: rec.UserID}
 			slog.Info("LoadBrokerPool: loaded offline account", "account_id", rec.ID, "user_id", rec.UserID)
@@ -274,9 +244,8 @@ func (s *TradingService) LoadBrokerPool(ctx context.Context) error {
 		s.credStatusMu.Lock()
 		s.credStatus[rec.ID] = rec.CredentialStatus
 		s.credStatusMu.Unlock()
-		// Hydrate the persisted automated halt (feature 030) — a routine redeploy must
-		// never silently un-halt an account whose failure condition might still be
-		// present (design.md round 5's caught regression).
+		// Hydrate the persisted automated halt — a redeploy must never silently un-halt an
+		// account whose failure condition might still be present.
 		s.haltedMu.Lock()
 		s.halted[rec.ID] = rec.Halted
 		s.haltReasons[rec.ID] = rec.HaltReason
@@ -286,12 +255,9 @@ func (s *TradingService) LoadBrokerPool(ctx context.Context) error {
 	return nil
 }
 
-// LoadInflightOrders repopulates the in-memory order map from the DB with orders that are
-// still in-flight at the broker (status NEW / PARTIALLY_FILLED with a broker_order_id). The
-// fill poller only tracks orders present in s.orders, which otherwise starts empty after a
-// restart — so an order placed before the restart would never have its fill detected, leaving
-// it stuck NEW forever. Called once at startup, before StartFillPoller. Best-effort: a DB read
-// failure is logged and the poller simply starts with whatever in-process orders exist.
+// LoadInflightOrders repopulates s.orders from the DB with orders still in-flight at the broker
+// (NEW/PARTIALLY_FILLED with a broker_order_id) so the fill poller resumes tracking them after a
+// restart. Called once before StartFillPoller; best-effort (a DB read failure is logged).
 func (s *TradingService) LoadInflightOrders(ctx context.Context) error {
 	orders, err := s.repo.ListSubmittedOrders(ctx)
 	if err != nil {
@@ -309,11 +275,8 @@ func (s *TradingService) LoadInflightOrders(ctx context.Context) error {
 	return nil
 }
 
-// resolveAccount returns the resolved account ID and broker pool entry for the given
-// accountID. If accountID is empty and exactly one broker is registered, that one is
-// returned. The resolved ID is returned explicitly (feature 101) — the previous 2-return
-// signature discarded it on this fallback path, leaving order.AccountId (and now
-// order_intents.broker_account_id, NOT NULL) empty even though a real account was used.
+// resolveAccount returns the resolved account ID and broker pool entry. An empty accountID with
+// exactly one registered BROKER account auto-selects it; the resolved ID is returned explicitly.
 func (s *TradingService) resolveAccount(accountID string) (resolvedID string, entry brokerPoolEntry, err error) {
 	s.brokersMu.RLock()
 	defer s.brokersMu.RUnlock()
@@ -327,8 +290,7 @@ func (s *TradingService) resolveAccount(accountID string) (resolvedID string, en
 	}
 
 	// Sole-account fallback: auto-select only when exactly one BROKER account is registered.
-	// Offline accounts (feature 157) are never the implicit account for a broker-routed order —
-	// an offline PlaceOrder names its account_id and takes its own branch before this is reached.
+	// Offline accounts are never the implicit account for a broker-routed order.
 	var soleID string
 	var soleEntry brokerPoolEntry
 	brokerCount := 0
@@ -380,14 +342,12 @@ func (s *TradingService) broadcastOrder(order *tradingv1.Order) {
 }
 
 func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrderRequest) (*tradingv1.Order, error) {
-	// Check platform maintenance mode.
 	if s.cfgW.GetBool("platform.maintenance_mode", false) {
 		return nil, fmt.Errorf("platform is in maintenance mode — trading halted")
 	}
 
-	// Validate trailing-stop parameters: a trailing_stop order requires exactly one
-	// of trail_price / trail_percent; any other order type must leave both zero.
-	// Catching this here returns a clean InvalidArgument instead of a broker 422.
+	// A trailing_stop order requires exactly one of trail_price/trail_percent; any other type
+	// must leave both zero. Caught here so a bad request returns InvalidArgument, not a broker 422.
 	if req.OrderType == tradingv1.OrderType_ORDER_TYPE_TRAILING_STOP {
 		if (req.TrailPrice > 0) == (req.TrailPercent > 0) {
 			return nil, grpcstatus.Errorf(codes.InvalidArgument,
@@ -398,25 +358,20 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 			"trail_price/trail_percent are only valid for trailing_stop orders")
 	}
 
-	// client_order_id is now mandatory (feature 101, FR-1): a stable client-generated
-	// nonce reused across retries of the same logical place-order action, and this
-	// order's intent ID for dedup purposes.
+	// client_order_id is mandatory: a stable client nonce reused across retries of the same
+	// logical place-order action, and this order's intent ID for dedup.
 	if req.ClientOrderId == "" {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "client_order_id is required")
 	}
 
-	// Resolve broker account.
 	resolvedAccountID, accountEntry, err := s.resolveAccount(req.AccountId)
 	if err != nil {
 		return nil, err
 	}
 
-	// Guard B (feature 159): route on the authoritative persisted broker_type as well as the
-	// in-memory pool tag. broker_type is immutable post-create, so the two normally agree; reading
-	// the persisted record makes the offline decision divergence-safe — an offline account can never
-	// fall through to a broker path even if its pool entry is stale or mistyped. A DB read error is
-	// non-fatal: fall back to the pool-tag-only decision (best-effort, mirroring the service's other
-	// non-blocking reads) so a transient DB blip never fails a legitimate broker order open.
+	// Route on the authoritative persisted broker_type as well as the in-memory pool tag, so an
+	// offline account can never fall through to a broker path if its pool entry is stale. A DB read
+	// error is non-fatal — fall back to the pool tag alone (best-effort).
 	persistedOffline := false
 	if s.accountRepo != nil {
 		if rec, gErr := s.accountRepo.GetBrokerAccount(ctx, resolvedAccountID); gErr != nil {
@@ -427,12 +382,9 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		}
 	}
 
-	// Offline account (feature 157): record the order as manual bookkeeping — this branch
-	// precedes every broker-routing path below. It deliberately skips broker submit,
-	// ComputePositionSize, bracket submission, and the halt/trading-state gates (there is no
-	// broker to protect, no live position to size against, and no bracket to arm — a NEW offline
-	// order becomes real only when ConfirmOrder writes its fill). resolveAccount already tagged
-	// the entry OFFLINE, so no broker call is ever constructed for it (@AC-4/@AC-8).
+	// Offline account: record the order as manual bookkeeping — this branch precedes every
+	// broker-routing path and deliberately skips broker submit, sizing, bracket, and the
+	// halt/trading-state gates. A NEW offline order becomes real only when ConfirmOrder writes its fill.
 	if accountEntry.brokerType == int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE) || persistedOffline {
 		return s.recordOfflineOrder(ctx, req, resolvedAccountID, accountEntry.userID)
 	}
@@ -440,43 +392,36 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 	// Resolve trading mode: request field takes precedence; fall back to live config, then env.
 	mode := s.resolveTradingMode(req.TradingMode)
 
-	// Persisted per-account automated halt (feature 030) — gates right after the
-	// account is resolved, mirroring the trading_state gate immediately below.
-	// ReplaceOrder gets the identical gate (no reduce-only carve-out); CancelOrder is
-	// deliberately never gated (the operator's sole remaining manual de-risk tool).
+	// Persisted per-account automated halt gate. ReplaceOrder gets the identical gate;
+	// CancelOrder is deliberately never gated (the operator's manual de-risk tool).
 	if s.isAccountHalted(resolvedAccountID) {
 		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "account is halted: %s", s.haltReason(resolvedAccountID))
 	}
 
-	// platform.trading_state gate (feature 100): HALTED blocks outright; REDUCE_ONLY
-	// blocks only exposure-increasing orders (verified via PortfolioService.GetPosition).
-	// Independent of and parallel to platform.maintenance_mode below.
+	// platform.trading_state gate: HALTED blocks outright; REDUCE_ONLY blocks only
+	// exposure-increasing orders. Independent of platform.maintenance_mode.
 	if err := s.checkTradingStateForPlaceOrder(ctx, accountEntry.userID, req.Symbol, mode, req.Side); err != nil {
 		return nil, err
 	}
 
-	// Compute the request-content hash (feature 101, FR-3) — the dedup mechanism's
-	// content-identity check, independent of the client_order_id nonce itself. Deliberately
-	// computed BEFORE position sizing (feature 023) mutates req.Qty below: the hash must
-	// reflect the caller's original request so a genuine retry of the same logical action
-	// always matches, even if market data has since moved and would size differently.
+	// Compute the request-content hash BEFORE position sizing mutates req.Qty below: the hash must
+	// reflect the caller's original request so a genuine retry always matches, even if sizing moved.
 	hashDigest, err := placeOrderRequestHash(req)
 	if err != nil {
 		return nil, grpcstatus.Errorf(codes.Internal, "compute request hash: %v", err)
 	}
 	requestHashHex := hex.EncodeToString(hashDigest)
 
-	// Position sizing (feature 023): qty <= 0 means "auto-size this order" — the
-	// sizing_enabled master gate rejects that up front if sizing is disabled (AC-4).
+	// Position sizing: qty <= 0 means "auto-size" — the sizing_enabled master gate rejects
+	// that up front if sizing is disabled.
 	sizingEnabled := s.cfgW.GetBool("trading.risk.sizing_enabled", true)
 	needSizing := req.Qty <= 0
 	if needSizing && !sizingEnabled {
 		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "position sizing is disabled; an explicit qty is required")
 	}
 
-	// Hoisted from checkPortfolioRisk's own internal guard so sizing and the warn-only
-	// risk check can share one equity lookup instead of each fetching it independently.
-	// Caller identity from the trusted x-user-id header (deprecated request body user_id ignored).
+	// Sizing and the warn-only risk check share one equity lookup instead of fetching it twice.
+	// Caller identity from the trusted x-user-id header (request-body user_id ignored).
 	needRiskCheck := middleware.FromContext(ctx).UserID != "" && s.cfgW.GetFloat("trading.risk.max_position_pct", 0.05) > 0
 	var equity float64
 	var equityErr error
@@ -484,14 +429,12 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		equity, equityErr = s.resolveAccountEquity(ctx, resolvedAccountID)
 	}
 
-	// sizedStopPrice is the informational stop computed by ComputePositionSize (feature
-	// 023) — set on the order below only for MARKET/LIMIT auto-sized orders; never a real
-	// broker-submitted STOP/STOP_LIMIT/TRAILING_STOP trigger. entryPriceProxy (feature 030)
-	// is the bracket take-profit formula's entry-price estimate.
+	// sizedStopPrice is the informational stop from ComputePositionSize — set only on auto-sized
+	// MARKET/LIMIT orders, never a real broker STOP/STOP_LIMIT/TRAILING_STOP trigger.
+	// entryPriceProxy is the bracket take-profit formula's entry-price estimate.
 	var sizedStopPrice, entryPriceProxy float64
 	if needSizing {
-		// Fail-closed (design.md § Chosen Approach) — unlike checkPortfolioRisk below,
-		// missing/zero equity aborts the order rather than just skipping a warning.
+		// Fail-closed — unlike checkPortfolioRisk below, missing/zero equity aborts the order.
 		if equityErr != nil || equity <= 0 {
 			return nil, grpcstatus.Errorf(codes.FailedPrecondition, "cannot auto-size order: equity unavailable: %v", equityErr)
 		}
@@ -510,22 +453,19 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		// threshold check below both read req.Qty after this point.
 		req.Qty = sizedQty
 		sizedStopPrice = computedStopPrice
-		// Prefer the LIMIT order's own limit price over the fetched current price as the
-		// entry-price proxy (feature 030) — a closer estimate of the actual fill price.
+		// Prefer the LIMIT order's own limit price as the entry-price proxy (closer to fill).
 		entryPriceProxy = computedCurrentPrice
 		if req.OrderType == tradingv1.OrderType_ORDER_TYPE_LIMIT {
 			entryPriceProxy = req.LimitPrice
 		}
 	}
 
-	// Non-blocking portfolio risk check: log warnings but never block order placement. Runs
-	// after sizing so it evaluates the real (possibly auto-sized) req.Qty — fixes the
-	// pre-existing bug where this structurally could never fire for auto-sized orders.
+	// Non-blocking portfolio risk check (warn-only). Runs after sizing so it evaluates the real
+	// (possibly auto-sized) req.Qty.
 	if needRiskCheck {
 		s.checkPortfolioRisk(ctx, req, mode, equity, equityErr)
 	}
 
-	// Check approval thresholds from live config.
 	approvalQtyThreshold := s.cfgW.GetFloat("trading.approval.require_above_qty", 500)
 	approvalNotionalThreshold := s.cfgW.GetFloat("trading.approval.require_above_notional", 50000)
 	requiresApproval := req.Qty > approvalQtyThreshold ||
@@ -537,22 +477,9 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		requestHashHex, needSizing, sizedStopPrice, entryPriceProxy)
 }
 
-// submitOrder is PlaceOrder's approval-decision-and-broker-submission seam, extracted
-// (feature 030) so flattenAndHalt can reuse the exact same safety machinery — order
-// intent dedup, ledger events, timeout-vs-definite-rejection handling, bracket
-// submission — that any other order gets, rather than a parallel ad hoc broker call.
-//
-// Deviation from design.md's literal 6-parameter signature: requestHashHex/needSizing/
-// sizedStopPrice/entryPriceProxy are also threaded through explicitly. design.md
-// predates features 101 (order-intent dedup) and 023 (position sizing) actually
-// landing on this branch, so it could not have anticipated their real shape. The
-// request hash in particular MUST be the caller's pre-sizing computation (see
-// PlaceOrder's own comment on why) — recomputing it here against the (possibly
-// already-mutated) req would defeat that guarantee. flattenAndHalt calls this with
-// needSizing=false (a flatten order always carries an explicit qty, never triggers
-// bracket submission) and a freshly-computed requestHashHex over the flatten request
-// (self-consistent: a flatten is never itself a candidate for the sizing-hash-order
-// subtlety, since it's never auto-sized).
+// submitOrder is PlaceOrder's broker-submission seam, shared with flattenAndHalt so a flatten
+// gets the same safety machinery (intent dedup, ledger events, bracket submission). requestHashHex
+// MUST be the caller's pre-sizing hash (see PlaceOrder) — never recomputed here against a mutated req.
 func (s *TradingService) submitOrder(
 	ctx context.Context,
 	req *tradingv1.PlaceOrderRequest,
@@ -572,13 +499,8 @@ func (s *TradingService) submitOrder(
 		orderStatus = tradingv1.OrderStatus_ORDER_STATUS_PENDING_APPROVAL
 	}
 
-	// Dedup insert (feature 101): gated on !requiresApproval. An approval-required
-	// order has no broker call yet at all — it is not part of this feature's dedup
-	// surface (FR-1..FR-6 concern the broker call, which the approval path defers
-	// indefinitely) — so it deliberately touches no order_intents row. This also
-	// satisfies "insert before building the provisional order struct" (still true when
-	// it does run) without an approval-required order acquiring an intent it should
-	// never have.
+	// Dedup insert, gated on !requiresApproval: an approval-required order has no broker call yet,
+	// so it deliberately touches no order_intents row.
 	ownsIntent := true
 	var intentState tradingv1.IntentState
 	if !requiresApproval {
@@ -610,8 +532,7 @@ func (s *TradingService) submitOrder(
 					"order intent %q outcome is unknown; verify with the broker before retrying", intentID)
 			default: // intentActionRejectPending
 				if isStale {
-					// Best-effort — the caller cannot and need not distinguish "not yet
-					// stale" from "just reclaimed" (design.md § Concurrency).
+					// Best-effort — the caller need not distinguish "not yet stale" from "just reclaimed".
 					_, _, _ = s.orderIntentRepo.ReclaimOrphanIntent(ctx, intentID, existing.UpdatedAt.Add(staleThreshold(s.cfgW)))
 				}
 				return nil, grpcstatus.Errorf(codes.FailedPrecondition,
@@ -644,10 +565,8 @@ func (s *TradingService) submitOrder(
 		UpdatedAt:     timestamppb.New(time.Now()),
 		IntentState:   intentState,
 	}
-	// Informational stop price for auto-sized MARKET/LIMIT orders only (feature 023) — this
-	// is never submitted to the broker as a real STOP/STOP_LIMIT/TRAILING_STOP trigger
-	// (product-spec's Out-of-Scope note); every other order type and every override-mode
-	// (explicit-qty) order keeps req.StopPrice, the real broker-trigger price, untouched.
+	// Informational stop for auto-sized MARKET/LIMIT orders only — never submitted as a real broker
+	// STOP/STOP_LIMIT/TRAILING_STOP trigger; every other order keeps req.StopPrice untouched.
 	if needSizing && (req.OrderType == tradingv1.OrderType_ORDER_TYPE_MARKET || req.OrderType == tradingv1.OrderType_ORDER_TYPE_LIMIT) {
 		order.StopPrice = sizedStopPrice
 	}
@@ -656,7 +575,6 @@ func (s *TradingService) submitOrder(
 	s.orders[orderID] = order
 	s.mu.Unlock()
 
-	// Persist order to DB.
 	if err := s.repo.UpsertOrder(ctx, order); err != nil {
 		slog.Warn("db upsert order failed", "order_id", orderID, "error", err)
 	}
@@ -676,22 +594,18 @@ func (s *TradingService) submitOrder(
 		return order, nil
 	}
 
-	// Emit order.submitted before calling broker — signals intent to submit.
+	// Emit order.submitted before calling the broker.
 	go s.emitLedgerEvent(context.Background(), "order.submitted", orderID, order.UserId, map[string]interface{}{
 		"order_id": orderID, "symbol": order.Symbol, "side": order.Side.String(),
 		"qty": order.Qty, "trading_mode": mode.String(),
 	})
 
-	// Submit to broker.
 	brokerReq := s.buildBrokerRequest(req)
-	// Forward the derived broker client-order-id (feature 101) instead of the raw
-	// platform order ID, so a retried submission is de-duplicated by the broker too —
-	// IBKR's only dedup mechanism (it has no server-side idempotency of its own).
+	// Forward the derived broker client-order-id so a retried submission is de-duplicated by the
+	// broker too — IBKR's only dedup mechanism (no server-side idempotency of its own).
 	brokerReq.ClientOrderID = broker.DeriveBrokerClientOrderID(intentID)
-	// Alpaca-native bracket attach (feature 030): strictly safer than post-fill
-	// submission — no fill→stop gap. IBKR does not accept these fields on SubmitOrder
-	// (no order_class field exists in its request shape); its legs go through
-	// maybeSubmitBracket's SubmitBracketLegs follow-up call after the fill is confirmed.
+	// Alpaca-native bracket attach — no fill→stop gap. IBKR does not accept these fields on
+	// SubmitOrder; its legs go through maybeSubmitBracket's SubmitBracketLegs after the fill.
 	bracketOrdersEnabled := needSizing && sizedStopPrice > 0 && s.cfgW.GetBool("trading.risk.bracket_orders_enabled", true)
 	if bracketOrdersEnabled && commonv1.BrokerType(accountEntry.brokerType) == commonv1.BrokerType_BROKER_TYPE_ALPACA {
 		brokerReq.BracketStopPrice = sizedStopPrice
@@ -702,10 +616,8 @@ func (s *TradingService) submitOrder(
 		var netErr net.Error
 		isTimeout := errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout())
 		if isTimeout {
-			// Uncertain outcome (feature 101, FR-4): leave order.Status at its
-			// pre-broker-call value and the intent PENDING for reclaim — do not
-			// unconditionally mark REJECTED, which would conflate "definitely
-			// rejected" with "we don't know what happened."
+			// Uncertain outcome: leave order.Status pre-call and the intent PENDING for reclaim —
+			// don't mark REJECTED, which conflates "definitely rejected" with "unknown".
 			_ = s.repo.UpsertOrder(context.Background(), order)
 			go s.emitLedgerEvent(context.Background(), "order.broker_call_uncertain", orderID, order.UserId, map[string]interface{}{
 				"order_id": orderID, "intent_id": intentID, "error": err.Error(),
@@ -713,7 +625,7 @@ func (s *TradingService) submitOrder(
 			slog.Warn("broker call uncertain (timeout)", "order_id", orderID, "intent_id", intentID, "error", err)
 			return order, fmt.Errorf("broker submission failed: %w", err)
 		}
-		// Definite, synchronous rejection — existing behavior unchanged.
+		// Definite, synchronous rejection.
 		order.Status = tradingv1.OrderStatus_ORDER_STATUS_REJECTED
 		order.UpdatedAt = timestamppb.New(time.Now())
 		go s.emitLedgerEvent(context.Background(), "order.broker_rejected", orderID, order.UserId, map[string]interface{}{
@@ -731,18 +643,15 @@ func (s *TradingService) submitOrder(
 		return nil, fmt.Errorf("broker submission failed: %w", err)
 	}
 
-	// Update order with broker-assigned fields.
 	order.BrokerOrderId = brokerOrder.BrokerOrderID
-	// Keep the existing status (NEW) if the broker's submit response carries a transient
-	// or unrecognized status (UNSPECIFIED) rather than clobbering it; the fill poller will
-	// reconcile the order to its real status.
+	// Keep NEW if the broker's submit status is transient/unrecognized (UNSPECIFIED) rather than
+	// clobbering it; the fill poller reconciles to the real status.
 	if st := alpacaStatusToProto(brokerOrder.Status); st != tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED {
 		order.Status = st
 	}
 	order.UpdatedAt = timestamppb.New(time.Now())
-	// Carry any fill the broker already reported on submit (market orders fill
-	// immediately). Without this the fill poller — which skips orders already in
-	// FILLED state — would never backfill the quantity, leaving FILLED orders at 0.
+	// Carry any fill the broker reported on submit — the fill poller skips FILLED orders, so
+	// without this a fill-on-submit would leave FILLED orders at qty 0.
 	order.FilledQty = brokerOrder.FilledQty
 	order.FilledAvgPrice = brokerOrder.FilledAvgPrice
 	if order.Status == tradingv1.OrderStatus_ORDER_STATUS_FILLED && order.FilledQty == 0 {
@@ -750,10 +659,8 @@ func (s *TradingService) submitOrder(
 	}
 	order.IntentState = tradingv1.IntentState_INTENT_STATE_COMPLETED
 
-	// Bracket submission (feature 030) — only once a fill is confirmed (a resting,
-	// unfilled LIMIT entry has nothing to protect yet; the fill poller's own hook
-	// handles that case when the fill is later detected). entryProxy prefers the real
-	// average fill price over the pre-fill estimate once it's known.
+	// Bracket submission only once a fill is confirmed (a resting LIMIT has nothing to protect yet;
+	// the fill poller handles that later). entryProxy prefers the real average fill price when known.
 	if order.FilledQty > 0 {
 		entryProxy := entryPriceProxy
 		if order.FilledAvgPrice > 0 {
@@ -763,7 +670,6 @@ func (s *TradingService) submitOrder(
 			s.cfgW.GetBool("trading.risk.bracket_orders_enabled", true))
 	}
 
-	// Persist updated order with broker fields.
 	if err := s.repo.UpsertOrder(context.Background(), order); err != nil {
 		slog.Warn("db upsert after broker submit failed", "order_id", orderID, "error", err)
 	}
@@ -785,11 +691,9 @@ func (s *TradingService) submitOrder(
 	return order, nil
 }
 
-// recordOfflineOrder persists a manually-entered order for an offline account (feature 157). It
-// never contacts a broker: it reuses feature 101's client_order_id dedup for idempotent record
-// (a retried record with the same nonce returns the stored order) but finalizes the intent
-// synchronously — there is no broker call to await. The order lands NEW with filled_qty = 0 and an
-// empty broker_order_id; it becomes economically real only when ConfirmOrder writes its fill.
+// recordOfflineOrder persists a manually-entered order for an offline account — never contacts a
+// broker. Reuses client_order_id dedup (a retried record returns the stored order) but finalizes the
+// intent synchronously. The order lands NEW (filled_qty 0, empty broker_order_id) until ConfirmOrder.
 func (s *TradingService) recordOfflineOrder(ctx context.Context, req *tradingv1.PlaceOrderRequest, accountID, userID string) (*tradingv1.Order, error) {
 	mode := s.resolveTradingMode(req.TradingMode)
 
@@ -911,11 +815,9 @@ func offlineFillsFromOrders(orders []*tradingv1.Order) []pnl.Fill {
 	return fills
 }
 
-// ConfirmOrder writes the fill a broker would otherwise report onto an OFFLINE order (feature 157),
-// then recomputes the account's absolute net positions from ALL its confirmed orders and emits the
-// self-healing account.positions.synced event — never order.filled (the invariant that keeps
-// portfolio's incremental fold from double-counting). It is order-sourced and never contacts a
-// broker: it rejects broker accounts and non-owners from the persisted order alone.
+// ConfirmOrder writes a fill onto an OFFLINE order, then recomputes the account's net positions and
+// emits account.positions.synced — never order.filled (that would double-count in portfolio's fold).
+// Order-sourced: rejects broker accounts and non-owners from the persisted order alone.
 func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.ConfirmOrderRequest) (*tradingv1.Order, error) {
 	if req.OrderId == "" {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "order_id is required")
@@ -931,8 +833,7 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 	if order == nil {
 		return nil, grpcstatus.Errorf(codes.NotFound, "order %q not found", req.OrderId)
 	}
-	// Order-sourced guard — GetOrder already selects broker_type + user_id, so no broker call is
-	// needed to reject a broker account (@AC-9) or a non-owner.
+	// Order-sourced guard — GetOrder already selects broker_type + user_id (no broker call needed).
 	if order.BrokerType != commonv1.BrokerType_BROKER_TYPE_OFFLINE {
 		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "ConfirmOrder applies only to offline accounts")
 	}
@@ -940,8 +841,7 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "order %q does not belong to caller", req.OrderId)
 	}
 
-	// Serialize persist→recompute→emit per account — request-driven confirm lacks the pollers'
-	// one-goroutine-per-account serialization (@AC-10 idempotency depends on a consistent recompute).
+	// Serialize persist→recompute→emit per account (idempotency depends on a consistent recompute).
 	lock := s.confirmLock(order.AccountId)
 	lock.Lock()
 	defer lock.Unlock()
@@ -964,8 +864,7 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 	s.orders[order.OrderId] = order
 	s.mu.Unlock()
 
-	// Recompute the account's absolute net positions from ALL its confirmed offline orders
-	// (seeded by the effective baseline when one exists) — the @AC-10 idempotency guarantee.
+	// Recompute net positions from ALL confirmed offline orders (seeded by the baseline) — idempotent.
 	if err := s.recomputeAndEmitOfflinePositions(ctx, order.AccountId, order.UserId); err != nil {
 		slog.Warn("ConfirmOrder: recompute failed; positions.synced not emitted",
 			"account_id", order.AccountId, "error", err)
@@ -973,12 +872,9 @@ func (s *TradingService) ConfirmOrder(ctx context.Context, req *tradingv1.Confir
 	return order, nil
 }
 
-// recomputeAndEmitOfflinePositions recomputes the absolute net positions for an offline account
-// from ALL its confirmed orders, seeded by the effective baseline when one exists, and emits the
-// self-healing account.positions.synced event. Fail-closed: a query error skips the emit (an
-// empty snapshot would make portfolio's DeletePositionsNotInSync wipe the account).
-//
-// caller must hold s.confirmLock(accountID).
+// recomputeAndEmitOfflinePositions recomputes an offline account's net positions (from all confirmed
+// orders, seeded by the baseline) and emits account.positions.synced. Fail-closed: a query error skips
+// the emit (an empty snapshot would make portfolio wipe the account). Caller must hold confirmLock(accountID).
 func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, accountID, userID string) error {
 	// --- Load baseline (fail-closed: error → skip emit) ---
 	asOf, seedLots, hasBaseline, err := s.baselineStore.EffectiveBaselineByAccount(ctx, accountID)
@@ -996,7 +892,7 @@ func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, a
 		return err
 	}
 
-	// --- Fold: three-branch baseline build (design.md § One producer, three baseline cases) ---
+	// --- Fold: three-branch baseline build ---
 	var result pnl.FoldResult
 	// postT0Symbols tracks which symbols had a post-T0 fill (for provenance computation).
 	postT0Symbols := make(map[string]bool)
@@ -1011,7 +907,7 @@ func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, a
 		}
 		result = pnl.FoldFrom(seedLots, offlineFillsFromOrders(postT0Orders))
 	} else {
-		// No-baseline branch: fold ALL confirmed orders — byte-identical to feature-157 behavior.
+		// No-baseline branch: fold ALL confirmed orders.
 		result = pnl.Fold(offlineFillsFromOrders(confirmed))
 	}
 
@@ -1043,10 +939,8 @@ func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, a
 			"day_pnl":         0.0,
 			"day_pnl_pct":     0.0,
 		}
-		// Symbol-level provenance (design.md § Symbol-level MIXED):
-		// - in baseline AND has a post-T0 fill → MIXED (3)
-		// - in baseline, no post-T0 fill → BASELINE (2)
-		// - only post-T0 fills (or no baseline exists) → ORDERS (1)
+		// Symbol-level provenance: in baseline + post-T0 fill → MIXED; in baseline only → BASELINE;
+		// post-T0 fills only (or no baseline) → ORDERS.
 		if hasBaseline {
 			inBaseline := baselineSymbols[sym]
 			hasPostT0 := postT0Symbols[sym]
@@ -1065,10 +959,9 @@ func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, a
 		}
 		posEntries = append(posEntries, entry)
 	}
-	// Emit account.positions.synced ONLY (never order.filled) — the disjointness invariant that
-	// keeps portfolio's ConsumeOrderFills/GetPnL from double-folding. realized_pnl carries the
-	// account-grain cumulative realized; broker syncs never set the key (nil on the portfolio side).
-	// Run on the inbound request ctx (C-03 header propagation).
+	// Emit account.positions.synced ONLY (never order.filled) — the disjointness invariant that keeps
+	// portfolio from double-folding. realized_pnl carries account-grain cumulative realized (broker
+	// syncs never set it). Run on the inbound request ctx for header propagation.
 	s.emitLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", accountID), userID, map[string]interface{}{
 		"account_id":   accountID,
 		"user_id":      userID,
@@ -1079,10 +972,9 @@ func (s *TradingService) recomputeAndEmitOfflinePositions(ctx context.Context, a
 	return nil
 }
 
-// SnapshotOfflinePositions records brokerage-statement period-end holdings as an effective-dated
-// opening baseline for an OFFLINE account (feature 163). Rejected with FailedPrecondition for
-// broker (Alpaca/IBKR) accounts. Per-row validation is fault-tolerant: invalid rows are rejected
-// individually, valid rows commit, and the response lists both.
+// SnapshotOfflinePositions records brokerage-statement holdings as an effective-dated opening baseline
+// for an OFFLINE account (broker accounts are rejected). Per-row validation is fault-tolerant: invalid
+// rows are rejected individually, valid rows commit, and the response lists both.
 func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *tradingv1.SnapshotOfflinePositionsRequest) (*tradingv1.SnapshotOfflinePositionsResponse, error) {
 	if req.AccountId == "" {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "account_id is required")
@@ -1097,7 +989,7 @@ func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *trad
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "as_of is required")
 	}
 
-	// Offline-only gate: mirrors ConfirmOrder's guard (AC-9).
+	// Offline-only gate.
 	rec, err := s.accountRepo.GetBrokerAccount(ctx, req.AccountId)
 	if err != nil {
 		return nil, grpcstatus.Errorf(codes.NotFound, "account %q not found: %v", req.AccountId, err)
@@ -1106,7 +998,7 @@ func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *trad
 		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "snapshots apply to OFFLINE accounts only")
 	}
 
-	// Per-row validation (fault-tolerant — FR-5/AC-7).
+	// Per-row validation (fault-tolerant).
 	var (
 		validRows []repository.BaselineRow
 		rejected  []*tradingv1.RejectedBaselineRow
@@ -1130,7 +1022,7 @@ func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *trad
 				RowIndex: int32(i), Reason: fmt.Sprintf("negative avg_cost_per_share for %s", pos.Symbol),
 			})
 		default:
-			// qty == 0 is valid (flatten — commits, dropped later by EffectiveBaselineByAccount, AC-8/AC-15).
+			// qty == 0 is valid (flatten — commits, dropped later by EffectiveBaselineByAccount).
 			validRows = append(validRows, repository.BaselineRow{
 				Symbol:          pos.Symbol,
 				Qty:             pos.Qty,
@@ -1141,7 +1033,7 @@ func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *trad
 
 	asOf := req.AsOf.AsTime()
 
-	// Warnings: check for unconfirmed NEW offline orders (AC-16, design.md § Snapshot-over-NEW).
+	// Warn if there are unconfirmed NEW offline orders (their fills are excluded until confirmed).
 	var warnings []string
 	hasNew, warnErr := s.baselineStore.HasUnconfirmedOfflineOrders(ctx, req.AccountId)
 	if warnErr != nil {
@@ -1151,7 +1043,7 @@ func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *trad
 		warnings = append(warnings, "account has unconfirmed NEW offline orders; their fills are excluded from the position fold until confirmed")
 	}
 
-	// Serialize persist→audit→recompute→emit under the per-account lock (@AC-10).
+	// Serialize persist→audit→recompute→emit under the per-account lock.
 	lock := s.confirmLock(req.AccountId)
 	lock.Lock()
 	defer lock.Unlock()
@@ -1160,7 +1052,7 @@ func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *trad
 		return nil, grpcstatus.Errorf(codes.Internal, "persist baseline: %v", err)
 	}
 
-	// Audit event: account.positions.baseline_set (FR-6/AC-10, append-latest).
+	// Audit event: account.positions.baseline_set.
 	baselinePayload := make([]interface{}, 0, len(validRows))
 	for _, r := range validRows {
 		baselinePayload = append(baselinePayload, map[string]interface{}{
@@ -1177,7 +1069,6 @@ func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *trad
 		"positions":          baselinePayload,
 	})
 
-	// Recompute and emit the seeded positions.synced event.
 	if err := s.recomputeAndEmitOfflinePositions(ctx, req.AccountId, req.UserId); err != nil {
 		slog.Warn("SnapshotOfflinePositions: recompute failed after baseline persist",
 			"account_id", req.AccountId, "error", err)
@@ -1191,15 +1082,13 @@ func (s *TradingService) SnapshotOfflinePositions(ctx context.Context, req *trad
 	}, nil
 }
 
-// CancelOrder is deliberately NOT gated by platform.trading_state (feature 100) — mirrors
-// feature 030's identical decision on its own per-account halt: cancellation is the
-// operator's sole remaining manual de-risk tool and must work even when trading is halted.
+// CancelOrder is deliberately NOT gated by platform.trading_state or the per-account halt —
+// cancellation is the operator's manual de-risk tool and must work even when trading is halted.
 func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelOrderRequest) (*tradingv1.CancelOrderResponse, error) {
 	s.mu.Lock()
 	order, ok := s.orders[req.OrderId]
 	s.mu.Unlock()
 	if !ok {
-		// Fall back to DB lookup.
 		var err error
 		order, err = s.repo.GetOrder(ctx, req.OrderId)
 		if err != nil || order == nil {
@@ -1210,19 +1099,15 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 		s.mu.Unlock()
 	}
 
-	// Guard A (feature 159): an offline order is manual bookkeeping — it never reaches a broker, so
-	// CancelOrder must not flip it to CANCELED (the local transition below is otherwise unconditional).
-	// Offline orders are un-placed by ConfirmOrder edits, not a broker cancel. Keyed on the authoritative
-	// persisted order.BrokerType (GetOrder already selects broker_type), not an empty broker_order_id — a
-	// broker order that has not yet received its broker_order_id also has an empty one and must stay
-	// cancelable (the broker-cancel branch below already gates on a non-empty id).
+	// An offline order never reaches a broker, so CancelOrder must reject it (it's un-placed via
+	// ConfirmOrder, not a broker cancel). Keyed on the persisted order.BrokerType, not an empty
+	// broker_order_id — a broker order awaiting its broker_order_id also has an empty one and stays cancelable.
 	if order.BrokerType == commonv1.BrokerType_BROKER_TYPE_OFFLINE {
 		return nil, grpcstatus.Errorf(codes.FailedPrecondition,
 			"offline order %s is managed via ConfirmOrder, not broker cancel", req.OrderId)
 	}
 
-	// Dedup insert (feature 101): server-derived intent ID (a content-identical cancel
-	// on the same order is safe to collapse — no client nonce needed).
+	// Dedup insert: server-derived intent ID (a content-identical cancel on the same order collapses).
 	intentID, requestHashHex, err := deriveReplaceCancelIntentID(req)
 	if err != nil {
 		return nil, grpcstatus.Errorf(codes.Internal, "derive order intent: %v", err)
@@ -1263,10 +1148,8 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 	}
 	order.IntentState = tradingv1.IntentState_INTENT_STATE_PENDING
 
-	// Cancel at broker if we have a broker order ID. This branch's existing fail-open
-	// behavior (log-only, cancellation proceeds locally regardless) is deliberately
-	// UNCHANGED by this feature — "mark canceled locally regardless of broker response"
-	// is a distinct, pre-existing decision (design.md § Cross-intent precedence).
+	// Cancel at broker if we have a broker order ID. Fail-open: the order is marked canceled
+	// locally regardless of the broker response (a deliberate, pre-existing decision).
 	finalIntentState := repository.IntentStateCompleted
 	var resolvedEntry brokerPoolEntry
 	var haveEntry bool
@@ -1274,8 +1157,7 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 		_, entry, resolveErr := s.resolveAccount(order.AccountId)
 		if resolveErr != nil {
 			slog.Warn("cancel: could not resolve broker account", "order_id", req.OrderId, "account_id", order.AccountId, "error", resolveErr)
-			// A broker-call failure doesn't support the certainty CONFIRMED (Completed)
-			// would assert — the cancel intent goes to UNKNOWN, not CONFIRMED (design.md).
+			// A broker-call failure can't assert CONFIRMED — the cancel intent goes to UNKNOWN.
 			finalIntentState = repository.IntentStateUnknown
 		} else {
 			resolvedEntry, haveEntry = entry, true
@@ -1287,11 +1169,8 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 		}
 	}
 
-	// Bracket-leg cancellation on signal-driven close (feature 030, OQ-2): best-effort
-	// — log failures, never block the close. Cancelling an already-filled leg is a
-	// broker no-op (Alpaca returns 422 for an already-filled order, already tolerated
-	// above); pollFills detecting a leg fill on an already-CANCELED bracket row is
-	// likewise a no-op (maybeSubmitBracket's own status-branch guard).
+	// Bracket-leg cancellation on close: best-effort — log failures, never block the close.
+	// Cancelling an already-filled leg is a broker no-op.
 	if haveEntry {
 		if bracket, bErr := s.bracketRepo.GetBracketByOrderID(ctx, req.OrderId); bErr != nil {
 			slog.Warn("cancel: bracket lookup failed", "order_id", req.OrderId, "error", bErr)
@@ -1336,16 +1215,13 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 	return &tradingv1.CancelOrderResponse{Success: true, Order: order}, nil
 }
 
-// ReplaceOrder modifies a working order's qty/price/TIF at the broker. It is
-// broker-agnostic: resolveAccount routes by the order's account/broker_type so both
-// Alpaca and IBKR are covered. Only NEW / PARTIALLY_FILLED orders may be replaced (FR-8);
-// the per-account broker client's IsPaper()/baseURL() preserves the paper-only dev invariant.
+// ReplaceOrder modifies a working order's qty/price/TIF. Broker-agnostic: resolveAccount routes
+// by the order's broker_type. Only NEW / PARTIALLY_FILLED orders may be replaced.
 func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.ReplaceOrderRequest) (*tradingv1.Order, error) {
 	s.mu.Lock()
 	order, ok := s.orders[req.OrderId]
 	s.mu.Unlock()
 	if !ok {
-		// Fall back to DB lookup.
 		var err error
 		order, err = s.repo.GetOrder(ctx, req.OrderId)
 		if err != nil || order == nil {
@@ -1356,9 +1232,8 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 		s.mu.Unlock()
 	}
 
-	// Fill-state gate (FR-8): only NEW / PARTIALLY_FILLED may be replaced. A
-	// PARTIALLY_FILLED replace adjusts the remaining qty — req.Qty is passed straight
-	// through; Alpaca/IBKR interpret it as the new total per their adapter.
+	// Fill-state gate: only NEW / PARTIALLY_FILLED may be replaced. req.Qty is passed straight
+	// through; each broker interprets it as the new total per its adapter.
 	switch order.Status {
 	case tradingv1.OrderStatus_ORDER_STATUS_NEW, tradingv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED:
 		// replaceable
@@ -1367,17 +1242,13 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 			"order %s is not replaceable in status %s", req.OrderId, order.Status)
 	}
 
-	// Persisted per-account automated halt (feature 030) — identical gate to
-	// PlaceOrder's, no reduce-only carve-out (design.md's explicit rejection: no such
-	// precedent exists anywhere in this service). Placed ahead of the trading_state
-	// gate below (order.AccountId is already known from the persisted order — no need
-	// to wait for resolveAccount).
+	// Persisted per-account automated halt gate — identical to PlaceOrder's, no reduce-only
+	// carve-out. Placed ahead of the trading_state gate (order.AccountId is already known).
 	if s.isAccountHalted(order.AccountId) {
 		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "account is halted: %s", s.haltReason(order.AccountId))
 	}
 
-	// platform.trading_state gate (feature 100): mirrors PlaceOrder's gate — HALTED
-	// blocks outright; REDUCE_ONLY blocks only size-increasing replaces.
+	// platform.trading_state gate: HALTED blocks outright; REDUCE_ONLY blocks only size-increasing replaces.
 	if err := s.checkTradingStateForReplace(order, req); err != nil {
 		return nil, err
 	}
@@ -1392,8 +1263,7 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 		return nil, err
 	}
 
-	// Dedup insert (feature 101): server-derived intent ID (a content-identical replace
-	// on the same order is safe to collapse — no client nonce needed, unlike PlaceOrder).
+	// Dedup insert: server-derived intent ID (a content-identical replace on the same order collapses).
 	intentID, requestHashHex, err := deriveReplaceCancelIntentID(req)
 	if err != nil {
 		return nil, grpcstatus.Errorf(codes.Internal, "derive order intent: %v", err)
@@ -1453,8 +1323,7 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 				}
 			}
 		}
-		// Timeout leaves the intent PENDING for reclaim — existing codes.Internal error
-		// returned unchanged either way (this branch's RPC-level behavior is preserved).
+		// Timeout leaves the intent PENDING for reclaim; the codes.Internal error is returned either way.
 		return nil, grpcstatus.Errorf(codes.Internal, "broker replace failed: %v", replaceErr)
 	}
 
@@ -1498,7 +1367,6 @@ func (s *TradingService) GetOrder(ctx context.Context, req *tradingv1.GetOrderRe
 		normalizeFilledQty(order)
 		return order, nil
 	}
-	// Fall back to DB.
 	order, err := s.repo.GetOrder(ctx, req.OrderId)
 	if err != nil || order == nil {
 		return nil, fmt.Errorf("order %s not found", req.OrderId)
@@ -1560,10 +1428,8 @@ func (s *TradingService) ListOrders(ctx context.Context, req *tradingv1.ListOrde
 	return &tradingv1.ListOrdersResponse{Orders: page, Page: pageResp}, nil
 }
 
-// paginateOrders applies PageRequest windowing to an already-sorted order slice.
-// PageToken is an opaque numeric offset (empty = first page); the response carries
-// the total match count and the next offset token when more rows remain. A zero/absent
-// PageSize disables windowing and returns the full slice.
+// paginateOrders applies PageRequest windowing. PageToken is an opaque numeric offset (empty =
+// first page); a zero/absent PageSize disables windowing and returns the full slice.
 func paginateOrders(all []*tradingv1.Order, page *commonv1.PageRequest) ([]*tradingv1.Order, *commonv1.PageResponse) {
 	total := int32(len(all))
 	if page == nil || page.PageSize <= 0 {
@@ -1589,7 +1455,6 @@ func paginateOrders(all []*tradingv1.Order, page *commonv1.PageRequest) ([]*trad
 }
 
 func (s *TradingService) StreamOrderUpdates(req *tradingv1.StreamOrderUpdatesRequest, stream tradingv1.TradingService_StreamOrderUpdatesServer) error {
-	// Send current snapshot of matching orders.
 	s.mu.Lock()
 	snapshot := make([]*tradingv1.Order, 0)
 	for _, order := range s.orders {
@@ -1637,8 +1502,8 @@ func (s *TradingService) StartFillPoller(ctx context.Context) {
 }
 
 func (s *TradingService) pollFills(ctx context.Context) {
-	// Snapshot the broker pool under read lock. Offline accounts (feature 157) have a nil client
-	// and never reach a broker, so skip them — a fill is only ever confirmed via ConfirmOrder.
+	// Snapshot the broker pool under read lock. Offline accounts have a nil client and never reach
+	// a broker, so skip them — a fill is only ever confirmed via ConfirmOrder.
 	s.brokersMu.RLock()
 	brokerMap := make(map[string]brokerPoolEntry, len(s.brokers))
 	for id, e := range s.brokers {
@@ -1649,7 +1514,6 @@ func (s *TradingService) pollFills(ctx context.Context) {
 	}
 	s.brokersMu.RUnlock()
 
-	// Collect in-flight orders from in-memory map.
 	s.mu.Lock()
 	candidates := make([]*tradingv1.Order, 0)
 	for _, o := range s.orders {
@@ -1691,17 +1555,13 @@ func (s *TradingService) pollFills(ctx context.Context) {
 		}
 
 		newStatus := alpacaStatusToProto(brokerOrder.Status)
-		// A transient ("done_for_day") or unrecognized broker status maps to UNSPECIFIED;
-		// don't overwrite the order's real status with it (that would both lose the current
-		// status and, if it were terminal, stop reconciliation) — keep polling so the order
-		// converges to its true terminal state on a later cycle.
+		// A transient/unrecognized broker status maps to UNSPECIFIED; don't overwrite the order's
+		// real status with it — keep polling so the order converges to its true terminal state.
 		if newStatus == tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED {
 			continue
 		}
-		// A same-status repeat is normally a no-op poll tick — except a repeated
-		// PARTIALLY_FILLED with a larger FilledQty (feature 030: a second partial fill
-		// on the same order), which must still be processed so an ACTIVE IBKR bracket
-		// gets resized on every fill delta, not just the first.
+		// A same-status repeat is a no-op tick — except a repeated PARTIALLY_FILLED with a larger
+		// FilledQty, which must be processed so an ACTIVE IBKR bracket resizes on every fill delta.
 		if newStatus == order.Status && order.FilledQty == brokerOrder.FilledQty {
 			continue
 		}
@@ -1729,16 +1589,14 @@ func (s *TradingService) pollFills(ctx context.Context) {
 				"qty": order.Qty, "fill_price": order.FilledAvgPrice,
 				"user_id": order.UserId, "trading_mode": order.TradingMode.String(),
 				"account_id": order.AccountId,
-				// feature 029 — additive per-fill fee (0 when the broker exposes none). The payload
-				// is a schemaless Struct, so this key needs no proto change.
+				// Per-fill fee (0 when the broker exposes none).
 				"fees": brokerOrder.Fees,
 			})
 			go s.emitFillAlert(context.Background(), order)
 			slog.Info("order filled", "order_id", order.OrderId, "symbol", order.Symbol,
 				"qty", order.Qty, "fill_price", order.FilledAvgPrice)
-			// Fill detected asynchronously (feature 030) — order.StopPrice is only ever
-			// nonzero here for an auto-sized MARKET/LIMIT entry (023's construction); a
-			// no-op for every other order (see maybeSubmitBracket's own guard).
+			// Fill detected asynchronously — order.StopPrice is nonzero only for an auto-sized
+			// MARKET/LIMIT entry; a no-op for every other order (see maybeSubmitBracket's guard).
 			s.maybeSubmitBracket(context.Background(), order, entry, brokerOrder, order.StopPrice, order.FilledAvgPrice,
 				s.cfgW.GetBool("trading.risk.bracket_orders_enabled", true))
 
@@ -1748,7 +1606,7 @@ func (s *TradingService) pollFills(ctx context.Context) {
 				"filled_qty": order.FilledQty, "fill_price": order.FilledAvgPrice,
 				"user_id": order.UserId, "trading_mode": order.TradingMode.String(),
 				"account_id": order.AccountId,
-				// feature 029 — additive per-fill fee (0 when the broker exposes none).
+				// Per-fill fee (0 when the broker exposes none).
 				"fees": brokerOrder.Fees,
 			})
 			// First partial fill creates the bracket; a later partial fill on an
@@ -1769,17 +1627,15 @@ func (s *TradingService) pollFills(ctx context.Context) {
 	}
 }
 
-// Mismatch classes emitted on reconciliation.mismatch_found (feature 102). An internal
-// ledger-payload string tag, not a wire/proto type — the taxonomy is closed within this
-// feature's own scope.
+// Mismatch classes emitted on reconciliation.mismatch_found — internal ledger-payload string tags,
+// not a wire/proto type.
 const (
 	mismatchClassUnknownBrokerOrder  = "unknown_broker_order"
 	mismatchClassQuantityDiscrepancy = "quantity_discrepancy"
 	mismatchClassMissingBrokerOrder  = "missing_broker_order"
 )
 
-// isTerminalOrderStatus mirrors pollFills' own terminal-status set (see its candidate
-// collection above).
+// isTerminalOrderStatus mirrors pollFills' terminal-status set.
 func isTerminalOrderStatus(status tradingv1.OrderStatus) bool {
 	switch status {
 	case tradingv1.OrderStatus_ORDER_STATUS_FILLED,
@@ -1791,9 +1647,8 @@ func isTerminalOrderStatus(status tradingv1.OrderStatus) bool {
 	return false
 }
 
-// StartReconciliationPoller periodically compares open orders/positions against broker truth
-// (feature 102 — broker-state-reconciliation). Mirrors StartFillPoller's exact
-// ticker+ctx.Done()+live-config-reread shape.
+// StartReconciliationPoller periodically compares open orders/positions against broker truth.
+// Interval is live-reloaded from trading.reconciliation.interval_ms.
 func (s *TradingService) StartReconciliationPoller(ctx context.Context) {
 	const defaultIntervalMs = 60000.0
 	currentInterval := time.Duration(defaultIntervalMs) * time.Millisecond

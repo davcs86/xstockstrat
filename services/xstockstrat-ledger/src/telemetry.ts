@@ -1,7 +1,6 @@
 /**
- * OpenTelemetry initialisation for xstockstrat-ledger.
- * Activated only when OTEL_ENABLED=true.
- * Must be called before any other imports to ensure auto-instrumentation works.
+ * OpenTelemetry initialisation — activated only when OTEL_ENABLED=true.
+ * Must be called before any other imports so auto-instrumentation can patch them.
  */
 export function initTelemetry(): void {
   if (process.env.OTEL_ENABLED !== 'true') return;

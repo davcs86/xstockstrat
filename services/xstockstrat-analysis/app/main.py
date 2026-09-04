@@ -30,7 +30,6 @@ INDICATORS_ENDPOINT = os.environ.get("INDICATORS_ENDPOINT", "xstockstrat-indicat
 INGEST_ENDPOINT = os.environ.get("INGEST_ENDPOINT", "xstockstrat-ingest:50055")
 LEDGER_ENDPOINT = os.environ.get("LEDGER_ENDPOINT", "xstockstrat-ledger:50057")
 NOTIFY_ENDPOINT = os.environ.get("NOTIFY_ENDPOINT", "xstockstrat-notify:50059")
-# Feature 062 — fundamentals signal producer reads the watchlist universe from portfolio.
 PORTFOLIO_ENDPOINT = os.environ.get("PORTFOLIO_ENDPOINT", "xstockstrat-portfolio:50052")
 TRADING_ENDPOINT = os.environ.get("TRADING_ENDPOINT", "xstockstrat-trading:50051")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
@@ -43,9 +42,8 @@ async def serve():
     await cfg_watcher.wait_for_snapshot(timeout_seconds=90)
     log.info("config snapshot received")
 
-    # Second, boot-frozen watcher on the marketdata namespace (feature 154): the fundamentals
-    # producer branches its FMP-budget cap on marketdata.fundamentals.provider, which marketdata
-    # itself freezes at boot. WatchConfig is per-namespace, so this read needs its own subscription.
+    # Boot-frozen watcher on the marketdata namespace: WatchConfig is per-namespace, so reading
+    # marketdata.fundamentals.provider (the fundsignal FMP-budget cap) needs its own subscription.
     md_cfg_watcher = ConfigWatcher(endpoint=CONFIG_ENDPOINT, namespace="marketdata")
     await md_cfg_watcher.wait_for_snapshot(timeout_seconds=90)
     log.info("marketdata config snapshot received")
@@ -56,9 +54,8 @@ async def serve():
             DATABASE_URL,
             min_size=1,
             max_size=int(os.environ.get("DB_POOL_MAX", "2")),
-            # PgBouncer transaction mode: disable asyncpg's prepared-statement cache,
-            # unsafe when consecutive queries land on different backend connections.
-            # Keeps asyncpg's default (100) on the direct-connection path.
+            # Under PgBouncer transaction mode asyncpg's prepared-statement cache must be disabled
+            # (unsafe when consecutive queries land on different backend connections).
             statement_cache_size=0 if os.environ.get("DB_PGBOUNCER") in ("true", "1") else 100,
         )
         log.info("analysis DB pool created")
@@ -75,7 +72,7 @@ async def serve():
         trading_channel=grpc.aio.insecure_channel(TRADING_ENDPOINT),
     )
 
-    # ── gRPC server (internal, port 50056) ────────────────────────────────
+    # ── gRPC server ────────────────────────────────────────────────────────
     grpc_server = grpc.aio.server()
     analysis_pb2_grpc.add_AnalysisServiceServicer_to_server(servicer, grpc_server)
 
@@ -95,11 +92,10 @@ async def serve():
     signal.signal(signal.SIGINT, handle_shutdown)
     signal.signal(signal.SIGTERM, handle_shutdown)
 
-    # ── Live strategy→alert evaluation loop (feature 048) ─────────────────
+    # ── Live strategy→alert evaluation loop ──────────────────────────────────
     if db_pool is not None:
-        # ── Hydrate persisted strategy scores (feature 064) ──────────────
-        # Best-effort so a hydrate failure never blocks startup. Reuses the existing
-        # asyncpg pool — no new pool; analysis stays at pool max 2 (F-06).
+        # ── Hydrate persisted strategy scores ──
+        # Best-effort — a hydrate failure never blocks startup.
         try:
             await servicer.hydrate_scores()
             log.info("strategy scores hydrated from DB")
@@ -118,14 +114,11 @@ async def serve():
             notify_stub=servicer._notify,
             ledger_stub=servicer._ledger,
             evaluator=StrategyEvaluator(servicer._indicators, ()),
-            # feature 069 — reuses db_pool (F-06)
             cooldowns_repo=StrategyCooldownsRepository(db_pool),
-            # feature 132 — owner-scoped universe resolution reads watchlist/held from portfolio
-            # (reuses the existing PORTFOLIO_ENDPOINT stub; no new channel — F-06).
             portfolio_stub=servicer._portfolio,
         )
-        # ── Hydrate persisted re-entry cooldowns (feature 069) ───────────
-        # Best-effort, alongside hydrate_scores — a failure never blocks startup.
+        # ── Hydrate persisted re-entry cooldowns ──
+        # Best-effort — a failure never blocks startup.
         try:
             await live_loop.hydrate_cooldowns()
             log.info("strategy cooldowns hydrated from DB")
@@ -134,7 +127,7 @@ async def serve():
         asyncio.get_event_loop().create_task(live_loop.run_forever())
         log.info("live evaluation loop started")
 
-        # ── Boot-time entry-time backfill for exit-cooldown (feature 116) ────────
+        # ── Boot-time entry-time backfill for exit-cooldown ──
         # Non-blocking — runs concurrently with run_forever(), never delays server start.
         from app.engine.entry_backfill import run_once as backfill_entry_times
 
@@ -143,7 +136,7 @@ async def serve():
         )
         log.info("entry-time backfill task started")
 
-        # ── Fundamentals signal producer (feature 062) ───────────────────
+        # ── Fundamentals signal producer ──
         from app.engine.fundsignal_loop import FundamentalsSignalLoop
 
         fundsignal_loop = FundamentalsSignalLoop(
@@ -161,10 +154,8 @@ async def serve():
         asyncio.get_event_loop().create_task(fundsignal_loop.run_forever())
         log.info("fundamentals signal producer loop started")
 
-        # ── Order-snapshot + P&L pattern consumer (feature 042) ──────────
-        # Single broad ledger StreamEvents subscription; captures order-event context and seals
-        # realized P&L into attribution samples. Reuses the existing pool + gRPC stubs (F-06);
-        # non-blocking, never delays server start.
+        # ── Order-snapshot + P&L pattern consumer ──
+        # Non-blocking — never delays server start.
         from app.engine.pnl_pattern_consumer import PnLPatternConsumer, SnapshotComposer
 
         pnl_pattern_consumer = PnLPatternConsumer(
@@ -180,9 +171,7 @@ async def serve():
         asyncio.get_event_loop().create_task(pnl_pattern_consumer.run_forever())
         log.info("pnl pattern consumer started")
 
-        # ── Opportunity queue daily refresh (feature 097) ────────────────
-        # A configured wall-clock daily pass that recomputes the materialized queue for the
-        # known-user set (OR-E). Reuses the existing pool (F-06); best-effort per user.
+        # ── Opportunity queue daily refresh ──
         asyncio.get_event_loop().create_task(servicer.run_opportunity_refresh_forever())
         log.info("opportunity queue daily refresh started")
 

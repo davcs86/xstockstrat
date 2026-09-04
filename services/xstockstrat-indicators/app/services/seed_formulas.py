@@ -1,4 +1,4 @@
-"""Idempotent startup seeding of built-in formulas (feature 063).
+"""Idempotent startup seeding of built-in formulas.
 
 The default value+quality fundamentals formula is registered here rather than via the
 RegisterFormula RPC because that RPC mints a random id per call and there is no
@@ -24,8 +24,7 @@ async def seed_default_formulas(db_pool) -> None:
         log.warning("seed_default_formulas: no db pool; skipping formula seeding")
         return
     try:
-        # Validate with the same gate RegisterFormula applies, so a malformed seed fails
-        # fast (logged) rather than at first execute.
+        # Validate with the same gate RegisterFormula applies, so a malformed seed fails fast.
         params_validation.validate_definitions(fvq.PARAMETERS)
         params_validation.validate_outputs(fvq.OUTPUTS)
 

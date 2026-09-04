@@ -13,10 +13,8 @@ import (
 	tradingv1 "github.com/xstockstrat/contracts/gen/go/trading/v1"
 )
 
-// dbQuerier is the subset of *pgxpool.Pool that GetOrder/ListOrders/ListSubmittedOrders need,
-// extracted so the LATERAL-join queries can be exercised with pgxmock (this service has no
-// live-DB test harness and CI provisions no database — see internal/repository/trading_repo_test.go).
-// Both *pgxpool.Pool and pgxmock.PgxPoolIface satisfy it; production wires it to the real pool.
+// dbQuerier is the query subset extracted so the LATERAL-join reads can be exercised with pgxmock
+// (this service has no live-DB test harness). Both *pgxpool.Pool and pgxmock satisfy it.
 type dbQuerier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
@@ -90,10 +88,8 @@ func (r *TradingRepo) UpsertOrder(ctx context.Context, o *tradingv1.Order) error
 	return err
 }
 
-// intentLateralJoinSQL surfaces cross-intent precedence on an order read (design.md §
-// Cross-intent precedence): the intent row with the latest updated_at across all intents
-// sharing that order_id determines the single intent_state shown on that Order. A
-// read-time query, not a second write path — adds zero writes beyond order_intents itself.
+// intentLateralJoinSQL surfaces cross-intent precedence: the intent with the latest updated_at
+// for an order_id determines the intent_state shown on that Order (a read-time join, no writes).
 const intentLateralJoinSQL = `
 	LEFT JOIN LATERAL (
 	    SELECT state, updated_at AS intent_updated_at FROM trading.order_intents
@@ -118,15 +114,9 @@ func (r *TradingRepo) GetOrder(ctx context.Context, orderID string) (*tradingv1.
 	return scanOrder(row)
 }
 
-// KnownBrokerOrderIDs returns the subset of the given broker order IDs that this account has a
-// persisted record of in trading.orders. The reconciliation poller (feature 102) uses it to tell a
-// genuinely foreign broker order (placed outside the platform — a real unknown_broker_order finding)
-// apart from one the platform itself placed that has since reached a terminal state and been evicted
-// from the in-memory order map: LoadInflightOrders only hydrates NEW/PARTIALLY_FILLED orders into
-// s.orders, so a legitimate terminal order is absent from memory yet still present here. Comparing
-// broker truth against memory alone misclassified every such historical order as unknown, halting
-// the account. Scoped to account_id to mirror reconcileTick's own in-memory (o.AccountId == accountID)
-// comparison. Empty input returns an empty map with no query round-trip.
+// KnownBrokerOrderIDs returns the subset of brokerOrderIDs this account has a persisted record of
+// in trading.orders — the reconciliation poller's DB-grounding check so a platform-placed order now
+// terminal (evicted from memory) is not misclassified as foreign. Empty input returns empty, no query.
 func (r *TradingRepo) KnownBrokerOrderIDs(ctx context.Context, accountID string, brokerOrderIDs []string) (map[string]bool, error) {
 	known := make(map[string]bool, len(brokerOrderIDs))
 	if len(brokerOrderIDs) == 0 {
@@ -280,10 +270,9 @@ func (r *TradingRepo) ListSubmittedOrders(ctx context.Context) ([]*tradingv1.Ord
 	return orders, rows.Err()
 }
 
-// ListConfirmedOfflineOrdersByAccount returns an offline account's confirmed orders — those with a
-// recorded fill (status PARTIALLY_FILLED or FILLED, filled_qty > 0) — ordered economically by fill
-// time (feature 157). ConfirmOrder rebuilds the account's absolute net positions from this set, so
-// re-editing one order's fill produces the same fold as if it had been confirmed once (idempotent).
+// ListConfirmedOfflineOrdersByAccount returns an offline account's confirmed orders (PARTIALLY_FILLED
+// or FILLED, filled_qty > 0), ordered by fill time — the set ConfirmOrder folds into net positions
+// (idempotent: re-editing one fill yields the same fold).
 func (r *TradingRepo) ListConfirmedOfflineOrdersByAccount(ctx context.Context, accountID string) ([]*tradingv1.Order, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT order_id, client_order_id, broker_order_id, symbol, side, order_type,

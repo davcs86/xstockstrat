@@ -18,7 +18,7 @@ import (
 )
 
 // computeRequestHash marshals msg deterministically and returns its sha256 digest —
-// the content-identity check for order-intent dedup (design.md § Concurrency).
+// the content-identity check for order-intent dedup.
 func computeRequestHash(msg proto.Message) ([]byte, error) {
 	b, err := proto.MarshalOptions{Deterministic: true}.Marshal(msg)
 	if err != nil {
@@ -28,11 +28,8 @@ func computeRequestHash(msg proto.Message) ([]byte, error) {
 	return sum[:], nil
 }
 
-// placeOrderRequestHash hashes a PlaceOrderRequest with ClientOrderId cleared first — the
-// client nonce is the intent ID, not part of the content being hashed. Clearing it keeps
-// the hash meaningful independent of the nonce: a retry with the same nonce still
-// hash-matches (correct), but two *different* logical orders that happen to reuse a stale
-// nonce are still caught as distinct content instead of trivially colliding on the nonce.
+// placeOrderRequestHash hashes a PlaceOrderRequest with ClientOrderId cleared — the nonce is the
+// intent ID, not hashed content, so the hash tracks logical order content independent of the nonce.
 func placeOrderRequestHash(req *tradingv1.PlaceOrderRequest) ([]byte, error) {
 	clone, ok := proto.Clone(req).(*tradingv1.PlaceOrderRequest)
 	if !ok {
@@ -42,10 +39,8 @@ func placeOrderRequestHash(req *tradingv1.PlaceOrderRequest) ([]byte, error) {
 	return computeRequestHash(clone)
 }
 
-// deriveReplaceCancelIntentID derives a server-side, content-hashed intent ID for
-// ReplaceOrder/CancelOrder — these target an already-identified order_id and need no
-// client nonce, since a content-identical replace/cancel on the same order is safe to
-// collapse (design.md § "PlaceOrder's intent ID — client nonce").
+// deriveReplaceCancelIntentID derives a server-side, content-hashed intent ID for Replace/Cancel —
+// no client nonce needed, since a content-identical replace/cancel on the same order safely collapses.
 func deriveReplaceCancelIntentID(msg proto.Message) (intentID string, hashHex string, err error) {
 	sum, err := computeRequestHash(msg)
 	if err != nil {
@@ -67,12 +62,9 @@ const (
 	intentActionRejectPending
 )
 
-// classifyIntentLookup decides what to do with an existing order_intents row found by
-// the reactive dedup path (design.md § Concurrency). isStale is meaningful only when
-// action == intentActionRejectPending — it tells the caller whether to *attempt*
-// ReclaimOrphanIntent before returning the rejection, not which action to return: "the
-// caller cannot and need not distinguish 'not yet stale' from 'just reclaimed'" (design.md
-// round 3, reaffirmed through round 7).
+// classifyIntentLookup decides what to do with an existing order_intents row (reactive dedup path).
+// isStale is meaningful only for intentActionRejectPending — whether to attempt ReclaimOrphanIntent
+// before returning the rejection, not which action to return.
 func classifyIntentLookup(existing *repository.OrderIntentRecord, requestHashHex string, now time.Time, staleThreshold time.Duration) (action intentAction, isStale bool) {
 	if existing.RequestHash != requestHashHex {
 		return intentActionRejectHashMismatch, false
@@ -88,11 +80,8 @@ func classifyIntentLookup(existing *repository.OrderIntentRecord, requestHashHex
 	}
 }
 
-// computeStaleThreshold applies the floor-clamped multiplier formula (design.md §
-// Staleness threshold) to a already-resolved floor (in ms) and multiplier — factored out
-// of staleThreshold as a pure function so the clamp behavior is directly unit-testable
-// without needing to inject a custom config.Watcher snapshot (which has no exported
-// setter — mirrors feature 100's parseTradingState/currentTradingState split).
+// computeStaleThreshold applies the floor-clamped multiplier formula — a pure function so the
+// clamp is unit-testable (config.Watcher has no exported snapshot setter to inject through).
 func computeStaleThreshold(floorMs int64, multiplier float64) time.Duration {
 	if multiplier < 1.5 {
 		multiplier = 1.5
@@ -100,11 +89,8 @@ func computeStaleThreshold(floorMs int64, multiplier float64) time.Duration {
 	return time.Duration(float64(floorMs)*multiplier) * time.Millisecond
 }
 
-// staleThreshold derives the PENDING-intent staleness threshold live from the broker
-// timeout and the configured multiplier (design.md § Staleness threshold): floor is
-// max(live trading.broker.timeout_ms, IBKRRequestTimeout), multiplier is read live and
-// floor-clamped to >=1.5 so a misconfigured multiplier can never push the threshold below
-// the live broker timeout.
+// staleThreshold derives the PENDING-intent staleness threshold live: floor = max(live
+// trading.broker.timeout_ms, IBKRRequestTimeout), multiplier clamped >=1.5 (never below the floor).
 func staleThreshold(cfgW *config.Watcher) time.Duration {
 	brokerMs := cfgW.GetInt("trading.broker.timeout_ms", 5000)
 	floorMs := brokerMs
@@ -115,11 +101,8 @@ func staleThreshold(cfgW *config.Watcher) time.Duration {
 	return computeStaleThreshold(floorMs, multiplier)
 }
 
-// StartOrderIntentSweeper proactively reclaims orphaned PENDING intents, closing the
-// unattended-crash gap the reactive reclaim (a side effect of a retry) cannot: if a client
-// crashes and the operator never resubmits, a PENDING intent would otherwise sit
-// unreclaimed forever (design.md § Sweep). Mirrors StartFillPoller's exact ticker +
-// ctx.Done() shape.
+// StartOrderIntentSweeper proactively reclaims orphaned PENDING intents — closing the
+// unattended-crash gap the reactive (retry-driven) reclaim cannot (no resubmit, no reclaim).
 func (s *TradingService) StartOrderIntentSweeper(ctx context.Context) {
 	const defaultIntervalMs = 5000.0
 	currentInterval := time.Duration(defaultIntervalMs) * time.Millisecond
@@ -143,10 +126,8 @@ func (s *TradingService) StartOrderIntentSweeper(ctx context.Context) {
 	}
 }
 
-// sweepOrderIntents runs one sweep tick: select up to 100 stale PENDING intents, then
-// loop calling the identical CAS the reactive path uses (design.md's "not a new SQL
-// shape" invariant) — a row that changed state between the SELECT and its own UPDATE is a
-// safe no-op.
+// sweepOrderIntents runs one sweep tick: select up to 100 stale PENDING intents, then call the
+// identical CAS the reactive path uses — a row that changed state before its UPDATE is a safe no-op.
 func (s *TradingService) sweepOrderIntents(ctx context.Context) {
 	staleBefore := time.Now().Add(-staleThreshold(s.cfgW))
 	stale, err := s.orderIntentRepo.SweepStalePending(ctx, staleBefore, 100)

@@ -15,9 +15,8 @@ type BaselineRow struct {
 	AvgCostPerShare float64
 }
 
-// UpsertBaselineSnapshot replaces all baseline rows for the given (accountID, clientSnapshotID)
-// atomically in a single transaction — a re-submit that drops a symbol removes it (not ON CONFLICT,
-// which would leave a dropped symbol behind). AC-6.
+// UpsertBaselineSnapshot atomically replaces all baseline rows for (accountID, clientSnapshotID)
+// in one transaction — a re-submit that drops a symbol removes it (replace, not ON CONFLICT).
 func (r *TradingRepo) UpsertBaselineSnapshot(ctx context.Context, accountID, clientSnapshotID string, asOf time.Time, rows []BaselineRow) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -25,7 +24,6 @@ func (r *TradingRepo) UpsertBaselineSnapshot(ctx context.Context, accountID, cli
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck // best-effort on error path
 
-	// Delete all existing rows for this (account, snapshot_id) — replace semantics.
 	_, err = tx.Exec(ctx, `
 		DELETE FROM trading.offline_position_baselines
 		WHERE account_id = $1 AND client_snapshot_id = $2
@@ -34,7 +32,6 @@ func (r *TradingRepo) UpsertBaselineSnapshot(ctx context.Context, accountID, cli
 		return fmt.Errorf("delete existing baseline: %w", err)
 	}
 
-	// Insert each valid row.
 	for _, row := range rows {
 		_, err = tx.Exec(ctx, `
 			INSERT INTO trading.offline_position_baselines
@@ -49,10 +46,8 @@ func (r *TradingRepo) UpsertBaselineSnapshot(ctx context.Context, accountID, cli
 	return tx.Commit(ctx)
 }
 
-// EffectiveBaselineByAccount returns the effective baseline for an account — the rows of the
-// greatest as_of (tie-break created_at DESC). Qty=0 rows are dropped here (a zero seed flattens
-// a symbol and must never reach result.Positions as a phantom — AC-8/AC-15; keeps pnl domain-free).
-// ok=false when no baseline rows exist (→ caller's no-baseline branch).
+// EffectiveBaselineByAccount returns the effective baseline (rows of greatest as_of; qty=0 rows
+// dropped as flatten phantoms). ok=false when no baseline rows exist.
 func (r *TradingRepo) EffectiveBaselineByAccount(ctx context.Context, accountID string) (asOf time.Time, lots map[string]pnl.Lot, ok bool, err error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT as_of, symbol, qty, avg_cost_per_share
@@ -83,7 +78,7 @@ func (r *TradingRepo) EffectiveBaselineByAccount(ctx context.Context, accountID 
 			return time.Time{}, nil, false, fmt.Errorf("scan baseline row: %w", err)
 		}
 		asOf = rowAsOf
-		// Drop qty=0 rows — a zero seed must never reach Positions as a phantom (AC-8/AC-15).
+		// Drop qty=0 rows — a zero seed must never reach Positions as a phantom.
 		if qty == 0 {
 			continue
 		}
@@ -94,14 +89,13 @@ func (r *TradingRepo) EffectiveBaselineByAccount(ctx context.Context, accountID 
 	}
 
 	if len(lots) == 0 && asOf.IsZero() {
-		// No baseline rows exist for this account.
 		return time.Time{}, nil, false, nil
 	}
 
 	return asOf, lots, true, nil
 }
 
-// DeleteBaselinesByAccount removes all baseline rows for an account (FR-8 deregister purge).
+// DeleteBaselinesByAccount removes all baseline rows for an account (deregister purge).
 func (r *TradingRepo) DeleteBaselinesByAccount(ctx context.Context, accountID string) error {
 	_, err := r.pool.Exec(ctx, `
 		DELETE FROM trading.offline_position_baselines WHERE account_id = $1
@@ -109,8 +103,8 @@ func (r *TradingRepo) DeleteBaselinesByAccount(ctx context.Context, accountID st
 	return err
 }
 
-// HasUnconfirmedOfflineOrders returns true if any NEW (unconfirmed) offline order exists for the
-// account. Used by SnapshotOfflinePositions to emit a warning (AC-16, design.md § Snapshot-over-NEW).
+// HasUnconfirmedOfflineOrders returns true if any NEW (unconfirmed) offline order exists for
+// the account (SnapshotOfflinePositions uses it to emit a warning).
 func (r *TradingRepo) HasUnconfirmedOfflineOrders(ctx context.Context, accountID string) (bool, error) {
 	var count int
 	err := r.pool.QueryRow(ctx, `

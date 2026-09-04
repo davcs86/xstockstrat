@@ -140,7 +140,6 @@ def resolve_and_validate(parameters, input_params_struct):
     resolved: dict = {}
     errors: list[tuple[str, str]] = []
 
-    # Unknown keys (supplied but not declared).
     for key in supplied:
         if key not in declared:
             errors.append((key, "unknown parameter"))

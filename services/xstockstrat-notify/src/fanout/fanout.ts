@@ -1,11 +1,6 @@
 /**
- * fanout/fanout.ts — best-effort external alert fanout (feature 020, notify-external-fanout).
- *
- * A side-channel bolted onto EmitAlert: qualifying alerts are POSTed to a Slack incoming webhook
- * and/or SendGrid v3 mail-send. It NEVER affects the primary in-process StreamAlerts delivery or the
- * EmitAlert RPC result — every failure is caught and logged at WARN. Credentials come from
- * `type: SECRET` env vars (SLACK_WEBHOOK_URL / SENDGRID_API_KEY); the five gate/dedup/email knobs are
- * live `notify.fanout.*` config keys read on every dispatch so a change takes effect with no restart.
+ * Best-effort Slack/SendGrid side-channel on EmitAlert (feature 020). Must never affect the primary
+ * StreamAlerts delivery or the EmitAlert RPC result — every failure is caught and logged at WARN.
  */
 import { createHash } from 'node:crypto';
 import { alertSeverityToNumber, AlertSeverity } from '@xstockstrat/proto/notify/v1/notify';
@@ -56,7 +51,7 @@ export class FanoutDispatcher {
   /** Best-effort fanout. Never throws — the whole body is guarded (FR-6/AC-4). */
   async dispatch(alert: FanoutAlert): Promise<void> {
     try {
-      // ── Gate (read live on every call so a config change needs no restart, AC-3) ──────────────
+      // Gate read live per call so a config change needs no restart (AC-3).
       const sevNum = alertSeverityToNumber(alert.severity as AlertSeverity);
       const minSev = clamp(this.config.getInt('notify.fanout.min_severity', 2), 0, 4);
       if (sevNum < minSev) return;
@@ -71,7 +66,7 @@ export class FanoutDispatcher {
         }
       }
 
-      // ── Dedup (content hash; sweep-then-check so the Map can't grow unbounded, AC-5) ───────────
+      // Dedup by content hash; sweep-then-check so the Map can't grow unbounded (AC-5).
       const key = this.dedupKey(alert);
       const windowMs = this.config.getInt('notify.fanout.dedup_window_seconds', 300) * 1000;
       const cutoff = Date.now() - windowMs;
@@ -81,7 +76,7 @@ export class FanoutDispatcher {
       if (this.dedup.has(key)) return;
       this.dedup.set(key, Date.now());
 
-      // ── Payload (FR-5) — claim no field a producer did not set ────────────────────────────────
+      // Payload: claim no field a producer did not set (FR-5).
       const ctx = alert.context ?? {};
       const payload: FanoutPayload = {
         source: alert.sourceService,
@@ -95,7 +90,7 @@ export class FanoutDispatcher {
         payload.conviction = Number(rawConviction);
       }
 
-      // ── Send per enabled channel, each isolated (AC-6) ────────────────────────────────────────
+      // Send per enabled channel, each isolated (AC-6).
       if (this.slackWebhookUrl) await this.sendSlack(payload, alert.alertId);
       const from = this.config.getString('notify.fanout.sendgrid_from_email');
       const to = this.config.getString('notify.fanout.sendgrid_to_email');
@@ -107,7 +102,6 @@ export class FanoutDispatcher {
     }
   }
 
-  /** Content hash: category|source|title|body plus any signal-context keys present. */
   private dedupKey(alert: FanoutAlert): string {
     const ctx = alert.context ?? {};
     const parts = [alert.category, alert.sourceService, alert.title, alert.body];

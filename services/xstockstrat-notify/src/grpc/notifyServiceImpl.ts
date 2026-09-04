@@ -27,15 +27,11 @@ export class NotifyServiceImpl {
     private readonly webPush: WebPushDispatcher,
   ) {}
 
-  /**
-   * EmitAlert — any service calls this to emit an alert.
-   * Alert is persisted to DB, then fanned-out to all matching StreamAlerts subscribers.
-   */
+  /** EmitAlert — persist the alert, then fan out to matching StreamAlerts subscribers. */
   async emitAlert(call: any, callback: any) {
     const req = call.request;
-    // F-10: reject empty (or whitespace-only) title/body before persisting. proto3 strings
-    // default to "" (never null), so the NOT NULL columns never fire — a blank alert would
-    // otherwise be stored and delivered blank. code 3 === INVALID_ARGUMENT.
+    // F-10: reject empty/whitespace title/body — proto3 strings default to "" (never null), so the
+    // NOT NULL columns never fire and a blank alert would be stored and delivered. code 3 = INVALID_ARGUMENT.
     if (!req.title?.trim() || !req.body?.trim()) {
       return callback({ code: 3, message: 'title and body are required' });
     }
@@ -50,10 +46,8 @@ export class NotifyServiceImpl {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
         [
           alertId,
-          // `severity` is a ts-proto string enum (stringEnums codegen), e.g.
-          // "ALERT_SEVERITY_WARNING"; the column is INTEGER. Convert to the numeric
-          // enum value before inserting — passing the string raised
-          // `invalid input syntax for type integer: "ALERT_SEVERITY_WARNING"`.
+          // severity is a ts-proto string enum (e.g. "ALERT_SEVERITY_WARNING") but the column is
+          // INTEGER — convert to the numeric enum value before inserting.
           alertSeverityToNumber(req.severity),
           req.category,
           req.title,
@@ -101,19 +95,16 @@ export class NotifyServiceImpl {
         createdAt: now,
       });
 
-      // Best-effort external fanout (feature 020). queueMicrotask defers dispatch until AFTER the
-      // success callback has reported, so fanout can never turn a succeeded emit into an RPC error
-      // and never adds latency to the primary stream write (FR-6/AC-4). Both the floating-promise
-      // .catch here and the dispatcher's own full-body try/catch guard the unhandled-rejection path.
+      // Best-effort fanout (feature 020): queueMicrotask defers dispatch until AFTER the success
+      // callback, so it can never turn a succeeded emit into an RPC error or add stream-write latency.
       queueMicrotask(() =>
         void this.fanout.dispatch(alert).catch((e: any) =>
           log.warn('fanout dispatch rejected', { alertId, error: e?.message ?? String(e) }),
         ),
       );
 
-      // Best-effort Web Push (feature 165). Second, disjoint queueMicrotask beside the fanout one —
-      // deferred until AFTER the success callback so a slow/failed push can never turn a succeeded
-      // emit into an RPC error or add latency to the primary StreamAlerts write (FR-3/AC-4/AC-5).
+      // Best-effort Web Push (feature 165): second disjoint queueMicrotask, also after the success
+      // callback so a slow/failed push can never turn a succeeded emit into an RPC error.
       queueMicrotask(() =>
         void this.webPush.dispatch(alert).catch((e: any) =>
           log.warn('push dispatch rejected', { alertId, error: e?.message ?? String(e) }),
@@ -125,11 +116,7 @@ export class NotifyServiceImpl {
     }
   }
 
-  /**
-   * StreamAlerts — server-streaming RPC.
-   * Connection is long-lived. Server pushes alerts as they are emitted.
-   * Filters by userId, categories, severities.
-   */
+  /** StreamAlerts — long-lived server stream; pushes matching alerts as they are emitted. */
   streamAlerts(call: any) {
     const req = call.request;
     const subId = uuidv4();
@@ -184,12 +171,8 @@ export class NotifyServiceImpl {
   }
 
   /**
-   * RegisterPushSubscription — upsert a Web Push subscription for the calling user (feature 165).
-   * The owner is resolved from the propagated `x-user-id` metadata header (C-03), never the request
-   * body — the external edge injects/strips it after auth, so the platform-internal value is trusted
-   * and a browser cannot assert another user's identity. Keyed on `endpoint` (globally unique) so a
-   * re-subscribe from the same browser updates in place and refreshes the rotated p256dh/auth keys
-   * instead of duplicating (AC-2).
+   * RegisterPushSubscription — upsert (by globally-unique `endpoint`) for the calling user (feature 165).
+   * Owner comes from the trusted propagated `x-user-id` header (C-03), never the request body.
    */
   async registerPushSubscription(call: any, callback: any) {
     const userId = (call.metadata?.get?.('x-user-id')?.[0] ?? '').toString();
@@ -218,9 +201,8 @@ export class NotifyServiceImpl {
   }
 
   /**
-   * UnregisterPushSubscription — delete a Web Push subscription by endpoint (feature 165).
-   * Endpoint-only (no user scoping): an endpoint is a possession-proven capability, and the register
-   * upsert can reassign an endpoint to another user, so a user-scoped delete could strand the row (AC-3).
+   * UnregisterPushSubscription — delete by `endpoint` only, NOT user-scoped: an endpoint is a
+   * possession-proven capability and the register upsert can reassign it, so user scoping strands rows (AC-3).
    */
   async unregisterPushSubscription(call: any, callback: any) {
     try {
@@ -235,15 +217,12 @@ export class NotifyServiceImpl {
   }
 
   private matchesSubscriber(alert: any, sub: StreamSubscriber): boolean {
-    // User filter: broadcast (no target) OR matches target
     if (sub.userId && alert.targetUserId && alert.targetUserId !== sub.userId) {
       return false;
     }
-    // Category filter
     if (sub.categories.length > 0 && !sub.categories.includes(alert.category)) {
       return false;
     }
-    // Severity filter
     if (sub.severities.length > 0 && !sub.severities.includes(alert.severity)) {
       return false;
     }
@@ -257,9 +236,8 @@ export class NotifyServiceImpl {
 export function rowToAlert(row: any) {
   return {
     alertId: row.alert_id,
-    // DB stores severity as the numeric enum value; ts-proto's encoder expects the
-    // string enum (stringEnums) and maps anything else to UNRECOGNIZED, so convert
-    // the integer back to the string enum here.
+    // DB stores severity as the numeric enum value but ts-proto's encoder expects the string enum
+    // (else UNRECOGNIZED) — convert the integer back here.
     severity: alertSeverityFromJSON(row.severity),
     category: row.category,
     title: row.title,

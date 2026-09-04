@@ -40,14 +40,8 @@ class BacktestRunsRepository:
         max_concurrent: int | None = None,
         fill_model: str | None = None,
     ) -> dict:
-        # Feature 133: user_id is attribution-only and NULLABLE — an inline/legacy run with no
-        # registered strategy legitimately has no owner (migration 015 left the column nullable).
-        # Feature 150: sizing_mode/position_weight/max_concurrent (migration 017) record the
-        # capital-allocation model each run used, so a run is reproducible despite WatchConfig
-        # drift. All NULLABLE — a legacy-mode run persists sizing_mode="SIZING_MODE_LEGACY" but
-        # leaves the two portfolio-only params NULL.
-        # Feature 151: fill_model (migration 018) records the effective fill model (enum name);
-        # NULLABLE — pre-151 rows have no value.
+        # user_id, sizing_mode/position_weight/max_concurrent, and fill_model are all NULLABLE:
+        # an inline/legacy run has no owner or portfolio params; pre-151 rows have no fill_model.
         row = await self._db.fetchrow(
             """
             INSERT INTO analysis.backtest_runs

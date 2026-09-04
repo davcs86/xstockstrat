@@ -10,7 +10,6 @@ export interface PropagationContext {
 export const propagationStore = new AsyncLocalStorage<PropagationContext>();
 
 // Extract the three upstream-propagation headers from an incoming HTTP request.
-// Used on the Connect-RPC HTTP path.
 export function extractFromHttpRequest(req: IncomingMessage): PropagationContext {
   return {
     userId:      (req.headers['x-user-id']      as string) ?? '',

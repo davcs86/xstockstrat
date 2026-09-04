@@ -7,11 +7,9 @@ import { getLogger } from '../services/logger';
 
 const log = getLogger('ledger:impl');
 
-// Cursor page size for ExportEvents (feature 021). One ExportEventsResponse is emitted per
-// page, so a 1M-row export is ~1000 messages, not a million (AC-7).
+// ExportEvents cursor page size — one response message per page (feature 021, AC-7).
 const EXPORT_BATCH_SIZE = 1000;
 
-// Promisified pg-cursor read: pg-cursor's read(rowCount, cb) is callback-based.
 function readCursor(cursor: Cursor, rowCount: number): Promise<any[]> {
   return new Promise((resolve, reject) => {
     cursor.read(rowCount, (err: Error | undefined, rows: any[]) => (err ? reject(err) : resolve(rows)));
@@ -22,20 +20,14 @@ export class LedgerServiceImpl {
   constructor(
     private readonly pool: Pool,
     private readonly config: ConfigWatcher,
-    // Shared LISTEN/NOTIFY fan-out used by StreamEvents. Optional only so unit
-    // tests (which never exercise streaming) can construct the impl with a
-    // bare pool; production always wires it.
+    // Optional only so streaming-free unit tests can pass a bare pool; production always wires it.
     private readonly notifier?: EventNotifier,
   ) {}
 
   /**
-   * AppendEvent — core write path.
-   * Events are strictly immutable once written (no UPDATE/DELETE on ledger.events).
-   *
-   * When the request carries an `idempotency_key`, the event is appended at most once
-   * for that key: a retried AppendEvent (e.g. after a transient transport failure such
-   * as a ledger restart GOAWAY) returns the originally-stored event instead of inserting
-   * a duplicate. An empty key preserves the prior behavior (every call inserts).
+   * AppendEvent — core write path; events are immutable once written.
+   * A non-empty `idempotency_key` appends at most once (a retry returns the stored
+   * event); an empty key inserts on every call.
    */
   async appendEvent(call: any, callback: any) {
     const req = call.request;
@@ -43,14 +35,10 @@ export class LedgerServiceImpl {
     const eventId = uuidv4();
     const now = new Date();
 
-    // Resolve the owning user once (feature 021): the request field wins, then the
-    // inbound x-user-id metadata (dual-channel — background producers set the field
-    // explicitly since they carry no metadata; request-scoped callers ride the header),
-    // else NULL for genuinely platform-scoped events.
+    // Owner precedence (feature 021): request field, else x-user-id metadata, else NULL.
     const userId: string | null =
       (req.userId && String(req.userId)) || call.metadata?.get?.('x-user-id')?.[0] || null;
 
-    // event-insert columns + values, shared by the plain and idempotent paths.
     const insertSql = `INSERT INTO ledger.events
          (event_id, event_type, source_service, correlation_id, stream_key,
           payload, metadata, occurred_at, recorded_at, user_id)
@@ -64,16 +52,13 @@ export class LedgerServiceImpl {
       req.streamKey,
       JSON.stringify(req.payload ?? {}),
       JSON.stringify(req.metadata ?? {}),
-      // occurredAt is decoded by ts-proto (useDate) into a JS Date — pass it
-      // straight through. Treating it as a protobuf `{ seconds }` object here
-      // produced `new Date(undefined * 1000)` → Invalid Date, which Postgres
-      // rejected as `invalid input syntax for type timestamp` ("0NaN-NaN-NaN…").
+      // occurredAt is a ts-proto useDate JS Date; toValidDate guards against a NaN timestamp.
       toValidDate(req.occurredAt, now),
       now,
       userId,
     ];
 
-    // Plain path — no dedup key, behave exactly as before.
+    // Plain path — no dedup key.
     if (!idempotencyKey) {
       try {
         const result = await this.pool.query(insertSql, insertParams);
@@ -86,8 +71,7 @@ export class LedgerServiceImpl {
       return;
     }
 
-    // Idempotent path — claim the key and insert the event atomically. On a duplicate
-    // key, return the event already stored for it instead of appending again.
+    // Idempotent path — claim key + insert atomically; on duplicate, return the stored event.
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
@@ -99,10 +83,7 @@ export class LedgerServiceImpl {
       );
 
       if (claim.rows.length === 0) {
-        // Key already claimed — the event exists. Roll back our no-op claim and return it.
-        // Reuse the transaction's own connection for the lookup (post-ROLLBACK the
-        // session is reusable): borrowing a second pooled connection here would
-        // require pool max >= 2 and self-deadlock at max = 1.
+        // Reuse this txn connection for the lookup: a second pooled connection self-deadlocks at pool max=1.
         await client.query('ROLLBACK');
         const existing = await client.query(
           `SELECT e.event_id, e.sequence, e.recorded_at
@@ -196,13 +177,9 @@ export class LedgerServiceImpl {
   }
 
   /**
-   * StreamEvents — server-streaming; replays from sequence then tails live.
-   *
-   * Live tailing uses the shared EventNotifier (a single dedicated LISTEN
-   * connection that fans out to all subscribers) rather than a per-stream
-   * pooled connection, so an open stream never holds a pool connection for its
-   * lifetime. Replay borrows a pool connection only for the duration of the
-   * historical query and releases it immediately.
+   * StreamEvents — server-streaming; replays from sequence, then tails live.
+   * Live tailing uses the shared EventNotifier, not a pooled connection, so an open
+   * stream never holds one; replay borrows and releases a pool connection.
    */
   async streamEvents(call: any) {
     const req = call.request;
@@ -212,22 +189,18 @@ export class LedgerServiceImpl {
       return;
     }
 
-    // Highest sequence written so far. Seeded just below fromSequence so the
-    // first replayed row (sequence === fromSequence) is delivered.
+    // Seeded just below fromSequence so the first replayed row (== fromSequence) is delivered.
     let maxSeq = req.fromSequence ? req.fromSequence - 1 : 0;
     let live = false;
     let buffer: any[] = [];
 
     const writeRow = (row: any) => {
       if (row.sequence > maxSeq) maxSeq = row.sequence;
-      // rowToEvent converts the snake_case DB/NOTIFY row to the camelCase shape
-      // that ts-proto encode() expects.
       call.write(rowToEvent(row));
     };
 
-    // Subscribe to live events BEFORE replaying history: events inserted during
-    // replay are buffered (not lost), then flushed (deduped by sequence) once
-    // replay finishes, after which delivery switches to direct/live.
+    // Subscribe BEFORE replaying: events inserted during replay are buffered, then
+    // flushed (deduped by sequence), then delivery goes live.
     const unsubscribe = notifier.subscribe({
       streamKey: req.streamKey || undefined,
       eventType: req.eventType || undefined,
@@ -239,9 +212,7 @@ export class LedgerServiceImpl {
         if (row.sequence > maxSeq) writeRow(row);
       },
       onReconnect: () => {
-        // The listener missed live NOTIFYs while reconnecting. End the stream so
-        // the client reconnects and replays the gap from the durable table
-        // (consumers resume from their last processed sequence).
+        // Missed NOTIFYs during reconnect — end the stream so the client reconnects and replays the gap.
         try {
           call.end();
         } catch {
@@ -250,8 +221,7 @@ export class LedgerServiceImpl {
       },
     });
 
-    // Release the subscription on every termination path — not just
-    // 'cancelled' — so a dropped/closed/errored stream can never leak it.
+    // Release the subscription on every termination path so a dropped/closed/errored stream can't leak it.
     let cleaned = false;
     const cleanup = () => {
       if (cleaned) return;
@@ -279,13 +249,11 @@ export class LedgerServiceImpl {
       return;
     }
 
-    // If the client went away while we were replaying, stop here — the
-    // subscription is already released and the call is dead.
+    // Client went away during replay — subscription already released, call is dead.
     if (cleaned) return;
 
-    // Flush events buffered during replay (dedup by sequence), then go live.
-    // This block is synchronous, so no notification can interleave between the
-    // flush and the `live = true` switch.
+    // Flush buffered events (dedup by sequence) then go live; synchronous so no NOTIFY
+    // interleaves before live=true.
     for (const row of buffer) {
       if (row.sequence > maxSeq) writeRow(row);
     }
@@ -311,13 +279,10 @@ export class LedgerServiceImpl {
 
   /**
    * ExportEvents — server-streaming export of the caller's events over a time window,
-   * batched by cursor page and ordered by the GLOBAL sequence (feature 021).
-   *
-   * Scope is the inbound `x-user-id` metadata: the `WHERE user_id = $1` predicate never
-   * matches another user's rows nor the pre-migration `NULL`-user_id rows (FR-10). Reads
-   * run on a DEDICATED short-lived pg.Client + pg-cursor — NEVER the DB_POOL_MAX=1 write
-   * pool — so a long export can never hold the single slot that would freeze AppendEvent
-   * (F-06; see CLAUDE.md § Live Streaming Architecture).
+   * batched by cursor page, ordered by global sequence (feature 021).
+   * Scope is the inbound x-user-id: `WHERE user_id = $1` never matches other users' or
+   * NULL-user_id rows (FR-10). Reads run on a dedicated pg.Client, never the pool, so a
+   * long export can't hold the single write slot and freeze AppendEvent (F-06).
    */
   async exportEvents(call: any) {
     // Config gate (AC-10) — FAILED_PRECONDITION (code 9) when disabled.
@@ -338,8 +303,7 @@ export class LedgerServiceImpl {
       return;
     }
 
-    // Caller scope (AC-11) — empty caller matches nothing (NULL = '' is never true),
-    // which also excludes historical NULL-user_id rows (FR-10).
+    // Empty caller matches nothing (user_id = '' never true), excluding historical NULL-user_id rows (FR-10).
     const caller: string = call.metadata?.get?.('x-user-id')?.[0] ?? '';
 
     // Optional event_type subset (FR-3/AC-3/AC-4).
@@ -368,10 +332,8 @@ export class LedgerServiceImpl {
   }
 
   /**
-   * Open a dedicated pg.Client (reusing the query pool's connection config, NOT a pooled
-   * connection) and read the export query in cursor batches, emitting each page via
-   * `onBatch`. Isolated as its own method so the exportEvents filter/order/gate logic can
-   * be unit-tested without a DB; the real cursor path is exercised by the e2e (Step 13).
+   * Open a dedicated pg.Client (never a pooled connection) and read the export query in
+   * cursor batches, emitting each page via `onBatch`.
    */
   protected async streamExportRows(
     sql: string,
@@ -396,10 +358,8 @@ export class LedgerServiceImpl {
 }
 
 /**
- * Coerce a ts-proto timestamp field (a JS `Date` under the default `useDate`
- * codegen) into a valid Date for Postgres, falling back when the value is
- * missing or an Invalid Date. Guards the append path — the immutable event
- * store must never persist a NaN timestamp.
+ * Coerce a ts-proto useDate value to a valid Date, falling back when missing or Invalid —
+ * the immutable event store must never persist a NaN timestamp.
  */
 export function toValidDate(value: unknown, fallback: Date): Date {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value;

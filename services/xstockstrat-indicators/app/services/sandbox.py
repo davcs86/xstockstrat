@@ -29,14 +29,8 @@ from dataclasses import dataclass
 
 log = logging.getLogger(__name__)
 
-# Numeric libraries (OpenBLAS, MKL, OpenMP) spin up one worker thread per CPU
-# core on import and each thread reserves a large virtual-memory buffer. Under
-# the sandbox's RLIMIT_AS address-space cap that reservation overflows the limit,
-# so importing numpy/pandas fails with
-#   "OpenBLAS error: Memory allocation still failed after 10 retries, giving up."
-# Pinning every BLAS/OMP backend to a single thread keeps the reservation small
-# enough to fit. These must be set in the child's environment *before* numpy is
-# imported (i.e. at subprocess launch), not inside the formula.
+# BLAS/OMP thread counts must be pinned to 1 in the child env before numpy imports, else
+# its per-core virtual-memory reservations overflow the sandbox cap and the import fails.
 _THREAD_LIMIT_ENV = {
     "OPENBLAS_NUM_THREADS": "1",
     "OMP_NUM_THREADS": "1",
@@ -45,7 +39,6 @@ _THREAD_LIMIT_ENV = {
     "VECLIB_MAXIMUM_THREADS": "1",
 }
 
-# Built-in functions allowed in sandbox (conservative subset)
 _SAFE_BUILTINS = {
     "abs",
     "all",
@@ -102,14 +95,8 @@ class SandboxResult:
     exit_reason: str  # "success"|"timeout"|"memory_exceeded"|"runtime_error"|"import_blocked"
 
 
-# Template injected around user formula code
-#
-# Builtin restriction is done by running the formula in an exec namespace whose
-# `__builtins__` exposes only a safe subset — NOT by deleting names from the
-# shared `builtins` module. Mutating `builtins` in place breaks the interpreter
-# and import machinery (which depend on builtins such as `KeyError`, `locals`,
-# and `delattr` itself), so a trivial formula like `result = 1` would fail with
-# `NameError: name 'delattr' is not defined` before it ever ran.
+# Restrict builtins via a fresh __builtins__ namespace, never by mutating the shared builtins
+# module — that breaks the interpreter/import machinery (e.g. delattr, KeyError, locals).
 _SANDBOX_WRAPPER = textwrap.dedent("""
 import json
 import sys
@@ -214,7 +201,6 @@ def execute_formula(
         stdout = proc.stdout
         stderr = proc.stderr
 
-        # Parse output
         output = {}
         for line in stdout.splitlines():
             if line.startswith("__OUTPUT__:"):
@@ -224,7 +210,6 @@ def execute_formula(
                     pass
 
         if proc.returncode != 0:
-            # Check for import block
             exit_reason = "runtime_error"
             if "is not allowed in sandbox" in stderr:
                 exit_reason = "import_blocked"
@@ -237,7 +222,7 @@ def execute_formula(
                 stderr=stderr,
                 execution_ms=elapsed_ms,
                 memory_used_bytes=0,
-                error=stderr.strip()[-500:],  # cap error size
+                error=stderr.strip()[-500:],
                 exit_reason=exit_reason,
             )
 
