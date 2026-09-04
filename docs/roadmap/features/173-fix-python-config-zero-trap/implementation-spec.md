@@ -178,7 +178,7 @@ is required — this is a decision, not an omission.
 
 ### Step 3 — test: ingest — accessor + consumer regression tests (`@AC-1`, `@AC-2`, `@AC-3`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_config_watcher.py` — modify

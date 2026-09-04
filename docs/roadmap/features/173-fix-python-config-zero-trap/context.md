@@ -165,3 +165,9 @@ Order 173→174→172→171→175, one stacked PR per feature (operator-approved
 - Files modified: `services/xstockstrat-ingest/app/handlers/servicer.py`
 - TDD (covered by Step 3): AC-1 red — `_effective_max_attempts` AttributeError → green after seam added.
 - Deviations: none
+
+### Step 3 — ingest accessor + consumer regression tests (AC-1/AC-2/AC-3) [done]
+- Added dial-free `ConfigWatcher.__new__` builders + real `ConfigSnapshot`/`ConfigValue` (insights-069/fails-074). `test_config_watcher.py`: `get_int_present` honors stored 0 (both keys), defaults when absent, `dedup_window_hours == 0`. `test_ingest_servicer.py`: `_effective_max_attempts() == 0` through the full watcher→property→seam chain against a real watcher.
+- Red→green: 5 tests failed on pre-fix tree (AttributeError ×3, `24 != 0`) → 5 passed after Steps 1-2. Full suite: 212 passed, coverage 78.15% (≥40). ruff check + format clean.
+- Files modified: `services/xstockstrat-ingest/tests/test_config_watcher.py`, `services/xstockstrat-ingest/tests/test_ingest_servicer.py`
+- Deviations: none. Existing `make_servicer(max_retry=…)` loop tests left untouched and green (seam-integrity).

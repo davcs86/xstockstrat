@@ -64,6 +64,24 @@ def make_servicer(
 
 
 # ---------------------------------------------------------------------------
+# Feature 173 — the retry consumer honors a stored max_retry_attempts=0 through
+# the full watcher → property → _effective_max_attempts() seam (real watcher,
+# not the MagicMock cfg). RED pre-fix: 3 (get_int trap) or AttributeError (no seam).
+# ---------------------------------------------------------------------------
+
+
+def test_effective_max_attempts_honors_stored_zero():
+    w = ConfigWatcher.__new__(ConfigWatcher)
+    snap = config_pb2.ConfigSnapshot()
+    snap.values["ingest.backfill.max_retry_attempts"].int_val = 0
+    snap.values["ingest.backfill.retry_on_failure"].bool_val = True
+    w._snapshot = snap
+    svc = make_servicer()  # channels/db mocked
+    svc._cfg = w  # exercise get_int_present + property + seam
+    assert svc._effective_max_attempts() == 0
+
+
+# ---------------------------------------------------------------------------
 # Durable backfill jobs (feature 052) — servicer reads/writes the repo, not _jobs
 # ---------------------------------------------------------------------------
 
