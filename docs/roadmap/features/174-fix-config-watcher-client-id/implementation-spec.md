@@ -48,7 +48,7 @@ in `product-spec.md § Consumer Surface(s)`, not an omission.
 
 ### Step 1 — service: analysis — extract `_build_watch_request()` and correct the `indicators-` identity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/config/watcher.py` — modify
@@ -109,7 +109,7 @@ in `product-spec.md § Consumer Surface(s)`, not an omission.
 
 ### Step 2 — test: analysis — wire-object assertion on the built `WatchConfigRequest`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify

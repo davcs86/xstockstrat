@@ -17,6 +17,7 @@
 | 2026-09-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS); overlap CLEAN (soft-rebase w/173); FRs + Consumer Surface added |
 | 2026-09-04 | `spec-ready` → `design-approved` | /sdd-design | 2 rounds (quick); cosmetic client_id relabel via _build_watch_request() seam approved; recon.md + design.md written; no Floor breach |
 | 2026-09-04 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
+| 2026-09-04 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run (stacked PR #2 on 173); Steps 1-2 (analysis `_build_watch_request`) done |
 
 ---
 
