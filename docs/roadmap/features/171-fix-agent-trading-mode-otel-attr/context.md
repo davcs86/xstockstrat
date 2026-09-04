@@ -160,3 +160,12 @@ Fleet-wide removal of the redundant `trading_mode` OTel resource attribute + dea
 - New `tests/test_telemetry.py` in all 4 asserting the built Resource omits `trading_mode`, keeps the trio. Agent adds `test_init_telemetry_non_blocking_on_error`: patches the source-module `OTLPSpanExporter` to raise (the name is locally imported inside init's try) → `init_telemetry()` swallows it and sets no global provider (AC-2).
 - Red→green: ImportError (`_build_resource` absent) → all pass. Coverage: agent 81.18%, ingest 76.69%, indicators 81.10% (≥50), analysis 85.19% (all ≥ threshold). ruff clean (fixed a docstring line length). grep `trading_mode` clean.
 - Files: `services/xstockstrat-{agent,ingest,indicators,analysis}/tests/test_telemetry.py`. Deviations: none (agent env needed `uv sync --extra dev` first — no dep/lock change).
+
+### Step 5 — Node telemetry: extract buildResource, drop trading_mode (ledger/identity/config/notify) [done]
+- Each `src/telemetry.ts`: extracted exported `buildResource()` as the sole Resource input to `initTelemetry`, removed the inline `new Resource({...})` + the `trading_mode` line, and dropped the now-unused inline Resource/SEMRESATTRS requires from init. **Deviation**: `buildResource` uses static top-level imports of `@opentelemetry/resources` + `@opentelemetry/semantic-conventions` (hard deps) instead of deferred `require`, so the design-mandated test is callable from ledger/identity's ESM strip-types runner (require undefined in ESM). Heavy SDK/exporter imports stay deferred. See Deviation Log.
+- Files: `services/xstockstrat-{ledger,identity,config,notify}/src/telemetry.ts`.
+
+### Step 6 — Node telemetry per-module absence tests (AC-1) [done]
+- New `src/__tests__/telemetry.test.ts` in all 4 (node:test + node:assert/strict, static `buildResource` import) asserting the built Resource omits `trading_mode`, keeps the trio. ledger/identity import `../telemetry.ts` (ESM), config/notify `../telemetry` (CJS) — per-runner extension.
+- Red→green: RED (require-undefined / buildResource missing) → all pass after the Step 5 static-import fix. Coverage: ledger 46%, identity 46%, config 80.16%, notify 88.57% (all ≥40). lint 0 errors. grep `trading_mode` clean.
+- Files: `services/xstockstrat-{ledger,identity,config,notify}/src/__tests__/telemetry.test.ts`. Deviations: static-import + import-extension (Deviation Log).

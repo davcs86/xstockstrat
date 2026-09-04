@@ -250,7 +250,7 @@ confirmed nothing in-repo queries the attribute; `OTEL_ENABLED=false` in both `.
 
 ### Step 5 — service: Remove `trading_mode` from the four Node backend telemetry modules (extract `buildResource`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-config`, `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-ledger/src/telemetry.ts` — modify
@@ -296,7 +296,7 @@ confirmed nothing in-repo queries the attribute; `OTEL_ENABLED=false` in both `.
 
 ### Step 6 — test: Per-module Node backend Resource-attribute assertions (ledger/identity/config/notify)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-config`, `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-ledger/src/__tests__/telemetry.test.ts` — create
@@ -398,4 +398,19 @@ confirmed nothing in-repo queries the attribute; `OTEL_ENABLED=false` in both `.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **Step 5/6 — Node `buildResource` uses static top-level imports, not deferred `require`.** The spec's
+  `buildResource` used `require('@opentelemetry/resources')`/`require('@opentelemetry/semantic-conventions')`
+  inside the function. That works in production and in the config/notify test runners (tsc → CJS), but
+  ledger/identity run their `.ts` tests directly via `node --experimental-strip-types`, which executes
+  them as **ESM** where `require` is undefined — so the design-mandated per-module test threw
+  `ReferenceError: require is not defined`. Both packages are **hard `dependencies` (^1.25.0)** in all
+  four services, so their deferral was cosmetic (unlike `@opentelemetry/sdk-node`/exporter/instrumentation,
+  which stay deferred inside `initTelemetry`). Resolved uniformly by importing just these two lightweight
+  packages at module top-level in all four files; `buildResource` references them directly.
+  **Disposition**: in-scope fix to make the C-08-mandated test runnable across both Node runners
+  (Option A). The module docstring's "all imports deferred" note now applies to the heavy exporter/SDK
+  imports only.
+- **Step 6 — test import extension differs per Node runner.** ledger/identity (ESM `--experimental-strip-types`)
+  import `from '../telemetry.ts'` (explicit extension required by ESM); config/notify (tsc → dist CJS)
+  import `from '../telemetry'`. Matches each service's existing harness. **Disposition**: runner-specific
+  extension resolved at execute (spec Step 6 anticipated this).
