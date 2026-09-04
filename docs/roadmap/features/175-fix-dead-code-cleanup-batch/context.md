@@ -64,43 +64,6 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ---
 
-## Session 2026-09-04 — sdd-design (in progress; recon + grilling)
-
-- Phase 0 Recon: wrote recon.md. All facts freshly re-verified. Key correction carried from triage:
-  ALL FOUR propagation.ts (incl. identity) are dead — identity's ledgerAudit.ts:13 propagates via its
-  own PROPAGATED_HEADERS const over gRPC Metadata, never imports the HTTP-edge module. Also found: only
-  portfolio orphans a strconv import on getEnvBool removal; each config_test.go is SHARED (delete the
-  TestGetEnvBool function, not the file — trading 7 / portfolio 9 / marketdata 15 test funcs).
-- Phase 1 Grilling — quick mode mandated 1 round; operator elected to run additional rounds (rounds 1–3
-  done, round 4 in progress). No Floor breach in any round. Decisions locked so far:
-  - **Identity propagation.ts: DELETE** (proposer+adversary consensus; mechanism mismatch — HTTP
-    IncomingMessage scaffolding vs gRPC Metadata — makes retention pointless; C-03 not breached).
-  - **@types/node ^24 bump WIDENED to the whole workspace incl. xstockstrat-ui** (operator scope
-    decision, this session). Consequence: acceptance.feature gains **@AC-4** for ui (verified via
-    `next build`, its only type gate — next.config.js has no ignoreBuildErrors — over its full tsconfig
-    include set incl. e2e Playwright specs); product-spec FR-3 / Affected Services / Out-of-Scope
-    reconciled to five services + the sibling-dep **bounce-to-operator** rule (an in-file mechanical
-    type fix is in scope; a @types/react / next / @types/pg bump or non-trivial refactor is NOT).
-  - **C-08 / fails-021 guard:** ledger + identity CI runs only strip-types (`node
-    --experimental-strip-types --test`), which type-checks NOTHING; their tsc lives only in `build`.
-    So AC-2's "builds (tsc)" + AC-3 for those two are dischargeable ONLY by an explicit `pnpm build`
-    (real tsc), never by their test runner. config/notify `test` already runs `tsc && node --test dist`.
-  - **C-15 locus:** the pure-deletion ACs' RED→GREEN is a construct-scoped grep transition
-    (`grep 'func getEnvBool'`, `git ls-files '*/middleware/propagation.ts'` empty — NOT bare substrings,
-    per fails-110) living as a NAMED `**Covers**: AC-N` Verification step in implementation-spec.md,
-    re-run at execute — not merely recorded in context.md. No permanent CI guard (How-to-Act #2).
-  - **Ordering:** bump 5 pkg → pnpm install → `pnpm why` (scoped to the five DIRECT deps at 24.x, not
-    "no 20.x anywhere in the graph" — a transitive 20.x floor is out of scope) → pre-delete type gate
-    (Node-only) → delete → re-verify → teardown.
-  - **ui type gate = `next build` ALONE** (round-3 adversary + fails-155): next build already
-    type-checks the full tsconfig program incl. e2e; a standalone `tsc --noEmit` adds zero coverage and
-    risks a false-RED (the `next` tsconfig plugin is LSP-only; `.next/types` only exist post-build).
-  - **Teardown targets:** header-propagation.md:123/:126-151 (re-home the reference snippet),
-    findings :18/:33/:34, root CLAUDE.md:335, three per-service Go findings.
-- Status: still spec-ready (design.md not yet written; flip to design-approved happens at COMPLETION).
-
----
-
 ## Session 2026-09-04 — sdd-design (in progress)
 
 - Phase 0 Recon: wrote recon.md. All facts freshly re-verified. Key: all FOUR propagation.ts dead
