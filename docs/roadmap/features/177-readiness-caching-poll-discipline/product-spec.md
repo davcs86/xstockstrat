@@ -38,10 +38,10 @@ triggers a background refresh.
 
 ## Out of Scope
 
-- Parallelizing the fan-out itself and event-loop offload — **feature 171
-  (analysis-concurrency-offload)**. (This feature reduces *how often* the fan-out runs; 171 makes each
+- Parallelizing the fan-out itself and event-loop offload — **feature 176
+  (analysis-concurrency-offload)**. (This feature reduces *how often* the fan-out runs; 176 makes each
   run faster. They compose.)
-- Quote N+1 batching — **feature 173 (quote-fanout-batching)**.
+- Quote N+1 batching — **feature 178 (quote-fanout-batching)**.
 
 ## Affected Services
 

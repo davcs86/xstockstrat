@@ -38,8 +38,8 @@ null-not-zero discipline in prior defects).
 
 ## Out of Scope
 
-- Analysis fan-out parallelization / event-loop offload — **feature 171**.
-- Caching cadence / staleness policy — **feature 172**.
+- Analysis fan-out parallelization / event-loop offload — **feature 176**.
+- Caching cadence / staleness policy — **feature 177**.
 - Adding a new batch RPC to marketdata — `GetLatestQuotesMulti` already exists (used by marketdata's
   own warm poller); this feature adopts it, it does not define it. (If `/sdd-spec` finds the batch RPC
   is insufficient — e.g. it lacks a field the per-item path returned — that becomes a proto gate and

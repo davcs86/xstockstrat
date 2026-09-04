@@ -45,8 +45,8 @@ leakage — see Known Trap) and the existing bars-fetch concurrency ceiling that
 ## Out of Scope
 
 - Caching / poll-cadence changes (empty-universe recompute, unconditional warm enrichment, client
-  `staleTime`) — those are **feature 172 (readiness-caching-poll-discipline)**.
-- Portfolio→marketdata quote N+1 batching and marketdata cold-symbol single-flight — **feature 173
+  `staleTime`) — those are **feature 177 (readiness-caching-poll-discipline)**.
+- Portfolio→marketdata quote N+1 batching and marketdata cold-symbol single-flight — **feature 178
   (quote-fanout-batching)**.
 - Horizontal scaling of analysis beyond `instance_count:1` (the per-process recompute guards).
 

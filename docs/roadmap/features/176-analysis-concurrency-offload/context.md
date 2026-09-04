@@ -1,8 +1,8 @@
 # Context: analysis-concurrency-offload
 
-**Feature**: `docs/roadmap/features/171-analysis-concurrency-offload/feature.md`
-**Product Spec**: `docs/roadmap/features/171-analysis-concurrency-offload/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/171-analysis-concurrency-offload/implementation-spec.md`
+**Feature**: `docs/roadmap/features/176-analysis-concurrency-offload/feature.md`
+**Product Spec**: `docs/roadmap/features/176-analysis-concurrency-offload/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/176-analysis-concurrency-offload/implementation-spec.md`
 
 ---
 
@@ -16,5 +16,5 @@
 - Known traps folded into Open Questions: IDOR owner-scoping of `_compute_opportunities`
   (fails.md:1153, feature 133), and the TimescaleDB shared-memory reason for the `_bars_fetch_sem = 2`
   bound (feature 141) — parallelize under a bound, never by removing it.
-- Sibling tracks (deliberately separate features to keep diffs surgical): 172 caching/poll
-  discipline, 173 quote-fanout batching, 174 UI resume + halt surfacing.
+- Sibling tracks (deliberately separate features to keep diffs surgical): 177 caching/poll
+  discipline, 178 quote-fanout batching, 179 UI resume + halt surfacing.

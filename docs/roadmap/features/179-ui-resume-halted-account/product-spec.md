@@ -42,7 +42,7 @@ unauthorized caller is not shown an actionable control, and the BFF/RPC rejects 
 
 - Any change to how an account gets **halted** (the SET paths, risk logic) — halt is already
   implemented (features 030/102).
-- The three analysis/portfolio performance tracks — **features 171, 172, 173**.
+- The three analysis/portfolio performance tracks — **features 176, 177, 178**.
 - Auto-resume / scheduled resume — this is a manual operator control only.
 
 ## Affected Services

@@ -1,8 +1,8 @@
 # Context: ui-resume-halted-account
 
-**Feature**: `docs/roadmap/features/174-ui-resume-halted-account/feature.md`
-**Product Spec**: `docs/roadmap/features/174-ui-resume-halted-account/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/174-ui-resume-halted-account/implementation-spec.md`
+**Feature**: `docs/roadmap/features/179-ui-resume-halted-account/feature.md`
+**Product Spec**: `docs/roadmap/features/179-ui-resume-halted-account/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/179-ui-resume-halted-account/implementation-spec.md`
 
 ---
 
@@ -14,7 +14,7 @@
   is UI-only — no browser Resume trigger, and no halt indicator beside the account-management
   controls. This is exactly what feature 169's product-spec deferred (`:37,:52`).
 - Predominantly a UI/BFF feature (no proto/schema/config change), so lower backend risk than
-  171/172/173.
+  176/177/178.
 - Open scope question folded in: RPC enforces admin-only (`RequireAdminScope`) vs. feature 169 FR-5's
   operator-or-admin — must be reconciled in `/sdd-design`, not silently chosen. Security-role review
   flagged because the control reaches a broker account.
