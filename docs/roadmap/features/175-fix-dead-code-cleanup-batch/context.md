@@ -118,3 +118,34 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Open threads (→ /sdd-spec): FR-3 sibling-dep bounce; vestigial per-service locks untouched; re-grep all
   deletion targets + confirm the exact @types/node line / root lockfile path / config-only eslint override
   at spec; narrow teardown (leave the LIVE Go `header-propagation.md:50` reference).
+
+---
+
+## Session 2026-09-04 — sdd-spec
+
+- Generated implementation-spec.md with 7 steps. Status: design-approved → implementation-ready.
+- Structure preserves the design's A→E order via 3 service+test pairs plus a docs teardown step:
+  Step 1 (bump 5 pkg + root lock) → Step 2 (pre-delete Node/ui build gate, Covers AC-3/AC-4) →
+  Step 3 (Go delete) → Step 4 (Go re-verify, Covers AC-1) → Step 5 (Node delete + eslint prune) →
+  Step 6 (Node re-verify tsc build, Covers AC-2) → Step 7 (6 teardown docs + 23-path landed-diff gate).
+- All four @AC-* covered (C-15): AC-3/AC-4 → Step 2; AC-1 → Step 4; AC-2 → Step 6. RED-locus honored:
+  version-string RED for AC-3/AC-4, construct-presence RED (grep/git ls-files) for AC-1/AC-2; build is
+  a green-before-and-after guard, never a manufactured build-RED.
+- Key codebase findings (all fresh-grepped this session):
+  - getEnvBool defs at trading config.go:60, portfolio :233 (+ suppressor :245 + strconv import :9,
+    used only at :238), marketdata :247. Zero production callers. config_test.go is SHARED in all three
+    (trading 7 / portfolio 9 / marketdata 15 test funcs) — delete only the TestGetEnvBool function
+    (:53 / :133 / :130), never the file. strconv orphan is portfolio-only.
+  - All four propagation.ts DEAD — importer grep returns only the export sites inside each file; no
+    import anywhere incl. identity (ledgerAudit.ts uses its own PROPAGATED_HEADERS over gRPC Metadata).
+    config/.eslintrc.json:31 is the only leaf eslintrc referencing propagation.ts (keep authz.ts).
+  - @types/node: ledger pkg:37 / notify:38 / config:35 / identity:37 all "^20.12.12"; ui:63 "^20"
+    (note the differing pin). Root pnpm-lock.yaml is the workspace lock; the four services/*/pnpm-lock.yaml
+    are vestigial and deliberately excluded from the 23-path gate (root install only).
+  - Node type gate = each leaf's `build` script ("tsc", pkg:8), NOT its strip-types `test` runner
+    (ledger/identity type-check nothing — fails-021/074). ui gate = `next build` only (fails-155).
+  - Six teardown docs confirmed: root findings :18/:33/:34, root CLAUDE.md:335, header-propagation.md:123
+    (Node "Reference store" cite + snippet :125-145; LIVE Go ref at :50 left untouched), and the three
+    per-service Go findings pointers (trading:5 / portfolio:7 / marketdata:5).
+- Consumer surface None (C-14, internal/platform-only) and C-16 non-promotion both restated in the spec
+  Execution Summary as recorded decisions.
