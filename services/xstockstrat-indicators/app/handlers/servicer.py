@@ -17,8 +17,8 @@ from app.services.formulas_repository import FormulasRepository
 
 log = logging.getLogger(__name__)
 
-# Fields an UpdateFormula update_mask may name (AIP-161 partial update); any other path is
-# rejected INVALID_ARGUMENT. formula_id/user_id/author/created_at are not maskable.
+# Fields an UpdateFormula update_mask may name; any other path is rejected INVALID_ARGUMENT.
+# formula_id/user_id/author/created_at are not maskable.
 _FORMULA_MASKABLE_PATHS = frozenset(
     {"name", "description", "source", "is_public", "parameters", "outputs", "warmup_period"}
 )
@@ -122,7 +122,6 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 ],
             )
 
-        # Resolve sandbox limits from config (override if specified in request)
         timeout_ms = request.timeout_ms_override or self._cfg.sandbox_timeout_ms
         memory_bytes = request.memory_bytes_override or self._cfg.sandbox_memory_bytes
         allowed_imports = self._cfg.sandbox_allowed_imports

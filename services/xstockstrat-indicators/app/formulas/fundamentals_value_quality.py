@@ -76,7 +76,7 @@ OUTPUTS = [
 DEFAULT_PARAMS = {n: d for (n, d, _) in _DEFAULTS}
 
 # The sandbox contract: `data` = fundamentals dict, `params` = tunables, assign `result`.
-# Written to be robust to missing/None metrics (FR-5) and to honor the FR-4 special cases.
+# Robust to missing/None metrics (FR-5); FR-4 special cases handled inline below.
 SOURCE = """
 def _get(key):
     v = data.get(key)
