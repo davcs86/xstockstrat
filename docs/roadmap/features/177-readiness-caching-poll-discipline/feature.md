@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-04 | `idea` → `draft` | /sdd-story | Product spec generated from performance audit Track B |
+| 2026-09-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved (advisory warnings + DB up/down note addressed); overlap CLEAN |
 
 ---
 
@@ -43,4 +44,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review readiness-caching-poll-discipline product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design readiness-caching-poll-discipline quick` — recon + adversarial design debate

@@ -25,10 +25,11 @@
 
 ## Summary
 
-Collapse the N+1 fan-out on the portfolio→marketdata and portfolio→DB read edges: switch
-`enrichPositions` from per-position `GetLatestQuote` to the existing batch `GetLatestQuotesMulti`,
-collapse `ListWatchlists`' per-watchlist `listBindings` into one `ANY`-array query, and add
-single-flight to marketdata's cold-symbol live fallback.
+Collapse the N+1 fan-out on the portfolio→marketdata and portfolio→DB read edges: add an additive
+`GetLatestQuotes` batch RPC to marketdata (wrapping its existing internal `MultiSymbolSource` helper)
+and switch `enrichPositions` from per-position `GetLatestQuote` to it, collapse `ListWatchlists`'
+per-watchlist `listBindings` into one `ANY`-array query, and add single-flight to marketdata's
+cold-symbol live fallback.
 
 ## Reviewers
 
@@ -38,6 +39,7 @@ re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
+| Proto Reviewer | Additive `GetLatestQuotes` RPC — non-breaking (`buf breaking`), enum/field conventions, codegen freshness |
 | `xstockstrat-portfolio` owner | P&L calculation accuracy, position snapshot consistency, concurrent write safety |
 | `xstockstrat-marketdata` owner | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency |
 

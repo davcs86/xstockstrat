@@ -7,7 +7,7 @@ Feature: quote-fanout-batching
   Scenario: Position enrichment uses one batched quote call
     Given a portfolio with 30 open positions
     When ListPositions enriches those positions with latest quotes
-    Then exactly one GetLatestQuotesMulti call is made for the 30 symbols
+    Then exactly one GetLatestQuotes call is made for the 30 symbols
     And no per-position GetLatestQuote call is made
     And each position's enriched price equals the value the serial path produced
 

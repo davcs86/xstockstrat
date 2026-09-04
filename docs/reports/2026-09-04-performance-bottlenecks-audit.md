@@ -89,7 +89,7 @@ platform behaves under simultaneous users.
 | 3.1 | **Critical** | indicators | **Blocking `subprocess.run` on the asyncio event loop.** The `async` `ExecuteFormula` handler calls `sandbox.execute_formula`, which runs a **synchronous** `subprocess.run(..., timeout=timeout_ms/1000)` with **no** `run_in_executor`/`to_thread`. The service processes exactly **one formula at a time**; one slow/looping user formula stalls every other user's `ExecuteFormula` **and** `ComputeIndicator` for up to `indicators.sandbox.timeout_ms=5000`ms. The documented `indicators.sandbox.max_concurrent` is "documented, not yet enforced" — and moot while the loop is pinned to 1. | `app/handlers/servicer.py:139`; `app/services/sandbox.py:188` |
 | 3.2 | **High** | analysis | **CPU-bound compute on the event loop.** `RunBacktest` + simulators run pure-Python per-bar loops directly in the async handler (no executor). While a backtest / `ScreenSymbols` / cold `ListOpportunities` compute runs, the single loop cannot service the live evaluation loop, `GetStrategyAnalytics`, or any other user's RPC. One user's multi-symbol backtest freezes decide-surface reads + live alerting for **all** users. | `servicer.py:537,1191,1222,1481,1523,1611`; `app/engine/live_loop.py` |
 | 3.3 | **High** | analysis | **Per-user compute lock doesn't contain the blast radius.** `_opportunity_lock(user_id)` correctly serializes per-user, but a cold read computes **synchronously on the shared loop under that lock** — so it blocks all users, not just the lock holder (compounds 3.2). | `servicer.py:3073,424` |
-| 3.4 | **High** | portfolio | **N+1 sequential `GetLatestQuote` per position** on every hot read (`ListPositions`, `GetPortfolio`, `GetPnL`, `ListPortfolios`), despite marketdata exposing a batch `GetLatestQuotesMulti`. Latency grows linearly with position count × concurrency; each cold quote can trigger a live Alpaca call (→ 3.7). | `internal/service/portfolio_service.go:325-339,522,692,731,1038` |
+| 3.4 | **High** | portfolio | **N+1 sequential `GetLatestQuote` per position** on every hot read (`ListPositions`, `GetPortfolio`, `GetPnL`, `ListPortfolios`). marketdata already batches quotes *internally* (`MultiSymbolSource`/`GetLatestQuotesMulti`, Alpaca REST, used by its own warm poller) but exposes **no batch quote gRPC RPC** — only singular `GetLatestQuote` on `marketdata.proto`. So the fix requires **adding an additive batch-quote RPC** to marketdata (see Track C), not merely adopting an existing one. Latency grows linearly with position count × concurrency; each cold quote can trigger a live Alpaca call (→ 3.7). | `internal/service/portfolio_service.go:325-339,522,692,731,1038`; `packages/proto/marketdata/v1/marketdata.proto` (only `GetLatestQuote`); internal helper `internal/source/source.go`, `internal/alpaca/client.go` |
 | 3.5 | Medium | ledger | **All platform event appends serialize through one DB connection** (`DB_POOL_MAX=1`); `AppendEvent` holds that connection for a full `BEGIN`/claim-insert/`COMMIT`. Deliberate budget decision (streams correctly decoupled onto a dedicated LISTEN conn via `EventNotifier`), but append throughput is capped at one connection's transaction rate under write bursts. | `src/index.ts:43`; `src/grpc/ledgerServiceImpl.ts:74` |
 | 3.6 | Medium | config | **Broadcast does sequential per-subscriber DB queries** — `broadcastToSubscribers` iterates subscribers awaiting `snapshotForSubscriber` one at a time; per-user subscribers each hit `resolveOverlayValues` → `pool.query` on `max=2`. A `SetConfig` with many per-user WatchConfig subscribers = N serialized round-trips before broadcast completes. Writes only (infrequent), bounded impact. | `src/grpc/configServiceImpl.ts:207-221,180-185` |
 | 3.7 | Low | marketdata | **No single-flight on cold-symbol live fallback.** The stale-refetch guard covers only already-known `(symbol,timeframe)`; a first-ever symbol has no guard and there is no `singleflight`/errgroup in the service. Concurrent first requests for the same cold symbol each fire an independent live Alpaca fetch — thundering herd, amplified by 3.4. | `internal/service/marketdata_service.go:49` |
@@ -148,7 +148,7 @@ already flagged obliquely in `docs/context-constitution-findings.md`.
    user count.
 5. **§2.4 / §1.2 / §1.3** missing/incomplete caching + poll discipline (empty-universe recompute,
    unconditional warm enrichment, no client `staleTime`).
-6. **§3.4 / §2.5** portfolio/marketdata N+1 (batchable via `GetLatestQuotesMulti` / `ANY`-array).
+6. **§3.4 / §2.5** portfolio/marketdata N+1 (batchable via a **new** additive marketdata batch-quote RPC + `ANY`-array binding query).
 7. **§3.7** marketdata cold-symbol single-flight; **§4** UI resume trigger + halt surfacing;
    **§1.5–1.7, §3.5–3.9** remaining medium/low items.
 
@@ -175,7 +175,9 @@ cache the empty-universe result (stop the every-15s recompute); make warm-poll l
 conditional rather than unconditional; add a client `staleTime` to the readiness `useQueries`.
 
 ### Track C — Portfolio/marketdata N+1 batching
-Addresses §3.4, §2.5, §3.7. Switch `enrichPositions` to `GetLatestQuotesMulti`; collapse
+Addresses §3.4, §2.5, §3.7. Add an **additive batch-quote gRPC RPC** to marketdata (wrapping the
+existing internal `MultiSymbolSource`/`GetLatestQuotesMulti` Alpaca-REST helper — thin server work,
+but a real proto addition + approval gate) and switch `enrichPositions` to it; collapse
 `ListWatchlists` `listBindings` into one `ANY`-array query; add `singleflight` to marketdata cold-
 symbol live fallback.
 

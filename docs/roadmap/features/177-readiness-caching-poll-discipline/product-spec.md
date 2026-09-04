@@ -76,7 +76,10 @@ _Constitution **C-14**._
 - [ ] No schema changes
 - OR: a readiness materialization may reuse or parallel the existing `analysis.opportunities` store
   (migration 011). Whether readiness needs its own table vs. an in-process/keyed cache is a
-  `/sdd-design` decision; if a table is added it is a new numbered migration in `xstockstrat-analysis`.
+  `/sdd-design` decision; if a table is added it is a new numbered migration in `xstockstrat-analysis`
+  as a matched `NNN_description.up.sql` + `.down.sql` pair — next free NNN is **022** (dir currently
+  tops out at `021_pnl_positions_fees_total`; re-check at `/sdd-spec` in case another feature claims 022
+  first).
 
 ## Feature Workflow Notes
 
