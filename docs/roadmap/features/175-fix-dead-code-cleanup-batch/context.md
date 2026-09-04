@@ -61,3 +61,42 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   services/xstockstrat-{trading,marketdata,portfolio}/docs/context-constitution-findings.md in the
   same PR (teardown).
 - Overlap: CLEAN (all 175 files disjoint from 172/173/174/084).
+
+---
+
+## Session 2026-09-04 — sdd-design (in progress)
+
+- Phase 0 Recon: wrote recon.md. All facts freshly re-verified. Key: all FOUR propagation.ts dead
+  incl. identity (ledgerAudit.ts:13 uses its own PROPAGATED_HEADERS over gRPC metadata, never imports
+  the module) — confirms the item-6 report correction. Only portfolio orphans a strconv import on
+  getEnvBool removal. config_test.go is a SHARED file in all three Go services (not dedicated) — must
+  delete the TestGetEnvBool FUNCTION, never the file. Zero @AC-* impacted (C-16 clear).
+- Phase 1 Grilling (quick mode mandated 1 round; operator opted into more):
+  - R1: proposer delete-all-four + toolchain-as-RED. Adversary NEEDS WORK (no Floor breach): the
+    green build proves "still compiles" but NOT the absence clause (C-15/P-06) — needs a scoped
+    RED→GREEN deletion assertion; ledger/identity strip-types run is a fails-021 vacuous-green risk;
+    teardown missed header-propagation.md:123 (ledger propagation.ts = the doc's "Reference store");
+    config_test.go shared-file hazard (CONFIRMED by grep); ui also pins @types/node ^20 (out of the
+    then-scope). All 6 objections accepted.
+  - **Operator decision (R1 gate): run another round; and BUMP ui too (whole-workspace @types/node).**
+  - R2: refined ordering = bump-and-verify-BEFORE-delete (bump 5 pkg → pnpm install → pnpm why →
+    pre-deletion tsc/next build → delete → re-verify). ui's only type gate is `next build`
+    (next.config.js has no ignoreBuildErrors); ui tsconfig include covers e2e Playwright specs.
+    Adversary NEEDS WORK: AC-3 "typechecks" has NO CI gate for ledger/identity (their only Node CI
+    step is strip-types, which type-checks nothing — fails-021 live) → need an explicit `pnpm build`
+    (tsc) gate for those two; C-15 locus correction — the covering RED assertion must live as a NAMED
+    STEP in implementation-spec.md (`**Covers**: AC-N`, re-run at execute), NOT merely in context.md;
+    ui widened but acceptance/FR not updated (C-15 uncovered-FR + P-03 divergence) → reconcile BEFORE
+    approval; ui blast radius is e2e-inclusive; construct-scope the absence greps (fails-110); record
+    the C-16 non-promotion in design.md.
+  - **Operator decision (R2 gate): keep ui IN (hardened); run another round.**
+  - Scope reconciliation applied NOW (operator-authorized, pre-approval, per the C-15/P-03 objection):
+    acceptance.feature gains @AC-4 (ui, `next build` gate across the full tsconfig include incl e2e);
+    product-spec FR-3 → five services with the leaf-tsc-vs-ui-next-build split + the sibling-dep
+    BOUNCE rule (an in-file mechanical type fix is in scope; needing @types/react/next/@types/pg or a
+    refactor bounces to the operator); Affected Services + Out of Scope updated (incl. explicit
+    no-permanent-CI-guard line). Identity propagation.ts delete recorded as resolved (mechanism
+    mismatch: HTTP IncomingMessage scaffolding vs ledgerAudit's gRPC Metadata + own const; C-03 intact).
+  - R3 (in progress): locking exact verification mechanics (C-15 `**Covers**` blocks with
+    construct-scoped greps; ledger/identity `pnpm build` gate; ui `next build`; fails-082 landed-diff
+    gate). design.md pending R3 synthesis + gate.

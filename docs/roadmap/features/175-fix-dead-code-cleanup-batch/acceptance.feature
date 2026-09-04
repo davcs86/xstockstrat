@@ -19,8 +19,15 @@ Feature: fix-dead-code-cleanup-batch (bug fix / cleanup)
       documented as intentionally retained), never silently left in an undecided state
 
   @AC-3 @FR-3 @regression @item-7
-  Scenario: The Node type surface matches the Node 24 runtime
-    Given the four Node services (ledger, notify, config, identity)
+  Scenario: The Node leaf type surface matches the Node 24 runtime
+    Given the four Node leaf services (ledger, notify, config, identity)
     When their package.json and lockfiles are inspected
     Then @types/node resolves to a ^24 major
-    And each service typechecks and builds against it
+    And each service typechecks (tsc via its build script — not only its test runner) and builds against it
+
+  @AC-4 @FR-3 @regression @item-7
+  Scenario: The xstockstrat-ui type surface builds against the Node 24 types
+    Given the xstockstrat-ui service (whose only type gate is `next build` — next.config.js sets no typescript.ignoreBuildErrors)
+    When its package.json and the workspace lockfile are inspected and the app is built
+    Then @types/node resolves to a ^24 major
+    And `next build` succeeds against the Node 24 types across ui's full tsconfig include set (src plus the e2e Playwright specs)

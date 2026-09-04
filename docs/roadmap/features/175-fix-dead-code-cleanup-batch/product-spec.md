@@ -76,7 +76,9 @@ never bumped when the runtime moved to Node 24.
 
 - Go: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata` (item 5)
 - Node: `xstockstrat-ledger`, `xstockstrat-notify`, `xstockstrat-config` (item 6 deletions),
-  `xstockstrat-identity` (item 6 open decision), and all four for item 7's `@types/node` bump.
+  `xstockstrat-identity` (item 6 — resolved at design: deleted; see design.md), and **all five** Node
+  workspace services (the four leaves **plus `xstockstrat-ui`**) for item 7's `@types/node` bump
+  (operator scope decision 2026-09-04 — see context.md).
 
 ## Functional Requirements
 
@@ -88,9 +90,17 @@ never bumped when the runtime moved to Node 24.
   `xstockstrat-{ledger,notify,config}`; each still builds (tsc) and passes its tests. `xstockstrat-identity`'s
   copy is handled per an explicit design decision (deleted — evidence says it is also unused — or
   documented as intentionally retained), never left silently undecided.
-- **FR-3** (item 7) — `@types/node` is bumped to `^24` in `xstockstrat-{ledger,notify,config,identity}`
-  `package.json`, lockfiles regenerated with the repo's tooling, and each service typechecks/builds
-  against it.
+- **FR-3** (item 7) — `@types/node` is bumped to `^24` in **all five** Node workspace services —
+  `xstockstrat-{ledger,notify,config,identity}` **and `xstockstrat-ui`** — `package.json`, the
+  workspace lockfile regenerated with the repo's tooling (`pnpm install`), and each service
+  typechecks/builds against it. The four leaves verify via `tsc` (their build script, not only their
+  test runner — a strip-types test run type-checks nothing); **`xstockstrat-ui` verifies via
+  `next build`**, its only type gate (`next.config.js` sets no `typescript.ignoreBuildErrors`), which
+  type-checks ui's full `tsconfig` include set (`src` plus the `e2e` Playwright specs). Scope boundary:
+  an in-file mechanical type fix needed to keep a service green under the Node-24 types is in scope;
+  the moment green requires bumping a **sibling** dependency (`@types/react`, `next`, `@types/pg`, …)
+  or a non-trivial refactor, that crosses the Out-of-Scope line below and **bounces to the operator**
+  (never silently absorbed).
 
 ## Consumer Surface(s)
 
@@ -122,5 +132,11 @@ no new dead-code finding introduced; findings-doc entries for the removed items 
 ## Out of Scope
 
 - Any behavioral change to config loading, header propagation, or gRPC handling.
-- Bumping other dependencies beyond `@types/node`.
+- Bumping any dependency **other than `@types/node`**. If a green build under `@types/node ^24`
+  turns out to require a sibling-package bump (`@types/react`, `next`, `@types/pg`, …) or a
+  non-trivial refactor rather than an in-file mechanical type fix, that need is out of scope and
+  **bounces to the operator** — it does not get silently absorbed into this cleanup (FR-3).
 - The live identity `ledgerAudit` propagation-header logic (unaffected by deleting `propagation.ts`).
+- A permanent CI guard against re-adding `getEnvBool` / `propagation.ts` (the removal ACs are one-time
+  RED→GREEN deletion regressions, not durable behavioral guarantees — a standing guard would be
+  speculative scaffolding).
