@@ -1,6 +1,6 @@
 # Implementation Spec: fix-python-config-zero-trap
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-09-04
 **Feature**: `docs/roadmap/features/173-fix-python-config-zero-trap/feature.md`
 **Total Steps**: 6
@@ -399,7 +399,7 @@ Author to fail against the pre-Step-4 tree (`get_str` traps `""` → the 4-modul
 
 ### Step 6 — docs: document the present-aware reads + FR-3 trapping-accessor audit
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` (service `CLAUDE.md` config-key tables)
 **Files**:
 - `services/xstockstrat-ingest/CLAUDE.md` — modify
@@ -449,4 +449,10 @@ Author to fail against the pre-Step-4 tree (`get_str` traps `""` → the 4-modul
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **Step 6 teardown — context-forge plugin unavailable (recorded per How-to-Act).** The
+  `/context-forge:context-constitution refresh` command is not an invocable skill in this session
+  (only `context-forge:context-scrubber` is registered). **Manual reconciliation performed**: re-read
+  both edited `CLAUDE.md` config-key rows against the current code — the three added "Read via
+  `get_int_present` / `get_str_present`" annotations match `services/xstockstrat-ingest/app/config/watcher.py:192,212`
+  and `services/xstockstrat-indicators/app/config/watcher.py:141` exactly; no other drift introduced
+  by these purely additive rows. **Disposition**: manual teardown equivalent (plugin unavailable).

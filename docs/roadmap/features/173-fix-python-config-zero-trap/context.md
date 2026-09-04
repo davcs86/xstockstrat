@@ -183,3 +183,16 @@ Order 173→174→172→171→175, one stacked PR per feature (operator-approved
 - Red→green: 3 failed pre-fix (AttributeError ×2, 4-module list != []) → 3 passed. Full suite: 128 passed, coverage 81.10% (≥50). ruff check + format clean (formatted my own AC-4 assertion line).
 - Files modified: `services/xstockstrat-indicators/tests/test_config_watcher.py`
 - Deviations: none
+
+### Step 6 — docs: present-aware read notes + FR-3 audit [done]
+- Annotated 3 config-key rows (ingest `max_retry_attempts`, `dedup_window_hours`; indicators `allowed_imports`) with the `get_int_present`/`get_str_present` present-aware read notes. FR-3 audit: no live 0-meaningful key remains on a trapping accessor; the ingest watcher's `indicators.sandbox.*` get_str/get_int reads (`:166/:170/:174`) are the pre-declared KNOWN-DEAD copy (ingest runs no sandbox) — expected, not a false-stop.
+- Teardown (How-to-Act): `/context-forge:context-constitution refresh` not invocable this session; manual reconciliation performed — annotations match watcher.py exactly, no drift. Recorded in Deviation Log + PR body.
+- Files modified: `services/xstockstrat-ingest/CLAUDE.md`, `services/xstockstrat-indicators/CLAUDE.md`
+- Deviations: teardown-manual (see Deviation Log)
+
+## Session 2026-09-04 — sdd-execute summary (feature 173)
+**Steps this session**: 1–6 (all)
+**Progress**: 6 done / 6 total
+**Stopped at**: all complete → code-completed
+**Accountability**: out-of-scope changes: none. Open questions: none. Unaddressed review warnings: none (the pre-declared known-dead ingest sandbox copy was handled in the Step 6 audit as planned).
+**Next**: stacked integration PR #1 (base `main-dev`); then feature 174.

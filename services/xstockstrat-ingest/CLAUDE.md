@@ -89,11 +89,11 @@ Namespace: `ingest`
 | `ingest.backfill.max_concurrent_jobs` | int | `3` | Max parallel backfill jobs |
 | `ingest.backfill.default_timeframe` | string | `1d` | **Documented, not yet wired** — the servicer hardcodes `"1d"` rather than reading this key |
 | `ingest.backfill.retry_on_failure` | bool | `true` | Auto-retry failed jobs |
-| `ingest.backfill.max_retry_attempts` | int | `3` | Max retry attempts for transient backfill failures |
+| `ingest.backfill.max_retry_attempts` | int | `3` | Max retry attempts for transient backfill failures. Read via `get_int_present` (never `get_int`): a configured `0` = no retries is honored (feature 173) |
 | `ingest.backfill.chunk_max_bars` | int | `200000` | Max estimated bars per backfill chunk (planner cap, feature 054) |
 | `ingest.backfill.chunk_window_days` | int | `90` | Time-window size (days) the chunk planner splits a range into |
 | `ingest.backfill.max_concurrent_chunks` | int | `3` | Max chunks of one job fetched in parallel |
-| `ingest.signals.dedup_window_hours` | int | `24` | Window within which a matching (source, symbol, direction, conviction, valid_until) signal is treated as a duplicate of the existing `ingest.signal_dedup_keys` claim (feature 111) |
+| `ingest.signals.dedup_window_hours` | int | `24` | Window within which a matching (source, symbol, direction, conviction, valid_until) signal is treated as a duplicate of the existing `ingest.signal_dedup_keys` claim (feature 111). Read via `get_int_present` (never `get_int`): a configured `0` disables the dedup window (feature 173) |
 | `ingest.mcp_client.poll_interval_seconds` | int | `300` | Server-side MCP query loop cadence for `mcp_client` sources (feature 166). Clamped to ≥1 at read (a settable 0 cannot busy-loop). Seed migration `025_ingest_mcp_client_keys` |
 | `ingest.mcp_client.request_timeout_seconds` | int | `30` | Per-call outbound MCP request timeout for `mcp_client` sources (feature 166). Clamped to ≥1 at read. Seed migration `025_ingest_mcp_client_keys` |
 
