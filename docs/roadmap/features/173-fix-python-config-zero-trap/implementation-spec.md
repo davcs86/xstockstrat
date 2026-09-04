@@ -1,6 +1,6 @@
 # Implementation Spec: fix-python-config-zero-trap
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-09-04
 **Feature**: `docs/roadmap/features/173-fix-python-config-zero-trap/feature.md`
 **Total Steps**: 6
@@ -57,7 +57,7 @@ is required — this is a decision, not an omission.
 
 ### Step 1 — service: ingest watcher — add `get_int_present`, re-point the two 0-meaningful keys, annotate the semaphore-key retentions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/config/watcher.py` — modify
@@ -127,7 +127,7 @@ is required — this is a decision, not an omission.
 
 ### Step 2 — service: ingest servicer — extract the `_effective_max_attempts()` seam
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -178,7 +178,7 @@ is required — this is a decision, not an omission.
 
 ### Step 3 — test: ingest — accessor + consumer regression tests (`@AC-1`, `@AC-2`, `@AC-3`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_config_watcher.py` — modify
@@ -269,7 +269,7 @@ method is absent → `AttributeError`) and pass after.
 
 ### Step 4 — service: indicators watcher — add net-new `get_str_present`, re-point `sandbox_allowed_imports`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/config/watcher.py` — modify
@@ -399,7 +399,7 @@ Author to fail against the pre-Step-4 tree (`get_str` traps `""` → the 4-modul
 
 ### Step 6 — docs: document the present-aware reads + FR-3 trapping-accessor audit
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` (service `CLAUDE.md` config-key tables)
 **Files**:
 - `services/xstockstrat-ingest/CLAUDE.md` — modify
@@ -449,4 +449,10 @@ Author to fail against the pre-Step-4 tree (`get_str` traps `""` → the 4-modul
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **Step 6 teardown — context-forge plugin unavailable (recorded per How-to-Act).** The
+  `/context-forge:context-constitution refresh` command is not an invocable skill in this session
+  (only `context-forge:context-scrubber` is registered). **Manual reconciliation performed**: re-read
+  both edited `CLAUDE.md` config-key rows against the current code — the three added "Read via
+  `get_int_present` / `get_str_present`" annotations match `services/xstockstrat-ingest/app/config/watcher.py:192,212`
+  and `services/xstockstrat-indicators/app/config/watcher.py:141` exactly; no other drift introduced
+  by these purely additive rows. **Disposition**: manual teardown equivalent (plugin unavailable).

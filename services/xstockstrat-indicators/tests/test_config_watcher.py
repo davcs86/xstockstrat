@@ -6,8 +6,9 @@ docs/reports/2026-08-07-watchconfig-scope-omission-defect.md.
 """
 
 from gen.common.v1 import common_pb2
+from gen.config.v1 import config_pb2
 
-from app.config.watcher import resolve_environment, resolve_trading_mode
+from app.config.watcher import ConfigWatcher, resolve_environment, resolve_trading_mode
 
 
 def test_resolve_environment_production():
@@ -36,3 +37,39 @@ def test_resolve_trading_mode_paper():
 
 def test_resolve_trading_mode_unset_defaults_paper():
     assert resolve_trading_mode("") == common_pb2.TRADING_MODE_PAPER
+
+
+# ---------------------------------------------------------------------------
+# Feature 173 — presence-aware string read (get_str_present): a stored "" must
+# be honored, not swallowed into the permissive default by the get_str zero-trap.
+# indicators.sandbox.allowed_imports="" must deny all imports, not revert to the
+# 4-module default (a security-relevant trap).
+# ---------------------------------------------------------------------------
+
+
+def _str_watcher(key: str, val: str) -> ConfigWatcher:
+    w = ConfigWatcher.__new__(ConfigWatcher)  # dial-free (fails-074)
+    snap = config_pb2.ConfigSnapshot()
+    snap.values[key].string_val = val  # sets the oneof case → HasField True even for ""
+    w._snapshot = snap
+    return w
+
+
+def test_get_str_present_honors_empty():
+    w = _str_watcher("indicators.sandbox.allowed_imports", "")
+    assert (
+        w.get_str_present("indicators.sandbox.allowed_imports", "numpy,pandas,math,statistics")
+        == ""
+    )
+
+
+def test_get_str_present_defaults_when_absent():
+    w = ConfigWatcher.__new__(ConfigWatcher)
+    w._snapshot = config_pb2.ConfigSnapshot()  # key absent
+    assert w.get_str_present("indicators.sandbox.allowed_imports", "x") == "x"
+
+
+def test_sandbox_allowed_imports_empty_denies_all():
+    w = _str_watcher("indicators.sandbox.allowed_imports", "")
+    # RED on buggy: ["numpy", "pandas", "math", "statistics"]
+    assert w.sandbox_allowed_imports == []
