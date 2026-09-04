@@ -32,7 +32,38 @@ export async function middleware(req: NextRequest) {
     if (req.nextUrl.pathname === '/auth/login' || req.nextUrl.pathname === '/auth/oauth-login') {
       return NextResponse.next();
     }
-    // Unified login page lives at the domain root, outside all basePaths.
+
+    // Expired/missing access token: attempt refresh before redirecting — the refresh token
+    // outlives the access TTL and the client-side interceptor cannot catch a server-side 307.
+    const refreshToken = req.cookies.get('refresh_token')?.value;
+    if (refreshToken) {
+      const result = await refreshSession(refreshToken);
+      if (result) {
+        const response = NextResponse.next({
+          request: {
+            headers: new Headers({
+              ...Object.fromEntries(req.headers),
+              [HEADER_TRACE_ID]: traceId,
+            }),
+          },
+        });
+        setSessionCookies(
+          response,
+          result.accessToken,
+          result.refreshToken,
+          rememberMeOptsFromRequest(req),
+        );
+        return response;
+      }
+      // Refresh failed (token revoked/expired) — clear stale cookies before redirecting.
+      const loginUrl = new URL('/auth/login', req.url);
+      loginUrl.searchParams.set('redirect', req.nextUrl.pathname + req.nextUrl.search);
+      const res = NextResponse.redirect(loginUrl);
+      clearSessionCookies(res);
+      return res;
+    }
+
+    // No refresh token at all — redirect to login.
     const loginUrl = new URL('/auth/login', req.url);
     loginUrl.searchParams.set('redirect', req.nextUrl.pathname + req.nextUrl.search);
     return NextResponse.redirect(loginUrl);
