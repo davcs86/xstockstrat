@@ -78,6 +78,26 @@ never bumped when the runtime moved to Node 24.
 - Node: `xstockstrat-ledger`, `xstockstrat-notify`, `xstockstrat-config` (item 6 deletions),
   `xstockstrat-identity` (item 6 open decision), and all four for item 7's `@types/node` bump.
 
+## Functional Requirements
+
+- **FR-1** (item 5) — `getEnvBool` is removed from `xstockstrat-{trading,portfolio,marketdata}`
+  `internal/config/config.go`, together with the `var _ = getEnvBool` suppressor and the dedicated
+  `config_test.go` test that existed solely to cover it; each service still compiles, lints
+  (golangci-lint), and passes its config-package tests.
+- **FR-2** (item 6) — The confirmed-dead `src/middleware/propagation.ts` is deleted from
+  `xstockstrat-{ledger,notify,config}`; each still builds (tsc) and passes its tests. `xstockstrat-identity`'s
+  copy is handled per an explicit design decision (deleted — evidence says it is also unused — or
+  documented as intentionally retained), never left silently undecided.
+- **FR-3** (item 7) — `@types/node` is bumped to `^24` in `xstockstrat-{ledger,notify,config,identity}`
+  `package.json`, lockfiles regenerated with the repo's tooling, and each service typechecks/builds
+  against it.
+
+## Consumer Surface(s)
+
+**None — internal/platform-only.** Every item is dead-code removal or a devDependency type-pin bump
+with **no runtime behavior change** (explicit in Out of Scope) — no RPC, response field, UI segment, or
+Agent MCP tool is touched. No consumer-surface step required. (**C-14**)
+
 ## Fix Scope
 
 - [x] No proto changes anticipated

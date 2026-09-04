@@ -44,6 +44,22 @@ the `client_id` prefix was never localized to the new service name.
 - `xstockstrat-config` — **investigation dependency only**: whether it keys on `client_id` for
   subscriber identification / dedup / fan-out decides whether this is a real defect or cosmetic.
 
+## Functional Requirements
+
+- **FR-1** — The `xstockstrat-analysis` and `xstockstrat-ingest` config watchers each construct their
+  `WatchConfig` request with a `client_id` prefixed by **their own** service name (`analysis-…` /
+  `ingest-…`), not the copy-pasted `indicators-…`. (The indicators watcher's own correct `client_id`
+  is unchanged.) Whether the shared prefix was behaviorally significant to `xstockstrat-config` or
+  merely a diagnostic label is an investigation question for design/spec, but FR-1 — correct
+  per-service identification — holds either way.
+
+## Consumer Surface(s)
+
+**None — internal/platform-only.** `client_id` is a field on the internal `WatchConfigRequest` gRPC
+message between a backend service and `xstockstrat-config`; it is a subscriber identifier / diagnostic
+label with no `xstockstrat-ui` segment or Agent MCP tool surface. No consumer-surface step required.
+(**C-14**)
+
 ## Fix Scope
 
 - [x] No proto changes anticipated

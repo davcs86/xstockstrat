@@ -43,6 +43,28 @@ suppressor was left in place. Same class as `trading.risk.daily_loss_limit`
 - If the "implement" path is chosen, `xstockstrat-notify` may be a secondary dependency (alert
   emission) and historical P&L snapshot storage is in scope.
 
+## Functional Requirements
+
+- **FR-1** — `portfolio.risk.max_drawdown_pct` is no longer **read-then-silently-discarded**. The
+  design gate picks exactly one path, and either satisfies FR-1: **(Path A)** the configured maximum
+  drawdown is enforced — a halt and/or alert fires when a portfolio's peak-to-current drawdown exceeds
+  the configured pct; or **(Path B)** the key is honestly marked **Documented, not yet implemented**
+  (parity with `trading.risk.daily_loss_limit`) and the misleading `_ = maxDrawdownPct` discard is
+  removed or annotated with the explaining contract. An operator must never be able to set the key and
+  believe a protection exists when none does.
+
+## Consumer Surface(s)
+
+**Path-dependent — resolved with the Path A/B decision at design (C-14):**
+- **Path A (enforce)** has an end-user-visible consequence: a drawdown breach produces a halt/alert
+  reaching the user through `xstockstrat-notify` and/or the `/trader` risk display in `xstockstrat-ui`.
+  Under Path A those surfaces earn their own implementation step(s) and must not be left stale.
+- **Path B (document)** is **internal/platform-only** — a docs + code-annotation change with no new
+  RPC/response field or UI; the only "surface" is the corrected portfolio `CLAUDE.md` config-key note.
+
+The product spec cannot pre-name the surface because the path is undecided; the design gate fixes it
+and `@AC-1`/`@AC-2` collapse to the chosen path's scenario.
+
 ## Fix Scope
 
 - [x] No proto changes anticipated (either fix path)

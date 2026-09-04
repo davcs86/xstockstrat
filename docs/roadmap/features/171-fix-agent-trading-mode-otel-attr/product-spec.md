@@ -50,6 +50,32 @@ carries the environment; whether a separate mode label is still wanted is the op
 
 - `xstockstrat-agent` (`app/telemetry.py`) — single service.
 
+## Functional Requirements
+
+- **FR-1** — The agent's OTel `Resource` no longer carries a `trading_mode` attribute inconsistent with
+  the post-feature-147 model: it is either **dropped** or **renamed** to an explicitly-scoped key. The
+  drop-vs-rename choice is deferred to the design gate (see Fix Scope / Open Questions); either outcome
+  satisfies FR-1. `deployment.environment` (from `APPLICATION_ENV`, `telemetry.py:38`) continues to
+  carry the environment.
+- **FR-2** — Telemetry initialisation remains non-blocking with the corrected attribute set: with
+  `OTEL_ENABLED=true` the corrected `Resource` builds and `init_telemetry()` completes without raising;
+  with it false the agent still starts.
+
+## Consumer Surface(s)
+
+**None — internal/platform-only.** The `trading_mode` attribute is an OpenTelemetry **resource
+attribute** surfaced only in exported traces / Grafana dashboards — not through any `xstockstrat-ui`
+segment (`/trader`·`/insights`·`/config-ui`) or Agent MCP tool. No consumer-surface implementation
+step is required. (**C-14**) — with the caveat in Fix Scope that a Grafana dashboard/alert querying
+`trading_mode` is the observability consumer to check before dropping the attribute.
+
+## Open Questions
+
+- **OQ-1** — Drop the `trading_mode` resource attribute entirely, or rename it (e.g.
+  `deployment.trading_mode`) for post-147-consistent semantics? Dropping is a breaking observability
+  change if a Grafana dashboard/alert queries `trading_mode`. Resolved at `/sdd-design`; once decided,
+  `@AC-1`'s `Then` tightens to that single outcome.
+
 ## Fix Scope
 
 - [x] No proto changes anticipated
