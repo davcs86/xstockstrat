@@ -7,6 +7,7 @@ defined, not estimated" requirement. Also a teeth test: conviction must move whe
 An inline StrategyDefinition literal is the single consumer here → inline is C-13 compliant.
 """
 
+import asyncio
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -230,3 +231,102 @@ async def test_no_bars_is_empty_readiness():
         "total_conditions": 0,
         "conditions": [],
     }
+
+
+# ---------------------------------------------------------------------------
+# FR-3 (feature 176) — optional component_sem: concurrent per-component dispatch
+# under a shared bound, byte-identical to the serial (component_sem=None) path.
+#
+# C-13: the 4-component StrategyDefinition and the stub factories below are single-
+# consumer within this section → inline is compliant (mirrors this file's convention).
+# ---------------------------------------------------------------------------
+
+_FR3_CLOSES = [10.0, 20.0, 30.0]
+
+
+def _four_component_definition():
+    # Four distinct components; entry_rule references all four so each must assemble.
+    return analysis_pb2.StrategyDefinition(
+        strategy_id="s",
+        display_name="S",
+        components=[_builtin(ref_name=f"c{i}", period=float(i + 1)) for i in range(4)],
+        entry_rule=json.dumps(
+            {"op": "AND", "conditions": [{"fn": ">", "lhs": f"c{i}", "rhs": 0} for i in range(4)]}
+        ),
+    )
+
+
+def _period_keyed_stub():
+    """ComputeIndicator returns a series keyed on the component's `period` param — so a
+    component's output is a function of its identity, NOT of gather completion order. This
+    is what makes the concurrent==serial equivalence assertion meaningful."""
+    stub = AsyncMock()
+
+    async def _compute(req, metadata=None):
+        period = req.params["period"]
+        return SimpleNamespace(result=[SimpleNamespace(value=c + period) for c in _FR3_CLOSES])
+
+    stub.ComputeIndicator = AsyncMock(side_effect=_compute)
+    return stub
+
+
+def _counting_stub(delay: float = 0.02):
+    """ComputeIndicator that records peak in-flight concurrency (single event loop → a plain
+    counter suffices; the await yields, letting overlapping tasks accumulate)."""
+    stub = AsyncMock()
+    state = {"in_flight": 0, "peak": 0}
+
+    async def _compute(req, metadata=None):
+        state["in_flight"] += 1
+        state["peak"] = max(state["peak"], state["in_flight"])
+        await asyncio.sleep(delay)
+        state["in_flight"] -= 1
+        period = req.params["period"]
+        return SimpleNamespace(result=[SimpleNamespace(value=c + period) for c in _FR3_CLOSES])
+
+    stub.ComputeIndicator = AsyncMock(side_effect=_compute)
+    return stub, state
+
+
+def _bars():
+    return [SimpleNamespace(close=c, timestamp=None) for c in _FR3_CLOSES]
+
+
+@pytest.mark.asyncio
+async def test_concurrent_component_series_byte_identical_to_serial():
+    """AC-3: the concurrent (component_sem set) and serial (None) paths produce an identical
+    readiness verdict — proves ref_name-keyed reassembly is gather-order-independent."""
+    definition = _four_component_definition()
+    serial = StrategyEvaluator(_period_keyed_stub(), component_sem=None)
+    concurrent = StrategyEvaluator(_period_keyed_stub(), component_sem=asyncio.Semaphore(4))
+
+    serial_r = await serial.evaluate_conditions_traced(definition, _bars(), "AAPL")
+    concurrent_r = await concurrent.evaluate_conditions_traced(definition, _bars(), "AAPL")
+
+    assert concurrent_r == serial_r
+
+
+@pytest.mark.asyncio
+async def test_component_sem_bounds_concurrent_dispatch():
+    """AC-3 (teeth): with Semaphore(2) over 4 components, peak in-flight assembly is EXACTLY 2 —
+    dispatched concurrently but capped by the bound, not the number of components."""
+    definition = _four_component_definition()
+    stub, state = _counting_stub()
+    evaluator = StrategyEvaluator(stub, component_sem=asyncio.Semaphore(2))
+
+    await evaluator.evaluate_conditions_traced(definition, _bars(), "AAPL")
+
+    assert state["peak"] == 2
+
+
+@pytest.mark.asyncio
+async def test_component_sem_none_is_strictly_serial():
+    """Regression guard: component_sem=None keeps assembly strictly serial (peak in-flight == 1) —
+    the invariant the backtest/score sites rely on."""
+    definition = _four_component_definition()
+    stub, state = _counting_stub()
+    evaluator = StrategyEvaluator(stub, component_sem=None)
+
+    await evaluator.evaluate_conditions_traced(definition, _bars(), "AAPL")
+
+    assert state["peak"] == 1
