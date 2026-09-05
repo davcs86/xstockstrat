@@ -2955,3 +2955,20 @@ reusing.
 - **Rule it implies**: a deletion PR's AC discharge is `(construct-scoped presence RED→GREEN as a named
   step) + (the service's REAL compile gate)`; verify the compile gate and lockfile source per service,
   never assume. Reinforces C-08/C-15/P-06 and fails-021/110/155/670; no new ID.
+
+### 2026-09-05 — analysis-concurrency-offload — perf
+- **Lesson**: to parallelize a serial async fan-out or move a CPU core off the event loop with
+  BYTE-FOR-BYTE output, two patterns paid off. (1) **Optional-semaphore evaluator**: add a
+  `component_sem=None` param where `None ⇒ verbatim serial` and a semaphore ⇒ `asyncio.gather` under
+  that bound, reassembling from the ORDER-PRESERVING gather result (gather keeps input order) so the
+  concurrent path is identical regardless of completion order — no `return_exceptions` (keeps the
+  serial per-item exception scope). (2) **Nested-closure CPU offload**: wrap an await-free core in a
+  local `def _core(): …` and `await loop.run_in_executor(self._compute_executor, _core)` — the closure
+  captures the prologue locals automatically, avoiding the error-prone explicit-param extraction the
+  spec sketched, while keeping the core off the loop.
+- **Evidence**: `evaluator.py` `evaluate_conditions_traced` branch; `servicer.py` `_backtest_symbol`/
+  `_simulate_portfolio` `_core` closures; feature 176 Steps 4/10.
+- **Rule it implies**: bound a parallel fan-out with a semaphore DISTINCT from any inner sem the tasks
+  re-acquire (feature 176 `_candidates_sem` vs `_bars_fetch_sem`), or a self-reentry deadlocks; prove
+  the offload with a peak-counter teeth test (exact bound, not an upper bound) + a head-of-line
+  isolation test (a spinning core in the executor must not stall a concurrent reader). No new ID.

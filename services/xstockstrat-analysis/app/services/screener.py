@@ -75,7 +75,7 @@ def _comparator_passes(op, value, threshold, threshold_high) -> bool:
 class ScreenerEngine:
     """Stateless engine; one instance per scan. Stubs + cfg are injected for testability."""
 
-    def __init__(self, marketdata, indicators, ingest, cfg, source_weights):
+    def __init__(self, marketdata, indicators, ingest, cfg, source_weights, compute_executor=None):
         self._marketdata = marketdata
         self._indicators = indicators
         self._ingest = ingest
@@ -84,6 +84,9 @@ class ScreenerEngine:
         self._sem = asyncio.Semaphore(
             max(1, cfg.get_int("analysis.screener.max_concurrent_formula_evals", 4))
         )
+        # feature 176 FR-4: the shared analysis compute pool for the pure-CPU rank tail. None (e.g.
+        # in unit tests) falls back to asyncio.to_thread — still off-loop, just not the single pool.
+        self._compute_executor = compute_executor
 
     async def screen(self, request, propagation_meta=()) -> analysis_pb2.ScreenSymbolsResponse:
         max_universe = self._cfg.get_int("analysis.screener.max_universe_size", 100)
@@ -106,10 +109,12 @@ class ScreenerEngine:
         if fundamental_criteria and fundamentals_available:
             self._validate_fundamental_metrics(fundamental_criteria, fundamentals)
 
-        per_symbol = []  # list of dicts: {symbol, raws, passes, signal_score, status, gap}
-        for symbol in symbols:
-            per_symbol.append(
-                await self._eval_symbol(
+        # feature 176 FR-4: fan out per-symbol evals concurrently — each _eval_symbol acquires _sem
+        # (analysis.screener.max_concurrent_formula_evals) inside _technical_value, so the bound now
+        # actually binds (the old serial loop left it inert). gather preserves `symbols` order.
+        per_symbol = await asyncio.gather(
+            *[
+                self._eval_symbol(
                     symbol,
                     request,
                     criteria,
@@ -117,7 +122,9 @@ class ScreenerEngine:
                     fundamentals_available,
                     propagation_meta,
                 )
-            )
+                for symbol in symbols
+            ]
+        )
 
         # One summarized WARN per scan for insufficient-bars symbols; excludes symbols whose GetBars
         # raised (already logged per-symbol) so an RPC failure is not double-reported.
@@ -137,16 +144,20 @@ class ScreenerEngine:
                 dataless_bars[:10],
             )
 
-        # Min-max normalize each criterion's raw values across the scanned universe.
-        norm = self._normalize_universe(criteria, per_symbol)
+        # feature 176 FR-4: the pure-CPU rank tail (min-max normalize + build + sort) runs off the
+        # event loop. A score_unavailable result sorts after every genuinely-scored one.
+        def _rank():
+            norm = self._normalize_universe(criteria, per_symbol)
+            built = [self._build_result(row, criteria, request, norm) for row in per_symbol]
+            built.sort(key=lambda r: (r.score_unavailable, -r.score))
+            return built
 
-        results = []
-        for row in per_symbol:
-            results.append(self._build_result(row, criteria, request, norm))
-
-        # A score_unavailable result's score is a neutral placeholder, not real evidence — sort it
-        # after every genuinely-scored result so it can never outrank real data.
-        results.sort(key=lambda r: (r.score_unavailable, -r.score))
+        if self._compute_executor is not None:
+            results = await asyncio.get_running_loop().run_in_executor(
+                self._compute_executor, _rank
+            )
+        else:
+            results = await asyncio.to_thread(_rank)
 
         # coverage_gaps come from the FULL sorted list, BEFORE min_conviction/rank_limit truncation,
         # so a below-cut symbol still surfaces its gap; HasField skips bars-specific no-gap case.

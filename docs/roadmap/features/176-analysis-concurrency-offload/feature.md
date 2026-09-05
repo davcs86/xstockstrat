@@ -15,6 +15,7 @@
 | 2026-09-05 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, extended); round-3 adversary SOUND; recon.md + design.md written |
 | 2026-09-05 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps |
 | 2026-09-05 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (config/docs registration) landed; sequential-mode execution started |
+| 2026-09-05 | `in-progress` → `code-completed` | /sdd-execute | All 11 steps landed (FR-1..FR-6): indicators sandbox offload, evaluator component_sem, readiness + opportunity parallel fan-out, backtest/screener CPU offload. Full suites green (indicators 132, analysis 669); ruff clean |
 
 ---
 

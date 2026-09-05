@@ -199,3 +199,31 @@ merge-order WARN). Tooling: `uv sync --extra dev` for indicators + analysis; bas
   5-turn background drain (deeper gather nesting); replaced with a bounded wait-until-guard-clears loop —
   assertions unchanged. Staged with the Step 8 commit.
 - Full analysis suite `665 passed`, coverage `85%`; ruff clean.
+
+### Steps 10–11 — done (FR-4 CPU offload of simulator cores + screener, TDD red→green)
+- Step 10 (`app/handlers/servicer.py`, `app/services/screener.py`): added imports
+  (`from concurrent.futures import ThreadPoolExecutor`) + `self._compute_executor` in `__init__`
+  (analysis.compute.max_worker_threads, default 4; F-06: cores hold no DB conn → pool stays 2).
+  Offloaded the pure-CPU cores via nested `def _core()` closures + `loop.run_in_executor(
+  self._compute_executor, _core)`: `_backtest_symbol` post-SMA core, `_backtest_symbol_evaluated`
+  post-warmup core, `_simulate_portfolio` whole body. Chose closures over the spec's module-level
+  helpers to auto-capture prologue locals (no param-extraction risk). Screener `screen`: serial
+  `_eval_symbol` loop → `asyncio.gather` (the `_sem` in `_technical_value` now actually binds the
+  formula-eval fan-out) + offloaded the pure-sync rank tail; `_compute_executor` wired into
+  `ScreenerEngine(compute_executor=...)` (optional, `to_thread` fallback for test engines).
+- Step 11 (`tests/test_analysis_servicer.py`, `tests/test_screener.py`): head-of-line isolation
+  (AC-4 — a ~0.6s spinning backtest core in the executor doesn't stall a 0.05s reader; RED pre-Step-10
+  the reader was blocked > 0.2s), offloaded-backtest determinism (byte-identical trades/equity across
+  runs), screener formula-eval peak == max_concurrent_formula_evals (RED pre-Step-10 peak==1), and a
+  ranking-unchanged guard (gather didn't scramble per-symbol assignment).
+- Deviations (spec Deviation Log): closure-based offload; single-pool screener executor wiring;
+  `_FakeEngine` double updated for the new `compute_executor` kwarg (staged with Step 10).
+- Full analysis suite `669 passed`, coverage `85%`; ruff clean. Existing 150/151 byte-for-byte
+  backtest suites pass through the offloaded path → equivalence proven. Status → code-completed.
+
+### Feature 176 — code-completed
+All 11 steps landed on `feature/analysis-concurrency-offload`, one commit per step (service+test
+pairs), red-before-green on every code step. FR-1 (opportunity single-flight fan-out), FR-2 (readiness
+parallel), FR-3 (evaluator component_sem), FR-4 (backtest/screener CPU offload), FR-5 (indicators
+sandbox offload), FR-6 (owner-scoped parallel). Ready for the integration PR into main-dev
+(merge-order: 176 before 177).

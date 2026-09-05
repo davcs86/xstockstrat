@@ -548,7 +548,7 @@ parallel fetch); post-Step-8 pass with coverage ≥ 40%.
 
 ### Step 10 — service: FR-4 — offload CPU-bound simulator cores + screener onto a dedicated bounded `ThreadPoolExecutor`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify (add executor in `__init__`; split `_backtest_symbol`, `_backtest_symbol_evaluated`, `_simulate_portfolio` prologue/core; offload cores)
@@ -619,7 +619,7 @@ parallel fetch); post-Step-8 pass with coverage ≥ 40%.
 
 ### Step 11 — test: FR-4 — a long backtest does not block a concurrent read; backtest/screener output byte-for-byte
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify (head-of-line + equivalence)
@@ -673,6 +673,27 @@ by adding a `_cfg_stub()` factory (answers `sandbox_max_concurrent() → 4`), re
 `MagicMock()` config args to it, and adding `cfg.sandbox_max_concurrent.return_value = 4` to the three
 sandbox `_cfg()` helpers. `tests/test_formulas.py` is not in Step 2's declared **Files** but the fix
 is required for the suite to stay green under Step 2's contract; staged with the Step 2 commit.
+
+### Step 10 — closure-based offload + two test-double updates
+
+**Disposition 1 (approach)**: the spec sketched module-level sync cores taking an explicit locals
+list. Implemented instead as nested `def _core()` closures offloaded via
+`loop.run_in_executor(self._compute_executor, _core)` — the closure captures the prologue locals
+automatically, eliminating the error-prone param-extraction while achieving the identical off-loop
+behavior. The core stays await-free (verified) and reads only in-memory data the coroutine no longer
+mutates after the offload, so no data race. Applied to `_backtest_symbol`, `_backtest_symbol_evaluated`
+(post-await cores) and `_simulate_portfolio` (whole body). Screener `screen` gathers the per-symbol
+fan-out and offloads the pure-sync rank tail (`_normalize_universe` + build + sort).
+
+**Disposition 2 (screener executor)**: chose to WIRE `AnalysisServicer._compute_executor` into
+`ScreenerEngine` (single bounded pool, spec-preferred) rather than `asyncio.to_thread`. The constructor
+param is optional (`compute_executor=None`) with a `to_thread` fallback so unit-test engines built
+without it still offload — no test churn there.
+
+**Disposition 3 (test doubles)**: the new `ScreenerEngine(compute_executor=...)` call broke one
+`_FakeEngine.__init__` double in `test_analysis_servicer.py` (unexpected kwarg); added
+`compute_executor=None` to it. `test_analysis_servicer.py` is Step 9/11's file; this one-line double
+fix is staged with the Step 10 commit to keep the suite green under Step 10.
 
 ### Step 8 — existing stale-recompute test drain made robust
 

@@ -1003,7 +1003,7 @@ class TestScreenSymbols:
         captured = {}
 
         class _FakeEngine:
-            def __init__(self, _md, _ind, _ing, _cfg, source_weights):
+            def __init__(self, _md, _ind, _ing, _cfg, source_weights, compute_executor=None):
                 captured["weights"] = source_weights
 
             async def screen(self, _request, _meta):
@@ -5954,6 +5954,7 @@ class TestSignalConfidence:
         assert capr.HasField("signal_confidence")
         assert abs(capr.signal_confidence - 0.90) < 1e-9  # max raw, not the summed/averaged value
 
+
 # ---------------------------------------------------------------------------
 # FR-1/FR-6 (feature 176) — _compute_opportunities three-phase single-flight fan-out:
 # an intra-compute GetBars bound, preserved owner-scoping, and set/rank determinism.
@@ -6062,3 +6063,4 @@ class TestOpportunityConcurrencyFeature176:
 
         assert _key(a) == _key(b)  # deterministic set + rank across runs
         assert len(a) >= 2
+
