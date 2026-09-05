@@ -102,6 +102,22 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 180 — watchlist-readiness-precompute (`xstockstrat-analysis`)
+
+Registers four `analysis.readiness_materializer.*` keys for the background readiness materializer
+loop — all **no-seed** (the `analysis.*` no-seed pattern) and **no `SCALAR_BOUNDS_REGISTRY` entry**
+(unlike feature 177's `stale_after_seconds`). The daily cadence anchor is the **dedicated**
+`refresh_hour_utc`, decoupled from `analysis.opportunity.refresh_hour_utc` (operator decision D-2) so
+the two daily loops tune independently. Jitter/retry reuse the existing `analysis.opportunity.*`
+operational knobs (bounded, non-cadence — not the daily anchor). No config migration.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.readiness_materializer.enabled` | bool | `false` | Master kill-switch for the loop. `get_bool` (HasField). Default OFF. No-seed. |
+| `analysis.readiness_materializer.refresh_hour_utc` | int | `0` | Dedicated wall-clock UTC anchor for the daily re-warm (decoupled from the opportunity loop, D-2). `get_int_present` (`0` = midnight legitimate). No-seed. |
+| `analysis.readiness_materializer.valid_window_hours` | int | `24` | Backstop TTL for a materialized row's `valid_until`; the authoritative bust is the `bar_epoch`-aware FAST gate. `get_int_present`; 1h floor. No-seed. |
+| `analysis.readiness_materializer.max_concurrent_bars_fetches` | int | `2` | The loop's own bars-fetch semaphore, separate from `analysis.opportunity.max_concurrent_bars_fetches` (feature-176 priority-inversion guard). `get_int` + `max(1, …)`. No-seed. |
+
 ### feature 177 — readiness-caching-poll-discipline (`xstockstrat-analysis` / `xstockstrat-config`)
 
 Registers three `analysis` keys, all read once/per-pass via `get_int_present` (a legitimate `0` must
