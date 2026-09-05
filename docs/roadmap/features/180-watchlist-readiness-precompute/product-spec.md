@@ -43,9 +43,14 @@ time I open the page.
 ## Functional Requirements
 
 FR-1. Readiness rows for watchlist-bound (symbol, strategy) pairs are materialized into
-`analysis.readiness_cache` by a **background process**, so that a subsequent `EvaluateReadiness`
-call for those pairs is served entirely from the FAST (cache-hit) path with no synchronous
-marketdata pull, indicator computation, or rule scoring on the request path.
+`analysis.readiness_cache` by a **background process**, so that once a pair has been materialized and
+is still fresh, a subsequent `EvaluateReadiness` call for it is served from the FAST (cache-hit) path
+with no synchronous marketdata pull, indicator computation, or rule scoring on the request path.
+**Coverage is eventually-consistent, not instantaneous** (design R1): the materializer warms the
+universe over a bounded rotation, so a pair opened before its first warm — or in the re-warm window
+right after a daily bar close — still falls to the synchronous path per FR-5. The guarantee is
+"fast for covered, fresh pairs," and the covered set converges within one rotation period; it is
+**not** "every pair is always FAST."
 
 FR-2. The materialized set is derived from the **actual watchlist bindings** (the (symbol, strategy)
 pairs a user could open), so that opening a watchlist finds its rows already warm rather than warming
@@ -53,10 +58,13 @@ them on demand. The derivation must be **owner-scoped** — a materialized row i
 correct user's binding and never leaks another user's live strategy into this user's readiness view
 (guards the fails.md:1153 IDOR class).
 
-FR-3. Materialized readiness respects the same **definition fingerprint** (`def_fingerprint`) and
-freshness semantics the on-demand path already uses, so that a stale row (strategy/formula changed,
-or bar data advanced past the refresh cadence) is recomputed rather than served indefinitely. The
-refresh cadence is operator-tunable via config (see Config Key Changes).
+FR-3. Materialized readiness respects the same **definition fingerprint** (`def_fingerprint`) as the
+on-demand path, so that a stale row — strategy/formula changed (fingerprint mismatch) **or** a new
+daily bar landed (`bar_epoch` behind the latest bar) — is recomputed rather than served indefinitely.
+Freshness is enforced by the `bar_epoch`-aware FAST gate (authoritative), with
+`analysis.readiness_materializer.valid_window_hours` as a backstop TTL. The materializer's run cadence
+itself is not a new config axis (it rides the loop's existing interval mechanism); the only
+operator-tunable freshness knob this feature adds is `valid_window_hours` (see Config Key Changes).
 
 FR-4. The background materialization is **bounded** in its resource use — marketdata pull volume,
 indicator recompute cost, and DB connection budget must stay within the analysis service's existing
@@ -79,12 +87,14 @@ platform; all strategy evaluation operates on **1-day (EOD) bars**. Readiness th
 at **daily bar close** or on a **strategy/formula definition change** — not intraday. The 30s poll
 cadence (`analysis.readiness.stale_after_seconds`, client `staleTime: 30_000`) exists to keep the
 **stock-list quote/price display** fresh, **not** the readiness verdict. Consequently a materialized
-readiness row may carry a **bar-close-aligned `valid_until`** (a long TTL keyed to the next expected
-daily bar) rather than the 30s window, so pre-warming does not require refreshing every pair every
-30s. The design **must reconcile this with feature 177's `@AC-2`** (which today relies on the short
-window to pick up intraday same-timestamp 1d-bar OHLC mutation) — i.e. decide whether that intraday
-sensitivity is a real requirement for readiness or an over-tight window inherited from conflating
-quote-freshness with verdict-freshness (a C-16 boundary the design phase resolves).
+readiness row need not use the 30s window: its freshness is governed by the **`bar_epoch`-aware FAST
+gate** (authoritative — a row is stale once a newer daily bar exists), backed by a generous
+`valid_window_hours` TTL (default 24h) as a backstop, so pre-warming does not require refreshing every
+pair every 30s. **RESOLVED at /sdd-design (C-16 boundary):** the intraday same-timestamp 1d-bar OHLC
+sensitivity that feature 177's short window provided is **not** a readiness requirement on this
+1-day-bar platform (operator ruling); feature 177's lazy path keeps its 30s window unchanged, and the
+`bar_epoch` predicate preserves `@AC-2` ("a new daily bar busts the cache") for both row origins under
+one freshness semantic. See design.md § @AC-2 reconciliation.
 
 ## Out of Scope
 
@@ -100,10 +110,10 @@ quote-freshness with verdict-freshness (a C-16 boundary the design phase resolve
 
 Exact service names from CLAUDE.md Service Registry:
 - `xstockstrat-analysis` — owns the readiness computation, the live evaluation loop, and
-  `analysis.readiness_cache`; the materializer lives here regardless of which loop option is chosen.
-- `xstockstrat-portfolio` — **read-only dependency**: source of watchlist bindings (the (symbol,
-  strategy) universe to materialize). Whether analysis reads bindings via a portfolio RPC or another
-  path is a design question.
+  `analysis.readiness_cache`; the dedicated materializer loop lives here (design Option B).
+- `xstockstrat-portfolio` — **read-only dependency**: source of watchlist bindings, read via the
+  **existing** owner-scoped `ListWatchlists` (per-owner `x-user-id`) — no new endpoint. No portfolio
+  code change.
 - `xstockstrat-config` — new operator-tunable cadence/enable keys (see Config Key Changes).
 
 ## Consumer Surface(s)
@@ -119,29 +129,35 @@ _Constitution **C-14**._
 
 ## Proto Contract Changes
 
-- [x] No proto changes required (the materializer writes the same `readiness_cache` rows the existing
-  `EvaluateReadiness` FAST path reads; the RPC contract is unchanged). _To be confirmed at /sdd-design:
-  reading watchlist bindings into analysis may need a portfolio-side RPC if none suitable exists._
+- [x] No proto changes required. RESOLVED at /sdd-design: the materializer writes the same
+  `readiness_cache` rows the existing `EvaluateReadiness` FAST path reads (contract unchanged), and
+  it sources watchlist bindings by **reusing the existing owner-scoped watchlist drain** (per-owner
+  `ListWatchlists` with `x-user-id`) — **no new portfolio RPC** and therefore **no proto-reviewer /
+  2-owner+platform-lead gate**. (The Round-1 `ListAllWatchlistBindings` RPC idea was rejected; see
+  design.md § Rejected Alternatives.)
 
 ## Config Key Changes
 
-- [ ] No new config keys
-- OR (expected — final set decided at /sdd-design):
-  - `analysis.readiness_materializer.enabled` (bool) — master switch for the background materializer.
-  - `analysis.readiness_materializer.interval_seconds` (int) — refresh cadence for the materialized set.
-  - _(possibly)_ `analysis.readiness_materializer.max_pairs_per_cycle` (int) — batch bound so a large
-    universe is materialized incrementally rather than in one burst.
+Final set (decided at /sdd-design):
+  - `analysis.readiness_materializer.enabled` (bool, default `false`) — master switch for the loop.
+  - `analysis.readiness_materializer.valid_window_hours` (int, default 24) — backstop TTL for a
+    materialized row's `valid_until` (the authoritative bust is the `bar_epoch`-aware FAST gate).
+  - `analysis.readiness_materializer.max_concurrent_bars_fetches` (int, default 2) — the loop's **own**
+    bars-fetch semaphore, separate from the interactive `analysis.opportunity.max_concurrent_bars_fetches`
+    (preserves the feature-176 priority-inversion guard).
 
-  Keys follow `<service>.<category>.<key>`; defaults declared in `services/xstockstrat-analysis/CLAUDE.md`.
-  The design must decide whether cadence reuses/extends `analysis.readiness.stale_after_seconds`
-  (feature 177) rather than adding a parallel knob.
+  Keys follow `<service>.<category>.<key>`; defaults declared in `services/xstockstrat-analysis/CLAUDE.md`
+  and logged in the config-governance Per-Feature Registered Keys log. **Cadence does NOT reuse
+  `analysis.readiness.stale_after_seconds`** (that 30s window stays owned by feature 177 for the lazy
+  path); the materializer rides its own loop interval. No `interval_seconds`/`max_pairs_per_cycle` keys.
 
 ## Database Changes
 
-- [x] No schema changes expected — the materializer reuses `analysis.readiness_cache`
-  (migration `022_readiness_cache`). _To be confirmed at /sdd-design: if the materializer needs to
-  distinguish materialized vs. on-demand rows, or index by (user, symbol, strategy) for efficient
-  batch upsert, a new column/index migration may be required (DBA review then applies)._
+- [x] No schema changes. RESOLVED at /sdd-design: the materializer reuses `analysis.readiness_cache`
+  (migration `022_readiness_cache`) as-is — materialized and on-demand rows are byte-identical (same
+  shared compute path), so **no origin-distinguishing column** is added, and the existing PK
+  `(user_id, strategy_id, rule, symbol)` already serves the batch upsert. No new migration; **no DBA
+  gate**.
 
 ## Feature Workflow Notes
 
@@ -158,28 +174,35 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **Loop placement (the core design question).** Should background write-through live **inside
-  the existing live evaluation loop** (`services/xstockstrat-analysis/app/engine/live_loop.py`) or in
-  a **new dedicated readiness-materializer loop**? Size both on performance for large symbols ×
-  strategies: fan-out cost, marketdata pull volume, indicator recompute reuse, DB connection budget,
-  staleness/freshness, and scaling behavior. **This is what `/sdd-design` (deep) must resolve.**
-- [ ] **Universe coverage.** Is every watchlist-bound strategy guaranteed to be in the live loop's
-  scan set, or can a watchlist bind a strategy the live loop does not evaluate (e.g. a non-live
-  strategy)? If the live loop only scans live-enabled strategies, the "reuse the live loop" option
-  cannot cover watchlist-only bindings without widening the loop's scan set — a decisive input to the
-  sizing. (Relates to insights.md:525 — "readiness scoped by a single upstream choice".)
-- [ ] **Acceptable staleness / refresh cadence.** Per-bar-close cadence vs. near-real-time? This sets
-  the materializer's period and directly drives its marketdata pull volume.
-- [ ] **Known trap — polling/recheck design (fails.md:804-847, feature 118).** "Nothing changed" is
-  the *expected, repeated* case for a background refresh loop, not a rare one; and a naive recheck
-  window can collapse to a full rescan. The materializer's cycle must be efficient in the steady
-  state where most rows are already fresh.
-- [ ] **Known trap — owner-scoping / IDOR (fails.md:1153, feature 131).** Reading watchlist bindings
-  and materializing per-user readiness must be owner-scoped; do not attribute one user's live/bound
-  strategy to another user's readiness view.
-- [ ] **Known trap — lazily-filled cache within one iteration (insights.md:220-230, C-08).** The
-  on-demand path already has a within-iteration warmup-cache subtlety; the materializer must not make
-  the first pair behave differently from the rest.
-- [ ] **Marketdata lock/pool budget under batch load** (`docs/runbooks/ohlcv-lock-budget-tuning.md`,
-  insights.md:180) — a large materialization burst multiplies 400-day bars queries; confirm it stays
-  within `max_locks_per_transaction` and the PgBouncer budget.
+_All product-spec Open Questions were resolved by `/sdd-design` (see `design.md`). Retained here as a
+decision record. Residual items are tracked as design **Open Risks** (design.md § Open Risks) for
+`/sdd-spec` / `/sdd-execute`._
+
+- [x] **Loop placement (the core design question).** RESOLVED → **Option B, a dedicated
+  readiness-materializer loop** (not inside the live loop). The live loop fetches each strategy's
+  *resolved universe*, not the watchlist-bound pairs, so the "reuse the loop's bars" premise was
+  false, and injecting readiness into its serial pair loop regressed alert latency (FR-4). Full
+  A-vs-B performance sizing in `design.md` § Option A vs Option B.
+- [x] **Universe coverage.** RESOLVED by **FR-6** — watchlists bind live strategies only, so the
+  warm-set is the live-strategy universe. The materializer enumerates live-strategy owners locally
+  (`analysis.strategies WHERE live_enabled`) and reuses the existing owner-scoped watchlist drain to
+  get exact bound pairs. Enforcing the live-only invariant at binding-write time is a **separate
+  follow-up** (design R5), not this feature.
+- [x] **Acceptable staleness / refresh cadence.** RESOLVED by **FR-7** — 1-day bars; readiness
+  changes at daily bar close / definition change. Materialized rows carry a bar-close-aligned
+  `valid_until` with a `bar_epoch`-aware FAST gate; cadence rides the loop interval. No 30s coupling.
+- [x] **Known trap — polling/recheck (fails.md:804-847, feature 118).** ADDRESSED — the loop applies
+  a **skip-fresh gate** (`read_many` → skip pairs already fresh under the freshness predicate), so the
+  steady "nothing changed" state costs a cheap read, not a recompute.
+- [x] **Known trap — owner-scoping / IDOR (fails.md:1153, feature 131).** ADDRESSED — warm-set is
+  sourced via the owner-scoped drain and every row is keyed under the binding owner's `user_id`;
+  no cross-user RPC. Owner-scoping is structural. A binding whose user does not own the strategy is
+  skipped, not fabricated (P-03).
+- [x] **Known trap — lazily-filled cache within one iteration (insights.md:220-230, C-08).**
+  ADDRESSED in design — the `latest_bar_epoch` lookup feeding the freshness predicate is memoized
+  **before** the per-symbol loop, not filled lazily within it (tracked as design R2 for /sdd-spec).
+- [x] **Marketdata lock/pool budget under batch load** (`ohlcv-lock-budget-tuning.md`, insights.md:180).
+  ADDRESSED — the materializer bounds concurrent 400-day pulls with its **own** semaphore
+  (`analysis.readiness_materializer.max_concurrent_bars_fetches`, default 2), separate from the
+  interactive `_bars_fetch_sem`, keeping it within the existing lock/PgBouncer envelope and preserving
+  the feature-176 priority-inversion guard.

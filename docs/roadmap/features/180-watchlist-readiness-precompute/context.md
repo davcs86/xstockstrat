@@ -89,3 +89,61 @@
   177 @AC-1/@AC-2 green (RED tests first at execute); R4 merge order 176→177→180 (merge-order row
   added); R5 enforcing the live-only-binding invariant is a separate follow-up, not this feature.
 - Status: spec-ready → design-approved. Next: /sdd-spec.
+
+## Session 2026-09-05 — sdd-review product-spec (advisory re-review, post-design)
+
+- Ran an ADVISORY product-spec re-review via spec-reviewer (not the full /sdd-review gate, which would
+  have regressed status design-approved → spec-ready on PASS). Purpose: confirm the 3 prior warnings
+  are cleared and catch residuals from the design-phase spec edits.
+- Prior 3 warnings: ALL CLEARED (Open Questions resolved; no new portfolio RPC / no proto/DB gate;
+  _READINESS_LOOKBACK_DAYS=400 nit fixed).
+- Residual warnings found and FIXED this session:
+  1. C-15 coverage — FR-6/FR-7 had no acceptance scenarios → added @AC-6 (non-live binding not
+     materialized) and @AC-7 (new daily bar busts materialized row; intraday drift does not).
+  2. @AC-4 cited the pre-decision key `analysis.opportunity.max_concurrent_bars_fetches` → repointed
+     to the materializer's own `analysis.readiness_materializer.max_concurrent_bars_fetches` + asserts
+     the semaphore is separate (feature-176 priority-inversion guard).
+  3. FR-3 said "refresh cadence operator-tunable via config" but no cadence key ships → reworded:
+     freshness = bar_epoch gate (authoritative) + valid_window_hours backstop; loop cadence is not a
+     new config axis. FR-7 valid_until wording aligned to the valid_window_hours backstop framing.
+- Result: PASS, no Floor breach, no residual warnings. Proceeding to /sdd-spec.
+
+## Session 2026-09-05 — sdd-spec
+
+- Generated implementation-spec.md with 7 steps (3 service + 3 paired test + 1 config).
+  Status: design-approved → implementation-ready. Every `@AC-1..7` scenario is mapped to a covering
+  step (see § Scenario Coverage). No proto, no DB migration, no config seed migration.
+- Two design-underspecified points surfaced (not silently resolved — P-03), recorded as spec Open
+  design points D-1..D-3 for /sdd-review impl-spec / operator sign-off:
+  - **D-1 (design.md correction):** design.md § Warm-set sourcing says to reuse
+    `live_loop._drain_watchlist` for `(strategy_id → symbols)` bindings, but that method
+    (`live_loop.py:467-496`, esp. :490) **collapses every binding to its bare symbol and discards
+    `strategy_id`** — the live loop applies each live strategy's `resolve_universe` to the whole
+    watchlist symbol set. The materializer's target read-set is the overlay's actual `(symbol,
+    strategy_id)` bindings (`WatchlistReadiness.tsx:183` `bound = bindings.filter(b => b.strategyId)`).
+    Step 5 therefore adds a NEW binding-aware drain `_drain_watchlist_bindings`, not a reuse. To be
+    recorded in the Deviation Log at execute.
+  - **D-2 (cadence):** design says "no new config axis" but component #3 says "DurableSchedule interval
+    mode" (which needs an interval value). Resolved in-spec to **wall-clock mode reusing the existing
+    `analysis.opportunity.refresh_hour_utc`** (daily re-warm after close, aligns with FR-7, no new
+    key). Flagged for review vs. adding a dedicated anchor key.
+  - **D-3 (R2 cost):** the `bar_epoch`-aware FAST gate needs a cheap per-symbol `latest_bar_epoch`;
+    grounded source is `MarketDataService.GetDataCoverage(...).latest` (`marketdata.proto:32,149-158`)
+    — a `MAX(time)` metadata read, memoized per request/cycle and filled before the per-symbol loop
+    (C-08). Replaces the 400-day pull, but is a per-symbol RPC on every overlay poll — flagged for
+    review sign-off. Benchmark epochs make a stamped row `>= symbol_latest`, so the gate never falsely
+    busts; the benchmark-newer-bar edge self-heals at the symbol's next daily bar (acceptable on 1d bars).
+- Key codebase findings (grounded evidence):
+  - EvaluateReadiness SLOW body to extract: `servicer.py:2786-2818`; FAST-gate inline predicate at
+    `servicer.py:2780`; `asyncio.gather` at `:2821` (memo must precede it — C-08).
+  - Loop template `run_opportunity_refresh_forever` at `servicer.py:3780`; own-semaphore precedent
+    `servicer.py:395-403`; main.py `create_task` wiring at `main.py:175`.
+  - `StrategiesRepository.list_live_enabled(user_id=None)` at `strategies.py:205` enumerates the
+    live-strategy warm-set owners globally; `readiness_cache` repo `read_many`/`upsert_many` at
+    `readiness_cache.py:25,44`.
+  - Feature-177 @AC-2 test busts via expired `valid_until` (`test_readiness_cache.py:82-105`), not
+    `bar_epoch`, so adding the `bar_epoch` conjunct keeps 177 green — but `_cache_svc` mocks only
+    `GetBars`, so Step 4 must add a `GetDataCoverage` mock (R3).
+- Reviewers snapshot finalized in feature.md: analysis service owner (all steps) + config service
+  owner (Step 7). No DBA / Proto Reviewer (no migration, no proto). Merge-order row for 180 already
+  present in merge-order.md (176 → 177 → 180).
