@@ -61,6 +61,11 @@ from app.services.evaluator import (
     align_indicator_points,
     referenced_refs,
 )
+from app.services.readiness import (
+    compute_readiness_row,
+    is_readiness_row_fresh,
+    readiness_valid_until,
+)
 from app.services.screener import ScreenerEngine
 
 # Back-compat alias: existing imports of _compute_signal_score from this module must stay valid.
@@ -247,6 +252,10 @@ _MAX_BAR_PAGES = 32
 # Recent-bar lookback for EvaluateReadiness: ~400 calendar days ≈ 280 trading bars, enough to
 # warm up long indicators (e.g. SMA/EMA up to ~200 periods) for a last-bar readiness read.
 _READINESS_LOOKBACK_DAYS = 400
+# Feature 180: narrow window for the FAST-gate GetDataCoverage latest-bar probe — wide enough to
+# always contain the most recent daily bar across weekends/holidays, small enough to bound the
+# server-side MIN/MAX/COUNT scan (we consume only `.latest`).
+_READINESS_COVERAGE_PROBE_DAYS = 10
 # Backstop for draining paginated QuerySignals / ListPositions in ListOpportunities.
 _MAX_DRAIN_PAGES = 50
 # Default queue page size when the request omits one.
@@ -428,6 +437,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         self._opportunities_repo = OpportunitiesRepository(db_pool) if db_pool else None
         # feature 177 FR-1: per-(user,strategy,rule,symbol) readiness cache backing the FAST path.
         self._readiness_cache_repo = ReadinessCacheRepository(db_pool) if db_pool else None
+        # feature 180: the readiness materializer's OWN bars-fetch semaphore — SEPARATE from
+        # _bars_fetch_sem so the background pre-warm can never starve interactive readiness
+        # (feature-176 priority-inversion guard). max(1, …) guards a negative config value.
+        self._readiness_materializer_bars_sem = asyncio.Semaphore(
+            max(
+                1,
+                self._cfg.get_int("analysis.readiness_materializer.max_concurrent_bars_fetches", 2),
+            )
+        )
         # feature 177 FR-3: per-user empty-universe compute-state gating redundant recompute.
         self._opportunity_compute_state_repo = (
             OpportunityComputeStateRepository(db_pool) if db_pool else None
@@ -2777,46 +2795,59 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Returns (proto, staged_cache_row | None, computed_at). gather preserves request order.
         async def _readiness_for(symbol):
             c = cached.get(symbol)
-            if c is not None and c["def_fingerprint"] == fingerprint and now < c["valid_until"]:
+            if c is not None and is_readiness_row_fresh(
+                c,
+                now=now,
+                fingerprint=fingerprint,
+                latest_bar_epoch=latest_bar_epoch.get(symbol, 0),
+            ):
                 return (
                     _symbol_readiness_from_json(c["readiness_json"], symbol),
                     None,
                     c["computed_at"],
                 )
-            async with self._bars_fetch_sem:
-                fetch_ok = True
-                try:
-                    bars = await self._fetch_bars_paged(symbol, range_msg, propagation_meta)
-                except Exception as e:  # bar fetch is best-effort per symbol
-                    log.warning("EvaluateReadiness: bars fetch failed for %s: %s", symbol, e)
-                    bars = []
-                    fetch_ok = False
-                if fetch_ok and not bars:
-                    # A successful-but-empty fetch is WARN-logged; request-bounded, so a per-symbol
-                    # WARN is rate-safe (unlike the live loop / screener, which summarize).
-                    log.warning(
-                        "EvaluateReadiness: no 1d bars for %s (strategy %s) — readiness empty",
-                        symbol,
-                        request.strategy_id,
-                    )
-                trace = await evaluator.evaluate_conditions_traced(
-                    definition, bars, symbol, rule=rule, benchmark_bars=benchmark_bars
+            # SLOW body extracted to the shared compute path (feature 180) so the interactive
+            # handler and the readiness materializer produce byte-identical rows.
+            staged = await compute_readiness_row(
+                symbol,
+                fetch_bars=self._fetch_bars_paged,
+                bars_sem=self._bars_fetch_sem,
+                evaluator=evaluator,
+                definition=definition,
+                range_msg=range_msg,
+                propagation_meta=propagation_meta,
+                benchmark_bars=benchmark_bars,
+                rule=rule,
+                fingerprint=fingerprint,
+                strategy_id=request.strategy_id,
+                user_id=caller_user_id,
+                now=now,
+                valid_until=now + timedelta(seconds=stale_after),
+                benchmark_epoch=_benchmark_epoch(),
+            )
+            return _readiness_to_proto(staged["readiness_json"]), staged, now
+
+        # Feature 180: bar_epoch-aware FAST gate. Fetch each distinct symbol's latest 1d-bar epoch
+        # ONCE, before the gather (C-08: fill-before-loop, never lazily inside it), so a new daily
+        # bar busts a still-in-window cached row. GetDataCoverage is a MIN/MAX/COUNT metadata read;
+        # bound the scan to a narrow recent window (we only consume .latest) so this per-symbol
+        # per-read probe stays cheap. Best-effort — a coverage miss (0) never falsely busts a row.
+        latest_bar_epoch: dict[str, int] = {}
+        coverage_range = _recent_range(_READINESS_COVERAGE_PROBE_DAYS)
+        for symbol in dict.fromkeys(request.symbols):
+            try:
+                cov = await self._marketdata.GetDataCoverage(
+                    marketdata_pb2.GetDataCoverageRequest(
+                        symbol=symbol,
+                        timeframe=common_pb2.Timeframe.TIMEFRAME_1DAY,
+                        range=coverage_range,
+                    ),
+                    metadata=propagation_meta,
                 )
-            # No slow-path bar_epoch reuse — always re-evaluate on a miss so a same-time.seconds
-            # intraday 1d bar update never freezes a day-one verdict (round-3 adversary #1).
-            bar_epoch = max(bars[-1].time.seconds if bars else 0, _benchmark_epoch())
-            staged = {
-                "user_id": caller_user_id,
-                "strategy_id": request.strategy_id,
-                "rule": rule,
-                "symbol": symbol,
-                "def_fingerprint": fingerprint,
-                "bar_epoch": bar_epoch,
-                "readiness_json": trace,  # {} when the trace is empty (never NULL)
-                "computed_at": now,
-                "valid_until": now + timedelta(seconds=stale_after),
-            }
-            return _readiness_to_proto(trace), staged, now
+                latest_bar_epoch[symbol] = cov.latest.seconds
+            except Exception as e:  # best-effort — a coverage miss never blocks the read
+                log.warning("EvaluateReadiness: GetDataCoverage failed for %s: %s", symbol, e)
+                latest_bar_epoch[symbol] = 0
 
         results = await asyncio.gather(*[_readiness_for(s) for s in request.symbols])
         protos = [r[0] for r in results]
@@ -3802,6 +3833,160 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         await asyncio.sleep(random.uniform(0, max(0, jitter)))
         while True:
             await asyncio.sleep(await self._opportunity_refresh_tick(schedule))
+
+    # ── Readiness materializer (feature 180) ────────────────────────────────────
+
+    def _readiness_materializer_hour(self) -> int:
+        """Wall-clock anchor hour (UTC) for the daily readiness re-warm — a DEDICATED key,
+        decoupled from the opportunity refresh (D-2), so tuning one loop never moves the other.
+        Read presence-aware (`0` = midnight is legitimate)."""
+        return self._cfg.get_int_present("analysis.readiness_materializer.refresh_hour_utc", 0)
+
+    async def _materialize_readiness_for_owner(self, owner: str, live_by_id: dict) -> None:
+        """Warm one owner's watchlist-bound (symbol, strategy) entry-rule readiness rows.
+        Best-effort: a failure here is caught by the caller so one bad owner never halts a cycle."""
+        meta = [("x-user-id", owner)]
+        bindings = await self._drain_watchlist_bindings(meta)
+        # Keep only bindings to THIS owner's live strategies (FR-6). A binding to a non-live/foreign
+        # strategy is skipped, never fabricated (P-03 / fails.md:1153). Group symbols per strategy.
+        by_strategy: dict[str, list[str]] = {}
+        for symbol, strategy_id in bindings:
+            if strategy_id and strategy_id in live_by_id:
+                by_strategy.setdefault(strategy_id, []).append(_normalize_symbol(symbol))
+        if not by_strategy:
+            return
+        now = datetime.now(UTC)
+        valid_window = self._cfg.get_int_present(
+            "analysis.readiness_materializer.valid_window_hours", 24
+        )
+        range_msg = _recent_range(_READINESS_LOOKBACK_DAYS)
+        coverage_range = _recent_range(_READINESS_COVERAGE_PROBE_DAYS)
+        staged_rows: list[dict] = []
+        for strategy_id, symbols in by_strategy.items():
+            row = live_by_id[strategy_id]
+            definition = _row_to_strategy_definition(row)
+            fingerprint = _definition_fingerprint(row["definition_json"])
+            evaluator = StrategyEvaluator(self._indicators, meta, component_sem=None)
+            benchmark_bars = await self._load_benchmark_bars_windowed(definition, range_msg, meta)
+            benchmark_epoch = 0
+            if benchmark_bars:
+                for bench in benchmark_bars.values():
+                    if bench:
+                        benchmark_epoch = max(benchmark_epoch, bench[-1].time.seconds)
+            existing = (
+                await self._readiness_cache_repo.read_many(owner, strategy_id, "entry", symbols)
+                if self._readiness_cache_repo is not None
+                else {}
+            )
+            # Fill the latest-bar epoch memo once, before the per-symbol compute (C-08).
+            latest_bar_epoch: dict[str, int] = {}
+            for symbol in dict.fromkeys(symbols):
+                try:
+                    cov = await self._marketdata.GetDataCoverage(
+                        marketdata_pb2.GetDataCoverageRequest(
+                            symbol=symbol,
+                            timeframe=common_pb2.Timeframe.TIMEFRAME_1DAY,
+                            range=coverage_range,
+                        ),
+                        metadata=meta,
+                    )
+                    latest_bar_epoch[symbol] = cov.latest.seconds
+                except Exception as e:  # best-effort — a coverage miss never falsely busts a row
+                    log.warning(
+                        "readiness materializer: GetDataCoverage failed for %s: %s", symbol, e
+                    )
+                    latest_bar_epoch[symbol] = 0
+            for symbol in symbols:
+                c = existing.get(symbol)
+                if c is not None and is_readiness_row_fresh(
+                    c,
+                    now=now,
+                    fingerprint=fingerprint,
+                    latest_bar_epoch=latest_bar_epoch.get(symbol, 0),
+                ):
+                    continue  # skip-fresh (fails.md:118 steady state)
+                staged_rows.append(
+                    await compute_readiness_row(
+                        symbol,
+                        fetch_bars=self._fetch_bars_paged,
+                        bars_sem=self._readiness_materializer_bars_sem,
+                        evaluator=evaluator,
+                        definition=definition,
+                        range_msg=range_msg,
+                        propagation_meta=meta,
+                        benchmark_bars=benchmark_bars,
+                        rule="entry",
+                        fingerprint=fingerprint,
+                        strategy_id=strategy_id,
+                        user_id=owner,
+                        now=now,
+                        valid_until=readiness_valid_until(now, valid_window_hours=valid_window),
+                        benchmark_epoch=benchmark_epoch,
+                    )
+                )
+        if staged_rows and self._readiness_cache_repo is not None:
+            try:
+                await self._readiness_cache_repo.upsert_many(staged_rows)
+            except Exception as e:  # noqa: BLE001 — cache write is best-effort
+                log.warning("readiness materializer: upsert failed for owner=%s: %s", owner, e)
+
+    async def _readiness_materializer_tick(self, schedule: "DurableSchedule") -> float:
+        """One scheduler iteration for the readiness materializer. Returns the seconds to sleep.
+        When due: kill-switch check, enumerate live strategies, warm each owner's bound pairs, then
+        advance to the next wall-clock hour. Enumeration failure retries soon (mirrors the
+        opportunity loop); a per-owner failure is swallowed so a completed pass advances."""
+        sleep_s = await schedule.next_sleep_seconds()
+        if sleep_s > 0:
+            return sleep_s
+        if not self._cfg.get_bool("analysis.readiness_materializer.enabled", False):
+            # Kill-switch OFF (default): advance to the next wall-clock hour, do nothing.
+            await schedule.advance(seconds_until_hour_utc(self._readiness_materializer_hour()))
+            return 0.0
+        try:
+            live_rows = await self._strategies_repo.list_live_enabled()
+        except Exception as e:
+            log.warning("readiness materializer: live-strategy enumeration failed: %s", e)
+            retry = max(1, self._cfg.get_int_present("analysis.opportunity.retry_seconds", 300))
+            await schedule.advance(retry)
+            return 0.0
+        # Group live strategies by owner → {strategy_id: row} (warm-set = live strategies, FR-6).
+        by_owner: dict[str, dict[str, dict]] = {}
+        for row in live_rows:
+            by_owner.setdefault(row["user_id"], {})[row["strategy_id"]] = row
+        for owner, live_by_id in by_owner.items():
+            try:
+                await self._materialize_readiness_for_owner(owner, live_by_id)
+            except Exception as e:  # one bad owner never kills the cycle (@AC-6)
+                log.warning("readiness materializer failed for owner=%s: %s", owner, e)
+            await asyncio.sleep(0)  # cooperative pacing point
+        await schedule.advance(seconds_until_hour_utc(self._readiness_materializer_hour()))
+        return 0.0
+
+    async def run_readiness_materializer_forever(self):
+        """Feature 180: dedicated daily background loop that pre-warms watchlist-bound readiness
+        rows into ``analysis.readiness_cache`` so the /insights overlay reads cache-only. Wall-clock
+        anchored to the DEDICATED ``analysis.readiness_materializer.refresh_hour_utc`` (decoupled
+        from the opportunity loop, D-2); kill-switch default OFF. Reuses the shared asyncpg pool
+        (F-06) and mirrors ``run_opportunity_refresh_forever``'s durable-schedule scaffolding."""
+        if (
+            self._readiness_cache_repo is None
+            or self._strategies_repo is None
+            or self._db_pool is None
+        ):
+            return
+        schedule = DurableSchedule(
+            self._db_pool,
+            "readiness_materializer",
+            "wallclock",
+            anchor_hour=self._readiness_materializer_hour,
+        )
+        await schedule.seed()
+        # One-shot bounded startup jitter (reuse the opportunity operational knob — not the daily
+        # anchor, which is the dedicated key above).
+        jitter = self._cfg.get_int_present("analysis.opportunity.startup_jitter_seconds", 30)
+        await asyncio.sleep(random.uniform(0, max(0, jitter)))
+        while True:
+            await asyncio.sleep(await self._readiness_materializer_tick(schedule))
 
     async def SetOpportunityAction(self, request, context):
         """Persist a per-user disposition (snooze/dismiss/take) for a queued opportunity

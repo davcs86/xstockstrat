@@ -36,6 +36,15 @@ def _cache_svc(bars_by_symbol, strategy_row=None):
         return SimpleNamespace(page=_EOF_PAGE, bars=bars_by_symbol.get(req.symbol, []))
 
     svc._marketdata.GetBars = AsyncMock(side_effect=_get_bars)
+
+    # Feature 180: the bar_epoch-aware FAST gate probes each symbol's latest 1d-bar epoch via
+    # GetDataCoverage before the gather. Default: the symbol's newest mocked bar (so a warmed row's
+    # bar_epoch == latest_bar_epoch → still fresh). Individual tests override for the new-bar case.
+    async def _get_coverage(req, metadata=None):
+        bars = bars_by_symbol.get(req.symbol, [])
+        return SimpleNamespace(latest=SimpleNamespace(seconds=bars[-1].time.seconds if bars else 0))
+
+    svc._marketdata.GetDataCoverage = AsyncMock(side_effect=_get_coverage)
     svc._indicators = MagicMock()
     svc._indicators.ComputeIndicator = AsyncMock(
         side_effect=lambda req, metadata=None: SimpleNamespace(

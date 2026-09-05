@@ -175,6 +175,12 @@ async def serve():
         asyncio.get_event_loop().create_task(servicer.run_opportunity_refresh_forever())
         log.info("opportunity queue daily refresh started")
 
+        # ── Readiness materializer (feature 180) ──
+        # Self-gates on analysis.readiness_materializer.enabled (default OFF), so an unconditional
+        # create_task is safe (mirrors the other loops); pre-warms watchlist readiness rows.
+        asyncio.get_event_loop().create_task(servicer.run_readiness_materializer_forever())
+        log.info("readiness materializer started")
+
     await grpc_server.wait_for_termination()
 
 
