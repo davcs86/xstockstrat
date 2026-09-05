@@ -10,6 +10,7 @@ Entry point:
 BarDecision has fields: bar_index (int), entry (bool), exit (bool), conviction (float).
 """
 
+import asyncio
 import json
 import logging
 import math
@@ -104,14 +105,20 @@ class StrategyEvaluator:
     - Returns per-bar BarDecision list; no look-ahead (bar i only uses data from bars 0..i).
     """
 
-    def __init__(self, indicators_stub, propagation_meta=()):
+    def __init__(self, indicators_stub, propagation_meta=(), component_sem=None):
         """
         indicators_stub: IndicatorsServiceStub — used to compute built-in indicators
                          and execute custom formulas bar by bar.
         propagation_meta: list of (key, value) tuples propagated from inbound request.
+        component_sem: optional asyncio.Semaphore. None ⇒ per-component assembly runs
+                       SERIAL (the load-bearing contract the backtest/score sites rely on);
+                       a semaphore ⇒ components are dispatched concurrently under that bound
+                       (feature 176, FR-3). Reassembly is keyed by ref_name, so the concurrent
+                       path is byte-identical to the serial one regardless of gather order.
         """
         self._indicators = indicators_stub
         self._meta = propagation_meta
+        self._component_sem = component_sem
 
     async def evaluate(
         self,
@@ -231,14 +238,34 @@ class StrategyEvaluator:
             else None
         )
         component_series: dict[str, list] = {}
-        for comp in definition.components:
-            series_map = await self._assemble_component_series(
-                comp, closes, eval_dates, benchmark_bars
-            )
-            primary = series_map.get("value", [None] * len(closes))
-            component_series[comp.ref_name] = primary
-            for series_name, series in series_map.items():
-                component_series[f"{comp.ref_name}.{series_name}"] = series
+        if self._component_sem is None:
+            # SERIAL — byte-for-byte the pre-176 behavior; the backtest (:1463) and score
+            # (:2892, which already holds _component_series_sem) sites depend on this.
+            for comp in definition.components:
+                series_map = await self._assemble_component_series(
+                    comp, closes, eval_dates, benchmark_bars
+                )
+                primary = series_map.get("value", [None] * len(closes))
+                component_series[comp.ref_name] = primary
+                for series_name, series in series_map.items():
+                    component_series[f"{comp.ref_name}.{series_name}"] = series
+        else:
+            # CONCURRENT — one coroutine per component under the shared bound. No
+            # return_exceptions: a FormulaExecutionError still propagates, matching serial scope.
+            async def _assemble(comp):
+                async with self._component_sem:
+                    return comp.ref_name, await self._assemble_component_series(
+                        comp, closes, eval_dates, benchmark_bars
+                    )
+
+            # gather preserves input order, so `assembled` is in definition.components order —
+            # the reassembly below is byte-for-byte identical to the serial loop.
+            assembled = await asyncio.gather(*[_assemble(comp) for comp in definition.components])
+            for ref_name, series_map in assembled:
+                primary = series_map.get("value", [None] * len(closes))
+                component_series[ref_name] = primary
+                for series_name, series in series_map.items():
+                    component_series[f"{ref_name}.{series_name}"] = series
         rule_src = definition.exit_rule if rule == "exit" else definition.entry_rule
         parsed_rule = json.loads(rule_src) if rule_src else None
         last = len(bars) - 1

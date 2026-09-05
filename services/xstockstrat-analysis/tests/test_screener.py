@@ -1,5 +1,6 @@
 """Engine unit tests for the screener (feature 060)."""
 
+import asyncio
 import logging
 from datetime import datetime
 from types import SimpleNamespace
@@ -615,3 +616,64 @@ async def test_signal_weighted_screen_returns_ok_not_crash():
     # leave 0.5 here, failing this assertion (so it can't pass without exercising the fixed line).
     for r in resp.results:
         assert r.score == pytest.approx(0.9)
+
+
+# ── FR-4 (feature 176) — the per-symbol fan-out is now concurrent, and the formula-eval
+#    semaphore actually binds it (the old serial loop left the sem inert). ──────────────
+
+
+async def test_formula_evals_bounded_by_semaphore():
+    """AC-4 (teeth): 12 symbols scanned concurrently, but peak in-flight ExecuteFormula is EXACTLY
+    the configured analysis.screener.max_concurrent_formula_evals (4) — the _sem now binds the
+    fan-out. The serial pre-176 loop peaked at 1."""
+    md = AsyncMock()
+    md.GetBars = AsyncMock(return_value=bars([1.0, 2.0, 3.0]))
+    ind = AsyncMock()
+    in_flight = 0
+    peak = 0
+    lock = asyncio.Lock()
+
+    async def _blocking_exec(req, metadata=None):
+        nonlocal in_flight, peak
+        async with lock:
+            in_flight += 1
+            peak = max(peak, in_flight)
+        await asyncio.sleep(0.02)
+        async with lock:
+            in_flight -= 1
+        return formula_resp([0.5])
+
+    ind.ExecuteFormula = AsyncMock(side_effect=_blocking_exec)
+    engine = make_engine(
+        md, ind, cfg=make_cfg(**{"analysis.screener.max_concurrent_formula_evals": 4})
+    )
+
+    req = analysis_pb2.ScreenSymbolsRequest(
+        symbols=[f"S{i}" for i in range(12)],
+        criteria=[formula_criterion("f1", "fid", analysis_pb2.COMPARATOR_GT, 0.0)],
+    )
+    resp = await engine.screen(req)
+
+    assert len(resp.results) == 12  # every symbol scored
+    assert peak == 4
+
+
+async def test_screen_ranking_unchanged_by_concurrent_fanout():
+    """AC-4: the concurrent fan-out yields the same ranked set a serial scan would — distinct
+    per-symbol formula values still rank descending after min-max normalization (regression guard
+    that gather did not scramble the per-symbol assignment)."""
+    md = AsyncMock()
+    md.GetBars = AsyncMock(return_value=bars([1.0, 2.0, 3.0]))
+    ind = AsyncMock()
+    ind.ExecuteFormula = AsyncMock(
+        side_effect=[formula_resp([0.1]), formula_resp([0.9]), formula_resp([0.5])]
+    )
+    engine = make_engine(md, ind)
+
+    req = analysis_pb2.ScreenSymbolsRequest(
+        symbols=["AAA", "BBB", "CCC"],
+        criteria=[formula_criterion("f1", "fid", analysis_pb2.COMPARATOR_GT, 0.0)],
+    )
+    resp = await engine.screen(req)
+
+    assert [r.symbol for r in resp.results] == ["BBB", "CCC", "AAA"]  # 0.9 > 0.5 > 0.1

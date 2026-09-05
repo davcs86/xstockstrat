@@ -10,6 +10,7 @@ import inspect
 import json
 import logging
 import math
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -1003,7 +1004,7 @@ class TestScreenSymbols:
         captured = {}
 
         class _FakeEngine:
-            def __init__(self, _md, _ind, _ing, _cfg, source_weights):
+            def __init__(self, _md, _ind, _ing, _cfg, source_weights, compute_executor=None):
                 captured["weights"] = source_weights
 
             async def screen(self, _request, _meta):
@@ -4439,8 +4440,11 @@ class TestListOpportunitiesMaterialized:
         ]
         by_symbol, _ = await _list_opps(svc)
         assert "OLD" in by_symbol  # stale row served immediately
-        # The background recompute runs on the next loop turns; it recomputes the fresh Universe.
-        for _ in range(5):
+        # The background recompute runs on the next loop turns; drain until its guard clears (the
+        # parallelized compute needs more scheduling turns than a fixed count — feature 176).
+        for _ in range(100):
+            if "u1" not in svc._opportunity_recomputing:
+                break
             await asyncio.sleep(0)
         assert svc._ingest.QuerySignals.await_count >= 1
         assert "u1" not in svc._opportunity_recomputing  # guard cleared after it ran
@@ -5950,3 +5954,191 @@ class TestSignalConfidence:
         capr = by_symbol["CAPR"]
         assert capr.HasField("signal_confidence")
         assert abs(capr.signal_confidence - 0.90) < 1e-9  # max raw, not the summed/averaged value
+
+
+# ---------------------------------------------------------------------------
+# FR-1/FR-6 (feature 176) — _compute_opportunities three-phase single-flight fan-out:
+# an intra-compute GetBars bound, preserved owner-scoping, and set/rank determinism.
+#
+# C-13: these reuse the module's existing _materialized_svc / _wl / _strat_row / _list_opps
+# fixtures; no new domain-data literal is centralized.
+# ---------------------------------------------------------------------------
+
+
+class TestOpportunityConcurrencyFeature176:
+    @pytest.mark.asyncio
+    async def test_intra_compute_bars_fetch_bounded(self):
+        """AC-1 (teeth): ONE user's compute over 12 watchlist-bound symbols keeps peak in-flight
+        GetBars at EXACTLY 2 — the Phase-1 single-flight is bounded by
+        analysis.opportunity.max_concurrent_bars_fetches (default 2), guarding feature 141. Serial
+        (pre-176) peaks at 1. Calls _compute_opportunities DIRECTLY to isolate the compute fan-out
+        from the ListOpportunities read-time sparkline-enrichment path (which fetches concurrently
+        on its own)."""
+        syms = [f"S{i}" for i in range(12)]
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[(s, "sx") for s in syms])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={s: _FIRING_BARS for s in syms},
+        )
+        in_flight = 0
+        peak = 0
+        lock = asyncio.Lock()
+
+        async def _blocking_get_bars(req, metadata=None):
+            nonlocal in_flight, peak
+            async with lock:
+                in_flight += 1
+                peak = max(peak, in_flight)
+            await asyncio.sleep(0.02)
+            async with lock:
+                in_flight -= 1
+            return _recent_bars_resp(_FIRING_BARS)
+
+        svc._marketdata.GetBars = AsyncMock(side_effect=_blocking_get_bars)
+
+        rows = await svc._compute_opportunities("u1", ())
+
+        assert {r["symbol"] for r in rows} == set(syms)  # every symbol still produced its row
+        assert peak == 2
+
+    @pytest.mark.asyncio
+    async def test_owner_scoping_preserved_under_parallel_fanout(self):
+        """AC-6: user B's parallel compute never attributes A's strategy. B's watchlist binds
+        AAPL→sx, but sx resolves only under A's ownership, so for B it is None (unattributed 0/0),
+        and every owner-scoped strategy load carries B's user_id — the IDOR guard (fails.md:1153)
+        survives the fan-out."""
+        from gen.marketdata.v1 import marketdata_pb2 as _md
+
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            bars={"AAPL": _FIRING_BARS},
+        )
+        svc._marketdata.GetLatestPrice = AsyncMock(return_value=_md.LatestPrice())
+        strat = _strat_row("sx", entry=_GT_100)
+
+        async def _owner_scoped(uid, sid):
+            return strat if (uid == "u1" and sid == "sx") else None
+
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(side_effect=_owner_scoped)
+
+        ctx_b = _ctx({"x-user-id": "uB", "x-access-scope": "7", "x-trace-id": "t1"})
+        resp = await svc.ListOpportunities(analysis_pb2.ListOpportunitiesRequest(), ctx_b)
+        by_symbol = {o.symbol: o for o in resp.opportunities}
+
+        assert "AAPL" in by_symbol  # still a candidate via B's own watchlist binding
+        # A's strategy resolves to None for B → its TRACE is not leaked: readiness is 0/0, not A's
+        # real firing readiness (the strategy_id echoes B's own binding, which is not the leak).
+        assert by_symbol["AAPL"].total_conditions == 0
+        assert by_symbol["AAPL"].passing_conditions == 0
+        # every owner-scoped load carried B's id; A's id never appears.
+        owner_uids = {c.args[0] for c in svc._strategies_repo.get_by_owner_and_id.await_args_list}
+        assert owner_uids <= {"uB"}
+        live_uids = {c.args[0] for c in svc._strategies_repo.list_live_enabled.await_args_list}
+        assert live_uids == {"uB"}
+
+    @pytest.mark.asyncio
+    async def test_opportunity_set_and_rank_matches_across_runs(self):
+        """AC-1: a multi-candidate universe (a firing entry, a non-firing entry, a deny-listed
+        muted placeholder, and a held position) yields an IDENTICAL ordered opportunity list across
+        two independent computes — the ref_name-keyed reassembly + verbatim eligibility predicate
+        reproduce the serial set and rank regardless of gather order."""
+
+        def _svc():
+            return _materialized_svc(
+                held=[("HELD", 5000.0)],
+                watchlists=[_wl(bindings=[("AAPL", "sx"), ("MSFT", "sx"), ("TSLA", "sx")])],
+                strategies={"sx": _strat_row("sx", entry=_GT_100, denied=["TSLA"])},
+                bars={
+                    "AAPL": _FIRING_BARS,
+                    "MSFT": [90.0, 95.0, 99.0],  # < 100 → entry does not fire
+                    "TSLA": _FIRING_BARS,
+                    "HELD": _FIRING_BARS,
+                },
+            )
+
+        _, a = await _list_opps(_svc())
+        _, b = await _list_opps(_svc())
+
+        def _key(opps):
+            return [(o.symbol, o.strategy_id, o.action, round(o.conviction, 6)) for o in opps]
+
+        assert _key(a) == _key(b)  # deterministic set + rank across runs
+        assert len(a) >= 2
+
+
+# ---------------------------------------------------------------------------
+# FR-4 (feature 176) — CPU-bound simulator cores run off the event loop on a dedicated
+# ThreadPoolExecutor, so a long backtest can't head-of-line-block an interactive read; the
+# offloaded backtest stays byte-for-byte deterministic.
+# ---------------------------------------------------------------------------
+
+
+class TestBacktestOffloadFeature176:
+    @pytest.mark.asyncio
+    async def test_long_backtest_does_not_block_concurrent_read(self, monkeypatch):
+        """AC-4: while a ~0.6s CPU-bound backtest core spins in the executor thread, a concurrent
+        0.05s reader coroutine completes on schedule — the event loop is not blocked. Pre-176 (core
+        on the loop) the reader is stalled until the backtest core finishes."""
+        import app.handlers.servicer as srv
+
+        closes = [10.0 + (i % 5) for i in range(30)]
+        bars_ = [_bar(1000 + i, c) for i, c in enumerate(closes)]
+        svc = make_servicer()
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(
+            return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars_)
+        )
+        svc._indicators = MagicMock()
+        svc._indicators.ComputeIndicator = AsyncMock(
+            side_effect=[_points(closes[1:]), _points(closes[2:])]
+        )
+
+        orig_apply_fill = srv._apply_fill
+
+        def _slow_apply_fill(*a, **k):
+            time.sleep(0.01)  # per-bar CPU spin, ~0.6s total across the 30-bar core
+            return orig_apply_fill(*a, **k)
+
+        monkeypatch.setattr(srv, "_apply_fill", _slow_apply_fill)
+
+        async def _reader():
+            t = time.perf_counter()
+            await asyncio.sleep(0.05)
+            return time.perf_counter() - t
+
+        reader_elapsed, _bt = await asyncio.gather(
+            _reader(),
+            svc._backtest_symbol(
+                "AAPL", common_pb2.TimeRange(), 2, 3, 0.0, 100_000.0, 0.001, 0.0005
+            ),
+        )
+
+        assert reader_elapsed < 0.2  # loop stayed free; not stalled by the spinning backtest core
+
+    @pytest.mark.asyncio
+    async def test_offloaded_backtest_is_deterministic(self):
+        """The offloaded _backtest_symbol produces byte-identical trades/equity across two runs —
+        offloading changes scheduling, not arithmetic (the existing feature-150/151 suites lock the
+        actual serial-baseline values, which still pass through the offloaded path)."""
+        bars_ = [_bar(1000 + i, c) for i, c in enumerate([10, 11, 12, 13, 14, 9])]
+        fast, slow = [9, 10, 12, 13, 9], [11, 11, 11, 11]
+
+        def _svc():
+            svc = make_servicer()
+            svc._marketdata = MagicMock()
+            svc._marketdata.GetBars = AsyncMock(
+                return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars_)
+            )
+            svc._indicators = MagicMock()
+            svc._indicators.ComputeIndicator = AsyncMock(side_effect=[_points(fast), _points(slow)])
+            return svc
+
+        args = ("AAPL", common_pb2.TimeRange(), 2, 3, 0.0, 100_000.0, 0.001, 0.0005)
+        t1, eq1, daily1, _d1, _i1 = await _svc()._backtest_symbol(*args)
+        t2, eq2, daily2, _d2, _i2 = await _svc()._backtest_symbol(*args)
+
+        assert eq1 == eq2
+        assert daily1 == daily2
+        assert [(t.side, t.qty, t.entry_price, t.exit_price, t.pnl) for t in t1] == [
+            (t.side, t.qty, t.entry_price, t.exit_price, t.pnl) for t in t2
+        ]

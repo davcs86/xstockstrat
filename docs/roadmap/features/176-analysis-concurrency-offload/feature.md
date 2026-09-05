@@ -13,6 +13,9 @@
 | 2026-09-04 | `idea` → `draft` | /sdd-story | Product spec generated from performance audit Track A |
 | 2026-09-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 advisory warnings, deferred to design); overlap CLEAN |
 | 2026-09-05 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, extended); round-3 adversary SOUND; recon.md + design.md written |
+| 2026-09-05 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps |
+| 2026-09-05 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (config/docs registration) landed; sequential-mode execution started |
+| 2026-09-05 | `in-progress` → `code-completed` | /sdd-execute | All 11 steps landed (FR-1..FR-6): indicators sandbox offload, evaluator component_sem, readiness + opportunity parallel fan-out, backtest/screener CPU offload. Full suites green (indicators 132, analysis 669); ruff clean |
 
 ---
 
@@ -22,7 +25,7 @@
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Recon Dossier](recon.md) — grounded codebase map, Patterns to REUSE, Existing Business Rules
 - [Design](design.md) — chosen approach, rejected alternatives, open risks, Constitution rules
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec analysis-concurrency-offload`_
+- [Implementation Spec](implementation-spec.md) — 11 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -42,9 +45,10 @@ re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
-| `xstockstrat-analysis` owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias |
-| `xstockstrat-indicators` owner | Formula sandboxing, numeric precision, timeout enforcement (`indicators.sandbox.timeout_ms`), no side-effects from formula execution |
+| `xstockstrat-analysis` owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias (Steps 1, 4–11) |
+| `xstockstrat-indicators` owner | Formula sandboxing, numeric precision, timeout enforcement (`indicators.sandbox.timeout_ms`), no side-effects from formula execution (Steps 1–3) |
+| `xstockstrat-config` owner | Config key naming (`<service>.<category>.<key>`), scoping, no-seed registration (Step 1 `config`) |
 
 ## Next Action
 
-`/sdd-spec analysis-concurrency-offload` — generate the implementation spec from the approved design
+`/sdd-review analysis-concurrency-offload impl-spec` — validate implementation spec, then `/sdd-execute analysis-concurrency-offload`
