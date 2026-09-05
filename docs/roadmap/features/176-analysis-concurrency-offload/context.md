@@ -62,3 +62,13 @@ Status unchanged: **spec-ready**. design.md NOT yet written (awaiting consolidat
   4. **Determinism RED assertions to name in test steps:** opportunities Phase-2 reassembles via gather-ORDERED results in `selected` order (byte-identical to serial append; session_end_seconds is order-safe max()); evaluator components reassemble keyed by ref_name (order-independent); owner-scope test asserts every concurrent branch stays under the caller (mirror test_cross_user_concurrency_bounded_by_semaphore).
   - F-06 stays clean IFF each offloaded sync core is pure-CPU (no asyncpg/gRPC/await) — evidence per simulator at /sdd-spec.
 - **NET:** SOUND. Ready to write design.md (readiness body-gate on _bars_fetch_sem; None⇒serial explicit; no-seed keys; gather-order RED assertions; 176-before-177 WARN). No new user fork.
+
+## Session 2026-09-05 — sdd-design COMPLETE (design-approved)
+
+- Phase 0 Recon: recon.md written (analysis + indicators; key reuse: entry_backfill.py bounded-gather, existing _bars_fetch_sem/_component_series_sem, _definition_fingerprint).
+- Phase 1 Grilling: 3 rounds (quick, extended by user). Chosen approach: three-phase single-flight opportunities fan-out under a NEW analysis.opportunity.max_concurrent_candidates; readiness parallelized under a _bars_fetch_sem body-gate; evaluator components under _component_series_sem (wired via optional StrategyEvaluator param, None⇒serial); FR-4 prologue/sync-core split offloaded to a dedicated bounded ThreadPoolExecutor (analysis.compute.max_worker_threads); FR-5 sandbox to_thread + sandbox_max_concurrent. Rejected: ProcessPoolExecutor, shared fan-out sem, Option B readiness, whole-coroutine to_thread.
+- Constitution rules touched: F-06, F-07, C-05, C-01, C-08/C-15, P-03. Floor breaches: none.
+- Business rules: all PRESERVE (byte-for-byte determinism refactor).
+- USER APPROVED design 2026-09-05 (approved 176 & 178; 177 & 179 held). Status: spec-ready → design-approved.
+- merge-order.md: 176-before-177 WARN row added (same-function overlap on _compute_opportunities/EvaluateReadiness/evaluator; confirm when 177 is approved).
+- Next: /sdd-spec analysis-concurrency-offload. Open risks carried: pure-CPU core evidence (F-06) per simulator, readiness large-symbols memory test, feature-173 watcher.py coordination — all to resolve at /sdd-spec.

@@ -71,3 +71,9 @@ Status unchanged: **spec-ready**. design.md NOT yet written (awaiting the consol
   - Also: verify SCALAR_BOUNDS_REGISTRY <86400 is server-ENFORCED (feature 161), both .down.sql DROP their table, 176→177 signature coupling handled at /sdd-spec against 176's post-restructure signatures.
   - Question (c) bounded-staleness (fast path serves on valid_until, a new bar mid-window unseen until expiry) = the signed-off EXTEND contract, SOUND provided fix #1 lands. Question (d) fingerprint excludes name/active/live_enabled = non-issue (those never enter evaluate_conditions_traced).
 - **NET:** design essentially final. Ready to write design.md with: FR-1 EXTEND (fast-path-only cache, no slow-path reuse; benchmark-max epoch; <86400 enforced), FR-3 CHANGE (signed off; short-TTL + self-heal writing opportunity_compute_state on empty), FR-4 failure-gated memo (+cite parity at spec). No new user fork.
+
+## Session 2026-09-05 — design HELD at approval gate
+
+- Round-3 debate complete and SOUND-with-doc-fold-ins (see the round-3 block above); design.md NOT written.
+- At the consolidated approval gate the user approved 176 & 178 and HELD this feature for a further look. Status stays spec-ready.
+- To resume: /sdd-design <slug> quick re-reads this context and can go straight to writing design.md + design-approved once the user confirms (all round-3 fold-ins + locked decisions are already recorded here — no further debate needed unless the user requests changes).

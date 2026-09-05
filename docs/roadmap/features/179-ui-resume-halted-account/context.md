@@ -70,3 +70,9 @@ Status unchanged: **spec-ready**. design.md NOT yet written (awaiting consolidat
   2. **HaltBadge color = `warning` (amber), NOT `sell`:** `sell` is a real token but red-family, colliding with credential-invalid `destructive` AND the RECONCILIATION HALT_SOURCE EnumBadge (itself role:'sell') → three red badges, undercutting the locked "distinct marker" intent. `warning` reserves red for credential-invalid and reads as "paused/blocked". Icon(Ban)+label("Halted")+tooltip distinctness preserved.
   - Minor: rename the selector gear-dot boolean hasCredentialIssue → hasAccountIssue/hasAnyIssue (it now ORs halt); step 1 must delete the orphaned local HALT_SOURCE const + "Kept local" comment at positions/page.tsx:41-47.
 - **NET:** essentially SOUND. Ready to write design.md with: HaltBadge variant=warning; isActive:true+halted:true fixture invariant; boolean rename. No new user fork.
+
+## Session 2026-09-05 — design HELD at approval gate
+
+- Round-3 debate complete and SOUND-with-doc-fold-ins (see the round-3 block above); design.md NOT written.
+- At the consolidated approval gate the user approved 176 & 178 and HELD this feature for a further look. Status stays spec-ready.
+- To resume: /sdd-design <slug> quick re-reads this context and can go straight to writing design.md + design-approved once the user confirms (all round-3 fold-ins + locked decisions are already recorded here — no further debate needed unless the user requests changes).

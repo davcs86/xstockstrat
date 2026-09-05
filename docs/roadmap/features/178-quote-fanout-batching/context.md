@@ -62,3 +62,14 @@ Status unchanged: **spec-ready**. design.md NOT yet written (awaiting consolidat
   - REQUIRED doc fix: restate the partial-failure waive rationale in AGGREGATE terms — a cold-batch Alpaca error drops the whole cold set, changing WHICH symbols contribute to concentration/equity (a different denominator observably changes the ratio + whether emitRiskAlert fires), NOT per-symbol terms. Waive is acceptable (degenerate path, warm poller keeps cold sets tiny, no @AC exercises a live fault) but must be documented honestly (fails.md:38). Optional: a documented divergence test.
   - Minor: note GetLatestQuotes-vs-Multi naming as a deliberate choice; keep N cold InsertQuote as INDEPENDENT ON CONFLICT execs (not one wrapping txn) to match singular parity; /sdd-spec should EXPLAIN-verify index use.
 - **NET:** SOUND. Ready to write design.md (no new migration; aggregate-honest waive wording; index-already-exists note). No user fork.
+
+## Session 2026-09-05 — sdd-design COMPLETE (design-approved)
+
+- Phase 0 Recon: recon.md written (portfolio + marketdata; key reuse: GetFundamentalsMulti batch precedent, alpaca.GetLatestQuotesMulti, cache-first singular path).
+- Phase 1 Grilling: 3 rounds (quick, extended). Chosen approach: additive GetLatestQuotes RPC (repeated Quote, self-keyed, absent=omitted); new GetLatestQuotesBatch repo method using DISTINCT ON (symbol) over the EXISTING idx_quotes_symbol_time (migration 001:56 — NO new migration); cache-first batched service method + set-keyed singleflight; per-site symbol sets (enrichPositions=CurrentPrice==0 only; 3 inline loops=full); ANY-array watchlist bindings over paginated IDs. Rejected: map<string,Quote>, naive ANY+LIMIT, pure-live wrap, per-symbol fan-in, N per-symbol repo reads.
+- Constitution rules touched: C-09 (additive proto gate), C-04 (n/a), C-01 (new repo method), C-10(b) parity, C-16 (net-new marketdata @AC). Floor breaches: none.
+- Business rules: PRESERVE @AC-7/12/157, @AC-1/2/167, @AC-1/154; net-new marketdata quote @AC authored here.
+- Partial-upstream-failure divergence WAIVED (aggregate-honest wording; degenerate path behind warm poller; asserts happy-path parity + null-not-zero, no partial-failure test).
+- USER APPROVED design 2026-09-05. Status: spec-ready → design-approved.
+- merge-order.md: 172-before-178 row added (same-function checkRiskLimits overlap; 178 keeps 172's drawdown block verbatim, batches only the quote loop).
+- Next: /sdd-spec quote-fanout-batching. Open risks carried: EXPLAIN-verify DISTINCT ON uses the index; author portfolio-side MarketDataServiceClient stub.
