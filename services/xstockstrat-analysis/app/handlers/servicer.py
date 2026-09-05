@@ -16,6 +16,7 @@ import json
 import logging
 import math
 import random
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -442,6 +443,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # the set marks users with a background recompute in flight. Single-process protection only.
         self._opportunity_locks: dict[str, asyncio.Lock] = {}
         self._opportunity_recomputing: set[str] = set()
+        # feature 177 FR-4: process-lifetime, success-only per-symbol live-enrichment memo —
+        # symbol → (monotonic_expiry, {"last_price", "prev_close", "spark"}). A fetch failure or an
+        # unavailable quote is never memoized (AC-11), so a stale price is never served as current.
+        self._live_enrich_memo: dict[str, tuple[float, dict]] = {}
         # Per-strategy recompute serialization: asyncio.Lock is non-reentrant, so a trigger already
         # holding it calls only _recompute_headline_locked. Single-process only, by strategy_id.
         self._recompute_locks: dict[str, asyncio.Lock] = {}
@@ -3138,12 +3143,37 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         if not opps:
             return
         sparkline_bars = max(1, self._cfg.get_int("analysis.opportunity.sparkline_bars", 20))
+        # FR-4: a short success-only memo skips the two live RPCs for a symbol re-enriched within
+        # the window (0 disables the memo → always fetch). Read once per pass (F-07).
+        ttl = self._cfg.get_int_present("analysis.opportunity.live_enrich_ttl_seconds", 10)
         # Dedup the marketdata reads per symbol — several opportunities can share one symbol.
         by_symbol: dict[str, list] = {}
         for opp in opps:
             by_symbol.setdefault(opp.symbol, []).append(opp)
 
+        def _apply_live_fields(targets: list, last_price, prev_close, spark) -> None:
+            for opp in targets:
+                if last_price is not None:
+                    opp.live_price = last_price
+                    if prev_close is not None and prev_close != 0.0:
+                        opp.change_pct = (last_price - prev_close) / prev_close
+                if spark is not None:
+                    del opp.sparkline[:]
+                    for b in spark:
+                        # Finite close → set it; a warm-up/missing bar → unset close (never NaN/0).
+                        pt = analysis_pb2.SparklinePoint()
+                        if b.close == b.close and b.close not in (float("inf"), float("-inf")):
+                            pt.close = b.close
+                        opp.sparkline.append(pt)
+
         async def _enrich_symbol(symbol: str, targets: list) -> None:
+            # FR-4 memo hit: an unexpired success-only entry applies its fields and skips BOTH RPCs.
+            if ttl > 0:
+                cached = self._live_enrich_memo.get(symbol)
+                if cached is not None and time.monotonic() < cached[0]:
+                    m = cached[1]
+                    _apply_live_fields(targets, m["last_price"], m["prev_close"], m["spark"])
+                    return
             last_price = None
             prev_close = None
             spark: list | None = None
@@ -3175,19 +3205,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 spark = list(resp.bars)
             except Exception as e:  # sparkline is best-effort; leave unset on any failure (AC-11)
                 log.warning("_enrich_opportunities_live: GetBars failed for %s: %s", symbol, e)
-            for opp in targets:
-                if last_price is not None:
-                    opp.live_price = last_price
-                    if prev_close is not None and prev_close != 0.0:
-                        opp.change_pct = (last_price - prev_close) / prev_close
-                if spark is not None:
-                    del opp.sparkline[:]
-                    for b in spark:
-                        # Finite close → set it; a warm-up/missing bar → unset close (never NaN/0).
-                        pt = analysis_pb2.SparklinePoint()
-                        if b.close == b.close and b.close not in (float("inf"), float("-inf")):
-                            pt.close = b.close
-                        opp.sparkline.append(pt)
+            # Memoize ONLY a full success (both a live price and a sparkline obtained); a failed or
+            # unavailable fetch is never cached, so it re-fetches within the TTL (AC-11).
+            if ttl > 0 and last_price is not None and spark is not None:
+                self._live_enrich_memo[symbol] = (
+                    time.monotonic() + ttl,
+                    {"last_price": last_price, "prev_close": prev_close, "spark": spark},
+                )
+            _apply_live_fields(targets, last_price, prev_close, spark)
 
         await asyncio.gather(*(_enrich_symbol(sym, targets) for sym, targets in by_symbol.items()))
 
