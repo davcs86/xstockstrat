@@ -1690,6 +1690,11 @@ export interface EvaluateReadinessRequest {
 
 export interface EvaluateReadinessResponse {
   readiness: SymbolReadiness[];
+  /**
+   * The oldest per-symbol cache "computed at" among the served rows — the response is never
+   * presented as fresher than this (feature 177, FR-5). Bounded by the readiness staleness window.
+   */
+  computedAt?: Date | undefined;
 }
 
 /**
@@ -8687,13 +8692,16 @@ export const EvaluateReadinessRequest: MessageFns<EvaluateReadinessRequest> = {
 };
 
 function createBaseEvaluateReadinessResponse(): EvaluateReadinessResponse {
-  return { readiness: [] };
+  return { readiness: [], computedAt: undefined };
 }
 
 export const EvaluateReadinessResponse: MessageFns<EvaluateReadinessResponse> = {
   encode(message: EvaluateReadinessResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     for (const v of message.readiness) {
       SymbolReadiness.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.computedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.computedAt), writer.uint32(18).fork()).join();
     }
     return writer;
   },
@@ -8713,6 +8721,14 @@ export const EvaluateReadinessResponse: MessageFns<EvaluateReadinessResponse> = 
           message.readiness.push(SymbolReadiness.decode(reader, reader.uint32()));
           continue;
         }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.computedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -8727,6 +8743,11 @@ export const EvaluateReadinessResponse: MessageFns<EvaluateReadinessResponse> = 
       readiness: globalThis.Array.isArray(object?.readiness)
         ? object.readiness.map((e: any) => SymbolReadiness.fromJSON(e))
         : [],
+      computedAt: isSet(object.computedAt)
+        ? fromJsonTimestamp(object.computedAt)
+        : isSet(object.computed_at)
+        ? fromJsonTimestamp(object.computed_at)
+        : undefined,
     };
   },
 
@@ -8734,6 +8755,9 @@ export const EvaluateReadinessResponse: MessageFns<EvaluateReadinessResponse> = 
     const obj: any = {};
     if (message.readiness?.length) {
       obj.readiness = message.readiness.map((e) => SymbolReadiness.toJSON(e));
+    }
+    if (message.computedAt !== undefined) {
+      obj.computedAt = message.computedAt.toISOString();
     }
     return obj;
   },
@@ -8744,6 +8768,7 @@ export const EvaluateReadinessResponse: MessageFns<EvaluateReadinessResponse> = 
   fromPartial<I extends Exact<DeepPartial<EvaluateReadinessResponse>, I>>(object: I): EvaluateReadinessResponse {
     const message = createBaseEvaluateReadinessResponse();
     message.readiness = object.readiness?.map((e) => SymbolReadiness.fromPartial(e)) || [];
+    message.computedAt = object.computedAt ?? undefined;
     return message;
   },
 };

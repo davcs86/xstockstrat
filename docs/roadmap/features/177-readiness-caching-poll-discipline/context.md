@@ -86,3 +86,191 @@ Status unchanged: **spec-ready**. design.md NOT yet written (awaiting the consol
 - USER APPROVED design 2026-09-05. Status: spec-ready → design-approved.
 - Open risks to /sdd-spec: daily-tick stamping (shared helper vs documented one-poll gap; don't perturb @AC-8/9/158); empty→non-empty within-one-TTL test; AC-12 parity cite SignalReadiness.tsx:31; 176-before-177 signatures.
 - Next: /sdd-spec readiness-caching-poll-discipline.
+
+## Session 2026-09-05 — sdd-spec
+
+- Generated implementation-spec.md with **13 steps**. Status: design-approved → implementation-ready.
+- Scenario coverage (C-15): AC-1/AC-2 → Step 7; AC-3 → Step 13; AC-4 → Step 9; AC-5 → Step 11. All covered.
+- Reviewers snapshot finalized: analysis owner, ui owner, config owner, Proto Reviewer, DBA.
+- Key codebase findings (all cited against the CURRENT post-176 tree — recon.md line numbers had
+  drifted because feature 176, now `code-completed`, is already merged into this feature branch):
+  - **176 is present**: `EvaluateReadiness` is post-176 restructured — an `asyncio.gather` over a
+    per-symbol `_readiness_for` coroutine (`servicer.py:2696`, body `:2744-2766`), and
+    `_compute_opportunities` / `ThreadPoolExecutor` / `analysis.opportunity.max_concurrent_candidates`
+    exist (`:395-406`). Spec'd FR-1/FR-4 against this shape. 176 must merge to main-dev before 177
+    integrates (merge-order.md:238-242).
+  - **Migrations top at `021`** (`021_pnl_positions_fees_total`) — next free analysis NNN = **022**,
+    then **023**. (The `026_analysis_engine_blend_keys` referenced in analysis CLAUDE.md is a
+    *config-service* migration, not analysis — no collision.) Config-service dir tops at `026` (024
+    gap); if a config seed migration is ever added for the readiness bound, next free = `027`.
+  - **Fingerprint reuse**: `_definition_fingerprint(definition_json: dict)` at `servicer.py:4389`;
+    must be fed `row["definition_json"]` (DB row dict), per the canonical `:2044`/`:641` call form —
+    never a request dict. No new hash.
+  - **bar_epoch source**: bars ascending, newest = `bars[-1].time.seconds`; benchmark from
+    `_load_benchmark_bars_windowed` (`:2737`). `bar_epoch = max(evaluated, benchmark)` newest.
+  - **Proto**: `google/protobuf/timestamp.proto` already imported (`analysis.proto:7`) — additive
+    `computed_at = 2` on `EvaluateReadinessResponse` (`:644-646`) needs no new import.
+  - **AC-12 parity proof confirmed**: `SignalReadiness.tsx:28` (`useOpportunities()`) + `:31`
+    (consumes `opps?.opportunities`) — no direct `GetLatestPrice` call, so the FR-4 memo introduces
+    no divergence.
+  - **FR-2 targets**: `WatchlistReadiness.tsx:193` `useQueries` (no `staleTime` today); copy per-query
+    `staleTime: 30_000` from `opportunities/page.tsx:136` (NOT a QueryClient default — @AC-6/167).
+  - **SCALAR_BOUNDS_REGISTRY**: config const at `configServiceImpl.ts:98`, enforced at SetConfig
+    (`:376-381`); add `'analysis.readiness.stale_after_seconds': { minValue: 0, maxValue: 86399 }`.
+
+## Decisions (sdd-spec)
+
+- **Three new config keys** (design's "two no-seed `analysis.opportunity.*`" + the bounded readiness key):
+  `analysis.readiness.stale_after_seconds` (bounded [0,86399], seed-less registry entry only),
+  `analysis.opportunity.empty_recompute_ttl_seconds` (no-seed, ~30s),
+  `analysis.opportunity.live_enrich_ttl_seconds` (no-seed, ~10s memo TTL). All read via `get_int_present`.
+- **No config-service seed migration** for the readiness bound (minimal path — behavior #2). The
+  `SCALAR_BOUNDS_REGISTRY` code entry enforces `<86400` at SetConfig without a seed row. Flagged in
+  Step 5 for the config owner: add one mirroring config `019_register_analysis_signal_decay_half_life`
+  only if config-ui discoverability of the bounded key is wanted (P-03 — surfaced, not silently decided).
+- **FR-3 daily-tick stamping RESOLVED** to the design's *preferred* wiring: a shared
+  `_replace_and_stamp_compute_state(user_id, rows)` helper replaces `replace_for_user` at all three
+  empty-yielding sites (`:3135` cold, `:3148` `_kick._run`, `:3649` daily tick), stamping
+  `opportunity_compute_state` only on an empty universe. The helper touches nothing around
+  `schedule.advance`, so feature-158 @AC-8/@AC-9/158 re-anchoring is preserved (Step 9 asserts it).
+- **Response `computed_at` = min (oldest) per-symbol computed_at** across served rows — a spec-level
+  realization of FR-5 not fully pinned in design.md; recorded (P-03), confirm at impl-spec review.
+
+## Open Threads (for /sdd-review impl-spec)
+
+- Confirm the min-of-computed_at response rule (Step 6) and the no-config-seed-migration decision (Step 5).
+- Confirm the readiness/empty/enrich default values (30/30/10 s) are acceptable (all within the <86400 bound).
+- 176 → 177 merge sequencing must hold at integration (merge-order.md).
+
+## Session 2026-09-05 — sdd-review impl-spec (advisory)
+
+- Result: 0 blockers, 5 warnings (13/13 steps grounded, no Floor risk). Post-176 baseline check PASSED —
+  Step 6 Codebase Evidence cites the post-176 `asyncio.gather`/`_readiness_for` shape (`servicer.py:2696-2767`),
+  not the pre-176 synchronous loop (no C-01/F-04 mismatch).
+- Overlap findings: CLEAN — only the known 176→177 same-function WARN on `servicer.py`/`evaluator.py`
+  (already `merge-order.md:237-242`, run 176 before 177). Migrations 022/023, proto `computed_at=2`,
+  and the config keys are all free on trunk and unclaimed by siblings.
+- Warnings carried into execution:
+  - Step 12/13 (C-15/C-01): impl `staleTime: 30_000` vs `@AC-3`'s "60 seconds" — [x] RESOLVED here.
+    Reconciled `acceptance.feature @AC-3` 60s → 30s to match the deliberate design decision and the
+    existing Opportunities-pane precedent (`opportunities/page.tsx:136`, also 30s). The 60s literal was a
+    story-time approximation; 30s is the design-authoritative value. Behavior unchanged (10s < both, so the
+    no-refetch-on-remount assertion holds either way). C-16 rationale: aligning acceptance to the design's
+    superseding decision, not changing an intended guarantee.
+  - Step 5 (C-08/B3): `configServiceImpl.ts` source change has no dedicated paired `test` step —
+    [ ] unaddressed (mitigated by the inline test instruction + `pnpm run test:coverage` in Verification;
+    revisit at execute — add an explicit config test if the inline coverage proves thin).
+  - Step 2 (B2): `Files` lists the `packages/proto/gen/` directory rather than explicit files —
+    [x] accepted (inherent to proto-gen; the empty-diff gate is the real check).
+  - Step 5 (C-01 minor): Evidence mislabels `configServiceImpl.ts:492` (a ListKeys bounds-hint map) as the
+    SetConfig "batch path" — [x] noted; the authoritative SetConfig enforcement `:376-385` is cited correctly,
+    so execution discovery re-anchors.
+  - Step 6 (low risk): `row["definition_json"]` key presence on the EvaluateReadiness row inferred from the
+    identical repo call at `:2044` — [ ] confirm at execute (verify the key is present before relying on it).
+
+## Session 2026-09-05 — /sdd-execute sequential (177 → 178 → 179)
+
+Sequential run started on `feature/readiness-caching-poll-discipline` (already rebased onto main-dev
+containing merged 176). Tooling: uv (analysis), pnpm 9.15.9 (config/UI), Docker daemon started for
+proto codegen. Re-spec gate: directive `none`, evidence re-validated by the impl-spec review (all
+anchors resolve on the post-176 tree) — no mismatch, no re-spec.
+
+### Steps 1–2 — done (proto computed_at + codegen, TDD N/A)
+- Step 1 (`analysis.proto`): added `google.protobuf.Timestamp computed_at = 2;` to
+  `EvaluateReadinessResponse` (timestamp already imported). buf lint + buf breaking (vs main-dev) ran
+  green inside the Docker codegen container → additive field confirmed non-breaking (C-09).
+- Step 2 (`packages/proto/gen/**`): regenerated Go/Python/TS stubs via `./scripts/localenv-setup.sh`
+  (Docker `Dockerfile.codegen`); compiled TS→JS via `pnpm install`'s prepare/tsc hook (the container
+  lacked gen/ts node_modules). `git diff packages/proto/gen/` limited to `analysis/v1` (source + dist);
+  compiled JS carries `computedAt`. CI-equivalent fallback (Docker codegen) — logged in Deviation Log.
+
+### Steps 3–4 — done (migrations 022/023, TDD N/A, offline-verified)
+- `022_readiness_cache` (PK user_id,strategy_id,rule,symbol; def_fingerprint, bar_epoch, readiness_json
+  JSONB DEFAULT '{}', computed_at, valid_until) and `023_opportunity_compute_state` (PK user_id;
+  computed_at, valid_until). Both mirror `011_opportunities` schema-qualified style; no hypertable.
+- Offline verify: up/down pairs exist, each CREATE TABLE has its inverse DROP TABLE, NNN 022/023 are
+  one/two past the 021 tip. Live apply deferred to CI/deploy (never started a DB).
+
+### Step 5 — done (config: 3 keys + readiness SCALAR_BOUNDS entry, TDD N/A)
+- `configServiceImpl.ts`: added `'analysis.readiness.stale_after_seconds': { minValue: 0, maxValue: 86399 }`
+  to SCALAR_BOUNDS_REGISTRY (< 86400 daily-bar boundary). Extended `setConfigScalarBounds.test.ts`
+  with 2 cases (accepts 0/86399, rejects 86400) — 8/8 pass.
+- `analysis/CLAUDE.md`: documented the 3 keys (readiness.stale_after_seconds|30, opportunity.
+  empty_recompute_ttl_seconds|30, opportunity.live_enrich_ttl_seconds|10), all get_int_present.
+- `config-governance.md`: feature-177 Per-Feature Registered Keys entry. No seed migration (bound
+  enforced regardless; config-ui-discoverability seed a noted follow-up, next config NNN 027).
+- Verify: config lint 0 errors; bounds test 8/8; all 3 keys grep-present in both doc homes.
+
+### Steps 6–7 — done (FR-1 readiness cache FAST/SLOW, TDD red→green)
+- Step 6: new `app/repositories/readiness_cache.py` (`ReadinessCacheRepository.read_many`/`upsert_many`,
+  mirrors OpportunitiesRepository; every NOT NULL col supplied, empty→`{}` never NULL). Wired
+  `self._readiness_cache_repo` in `__init__`. EvaluateReadiness now loads the window
+  (`get_int_present("analysis.readiness.stale_after_seconds",30)`) + `_definition_fingerprint(row
+  ["definition_json"])` once, reads the request set in one query, and `_readiness_for` is FAST
+  (fingerprint match + `now < valid_until` → `_symbol_readiness_from_json` via `_readiness_to_proto`,
+  NO sem/fetch/eval) vs SLOW (existing body → stage a cache row). SLOW rows upserted once after the
+  gather (best-effort). Response `computed_at` = min served (FR-5). No slow-path bar_epoch reuse.
+  New helper `_symbol_readiness_from_json` guarantees FAST==fresh byte-identity.
+  - Review item CLEARED: `row["definition_json"]` key confirmed present (StrategiesRepository._to_dict
+    always sets it).
+  - Deviation: `bar_epoch` benchmark contribution computed over `benchmark_bars.values()` (the loader
+    returns a `{source_symbol: [bars]}` dict, not a list as the spec sketch implied). Logged below.
+- Step 7: `tests/test_readiness_cache.py` — AC-1 SLOW-write→FAST-read round-trip (pass 2: 0 GetBars,
+  byte-identical verdicts, computed_at set); AC-2 expiry→SLOW re-stamp bar_epoch; AC-2 benchmark-only
+  newer bar drives bar_epoch. RED pre-Step-6 (upsert never called / GetBars not skipped), GREEN after.
+- Full analysis suite `672 passed` (+3), coverage `85%`; ruff clean.
+
+### Steps 8–9 — done (FR-3 empty-universe compute-state, TDD red→green)
+- Step 8: new `app/repositories/opportunity_compute_state.py` (`OpportunityComputeStateRepository.get`
+  / `upsert`, literal INSERT … ON CONFLICT (user_id) DO UPDATE, both NOT NULL cols supplied). Wired
+  `self._opportunity_compute_state_repo` in `__init__`. New shared helper
+  `_replace_and_stamp_compute_state(user_id, rows, propagation_meta=None)` = `replace_for_user` then,
+  when `not rows`, best-effort `upsert(now()+ttl)` where `ttl=max(1, get_int_present(
+  "analysis.opportunity.empty_recompute_ttl_seconds",30))`. Replaced the 3 empty-yielding
+  `replace_for_user` sites (`_materialize_opportunities`, `_kick._run`, `_opportunity_refresh_tick`)
+  with the helper — `schedule.advance`/lock/exception handling untouched (feature-158 @AC-8/@AC-9).
+  `ListOpportunities` count==0 branch now consults compute-state: fresh stamp → `_kick` self-heal +
+  serve empty; absent/elapsed → synchronous `_materialize_opportunities`. Stale branch unchanged.
+- Step 9: `tests/test_opportunity_compute_state.py` — AC-4 (4 polls, compute at most once, polls 2-4
+  kick); empty→non-empty self-heal (poll2 no synchronous recompute, background kick writes the new
+  row within the TTL); stamp-on-empty-not-nonempty (helper); `_kick._run` stamps; daily-tick stamps
+  AND still advances the wall-clock schedule. RED pre-Step-8 (4/5 fail: no gate/stamp; the self-heal
+  test strengthened with a mid-poll `compute.await_count==1` assert so it too is red pre-change),
+  GREEN after.
+- Full analysis suite `677 passed` (+5), coverage `85%`; ruff clean.
+
+### Steps 10–11 — done (FR-4 conditional live-enrichment memo, TDD red→green)
+- Step 10: `servicer.py` — added `import time` + a process-lifetime `self._live_enrich_memo:
+  dict[str, tuple[float, dict]]` (symbol → (monotonic_expiry, {last_price, prev_close, spark})).
+  `_enrich_opportunities_live` reads `ttl=get_int_present("analysis.opportunity.
+  live_enrich_ttl_seconds",10)` once per pass. Extracted the target-apply loop into a nested
+  `_apply_live_fields` (byte-identical apply for both the memo-hit and fetch paths). `_enrich_symbol`
+  now: (a) memo hit when `ttl>0` and `monotonic()<expiry` → apply + return, skipping BOTH RPCs; (b)
+  on a miss runs the existing fetch body, then memoizes ONLY on full success (`last_price is not None
+  AND spark is not None`) — a failed/unavailable fetch is never cached (AC-11); `ttl==0` disables.
+  Ranking/ORDER BY untouched (enrichment stays read-time-only, AC-14).
+- Step 11: `tests/test_live_enrich_memo.py` — AC-5 (pass2 within TTL: 0 new RPCs, identical
+  live_price/sparkline; past TTL both RPCs fire again — `time.monotonic` monkeypatched clock);
+  ttl==0 disables the memo (always fetch); AC-11 (price-miss pass1 memoizes nothing → pass2 within
+  TTL still fetches and surfaces the recovered quote). RED pre-Step-10 (memo-hit refetches; the
+  monkeypatch target `servicer.time` doesn't exist pre-`import time`), GREEN after.
+- Full analysis suite `680 passed` (+3), coverage `85%`; ruff clean.
+
+### Steps 12–13 — done (FR-2 client staleTime + remount e2e, TDD red→green)
+- Step 12: `WatchlistReadiness.tsx` — added `staleTime: 30_000` to each `useQueries` query descriptor
+  (per-query, NOT a `QueryClient` default — a default would force a whole-list refetch, @AC-6/167).
+  `queryClient.ts` defaults untouched (`staleTime: 5_000`). Lint clean.
+- Step 13: `e2e/insights/watchlists.spec.ts` — new AC-3 test: two pre-bound lists, a `page.on(
+  'request')` counter on `/EvaluateReadiness`, `page.clock` advanced 10s (past the 5s QueryClient
+  default, within the 30s per-query window), switch list away→back (detail remounts on
+  `key={watchlistId}`), assert no second EvaluateReadiness. RED pre-Step-12 (10s > 5s default →
+  refetch; the one failure among 419 green), GREEN after (`420 passed`). Reuses `mockWatchlists` /
+  `openList` / `addAuthCookie` / the `evaluateReadiness` mock handler (C-12 — no inline mock literals;
+  the route counter is a scenario one-off per the spec).
+
+### Deviation Log — Step 13 e2e runner (CI-equivalent local run)
+- **Disposition**: CI-equivalent fallback. Ran the Playwright suite locally via `CI=1 pnpm test:e2e`
+  (the `pnpm build && pnpm start` prod path — the dev-server cold-compile blows the 10s local warmup
+  budget) with `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium` (this sandbox pre-bakes
+  a single Chromium and `global-setup.ts` reads that env var directly). Same image/flow CI uses; full
+  suite 420 green. No product/behavior deviation.

@@ -786,6 +786,11 @@ export interface EvaluateReadinessRequest {
 }
 export interface EvaluateReadinessResponse {
     readiness: SymbolReadiness[];
+    /**
+     * The oldest per-symbol cache "computed at" among the served rows — the response is never
+     * presented as fresher than this (feature 177, FR-5). Bounded by the readiness staleness window.
+     */
+    computedAt?: Date | undefined;
 }
 /**
  * user_id is intentionally absent — taken from the propagated x-user-id header server-side

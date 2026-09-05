@@ -16,6 +16,7 @@ import json
 import logging
 import math
 import random
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -43,9 +44,11 @@ from app.repositories.backtest_run_symbols import BacktestRunSymbolsRepository
 from app.repositories.backtest_runs import BacktestRunsRepository
 from app.repositories.opportunities import OpportunitiesRepository
 from app.repositories.opportunity_actions import OpportunityActionsRepository
+from app.repositories.opportunity_compute_state import OpportunityComputeStateRepository
 from app.repositories.order_snapshots import OrderSnapshotsRepository
 from app.repositories.pnl_pattern_samples import PnLPatternSamplesRepository
 from app.repositories.pnl_positions import PnLPositionsRepository
+from app.repositories.readiness_cache import ReadinessCacheRepository
 from app.repositories.strategies import StrategiesRepository
 from app.repositories.strategy_scores import StrategyScoresRepository
 from app.services import scoring, warmup
@@ -423,6 +426,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Materialized per-user opportunity queue: ListOpportunities is a pure read of this table,
         # kept fresh by compute-on-read + stale-while-revalidate + a daily refresh. None in no-DB.
         self._opportunities_repo = OpportunitiesRepository(db_pool) if db_pool else None
+        # feature 177 FR-1: per-(user,strategy,rule,symbol) readiness cache backing the FAST path.
+        self._readiness_cache_repo = ReadinessCacheRepository(db_pool) if db_pool else None
+        # feature 177 FR-3: per-user empty-universe compute-state gating redundant recompute.
+        self._opportunity_compute_state_repo = (
+            OpportunityComputeStateRepository(db_pool) if db_pool else None
+        )
         # P&L pattern attribution samples: written by the pnl_pattern_consumer, read here by
         # QueryPnLPatterns with query-time quantile bucketing.
         self._pnl_samples_repo = PnLPatternSamplesRepository(db_pool) if db_pool else None
@@ -434,6 +443,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # the set marks users with a background recompute in flight. Single-process protection only.
         self._opportunity_locks: dict[str, asyncio.Lock] = {}
         self._opportunity_recomputing: set[str] = set()
+        # feature 177 FR-4: process-lifetime, success-only per-symbol live-enrichment memo —
+        # symbol → (monotonic_expiry, {"last_price", "prev_close", "spark"}). A fetch failure or an
+        # unavailable quote is never memoized (AC-11), so a stale price is never served as current.
+        self._live_enrich_memo: dict[str, tuple[float, dict]] = {}
         # Per-strategy recompute serialization: asyncio.Lock is non-reentrant, so a trigger already
         # holding it calls only _recompute_headline_locked. Single-process only, by strategy_id.
         self._recompute_locks: dict[str, asyncio.Lock] = {}
@@ -2738,10 +2751,38 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             definition, range_msg, propagation_meta
         )
 
-        # FR-2: per-symbol body gated by _bars_fetch_sem (opportunity bars-fetch bound, default 2) —
-        # caps concurrent GetBars (feature 141) + pending-coroutine memory; benchmark preloaded
-        # so no nested re-acquire; gather preserves request.symbols order (byte-identical set).
+        # FR-1 readiness cache: read the staleness window + definition fingerprint once, load the
+        # request set in a single query. A fresh, fingerprint-matching, unexpired row serves FAST.
+        now = datetime.now(UTC)
+        stale_after = self._cfg.get_int_present("analysis.readiness.stale_after_seconds", 30)
+        fingerprint = _definition_fingerprint(row["definition_json"])
+        cached = (
+            await self._readiness_cache_repo.read_many(
+                caller_user_id, request.strategy_id, rule, list(request.symbols)
+            )
+            if self._readiness_cache_repo is not None
+            else {}
+        )
+
+        def _benchmark_epoch():
+            e = 0
+            if benchmark_bars:
+                for bench in benchmark_bars.values():
+                    if bench:
+                        e = max(e, bench[-1].time.seconds)
+            return e
+
+        # FR-2: SLOW per-symbol body gated by _bars_fetch_sem (opportunity bars-fetch bound, default
+        # 2). FR-1: FAST serves a fresh cache hit WITHOUT the sem, a fetch, or a re-evaluation.
+        # Returns (proto, staged_cache_row | None, computed_at). gather preserves request order.
         async def _readiness_for(symbol):
+            c = cached.get(symbol)
+            if c is not None and c["def_fingerprint"] == fingerprint and now < c["valid_until"]:
+                return (
+                    _symbol_readiness_from_json(c["readiness_json"], symbol),
+                    None,
+                    c["computed_at"],
+                )
             async with self._bars_fetch_sem:
                 fetch_ok = True
                 try:
@@ -2761,10 +2802,38 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 trace = await evaluator.evaluate_conditions_traced(
                     definition, bars, symbol, rule=rule, benchmark_bars=benchmark_bars
                 )
-                return _readiness_to_proto(trace)
+            # No slow-path bar_epoch reuse — always re-evaluate on a miss so a same-time.seconds
+            # intraday 1d bar update never freezes a day-one verdict (round-3 adversary #1).
+            bar_epoch = max(bars[-1].time.seconds if bars else 0, _benchmark_epoch())
+            staged = {
+                "user_id": caller_user_id,
+                "strategy_id": request.strategy_id,
+                "rule": rule,
+                "symbol": symbol,
+                "def_fingerprint": fingerprint,
+                "bar_epoch": bar_epoch,
+                "readiness_json": trace,  # {} when the trace is empty (never NULL)
+                "computed_at": now,
+                "valid_until": now + timedelta(seconds=stale_after),
+            }
+            return _readiness_to_proto(trace), staged, now
 
-        readiness = await asyncio.gather(*[_readiness_for(s) for s in request.symbols])
-        return analysis_pb2.EvaluateReadinessResponse(readiness=list(readiness))
+        results = await asyncio.gather(*[_readiness_for(s) for s in request.symbols])
+        protos = [r[0] for r in results]
+        staged_rows = [r[1] for r in results if r[1] is not None]
+        # Persist the SLOW rows once, out of the per-symbol hot path (best-effort — a write failure
+        # never fails the read, mirroring the opportunity recompute).
+        if staged_rows and self._readiness_cache_repo is not None:
+            try:
+                await self._readiness_cache_repo.upsert_many(staged_rows)
+            except Exception as e:  # noqa: BLE001 — cache write is best-effort
+                log.warning("EvaluateReadiness: readiness cache upsert failed: %s", e)
+        # FR-5: computed_at = the OLDEST per-symbol computed_at served — never fresher than that.
+        resp = analysis_pb2.EvaluateReadinessResponse(readiness=protos)
+        served = [r[2] for r in results if r[2] is not None]
+        if served:
+            resp.computed_at.FromDatetime(min(served))
+        return resp
 
     async def QueryPnLPatterns(self, request, context):
         """Ranked P&L-attribution factors (feature 042). Reads the raw pnl_pattern_samples for the
@@ -3021,11 +3090,23 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         )
         if not rows:
             if await self._opportunities_repo.count_for_user(user_id) == 0:
-                # Cold read: bounded synchronous compute, then serve.
-                await self._materialize_opportunities(user_id, propagation_meta)
-                rows = await self._opportunities_repo.read(
-                    user_id, request.min_conviction, w, include_expired=False
+                # Cold read (never materialized) OR a legitimately-empty universe. Feature 177
+                # FR-3: consult compute-state — a still-fresh empty stamp serves empty without a
+                # synchronous recompute (a background revalidate self-heals an empty→non-empty
+                # transition within ≈ one poll cycle); otherwise compute synchronously.
+                state = (
+                    await self._opportunity_compute_state_repo.get(user_id)
+                    if self._opportunity_compute_state_repo is not None
+                    else None
                 )
+                if state is not None and datetime.now(UTC) < state["valid_until"]:
+                    self._kick_opportunity_recompute(user_id, propagation_meta)
+                    # rows stays [] → falls through to (empty) pagination/enrichment.
+                else:
+                    await self._materialize_opportunities(user_id, propagation_meta)
+                    rows = await self._opportunities_repo.read(
+                        user_id, request.min_conviction, w, include_expired=False
+                    )
             else:
                 # All rows stale: serve stale now, revalidate in the background.
                 self._kick_opportunity_recompute(user_id, propagation_meta)
@@ -3062,12 +3143,37 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         if not opps:
             return
         sparkline_bars = max(1, self._cfg.get_int("analysis.opportunity.sparkline_bars", 20))
+        # FR-4: a short success-only memo skips the two live RPCs for a symbol re-enriched within
+        # the window (0 disables the memo → always fetch). Read once per pass (F-07).
+        ttl = self._cfg.get_int_present("analysis.opportunity.live_enrich_ttl_seconds", 10)
         # Dedup the marketdata reads per symbol — several opportunities can share one symbol.
         by_symbol: dict[str, list] = {}
         for opp in opps:
             by_symbol.setdefault(opp.symbol, []).append(opp)
 
+        def _apply_live_fields(targets: list, last_price, prev_close, spark) -> None:
+            for opp in targets:
+                if last_price is not None:
+                    opp.live_price = last_price
+                    if prev_close is not None and prev_close != 0.0:
+                        opp.change_pct = (last_price - prev_close) / prev_close
+                if spark is not None:
+                    del opp.sparkline[:]
+                    for b in spark:
+                        # Finite close → set it; a warm-up/missing bar → unset close (never NaN/0).
+                        pt = analysis_pb2.SparklinePoint()
+                        if b.close == b.close and b.close not in (float("inf"), float("-inf")):
+                            pt.close = b.close
+                        opp.sparkline.append(pt)
+
         async def _enrich_symbol(symbol: str, targets: list) -> None:
+            # FR-4 memo hit: an unexpired success-only entry applies its fields and skips BOTH RPCs.
+            if ttl > 0:
+                cached = self._live_enrich_memo.get(symbol)
+                if cached is not None and time.monotonic() < cached[0]:
+                    m = cached[1]
+                    _apply_live_fields(targets, m["last_price"], m["prev_close"], m["spark"])
+                    return
             last_price = None
             prev_close = None
             spark: list | None = None
@@ -3099,19 +3205,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 spark = list(resp.bars)
             except Exception as e:  # sparkline is best-effort; leave unset on any failure (AC-11)
                 log.warning("_enrich_opportunities_live: GetBars failed for %s: %s", symbol, e)
-            for opp in targets:
-                if last_price is not None:
-                    opp.live_price = last_price
-                    if prev_close is not None and prev_close != 0.0:
-                        opp.change_pct = (last_price - prev_close) / prev_close
-                if spark is not None:
-                    del opp.sparkline[:]
-                    for b in spark:
-                        # Finite close → set it; a warm-up/missing bar → unset close (never NaN/0).
-                        pt = analysis_pb2.SparklinePoint()
-                        if b.close == b.close and b.close not in (float("inf"), float("-inf")):
-                            pt.close = b.close
-                        opp.sparkline.append(pt)
+            # Memoize ONLY a full success (both a live price and a sparkline obtained); a failed or
+            # unavailable fetch is never cached, so it re-fetches within the TTL (AC-11).
+            if ttl > 0 and last_price is not None and spark is not None:
+                self._live_enrich_memo[symbol] = (
+                    time.monotonic() + ttl,
+                    {"last_price": last_price, "prev_close": prev_close, "spark": spark},
+                )
+            _apply_live_fields(targets, last_price, prev_close, spark)
 
         await asyncio.gather(*(_enrich_symbol(sym, targets) for sym, targets in by_symbol.items()))
 
@@ -3125,6 +3226,28 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             self._opportunity_locks[user_id] = lock
         return lock
 
+    async def _replace_and_stamp_compute_state(
+        self, user_id: str, rows, propagation_meta=None
+    ) -> None:
+        """Replace the user's materialized rows, then (feature 177 FR-3) stamp the empty-universe
+        compute-state when the compute yielded nothing. An empty ``replace_for_user`` DELETEs
+        without inserting, so ``count_for_user`` stays 0 and every poll recomputes; the stamp
+        records a short ``valid_until`` window so the empty result is served without a synchronous
+        recompute until it elapses. Stamping is best-effort (mirrors the recompute try/except) — it
+        never fails the write path. ``propagation_meta`` is accepted for call-site symmetry (the
+        DB-only stamp needs no header trio)."""
+        await self._opportunities_repo.replace_for_user(user_id, rows)
+        if not rows and self._opportunity_compute_state_repo is not None:
+            ttl = max(
+                1, self._cfg.get_int_present("analysis.opportunity.empty_recompute_ttl_seconds", 30)
+            )
+            try:
+                await self._opportunity_compute_state_repo.upsert(
+                    user_id, datetime.now(UTC) + timedelta(seconds=ttl)
+                )
+            except Exception as e:  # best-effort — a stamp failure never fails the read/refresh
+                log.warning("empty-universe compute-state stamp failed for user=%s: %s", user_id, e)
+
     async def _materialize_opportunities(self, user_id: str, propagation_meta) -> None:
         """Compute the user's Universe and replace their materialized rows, serialized per user.
         Double-checks under the lock so a second waiter behind a cold read doesn't recompute."""
@@ -3132,7 +3255,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if await self._opportunities_repo.count_for_user(user_id) > 0:
                 return  # another cold reader populated it while we waited
             rows = await self._compute_opportunities(user_id, propagation_meta)
-            await self._opportunities_repo.replace_for_user(user_id, rows)
+            await self._replace_and_stamp_compute_state(user_id, rows, propagation_meta)
 
     def _kick_opportunity_recompute(self, user_id: str, propagation_meta) -> None:
         """Fire-and-forget background recompute (stale-while-revalidate). Guarded so a burst of
@@ -3145,7 +3268,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             try:
                 async with self._opportunity_lock(user_id):
                     rows = await self._compute_opportunities(user_id, propagation_meta)
-                    await self._opportunities_repo.replace_for_user(user_id, rows)
+                    await self._replace_and_stamp_compute_state(user_id, rows, propagation_meta)
             except Exception as e:  # a recompute failure never takes down the loop/read
                 log.warning("opportunity recompute failed for user=%s: %s", user_id, e)
             finally:
@@ -3646,7 +3769,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             try:
                 async with self._opportunity_lock(uid):
                     rows = await self._compute_opportunities(uid, meta)
-                    await self._opportunities_repo.replace_for_user(uid, rows)
+                    await self._replace_and_stamp_compute_state(uid, rows, meta)
             except Exception as e:  # one bad user never kills the pass
                 log.warning("opportunity daily refresh failed for user=%s: %s", uid, e)
             await asyncio.sleep(0)  # cooperative pacing point
@@ -3918,6 +4041,15 @@ def _readiness_to_proto(trace: dict) -> "analysis_pb2.SymbolReadiness":
             for c in trace["conditions"]
         ],
     )
+
+
+def _symbol_readiness_from_json(
+    readiness_json: dict, symbol: str
+) -> "analysis_pb2.SymbolReadiness":
+    """Rebuild a SymbolReadiness proto from a cached readiness_json trace (feature 177 FR-1). Routes
+    through _readiness_to_proto so a FAST-served row is byte-identical to a freshly computed one; an
+    empty ({}) cache row rebuilds the zero-conviction empty readiness."""
+    return _readiness_to_proto(readiness_json if readiness_json else _empty_readiness(symbol))
 
 
 def _action_for(direction: str, held: bool):

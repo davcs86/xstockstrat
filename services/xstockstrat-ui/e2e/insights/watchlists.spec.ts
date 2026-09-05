@@ -664,4 +664,56 @@ test.describe('Watchlists (insights)', () => {
     await expect(page.getByTestId('select-GOOG')).not.toBeChecked();
     await expect(page.getByTestId('select-AMZN')).not.toBeChecked();
   });
+
+  test('remount within staleTime does not refetch readiness (feature 177 FR-2, AC-3)', async ({
+    page,
+  }) => {
+    // A per-query staleTime of 30s (WatchlistReadiness useQueries) must let a detail-pane remount
+    // reuse the cache. The page clock advances 10s — past the 5s QueryClient default (which would
+    // refetch, the pre-FR-2 behavior), within the 30s per-query window (which must not).
+    await page.clock.install();
+    await addAuthCookie(page);
+    await mockWatchlists(page, [
+      {
+        watchlistId: 'wl-fresh',
+        userId: 'test-user-001',
+        name: 'Fresh',
+        description: '',
+        symbols: ['AAPL'],
+        bindings: [{ symbol: 'AAPL', strategyId: 'strat-live-001' }],
+      },
+      {
+        watchlistId: 'wl-other',
+        userId: 'test-user-001',
+        name: 'Other',
+        description: '',
+        symbols: [],
+        bindings: [],
+      },
+    ]);
+
+    // Route counter for the BFF EvaluateReadiness call (a scenario one-off — no domain fixture).
+    let readinessCalls = 0;
+    page.on('request', (r) => {
+      if (r.url().includes('/EvaluateReadiness')) readinessCalls += 1;
+    });
+
+    await page.goto('/insights/watchlists');
+    const readiness = page.getByTestId('watchlist-readiness');
+    await openList(page, 'Fresh');
+    await expect(readiness.getByTestId('readiness-row-AAPL')).toBeVisible({ timeout: 5000 });
+    await page.waitForTimeout(300); // let the first readiness request settle
+    const callsAfterFirstRender = readinessCalls;
+    expect(callsAfterFirstRender).toBeGreaterThanOrEqual(1);
+
+    // Switch away (detail remounts on key={watchlistId}), advance within the staleTime, switch back.
+    await openList(page, 'Other');
+    await page.clock.fastForward(10_000);
+    await openList(page, 'Fresh');
+    await expect(readiness.getByTestId('readiness-row-AAPL')).toBeVisible({ timeout: 5000 });
+    await page.waitForTimeout(300); // give any (unwanted) refetch time to fire
+
+    // Within the 30s staleTime the remount serves from cache — no second EvaluateReadiness.
+    expect(readinessCalls).toBe(callsAfterFirstRender);
+  });
 });

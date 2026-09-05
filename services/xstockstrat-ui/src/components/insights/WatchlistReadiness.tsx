@@ -194,6 +194,10 @@ export function WatchlistReadiness({
     queries: groups.map(([strategyId, symbols]) => ({
       queryKey: ['readiness', strategyId, [...symbols].sort()],
       queryFn: () => analysisClient.evaluateReadiness({ strategyId, symbols }),
+      // feature 177 FR-2: a per-query staleTime (aligned to the 30s Opportunities cadence + 15s
+      // poll) so a remount within the window reuses the cache instead of refetching. Per-query, not
+      // a QueryClient default — a default would force a whole-list refetch (@AC-6/167).
+      staleTime: 30_000,
     })),
   });
 

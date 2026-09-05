@@ -1578,6 +1578,13 @@ export type EvaluateReadinessResponse = Message<"xstockstrat.analysis.v1.Evaluat
      * @generated from field: repeated xstockstrat.analysis.v1.SymbolReadiness readiness = 1;
      */
     readiness: SymbolReadiness[];
+    /**
+     * The oldest per-symbol cache "computed at" among the served rows — the response is never
+     * presented as fresher than this (feature 177, FR-5). Bounded by the readiness staleness window.
+     *
+     * @generated from field: google.protobuf.Timestamp computed_at = 2;
+     */
+    computedAt?: Timestamp | undefined;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.EvaluateReadinessResponse.
