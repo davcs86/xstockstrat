@@ -1,6 +1,6 @@
 # Implementation Spec: fix-portfolio-max-drawdown-unenforced
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-09-04
 **Feature**: `docs/roadmap/features/172-fix-portfolio-max-drawdown-unenforced/feature.md`
 **Total Steps**: 6
@@ -52,7 +52,7 @@ paired tests are still required (C-08) and are the RED-before-green regression g
 
 ### Step 1 — migration: add `peak_equity` high-water-mark column to `account_balances`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/migrations/016_account_balance_peak_equity.up.sql` — create
@@ -97,7 +97,7 @@ database — the real apply/rollback runs in CI/deploy.
 
 ### Step 2 — service: HWM upsert + `GetAccountDrawdowns` read + interface widening (repository)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go` — modify
@@ -173,7 +173,7 @@ queries via `r.db.Query`. (Coverage/lint gate is exercised together with the pai
 
 ### Step 3 — test: pgxmock repository tests for `GetAccountDrawdowns` + `UpsertAccountBalance` HWM
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo_test.go` — modify
@@ -225,7 +225,7 @@ test-pairing is satisfied by this step for Step 2.
 
 ### Step 4 — service: `evaluateDrawdowns` seam + wire into `checkRiskLimits`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -298,7 +298,7 @@ exercised with the paired Step 5 test.)
 
 ### Step 5 — test: `evaluateDrawdowns` decision-logic unit test
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_risk_test.go` — modify
@@ -338,7 +338,7 @@ test-pairing is satisfied by this step for Step 4.
 
 ### Step 6 — docs: reconcile config-key note, stale findings line numbers, durable acceptance suite
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio` (docs only)
 **Files**:
 - `services/xstockstrat-portfolio/CLAUDE.md` — modify
@@ -395,4 +395,14 @@ Confirm the CLAUDE.md row no longer says "not yet enforced", the findings-doc no
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **Tooling — golangci-lint rebuilt from source (CI-equivalent).** The session's packaged
+  golangci-lint 2.5.0 (built with go1.25) refuses to run against the repo's `go 1.27` target. Installed
+  the repo-pinned **v2.13.1 built with the go1.27.0 toolchain**
+  (`GOTOOLCHAIN=go1.27.0 go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1`),
+  which matches the CI `golangci-lint-action@v9` pin. Lint then ran clean (0 issues) across the module.
+  **Disposition**: CI-equivalent tool provisioning (sequential-mode fallback).
+- **Step 6 teardown — context-forge plugin unavailable.** `/context-forge:context-constitution refresh`
+  not invocable this session. **Manual reconciliation performed**: `CLAUDE.md` `max_drawdown_pct` row and
+  the portfolio findings row both re-read against the enforcement code — the "now enforced" text matches
+  `checkRiskLimits` (`GetFloat` `:740`, enforcement `:769-771`); stale `:769`/`:797` citations corrected.
+  No drift. **Disposition**: manual teardown equivalent (plugin unavailable).

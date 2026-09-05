@@ -136,3 +136,57 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Step 2: coverage threshold not stated — [x] no action (telemetry/ is coverage-EXCLUDED from Go -coverpkg; direct `go test` is the C-08 gate). Reviewer-verified exception.
   - Step 8: AC-3 covered by a grep in Verification rather than a test-step/RED (C-15 prefers a RED assertion) — [x] no action (pure-docs scenario, justified).
 - Overlap findings: CLEAN — no migration/proto/config/file collision. Shared service dirs with 175 (config vs telemetry files) and 172/173/174 are different files; courtesy merge coordination only.
+
+---
+
+## Session 2026-09-04 — sdd-execute (sequential; stacked PR #4 of 5, base feature/fix-portfolio-max-drawdown-unenforced)
+
+Fleet-wide removal of the redundant `trading_mode` OTel resource attribute + dead local read across 12 telemetry modules. TRADING_MODE env var kept (live routing axis). golangci-lint v2.13.1@go1.27 reused. Auto-proceed.
+
+### Step 1 — Go telemetry: extract newResource, drop trading_mode (trading/portfolio/marketdata) [done]
+- Each `internal/telemetry/otel.go`: extracted `newResource(ctx)` as the sole Resource input to `Init` (moved the svcName block in), deleted the `attribute.String("trading_mode", ...)` line. `attribute`/`os` imports still used. Comment trimmed to state the sole-input invariant (test guards the omission). No `.do`/compose env changes.
+- Files: `services/xstockstrat-{trading,portfolio,marketdata}/internal/telemetry/otel.go`.
+
+### Step 2 — Go telemetry per-module absence tests (AC-1) [done]
+- New `otel_test.go` (package telemetry, calls unexported `newResource`) in all 3 services asserting the built SDK Resource omits `trading_mode` and keeps service.name/deployment.environment/platform.
+- Red→green: compile-RED (`undefined: newResource`) → all 3 pass. golangci-lint 0 issues; grep `trading_mode` clean in Go telemetry. Coverage: telemetry/ is Go -coverpkg-excluded (direct `go test` is the C-08 gate).
+- Files: `services/xstockstrat-{trading,portfolio,marketdata}/internal/telemetry/otel_test.go`. Deviations: none.
+
+### Step 3 — Python telemetry: extract _build_resource, drop trading_mode (agent/ingest/indicators/analysis) [done]
+- Each `app/telemetry.py`: extracted module-level `_build_resource()` (deferred SDK import) as the sole Resource input to `init_telemetry`; deleted the `trading_mode`/`environment` locals and the inline `Resource.create({...})` dict (dropping the `trading_mode` key). `svc_name`/`endpoint` kept (exporter + log). No `.do`/compose env changes.
+- Files: `services/xstockstrat-{agent,ingest,indicators,analysis}/app/telemetry.py`.
+
+### Step 4 — Python telemetry per-module tests (AC-1) + agent non-blocking init (AC-2) [done]
+- New `tests/test_telemetry.py` in all 4 asserting the built Resource omits `trading_mode`, keeps the trio. Agent adds `test_init_telemetry_non_blocking_on_error`: patches the source-module `OTLPSpanExporter` to raise (the name is locally imported inside init's try) → `init_telemetry()` swallows it and sets no global provider (AC-2).
+- Red→green: ImportError (`_build_resource` absent) → all pass. Coverage: agent 81.18%, ingest 76.69%, indicators 81.10% (≥50), analysis 85.19% (all ≥ threshold). ruff clean (fixed a docstring line length). grep `trading_mode` clean.
+- Files: `services/xstockstrat-{agent,ingest,indicators,analysis}/tests/test_telemetry.py`. Deviations: none (agent env needed `uv sync --extra dev` first — no dep/lock change).
+
+### Step 5 — Node telemetry: extract buildResource, drop trading_mode (ledger/identity/config/notify) [done]
+- Each `src/telemetry.ts`: extracted exported `buildResource()` as the sole Resource input to `initTelemetry`, removed the inline `new Resource({...})` + the `trading_mode` line, and dropped the now-unused inline Resource/SEMRESATTRS requires from init. **Deviation**: `buildResource` uses static top-level imports of `@opentelemetry/resources` + `@opentelemetry/semantic-conventions` (hard deps) instead of deferred `require`, so the design-mandated test is callable from ledger/identity's ESM strip-types runner (require undefined in ESM). Heavy SDK/exporter imports stay deferred. See Deviation Log.
+- Files: `services/xstockstrat-{ledger,identity,config,notify}/src/telemetry.ts`.
+
+### Step 6 — Node telemetry per-module absence tests (AC-1) [done]
+- New `src/__tests__/telemetry.test.ts` in all 4 (node:test + node:assert/strict, static `buildResource` import) asserting the built Resource omits `trading_mode`, keeps the trio. ledger/identity import `../telemetry.ts` (ESM), config/notify `../telemetry` (CJS) — per-runner extension.
+- Red→green: RED (require-undefined / buildResource missing) → all pass after the Step 5 static-import fix. Coverage: ledger 46%, identity 46%, config 80.16%, notify 88.57% (all ≥40). lint 0 errors. grep `trading_mode` clean.
+- Files: `services/xstockstrat-{ledger,identity,config,notify}/src/__tests__/telemetry.test.ts`. Deviations: static-import + import-extension (Deviation Log).
+
+### Step 7 — UI telemetry: one-line trading_mode deletion (frontend) [done]
+- Deleted the `trading_mode: process.env.TRADING_MODE ?? 'paper',` line from `resourceFromAttributes({...})`; kept `resourceFromAttributes` + the trio. No builder extraction (frontend, C-08 backend pairing exempt). grep clean. `tsc --noEmit` shows telemetry.ts clean (the only tsc error is a PRE-EXISTING, unrelated `src/middleware.test.ts` MockInstance type issue — not introduced here; the UI runs vitest/next lint in CI).
+- Files: `services/xstockstrat-ui/src/telemetry.ts`.
+
+### Step 8 — docs: drop trading_mode from dashboards README (AC-3) [done]
+- Dropped `trading_mode` from the Resource-attributes bullet; kept service.name/deployment.environment/platform. AC-3 grep `grep -rn 'trading_mode' packages/otel/` returns no matches.
+- Files: `packages/otel/dashboards/README.md`.
+
+### C-16 promotion + finalize
+- Promoted AC-1 (outline, 11 backend modules) / AC-2 / AC-3 → `docs/sdd/business-rules/platform.feature` (`@feature-171`, cross-cutting telemetry guarantee). Findings reconciliation: grep found NO open `trading_mode` OTel entries in root findings / scrubber-findings (design thread was "close if present" — none exist; other doc `trading_mode` mentions are the config axis/env var, unchanged). Teardown: no CLAUDE.md/constitution context file touched (only telemetry code + dashboards README, not a scrubberExtraTarget) → no context-forge refresh owed.
+
+## Session 2026-09-04 — sdd-execute summary (feature 171)
+**Steps this session**: 1–8 (all)
+**Progress**: 8 done / 8 total
+**Stopped at**: all complete → code-completed
+**Accountability**: out-of-scope changes: none (TRADING_MODE env var + .do/compose values untouched, as specced). Open questions: none. Unaddressed review warnings: none. **Deviation (surfaced)**: Node `buildResource` uses static top-level imports of two hard-dep OTel packages instead of deferred `require`, so the C-08 per-module test runs under both the CJS and ESM Node test runners — see Deviation Log.
+**Next**: stacked integration PR #4 (base `feature/fix-portfolio-max-drawdown-unenforced`); then feature 175.
+
+### Follow-up 2026-09-04 — tsc-build fix (surfaced by feature 175's build gate)
+- The Step 6 ledger/identity `../telemetry.ts` import (needed by their ESM strip-types test runner) broke their `tsc` **build** (`TS5097` — `.ts` extension not allowed in an emitting build). Their single tsconfig `include: src/**/*` was compiling test sources incidentally. Fixed by excluding `src/**/*.test.ts` from `services/xstockstrat-{ledger,identity}/tsconfig.json` (tests aren't shipped; the runner runs them from source). Verified: all 4 leaf `pnpm run build` (tsc) pass AND ledger/identity `pnpm run test` (strip-types, 37/53 pass) stay green. Committed to this branch (PR #1095) as a separate follow-up commit. See Deviation Log.

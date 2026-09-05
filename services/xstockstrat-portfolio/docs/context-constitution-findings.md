@@ -4,7 +4,7 @@ Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2
 `claude/loaded-plugins-list-d120nl` @ `82a0549` — all open rows re-verified, still reproduce; re-anchored
 2026-09-03 (branch `claude/watchlist-bulk-default-strategy-zxx6su` @ `d4cd327`) after feature-170
 `portfolio_service.go` line shifts — all rows still reproduce, none resolved). For
-triage/fixing, not governance. Repo-wide defects (Go 1.22 doc-lie, `getEnvBool` dead) live in the root findings log.
+triage/fixing, not governance. Repo-wide defects (Go 1.22 doc-lie) live in the root findings log.
 
 ## Latent bugs (looks broken, not merely non-obvious)
 
@@ -17,7 +17,7 @@ triage/fixing, not governance. Repo-wide defects (Go 1.22 doc-lie, `getEnvBool` 
 
 | What | Why it looks dead | Evidence |
 |---|---|---|
-| `portfolio.risk.max_drawdown_pct` config key | read then discarded (`_ = maxDrawdownPct`, comment "handled by snapshots over time"); no drawdown logic | `portfolio_service.go:769` (`GetFloat`), `:797` (`_ = maxDrawdownPct`) |
+| ~~`portfolio.risk.max_drawdown_pct` config key~~ **RESOLVED (feature 172)**: now enforced per-account — `checkRiskLimits` fetches `GetAccountDrawdowns` and `evaluateDrawdowns` emits a WARNING alert on breach (peak_equity HWM, migration 016) | ~~read then discarded~~ now enforced | `portfolio_service.go:740` (`GetFloat`), `:769-774` (`GetAccountDrawdowns`/`evaluateDrawdowns` enforcement — formerly the `_ = maxDrawdownPct` discard at `:750`) |
 
 ## Open questions (unresolved *why* — needs a maintainer)
 

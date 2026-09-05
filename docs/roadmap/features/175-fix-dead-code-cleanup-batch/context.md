@@ -160,3 +160,38 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Step 2: no coverage threshold stated — [x] no action (a devDep type-pin changes no runtime source; discharge is compile-green via tsc/next build, not coverage; Node-leaf coverage discharge is in Step 6).
   - Step 7: header-propagation.md:123 "Reference store" line re-home — [ ] unaddressed refinement: also NEUTRALIZE the snippet BODY at :125-145 (it shows the gRPC extractFromMetadata form; a pre-existing doc/code drift), not only the "Reference store:" pointer line. Leave the LIVE Go reference at :50 untouched.
 - Overlap findings: CLEAN — no proto/migration/config possible; all source files disjoint. Soft, disjoint-region findings-doc overlaps only: with 172 on portfolio findings, with 174 on root findings — rebase-only, non-blocking.
+
+---
+
+## Session 2026-09-04 — sdd-execute (sequential; stacked PR #5 of 5, base feature/fix-agent-trading-mode-otel-attr)
+
+Dead-code cleanup batch + @types/node type-pin. Stacked on 171 (final of the sequence). The 23-path landed-diff gate is run against the PR base (171's branch), NOT main-dev, because the stacked branch contains all prior features' commits — the diff vs 171 is exactly 175's change. Auto-proceed.
+
+### Step 1 — bump @types/node ^20 → ^24 across 5 Node workspaces + root lock [done]
+- ledger/notify/config/identity/ui package.json `@types/node` → `^24` (resolves 24.13.3); root `pnpm install` regenerated ONLY the root `pnpm-lock.yaml` (vestigial per-service locks untouched — verified via git status).
+- No FR-3 bounce: `@types/node ^24` needed no sibling dep bump.
+
+### Step 2 — @types/node ^24 resolution + pre-delete build gate (AC-3, AC-4) [done]
+- AC-3: 4 leaves resolve @types/node 24.x; `pnpm --filter {ledger,notify,config,identity} build` (tsc) all green. AC-4: ui resolves 24.x; `pnpm --filter ui build` (next build) green.
+- NOTE: surfaced a pre-existing tsc-build break from feature 171 (ledger/identity telemetry.test.ts `.ts` import rejected by tsc build) — fixed on the 171 branch (PR #1095) by excluding `src/**/*.test.ts` from those two tsconfigs; 175 inherits the fix via the stack. Not a 175 diff-gate path.
+
+### Step 3 — delete dead getEnvBool from 3 Go config packages [done]
+- Removed `func getEnvBool` from trading (config.go:60), portfolio (:233 + `var _ = getEnvBool` suppressor + orphaned `strconv` import :9), marketdata (:247); removed the dedicated `TestGetEnvBool` function from each config_test.go (never the file). Zero production callers.
+### Step 4 — Go config still builds/lints/tests (AC-1) [done]
+- getEnvBool absent (grep 0). All 3: `go build ./...` clean, `golangci-lint` 0 issues (incl. no orphan-strconv failure), `go test ./internal/config/...` pass. Coverage ≥40: trading 69.0%, portfolio 49.0%, marketdata 62.6%.
+
+### Step 5 — delete dead propagation.ts from 4 Node leaves + prune config eslintrc [done]
+- Fresh re-grep: zero external importers. `git rm` the 4 `src/middleware/propagation.ts` (ledger/notify/config/identity); struck `src/middleware/propagation.ts` from config `.eslintrc.json` override (kept `src/grpc/authz.ts`). identity's live `ledgerAudit.ts`/`PROPAGATED_HEADERS` untouched.
+### Step 6 — Node leaves still build (tsc) + pass (AC-2) [done]
+- Absence: `git ls-files` 0, eslintrc grep 0. All 4 `pnpm build` (tsc type gate) green; lint 0; test:coverage pass ≥40 (ledger 46, notify 88.57, config 80.16, identity 46).
+
+### Step 7 — teardown (6 docs) + landed-diff gate [done]
+- Reconciled 6 docs (NARROW): removed root findings getEnvBool row; marked both propagation.ts findings RESOLVED (all four deleted); reworded root CLAUDE.md §Header Propagation; neutralised header-propagation.md Node "Reference store" pointer to a template (LIVE Go propagation.go ref at :50 untouched); dropped the getEnvBool clause from the 3 per-service Go findings. Left the unrelated 173-era zero-trap finding row out of scope.
+- Teardown: context-forge refresh not invocable; manual reconciliation performed (Deviation Log + PR body).
+
+## Session 2026-09-04 — sdd-execute summary (feature 175)
+**Steps this session**: 1–7 (all)
+**Progress**: 7 done / 7 total
+**Stopped at**: all complete → code-completed
+**Accountability**: out-of-scope changes: none in 175's own diff. Open questions: none. **Surfaced (fixed on 171/PR #1095)**: a latent tsc-build break from feature 171's ledger/identity telemetry test `.ts` import — fixed there, inherited via the stack, not a 175 diff-gate path. C-16: deliberate NON-promotion (one-time removal guards).
+**Next**: stacked integration PR #5 (base `feature/fix-agent-trading-mode-otel-attr`) — end of sequence.

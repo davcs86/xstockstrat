@@ -34,19 +34,7 @@ func Init(ctx context.Context) (func(context.Context) error, error) {
 		return nil, err
 	}
 
-	svcName := os.Getenv("SERVICE_NAME")
-	if svcName == "" {
-		svcName = "portfolio"
-	}
-
-	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			semconv.ServiceName(svcName),
-			semconv.DeploymentEnvironment(os.Getenv("APPLICATION_ENV")),
-			attribute.String("trading_mode", os.Getenv("TRADING_MODE")),
-			attribute.String("platform", "xstockstrat"),
-		),
-	)
+	res, err := newResource(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -58,4 +46,20 @@ func Init(ctx context.Context) (func(context.Context) error, error) {
 	otel.SetTracerProvider(tp)
 
 	return tp.Shutdown, nil
+}
+
+// newResource builds the sole OTel Resource input to Init (its omissions are guarded by
+// TestNewResourceOmitsTradingMode).
+func newResource(ctx context.Context) (*resource.Resource, error) {
+	svcName := os.Getenv("SERVICE_NAME")
+	if svcName == "" {
+		svcName = "portfolio"
+	}
+	return resource.New(ctx,
+		resource.WithAttributes(
+			semconv.ServiceName(svcName),
+			semconv.DeploymentEnvironment(os.Getenv("APPLICATION_ENV")),
+			attribute.String("platform", "xstockstrat"),
+		),
+	)
 }

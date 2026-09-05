@@ -332,7 +332,7 @@ xstockstrat-analysis → xstockstrat-ingest (QuerySignals for signal-weighted ba
 
 ## Header Propagation Convention
 
-Every backend service **that makes outbound per-request gRPC calls** must propagate `x-user-id`, `x-access-scope`, and `x-trace-id` from the inbound request to those calls. The external edge injects/strips them after auth (the `xstockstrat-ui` middleware — the nginx proxy that formerly did this was removed by feature 045), so platform-internal values are trusted. The Node leaf services (ledger, identity, notify, config) currently make no outbound per-request calls, so their `src/middleware/propagation.ts` is presently unused (see `docs/context-constitution-findings.md`).
+Every backend service **that makes outbound per-request gRPC calls** must propagate `x-user-id`, `x-access-scope`, and `x-trace-id` from the inbound request to those calls. The external edge injects/strips them after auth (the `xstockstrat-ui` middleware — the nginx proxy that formerly did this was removed by feature 045), so platform-internal values are trusted. The Node leaf services (ledger, identity, notify, config) make no outbound per-request calls that need this trio, so the unused `src/middleware/propagation.ts` helper each carried was removed (feature 175). identity's admin-audit calls to ledger forward the trio via `ledgerAudit.ts`'s own `PROPAGATED_HEADERS` const, not that helper.
 
 **Language-specific patterns (Go interceptor, Python per-method, Node.js AsyncLocalStorage), code snippets, and reference implementations** → read `docs/patterns/header-propagation.md`.
 

@@ -1,5 +1,5 @@
 """
-Config watcher for xstockstrat-indicators.
+Config watcher for xstockstrat-analysis.
 Subscribes to xstockstrat-config WatchConfig stream at startup.
 """
 
@@ -51,17 +51,18 @@ class ConfigWatcher:
         self._stub = config_pb2_grpc.ConfigServiceStub(self._channel)
         asyncio.get_event_loop().create_task(self._watch())
 
+    def _build_watch_request(self) -> config_pb2.WatchConfigRequest:
+        return config_pb2.WatchConfigRequest(
+            namespace=self.namespace,
+            client_id=f"analysis-{id(self)}",
+            environment=self._environment,
+            trading_mode=self._trading_mode,
+        )
+
     async def _watch(self):
         while True:
             try:
-                stream = self._stub.WatchConfig(
-                    config_pb2.WatchConfigRequest(
-                        namespace=self.namespace,
-                        client_id=f"indicators-{id(self)}",
-                        environment=self._environment,
-                        trading_mode=self._trading_mode,
-                    )
-                )
+                stream = self._stub.WatchConfig(self._build_watch_request())
                 async for snapshot in stream:
                     self._snapshot = snapshot
                     self._snapshot_event.set()

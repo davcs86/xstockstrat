@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 
@@ -229,17 +228,3 @@ func getEnv(key, def string) string {
 	}
 	return def
 }
-
-func getEnvBool(key string, def bool) bool {
-	v := os.Getenv(key)
-	if v == "" {
-		return def
-	}
-	b, err := strconv.ParseBool(v)
-	if err != nil {
-		return def
-	}
-	return b
-}
-
-var _ = getEnvBool

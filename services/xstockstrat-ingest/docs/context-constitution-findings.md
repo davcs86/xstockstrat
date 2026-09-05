@@ -24,7 +24,7 @@ also recorded at the root.
 
 | Issue | Impact | Evidence |
 |---|---|---|
-| **`ConfigWatcher` carries indicators identity** (worse 2026-09-02): module docstring still "Config watcher for xstockstrat-**indicators**" (`watcher.py:2`) and `client_id=f"indicators-{id(self)}"` (`:75`); the file also still carries dead indicators-only helpers `sandbox_timeout_ms`/`sandbox_memory_bytes`/`sandbox_allowed_imports` (`watcher.py:152-165`) that no ingest code calls | ingest registers with the config service under an "indicators-…" client id (copy-paste) + dead helpers | `app/config/watcher.py:2,75,152-165` |
+| **Dead indicators-only `sandbox_*` helpers**: the file still carries `sandbox_timeout_ms`/`sandbox_memory_bytes`/`sandbox_allowed_imports` (`watcher.py:164-176`) that no ingest code calls (ingest runs no sandbox). ~~The identity clause (docstring + `client_id="indicators-…"`) was **RESOLVED by feature 174**~~: docstring is now "Config watcher for xstockstrat-**ingest**" and `client_id=f"ingest-{id(self)}"` via `_build_watch_request()`. | dead helpers copy-pasted from the indicators template remain (a separate change class — dead-code deletion) | `app/config/watcher.py:164-176` |
 
 ## Open questions (unresolved *why* — needs a maintainer)
 

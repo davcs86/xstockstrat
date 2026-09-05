@@ -28,7 +28,7 @@
   },
   "overrides": [
     {
-      "files": ["src/grpc/authz.ts", "src/middleware/propagation.ts"],
+      "files": ["src/grpc/authz.ts"],
       "rules": {
         "no-restricted-syntax": "off"
       }
