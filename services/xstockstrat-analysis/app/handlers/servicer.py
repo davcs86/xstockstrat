@@ -46,6 +46,7 @@ from app.repositories.opportunity_actions import OpportunityActionsRepository
 from app.repositories.order_snapshots import OrderSnapshotsRepository
 from app.repositories.pnl_pattern_samples import PnLPatternSamplesRepository
 from app.repositories.pnl_positions import PnLPositionsRepository
+from app.repositories.readiness_cache import ReadinessCacheRepository
 from app.repositories.strategies import StrategiesRepository
 from app.repositories.strategy_scores import StrategyScoresRepository
 from app.services import scoring, warmup
@@ -423,6 +424,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Materialized per-user opportunity queue: ListOpportunities is a pure read of this table,
         # kept fresh by compute-on-read + stale-while-revalidate + a daily refresh. None in no-DB.
         self._opportunities_repo = OpportunitiesRepository(db_pool) if db_pool else None
+        # feature 177 FR-1: per-(user,strategy,rule,symbol) readiness cache backing the FAST path.
+        self._readiness_cache_repo = ReadinessCacheRepository(db_pool) if db_pool else None
         # P&L pattern attribution samples: written by the pnl_pattern_consumer, read here by
         # QueryPnLPatterns with query-time quantile bucketing.
         self._pnl_samples_repo = PnLPatternSamplesRepository(db_pool) if db_pool else None
@@ -2738,10 +2741,38 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             definition, range_msg, propagation_meta
         )
 
-        # FR-2: per-symbol body gated by _bars_fetch_sem (opportunity bars-fetch bound, default 2) —
-        # caps concurrent GetBars (feature 141) + pending-coroutine memory; benchmark preloaded
-        # so no nested re-acquire; gather preserves request.symbols order (byte-identical set).
+        # FR-1 readiness cache: read the staleness window + definition fingerprint once, load the
+        # request set in a single query. A fresh, fingerprint-matching, unexpired row serves FAST.
+        now = datetime.now(UTC)
+        stale_after = self._cfg.get_int_present("analysis.readiness.stale_after_seconds", 30)
+        fingerprint = _definition_fingerprint(row["definition_json"])
+        cached = (
+            await self._readiness_cache_repo.read_many(
+                caller_user_id, request.strategy_id, rule, list(request.symbols)
+            )
+            if self._readiness_cache_repo is not None
+            else {}
+        )
+
+        def _benchmark_epoch():
+            e = 0
+            if benchmark_bars:
+                for bench in benchmark_bars.values():
+                    if bench:
+                        e = max(e, bench[-1].time.seconds)
+            return e
+
+        # FR-2: SLOW per-symbol body gated by _bars_fetch_sem (opportunity bars-fetch bound, default
+        # 2). FR-1: FAST serves a fresh cache hit WITHOUT the sem, a fetch, or a re-evaluation.
+        # Returns (proto, staged_cache_row | None, computed_at). gather preserves request order.
         async def _readiness_for(symbol):
+            c = cached.get(symbol)
+            if c is not None and c["def_fingerprint"] == fingerprint and now < c["valid_until"]:
+                return (
+                    _symbol_readiness_from_json(c["readiness_json"], symbol),
+                    None,
+                    c["computed_at"],
+                )
             async with self._bars_fetch_sem:
                 fetch_ok = True
                 try:
@@ -2761,10 +2792,38 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 trace = await evaluator.evaluate_conditions_traced(
                     definition, bars, symbol, rule=rule, benchmark_bars=benchmark_bars
                 )
-                return _readiness_to_proto(trace)
+            # No slow-path bar_epoch reuse — always re-evaluate on a miss so a same-time.seconds
+            # intraday 1d bar update never freezes a day-one verdict (round-3 adversary #1).
+            bar_epoch = max(bars[-1].time.seconds if bars else 0, _benchmark_epoch())
+            staged = {
+                "user_id": caller_user_id,
+                "strategy_id": request.strategy_id,
+                "rule": rule,
+                "symbol": symbol,
+                "def_fingerprint": fingerprint,
+                "bar_epoch": bar_epoch,
+                "readiness_json": trace,  # {} when the trace is empty (never NULL)
+                "computed_at": now,
+                "valid_until": now + timedelta(seconds=stale_after),
+            }
+            return _readiness_to_proto(trace), staged, now
 
-        readiness = await asyncio.gather(*[_readiness_for(s) for s in request.symbols])
-        return analysis_pb2.EvaluateReadinessResponse(readiness=list(readiness))
+        results = await asyncio.gather(*[_readiness_for(s) for s in request.symbols])
+        protos = [r[0] for r in results]
+        staged_rows = [r[1] for r in results if r[1] is not None]
+        # Persist the SLOW rows once, out of the per-symbol hot path (best-effort — a write failure
+        # never fails the read, mirroring the opportunity recompute).
+        if staged_rows and self._readiness_cache_repo is not None:
+            try:
+                await self._readiness_cache_repo.upsert_many(staged_rows)
+            except Exception as e:  # noqa: BLE001 — cache write is best-effort
+                log.warning("EvaluateReadiness: readiness cache upsert failed: %s", e)
+        # FR-5: computed_at = the OLDEST per-symbol computed_at served — never fresher than that.
+        resp = analysis_pb2.EvaluateReadinessResponse(readiness=protos)
+        served = [r[2] for r in results if r[2] is not None]
+        if served:
+            resp.computed_at.FromDatetime(min(served))
+        return resp
 
     async def QueryPnLPatterns(self, request, context):
         """Ranked P&L-attribution factors (feature 042). Reads the raw pnl_pattern_samples for the
@@ -3918,6 +3977,15 @@ def _readiness_to_proto(trace: dict) -> "analysis_pb2.SymbolReadiness":
             for c in trace["conditions"]
         ],
     )
+
+
+def _symbol_readiness_from_json(
+    readiness_json: dict, symbol: str
+) -> "analysis_pb2.SymbolReadiness":
+    """Rebuild a SymbolReadiness proto from a cached readiness_json trace (feature 177 FR-1). Routes
+    through _readiness_to_proto so a FAST-served row is byte-identical to a freshly computed one; an
+    empty ({}) cache row rebuilds the zero-conviction empty readiness."""
+    return _readiness_to_proto(readiness_json if readiness_json else _empty_readiness(symbol))
 
 
 def _action_for(direction: str, held: bool):

@@ -200,3 +200,22 @@ anchors resolve on the post-176 tree) — no mismatch, no re-spec.
 - `config-governance.md`: feature-177 Per-Feature Registered Keys entry. No seed migration (bound
   enforced regardless; config-ui-discoverability seed a noted follow-up, next config NNN 027).
 - Verify: config lint 0 errors; bounds test 8/8; all 3 keys grep-present in both doc homes.
+
+### Steps 6–7 — done (FR-1 readiness cache FAST/SLOW, TDD red→green)
+- Step 6: new `app/repositories/readiness_cache.py` (`ReadinessCacheRepository.read_many`/`upsert_many`,
+  mirrors OpportunitiesRepository; every NOT NULL col supplied, empty→`{}` never NULL). Wired
+  `self._readiness_cache_repo` in `__init__`. EvaluateReadiness now loads the window
+  (`get_int_present("analysis.readiness.stale_after_seconds",30)`) + `_definition_fingerprint(row
+  ["definition_json"])` once, reads the request set in one query, and `_readiness_for` is FAST
+  (fingerprint match + `now < valid_until` → `_symbol_readiness_from_json` via `_readiness_to_proto`,
+  NO sem/fetch/eval) vs SLOW (existing body → stage a cache row). SLOW rows upserted once after the
+  gather (best-effort). Response `computed_at` = min served (FR-5). No slow-path bar_epoch reuse.
+  New helper `_symbol_readiness_from_json` guarantees FAST==fresh byte-identity.
+  - Review item CLEARED: `row["definition_json"]` key confirmed present (StrategiesRepository._to_dict
+    always sets it).
+  - Deviation: `bar_epoch` benchmark contribution computed over `benchmark_bars.values()` (the loader
+    returns a `{source_symbol: [bars]}` dict, not a list as the spec sketch implied). Logged below.
+- Step 7: `tests/test_readiness_cache.py` — AC-1 SLOW-write→FAST-read round-trip (pass 2: 0 GetBars,
+  byte-identical verdicts, computed_at set); AC-2 expiry→SLOW re-stamp bar_epoch; AC-2 benchmark-only
+  newer bar drives bar_epoch. RED pre-Step-6 (upsert never called / GetBars not skipped), GREEN after.
+- Full analysis suite `672 passed` (+3), coverage `85%`; ruff clean.

@@ -277,7 +277,7 @@ confirms all three keys are documented in both homes.
 
 ### Step 6 — service: FR-1 readiness cache (repository + FAST/SLOW `EvaluateReadiness`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/readiness_cache.py` — create
@@ -357,7 +357,7 @@ Ruff clean. `grep -n "get_int_present(\"analysis.readiness.stale_after_seconds\"
 
 ### Step 7 — test: FR-1 readiness cache (AC-1, AC-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_readiness_cache.py` — create
@@ -669,6 +669,14 @@ from the fixture/auth homes (C-12).
 ---
 
 ## Deviation Log
+
+### Step 6 — bar_epoch benchmark contribution over the benchmark dict
+
+**Disposition**: spec-sketch imprecision, corrected. The Step 6 sketch wrote
+`benchmark_bars[-1].time.seconds` as if `benchmark_bars` were a list; `_load_benchmark_bars_windowed`
+returns a `{source_symbol: [bars]}` dict (or None). Implemented `_benchmark_epoch()` as the max
+last-bar `time.seconds` across `benchmark_bars.values()`, preserving the `max(evaluated, benchmark)`
+intent. No behavior change from the design; covered by the benchmark-only bar_epoch test.
 
 ### Steps 1–2 — proto codegen via Docker + TS compile via pnpm prepare
 
