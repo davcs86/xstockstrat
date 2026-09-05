@@ -2,6 +2,7 @@
 IndicatorsServicer — gRPC servicer implementation.
 """
 
+import asyncio
 import logging
 
 import grpc
@@ -31,6 +32,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         self._repo: FormulasRepository | None = (
             FormulasRepository(db_pool) if db_pool is not None else None
         )
+        self._sandbox_sem = asyncio.Semaphore(max(1, config_watcher.sandbox_max_concurrent()))
 
     @staticmethod
     def _has_admin_scope(context) -> bool:
@@ -136,14 +138,19 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             memory_bytes,
         )
 
-        result = sandbox.execute_formula(
-            source=source,
-            input_data=input_data,
-            allowed_imports=allowed_imports,
-            timeout_ms=timeout_ms,
-            memory_bytes=memory_bytes,
-            params=resolved_params,
-        )
+        # Offload the blocking subprocess.run spawn off the event loop, bounded by
+        # indicators.sandbox.max_concurrent — timeout is preserved because execute_formula
+        # still owns the subprocess.run(timeout=…) and still returns exit_reason="timeout".
+        async with self._sandbox_sem:
+            result = await asyncio.to_thread(
+                sandbox.execute_formula,
+                source=source,
+                input_data=input_data,
+                allowed_imports=allowed_imports,
+                timeout_ms=timeout_ms,
+                memory_bytes=memory_bytes,
+                params=resolved_params,
+            )
 
         exit_reason_map = {
             "success": indicators_pb2.SANDBOX_EXIT_REASON_SUCCESS,
