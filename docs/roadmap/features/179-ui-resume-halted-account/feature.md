@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-09-04 | `idea` → `draft` | /sdd-story | Product spec generated from performance audit Track D |
 | 2026-09-04 | `draft` → `spec-ready` | /sdd-review | FAILED first pass (criterion 9, scope contradiction); resolved all Open Questions (admin-only scope, conservative), re-review PASS; overlap CLEAN |
+| 2026-09-05 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, extended); round-4 adversary SOUND; recon.md + design.md written |
 
 ---
 
@@ -19,6 +20,8 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon Dossier](recon.md) — grounded codebase map, Patterns to REUSE, Existing Business Rules
+- [Design](design.md) — chosen approach, rejected alternatives, open risks, Constitution rules
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec ui-resume-halted-account`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -45,4 +48,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design ui-resume-halted-account quick` — recon + adversarial design debate
+`/sdd-spec ui-resume-halted-account` — generate the implementation spec from the approved design

@@ -76,3 +76,13 @@ Status unchanged: **spec-ready**. design.md NOT yet written (awaiting consolidat
 - Round-3 debate complete and SOUND-with-doc-fold-ins (see the round-3 block above); design.md NOT written.
 - At the consolidated approval gate the user approved 176 & 178 and HELD this feature for a further look. Status stays spec-ready.
 - To resume: /sdd-design <slug> quick re-reads this context and can go straight to writing design.md + design-approved once the user confirms (all round-3 fold-ins + locked decisions are already recorded here — no further debate needed unless the user requests changes).
+
+## Session 2026-09-05 — sdd-design COMPLETE (design-approved)
+
+- Phase 1 Grilling: 4 rounds (quick, extended by user through rounds 2-4). Round-4 adversary SOUND, no Floor breach, no @AC regression. design.md written.
+- Chosen approach: extract HALT_SOURCE to opportunityShared (rewire positions page, same PR; React-free data map only — server-bundle safe); new HaltBadge.tsx (Ban icon + variant="warning" amber + iconOnly); forwardAdmin BFF route; AccountContext.applyAccountUpdate full-replace fail-loud; AccountRow badge row renders indicator UNCONDITIONALLY gated on halted===true (survives halted&&!isActive deregistered rows) while the Resume action stays isActive-gated; AccountSelector HaltBadge iconOnly + rename hasCredentialIssue→hasAccountIssue (ORs halt into gear dot); BFF-isolating non-admin e2e + STATEFUL mock (resumeAccount flips halted→false) in-place confirm-then-clears.
+- Constitution: C-17 (warning token, no hardcoded color), C-10 (same-PR extract+rewire), C-08/C-15 (isolated BFF test, stateful in-place e2e). Floor breaches: none. All @AC PRESERVE.
+- Locked decisions honored: admin-only (no RPC change); distinct halt marker on selector+row+gear-dot; HaltBadge=warning.
+- USER APPROVED design 2026-09-05. Status: spec-ready → design-approved.
+- Open risks to /sdd-spec: place HaltBadge in the :295-304 badge row (not the action block); stateful e2e mock; verify server-bundle safety with a real next build (fails.md:1652).
+- Next: /sdd-spec ui-resume-halted-account.

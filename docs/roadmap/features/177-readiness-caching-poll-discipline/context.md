@@ -77,3 +77,12 @@ Status unchanged: **spec-ready**. design.md NOT yet written (awaiting the consol
 - Round-3 debate complete and SOUND-with-doc-fold-ins (see the round-3 block above); design.md NOT written.
 - At the consolidated approval gate the user approved 176 & 178 and HELD this feature for a further look. Status stays spec-ready.
 - To resume: /sdd-design <slug> quick re-reads this context and can go straight to writing design.md + design-approved once the user confirms (all round-3 fold-ins + locked decisions are already recorded here — no further debate needed unless the user requests changes).
+
+## Session 2026-09-05 — sdd-design COMPLETE (design-approved)
+
+- Phase 1 Grilling: 4 rounds (quick, extended by user through rounds 2-4). Round-4 adversary SOUND, no Floor breach; all prior objections resolved. design.md written.
+- Chosen approach: durable readiness cache (022_readiness_cache, two-path FAST/SLOW, NO slow-path reuse, bar_epoch=max(eval,benchmark), reuse _definition_fingerprint, stale_after_seconds<86400 server-bounded); empty-universe via 023_opportunity_compute_state stamped on ALL three empty-completion paths (_materialize cold, _kick._run, _opportunity_refresh_tick daily — via a shared _replace_and_stamp helper, settle at /sdd-spec); FR-4 success-only failure-gated memo; FR-2 per-query staleTime; additive computed_at=2.
+- Business Rules: FR-1 EXTEND; FR-3 CHANGE (C-16) USER SIGNED OFF this session (short-TTL ~30s + self-heal). Constitution: C-07, C-09, C-05, C-16, P-03. Floor breaches: none.
+- USER APPROVED design 2026-09-05. Status: spec-ready → design-approved.
+- Open risks to /sdd-spec: daily-tick stamping (shared helper vs documented one-poll gap; don't perturb @AC-8/9/158); empty→non-empty within-one-TTL test; AC-12 parity cite SignalReadiness.tsx:31; 176-before-177 signatures.
+- Next: /sdd-spec readiness-caching-poll-discipline.
