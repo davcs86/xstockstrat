@@ -148,7 +148,7 @@ async def test_new_daily_bar_busts_fast_gate_but_same_day_serves_fast():
 
 @pytest.mark.asyncio
 async def test_uncovered_pair_computes_on_demand_and_writes_row():
-    """AC-5: a pair with no cache row computes synchronously (SLOW) and writes a row — never blank."""
+    """AC-5: a pair with no cache row computes synchronously (SLOW) and writes a row, never blank."""
     svc = _cache_svc({"TSLA": _real_bars("TSLA", [200.0, 210.0, 220.0])})
     svc._readiness_cache_repo.read_many = AsyncMock(return_value={})  # uncovered
     req = analysis_pb2.EvaluateReadinessRequest(strategy_id="s1", symbols=["TSLA"])
