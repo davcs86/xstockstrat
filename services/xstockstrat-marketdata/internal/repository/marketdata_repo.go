@@ -304,6 +304,52 @@ func (r *MarketDataRepo) GetLatestQuote(ctx context.Context, symbol string) (*ma
 	}, nil
 }
 
+// GetLatestQuotesBatch returns the most recent quote per requested symbol in one query (feature
+// 178). A symbol with no stored quote is absent from the map (null-not-zero) — never a zero Quote.
+// DISTINCT ON (symbol) ORDER BY symbol, time DESC rides the existing idx_quotes_symbol_time
+// (migration 001:56), so cache hits stay index-shaped — no new migration.
+func (r *MarketDataRepo) GetLatestQuotesBatch(ctx context.Context, symbols []string) (map[string]*marketdatav1.Quote, error) {
+	out := make(map[string]*marketdatav1.Quote, len(symbols))
+	if len(symbols) == 0 {
+		return out, nil
+	}
+	const sql = `
+		SELECT DISTINCT ON (symbol) time, symbol, ask_price, ask_size, bid_price, bid_size, source
+		FROM marketdata.quotes
+		WHERE symbol = ANY($1)
+		ORDER BY symbol, time DESC`
+	rows, err := r.pool.Query(ctx, sql, symbols)
+	if err != nil {
+		return nil, fmt.Errorf("get latest quotes batch: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			t                  time.Time
+			sym                string
+			askPrice, bidPrice float64
+			askSize, bidSize   int32
+			source             string
+		)
+		if err := rows.Scan(&t, &sym, &askPrice, &askSize, &bidPrice, &bidSize, &source); err != nil {
+			return nil, fmt.Errorf("scan latest quotes batch: %w", err)
+		}
+		out[sym] = &marketdatav1.Quote{
+			Time:     timestamppb.New(t),
+			Symbol:   sym,
+			AskPrice: askPrice,
+			AskSize:  askSize,
+			BidPrice: bidPrice,
+			BidSize:  bidSize,
+			Source:   source,
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate latest quotes batch: %w", err)
+	}
+	return out, nil
+}
+
 // ── Fundamentals cache (feature 059) ─────────────────────────────────────────
 // Reuses the existing pgxpool — no second pool (DB budget stays 2).
 

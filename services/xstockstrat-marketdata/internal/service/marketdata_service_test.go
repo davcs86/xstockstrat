@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -976,5 +977,134 @@ func TestResolveIngestTimeframes(t *testing.T) {
 				t.Errorf("resolveIngestTimeframes(%q): expected %d WARN record(s), got %d", tc.raw, tc.wantWarn, warnCount)
 			}
 		})
+	}
+}
+
+// ── feature 178: GetLatestQuotes batch method (single-flight + null-not-zero) ─────────────────
+
+// fakeMultiSource implements source.DataSourceClient AND source.MultiSymbolSource. It serves only
+// the symbols in `quotes` (an absent symbol proves null-not-zero) and counts upstream fetches; the
+// optional started/release channels let a test force overlap to prove single-flight coalescing.
+type fakeMultiSource struct {
+	mu      sync.Mutex
+	calls   int
+	quotes  map[string]*marketdatav1.Quote
+	started chan struct{}
+	release chan struct{}
+}
+
+func (f *fakeMultiSource) GetLatestQuotesMulti(_ context.Context, symbols []string) (map[string]*marketdatav1.Quote, error) {
+	f.mu.Lock()
+	f.calls++
+	f.mu.Unlock()
+	if f.started != nil {
+		close(f.started) // single-flight runs the fn once (leader), so this closes exactly once
+	}
+	if f.release != nil {
+		<-f.release
+	}
+	out := map[string]*marketdatav1.Quote{}
+	for _, s := range symbols {
+		if q, ok := f.quotes[s]; ok {
+			out[s] = q
+		}
+	}
+	return out, nil
+}
+
+func (*fakeMultiSource) GetBarsMulti(context.Context, []string, string, time.Time, time.Time) (map[string][]*marketdatav1.Bar, error) {
+	return nil, nil
+}
+func (*fakeMultiSource) GetBars(context.Context, string, string, time.Time, time.Time) ([]*marketdatav1.Bar, error) {
+	return nil, nil
+}
+func (*fakeMultiSource) GetLatestQuote(context.Context, string) (*marketdatav1.Quote, error) {
+	return nil, nil
+}
+func (*fakeMultiSource) ListAssets(context.Context, string) ([]*commonv1.Asset, error) {
+	return nil, nil
+}
+func (*fakeMultiSource) StreamBars(context.Context, []string, string) (<-chan *marketdatav1.Bar, error) {
+	return nil, nil
+}
+func (*fakeMultiSource) StreamQuotes(context.Context, []string) (<-chan *marketdatav1.Quote, error) {
+	return nil, nil
+}
+
+// TestGetLatestQuotes_SingleFlightCoalescesColdFetch — @AC-3: five concurrent batch calls for the
+// same cold symbol trigger exactly one upstream Alpaca fetch, and all callers receive the quote.
+// Drives the no-DB path (nil repo → every symbol is cold) so no database is needed.
+func TestGetLatestQuotes_SingleFlightCoalescesColdFetch(t *testing.T) {
+	q := &marketdatav1.Quote{Symbol: "ZZZZ", AskPrice: 10, BidPrice: 9}
+	fake := &fakeMultiSource{
+		quotes:  map[string]*marketdatav1.Quote{"ZZZZ": q},
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	reg := source.NewRegistry()
+	reg.Register("alpaca", fake)
+	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}}
+
+	const n = 5
+	results := make([]*marketdatav1.Quote, n)
+	errs := make([]error, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			out, err := svc.GetLatestQuotes(context.Background(), []string{"ZZZZ"})
+			errs[i] = err
+			if len(out) == 1 {
+				results[i] = out[0]
+			}
+		}(i)
+	}
+	<-fake.started                    // the leader is inside the upstream fetch
+	time.Sleep(25 * time.Millisecond) // let the other four park in singleflight.Do
+	close(fake.release)               // let the fetch return
+	wg.Wait()
+
+	if fake.calls != 1 {
+		t.Fatalf("expected exactly 1 upstream fetch under concurrency, got %d", fake.calls)
+	}
+	for i := 0; i < n; i++ {
+		if errs[i] != nil {
+			t.Fatalf("caller %d error: %v", i, errs[i])
+		}
+		if results[i] == nil || results[i].Symbol != "ZZZZ" {
+			t.Fatalf("caller %d got %v, want ZZZZ quote", i, results[i])
+		}
+	}
+}
+
+// TestGetLatestQuotes_OmitsMissingSymbol — @AC-4: a symbol the source can't serve is absent from
+// the result (null-not-zero), never a fabricated zero-price Quote.
+func TestGetLatestQuotes_OmitsMissingSymbol(t *testing.T) {
+	fake := &fakeMultiSource{
+		quotes: map[string]*marketdatav1.Quote{
+			"AAPL": {Symbol: "AAPL", AskPrice: 190, BidPrice: 189},
+		}, // NOQUOTE deliberately absent
+	}
+	reg := source.NewRegistry()
+	reg.Register("alpaca", fake)
+	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}}
+
+	out, err := svc.GetLatestQuotes(context.Background(), []string{"AAPL", "NOQUOTE"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	bySym := map[string]*marketdatav1.Quote{}
+	for _, qq := range out {
+		bySym[qq.Symbol] = qq
+	}
+	if _, ok := bySym["AAPL"]; !ok {
+		t.Fatalf("AAPL missing from batch result")
+	}
+	if _, ok := bySym["NOQUOTE"]; ok {
+		t.Fatalf("NOQUOTE must be omitted (null-not-zero), got a Quote")
+	}
+	if len(out) != 1 {
+		t.Fatalf("want exactly 1 quote, got %d", len(out))
 	}
 }

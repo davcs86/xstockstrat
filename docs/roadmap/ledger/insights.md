@@ -2973,6 +2973,53 @@ reusing.
   the offload with a peak-counter teeth test (exact bound, not an upper bound) + a head-of-line
   isolation test (a spinning core in the executor must not stall a concurrent reader). No new ID.
 
+### 2026-09-05 — quote-fanout-batching — perf
+- **Pattern**: Collapse a serial per-item fan-out (N gRPC or N DB calls) into a batch WITHOUT changing
+  the response contract or losing the "missing ≠ zero" discipline. Three shapes landed: (1) an
+  **additive batch RPC** mirroring an existing `*Multi` precedent, returning `repeated <Elem>`
+  **self-keyed** on the element's own id (an absent item is omitted → null-not-zero, no
+  `map<>` needed, buf-breaking-safe); (2) a cache-first batch service method = one batched repo read
+  (`DISTINCT ON (key) ... ORDER BY key, ts DESC` over the *existing* per-key index — no migration) +
+  one upstream fetch for the cold remainder **coalesced under a `singleflight.Group` keyed on the
+  sorted cold set** (concurrent callers share one fetch); (3) a `WHERE key = ANY($1::uuid[])` +
+  `ORDER BY key, sub` read that replaces a 1+N loop, grouped into `map[key][]row` preserving per-key
+  order. Consumer side: one helper that batches then re-keys by id, where a whole-call RPC error
+  returns an empty map so every item is "missing" — the same neutral outcome as N failing singular
+  calls (never a fabricated zero).
+- **Evidence**: `marketdata.proto` `GetLatestQuotes`; `marketdata_repo.go` `GetLatestQuotesBatch`,
+  `marketdata_service.go` `GetLatestQuotes` (+`quoteSingleflight`); `portfolio_service.go`
+  `latestQuotesFor` (4 sites); `watchlist_repo.go` `bindingsByWatchlist`; feature 178 Steps 3/5/7.
+- **Rule it implies**: (a) batch by mirroring the closest existing `*Multi`/`ANY` precedent, not a new
+  shape; (b) a batched "latest per key" repo read is a NEW method (`DISTINCT ON`), never a `LIMIT`ed
+  clone of the singular `... LIMIT 1`; (c) key single-flight on the SORTED cold SET so it actually
+  coalesces; (d) preserve any per-site formula byte-identical + add a cross-path parity test (PR#735
+  scar); (e) for the offline test, a concrete `*pgxpool.Pool` field blocks pgxmock — add the mockable
+  `queryRower` seam (as PortfolioRepo already did) rather than a live DB. No new ID.
+
+### 2026-09-05 — ui-resume-halted-account — reuse
+- **Pattern**: Adding a confirm-gated privileged row action reuses the canonical `RowActionsMenu`
+  (admin-gated action + reason-surfacing `AlertDialog`) rather than a bespoke button. Two e2e
+  consequences to plan for: the dropdown stays *mounted* through the confirm flow (Radix
+  `onSelect` `preventDefault`), so (a) the halt reason renders in both the dialog and the row behind
+  it — scope reason assertions to `getByRole('alertdialog')` to avoid a strict-mode dup; and (b)
+  re-opening the row menu after confirm must `Escape`-reset first or the trigger click deadlocks
+  against the still-open menu.
+- **Evidence**: `services/xstockstrat-ui/src/components/shared/RowActionsMenu.tsx:90-100`;
+  `services/xstockstrat-ui/e2e/trader/account-resume.spec.ts` @AC-3/@AC-6; feature 179 Deviation Log.
+- **Rule it implies**: reuse `RowActionsMenu` for confirm-gated row actions (C-17); when e2e-testing
+  one, scope dialog assertions and reset the menu between interactions — no new Constitution ID.
+
+### 2026-09-05 — ui-resume-halted-account — design
+- **Pattern**: An "optimistic clear then refetch" UI mutation reads cleanest as a full-replace context
+  mutator (`applyAccountUpdate`, fail-loud on a missing id) fed by the *authoritative* server response,
+  followed by a background `refreshAccounts()`. The e2e mock should echo the requested id back mutated
+  so the optimistic path is actually exercised, not masked by the refetch.
+- **Evidence**: `services/xstockstrat-ui/src/context/AccountContext.tsx` `applyAccountUpdate`;
+  `services/xstockstrat-ui/src/components/trader/accountShared.tsx` `handleResume`;
+  `services/xstockstrat-ui/e2e/mock-backend.ts` `resumeAccount` (id echo).
+- **Rule it implies**: drive an optimistic-then-refetch mutation from the server response, and make the
+  mock echo identity so the optimistic frame is under test — no new ID.
+
 ### 2026-09-05 — readiness-caching-poll-discipline — perf
 - **Pattern**: Cache a decide-surface read WITHOUT ever presenting stale-as-fresh by keying the cache
   entry on the *inputs that must invalidate it* and carrying an explicit `computed_at`. Three shapes

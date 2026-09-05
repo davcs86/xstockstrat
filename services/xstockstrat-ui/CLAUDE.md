@@ -148,7 +148,9 @@ The physical routes/segments above are **unchanged**; feature 083 layers an oppo
   values (C-10(b)) and the fill lineage.
 - **Enum render maps** — `src/lib/opportunityShared.tsx` holds the exhaustive
   `Record<Enum, EnumRender>` maps (`OPPORTUNITY_ACTION`, `CONDITION_STATE`, `POSITION_RISK_FLAG`,
-  `SOURCE_HEALTH`) + `EnumBadge`. Adding a proto enum value without a map entry fails `tsc` here.
+  `SOURCE_HEALTH`, `HALT_SOURCE`) + `EnumBadge`. Adding a proto enum value without a map entry fails
+  `tsc` here. (`HALT_SOURCE` was extracted here from the positions page by feature 179 so the
+  account-management surfaces can reuse it.)
 - **Copilot rail (beta)** — `src/components/copilot/CopilotRail.tsx`, a 310px global rail mounted in
   `PlatformHeader`, default off via `src/context/ChromeContext.tsx` (`showCopilot`). Two no-LLM
   templated reads (pure helpers in `src/lib/copilot.ts`) + an **append-only** note thread persisted

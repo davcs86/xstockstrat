@@ -19,6 +19,9 @@ import { Field, FieldError } from '../ui/field';
 import { RowActionsMenu } from '../shared/RowActionsMenu';
 import { FormDialog } from '../shared/FormDialog';
 import { CredentialStatusBadge } from './CredentialStatusBadge';
+import { HaltBadge } from './HaltBadge';
+import { EnumBadge, HALT_SOURCE } from '@/lib/opportunityShared';
+import { useIsAdmin } from '@/hooks/useLiveStrategies';
 import { brokerLabel } from '@/lib/brokers';
 
 export interface CredentialState {
@@ -264,10 +267,12 @@ export function AccountRow({
   /** Show the account's UUID under its name (the full accounts page; off on the compact panel). */
   showId?: boolean;
 }) {
-  const { accounts, selectedAccountId, setSelectedAccountId, refreshAccounts } =
+  const { accounts, selectedAccountId, setSelectedAccountId, refreshAccounts, applyAccountUpdate } =
     useAccountContext();
+  const isAdmin = useIsAdmin().data === true;
   const [editing, setEditing] = React.useState(false);
   const [removing, setRemoving] = React.useState(false);
+  const [resuming, setResuming] = React.useState(false);
   // Offline accounts have no credentials — hide "Edit keys" (the backend rejects the update for offline).
   const isOffline = account.brokerType === BrokerType.OFFLINE;
 
@@ -285,6 +290,18 @@ export function AccountRow({
     }
   }
 
+  async function handleResume() {
+    setResuming(true);
+    try {
+      // Optimistic clear from the authoritative response, then a background refetch (feature 179).
+      const { account: updated } = await tradingClient.resumeAccount({ accountId: account.id });
+      if (updated) applyAccountUpdate(updated);
+      await refreshAccounts();
+    } finally {
+      setResuming(false);
+    }
+  }
+
   return (
     <div
       data-testid={`account-row-${account.id}`}
@@ -296,6 +313,15 @@ export function AccountRow({
             <span className="text-sm font-medium">{account.displayName}</span>
             <Badge variant="secondary">{brokerLabel(account.brokerType)}</Badge>
             <CredentialStatusBadge status={account.credentialStatus} />
+            {account.halted === true && (
+              <>
+                <HaltBadge reason={account.haltReason} />
+                {account.haltReason && (
+                  <span className="text-xs text-muted-foreground">{account.haltReason}</span>
+                )}
+                <EnumBadge render={HALT_SOURCE[account.haltSource]} />
+              </>
+            )}
             {showId && (
               <span className="font-mono text-[11px] break-all text-muted-foreground">
                 {account.id}
@@ -309,6 +335,24 @@ export function AccountRow({
               triggerLabel={`Actions for ${account.displayName}`}
               actions={[
                 ...(isOffline ? [] : [{ label: 'Edit keys', onSelect: () => setEditing(true) }]),
+                ...(isAdmin && account.halted
+                  ? [
+                      {
+                        label: 'Resume',
+                        onSelect: handleResume,
+                        disabled: resuming,
+                        confirm: {
+                          title: 'Resume account',
+                          description: (
+                            <>
+                              Resume {account.displayName}? Halt reason: {account.haltReason}. This
+                              clears the halt and re-enables order placement.
+                            </>
+                          ),
+                        },
+                      },
+                    ]
+                  : []),
                 {
                   label: 'Remove',
                   destructive: true,

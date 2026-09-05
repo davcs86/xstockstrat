@@ -53,5 +53,23 @@ export const BROKER_ACCOUNT_OFFLINE = {
   credentialStatus: CREDENTIAL_STATUS_UNSPECIFIED,
 };
 
+/**
+ * A halted broker account (feature 179). `isActive: true` AND `halted: true` together — the
+ * load-bearing invariant: the Resume action lives inside the `isActive` gate, so a halted-but-
+ * inactive fixture would make Step 8 green vacuously (fails.md:1650). `haltSource: 1` =
+ * HALT_SOURCE_BRACKET_PROTECTION.
+ */
+export const BROKER_ACCOUNT_HALTED = {
+  id: 'halted-001',
+  displayName: 'Halted Alpaca',
+  brokerType: 1, // BROKER_TYPE_ALPACA
+  isPaper: true,
+  isActive: true,
+  credentialStatus: CREDENTIAL_STATUS_VALID,
+  halted: true,
+  haltReason: 'bracket flatten failed',
+  haltSource: 1, // HALT_SOURCE_BRACKET_PROTECTION
+};
+
 /** The default two-account universe (Alpaca + IBKR paper). */
 export const BROKER_ACCOUNTS = [BROKER_ACCOUNT_ALPACA, BROKER_ACCOUNT_IBKR];

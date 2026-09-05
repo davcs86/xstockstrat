@@ -86,3 +86,94 @@ Status unchanged: **spec-ready**. design.md NOT yet written (awaiting consolidat
 - USER APPROVED design 2026-09-05. Status: spec-ready → design-approved.
 - Open risks to /sdd-spec: place HaltBadge in the :295-304 badge row (not the action block); stateful e2e mock; verify server-bundle safety with a real next build (fails.md:1652).
 - Next: /sdd-spec ui-resume-halted-account.
+
+## Session 2026-09-05 — sdd-spec
+
+- Generated implementation-spec.md with 8 steps. Status → implementation-ready.
+- All 8 steps modify `xstockstrat-ui` only (no backend/proto/migration/config change). Reviewers
+  snapshot finalized: xstockstrat-ui owner + Security (Steps 3/5/8, privileged mutation); no trading
+  reviewer (RPC consumed unchanged).
+- Every `@AC-*` (AC-1..AC-6) is covered by the single Playwright spec in Step 8; supporting service
+  steps mapped in the Scenario Coverage table. Consumer surface (C-14): UI `/trader` account-mgmt,
+  already nav-reachable at `/trader/accounts` (AppShell) — no PLATFORM_SUBNAV registration needed.
+- Key codebase findings (all verified against current tree, not just recon):
+  - `resumeAccount` / `ResumeAccount` is **absent** everywhere in `src/`+`e2e/` today — the BFF route,
+    the AccountRow control, and the e2e are all net-new. The generated `TradingService` client already
+    carries `resumeAccount` (proto `trading.proto:43,299-306`), so no browser-client file edit.
+  - `HALT_SOURCE` is a non-exported local const at `positions/page.tsx:41-46` (comment "Kept local");
+    Step 1 extracts it to `opportunityShared.tsx` (data-only, server-bundle-safe per fails.md:1652) and
+    rewires the positions page — same PR (C-10).
+  - `forwardAdmin` (`bffShared.ts:72-76`) = `forward + requireAdminScope`, applies `backendHeaders`
+    (x-user-id/x-access-scope/x-trace-id) — Step 3 reuses it (no header re-implementation; mirrors the
+    RPC's admin-only gate at the edge without widening).
+  - `Badge` has an app-specific `warning` (amber) variant at `badge.tsx:25` — HaltBadge (Step 2) uses
+    it; distinct from the red `destructive` credential badge and red `RECONCILIATION` EnumBadge (C-17).
+  - AccountRow badge row (`accountShared.tsx:295-304`) renders unconditionally (outside the `:306`
+    `isActive` gate) — indicator goes there (survives halted&&!isActive), Resume action stays
+    isActive-gated in `RowActionsMenu`. `useIsAdmin()` at `useLiveStrategies.ts:41`; `/api/auth/me`
+    returns `isAdmin` from `roles.includes('admin')`.
+  - AccountContext has a swallowed-catch refetch (`AccountContext.tsx:41-43`); Step 4 adds
+    `applyAccountUpdate` (full-replace, fail-loud on missing id) for optimistic clear.
+  - e2e auth helpers exist: `addAdminCookie` (roles ['admin']) / `addAuthCookie` (no roles = non-admin),
+    `e2e/helpers/auth.ts:64-73`. Halt-mock via `page.route(...ListBrokerAccounts...)` pattern proven at
+    `positions-reconciliation.spec.ts:56-100`. Mock-backend trader TradingService (`mock-backend.ts:242-306`)
+    has no `resumeAccount` handler — Step 7 adds an unconditional-success one so the non-admin test
+    isolates the `forwardAdmin` gate (fails.md:1650 vacuous-green). Halted fixture must set
+    `isActive:true + halted:true` together (context.md round-3 invariant).
+
+## Session 2026-09-05 — sdd-review impl-spec (advisory)
+
+- Result: PASS WITH WARNINGS — 0 blockers, all findings advisory/NOTE-level (8/8 steps grounded,
+  no Floor risk; UI-only, no proto/migration/config/backend change). Every referenced symbol/path
+  resolved in `services/xstockstrat-ui/` + `packages/proto/` — `HALT_SOURCE` local const, the
+  `opportunityShared.tsx` export lines, `Badge variant="warning"` (`badge.tsx:25`), `forwardAdmin`
+  (`bffShared.ts:72`), `AccountContext`/`AccountRow`/`AccountSelector`, `useIsAdmin`, and the generated
+  `TradingService.resumeAccount` (no client-file edit). C-14/C-10/C-15 clean; C-03 header propagation
+  inherited via `forwardAdmin`→`forward`→`backendHeaders`.
+- Overlap findings: CLEAN — UI-only; no proto/migration/config; none of the shared UI files 179 edits
+  (`opportunityShared.tsx`, `accountShared.tsx`, `AccountContext`, `AccountSelector`, `traderBff.ts`,
+  positions/page.tsx, e2e fixtures) is touched by any other in-flight feature. `ResumeAccount` RPC +
+  `BrokerAccount` halt fields already on trunk (features 030/102). No merge-order entry warranted.
+- Advisory NOTEs carried into execution (none blocking, no spec change made):
+  - Step 2 (C-17): the reused `Badge variant="warning"` uses raw Tailwind palette utilities
+    (`bg-yellow-500/text-yellow-400`) rather than a `--warning` role token — [x] PRE-EXISTING in
+    `ui/badge.tsx` (features 083/119), guarded by `badge.test.ts`, NOT introduced here; 179's own call
+    sites are C-17-clean (no color literals, iconOnly carries aria-label). Track in the ui-ux-governance
+    deviation backlog if not already; not this feature's to fix.
+  - Steps 7/8 (C-08): `test` steps state no coverage threshold — [x] accepted (xstockstrat-ui e2e has no
+    coverage gate; documented in the Execution Summary).
+  - Step 7 (DRY): proposed inline `credentialStatus: 1` diverges from the file's `CREDENTIAL_STATUS_VALID`
+    const — [ ] use the named const at execute (trivial local-DRY).
+  - Step 1 (C-01): local const line-ref off-by-one (`:43-47` vs cited `:43-46`) — [ ] re-anchor at execute.
+  - Step 8 (C-15 minor): the @AC-1 e2e case exercises the BRACKET_PROTECTION fixture while
+    acceptance @AC-1's illustrative Given names RECONCILIATION — [x] accepted (both are valid halted
+    states; the behavioral assertion — indicator + reason + source badge shown pre-order — is identical).
+
+## Session 2026-09-05 — sdd-execute sequential (Steps 1–8, code-completed)
+
+- **Executed all 8 steps** on `feature/ui-resume-halted-account`, one commit per step, red-before-green
+  anchored on the Step 8 Playwright spec.
+  - RED: authored `e2e/trader/account-resume.spec.ts` first; against the pre-implementation tree all
+    6 @AC-* cases FAIL (no HaltBadge, no Resume action, no `resumeAccount` BFF route) — `RED_EXIT=1`.
+  - GREEN after Steps 1–7: `pnpm exec playwright test e2e/trader/account-resume.spec.ts --project=chromium`
+    → **7 passed** (6 @AC-* + SSR warmup setup), no flake on the stateful @AC-3. `pnpm run lint` clean
+    (only pre-existing warnings in unrelated files; none reference the new/changed files).
+- **Files landed** (by step): 1 `opportunityShared.tsx` + `positions/page.tsx` (extract `HALT_SOURCE`);
+  2 `HaltBadge.tsx` (new); 3 `traderBff.ts` (`resumeAccount: forwardAdmin`); 4 `AccountContext.tsx`
+  (`applyAccountUpdate`); 5 `accountShared.tsx` (indicator + admin Resume via `RowActionsMenu`);
+  6 `AccountSelector.tsx` (iconOnly badge + `hasAccountIssue` gear dot); 7 `e2e/fixtures/accounts.ts`
+  (`BROKER_ACCOUNT_HALTED`), `INVENTORY.md`, `e2e/mock-backend.ts` (mock `resumeAccount`); 8
+  `e2e/trader/account-resume.spec.ts` (new).
+- **GREEN-phase test-robustness fixes** (Deviation Log): @AC-6 scoped the reason assertion to the
+  `alertdialog` (strict-mode dup with the row behind it); @AC-3 added an `Escape` reset before
+  re-opening the row menu (Radix keeps the dropdown mounted through the confirm flow via
+  `onSelect` `preventDefault`). `RowActionsMenu` itself untouched (out of scope). The mock
+  `resumeAccount` echoes the requested id cleared so @AC-3 truly exercises `applyAccountUpdate`.
+- **Advisory NOTEs from impl-spec review** resolved at execute: Step 7 used the named
+  `CREDENTIAL_STATUS_VALID` const (not inline `1`); the `Badge variant="warning"` C-17 palette NOTE is
+  pre-existing/guarded, not this feature's to fix; @AC-1 uses the BRACKET_PROTECTION fixture (both
+  halted states are behaviorally equivalent for the indicator assertion).
+- **Constitution**: C-14 (single UI `/trader` consumer surface, no Agent change); C-03 header
+  propagation inherited via `forwardAdmin`→`forward`→`backendHeaders` (no re-implementation); C-12
+  fixtures from `../fixtures` + `../helpers/auth` (no inline domain literals); no proto/migration/config
+  /backend change (UI-only, against the pre-existing admin-only `ResumeAccount` RPC).
