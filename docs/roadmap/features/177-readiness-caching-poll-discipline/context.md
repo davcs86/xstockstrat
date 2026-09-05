@@ -86,3 +86,58 @@ Status unchanged: **spec-ready**. design.md NOT yet written (awaiting the consol
 - USER APPROVED design 2026-09-05. Status: spec-ready → design-approved.
 - Open risks to /sdd-spec: daily-tick stamping (shared helper vs documented one-poll gap; don't perturb @AC-8/9/158); empty→non-empty within-one-TTL test; AC-12 parity cite SignalReadiness.tsx:31; 176-before-177 signatures.
 - Next: /sdd-spec readiness-caching-poll-discipline.
+
+## Session 2026-09-05 — sdd-spec
+
+- Generated implementation-spec.md with **13 steps**. Status: design-approved → implementation-ready.
+- Scenario coverage (C-15): AC-1/AC-2 → Step 7; AC-3 → Step 13; AC-4 → Step 9; AC-5 → Step 11. All covered.
+- Reviewers snapshot finalized: analysis owner, ui owner, config owner, Proto Reviewer, DBA.
+- Key codebase findings (all cited against the CURRENT post-176 tree — recon.md line numbers had
+  drifted because feature 176, now `code-completed`, is already merged into this feature branch):
+  - **176 is present**: `EvaluateReadiness` is post-176 restructured — an `asyncio.gather` over a
+    per-symbol `_readiness_for` coroutine (`servicer.py:2696`, body `:2744-2766`), and
+    `_compute_opportunities` / `ThreadPoolExecutor` / `analysis.opportunity.max_concurrent_candidates`
+    exist (`:395-406`). Spec'd FR-1/FR-4 against this shape. 176 must merge to main-dev before 177
+    integrates (merge-order.md:238-242).
+  - **Migrations top at `021`** (`021_pnl_positions_fees_total`) — next free analysis NNN = **022**,
+    then **023**. (The `026_analysis_engine_blend_keys` referenced in analysis CLAUDE.md is a
+    *config-service* migration, not analysis — no collision.) Config-service dir tops at `026` (024
+    gap); if a config seed migration is ever added for the readiness bound, next free = `027`.
+  - **Fingerprint reuse**: `_definition_fingerprint(definition_json: dict)` at `servicer.py:4389`;
+    must be fed `row["definition_json"]` (DB row dict), per the canonical `:2044`/`:641` call form —
+    never a request dict. No new hash.
+  - **bar_epoch source**: bars ascending, newest = `bars[-1].time.seconds`; benchmark from
+    `_load_benchmark_bars_windowed` (`:2737`). `bar_epoch = max(evaluated, benchmark)` newest.
+  - **Proto**: `google/protobuf/timestamp.proto` already imported (`analysis.proto:7`) — additive
+    `computed_at = 2` on `EvaluateReadinessResponse` (`:644-646`) needs no new import.
+  - **AC-12 parity proof confirmed**: `SignalReadiness.tsx:28` (`useOpportunities()`) + `:31`
+    (consumes `opps?.opportunities`) — no direct `GetLatestPrice` call, so the FR-4 memo introduces
+    no divergence.
+  - **FR-2 targets**: `WatchlistReadiness.tsx:193` `useQueries` (no `staleTime` today); copy per-query
+    `staleTime: 30_000` from `opportunities/page.tsx:136` (NOT a QueryClient default — @AC-6/167).
+  - **SCALAR_BOUNDS_REGISTRY**: config const at `configServiceImpl.ts:98`, enforced at SetConfig
+    (`:376-381`); add `'analysis.readiness.stale_after_seconds': { minValue: 0, maxValue: 86399 }`.
+
+## Decisions (sdd-spec)
+
+- **Three new config keys** (design's "two no-seed `analysis.opportunity.*`" + the bounded readiness key):
+  `analysis.readiness.stale_after_seconds` (bounded [0,86399], seed-less registry entry only),
+  `analysis.opportunity.empty_recompute_ttl_seconds` (no-seed, ~30s),
+  `analysis.opportunity.live_enrich_ttl_seconds` (no-seed, ~10s memo TTL). All read via `get_int_present`.
+- **No config-service seed migration** for the readiness bound (minimal path — behavior #2). The
+  `SCALAR_BOUNDS_REGISTRY` code entry enforces `<86400` at SetConfig without a seed row. Flagged in
+  Step 5 for the config owner: add one mirroring config `019_register_analysis_signal_decay_half_life`
+  only if config-ui discoverability of the bounded key is wanted (P-03 — surfaced, not silently decided).
+- **FR-3 daily-tick stamping RESOLVED** to the design's *preferred* wiring: a shared
+  `_replace_and_stamp_compute_state(user_id, rows)` helper replaces `replace_for_user` at all three
+  empty-yielding sites (`:3135` cold, `:3148` `_kick._run`, `:3649` daily tick), stamping
+  `opportunity_compute_state` only on an empty universe. The helper touches nothing around
+  `schedule.advance`, so feature-158 @AC-8/@AC-9/158 re-anchoring is preserved (Step 9 asserts it).
+- **Response `computed_at` = min (oldest) per-symbol computed_at** across served rows — a spec-level
+  realization of FR-5 not fully pinned in design.md; recorded (P-03), confirm at impl-spec review.
+
+## Open Threads (for /sdd-review impl-spec)
+
+- Confirm the min-of-computed_at response rule (Step 6) and the no-config-seed-migration decision (Step 5).
+- Confirm the readiness/empty/enrich default values (30/30/10 s) are acceptable (all within the <86400 bound).
+- 176 → 177 merge sequencing must hold at integration (merge-order.md).
