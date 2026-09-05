@@ -2972,3 +2972,25 @@ reusing.
   re-acquire (feature 176 `_candidates_sem` vs `_bars_fetch_sem`), or a self-reentry deadlocks; prove
   the offload with a peak-counter teeth test (exact bound, not an upper bound) + a head-of-line
   isolation test (a spinning core in the executor must not stall a concurrent reader). No new ID.
+
+### 2026-09-05 — readiness-caching-poll-discipline — perf
+- **Pattern**: Cache a decide-surface read WITHOUT ever presenting stale-as-fresh by keying the cache
+  entry on the *inputs that must invalidate it* and carrying an explicit `computed_at`. Three shapes
+  landed: (1) a per-`(user,strategy,rule,symbol)` FAST/SLOW cache keyed on the **definition
+  fingerprint + `bar_epoch`** (`max(evaluated, benchmark)` last-bar) so a FAST hit is byte-identical
+  to a fresh compute and a new bar always busts it — never a slow-path `bar_epoch` reuse (a same-
+  `time.seconds` intraday 1d update must re-evaluate); (2) a **dedicated compute-state table** (not an
+  in-band queue sentinel — the sentinel is eaten by the read's conviction floor and re-kicks every
+  poll) that stamps a short TTL only on an **empty** compute, gating redundant recompute while a
+  background self-heal covers empty→non-empty; (3) a **success-only** process-lifetime memo for
+  read-time live enrichment (a failed/unavailable fetch is never cached, so it drops within the TTL).
+  The response `computed_at` = the **oldest** served row's stamp (never fresher than its oldest input).
+- **Evidence**: `analysis/app/repositories/{readiness_cache,opportunity_compute_state}.py`; migrations
+  `022`/`023`; `servicer.py` `EvaluateReadiness` FAST/SLOW, `_replace_and_stamp_compute_state` (the
+  three empty `replace_for_user` sites), `_enrich_opportunities_live` memo; feature 177 Steps 6/8/10.
+- **Rule it implies**: when caching a recompute-on-read surface, (a) key the entry on every input that
+  must invalidate it (fingerprint + freshest-bar epoch), not wall-clock alone; (b) prefer a dedicated
+  state table over an in-band sentinel whenever a read-side filter would hide the sentinel; (c)
+  memoize live values **success-only**; (d) always surface an oldest-of `computed_at` so no consumer
+  can read the response as fresher than its stalest input. Client mirror: a per-query `staleTime`
+  (never a `QueryClient` default — a default forces a whole-list refetch). No new ID.
