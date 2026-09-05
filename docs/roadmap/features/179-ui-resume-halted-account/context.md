@@ -86,3 +86,37 @@ Status unchanged: **spec-ready**. design.md NOT yet written (awaiting consolidat
 - USER APPROVED design 2026-09-05. Status: spec-ready → design-approved.
 - Open risks to /sdd-spec: place HaltBadge in the :295-304 badge row (not the action block); stateful e2e mock; verify server-bundle safety with a real next build (fails.md:1652).
 - Next: /sdd-spec ui-resume-halted-account.
+
+## Session 2026-09-05 — sdd-spec
+
+- Generated implementation-spec.md with 8 steps. Status → implementation-ready.
+- All 8 steps modify `xstockstrat-ui` only (no backend/proto/migration/config change). Reviewers
+  snapshot finalized: xstockstrat-ui owner + Security (Steps 3/5/8, privileged mutation); no trading
+  reviewer (RPC consumed unchanged).
+- Every `@AC-*` (AC-1..AC-6) is covered by the single Playwright spec in Step 8; supporting service
+  steps mapped in the Scenario Coverage table. Consumer surface (C-14): UI `/trader` account-mgmt,
+  already nav-reachable at `/trader/accounts` (AppShell) — no PLATFORM_SUBNAV registration needed.
+- Key codebase findings (all verified against current tree, not just recon):
+  - `resumeAccount` / `ResumeAccount` is **absent** everywhere in `src/`+`e2e/` today — the BFF route,
+    the AccountRow control, and the e2e are all net-new. The generated `TradingService` client already
+    carries `resumeAccount` (proto `trading.proto:43,299-306`), so no browser-client file edit.
+  - `HALT_SOURCE` is a non-exported local const at `positions/page.tsx:41-46` (comment "Kept local");
+    Step 1 extracts it to `opportunityShared.tsx` (data-only, server-bundle-safe per fails.md:1652) and
+    rewires the positions page — same PR (C-10).
+  - `forwardAdmin` (`bffShared.ts:72-76`) = `forward + requireAdminScope`, applies `backendHeaders`
+    (x-user-id/x-access-scope/x-trace-id) — Step 3 reuses it (no header re-implementation; mirrors the
+    RPC's admin-only gate at the edge without widening).
+  - `Badge` has an app-specific `warning` (amber) variant at `badge.tsx:25` — HaltBadge (Step 2) uses
+    it; distinct from the red `destructive` credential badge and red `RECONCILIATION` EnumBadge (C-17).
+  - AccountRow badge row (`accountShared.tsx:295-304`) renders unconditionally (outside the `:306`
+    `isActive` gate) — indicator goes there (survives halted&&!isActive), Resume action stays
+    isActive-gated in `RowActionsMenu`. `useIsAdmin()` at `useLiveStrategies.ts:41`; `/api/auth/me`
+    returns `isAdmin` from `roles.includes('admin')`.
+  - AccountContext has a swallowed-catch refetch (`AccountContext.tsx:41-43`); Step 4 adds
+    `applyAccountUpdate` (full-replace, fail-loud on missing id) for optimistic clear.
+  - e2e auth helpers exist: `addAdminCookie` (roles ['admin']) / `addAuthCookie` (no roles = non-admin),
+    `e2e/helpers/auth.ts:64-73`. Halt-mock via `page.route(...ListBrokerAccounts...)` pattern proven at
+    `positions-reconciliation.spec.ts:56-100`. Mock-backend trader TradingService (`mock-backend.ts:242-306`)
+    has no `resumeAccount` handler — Step 7 adds an unconditional-success one so the non-admin test
+    isolates the `forwardAdmin` gate (fails.md:1650 vacuous-green). Halted fixture must set
+    `isActive:true + halted:true` together (context.md round-3 invariant).

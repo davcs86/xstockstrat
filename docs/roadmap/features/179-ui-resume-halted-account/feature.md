@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/ui-resume-halted-account`
 **Created**: 2026-09-04
-**Last Updated**: 2026-09-04
+**Last Updated**: 2026-09-05
 
 ---
 
@@ -13,6 +13,7 @@
 | 2026-09-04 | `idea` → `draft` | /sdd-story | Product spec generated from performance audit Track D |
 | 2026-09-04 | `draft` → `spec-ready` | /sdd-review | FAILED first pass (criterion 9, scope contradiction); resolved all Open Questions (admin-only scope, conservative), re-review PASS; overlap CLEAN |
 | 2026-09-05 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, extended); round-4 adversary SOUND; recon.md + design.md written |
+| 2026-09-05 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps |
 
 ---
 
@@ -22,7 +23,7 @@
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Recon Dossier](recon.md) — grounded codebase map, Patterns to REUSE, Existing Business Rules
 - [Design](design.md) — chosen approach, rejected alternatives, open risks, Constitution rules
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec ui-resume-halted-account`_
+- [Implementation Spec](implementation-spec.md) — 8 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -42,10 +43,13 @@ re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
-| `xstockstrat-ui` owner | Trading UI correctness, Connect-RPC call safety, access-scope correctness on a privileged mutation |
-| `xstockstrat-trading` owner | Order execution correctness, halt/resume state integrity, scope enforcement on ResumeAccount |
-| Security (role) | Access-scope of the Resume mutation (admin vs operator-or-admin), no privilege widening at the BFF edge |
+| `xstockstrat-ui` owner | Trading UI correctness, Connect-RPC call safety, UI/UX consistency (C-17), test-data inventory (C-12) — all 8 steps modify `xstockstrat-ui` only |
+| Security (role) | Auth scope on the privileged Resume mutation (Steps 3, 5, 8): admin-gated at the BFF (`forwardAdmin`) with no scope widening at the edge; enforcement is the pre-existing admin-only RPC |
+
+_(No `xstockstrat-trading` reviewer — the `ResumeAccount` RPC is consumed unchanged; no backend/proto
+change in this feature.)_
 
 ## Next Action
 
-`/sdd-spec ui-resume-halted-account` — generate the implementation spec from the approved design
+`/sdd-review ui-resume-halted-account impl-spec` — validate the implementation spec, then
+`/sdd-execute ui-resume-halted-account`
