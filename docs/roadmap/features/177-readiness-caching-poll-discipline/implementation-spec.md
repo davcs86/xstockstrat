@@ -402,7 +402,7 @@ before Step 6 and the GREEN run after.)
 
 ### Step 8 — service: FR-3 empty-universe compute-state (repository + gate + shared stamp helper)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/opportunity_compute_state.py` — create
@@ -469,7 +469,7 @@ returns the helper def **plus three** call sites (the three former `replace_for_
 
 ### Step 9 — test: FR-3 empty-universe (AC-4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_opportunity_compute_state.py` — create

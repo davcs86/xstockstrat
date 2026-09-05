@@ -219,3 +219,22 @@ anchors resolve on the post-176 tree) — no mismatch, no re-spec.
   byte-identical verdicts, computed_at set); AC-2 expiry→SLOW re-stamp bar_epoch; AC-2 benchmark-only
   newer bar drives bar_epoch. RED pre-Step-6 (upsert never called / GetBars not skipped), GREEN after.
 - Full analysis suite `672 passed` (+3), coverage `85%`; ruff clean.
+
+### Steps 8–9 — done (FR-3 empty-universe compute-state, TDD red→green)
+- Step 8: new `app/repositories/opportunity_compute_state.py` (`OpportunityComputeStateRepository.get`
+  / `upsert`, literal INSERT … ON CONFLICT (user_id) DO UPDATE, both NOT NULL cols supplied). Wired
+  `self._opportunity_compute_state_repo` in `__init__`. New shared helper
+  `_replace_and_stamp_compute_state(user_id, rows, propagation_meta=None)` = `replace_for_user` then,
+  when `not rows`, best-effort `upsert(now()+ttl)` where `ttl=max(1, get_int_present(
+  "analysis.opportunity.empty_recompute_ttl_seconds",30))`. Replaced the 3 empty-yielding
+  `replace_for_user` sites (`_materialize_opportunities`, `_kick._run`, `_opportunity_refresh_tick`)
+  with the helper — `schedule.advance`/lock/exception handling untouched (feature-158 @AC-8/@AC-9).
+  `ListOpportunities` count==0 branch now consults compute-state: fresh stamp → `_kick` self-heal +
+  serve empty; absent/elapsed → synchronous `_materialize_opportunities`. Stale branch unchanged.
+- Step 9: `tests/test_opportunity_compute_state.py` — AC-4 (4 polls, compute at most once, polls 2-4
+  kick); empty→non-empty self-heal (poll2 no synchronous recompute, background kick writes the new
+  row within the TTL); stamp-on-empty-not-nonempty (helper); `_kick._run` stamps; daily-tick stamps
+  AND still advances the wall-clock schedule. RED pre-Step-8 (4/5 fail: no gate/stamp; the self-heal
+  test strengthened with a mid-poll `compute.await_count==1` assert so it too is red pre-change),
+  GREEN after.
+- Full analysis suite `677 passed` (+5), coverage `85%`; ruff clean.
