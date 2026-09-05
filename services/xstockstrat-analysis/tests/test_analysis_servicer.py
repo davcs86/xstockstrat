@@ -10,6 +10,7 @@ import inspect
 import json
 import logging
 import math
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -6064,3 +6065,79 @@ class TestOpportunityConcurrencyFeature176:
         assert _key(a) == _key(b)  # deterministic set + rank across runs
         assert len(a) >= 2
 
+# ---------------------------------------------------------------------------
+# FR-4 (feature 176) — CPU-bound simulator cores run off the event loop on a dedicated
+# ThreadPoolExecutor, so a long backtest can't head-of-line-block an interactive read; the
+# offloaded backtest stays byte-for-byte deterministic.
+# ---------------------------------------------------------------------------
+
+
+class TestBacktestOffloadFeature176:
+    @pytest.mark.asyncio
+    async def test_long_backtest_does_not_block_concurrent_read(self, monkeypatch):
+        """AC-4: while a ~0.6s CPU-bound backtest core spins in the executor thread, a concurrent
+        0.05s reader coroutine completes on schedule — the event loop is not blocked. Pre-176 (core
+        on the loop) the reader is stalled until the backtest core finishes."""
+        import app.handlers.servicer as srv
+
+        closes = [10.0 + (i % 5) for i in range(30)]
+        bars_ = [_bar(1000 + i, c) for i, c in enumerate(closes)]
+        svc = make_servicer()
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(
+            return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars_)
+        )
+        svc._indicators = MagicMock()
+        svc._indicators.ComputeIndicator = AsyncMock(
+            side_effect=[_points(closes[1:]), _points(closes[2:])]
+        )
+
+        orig_apply_fill = srv._apply_fill
+
+        def _slow_apply_fill(*a, **k):
+            time.sleep(0.01)  # per-bar CPU spin, ~0.6s total across the 30-bar core
+            return orig_apply_fill(*a, **k)
+
+        monkeypatch.setattr(srv, "_apply_fill", _slow_apply_fill)
+
+        async def _reader():
+            t = time.perf_counter()
+            await asyncio.sleep(0.05)
+            return time.perf_counter() - t
+
+        reader_elapsed, _bt = await asyncio.gather(
+            _reader(),
+            svc._backtest_symbol(
+                "AAPL", common_pb2.TimeRange(), 2, 3, 0.0, 100_000.0, 0.001, 0.0005
+            ),
+        )
+
+        assert reader_elapsed < 0.2  # loop stayed free; not stalled by the spinning backtest core
+
+    @pytest.mark.asyncio
+    async def test_offloaded_backtest_is_deterministic(self):
+        """The offloaded _backtest_symbol produces byte-identical trades/equity across two runs —
+        offloading changes scheduling, not arithmetic (the existing feature-150/151 suites lock the
+        actual serial-baseline values, which still pass through the offloaded path)."""
+        bars_ = [_bar(1000 + i, c) for i, c in enumerate([10, 11, 12, 13, 14, 9])]
+        fast, slow = [9, 10, 12, 13, 9], [11, 11, 11, 11]
+
+        def _svc():
+            svc = make_servicer()
+            svc._marketdata = MagicMock()
+            svc._marketdata.GetBars = AsyncMock(
+                return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars_)
+            )
+            svc._indicators = MagicMock()
+            svc._indicators.ComputeIndicator = AsyncMock(side_effect=[_points(fast), _points(slow)])
+            return svc
+
+        args = ("AAPL", common_pb2.TimeRange(), 2, 3, 0.0, 100_000.0, 0.001, 0.0005)
+        t1, eq1, daily1, _d1, _i1 = await _svc()._backtest_symbol(*args)
+        t2, eq2, daily2, _d2, _i2 = await _svc()._backtest_symbol(*args)
+
+        assert eq1 == eq2
+        assert daily1 == daily2
+        assert [(t.side, t.qty, t.entry_price, t.exit_price, t.pnl) for t in t1] == [
+            (t.side, t.qty, t.entry_price, t.exit_price, t.pnl) for t in t2
+        ]
