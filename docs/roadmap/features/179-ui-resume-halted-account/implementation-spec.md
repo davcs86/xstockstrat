@@ -325,7 +325,7 @@ No hardcoded color literal added (C-17). Behavioral proof: Step 8 (@AC-1/2/3/5/6
 
 ### Step 6 — service: Halt marker on `AccountSelector` (icon + folded gear dot)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/AccountSelector.tsx` — modify

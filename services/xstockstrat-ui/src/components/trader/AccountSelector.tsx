@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Settings, AlertTriangle } from 'lucide-react';
 import { useAccountContext } from '@/context/AccountContext';
 import { CredentialStatusBadge } from './CredentialStatusBadge';
+import { HaltBadge } from './HaltBadge';
 import { CredentialStatus } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { brokerLabel } from '@/lib/brokers';
 import { Badge } from '../ui/badge';
@@ -15,12 +16,13 @@ export function AccountSelector() {
   const { accounts, selectedAccountId, setSelectedAccountId } = useAccountContext();
   const activeAccounts = accounts.filter((a) => a.isActive);
 
-  // Surface a warning on the manage-accounts button when any account's keys
-  // need attention, so the user notices without opening the panel.
-  const hasCredentialIssue = activeAccounts.some(
+  // Surface a warning on the manage-accounts button when any account needs attention — bad keys
+  // OR halted (feature 179) — so the user notices without opening the panel, even when collapsed.
+  const hasAccountIssue = activeAccounts.some(
     (a) =>
       a.credentialStatus === CredentialStatus.INVALID ||
-      a.credentialStatus === CredentialStatus.UNKNOWN,
+      a.credentialStatus === CredentialStatus.UNKNOWN ||
+      a.halted === true,
   );
   const selected = activeAccounts.find((a) => a.id === selectedAccountId);
 
@@ -40,6 +42,7 @@ export function AccountSelector() {
                 {account.credentialStatus === CredentialStatus.INVALID && (
                   <AlertTriangle className="h-3 w-3 text-destructive" />
                 )}
+                {account.halted === true && <HaltBadge iconOnly reason={account.haltReason} />}
                 {account.displayName}
                 <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">
                   {brokerLabel(account.brokerType)}
@@ -66,7 +69,7 @@ export function AccountSelector() {
       >
         <Link href="/trader/accounts">
           <Settings className="h-4 w-4" />
-          {hasCredentialIssue && (
+          {hasAccountIssue && (
             // no clean shadcn-primitive fit — Badge's box model is sized for padded text
             <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-destructive" />
           )}
