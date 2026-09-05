@@ -139,3 +139,6 @@ class ConfigWatcher:
             "indicators.sandbox.allowed_imports", default="numpy,pandas,math,statistics"
         )
         return [m.strip() for m in raw.split(",") if m.strip()]
+
+    def sandbox_max_concurrent(self) -> int:
+        return self.get_int("indicators.sandbox.max_concurrent", default=4)

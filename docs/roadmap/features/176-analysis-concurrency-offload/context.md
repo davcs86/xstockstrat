@@ -122,3 +122,22 @@ merge-order WARN). Tooling: `uv sync --extra dev` for indicators + analysis; bas
   (newest-first) with both keys; noted the indicators key is enforced-not-new (no row).
 - Verified: both keys present in analysis CLAUDE.md + config-governance log; indicators row updated;
   no `migrations/` file added (no-seed). Committed directly to `feature/analysis-concurrency-offload`.
+
+### Steps 2–3 — done (FR-5 indicators sandbox offload + concurrency/timeout tests, TDD red→green)
+- RED captured: new `tests/test_execute_formula_concurrency.py` against the pre-Step-2 tree →
+  `peak == 1` (sandbox ran synchronously on the loop; 4 gathered calls serialized) — the two
+  concurrency cases FAILED; the timeout guard already passed (it is a regression guard, not a
+  discriminator).
+- Step 2 (`app/config/watcher.py`, `app/handlers/servicer.py`): added
+  `ConfigWatcher.sandbox_max_concurrent()` (method, called with `()` per spec — sits among the
+  `@property` sandbox siblings but the call sites use `()`); added `import asyncio`; built
+  `self._sandbox_sem = asyncio.Semaphore(max(1, config_watcher.sandbox_max_concurrent()))` in
+  `__init__`; wrapped the `sandbox.execute_formula(...)` call in `ExecuteFormula` as
+  `async with self._sandbox_sem: result = await asyncio.to_thread(sandbox.execute_formula, ...)`.
+  Timeout preserved (execute_formula still owns `subprocess.run(timeout=…)`).
+- Deviation (recorded in spec Deviation Log): the new `__init__` contract broke 13 bare-MagicMock
+  config doubles in `tests/test_formulas.py` (`max(1, MagicMock())` → TypeError). Fixed with a
+  `_cfg_stub()` factory + `sandbox_max_concurrent.return_value = 4` on the 3 sandbox `_cfg()` helpers.
+  Staged with the Step 2 commit (required to keep the suite green under Step 2).
+- GREEN: full indicators suite `132 passed`, coverage `81%` (≥50 gate); `ruff check` + `format`
+  clean. Step 2 grep confirms `_sandbox_sem`/`asyncio.to_thread`/`sandbox_max_concurrent` present.

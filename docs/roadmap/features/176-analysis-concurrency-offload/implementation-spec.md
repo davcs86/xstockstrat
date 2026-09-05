@@ -126,7 +126,7 @@ indicators row is updated. No `migrations/` file is added (no-seed).
 
 ### Step 2 — service: FR-5 — offload the indicators sandbox `subprocess.run` and enforce `indicators.sandbox.max_concurrent`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/config/watcher.py` — modify (add `sandbox_max_concurrent()` accessor)
@@ -190,7 +190,7 @@ indicators row is updated. No `migrations/` file is added (no-seed).
 
 ### Step 3 — test: FR-5 — concurrent formula executions run off-loop under the bound; timeout still enforced
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_sandbox.py` — modify (or a new `tests/test_execute_formula_concurrency.py`)
@@ -663,4 +663,19 @@ coverage ≥ 40%.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Step 2 — existing indicators test doubles updated for the new `__init__` config contract
+
+**Disposition**: necessary test-double maintenance (not scope creep). `IndicatorsServicer.__init__`
+now calls `config_watcher.sandbox_max_concurrent()` to size `self._sandbox_sem`. Every existing
+`IndicatorsServicer(...)` construction in `tests/test_formulas.py` passed a bare `MagicMock()` (or a
+`_cfg()` MagicMock without that method), which makes `max(1, <MagicMock>)` raise `TypeError`. Fixed
+by adding a `_cfg_stub()` factory (answers `sandbox_max_concurrent() → 4`), rewiring the 7 bare
+`MagicMock()` config args to it, and adding `cfg.sandbox_max_concurrent.return_value = 4` to the three
+sandbox `_cfg()` helpers. `tests/test_formulas.py` is not in Step 2's declared **Files** but the fix
+is required for the suite to stay green under Step 2's contract; staged with the Step 2 commit.
+
+### Step 3 — `SandboxResult.error` field in the test double
+
+**Disposition**: spec fidelity. The Step 3 monkeypatch double must return a full `SandboxResult`;
+the dataclass has a required `error: str` field (`sandbox.py:94`) the spec sketch omitted — added
+`error=""` to the double. No behavior change.
