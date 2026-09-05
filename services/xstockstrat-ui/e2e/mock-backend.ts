@@ -31,6 +31,7 @@ import {
   TEST_USER_ID,
   TEST_USER_EMAIL,
   BROKER_ACCOUNT_ALPACA,
+  BROKER_ACCOUNT_HALTED,
   BROKER_ACCOUNT_NEW,
   BROKER_ACCOUNTS,
   PORTFOLIO_ALPACA,
@@ -302,6 +303,12 @@ export async function startMockBackend(): Promise<void> {
         },
         async getTradingEnvironment() {
           return { tradingMode: 1, applicationEnv: 'development' };
+        },
+        // Feature 179 — succeed UNCONDITIONALLY: a PermissionDenied must originate ONLY from the
+        // BFF forwardAdmin gate (Step 3), never the backend, so the non-admin e2e isolates that gate.
+        // Echo the resumed id back cleared so applyAccountUpdate targets the real row (in-place clear).
+        async resumeAccount(req: { accountId: string }) {
+          return { account: { ...BROKER_ACCOUNT_HALTED, id: req.accountId, halted: false } };
         },
       });
 

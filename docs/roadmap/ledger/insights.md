@@ -2995,3 +2995,27 @@ reusing.
   coalesces; (d) preserve any per-site formula byte-identical + add a cross-path parity test (PR#735
   scar); (e) for the offline test, a concrete `*pgxpool.Pool` field blocks pgxmock — add the mockable
   `queryRower` seam (as PortfolioRepo already did) rather than a live DB. No new ID.
+
+### 2026-09-05 — ui-resume-halted-account — reuse
+- **Pattern**: Adding a confirm-gated privileged row action reuses the canonical `RowActionsMenu`
+  (admin-gated action + reason-surfacing `AlertDialog`) rather than a bespoke button. Two e2e
+  consequences to plan for: the dropdown stays *mounted* through the confirm flow (Radix
+  `onSelect` `preventDefault`), so (a) the halt reason renders in both the dialog and the row behind
+  it — scope reason assertions to `getByRole('alertdialog')` to avoid a strict-mode dup; and (b)
+  re-opening the row menu after confirm must `Escape`-reset first or the trigger click deadlocks
+  against the still-open menu.
+- **Evidence**: `services/xstockstrat-ui/src/components/shared/RowActionsMenu.tsx:90-100`;
+  `services/xstockstrat-ui/e2e/trader/account-resume.spec.ts` @AC-3/@AC-6; feature 179 Deviation Log.
+- **Rule it implies**: reuse `RowActionsMenu` for confirm-gated row actions (C-17); when e2e-testing
+  one, scope dialog assertions and reset the menu between interactions — no new Constitution ID.
+
+### 2026-09-05 — ui-resume-halted-account — design
+- **Pattern**: An "optimistic clear then refetch" UI mutation reads cleanest as a full-replace context
+  mutator (`applyAccountUpdate`, fail-loud on a missing id) fed by the *authoritative* server response,
+  followed by a background `refreshAccounts()`. The e2e mock should echo the requested id back mutated
+  so the optimistic path is actually exercised, not masked by the refetch.
+- **Evidence**: `services/xstockstrat-ui/src/context/AccountContext.tsx` `applyAccountUpdate`;
+  `services/xstockstrat-ui/src/components/trader/accountShared.tsx` `handleResume`;
+  `services/xstockstrat-ui/e2e/mock-backend.ts` `resumeAccount` (id echo).
+- **Rule it implies**: drive an optimistic-then-refetch mutation from the server response, and make the
+  mock echo identity so the optimistic frame is under test — no new ID.
