@@ -23,3 +23,17 @@
   (`docs/runbooks/ohlcv-lock-budget-tuning.md`, insights.md:180).
 - Consumer surface (C-14): UI `/insights` (`/insights/watchlists`) — no new UI code expected; the
   existing `EvaluateReadiness` read benefits from the pre-warmed cache.
+
+## Session 2026-09-05 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Verdict: PASS WITH WARNINGS (spec-reviewer). No blockers, no Floor breach.
+- Warnings: (1) Open Questions has 6 unchecked items — deferred by design to /sdd-design, not a
+  gate blocker; (2) if /sdd-design adds an additive portfolio binding-read RPC, flag its owner-level
+  approval gate then; (3) fixed evidence-drift nit — `_READINESS_LOOKBACK` → `_READINESS_LOOKBACK_DAYS = 400`
+  at servicer.py:249.
+- Overlap findings: CLEAN — no duplicate config key, proto field, or migration NNN. BUT a hard
+  build-order dependency exists: 180 reuses `analysis.readiness_cache` (migration 022, feature 177)
+  and the restructured `EvaluateReadiness`/bars-fetch bound (feature 176). Both are code-completed,
+  not launched. Recommended merge sequence: 176 → 177 → 180. No merge-order.md row for 180 yet —
+  add one at design/spec time. Next free analysis migration NNN is 024 (022, 023 taken by 177).

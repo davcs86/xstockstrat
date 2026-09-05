@@ -32,7 +32,7 @@ time I open the page.
   `services/xstockstrat-analysis/app/handlers/servicer.py:2709`; per-symbol `_readiness_for()`
   (`:2778-2819`) runs via `asyncio.gather` (`:2821`). FAST path returns the `readiness_cache` row
   when `def_fingerprint` matches and `now < valid_until` (`:2780-2785`); SLOW path
-  (`:2786-2819`) fetches ~400 days of bars (`_READINESS_LOOKBACK`, `:247-248`) gated by
+  (`:2786-2819`) fetches ~400 days of bars (`_READINESS_LOOKBACK_DAYS = 400`, `:249`) gated by
   `self._bars_fetch_sem` (default 2, `analysis.opportunity.max_concurrent_bars_fetches`), evaluates
   conditions, and writes back to cache (`:2826-2830`).
 - **Cache window is 30s** (`analysis.readiness.stale_after_seconds`, `servicer.py:2757`; feature 177).

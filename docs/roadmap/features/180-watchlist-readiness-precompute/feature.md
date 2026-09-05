@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-05 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-09-05 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS with warnings: Open Questions deferred to /sdd-design; evidence-drift nit fixed); overlap CLEAN |
 
 ---
 
@@ -45,4 +46,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review watchlist-readiness-precompute product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design watchlist-readiness-precompute` — deep design debate (recon + grilling) to size the two loop-placement options
