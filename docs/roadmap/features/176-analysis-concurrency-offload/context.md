@@ -160,3 +160,18 @@ merge-order WARN). Tooling: `uv sync --extra dev` for indicators + analysis; bas
   `component_sem` kwarg). GREEN with Step 4 restored.
 - Full analysis suite `659 passed` (656 baseline + 3), coverage `85%` (≥40); `ruff check`/`format`
   clean. Existing 656 unchanged ⇒ serial path proven byte-identical.
+
+### Steps 6–7 — done (FR-2 readiness parallelization, TDD red→green)
+- Step 6 (`app/handlers/servicer.py` EvaluateReadiness): replaced the serial
+  `for symbol in request.symbols` loop with a per-symbol coroutine `_readiness_for(symbol)` whose
+  whole body is gated `async with self._bars_fetch_sem:` (the opportunity bars-fetch bound, default
+  2), dispatched via `asyncio.gather` and returned as `list(...)`. Benchmark loaded once above the
+  gather (no nested `_bars_fetch_sem` re-acquire). gather preserves `request.symbols` order → one
+  entry per symbol in original order (byte-identical set). Per-symbol best-effort catch kept inside
+  the task (no blanket return_exceptions). Comment trimmed to the 2-line cap.
+- Step 7 (`tests/test_readiness_opportunities_source_symbol.py`): 3 FR-2 tests — verdicts + order
+  preserved over a 20-symbol request; blocking-GetBars peak == 2 (teeth); 200-symbol request peak ≤ 2
+  (large-request memory open-risk). Non-benchmark strategy so the only GetBars calls are per-symbol.
+- RED captured by stashing the Step-6 servicer change: `test_readiness_bars_fetch_bounded_by_sem`
+  → `peak == 1` (serial). GREEN post-Step-6.
+- Full analysis suite `662 passed` (+3), coverage `85%`; ruff clean.

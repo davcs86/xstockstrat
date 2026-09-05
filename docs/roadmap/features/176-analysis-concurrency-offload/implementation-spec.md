@@ -339,7 +339,7 @@ or no `_sandbox_sem`); after Step 2 it passes and coverage ≥ 50%.
 
 ### Step 6 — service: FR-2 — parallelize `EvaluateReadiness` per-symbol fan-out under a `_bars_fetch_sem` body-gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify (`EvaluateReadiness`, `:2660-2723`)
@@ -390,7 +390,7 @@ or no `_sandbox_sem`); after Step 2 it passes and coverage ≥ 50%.
 
 ### Step 7 — test: FR-2 — readiness verdicts equal serial; per-symbol GetBars bounded; order preserved; large-request memory
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_readiness_opportunities_source_symbol.py` — modify (or `test_analysis_servicer.py`)

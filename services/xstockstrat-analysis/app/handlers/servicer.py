@@ -2702,28 +2702,34 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         benchmark_bars = await self._load_benchmark_bars_windowed(
             definition, range_msg, propagation_meta
         )
-        readiness = []
-        for symbol in request.symbols:
-            fetch_ok = True
-            try:
-                bars = await self._fetch_bars_paged(symbol, range_msg, propagation_meta)
-            except Exception as e:  # bar fetch is best-effort per symbol
-                log.warning("EvaluateReadiness: bars fetch failed for %s: %s", symbol, e)
-                bars = []
-                fetch_ok = False
-            if fetch_ok and not bars:
-                # A successful-but-empty fetch is WARN-logged; request-bounded loop, so a per-symbol
-                # WARN is rate-safe (unlike the live loop / screener, which summarize).
-                log.warning(
-                    "EvaluateReadiness: no 1d bars for %s (strategy %s) — readiness will be empty",
-                    symbol,
-                    request.strategy_id,
+
+        # FR-2: per-symbol body gated by _bars_fetch_sem (opportunity bars-fetch bound, default 2) —
+        # caps concurrent GetBars (feature 141) + pending-coroutine memory; benchmark preloaded
+        # so no nested re-acquire; gather preserves request.symbols order (byte-identical set).
+        async def _readiness_for(symbol):
+            async with self._bars_fetch_sem:
+                fetch_ok = True
+                try:
+                    bars = await self._fetch_bars_paged(symbol, range_msg, propagation_meta)
+                except Exception as e:  # bar fetch is best-effort per symbol
+                    log.warning("EvaluateReadiness: bars fetch failed for %s: %s", symbol, e)
+                    bars = []
+                    fetch_ok = False
+                if fetch_ok and not bars:
+                    # A successful-but-empty fetch is WARN-logged; request-bounded, so a per-symbol
+                    # WARN is rate-safe (unlike the live loop / screener, which summarize).
+                    log.warning(
+                        "EvaluateReadiness: no 1d bars for %s (strategy %s) — readiness empty",
+                        symbol,
+                        request.strategy_id,
+                    )
+                trace = await evaluator.evaluate_conditions_traced(
+                    definition, bars, symbol, rule=rule, benchmark_bars=benchmark_bars
                 )
-            trace = await evaluator.evaluate_conditions_traced(
-                definition, bars, symbol, rule=rule, benchmark_bars=benchmark_bars
-            )
-            readiness.append(_readiness_to_proto(trace))
-        return analysis_pb2.EvaluateReadinessResponse(readiness=readiness)
+                return _readiness_to_proto(trace)
+
+        readiness = await asyncio.gather(*[_readiness_for(s) for s in request.symbols])
+        return analysis_pb2.EvaluateReadinessResponse(readiness=list(readiness))
 
     async def QueryPnLPatterns(self, request, context):
         """Ranked P&L-attribution factors (feature 042). Reads the raw pnl_pattern_samples for the
