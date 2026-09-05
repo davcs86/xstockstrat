@@ -97,6 +97,9 @@ interface Subscriber {
 // DB `key` column — a bare `key` lookup would miss the registry and skip validation.
 const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: number }> = {
   'analysis.scoring.signal_decay_half_life_hours': { minValue: 0, maxValue: 8760 },
+  // feature 177 FR-1: readiness cache staleness window. < 86400 (the 1d bar cadence) so a
+  // served-stale readiness verdict can never outlive a new daily bar. 0 = always stale (min inclusive).
+  'analysis.readiness.stale_after_seconds': { minValue: 0, maxValue: 86399 },
 };
 
 export class ConfigServiceImpl {

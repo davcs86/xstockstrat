@@ -190,3 +190,13 @@ anchors resolve on the post-176 tree) — no mismatch, no re-spec.
   computed_at, valid_until). Both mirror `011_opportunities` schema-qualified style; no hypertable.
 - Offline verify: up/down pairs exist, each CREATE TABLE has its inverse DROP TABLE, NNN 022/023 are
   one/two past the 021 tip. Live apply deferred to CI/deploy (never started a DB).
+
+### Step 5 — done (config: 3 keys + readiness SCALAR_BOUNDS entry, TDD N/A)
+- `configServiceImpl.ts`: added `'analysis.readiness.stale_after_seconds': { minValue: 0, maxValue: 86399 }`
+  to SCALAR_BOUNDS_REGISTRY (< 86400 daily-bar boundary). Extended `setConfigScalarBounds.test.ts`
+  with 2 cases (accepts 0/86399, rejects 86400) — 8/8 pass.
+- `analysis/CLAUDE.md`: documented the 3 keys (readiness.stale_after_seconds|30, opportunity.
+  empty_recompute_ttl_seconds|30, opportunity.live_enrich_ttl_seconds|10), all get_int_present.
+- `config-governance.md`: feature-177 Per-Feature Registered Keys entry. No seed migration (bound
+  enforced regardless; config-ui-discoverability seed a noted follow-up, next config NNN 027).
+- Verify: config lint 0 errors; bounds test 8/8; all 3 keys grep-present in both doc homes.

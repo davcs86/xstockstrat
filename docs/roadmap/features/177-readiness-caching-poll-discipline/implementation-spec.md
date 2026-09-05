@@ -217,7 +217,7 @@ Read both: the `CREATE TABLE` in `.up` has its inverse `DROP TABLE` in `.down`; 
 
 ### Step 5 — config: register the three new keys (+ readiness bound)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config` (bound) + `xstockstrat-analysis` (docs) + `docs/patterns`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify (add one `SCALAR_BOUNDS_REGISTRY` entry)

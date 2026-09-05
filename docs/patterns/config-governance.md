@@ -102,6 +102,21 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 177 — readiness-caching-poll-discipline (`xstockstrat-analysis` / `xstockstrat-config`)
+
+Registers three `analysis` keys, all read once/per-pass via `get_int_present` (a legitimate `0` must
+not be swallowed by the `get_int` zero-trap). Two are **no-seed** (the `analysis.opportunity.*`
+pattern); the readiness key adds a **`SCALAR_BOUNDS_REGISTRY` code entry** in `xstockstrat-config`
+(`configServiceImpl.ts`, the feature-161 precedent) enforcing `[0, 86399]` at `SetConfig` — no seed
+migration (the bound is enforced regardless of a seed row; a config-ui-discoverability seed migration
+is a noted follow-up, next free config NNN `027`).
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.readiness.stale_after_seconds` | int | `30` | FR-1 readiness cache staleness window. Server-bounded `[0, 86399]` (`< 86400` so a served-stale verdict never crosses a daily-bar boundary). `0` = always stale. |
+| `analysis.opportunity.empty_recompute_ttl_seconds` | int | `30` | FR-3 empty-universe recompute suppression window. No-seed. |
+| `analysis.opportunity.live_enrich_ttl_seconds` | int | `10` | FR-4 TTL for the success-only per-symbol live-quote/sparkline memo. `0` disables the memo. No-seed. |
+
 ### feature 176 — analysis-concurrency-offload (`xstockstrat-analysis`)
 
 Adds two process-lifetime concurrency-bound keys read once at `AnalysisServicer.__init__`, both

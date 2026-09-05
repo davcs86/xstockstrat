@@ -123,4 +123,26 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     assert.equal(err, null, 'an unbounded key must be unaffected by the scalar-bounds guard');
     assert.ok(insertQuery());
   });
+
+  // feature 177 FR-1: analysis.readiness.stale_after_seconds bounded [0, 86399] so a served-stale
+  // readiness verdict never crosses a daily-bar boundary.
+  const READINESS_KEY = 'readiness.stale_after_seconds';
+
+  it('accepts readiness.stale_after_seconds = 0 (always stale) and = 86399 (max)', async () => {
+    queries = [];
+    assert.equal((await setConfig({ intVal: 0 }, READINESS_KEY)).err, null, '0 is valid (min inclusive)');
+    assert.ok(insertQuery());
+    queries = [];
+    assert.equal((await setConfig({ intVal: 86399 }, READINESS_KEY)).err, null, '86399 is the inclusive max');
+    assert.ok(insertQuery());
+  });
+
+  it('rejects readiness.stale_after_seconds = 86400 (crosses the daily-bar boundary)', async () => {
+    queries = [];
+    const { err } = await setConfig({ intVal: 86400 }, READINESS_KEY);
+    assert.ok(err, 'expected a gRPC error for an out-of-range value');
+    assert.equal(err.code, grpc.status.INVALID_ARGUMENT);
+    assert.match(err.details ?? err.message, /\[0, 86399\]/);
+    assert.equal(insertQuery(), undefined, 'no INSERT may run for an out-of-range value');
+  });
 });
