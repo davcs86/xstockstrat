@@ -120,3 +120,31 @@ Status unchanged: **spec-ready**. design.md NOT yet written (awaiting consolidat
     has no `resumeAccount` handler — Step 7 adds an unconditional-success one so the non-admin test
     isolates the `forwardAdmin` gate (fails.md:1650 vacuous-green). Halted fixture must set
     `isActive:true + halted:true` together (context.md round-3 invariant).
+
+## Session 2026-09-05 — sdd-review impl-spec (advisory)
+
+- Result: PASS WITH WARNINGS — 0 blockers, all findings advisory/NOTE-level (8/8 steps grounded,
+  no Floor risk; UI-only, no proto/migration/config/backend change). Every referenced symbol/path
+  resolved in `services/xstockstrat-ui/` + `packages/proto/` — `HALT_SOURCE` local const, the
+  `opportunityShared.tsx` export lines, `Badge variant="warning"` (`badge.tsx:25`), `forwardAdmin`
+  (`bffShared.ts:72`), `AccountContext`/`AccountRow`/`AccountSelector`, `useIsAdmin`, and the generated
+  `TradingService.resumeAccount` (no client-file edit). C-14/C-10/C-15 clean; C-03 header propagation
+  inherited via `forwardAdmin`→`forward`→`backendHeaders`.
+- Overlap findings: CLEAN — UI-only; no proto/migration/config; none of the shared UI files 179 edits
+  (`opportunityShared.tsx`, `accountShared.tsx`, `AccountContext`, `AccountSelector`, `traderBff.ts`,
+  positions/page.tsx, e2e fixtures) is touched by any other in-flight feature. `ResumeAccount` RPC +
+  `BrokerAccount` halt fields already on trunk (features 030/102). No merge-order entry warranted.
+- Advisory NOTEs carried into execution (none blocking, no spec change made):
+  - Step 2 (C-17): the reused `Badge variant="warning"` uses raw Tailwind palette utilities
+    (`bg-yellow-500/text-yellow-400`) rather than a `--warning` role token — [x] PRE-EXISTING in
+    `ui/badge.tsx` (features 083/119), guarded by `badge.test.ts`, NOT introduced here; 179's own call
+    sites are C-17-clean (no color literals, iconOnly carries aria-label). Track in the ui-ux-governance
+    deviation backlog if not already; not this feature's to fix.
+  - Steps 7/8 (C-08): `test` steps state no coverage threshold — [x] accepted (xstockstrat-ui e2e has no
+    coverage gate; documented in the Execution Summary).
+  - Step 7 (DRY): proposed inline `credentialStatus: 1` diverges from the file's `CREDENTIAL_STATUS_VALID`
+    const — [ ] use the named const at execute (trivial local-DRY).
+  - Step 1 (C-01): local const line-ref off-by-one (`:43-47` vs cited `:43-46`) — [ ] re-anchor at execute.
+  - Step 8 (C-15 minor): the @AC-1 e2e case exercises the BRACKET_PROTECTION fixture while
+    acceptance @AC-1's illustrative Given names RECONCILIATION — [x] accepted (both are valid halted
+    states; the behavioral assertion — indicator + reason + source badge shown pre-order — is identical).
