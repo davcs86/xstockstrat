@@ -72,3 +72,53 @@ Status unchanged: **spec-ready**. design.md NOT yet written (awaiting consolidat
 - USER APPROVED design 2026-09-05 (approved 176 & 178; 177 & 179 held). Status: spec-ready → design-approved.
 - merge-order.md: 176-before-177 WARN row added (same-function overlap on _compute_opportunities/EvaluateReadiness/evaluator; confirm when 177 is approved).
 - Next: /sdd-spec analysis-concurrency-offload. Open risks carried: pure-CPU core evidence (F-06) per simulator, readiness large-symbols memory test, feature-173 watcher.py coordination — all to resolve at /sdd-spec.
+
+## Session 2026-09-05 — sdd-spec
+
+- Generated implementation-spec.md with **11 steps** (5 `service` + 5 paired `test` + 1 `config`).
+  Status → implementation-ready. Every step cites verified `path:line` evidence (recon.md Codebase
+  Map re-verified against the current tree; no line drift found).
+- Step map: 1 config (2 new no-seed analysis keys + enforce indicators.sandbox.max_concurrent);
+  2–3 FR-5 sandbox to_thread+sem (indicators); 4–5 FR-3 evaluator optional `component_sem`
+  (None⇒serial, 4 construction sites); 6–7 FR-2 readiness `_bars_fetch_sem` body-gate;
+  8–9 FR-1/FR-6 three-phase single-flight `_compute_opportunities` under new `_candidates_sem`;
+  10–11 FR-4 dedicated bounded ThreadPoolExecutor (simulator prologue/core split + screener).
+- Key codebase findings (grep-verified this session):
+  - Simulator F-06 evidence CONFIRMED: `_backtest_symbol` core `:1222-1327`, `_backtest_symbol_evaluated`
+    core after `:1498`, `_simulate_portfolio` whole body `:1611-1776` are all **`await`-free** (the
+    `await`s at `:1800/1820/1850` belong to sibling warmup methods, NOT `_simulate_portfolio`). Cores
+    open no DB connection → asyncpg pool stays 2.
+  - StrategyEvaluator construction sites: `servicer.py:1463` (backtest), `:2695` (readiness),
+    `:2892` (score — already acquires `_component_series_sem` at `:2904`, so pass `None`), `:3372`
+    (opportunities). `__init__` at `evaluator.py:107`; per-component loop at `evaluator.py:234` inside
+    `evaluate_conditions_traced` (`:195`).
+  - Indicators: `ExecuteFormula` `:85` calls sync `sandbox.execute_formula` `:139`; **`asyncio` not
+    imported** in that servicer (must add). Analysis servicer **has** `import asyncio` (`:13`) but
+    **not** `ThreadPoolExecutor`/`functools` (must add). New indicators accessor
+    `sandbox_max_concurrent()` after `watcher.py:137`.
+  - Screener: `_sem` built `screener.py:84`, acquired inside `_eval_symbol` `:324`, but the serial
+    loop `:110` leaves it ineffective — FR-4 gathers the fan-out so `_sem` actually binds.
+  - merge-order.md 176→177 WARN row already present (`:227-242`) — no step re-adds it. strat-lab
+    plugin needs no update (no run_backtest API/shape change). No seed migration (no-seed key pattern).
+- Reviewers snapshot finalized: analysis owner (1,4–11), indicators owner (1–3), config owner (1).
+
+## Session 2026-09-05 — /sdd-execute sequential (176→177→178→179, one PR per feature)
+
+Sequential-mode run started. Pacing: user-authorized "run all four back-to-back", branch model
+`feature/<slug> → main-dev`. Only 176 is implementation-ready; 177/178/179 are design-approved and
+will be `/sdd-spec`'d then executed in turn (177 against 176's post-restructure signatures per
+merge-order WARN). Tooling: `uv sync --extra dev` for indicators + analysis; baselines green
+(indicators 129 passed, analysis 656 passed) before any edit.
+
+### Step 1 — done (config/docs registration, TDD N/A)
+- `services/xstockstrat-analysis/CLAUDE.md` § Config Keys Consumed: added
+  `analysis.opportunity.max_concurrent_candidates|4` (priority-inversion guard, separate from
+  `max_concurrent_bars_fetches`) and `analysis.compute.max_worker_threads|4` (FR-4 executor pool,
+  no DB conn). Both no-seed.
+- `services/xstockstrat-indicators/CLAUDE.md:72`: reworded `indicators.sandbox.max_concurrent` row —
+  removed "not yet enforced"; now enforced via new `ConfigWatcher.sandbox_max_concurrent()` +
+  `_sandbox_sem` in `ExecuteFormula` (FR-5).
+- `docs/patterns/config-governance.md` § Per-Feature Registered Keys: added feature-176 entry
+  (newest-first) with both keys; noted the indicators key is enforced-not-new (no row).
+- Verified: both keys present in analysis CLAUDE.md + config-governance log; indicators row updated;
+  no `migrations/` file added (no-seed). Committed directly to `feature/analysis-concurrency-offload`.
