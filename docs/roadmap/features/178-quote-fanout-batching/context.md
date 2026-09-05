@@ -150,3 +150,23 @@ Status unchanged: **spec-ready**. design.md NOT yet written (awaiting consolidat
   RED pre-Step-3 (GetLatestQuotes undefined / handler unimplemented) → GREEN after.
 - Verify: `go test ./internal/... -race` all green; go vet + gofmt clean. golangci-lint v2.5.0 can't
   target go1.27 → fell back to build+vet+gofmt (CI runs pinned v2.13.1). Deviations logged.
+
+## Session 2026-09-05 — sdd-execute sequential (Steps 5–6)
+- Step 5 (portfolio service): new `latestQuotesFor(ctx, symbols)` helper (one GetLatestQuotes call,
+  re-keyed by symbol; RPC error → empty map → all-missing neutral outcome). Switched all four sites —
+  enrichPositions (CurrentPrice==0 subset only, preserving the broker-valued skip), GetPnL,
+  broadcastSnapshot, checkRiskLimits (rebuilds posValues/totalValue) — to collect-then-batch-then-
+  lookup. `(quote.AskPrice + quote.BidPrice) / 2` kept byte-identical at all 4 sites (grep: 4/4);
+  0 singular GetLatestQuote calls remain. checkRiskLimits concentration check + 172's drawdown block
+  left verbatim.
+- Step 6 (test): `internal/service/portfolio_service_test.go` — `stubMarketData` (embeds the
+  MarketDataServiceClient interface; overrides only the two quote methods with counters). AC-1 (30
+  positions → 1 batched call, 0 singular, each CurrentPrice == reference mid — PR#735 formula parity),
+  AC-4 (NOQUOTE omitted → left neutral 0), whole-call-error equivalence (all unenriched). RED
+  pre-Step-5 (singular path → getLatestQuotesCalls==0) → GREEN after.
+  - Test-scope note: the mid-formula parity is asserted via enrichPositions (directly callable) + the
+    static grep (4/4 identical sites); checkRiskLimits is not unit-driven (needs cfg/repo/notify
+    stubs) — coverage-excluded package, red-green behavioral gate, formula guarded by the shared
+    byte-identical expression.
+- Verify: `go test ./internal/... -race` green; vet + gofmt clean. golangci-lint deferred to CI
+  (v2.5.0-vs-go1.27, per the Steps 3–4 deviation).

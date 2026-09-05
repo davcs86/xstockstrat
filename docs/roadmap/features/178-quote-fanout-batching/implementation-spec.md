@@ -228,7 +228,7 @@ The `@AC-3` test shows exactly one upstream fetch under concurrency; the `@AC-4`
 
 ### Step 5 — service: switch portfolio's four read sites to the batch call
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify (`enrichPositions`, `GetPnL`, `broadcastSnapshot`, `checkRiskLimits`)
@@ -266,7 +266,7 @@ Compiles and lints. Behavioral parity is Step 6.
 
 ### Step 6 — test: portfolio batch parity + null-not-zero
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service_test.go` — create (or add to an existing service test file), including a new in-package `MarketDataServiceClient` stub
