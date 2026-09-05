@@ -21,7 +21,7 @@ Feature: readiness-caching-poll-discipline
 
   @AC-3 @FR-2
   Scenario: Remounting the watchlist detail pane within staleTime does not refetch
-    Given the readiness useQueries staleTime is 60 seconds
+    Given the readiness useQueries staleTime is 30 seconds
     And the watchlist detail pane was rendered 10 seconds ago
     When the user switches away and back to the same watchlist
     Then no new EvaluateReadiness request is issued to the BFF

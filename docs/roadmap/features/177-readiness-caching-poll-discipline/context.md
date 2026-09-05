@@ -141,3 +141,29 @@ Status unchanged: **spec-ready**. design.md NOT yet written (awaiting the consol
 - Confirm the min-of-computed_at response rule (Step 6) and the no-config-seed-migration decision (Step 5).
 - Confirm the readiness/empty/enrich default values (30/30/10 s) are acceptable (all within the <86400 bound).
 - 176 → 177 merge sequencing must hold at integration (merge-order.md).
+
+## Session 2026-09-05 — sdd-review impl-spec (advisory)
+
+- Result: 0 blockers, 5 warnings (13/13 steps grounded, no Floor risk). Post-176 baseline check PASSED —
+  Step 6 Codebase Evidence cites the post-176 `asyncio.gather`/`_readiness_for` shape (`servicer.py:2696-2767`),
+  not the pre-176 synchronous loop (no C-01/F-04 mismatch).
+- Overlap findings: CLEAN — only the known 176→177 same-function WARN on `servicer.py`/`evaluator.py`
+  (already `merge-order.md:237-242`, run 176 before 177). Migrations 022/023, proto `computed_at=2`,
+  and the config keys are all free on trunk and unclaimed by siblings.
+- Warnings carried into execution:
+  - Step 12/13 (C-15/C-01): impl `staleTime: 30_000` vs `@AC-3`'s "60 seconds" — [x] RESOLVED here.
+    Reconciled `acceptance.feature @AC-3` 60s → 30s to match the deliberate design decision and the
+    existing Opportunities-pane precedent (`opportunities/page.tsx:136`, also 30s). The 60s literal was a
+    story-time approximation; 30s is the design-authoritative value. Behavior unchanged (10s < both, so the
+    no-refetch-on-remount assertion holds either way). C-16 rationale: aligning acceptance to the design's
+    superseding decision, not changing an intended guarantee.
+  - Step 5 (C-08/B3): `configServiceImpl.ts` source change has no dedicated paired `test` step —
+    [ ] unaddressed (mitigated by the inline test instruction + `pnpm run test:coverage` in Verification;
+    revisit at execute — add an explicit config test if the inline coverage proves thin).
+  - Step 2 (B2): `Files` lists the `packages/proto/gen/` directory rather than explicit files —
+    [x] accepted (inherent to proto-gen; the empty-diff gate is the real check).
+  - Step 5 (C-01 minor): Evidence mislabels `configServiceImpl.ts:492` (a ListKeys bounds-hint map) as the
+    SetConfig "batch path" — [x] noted; the authoritative SetConfig enforcement `:376-385` is cited correctly,
+    so execution discovery re-anchors.
+  - Step 6 (low risk): `row["definition_json"]` key presence on the EvaluateReadiness row inferred from the
+    identical repo call at `:2044` — [ ] confirm at execute (verify the key is present before relying on it).
