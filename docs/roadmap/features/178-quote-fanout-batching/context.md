@@ -107,3 +107,19 @@ Status unchanged: **spec-ready**. design.md NOT yet written (awaiting consolidat
 - Scenario coverage (C-15): AC-1→Step6, AC-2→Step8, AC-3→Step4, AC-4→Step4+Step6. All covered.
 - Consumer surface (C-14): internal/platform-only per product spec — no UI/agent step (restated in
   Execution Summary).
+
+## Session 2026-09-05 — sdd-review impl-spec (advisory)
+
+- Result: 0 blockers, 0 substantive warnings, 6 advisory NOTEs (8/8 steps grounded, no Floor risk).
+  Verdict PASS. Proto change verified additive (buf-breaking-safe); header trio propagates via the
+  already-wired `middleware.UnaryClientInterceptor` on `mdConn`; feature-172 `checkRiskLimits`
+  drawdown block confirmed present and kept verbatim; Step 7 correctly grep-gates the `listBindings`
+  removal against its second caller (`watchlist_repo.go:94`) — no F-04-adjacent erroneous deletion.
+- Overlap findings: CLEAN — only the known 172→178 same-function WARN on `portfolio_service.go`
+  `checkRiskLimits` (already `merge-order.md:227-236`; 172 merged, block preserved verbatim). Proto
+  message/field numbers, migrations (none), and config (none) all clear vs siblings 176/177/179.
+- Advisory NOTEs carried into execution (none blocking):
+  - Step 2 (B2): `Files` uses `gen/**` directory globs — [x] accepted (inherent to codegen; empty-diff gate is the real check).
+  - Steps 4/6/8 (C-08): no explicit coverage threshold — [x] accepted (Go service/handler/repository are coverage-excluded; red-green behavioral tests are the gate).
+  - Step 5 (C-01): `checkRiskLimits`/drawdown line citations off by one (`:749-757`/`:768-774` actual) — [ ] re-anchor at execute discovery.
+  - Step 6 (C-01): cites `portfolio_risk_test.go:126` as a ctor site; it is an assertion line — [ ] re-anchor at execute (the "no MarketDataServiceClient stub today" claim holds via grep).
