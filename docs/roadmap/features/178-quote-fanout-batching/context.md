@@ -123,3 +123,15 @@ Status unchanged: **spec-ready**. design.md NOT yet written (awaiting consolidat
   - Steps 4/6/8 (C-08): no explicit coverage threshold — [x] accepted (Go service/handler/repository are coverage-excluded; red-green behavioral tests are the gate).
   - Step 5 (C-01): `checkRiskLimits`/drawdown line citations off by one (`:749-757`/`:768-774` actual) — [ ] re-anchor at execute discovery.
   - Step 6 (C-01): cites `portfolio_risk_test.go:126` as a ctor site; it is an assertion line — [ ] re-anchor at execute (the "no MarketDataServiceClient stub today" claim holds via grep).
+
+## Session 2026-09-05 — sdd-execute sequential (Steps 1–2)
+- Branch-sync: merged origin/main-dev into feature/quote-fanout-batching (clean — 176 landed; no
+  conflict with 178's Go/proto work). 177 not yet merged (independent).
+- Step 1 (proto): added `rpc GetLatestQuotes(GetLatestQuotesRequest) returns (GetLatestQuotesResponse)`
+  after GetFundamentalsMulti (marketdata.proto:44) + the two messages after :227, mirroring the
+  GetFundamentalsMulti batch precedent (`repeated Quote quotes = 1`, self-keyed → null-not-zero). No
+  map<string,Quote>. TDD N/A.
+- Step 2 (proto-gen): regenerated via Docker (`localenv-setup.sh`); diff limited to marketdata/v1
+  (Go pb/grpc/connect, Python, TS+dist); buf lint + breaking green. Deviation logged (CI-equivalent).
+- Verify: gen diff marketdata-only; new GetLatestQuotes symbols present in gen/go. Docker codegen
+  fallback (buf not on host) — same as 176/177.

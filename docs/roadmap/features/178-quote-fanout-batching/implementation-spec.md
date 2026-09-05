@@ -55,7 +55,7 @@ block **verbatim** — no same-function conflict remains because 172 is already 
 
 ### Step 1 — proto: add additive `GetLatestQuotes` batch RPC
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/marketdata/v1/marketdata.proto` — modify
@@ -100,7 +100,7 @@ Both pass (adding an RPC + two messages is additive — `buf breaking` reports n
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/**`, `packages/proto/gen/python/**`, `packages/proto/gen/ts/**` — modify (generated; never hand-edit)
@@ -372,4 +372,12 @@ One binding query per `ListByUser` page; bindings match the per-watchlist result
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Steps 1–2 — proto codegen via Docker (CI-equivalent fallback)
+
+**Disposition**: CI-equivalent fallback. `buf` is not on the host; ran `./scripts/localenv-setup.sh`
+(builds the pinned `Dockerfile.codegen` and runs `buf lint` + `buf breaking --against main-dev` +
+`buf generate` + grpcio-tools + the TS `tsc` compile inside the container — all green, exit 0). The
+`git diff packages/proto/gen/` is limited to `marketdata/v1` (Go pb/grpc/connect, Python, TS + dist),
+matching CI's `proto-freshness` stale-stub check; `buf lint`/`breaking` also re-run in CI's proto-lint
+job. Step 1's `buf breaking` was run against `main-dev` (the container default) rather than the
+feature branch named in the step — both prove additivity, and main-dev is the CI-relevant base.

@@ -14,6 +14,7 @@
 | 2026-09-04 | `draft` → `spec-ready` | /sdd-review | FAILED first pass (false "batch RPC exists" premise); reworked to additive GetLatestQuotes RPC, re-review PASS; overlap = soft rebase w/172 |
 | 2026-09-05 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, extended); round-3 adversary SOUND; recon.md + design.md written |
 | 2026-09-05 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps |
+| 2026-09-05 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run started; Steps 1–2 (proto GetLatestQuotes + codegen) landed |
 
 ---
 

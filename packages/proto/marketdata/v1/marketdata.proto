@@ -42,6 +42,10 @@ service MarketDataService {
 
   // Batched fundamentals for a watchlist scan (core metrics via one FMP quote call)
   rpc GetFundamentalsMulti(GetFundamentalsMultiRequest) returns (GetFundamentalsMultiResponse);
+
+  // Batched latest quotes — partial by design: a symbol with no quote is omitted from the
+  // response (null-not-zero), never returned as a fabricated zero-price Quote.
+  rpc GetLatestQuotes(GetLatestQuotesRequest) returns (GetLatestQuotesResponse);
 }
 
 message Bar {
@@ -224,4 +228,12 @@ message GetFundamentalsMultiRequest {
 
 message GetFundamentalsMultiResponse {
   repeated Fundamentals fundamentals = 1;
+}
+
+message GetLatestQuotesRequest {
+  repeated string symbols = 1;
+}
+
+message GetLatestQuotesResponse {
+  repeated Quote quotes = 1;
 }
