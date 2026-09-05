@@ -61,7 +61,7 @@ from app.services.evaluator import (
     align_indicator_points,
     referenced_refs,
 )
-from app.services.readiness import compute_readiness_row
+from app.services.readiness import compute_readiness_row, is_readiness_row_fresh
 from app.services.screener import ScreenerEngine
 
 # Back-compat alias: existing imports of _compute_signal_score from this module must stay valid.
@@ -248,6 +248,10 @@ _MAX_BAR_PAGES = 32
 # Recent-bar lookback for EvaluateReadiness: ~400 calendar days ≈ 280 trading bars, enough to
 # warm up long indicators (e.g. SMA/EMA up to ~200 periods) for a last-bar readiness read.
 _READINESS_LOOKBACK_DAYS = 400
+# Feature 180: narrow window for the FAST-gate GetDataCoverage latest-bar probe — wide enough to
+# always contain the most recent daily bar across weekends/holidays, small enough to bound the
+# server-side MIN/MAX/COUNT scan (we consume only `.latest`).
+_READINESS_COVERAGE_PROBE_DAYS = 10
 # Backstop for draining paginated QuerySignals / ListPositions in ListOpportunities.
 _MAX_DRAIN_PAGES = 50
 # Default queue page size when the request omits one.
@@ -2778,7 +2782,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Returns (proto, staged_cache_row | None, computed_at). gather preserves request order.
         async def _readiness_for(symbol):
             c = cached.get(symbol)
-            if c is not None and c["def_fingerprint"] == fingerprint and now < c["valid_until"]:
+            if c is not None and is_readiness_row_fresh(
+                c,
+                now=now,
+                fingerprint=fingerprint,
+                latest_bar_epoch=latest_bar_epoch.get(symbol, 0),
+            ):
                 return (
                     _symbol_readiness_from_json(c["readiness_json"], symbol),
                     None,
@@ -2804,6 +2813,28 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 benchmark_epoch=_benchmark_epoch(),
             )
             return _readiness_to_proto(staged["readiness_json"]), staged, now
+
+        # Feature 180: bar_epoch-aware FAST gate. Fetch each distinct symbol's latest 1d-bar epoch
+        # ONCE, before the gather (C-08: fill-before-loop, never lazily inside it), so a new daily
+        # bar busts a still-in-window cached row. GetDataCoverage is a MIN/MAX/COUNT metadata read;
+        # bound the scan to a narrow recent window (we only consume .latest) so this per-symbol
+        # per-read probe stays cheap. Best-effort — a coverage miss (0) never falsely busts a row.
+        latest_bar_epoch: dict[str, int] = {}
+        coverage_range = _recent_range(_READINESS_COVERAGE_PROBE_DAYS)
+        for symbol in dict.fromkeys(request.symbols):
+            try:
+                cov = await self._marketdata.GetDataCoverage(
+                    marketdata_pb2.GetDataCoverageRequest(
+                        symbol=symbol,
+                        timeframe=common_pb2.Timeframe.TIMEFRAME_1DAY,
+                        range=coverage_range,
+                    ),
+                    metadata=propagation_meta,
+                )
+                latest_bar_epoch[symbol] = cov.latest.seconds
+            except Exception as e:  # best-effort — a coverage miss never blocks the read
+                log.warning("EvaluateReadiness: GetDataCoverage failed for %s: %s", symbol, e)
+                latest_bar_epoch[symbol] = 0
 
         results = await asyncio.gather(*[_readiness_for(s) for s in request.symbols])
         protos = [r[0] for r in results]

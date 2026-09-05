@@ -199,7 +199,7 @@ Written to fail before Step 1 (module `app.services.readiness` does not yet exis
 
 ### Step 3 — service: Make the FAST gate `bar_epoch`-aware (memoized `latest_bar_epoch`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -252,7 +252,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 
 ### Step 4 — test: interactive `bar_epoch` gate — @AC-1 / @AC-5 / @AC-7
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_readiness.py` — modify

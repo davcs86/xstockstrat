@@ -188,3 +188,20 @@
   177's `test_readiness_cache.py` still green; full suite 687 passed @ 84.97% cov.
 - Files modified: `tests/test_readiness.py`
 - Deviations: none
+
+### Step 3 — bar_epoch-aware FAST gate [done]
+- Added a per-request `latest_bar_epoch` memo (filled before the gather, C-08) via
+  `GetDataCoverage(symbol, TIMEFRAME_1DAY, range=recent 10d)` — best-effort (0 on miss); replaced the
+  inline FAST predicate with `is_readiness_row_fresh(...)`. D-3/W4 resolved in code: GetDataCoverageRequest
+  HAS a `range` field, so the per-read MIN/MAX/COUNT scan is bounded to a 10-day window (consumes only
+  `.latest`) — no unbounded full-history scan, no follow-up owed.
+- Files modified: `app/handlers/servicer.py`
+- Deviations: none (Step 3 instruction #1 anticipated the range field; confirmed present).
+
+### Step 4 — interactive bar_epoch gate tests [done]
+- Added GetDataCoverage default mock to `_cache_svc` (test_readiness_cache.py); added AC-7 (new daily
+  bar busts, same-day serves FAST), AC-5 (uncovered→SLOW, writes row), plus the AC-1 same-day FAST leg.
+  177's AC-1/AC-2 cache tests stay green (regression guard, design R3). TDD: red (pre-Step-3 new bar
+  does not bust → GetBars=0) → green (12 passed in pair; full suite 689 passed @ 85.01%).
+- Files modified: `tests/test_readiness.py`, `tests/test_readiness_cache.py`
+- Deviations: none
