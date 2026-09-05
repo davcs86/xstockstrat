@@ -321,15 +321,44 @@ func closedPositionPayload(userID, symbol, acctID, mode string, sealed, feesSeal
 	return payload
 }
 
+// latestQuotesFor fetches the latest quote for each symbol in ONE batched marketdata call and
+// re-keys the response by symbol (feature 178). On RPC error it logs a warn and returns an empty
+// map, so every symbol is then treated as missing — the same neutral outcome as N failing singular
+// calls (never a fabricated price). A symbol the batch omits is simply absent from the map.
+func (s *PortfolioService) latestQuotesFor(ctx context.Context, symbols []string) map[string]*marketdatav1.Quote {
+	out := make(map[string]*marketdatav1.Quote, len(symbols))
+	if len(symbols) == 0 {
+		return out
+	}
+	resp, err := s.marketdata.GetLatestQuotes(ctx, &marketdatav1.GetLatestQuotesRequest{Symbols: symbols})
+	if err != nil {
+		slog.Warn("batch latest quotes unavailable", "count", len(symbols), "error", err)
+		return out
+	}
+	for _, q := range resp.Quotes {
+		out[q.Symbol] = q
+	}
+	return out
+}
+
 func (s *PortfolioService) enrichPositions(ctx context.Context, positions []*portfoliov1.Position) {
+	// Batch only the un-broker-valued positions — a full-set batch would overwrite broker-
+	// authoritative mark-to-market (breaks @AC-12/157 short MtM, @AC-7 ListPositions↔ListPortfolios).
+	var symbols []string
 	for _, p := range positions {
 		if p.CurrentPrice > 0 {
 			continue
 		}
-		quote, err := s.marketdata.GetLatestQuote(ctx, &marketdatav1.GetLatestQuoteRequest{Symbol: p.Symbol})
-		if err != nil {
-			slog.Warn("latest quote unavailable for position", "symbol", p.Symbol, "error", err)
+		symbols = append(symbols, p.Symbol)
+	}
+	quotes := s.latestQuotesFor(ctx, symbols)
+	for _, p := range positions {
+		if p.CurrentPrice > 0 {
 			continue
+		}
+		quote, ok := quotes[p.Symbol]
+		if !ok {
+			continue // missing quote → same skip as the old per-position error path
 		}
 		price := (quote.AskPrice + quote.BidPrice) / 2
 		if price <= 0 {
@@ -519,9 +548,13 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 		return nil, err
 	}
 	var unrealized float64
+	pnlSymbols := make([]string, 0, len(positions))
 	for _, p := range positions {
-		quote, err := s.marketdata.GetLatestQuote(ctx, &marketdatav1.GetLatestQuoteRequest{Symbol: p.Symbol})
-		if err == nil {
+		pnlSymbols = append(pnlSymbols, p.Symbol)
+	}
+	pnlQuotes := s.latestQuotesFor(ctx, pnlSymbols)
+	for _, p := range positions {
+		if quote, ok := pnlQuotes[p.Symbol]; ok {
 			price := (quote.AskPrice + quote.BidPrice) / 2
 			unrealized += (price - p.AvgEntryPrice) * p.Qty
 		}
@@ -689,9 +722,13 @@ func (s *PortfolioService) broadcastSnapshot(ctx context.Context, userID string,
 		return
 	}
 	var equity float64
+	snapSymbols := make([]string, 0, len(positions))
 	for _, p := range positions {
-		quote, err := s.marketdata.GetLatestQuote(ctx, &marketdatav1.GetLatestQuoteRequest{Symbol: p.Symbol})
-		if err == nil {
+		snapSymbols = append(snapSymbols, p.Symbol)
+	}
+	snapQuotes := s.latestQuotesFor(ctx, snapSymbols)
+	for _, p := range positions {
+		if quote, ok := snapQuotes[p.Symbol]; ok {
 			price := (quote.AskPrice + quote.BidPrice) / 2
 			equity += price * p.Qty
 		}
@@ -746,9 +783,13 @@ func (s *PortfolioService) checkRiskLimits(ctx context.Context, userID string, m
 	}
 	var totalValue float64
 	posValues := make(map[string]float64)
+	riskSymbols := make([]string, 0, len(positions))
 	for _, p := range positions {
-		quote, err := s.marketdata.GetLatestQuote(ctx, &marketdatav1.GetLatestQuoteRequest{Symbol: p.Symbol})
-		if err == nil {
+		riskSymbols = append(riskSymbols, p.Symbol)
+	}
+	riskQuotes := s.latestQuotesFor(ctx, riskSymbols)
+	for _, p := range positions {
+		if quote, ok := riskQuotes[p.Symbol]; ok {
 			price := (quote.AskPrice + quote.BidPrice) / 2
 			val := price * p.Qty
 			posValues[p.Symbol] = val

@@ -13,6 +13,9 @@
 | 2026-09-04 | `idea` → `draft` | /sdd-story | Product spec generated from performance audit Track C |
 | 2026-09-04 | `draft` → `spec-ready` | /sdd-review | FAILED first pass (false "batch RPC exists" premise); reworked to additive GetLatestQuotes RPC, re-review PASS; overlap = soft rebase w/172 |
 | 2026-09-05 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, extended); round-3 adversary SOUND; recon.md + design.md written |
+| 2026-09-05 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps |
+| 2026-09-05 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run started; Steps 1–2 (proto GetLatestQuotes + codegen) landed |
+| 2026-09-05 | `in-progress` → `code-completed` | /sdd-execute | All 8 steps done (GetLatestQuotes batch RPC + marketdata single-flight, portfolio 4-site switch, ListWatchlists ANY-array); marketdata + portfolio suites green under -race |
 
 ---
 
@@ -22,7 +25,7 @@
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Recon Dossier](recon.md) — grounded codebase map, Patterns to REUSE, Existing Business Rules
 - [Design](design.md) — chosen approach, rejected alternatives, open risks, Constitution rules
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec quote-fanout-batching`_
+- [Implementation Spec](implementation-spec.md) — 8 numbered steps, evidence-cited
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -49,4 +52,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec quote-fanout-batching` — generate the implementation spec from the approved design
+`/sdd-review quote-fanout-batching impl-spec` — validate the implementation spec, then `/sdd-execute quote-fanout-batching`

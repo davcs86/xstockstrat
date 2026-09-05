@@ -66,6 +66,9 @@ const (
 	// MarketDataServiceGetFundamentalsMultiProcedure is the fully-qualified name of the
 	// MarketDataService's GetFundamentalsMulti RPC.
 	MarketDataServiceGetFundamentalsMultiProcedure = "/xstockstrat.marketdata.v1.MarketDataService/GetFundamentalsMulti"
+	// MarketDataServiceGetLatestQuotesProcedure is the fully-qualified name of the MarketDataService's
+	// GetLatestQuotes RPC.
+	MarketDataServiceGetLatestQuotesProcedure = "/xstockstrat.marketdata.v1.MarketDataService/GetLatestQuotes"
 )
 
 // MarketDataServiceClient is a client for the xstockstrat.marketdata.v1.MarketDataService service.
@@ -92,6 +95,9 @@ type MarketDataServiceClient interface {
 	GetFundamentals(context.Context, *connect.Request[v1.GetFundamentalsRequest]) (*connect.Response[v1.GetFundamentalsResponse], error)
 	// Batched fundamentals for a watchlist scan (core metrics via one FMP quote call)
 	GetFundamentalsMulti(context.Context, *connect.Request[v1.GetFundamentalsMultiRequest]) (*connect.Response[v1.GetFundamentalsMultiResponse], error)
+	// Batched latest quotes — partial by design: a symbol with no quote is omitted from the
+	// response (null-not-zero), never returned as a fabricated zero-price Quote.
+	GetLatestQuotes(context.Context, *connect.Request[v1.GetLatestQuotesRequest]) (*connect.Response[v1.GetLatestQuotesResponse], error)
 }
 
 // NewMarketDataServiceClient constructs a client for the
@@ -172,6 +178,12 @@ func NewMarketDataServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(marketDataServiceMethods.ByName("GetFundamentalsMulti")),
 			connect.WithClientOptions(opts...),
 		),
+		getLatestQuotes: connect.NewClient[v1.GetLatestQuotesRequest, v1.GetLatestQuotesResponse](
+			httpClient,
+			baseURL+MarketDataServiceGetLatestQuotesProcedure,
+			connect.WithSchema(marketDataServiceMethods.ByName("GetLatestQuotes")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -188,6 +200,7 @@ type marketDataServiceClient struct {
 	listAssets           *connect.Client[v1.ListAssetsRequest, v1.ListAssetsResponse]
 	getFundamentals      *connect.Client[v1.GetFundamentalsRequest, v1.GetFundamentalsResponse]
 	getFundamentalsMulti *connect.Client[v1.GetFundamentalsMultiRequest, v1.GetFundamentalsMultiResponse]
+	getLatestQuotes      *connect.Client[v1.GetLatestQuotesRequest, v1.GetLatestQuotesResponse]
 }
 
 // StreamBars calls xstockstrat.marketdata.v1.MarketDataService.StreamBars.
@@ -245,6 +258,11 @@ func (c *marketDataServiceClient) GetFundamentalsMulti(ctx context.Context, req 
 	return c.getFundamentalsMulti.CallUnary(ctx, req)
 }
 
+// GetLatestQuotes calls xstockstrat.marketdata.v1.MarketDataService.GetLatestQuotes.
+func (c *marketDataServiceClient) GetLatestQuotes(ctx context.Context, req *connect.Request[v1.GetLatestQuotesRequest]) (*connect.Response[v1.GetLatestQuotesResponse], error) {
+	return c.getLatestQuotes.CallUnary(ctx, req)
+}
+
 // MarketDataServiceHandler is an implementation of the xstockstrat.marketdata.v1.MarketDataService
 // service.
 type MarketDataServiceHandler interface {
@@ -270,6 +288,9 @@ type MarketDataServiceHandler interface {
 	GetFundamentals(context.Context, *connect.Request[v1.GetFundamentalsRequest]) (*connect.Response[v1.GetFundamentalsResponse], error)
 	// Batched fundamentals for a watchlist scan (core metrics via one FMP quote call)
 	GetFundamentalsMulti(context.Context, *connect.Request[v1.GetFundamentalsMultiRequest]) (*connect.Response[v1.GetFundamentalsMultiResponse], error)
+	// Batched latest quotes — partial by design: a symbol with no quote is omitted from the
+	// response (null-not-zero), never returned as a fabricated zero-price Quote.
+	GetLatestQuotes(context.Context, *connect.Request[v1.GetLatestQuotesRequest]) (*connect.Response[v1.GetLatestQuotesResponse], error)
 }
 
 // NewMarketDataServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -345,6 +366,12 @@ func NewMarketDataServiceHandler(svc MarketDataServiceHandler, opts ...connect.H
 		connect.WithSchema(marketDataServiceMethods.ByName("GetFundamentalsMulti")),
 		connect.WithHandlerOptions(opts...),
 	)
+	marketDataServiceGetLatestQuotesHandler := connect.NewUnaryHandler(
+		MarketDataServiceGetLatestQuotesProcedure,
+		svc.GetLatestQuotes,
+		connect.WithSchema(marketDataServiceMethods.ByName("GetLatestQuotes")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.marketdata.v1.MarketDataService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case MarketDataServiceStreamBarsProcedure:
@@ -369,6 +396,8 @@ func NewMarketDataServiceHandler(svc MarketDataServiceHandler, opts ...connect.H
 			marketDataServiceGetFundamentalsHandler.ServeHTTP(w, r)
 		case MarketDataServiceGetFundamentalsMultiProcedure:
 			marketDataServiceGetFundamentalsMultiHandler.ServeHTTP(w, r)
+		case MarketDataServiceGetLatestQuotesProcedure:
+			marketDataServiceGetLatestQuotesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -420,4 +449,8 @@ func (UnimplementedMarketDataServiceHandler) GetFundamentals(context.Context, *c
 
 func (UnimplementedMarketDataServiceHandler) GetFundamentalsMulti(context.Context, *connect.Request[v1.GetFundamentalsMultiRequest]) (*connect.Response[v1.GetFundamentalsMultiResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.GetFundamentalsMulti is not implemented"))
+}
+
+func (UnimplementedMarketDataServiceHandler) GetLatestQuotes(context.Context, *connect.Request[v1.GetLatestQuotesRequest]) (*connect.Response[v1.GetLatestQuotesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.GetLatestQuotes is not implemented"))
 }
