@@ -96,3 +96,44 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Note: test comments tag environment/trading_mode assertions `@AC-10`, which is NOT a scenario in this feature's acceptance.feature (only AC-1/AC-2) — [x] no action (comment-only; **Covers** correctly cites AC-1/AC-2; C-15 intact). Cosmetic; may mislead a reader grepping this feature's ACs.
   - Note: WatchConfigRequest.trading_mode may be vestigial (root CLAUDE.md: the trading_mode config axis was removed by feature 147) — [x] no action (preserving it verbatim is the correct minimal-change choice for a cosmetic fix; out of scope).
 - Overlap findings: SOFT (WARN, rebase-only) — shares three xstockstrat-ingest files with 173 (disjoint line ranges) and the root findings log with 175 (disjoint rows). Recommend landing 173 BEFORE 174 (see 173 note); 174 rebases the shared ingest files. No FAIL-level collision.
+
+---
+
+## Session 2026-09-04 — sdd-execute (sequential; stacked PR #2 of 5, base feature/fix-python-config-zero-trap)
+
+Stacked directly on 173's branch (so the ingest watcher already carries 173's `get_int_present`; the client_id/docstring sites at ingest L2/L73 sit above 173's edits — no drift). Auto-proceed through checkpoints.
+
+### Step 1 — analysis watcher: extract `_build_watch_request()`, flip prefix, fix docstring [done]
+- Extracted the inline `WatchConfigRequest` build into `_build_watch_request()`, flipped `indicators-` → `analysis-`, fixed the module docstring L2 to `xstockstrat-analysis`. `environment`/`trading_mode` preserved verbatim (guards @AC-10). Whole-request seam (not str) so a future inline revert stays caught.
+- Files modified: `services/xstockstrat-analysis/app/config/watcher.py`
+- Deviations: none
+
+### Step 2 — analysis wire-object test (AC-1) [done]
+- Reused the existing non-dialing `_StubWatcher` (no second stub); asserts the built request's `client_id` starts `analysis-` (not `indicators-`) and preserves environment/trading_mode/namespace.
+- Red→green: AttributeError (`_build_watch_request` absent) on pre-fix tree → passed after Step 1. Full suite: 655 passed, coverage 85.01% (≥40). ruff clean.
+- Files modified: `services/xstockstrat-analysis/tests/test_analysis_servicer.py`
+- Deviations: none
+
+### Step 3 — ingest watcher: extract `_build_watch_request()`, flip prefix, fix docstring [done]
+- Byte-identical to analysis except the prefix `ingest-`; docstring L2 → `xstockstrat-ingest`. Left the dead `sandbox_*` helpers and `resolve_secret` untouched (out of scope — kept as an open findings item per Step 5). The ingest watcher already carried 173's `get_int_present` (stacked); no conflict — the client_id sits in `_watch` above 173's edits.
+- Files modified: `services/xstockstrat-ingest/app/config/watcher.py`
+- Deviations: none
+
+### Step 4 — ingest wire-object test (AC-2) [done]
+- Reused the existing non-dialing `_StubWatcher`; asserts `client_id` starts `ingest-` (not `indicators-`), preserves environment/trading_mode/namespace.
+- Red→green: AttributeError on pre-fix tree → passed after Step 3. Full suite: 213 passed, coverage 78.19% (≥40). ruff clean.
+- Files modified: `services/xstockstrat-ingest/tests/test_ingest_servicer.py`
+- Deviations: none
+
+### Step 5 — docs teardown: narrow findings, reconcile CLAUDE.md defect refs [done]
+- 5 files: analysis findings row RESOLVED; ingest findings row NARROWED (identity struck, dead `sandbox_*` helpers KEPT open at actual `:164-176`); analysis+ingest `CLAUDE.md:4` dropped the fixed `client_id` copy-paste item; root findings `:39` significance question resolved as cosmetic (recon rationale). Verified: no live unfixed identity claim; dead-helper clause retained; no `indicators-` client_id/docstring in either watcher source.
+- Teardown: context-forge refresh not invocable; manual reconciliation performed (see Deviation Log + PR body).
+- Files modified: analysis+ingest `docs/context-constitution-findings.md`, analysis+ingest `CLAUDE.md`, root `docs/context-constitution-findings.md`
+- Deviations: teardown-manual (Deviation Log)
+
+## Session 2026-09-04 — sdd-execute summary (feature 174)
+**Steps this session**: 1–5 (all)
+**Progress**: 5 done / 5 total
+**Stopped at**: all complete → code-completed
+**Accountability**: out-of-scope changes: none (dead ingest `sandbox_*` helpers deliberately left open — a separate change class). Open questions: none. Unaddressed review warnings: none.
+**Next**: stacked integration PR #2 (base `feature/fix-python-config-zero-trap`); then feature 172.

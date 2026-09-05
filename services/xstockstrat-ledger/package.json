@@ -34,7 +34,7 @@
     "pg-cursor": "^2.11.0"
   },
   "devDependencies": {
-    "@types/node": "^20.12.12",
+    "@types/node": "^24",
     "c8": "^10.1.2",
     "@types/pg": "^8.11.6",
     "@types/uuid": "^9.0.8",

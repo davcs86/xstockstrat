@@ -57,14 +57,6 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-func getEnvBool(key string, fallback bool) bool {
-	v := os.Getenv(key)
-	if v == "" {
-		return fallback
-	}
-	return v == "true" || v == "1" || v == "yes"
-}
-
 // Watcher subscribes to xstockstrat-config WatchConfig stream.
 type Watcher struct {
 	namespace   string

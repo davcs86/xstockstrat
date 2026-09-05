@@ -130,30 +130,6 @@ func TestWatcherGetBool(t *testing.T) {
 	}
 }
 
-func TestGetEnvBool(t *testing.T) {
-	tests := []struct {
-		envVal   string
-		fallback bool
-		want     bool
-	}{
-		{"true", false, true},
-		{"1", false, true},
-		{"false", true, false},
-		{"0", true, false},
-		{"", true, true},
-		{"", false, false},
-		{"invalid", true, true}, // invalid value returns fallback
-	}
-
-	for _, tt := range tests {
-		t.Setenv("TEST_BOOL_PF", tt.envVal)
-		got := getEnvBool("TEST_BOOL_PF", tt.fallback)
-		if got != tt.want {
-			t.Errorf("getEnvBool(%q, %v) = %v, want %v", tt.envVal, tt.fallback, got, tt.want)
-		}
-	}
-}
-
 // TestResolveEnvironment / TestResolveTradingMode guard the WatchConfig scope-omission fix:
 // NewWatcher must resolve this deployment's own APPLICATION_ENV/TRADING_MODE into the proto
 // scope it subscribes with, instead of leaving the request at its zero-value (dev/unspecified).

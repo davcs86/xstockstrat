@@ -50,34 +50,6 @@ func TestLoadFromEnv_Overrides(t *testing.T) {
 	}
 }
 
-func TestGetEnvBool(t *testing.T) {
-	tests := []struct {
-		envVal   string
-		fallback bool
-		want     bool
-	}{
-		{"true", false, true},
-		{"1", false, true},
-		{"yes", false, true},
-		{"false", true, false},
-		{"0", true, false},
-		{"", true, true},
-		{"", false, false},
-	}
-
-	for _, tt := range tests {
-		t.Setenv("TEST_BOOL_KEY", tt.envVal)
-		if tt.envVal == "" {
-			// clear the env to test the fallback path
-			t.Setenv("TEST_BOOL_KEY", "")
-		}
-		got := getEnvBool("TEST_BOOL_KEY", tt.fallback)
-		if got != tt.want {
-			t.Errorf("getEnvBool(%q, %v) = %v, want %v", tt.envVal, tt.fallback, got, tt.want)
-		}
-	}
-}
-
 // fakeConfigServiceClient implements configv1.ConfigServiceClient narrowly — only
 // SetConfig is exercised by Watcher.SetConfig's tests below; every other method panics if
 // called (feature 102 — mirrors 030's fakeBroker narrow-interface-fake technique).

@@ -118,3 +118,44 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Carried into execution:
   - Steps 3/5: coverage threshold not stated — [x] no action (internal/repository + internal/service EXCLUDED by ci.yml:244 COVERPKGS filter; pgxmock + unit assertions are the C-08 gate). Reviewer-verified exception.
 - Overlap findings: CLEAN — migration 016 uncontested; one SOFT, disjoint-region overlap with 175 on services/xstockstrat-portfolio/docs/context-constitution-findings.md (172 = drawdown row, 175 = getEnvBool row) — rebase-only, non-blocking.
+
+---
+
+## Session 2026-09-04 — sdd-execute (sequential; stacked PR #3 of 5, base feature/fix-config-watcher-client-id)
+
+Path A per-account drawdown enforcement. Go 1.27; golangci-lint v2.13.1 rebuilt from source with GOTOOLCHAIN=go1.27.0 (the packaged 2.5.0 refuses go 1.27 — see Deviation Log). Auto-proceed.
+
+### Step 1 — migration 016: peak_equity HWM column [done]
+- `016_account_balance_peak_equity.up.sql` adds `peak_equity DOUBLE PRECISION NOT NULL DEFAULT 0` (matches `equity` type) + seeds `peak_equity = equity`; `.down.sql` drops it. Offline-verified (up/down inverse, next free NNN 016). No DB apply — real apply runs in CI/deploy.
+- Files: `migrations/016_account_balance_peak_equity.{up,down}.sql`. TDD: N/A (migration).
+- Migration needs DBA + owner approval at the PR (noted).
+
+### Step 2 — repository: HWM upsert + GetAccountDrawdowns + interface widening [done]
+- Widened `queryRower` with `Query` + `Exec` (added `pgconn` import); switched `UpsertAccountBalance` to `r.db.Exec` and added `peak_equity` (bound to $6) + `peak_equity = GREATEST(...EXCLUDED.equity)` on conflict — HWM rises each sync, never falls; no Go signature change. Added `AccountDrawdown` struct + `GetAccountDrawdowns(user, mode)` via `r.db.Query`.
+- Files: `internal/repository/portfolio_repo.go`. Build clean; golangci-lint 0 issues.
+
+### Step 3 — pgxmock repository tests (AC-1 fetch shape, AC-2 GREATEST contract) [done]
+- `TestGetAccountDrawdowns_ScopesToUserAndMode` (SELECT projection + user_id/trading_mode filter, 2 rows) and `TestUpsertAccountBalance_RaisesPeakEquityWithGreatest` (ExpectExec regex requires peak_equity + GREATEST clause). C-13: inline row literals, single consumer.
+- Red→green: compile-RED (`GetAccountDrawdowns undefined`) on pre-Step-2 tree → both pass after Step 2 (`-race`). golangci-lint 0 issues.
+- Files: `internal/repository/portfolio_repo_test.go`. Deviations: none.
+
+### Step 4 — service: evaluateDrawdowns seam + wire into checkRiskLimits [done]
+- Added pure package-level `evaluateDrawdowns([]repository.AccountDrawdown, limit) []string` (skips peak<=0, guards divide-by-zero). Replaced the `_ = maxDrawdownPct` discard with a thin fetch (`GetAccountDrawdowns(userID, mode.String())`) → per-breach `emitRiskAlert` (reused verbatim: WARNING/"risk" + ledger `portfolio.risk.drawdown_breach`, honors notify gates). No new outbound gRPC (DB read + already-wired clients).
+- Files: `internal/service/portfolio_service.go`. Build clean.
+
+### Step 5 — service: evaluateDrawdowns unit test (AC-1) [done]
+- Table-driven `TestEvaluateDrawdowns`: breach (3%>2%, names acc-1), sub-limit (1%<=2%, silent), no-history (peak 0, skipped, no panic), mixed slice (per-account grain — only breaching named). C-13: inline literals, single consumer.
+- Red→green: compile-RED (`undefined: evaluateDrawdowns`) on pre-Step-4 tree → passed after Step 4 (`-race`). gofmt-fixed my own comment alignment. golangci-lint 0 issues (whole module); full portfolio suite green (no regression from the interface widening / upsert change).
+- Files: `internal/service/portfolio_risk_test.go`. Deviations: none.
+
+### Step 6 — docs: config-key note + findings + durable acceptance suite (C-16) [done]
+- `CLAUDE.md` `max_drawdown_pct` row → enforcement description; portfolio findings `:20` marked RESOLVED with corrected `:769`/`:797` → `:740`/`:769-771` citations; created `acceptance/drawdown-enforcement.feature` promoting AC-1/AC-2 (`@feature-172`).
+- Teardown: context-forge refresh not invocable; manual reconciliation performed (see Deviation Log + PR body).
+- Files: `services/xstockstrat-portfolio/CLAUDE.md`, `.../docs/context-constitution-findings.md`, `.../acceptance/drawdown-enforcement.feature`
+
+## Session 2026-09-04 — sdd-execute summary (feature 172)
+**Steps this session**: 1–6 (all)
+**Progress**: 6 done / 6 total
+**Stopped at**: all complete → code-completed
+**Accountability**: out-of-scope changes: none. Open questions: cash-flow-funding drawdown is an accepted known limitation with a named follow-up ('model funding events') — recorded at design, not this PR's scope. Unaddressed review warnings: none. Migration 016 needs DBA + service-owner approval at the PR.
+**Next**: stacked integration PR #3 (base `feature/fix-config-watcher-client-id`); then feature 171.

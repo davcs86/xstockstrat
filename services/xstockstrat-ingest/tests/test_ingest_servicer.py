@@ -64,6 +64,24 @@ def make_servicer(
 
 
 # ---------------------------------------------------------------------------
+# Feature 173 — the retry consumer honors a stored max_retry_attempts=0 through
+# the full watcher → property → _effective_max_attempts() seam (real watcher,
+# not the MagicMock cfg). RED pre-fix: 3 (get_int trap) or AttributeError (no seam).
+# ---------------------------------------------------------------------------
+
+
+def test_effective_max_attempts_honors_stored_zero():
+    w = ConfigWatcher.__new__(ConfigWatcher)
+    snap = config_pb2.ConfigSnapshot()
+    snap.values["ingest.backfill.max_retry_attempts"].int_val = 0
+    snap.values["ingest.backfill.retry_on_failure"].bool_val = True
+    w._snapshot = snap
+    svc = make_servicer()  # channels/db mocked
+    svc._cfg = w  # exercise get_int_present + property + seam
+    assert svc._effective_max_attempts() == 0
+
+
+# ---------------------------------------------------------------------------
 # Durable backfill jobs (feature 052) — servicer reads/writes the repo, not _jobs
 # ---------------------------------------------------------------------------
 
@@ -1026,6 +1044,19 @@ class _StubWatcher(ConfigWatcher):
 
 
 class TestConfigWatcherGetters:
+    def test_build_watch_request_client_id_and_scope(self):
+        # Feature 174 — the ingest watcher must identify as ingest-<id>, not the
+        # copy-pasted indicators- prefix, while keeping environment + trading_mode on the wire.
+        w = _StubWatcher()
+        w._environment = common_pb2.ENVIRONMENT_STAGING
+        w._trading_mode = common_pb2.TRADING_MODE_PAPER
+        req = w._build_watch_request()
+        assert req.client_id.startswith("ingest-")
+        assert not req.client_id.startswith("indicators-")
+        assert req.environment == common_pb2.ENVIRONMENT_STAGING
+        assert req.trading_mode == common_pb2.TRADING_MODE_PAPER
+        assert req.namespace == "ingest"
+
     def test_get_str_returns_default_when_no_snapshot(self):
         w = _StubWatcher()
         assert w.get_str("any.key", default="fallback") == "fallback"

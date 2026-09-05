@@ -127,30 +127,6 @@ func TestLoadFromEnv_Overrides(t *testing.T) {
 	}
 }
 
-func TestGetEnvBool(t *testing.T) {
-	tests := []struct {
-		envVal   string
-		fallback bool
-		want     bool
-	}{
-		{"true", false, true},
-		{"1", false, true},
-		{"yes", false, true},
-		{"false", true, false},
-		{"0", true, false},
-		{"", true, true},
-		{"", false, false},
-	}
-
-	for _, tt := range tests {
-		t.Setenv("TEST_BOOL_MD", tt.envVal)
-		got := getEnvBool("TEST_BOOL_MD", tt.fallback)
-		if got != tt.want {
-			t.Errorf("getEnvBool(%q, %v) = %v, want %v", tt.envVal, tt.fallback, got, tt.want)
-		}
-	}
-}
-
 // newTestWatcher builds a Watcher with a pre-populated snapshot for unit tests.
 // It bypasses NewWatcher (which dials gRPC) so no network is required.
 func newTestWatcher(snapshot map[string]*configv1.ConfigValue) *Watcher {

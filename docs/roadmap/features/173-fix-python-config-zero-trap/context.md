@@ -147,3 +147,55 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Carried into execution:
   - Step 6: the FR-3 audit grep over ingest/app/config/watcher.py will also surface the DEAD `indicators.sandbox.*` helper copy at ingest watcher.py:149-163 (a get_str read of indicators.sandbox.allowed_imports) — [ ] unaddressed: pre-declare this dead copy as known-out-of-scope in the Step 6 enumeration so the "stop and reconcile" instruction does not false-stop on it (C-01 evidence completeness). It is dead code (ingest runs no sandbox); NOT a correctness/security/Floor issue. Same dead helper 174 deliberately leaves open.
 - Overlap findings: SOFT (WARN, rebase-only) — 173 and 174 both edit three xstockstrat-ingest files (app/config/watcher.py, tests/test_ingest_servicer.py, CLAUDE.md) at DISJOINT line ranges. Recommend sequencing: land 173 (SEV-2 correctness) BEFORE 174 (cosmetic); 174 rebases. No shared migration/proto/config. No merge-order row written (WARN-level, not FAIL) — pending operator decision.
+
+---
+
+## Session 2026-09-04 — sdd-execute (sequential; stacked PR #1 of 5, base main-dev)
+
+Order 173→174→172→171→175, one stacked PR per feature (operator-approved: SDD feature/<slug> stack, auto-proceed through checkpoints). Branch `feature/fix-python-config-zero-trap` off `origin/main-dev` (5256cca).
+
+### Step 1 — ingest watcher: add `get_int_present`, re-point 2 keys, annotate semaphore keys [done]
+- Added `get_int_present` (HasField-based, ported verbatim from analysis watcher `:102-113`) after `get_int`. Re-pointed `backfill_max_retry_attempts` and `dedup_window_hours` to it; annotated `backfill_max_concurrent_jobs`/`backfill_max_concurrent_chunks` with the intentional-zero-trap comment (Semaphore(0) deadlock at servicer.py:191/:519). No `get_float_present` (FR-1 int-only).
+- Files modified: `services/xstockstrat-ingest/app/config/watcher.py`
+- TDD (cluster 1+2 covered by Step 3): AC-3 red — `get_int_present` AttributeError; AC-2 red — `dedup_window_hours == 24` not 0 → green after Steps 1-2.
+- Deviations: none
+
+### Step 2 — ingest servicer: extract `_effective_max_attempts()` seam [done]
+- Added `_effective_max_attempts()` on `IngestServicer` and replaced the inline `max_attempts = (... if backfill_retry_on_failure else 0)` in `_run_chunks` with a single call to it — the sole definition of `max_attempts` (no duplicate inline copy; seam-integrity per design.md Open Risk).
+- Files modified: `services/xstockstrat-ingest/app/handlers/servicer.py`
+- TDD (covered by Step 3): AC-1 red — `_effective_max_attempts` AttributeError → green after seam added.
+- Deviations: none
+
+### Step 3 — ingest accessor + consumer regression tests (AC-1/AC-2/AC-3) [done]
+- Added dial-free `ConfigWatcher.__new__` builders + real `ConfigSnapshot`/`ConfigValue` (insights-069/fails-074). `test_config_watcher.py`: `get_int_present` honors stored 0 (both keys), defaults when absent, `dedup_window_hours == 0`. `test_ingest_servicer.py`: `_effective_max_attempts() == 0` through the full watcher→property→seam chain against a real watcher.
+- Red→green: 5 tests failed on pre-fix tree (AttributeError ×3, `24 != 0`) → 5 passed after Steps 1-2. Full suite: 212 passed, coverage 78.15% (≥40). ruff check + format clean.
+- Files modified: `services/xstockstrat-ingest/tests/test_config_watcher.py`, `services/xstockstrat-ingest/tests/test_ingest_servicer.py`
+- Deviations: none. Existing `make_servicer(max_retry=…)` loop tests left untouched and green (seam-integrity).
+
+### Step 4 — indicators watcher: add net-new `get_str_present`, re-point `sandbox_allowed_imports` [done]
+- Added `get_str_present` (net-new; no `get_str_present` existed in any watcher) after `get_str`, mirroring `get_bool`'s HasField idiom. Re-pointed `sandbox_allowed_imports` to it, leaving the split unchanged so a stored "" resolves to `[]` (deny all imports) instead of the permissive 4-module default. No numeric present accessor (OQ-3: indicators numeric keys not 0-meaningful).
+- Files modified: `services/xstockstrat-indicators/app/config/watcher.py`
+- TDD (covered by Step 5): AC-4 red — `get_str_present` AttributeError / `sandbox_allowed_imports == [4-module default]` → green after.
+- Deviations: none
+
+### Step 5 — indicators `get_str_present` + deny-all `allowed_imports` tests (AC-4) [done]
+- Added dial-free `_str_watcher` builder + cases: `get_str_present` honors "", defaults when absent, `sandbox_allowed_imports == []`. Property assertion is the primary AC-4 check (subprocess end-to-end left out per design.md Open Risk — flake/cost).
+- Red→green: 3 failed pre-fix (AttributeError ×2, 4-module list != []) → 3 passed. Full suite: 128 passed, coverage 81.10% (≥50). ruff check + format clean (formatted my own AC-4 assertion line).
+- Files modified: `services/xstockstrat-indicators/tests/test_config_watcher.py`
+- Deviations: none
+
+### Step 6 — docs: present-aware read notes + FR-3 audit [done]
+- Annotated 3 config-key rows (ingest `max_retry_attempts`, `dedup_window_hours`; indicators `allowed_imports`) with the `get_int_present`/`get_str_present` present-aware read notes. FR-3 audit: no live 0-meaningful key remains on a trapping accessor; the ingest watcher's `indicators.sandbox.*` get_str/get_int reads (`:166/:170/:174`) are the pre-declared KNOWN-DEAD copy (ingest runs no sandbox) — expected, not a false-stop.
+- Teardown (How-to-Act): `/context-forge:context-constitution refresh` not invocable this session; manual reconciliation performed — annotations match watcher.py exactly, no drift. Recorded in Deviation Log + PR body.
+- Files modified: `services/xstockstrat-ingest/CLAUDE.md`, `services/xstockstrat-indicators/CLAUDE.md`
+- Deviations: teardown-manual (see Deviation Log)
+
+## Session 2026-09-04 — sdd-execute summary (feature 173)
+**Steps this session**: 1–6 (all)
+**Progress**: 6 done / 6 total
+**Stopped at**: all complete → code-completed
+**Accountability**: out-of-scope changes: none. Open questions: none. Unaddressed review warnings: none (the pre-declared known-dead ingest sandbox copy was handled in the Step 6 audit as planned).
+**Next**: stacked integration PR #1 (base `main-dev`); then feature 174.
+
+### C-16 promotion (integration)
+- Promoted AC-1/AC-2/AC-3 → `services/xstockstrat-ingest/acceptance/fix-python-config-zero-trap.feature`; AC-4 → `services/xstockstrat-indicators/acceptance/fix-python-config-zero-trap.feature` (new dir), each tagged `@feature-173`. All PRESERVE-class additive regression guards (no CHANGE to existing guarantees); staged into PR #1. Operator pre-authorized auto-proceed; surfaced in the per-feature summary.

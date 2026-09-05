@@ -68,7 +68,7 @@ Namespace: `indicators`
 |---|---|---|---|
 | `indicators.sandbox.timeout_ms` | int | `5000` | Max formula execution time in ms |
 | `indicators.sandbox.memory_bytes` | int | `134217728` | Max memory (128 MiB) per formula |
-| `indicators.sandbox.allowed_imports` | string | `numpy,pandas,math,statistics` | Comma-separated allowed Python imports |
+| `indicators.sandbox.allowed_imports` | string | `numpy,pandas,math,statistics` | Comma-separated allowed Python imports. Read via `get_str_present` (never `get_str`): a configured `""` denies all imports rather than reverting to this permissive default (feature 173) |
 | `indicators.sandbox.max_concurrent` | int | `4` | **Documented, not yet enforced** — intended concurrency cap; no `Semaphore`/limit reads it |
 
 ## Seeded Formulas

@@ -718,6 +718,24 @@ func (s *PortfolioService) broadcastSnapshot(ctx context.Context, userID string,
 	s.mu.RUnlock()
 }
 
+// evaluateDrawdowns returns a per-account breach message for each account whose peak-to-current
+// drawdown exceeds limit. peak_equity == 0 (no history) is skipped — no divide-by-zero.
+func evaluateDrawdowns(rows []repository.AccountDrawdown, limit float64) []string {
+	var msgs []string
+	for _, d := range rows {
+		if d.PeakEquity <= 0 {
+			continue
+		}
+		dd := (d.PeakEquity - d.Equity) / d.PeakEquity
+		if dd > limit {
+			msgs = append(msgs, fmt.Sprintf(
+				"drawdown limit breach: account %s at %.1f%% (peak %.2f, current %.2f)",
+				d.AccountID, dd*100, d.PeakEquity, d.Equity))
+		}
+	}
+	return msgs
+}
+
 func (s *PortfolioService) checkRiskLimits(ctx context.Context, userID string, mode commonv1.TradingMode) {
 	maxDrawdownPct := s.cfg.GetFloat("portfolio.risk.max_drawdown_pct", 0.10)
 	concentrationLimitPct := s.cfg.GetFloat("portfolio.risk.concentration_limit_pct", 0.20)
@@ -747,7 +765,13 @@ func (s *PortfolioService) checkRiskLimits(ctx context.Context, userID string, m
 			}
 		}
 	}
-	_ = maxDrawdownPct // drawdown requires historical P&L tracking — handled by snapshots over time
+	// Per-account drawdown: broker-authoritative equity vs persisted peak_equity HWM (feature 172).
+	drawdowns, err := s.repo.GetAccountDrawdowns(ctx, userID, mode.String())
+	if err == nil {
+		for _, msg := range evaluateDrawdowns(drawdowns, maxDrawdownPct) {
+			s.emitRiskAlert(ctx, msg)
+		}
+	}
 }
 
 func (s *PortfolioService) emitRiskAlert(ctx context.Context, msg string) {
