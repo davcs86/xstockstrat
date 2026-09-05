@@ -67,6 +67,25 @@ FR-5. The on-demand `EvaluateReadiness` path remains a correct fallback: a cache
 materializer has not yet covered, or a brand-new binding) still computes synchronously as today, so
 the overlay is never blank — it is only slow in the uncovered case, fast in the covered case.
 
+FR-6. **(Operator constraint, 2026-09-05.)** Watchlist symbol bindings reference **live strategies
+only**. A binding to a non-live strategy is treated as a **bug**, not a supported case — the
+materializer's warm-set is therefore the live-strategy universe (which the live evaluation loop
+already enumerates per owner), and this feature is **not** obligated to pre-warm non-live bindings.
+Whether the platform should actively *prevent* creating a non-live binding is a separate concern
+(see Out of Scope / Open Questions), not solved here.
+
+FR-7. **(Operator constraint, 2026-09-05 — freshness reframe.)** This is **not** a day-trading
+platform; all strategy evaluation operates on **1-day (EOD) bars**. Readiness therefore only changes
+at **daily bar close** or on a **strategy/formula definition change** — not intraday. The 30s poll
+cadence (`analysis.readiness.stale_after_seconds`, client `staleTime: 30_000`) exists to keep the
+**stock-list quote/price display** fresh, **not** the readiness verdict. Consequently a materialized
+readiness row may carry a **bar-close-aligned `valid_until`** (a long TTL keyed to the next expected
+daily bar) rather than the 30s window, so pre-warming does not require refreshing every pair every
+30s. The design **must reconcile this with feature 177's `@AC-2`** (which today relies on the short
+window to pick up intraday same-timestamp 1d-bar OHLC mutation) — i.e. decide whether that intraday
+sensitivity is a real requirement for readiness or an over-tight window inherited from conflating
+quote-freshness with verdict-freshness (a C-16 boundary the design phase resolves).
+
 ## Out of Scope
 
 - Changing the `EvaluateReadiness` RPC contract or the UI overlay component (`WatchlistReadiness.tsx`)

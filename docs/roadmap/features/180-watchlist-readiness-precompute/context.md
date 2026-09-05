@@ -37,3 +37,23 @@
   and the restructured `EvaluateReadiness`/bars-fetch bound (feature 176). Both are code-completed,
   not launched. Recommended merge sequence: 176 → 177 → 180. No merge-order.md row for 180 yet —
   add one at design/spec time. Next free analysis migration NNN is 024 (022, 023 taken by 177).
+
+## Session 2026-09-05 — sdd-design (Phase 1 grilling, Round 1 + operator reframe)
+
+- Recon written; Round 1 proposer proposed **Option B** (dedicated `run_readiness_materializer_forever`
+  loop mirroring `run_opportunity_refresh_forever`) + new gated `ListAllWatchlistBindings` portfolio
+  RPC + shared-helper refactor of the SLOW `_readiness_for` body for byte-identity.
+- Round 1 adversary verdict **NEEDS WORK** (no Floor breach, no C-16 regression as written): the
+  30s `valid_until` window makes background *verdict* pre-warm unable to fix the cold large-watchlist
+  first-load (can't refresh P pairs per rolling 30s under `_bars_fetch_sem`=2); reusing
+  `_bars_fetch_sem` re-creates the feature-176 priority inversion; `interval 60 > stale_after 30` is
+  self-contradictory; owner-scoping must hash the binding-owner's DB strategy row (fails.md:1153).
+- **Operator injected two direction-changing requirements** (recorded as FR-6, FR-7):
+  1. Watchlists bind **live strategies only** → warm-set = live-strategy universe the live loop
+     already enumerates per owner ⇒ **Option A (inside live loop) regains viability**; the new
+     cross-user RPC may be unnecessary. Non-live binding = bug, out of scope here.
+  2. **1-day bars only; 30s poll is for stock-list freshness, not readiness** ⇒ readiness changes
+     only at daily bar close / definition change ⇒ a materialized row can carry a **bar-close-aligned
+     `valid_until`**, dissolving the "refresh every 30s" wall. Must reconcile with feature 177 `@AC-2`
+     (intraday 1d-bar OHLC bust) — the key C-16 boundary for Round 2.
+- Warm-set scope (live-loop enumeration vs new RPC) deferred to Round 2 by the operator.
