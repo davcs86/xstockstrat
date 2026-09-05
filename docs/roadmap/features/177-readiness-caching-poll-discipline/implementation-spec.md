@@ -593,7 +593,7 @@ Targeted file passes; full suite ≥ 40%.
 
 ### Step 12 — service: FR-2 client `staleTime` on the readiness `useQueries`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/WatchlistReadiness.tsx` — modify
@@ -628,7 +628,7 @@ defaults (no whole-list refetch regression).
 
 ### Step 13 — test: FR-2 remount within `staleTime` (AC-3, Playwright e2e)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/watchlists.spec.ts` — modify

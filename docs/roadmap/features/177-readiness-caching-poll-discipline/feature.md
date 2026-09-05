@@ -16,6 +16,7 @@
 | 2026-09-05 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 13 steps |
 
 | 2026-09-05 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run started; Steps 1–2 (proto computed_at + codegen) landed |
+| 2026-09-05 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done (FR-1 readiness FAST/SLOW cache, FR-3 empty-universe compute-state, FR-4 live-enrich memo, FR-2 UI staleTime + e2e); analysis suite 680 green + UI e2e 420 green |
 ---
 
 ## Artifacts

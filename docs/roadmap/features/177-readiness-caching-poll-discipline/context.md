@@ -255,3 +255,22 @@ anchors resolve on the post-176 tree) — no mismatch, no re-spec.
   TTL still fetches and surfaces the recovered quote). RED pre-Step-10 (memo-hit refetches; the
   monkeypatch target `servicer.time` doesn't exist pre-`import time`), GREEN after.
 - Full analysis suite `680 passed` (+3), coverage `85%`; ruff clean.
+
+### Steps 12–13 — done (FR-2 client staleTime + remount e2e, TDD red→green)
+- Step 12: `WatchlistReadiness.tsx` — added `staleTime: 30_000` to each `useQueries` query descriptor
+  (per-query, NOT a `QueryClient` default — a default would force a whole-list refetch, @AC-6/167).
+  `queryClient.ts` defaults untouched (`staleTime: 5_000`). Lint clean.
+- Step 13: `e2e/insights/watchlists.spec.ts` — new AC-3 test: two pre-bound lists, a `page.on(
+  'request')` counter on `/EvaluateReadiness`, `page.clock` advanced 10s (past the 5s QueryClient
+  default, within the 30s per-query window), switch list away→back (detail remounts on
+  `key={watchlistId}`), assert no second EvaluateReadiness. RED pre-Step-12 (10s > 5s default →
+  refetch; the one failure among 419 green), GREEN after (`420 passed`). Reuses `mockWatchlists` /
+  `openList` / `addAuthCookie` / the `evaluateReadiness` mock handler (C-12 — no inline mock literals;
+  the route counter is a scenario one-off per the spec).
+
+### Deviation Log — Step 13 e2e runner (CI-equivalent local run)
+- **Disposition**: CI-equivalent fallback. Ran the Playwright suite locally via `CI=1 pnpm test:e2e`
+  (the `pnpm build && pnpm start` prod path — the dev-server cold-compile blows the 10s local warmup
+  budget) with `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium` (this sandbox pre-bakes
+  a single Chromium and `global-setup.ts` reads that env var directly). Same image/flow CI uses; full
+  suite 420 green. No product/behavior deviation.
