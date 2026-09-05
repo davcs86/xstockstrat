@@ -20,6 +20,7 @@ import {
   requireSession,
   backendHeaders,
   forward,
+  forwardAdmin,
 } from '@/lib/bffShared';
 import { COPILOT_STREAM_PREFIX, COPILOT_EVENT_TYPE, copilotStreamKey } from '@/lib/copilot';
 
@@ -55,6 +56,9 @@ router.service(TradingService, {
     tradingClient.updateBrokerAccountCredentials(req, opts),
   ),
   getTradingEnvironment: forward((req, opts) => tradingClient.getTradingEnvironment(req, opts)),
+  // Admin-gated (feature 179): resume mirrors the RPC's server-side RequireAdminScope at the edge
+  // without widening scope. account_id/reason only — ownership resolves from the propagated header.
+  resumeAccount: forwardAdmin((req, opts) => tradingClient.resumeAccount(req, opts)),
 });
 
 router.service(PortfolioService, {

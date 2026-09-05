@@ -164,7 +164,7 @@ No hardcoded hex/`oklch`/`hsl`/`bg-yellow-*` literal in this file (C-17): `grep 
 
 ### Step 3 — service: Register the admin-gated `resumeAccount` BFF route
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/traderBff.ts` — modify
