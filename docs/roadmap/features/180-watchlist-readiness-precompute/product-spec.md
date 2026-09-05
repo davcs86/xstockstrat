@@ -62,9 +62,10 @@ FR-3. Materialized readiness respects the same **definition fingerprint** (`def_
 on-demand path, so that a stale row — strategy/formula changed (fingerprint mismatch) **or** a new
 daily bar landed (`bar_epoch` behind the latest bar) — is recomputed rather than served indefinitely.
 Freshness is enforced by the `bar_epoch`-aware FAST gate (authoritative), with
-`analysis.readiness_materializer.valid_window_hours` as a backstop TTL. The materializer's run cadence
-itself is not a new config axis (it rides the loop's existing interval mechanism); the only
-operator-tunable freshness knob this feature adds is `valid_window_hours` (see Config Key Changes).
+`analysis.readiness_materializer.valid_window_hours` as a backstop TTL. The daily re-warm runs on a
+wall-clock cadence anchored by a **dedicated** `analysis.readiness_materializer.refresh_hour_utc`
+(decoupled from the opportunity loop's own anchor — operator decision, 2026-09-05), so the two daily
+loops are independently tunable (see Config Key Changes).
 
 FR-4. The background materialization is **bounded** in its resource use — marketdata pull volume,
 indicator recompute cost, and DB connection budget must stay within the analysis service's existing
@@ -138,8 +139,11 @@ _Constitution **C-14**._
 
 ## Config Key Changes
 
-Final set (decided at /sdd-design):
+Final set (decided at /sdd-design; the cadence anchor added at /sdd-review impl-spec — operator D-2):
   - `analysis.readiness_materializer.enabled` (bool, default `false`) — master switch for the loop.
+  - `analysis.readiness_materializer.refresh_hour_utc` (int, default = the same post-close hour as
+    `analysis.opportunity.refresh_hour_utc`'s default) — **dedicated** wall-clock anchor for the daily
+    re-warm, decoupled from the opportunity loop so the two daily jobs tune independently (D-2).
   - `analysis.readiness_materializer.valid_window_hours` (int, default 24) — backstop TTL for a
     materialized row's `valid_until` (the authoritative bust is the `bar_epoch`-aware FAST gate).
   - `analysis.readiness_materializer.max_concurrent_bars_fetches` (int, default 2) — the loop's **own**

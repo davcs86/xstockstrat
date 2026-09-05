@@ -147,3 +147,26 @@
 - Reviewers snapshot finalized in feature.md: analysis service owner (all steps) + config service
   owner (Step 7). No DBA / Proto Reviewer (no migration, no proto). Merge-order row for 180 already
   present in merge-order.md (176 → 177 → 180).
+
+## Session 2026-09-05 — sdd-review impl-spec (advisory) + all warnings resolved
+
+- Result: 0 blockers, 4 warnings, no Floor breach (spec-reviewer, PASS WITH WARNINGS). Overlap: only
+  the expected same-function overlap on servicer.py with 176/177, already governed by the existing
+  merge-order row (176 → 177 → 180); no new row needed. All code-checkable claims verified (D-1
+  `_drain_watchlist` discards strategy_id CONFIRMED; D-3 `GetDataCoverage` exists; `refresh_hour_utc`
+  exists).
+- All 4 warnings ADDRESSED this session:
+  - [x] W1 (C-15 tag swap): @AC-2 (owner-scoped derivation) was mislabeled as "new daily bar busts"
+    in the coverage table + Step 4. Fixed: @AC-2 → Step 6; Step 4 covers @AC-1/@AC-5/@AC-7 only;
+    @AC-7 is the daily-bar-bust scenario.
+  - [x] W2 (Step 5 DurableSchedule job name, C-01/P-03): pinned distinct `job_name="readiness_materializer"`
+    (was unspecified; would have collided with "opportunity" on analysis.job_schedule PK).
+  - [x] W3 (D-2 cadence coupling, P-03 decision): OPERATOR CHOSE the **dedicated decoupled key**
+    `analysis.readiness_materializer.refresh_hour_utc` over reusing `analysis.opportunity.refresh_hour_utc`.
+    Applied to Step 5 (anchor), Step 7 (now FOUR keys), the D-2 deviation block, and product-spec
+    (FR-3 reworded, Config section adds the 4th key). Two daily loops now independently tunable.
+  - [x] W4 (D-3 GetDataCoverage cost): Step 3 now instructs bounding the per-read MIN/MAX/COUNT(*)
+    scan via a narrow recent range if the request exposes one (confirm at execute), else record the
+    full-history-scan cost as a marketdata follow-up (P-03) — still far cheaper than the 400-day pull.
+- Status unchanged: implementation-ready (Mode B is advisory, no lifecycle change).
+- Next: /sdd-execute (gated on 176 → 177 landing first).

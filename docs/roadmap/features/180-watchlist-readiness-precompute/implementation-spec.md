@@ -35,7 +35,7 @@ by the backend warm cache alone.
 | Scenario | Covered by step(s) |
 |---|---|
 | @AC-1 (materialized pair served FAST, no recompute) | Step 2 (interactive byte-identity FAST hit), Step 6 (materialized row → FAST hit) |
-| @AC-2 (new daily bar busts the cache) | Step 4 (interactive `bar_epoch` gate), Step 6 (materialized row re-warmed) |
+| @AC-2 (materialized set derived from watchlist bindings, owner-scoped) | Step 6 (owner-scoped derivation from bindings) |
 | @AC-3 (stale fingerprint recomputed) | Step 6 |
 | @AC-4 (cycle stays within resource envelope; own semaphore) | Step 6 |
 | @AC-5 (uncovered pair → SLOW fallback, never blank; writes row) | Step 4 |
@@ -70,16 +70,18 @@ by the backend warm cache alone.
   (`WatchlistReadiness.tsx:183` `bound = bindings.filter(b => b.strategyId)`, recon). Step 5 therefore
   adds a **new** binding-aware drain (`_drain_watchlist_bindings`) rather than reusing `_drain_watchlist`.
   Record this correction in the `## Deviation Log` at execute.
-- **D-2 — loop cadence mechanism (design R1 + product-spec FR-3 "cadence is not a new config axis").**
-  design.md component #3 says "DurableSchedule interval mode," but interval mode needs an interval
-  value and the design forbids a new cadence key. The grounded, no-new-key choice consistent with
-  FR-7 (readiness changes at daily bar close) is **DurableSchedule wall-clock mode reusing the
-  existing `analysis.opportunity.refresh_hour_utc`** anchor (a daily re-warm shortly after close),
-  mirroring `run_opportunity_refresh_forever` (servicer.py:3780-3804). Step 5 specs this. **Confirm at
-  `/sdd-review impl-spec` or with the operator** whether reusing the opportunity anchor is acceptable
-  vs. adding a dedicated `analysis.readiness_materializer.*` wall-clock key (which would reintroduce a
-  cadence axis the design ruled out). FR-1 is already rescoped to eventually-consistent (product-spec
-  FR-1, design R1): openers before the first daily warm fall to the Step 4 SLOW fallback.
+- **D-2 — loop cadence mechanism. RESOLVED (operator, 2026-09-05): dedicated decoupled key.**
+  design.md component #3 said "DurableSchedule interval mode," but interval mode needs an interval
+  value; FR-7 (readiness changes at daily bar close) makes a **wall-clock daily re-warm shortly after
+  close** the right shape, mirroring `run_opportunity_refresh_forever` (servicer.py:3780-3804). The
+  choice between reusing `analysis.opportunity.refresh_hour_utc` vs. a dedicated key was put to the
+  operator, who chose the **dedicated key `analysis.readiness_materializer.refresh_hour_utc`** — the
+  two daily loops are decoupled so tuning the opportunity refresh hour never silently moves the
+  readiness re-warm (fault-tolerant / independently operable). Step 5 uses this key; Step 7 declares
+  it (four keys total). This reopens FR-3's "cadence is not a new config axis" wording — reconciled in
+  product-spec (the materializer adds one cadence anchor key, `refresh_hour_utc`, plus the
+  `valid_window_hours` backstop). FR-1 remains rescoped to eventually-consistent (design R1): openers
+  before the first daily warm fall to the Step 4 SLOW fallback.
 - **D-3 — R2 FAST-gate `latest_bar_epoch` cost.** The `bar_epoch`-aware gate (Step 3) needs each
   symbol's latest 1d-bar epoch on every FAST read. The grounded cheap source is
   `MarketDataService.GetDataCoverage(symbol, timeframe=1d).latest` (a `MAX(time)` metadata read,
@@ -223,6 +225,14 @@ Written to fail before Step 1 (module `app.services.readiness` does not yet exis
    timeframe enum consistent with the readiness bars (confirm the enum member via
    `packages/proto/common/v1/common.proto` `Timeframe`). Consider batching but per-symbol is fine at
    overlay scale.
+   - **Cost bound (review D-3):** `GetDataCoverage` runs `SELECT MIN(time), MAX(time), COUNT(*)` over
+     the symbol's full history (`services/xstockstrat-marketdata/internal/repository/marketdata_repo.go:213`),
+     yet this memo runs on **every** FAST read and needs only `.latest`. To keep this per-symbol-per-read
+     lookup cheap, pass a **narrow recent time range** on `GetDataCoverageRequest` if the message exposes
+     one (confirm the field at execute) so the server bounds its scan; consume only `resp.latest`. If no
+     range field exists, keep the call (still far cheaper than the 400-day pull + indicator/rule fan-out
+     it replaces) but record the full-history-scan cost as a follow-up for the marketdata owner rather
+     than leaving it unstated (P-03).
 2. Replace the inline FAST-gate predicate at `servicer.py:2780` with
    `is_readiness_row_fresh(c, now=now, fingerprint=fingerprint, latest_bar_epoch=latest_bar_epoch.get(symbol, 0))`
    (from `app.services.readiness`, Step 1). On `True`, serve FAST exactly as today (:2781-2785); on
@@ -240,7 +250,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 
 ---
 
-### Step 4 — test: interactive `bar_epoch` gate — @AC-1 / @AC-2 / @AC-5 / @AC-7
+### Step 4 — test: interactive `bar_epoch` gate — @AC-1 / @AC-5 / @AC-7
 
 **Status**: `pending`
 **Service**: `xstockstrat-analysis`
@@ -253,11 +263,11 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 **Codebase Evidence**:
 - `_cache_svc` mock builder to extend: `tests/test_readiness_cache.py:28-48` (mocks `svc._marketdata.GetBars` only; must also mock `svc._marketdata.GetDataCoverage`).
 - 177 scenarios that must stay green: `tests/test_readiness_cache.py:63-90` (@AC-1 FAST), `:82-105` (@AC-2 expiry), `:112-127` (benchmark bar_epoch).
-- Acceptance source: `docs/roadmap/features/180-watchlist-readiness-precompute/acceptance.feature` @AC-1, @AC-2, @AC-5, @AC-7.
+- Acceptance source: `docs/roadmap/features/180-watchlist-readiness-precompute/acceptance.feature` @AC-1, @AC-5, @AC-7. (Owner-scoped derivation @AC-2 is a materializer behavior — covered in Step 6, not here.)
 
 **TDD**: `red-green required`
 
-**Covers**: `AC-1, AC-2, AC-5, AC-7`
+**Covers**: `AC-1, AC-5, AC-7`
 
 **Instructions**:
 1. Add a `GetDataCoverage` AsyncMock to `_cache_svc` (returns `latest.seconds` = the symbol's newest
@@ -266,7 +276,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 2. **@AC-1 (FAST hit within window, current epoch):** a fresh, fingerprint-matching row whose
    `bar_epoch == latest_bar_epoch` serves FAST — assert `GetBars.await_count == 0` after warm-up (a
    `GetDataCoverage` call is allowed; assert no `GetBars`).
-3. **@AC-2 / @AC-7 (new daily bar busts, intraday does not):** with a cached row at `bar_epoch = E`
+3. **@AC-7 (new daily bar busts, intraday does not):** with a cached row at `bar_epoch = E`
    and `valid_until` in the future, when `GetDataCoverage.latest.seconds == E` (same trading day, no
    new bar) → FAST (no `GetBars`); when it advances to `E+1` (new daily bar) → `is_readiness_row_fresh`
    returns `False` → SLOW recompute (`GetBars` called), verdict reflects the new bar. This asserts the
@@ -308,7 +318,7 @@ Written to fail before Step 3 (the epoch-advance case serves FAST instead of rec
 - Shared compute + freshness + valid_until: `app/services/readiness.py` (Steps 1, 3).
 - Cache repo: `app/repositories/readiness_cache.py:25` `read_many(user_id, strategy_id, rule, symbols)`, `:44` `upsert_many(rows)`.
 - `latest_bar_epoch` source: `GetDataCoverage` (Step 3 helper — factor it so the loop reuses it per cycle).
-- Config-read patterns: `get_bool` (`live_loop.py:265`), `get_int_present`/`get_int` with `max(1,…)` clamp (`servicer.py:391,396`); wall-clock anchor `analysis.opportunity.refresh_hour_utc` read presence-aware (`servicer.py:3797` via `self._opportunity_refresh_hour`), jitter `analysis.opportunity.startup_jitter_seconds` (:3801), retry `analysis.opportunity.retry_seconds` (:3762).
+- Config-read patterns: `get_bool` (`live_loop.py:265`), `get_int_present`/`get_int` with `max(1,…)` clamp (`servicer.py:391,396`); model the wall-clock anchor read on `analysis.opportunity.refresh_hour_utc` presence-aware handling (`servicer.py:3797` via `self._opportunity_refresh_hour`) but read the **dedicated** `analysis.readiness_materializer.refresh_hour_utc` (D-2). Jitter/retry may reuse the opportunity knobs `analysis.opportunity.startup_jitter_seconds` (:3801) / `analysis.opportunity.retry_seconds` (:3762) (bounded, non-cadence operational knobs — not the daily anchor), or read materializer-scoped values; confirm at execute.
 - Background-task wiring precedent: `main.py:175` `asyncio.get_event_loop().create_task(servicer.run_opportunity_refresh_forever())` inside the `if db_pool is not None:` block.
 - C-03 background header synthesis: `servicer.py:3766-3768` `meta = [("x-user-id", uid)]` per owner.
 
@@ -321,9 +331,13 @@ Written to fail before Step 3 (the epoch-advance case serves FAST instead of rec
 2. **`_drain_watchlist_bindings(owner) -> list[tuple[str, str]]`** — the binding-aware drain (D-1). Page `ListWatchlists` metadata `[("x-user-id", owner)]`; for each `wl.bindings` entry with a non-empty `strategy_id`, yield `(strategy_id, _normalize_symbol(symbol))`. Best-effort (an RPC failure returns what was drained so far, mirroring `_drain_watchlist`). Ignore legacy flat `wl.symbols` (they carry no strategy — not part of the overlay read-set).
 3. **`run_readiness_materializer_forever`** (orchestration only — design § component #3):
    - Early-return if `self._readiness_cache_repo is None or self._strategies_repo is None or self._db_pool is None`.
-   - DurableSchedule wall-clock mode anchored to `analysis.opportunity.refresh_hour_utc` (D-2 —
-     re-warm daily after close; reuses the existing anchor, no new cadence key). Seed → one-shot
-     bounded startup jitter → `while True: await asyncio.sleep(await self._readiness_materializer_tick(schedule))`.
+   - DurableSchedule wall-clock mode with a **distinct `job_name="readiness_materializer"`** (NOT
+     `"opportunity"` — `analysis.job_schedule` is keyed `(job_name, user_id)` per migration 020, so
+     reusing the opportunity job name would collide on that PK). Anchored to the **dedicated** key
+     `analysis.readiness_materializer.refresh_hour_utc` (D-2 decision — decoupled from the opportunity
+     loop's anchor), read presence-aware like `self._opportunity_refresh_hour` (`servicer.py:3797`).
+     Seed → one-shot bounded startup
+     jitter → `while True: await asyncio.sleep(await self._readiness_materializer_tick(schedule))`.
    - **`_readiness_materializer_tick`**: (a) check `self._cfg.get_bool("analysis.readiness_materializer.enabled", False)` — if disabled, advance the schedule and return (kill-switch, default OFF). (b) `live_rows = await self._strategies_repo.list_live_enabled()`; group into `owner -> {strategy_id: definition_row}`. (c) For each owner: `bindings = await self._drain_watchlist_bindings(owner)`; keep `(strategy_id, symbol)` where `strategy_id` is in that owner's live set (**@AC-6**: a binding to a non-live/other strategy is skipped, never fabricated — P-03; do not raise). (d) Build the warm-set of `(owner, strategy_id, symbol, definition)` with `rule="entry"`. (e) **Skip-fresh gate** (fails.md:118): per `(owner, strategy_id)` batch, `read_many(owner, strategy_id, "entry", symbols)` and fill a per-cycle `latest_bar_epoch` memo (via the Step-3 `GetDataCoverage` helper, **before** the per-pair compute — C-08); skip any pair where `is_readiness_row_fresh(row, now=now, fingerprint=_definition_fingerprint(definition_row["definition_json"]), latest_bar_epoch=…)`. (f) For each surviving pair, `compute_readiness_row(...)` with `bars_sem=self._readiness_materializer_bars_sem`, `valid_until=readiness_valid_until(now, valid_window_hours=self._cfg.get_int_present("analysis.readiness_materializer.valid_window_hours", 24))`, benchmark bars via `self._load_benchmark_bars_windowed`, meta `[("x-user-id", owner)]`. (g) `upsert_many(staged_rows)` per owner/strategy batch (best-effort try/except → log.warning; one bad pair or owner never halts the cycle — @AC-6). (h) `await asyncio.sleep(0)` cooperative pacing between owners (mirror servicer.py:3775). Advance the schedule to the next wall-clock hour on success; on a caught enumeration error advance by `analysis.opportunity.retry_seconds`.
 4. **`main.py`** — inside the existing `if db_pool is not None:` block (near :175), add `asyncio.get_event_loop().create_task(servicer.run_readiness_materializer_forever())` + a `log.info`. The loop self-gates on `.enabled` (default OFF), so unconditional `create_task` is safe (mirrors `fundsignal_loop`).
 5. Shared `asyncpg` pool only (F-06) — no new pool.
@@ -394,7 +408,7 @@ Written to fail before Step 5 (`_readiness_materializer_tick` does not yet exist
 
 ---
 
-### Step 7 — config: Declare the three `analysis.readiness_materializer.*` keys
+### Step 7 — config: Declare the four `analysis.readiness_materializer.*` keys
 
 **Status**: `pending`
 **Service**: `xstockstrat-analysis` / `xstockstrat-config`
@@ -414,16 +428,17 @@ Written to fail before Step 5 (`_readiness_materializer_tick` does not yet exist
 **Covers**: —
 
 **Instructions**:
-1. Append three rows to `services/xstockstrat-analysis/CLAUDE.md` § Config Keys Consumed:
+1. Append four rows to `services/xstockstrat-analysis/CLAUDE.md` § Config Keys Consumed:
    - `analysis.readiness_materializer.enabled` | bool | `false` | Master kill-switch for the readiness materializer loop (feature 180). Read via `get_bool` (HasField — an explicit operator value is honored). Default OFF. No-seed.
+   - `analysis.readiness_materializer.refresh_hour_utc` | int | `<same post-close hour as `analysis.opportunity.refresh_hour_utc`'s default>` | Wall-clock UTC hour for the daily readiness re-warm (feature 180, D-2). **Dedicated** and decoupled from `analysis.opportunity.refresh_hour_utc` so tuning the opportunity refresh never moves the readiness re-warm. Read presence-aware (mirror `self._opportunity_refresh_hour`). No-seed.
    - `analysis.readiness_materializer.valid_window_hours` | int | `24` | Backstop TTL for a materialized row's `valid_until` (feature 180); the **authoritative** freshness bust is the `bar_epoch`-aware FAST gate (`is_readiness_row_fresh`). Read via `get_int_present`. No-seed.
    - `analysis.readiness_materializer.max_concurrent_bars_fetches` | int | `2` | The loop's **own** bars-fetch semaphore (feature 180), separate from `analysis.opportunity.max_concurrent_bars_fetches` so a background pre-warm never starves interactive readiness (feature-176 priority-inversion guard). Read once at `__init__` via `get_int` with a `max(1, …)` clamp. No-seed.
 2. Append a `### feature 180 — watchlist-readiness-precompute (xstockstrat-analysis)` entry (newest
    first) to `docs/patterns/config-governance.md` § Per-Feature Registered Keys, with the same
-   three-key table and a one-line note: all three **no-seed** (the `analysis.*` no-seed pattern), no
-   config migration, no `SCALAR_BOUNDS_REGISTRY` entry (unlike feature 177's `stale_after_seconds`),
-   cadence is **not** a new key (rides the reused `analysis.opportunity.refresh_hour_utc` wall-clock
-   anchor — see D-2).
+   four-key table and a one-line note: all four **no-seed** (the `analysis.*` no-seed pattern), no
+   config migration, no `SCALAR_BOUNDS_REGISTRY` entry (unlike feature 177's `stale_after_seconds`);
+   the daily cadence anchor is the **dedicated** `analysis.readiness_materializer.refresh_hour_utc`
+   (decoupled from the opportunity loop — D-2), not a reuse.
 3. Do not add a config seed migration; do not reuse `analysis.readiness.stale_after_seconds` (owned by
    feature 177's lazy path — product-spec § Config Key Changes).
 
