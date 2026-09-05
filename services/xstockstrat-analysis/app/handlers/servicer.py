@@ -43,6 +43,7 @@ from app.repositories.backtest_run_symbols import BacktestRunSymbolsRepository
 from app.repositories.backtest_runs import BacktestRunsRepository
 from app.repositories.opportunities import OpportunitiesRepository
 from app.repositories.opportunity_actions import OpportunityActionsRepository
+from app.repositories.opportunity_compute_state import OpportunityComputeStateRepository
 from app.repositories.order_snapshots import OrderSnapshotsRepository
 from app.repositories.pnl_pattern_samples import PnLPatternSamplesRepository
 from app.repositories.pnl_positions import PnLPositionsRepository
@@ -426,6 +427,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         self._opportunities_repo = OpportunitiesRepository(db_pool) if db_pool else None
         # feature 177 FR-1: per-(user,strategy,rule,symbol) readiness cache backing the FAST path.
         self._readiness_cache_repo = ReadinessCacheRepository(db_pool) if db_pool else None
+        # feature 177 FR-3: per-user empty-universe compute-state gating redundant recompute.
+        self._opportunity_compute_state_repo = (
+            OpportunityComputeStateRepository(db_pool) if db_pool else None
+        )
         # P&L pattern attribution samples: written by the pnl_pattern_consumer, read here by
         # QueryPnLPatterns with query-time quantile bucketing.
         self._pnl_samples_repo = PnLPatternSamplesRepository(db_pool) if db_pool else None
@@ -3080,11 +3085,23 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         )
         if not rows:
             if await self._opportunities_repo.count_for_user(user_id) == 0:
-                # Cold read: bounded synchronous compute, then serve.
-                await self._materialize_opportunities(user_id, propagation_meta)
-                rows = await self._opportunities_repo.read(
-                    user_id, request.min_conviction, w, include_expired=False
+                # Cold read (never materialized) OR a legitimately-empty universe. Feature 177
+                # FR-3: consult compute-state — a still-fresh empty stamp serves empty without a
+                # synchronous recompute (a background revalidate self-heals an empty→non-empty
+                # transition within ≈ one poll cycle); otherwise compute synchronously.
+                state = (
+                    await self._opportunity_compute_state_repo.get(user_id)
+                    if self._opportunity_compute_state_repo is not None
+                    else None
                 )
+                if state is not None and datetime.now(UTC) < state["valid_until"]:
+                    self._kick_opportunity_recompute(user_id, propagation_meta)
+                    # rows stays [] → falls through to (empty) pagination/enrichment.
+                else:
+                    await self._materialize_opportunities(user_id, propagation_meta)
+                    rows = await self._opportunities_repo.read(
+                        user_id, request.min_conviction, w, include_expired=False
+                    )
             else:
                 # All rows stale: serve stale now, revalidate in the background.
                 self._kick_opportunity_recompute(user_id, propagation_meta)
@@ -3184,6 +3201,28 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             self._opportunity_locks[user_id] = lock
         return lock
 
+    async def _replace_and_stamp_compute_state(
+        self, user_id: str, rows, propagation_meta=None
+    ) -> None:
+        """Replace the user's materialized rows, then (feature 177 FR-3) stamp the empty-universe
+        compute-state when the compute yielded nothing. An empty ``replace_for_user`` DELETEs
+        without inserting, so ``count_for_user`` stays 0 and every poll recomputes; the stamp
+        records a short ``valid_until`` window so the empty result is served without a synchronous
+        recompute until it elapses. Stamping is best-effort (mirrors the recompute try/except) — it
+        never fails the write path. ``propagation_meta`` is accepted for call-site symmetry (the
+        DB-only stamp needs no header trio)."""
+        await self._opportunities_repo.replace_for_user(user_id, rows)
+        if not rows and self._opportunity_compute_state_repo is not None:
+            ttl = max(
+                1, self._cfg.get_int_present("analysis.opportunity.empty_recompute_ttl_seconds", 30)
+            )
+            try:
+                await self._opportunity_compute_state_repo.upsert(
+                    user_id, datetime.now(UTC) + timedelta(seconds=ttl)
+                )
+            except Exception as e:  # best-effort — a stamp failure never fails the read/refresh
+                log.warning("empty-universe compute-state stamp failed for user=%s: %s", user_id, e)
+
     async def _materialize_opportunities(self, user_id: str, propagation_meta) -> None:
         """Compute the user's Universe and replace their materialized rows, serialized per user.
         Double-checks under the lock so a second waiter behind a cold read doesn't recompute."""
@@ -3191,7 +3230,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if await self._opportunities_repo.count_for_user(user_id) > 0:
                 return  # another cold reader populated it while we waited
             rows = await self._compute_opportunities(user_id, propagation_meta)
-            await self._opportunities_repo.replace_for_user(user_id, rows)
+            await self._replace_and_stamp_compute_state(user_id, rows, propagation_meta)
 
     def _kick_opportunity_recompute(self, user_id: str, propagation_meta) -> None:
         """Fire-and-forget background recompute (stale-while-revalidate). Guarded so a burst of
@@ -3204,7 +3243,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             try:
                 async with self._opportunity_lock(user_id):
                     rows = await self._compute_opportunities(user_id, propagation_meta)
-                    await self._opportunities_repo.replace_for_user(user_id, rows)
+                    await self._replace_and_stamp_compute_state(user_id, rows, propagation_meta)
             except Exception as e:  # a recompute failure never takes down the loop/read
                 log.warning("opportunity recompute failed for user=%s: %s", user_id, e)
             finally:
@@ -3705,7 +3744,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             try:
                 async with self._opportunity_lock(uid):
                     rows = await self._compute_opportunities(uid, meta)
-                    await self._opportunities_repo.replace_for_user(uid, rows)
+                    await self._replace_and_stamp_compute_state(uid, rows, meta)
             except Exception as e:  # one bad user never kills the pass
                 log.warning("opportunity daily refresh failed for user=%s: %s", uid, e)
             await asyncio.sleep(0)  # cooperative pacing point
