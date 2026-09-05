@@ -391,6 +391,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         self._bars_fetch_sem = asyncio.Semaphore(
             max(1, self._cfg.get_int("analysis.opportunity.max_concurrent_bars_fetches", 2))
         )
+        # Bounds the Phase-2 per-candidate fan-out in _compute_opportunities (feature 176, FR-1).
+        # DISTINCT from _bars_fetch_sem (avoids a self-deadlock re-entering the benchmark loader,
+        # and keeps a large opportunity compute from starving interactive readiness).
+        self._candidates_sem = asyncio.Semaphore(
+            max(1, self._cfg.get_int("analysis.opportunity.max_concurrent_candidates", 4))
+        )
         # Durable backup for the in-memory _strategies dict: reads stay in-memory, this persists on
         # score and hydrates at boot. None in the no-DB test path.
         self._scores_repo = StrategyScoresRepository(db_pool) if db_pool else None
@@ -3396,75 +3402,114 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         session_end_seconds = 0
         window_hours = self._cfg.get_int("analysis.opportunity.valid_window_hours", 24)
 
-        rows: list[dict] = []
-        for c in selected:
-            sym = c["symbol"]
-            strat = c["strategy_id"]
-            readiness = _empty_readiness(sym)
-            exit_fires = False
+        # FR-1/FR-6 (feature 176): three-phase single-flight fan-out. Serial-identical output —
+        # per-candidate eligibility, session_end, dedup and ordering are all preserved; only the
+        # fetch/evaluate scheduling is parallelized. user_id is the caller's (owner-scoping / IDOR
+        # guard, fails.md:1153) and is closed over by every phase — no unscoped read.
 
-            # A muted NON-held row is a deny-listed placeholder — skip the bars-fetch/trace and
-            # emit 0/0 (a held+denied row still traces its exit, since deny is entry-only).
-            if strat and not (c["muted"] and not c["is_held"]):
-                definition = await self._load_strategy_definition(user_id, strat, strategy_defs)
-                if definition is not None:
-                    if sym in bars_by_symbol:
-                        bars = bars_by_symbol[sym]
+        # Phase 0 — one StrategyDefinition load per unique eligible strategy_id (owner-scoped).
+        # Eligible = attributed AND not a muted-non-held deny placeholder (verbatim serial rule).
+        eligible = [
+            c for c in selected if c["strategy_id"] and not (c["muted"] and not c["is_held"])
+        ]
+        for strat_id in dict.fromkeys(c["strategy_id"] for c in eligible):
+            await self._load_strategy_definition(user_id, strat_id, strategy_defs)
+        defined_eligible = [c for c in eligible if strategy_defs.get(c["strategy_id"]) is not None]
+
+        # Phase 1 — single-flight: fetch each unique defined-eligible symbol + each unique benchmark
+        # once, under _bars_fetch_sem (feature-141 bound). Fetching exactly the serial-eligible set
+        # keeps session_end_seconds identical (an over-fetch would raise it, breaking @AC-14).
+        async def _fetch_into(sym):
+            async with self._bars_fetch_sem:
+                try:
+                    return sym, await self._fetch_bars_paged(sym, range_msg, propagation_meta)
+                except Exception as e:  # bar fetch is best-effort per symbol
+                    log.warning("_compute_opportunities: bars fetch failed for %s: %s", sym, e)
+                    return sym, []
+
+        unique_symbols = list(dict.fromkeys(c["symbol"] for c in defined_eligible))
+        for sym, bars in await asyncio.gather(*[_fetch_into(s) for s in unique_symbols]):
+            bars_by_symbol[sym] = bars
+            if bars:
+                session_end_seconds = max(session_end_seconds, bars[-1].time.seconds)
+
+        async def _fetch_benchmark_into(sym):
+            async with self._bars_fetch_sem:
+                try:
+                    return sym, await self._fetch_bars_paged(sym, range_msg, propagation_meta)
+                except Exception as e:  # noqa: BLE001 — benchmark fetch is best-effort
+                    log.warning("benchmark bars fetch failed for %s: %s", sym, e)
+                    return sym, []
+
+        benchmark_syms = list(
+            dict.fromkeys(
+                ss
+                for sid in dict.fromkeys(c["strategy_id"] for c in defined_eligible)
+                for ss in sorted(
+                    {
+                        comp.source_symbol
+                        for comp in strategy_defs[sid].components
+                        if comp.source_symbol
+                    }
+                )
+            )
+        )
+        for sym, bars in await asyncio.gather(*[_fetch_benchmark_into(s) for s in benchmark_syms]):
+            benchmark_bars_cache[sym] = bars
+
+        # Phase 2 — per-candidate evaluate under _candidates_sem, CACHE-ONLY: Phase 1 warmed both
+        # caches so every _load_benchmark_bars_windowed here is a cache hit (no sem); component RPCs
+        # still fan out bounded by _component_series_sem. No return_exceptions (serial per-candidate
+        # scope); gather keeps `selected` order and dropping None reproduces the serial `continue`.
+        async def _row_for(c):
+            async with self._candidates_sem:
+                sym = c["symbol"]
+                strat = c["strategy_id"]
+                readiness = _empty_readiness(sym)
+                exit_fires = False
+
+                if strat and not (c["muted"] and not c["is_held"]):
+                    definition = strategy_defs.get(strat)
+                    if definition is not None:
+                        bars = bars_by_symbol.get(sym, [])
+                        benchmark_bars = await self._load_benchmark_bars_windowed(
+                            definition,
+                            range_msg,
+                            propagation_meta,
+                            cache=benchmark_bars_cache,
+                            sem=self._bars_fetch_sem,
+                        )
+                        # Held + attributed → exit-rule trace (FR-8); else entry-rule trace.
+                        rule = "exit" if c["is_held"] else "entry"
+                        readiness = await evaluator.evaluate_conditions_traced(
+                            definition, bars, sym, rule=rule, benchmark_bars=benchmark_bars
+                        )
+                        if c["is_held"]:
+                            total = readiness["total_conditions"]
+                            exit_fires = total > 0 and readiness["passing_conditions"] == total
+                        # Persist strategy target/stop from signal_params into readiness JSONB
+                        # (no new column); present → store, absent → nothing (never fabricated).
+                        _sp = json_format.MessageToDict(definition.signal_params)
+                        for _key, _dst in (("target", "target_price"), ("stop", "stop_price")):
+                            _val = _sp.get(_key)
+                            if isinstance(_val, (int, float)) and not isinstance(_val, bool):
+                                readiness[_dst] = float(_val)
+
+                action = _resolve_action_tag(c, exit_fires)
+                if action is None:
+                    if c["muted"]:
+                        # A muted, otherwise-non-actionable row is informational — keep it
+                        # (UNSPECIFIED tag), never drop it. The mute is the signal.
+                        action = analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED
                     else:
-                        async with self._bars_fetch_sem:
-                            try:
-                                bars = await self._fetch_bars_paged(
-                                    sym, range_msg, propagation_meta
-                                )
-                            except Exception as e:  # bar fetch is best-effort per symbol
-                                log.warning(
-                                    "_compute_opportunities: bars fetch failed for %s: %s", sym, e
-                                )
-                                bars = []
-                        bars_by_symbol[sym] = bars
-                    if bars:
-                        newest = bars[-1].time.seconds
-                        session_end_seconds = max(session_end_seconds, newest)
-                    # Benchmark bars for this definition, deduped once per pass.
-                    benchmark_bars = await self._load_benchmark_bars_windowed(
-                        definition,
-                        range_msg,
-                        propagation_meta,
-                        cache=benchmark_bars_cache,
-                        sem=self._bars_fetch_sem,
-                    )
-                    # Held + attributed → exit-rule trace (FR-8); else entry-rule trace.
-                    rule = "exit" if c["is_held"] else "entry"
-                    readiness = await evaluator.evaluate_conditions_traced(
-                        definition, bars, sym, rule=rule, benchmark_bars=benchmark_bars
-                    )
-                    if c["is_held"]:
-                        total = readiness["total_conditions"]
-                        exit_fires = total > 0 and readiness["passing_conditions"] == total
-                    # Persist strategy-derived target/stop from signal_params into readiness JSONB
-                    # (no new column); present → store, absent → nothing (never fabricated).
-                    _sp = json_format.MessageToDict(definition.signal_params)
-                    for _key, _dst in (("target", "target_price"), ("stop", "stop_price")):
-                        _val = _sp.get(_key)
-                        if isinstance(_val, (int, float)) and not isinstance(_val, bool):
-                            readiness[_dst] = float(_val)
+                        return None  # speculative sell-with-no-position → not actionable, drop
 
-            action = _resolve_action_tag(c, exit_fires)
-            if action is None:
-                if c["muted"]:
-                    # A muted, otherwise-non-actionable row is informational — keep it (UNSPECIFIED
-                    # tag), never drop it. The mute is the signal.
-                    action = analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED
-                else:
-                    continue  # speculative sell-with-no-position → not actionable, drop
+                # Carry the raw max ExternalSignal.conviction via readiness_json (no column).
+                # _best_sig_conv stays -1.0 with no signal → leave unset, never a fabricated 0.0.
+                if c["_best_sig_conv"] >= 0.0:
+                    readiness["signal_confidence"] = c["_best_sig_conv"]
 
-            # Carry the raw max ExternalSignal.conviction via readiness_json (no column).
-            # _best_sig_conv stays -1.0 with no signal → leave unset, never a fabricated 0.0.
-            if c["_best_sig_conv"] >= 0.0:
-                readiness["signal_confidence"] = c["_best_sig_conv"]
-
-            rows.append(
-                {
+                return {
                     "opportunity_key": _opportunity_key(user_id, sym, strat),
                     "symbol": sym,
                     "strategy_id": strat,
@@ -3475,7 +3520,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     "provenance": c["provenance"],
                     "thesis": c["thesis"],
                 }
-            )
+
+        rows = [r for r in await asyncio.gather(*[_row_for(c) for c in selected]) if r is not None]
 
         # One session date for the whole compute → uniform valid_until; fall back to now when no
         # bars were fetched. The mixed-calendar residual is accepted (revalidated on next read).

@@ -430,7 +430,7 @@ post-Step-6 passes with coverage ≥ 40%.
 
 ### Step 8 — service: FR-1/FR-6 — three-phase single-flight `_compute_opportunities` fan-out under `analysis.opportunity.max_concurrent_candidates`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify (`AnalysisServicer.__init__` add the candidates sem; `_compute_opportunities`, `:3109`/`:3372-3475`)
@@ -500,7 +500,7 @@ post-Step-6 passes with coverage ≥ 40%.
 
 ### Step 9 — test: FR-1/FR-6 — opportunity set + rank identical to serial; GetBars ≤ bound; owner-scoping preserved
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify (extend the concurrency + opportunity suites)
@@ -673,6 +673,16 @@ by adding a `_cfg_stub()` factory (answers `sandbox_max_concurrent() → 4`), re
 `MagicMock()` config args to it, and adding `cfg.sandbox_max_concurrent.return_value = 4` to the three
 sandbox `_cfg()` helpers. `tests/test_formulas.py` is not in Step 2's declared **Files** but the fix
 is required for the suite to stay green under Step 2's contract; staged with the Step 2 commit.
+
+### Step 8 — existing stale-recompute test drain made robust
+
+**Disposition**: necessary test-robustness fix (not weakening). The parallelized _compute_opportunities
+adds nested `asyncio.gather` scheduling, so `test_stale_read_serves_stale_and_kicks_recompute`'s fixed
+`for _ in range(5): await asyncio.sleep(0)` background drain no longer reaches quiescence before the
+assertion. Replaced with a bounded wait-until-the-recompute-guard-clears loop (`range(100)` + break) —
+every assertion (stale row served, QuerySignals ran, guard cleared) is unchanged. `test_analysis_servicer.py`
+is Step 9's declared file; the drain fix is staged with the Step 8 commit to keep the suite green under
+Step 8's restructure.
 
 ### Step 3 — `SandboxResult.error` field in the test double
 

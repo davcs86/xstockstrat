@@ -4439,8 +4439,11 @@ class TestListOpportunitiesMaterialized:
         ]
         by_symbol, _ = await _list_opps(svc)
         assert "OLD" in by_symbol  # stale row served immediately
-        # The background recompute runs on the next loop turns; it recomputes the fresh Universe.
-        for _ in range(5):
+        # The background recompute runs on the next loop turns; drain until its guard clears (the
+        # parallelized compute needs more scheduling turns than a fixed count — feature 176).
+        for _ in range(100):
+            if "u1" not in svc._opportunity_recomputing:
+                break
             await asyncio.sleep(0)
         assert svc._ingest.QuerySignals.await_count >= 1
         assert "u1" not in svc._opportunity_recomputing  # guard cleared after it ran
@@ -5950,3 +5953,4 @@ class TestSignalConfidence:
         capr = by_symbol["CAPR"]
         assert capr.HasField("signal_confidence")
         assert abs(capr.signal_confidence - 0.90) < 1e-9  # max raw, not the summed/averaged value
+

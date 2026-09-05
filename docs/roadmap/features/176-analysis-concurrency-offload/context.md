@@ -175,3 +175,27 @@ merge-order WARN). Tooling: `uv sync --extra dev` for indicators + analysis; bas
 - RED captured by stashing the Step-6 servicer change: `test_readiness_bars_fetch_bounded_by_sem`
   → `peak == 1` (serial). GREEN post-Step-6.
 - Full analysis suite `662 passed` (+3), coverage `85%`; ruff clean.
+
+### Steps 8–9 — done (FR-1/FR-6 three-phase single-flight _compute_opportunities, TDD red→green)
+- Step 8 (`app/handlers/servicer.py`): added `self._candidates_sem` (analysis.opportunity.max_concurrent_candidates,
+  default 4, DISTINCT from _bars_fetch_sem to avoid a self-deadlock re-entering the benchmark loader
+  and to stop a big compute starving readiness). Restructured the serial candidate loop into three
+  phases: **Phase 0** dedup-load StrategyDefinitions once per unique eligible strategy_id (owner-scoped,
+  IDOR guard); **Phase 1** single-flight fetch each unique defined-eligible symbol's bars + each unique
+  benchmark once, all under `_bars_fetch_sem` — session_end_seconds computed here over exactly the
+  serial-eligible set (identical max → @AC-14 ranking preserved); **Phase 2** per-candidate `_row_for`
+  under `_candidates_sem`, CACHE-ONLY (Phase-1-warmed caches make every _load_benchmark_bars_windowed a
+  cache hit — no sem), `asyncio.gather` in `selected` order, drop None (== serial `continue`) → rows
+  byte-identical. No return_exceptions (serial per-candidate scope preserved).
+- Step 9 (`tests/test_analysis_servicer.py`): 3 FR-1/FR-6 tests — intra-compute peak GetBars == 2 (teeth;
+  calls `_compute_opportunities` DIRECTLY to isolate the compute fan-out from ListOpportunities' own
+  concurrent sparkline enrichment); owner-scoping (user B gets 0/0 readiness for A's strategy, every
+  owner-scoped load carries B's id — IDOR guard survives fan-out); set+rank deterministic across two runs
+  (muted-denied + non-firing + firing + held candidates exercise the eligibility predicate).
+- RED captured by stashing the Step-8 servicer change: `test_intra_compute_bars_fetch_bounded` → peak == 1.
+  GREEN post-Step-8 (all 3). Note: owner-scoping assertion corrected during authoring — the leak-guard is
+  0/0 readiness (no A trace), NOT an empty strategy_id (the row echoes B's own watchlist binding).
+- Deviation (spec Deviation Log): Step 8 broke `test_stale_read_serves_stale_and_kicks_recompute`'s fixed
+  5-turn background drain (deeper gather nesting); replaced with a bounded wait-until-guard-clears loop —
+  assertions unchanged. Staged with the Step 8 commit.
+- Full analysis suite `665 passed`, coverage `85%`; ruff clean.
