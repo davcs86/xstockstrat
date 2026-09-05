@@ -5954,3 +5954,111 @@ class TestSignalConfidence:
         assert capr.HasField("signal_confidence")
         assert abs(capr.signal_confidence - 0.90) < 1e-9  # max raw, not the summed/averaged value
 
+# ---------------------------------------------------------------------------
+# FR-1/FR-6 (feature 176) — _compute_opportunities three-phase single-flight fan-out:
+# an intra-compute GetBars bound, preserved owner-scoping, and set/rank determinism.
+#
+# C-13: these reuse the module's existing _materialized_svc / _wl / _strat_row / _list_opps
+# fixtures; no new domain-data literal is centralized.
+# ---------------------------------------------------------------------------
+
+
+class TestOpportunityConcurrencyFeature176:
+    @pytest.mark.asyncio
+    async def test_intra_compute_bars_fetch_bounded(self):
+        """AC-1 (teeth): ONE user's compute over 12 watchlist-bound symbols keeps peak in-flight
+        GetBars at EXACTLY 2 — the Phase-1 single-flight is bounded by
+        analysis.opportunity.max_concurrent_bars_fetches (default 2), guarding feature 141. Serial
+        (pre-176) peaks at 1. Calls _compute_opportunities DIRECTLY to isolate the compute fan-out
+        from the ListOpportunities read-time sparkline-enrichment path (which fetches concurrently
+        on its own)."""
+        syms = [f"S{i}" for i in range(12)]
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[(s, "sx") for s in syms])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={s: _FIRING_BARS for s in syms},
+        )
+        in_flight = 0
+        peak = 0
+        lock = asyncio.Lock()
+
+        async def _blocking_get_bars(req, metadata=None):
+            nonlocal in_flight, peak
+            async with lock:
+                in_flight += 1
+                peak = max(peak, in_flight)
+            await asyncio.sleep(0.02)
+            async with lock:
+                in_flight -= 1
+            return _recent_bars_resp(_FIRING_BARS)
+
+        svc._marketdata.GetBars = AsyncMock(side_effect=_blocking_get_bars)
+
+        rows = await svc._compute_opportunities("u1", ())
+
+        assert {r["symbol"] for r in rows} == set(syms)  # every symbol still produced its row
+        assert peak == 2
+
+    @pytest.mark.asyncio
+    async def test_owner_scoping_preserved_under_parallel_fanout(self):
+        """AC-6: user B's parallel compute never attributes A's strategy. B's watchlist binds
+        AAPL→sx, but sx resolves only under A's ownership, so for B it is None (unattributed 0/0),
+        and every owner-scoped strategy load carries B's user_id — the IDOR guard (fails.md:1153)
+        survives the fan-out."""
+        from gen.marketdata.v1 import marketdata_pb2 as _md
+
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            bars={"AAPL": _FIRING_BARS},
+        )
+        svc._marketdata.GetLatestPrice = AsyncMock(return_value=_md.LatestPrice())
+        strat = _strat_row("sx", entry=_GT_100)
+
+        async def _owner_scoped(uid, sid):
+            return strat if (uid == "u1" and sid == "sx") else None
+
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(side_effect=_owner_scoped)
+
+        ctx_b = _ctx({"x-user-id": "uB", "x-access-scope": "7", "x-trace-id": "t1"})
+        resp = await svc.ListOpportunities(analysis_pb2.ListOpportunitiesRequest(), ctx_b)
+        by_symbol = {o.symbol: o for o in resp.opportunities}
+
+        assert "AAPL" in by_symbol  # still a candidate via B's own watchlist binding
+        # A's strategy resolves to None for B → its TRACE is not leaked: readiness is 0/0, not A's
+        # real firing readiness (the strategy_id echoes B's own binding, which is not the leak).
+        assert by_symbol["AAPL"].total_conditions == 0
+        assert by_symbol["AAPL"].passing_conditions == 0
+        # every owner-scoped load carried B's id; A's id never appears.
+        owner_uids = {c.args[0] for c in svc._strategies_repo.get_by_owner_and_id.await_args_list}
+        assert owner_uids <= {"uB"}
+        live_uids = {c.args[0] for c in svc._strategies_repo.list_live_enabled.await_args_list}
+        assert live_uids == {"uB"}
+
+    @pytest.mark.asyncio
+    async def test_opportunity_set_and_rank_matches_across_runs(self):
+        """AC-1: a multi-candidate universe (a firing entry, a non-firing entry, a deny-listed
+        muted placeholder, and a held position) yields an IDENTICAL ordered opportunity list across
+        two independent computes — the ref_name-keyed reassembly + verbatim eligibility predicate
+        reproduce the serial set and rank regardless of gather order."""
+
+        def _svc():
+            return _materialized_svc(
+                held=[("HELD", 5000.0)],
+                watchlists=[_wl(bindings=[("AAPL", "sx"), ("MSFT", "sx"), ("TSLA", "sx")])],
+                strategies={"sx": _strat_row("sx", entry=_GT_100, denied=["TSLA"])},
+                bars={
+                    "AAPL": _FIRING_BARS,
+                    "MSFT": [90.0, 95.0, 99.0],  # < 100 → entry does not fire
+                    "TSLA": _FIRING_BARS,
+                    "HELD": _FIRING_BARS,
+                },
+            )
+
+        _, a = await _list_opps(_svc())
+        _, b = await _list_opps(_svc())
+
+        def _key(opps):
+            return [(o.symbol, o.strategy_id, o.action, round(o.conviction, 6)) for o in opps]
+
+        assert _key(a) == _key(b)  # deterministic set + rank across runs
+        assert len(a) >= 2
