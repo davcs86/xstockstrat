@@ -128,7 +128,7 @@ Exit 0 after staging the regen (no residual diff — regen is deterministic and 
 
 ### Step 3 — migration: `022_readiness_cache`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/022_readiness_cache.up.sql` — create
@@ -176,7 +176,7 @@ NNN is `022` (one past `021`).
 
 ### Step 4 — migration: `023_opportunity_compute_state`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/023_opportunity_compute_state.up.sql` — create

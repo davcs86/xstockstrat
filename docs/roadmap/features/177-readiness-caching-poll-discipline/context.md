@@ -183,3 +183,10 @@ anchors resolve on the post-176 tree) — no mismatch, no re-spec.
   (Docker `Dockerfile.codegen`); compiled TS→JS via `pnpm install`'s prepare/tsc hook (the container
   lacked gen/ts node_modules). `git diff packages/proto/gen/` limited to `analysis/v1` (source + dist);
   compiled JS carries `computedAt`. CI-equivalent fallback (Docker codegen) — logged in Deviation Log.
+
+### Steps 3–4 — done (migrations 022/023, TDD N/A, offline-verified)
+- `022_readiness_cache` (PK user_id,strategy_id,rule,symbol; def_fingerprint, bar_epoch, readiness_json
+  JSONB DEFAULT '{}', computed_at, valid_until) and `023_opportunity_compute_state` (PK user_id;
+  computed_at, valid_until). Both mirror `011_opportunities` schema-qualified style; no hypertable.
+- Offline verify: up/down pairs exist, each CREATE TABLE has its inverse DROP TABLE, NNN 022/023 are
+  one/two past the 021 tip. Live apply deferred to CI/deploy (never started a DB).
