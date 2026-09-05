@@ -117,7 +117,7 @@ stays green (regression: the positions-page indicator is unchanged).
 
 ### Step 2 — service: New `HaltBadge` client leaf
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/HaltBadge.tsx` — create
