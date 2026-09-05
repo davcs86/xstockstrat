@@ -112,3 +112,38 @@ Feature: Platform-wide guarantees
     When each is submitted
     Then the symbol-page OrderForm sends a PlaceOrder request that routes into 023's auto-sizing path (qty <= 0 with the real confidence)
     And the plain /trader form sends no PlaceOrder request and is rejected with a "quantity required" validation error, so it never auto-sizes
+
+  @AC-1 @FR-1 @regression @feature-171
+  Scenario Outline: A telemetry module's built Resource no longer carries the trading_mode attribute
+    Given OTEL_ENABLED is "true" and TRADING_MODE is set to "paper"
+    When <service> initialises telemetry and builds its OTel Resource
+    Then the resource attributes do NOT include "trading_mode"
+    And they still include "service.name", "deployment.environment", and "platform"
+
+    Examples:
+      | service                 |
+      | xstockstrat-trading     |
+      | xstockstrat-portfolio   |
+      | xstockstrat-marketdata  |
+      | xstockstrat-agent       |
+      | xstockstrat-ingest      |
+      | xstockstrat-indicators  |
+      | xstockstrat-analysis    |
+      | xstockstrat-ledger      |
+      | xstockstrat-identity    |
+      | xstockstrat-config      |
+      | xstockstrat-notify      |
+
+  @AC-2 @FR-3 @regression @feature-171
+  Scenario: Telemetry init remains non-blocking after the trading_mode attribute is removed
+    Given OTEL_ENABLED is "true"
+    When a telemetry module builds its Resource with the trading_mode attribute removed
+    Then telemetry initialisation completes without raising
+    And the service proceeds to start normally
+
+  @AC-3 @FR-2 @regression @feature-171
+  Scenario: The dashboards README documents the emitted attribute set, without trading_mode
+    Given packages/otel/dashboards/README.md lists the resource attributes every service attaches
+    When the documented attribute list is inspected
+    Then it does NOT list "trading_mode"
+    And it still lists "service.name", "deployment.environment", and "platform"

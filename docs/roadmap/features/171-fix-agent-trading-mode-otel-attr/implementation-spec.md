@@ -1,6 +1,6 @@
 # Implementation Spec: fix-agent-trading-mode-otel-attr
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-09-04
 **Feature**: `docs/roadmap/features/171-fix-agent-trading-mode-otel-attr/feature.md`
 **Total Steps**: 8
@@ -56,7 +56,7 @@ confirmed nothing in-repo queries the attribute; `OTEL_ENABLED=false` in both `.
 
 ### Step 1 — service: Remove `trading_mode` from the three Go telemetry modules (extract `newResource`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/otel.go` — modify
@@ -106,7 +106,7 @@ confirmed nothing in-repo queries the attribute; `OTEL_ENABLED=false` in both `.
 
 ### Step 2 — test: Per-module Go Resource-attribute assertions (trading/portfolio/marketdata)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/otel_test.go` — create
@@ -151,7 +151,7 @@ confirmed nothing in-repo queries the attribute; `OTEL_ENABLED=false` in both `.
 
 ### Step 3 — service: Remove `trading_mode` from the four Python telemetry modules (extract `_build_resource`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`, `xstockstrat-ingest`, `xstockstrat-indicators`, `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-agent/app/telemetry.py` — modify
@@ -197,7 +197,7 @@ confirmed nothing in-repo queries the attribute; `OTEL_ENABLED=false` in both `.
 
 ### Step 4 — test: Per-module Python Resource-attribute assertions + agent non-blocking init
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`, `xstockstrat-ingest`, `xstockstrat-indicators`, `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-agent/tests/test_telemetry.py` — create
@@ -250,7 +250,7 @@ confirmed nothing in-repo queries the attribute; `OTEL_ENABLED=false` in both `.
 
 ### Step 5 — service: Remove `trading_mode` from the four Node backend telemetry modules (extract `buildResource`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-config`, `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-ledger/src/telemetry.ts` — modify
@@ -296,7 +296,7 @@ confirmed nothing in-repo queries the attribute; `OTEL_ENABLED=false` in both `.
 
 ### Step 6 — test: Per-module Node backend Resource-attribute assertions (ledger/identity/config/notify)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-config`, `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-ledger/src/__tests__/telemetry.test.ts` — create
@@ -344,7 +344,7 @@ confirmed nothing in-repo queries the attribute; `OTEL_ENABLED=false` in both `.
 
 ### Step 7 — service: Remove the one `trading_mode` line from `xstockstrat-ui` telemetry (frontend)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/telemetry.ts` — modify
@@ -371,7 +371,7 @@ confirmed nothing in-repo queries the attribute; `OTEL_ENABLED=false` in both `.
 
 ### Step 8 — docs: Drop `trading_mode` from the dashboards README attribute list
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/otel/dashboards/`
 **Files**:
 - `packages/otel/dashboards/README.md` — modify
@@ -398,4 +398,30 @@ confirmed nothing in-repo queries the attribute; `OTEL_ENABLED=false` in both `.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **Step 5/6 — Node `buildResource` uses static top-level imports, not deferred `require`.** The spec's
+  `buildResource` used `require('@opentelemetry/resources')`/`require('@opentelemetry/semantic-conventions')`
+  inside the function. That works in production and in the config/notify test runners (tsc → CJS), but
+  ledger/identity run their `.ts` tests directly via `node --experimental-strip-types`, which executes
+  them as **ESM** where `require` is undefined — so the design-mandated per-module test threw
+  `ReferenceError: require is not defined`. Both packages are **hard `dependencies` (^1.25.0)** in all
+  four services, so their deferral was cosmetic (unlike `@opentelemetry/sdk-node`/exporter/instrumentation,
+  which stay deferred inside `initTelemetry`). Resolved uniformly by importing just these two lightweight
+  packages at module top-level in all four files; `buildResource` references them directly.
+  **Disposition**: in-scope fix to make the C-08-mandated test runnable across both Node runners
+  (Option A). The module docstring's "all imports deferred" note now applies to the heavy exporter/SDK
+  imports only.
+- **Step 6 — test import extension differs per Node runner.** ledger/identity (ESM `--experimental-strip-types`)
+  import `from '../telemetry.ts'` (explicit extension required by ESM); config/notify (tsc → dist CJS)
+  import `from '../telemetry'`. Matches each service's existing harness. **Disposition**: runner-specific
+  extension resolved at execute (spec Step 6 anticipated this).
+- **Step 6 follow-up — exclude test files from the ledger/identity production `tsc` build.** The
+  `from '../telemetry.ts'` import that the ESM strip-types test runner requires is rejected by the `tsc`
+  **build** (`TS5097: An import path can only end with '.ts' when allowImportingTsExtensions is enabled`),
+  which an emitting build cannot set. ledger/identity's single `tsconfig.json` (`include: src/**/*`)
+  compiled the test files incidentally — but test files are never shipped and their strip-types runner
+  runs them from source, not `dist`. Added `"src/**/*.test.ts"` to `exclude` in
+  `services/xstockstrat-{ledger,identity}/tsconfig.json` so the production build no longer type-checks
+  test sources; `pnpm run build` (tsc) and `pnpm run test` (strip-types) both pass. config/notify are
+  unaffected (they compile-first with an extensionless import). Surfaced by feature 175's `@types/node`
+  build gate, the first `tsc` build run after Step 6. **Disposition**: in-scope fix to make Step 6's own
+  test approach compatible with the production build.
