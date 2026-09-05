@@ -262,7 +262,7 @@ of the refetch).
 
 ### Step 5 — service: Halt indicator + admin-gated Resume action on `AccountRow`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/accountShared.tsx` — modify
