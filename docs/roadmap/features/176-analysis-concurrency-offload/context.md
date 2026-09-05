@@ -42,3 +42,10 @@ Status unchanged: **spec-ready** (design NOT approved — user chose "Hold, run 
 - **Synthesis (survives):** core architecture (bounded-gather under existing leaf bounds + prologue/core split + to_thread sandbox) is sound WITH the 6 revisions above. Round 2 must fold them in; the executor config key returns.
 - **Ledger:** fails.md:2029 (non-reentrant lock, feature 163) — the deadlock class; fails.md:1153/1144 (IDOR + closure-claims-are-unverified).
 - **NEXT (round 2):** re-propose with prologue/core split, separate fan-out limiter (+ analysis.compute.max_worker_threads), Phase-1 single-flight, per-task serial catch, bounded FR-4 executor. Then re-adversary, then user gate.
+
+## Session 2026-09-05 — sdd-design ROUND 2 (proposer done; adversary PENDING)
+
+Status unchanged: **spec-ready**. design.md NOT yet written.
+
+- **Round-2 proposer (done):** three-phase — Phase 0 dedup-load strategy defs; Phase 1 single-flight-by-construction (fetch each unique symbol/benchmark ONCE via gather; sem acquisitions SEQUENTIAL within a task, not nested → no deadlock; per-task serial catch); Phase 2 per-candidate evaluate under a SEPARATE fan-out semaphore (new key `analysis.opportunity.max_concurrent_candidates`, not _bars_fetch_sem), no return_exceptions. FR-4 prologue/sync-core split per simulator, offload only the sync core via loop.run_in_executor on a shared bounded ThreadPoolExecutor (new key `analysis.compute.max_worker_threads`). FR-5 to_thread + sandbox_max_concurrent. Two new config keys; reuse _bars_fetch_sem (leaf) + _component_series_sem. Own flagged risk: Phase-1 eligibility gating must reproduce the serial skip predicates verbatim (muted-non-held :3391, definition-not-None :3395).
+- **Round-2 adversary: PENDING** (task launched; notification not yet received when the user requested round 3). Round 3 for 176 is HELD until its round-2 adversary reports, then folds those findings + re-proposes.
