@@ -61,6 +61,7 @@ from app.services.evaluator import (
     align_indicator_points,
     referenced_refs,
 )
+from app.services.readiness import compute_readiness_row
 from app.services.screener import ScreenerEngine
 
 # Back-compat alias: existing imports of _compute_signal_score from this module must stay valid.
@@ -2783,40 +2784,26 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     None,
                     c["computed_at"],
                 )
-            async with self._bars_fetch_sem:
-                fetch_ok = True
-                try:
-                    bars = await self._fetch_bars_paged(symbol, range_msg, propagation_meta)
-                except Exception as e:  # bar fetch is best-effort per symbol
-                    log.warning("EvaluateReadiness: bars fetch failed for %s: %s", symbol, e)
-                    bars = []
-                    fetch_ok = False
-                if fetch_ok and not bars:
-                    # A successful-but-empty fetch is WARN-logged; request-bounded, so a per-symbol
-                    # WARN is rate-safe (unlike the live loop / screener, which summarize).
-                    log.warning(
-                        "EvaluateReadiness: no 1d bars for %s (strategy %s) — readiness empty",
-                        symbol,
-                        request.strategy_id,
-                    )
-                trace = await evaluator.evaluate_conditions_traced(
-                    definition, bars, symbol, rule=rule, benchmark_bars=benchmark_bars
-                )
-            # No slow-path bar_epoch reuse — always re-evaluate on a miss so a same-time.seconds
-            # intraday 1d bar update never freezes a day-one verdict (round-3 adversary #1).
-            bar_epoch = max(bars[-1].time.seconds if bars else 0, _benchmark_epoch())
-            staged = {
-                "user_id": caller_user_id,
-                "strategy_id": request.strategy_id,
-                "rule": rule,
-                "symbol": symbol,
-                "def_fingerprint": fingerprint,
-                "bar_epoch": bar_epoch,
-                "readiness_json": trace,  # {} when the trace is empty (never NULL)
-                "computed_at": now,
-                "valid_until": now + timedelta(seconds=stale_after),
-            }
-            return _readiness_to_proto(trace), staged, now
+            # SLOW body extracted to the shared compute path (feature 180) so the interactive
+            # handler and the readiness materializer produce byte-identical rows.
+            staged = await compute_readiness_row(
+                symbol,
+                fetch_bars=self._fetch_bars_paged,
+                bars_sem=self._bars_fetch_sem,
+                evaluator=evaluator,
+                definition=definition,
+                range_msg=range_msg,
+                propagation_meta=propagation_meta,
+                benchmark_bars=benchmark_bars,
+                rule=rule,
+                fingerprint=fingerprint,
+                strategy_id=request.strategy_id,
+                user_id=caller_user_id,
+                now=now,
+                valid_until=now + timedelta(seconds=stale_after),
+                benchmark_epoch=_benchmark_epoch(),
+            )
+            return _readiness_to_proto(staged["readiness_json"]), staged, now
 
         results = await asyncio.gather(*[_readiness_for(s) for s in request.symbols])
         protos = [r[0] for r in results]

@@ -98,7 +98,7 @@ by the backend warm cache alone.
 
 ### Step 1 — service: Extract shared readiness compute + freshness helpers (`app/services/readiness.py`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/readiness.py` — create
@@ -158,7 +158,7 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_readiness_cache.py 
 
 ### Step 2 — test: Byte-identity parity + pure freshness/valid-until units
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_readiness.py` — create

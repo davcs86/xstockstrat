@@ -170,3 +170,21 @@
     full-history-scan cost as a marketdata follow-up (P-03) — still far cheaper than the 400-day pull.
 - Status unchanged: implementation-ready (Mode B is advisory, no lifecycle change).
 - Next: /sdd-execute (gated on 176 → 177 landing first).
+
+- Tooling setup (steps 1-7): python (uv-managed) ✓ · uv ✓ 0.8.17 · ruff ✓ 0.15.8 (uv) · pytest ✓ 9.0.3 (uv). Baseline `test_readiness_cache.py` green (3 passed). No DB/proto/Node needed.
+
+## Session 2026-09-05 — sdd-execute (sequential)
+
+### Step 1 — Extract shared readiness compute + freshness helpers [done]
+- Created `app/services/readiness.py` with `compute_readiness_row` (shared SLOW body), pure
+  `is_readiness_row_fresh` (fingerprint + window + bar_epoch), and `readiness_valid_until`.
+  Refactored `servicer._readiness_for` SLOW branch to delegate (FAST branch unchanged) — pure refactor.
+- Files modified: `app/services/readiness.py`, `app/handlers/servicer.py`
+- Deviations: none
+
+### Step 2 — Byte-identity parity + pure freshness/valid-until units [done]
+- Created `tests/test_readiness.py`: pure-predicate table tests + AC-1 byte-identity of the SLOW
+  staged-row shape/verdicts. TDD: red (ModuleNotFoundError app.services.readiness) → green (10 passed);
+  177's `test_readiness_cache.py` still green; full suite 687 passed @ 84.97% cov.
+- Files modified: `tests/test_readiness.py`
+- Deviations: none
