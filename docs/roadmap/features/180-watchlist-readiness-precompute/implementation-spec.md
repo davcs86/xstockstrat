@@ -1,6 +1,6 @@
 # Implementation Spec: watchlist-readiness-precompute
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-09-05
 **Feature**: `docs/roadmap/features/180-watchlist-readiness-precompute/feature.md`
 **Total Steps**: 7
@@ -296,7 +296,7 @@ Written to fail before Step 3 (the epoch-advance case serves FAST instead of rec
 
 ### Step 5 — service: Readiness materializer loop + owner-scoped binding drain + wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify (`__init__` semaphore + `run_readiness_materializer_forever` + `_drain_watchlist_bindings` + `_readiness_materializer_tick`)
@@ -352,7 +352,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 
 ### Step 6 — test: materializer — @AC-1 / @AC-2 / @AC-3 / @AC-4 / @AC-6
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_readiness_materializer.py` — create
@@ -410,7 +410,7 @@ Written to fail before Step 5 (`_readiness_materializer_tick` does not yet exist
 
 ### Step 7 — config: Declare the four `analysis.readiness_materializer.*` keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis` / `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify (append to the `## Config Keys Consumed` table)
@@ -453,4 +453,19 @@ ls services/xstockstrat-config/migrations/ | tail -3   # confirm no new config s
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### D-1-actual (Step 5) — reused the existing `_drain_watchlist_bindings` instead of adding a new one
+- **Spec said**: Step 5 instruction #2 — "add a new binding-aware drain `_drain_watchlist_bindings`".
+- **Actual**: the servicer **already has** `AnalysisServicer._drain_watchlist_bindings(propagation_meta)
+  -> list[(symbol, strategy_id)]` (built for `_compute_opportunities`), with exactly the needed
+  owner-scoped `ListWatchlists(metadata=[("x-user-id", owner)])` + binding shape. Reused it verbatim
+  (passing `meta=[("x-user-id", owner)]`) rather than creating a duplicate — DRY guard rail / F-08.
+- **Disposition**: beneficial deviation, no behavior change vs. spec intent (D-1's correction to
+  design.md still holds — `live_loop._drain_watchlist` does discard strategy_id; the servicer's
+  same-named method does not). Warm-set still owner-scoped by construction (fails.md:1153).
+
+### D-2-actual (Step 5) — jitter/retry reuse the opportunity operational knobs
+- The dedicated **cadence anchor** is `analysis.readiness_materializer.refresh_hour_utc` (operator
+  D-2). The bounded **startup jitter** and enumeration **retry** reuse `analysis.opportunity.
+  startup_jitter_seconds` / `analysis.opportunity.retry_seconds` (non-cadence operational knobs) to
+  keep the new-key surface minimal — the decoupling the operator asked for is the daily hour, which
+  is dedicated. Documented in Step 7's config-governance entry.

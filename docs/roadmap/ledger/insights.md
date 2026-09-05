@@ -3060,3 +3060,19 @@ reusing.
 - **Evidence**: `docs/roadmap/features/180-watchlist-readiness-precompute/design.md` §§ Chosen
   Approach, Option A vs B, @AC-2 reconciliation; `services/xstockstrat-analysis/app/engine/live_loop.py:103-105,341-347`;
   `services/xstockstrat-analysis/app/handlers/servicer.py:2780,2786-2818`.
+
+### 2026-09-05 — watchlist-readiness-precompute — execute
+- **Pattern**: A background pre-warm loop and its interactive read path stay honest when they share
+  ONE compute unit and ONE freshness predicate. Extracting the SLOW `EvaluateReadiness` body into
+  `app/services/readiness.py` (`compute_readiness_row` + pure `is_readiness_row_fresh`) let the new
+  `run_readiness_materializer_forever` loop produce byte-identical rows and let the FAST gate become
+  `bar_epoch`-aware for both origins with no two-policies-per-table risk — the modularization the
+  operator asked for, and the cheapest correctness guarantee (feature 180, Steps 1/3/5).
+- **Pattern**: Before adding a "new" helper a spec calls for, grep the target service — feature 180's
+  Step 5 was specced to add `_drain_watchlist_bindings`, but the servicer already had exactly that
+  method (built for `_compute_opportunities`); reusing it avoided a duplicate. The spec's D-1
+  correction (that `live_loop._drain_watchlist` discards `strategy_id`) was right about the *live_loop*
+  method but missed the servicer's own binding-aware drain.
+- **Evidence**: `services/xstockstrat-analysis/app/services/readiness.py`;
+  `app/handlers/servicer.py` (`_readiness_materializer_tick`, `_drain_watchlist_bindings` reuse,
+  FAST gate); `docs/roadmap/features/180-watchlist-readiness-precompute/implementation-spec.md` Deviation Log.

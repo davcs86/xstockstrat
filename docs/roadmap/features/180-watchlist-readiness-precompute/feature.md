@@ -15,6 +15,7 @@
 | 2026-09-05 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 full rounds + operator reframe FR-6/FR-7) and approved; recon.md + design.md written. Chosen: Option B (dedicated materializer loop) + modularized bar_epoch-aware FAST gate |
 | 2026-09-05 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 7 steps |
 | 2026-09-05 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Steps 1-2 done) |
+| 2026-09-05 | `in-progress` → `code-completed` | /sdd-execute | All 7 steps done (sequential); analysis suite 696 passed @ 84.66%, ruff clean |
 
 ---
 
@@ -50,5 +51,4 @@ migration — reuses `readiness_cache` 022) and no Proto Reviewer (no proto chan
 
 ## Next Action
 
-`/sdd-review watchlist-readiness-precompute impl-spec` — validate the implementation spec, then
-`/sdd-execute watchlist-readiness-precompute`
+Integration PR (feature → main-dev) is open as #1102 — merge after 176 & 177 land and CI/Approvals pass.

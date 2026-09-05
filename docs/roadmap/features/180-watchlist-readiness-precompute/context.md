@@ -205,3 +205,36 @@
   does not bust → GetBars=0) → green (12 passed in pair; full suite 689 passed @ 85.01%).
 - Files modified: `tests/test_readiness.py`, `tests/test_readiness_cache.py`
 - Deviations: none
+
+### Step 5 — Readiness materializer loop + wiring [done]
+- Added `run_readiness_materializer_forever` / `_readiness_materializer_tick` /
+  `_materialize_readiness_for_owner` / `_readiness_materializer_hour` + own semaphore
+  `_readiness_materializer_bars_sem`; wired an unconditional `create_task` in `main.py` (loop
+  self-gates on `.enabled`, default OFF). DurableSchedule wall-clock, distinct job_name
+  "readiness_materializer", dedicated `refresh_hour_utc` anchor. Owner-scoped, skip-fresh gate.
+- Files modified: `app/handlers/servicer.py`, `app/main.py`
+- Deviations: D-1-actual (reused the existing `_drain_watchlist_bindings` instead of adding a new
+  one — DRY), D-2-actual (jitter/retry reuse the opportunity operational knobs; only the daily
+  anchor is dedicated). Both in the Deviation Log.
+
+### Step 6 — materializer tests [done]
+- Created `tests/test_readiness_materializer.py`: AC-2 owner-scoping, AC-6 non-live skip (cycle not
+  halted), AC-3 stale-fingerprint recompute, AC-4 own-semaphore (never the interactive one) + no new
+  pool, skip-fresh steady state, kill-switch off, AC-1 materialized→FAST behavioral link. TDD: red (7
+  fail — tick/methods/sem absent) → green (7 passed; full suite 696 @ 84.66%).
+- Files modified: `tests/test_readiness_materializer.py`
+- Deviations: none
+
+### Step 7 — config key declarations [done]
+- Declared the 4 `analysis.readiness_materializer.*` keys in the analysis CLAUDE.md Config Keys
+  Consumed table + a Per-Feature Registered Keys entry in `docs/patterns/config-governance.md`.
+  No config seed migration (analysis no-seed pattern); verified keys present in both files.
+- Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `docs/patterns/config-governance.md`
+- Deviations: none
+
+**Teardown note:** Step 7 edited a service `CLAUDE.md` (a context file). The context-forge plugin is
+not available in this execute session, so per the root CLAUDE.md Teardown rule I performed the manual
+equivalent: re-read the edited Config Keys Consumed table against the shipped code — all 4 keys match
+their read sites (`get_bool`/`get_int_present`/`get_int` clamps in servicer `__init__` +
+materializer), defaults match, and the dedicated-vs-reused wording matches D-2. No drift found. The
+additions are new-key documentation, not changes to existing described behavior.
