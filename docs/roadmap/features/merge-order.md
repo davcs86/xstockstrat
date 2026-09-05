@@ -223,3 +223,20 @@ proto-field collisions, but re-run `./scripts/buf-gen.sh` after each merge.
 >   must merge into the existing module, not re-create.
 >
 > **Recommended single-run execution order** (respects all of the above): `128 > 021 > 043 > 167 > 029 > 095 > 110 > 031 > 166 > 168`.
+
+> **Performance-audit batch (features 176-179, 2026-09-05) — same-function execution overlaps
+> (WARN, not blocking).** No field/migration/config collision. Second feature to land manually
+> reconciles (not a mechanical rebase):
+> - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` `checkRiskLimits`
+>   (`:729-750`): **172** (`fix-portfolio-max-drawdown-unenforced`) adds `evaluateDrawdowns`/
+>   `GetAccountDrawdowns` at `:750` (reads `account_balances`); **178** (`quote-fanout-batching`)
+>   rewrites the per-position quote loop at `:731-737` that feeds the **concentration** check
+>   (`posValues`/`totalValue`, `:742-748`). Disjoint blocks in one function → **run 172 before 178**;
+>   178 keeps 172's drawdown block verbatim while batching only the quote loop. (178 is
+>   design-approved 2026-09-05; 172 is implementation-ready.)
+> - `services/xstockstrat-analysis/app/handlers/servicer.py` + `app/services/evaluator.py`
+>   `_compute_opportunities`/`EvaluateReadiness`/`evaluate_conditions_traced`: **176**
+>   (`analysis-concurrency-offload`) restructures these serial loops into bounded-gather; **177**
+>   (`readiness-caching-poll-discipline`) wraps the same functions with caching. **Run 176 before
+>   177**; 177's `/sdd-spec` writes against 176's post-restructure signatures. (Row added on 176
+>   design-approval 2026-09-05; 177 not yet design-approved — confirm/refine this row when it is.)
