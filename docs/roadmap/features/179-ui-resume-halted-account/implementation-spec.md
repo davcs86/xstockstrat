@@ -219,7 +219,7 @@ that bypasses `backendHeaders`. Behavioral proof is Step 8's non-admin (`Permiss
 
 ### Step 4 — service: `AccountContext.applyAccountUpdate` (optimistic full-replace)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/context/AccountContext.tsx` — modify
