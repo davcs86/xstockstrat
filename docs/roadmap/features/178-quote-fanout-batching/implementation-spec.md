@@ -299,7 +299,7 @@ All parity/null-not-zero assertions pass; `getLatestQuoteCalls == 0` proves the 
 
 ### Step 7 — service: collapse `ListWatchlists` bindings into one ANY-array query
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/watchlist_repo.go` — modify (`ListByUser` + new batched binding read; retire the per-watchlist `listBindings` loop call)
@@ -340,7 +340,7 @@ Compiles; the per-watchlist `listBindings` call inside `ListByUser` is gone. Beh
 
 ### Step 8 — test: watchlist bindings single-query parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/watchlist_repo_test.go` — create (or add to an existing repository test file)
@@ -400,3 +400,14 @@ there. The DB-backed warm read (`GetLatestQuotesBatch`) is covered by CI/integra
 `CodeInvalidArgument`) required a handler-package test, but no `internal/handler/*_test.go` existed.
 Added `internal/handler/marketdata_handler_test.go` (one test, `svc` nil since the guard rejects
 first) — one file beyond the step's declared `Files`, recorded here.
+
+### Step 8 — mockable `db` field added to WatchlistRepo (offline @AC-2 via pgxmock)
+
+**Disposition**: enabling change, precedented. The repo test harness is **pgxmock** (mock pool, works
+offline), not a live DB — but `WatchlistRepo.pool` was a concrete `*pgxpool.Pool`, unmockable. Added a
+`db queryRower` field (set to `pool` in `NewWatchlistRepo`) mirroring the identical pattern
+`PortfolioRepo` already carries, and routed `bindingsByWatchlist` through it, so the `@AC-2`
+single-ANY-array-query assertion runs offline via pgxmock (a real query-count test, not the spec's
+table-driven fallback). One non-test-file change (`watchlist_repo.go`) beyond Step 8's declared
+`Files` (test only) — recorded here. `ListByUser`'s main query and the retained single-getter
+`listBindings` still use `r.pool` (untouched).

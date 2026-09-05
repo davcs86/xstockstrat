@@ -15,6 +15,7 @@
 | 2026-09-05 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, extended); round-3 adversary SOUND; recon.md + design.md written |
 | 2026-09-05 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps |
 | 2026-09-05 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run started; Steps 1–2 (proto GetLatestQuotes + codegen) landed |
+| 2026-09-05 | `in-progress` → `code-completed` | /sdd-execute | All 8 steps done (GetLatestQuotes batch RPC + marketdata single-flight, portfolio 4-site switch, ListWatchlists ANY-array); marketdata + portfolio suites green under -race |
 
 ---
 

@@ -170,3 +170,18 @@ Status unchanged: **spec-ready**. design.md NOT yet written (awaiting consolidat
     byte-identical expression.
 - Verify: `go test ./internal/... -race` green; vet + gofmt clean. golangci-lint deferred to CI
   (v2.5.0-vs-go1.27, per the Steps 3–4 deviation).
+
+## Session 2026-09-05 — sdd-execute sequential (Steps 7–8) — code-completed
+- Step 7 (portfolio repo): `ListByUser` now truncates the +1 lookahead FIRST, then reads all
+  bindings for the returned page's IDs via one `bindingsByWatchlist` ANY-array query
+  (`WHERE watchlist_id = ANY($1::uuid[]) ORDER BY watchlist_id, symbol`), grouped by watchlist_id
+  (reusing listBindings' exact Symbol/StrategyId/Source mapping). `listBindings` KEPT — its second
+  caller (the single-watchlist getter, :94) still uses it. `//nolint:staticcheck` symbols-mirror
+  comment preserved.
+- Step 8 (test): pgxmock `watchlist_repo_test.go` asserts one ANY-array query (ExpectationsWereMet)
+  + grouping/field parity. Added a `db queryRower` field to WatchlistRepo (pgxmock seam, mirrors
+  PortfolioRepo) so bindingsByWatchlist is mock-testable offline — deviation logged. RED pre-Step-7
+  (db/bindingsByWatchlist undefined) → GREEN.
+- Verify: `go test ./internal/... -race` green (marketdata + portfolio); vet + gofmt clean.
+  golangci-lint deferred to CI (v2.5.0-vs-go1.27).
+- All 8 steps done → status code-completed.
