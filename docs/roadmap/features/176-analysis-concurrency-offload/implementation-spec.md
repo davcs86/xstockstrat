@@ -235,7 +235,7 @@ or no `_sandbox_sem`); after Step 2 it passes and coverage ≥ 50%.
 
 ### Step 4 — service: FR-3 — optional `component_sem` on `StrategyEvaluator`; concurrent per-component dispatch (None ⇒ serial)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/evaluator.py` — modify (add `component_sem=None` param; branch the component loop)
@@ -297,7 +297,7 @@ or no `_sandbox_sem`); after Step 2 it passes and coverage ≥ 50%.
 
 ### Step 5 — test: FR-3 — components dispatched concurrently under the bound; assembled series byte-identical; None ⇒ serial
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_strategy_evaluator.py` — modify (or `test_evaluator_traced.py`)

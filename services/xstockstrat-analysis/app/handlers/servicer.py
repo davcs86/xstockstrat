@@ -1460,7 +1460,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             log.warning("symbol %s has insufficient bars (%d)", symbol, len(bars))
             raise _InsufficientData(symbol, len(bars), 2)
 
-        evaluator = StrategyEvaluator(self._indicators, propagation_meta)
+        # Batch backtest path: SERIAL component assembly (component_sem=None).
+        evaluator = StrategyEvaluator(self._indicators, propagation_meta, component_sem=None)
         # Capture the computed component series for diagnostics. benchmark_bars (preloaded once
         # per run, shared across symbols) resolve source_symbol components via the evaluator.
         decisions, component_series = await evaluator.evaluate_with_series(
@@ -2692,7 +2693,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Trace the exit rule only when explicitly requested (held REDUCE/ADD panel); UNSPECIFIED/
         # ENTRY keep the entry-rule default so watchlist readiness is unchanged.
         rule = "exit" if request.rule == analysis_pb2.READINESS_RULE_EXIT else "entry"
-        evaluator = StrategyEvaluator(self._indicators, propagation_meta)
+        # Interactive readiness path: per-component fan-out bounded by the shared component sem.
+        evaluator = StrategyEvaluator(
+            self._indicators, propagation_meta, component_sem=self._component_series_sem
+        )
         range_msg = _recent_range(_READINESS_LOOKBACK_DAYS)
         # One benchmark load for the whole request (shared across request.symbols).
         benchmark_bars = await self._load_benchmark_bars_windowed(
@@ -2889,7 +2893,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             )
             return
         definition = _row_to_strategy_definition(row)
-        evaluator = StrategyEvaluator(self._indicators, propagation_meta)
+        # ScoreStrategy already acquires _component_series_sem at its call site — pass None to
+        # avoid a double-acquire (SERIAL assembly inside the already-held bound).
+        evaluator = StrategyEvaluator(self._indicators, propagation_meta, component_sem=None)
         closes = list(request.closes)
         component_series = []
         # Sequential loop (no gather) so the singleton semaphore bounds cross-request compute.
@@ -3369,7 +3375,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         # Readiness + row assembly. Attributed candidates fetch bars once each and trace; the
         # session date (for valid_until) is the newest bar seen across the whole compute.
-        evaluator = StrategyEvaluator(self._indicators, propagation_meta)
+        # Interactive opportunity path: per-component fan-out bounded by the shared component sem.
+        evaluator = StrategyEvaluator(
+            self._indicators, propagation_meta, component_sem=self._component_series_sem
+        )
         range_msg = _recent_range(_READINESS_LOOKBACK_DAYS)
         strategy_defs: dict[str, object] = {}  # strategy_id → StrategyDefinition | None (cache)
         # Per-pass symbol-keyed bars dedup — one fetch per unique symbol. A failed fetch caches []

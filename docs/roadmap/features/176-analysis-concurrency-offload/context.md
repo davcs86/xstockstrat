@@ -141,3 +141,22 @@ merge-order WARN). Tooling: `uv sync --extra dev` for indicators + analysis; bas
   Staged with the Step 2 commit (required to keep the suite green under Step 2).
 - GREEN: full indicators suite `132 passed`, coverage `81%` (≥50 gate); `ruff check` + `format`
   clean. Step 2 grep confirms `_sandbox_sem`/`asyncio.to_thread`/`sandbox_max_concurrent` present.
+
+### Steps 4–5 — done (FR-3 evaluator optional component_sem, TDD red→green)
+- Step 4 (`app/services/evaluator.py`, `app/handlers/servicer.py`): added `import asyncio`;
+  `StrategyEvaluator.__init__(..., component_sem=None)` storing `self._component_sem`; branched
+  `evaluate_conditions_traced`'s per-component loop — `None ⇒` serial (verbatim pre-176) / a
+  semaphore ⇒ `asyncio.gather` of `async with self._component_sem: return ref_name, await
+  _assemble_component_series(...)`. Refinement over the spec sketch: reassembly iterates the
+  **order-preserving** gather result directly (gather keeps input order) rather than a by_ref dict —
+  byte-identical to serial even if ref_names ever collided; no return_exceptions (FormulaExecutionError
+  still propagates). 4 construction sites threaded explicitly: `:2695` readiness + `:3372`
+  opportunities ⇒ `component_sem=self._component_series_sem`; `:1463` backtest + `:2892` score ⇒
+  `component_sem=None` (score already holds `_component_series_sem` at `:2904` — avoids double-acquire).
+- Step 5 (`tests/test_evaluator_traced.py`): 3 FR-3 tests — concurrent==serial byte-identical
+  (period-keyed stub so component output is identity-, not order-, dependent); Semaphore(2) over 4
+  components ⇒ `peak == 2` (teeth); `component_sem=None` ⇒ `peak == 1` (serial regression guard).
+- RED captured by stashing the Step-4 `evaluator.py` change: all 3 FR-3 tests → TypeError (no
+  `component_sem` kwarg). GREEN with Step 4 restored.
+- Full analysis suite `659 passed` (656 baseline + 3), coverage `85%` (≥40); `ruff check`/`format`
+  clean. Existing 656 unchanged ⇒ serial path proven byte-identical.
