@@ -261,6 +261,14 @@ export interface GetFundamentalsMultiResponse {
   fundamentals: Fundamentals[];
 }
 
+export interface GetLatestQuotesRequest {
+  symbols: string[];
+}
+
+export interface GetLatestQuotesResponse {
+  quotes: Quote[];
+}
+
 function createBaseBar(): Bar {
   return {
     symbol: "",
@@ -3004,6 +3012,124 @@ export const GetFundamentalsMultiResponse: MessageFns<GetFundamentalsMultiRespon
   },
 };
 
+function createBaseGetLatestQuotesRequest(): GetLatestQuotesRequest {
+  return { symbols: [] };
+}
+
+export const GetLatestQuotesRequest: MessageFns<GetLatestQuotesRequest> = {
+  encode(message: GetLatestQuotesRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.symbols) {
+      writer.uint32(10).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetLatestQuotesRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetLatestQuotesRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbols.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetLatestQuotesRequest {
+    return {
+      symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+    };
+  },
+
+  toJSON(message: GetLatestQuotesRequest): unknown {
+    const obj: any = {};
+    if (message.symbols?.length) {
+      obj.symbols = message.symbols;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetLatestQuotesRequest>, I>>(base?: I): GetLatestQuotesRequest {
+    return GetLatestQuotesRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetLatestQuotesRequest>, I>>(object: I): GetLatestQuotesRequest {
+    const message = createBaseGetLatestQuotesRequest();
+    message.symbols = object.symbols?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseGetLatestQuotesResponse(): GetLatestQuotesResponse {
+  return { quotes: [] };
+}
+
+export const GetLatestQuotesResponse: MessageFns<GetLatestQuotesResponse> = {
+  encode(message: GetLatestQuotesResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.quotes) {
+      Quote.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetLatestQuotesResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetLatestQuotesResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.quotes.push(Quote.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetLatestQuotesResponse {
+    return { quotes: globalThis.Array.isArray(object?.quotes) ? object.quotes.map((e: any) => Quote.fromJSON(e)) : [] };
+  },
+
+  toJSON(message: GetLatestQuotesResponse): unknown {
+    const obj: any = {};
+    if (message.quotes?.length) {
+      obj.quotes = message.quotes.map((e) => Quote.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetLatestQuotesResponse>, I>>(base?: I): GetLatestQuotesResponse {
+    return GetLatestQuotesResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetLatestQuotesResponse>, I>>(object: I): GetLatestQuotesResponse {
+    const message = createBaseGetLatestQuotesResponse();
+    message.quotes = object.quotes?.map((e) => Quote.fromPartial(e)) || [];
+    return message;
+  },
+};
+
 /**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
@@ -3131,6 +3257,21 @@ export const MarketDataServiceService = {
       Buffer.from(GetFundamentalsMultiResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): GetFundamentalsMultiResponse => GetFundamentalsMultiResponse.decode(value),
   },
+  /**
+   * Batched latest quotes — partial by design: a symbol with no quote is omitted from the
+   * response (null-not-zero), never returned as a fabricated zero-price Quote.
+   */
+  getLatestQuotes: {
+    path: "/xstockstrat.marketdata.v1.MarketDataService/GetLatestQuotes" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetLatestQuotesRequest): Buffer =>
+      Buffer.from(GetLatestQuotesRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetLatestQuotesRequest => GetLatestQuotesRequest.decode(value),
+    responseSerialize: (value: GetLatestQuotesResponse): Buffer =>
+      Buffer.from(GetLatestQuotesResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetLatestQuotesResponse => GetLatestQuotesResponse.decode(value),
+  },
 } as const;
 
 export interface MarketDataServiceServer extends UntypedServiceImplementation {
@@ -3156,6 +3297,11 @@ export interface MarketDataServiceServer extends UntypedServiceImplementation {
   getFundamentals: handleUnaryCall<GetFundamentalsRequest, GetFundamentalsResponse>;
   /** Batched fundamentals for a watchlist scan (core metrics via one FMP quote call) */
   getFundamentalsMulti: handleUnaryCall<GetFundamentalsMultiRequest, GetFundamentalsMultiResponse>;
+  /**
+   * Batched latest quotes — partial by design: a symbol with no quote is omitted from the
+   * response (null-not-zero), never returned as a fabricated zero-price Quote.
+   */
+  getLatestQuotes: handleUnaryCall<GetLatestQuotesRequest, GetLatestQuotesResponse>;
 }
 
 export interface MarketDataServiceClient extends Client {
@@ -3316,6 +3462,25 @@ export interface MarketDataServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: GetFundamentalsMultiResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Batched latest quotes — partial by design: a symbol with no quote is omitted from the
+   * response (null-not-zero), never returned as a fabricated zero-price Quote.
+   */
+  getLatestQuotes(
+    request: GetLatestQuotesRequest,
+    callback: (error: ServiceError | null, response: GetLatestQuotesResponse) => void,
+  ): ClientUnaryCall;
+  getLatestQuotes(
+    request: GetLatestQuotesRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetLatestQuotesResponse) => void,
+  ): ClientUnaryCall;
+  getLatestQuotes(
+    request: GetLatestQuotesRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetLatestQuotesResponse) => void,
   ): ClientUnaryCall;
 }
 

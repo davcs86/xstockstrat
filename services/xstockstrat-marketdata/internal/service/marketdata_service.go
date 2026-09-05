@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"connectrpc.com/connect"
+	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -48,6 +50,11 @@ type MarketDataService struct {
 	// per interval, so a weekend (newest bar legitimately old) doesn't refetch on every poll.
 	staleMu        sync.Mutex
 	lastStaleCheck map[string]time.Time
+
+	// quoteSingleflight coalesces concurrent batch-quote cold fetches keyed on the sorted cold set,
+	// so N overlapping GetLatestQuotes calls for the same misses trigger one upstream Alpaca fetch
+	// (feature 178, @AC-3). Distinct code path from staleMu — no shared lock, no deadlock.
+	quoteSingleflight singleflight.Group
 
 	// fundamentals is the active fundamentals source, held separately from the OHLCV registry
 	// (FR-2). Always non-nil (feature 082); marketdata.<fundProvider>.enabled gates use, not construction.
@@ -425,6 +432,87 @@ func (s *MarketDataService) GetLatestQuote(ctx context.Context, symbol string) (
 		slog.Warn("GetLatestQuote: cache insert failed", "symbol", symbol, "error", err)
 	}
 	return live, nil
+}
+
+// GetLatestQuotes returns the latest quote for each requested symbol, cache-first and batched
+// (feature 178). Warm (cached) symbols are read in one DISTINCT ON query; the cold remainder is
+// fetched from the live source in one multi-symbol call, coalesced under singleflight on the sorted
+// cold set so concurrent callers share a single upstream fetch (@AC-3), then cached. A symbol with
+// no quote from either path is omitted from the result (null-not-zero), never a zero-price Quote.
+func (s *MarketDataService) GetLatestQuotes(ctx context.Context, symbols []string) ([]*marketdatav1.Quote, error) {
+	if len(symbols) == 0 {
+		return nil, nil
+	}
+	for _, sym := range symbols {
+		s.markWarm(sym)
+	}
+	// Warm (cached) hits in one query. s.repo is nil only on the no-DB unit-test path (feature 178
+	// @AC-3 single-flight coverage) — there every symbol is treated as cold.
+	warm := map[string]*marketdatav1.Quote{}
+	if s.repo != nil {
+		var err error
+		warm, err = s.repo.GetLatestQuotesBatch(ctx, symbols)
+		if err != nil {
+			return nil, err
+		}
+	}
+	var cold []string
+	for _, sym := range symbols {
+		if _, ok := warm[sym]; !ok {
+			cold = append(cold, sym)
+		}
+	}
+	if len(cold) > 0 {
+		sortedCold := append([]string(nil), cold...)
+		sort.Strings(sortedCold)
+		key := strings.Join(sortedCold, ",")
+		v, fetchErr, _ := s.quoteSingleflight.Do(key, func() (interface{}, error) {
+			src, e := s.registry.Get("")
+			if e != nil {
+				return nil, e
+			}
+			ms, ok := src.(source.MultiSymbolSource)
+			if !ok {
+				return map[string]*marketdatav1.Quote{}, nil
+			}
+			coldMap, e := ms.GetLatestQuotesMulti(ctx, sortedCold)
+			if e != nil {
+				return nil, e
+			}
+			// Cache each cold quote independently (ON CONFLICT upsert, not one wrapping txn) —
+			// matches the singular path (:424) and the warm poller (:520). s.repo is nil only on
+			// the no-DB unit-test path.
+			if s.repo != nil {
+				for _, q := range coldMap {
+					if q == nil {
+						continue
+					}
+					if insErr := s.repo.InsertQuote(ctx, q); insErr != nil {
+						slog.Warn("GetLatestQuotes: cache insert failed", "symbol", q.Symbol, "error", insErr)
+					}
+				}
+			}
+			return coldMap, nil
+		})
+		if fetchErr != nil {
+			// WAIVED partial-upstream-failure divergence (design § Open Risks): a cold-batch
+			// transport error drops the whole cold set rather than per-symbol; return the error
+			// instead of substituting zero values.
+			return nil, fetchErr
+		}
+		if coldMap, ok := v.(map[string]*marketdatav1.Quote); ok {
+			for _, q := range coldMap {
+				if q != nil {
+					warm[q.Symbol] = q
+				}
+			}
+		}
+	}
+	out := make([]*marketdatav1.Quote, 0, len(warm))
+	for _, q := range warm {
+		out = append(out, q)
+	}
+	return out, nil
 }
 
 // GetLatestPrice returns the latest trade price + prior-session daily close. Either value is left

@@ -24,11 +24,14 @@ var ErrBindingNotFound = errors.New("watchlist binding not found")
 // (no second pool). Ownership is enforced in the service layer; the repo is ownership-agnostic.
 type WatchlistRepo struct {
 	pool *pgxpool.Pool
+	// db is the mockable query surface (pool in prod, pgxmock in tests), mirroring PortfolioRepo.
+	// bindingsByWatchlist reads through it so its single ANY-array query is unit-testable offline.
+	db queryRower
 }
 
 // NewWatchlistRepo constructs a WatchlistRepo over an existing pool.
 func NewWatchlistRepo(pool *pgxpool.Pool) *WatchlistRepo {
-	return &WatchlistRepo{pool: pool}
+	return &WatchlistRepo{pool: pool, db: pool}
 }
 
 // Create inserts a new watchlist plus its (already normalized) bindings in one tx.
@@ -129,21 +132,62 @@ func (r *WatchlistRepo) ListByUser(ctx context.Context, userID string, pageSize 
 	}
 	rows.Close()
 
-	for _, wl := range wls {
-		binds, err := r.listBindings(ctx, wl.WatchlistId)
-		if err != nil {
-			return nil, "", err
-		}
-		wl.Bindings = binds
-		wl.Symbols = bindingSymbols(binds) //nolint:staticcheck // SA1019: deprecated symbols mirror intentionally retained for old clients (feature 097)
-	}
-
+	// Truncate the +1 lookahead FIRST, then batch bindings over exactly the returned page's IDs
+	// (feature 178) — the lookahead row is not part of the response and must not be read.
 	nextToken := ""
 	if len(wls) > pageSize {
 		nextToken = wls[pageSize].WatchlistId
 		wls = wls[:pageSize]
 	}
+
+	ids := make([]string, 0, len(wls))
+	for _, wl := range wls {
+		ids = append(ids, wl.WatchlistId)
+	}
+	bindingsByID, err := r.bindingsByWatchlist(ctx, ids)
+	if err != nil {
+		return nil, "", err
+	}
+	for _, wl := range wls {
+		wl.Bindings = bindingsByID[wl.WatchlistId]
+		wl.Symbols = bindingSymbols(wl.Bindings) //nolint:staticcheck // SA1019: deprecated symbols mirror intentionally retained for old clients (feature 097)
+	}
 	return wls, nextToken, nil
+}
+
+// bindingsByWatchlist reads the bindings for a set of watchlists in ONE ANY-array query and groups
+// them by watchlist_id (feature 178). Ordering by (watchlist_id, symbol) preserves each list's
+// per-symbol order; reuses listBindings' exact per-row mapping. A watchlist with no rows is absent
+// from the map (→ nil bindings, same as the old per-watchlist path).
+func (r *WatchlistRepo) bindingsByWatchlist(ctx context.Context, watchlistIDs []string) (map[string][]*portfoliov1.WatchlistBinding, error) {
+	out := make(map[string][]*portfoliov1.WatchlistBinding, len(watchlistIDs))
+	if len(watchlistIDs) == 0 {
+		return out, nil
+	}
+	rows, err := r.db.Query(ctx,
+		`SELECT watchlist_id, symbol, strategy_id, source
+		 FROM portfolio.watchlist_symbols
+		 WHERE watchlist_id = ANY($1::uuid[])
+		 ORDER BY watchlist_id, symbol ASC`, watchlistIDs)
+	if err != nil {
+		return nil, fmt.Errorf("list bindings batch: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			wlID, symbol, strategyID string
+			source                   int16
+		)
+		if err := rows.Scan(&wlID, &symbol, &strategyID, &source); err != nil {
+			return nil, fmt.Errorf("scan binding: %w", err)
+		}
+		out[wlID] = append(out[wlID], &portfoliov1.WatchlistBinding{
+			Symbol:     symbol,
+			StrategyId: strategyID,
+			Source:     portfoliov1.WatchlistEntrySource(source),
+		})
+	}
+	return out, rows.Err()
 }
 
 // Update replaces name/description and the full binding set (already normalized) in one tx.

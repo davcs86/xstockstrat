@@ -2973,6 +2973,29 @@ reusing.
   the offload with a peak-counter teeth test (exact bound, not an upper bound) + a head-of-line
   isolation test (a spinning core in the executor must not stall a concurrent reader). No new ID.
 
+### 2026-09-05 — quote-fanout-batching — perf
+- **Pattern**: Collapse a serial per-item fan-out (N gRPC or N DB calls) into a batch WITHOUT changing
+  the response contract or losing the "missing ≠ zero" discipline. Three shapes landed: (1) an
+  **additive batch RPC** mirroring an existing `*Multi` precedent, returning `repeated <Elem>`
+  **self-keyed** on the element's own id (an absent item is omitted → null-not-zero, no
+  `map<>` needed, buf-breaking-safe); (2) a cache-first batch service method = one batched repo read
+  (`DISTINCT ON (key) ... ORDER BY key, ts DESC` over the *existing* per-key index — no migration) +
+  one upstream fetch for the cold remainder **coalesced under a `singleflight.Group` keyed on the
+  sorted cold set** (concurrent callers share one fetch); (3) a `WHERE key = ANY($1::uuid[])` +
+  `ORDER BY key, sub` read that replaces a 1+N loop, grouped into `map[key][]row` preserving per-key
+  order. Consumer side: one helper that batches then re-keys by id, where a whole-call RPC error
+  returns an empty map so every item is "missing" — the same neutral outcome as N failing singular
+  calls (never a fabricated zero).
+- **Evidence**: `marketdata.proto` `GetLatestQuotes`; `marketdata_repo.go` `GetLatestQuotesBatch`,
+  `marketdata_service.go` `GetLatestQuotes` (+`quoteSingleflight`); `portfolio_service.go`
+  `latestQuotesFor` (4 sites); `watchlist_repo.go` `bindingsByWatchlist`; feature 178 Steps 3/5/7.
+- **Rule it implies**: (a) batch by mirroring the closest existing `*Multi`/`ANY` precedent, not a new
+  shape; (b) a batched "latest per key" repo read is a NEW method (`DISTINCT ON`), never a `LIMIT`ed
+  clone of the singular `... LIMIT 1`; (c) key single-flight on the SORTED cold SET so it actually
+  coalesces; (d) preserve any per-site formula byte-identical + add a cross-path parity test (PR#735
+  scar); (e) for the offline test, a concrete `*pgxpool.Pool` field blocks pgxmock — add the mockable
+  `queryRower` seam (as PortfolioRepo already did) rather than a live DB. No new ID.
+
 ### 2026-09-05 — ui-resume-halted-account — reuse
 - **Pattern**: Adding a confirm-gated privileged row action reuses the canonical `RowActionsMenu`
   (admin-gated action + reason-surfacing `AlertDialog`) rather than a bespoke button. Two e2e

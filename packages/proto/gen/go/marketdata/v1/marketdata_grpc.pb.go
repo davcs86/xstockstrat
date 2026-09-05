@@ -30,6 +30,7 @@ const (
 	MarketDataService_ListAssets_FullMethodName           = "/xstockstrat.marketdata.v1.MarketDataService/ListAssets"
 	MarketDataService_GetFundamentals_FullMethodName      = "/xstockstrat.marketdata.v1.MarketDataService/GetFundamentals"
 	MarketDataService_GetFundamentalsMulti_FullMethodName = "/xstockstrat.marketdata.v1.MarketDataService/GetFundamentalsMulti"
+	MarketDataService_GetLatestQuotes_FullMethodName      = "/xstockstrat.marketdata.v1.MarketDataService/GetLatestQuotes"
 )
 
 // MarketDataServiceClient is the client API for MarketDataService service.
@@ -61,6 +62,9 @@ type MarketDataServiceClient interface {
 	GetFundamentals(ctx context.Context, in *GetFundamentalsRequest, opts ...grpc.CallOption) (*GetFundamentalsResponse, error)
 	// Batched fundamentals for a watchlist scan (core metrics via one FMP quote call)
 	GetFundamentalsMulti(ctx context.Context, in *GetFundamentalsMultiRequest, opts ...grpc.CallOption) (*GetFundamentalsMultiResponse, error)
+	// Batched latest quotes — partial by design: a symbol with no quote is omitted from the
+	// response (null-not-zero), never returned as a fabricated zero-price Quote.
+	GetLatestQuotes(ctx context.Context, in *GetLatestQuotesRequest, opts ...grpc.CallOption) (*GetLatestQuotesResponse, error)
 }
 
 type marketDataServiceClient struct {
@@ -199,6 +203,16 @@ func (c *marketDataServiceClient) GetFundamentalsMulti(ctx context.Context, in *
 	return out, nil
 }
 
+func (c *marketDataServiceClient) GetLatestQuotes(ctx context.Context, in *GetLatestQuotesRequest, opts ...grpc.CallOption) (*GetLatestQuotesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetLatestQuotesResponse)
+	err := c.cc.Invoke(ctx, MarketDataService_GetLatestQuotes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MarketDataServiceServer is the server API for MarketDataService service.
 // All implementations should embed UnimplementedMarketDataServiceServer
 // for forward compatibility.
@@ -228,6 +242,9 @@ type MarketDataServiceServer interface {
 	GetFundamentals(context.Context, *GetFundamentalsRequest) (*GetFundamentalsResponse, error)
 	// Batched fundamentals for a watchlist scan (core metrics via one FMP quote call)
 	GetFundamentalsMulti(context.Context, *GetFundamentalsMultiRequest) (*GetFundamentalsMultiResponse, error)
+	// Batched latest quotes — partial by design: a symbol with no quote is omitted from the
+	// response (null-not-zero), never returned as a fabricated zero-price Quote.
+	GetLatestQuotes(context.Context, *GetLatestQuotesRequest) (*GetLatestQuotesResponse, error)
 }
 
 // UnimplementedMarketDataServiceServer should be embedded to have
@@ -269,6 +286,9 @@ func (UnimplementedMarketDataServiceServer) GetFundamentals(context.Context, *Ge
 }
 func (UnimplementedMarketDataServiceServer) GetFundamentalsMulti(context.Context, *GetFundamentalsMultiRequest) (*GetFundamentalsMultiResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetFundamentalsMulti not implemented")
+}
+func (UnimplementedMarketDataServiceServer) GetLatestQuotes(context.Context, *GetLatestQuotesRequest) (*GetLatestQuotesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetLatestQuotes not implemented")
 }
 func (UnimplementedMarketDataServiceServer) testEmbeddedByValue() {}
 
@@ -474,6 +494,24 @@ func _MarketDataService_GetFundamentalsMulti_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MarketDataService_GetLatestQuotes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetLatestQuotesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketDataServiceServer).GetLatestQuotes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketDataService_GetLatestQuotes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketDataServiceServer).GetLatestQuotes(ctx, req.(*GetLatestQuotesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MarketDataService_ServiceDesc is the grpc.ServiceDesc for MarketDataService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -516,6 +554,10 @@ var MarketDataService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetFundamentalsMulti",
 			Handler:    _MarketDataService_GetFundamentalsMulti_Handler,
+		},
+		{
+			MethodName: "GetLatestQuotes",
+			Handler:    _MarketDataService_GetLatestQuotes_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
