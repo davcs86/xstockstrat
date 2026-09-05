@@ -148,3 +148,32 @@ Status unchanged: **spec-ready**. design.md NOT yet written (awaiting consolidat
   - Step 8 (C-15 minor): the @AC-1 e2e case exercises the BRACKET_PROTECTION fixture while
     acceptance @AC-1's illustrative Given names RECONCILIATION — [x] accepted (both are valid halted
     states; the behavioral assertion — indicator + reason + source badge shown pre-order — is identical).
+
+## Session 2026-09-05 — sdd-execute sequential (Steps 1–8, code-completed)
+
+- **Executed all 8 steps** on `feature/ui-resume-halted-account`, one commit per step, red-before-green
+  anchored on the Step 8 Playwright spec.
+  - RED: authored `e2e/trader/account-resume.spec.ts` first; against the pre-implementation tree all
+    6 @AC-* cases FAIL (no HaltBadge, no Resume action, no `resumeAccount` BFF route) — `RED_EXIT=1`.
+  - GREEN after Steps 1–7: `pnpm exec playwright test e2e/trader/account-resume.spec.ts --project=chromium`
+    → **7 passed** (6 @AC-* + SSR warmup setup), no flake on the stateful @AC-3. `pnpm run lint` clean
+    (only pre-existing warnings in unrelated files; none reference the new/changed files).
+- **Files landed** (by step): 1 `opportunityShared.tsx` + `positions/page.tsx` (extract `HALT_SOURCE`);
+  2 `HaltBadge.tsx` (new); 3 `traderBff.ts` (`resumeAccount: forwardAdmin`); 4 `AccountContext.tsx`
+  (`applyAccountUpdate`); 5 `accountShared.tsx` (indicator + admin Resume via `RowActionsMenu`);
+  6 `AccountSelector.tsx` (iconOnly badge + `hasAccountIssue` gear dot); 7 `e2e/fixtures/accounts.ts`
+  (`BROKER_ACCOUNT_HALTED`), `INVENTORY.md`, `e2e/mock-backend.ts` (mock `resumeAccount`); 8
+  `e2e/trader/account-resume.spec.ts` (new).
+- **GREEN-phase test-robustness fixes** (Deviation Log): @AC-6 scoped the reason assertion to the
+  `alertdialog` (strict-mode dup with the row behind it); @AC-3 added an `Escape` reset before
+  re-opening the row menu (Radix keeps the dropdown mounted through the confirm flow via
+  `onSelect` `preventDefault`). `RowActionsMenu` itself untouched (out of scope). The mock
+  `resumeAccount` echoes the requested id cleared so @AC-3 truly exercises `applyAccountUpdate`.
+- **Advisory NOTEs from impl-spec review** resolved at execute: Step 7 used the named
+  `CREDENTIAL_STATUS_VALID` const (not inline `1`); the `Badge variant="warning"` C-17 palette NOTE is
+  pre-existing/guarded, not this feature's to fix; @AC-1 uses the BRACKET_PROTECTION fixture (both
+  halted states are behaviorally equivalent for the indicator assertion).
+- **Constitution**: C-14 (single UI `/trader` consumer surface, no Agent change); C-03 header
+  propagation inherited via `forwardAdmin`→`forward`→`backendHeaders` (no re-implementation); C-12
+  fixtures from `../fixtures` + `../helpers/auth` (no inline domain literals); no proto/migration/config
+  /backend change (UI-only, against the pre-existing admin-only `ResumeAccount` RPC).

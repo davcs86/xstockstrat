@@ -419,7 +419,7 @@ pnpm run lint
 
 ### Step 8 — test: Playwright spec covering every acceptance scenario
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/account-resume.spec.ts` — create
@@ -493,4 +493,21 @@ never a `reload()`).
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **Step 8 (GREEN-phase test robustness, no spec-intent change).** Two assertions in
+  `account-resume.spec.ts` were hardened after the first GREEN run surfaced Radix interaction quirks
+  of the reused `RowActionsMenu`:
+  - **@AC-6**: the halt reason renders in *both* the confirm dialog and the row behind it, so the
+    unscoped `getByText('bracket flatten failed')` was a strict-mode dup — scoped to
+    `getByRole('alertdialog')`.
+  - **@AC-3**: `RowActionsMenu` keeps the dropdown mounted through the confirm flow
+    (`onSelect` `preventDefault`), so re-clicking the trigger deadlocked against the still-open menu —
+    added an `Escape` reset before re-opening to re-verify the Resume action is gone.
+  Neither changes the acceptance behavior asserted; `RowActionsMenu` itself is untouched (out of scope).
+  **Disposition**: test-only refinement within Step 8's scope.
+- **Step 7 (mock fidelity).** The mock `resumeAccount` echoes the *requested* account id back cleared
+  (`{...BROKER_ACCOUNT_HALTED, id: req.accountId, halted:false}`) rather than a fixed account, so the
+  @AC-3 in-place clear genuinely exercises `applyAccountUpdate` on the resumed row.
+  **Disposition**: accepted — strictly more faithful than the spec's fixed-return sketch.
+- **Verification substitution**: `golangci-lint` / DB apply are N/A (UI-only feature); Step 8's
+  `pnpm exec playwright test e2e/trader/account-resume.spec.ts --project=chromium` is the CI-equivalent
+  gate. GREEN: 6/6 acceptance scenarios pass (7 incl. SSR warmup setup), no flake on the stateful @AC-3.
