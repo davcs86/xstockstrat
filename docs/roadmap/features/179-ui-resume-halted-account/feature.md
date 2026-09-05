@@ -14,6 +14,7 @@
 | 2026-09-04 | `draft` → `spec-ready` | /sdd-review | FAILED first pass (criterion 9, scope contradiction); resolved all Open Questions (admin-only scope, conservative), re-review PASS; overlap CLEAN |
 | 2026-09-05 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, extended); round-4 adversary SOUND; recon.md + design.md written |
 | 2026-09-05 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps |
+| 2026-09-05 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 landed (extract `HALT_SOURCE` to `opportunityShared`, rewire positions page) |
 
 ---
 

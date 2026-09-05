@@ -61,7 +61,7 @@ Every `@AC-*` in `acceptance.feature` is covered by the single Playwright spec i
 
 ### Step 1 — service: Extract `HALT_SOURCE` to `opportunityShared` and rewire the positions page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/opportunityShared.tsx` — modify

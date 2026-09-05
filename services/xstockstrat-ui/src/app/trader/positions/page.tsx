@@ -8,7 +8,7 @@ import { AppShell } from '@/components/trader/AppShell';
 import { useAccountContext } from '@/context/AccountContext';
 import { usePositions } from '@/hooks/usePortfolio';
 import { useReconciliationStatus } from '@/hooks/useReconciliationStatus';
-import { POSITION_RISK_FLAG, EnumBadge, type EnumRender } from '@/lib/opportunityShared';
+import { POSITION_RISK_FLAG, HALT_SOURCE, EnumBadge } from '@/lib/opportunityShared';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { StatTile } from '@/components/shared/StatTile';
@@ -20,7 +20,6 @@ import { openR, fmtR, sideLabel, isExitFlag } from '@/lib/positionRisk';
 import { traderConfigClient } from '@/lib/browserClients/traderConfigClient';
 import { PositionSide } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import type { Position } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
-import { HaltSource } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -37,14 +36,6 @@ import { DataTable } from '@/components/ui/data-table';
 
 type TradingMode = 'paper' | 'live';
 type PnlFilter = 'all' | 'winners' | 'losers';
-
-// Halt-source labels — an exhaustive Record<Enum, EnumRender> (adding a value breaks tsc). Kept local
-// since HaltSource is a trading-domain enum, not an opportunity one.
-const HALT_SOURCE: Record<HaltSource, EnumRender> = {
-  [HaltSource.UNSPECIFIED]: { label: '—', role: 'secondary' },
-  [HaltSource.BRACKET_PROTECTION]: { label: 'Bracket protection', role: 'paper' },
-  [HaltSource.RECONCILIATION]: { label: 'Reconciliation', role: 'sell' },
-};
 
 export default function PositionsPage() {
   const { selectedAccountId, environmentMode, accounts } = useAccountContext();

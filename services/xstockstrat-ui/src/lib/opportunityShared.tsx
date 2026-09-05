@@ -8,6 +8,7 @@ import { OpportunityActionTag, ConditionState } from '@xstockstrat/proto/analysi
 import type { ConditionEval } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { PositionRiskFlag } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { SourceHealthStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
+import { HaltSource } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { Badge } from '../components/ui/badge';
 
 /** Semantic color role, aligned to the Nocturne gain/loss/paper tokens + a neutral + info. */
@@ -52,6 +53,14 @@ export const SOURCE_HEALTH: Record<SourceHealthStatus, EnumRender> = {
   [SourceHealthStatus.LIVE]: { label: 'Live', role: 'buy' },
   [SourceHealthStatus.STALE]: { label: 'Stale', role: 'paper' },
   [SourceHealthStatus.DOWN]: { label: 'Down', role: 'sell' },
+};
+
+// Halt-source labels (feature 179 — extracted from the positions page for reuse across the
+// account-management surfaces). Exhaustive — adding a HaltSource value breaks tsc here.
+export const HALT_SOURCE: Record<HaltSource, EnumRender> = {
+  [HaltSource.UNSPECIFIED]: { label: '—', role: 'secondary' },
+  [HaltSource.BRACKET_PROTECTION]: { label: 'Bracket protection', role: 'paper' },
+  [HaltSource.RECONCILIATION]: { label: 'Reconciliation', role: 'sell' },
 };
 
 /**
