@@ -73,3 +73,37 @@ Status unchanged: **spec-ready**. design.md NOT yet written (awaiting consolidat
 - USER APPROVED design 2026-09-05. Status: spec-ready → design-approved.
 - merge-order.md: 172-before-178 row added (same-function checkRiskLimits overlap; 178 keeps 172's drawdown block verbatim, batches only the quote loop).
 - Next: /sdd-spec quote-fanout-batching. Open risks carried: EXPLAIN-verify DISTINCT ON uses the index; author portfolio-side MarketDataServiceClient stub.
+
+## Session 2026-09-05 — sdd-spec
+
+- Generated implementation-spec.md with 8 steps. Status → implementation-ready.
+- Key codebase findings (verified this session, not just from recon):
+  - **Feature 172 has already landed on the branch base.** `checkRiskLimits` now carries 172's
+    `evaluateDrawdowns`/`GetAccountDrawdowns` drawdown block (`portfolio_service.go:768-773`) after the
+    quote loop; portfolio's last migration is now **016** (`016_account_balance_peak_equity`), not 015
+    as recon read. The recon-flagged "same-function merge conflict" is therefore **moot** — Step 5
+    batches only the quote loop and keeps 172's block verbatim; no reconcile needed. Inline-loop lines
+    shifted: `GetPnL:523`, `broadcastSnapshot:693`, `checkRiskLimits:750` (recon had :523/:693/:732).
+  - Index `idx_quotes_symbol_time ON marketdata.quotes (symbol, time DESC)` confirmed at
+    `migrations/001_marketdata_hypertables.up.sql:56` → `DISTINCT ON (symbol) ... ORDER BY symbol, time
+    DESC` rides it; **no new migration** (marketdata last migration = 004). EXPLAIN-verify deferred to
+    execute/CI against the managed DB (offline spec cannot run it; index existence is the standing proof).
+  - Proto batch precedent `GetFundamentalsMulti` confirmed (`marketdata.proto:44,221-227`); handler
+    `:183`, gRPC adapter `:318`, adapter struct `:209`, auto-registration via
+    `RegisterMarketDataServiceServer(...GRPCHandler())` `cmd/server/main.go:152`. `Quote` message
+    (`:63-71`) reused as the `repeated Quote` element (self-keyed on `symbol`).
+  - Portfolio→marketdata client already header-propagating: `mdConn` dialed with
+    `grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor)` (`portfolio_service.go:113`) —
+    the new `GetLatestQuotes` call on `s.marketdata` needs **no** new propagation wiring.
+  - `golang.org/x/sync v0.20.0` is present **indirect** (`go.mod:36`); importing `singleflight`
+    promotes it to direct via `go mod tidy` (no new download).
+  - **Testability seam:** marketdata `s.repo` and portfolio `s.marketdata` quote paths use a concrete
+    `*MarketDataRepo` (no interface) — repo-layer `DISTINCT ON`/`ANY` reads need a DB (integration),
+    while the single-flight coalescing, partial-map merge, and portfolio batch-vs-serial parity are the
+    unit-testable seams. No portfolio-side `MarketDataServiceClient` stub exists — Steps 6 authors one.
+  - Coverage: all new logic lands in Go packages **excluded** from the `-coverpkg` set
+    (`service/`,`handler/`,`repository/`) — no coverage threshold applies; red-green behavioral tests
+    are the gate (noted in each test step).
+- Scenario coverage (C-15): AC-1→Step6, AC-2→Step8, AC-3→Step4, AC-4→Step4+Step6. All covered.
+- Consumer surface (C-14): internal/platform-only per product spec — no UI/agent step (restated in
+  Execution Summary).
