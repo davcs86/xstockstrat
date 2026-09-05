@@ -72,3 +72,158 @@ Status unchanged: **spec-ready**. design.md NOT yet written (awaiting consolidat
 - USER APPROVED design 2026-09-05 (approved 176 & 178; 177 & 179 held). Status: spec-ready → design-approved.
 - merge-order.md: 176-before-177 WARN row added (same-function overlap on _compute_opportunities/EvaluateReadiness/evaluator; confirm when 177 is approved).
 - Next: /sdd-spec analysis-concurrency-offload. Open risks carried: pure-CPU core evidence (F-06) per simulator, readiness large-symbols memory test, feature-173 watcher.py coordination — all to resolve at /sdd-spec.
+
+## Session 2026-09-05 — sdd-spec
+
+- Generated implementation-spec.md with **11 steps** (5 `service` + 5 paired `test` + 1 `config`).
+  Status → implementation-ready. Every step cites verified `path:line` evidence (recon.md Codebase
+  Map re-verified against the current tree; no line drift found).
+- Step map: 1 config (2 new no-seed analysis keys + enforce indicators.sandbox.max_concurrent);
+  2–3 FR-5 sandbox to_thread+sem (indicators); 4–5 FR-3 evaluator optional `component_sem`
+  (None⇒serial, 4 construction sites); 6–7 FR-2 readiness `_bars_fetch_sem` body-gate;
+  8–9 FR-1/FR-6 three-phase single-flight `_compute_opportunities` under new `_candidates_sem`;
+  10–11 FR-4 dedicated bounded ThreadPoolExecutor (simulator prologue/core split + screener).
+- Key codebase findings (grep-verified this session):
+  - Simulator F-06 evidence CONFIRMED: `_backtest_symbol` core `:1222-1327`, `_backtest_symbol_evaluated`
+    core after `:1498`, `_simulate_portfolio` whole body `:1611-1776` are all **`await`-free** (the
+    `await`s at `:1800/1820/1850` belong to sibling warmup methods, NOT `_simulate_portfolio`). Cores
+    open no DB connection → asyncpg pool stays 2.
+  - StrategyEvaluator construction sites: `servicer.py:1463` (backtest), `:2695` (readiness),
+    `:2892` (score — already acquires `_component_series_sem` at `:2904`, so pass `None`), `:3372`
+    (opportunities). `__init__` at `evaluator.py:107`; per-component loop at `evaluator.py:234` inside
+    `evaluate_conditions_traced` (`:195`).
+  - Indicators: `ExecuteFormula` `:85` calls sync `sandbox.execute_formula` `:139`; **`asyncio` not
+    imported** in that servicer (must add). Analysis servicer **has** `import asyncio` (`:13`) but
+    **not** `ThreadPoolExecutor`/`functools` (must add). New indicators accessor
+    `sandbox_max_concurrent()` after `watcher.py:137`.
+  - Screener: `_sem` built `screener.py:84`, acquired inside `_eval_symbol` `:324`, but the serial
+    loop `:110` leaves it ineffective — FR-4 gathers the fan-out so `_sem` actually binds.
+  - merge-order.md 176→177 WARN row already present (`:227-242`) — no step re-adds it. strat-lab
+    plugin needs no update (no run_backtest API/shape change). No seed migration (no-seed key pattern).
+- Reviewers snapshot finalized: analysis owner (1,4–11), indicators owner (1–3), config owner (1).
+
+## Session 2026-09-05 — /sdd-execute sequential (176→177→178→179, one PR per feature)
+
+Sequential-mode run started. Pacing: user-authorized "run all four back-to-back", branch model
+`feature/<slug> → main-dev`. Only 176 is implementation-ready; 177/178/179 are design-approved and
+will be `/sdd-spec`'d then executed in turn (177 against 176's post-restructure signatures per
+merge-order WARN). Tooling: `uv sync --extra dev` for indicators + analysis; baselines green
+(indicators 129 passed, analysis 656 passed) before any edit.
+
+### Step 1 — done (config/docs registration, TDD N/A)
+- `services/xstockstrat-analysis/CLAUDE.md` § Config Keys Consumed: added
+  `analysis.opportunity.max_concurrent_candidates|4` (priority-inversion guard, separate from
+  `max_concurrent_bars_fetches`) and `analysis.compute.max_worker_threads|4` (FR-4 executor pool,
+  no DB conn). Both no-seed.
+- `services/xstockstrat-indicators/CLAUDE.md:72`: reworded `indicators.sandbox.max_concurrent` row —
+  removed "not yet enforced"; now enforced via new `ConfigWatcher.sandbox_max_concurrent()` +
+  `_sandbox_sem` in `ExecuteFormula` (FR-5).
+- `docs/patterns/config-governance.md` § Per-Feature Registered Keys: added feature-176 entry
+  (newest-first) with both keys; noted the indicators key is enforced-not-new (no row).
+- Verified: both keys present in analysis CLAUDE.md + config-governance log; indicators row updated;
+  no `migrations/` file added (no-seed). Committed directly to `feature/analysis-concurrency-offload`.
+
+### Steps 2–3 — done (FR-5 indicators sandbox offload + concurrency/timeout tests, TDD red→green)
+- RED captured: new `tests/test_execute_formula_concurrency.py` against the pre-Step-2 tree →
+  `peak == 1` (sandbox ran synchronously on the loop; 4 gathered calls serialized) — the two
+  concurrency cases FAILED; the timeout guard already passed (it is a regression guard, not a
+  discriminator).
+- Step 2 (`app/config/watcher.py`, `app/handlers/servicer.py`): added
+  `ConfigWatcher.sandbox_max_concurrent()` (method, called with `()` per spec — sits among the
+  `@property` sandbox siblings but the call sites use `()`); added `import asyncio`; built
+  `self._sandbox_sem = asyncio.Semaphore(max(1, config_watcher.sandbox_max_concurrent()))` in
+  `__init__`; wrapped the `sandbox.execute_formula(...)` call in `ExecuteFormula` as
+  `async with self._sandbox_sem: result = await asyncio.to_thread(sandbox.execute_formula, ...)`.
+  Timeout preserved (execute_formula still owns `subprocess.run(timeout=…)`).
+- Deviation (recorded in spec Deviation Log): the new `__init__` contract broke 13 bare-MagicMock
+  config doubles in `tests/test_formulas.py` (`max(1, MagicMock())` → TypeError). Fixed with a
+  `_cfg_stub()` factory + `sandbox_max_concurrent.return_value = 4` on the 3 sandbox `_cfg()` helpers.
+  Staged with the Step 2 commit (required to keep the suite green under Step 2).
+- GREEN: full indicators suite `132 passed`, coverage `81%` (≥50 gate); `ruff check` + `format`
+  clean. Step 2 grep confirms `_sandbox_sem`/`asyncio.to_thread`/`sandbox_max_concurrent` present.
+
+### Steps 4–5 — done (FR-3 evaluator optional component_sem, TDD red→green)
+- Step 4 (`app/services/evaluator.py`, `app/handlers/servicer.py`): added `import asyncio`;
+  `StrategyEvaluator.__init__(..., component_sem=None)` storing `self._component_sem`; branched
+  `evaluate_conditions_traced`'s per-component loop — `None ⇒` serial (verbatim pre-176) / a
+  semaphore ⇒ `asyncio.gather` of `async with self._component_sem: return ref_name, await
+  _assemble_component_series(...)`. Refinement over the spec sketch: reassembly iterates the
+  **order-preserving** gather result directly (gather keeps input order) rather than a by_ref dict —
+  byte-identical to serial even if ref_names ever collided; no return_exceptions (FormulaExecutionError
+  still propagates). 4 construction sites threaded explicitly: `:2695` readiness + `:3372`
+  opportunities ⇒ `component_sem=self._component_series_sem`; `:1463` backtest + `:2892` score ⇒
+  `component_sem=None` (score already holds `_component_series_sem` at `:2904` — avoids double-acquire).
+- Step 5 (`tests/test_evaluator_traced.py`): 3 FR-3 tests — concurrent==serial byte-identical
+  (period-keyed stub so component output is identity-, not order-, dependent); Semaphore(2) over 4
+  components ⇒ `peak == 2` (teeth); `component_sem=None` ⇒ `peak == 1` (serial regression guard).
+- RED captured by stashing the Step-4 `evaluator.py` change: all 3 FR-3 tests → TypeError (no
+  `component_sem` kwarg). GREEN with Step 4 restored.
+- Full analysis suite `659 passed` (656 baseline + 3), coverage `85%` (≥40); `ruff check`/`format`
+  clean. Existing 656 unchanged ⇒ serial path proven byte-identical.
+
+### Steps 6–7 — done (FR-2 readiness parallelization, TDD red→green)
+- Step 6 (`app/handlers/servicer.py` EvaluateReadiness): replaced the serial
+  `for symbol in request.symbols` loop with a per-symbol coroutine `_readiness_for(symbol)` whose
+  whole body is gated `async with self._bars_fetch_sem:` (the opportunity bars-fetch bound, default
+  2), dispatched via `asyncio.gather` and returned as `list(...)`. Benchmark loaded once above the
+  gather (no nested `_bars_fetch_sem` re-acquire). gather preserves `request.symbols` order → one
+  entry per symbol in original order (byte-identical set). Per-symbol best-effort catch kept inside
+  the task (no blanket return_exceptions). Comment trimmed to the 2-line cap.
+- Step 7 (`tests/test_readiness_opportunities_source_symbol.py`): 3 FR-2 tests — verdicts + order
+  preserved over a 20-symbol request; blocking-GetBars peak == 2 (teeth); 200-symbol request peak ≤ 2
+  (large-request memory open-risk). Non-benchmark strategy so the only GetBars calls are per-symbol.
+- RED captured by stashing the Step-6 servicer change: `test_readiness_bars_fetch_bounded_by_sem`
+  → `peak == 1` (serial). GREEN post-Step-6.
+- Full analysis suite `662 passed` (+3), coverage `85%`; ruff clean.
+
+### Steps 8–9 — done (FR-1/FR-6 three-phase single-flight _compute_opportunities, TDD red→green)
+- Step 8 (`app/handlers/servicer.py`): added `self._candidates_sem` (analysis.opportunity.max_concurrent_candidates,
+  default 4, DISTINCT from _bars_fetch_sem to avoid a self-deadlock re-entering the benchmark loader
+  and to stop a big compute starving readiness). Restructured the serial candidate loop into three
+  phases: **Phase 0** dedup-load StrategyDefinitions once per unique eligible strategy_id (owner-scoped,
+  IDOR guard); **Phase 1** single-flight fetch each unique defined-eligible symbol's bars + each unique
+  benchmark once, all under `_bars_fetch_sem` — session_end_seconds computed here over exactly the
+  serial-eligible set (identical max → @AC-14 ranking preserved); **Phase 2** per-candidate `_row_for`
+  under `_candidates_sem`, CACHE-ONLY (Phase-1-warmed caches make every _load_benchmark_bars_windowed a
+  cache hit — no sem), `asyncio.gather` in `selected` order, drop None (== serial `continue`) → rows
+  byte-identical. No return_exceptions (serial per-candidate scope preserved).
+- Step 9 (`tests/test_analysis_servicer.py`): 3 FR-1/FR-6 tests — intra-compute peak GetBars == 2 (teeth;
+  calls `_compute_opportunities` DIRECTLY to isolate the compute fan-out from ListOpportunities' own
+  concurrent sparkline enrichment); owner-scoping (user B gets 0/0 readiness for A's strategy, every
+  owner-scoped load carries B's id — IDOR guard survives fan-out); set+rank deterministic across two runs
+  (muted-denied + non-firing + firing + held candidates exercise the eligibility predicate).
+- RED captured by stashing the Step-8 servicer change: `test_intra_compute_bars_fetch_bounded` → peak == 1.
+  GREEN post-Step-8 (all 3). Note: owner-scoping assertion corrected during authoring — the leak-guard is
+  0/0 readiness (no A trace), NOT an empty strategy_id (the row echoes B's own watchlist binding).
+- Deviation (spec Deviation Log): Step 8 broke `test_stale_read_serves_stale_and_kicks_recompute`'s fixed
+  5-turn background drain (deeper gather nesting); replaced with a bounded wait-until-guard-clears loop —
+  assertions unchanged. Staged with the Step 8 commit.
+- Full analysis suite `665 passed`, coverage `85%`; ruff clean.
+
+### Steps 10–11 — done (FR-4 CPU offload of simulator cores + screener, TDD red→green)
+- Step 10 (`app/handlers/servicer.py`, `app/services/screener.py`): added imports
+  (`from concurrent.futures import ThreadPoolExecutor`) + `self._compute_executor` in `__init__`
+  (analysis.compute.max_worker_threads, default 4; F-06: cores hold no DB conn → pool stays 2).
+  Offloaded the pure-CPU cores via nested `def _core()` closures + `loop.run_in_executor(
+  self._compute_executor, _core)`: `_backtest_symbol` post-SMA core, `_backtest_symbol_evaluated`
+  post-warmup core, `_simulate_portfolio` whole body. Chose closures over the spec's module-level
+  helpers to auto-capture prologue locals (no param-extraction risk). Screener `screen`: serial
+  `_eval_symbol` loop → `asyncio.gather` (the `_sem` in `_technical_value` now actually binds the
+  formula-eval fan-out) + offloaded the pure-sync rank tail; `_compute_executor` wired into
+  `ScreenerEngine(compute_executor=...)` (optional, `to_thread` fallback for test engines).
+- Step 11 (`tests/test_analysis_servicer.py`, `tests/test_screener.py`): head-of-line isolation
+  (AC-4 — a ~0.6s spinning backtest core in the executor doesn't stall a 0.05s reader; RED pre-Step-10
+  the reader was blocked > 0.2s), offloaded-backtest determinism (byte-identical trades/equity across
+  runs), screener formula-eval peak == max_concurrent_formula_evals (RED pre-Step-10 peak==1), and a
+  ranking-unchanged guard (gather didn't scramble per-symbol assignment).
+- Deviations (spec Deviation Log): closure-based offload; single-pool screener executor wiring;
+  `_FakeEngine` double updated for the new `compute_executor` kwarg (staged with Step 10).
+- Full analysis suite `669 passed`, coverage `85%`; ruff clean. Existing 150/151 byte-for-byte
+  backtest suites pass through the offloaded path → equivalence proven. Status → code-completed.
+
+### Feature 176 — code-completed
+All 11 steps landed on `feature/analysis-concurrency-offload`, one commit per step (service+test
+pairs), red-before-green on every code step. FR-1 (opportunity single-flight fan-out), FR-2 (readiness
+parallel), FR-3 (evaluator component_sem), FR-4 (backtest/screener CPU offload), FR-5 (indicators
+sandbox offload), FR-6 (owner-scoped parallel). Ready for the integration PR into main-dev
+(merge-order: 176 before 177).

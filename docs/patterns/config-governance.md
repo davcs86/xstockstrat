@@ -102,6 +102,22 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 176 — analysis-concurrency-offload (`xstockstrat-analysis`)
+
+Adds two process-lifetime concurrency-bound keys read once at `AnalysisServicer.__init__`, both
+**no-seed** (read at `__init__` via WatchConfig, resolving to the code defaults below until an
+operator `SetConfig`s them — the `analysis.opportunity.*` no-seed pattern, features 131/141). They
+bound the parallelized opportunity fan-out and the CPU-offload executor added when the serial
+cross-service fan-out was parallelized and the simulator cores moved off the event loop. Separately,
+`xstockstrat-indicators`' pre-existing `indicators.sandbox.max_concurrent` key (declared inert since
+feature 060) is now enforced by a real `asyncio.Semaphore` in `ExecuteFormula` — no new key, so it is
+not a row here (see `services/xstockstrat-indicators/CLAUDE.md`).
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.opportunity.max_concurrent_candidates` | int | `4` | Bounds the per-candidate `evaluate_conditions_traced` fan-out in `_compute_opportunities` Phase 2 — **separate** from `analysis.opportunity.max_concurrent_bars_fetches` so a large opportunity compute cannot starve interactive readiness (priority-inversion guard). `max(1, get_int(...))` clamp. No-seed (read at `__init__` via WatchConfig). |
+| `analysis.compute.max_worker_threads` | int | `4` | Size of the dedicated `ThreadPoolExecutor` running the pure-CPU backtest simulator cores + screener sync tail off the event loop (FR-4). Executor threads hold **no** asyncpg connection (F-06: direct pool stays 2). New `analysis.compute.*` category. `max(1, get_int(...))` clamp. No-seed (read at `__init__` via WatchConfig). |
+
 ### feature 168 — fundamentals-blend-universe (`xstockstrat-analysis` / `xstockstrat-config`)
 
 **Registers** two `analysis.engine.*` keys, seeded by migration **`026_analysis_engine_blend_keys`**
