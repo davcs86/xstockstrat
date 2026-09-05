@@ -31,7 +31,8 @@ Feature: watchlist-readiness-precompute
   Scenario: A large materialization cycle stays within the resource envelope
     Given 500 distinct watchlist-bound (symbol, strategy) pairs exist across all users
     When the materializer runs
-    Then concurrent marketdata bars fetches never exceed the analysis.opportunity.max_concurrent_bars_fetches limit
+    Then concurrent marketdata bars fetches by the materializer never exceed the analysis.readiness_materializer.max_concurrent_bars_fetches limit
+    And the materializer's bars fetches use a semaphore separate from the interactive analysis.opportunity.max_concurrent_bars_fetches limit
     And the analysis service holds no more than its configured PgBouncer pool of database connections during the cycle
     And an on-demand EvaluateReadiness call issued during the cycle still returns within its normal latency budget
 
@@ -42,3 +43,19 @@ Feature: watchlist-readiness-precompute
     When the UI calls EvaluateReadiness with strategyId "STR-3" and symbols ["TSLA"]
     Then the response is computed synchronously via the SLOW path and returned
     And a readiness_cache row for ("TSLA", "STR-3") is written for subsequent reads
+
+  @AC-6 @FR-6
+  Scenario: A watchlist binding to a non-live strategy is not materialized
+    Given strategy "STR-4" is bound to symbol "AMD" in a user's watchlist
+    And strategy "STR-4" has live_enabled = false
+    When the materializer runs one cycle
+    Then no readiness_cache row is materialized for ("AMD", "STR-4")
+    And the materializer does not raise or halt the cycle over the non-live binding
+
+  @AC-7 @FR-7
+  Scenario: A materialized readiness verdict is busted by a new daily bar, not by intraday drift
+    Given a materialized readiness_cache row exists for ("AAPL", "STR-1") stamped with bar_epoch for the 2026-09-04 daily close and a valid_until 24 hours ahead
+    When EvaluateReadiness is called for ("AAPL", "STR-1") later the same trading day with no new daily bar
+    Then the response is served from the FAST path using the existing row
+    When a new daily bar for 2026-09-05 lands and EvaluateReadiness is called for ("AAPL", "STR-1")
+    Then the row is treated as stale and the verdict is recomputed against the 2026-09-05 bar

@@ -69,6 +69,14 @@ owner-scoped `ListWatchlists` with `metadata=[("x-user-id", owner)]`) to obtain 
 `authz.go` grant, and the fails.md:1153 IDOR surface never opens. A binding whose `user_id` does not
 own the strategy is **skipped**, not fabricated (P-03).
 
+> **Correction (impl-spec D-1, 2026-09-05):** `live_loop._drain_watchlist` (`live_loop.py:490`)
+> collapses each binding to its **bare symbol and discards `strategy_id`**, so it cannot yield the
+> `(symbol, strategy_id)` pairs the overlay reads. The materializer instead adds a **new**
+> `_drain_watchlist_bindings` helper (same owner-scoped `ListWatchlists` + `x-user-id` pattern) that
+> preserves `strategy_id`. The "reuse the drain, no new RPC, owner-scoped" conclusion stands — only
+> the *reuse-verbatim* claim is corrected to *new-helper, same pattern*. See implementation-spec.md
+> Step 5 / § Deviations D-1.
+
 ### Resource bounding (fixes the Round-1 objections)
 
 - **Own semaphore** `analysis.readiness_materializer.max_concurrent_bars_fetches` (default 2),
