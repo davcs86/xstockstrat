@@ -167,3 +167,19 @@ Status unchanged: **spec-ready**. design.md NOT yet written (awaiting the consol
     so execution discovery re-anchors.
   - Step 6 (low risk): `row["definition_json"]` key presence on the EvaluateReadiness row inferred from the
     identical repo call at `:2044` — [ ] confirm at execute (verify the key is present before relying on it).
+
+## Session 2026-09-05 — /sdd-execute sequential (177 → 178 → 179)
+
+Sequential run started on `feature/readiness-caching-poll-discipline` (already rebased onto main-dev
+containing merged 176). Tooling: uv (analysis), pnpm 9.15.9 (config/UI), Docker daemon started for
+proto codegen. Re-spec gate: directive `none`, evidence re-validated by the impl-spec review (all
+anchors resolve on the post-176 tree) — no mismatch, no re-spec.
+
+### Steps 1–2 — done (proto computed_at + codegen, TDD N/A)
+- Step 1 (`analysis.proto`): added `google.protobuf.Timestamp computed_at = 2;` to
+  `EvaluateReadinessResponse` (timestamp already imported). buf lint + buf breaking (vs main-dev) ran
+  green inside the Docker codegen container → additive field confirmed non-breaking (C-09).
+- Step 2 (`packages/proto/gen/**`): regenerated Go/Python/TS stubs via `./scripts/localenv-setup.sh`
+  (Docker `Dockerfile.codegen`); compiled TS→JS via `pnpm install`'s prepare/tsc hook (the container
+  lacked gen/ts node_modules). `git diff packages/proto/gen/` limited to `analysis/v1` (source + dist);
+  compiled JS carries `computedAt`. CI-equivalent fallback (Docker codegen) — logged in Deviation Log.

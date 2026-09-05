@@ -62,7 +62,7 @@ added for FR-5 correctness/observability, not a mandated UI display.
 
 ### Step 1 — proto: add `computed_at` to `EvaluateReadinessResponse`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -98,7 +98,7 @@ Both pass (lint clean; breaking reports no incompatibility — a new field is no
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/` — modify (regenerated; do not hand-edit)
@@ -670,4 +670,12 @@ from the fixture/auth homes (C-12).
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Steps 1–2 — proto codegen via Docker + TS compile via pnpm prepare
+
+**Disposition**: CI-equivalent fallback. `buf` is not on the host; ran `./scripts/localenv-setup.sh`
+(builds the pinned `Dockerfile.codegen` and runs `buf lint` + `buf breaking` + `buf generate` +
+grpcio-tools inside the container — all green). The container's final `tsc` compile of `gen/ts` failed
+for lack of `node_modules`, so the compiled JS in `gen/ts/dist` was produced on the host via
+`pnpm install --frozen-lockfile` (its `gen/ts` `prepare` hook runs `tsc`). Verified
+`git diff packages/proto/gen/` is limited to `analysis/v1` (source + dist), matching CI's stale-stub
+check; `buf lint`/`breaking` also re-run in CI's proto-lint job.
