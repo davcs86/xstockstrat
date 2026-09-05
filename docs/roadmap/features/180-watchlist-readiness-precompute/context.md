@@ -57,3 +57,35 @@
      `valid_until`**, dissolving the "refresh every 30s" wall. Must reconcile with feature 177 `@AC-2`
      (intraday 1d-bar OHLC bust) — the key C-16 boundary for Round 2.
 - Warm-set scope (live-loop enumeration vs new RPC) deferred to Round 2 by the operator.
+
+## Session 2026-09-05 — sdd-design (Phase 1 grilling, Round 2 + approval)
+
+- Round 2 proposer pivoted to **Option A** (materialize inside the live loop, reuse in-hand bars).
+- Round 2 adversary (code-verified, re-grepped) returned **NEEDS WORK** and demolished Option A's
+  premise: the live loop fetches each live strategy's *resolved universe* (`allowlist OR
+  (watchlist ∪ held ∪ signals) − denied`, live_loop.py:103-105), NOT the watchlist-bound pair set →
+  allowlist-override live strategies get 0% binding coverage; injecting readiness into the serial
+  `_eval_pair` (live_loop.py:341-347) is an FR-4 alert-latency regression; 365→400 lookup unify and
+  benchmark-loader divergence break byte-identity. Also: the bar_epoch-blind FAST gate + a long
+  materialized valid_until would regress @AC-2.
+- **Operator decisions at the gate:** (1) **Approve Option B** (dedicated materializer loop);
+  (2) **@AC-2 fix = bar_epoch-aware FAST gate**, "well modularized, not spaghetti code".
+- design.md written. Chosen approach:
+  - Dedicated `run_readiness_materializer_forever` loop (DurableSchedule template servicer.py:3780),
+    OWN semaphore `analysis.readiness_materializer.max_concurrent_bars_fetches` (fixes feature-176
+    priority inversion), skip-fresh gate (fails.md:118), shared asyncpg pool (F-06).
+  - **Modularization mandate:** one shared `ReadinessComputer` (extract SLOW body servicer.py:2786-2818,
+    DRY, guarantees byte-identity), one pure `is_readiness_row_fresh(...)` freshness predicate
+    (the @AC-2 bar_epoch logic in ONE unit-tested function, called by both lazy + materialized reads →
+    single freshness semantic, no two-policy-per-table trap), loop = orchestration only,
+    `readiness_valid_until` helper isolated.
+  - Warm-set sourced with NO new cross-user RPC: enumerate live-strategy owners locally
+    (analysis.strategies WHERE live_enabled) + reuse live loop's owner-scoped `_drain_watchlist`
+    (live_loop.py:483) → owner-scoped by construction (kills fails.md:1153 IDOR surface).
+  - No proto, no migration. Config: analysis.readiness_materializer.{enabled(false),
+    valid_window_hours(24), max_concurrent_bars_fetches(2)}.
+- Open risks carried (design.md): R1 rescope FR-1 to eventually-consistent (at /sdd-spec);
+  R2 latest_bar_epoch lookup must be cheap+memoized (C-08); R3 shared FAST-gate change must keep
+  177 @AC-1/@AC-2 green (RED tests first at execute); R4 merge order 176→177→180 (merge-order row
+  added); R5 enforcing the live-only-binding invariant is a separate follow-up, not this feature.
+- Status: spec-ready → design-approved. Next: /sdd-spec.

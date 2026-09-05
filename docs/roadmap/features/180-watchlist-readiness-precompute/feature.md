@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-09-05 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-05 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS with warnings: Open Questions deferred to /sdd-design; evidence-drift nit fixed); overlap CLEAN |
+| 2026-09-05 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 full rounds + operator reframe FR-6/FR-7) and approved; recon.md + design.md written. Chosen: Option B (dedicated materializer loop) + modularized bar_epoch-aware FAST gate |
 
 ---
 
@@ -19,6 +20,8 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon Dossier](recon.md) — grounded codebase map, patterns to reuse, existing business rules (C-16)
+- [Design](design.md) — chosen approach (Option B), rejected alternatives, open risks, rules touched
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec <slug>`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -46,4 +49,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design watchlist-readiness-precompute` — deep design debate (recon + grilling) to size the two loop-placement options
+`/sdd-spec watchlist-readiness-precompute` — generate the implementation spec from the approved design
