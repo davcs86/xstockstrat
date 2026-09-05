@@ -511,7 +511,7 @@ Targeted file passes; full suite ≥ 40%.
 
 ### Step 10 — service: FR-4 conditional live-enrichment memo
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -554,7 +554,7 @@ config read (F-07).
 
 ### Step 11 — test: FR-4 conditional enrichment (AC-5, AC-11)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_live_enrich_memo.py` — create

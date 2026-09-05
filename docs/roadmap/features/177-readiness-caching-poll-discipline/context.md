@@ -238,3 +238,20 @@ anchors resolve on the post-176 tree) — no mismatch, no re-spec.
   test strengthened with a mid-poll `compute.await_count==1` assert so it too is red pre-change),
   GREEN after.
 - Full analysis suite `677 passed` (+5), coverage `85%`; ruff clean.
+
+### Steps 10–11 — done (FR-4 conditional live-enrichment memo, TDD red→green)
+- Step 10: `servicer.py` — added `import time` + a process-lifetime `self._live_enrich_memo:
+  dict[str, tuple[float, dict]]` (symbol → (monotonic_expiry, {last_price, prev_close, spark})).
+  `_enrich_opportunities_live` reads `ttl=get_int_present("analysis.opportunity.
+  live_enrich_ttl_seconds",10)` once per pass. Extracted the target-apply loop into a nested
+  `_apply_live_fields` (byte-identical apply for both the memo-hit and fetch paths). `_enrich_symbol`
+  now: (a) memo hit when `ttl>0` and `monotonic()<expiry` → apply + return, skipping BOTH RPCs; (b)
+  on a miss runs the existing fetch body, then memoizes ONLY on full success (`last_price is not None
+  AND spark is not None`) — a failed/unavailable fetch is never cached (AC-11); `ttl==0` disables.
+  Ranking/ORDER BY untouched (enrichment stays read-time-only, AC-14).
+- Step 11: `tests/test_live_enrich_memo.py` — AC-5 (pass2 within TTL: 0 new RPCs, identical
+  live_price/sparkline; past TTL both RPCs fire again — `time.monotonic` monkeypatched clock);
+  ttl==0 disables the memo (always fetch); AC-11 (price-miss pass1 memoizes nothing → pass2 within
+  TTL still fetches and surfaces the recovered quote). RED pre-Step-10 (memo-hit refetches; the
+  monkeypatch target `servicer.time` doesn't exist pre-`import time`), GREEN after.
+- Full analysis suite `680 passed` (+3), coverage `85%`; ruff clean.
