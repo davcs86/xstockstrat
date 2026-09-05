@@ -129,7 +129,7 @@ Runs clean and leaves **no** diff after staging the regenerated output (matches 
 
 ### Step 3 — service: marketdata batch quote method + single-flight
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go` — modify (new `GetLatestQuotesBatch`)
@@ -195,7 +195,7 @@ Compiles (the adapter now satisfies the regenerated `MarketDataServiceServer` in
 
 ### Step 4 — test: marketdata batch method (single-flight + null-not-zero)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify (new tests + extend/author a `MultiSymbolSource` fake)
@@ -381,3 +381,22 @@ One binding query per `ListByUser` page; bindings match the per-watchlist result
 matching CI's `proto-freshness` stale-stub check; `buf lint`/`breaking` also re-run in CI's proto-lint
 job. Step 1's `buf breaking` was run against `main-dev` (the container default) rather than the
 feature branch named in the step — both prove additivity, and main-dev is the CI-relevant base.
+
+### Steps 3–4 — golangci-lint version fallback + a no-DB seam + one added test file
+
+**Disposition (lint):** the host's `golangci-lint` is **v2.5.0** (built with go1.25), which refuses a
+go1.27 target (`config: the Go language version (go1.25) ... is lower than the targeted Go version
+(1.27.0)`); the repo pins **v2.13.1**, which CI runs. Verified locally with `GOWORK=off go build
+./...` + `go vet ./...` + `gofmt -l` (all clean) instead; the pinned linter runs in CI's `Go lint and
+test` job. Applies to Steps 3, 5, 7 identically.
+
+**Disposition (no-DB seam):** `MarketDataService.GetLatestQuotes` guards its two `s.repo` calls with
+`if s.repo != nil` so the `@AC-3` single-flight coalescing + `@AC-4` null-not-zero merge are unit-
+testable without a database (the spec anticipated this — "gate this assertion behind the seam the
+service exposes for the cold set"). In production `s.repo` is always non-nil; the guard is a no-op
+there. The DB-backed warm read (`GetLatestQuotesBatch`) is covered by CI/integration.
+
+**Disposition (added file):** Step 4 instruction #4 (handler rejects empty `Symbols` with
+`CodeInvalidArgument`) required a handler-package test, but no `internal/handler/*_test.go` existed.
+Added `internal/handler/marketdata_handler_test.go` (one test, `svc` nil since the guard rejects
+first) — one file beyond the step's declared `Files`, recorded here.

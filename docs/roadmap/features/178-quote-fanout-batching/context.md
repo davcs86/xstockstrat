@@ -135,3 +135,18 @@ Status unchanged: **spec-ready**. design.md NOT yet written (awaiting consolidat
   (Go pb/grpc/connect, Python, TS+dist); buf lint + breaking green. Deviation logged (CI-equivalent).
 - Verify: gen diff marketdata-only; new GetLatestQuotes symbols present in gen/go. Docker codegen
   fallback (buf not on host) — same as 176/177.
+
+## Session 2026-09-05 — sdd-execute sequential (Steps 3–4)
+- Step 3 (marketdata service): new `MarketDataRepo.GetLatestQuotesBatch` (DISTINCT ON (symbol) over
+  the existing idx_quotes_symbol_time, no migration); `MarketDataService.GetLatestQuotes` (cache-first
+  batched: repo warm read → cold set → one `alpaca.GetLatestQuotesMulti` under `quoteSingleflight`
+  keyed on the sorted cold set → per-quote InsertQuote leader-only → merge; absent symbol omitted).
+  Handler + gRPC adapter mirror GetFundamentalsMulti. `go mod tidy` promoted x/sync to direct.
+  `s.repo`-nil-guarded for the no-DB unit-test seam (deviation logged).
+- Step 4 (test): `fakeMultiSource` (DataSourceClient + MultiSymbolSource); AC-3 (5 concurrent cold
+  calls → exactly 1 upstream fetch, barrier via started/release channels) + AC-4 (NOQUOTE omitted,
+  null-not-zero) in the service test; a new `internal/handler/marketdata_handler_test.go` asserts the
+  handler rejects empty Symbols with CodeInvalidArgument (deviation: file beyond declared Files).
+  RED pre-Step-3 (GetLatestQuotes undefined / handler unimplemented) → GREEN after.
+- Verify: `go test ./internal/... -race` all green; go vet + gofmt clean. golangci-lint v2.5.0 can't
+  target go1.27 → fell back to build+vet+gofmt (CI runs pinned v2.13.1). Deviations logged.
