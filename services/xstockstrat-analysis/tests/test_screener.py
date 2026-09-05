@@ -617,6 +617,7 @@ async def test_signal_weighted_screen_returns_ok_not_crash():
     for r in resp.results:
         assert r.score == pytest.approx(0.9)
 
+
 # ── FR-4 (feature 176) — the per-symbol fan-out is now concurrent, and the formula-eval
 #    semaphore actually binds it (the old serial loop left the sem inert). ──────────────
 

@@ -6065,6 +6065,7 @@ class TestOpportunityConcurrencyFeature176:
         assert _key(a) == _key(b)  # deterministic set + rank across runs
         assert len(a) >= 2
 
+
 # ---------------------------------------------------------------------------
 # FR-4 (feature 176) — CPU-bound simulator cores run off the event loop on a dedicated
 # ThreadPoolExecutor, so a long backtest can't head-of-line-block an interactive read; the
