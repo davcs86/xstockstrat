@@ -3041,3 +3041,22 @@ reusing.
   memoize live values **success-only**; (d) always surface an oldest-of `computed_at` so no consumer
   can read the response as fresher than its stalest input. Client mirror: a per-query `staleTime`
   (never a `QueryClient` default — a default forces a whole-list refetch). No new ID.
+
+### 2026-09-05 — watchlist-readiness-precompute — design
+- **Pattern**: When a "pre-warm a cache in the background" feature is proposed, the decisive question
+  is not *which loop* hosts it but *whether the host loop already fetches the exact keys the reader
+  reads*. Here the live loop looked like a free host (it evaluates the same live strategies), but it
+  fetches each strategy's **resolved universe** (`allowlist OR (watchlist ∪ held ∪ signals) − denied`,
+  `live_loop.py:103-105`), which is neither a subset nor a superset of the watchlist-bound pairs the
+  overlay reads — allowlist-override strategies yield **0%** binding coverage. "Reuse the bars the
+  loop already has" collapsed under a re-grep. Verify the host's actual key set against the reader's
+  key set before trading a dedicated loop away for "free" reuse.
+- **Pattern**: A cross-path cache whose freshness must survive a shared gate is safest when the
+  bust condition is **data-derived (a stored `bar_epoch` vs the latest bar), not time-derived (TTL)**.
+  A per-origin `valid_until` policy under one gate creates two silent freshness semantics on one
+  table (a C-16 dishonesty); moving the bust into one pure `is_fresh(row, now, latest_epoch)`
+  predicate shared by every read path keeps a single honest semantic and confines the change to a
+  reviewable unit. (feature 180 — bar_epoch-aware FAST gate over feature 177's `servicer.py:2780`.)
+- **Evidence**: `docs/roadmap/features/180-watchlist-readiness-precompute/design.md` §§ Chosen
+  Approach, Option A vs B, @AC-2 reconciliation; `services/xstockstrat-analysis/app/engine/live_loop.py:103-105,341-347`;
+  `services/xstockstrat-analysis/app/handlers/servicer.py:2780,2786-2818`.

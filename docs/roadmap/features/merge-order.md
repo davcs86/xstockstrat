@@ -240,3 +240,10 @@ proto-field collisions, but re-run `./scripts/buf-gen.sh` after each merge.
 >   (`readiness-caching-poll-discipline`) wraps the same functions with caching. **Run 176 before
 >   177**; 177's `/sdd-spec` writes against 176's post-restructure signatures. (Row added on 176
 >   design-approval 2026-09-05; 177 not yet design-approved — confirm/refine this row when it is.)
+> - **180** (`watchlist-readiness-precompute`, design-approved 2026-09-05) adds a dedicated
+>   readiness-materializer loop in `xstockstrat-analysis` that reuses `analysis.readiness_cache`
+>   (migration 022, feature **177**), the restructured `EvaluateReadiness`/bars-fetch bound (feature
+>   **176**), and refactors the shared readiness FAST gate (`servicer.py:2780`) to be
+>   `bar_epoch`-aware (must keep 177's `@AC-1/@AC-2` green). No field/config/migration collision
+>   (its keys are `analysis.readiness_materializer.*`, new; no migration). **Run 176 → 177 → 180.**
+>   180's `/sdd-spec` writes against 176's post-restructure + 177's cache signatures.
