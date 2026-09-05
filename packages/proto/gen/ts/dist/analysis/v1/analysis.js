@@ -7312,12 +7312,15 @@ exports.EvaluateReadinessRequest = {
     },
 };
 function createBaseEvaluateReadinessResponse() {
-    return { readiness: [] };
+    return { readiness: [], computedAt: undefined };
 }
 exports.EvaluateReadinessResponse = {
     encode(message, writer = new wire_1.BinaryWriter()) {
         for (const v of message.readiness) {
             exports.SymbolReadiness.encode(v, writer.uint32(10).fork()).join();
+        }
+        if (message.computedAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.computedAt), writer.uint32(18).fork()).join();
         }
         return writer;
     },
@@ -7335,6 +7338,13 @@ exports.EvaluateReadinessResponse = {
                     message.readiness.push(exports.SymbolReadiness.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.computedAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -7348,12 +7358,20 @@ exports.EvaluateReadinessResponse = {
             readiness: globalThis.Array.isArray(object?.readiness)
                 ? object.readiness.map((e) => exports.SymbolReadiness.fromJSON(e))
                 : [],
+            computedAt: isSet(object.computedAt)
+                ? fromJsonTimestamp(object.computedAt)
+                : isSet(object.computed_at)
+                    ? fromJsonTimestamp(object.computed_at)
+                    : undefined,
         };
     },
     toJSON(message) {
         const obj = {};
         if (message.readiness?.length) {
             obj.readiness = message.readiness.map((e) => exports.SymbolReadiness.toJSON(e));
+        }
+        if (message.computedAt !== undefined) {
+            obj.computedAt = message.computedAt.toISOString();
         }
         return obj;
     },
@@ -7363,6 +7381,7 @@ exports.EvaluateReadinessResponse = {
     fromPartial(object) {
         const message = createBaseEvaluateReadinessResponse();
         message.readiness = object.readiness?.map((e) => exports.SymbolReadiness.fromPartial(e)) || [];
+        message.computedAt = object.computedAt ?? undefined;
         return message;
     },
 };
