@@ -366,7 +366,7 @@ Behavioral proof: Step 8 selector/gear-dot assertions.
 
 ### Step 7 — test: Halted-account fixture + stateful mock `resumeAccount` handler
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/accounts.ts` — modify
