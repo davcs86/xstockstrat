@@ -22,3 +22,16 @@
 - Branch note: harness-designated branch is `claude/watchlist-stock-list-perf-o3qoqb` (its prior PR is
   merged); this follow-up will restart that branch from origin/main-dev and open a NEW PR to main-dev,
   rather than a `feature/<slug>` branch, per the standing harness branch constraint.
+
+## Session 2026-09-06 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- First pass FAILed on criterion 9 (unchecked Open Questions) + an advisory getter-typing warning;
+  fixed both (commit 672747e): resolved all three Open Questions to [x]; corrected FR-1 to record the
+  exact getter per key — notably `analysis.readiness_materializer.max_concurrent_bars_fetches` is read
+  via `get_int` (zero-trap, servicer.py:454), NOT `get_int_present`; seed `int`/`2` is safe because it
+  equals the code default. Re-review: PASS, 0 warnings.
+- Overlap findings: none (migration 027 free; four keys only read — not seeded — by features 180/181;
+  advisory 180→182 logical ordering, no blocking merge-order row).
+- Warnings carried to design: when writing 027, a future operator setting
+  `max_concurrent_bars_fetches=0` would have `get_int` collapse it back to `2` — do NOT seed `0`.

@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-06 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-09-06 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings); overlap CLEAN |
 
 ---
 
@@ -43,4 +44,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review <slug> product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design readiness-materializer-config-keys quick` — recon + one-round design debate
