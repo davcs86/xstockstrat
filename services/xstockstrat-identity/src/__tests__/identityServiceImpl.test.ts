@@ -923,3 +923,142 @@ describe('ledger audit emits (AC-8/AC-10)', () => {
     assert.ok(resp.user);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Admin cross-user profile metadata (feature 182) — AC-7 / AC-8 / AC-10
+// ---------------------------------------------------------------------------
+
+const META_ROW = {
+  user_id: 'target-1',
+  email: 'target@example.com',
+  phone: '+1-555-0100',
+  display_name: 'Jane Q',
+  metadata: { team: 'quant' },
+  metadata_updated_at: new Date('2026-02-02T00:00:00Z'),
+};
+
+describe('admin metadata gate (AC-10)', () => {
+  for (const m of ['adminGetUserMetadata', 'adminUpdateUserMetadata']) {
+    it(`${m} denies a non-admin caller (PERMISSION_DENIED) and runs no query`, async () => {
+      if (!IdentityServiceImpl) return;
+      const pool = routePool([]);
+      const impl = makeAdminImpl(pool);
+      const { err } = await runRpc(impl, m, nonAdminCall({ userId: 'target-1', displayName: 'x' }));
+      assert.ok(err, `${m} must deny`);
+      assert.equal(err.code, 7);
+      assert.equal(pool.calls.length, 0, `${m} must not touch the DB when denied`);
+    });
+  }
+});
+
+describe('adminGetUserMetadata (AC-7)', () => {
+  it("returns the target's metadata, selected by the request-body user_id (not x-user-id)", async () => {
+    if (!IdentityServiceImpl) return;
+    const pool = routePool([{ re: /SELECT .* FROM identity\.users WHERE user_id/, resp: { rows: [META_ROW] } }]);
+    const impl = makeAdminImpl(pool);
+    const { err, resp } = await runRpc(impl, 'adminGetUserMetadata', adminCall({ userId: 'target-1' }, 'admin-9'));
+    assert.equal(err, null);
+    assert.equal(resp.userMetadata.userId, 'target-1');
+    assert.equal(resp.userMetadata.displayName, 'Jane Q');
+    assert.equal(resp.userMetadata.phone, '+1-555-0100');
+    const sel = pool.calls.find((c) => /FROM identity\.users WHERE user_id/.test(c.sql))!;
+    assert.deepEqual(sel.params, ['target-1'], 'SELECT parameterized by request user_id, not the admin caller');
+  });
+
+  it('returns NOT_FOUND (code 5) for a missing target', async () => {
+    if (!IdentityServiceImpl) return;
+    const pool = routePool([{ re: /SELECT .* FROM identity\.users WHERE user_id/, resp: { rows: [] } }]);
+    const impl = makeAdminImpl(pool);
+    const { err } = await runRpc(impl, 'adminGetUserMetadata', adminCall({ userId: 'ghost' }));
+    assert.equal(err.code, 5);
+  });
+
+  it('requires user_id (INVALID_ARGUMENT) and emits no audit on read', async () => {
+    if (!IdentityServiceImpl) return;
+    const audit = makeFakeAudit();
+    const impl = makeAuditImpl(routePool([]), audit);
+    const { err } = await runRpc(impl, 'adminGetUserMetadata', adminCall({}));
+    assert.equal(err.code, 3);
+    assert.equal(audit.calls.length, 0, 'reads never audit');
+  });
+});
+
+describe('adminUpdateUserMetadata (AC-8)', () => {
+  it('partial update: display_name only, advances metadata_updated_at, audits acting admin + target (no values)', async () => {
+    if (!IdentityServiceImpl) return;
+    const pool = routePool([{ re: /UPDATE identity\.users SET .* WHERE user_id/, resp: { rows: [{ ...META_ROW, display_name: 'Jane Quant' }], rowCount: 1 } }]);
+    const audit = makeFakeAudit();
+    const impl = makeAuditImpl(pool, audit);
+    const { err, resp } = await runRpc(impl, 'adminUpdateUserMetadata', adminCall({ userId: 'target-1', displayName: 'Jane Quant' }, 'admin-9'));
+    assert.equal(err, null);
+    assert.equal(resp.userMetadata.displayName, 'Jane Quant');
+    const upd = pool.calls.find((c) => /UPDATE identity\.users SET/.test(c.sql))!;
+    assert.ok(/display_name = \$1/.test(upd.sql), 'only display_name in the SET clause');
+    assert.ok(!/phone = /.test(upd.sql), 'phone not touched by a display_name-only update');
+    assert.ok(/metadata_updated_at = NOW\(\)/.test(upd.sql));
+    assert.equal(audit.calls.length, 1);
+    assert.equal(audit.calls[0].eventType, 'identity.user.metadata_updated');
+    assert.equal(audit.calls[0].payload.acting_admin_user_id, 'admin-9');
+    assert.equal(audit.calls[0].payload.target_user_id, 'target-1');
+    assert.deepEqual(audit.calls[0].payload.updated_fields, ['displayName']);
+    assertNoSecret(audit.calls[0].payload);
+    assert.ok(!('metadata' in audit.calls[0].payload), 'no metadata values in the audit payload');
+  });
+
+  it('rejects an empty update (INVALID_ARGUMENT) with no DB write', async () => {
+    if (!IdentityServiceImpl) return;
+    const pool = routePool([]);
+    const impl = makeAdminImpl(pool);
+    const { err } = await runRpc(impl, 'adminUpdateUserMetadata', adminCall({ userId: 'target-1' }));
+    assert.equal(err.code, 3);
+    assert.equal(pool.calls.length, 0);
+  });
+
+  it('returns NOT_FOUND (code 5) for a missing target', async () => {
+    if (!IdentityServiceImpl) return;
+    const pool = routePool([{ re: /UPDATE identity\.users SET/, resp: { rows: [], rowCount: 0 } }]);
+    const impl = makeAdminImpl(pool);
+    const { err } = await runRpc(impl, 'adminUpdateUserMetadata', adminCall({ userId: 'ghost', phone: '+1' }));
+    assert.equal(err.code, 5);
+  });
+
+  it('reads user_id via ts-proto camelCase (a snake_case-only user_id is not read → INVALID_ARGUMENT)', async () => {
+    if (!IdentityServiceImpl) return;
+    const pool = routePool([{ re: /UPDATE/, resp: { rows: [META_ROW], rowCount: 1 } }]);
+    const impl = makeAdminImpl(pool);
+    const { err } = await runRpc(impl, 'adminUpdateUserMetadata', adminCall({ user_id: 'target-1', displayName: 'x' }));
+    assert.equal(err.code, 3, 'snake_case user_id must not be read; camelCase required');
+  });
+});
+
+describe('mapDbError — 8KB metadata CHECK (SQLSTATE 23514) → INVALID_ARGUMENT', () => {
+  it('self updateUserMetadata maps 23514 to code 3 (fixes the pre-existing INTERNAL leak)', async () => {
+    if (!IdentityServiceImpl) return;
+    const e: any = new Error('metadata size'); e.code = '23514';
+    const impl = makeImpl([], e);
+    if (!impl) return;
+    const { err } = await runRpc(impl, 'updateUserMetadata', makeCallWithMetadata({ displayName: 'x' }, 'u1'));
+    assert.equal(err.code, 3);
+    assert.equal(err.message, 'metadata exceeds 8KB limit');
+  });
+
+  it('adminUpdateUserMetadata maps 23514 to code 3; a generic error still maps to code 13', async () => {
+    if (!IdentityServiceImpl) return;
+    const e514: any = new Error('too big'); e514.code = '23514';
+    const impl514 = makeAdminImpl({ calls: [], async query() { throw e514; } } as any);
+    const r514 = await runRpc(impl514, 'adminUpdateUserMetadata', adminCall({ userId: 'target-1', displayName: 'x' }));
+    assert.equal(r514.err.code, 3);
+    const eGen: any = new Error('boom');
+    const implGen = makeAdminImpl({ calls: [], async query() { throw eGen; } } as any);
+    const rGen = await runRpc(implGen, 'adminUpdateUserMetadata', adminCall({ userId: 'target-1', phone: '+1' }));
+    assert.equal(rGen.err.code, 13);
+  });
+});
+
+describe('admin metadata handler registration (smoke)', () => {
+  it('adminGetUserMetadata / adminUpdateUserMetadata are callable prototype methods', () => {
+    if (!IdentityServiceImpl) return;
+    assert.equal(typeof IdentityServiceImpl.prototype.adminGetUserMetadata, 'function');
+    assert.equal(typeof IdentityServiceImpl.prototype.adminUpdateUserMetadata, 'function');
+  });
+});
