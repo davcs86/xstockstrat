@@ -137,3 +137,10 @@ Stacked directly on 173's branch (so the ingest watcher already carries 173's `g
 **Stopped at**: all complete → code-completed
 **Accountability**: out-of-scope changes: none (dead ingest `sandbox_*` helpers deliberately left open — a separate change class). Open questions: none. Unaddressed review warnings: none.
 **Next**: stacked integration PR #2 (base `feature/fix-python-config-zero-trap`); then feature 172.
+
+## Session 2026-09-06 (CI: feature status automation)
+
+- Promotion PR #1104 merged to main
+- Feature promoted and committed: 83743049da1ec2e2337ef49bad54c49a10721841
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-06

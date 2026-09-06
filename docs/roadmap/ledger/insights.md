@@ -3081,3 +3081,21 @@ reusing.
 - **Pattern**: The hand-maintained-projection parity guard (mirror of `test_backtest_view.py`'s `DESCRIPTOR.fields_by_name` check) has a **TS-service analog** for services whose runtime stub is ts-proto (which has NO field reflection): reflect via **protobuf-es v2** instead — import `<Msg>Schema` from the `_pb` module (`protoc-gen-es` is already generated per `packages/proto/buf.gen.yaml`; `@bufbuild/protobuf` is a dep) and assert `<Msg>Schema.fields.map(f => f.localName)` (camelCase) equals the emitted key set of the row→proto mapper. The mapper must emit every field unconditionally (`x ?? undefined`, never conditional-spread) or the key-set assertion becomes row-dependent. Mild dual-flavor indirection: the service serializes via ts-proto while the guard reflects via protobuf-es, but both derive from the same `.proto`.
 - **Evidence**: feature 182 design.md § Chosen Approach (step 2 test plan); `packages/proto/buf.gen.yaml:35` (protoc-gen-es); `services/xstockstrat-identity/package.json:20` (`@bufbuild/protobuf`); Python precedent `services/xstockstrat-agent/tests/test_backtest_view.py:189`.
 - **Rule it implies**: a hand-maintained proto projection in a TS/Node service must be pinned by a protobuf-es schema-reflection parity test (the ts-proto stub cannot back one) — extends the F-12/RC-1 "pin projections with a parity test" lesson across languages.
+
+## 2026-09-06 — config write-bounds are write-path only (feature 182)
+
+- **Pattern**: Registering a `SCALAR_BOUNDS_REGISTRY` entry for a config key rejects only out-of-range
+  future `SetConfig` writes (`configServiceImpl.ts` write edge) and touches **no read path** — so
+  adding bounds does NOT break a "no-runtime-behavior-change" registration contract. A design that
+  defers bounds "to stay no-behavior-change" is miscalibrated: the behavior-change fear belongs to the
+  *seeded value* (seed == code default = no change), not to the bounds.
+- **Rule it implies**: when a feature makes a numeric operational key operator-editable (seeding it so
+  config-ui can show it), evaluate write-bounds on their own merits (footgun exposure), not against the
+  no-behavior-change contract. Two footgun classes to check at the reader: a `max(1,…)` clamp guards
+  only the low side (upper is still an operator lever — e.g. `max_concurrent_bars_fetches` re-opening
+  the feature-141 SEV-2), and a key fed to a scheduler/`seconds_until_hour_utc` may have **no** clamp
+  (`refresh_hour_utc`). Bound the upper side in the registry, keyed on the FULL dotted key path.
+- **Evidence**: `services/xstockstrat-config/src/grpc/configServiceImpl.ts:98-103` (float-only registry
+  today — int support is the open verify for a new int-key bound);
+  `services/xstockstrat-analysis/app/handlers/servicer.py:454` (`get_int` + low-only `max(1,…)`), `:4075`
+  (`refresh_hour_utc`, no clamp); feature 182 design.md.

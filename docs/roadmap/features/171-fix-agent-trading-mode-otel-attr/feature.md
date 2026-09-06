@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-09-04
 **Last Updated**: 2026-09-04
+**Committed to main**: 83743049da1ec2e2337ef49bad54c49a10721841
+**Launched date**: 2026-09-06
 
 ---
 
@@ -20,6 +22,7 @@
 | 2026-09-04 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run (stacked PR #4 on 172); Steps 1-2 (Go telemetry: newResource extraction, trading_mode removed, per-module tests) done |
 | 2026-09-04 | `in-progress` → `code-completed` | /sdd-execute | All 8 steps done: trading_mode OTel attr removed fleet-wide (12 modules) + per-module tests + README; C-16 platform promotion. Deviation: Node buildResource uses static top-level imports (Deviation Log) |
 
+| 2026-09-06 | `code-completed` → `launched` | CI workflow | Promoted via PR #1104; committed 83743049da1ec2e2337ef49bad54c49a10721841 |
 ---
 
 ## Artifacts

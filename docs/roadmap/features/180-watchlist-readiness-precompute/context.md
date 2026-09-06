@@ -238,3 +238,10 @@ equivalent: re-read the edited Config Keys Consumed table against the shipped co
 their read sites (`get_bool`/`get_int_present`/`get_int` clamps in servicer `__init__` +
 materializer), defaults match, and the dedicated-vs-reused wording matches D-2. No drift found. The
 additions are new-key documentation, not changes to existing described behavior.
+
+## Session 2026-09-06 (CI: feature status automation)
+
+- Promotion PR #1104 merged to main
+- Feature promoted and committed: 83743049da1ec2e2337ef49bad54c49a10721841
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-06

@@ -3,6 +3,8 @@
 **Development Branch**: `feature/watchlist-readiness-list-ux`
 **Created**: 2026-09-06
 **Last Updated**: 2026-09-06
+**Committed to main**: 83743049da1ec2e2337ef49bad54c49a10721841
+**Launched date**: 2026-09-06
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-09-06 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Steps 1–2: proto + codegen). Dev branch is `claude/watchlist-stock-list-perf-o3qoqb` (harness override, D-1). |
 | 2026-09-06 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps done (proto+codegen, R-E sentinel+tests, GetWatchlistReadiness handler+tests, UI hook/rewrite/BFF/e2e-mocks, Playwright AC-1..6 6/6 green, docs). Analysis pytest 708 passed @83.9%; UI lint+tsc clean; e2e green on the pre-installed Chromium (D-3). Integration PR = existing #1103. |
 
+| 2026-09-06 | `code-completed` → `launched` | CI workflow | Promoted via PR #1104; committed 83743049da1ec2e2337ef49bad54c49a10721841 |
 ---
 
 ## Artifacts

@@ -190,3 +190,10 @@ Fleet-wide removal of the redundant `trading_mode` OTel resource attribute + dea
 
 ### Follow-up 2026-09-04 — tsc-build fix (surfaced by feature 175's build gate)
 - The Step 6 ledger/identity `../telemetry.ts` import (needed by their ESM strip-types test runner) broke their `tsc` **build** (`TS5097` — `.ts` extension not allowed in an emitting build). Their single tsconfig `include: src/**/*` was compiling test sources incidentally. Fixed by excluding `src/**/*.test.ts` from `services/xstockstrat-{ledger,identity}/tsconfig.json` (tests aren't shipped; the runner runs them from source). Verified: all 4 leaf `pnpm run build` (tsc) pass AND ledger/identity `pnpm run test` (strip-types, 37/53 pass) stay green. Committed to this branch (PR #1095) as a separate follow-up commit. See Deviation Log.
+
+## Session 2026-09-06 (CI: feature status automation)
+
+- Promotion PR #1104 merged to main
+- Feature promoted and committed: 83743049da1ec2e2337ef49bad54c49a10721841
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-06

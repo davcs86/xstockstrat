@@ -185,3 +185,10 @@ Status unchanged: **spec-ready**. design.md NOT yet written (awaiting consolidat
 - Verify: `go test ./internal/... -race` green (marketdata + portfolio); vet + gofmt clean.
   golangci-lint deferred to CI (v2.5.0-vs-go1.27).
 - All 8 steps done → status code-completed.
+
+## Session 2026-09-06 (CI: feature status automation)
+
+- Promotion PR #1104 merged to main
+- Feature promoted and committed: 83743049da1ec2e2337ef49bad54c49a10721841
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-06

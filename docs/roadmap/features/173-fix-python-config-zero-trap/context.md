@@ -199,3 +199,10 @@ Order 173→174→172→171→175, one stacked PR per feature (operator-approved
 
 ### C-16 promotion (integration)
 - Promoted AC-1/AC-2/AC-3 → `services/xstockstrat-ingest/acceptance/fix-python-config-zero-trap.feature`; AC-4 → `services/xstockstrat-indicators/acceptance/fix-python-config-zero-trap.feature` (new dir), each tagged `@feature-173`. All PRESERVE-class additive regression guards (no CHANGE to existing guarantees); staged into PR #1. Operator pre-authorized auto-proceed; surfaced in the per-feature summary.
+
+## Session 2026-09-06 (CI: feature status automation)
+
+- Promotion PR #1104 merged to main
+- Feature promoted and committed: 83743049da1ec2e2337ef49bad54c49a10721841
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-06

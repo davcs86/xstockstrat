@@ -371,3 +371,10 @@ RPC (F-06 clean). No Floor breach; no ledger repeat.
   `/EvaluateReadiness` to `/GetWatchlistReadiness`.
 - Verified: all 26 tests in `watchlists.spec.ts` + `watchlist-readiness-list.spec.ts` pass; `pnpm lint`
   clean (pre-existing exhaustive-deps warnings only, none in touched files).
+
+## Session 2026-09-06 (CI: feature status automation)
+
+- Promotion PR #1104 merged to main
+- Feature promoted and committed: 83743049da1ec2e2337ef49bad54c49a10721841
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-06

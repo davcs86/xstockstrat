@@ -3,6 +3,8 @@
 **Development Branch**: `feature/ui-resume-halted-account`
 **Created**: 2026-09-04
 **Last Updated**: 2026-09-05
+**Committed to main**: 83743049da1ec2e2337ef49bad54c49a10721841
+**Launched date**: 2026-09-06
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-09-05 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 landed (extract `HALT_SOURCE` to `opportunityShared`, rewire positions page) |
 | 2026-09-05 | `in-progress` → `code-completed` | /sdd-execute | All 8 steps done; e2e GREEN (6/6 @AC-* scenarios); C-16 promotion + teardown pending integration PR |
 
+| 2026-09-06 | `code-completed` → `launched` | CI workflow | Promoted via PR #1104; committed 83743049da1ec2e2337ef49bad54c49a10721841 |
 ---
 
 ## Artifacts
