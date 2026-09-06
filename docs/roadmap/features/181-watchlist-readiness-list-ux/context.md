@@ -118,3 +118,45 @@ CLOSED-WITH-CONDITION, no Floor breach, no blocker.** design.md + recon.md tight
 - **Also corrected:** design.md step 1 anchors `GetWatchlist` to a new method on the existing `self._portfolio`
   stub (RPC `portfolio.proto:22`), not the `ListWatchlists` drain line — no new edge (F-06 clean).
 - All conditions are /sdd-spec obligations (R-A..R-F); no new operator fork. design.md at 3-round state.
+
+### Round 4 (operator-requested) — mechanize the infinite-PENDING trap (R-E) + polish
+
+Ran a fourth proposer→adversary round to convert R-E (and R-A/R-F residuals) from deferred conditions
+into concrete, code-verified mechanisms.
+
+- **Proposer:** R-E solvable with a *stateless* server predicate over existing `readiness_cache` columns —
+  no schema change. Distinguish data-unavailable (→UNKNOWN) from not-yet-recomputed (→PENDING) via
+  `computed_at` recency + `bar_epoch < lbe`.
+- **Adversary — STILL-OPEN (the recency predicate is defective):** it **misfires** on the normal
+  new-bar-at-close case — a row computed seconds before a daily bar closes is *recent* and *trails* the new
+  `lbe`, so the recency predicate would paint a healthy not-yet-recomputed row as UNKNOWN (an error state)
+  and suppress its legitimate refresh for ≤5 min once/day (a C-16 @AC-2 / feature-177 regression). Also
+  proved `bar_epoch == 0` is insufficient: the benchmark is loaded once per request independent of each
+  symbol's primary fetch (`servicer.py:2768-2770`), so a benchmark-present strategy whose primary bars fail
+  writes `bar_epoch = benchmark_epoch > 0` — the trap stays open for benchmark strategies. Conclusion: only
+  an explicit failure marker written by `compute_readiness_row` is correct. Adversary also flagged a
+  **recovery gap** (client polled only while PENDING + UNKNOWN terminal + no kick → UNKNOWN never recovers
+  without remount).
+- **OPERATOR DECISION (AskUserQuestion):** chose **"Sentinel in shared compute"** — `compute_readiness_row`
+  stamps `bar_epoch = -1` on a primary-bars-fetch exception; classifier maps `bar_epoch < 0 → UNKNOWN`.
+  **Explicitly accepted the scope deviation:** this edits the compute path SHARED by the interactive
+  `EvaluateReadiness` handler and the feature-180 materializer, so it is a (more-correct) behavior change to
+  shipped features 177/180 — exceeding 181's "presentation + read-shape only" scope. **This is a recorded
+  operator override of that scope boundary (C-11 Commandment / P-03 no-silent-deviation).** Rejected the
+  bounded-transient (ships a false UNKNOWN) and the new `bars_ok` column (breaks F-06 no-schema).
+- **Verified facts (this session):** `readiness_cache.bar_epoch` is `BIGINT NOT NULL` with no non-negative
+  constraint (`migrations/022_readiness_cache.up.sql:14`) → `-1` sentinel is schema-safe. The durable
+  readiness suite is `readiness-caching-poll-discipline.feature` (exists in analysis + ui acceptance) —
+  the R-A regression home; `platform.feature` DOES exist (cross-cutting suite) so recon.md:55's reference
+  to it stands (the adversary's "platform.feature missing" claim was wrong).
+- **Recovery mechanism folded in:** UNKNOWN rows are re-kicked, **rate-limited** by a `computed_at` cooldown
+  (`now - computed_at > _READINESS_UNKNOWN_RETRY_SECONDS`, 300s module constant — stateless, no config key)
+  so a persistently-down source retries ≤ once/5min; the client keeps polling while any rendered row is
+  **PENDING OR UNKNOWN**, so recovery is observed without a manual reload.
+- **Constants pinned:** poll interval 30_000ms (UI const, matches 177), page size 25 (UI const),
+  `_READINESS_UNKNOWN_RETRY_SECONDS` 300 (module const beside `_READINESS_LOOKBACK_DAYS`). None are config keys.
+- **R-F:** reuse the materializer bars-sem for on-read kicks (no new config key); document the coupling in
+  `analysis/CLAUDE.md` (a /sdd-spec obligation).
+- design.md updated to 4-round state (classifier rewritten, sentinel + recovery in step 5, two rejected
+  discriminators added, R-A/R-E resolved). **New /sdd-spec obligation:** RED-test the sentinel write + the
+  four-way classifier, and re-verify feature-177 @AC-2 in the same PR (shared-compute change).

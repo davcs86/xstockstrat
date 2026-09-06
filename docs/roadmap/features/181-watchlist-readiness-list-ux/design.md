@@ -1,10 +1,11 @@
 # Design: watchlist-readiness-list-ux (feature 181)
 
 **Created**: 2026-09-06
-**Mode**: /sdd-design full (3 rounds) — gates `spec-ready` → `design-approved`
+**Mode**: /sdd-design full (4 rounds) — gates `spec-ready` → `design-approved`
 **Inputs**: `product-spec.md` (FR-1..7), `recon.md`, Constitution `docs/sdd/constitution.md`, ledger `fails.md`
-**Debate**: design-proposer vs design-adversary, 3 rounds; 2 operator forks resolved at the Round-2 gate,
-Obj 3–7 closed at Round 3 (adversary-verified against code, no blocker).
+**Debate**: design-proposer vs design-adversary, 4 rounds; 2 operator forks resolved at the Round-2 gate,
+Obj 3–7 closed at Round 3 (adversary-verified), R-E infinite-PENDING trap mechanized at Round 4 (failure
+sentinel; operator-approved shared-compute scope deviation). No Floor breach at any round.
 
 ---
 
@@ -51,13 +52,22 @@ rows immediately and self-heals pending rows by polling the **same** RPC. No por
    only for the visible page").
 3. `readiness_cache.read_many(caller_user_id, strategy_id, "entry", symbols)` — **cache read only**,
    never SLOW compute in this RPC.
-4. **Freshness = full `is_readiness_row_fresh` predicate** (`readiness.py:16-28`): fingerprint match
-   **AND** `now < valid_until` **AND** `bar_epoch >= latest_bar_epoch`. The `latest_bar_epoch` is
-   obtained by **one `GetDataCoverage` MIN/MAX probe per distinct page symbol** (≤ page size) — the
-   exact probe `EvaluateReadiness` (`servicer.py:2837-2850`) and the materializer
-   (`servicer.py:3883-3898`) already run. This is a bounded metadata read, **not** a bars fetch and
-   **not** a re-eval — "cache-only compute" is preserved. Fresh → `RESOLVED` + inline `SymbolReadiness`;
-   stale/missing → `PENDING`.
+4. **Classify each page pair (stateless, over existing cache columns + the probe).** `latest_bar_epoch`
+   (`lbe`) is obtained by **one `GetDataCoverage` MIN/MAX probe per distinct page symbol** (≤ page size) —
+   the exact probe `EvaluateReadiness` (`servicer.py:2837-2850`) and the materializer
+   (`servicer.py:3883-3898`) already run: a bounded metadata read, **not** a bars fetch, **not** a re-eval
+   ("cache-only compute" preserved). The classifier, in this order (see R-E for the sentinel):
+   ```
+   row = cached.get(symbol); lbe = latest_bar_epoch.get(symbol, 0)
+   if row and row["bar_epoch"] < 0:                            -> UNKNOWN   # data-unavailable sentinel
+   elif row and is_readiness_row_fresh(row, now, fp, lbe):     -> RESOLVED  # inline SymbolReadiness
+   else:                                                       -> PENDING   # + deduped kick
+   ```
+   `is_readiness_row_fresh` (`readiness.py:16-28`) is the full predicate — fingerprint match **AND**
+   `now < valid_until` **AND** `bar_epoch >= latest_bar_epoch` (the authoritative `bar_epoch` bust, keeping
+   @AC-2). A probe miss (`lbe = 0`) makes `bar_epoch >= 0` always true → a non-sentinel row serves
+   `RESOLVED` best-effort (matches the interactive path); a sentinel (`-1`) row is `UNKNOWN` regardless of
+   `lbe`, so the `bar_epoch < 0` check is **first**.
 5. For the page's not-fresh pairs, fire a **best-effort background refresh** — reuse `compute_readiness_row`
    + `upsert_many` (`readiness.py:38`, `readiness_cache.py:44`) grouped by strategy, each definition loaded
    owner-scoped via `get_by_owner_and_id` (`strategies.py:66`). Dedupe via a **guard-set keyed per
@@ -76,6 +86,12 @@ rows immediately and self-heals pending rows by polling the **same** RPC. No por
    idempotent `ON CONFLICT … DO UPDATE` (`readiness_cache.py:52-61`) and the kick + loop run the same
    `compute_readiness_row`, so a double-fire on one pair is last-write-wins, not corruption. Returns
    immediately; a refresh failure never touches the response (FR-5).
+   - **PENDING** pairs are kicked on every poll (guard-set deduped). **UNKNOWN** (sentinel `-1`) pairs are
+     kicked only when a **retry cooldown** has elapsed — `now - row["computed_at"] > _READINESS_UNKNOWN_RETRY_SECONDS`
+     (300s, a module constant beside `_READINESS_LOOKBACK_DAYS`, `servicer.py:2766`) — evaluated statelessly
+     from the row's own `computed_at`. So a persistently data-unavailable pair re-attempts at most once per
+     ~5 min (not every 30s poll), and self-heals: when bars return, the cooldown-gated kick writes a real
+     `bar_epoch` ≥ `lbe` → the next poll classifies it `RESOLVED`. No operator action, no schema/state.
 
 ### Client behavior (UI)
 
@@ -89,15 +105,18 @@ rows immediately and self-heals pending rows by polling the **same** RPC. No por
   membership agreeing exactly: each verdict is matched onto its row by the `(symbol, strategy_id)` cell
   key, so a rebind race can only leave a since-removed pair unmatched (→ stays `PENDING`/drops on next
   poll), never land a wrong verdict on a row.
-- Rows render immediately (FR-1). `RESOLVED` → verdict; `PENDING` → C-17 `Skeleton` (`aria-busy`) and the
-  hook **re-fetches `GetWatchlistReadiness` on an interval** (staleTime:30_000-equivalent cadence,
-  `refetchInterval` while any row is `PENDING`) until no `PENDING` rows remain; `UNKNOWN` → icon+text
-  error via `QueryStateMessages`. Pagination control keyboard-operable + labeled (FR-7).
-- **"hasPending" is computed from the *rendered* rows** (the binding rows joined to the readiness map),
-  **not** from the readiness response alone — otherwise a symbol just added via `useAddWatchlistSymbols`
-  (which invalidates `['watchlists']` and re-renders a new binding row) would have no readiness entry, so
-  a pending-from-response-only check would never re-poll it and the new row would hang on `Skeleton`
-  forever (Round-3 Obj 6 gap). The union keeps the poll alive until every rendered row resolves.
+- Rows render immediately (FR-1). `RESOLVED` → verdict; `PENDING` → C-17 `Skeleton` (`aria-busy`);
+  `UNKNOWN` → icon+text error via `QueryStateMessages` (FR-5). The hook **re-fetches
+  `GetWatchlistReadiness` on an interval** (staleTime:30_000-equivalent cadence) while any rendered row is
+  **`PENDING` OR `UNKNOWN`** — polling must stay alive on `UNKNOWN` too, so the server's cooldown-gated
+  recovery re-kick (step 5) is observed and a data-recovered pair flips to `RESOLVED` without a manual
+  reload (Round-4 recovery gap). Pagination control keyboard-operable + labeled (FR-7).
+- **The poll-alive condition is computed from the *rendered* rows** (the binding rows joined to the
+  readiness map), **not** from the readiness response alone — otherwise a symbol just added via
+  `useAddWatchlistSymbols` (which invalidates `['watchlists']` and re-renders a new binding row) would have
+  no readiness entry, so a response-only check would never re-poll it and the new row would hang on
+  `Skeleton` forever (Round-3 Obj 6 gap). The union keeps the poll alive until every rendered row is
+  `RESOLVED`.
 - `WatchlistReadiness.tsx:186-202` `useQueries` fan-out is **removed**; the per-strategy client
   `EvaluateReadiness` fan-out is **not** reintroduced — pending rows resolve through the one page-bounded
   RPC (the N+1 is killed, not relocated).
@@ -150,15 +169,31 @@ rows immediately and self-heals pending rows by polling the **same** RPC. No por
   dedupe (Obj 4).
 - **Coarse whole-owner `_materialize_readiness_for_owner` on read.** Re-warms every watchlist for one
   page view — wasteful. Scope the kick to the page's not-fresh pairs.
+- **R-E discriminator: `computed_at` recency (`stuck = recent AND bar_epoch < lbe`).** Rejected — misfires
+  on the normal new-bar-at-close case: a row computed seconds before a daily bar closes is *recent* and
+  *trails* the new `lbe`, yet is a healthy not-yet-recomputed row (should be `PENDING`), not data-unavailable
+  (`UNKNOWN`). Would paint a ≤5-min false `UNKNOWN` once/day at bar close and suppress the legitimate
+  refresh — a C-16 @AC-2 (feature-177) regression.
+- **R-E discriminator: `bar_epoch == 0`.** Rejected — the benchmark is loaded once per request independent
+  of each symbol's primary fetch (`servicer.py:2768-2770`), so a *benchmark-present* strategy whose primary
+  bars fail writes `bar_epoch = max(0, benchmark_epoch) > 0` — a `== 0` test misses it and the trap stays
+  open for benchmark strategies. Only an explicit failure sentinel written by `compute_readiness_row`
+  covers both sub-cases (see R-E).
 
 ---
 
 ## Open Risks / Conditions Carried to /sdd-spec
 
 - **R-A (recon R3, adversary "at risk").** Feature 180's FAST/`bar_epoch` guarantee is not yet in a
-  durable C-16 suite. The probe-gate decision keeps this surface consistent with feature-177 @AC-2, but
-  /sdd-spec should add a regression test asserting a bar-busted row renders `PENDING` (not a stale
-  `RESOLVED`), and flag the 180 promotion.
+  durable C-16 suite. The probe-gate decision keeps this surface consistent with feature-177 @AC-2.
+  /sdd-spec adds: (1) a pytest in `services/xstockstrat-analysis/tests/test_readiness.py` (which already
+  unit-tests `is_readiness_row_fresh` + the interactive bar_epoch FAST gate) covering all four classifier
+  states — fresh→RESOLVED; sentinel(`-1`)→UNKNOWN; bar-stale non-sentinel→PENDING+kick; probe-miss
+  (`lbe=0`)→best-effort RESOLVED — with the load-bearing assertion *a bar-busted row is never a stale
+  RESOLVED*; (2) a durable C-16 scenario in **`services/xstockstrat-analysis/acceptance/readiness-caching-poll-discipline.feature`**
+  (the existing feature-177 readiness suite — **not** `platform.feature`, which is the cross-cutting suite),
+  asserting the same guarantee, and flags the feature-180 FAST/`bar_epoch` guarantee for promotion in the
+  same edit.
 - **R-B (Obj 5, fails.md:118) — SPLIT.** **FR-1** (immediate render + per-row loading) and **FR-2** (the
   client per-strategy N+1 elimination — one page-bounded RPC + interval refetch of that same RPC, never N
   `EvaluateReadiness` calls) are **UNCONDITIONAL**. **FR-6** (visible page served FAST with no server-side
@@ -179,15 +214,25 @@ rows immediately and self-heals pending rows by polling the **same** RPC. No por
   `watchlist.systemManaged` (`WatchlistDetail.tsx:221`); firing/watching cues + blocking + firing-row jump
   `firing` ← the verdict via `readinessState/isFiring/blockingCondition` (`WatchlistReadiness.tsx:42-75,266-296`);
   jump href ← `binding.strategyId` (`WatchlistReadiness.tsx:301`). /sdd-spec records this table.
-- **R-E (Obj 4c, NEW — highest-priority) — bounded `PENDING`→`UNKNOWN`.** The cache-read-only + probe-gate
-  combination introduces an infinite-`PENDING` trap the interactive `EvaluateReadiness` does not have: if
-  `GetDataCoverage` succeeds (`latest_bar_epoch > 0`) but `_fetch_bars_paged` **persistently** fails,
-  `compute_readiness_row` swallows the fetch error and upserts `bar_epoch = max(0, benchmark_epoch)`
-  (`readiness.py:61-82`), so `is_readiness_row_fresh`'s `bar_epoch(0) >= latest(>0)` is **False forever** →
-  the RPC returns `PENDING` on every poll → infinite poll + infinite kick + log spam, never resolving.
-  /sdd-spec MUST bound this: after a kicked pair stays stale past N polls (or the kick's compute could not
-  reach `latest_bar_epoch`), degrade the row to **`UNKNOWN`** (the state @AC-2/FR-5 already define), not
-  perpetual loading. This is a required condition, not implicit.
+- **R-E (Obj 4c) — RESOLVED via a failure sentinel (operator-approved scope deviation).** The
+  cache-read-only + probe-gate combination introduced an infinite-`PENDING` trap: if `GetDataCoverage`
+  succeeds (`lbe > 0`) but `_fetch_bars_paged` **persistently** fails, `compute_readiness_row` today
+  swallows the error and upserts `bar_epoch = max(0, benchmark_epoch)` (`readiness.py:61-82`), which never
+  reaches `lbe` → `is_readiness_row_fresh` False forever → `PENDING` on every poll. Two rejected
+  discriminators (`computed_at` recency; `bar_epoch == 0`) are in Rejected Alternatives — recency misfires
+  on the normal new-bar-at-close case, and `== 0` misses benchmark-present failures. **Fix (operator
+  choice, see context.md):** `compute_readiness_row` stamps **`bar_epoch = -1`** on a primary-bars-fetch
+  exception (instead of the `max(0, benchmark_epoch)` fallback); the classifier maps `bar_epoch < 0 →
+  UNKNOWN` (step 4), and the server rate-limits the recovery re-kick by a `computed_at` cooldown (step 5).
+  `-1` is schema-safe: `readiness_cache.bar_epoch` is `BIGINT NOT NULL` with no non-negative constraint
+  (`migrations/022_readiness_cache.up.sql:14`). Reuses `ReadinessState.UNKNOWN` — **no new proto field, no
+  migration** (F-06 holds). **Scope deviation:** `compute_readiness_row` is the compute path shared by the
+  interactive `EvaluateReadiness` handler and the feature-180 materializer, so this is a (more-correct)
+  behavior change to shipped features 177/180 — a benchmark-present primary-failure row that today can
+  FAST-serve a degraded verdict now becomes non-fresh/`UNKNOWN`. This exceeds 181's "presentation +
+  read-shape only" scope; the operator **explicitly approved** it (recorded in context.md, C-11/P-03).
+  /sdd-spec MUST re-verify feature-177 @AC-2 against `readiness-caching-poll-discipline.feature` in the
+  same PR, and RED-test the sentinel write + the four-way classifier.
 - **R-F (Obj 4a, NEW) — semaphore config coupling.** Reusing `self._readiness_materializer_bars_sem`
   (`servicer.py:443`) for on-read kicks means `analysis.readiness_materializer.max_concurrent_bars_fetches`
   now **also** throttles interactive watchlist-read kicks. Document in the spec and `analysis/CLAUDE.md`
