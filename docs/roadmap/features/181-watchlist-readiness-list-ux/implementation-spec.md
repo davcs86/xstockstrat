@@ -1,6 +1,6 @@
 # Implementation Spec: watchlist-readiness-list-ux
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-09-06
 **Feature**: `docs/roadmap/features/181-watchlist-readiness-list-ux/feature.md`
 **Total Steps**: 12
@@ -317,7 +317,7 @@ All pass; classifier/paging/cooldown tests RED against the pre-Step-5 tree.
 
 ### Step 7 — service: `useWatchlistReadiness` hook (own query key, page-token stack, poll-alive)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/hooks/useWatchlistReadiness.ts` — create
@@ -350,7 +350,7 @@ Lint passes; behavioral coverage via Step 11.
 
 ### Step 8 — service: rewrite `WatchlistReadiness.tsx` — per-row state, C-17 primitives, pagination
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/WatchlistReadiness.tsx` — modify
@@ -395,7 +395,7 @@ Lint passes; behavioral/a11y coverage via Step 11.
 
 ### Step 9 — service: BFF `getWatchlistReadiness` forward in `insightsBff`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/insightsBff.ts` — modify
@@ -432,7 +432,7 @@ Lint passes; the forward is present in insightsBff only.
 
 ### Step 10 — service: e2e mock for `GetWatchlistReadiness` in both mock homes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify
@@ -467,7 +467,7 @@ Both homes carry the mock; consumed in Step 11.
 
 ### Step 11 — test: Playwright e2e for the watchlist readiness list (AC-1..AC-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/watchlists.spec.ts` — modify (or a new `watchlist-readiness-list.spec.ts` under `e2e/insights/`)
@@ -501,7 +501,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm test:e2e -- e2e/insights/wat
 
 ### Step 12 — docs: analysis `CLAUDE.md` — new RPC, semaphore coupling, materializer prerequisite
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify

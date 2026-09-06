@@ -307,3 +307,39 @@ RPC (F-06 clean). No Floor breach; no ledger repeat.
 - Verification: ruff clean; `pytest --cov=app` 708 passed, 83.90%; no-cycle grep over
   xstockstrat-portfolio finds no analysis client (AC-5).
 - Files modified: `tests/test_watchlist_readiness.py`, `acceptance/readiness-caching-poll-discipline.feature`.
+
+### Steps 7–11 — UI: hook, WatchlistReadiness rewrite, BFF, e2e mocks, Playwright [done]
+- Step 7: `src/hooks/useWatchlistReadiness.ts` — own `['watchlistReadiness', watchlistId, pageToken]`
+  key (disjoint from `['watchlists']` — @AC-6 preserved), function-form `refetchInterval` computing
+  poll-alive from the rendered page pairs (Obj-6 gap fix), `decodePairToken` keyset helper.
+- Step 8: rewrote `WatchlistReadiness.tsx` — removed the `useQueries` per-strategy N+1 fan-out; rows
+  render immediately from `['watchlists']` bindings, verdict decorated by the one page-bounded RPC,
+  keyed `(symbol, strategyId)`; PENDING→Skeleton(aria-busy/role=status), UNKNOWN→icon+text
+  (TriangleAlert + QueryStateMessages), RESOLVED→existing verdict; keyset prev/next pagination
+  (labeled, keyboard-operable). All affordances (provenance/in-queue/system-managed/controls/jump)
+  preserved from the retained `['watchlists']` read. `WatchlistDetail.tsx` passes `watchlistId`.
+- Step 9: `insightsBff.ts` `getWatchlistReadiness` forward (single site — trader/config BFF have no
+  watchlists; fails.md:1138 clear; inherits createDispatch error passthrough, fails.md:552).
+- Step 10: e2e mocks in both homes — in-process default `{rows:[],page:{}}` (mock-backend.ts) + a
+  keyset-paginating decorating `page.route` in `watchlistMock.ts` (3rd `readinessOverrides` arg,
+  flattened proto3-JSON camelCase enum-name shape, fails.md:1281/1317). INVENTORY.md row added.
+- Step 11: `e2e/insights/watchlist-readiness-list.spec.ts` — AC-1 (immediate render + Skeleton),
+  AC-2 (one row UNKNOWN, list survives), AC-3 (inline decorate, NO EvaluateReadiness fan-out — asserts
+  zero browser calls), AC-4 (30 rows → 25/page + Next → 5), AC-6 (aria-busy skeleton + labeled
+  keyboard pagination). **6/6 green** on the pre-installed Chromium.
+- Verification: `pnpm run lint` clean; `tsc --noEmit` clean for all feature-181 files (pre-existing
+  `middleware.test.ts` vitest-mock typing error is untouched/unrelated). Playwright 6/6 pass.
+
+### Step 12 — docs: analysis CLAUDE.md [done]
+- Added the `GetWatchlistReadiness` subsection (cache-first, keyset, four-way classifier, guard-set
+  kick, sentinel scope note), the R-F semaphore-coupling note on the materializer config-key row, and
+  the R-B materializer-prerequisite note. Verification grep passes.
+
+### Deviations (D-3)
+- **D-3 — e2e run on the pre-installed Chromium (Steps 11).** Disposition: environment-provided
+  browser + cold-compile timeout, not a CI fallback. The project's pinned Playwright expects browser
+  build 1234; the sandbox ships build 1194 at `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`.
+  Per the environment guidance (use the pre-installed browser, never `playwright install`), ran with
+  `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` pointed there and `--timeout=120000` (the SSR warmup exceeds
+  the 10s non-CI default on a cold `next dev` compile). All 6 tests pass. CI runs the hermetic
+  `Dockerfile.e2e` image with the matched browser — unaffected.
