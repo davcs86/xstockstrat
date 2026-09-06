@@ -50,3 +50,25 @@ Feature: readiness-materializer-config-keys
     When feature 182 lands
     Then those four rows cite seed migration 027 instead of "No seed migration"
     And the config-governance per-feature registered-keys log records the four keys under feature 182
+    And the ~5 other analysis.* / analysis.opportunity.* rows that still have no seed migration keep their "No seed migration" note unchanged
+
+  @AC-7 @FR-6
+  Scenario: An in-bounds tuning write is accepted
+    Given migration 027 has registered the materializer keys and their SCALAR_BOUNDS_REGISTRY bounds
+    When an admin sets analysis.readiness_materializer.refresh_hour_utc to 6 and max_concurrent_bars_fetches to 5
+    Then both SetConfig writes succeed
+    And a subsequent GetConfig returns refresh_hour_utc=6 and max_concurrent_bars_fetches=5
+
+  @AC-8 @FR-6
+  Scenario: An out-of-bounds tuning write is rejected at the write edge
+    Given migration 027 has registered the materializer keys and their bounds (refresh_hour_utc [0,23], valid_window_hours [1,168], max_concurrent_bars_fetches [1,5])
+    When an admin tries to set analysis.readiness_materializer.max_concurrent_bars_fetches to 10000
+    Then SetConfig is rejected with INVALID_ARGUMENT and the stored value is unchanged
+    And setting refresh_hour_utc to 99 is likewise rejected INVALID_ARGUMENT
+
+  @AC-9 @FR-2
+  Scenario: The bounds are write-path only and change no read path
+    Given the materializer keys are registered with bounds and seeded at code defaults
+    When the analysis service receives the config snapshot
+    Then get_bool("analysis.readiness_materializer.enabled") still resolves to false
+    And the readiness materializer loop remains OFF (bounds reject only out-of-range future writes; no read path is altered)

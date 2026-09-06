@@ -44,8 +44,18 @@ namespace and an admin can toggle it there (the existing admin-gated `SetConfig`
 `create_key` needed once the global row exists).
 
 FR-5. The docs that assert these keys have "No seed migration (the `analysis.*` no-seed pattern)" are
-corrected (analysis `CLAUDE.md` Config Keys table), and the config-governance per-feature
-registered-keys log records this registration.
+corrected (analysis `CLAUDE.md` Config Keys table) **for the four `readiness_materializer.*` rows only**
+(the other ~5 `analysis.*`/`analysis.opportunity.*` no-seed notes stay intact), and the
+config-governance per-feature registered-keys log records this registration.
+
+FR-6. _(Added at the design gate — approved scope "all four + write-bounds", 2026-09-06.)_ Because
+registering the numeric tuning keys makes them operator-editable in config-ui, the three int keys get
+server-side write-bounds in `SCALAR_BOUNDS_REGISTRY` (`services/xstockstrat-config/src/grpc/configServiceImpl.ts`)
+so an out-of-range `SetConfig` is rejected `INVALID_ARGUMENT` (EXTEND of the feature-161 `@AC-11`/`@AC-12`
+pattern): `refresh_hour_utc` `[0,23]`, `valid_window_hours` `[1,168]`, `max_concurrent_bars_fetches`
+`[1,5]` (ceiling = marketdata PgBouncer pool size, guarding the feature-141 SEV-2). Bounds are
+**write-path only** — they reject future out-of-range writes and touch no read path, so registration
+remains a no-runtime-behavior-change change. `enabled` is a bool → no numeric bound.
 
 ## Out of Scope
 
@@ -57,9 +67,9 @@ registered-keys log records this registration.
 ## Affected Services
 
 Exact service names from CLAUDE.md Service Registry:
-- `xstockstrat-config` — new seed migration under `services/xstockstrat-config/migrations/` (registers the rows; the config store is its schema).
+- `xstockstrat-config` — new seed migration under `services/xstockstrat-config/migrations/` (registers the rows) **plus a code change**: three new `SCALAR_BOUNDS_REGISTRY` entries in `src/grpc/configServiceImpl.ts` (FR-6, added at design gate). No schema change.
 - `xstockstrat-analysis` — **docs only** (`CLAUDE.md` Config Keys table notes corrected). No code change: the reader already exists (feature 180).
-- `xstockstrat-ui` (`/config-ui`) — **no code change**; it renders the newly-registered keys automatically.
+- `xstockstrat-ui` (`/config-ui`) — **no code change**; it renders the newly-registered keys automatically (with the bounds hint from FR-6).
 
 ## Consumer Surface(s)
 
