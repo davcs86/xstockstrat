@@ -139,6 +139,22 @@ export interface UpdateUserMetadataRequest {
 export interface UpdateUserMetadataResponse {
     userMetadata?: UserMetadata | undefined;
 }
+/**
+ * ── Admin cross-user profile metadata (admin-gated, feature 183) ──────────────
+ * Target selected by request-body user_id (never x-user-id). Responses reuse
+ * GetUserMetadataResponse / UpdateUserMetadataResponse above.
+ */
+export interface AdminGetUserMetadataRequest {
+    userId: string;
+}
+export interface AdminUpdateUserMetadataRequest {
+    userId: string;
+    phone?: string | undefined;
+    displayName?: string | undefined;
+    metadata?: {
+        [key: string]: any;
+    } | undefined;
+}
 /** Password-free admin view of a user (no password / password_hash — FR-10/AC-10). */
 export interface User {
     userId: string;
@@ -213,6 +229,8 @@ export declare const GetUserMetadataRequest: MessageFns<GetUserMetadataRequest>;
 export declare const GetUserMetadataResponse: MessageFns<GetUserMetadataResponse>;
 export declare const UpdateUserMetadataRequest: MessageFns<UpdateUserMetadataRequest>;
 export declare const UpdateUserMetadataResponse: MessageFns<UpdateUserMetadataResponse>;
+export declare const AdminGetUserMetadataRequest: MessageFns<AdminGetUserMetadataRequest>;
+export declare const AdminUpdateUserMetadataRequest: MessageFns<AdminUpdateUserMetadataRequest>;
 export declare const User: MessageFns<User>;
 export declare const CreateUserRequest: MessageFns<CreateUserRequest>;
 export declare const CreateUserResponse: MessageFns<CreateUserResponse>;
@@ -355,6 +373,28 @@ export declare const IdentityServiceService: {
         readonly responseDeserialize: (value: Buffer) => UpdateUserMetadataResponse;
     };
     /**
+     * Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
+     * body user_id, never x-user-id (C-03). Reuse the self responses.
+     */
+    readonly adminGetUserMetadata: {
+        readonly path: "/xstockstrat.identity.v1.IdentityService/AdminGetUserMetadata";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: AdminGetUserMetadataRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => AdminGetUserMetadataRequest;
+        readonly responseSerialize: (value: GetUserMetadataResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => GetUserMetadataResponse;
+    };
+    readonly adminUpdateUserMetadata: {
+        readonly path: "/xstockstrat.identity.v1.IdentityService/AdminUpdateUserMetadata";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: AdminUpdateUserMetadataRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => AdminUpdateUserMetadataRequest;
+        readonly responseSerialize: (value: UpdateUserMetadataResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => UpdateUserMetadataResponse;
+    };
+    /**
      * User management (admin-gated, feature 043). Every RPC requires the admin access-scope bit;
      * passwords are write-only (never returned). Additive over the existing service.
      */
@@ -437,6 +477,12 @@ export interface IdentityServiceServer extends UntypedServiceImplementation {
     getUserMetadata: handleUnaryCall<GetUserMetadataRequest, GetUserMetadataResponse>;
     updateUserMetadata: handleUnaryCall<UpdateUserMetadataRequest, UpdateUserMetadataResponse>;
     /**
+     * Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
+     * body user_id, never x-user-id (C-03). Reuse the self responses.
+     */
+    adminGetUserMetadata: handleUnaryCall<AdminGetUserMetadataRequest, GetUserMetadataResponse>;
+    adminUpdateUserMetadata: handleUnaryCall<AdminUpdateUserMetadataRequest, UpdateUserMetadataResponse>;
+    /**
      * User management (admin-gated, feature 043). Every RPC requires the admin access-scope bit;
      * passwords are write-only (never returned). Additive over the existing service.
      */
@@ -496,6 +542,16 @@ export interface IdentityServiceClient extends Client {
     updateUserMetadata(request: UpdateUserMetadataRequest, callback: (error: ServiceError | null, response: UpdateUserMetadataResponse) => void): ClientUnaryCall;
     updateUserMetadata(request: UpdateUserMetadataRequest, metadata: Metadata, callback: (error: ServiceError | null, response: UpdateUserMetadataResponse) => void): ClientUnaryCall;
     updateUserMetadata(request: UpdateUserMetadataRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: UpdateUserMetadataResponse) => void): ClientUnaryCall;
+    /**
+     * Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
+     * body user_id, never x-user-id (C-03). Reuse the self responses.
+     */
+    adminGetUserMetadata(request: AdminGetUserMetadataRequest, callback: (error: ServiceError | null, response: GetUserMetadataResponse) => void): ClientUnaryCall;
+    adminGetUserMetadata(request: AdminGetUserMetadataRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetUserMetadataResponse) => void): ClientUnaryCall;
+    adminGetUserMetadata(request: AdminGetUserMetadataRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetUserMetadataResponse) => void): ClientUnaryCall;
+    adminUpdateUserMetadata(request: AdminUpdateUserMetadataRequest, callback: (error: ServiceError | null, response: UpdateUserMetadataResponse) => void): ClientUnaryCall;
+    adminUpdateUserMetadata(request: AdminUpdateUserMetadataRequest, metadata: Metadata, callback: (error: ServiceError | null, response: UpdateUserMetadataResponse) => void): ClientUnaryCall;
+    adminUpdateUserMetadata(request: AdminUpdateUserMetadataRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: UpdateUserMetadataResponse) => void): ClientUnaryCall;
     /**
      * User management (admin-gated, feature 043). Every RPC requires the admin access-scope bit;
      * passwords are write-only (never returned). Additive over the existing service.

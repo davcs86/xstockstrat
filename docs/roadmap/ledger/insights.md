@@ -3077,6 +3077,11 @@ reusing.
   `app/handlers/servicer.py` (`_readiness_materializer_tick`, `_drain_watchlist_bindings` reuse,
   FAST gate); `docs/roadmap/features/180-watchlist-readiness-precompute/implementation-spec.md` Deviation Log.
 
+### 2026-09-06 — mcp-user-profile-roles — design
+- **Pattern**: The hand-maintained-projection parity guard (mirror of `test_backtest_view.py`'s `DESCRIPTOR.fields_by_name` check) has a **TS-service analog** for services whose runtime stub is ts-proto (which has NO field reflection): reflect via **protobuf-es v2** instead — import `<Msg>Schema` from the `_pb` module (`protoc-gen-es` is already generated per `packages/proto/buf.gen.yaml`; `@bufbuild/protobuf` is a dep) and assert `<Msg>Schema.fields.map(f => f.localName)` (camelCase) equals the emitted key set of the row→proto mapper. The mapper must emit every field unconditionally (`x ?? undefined`, never conditional-spread) or the key-set assertion becomes row-dependent. Mild dual-flavor indirection: the service serializes via ts-proto while the guard reflects via protobuf-es, but both derive from the same `.proto`.
+- **Evidence**: feature 183 design.md § Chosen Approach (step 2 test plan); `packages/proto/buf.gen.yaml:35` (protoc-gen-es); `services/xstockstrat-identity/package.json:20` (`@bufbuild/protobuf`); Python precedent `services/xstockstrat-agent/tests/test_backtest_view.py:189`.
+- **Rule it implies**: a hand-maintained proto projection in a TS/Node service must be pinned by a protobuf-es schema-reflection parity test (the ts-proto stub cannot back one) — extends the F-12/RC-1 "pin projections with a parity test" lesson across languages.
+
 ## 2026-09-06 — config write-bounds are write-path only (feature 182)
 
 - **Pattern**: Registering a `SCALAR_BOUNDS_REGISTRY` entry for a config key rejects only out-of-range

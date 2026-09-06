@@ -19,25 +19,27 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	IdentityService_AuthenticateUser_FullMethodName    = "/xstockstrat.identity.v1.IdentityService/AuthenticateUser"
-	IdentityService_ValidateToken_FullMethodName       = "/xstockstrat.identity.v1.IdentityService/ValidateToken"
-	IdentityService_RefreshToken_FullMethodName        = "/xstockstrat.identity.v1.IdentityService/RefreshToken"
-	IdentityService_RevokeToken_FullMethodName         = "/xstockstrat.identity.v1.IdentityService/RevokeToken"
-	IdentityService_RegisterOAuthClient_FullMethodName = "/xstockstrat.identity.v1.IdentityService/RegisterOAuthClient"
-	IdentityService_GetOAuthClient_FullMethodName      = "/xstockstrat.identity.v1.IdentityService/GetOAuthClient"
-	IdentityService_IssueAuthCode_FullMethodName       = "/xstockstrat.identity.v1.IdentityService/IssueAuthCode"
-	IdentityService_ExchangeAuthCode_FullMethodName    = "/xstockstrat.identity.v1.IdentityService/ExchangeAuthCode"
-	IdentityService_RefreshOAuthToken_FullMethodName   = "/xstockstrat.identity.v1.IdentityService/RefreshOAuthToken"
-	IdentityService_ListAuthorizedApps_FullMethodName  = "/xstockstrat.identity.v1.IdentityService/ListAuthorizedApps"
-	IdentityService_RevokeAuthorizedApp_FullMethodName = "/xstockstrat.identity.v1.IdentityService/RevokeAuthorizedApp"
-	IdentityService_GetUserMetadata_FullMethodName     = "/xstockstrat.identity.v1.IdentityService/GetUserMetadata"
-	IdentityService_UpdateUserMetadata_FullMethodName  = "/xstockstrat.identity.v1.IdentityService/UpdateUserMetadata"
-	IdentityService_CreateUser_FullMethodName          = "/xstockstrat.identity.v1.IdentityService/CreateUser"
-	IdentityService_ListUsers_FullMethodName           = "/xstockstrat.identity.v1.IdentityService/ListUsers"
-	IdentityService_GetUser_FullMethodName             = "/xstockstrat.identity.v1.IdentityService/GetUser"
-	IdentityService_UpdatePassword_FullMethodName      = "/xstockstrat.identity.v1.IdentityService/UpdatePassword"
-	IdentityService_SetUserRoles_FullMethodName        = "/xstockstrat.identity.v1.IdentityService/SetUserRoles"
-	IdentityService_SetUserActive_FullMethodName       = "/xstockstrat.identity.v1.IdentityService/SetUserActive"
+	IdentityService_AuthenticateUser_FullMethodName        = "/xstockstrat.identity.v1.IdentityService/AuthenticateUser"
+	IdentityService_ValidateToken_FullMethodName           = "/xstockstrat.identity.v1.IdentityService/ValidateToken"
+	IdentityService_RefreshToken_FullMethodName            = "/xstockstrat.identity.v1.IdentityService/RefreshToken"
+	IdentityService_RevokeToken_FullMethodName             = "/xstockstrat.identity.v1.IdentityService/RevokeToken"
+	IdentityService_RegisterOAuthClient_FullMethodName     = "/xstockstrat.identity.v1.IdentityService/RegisterOAuthClient"
+	IdentityService_GetOAuthClient_FullMethodName          = "/xstockstrat.identity.v1.IdentityService/GetOAuthClient"
+	IdentityService_IssueAuthCode_FullMethodName           = "/xstockstrat.identity.v1.IdentityService/IssueAuthCode"
+	IdentityService_ExchangeAuthCode_FullMethodName        = "/xstockstrat.identity.v1.IdentityService/ExchangeAuthCode"
+	IdentityService_RefreshOAuthToken_FullMethodName       = "/xstockstrat.identity.v1.IdentityService/RefreshOAuthToken"
+	IdentityService_ListAuthorizedApps_FullMethodName      = "/xstockstrat.identity.v1.IdentityService/ListAuthorizedApps"
+	IdentityService_RevokeAuthorizedApp_FullMethodName     = "/xstockstrat.identity.v1.IdentityService/RevokeAuthorizedApp"
+	IdentityService_GetUserMetadata_FullMethodName         = "/xstockstrat.identity.v1.IdentityService/GetUserMetadata"
+	IdentityService_UpdateUserMetadata_FullMethodName      = "/xstockstrat.identity.v1.IdentityService/UpdateUserMetadata"
+	IdentityService_AdminGetUserMetadata_FullMethodName    = "/xstockstrat.identity.v1.IdentityService/AdminGetUserMetadata"
+	IdentityService_AdminUpdateUserMetadata_FullMethodName = "/xstockstrat.identity.v1.IdentityService/AdminUpdateUserMetadata"
+	IdentityService_CreateUser_FullMethodName              = "/xstockstrat.identity.v1.IdentityService/CreateUser"
+	IdentityService_ListUsers_FullMethodName               = "/xstockstrat.identity.v1.IdentityService/ListUsers"
+	IdentityService_GetUser_FullMethodName                 = "/xstockstrat.identity.v1.IdentityService/GetUser"
+	IdentityService_UpdatePassword_FullMethodName          = "/xstockstrat.identity.v1.IdentityService/UpdatePassword"
+	IdentityService_SetUserRoles_FullMethodName            = "/xstockstrat.identity.v1.IdentityService/SetUserRoles"
+	IdentityService_SetUserActive_FullMethodName           = "/xstockstrat.identity.v1.IdentityService/SetUserActive"
 )
 
 // IdentityServiceClient is the client API for IdentityService service.
@@ -62,6 +64,10 @@ type IdentityServiceClient interface {
 	// User profile metadata self-management (feature 130)
 	GetUserMetadata(ctx context.Context, in *GetUserMetadataRequest, opts ...grpc.CallOption) (*GetUserMetadataResponse, error)
 	UpdateUserMetadata(ctx context.Context, in *UpdateUserMetadataRequest, opts ...grpc.CallOption) (*UpdateUserMetadataResponse, error)
+	// Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
+	// body user_id, never x-user-id (C-03). Reuse the self responses.
+	AdminGetUserMetadata(ctx context.Context, in *AdminGetUserMetadataRequest, opts ...grpc.CallOption) (*GetUserMetadataResponse, error)
+	AdminUpdateUserMetadata(ctx context.Context, in *AdminUpdateUserMetadataRequest, opts ...grpc.CallOption) (*UpdateUserMetadataResponse, error)
 	// User management (admin-gated, feature 043). Every RPC requires the admin access-scope bit;
 	// passwords are write-only (never returned). Additive over the existing service.
 	CreateUser(ctx context.Context, in *CreateUserRequest, opts ...grpc.CallOption) (*CreateUserResponse, error)
@@ -210,6 +216,26 @@ func (c *identityServiceClient) UpdateUserMetadata(ctx context.Context, in *Upda
 	return out, nil
 }
 
+func (c *identityServiceClient) AdminGetUserMetadata(ctx context.Context, in *AdminGetUserMetadataRequest, opts ...grpc.CallOption) (*GetUserMetadataResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetUserMetadataResponse)
+	err := c.cc.Invoke(ctx, IdentityService_AdminGetUserMetadata_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *identityServiceClient) AdminUpdateUserMetadata(ctx context.Context, in *AdminUpdateUserMetadataRequest, opts ...grpc.CallOption) (*UpdateUserMetadataResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateUserMetadataResponse)
+	err := c.cc.Invoke(ctx, IdentityService_AdminUpdateUserMetadata_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *identityServiceClient) CreateUser(ctx context.Context, in *CreateUserRequest, opts ...grpc.CallOption) (*CreateUserResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CreateUserResponse)
@@ -292,6 +318,10 @@ type IdentityServiceServer interface {
 	// User profile metadata self-management (feature 130)
 	GetUserMetadata(context.Context, *GetUserMetadataRequest) (*GetUserMetadataResponse, error)
 	UpdateUserMetadata(context.Context, *UpdateUserMetadataRequest) (*UpdateUserMetadataResponse, error)
+	// Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
+	// body user_id, never x-user-id (C-03). Reuse the self responses.
+	AdminGetUserMetadata(context.Context, *AdminGetUserMetadataRequest) (*GetUserMetadataResponse, error)
+	AdminUpdateUserMetadata(context.Context, *AdminUpdateUserMetadataRequest) (*UpdateUserMetadataResponse, error)
 	// User management (admin-gated, feature 043). Every RPC requires the admin access-scope bit;
 	// passwords are write-only (never returned). Additive over the existing service.
 	CreateUser(context.Context, *CreateUserRequest) (*CreateUserResponse, error)
@@ -347,6 +377,12 @@ func (UnimplementedIdentityServiceServer) GetUserMetadata(context.Context, *GetU
 }
 func (UnimplementedIdentityServiceServer) UpdateUserMetadata(context.Context, *UpdateUserMetadataRequest) (*UpdateUserMetadataResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateUserMetadata not implemented")
+}
+func (UnimplementedIdentityServiceServer) AdminGetUserMetadata(context.Context, *AdminGetUserMetadataRequest) (*GetUserMetadataResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AdminGetUserMetadata not implemented")
+}
+func (UnimplementedIdentityServiceServer) AdminUpdateUserMetadata(context.Context, *AdminUpdateUserMetadataRequest) (*UpdateUserMetadataResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AdminUpdateUserMetadata not implemented")
 }
 func (UnimplementedIdentityServiceServer) CreateUser(context.Context, *CreateUserRequest) (*CreateUserResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateUser not implemented")
@@ -620,6 +656,42 @@ func _IdentityService_UpdateUserMetadata_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _IdentityService_AdminGetUserMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminGetUserMetadataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).AdminGetUserMetadata(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_AdminGetUserMetadata_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).AdminGetUserMetadata(ctx, req.(*AdminGetUserMetadataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IdentityService_AdminUpdateUserMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminUpdateUserMetadataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).AdminUpdateUserMetadata(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_AdminUpdateUserMetadata_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).AdminUpdateUserMetadata(ctx, req.(*AdminUpdateUserMetadataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _IdentityService_CreateUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateUserRequest)
 	if err := dec(in); err != nil {
@@ -786,6 +858,14 @@ var IdentityService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateUserMetadata",
 			Handler:    _IdentityService_UpdateUserMetadata_Handler,
+		},
+		{
+			MethodName: "AdminGetUserMetadata",
+			Handler:    _IdentityService_AdminGetUserMetadata_Handler,
+		},
+		{
+			MethodName: "AdminUpdateUserMetadata",
+			Handler:    _IdentityService_AdminUpdateUserMetadata_Handler,
 		},
 		{
 			MethodName: "CreateUser",
