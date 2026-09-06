@@ -33,3 +33,34 @@
 - Note: harness assigned single dev branch `claude/mcp-user-profile-roles-3zdmww` (PR → main-dev); the
   per-step `feature/<slug>` PR machinery does not apply to this harness session — work lands on the
   assigned branch.
+
+## Session 2026-09-06 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: packages/proto, xstockstrat-identity, xstockstrat-agent;
+  key reuse: manage_account op-dispatch, adminGate + auditSafe, UserMetadata message, _metadata()
+  scope propagation, extracted metadata helpers).
+- Phase 1 Grilling: 4 rounds (quick mode extended by operator, who chose "run another round" at
+  gates R1/R2/R3). Chosen approach: 5 dedicated admin MCP tools (manage_user op-dispatch +
+  list_users/get_user + admin_get_user_metadata/admin_set_user_metadata) over 2 additive identity
+  RPCs (AdminGetUserMetadata/AdminUpdateUserMetadata reusing UserMetadata + existing responses),
+  backend adminGate sole authority, count 35→40. Rejected: target_user_id arg on shipped
+  self-service tools (mixes authz, risks @AC-1@feature-148); new Admin*Response messages; vitest
+  cross-service tool-count auto-guard (infeasible — UI learns catalog at runtime).
+- Operator decisions at gates: (R1) copilot.ts corrected in-scope; caller-supplied plaintext
+  password; no audit on admin profile reads. (R4) fix the self-path 8KB-CHECK error leak in-scope
+  via a shared mapDbError helper (23505→ALREADY_EXISTS, 23514→INVALID_ARGUMENT, else INTERNAL),
+  applied to createUser + self updateUserMetadata + new adminUpdateUserMetadata (C-10 consistency).
+- Mechanism corrections banked from the debate: identity RPCs auto-wire via the single
+  addService(IdentityServiceService, identityImpl) — NO src/index.ts edit; implement two same-named
+  class methods. Projection-parity test must use protobuf-es v2 schema reflection
+  (UserMetadataSchema.fields), NOT the ts-proto stub (no field reflection). rowToUserMetadata emits
+  all 6 keys unconditionally. copilot.ts stays a manual-sync F-12 surface (no auto-guard feasible).
+- Constitution rules touched: C-03, C-04, C-08, C-09, C-10, C-14, F-01, F-04, F-07. Floor breaches:
+  none across all 4 rounds.
+- Business rules (C-16): PRESERVE identity @AC-1..6/@AC-10/@AC-11 + agent @AC-8@feature-156 /
+  @AC-1@feature-148; EXTEND identity @AC-7 (new RPCs join adminGate denial set) and @AC-8 (admin
+  metadata write audits `identity.user.metadata_updated`).
+- Open threads (carry to /sdd-spec): response-message coupling (shared-contract constraint);
+  dual proto-flavor parity indirection; copilot.ts manual-sync residual; self-metadata C-16 gap
+  (pinned by local identity tests :493-582).
+- Status: draft → design-approved.
