@@ -1,5 +1,5 @@
 import { type Page } from '@playwright/test';
-import { symbolReadiness } from '../fixtures/opportunities';
+import { symbolReadiness, READINESS_BUCKET_OVERRIDE } from '../fixtures/opportunities';
 
 /**
  * Shared stateful in-memory mock of the PortfolioService watchlist RPCs (feature 058/097/098).
@@ -249,7 +249,9 @@ export async function mockWatchlists(
         symbol: b.symbol,
         strategyId: b.strategyId,
         state: 'READINESS_STATE_RESOLVED',
-        readiness: symbolReadiness(b.symbol),
+        // Merge the per-symbol bucket override (READY1/WATCH1/QUIET1/NODATA1) over the default 2/3
+        // "1 away" verdict — same shape the pre-181 EvaluateReadiness mock produced.
+        readiness: { ...symbolReadiness(b.symbol), ...(READINESS_BUCKET_OVERRIDE[b.symbol] ?? {}) },
         computedAt: new Date().toISOString(),
       };
     });

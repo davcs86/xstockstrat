@@ -668,9 +668,9 @@ test.describe('Watchlists (insights)', () => {
   test('remount within staleTime does not refetch readiness (feature 177 FR-2, AC-3)', async ({
     page,
   }) => {
-    // A per-query staleTime of 30s (WatchlistReadiness useQueries) must let a detail-pane remount
-    // reuse the cache. The page clock advances 10s — past the 5s QueryClient default (which would
-    // refetch, the pre-FR-2 behavior), within the 30s per-query window (which must not).
+    // A staleTime of 30s (the feature-181 GetWatchlistReadiness query) must let a detail-pane
+    // remount reuse the cache. The page clock advances 10s — past the 5s QueryClient default (which
+    // would refetch, the pre-FR-2 behavior), within the 30s per-query window (which must not).
     await page.clock.install();
     await addAuthCookie(page);
     await mockWatchlists(page, [
@@ -692,10 +692,10 @@ test.describe('Watchlists (insights)', () => {
       },
     ]);
 
-    // Route counter for the BFF EvaluateReadiness call (a scenario one-off — no domain fixture).
+    // Route counter for the feature-181 GetWatchlistReadiness decoration call (a scenario one-off).
     let readinessCalls = 0;
     page.on('request', (r) => {
-      if (r.url().includes('/EvaluateReadiness')) readinessCalls += 1;
+      if (r.url().includes('/GetWatchlistReadiness')) readinessCalls += 1;
     });
 
     await page.goto('/insights/watchlists');
@@ -713,7 +713,7 @@ test.describe('Watchlists (insights)', () => {
     await expect(readiness.getByTestId('readiness-row-AAPL')).toBeVisible({ timeout: 5000 });
     await page.waitForTimeout(300); // give any (unwanted) refetch time to fire
 
-    // Within the 30s staleTime the remount serves from cache — no second EvaluateReadiness.
+    // Within the 30s staleTime the remount serves from cache — no second GetWatchlistReadiness.
     expect(readinessCalls).toBe(callsAfterFirstRender);
   });
 });

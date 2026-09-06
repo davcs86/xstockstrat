@@ -26,14 +26,18 @@ export function useWatchlistReadiness(
   pageToken: string,
   pagePairs: { symbol: string; strategyId: string }[],
 ) {
+  // The bound-pair signature is part of the key so re-binding a strategy (which mutates the
+  // `['watchlists']` bindings, not `pageToken`) refetches immediately instead of waiting on the
+  // 30s poll — the removed per-strategy useQueries fan-out got this for free by keying on symbols.
+  const pairSig = pagePairs.map((p) => readinessRowKey(p.symbol, p.strategyId)).join(',');
   return useQuery({
-    queryKey: ['watchlistReadiness', watchlistId, pageToken],
+    queryKey: ['watchlistReadiness', watchlistId, pageToken, pairSig],
     queryFn: () =>
       analysisClient.getWatchlistReadiness({
         watchlistId,
         page: { pageSize: WATCHLIST_READINESS_PAGE_SIZE, pageToken },
       }),
-    enabled: Boolean(watchlistId),
+    enabled: Boolean(watchlistId) && pagePairs.length > 0,
     staleTime: WATCHLIST_READINESS_POLL_MS,
     refetchInterval: (query) => {
       const map = readinessRowMap(query.state.data?.rows);

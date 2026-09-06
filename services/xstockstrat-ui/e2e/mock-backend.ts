@@ -48,6 +48,7 @@ import {
   OPPORTUNITIES,
   CAPR_LATEST_PRICE,
   symbolReadiness,
+  READINESS_BUCKET_OVERRIDE,
   exitReadiness,
   POSITIONS,
   positionForSymbol,
@@ -80,16 +81,6 @@ export const CONFIG_UI_MOCK_PORT = 9093;
 // dedicated symbols the rollup test creates (never AAPL/MSFT/… asserted by other specs), so the
 // default `symbolReadiness` (2/3 → "watching") is untouched for every other consumer. Fields spread
 // over the fixture in the `evaluateReadiness` handler.
-const READINESS_BUCKET_OVERRIDE: Record<
-  string,
-  { passingConditions?: number; totalConditions?: number }
-> = {
-  READY1: { passingConditions: 3, totalConditions: 3 }, // ready (firing)
-  WATCH1: { passingConditions: 1, totalConditions: 3 }, // watching
-  QUIET1: { passingConditions: 0, totalConditions: 3 }, // quiet
-  NODATA1: { passingConditions: 0, totalConditions: 0 }, // no-data (un-evaluable)
-};
-
 // feature 133 — strategy ownership. Every pre-seeded fixture strategy is owned by user A
 // (`TEST_USER_ID`); the composite `(user_id, strategy_id)` PK means a second user (`TEST_USER_B_ID`)
 // may hold the same id without collision. The handlers below resolve the caller from the propagated
