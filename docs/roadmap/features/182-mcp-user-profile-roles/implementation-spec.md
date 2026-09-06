@@ -123,10 +123,19 @@ Both green (additions are non-breaking). If the feature branch does not yet exis
 
 **Status**: `pending`
 **Service**: `packages/proto`
-**Files**:
-- `packages/proto/gen/go/identity/v1/` — modify (regenerated)
-- `packages/proto/gen/python/identity/v1/` — modify (regenerated)
-- `packages/proto/gen/ts/identity/v1/` — modify (regenerated)
+**Files** (regenerated wholesale by `./scripts/buf-gen.sh` — never hand-edited; the exact set below is
+the current `identity/v1` output, re-emitted with the two new RPCs/messages):
+- `packages/proto/gen/go/identity/v1/identity.pb.go` — modify (regenerated)
+- `packages/proto/gen/go/identity/v1/identity_grpc.pb.go` — modify (regenerated)
+- `packages/proto/gen/go/identity/v1/identityv1connect/identity.connect.go` — modify (regenerated)
+- `packages/proto/gen/python/identity/v1/identity_pb2.py` — modify (regenerated)
+- `packages/proto/gen/python/identity/v1/identity_pb2_grpc.py` — modify (regenerated)
+- `packages/proto/gen/ts/identity/v1/identity.ts` — modify (regenerated)
+- `packages/proto/gen/ts/identity/v1/identity_connect.ts` — modify (regenerated)
+- `packages/proto/gen/ts/identity/v1/identity_pb.ts` — modify (regenerated; the protobuf-es
+  `UserMetadataSchema` used by the Step 4 projection-parity test)
+- plus the compiled TS output under `packages/proto/gen/ts/dist/` (emitted by the TS compile in
+  `buf-gen.sh`) — regenerated, not hand-edited
 
 **Reviewers**: Proto Reviewer — field number uniqueness per message, no breaking changes without deprecation, `buf lint`/`buf breaking` pass; xstockstrat-identity — admin-gated cross-user profile contract; xstockstrat-agent — MCP tool contract stability; Security — admin auth-scope surface
 (inherited from Step 1)

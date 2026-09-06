@@ -118,8 +118,10 @@
     Corrected all three occurrences to reference RC-1/fails.md:308-310 (C-01).
   - [x] adminGate doc comment "shared by all six admin RPCs" (identityServiceImpl.ts:638) goes stale
     at eight callers — added Step 3 item 6 to fix the comment in the same file.
-  - [ ] (inherent, no fix) Step 2 `**Files**` lists gen/{go,python,ts} directories rather than files —
-    correct for regenerated codegen output; carried as-is.
+  - [x] Step 2 `**Files**` listed gen/{go,python,ts} directories rather than files — replaced with the
+    exact regenerated file set (identity.pb.go, identity_grpc.pb.go, identityv1connect/identity.connect.go,
+    identity_pb2.py, identity_pb2_grpc.py, identity.ts, identity_connect.ts, identity_pb.ts, + dist/),
+    with a note that the whole identity/v1 package is regenerated wholesale by buf-gen.sh.
 - Overlap scan: CLEAN — no migration/proto-field/config-key/file collisions with any non-launched
   feature; shared agent surfaces touched only by already-launched features (rebase-only). No merge-order
   row required.
