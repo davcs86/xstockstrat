@@ -56,6 +56,11 @@ def test_list_tools_returns_all_registered_tools():
         "list_accounts",
         "get_positions",
         "get_positions_by_account_id",
+        "manage_user",
+        "list_users",
+        "get_user",
+        "admin_get_user_metadata",
+        "admin_set_user_metadata",
     }
 
 
