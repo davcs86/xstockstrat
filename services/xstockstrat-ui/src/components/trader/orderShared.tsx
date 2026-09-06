@@ -1,11 +1,5 @@
-// Shared order-table building blocks used by OrderBook, OrdersTable, and the order-detail
-// page: the status/type lookup tables, price formatting, and the recurring badge cell content
-// (feature 135 migrated all `Table`-based consumers to the shared `DataTable` composite, whose
-// `ColumnDef.cell` renderers need bare content, not a `<TableCell>` wrapper — the pre-migration
-// `OrderSymbolCell`/`OrderSideCell`/`OrderStatusCell` wrappers were removed as dead code once
-// their last call sites (`OrdersTable.tsx`, `OrderBook.tsx`) migrated to inlined/bare-content
-// equivalents; `OrderSideBadge`/`OrderStatusBadge` below are the bare-content forms still in use).
-// Single source of truth (DRY guard rail — see docs/patterns/dry-guard-rail.md).
+// Shared order-table building blocks used by OrderBook, OrdersTable, and the order-detail page:
+// status/type lookup tables, price formatting, and bare-content badge cells for `DataTable` (DRY).
 
 import { OrderSide, OrderStatus, IntentState } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { Badge } from '../ui/badge';

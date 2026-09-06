@@ -32,8 +32,7 @@ async function main() {
   const caCert = process.env.DATABASE_CA_CERT;
   const pool = new Pool({
     connectionString: dbUrl,
-    // Cap pool size to stay within DigitalOcean's shared 20-connection budget
-    // (see root CLAUDE.md). Override with DB_POOL_MAX.
+    // Cap pool size to stay within the shared DB connection budget. Override with DB_POOL_MAX.
     max: parseInt(process.env.DB_POOL_MAX ?? '2', 10),
     ssl: sslDisabled ? false : {
       rejectUnauthorized: !!caCert,
@@ -41,12 +40,11 @@ async function main() {
     },
   });
 
-  // Best-effort ledger audit for admin user-management mutations (feature 043). LEDGER_ENDPOINT is
-  // already wired in docker-compose + both .do specs; only this reader is new.
+  // Best-effort ledger audit for admin user-management mutations.
   const ledgerAudit = createLedgerAudit();
   const identityImpl = new IdentityServiceImpl(pool, configWatcher, ledgerAudit);
 
-  // ── gRPC server (internal service-to-service, port 50058) ──────────────
+  // ── gRPC server (internal service-to-service) ──────────────
   const grpcServer = new grpc.Server();
   grpcServer.addService(
     IdentityServiceService,

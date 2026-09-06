@@ -660,6 +660,34 @@ export type GetFundamentalsMultiResponse = Message<"xstockstrat.marketdata.v1.Ge
  */
 export declare const GetFundamentalsMultiResponseSchema: GenMessage<GetFundamentalsMultiResponse>;
 /**
+ * @generated from message xstockstrat.marketdata.v1.GetLatestQuotesRequest
+ */
+export type GetLatestQuotesRequest = Message<"xstockstrat.marketdata.v1.GetLatestQuotesRequest"> & {
+    /**
+     * @generated from field: repeated string symbols = 1;
+     */
+    symbols: string[];
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetLatestQuotesRequest.
+ * Use `create(GetLatestQuotesRequestSchema)` to create a new message.
+ */
+export declare const GetLatestQuotesRequestSchema: GenMessage<GetLatestQuotesRequest>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetLatestQuotesResponse
+ */
+export type GetLatestQuotesResponse = Message<"xstockstrat.marketdata.v1.GetLatestQuotesResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.marketdata.v1.Quote quotes = 1;
+     */
+    quotes: Quote[];
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetLatestQuotesResponse.
+ * Use `create(GetLatestQuotesResponseSchema)` to create a new message.
+ */
+export declare const GetLatestQuotesResponseSchema: GenMessage<GetLatestQuotesResponse>;
+/**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
  *
@@ -775,5 +803,16 @@ export declare const MarketDataService: GenService<{
         methodKind: "unary";
         input: typeof GetFundamentalsMultiRequestSchema;
         output: typeof GetFundamentalsMultiResponseSchema;
+    };
+    /**
+     * Batched latest quotes — partial by design: a symbol with no quote is omitted from the
+     * response (null-not-zero), never returned as a fabricated zero-price Quote.
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetLatestQuotes
+     */
+    getLatestQuotes: {
+        methodKind: "unary";
+        input: typeof GetLatestQuotesRequestSchema;
+        output: typeof GetLatestQuotesResponseSchema;
     };
 }>;

@@ -11,13 +11,8 @@ import { StrategyPicker } from '@/components/insights/StrategyPicker';
 import { useOpportunities, useReadiness, useStrategyAnalytics } from '@/hooks/useOpportunities';
 
 /**
- * Signal-detail readiness (feature 083, FR-6). EvaluateReadiness is strategy-scoped, so the
- * strategy is an EXPLICIT input — CONTROLLED by the page (feature 145): the shared page-level
- * strategy selection (seeded `?strategy=` → watchlist binding → picker) flows in via `strategyId`,
- * and the panel's own picker calls `onStrategyChange` so all three strategy-scoped panels stay
- * synced. No fabricated signal→strategy binding: with no strategy selected the panel prompts
- * instead of guessing. Renders the traced PASS/SOFT/FAIL leaves + distance-to-threshold and the
- * deterministic "N/M conditions" conviction.
+ * Signal-detail readiness. Strategy is an EXPLICIT page-controlled input (via strategyId +
+ * onStrategyChange); with none selected the panel prompts, never fabricating a signal→strategy binding.
  */
 export function SignalReadiness({
   symbol,
@@ -28,11 +23,8 @@ export function SignalReadiness({
   strategyId: string;
   onStrategyChange: (id: string) => void;
 }) {
-  // feature 138 — trace the EXIT rule when this (symbol, strategy) is a HELD opportunity, so the
-  // panel explains the exit rule that actually fired (matching the header's exit-derived
-  // conviction) instead of the entry rule. "position" in the queue row's provenance is exactly the
-  // `is_held` marker _compute_opportunities used to pick rule="exit", so the two always agree; a
-  // non-held / picked-elsewhere strategy has no such row → entry rule (unchanged).
+  // Trace the EXIT rule when this (symbol, strategy) is a HELD opportunity (provenance includes
+  // "position", the is_held marker), else the ENTRY rule.
   const { data: opps } = useOpportunities();
   const isHeld = useMemo(
     () =>
@@ -51,7 +43,7 @@ export function SignalReadiness({
     rule,
   );
   const readiness = data?.readiness?.[0];
-  // Strategy track record (feature 083 — the handoff's Signal-detail track-record block).
+  // Strategy track record block.
   const { data: analytics } = useStrategyAnalytics(strategyId || undefined);
 
   return (
@@ -94,8 +86,7 @@ export function SignalReadiness({
               <span className="font-mono tabular-nums text-sm">
                 {readiness.passingConditions}/{readiness.totalConditions} conditions
               </span>
-              {/* feature 155 (FR-1, AC-13) — the same firing cue (icon + buy/green) the Watchlists
-                  and Opportunities surfaces use, when all conditions pass (3/3-style trace). */}
+              {/* The same firing cue the Watchlists and Opportunities surfaces use when all pass. */}
               {readinessState(readiness) === 'firing' && (
                 <EnumBadge render={READINESS_CUE.firing} testId="readiness-cue-firing" />
               )}

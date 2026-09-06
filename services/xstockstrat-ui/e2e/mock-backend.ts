@@ -31,6 +31,7 @@ import {
   TEST_USER_ID,
   TEST_USER_EMAIL,
   BROKER_ACCOUNT_ALPACA,
+  BROKER_ACCOUNT_HALTED,
   BROKER_ACCOUNT_NEW,
   BROKER_ACCOUNTS,
   PORTFOLIO_ALPACA,
@@ -47,6 +48,7 @@ import {
   OPPORTUNITIES,
   CAPR_LATEST_PRICE,
   symbolReadiness,
+  READINESS_BUCKET_OVERRIDE,
   exitReadiness,
   POSITIONS,
   positionForSymbol,
@@ -79,16 +81,6 @@ export const CONFIG_UI_MOCK_PORT = 9093;
 // dedicated symbols the rollup test creates (never AAPL/MSFT/… asserted by other specs), so the
 // default `symbolReadiness` (2/3 → "watching") is untouched for every other consumer. Fields spread
 // over the fixture in the `evaluateReadiness` handler.
-const READINESS_BUCKET_OVERRIDE: Record<
-  string,
-  { passingConditions?: number; totalConditions?: number }
-> = {
-  READY1: { passingConditions: 3, totalConditions: 3 }, // ready (firing)
-  WATCH1: { passingConditions: 1, totalConditions: 3 }, // watching
-  QUIET1: { passingConditions: 0, totalConditions: 3 }, // quiet
-  NODATA1: { passingConditions: 0, totalConditions: 0 }, // no-data (un-evaluable)
-};
-
 // feature 133 — strategy ownership. Every pre-seeded fixture strategy is owned by user A
 // (`TEST_USER_ID`); the composite `(user_id, strategy_id)` PK means a second user (`TEST_USER_B_ID`)
 // may hold the same id without collision. The handlers below resolve the caller from the propagated
@@ -302,6 +294,12 @@ export async function startMockBackend(): Promise<void> {
         },
         async getTradingEnvironment() {
           return { tradingMode: 1, applicationEnv: 'development' };
+        },
+        // Feature 179 — succeed UNCONDITIONALLY: a PermissionDenied must originate ONLY from the
+        // BFF forwardAdmin gate (Step 3), never the backend, so the non-admin e2e isolates that gate.
+        // Echo the resumed id back cleared so applyAccountUpdate targets the real row (in-place clear).
+        async resumeAccount(req: { accountId: string }) {
+          return { account: { ...BROKER_ACCOUNT_HALTED, id: req.accountId, halted: false } };
         },
       });
 
@@ -830,6 +828,12 @@ export async function startMockBackend(): Promise<void> {
               ...(READINESS_BUCKET_OVERRIDE[s] ?? {}),
             })),
           };
+        },
+        // feature 181 — cache-first watchlist readiness decoration. Default empty (the in-process
+        // listWatchlists default is [] too); the watchlists specs drive the decorated rows via the
+        // per-test page.route in e2e/helpers/watchlistMock.ts.
+        async getWatchlistReadiness() {
+          return { rows: [], page: {} };
         },
         // feature 083 — per-strategy analytics for the Engine → Strategies detail.
         async getStrategyAnalytics(req) {

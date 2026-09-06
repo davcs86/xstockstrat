@@ -70,13 +70,11 @@ export default function UsersPage() {
   const onError = (err: unknown) =>
     setActionError(err instanceof ConnectError ? err.rawMessage : 'Action failed');
 
-  // Create user dialog state
   const [createOpen, setCreateOpen] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newRoles, setNewRoles] = useState<Role[]>([Role.TRADER]);
 
-  // Per-user dialogs
   const [pwUser, setPwUser] = useState<User | null>(null);
   const [pwValue, setPwValue] = useState('');
   const [rolesUser, setRolesUser] = useState<User | null>(null);
@@ -232,7 +230,6 @@ export default function UsersPage() {
         </CardContent>
       </Card>
 
-      {/* Create user */}
       <FormDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
@@ -281,7 +278,6 @@ export default function UsersPage() {
         </div>
       </FormDialog>
 
-      {/* Reset password */}
       <FormDialog
         open={pwUser !== null}
         onOpenChange={(o) => !o && setPwUser(null)}
@@ -312,7 +308,6 @@ export default function UsersPage() {
         </div>
       </FormDialog>
 
-      {/* Edit roles */}
       <FormDialog
         open={rolesUser !== null}
         onOpenChange={(o) => !o && setRolesUser(null)}

@@ -4,18 +4,14 @@
 
 import { Timeframe as PbTimeframe } from '@xstockstrat/proto/common/v1/common_pb';
 
-// Only 1d is supported platform-wide (feature 143) — GetBars/BackfillBars reject any other
-// requested timeframe, and the always-on ingester only ever fetches 1d. The 15m/1h options were
-// removed: no trading-path consumer (live loop, screener technical criteria, default SMA strategy)
-// evaluates anything but daily bars. Historical 15m/1h rows stay stored but are no longer fetchable.
+// Only 1d is supported platform-wide — GetBars/BackfillBars reject any other timeframe, and the
+// always-on ingester only fetches 1d.
 export type Timeframe = '1Day';
 
 export const TIMEFRAMES: { value: Timeframe; label: string }[] = [{ value: '1Day', label: '1d' }];
 
-// The deprecated GetBarsRequest.timeframe string is scheduled for removal; senders must
-// populate timeframe_enum too, or timeframe.Resolve(UNSPECIFIED, "") errors and the chart
-// goes blank. Mapped type, not a lookup object: a Timeframe member without an enum here fails
-// tsc rather than silently skipping the enum (feature 080 FR-8/AC-8).
+// Senders must populate timeframe_enum, or timeframe.Resolve(UNSPECIFIED, "") errors and the chart
+// goes blank. Mapped type (not a lookup): a Timeframe member without an enum here fails tsc.
 export const TIMEFRAME_ENUM: Record<Timeframe, PbTimeframe> = {
   '1Day': PbTimeframe.TIMEFRAME_1DAY,
 };

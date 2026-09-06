@@ -3,9 +3,8 @@ import { timestampFromDate } from '@bufbuild/protobuf/wkt';
 import { analysisClient } from '@/lib/browserClients/analysisClient';
 
 /**
- * feature 029 — per-source signal-performance attribution. Read-only query against the insights BFF
- * (AnalysisService.GetAttribution), owner-scoped server-side from the propagated x-user-id header.
- * Optional [start, end] window (Date → protobuf-es Timestamp) and a source_id slug filter.
+ * Per-source signal-performance attribution. Read-only GetAttribution query, owner-scoped
+ * server-side from the x-user-id header. Optional [start, end] window and a source_id filter.
  */
 type GetAttributionResult = Awaited<ReturnType<typeof analysisClient.getAttribution>>;
 

@@ -34,9 +34,8 @@ export interface PositionFilters {
   pageSize?: number;
 }
 
-// Paginated, server-side-filtered open positions backed by PortfolioService.ListPositions
-// (replaces the prior getPortfolio().positions read). The winners/losers P&L-sign filter is
-// applied client-side over the enriched unrealizedPnl returned by the service.
+// Paginated, server-side-filtered open positions (ListPositions). The winners/losers P&L-sign
+// filter is applied client-side over the service's enriched unrealizedPnl.
 export function usePositions(
   mode: 'paper' | 'live',
   selectedAccountId: string | null,
@@ -59,10 +58,8 @@ export function usePositions(
   });
 }
 
-// Single authoritative position for the dedicated Position page (feature 096) — backed by
-// PortfolioService.GetPosition through the trader BFF. Reads one broker-authoritative Position
-// (rather than filtering listPositions client-side) so the page's unrealized P&L ties to the
-// Exposure list and Portfolio (C-10(b) valuation parity). Disabled until a symbol is set.
+// Reads one broker-authoritative Position (GetPosition), not a client-side listPositions filter, so
+// unrealized P&L ties to the Exposure list and Portfolio (C-10(b) valuation parity). Disabled until a symbol is set.
 export function usePosition(
   symbol: string,
   mode: 'paper' | 'live',
@@ -79,9 +76,8 @@ export function usePosition(
         symbol,
         ...(selectedAccountId ? { accountId: selectedAccountId } : {}),
       }),
-    // A NotFound (unheld symbol) is a normal, expected state on the unified symbol page — don't
-    // burn a retry on it, and don't keep polling GetPosition forever against a symbol that will
-    // never resolve (feature 125). Mirrors useStrategies.ts's NotFound-aware retry/refetch guards.
+    // NotFound (unheld symbol) is expected on the unified symbol page — don't retry it or keep
+    // polling a symbol that will never resolve.
     retry: (failureCount, err) => !isNotFoundError(err) && failureCount < 1,
     refetchInterval: (query) => (isNotFoundError(query.state.error) ? false : 10_000),
   });

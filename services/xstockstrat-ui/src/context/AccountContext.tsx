@@ -16,6 +16,11 @@ export type AccountContextValue = {
   setSelectedAccountId: (id: string | null) => void;
   refreshAccounts: () => Promise<void>;
   /**
+   * Optimistically replace one account's row from an authoritative response (e.g. ResumeAccount's
+   * full account), so the UI clears in place even if the background refetch fails (feature 179).
+   */
+  applyAccountUpdate: (account: BrokerAccount) => void;
+  /**
    * The trading mode this deployment routes to. Fixed per environment — users
    * cannot switch. `null` until the environment has been fetched.
    */
@@ -43,6 +48,11 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const applyAccountUpdate = React.useCallback((account: BrokerAccount) => {
+    if (!account?.id) throw new Error('applyAccountUpdate: missing account.id');
+    setAccounts((prev) => prev.map((a) => (a.id === account.id ? account : a)));
+  }, []);
+
   const fetchEnvironment = React.useCallback(async () => {
     try {
       const { tradingMode } = await tradingClient.getTradingEnvironment({});
@@ -62,6 +72,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     selectedAccountId,
     setSelectedAccountId,
     refreshAccounts: fetchAccounts,
+    applyAccountUpdate,
     environmentMode,
   };
 

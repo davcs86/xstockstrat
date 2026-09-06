@@ -1,26 +1,21 @@
-// Watchlist readiness roll-up helpers (feature 098).
+// Watchlist readiness roll-up helpers. Readiness is the traced evaluation of a strategy's entry rule
+// over a watchlist's symbols (analysis EvaluateReadiness).
 //
-// Readiness is the traced evaluation of a strategy's entry rule over a watchlist's symbols
-// (analysis EvaluateReadiness). These pure helpers bucket each symbol so the Watchlists detail can
-// show a "<N> ready · <N> watching · <N> quiet · <N> no-data" head-line and each row its state.
-//
-// Params are structural (not the React-Query-inferred `Readiness` type) so this module stays pure
-// and unit-testable under the vitest `src/lib/**` coverage scope.
+// Params are structural (not the React-Query-inferred `Readiness` type) so this module stays pure and
+// unit-testable under the vitest `src/lib/**` coverage scope.
 
 /** A firing signal: at least one condition and every condition passing. */
 export function isFiring(r: { passingConditions: number; totalConditions: number }): boolean {
   return r.totalConditions > 0 && r.passingConditions === r.totalConditions;
 }
 
-/** The four readiness states a symbol can be in against its strategy (feature 155). */
+/** The four readiness states a symbol can be in against its strategy. */
 export type ReadinessState = 'firing' | 'watching' | 'quiet' | 'nodata';
 
 /**
- * The single 4-way readiness bucketer (feature 155). This is the ONE source of the
- * firing/watching/quiet/no-data decision — `rollupReadiness`'s counts, every `Progress` variant
- * picker, the row's text label, and the `READINESS_CUE` icon/color lookup all derive from it, rather
- * than each re-branching `isFiring`/`passingConditions` in-line. `nodata` (`totalConditions === 0`)
- * is an un-evaluable symbol, never folded into `quiet`.
+ * The single source of the firing/watching/quiet/no-data decision — counts, Progress variants, row
+ * labels, and the READINESS_CUE lookup all derive from it, rather than re-branching inline. `nodata`
+ * (`totalConditions === 0`) is an un-evaluable symbol, never folded into `quiet`.
  */
 export function readinessState(r: {
   passingConditions: number;
@@ -40,16 +35,9 @@ export interface ReadinessCounts {
 }
 
 /**
- * Bucket each requested symbol into ready / watching / quiet / no-data.
- *
- * `nodata` (`totalConditions === 0`) is the honest mapping of the evaluator's per-symbol
- * empty-readiness fallback (bar-fetch failure) — an un-evaluable symbol is "no data", never folded
- * into "quiet" (which would read as "not close to firing").
- *
- * The count is reconciled against `requestedSymbols`: a requested symbol with no matching readiness
- * row is also counted as `nodata`, so `ready + watching + quiet + nodata === requestedSymbols.length`
- * holds even if the producer returns fewer rows than requested (defends the count-parity invariant
- * beyond the current 1:1 producer guarantee).
+ * Bucket each requested symbol into ready / watching / quiet / no-data. A requested symbol with no
+ * matching readiness row is counted as `nodata`, so `ready + watching + quiet + nodata ===
+ * requestedSymbols.length` holds even if the producer returns fewer rows than requested.
  */
 export function rollupReadiness(
   readiness: Array<{ symbol: string; passingConditions: number; totalConditions: number }>,

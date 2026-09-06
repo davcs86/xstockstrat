@@ -1,7 +1,5 @@
-// Shared position-risk display helpers for the Book → Exposure surface: the Exposure list
-// (app/trader/positions/page.tsx) and the single-Position page (app/trader/positions/[symbol]).
-// Single source of truth (DRY guard rail — docs/patterns/dry-guard-rail.md); these were previously
-// inlined on the Exposure page and are now read by a second consumer (the Position page).
+// Shared position-risk display helpers for the Book → Exposure surface (the Exposure list and the
+// single-Position page). Single source of truth (DRY guard rail).
 
 import { PositionRiskFlag } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import type { Position } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';

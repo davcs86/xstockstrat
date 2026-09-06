@@ -11,18 +11,11 @@ export interface SymbolPanel {
 }
 
 /**
- * Groups related panels of a Symbol-page section (feature 139) into a responsive cluster:
- * - **desktop (`md`+)**: all panels rendered as equal-width **columns in one row**;
- * - **mobile (`< md`)**: a **tabbed panel** — a segmented tab bar picks one panel at a time.
- *
- * Every panel stays **mounted** in both layouts (inactive mobile panels are `hidden` via CSS, not
- * unmounted), so in-flight queries / a running backtest never tear down (FR-7) and the existing
- * `position-detail.spec.ts` assertions — which run at the default desktop viewport and therefore see
- * every panel as a visible column — stay green. The tab bar is a `ToggleGroup` (its items are
- * `role="radio"`, not `role="tab"`), so it does not reintroduce the `getByRole('tab')` collision the
- * top-level section nav was designed to avoid.
- *
- * 0 panels → renders nothing; 1 panel → renders it bare (no tab bar, no grid).
+ * Groups a Symbol-page section's panels: equal-width columns on desktop (`md`+), a tabbed panel on
+ * mobile (`< md`). Every panel stays MOUNTED in both layouts (inactive mobile panels are `hidden` via
+ * CSS, not unmounted), so in-flight queries / a running backtest never tear down. The tab bar is a
+ * `ToggleGroup` (items `role="radio"`, not `role="tab"`), avoiding the `getByRole('tab')` collision the
+ * section nav avoids. 0 panels → renders nothing; 1 panel → renders it bare.
  */
 export function SymbolPanelGroup({
   panels,
@@ -59,10 +52,8 @@ export function SymbolPanelGroup({
         </ToggleGroup>
       </div>
 
-      {/* Panels: one-at-a-time (mounted) on mobile, equal columns in one row on desktop. `min-w-0`
-          lets each grid item shrink below its content's intrinsic width (grid items default to
-          `min-width:auto`), so a wide panel (e.g. the Position stat grid / an orders table) can't
-          force horizontal page overflow at 390px — matching the pre-grouping block layout. */}
+      {/* `min-w-0` lets each grid item shrink below its content's intrinsic width (grid items default
+          to `min-width:auto`), so a wide panel can't force horizontal page overflow on mobile. */}
       <div className="grid gap-4 md:grid-flow-col md:auto-cols-fr md:items-start">
         {panels.map((p) => (
           <div

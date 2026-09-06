@@ -1,4 +1,4 @@
-"""Default "Value+Quality Composite" fundamentals scoring formula (feature 063).
+"""Default "Value+Quality Composite" fundamentals scoring formula.
 
 This formula is delivered like any user formula: its ``SOURCE`` runs in the indicators
 sandbox with the symbol's fundamentals injected as ``data`` and the tunable band
@@ -19,14 +19,11 @@ from google.protobuf.struct_pb2 import Value
 
 from app.formulas import SYSTEM_AUTHOR
 
-# Deterministic id → re-seeding is idempotent and 062 can hardcode the reference.
 FORMULA_ID = str(
     uuid.uuid5(uuid.NAMESPACE_URL, "xstockstrat:formula:fundamentals-value-quality-v1")
 )
 
 NAME = "Fundamentals Value+Quality Composite (v1)"
-# Reserved system author (see app/formulas/SYSTEM_AUTHOR) — marks this as a platform-managed,
-# read-only formula that UpdateFormula/DeleteFormula refuse to mutate.
 AUTHOR = SYSTEM_AUTHOR
 IS_PUBLIC = True
 DESCRIPTION = (
@@ -36,7 +33,6 @@ DESCRIPTION = (
     "formula params (no deploy needed to retune)."
 )
 
-# FR-4 default band endpoints + weights, exposed as tunable params.
 _DEFAULTS: list[tuple[str, float, str]] = [
     ("value_weight", 0.5, "Weight of the value sub-score in the composite"),
     ("quality_weight", 0.5, "Weight of the quality sub-score in the composite"),
@@ -76,12 +72,11 @@ OUTPUTS = [
     ),
 ]
 
-# DEFAULT_PARAMS mirrors the param defaults so tests and 062 can resolve the shipped
-# defaults without re-deriving them from the proto messages.
+# Mirrors the param defaults so callers resolve shipped defaults without re-deriving from proto.
 DEFAULT_PARAMS = {n: d for (n, d, _) in _DEFAULTS}
 
 # The sandbox contract: `data` = fundamentals dict, `params` = tunables, assign `result`.
-# Written to be robust to missing/None metrics (FR-5) and to honor the FR-4 special cases.
+# Robust to missing/None metrics (FR-5); FR-4 special cases handled inline below.
 SOURCE = """
 def _get(key):
     v = data.get(key)

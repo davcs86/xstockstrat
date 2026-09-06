@@ -24,7 +24,7 @@ export function useStrategyAlerts(strategyId: string) {
     queryKey: ['strategy-alerts', strategyId],
     queryFn: async () => {
       const resp = await notifyClient.listAlerts({ categories: ['strategy'], limit: 50 });
-      // The live loop tags each alert with `strategy_id:<id>` (robust string filter).
+      // The live loop tags each alert with `strategy_id:<id>`.
       const tag = `strategy_id:${strategyId}`;
       return resp.alerts.filter((a) => a.tags.includes(tag)).slice(0, 10);
     },
@@ -34,10 +34,9 @@ export function useStrategyAlerts(strategyId: string) {
 }
 
 /**
- * Client-readable admin signal. The JWT is httpOnly, so the page cannot read roles
- * directly; this calls the lightweight /trader/api-adjacent /api/auth/me route which
- * derives `isAdmin` server-side from the session cookie. The toggle is also gated
- * server-side in the BFF (defense-in-depth).
+ * Client-readable admin signal. The JWT is httpOnly, so the page can't read roles directly; this
+ * calls /api/auth/me, which derives `isAdmin` server-side from the session cookie. The toggle is
+ * also gated server-side in the BFF (defense-in-depth).
  */
 export function useIsAdmin() {
   return useQuery({

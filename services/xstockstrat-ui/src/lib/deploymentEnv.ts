@@ -1,29 +1,23 @@
-// Canonical native-scope resolution for the Config UI's ENV axis (feature 115). Reads
-// APPLICATION_ENV (existing deployment env var — .do/app.yaml / .do/app.dev.yaml) and normalizes
-// its "development"/"production" vocabulary to the Config UI's own "staging"/"production"
-// vocabulary (feature 147 renamed dev→staging; paper/live is derived from environment).
-// Consumed by the BFF write guard (configUiBff.ts) and by Server Components only —
-// APPLICATION_ENV is not exposed to the client bundle (next.config.js has no env/
-// publicRuntimeConfig key for it); a Client Component must receive the resolved value as a prop.
+// Canonical native-scope resolution for the Config UI's ENV axis. Reads APPLICATION_ENV and
+// normalizes "development"/"production" to the Config UI's "staging"/"production" vocabulary.
+// Server-Components-only — APPLICATION_ENV is not in the client bundle, so a Client Component must
+// receive the resolved value as a prop.
 import { Environment } from '@xstockstrat/proto/common/v1/common_pb';
 
 export function getNativeConfigEnv(): 'staging' | 'production' {
   return process.env.APPLICATION_ENV === 'production' ? 'production' : 'staging';
 }
 
-/** This deployment's native scope as the proto Environment enum (feature 166) — so a server-side
- * caller (e.g. the config-ui BFF) can fill in an UNSPECIFIED environment with the correct native
- * value instead of forcing every Client Component to thread the resolved env as a prop. */
+/** This deployment's native scope as the proto Environment enum — so a server-side caller can fill an
+ * UNSPECIFIED environment with the correct native value instead of threading it as a prop. */
 export function nativeConfigEnvironment(): Environment {
   return getNativeConfigEnv() === 'production' ? Environment.PRODUCTION : Environment.STAGING;
 }
 
 /**
- * True when `env` (a SetConfigRequest/ListKeysRequest environment field) matches this
- * deployment's native scope. Environment.UNSPECIFIED and the deprecated Environment.DEV both
- * resolve to STAGING before comparing, mirroring the backend's own resolveEnv/ENV_MAP
- * (feature 147: DEV and STAGING are the same 'staging' scope) — an unconditional exact-match
- * would falsely reject a legitimate write on a staging-native deployment.
+ * True when `env` matches this deployment's native scope. UNSPECIFIED and the deprecated DEV both
+ * resolve to STAGING before comparing (mirrors the backend's ENV_MAP) — an exact-match would falsely
+ * reject a legitimate write on a staging-native deployment.
  */
 export function isNativeConfigEnvironment(env: Environment): boolean {
   const effective =

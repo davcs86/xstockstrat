@@ -1,12 +1,7 @@
 /**
- * Identity → ledger audit client (feature 043). Identity's first outbound per-request caller, so
- * C-03 binds it: the three propagation headers are read from the inbound call metadata and forwarded
- * on the outbound grpc-js call, and x-trace-id becomes the event correlation_id.
- *
- * Audit is BEST-EFFORT after the mutation commits (design R5): append() swallows every error (logs
- * it) and never throws back into the mutation path — a ledger outage never rolls back a user change.
- * The payload is built ONLY from an explicit safe-field allow-list passed by the caller — the request
- * (which carries the plaintext password) is never spread in (AC-8/AC-10).
+ * Identity's outbound per-request gRPC caller (C-03/PLAT-4): forwards x-user-id/x-access-scope/
+ * x-trace-id from inbound metadata (x-trace-id → correlation_id). Best-effort: append() swallows
+ * every error and never rolls back the mutation; payload is a safe-field allow-list, never the request.
  */
 import * as grpc from '@grpc/grpc-js';
 import { LedgerServiceClient } from '@xstockstrat/proto/ledger/v1/ledger';
@@ -26,7 +21,7 @@ export interface LedgerAudit {
   ): Promise<void>;
 }
 
-/** A no-op audit sink so a servicer constructed without an audit client (unit tests) still works. */
+/** A no-op audit sink for servicers constructed without an audit client. */
 export const NOOP_LEDGER_AUDIT: LedgerAudit = {
   async append() {
     /* no-op */
@@ -52,8 +47,7 @@ export function createLedgerAudit(
           streamKey: `user:${targetUserId}`,
           correlationId: traceId,
           payload: safePayload, // ts-proto Struct field accepts a plain JSON object
-          // Stable across retries when a trace/correlation id is present (dedups a re-sent audit);
-          // empty when absent → the ledger treats it as a plain insert (fire-once best-effort). NOT
+          // Stable across retries for dedup when a trace id is present; empty otherwise. NOT
           // derived from Date.now(), which would defeat dedup on retry.
           idempotencyKey: traceId ? `${eventType}:${targetUserId}:${traceId}` : '',
         };

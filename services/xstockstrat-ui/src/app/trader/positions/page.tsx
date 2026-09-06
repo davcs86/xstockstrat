@@ -8,7 +8,7 @@ import { AppShell } from '@/components/trader/AppShell';
 import { useAccountContext } from '@/context/AccountContext';
 import { usePositions } from '@/hooks/usePortfolio';
 import { useReconciliationStatus } from '@/hooks/useReconciliationStatus';
-import { POSITION_RISK_FLAG, EnumBadge, type EnumRender } from '@/lib/opportunityShared';
+import { POSITION_RISK_FLAG, HALT_SOURCE, EnumBadge } from '@/lib/opportunityShared';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { StatTile } from '@/components/shared/StatTile';
@@ -20,7 +20,6 @@ import { openR, fmtR, sideLabel, isExitFlag } from '@/lib/positionRisk';
 import { traderConfigClient } from '@/lib/browserClients/traderConfigClient';
 import { PositionSide } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import type { Position } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
-import { HaltSource } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -37,15 +36,6 @@ import { DataTable } from '@/components/ui/data-table';
 
 type TradingMode = 'paper' | 'live';
 type PnlFilter = 'all' | 'winners' | 'losers';
-
-// Halt-source labels for the amended AC-5 per-account halt badge (feature 102) — mirrors
-// opportunityShared.tsx's exhaustive Record<Enum, EnumRender> discipline (Constitution C-04/
-// C-10(a)); kept local since HaltSource is a trading-domain enum, not an opportunity one.
-const HALT_SOURCE: Record<HaltSource, EnumRender> = {
-  [HaltSource.UNSPECIFIED]: { label: '—', role: 'secondary' },
-  [HaltSource.BRACKET_PROTECTION]: { label: 'Bracket protection', role: 'paper' },
-  [HaltSource.RECONCILIATION]: { label: 'Reconciliation', role: 'sell' },
-};
 
 export default function PositionsPage() {
   const { selectedAccountId, environmentMode, accounts } = useAccountContext();
@@ -71,10 +61,8 @@ export default function PositionsPage() {
   });
 
   const rawPositions = data?.positions ?? [];
-  // Winners/losers P&L-sign filter is applied client-side over the enriched unrealizedPnl.
-  // Wrapped in useMemo — TanStack Table requires a referentially-stable `data` array (ledger
-  // fails.md 2026-08-08); `.filter()` on every render would otherwise produce a fresh array
-  // reference even when the underlying positions/filter are unchanged.
+  // Winners/losers filter is client-side. Wrapped in useMemo — TanStack Table requires a
+  // referentially-stable `data` array, else a fresh .filter() array every render churns it.
   const positions = useMemo(
     () =>
       rawPositions.filter((p) => {
@@ -120,11 +108,11 @@ export default function PositionsPage() {
     mode,
   );
 
-  // Feature 102 — reconciliation status + halt display (Constitution C-14 consumer surface).
+  // Reconciliation status + halt display.
   const reconciliationStatus = useReconciliationStatus(selectedAccountId);
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId) ?? null;
-  // Platform-wide trading_state, checked first (rare) — amended AC-5's "one coherent
-  // restriction display" derives from whichever mechanism is currently active, never both.
+  // Platform-wide trading_state, checked first — the one restriction display derives from whichever
+  // mechanism is active, never both.
   const platformTradingState = useQuery({
     queryKey: ['platform-trading-state'],
     queryFn: async () => {
@@ -138,12 +126,8 @@ export default function PositionsPage() {
   const platformRestricted =
     platformTradingState.data === 'REDUCE_ONLY' || platformTradingState.data === 'HALTED';
 
-  // Exposure table columns. Every `meta.className` below carries the pre-migration column's
-  // static Tailwind classes (breakpoint-disclosure + alignment) unchanged. The 5 P&L/Open-R
-  // columns had a *dynamic* per-row className (`pnlClass(...)`, sign-dependent) — `meta.className`
-  // is a static per-column string, so those dynamic color classes are applied to an inner `<span>`
-  // inside the cell instead of the `<TableCell>` itself; the static alignment/weight classes stay
-  // on `meta.className`. Visually identical to the pre-migration markup.
+  // Exposure table columns. meta.className is static per-column, so sign-dependent pnlClass colors go
+  // on an inner <span> in the cell, not the TableCell.
   const columns = useMemo<ColumnDef<Position>[]>(
     () => [
       {
@@ -151,10 +135,8 @@ export default function PositionsPage() {
         header: 'Asset',
         meta: { className: 'font-mono font-semibold' },
         cell: ({ row }) => (
-          // Symbol links to the dedicated full-page Position view (feature 096); the rest of
-          // the row still opens the quick-peek Sheet. stopPropagation preserved verbatim — the
-          // composite's isInteractiveTarget guard is a belt-and-suspenders addition on top, not
-          // a replacement.
+          // Symbol links to the full-page Position view; the rest of the row opens the quick-peek
+          // Sheet, so stopPropagation keeps this link from also opening it.
           <Link
             href={`/trader/positions/${encodeURIComponent(row.original.symbol)}`}
             className="hover:underline"
@@ -243,7 +225,7 @@ export default function PositionsPage() {
           </span>
         ),
       },
-      // feature 083 — Exposure risk reframe (risk, not P&L).
+      // Exposure risk reframe (risk, not P&L).
       {
         id: 'weight',
         header: 'Weight',
@@ -300,8 +282,8 @@ export default function PositionsPage() {
         enableSorting: false,
         meta: { className: 'text-right' },
         cell: ({ row }) => (
-          // Quick-trade shortcut: opens the order ticket pre-filled with this symbol.
-          // stopPropagation preserved verbatim so the row's detail Sheet doesn't also open.
+          // Quick-trade shortcut: opens the order ticket pre-filled with this symbol. stopPropagation
+          // keeps the row's detail Sheet from also opening.
           <Button
             asChild
             size="sm"
@@ -317,9 +299,8 @@ export default function PositionsPage() {
     [weight],
   );
 
-  // Fill-lineage table columns (design exception — a bare sort baseline, no pagination/filter/
-  // column-visibility; see design.md's "disproportionate for a single-position drill-down list
-  // inside an already-narrow Sheet" disposition).
+  // Fill-lineage table columns — a bare sort baseline, no pagination/filter/column-visibility (a
+  // single-position drill-down list inside a narrow Sheet).
   const lineageColumns = useMemo<ColumnDef<NonNullable<typeof lineage.data>[number]>[]>(
     () => [
       {
@@ -355,8 +336,7 @@ export default function PositionsPage() {
               What each position is risking and what would trigger an exit — your broker has the
               P&amp;L.
             </p>
-            {/* Renders nothing for the healthy, unrestricted case (CredentialStatusBadge's
-                own "no noise when healthy" principle). */}
+            {/* Renders nothing for the healthy, unrestricted case (no noise when healthy). */}
             {reconciliationStatus.data?.lastReconciledAt &&
               !reconciliationStatus.data.hasUnresolvedMismatch &&
               !platformRestricted &&
@@ -390,7 +370,7 @@ export default function PositionsPage() {
           )}
         </div>
 
-        {/* Risk stat row (feature 083 — Exposure is framed as risk, not P&L). */}
+        {/* Risk stat row — Exposure is framed as risk, not P&L. */}
         {positions.length > 0 && (
           <div className="grid grid-cols-2 overflow-hidden rounded-md border border-border sm:grid-cols-4">
             <StatTile
@@ -569,15 +549,13 @@ export default function PositionsPage() {
           </SheetHeader>
           {selected && (
             <div className="px-4 space-y-5">
-              {/* Deep link from the quick-peek Sheet to the dedicated full-page view (feature 096). */}
               <Button asChild variant="outline" size="sm" className="w-full min-h-[44px]">
                 <Link href={`/trader/positions/${encodeURIComponent(selected.symbol)}`}>
                   Open full view →
                 </Link>
               </Button>
-              {/* Risk stat row (feature 083 — the single position is risk-framed, matching the
-                  Exposure surface: what it risks and what triggers an exit). All from the enriched
-                  Position risk fields; em-dash fallbacks when the position carries no resting stop. */}
+              {/* Risk stat row — the single position is risk-framed, from the enriched Position risk
+                  fields; em-dash fallbacks when there's no resting stop. */}
               <div className="grid grid-cols-2 overflow-hidden rounded-md border border-border">
                 <StatTile
                   size="md"
@@ -614,7 +592,6 @@ export default function PositionsPage() {
                 />
               </div>
 
-              {/* Exit rule / factor (risk framing). */}
               <div>
                 <Eyebrow as="p" className="mb-2">
                   Position risk
@@ -631,7 +608,7 @@ export default function PositionsPage() {
                 </dl>
               </div>
 
-              {/* Broker-reported values (read-only mirror — C-10(b): the broker owns the P&L). */}
+              {/* Broker-reported values (read-only mirror — the broker owns the P&L). */}
               <div>
                 <Eyebrow as="p" className="mb-2">
                   Reported by broker

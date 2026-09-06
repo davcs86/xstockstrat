@@ -96,11 +96,8 @@ export function useDeleteFormula() {
 
 export function useExecuteFormula() {
   return useMutation({
-    // Either formulaId (run a saved formula) or formulaSource (run the current,
-    // possibly unsaved, editor buffer — the notebook-style "Run" behavior).
-    // For inline formula_source runs, `parameters` carries the in-editor parameter
-    // DEFINITIONS so the engine can validate input_params and apply defaults
-    // (saved formulas use their stored definitions and ignore this).
+    // Pass formulaId (saved formula) OR formulaSource (unsaved editor buffer). For a formulaSource
+    // run, `parameters` carries the in-editor param definitions; saved formulas ignore it.
     mutationFn: (req: {
       formulaId?: string;
       formulaSource?: string;

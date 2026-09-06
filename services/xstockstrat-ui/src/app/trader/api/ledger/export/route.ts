@@ -7,15 +7,13 @@ import { getSessionFromRequest, rolesToAccessScope, generateTraceId } from '@/li
 import { HEADER_USER_ID, HEADER_ACCESS_SCOPE, HEADER_TRACE_ID } from '@/lib/headers';
 
 /**
- * Ledger event export (feature 021) — session-gated BFF streaming route on the /trader segment.
- * Streams the caller's own ledger events (NDJSON default, `?format=csv` for CSV) from the ledger
- * `ExportEvents` server-streaming RPC. Not a Connect-router entry: the browser saves the raw byte
- * stream. Errors are mapped explicitly (NOT connectCodeToHttp): the ledger returns
- * FAILED_PRECONDITION when disabled (→ 403, AC-10) and INVALID_ARGUMENT over-window (→ 400, AC-5),
- * whereas connectCodeToHttp maps FailedPrecondition→400.
+ * Ledger event export — session-gated BFF streaming route on the /trader segment. Streams the
+ * caller's own ledger events (NDJSON default, `?format=csv`) from the ledger `ExportEvents` RPC. Not
+ * a Connect-router entry: the browser saves the raw byte stream. Errors are mapped explicitly (NOT
+ * connectCodeToHttp): FAILED_PRECONDITION when disabled → 403, INVALID_ARGUMENT over-window → 400.
  */
 
-// AC-8: the exact column set surfaced per event.
+// The exact column set surfaced per event.
 const CSV_HEADER =
   'event_id,event_type,occurred_at,source_service,correlation_id,sequence,stream_key,user_id,payload';
 
@@ -86,7 +84,7 @@ function mapError(err: unknown): NextResponse {
 }
 
 export async function GET(req: NextRequest) {
-  // AC-6: reject unauthenticated before any ledger call.
+  // Reject unauthenticated before any ledger call.
   const claims = await getSessionFromRequest(req);
   if (!claims) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -98,7 +96,7 @@ export async function GET(req: NextRequest) {
   const eventType = searchParams.get('event_type') ?? '';
   const format = searchParams.get('format') ?? 'ndjson';
 
-  // Propagate the three identity headers (C-03) — replicated here (a raw route has no Connect
+  // Propagate the three identity headers — replicated here (a raw route has no Connect
   // HandlerContext for backendHeaders): the ledger scopes the export to this x-user-id.
   const headers = {
     [HEADER_USER_ID]: claims.user_id,

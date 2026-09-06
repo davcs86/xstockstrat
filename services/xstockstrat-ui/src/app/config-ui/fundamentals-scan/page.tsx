@@ -9,9 +9,8 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { useRunFundamentalsScan } from '@/app/config-ui/hooks/useRunFundamentalsScan';
 
-// Admin-only manual trigger for the fundamentals signal producer (feature 156). The BFF route
-// (config-ui AnalysisService.runFundamentalsScan) is gated by forwardAdmin, so a non-admin caller
-// receives a ConnectError (PermissionDenied) on submit — the authoritative gate, surfaced here.
+// Admin-only manual trigger for the fundamentals signal producer. The BFF route is gated by
+// forwardAdmin, so a non-admin caller receives a ConnectError (PermissionDenied) on submit.
 export default function FundamentalsScanPage() {
   const [force, setForce] = useState(false);
   const [dryRun, setDryRun] = useState(false);

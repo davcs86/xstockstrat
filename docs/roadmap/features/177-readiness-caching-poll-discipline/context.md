@@ -1,0 +1,276 @@
+# Context: readiness-caching-poll-discipline
+
+**Feature**: `docs/roadmap/features/177-readiness-caching-poll-discipline/feature.md`
+**Product Spec**: `docs/roadmap/features/177-readiness-caching-poll-discipline/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/177-readiness-caching-poll-discipline/implementation-spec.md`
+
+---
+
+## Session 2026-09-04 — sdd-story
+
+- Created from performance-audit Track B (`docs/reports/2026-09-04-performance-bottlenecks-audit.md`,
+  findings 2.4, 1.2, 1.3, 1.7).
+- Reduces how *often* the analysis fan-out runs; composes with feature 176, which makes each run
+  faster. Kept separate to keep diffs surgical (behavior #3) — 176 is service-concurrency mechanics,
+  177 is caching/cadence policy.
+- Known traps folded into Open Questions: feature 110 (verify remount cost vs. actual `staleTime`
+  before per-symptom fixes; the outer cache key is the systemic fix) and feature 118
+  (screener-data-readiness-polling — align with the existing readiness-poll pattern).
+
+## Session 2026-09-04 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready. Verdict PASS WITH WARNINGS (no blockers).
+- Verified: _enrich_opportunities_live (servicer.py:3006, 2-RPC-per-symbol), migration 011 exists, WatchlistReadiness.tsx:193 useQueries.
+- Addressed: DB section now names the up.sql+down.sql pairing; next free migration NNN = 022 (dir tops at 021_pnl_positions_fees_total).
+- Warnings (advisory, to close in /sdd-design): four Open Questions — remount-cost trap (fails.md:751-754, feature 110), poll-cadence alignment (feature 118), readiness cache "bar epoch" invalidation key, empty-universe cache placement.
+- Overlap: CLEAN. Same 176↔177 analysis compute-path coordination noted; config namespace analysis.readiness.* confirmed absent on trunk.
+
+## Session 2026-09-05 — sdd-design quick, ROUND 1 (PAUSED, not approved)
+
+Status unchanged: **spec-ready** (user chose "Hold, run another round"). recon.md written + committed. design.md NOT yet written.
+
+**USER DECISION (locked):** readiness cache home = **Durable table (migration 022)**, mirroring the Opportunities stack. (In-process TTL was the adversary's minimum-that-solves alternative; user chose durable for restart/scale safety.)
+
+- **Proposer (r1):** table analysis.readiness_cache (022), composite key (user_id, strategy_id, symbols_hash, bar_epoch=wall-clock UTC session date); sentinel row for empty-universe; in-process TTL memo for FR-4 enrichment; additive computed_at=2 on EvaluateReadinessResponse; per-query staleTime:30_000. SWR verdict EXTEND.
+- **Adversary (r1): NEEDS WORK, no Floor breach.** Correctness objections that MUST be folded into round 2 (the table decision is settled, these are not):
+  1. **bar_epoch WRONG as wall-clock (breaks @AC-11/095 never-stale-as-fresh):** the Opportunities template anchors on `session_end_seconds = max(bars[-1].time)` observed during compute (servicer.py:3411-3471), NOT wall-clock. Wall-clock masks an intraday-corrected same-day bar AND reads epoch=D from 00:00 UTC before the real D bar lands. FIX: epoch = max(bar.time) observed (reuse session_end_seconds), bound same-timestamp corrections with stale_after_seconds SWR.
+  2. **Key omits `rule` (EvaluateReadinessRequest field 3) → cross-verdict collision (@AC-1/@AC-2/155):** entry vs exit tree differ (servicer.py:2694). ALSO omits strategy-definition version — a ManageStrategy edit leaves the key unchanged → stale verdict. FIX: add `rule` + a definition fingerprint (definition_json)/strategies.updated_at to the key.
+  3. **Sentinel-row hack rejected (fails.md:757-769 class):** conviction-0 sentinel is filtered by read() floor (opportunities.py:107) → read() still returns [] → else/stale branch STILL fires _kick_opportunity_recompute every poll (FR-3 not met); re-ordering the cold/stale state machine changes behavior for ALL users and blocks empty→non-empty transition (new opportunity silently fails to surface). Also feature 097 already REJECTED a separate readiness_cache table (migration 011:6 note). FIX: use a dedicated per-user compute-state row (user_id, computed_at, valid_until) that the freshness check reads — keep `opportunities` rows "real rows only". (Note: this interacts with the durable-table decision — the empty-universe marker is a compute-state row, NOT an in-band opportunity sentinel.)
+  4. **FR-4 TTL memo (@AC-12/095 cross-surface parity):** memo only wraps the Decide path; prove Signal-detail derives live_price from the SAME memo entry, else the memo INTRODUCES the divergence AC-12 forbids. Memoize only successful reads (a memoized miss suppresses a recovered price).
+  5. **SWR verdict is CHANGE not EXTEND (sign-off):** re-ordering ListOpportunities cold-vs-stale state machine changes existing opportunity-materialization refresh behavior → needs user sign-off in context.md (recon.md:53). Round 2 must classify precisely and get sign-off if it re-orders.
+  6. **176↔177 sequencing:** both edit EvaluateReadiness + _enrich_opportunities_live; design 177's wrap against 176's POST-parallelization shape, register in merge-order.md (176 first).
+- **NEXT (round 2):** re-propose with durable table (locked) BUT epoch=max(bar.time), key incl. rule+definition-fingerprint, compute-state row for empty-universe (not in-band sentinel), AC-12 parity proof for the memo, precise EXTEND/CHANGE classification (+ sign-off if CHANGE). Then re-adversary, then user gate.
+
+## Session 2026-09-05 — sdd-design ROUND 2 (complete) + USER DECISION; round 3 pending
+
+Status unchanged: **spec-ready** (user chose "Hold, run another round" → round 3). design.md NOT yet written.
+
+- **Round-2 proposer:** durable table 022; readiness_cache PK (user_id, strategy_id, rule, symbol) + def_fingerprint + bar_epoch/valid_until freshness gate; epoch=max(bar.time) (session_end_seconds); separate opportunity_compute_state table for empty-universe gate as an ADDED pre-check inside `if not rows:`; in-process short-TTL memo for FR-4 (successful reads only); additive computed_at=2; per-query staleTime. Claimed EXTEND for both.
+- **Round-2 adversary: NEEDS WORK, no Floor breach.** Fold into round 3:
+  1. **Benchmark-bar staleness escapes the gate:** bar_epoch anchors on the EVALUATED symbol only; a benchmark(source_symbol)-gated strategy whose evaluated symbol is dormant but whose benchmark prints a new bar → stale verdict served fresh (@AC-1/2/155, @AC-11/095). FIX: `bar_epoch = max(evaluated newest, benchmark newest bar time)` — benchmark bars already in scope (_load_benchmark_bars_windowed).
+  2. **stale_after_seconds needs a server bound < 86400** (1d bar interval; readiness is 1d-only). ≥86400 → new bar lands before expiry → stale served fresh across a bar boundary. FIX: enforce a bound like feature 161's SCALAR_BOUNDS_REGISTRY; document "window < bar cadence." (Config-leaf invalidation is a NON-issue: evaluate_conditions_traced is pure over definition_json+bars+benchmark_bars; no analysis.* config enters the trace — only the two bar epochs matter.)
+  3. **MUST reuse the existing `_definition_fingerprint` helper (servicer.py:626/2013)**, never a new hash (a divergent hash → guaranteed miss/false hit, silently defeats the cache).
+  4. **fails.md:757-769 (INSERT vs NOT NULL):** trace the literal upsert column set for BOTH tables; a fetch_ok-but-empty-bars symbol (servicer.py:2710) → is readiness_json '{}' or NULL? opportunity_compute_state write must supply computed_at AND valid_until.
+  5. **FR-4 memo @AC-11:** reuse must be FAILURE-gated, not just TTL-gated — a symbol whose quote goes unavailable must drop its price within the TTL, never persist a memoized price as current. Bound TTL tightly.
+  6. Prefer two separate migrations (022_readiness_cache + 023_opportunity_compute_state) for independent rollback; verify both down.sql DROPs.
+  7. 176→177 hard sequencing (177 wraps functions 176 restructures) — spec 177 against 176's restructured signatures or gate behind 176's merge; merge-order.md.
+  - SOUND: per-symbol PK (subset/superset reuse + mixed freshness), def_fingerprint retrievable in scope (no extra fetch), computed_at=2 additive, AC-12 parity proof.
+- **VERDICT split (adversary + USER SIGN-OFF):** FR-1 readiness cache = **EXTEND** (with the two bar-epoch fixes). FR-3 empty-universe = **CHANGE** (delays a currently-empty user's first opportunity up to the cache window).
+- **USER DECISION (locked, C-16 CHANGE signed off):** ACCEPT FR-3 with a **dedicated SHORT TTL** (~30s; its OWN new config key, e.g. `analysis.opportunity.empty_recompute_ttl_seconds`, NOT the 24h valid_window_hours) + a **background revalidate kick on the empty path** so the empty state self-heals → first-opportunity delay ≤ ~one poll cycle (≈ today). This is the signed-off CHANGE; round 3 must implement it this way and record the sign-off in design.md § Business Rules Touched (CHANGE @ this session).
+- **NEXT (round 3):** re-propose with benchmark-max epoch, <86400 window bound, reuse _definition_fingerprint, literal INSERT column trace, failure-gated memo, two migrations, short-TTL+self-heal empty-universe, 176-first sequencing. Then re-adversary, then user gate.
+
+## Session 2026-09-05 — sdd-design ROUND 3 (proposer + adversary complete); final gate pending
+
+Status unchanged: **spec-ready**. design.md NOT yet written (awaiting the consolidated final gate across 176-179).
+
+- **Round-3 proposer:** two migrations (022_readiness_cache + 023_opportunity_compute_state) with literal upsert column lists + NOT-NULL DDL; bar_epoch=max(eval last-bar, benchmark last-bar); reuse _definition_fingerprint (servicer.py:4299); valid_until=now()+stale_after_seconds (wall-clock SWR, <86400 via SCALAR_BOUNDS_REGISTRY); FR-3 short-TTL 30s (own key analysis.opportunity.empty_recompute_ttl_seconds) + self-heal kick; FR-4 failure-gated memo at GetLatestPrice seam; additive computed_at=2; per-query staleTime.
+- **Round-3 adversary: NEEDS WORK, no Floor breach.** All round-2 objections RESOLVED; locked decisions correct. THREE fold-ins for design.md:
+  1. **DROP the slow-path bar_epoch reuse** ("if stored fp==cur AND bar_epoch matches reuse persisted json"): an intraday-updating current-day 1d bar keeps the same time.seconds while OHLC moves → the first compute of the day would be served ALL DAY, never re-evaluated, defeating the <86400 window (stale ≠ "identical from cache", @AC-1/2/155). FIX (behavior #2 simplification): on ANY valid_until miss, always re-run evaluate_conditions_traced + upsert; the bars are already fetched on the slow path (the reuse saved only a pure-CPU trace). The FAST path (valid_until gate skipping fetch+evaluate) already delivers the caching win. [If ever kept, must first cite marketdata 1d "latest bar" immutable-at-close semantics and gate on a completed prior-session bar.]
+  2. **Empty-universe self-heal write-completeness (fails.md:757-769):** _kick_opportunity_recompute (servicer.py:3090) writes only analysis.opportunities via replace_for_user — it NEVER writes opportunity_compute_state. So an empty completion doesn't refresh valid_until → next poll re-runs _materialize synchronously → FR-3 not met. FIX: EVERY compute completion yielding an empty universe — both _materialize_opportunities (cold) AND the _kick background task — must upsert opportunity_compute_state (computed_at=now, valid_until=now+empty_recompute_ttl_seconds); trace the literal INSERT.
+  3. **FR-4 memo @AC-12 parity = spec-time VERIFY (not blocker):** grep suggests Signal-detail (insights/market/[symbol]/page.tsx) does NOT call GetLatestPrice directly (consistent with consuming Opportunity.live_price from the shared ListOpportunities response) → memo introduces no divergence. design.md must CITE the market page's price-source line as the parity proof (P-03), not leave it open.
+  - Also: verify SCALAR_BOUNDS_REGISTRY <86400 is server-ENFORCED (feature 161), both .down.sql DROP their table, 176→177 signature coupling handled at /sdd-spec against 176's post-restructure signatures.
+  - Question (c) bounded-staleness (fast path serves on valid_until, a new bar mid-window unseen until expiry) = the signed-off EXTEND contract, SOUND provided fix #1 lands. Question (d) fingerprint excludes name/active/live_enabled = non-issue (those never enter evaluate_conditions_traced).
+- **NET:** design essentially final. Ready to write design.md with: FR-1 EXTEND (fast-path-only cache, no slow-path reuse; benchmark-max epoch; <86400 enforced), FR-3 CHANGE (signed off; short-TTL + self-heal writing opportunity_compute_state on empty), FR-4 failure-gated memo (+cite parity at spec). No new user fork.
+
+## Session 2026-09-05 — design HELD at approval gate
+
+- Round-3 debate complete and SOUND-with-doc-fold-ins (see the round-3 block above); design.md NOT written.
+- At the consolidated approval gate the user approved 176 & 178 and HELD this feature for a further look. Status stays spec-ready.
+- To resume: /sdd-design <slug> quick re-reads this context and can go straight to writing design.md + design-approved once the user confirms (all round-3 fold-ins + locked decisions are already recorded here — no further debate needed unless the user requests changes).
+
+## Session 2026-09-05 — sdd-design COMPLETE (design-approved)
+
+- Phase 1 Grilling: 4 rounds (quick, extended by user through rounds 2-4). Round-4 adversary SOUND, no Floor breach; all prior objections resolved. design.md written.
+- Chosen approach: durable readiness cache (022_readiness_cache, two-path FAST/SLOW, NO slow-path reuse, bar_epoch=max(eval,benchmark), reuse _definition_fingerprint, stale_after_seconds<86400 server-bounded); empty-universe via 023_opportunity_compute_state stamped on ALL three empty-completion paths (_materialize cold, _kick._run, _opportunity_refresh_tick daily — via a shared _replace_and_stamp helper, settle at /sdd-spec); FR-4 success-only failure-gated memo; FR-2 per-query staleTime; additive computed_at=2.
+- Business Rules: FR-1 EXTEND; FR-3 CHANGE (C-16) USER SIGNED OFF this session (short-TTL ~30s + self-heal). Constitution: C-07, C-09, C-05, C-16, P-03. Floor breaches: none.
+- USER APPROVED design 2026-09-05. Status: spec-ready → design-approved.
+- Open risks to /sdd-spec: daily-tick stamping (shared helper vs documented one-poll gap; don't perturb @AC-8/9/158); empty→non-empty within-one-TTL test; AC-12 parity cite SignalReadiness.tsx:31; 176-before-177 signatures.
+- Next: /sdd-spec readiness-caching-poll-discipline.
+
+## Session 2026-09-05 — sdd-spec
+
+- Generated implementation-spec.md with **13 steps**. Status: design-approved → implementation-ready.
+- Scenario coverage (C-15): AC-1/AC-2 → Step 7; AC-3 → Step 13; AC-4 → Step 9; AC-5 → Step 11. All covered.
+- Reviewers snapshot finalized: analysis owner, ui owner, config owner, Proto Reviewer, DBA.
+- Key codebase findings (all cited against the CURRENT post-176 tree — recon.md line numbers had
+  drifted because feature 176, now `code-completed`, is already merged into this feature branch):
+  - **176 is present**: `EvaluateReadiness` is post-176 restructured — an `asyncio.gather` over a
+    per-symbol `_readiness_for` coroutine (`servicer.py:2696`, body `:2744-2766`), and
+    `_compute_opportunities` / `ThreadPoolExecutor` / `analysis.opportunity.max_concurrent_candidates`
+    exist (`:395-406`). Spec'd FR-1/FR-4 against this shape. 176 must merge to main-dev before 177
+    integrates (merge-order.md:238-242).
+  - **Migrations top at `021`** (`021_pnl_positions_fees_total`) — next free analysis NNN = **022**,
+    then **023**. (The `026_analysis_engine_blend_keys` referenced in analysis CLAUDE.md is a
+    *config-service* migration, not analysis — no collision.) Config-service dir tops at `026` (024
+    gap); if a config seed migration is ever added for the readiness bound, next free = `027`.
+  - **Fingerprint reuse**: `_definition_fingerprint(definition_json: dict)` at `servicer.py:4389`;
+    must be fed `row["definition_json"]` (DB row dict), per the canonical `:2044`/`:641` call form —
+    never a request dict. No new hash.
+  - **bar_epoch source**: bars ascending, newest = `bars[-1].time.seconds`; benchmark from
+    `_load_benchmark_bars_windowed` (`:2737`). `bar_epoch = max(evaluated, benchmark)` newest.
+  - **Proto**: `google/protobuf/timestamp.proto` already imported (`analysis.proto:7`) — additive
+    `computed_at = 2` on `EvaluateReadinessResponse` (`:644-646`) needs no new import.
+  - **AC-12 parity proof confirmed**: `SignalReadiness.tsx:28` (`useOpportunities()`) + `:31`
+    (consumes `opps?.opportunities`) — no direct `GetLatestPrice` call, so the FR-4 memo introduces
+    no divergence.
+  - **FR-2 targets**: `WatchlistReadiness.tsx:193` `useQueries` (no `staleTime` today); copy per-query
+    `staleTime: 30_000` from `opportunities/page.tsx:136` (NOT a QueryClient default — @AC-6/167).
+  - **SCALAR_BOUNDS_REGISTRY**: config const at `configServiceImpl.ts:98`, enforced at SetConfig
+    (`:376-381`); add `'analysis.readiness.stale_after_seconds': { minValue: 0, maxValue: 86399 }`.
+
+## Decisions (sdd-spec)
+
+- **Three new config keys** (design's "two no-seed `analysis.opportunity.*`" + the bounded readiness key):
+  `analysis.readiness.stale_after_seconds` (bounded [0,86399], seed-less registry entry only),
+  `analysis.opportunity.empty_recompute_ttl_seconds` (no-seed, ~30s),
+  `analysis.opportunity.live_enrich_ttl_seconds` (no-seed, ~10s memo TTL). All read via `get_int_present`.
+- **No config-service seed migration** for the readiness bound (minimal path — behavior #2). The
+  `SCALAR_BOUNDS_REGISTRY` code entry enforces `<86400` at SetConfig without a seed row. Flagged in
+  Step 5 for the config owner: add one mirroring config `019_register_analysis_signal_decay_half_life`
+  only if config-ui discoverability of the bounded key is wanted (P-03 — surfaced, not silently decided).
+- **FR-3 daily-tick stamping RESOLVED** to the design's *preferred* wiring: a shared
+  `_replace_and_stamp_compute_state(user_id, rows)` helper replaces `replace_for_user` at all three
+  empty-yielding sites (`:3135` cold, `:3148` `_kick._run`, `:3649` daily tick), stamping
+  `opportunity_compute_state` only on an empty universe. The helper touches nothing around
+  `schedule.advance`, so feature-158 @AC-8/@AC-9/158 re-anchoring is preserved (Step 9 asserts it).
+- **Response `computed_at` = min (oldest) per-symbol computed_at** across served rows — a spec-level
+  realization of FR-5 not fully pinned in design.md; recorded (P-03), confirm at impl-spec review.
+
+## Open Threads (for /sdd-review impl-spec)
+
+- Confirm the min-of-computed_at response rule (Step 6) and the no-config-seed-migration decision (Step 5).
+- Confirm the readiness/empty/enrich default values (30/30/10 s) are acceptable (all within the <86400 bound).
+- 176 → 177 merge sequencing must hold at integration (merge-order.md).
+
+## Session 2026-09-05 — sdd-review impl-spec (advisory)
+
+- Result: 0 blockers, 5 warnings (13/13 steps grounded, no Floor risk). Post-176 baseline check PASSED —
+  Step 6 Codebase Evidence cites the post-176 `asyncio.gather`/`_readiness_for` shape (`servicer.py:2696-2767`),
+  not the pre-176 synchronous loop (no C-01/F-04 mismatch).
+- Overlap findings: CLEAN — only the known 176→177 same-function WARN on `servicer.py`/`evaluator.py`
+  (already `merge-order.md:237-242`, run 176 before 177). Migrations 022/023, proto `computed_at=2`,
+  and the config keys are all free on trunk and unclaimed by siblings.
+- Warnings carried into execution:
+  - Step 12/13 (C-15/C-01): impl `staleTime: 30_000` vs `@AC-3`'s "60 seconds" — [x] RESOLVED here.
+    Reconciled `acceptance.feature @AC-3` 60s → 30s to match the deliberate design decision and the
+    existing Opportunities-pane precedent (`opportunities/page.tsx:136`, also 30s). The 60s literal was a
+    story-time approximation; 30s is the design-authoritative value. Behavior unchanged (10s < both, so the
+    no-refetch-on-remount assertion holds either way). C-16 rationale: aligning acceptance to the design's
+    superseding decision, not changing an intended guarantee.
+  - Step 5 (C-08/B3): `configServiceImpl.ts` source change has no dedicated paired `test` step —
+    [ ] unaddressed (mitigated by the inline test instruction + `pnpm run test:coverage` in Verification;
+    revisit at execute — add an explicit config test if the inline coverage proves thin).
+  - Step 2 (B2): `Files` lists the `packages/proto/gen/` directory rather than explicit files —
+    [x] accepted (inherent to proto-gen; the empty-diff gate is the real check).
+  - Step 5 (C-01 minor): Evidence mislabels `configServiceImpl.ts:492` (a ListKeys bounds-hint map) as the
+    SetConfig "batch path" — [x] noted; the authoritative SetConfig enforcement `:376-385` is cited correctly,
+    so execution discovery re-anchors.
+  - Step 6 (low risk): `row["definition_json"]` key presence on the EvaluateReadiness row inferred from the
+    identical repo call at `:2044` — [ ] confirm at execute (verify the key is present before relying on it).
+
+## Session 2026-09-05 — /sdd-execute sequential (177 → 178 → 179)
+
+Sequential run started on `feature/readiness-caching-poll-discipline` (already rebased onto main-dev
+containing merged 176). Tooling: uv (analysis), pnpm 9.15.9 (config/UI), Docker daemon started for
+proto codegen. Re-spec gate: directive `none`, evidence re-validated by the impl-spec review (all
+anchors resolve on the post-176 tree) — no mismatch, no re-spec.
+
+### Steps 1–2 — done (proto computed_at + codegen, TDD N/A)
+- Step 1 (`analysis.proto`): added `google.protobuf.Timestamp computed_at = 2;` to
+  `EvaluateReadinessResponse` (timestamp already imported). buf lint + buf breaking (vs main-dev) ran
+  green inside the Docker codegen container → additive field confirmed non-breaking (C-09).
+- Step 2 (`packages/proto/gen/**`): regenerated Go/Python/TS stubs via `./scripts/localenv-setup.sh`
+  (Docker `Dockerfile.codegen`); compiled TS→JS via `pnpm install`'s prepare/tsc hook (the container
+  lacked gen/ts node_modules). `git diff packages/proto/gen/` limited to `analysis/v1` (source + dist);
+  compiled JS carries `computedAt`. CI-equivalent fallback (Docker codegen) — logged in Deviation Log.
+
+### Steps 3–4 — done (migrations 022/023, TDD N/A, offline-verified)
+- `022_readiness_cache` (PK user_id,strategy_id,rule,symbol; def_fingerprint, bar_epoch, readiness_json
+  JSONB DEFAULT '{}', computed_at, valid_until) and `023_opportunity_compute_state` (PK user_id;
+  computed_at, valid_until). Both mirror `011_opportunities` schema-qualified style; no hypertable.
+- Offline verify: up/down pairs exist, each CREATE TABLE has its inverse DROP TABLE, NNN 022/023 are
+  one/two past the 021 tip. Live apply deferred to CI/deploy (never started a DB).
+
+### Step 5 — done (config: 3 keys + readiness SCALAR_BOUNDS entry, TDD N/A)
+- `configServiceImpl.ts`: added `'analysis.readiness.stale_after_seconds': { minValue: 0, maxValue: 86399 }`
+  to SCALAR_BOUNDS_REGISTRY (< 86400 daily-bar boundary). Extended `setConfigScalarBounds.test.ts`
+  with 2 cases (accepts 0/86399, rejects 86400) — 8/8 pass.
+- `analysis/CLAUDE.md`: documented the 3 keys (readiness.stale_after_seconds|30, opportunity.
+  empty_recompute_ttl_seconds|30, opportunity.live_enrich_ttl_seconds|10), all get_int_present.
+- `config-governance.md`: feature-177 Per-Feature Registered Keys entry. No seed migration (bound
+  enforced regardless; config-ui-discoverability seed a noted follow-up, next config NNN 027).
+- Verify: config lint 0 errors; bounds test 8/8; all 3 keys grep-present in both doc homes.
+
+### Steps 6–7 — done (FR-1 readiness cache FAST/SLOW, TDD red→green)
+- Step 6: new `app/repositories/readiness_cache.py` (`ReadinessCacheRepository.read_many`/`upsert_many`,
+  mirrors OpportunitiesRepository; every NOT NULL col supplied, empty→`{}` never NULL). Wired
+  `self._readiness_cache_repo` in `__init__`. EvaluateReadiness now loads the window
+  (`get_int_present("analysis.readiness.stale_after_seconds",30)`) + `_definition_fingerprint(row
+  ["definition_json"])` once, reads the request set in one query, and `_readiness_for` is FAST
+  (fingerprint match + `now < valid_until` → `_symbol_readiness_from_json` via `_readiness_to_proto`,
+  NO sem/fetch/eval) vs SLOW (existing body → stage a cache row). SLOW rows upserted once after the
+  gather (best-effort). Response `computed_at` = min served (FR-5). No slow-path bar_epoch reuse.
+  New helper `_symbol_readiness_from_json` guarantees FAST==fresh byte-identity.
+  - Review item CLEARED: `row["definition_json"]` key confirmed present (StrategiesRepository._to_dict
+    always sets it).
+  - Deviation: `bar_epoch` benchmark contribution computed over `benchmark_bars.values()` (the loader
+    returns a `{source_symbol: [bars]}` dict, not a list as the spec sketch implied). Logged below.
+- Step 7: `tests/test_readiness_cache.py` — AC-1 SLOW-write→FAST-read round-trip (pass 2: 0 GetBars,
+  byte-identical verdicts, computed_at set); AC-2 expiry→SLOW re-stamp bar_epoch; AC-2 benchmark-only
+  newer bar drives bar_epoch. RED pre-Step-6 (upsert never called / GetBars not skipped), GREEN after.
+- Full analysis suite `672 passed` (+3), coverage `85%`; ruff clean.
+
+### Steps 8–9 — done (FR-3 empty-universe compute-state, TDD red→green)
+- Step 8: new `app/repositories/opportunity_compute_state.py` (`OpportunityComputeStateRepository.get`
+  / `upsert`, literal INSERT … ON CONFLICT (user_id) DO UPDATE, both NOT NULL cols supplied). Wired
+  `self._opportunity_compute_state_repo` in `__init__`. New shared helper
+  `_replace_and_stamp_compute_state(user_id, rows, propagation_meta=None)` = `replace_for_user` then,
+  when `not rows`, best-effort `upsert(now()+ttl)` where `ttl=max(1, get_int_present(
+  "analysis.opportunity.empty_recompute_ttl_seconds",30))`. Replaced the 3 empty-yielding
+  `replace_for_user` sites (`_materialize_opportunities`, `_kick._run`, `_opportunity_refresh_tick`)
+  with the helper — `schedule.advance`/lock/exception handling untouched (feature-158 @AC-8/@AC-9).
+  `ListOpportunities` count==0 branch now consults compute-state: fresh stamp → `_kick` self-heal +
+  serve empty; absent/elapsed → synchronous `_materialize_opportunities`. Stale branch unchanged.
+- Step 9: `tests/test_opportunity_compute_state.py` — AC-4 (4 polls, compute at most once, polls 2-4
+  kick); empty→non-empty self-heal (poll2 no synchronous recompute, background kick writes the new
+  row within the TTL); stamp-on-empty-not-nonempty (helper); `_kick._run` stamps; daily-tick stamps
+  AND still advances the wall-clock schedule. RED pre-Step-8 (4/5 fail: no gate/stamp; the self-heal
+  test strengthened with a mid-poll `compute.await_count==1` assert so it too is red pre-change),
+  GREEN after.
+- Full analysis suite `677 passed` (+5), coverage `85%`; ruff clean.
+
+### Steps 10–11 — done (FR-4 conditional live-enrichment memo, TDD red→green)
+- Step 10: `servicer.py` — added `import time` + a process-lifetime `self._live_enrich_memo:
+  dict[str, tuple[float, dict]]` (symbol → (monotonic_expiry, {last_price, prev_close, spark})).
+  `_enrich_opportunities_live` reads `ttl=get_int_present("analysis.opportunity.
+  live_enrich_ttl_seconds",10)` once per pass. Extracted the target-apply loop into a nested
+  `_apply_live_fields` (byte-identical apply for both the memo-hit and fetch paths). `_enrich_symbol`
+  now: (a) memo hit when `ttl>0` and `monotonic()<expiry` → apply + return, skipping BOTH RPCs; (b)
+  on a miss runs the existing fetch body, then memoizes ONLY on full success (`last_price is not None
+  AND spark is not None`) — a failed/unavailable fetch is never cached (AC-11); `ttl==0` disables.
+  Ranking/ORDER BY untouched (enrichment stays read-time-only, AC-14).
+- Step 11: `tests/test_live_enrich_memo.py` — AC-5 (pass2 within TTL: 0 new RPCs, identical
+  live_price/sparkline; past TTL both RPCs fire again — `time.monotonic` monkeypatched clock);
+  ttl==0 disables the memo (always fetch); AC-11 (price-miss pass1 memoizes nothing → pass2 within
+  TTL still fetches and surfaces the recovered quote). RED pre-Step-10 (memo-hit refetches; the
+  monkeypatch target `servicer.time` doesn't exist pre-`import time`), GREEN after.
+- Full analysis suite `680 passed` (+3), coverage `85%`; ruff clean.
+
+### Steps 12–13 — done (FR-2 client staleTime + remount e2e, TDD red→green)
+- Step 12: `WatchlistReadiness.tsx` — added `staleTime: 30_000` to each `useQueries` query descriptor
+  (per-query, NOT a `QueryClient` default — a default would force a whole-list refetch, @AC-6/167).
+  `queryClient.ts` defaults untouched (`staleTime: 5_000`). Lint clean.
+- Step 13: `e2e/insights/watchlists.spec.ts` — new AC-3 test: two pre-bound lists, a `page.on(
+  'request')` counter on `/EvaluateReadiness`, `page.clock` advanced 10s (past the 5s QueryClient
+  default, within the 30s per-query window), switch list away→back (detail remounts on
+  `key={watchlistId}`), assert no second EvaluateReadiness. RED pre-Step-12 (10s > 5s default →
+  refetch; the one failure among 419 green), GREEN after (`420 passed`). Reuses `mockWatchlists` /
+  `openList` / `addAuthCookie` / the `evaluateReadiness` mock handler (C-12 — no inline mock literals;
+  the route counter is a scenario one-off per the spec).
+
+### Deviation Log — Step 13 e2e runner (CI-equivalent local run)
+- **Disposition**: CI-equivalent fallback. Ran the Playwright suite locally via `CI=1 pnpm test:e2e`
+  (the `pnpm build && pnpm start` prod path — the dev-server cold-compile blows the 10s local warmup
+  budget) with `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium` (this sandbox pre-bakes
+  a single Chromium and `global-setup.ts` reads that env var directly). Same image/flow CI uses; full
+  suite 420 green. No product/behavior deviation.

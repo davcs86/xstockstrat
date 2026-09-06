@@ -887,6 +887,71 @@ export function readinessRuleToNumber(object: ReadinessRule): number {
   }
 }
 
+/** Per-row readiness lifecycle state (feature 181). Closed set → enum (C-04). */
+export enum ReadinessState {
+  READINESS_STATE_UNSPECIFIED = "READINESS_STATE_UNSPECIFIED",
+  /** READINESS_STATE_RESOLVED - `readiness` populated; served from the FAST cache path */
+  READINESS_STATE_RESOLVED = "READINESS_STATE_RESOLVED",
+  /** READINESS_STATE_PENDING - not-yet-fresh; a background refresh was kicked; poll again */
+  READINESS_STATE_PENDING = "READINESS_STATE_PENDING",
+  /** READINESS_STATE_UNKNOWN - data-unavailable (bar_epoch < 0 sentinel); best-effort retry */
+  READINESS_STATE_UNKNOWN = "READINESS_STATE_UNKNOWN",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function readinessStateFromJSON(object: any): ReadinessState {
+  switch (object) {
+    case 0:
+    case "READINESS_STATE_UNSPECIFIED":
+      return ReadinessState.READINESS_STATE_UNSPECIFIED;
+    case 1:
+    case "READINESS_STATE_RESOLVED":
+      return ReadinessState.READINESS_STATE_RESOLVED;
+    case 2:
+    case "READINESS_STATE_PENDING":
+      return ReadinessState.READINESS_STATE_PENDING;
+    case 3:
+    case "READINESS_STATE_UNKNOWN":
+      return ReadinessState.READINESS_STATE_UNKNOWN;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return ReadinessState.UNRECOGNIZED;
+  }
+}
+
+export function readinessStateToJSON(object: ReadinessState): string {
+  switch (object) {
+    case ReadinessState.READINESS_STATE_UNSPECIFIED:
+      return "READINESS_STATE_UNSPECIFIED";
+    case ReadinessState.READINESS_STATE_RESOLVED:
+      return "READINESS_STATE_RESOLVED";
+    case ReadinessState.READINESS_STATE_PENDING:
+      return "READINESS_STATE_PENDING";
+    case ReadinessState.READINESS_STATE_UNKNOWN:
+      return "READINESS_STATE_UNKNOWN";
+    case ReadinessState.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function readinessStateToNumber(object: ReadinessState): number {
+  switch (object) {
+    case ReadinessState.READINESS_STATE_UNSPECIFIED:
+      return 0;
+    case ReadinessState.READINESS_STATE_RESOLVED:
+      return 1;
+    case ReadinessState.READINESS_STATE_PENDING:
+      return 2;
+    case ReadinessState.READINESS_STATE_UNKNOWN:
+      return 3;
+    case ReadinessState.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 /** The persisted per-user disposition of a queued opportunity (feature 097). Closed set → enum (C-04). */
 export enum OpportunityAction {
   OPPORTUNITY_ACTION_UNSPECIFIED = "OPPORTUNITY_ACTION_UNSPECIFIED",
@@ -1690,6 +1755,39 @@ export interface EvaluateReadinessRequest {
 
 export interface EvaluateReadinessResponse {
   readiness: SymbolReadiness[];
+  /**
+   * The oldest per-symbol cache "computed at" among the served rows — the response is never
+   * presented as fresher than this (feature 177, FR-5). Bounded by the readiness staleness window.
+   */
+  computedAt?: Date | undefined;
+}
+
+/**
+ * One decorated watchlist row (feature 181). `strategy_id` is the join key onto the ['watchlists']
+ * read's binding; it is NOT a display payload and carries no provenance/source (the client renders
+ * those from the binding). `readiness` is populated iff state == READINESS_STATE_RESOLVED.
+ */
+export interface WatchlistReadinessRow {
+  symbol: string;
+  strategyId: string;
+  state: ReadinessState;
+  readiness?: SymbolReadiness | undefined;
+  computedAt?: Date | undefined;
+}
+
+/**
+ * user_id is intentionally absent — taken from the propagated x-user-id header server-side
+ * (match the ListOpportunitiesRequest convention), never from the wire. The server derives the
+ * (symbol, strategy_id) pairs from the OWNER'S OWN watchlist (anti-IDOR, fails.md:1153).
+ */
+export interface GetWatchlistReadinessRequest {
+  watchlistId: string;
+  page?: PageRequest | undefined;
+}
+
+export interface GetWatchlistReadinessResponse {
+  rows: WatchlistReadinessRow[];
+  page?: PageResponse | undefined;
 }
 
 /**
@@ -8687,13 +8785,16 @@ export const EvaluateReadinessRequest: MessageFns<EvaluateReadinessRequest> = {
 };
 
 function createBaseEvaluateReadinessResponse(): EvaluateReadinessResponse {
-  return { readiness: [] };
+  return { readiness: [], computedAt: undefined };
 }
 
 export const EvaluateReadinessResponse: MessageFns<EvaluateReadinessResponse> = {
   encode(message: EvaluateReadinessResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     for (const v of message.readiness) {
       SymbolReadiness.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.computedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.computedAt), writer.uint32(18).fork()).join();
     }
     return writer;
   },
@@ -8713,6 +8814,14 @@ export const EvaluateReadinessResponse: MessageFns<EvaluateReadinessResponse> = 
           message.readiness.push(SymbolReadiness.decode(reader, reader.uint32()));
           continue;
         }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.computedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -8727,6 +8836,11 @@ export const EvaluateReadinessResponse: MessageFns<EvaluateReadinessResponse> = 
       readiness: globalThis.Array.isArray(object?.readiness)
         ? object.readiness.map((e: any) => SymbolReadiness.fromJSON(e))
         : [],
+      computedAt: isSet(object.computedAt)
+        ? fromJsonTimestamp(object.computedAt)
+        : isSet(object.computed_at)
+        ? fromJsonTimestamp(object.computed_at)
+        : undefined,
     };
   },
 
@@ -8734,6 +8848,9 @@ export const EvaluateReadinessResponse: MessageFns<EvaluateReadinessResponse> = 
     const obj: any = {};
     if (message.readiness?.length) {
       obj.readiness = message.readiness.map((e) => SymbolReadiness.toJSON(e));
+    }
+    if (message.computedAt !== undefined) {
+      obj.computedAt = message.computedAt.toISOString();
     }
     return obj;
   },
@@ -8744,6 +8861,311 @@ export const EvaluateReadinessResponse: MessageFns<EvaluateReadinessResponse> = 
   fromPartial<I extends Exact<DeepPartial<EvaluateReadinessResponse>, I>>(object: I): EvaluateReadinessResponse {
     const message = createBaseEvaluateReadinessResponse();
     message.readiness = object.readiness?.map((e) => SymbolReadiness.fromPartial(e)) || [];
+    message.computedAt = object.computedAt ?? undefined;
+    return message;
+  },
+};
+
+function createBaseWatchlistReadinessRow(): WatchlistReadinessRow {
+  return {
+    symbol: "",
+    strategyId: "",
+    state: ReadinessState.READINESS_STATE_UNSPECIFIED,
+    readiness: undefined,
+    computedAt: undefined,
+  };
+}
+
+export const WatchlistReadinessRow: MessageFns<WatchlistReadinessRow> = {
+  encode(message: WatchlistReadinessRow, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    if (message.strategyId !== "") {
+      writer.uint32(18).string(message.strategyId);
+    }
+    if (message.state !== ReadinessState.READINESS_STATE_UNSPECIFIED) {
+      writer.uint32(24).int32(readinessStateToNumber(message.state));
+    }
+    if (message.readiness !== undefined) {
+      SymbolReadiness.encode(message.readiness, writer.uint32(34).fork()).join();
+    }
+    if (message.computedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.computedAt), writer.uint32(42).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): WatchlistReadinessRow {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseWatchlistReadinessRow();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.strategyId = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.state = readinessStateFromJSON(reader.int32());
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.readiness = SymbolReadiness.decode(reader, reader.uint32());
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.computedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): WatchlistReadinessRow {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      strategyId: isSet(object.strategyId)
+        ? globalThis.String(object.strategyId)
+        : isSet(object.strategy_id)
+        ? globalThis.String(object.strategy_id)
+        : "",
+      state: isSet(object.state) ? readinessStateFromJSON(object.state) : ReadinessState.READINESS_STATE_UNSPECIFIED,
+      readiness: isSet(object.readiness) ? SymbolReadiness.fromJSON(object.readiness) : undefined,
+      computedAt: isSet(object.computedAt)
+        ? fromJsonTimestamp(object.computedAt)
+        : isSet(object.computed_at)
+        ? fromJsonTimestamp(object.computed_at)
+        : undefined,
+    };
+  },
+
+  toJSON(message: WatchlistReadinessRow): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.strategyId !== "") {
+      obj.strategyId = message.strategyId;
+    }
+    if (message.state !== ReadinessState.READINESS_STATE_UNSPECIFIED) {
+      obj.state = readinessStateToJSON(message.state);
+    }
+    if (message.readiness !== undefined) {
+      obj.readiness = SymbolReadiness.toJSON(message.readiness);
+    }
+    if (message.computedAt !== undefined) {
+      obj.computedAt = message.computedAt.toISOString();
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<WatchlistReadinessRow>, I>>(base?: I): WatchlistReadinessRow {
+    return WatchlistReadinessRow.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<WatchlistReadinessRow>, I>>(object: I): WatchlistReadinessRow {
+    const message = createBaseWatchlistReadinessRow();
+    message.symbol = object.symbol ?? "";
+    message.strategyId = object.strategyId ?? "";
+    message.state = object.state ?? ReadinessState.READINESS_STATE_UNSPECIFIED;
+    message.readiness = (object.readiness !== undefined && object.readiness !== null)
+      ? SymbolReadiness.fromPartial(object.readiness)
+      : undefined;
+    message.computedAt = object.computedAt ?? undefined;
+    return message;
+  },
+};
+
+function createBaseGetWatchlistReadinessRequest(): GetWatchlistReadinessRequest {
+  return { watchlistId: "", page: undefined };
+}
+
+export const GetWatchlistReadinessRequest: MessageFns<GetWatchlistReadinessRequest> = {
+  encode(message: GetWatchlistReadinessRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.watchlistId !== "") {
+      writer.uint32(10).string(message.watchlistId);
+    }
+    if (message.page !== undefined) {
+      PageRequest.encode(message.page, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetWatchlistReadinessRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetWatchlistReadinessRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.watchlistId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.page = PageRequest.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetWatchlistReadinessRequest {
+    return {
+      watchlistId: isSet(object.watchlistId)
+        ? globalThis.String(object.watchlistId)
+        : isSet(object.watchlist_id)
+        ? globalThis.String(object.watchlist_id)
+        : "",
+      page: isSet(object.page) ? PageRequest.fromJSON(object.page) : undefined,
+    };
+  },
+
+  toJSON(message: GetWatchlistReadinessRequest): unknown {
+    const obj: any = {};
+    if (message.watchlistId !== "") {
+      obj.watchlistId = message.watchlistId;
+    }
+    if (message.page !== undefined) {
+      obj.page = PageRequest.toJSON(message.page);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetWatchlistReadinessRequest>, I>>(base?: I): GetWatchlistReadinessRequest {
+    return GetWatchlistReadinessRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetWatchlistReadinessRequest>, I>>(object: I): GetWatchlistReadinessRequest {
+    const message = createBaseGetWatchlistReadinessRequest();
+    message.watchlistId = object.watchlistId ?? "";
+    message.page = (object.page !== undefined && object.page !== null)
+      ? PageRequest.fromPartial(object.page)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseGetWatchlistReadinessResponse(): GetWatchlistReadinessResponse {
+  return { rows: [], page: undefined };
+}
+
+export const GetWatchlistReadinessResponse: MessageFns<GetWatchlistReadinessResponse> = {
+  encode(message: GetWatchlistReadinessResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.rows) {
+      WatchlistReadinessRow.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.page !== undefined) {
+      PageResponse.encode(message.page, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetWatchlistReadinessResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetWatchlistReadinessResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.rows.push(WatchlistReadinessRow.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.page = PageResponse.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetWatchlistReadinessResponse {
+    return {
+      rows: globalThis.Array.isArray(object?.rows)
+        ? object.rows.map((e: any) => WatchlistReadinessRow.fromJSON(e))
+        : [],
+      page: isSet(object.page) ? PageResponse.fromJSON(object.page) : undefined,
+    };
+  },
+
+  toJSON(message: GetWatchlistReadinessResponse): unknown {
+    const obj: any = {};
+    if (message.rows?.length) {
+      obj.rows = message.rows.map((e) => WatchlistReadinessRow.toJSON(e));
+    }
+    if (message.page !== undefined) {
+      obj.page = PageResponse.toJSON(message.page);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetWatchlistReadinessResponse>, I>>(base?: I): GetWatchlistReadinessResponse {
+    return GetWatchlistReadinessResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetWatchlistReadinessResponse>, I>>(
+    object: I,
+  ): GetWatchlistReadinessResponse {
+    const message = createBaseGetWatchlistReadinessResponse();
+    message.rows = object.rows?.map((e) => WatchlistReadinessRow.fromPartial(e)) || [];
+    message.page = (object.page !== undefined && object.page !== null)
+      ? PageResponse.fromPartial(object.page)
+      : undefined;
     return message;
   },
 };
@@ -10825,6 +11247,22 @@ export const AnalysisServiceService = {
       Buffer.from(GetAttributionResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): GetAttributionResponse => GetAttributionResponse.decode(value),
   },
+  /**
+   * Cache-first readiness decoration for a page of a watchlist's bound (symbol, strategy_id)
+   * pairs (feature 181). Owner from x-user-id; RESOLVED rows carry inline SymbolReadiness,
+   * PENDING/UNKNOWN rows resolve on a subsequent poll (the server kicks a background refresh).
+   */
+  getWatchlistReadiness: {
+    path: "/xstockstrat.analysis.v1.AnalysisService/GetWatchlistReadiness" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetWatchlistReadinessRequest): Buffer =>
+      Buffer.from(GetWatchlistReadinessRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetWatchlistReadinessRequest => GetWatchlistReadinessRequest.decode(value),
+    responseSerialize: (value: GetWatchlistReadinessResponse): Buffer =>
+      Buffer.from(GetWatchlistReadinessResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetWatchlistReadinessResponse => GetWatchlistReadinessResponse.decode(value),
+  },
 } as const;
 
 export interface AnalysisServiceServer extends UntypedServiceImplementation {
@@ -10880,6 +11318,12 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
    * aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
    */
   getAttribution: handleUnaryCall<GetAttributionRequest, GetAttributionResponse>;
+  /**
+   * Cache-first readiness decoration for a page of a watchlist's bound (symbol, strategy_id)
+   * pairs (feature 181). Owner from x-user-id; RESOLVED rows carry inline SymbolReadiness,
+   * PENDING/UNKNOWN rows resolve on a subsequent poll (the server kicks a background refresh).
+   */
+  getWatchlistReadiness: handleUnaryCall<GetWatchlistReadinessRequest, GetWatchlistReadinessResponse>;
 }
 
 export interface AnalysisServiceClient extends Client {
@@ -11200,6 +11644,26 @@ export interface AnalysisServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: GetAttributionResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Cache-first readiness decoration for a page of a watchlist's bound (symbol, strategy_id)
+   * pairs (feature 181). Owner from x-user-id; RESOLVED rows carry inline SymbolReadiness,
+   * PENDING/UNKNOWN rows resolve on a subsequent poll (the server kicks a background refresh).
+   */
+  getWatchlistReadiness(
+    request: GetWatchlistReadinessRequest,
+    callback: (error: ServiceError | null, response: GetWatchlistReadinessResponse) => void,
+  ): ClientUnaryCall;
+  getWatchlistReadiness(
+    request: GetWatchlistReadinessRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetWatchlistReadinessResponse) => void,
+  ): ClientUnaryCall;
+  getWatchlistReadiness(
+    request: GetWatchlistReadinessRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetWatchlistReadinessResponse) => void,
   ): ClientUnaryCall;
 }
 

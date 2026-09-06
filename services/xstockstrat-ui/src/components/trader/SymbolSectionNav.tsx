@@ -4,11 +4,8 @@ import { useEffect, useState } from 'react';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/components/ui/utils';
 
-// Single source of truth for the sticky geometry (feature 139), so the nav's sticky `top` and each
-// section's `scroll-margin-top` can never drift. The real header (PlatformHeader) is `sticky top-0`
-// and is Row1 `h-[49px]` always + Row2 `h-9` (36px) `hidden sm:flex` → 49px below `sm`, 85px at
-// `sm`+; this nav bar is `h-11` (44px). So the nav parks directly below the header, and a
-// scrolled-to section clears both the header and the nav.
+// Single source of truth for the sticky geometry, so the nav's sticky `top` and each section's
+// `scroll-margin-top` can never drift from the header height (49px below sm, 85px at sm+; nav 44px).
 export const STICKY_NAV_TOP = 'top-[49px] sm:top-[85px]';
 export const SECTION_SCROLL_MT = 'scroll-mt-[93px] sm:scroll-mt-[129px]'; // (49+44) / (85+44)
 
@@ -21,16 +18,12 @@ export interface SymbolGroup {
 }
 
 /**
- * Sticky segmented anchor-nav for the Symbol page's sections (feature 139). All sections stay
- * mounted; this only jumps to / highlights them:
- * - a shadcn `ToggleGroup type="single"` (its items are `<button>`s, not `role="tab"`, so they do
- *   not collide with tab-role e2e locators) inside `<nav aria-label="Symbol navigation">` — a label
- *   without the substring "Section", so it can't be confused with the header's own Section nav;
- * - an inbound `#hash` is honored on mount (read inside an effect, never during render, to avoid an
- *   SSR/hydration mismatch);
- * - an `IntersectionObserver` scroll-spy keeps the active chip truthful during free scroll (FR-2);
- * - selecting a chip writes a BARE `#id` hash via `history.replaceState`, leaving any `?strategy=`
- *   query seed untouched (FR-5) and triggering no Next navigation/refetch.
+ * Sticky segmented anchor-nav for the Symbol page's sections; all sections stay mounted.
+ * - items are `<button>`s, not `role="tab"`, and `<nav>` is labelled without the substring "Section",
+ *   so neither collides with the header's own tab/Section nav locators;
+ * - an inbound `#hash` is honored on mount inside an effect (never during render) to avoid a
+ *   hydration mismatch;
+ * - selecting a chip writes a BARE `#id` hash, leaving any `?strategy=` query seed untouched.
  */
 export function SymbolSectionNav({ groups }: { groups: SymbolGroup[] }) {
   const [active, setActive] = useState<string>(groups[0]?.id ?? '');
@@ -46,14 +39,8 @@ export function SymbolSectionNav({ groups }: { groups: SymbolGroup[] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Scroll-spy (feature 139; algorithm revised by the 139 amendment): highlight the section the
-  // reader is on. A prior `IntersectionObserver` "topmost intersecting a thin band" heuristic was
-  // replaced by a deterministic scroll-position read because the amendment's column-grouped panels
-  // shortened the page — the last section can no longer scroll under the sticky offset line, so a
-  // band-based observer could never highlight it (and would steal `active` back from a deep-link to
-  // it). This computes, on a rAF-throttled scroll, the **last section whose top has passed the
-  // offset line** (the one you're reading), with an explicit **bottom-of-page** rule so the final
-  // section highlights once you reach the end even if it never reaches the offset line.
+  // Scroll-spy: on a rAF-throttled scroll, highlight the last section whose top has passed the offset
+  // line, with an explicit bottom-of-page rule so a final short section still highlights at the end.
   useEffect(() => {
     const ids = groupKey.split(',').filter(Boolean);
     if (ids.length === 0) return;
@@ -101,7 +88,7 @@ export function SymbolSectionNav({ groups }: { groups: SymbolGroup[] }) {
     if (!id) return; // ToggleGroup deselect → controlled value unchanged, harmless no-op
     setActive(id);
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
-    // Bare relative hash — never `${pathname}#id` — so ?strategy= in the query is preserved (FR-5).
+    // Bare relative hash — never `${pathname}#id` — so ?strategy= in the query is preserved.
     window.history.replaceState(null, '', `#${id}`);
   };
 

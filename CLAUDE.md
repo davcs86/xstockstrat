@@ -2,7 +2,7 @@
 ## How to Act
 
 Read this first — it governs *how* you work here; everything below is the *what* you work with.
-These four behaviors are the operating defaults; the rest of this file (and the constitution) is
+These five behaviors are the operating defaults; the rest of this file (and the constitution) is
 context you load per task.
 
 1. **Don't assume — ask, and surface tradeoffs.** On ambiguity, a missing detail, or a design fork,
@@ -16,6 +16,12 @@ context you load per task.
 4. **Define success up front, then loop until verified.** State the pass condition before you start,
    then run to it — write the check, run it, fix, re-run — and don't declare victory mid-loop.
    *(Enforced by the best-effort/verify norms **PLAT-N1** and the migration/proto CI gates.)*
+5. **Comments state constraints, not mechanism or history — cap 2 lines.** A comment earns its place
+   only if deleting it would silently break something (a caller's unstated assumption, a non-obvious
+   invariant, a load-bearing directive). How the system *works*, and why it got that way, goes in the
+   commit/PR description or the context files (`PLAT-*` constitution, findings, ledger, per-feature
+   `context.md`) — where it is read on purpose — never as inline narration. Apply the Litmus test
+   below to every comment you write or keep. *(Enforced in review; the durable homes are §Context Guide.)*
 
 > Litmus test for any future line in this file: *does it shape how the agent thinks (a behavior), or
 > restate a fact the agent can read from the code?* If it's a fact already in the repo, leave it out.
@@ -326,7 +332,7 @@ xstockstrat-analysis → xstockstrat-ingest (QuerySignals for signal-weighted ba
 
 ## Header Propagation Convention
 
-Every backend service **that makes outbound per-request gRPC calls** must propagate `x-user-id`, `x-access-scope`, and `x-trace-id` from the inbound request to those calls. The external edge injects/strips them after auth (the `xstockstrat-ui` middleware — the nginx proxy that formerly did this was removed by feature 045), so platform-internal values are trusted. The Node leaf services (ledger, identity, notify, config) currently make no outbound per-request calls, so their `src/middleware/propagation.ts` is presently unused (see `docs/context-constitution-findings.md`).
+Every backend service **that makes outbound per-request gRPC calls** must propagate `x-user-id`, `x-access-scope`, and `x-trace-id` from the inbound request to those calls. The external edge injects/strips them after auth (the `xstockstrat-ui` middleware — the nginx proxy that formerly did this was removed by feature 045), so platform-internal values are trusted. The Node leaf services (ledger, identity, notify, config) make no outbound per-request calls that need this trio, so the unused `src/middleware/propagation.ts` helper each carried was removed (feature 175). identity's admin-audit calls to ledger forward the trio via `ledgerAudit.ts`'s own `PROPAGATED_HEADERS` const, not that helper.
 
 **Language-specific patterns (Go interceptor, Python per-method, Node.js AsyncLocalStorage), code snippets, and reference implementations** → read `docs/patterns/header-propagation.md`.
 

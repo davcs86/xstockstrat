@@ -2,12 +2,10 @@ import { useQuery } from '@tanstack/react-query';
 import { marketDataClient } from '@/lib/browserClients/marketDataClient';
 
 /**
- * Fundamentals ratios/metrics for a symbol (feature 125, FR-7) — GetFundamentals on
- * MarketDataService, a read-through cache over the active provider. A symbol with no data does NOT
- * surface as NotFound: the backend wraps the miss as UNAVAILABLE (no FMP row), FAILED_PRECONDITION
- * (fundamentals disabled), or RESOURCE_EXHAUSTED (quota, no cache) — so callers must treat ANY error
- * as the explicit no-data state (never special-case NotFound like the rest of this page). `retry:
- * false` because none of those errors is transient enough to warrant a retry on a page-load read.
+ * Fundamentals ratios/metrics for a symbol — GetFundamentals on MarketDataService. A no-data symbol
+ * does NOT surface as NotFound: the backend wraps the miss as UNAVAILABLE / FAILED_PRECONDITION /
+ * RESOURCE_EXHAUSTED, so callers must treat ANY error as the no-data state (never special-case
+ * NotFound). `retry: false` — none of those errors is transient.
  */
 export function useFundamentals(symbol: string) {
   return useQuery({

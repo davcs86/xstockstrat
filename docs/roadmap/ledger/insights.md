@@ -12,7 +12,7 @@ reusing.
 
 ## Rules
 
-- **Append-only.** Add new entries at the bottom; never rewrite or delete an existing one.
+- **Append newest-at-bottom; periodic lossless curation permitted.** New entries are still appended at the bottom (newest last). A periodic curation pass MAY merge duplicate/near-duplicate entries, normalize categories, and compress superseded entries — but only when every distinct lesson, every distinct piece of evidence, and a `- **Merged from**: …` provenance line are preserved. Curation is destructive-but-lossless; it never drops a unique lesson or citation.
 - **One entry, one lesson.** Keep it scannable.
 - **Cite evidence.** Point to a `path:line`, PR, or step so the reader can see the real thing.
 - **Categories:** `reuse` · `perf` · `design` · `ordering`.
@@ -30,16 +30,7 @@ reusing.
 
 <!-- Append entries below. Newest at the bottom. -->
 
-### 2026-07-03 — persist-strategy-scores — design
-- **Pattern**: To add DB durability to volatile in-memory service state without changing (and risking)
-  the read path, use **write-through + hydrate-at-boot**: keep the in-memory dict as the sole read
-  source, add a best-effort DB upsert on write, and hydrate the dict from the DB once at startup. Avoids
-  the false-success hazard of "best-effort write + read-from-DB" (a swallowed write then a DB read →
-  NOT_FOUND for a value the caller was just told succeeded).
-- **Evidence**: `services/xstockstrat-analysis/app/handlers/servicer.py` (`hydrate_scores`, best-effort
-  upsert in `ScoreStrategy`), `app/main.py` boot call; design.md § Chosen Approach (feature 064).
-- **Rule it implies**: prefer write-through+hydrate over DB-direct reads when a best-effort write and a
-  durable read path must coexist; reuse the existing repo/pool (no new pool — F-06).
+> Curated 2026-09-03: normalized 14 category labels to the canonical set (`execute`→`design`/`ordering`; `design round 2`→`design`; `pattern`→`design`; one `assumption` mislabel→`design`; `reuse (candidate follow-up…)`→`reuse`; and description-slot categories — "derive precedence, don't seed it", "align charts on one engine, not two", "proto/fingerprint-stability" — →`design`, with the descriptive detail already present in each entry body); merged 3 duplicate clusters (persist-strategy-scores write-through+hydrate, trigger-backfill five-discovery-surfaces, and the 069 shared-pure-gate-module loose bullet folded into its `###` entry); compressed 0 superseded entries. Lossless — every distinct lesson, evidence citation, and provenance retained. Entry count: 363→361 `### ` headings (two merges removed one duplicate `###` each; the third folded a non-`###` loose bullet).
 
 ### 2026-07-08 — backtest-debug-info — design
 - **Pattern**: To add a per-bar/observability read to an engine consumed by a live loop, keep the
@@ -93,22 +84,6 @@ reusing.
 - **Rule it implies**: when adding coverage gates to a codebase with large untested surface, gate on
   tested files, not the whole tree — a floor you can't reach on day one gets disabled, not met.
 
-### 2026-07-20 — trigger-backfill-mcp-tool — design
-- **Pattern**: A new MCP agent tool has **five** discovery/documentation surfaces, not one: the
-  `app/tools.py` module-docstring tool count + enumeration, the agent `CLAUDE.md` tool table, the
-  `docs/runbooks/mcp-tools.md` reference (header count + per-tool section), the
-  `docs/runbooks/CLAUDE.md` index line, and any **operational runbook** that documents how to do
-  the underlying task (e.g. `historical-backfill.md` for a backfill tool). Recon found four; the
-  adversarial round caught the fifth — the operational runbook is the surface that makes the
-  capability *findable* by an operator solving a problem. The `/api/tools` catalog itself is
-  automatic (FastMCP registration), but its name-set test is the built-in reachability proof.
-- **Evidence**: feature 066 design.md § Chosen Approach (Docs — five surfaces); adversary round-1
-  C-10(a) finding; `services/xstockstrat-agent/app/main.py:180` (auto catalog);
-  `tests/test_tools_endpoint.py:23-35` (name-set test).
-- **Rule it implies**: C-10(a) applies to tool/CLI/API additions, not just UI routes — enumerate
-  the discovery surfaces (including task-oriented runbooks) at recon time and prove the shared one
-  with a test.
-
 ### 2026-07-21 — fix-custom-formula-allnone — reuse
 - **Pattern**: Decoding a `google.protobuf.Struct` response field with `dict(resp.field)` +
   `isinstance(raw, (list, tuple))` silently **drops every list value** — `Struct.update()` marshals a
@@ -141,16 +116,20 @@ reusing.
 - **Pattern**: When two code paths must apply the *same* rule via a shared helper (here: backtest and
   live loop both calling `is_cooldown_active`), sharing the *function* is not enough — a cross-cutting
   input invariant (tz-aware-UTC datetimes) will silently drift if it is enforced by a comment at each
-  call site. Enforce the invariant **inside the helper** (raise `ValueError` on a naive datetime) and
-  unit-test the guard directly, so a third call site or a careless edit fails loudly instead of
-  reintroducing the two-paths-drift failure the shared helper was meant to prevent. Complements C-10(b):
-  the parity test proves the callers agree; the internal guard proves they *can't* feed the helper
-  incompatible inputs.
+  call site. Make the shared piece a single **pure** gate module (`app/services/cooldown.py`, no
+  DB/proto/gRPC imports) consumed identically by both engines, and enforce the invariant **inside the
+  helper** (raise `ValueError` on a naive datetime) with a direct unit test on the guard, so a third
+  call site or a careless edit fails loudly instead of reintroducing the two-paths-drift failure the
+  shared helper was meant to prevent (cf. fails 056). This made backtest/live parity (FR-4) directly
+  unit-testable. Complements C-10(b): the parity test proves the callers agree; the internal guard
+  proves they *can't* feed the helper incompatible inputs. Corollary: feed both call sites the **same**
+  time source (bar time), never one wall-clock + one bar-time.
 - **Evidence**: `docs/roadmap/features/069-strategy-reentry-cooldown/design.md` § Chosen Approach
   (`cooldown.py` `_require_aware`); 5-round design debate (the naive/aware split was flagged R2, "fix by
   comment" rejected R3, moved inside the helper R4).
 - **Rule it implies**: a shared helper reused across paths owns its input-contract enforcement (assert
   inside + a dedicated guard test), not a convention repeated at each call site — reinforces C-10(b), no new ID.
+- **Merged from**: 2 entries (both 2026-07-24) — the `### ` design entry and a loose bullet restating the same shared-pure-gate-module lesson (added: the pure/no-imports module detail and the same-time-source corollary).
 
 ### 2026-07-24 — 069-strategy-reentry-cooldown — design
 - **Pattern**: A proto3 scalar where the zero value is a *meaningful distinct choice* from "unset" (here:
@@ -168,13 +147,6 @@ reusing.
 - **Rule it implies**: if a scalar's zero is a real choice, declare it `optional` and check presence at
   every read/write layer — never `?? 0`, `x or default`, or a truthy guard; reinforces P-03 (verify the
   decoder/codegen contract), no new ID.
-
-- 2026-07-24 (069 strategy-reentry-cooldown): A single shared **pure** gate module
-  (`app/services/cooldown.py`, no DB/proto/gRPC imports) consumed identically by the backtest engine
-  and the live loop, with the tz-awareness invariant enforced *inside* the helper (`_require_aware`)
-  rather than by a per-call-site comment, made backtest/live parity (FR-4) directly unit-testable and
-  killed the class of "two enforcement paths drift apart" bugs (cf. fails 056). Feed both call sites the
-  **same** time source (bar time), never one wall-clock + one bar-time.
 
 ### 2026-07-26 — 071-backtest-time-window — design
 - **Pattern**: A "warm-up is verified at runtime, so the constant is safe" defense must be checked
@@ -243,7 +215,7 @@ reusing.
 - **Rule it implies**: reinforces **P-03** — verify the serializer's omission contract before designing
   merge semantics on top of it; presence rules differ per field kind and a two-rule merge will diverge.
 
-### 2026-07-27 — 071-backtest-time-window — execute
+### 2026-07-27 — 071-backtest-time-window — design
 - **Pattern**: When a value is **read at the top** of a per-item loop but **written at the bottom**,
   memoizing it in a shared cache silently makes item 1 behave differently from items 2+.
   `warmup.required_prefix_bars` reads the declared-formula-warm-up cache before fetching bars, while
@@ -259,7 +231,7 @@ reusing.
   than it is written needs a **multi-item** test asserting item 1 and item N behave identically. A
   docstring stating "caller must pre-populate" is a claim, not a guarantee.
 
-### 2026-07-27 — 071-backtest-time-window — execute
+### 2026-07-27 — 071-backtest-time-window — design
 - **Pattern**: A determinism assertion over a protobuf message must **clear the fields that differ
   per run by construction** (`backtest_id` uuid, `completed_at` stamp) rather than fall back to a
   field-by-field comparison. Left in, byte-identity is vacuously false and the natural next move —
@@ -271,7 +243,7 @@ reusing.
 - **Rule it implies**: extends **P-06** — when a test asserts "X does not change Y", add the
   companion assertion that something *does* change Y, so a no-op harness can't masquerade as a pass.
 
-### 2026-07-27 — 071-backtest-time-window — execute
+### 2026-07-27 — 071-backtest-time-window — design
 - **Pattern**: A mock that **echoes a request field back** as its response cannot distinguish a
   correct consumer from an incorrect one. `mock-backend.ts` returned `req.range` as both
   `requestedRange` and `gap`, so an e2e asserting the backfill action's range would pass whichever
@@ -312,7 +284,7 @@ reusing.
   best-effort, check whether the referrer can *detect* a failed persist. If it cannot, prefer
   carrying the value over referencing it.
 
-### 2026-07-27 — 072-backtest-result-attachment — design round 2
+### 2026-07-27 — 072-backtest-result-attachment — design
 - **Pattern**: A second grilling round on an **already-approved, already-specced** design is worth
   running when the first round closed on estimates. Round 2 here left the chosen approach untouched
   but still paid for itself: measuring the payload (5 symbols × 504 bars) showed the inline summary
@@ -327,7 +299,7 @@ reusing.
   measured, not estimated. If a design closes with figures nobody ran, a follow-up round that only
   measures them is a good trade even when the decision does not change.
 
-### 2026-07-27 — 072-backtest-result-attachment — design round 2
+### 2026-07-27 — 072-backtest-result-attachment — design
 - **Pattern**: When a feature writes a decision rule into the ledger, later rounds of that **same
   feature** must be checked against it. Round 2 proposed swapping the attachment to gzip, which would
   have inverted the failure-asymmetry rule this feature had recorded one day earlier and used to
@@ -340,7 +312,7 @@ reusing.
 - **Rule it implies**: reinforces **P-03** — a self-authored ledger rule binds the feature that wrote
   it. Re-read your own entries before adopting a change that trades the same axis.
 
-### 2026-07-27 — 072-backtest-result-attachment — execute
+### 2026-07-27 — 072-backtest-result-attachment — ordering
 - **Pattern**: When a step's verification cannot pass standalone because a *later* step adapts the
   test it breaks, the F-05-clean split is to carry **only the minimum adaptation** in the breaking
   step's commit, not to merge the two steps or to commit red. 072's step 3 changed
@@ -520,7 +492,7 @@ reusing.
 - **Evidence**: `docs/roadmap/features/086-fix-mcp-formula-lifecycle/design.md` §§ Chosen Approach 2/4, Rejected Alternatives; analysis `_fetch_formula_outputs` (`servicer.py:194-201`), `_declared_formula_warmup` (`servicer.py:1151`); root CLAUDE.md dep graph (analysis→indicators already exists, reverse edge would cycle — ledger 2026-07-31 083).
 - **Rule it implies**: extends **C-10(b)** and **F-06** — for a deletable resource another service depends on, prefer soft-delete + surfaced flag + run-flag at the consumer's existing fetch site over a reverse referential-delete edge; and "soft delete" is not honest unless the deleted state is observable in reads and flagged in runs.
 
-### 2026-08-02 — 097-remove-x-mcp-secret-header — execute
+### 2026-08-02 — 097-remove-x-mcp-secret-header — design
 - **Pattern**: Writing a **removal feature's** replacement doc/comment text is easy to get subtly
   wrong twice, both caught only at execute time, not spec time. First: when a step's own
   `**Verification**` demands a hard zero-count of the removed vocabulary in a set of files, the
@@ -680,7 +652,7 @@ reusing.
 - **Pattern**: A feature whose implementation step targets a service directory owned by an in-flight consolidation/rewrite feature (e.g. 045) should wait for that feature to merge before speccing file paths, not spec against the soon-to-be-deleted path and re-spec later.
 - **Evidence**: `docs/roadmap/features/016-config-ui-weight-validation/context.md` Session 2026-06-01 (W3 decision) + Session 2026-06-04 (actual re-spec of Steps 5-6 from `xstockstrat-config-ui` to `xstockstrat-ui`).
 - **Rule it implies**: At `/sdd-spec` time, check `merge-order.md` and in-flight feature statuses for the target service directory; if a consolidation feature is `draft`/`in-progress` and targets the same directory, flag it for re-spec-after-merge rather than speccing now.
-### 2026-08-05 — unified-login-page — assumption
+### 2026-08-05 — unified-login-page — design
 - **Pattern**: An implementation spec written before a prerequisite feature (045) fully landed assumed a structure that main-dev no longer matched by execution time, forcing a mid-execution re-spec.
 - **Evidence**: `docs/roadmap/features/019-unified-login-page/context.md:76-80`.
 - **Rule it implies**: When a feature's spec has a hard "must follow feature X being launched" dependency, re-verify the actual landed structure of X at execute-time (not just at spec-time) before trusting the spec's file list.
@@ -990,9 +962,20 @@ reusing.
 - **Rule it implies**: Before seeding any resource at startup, grep for an existing uniqueness constraint/upsert path; if absent, build one rather than re-inserting on restart.
 
 ### 2026-08-06 — persist-strategy-scores — design
-- **Pattern**: a best-effort write (FR-7-style) paired with a read path hitting the same store risks a false success ack on next read.
-- **Evidence**: design.md:12-16, 85-87.
-- **Rule it implies**: keep reads served from the in-memory/already-acked state (write-through), not the just-written durable store, unless the write is confirmed synchronous.
+- **Pattern**: To add DB durability to volatile in-memory service state without changing (and risking)
+  the read path, use **write-through + hydrate-at-boot**: keep the in-memory dict as the sole read
+  source, add a best-effort DB upsert on write, and hydrate the dict from the DB once at startup. A
+  best-effort write (FR-7-style) paired with a read path hitting the *same* store risks a false success
+  ack on the next read — the false-success hazard of "best-effort write + read-from-DB" (a swallowed
+  write then a DB read → NOT_FOUND for a value the caller was just told succeeded). Keep reads served
+  from the in-memory/already-acked state (write-through), not the just-written durable store, unless the
+  write is confirmed synchronous.
+- **Evidence**: `services/xstockstrat-analysis/app/handlers/servicer.py` (`hydrate_scores`, best-effort
+  upsert in `ScoreStrategy`), `app/main.py` boot call; design.md § Chosen Approach (feature 064);
+  design.md:12-16, 85-87.
+- **Rule it implies**: prefer write-through+hydrate over DB-direct reads when a best-effort write and a
+  durable read path must coexist; reuse the existing repo/pool (no new pool — F-06).
+- **Merged from**: 2 entries (2026-07-03, 2026-08-06) — the same write-through+hydrate / false-success-ack lesson for feature 064's persist-strategy-scores.
 
 ### 2026-08-06 — persist-strategy-scores — reuse
 - **Pattern**: DOUBLE PRECISION columns silently accept NaN/Infinity; JSONB columns reject them and fail the write.
@@ -1010,9 +993,23 @@ reusing.
 - **Rule it implies**: Record such standing approvals inline in context.md instead of re-prompting; only prompt when a real unresolved tradeoff remains.
 
 ### 2026-08-06 — trigger-backfill-mcp-tool — design
-- **Pattern**: Phase 0 Recon undercounted required docs-discovery surfaces (found 4 of 5); the mandated Phase 1 adversarial round is what caught the missing one (`historical-backfill.md`), not recon itself.
-- **Evidence**: design.md:72, context.md:53 (066).
-- **Rule it implies**: Treat recon's discovery-surface list as provisional, not final — the adversarial round is a required backstop for doc-surface completeness, so don't skip or shortcut it even in quick mode.
+- **Pattern**: A new MCP agent tool has **five** discovery/documentation surfaces, not one: the
+  `app/tools.py` module-docstring tool count + enumeration, the agent `CLAUDE.md` tool table, the
+  `docs/runbooks/mcp-tools.md` reference (header count + per-tool section), the
+  `docs/runbooks/CLAUDE.md` index line, and any **operational runbook** that documents how to do
+  the underlying task (e.g. `historical-backfill.md` for a backfill tool). Recon found only four; the
+  mandated Phase 1 adversarial round caught the fifth (`historical-backfill.md`) — the operational
+  runbook is the surface that makes the capability *findable* by an operator solving a problem, so
+  treat recon's own discovery-surface list as provisional, not final. The `/api/tools` catalog itself
+  is automatic (FastMCP registration), but its name-set test is the built-in reachability proof.
+- **Evidence**: feature 066 design.md § Chosen Approach (Docs — five surfaces); adversary round-1
+  C-10(a) finding; `services/xstockstrat-agent/app/main.py:180` (auto catalog);
+  `tests/test_tools_endpoint.py:23-35` (name-set test); design.md:72, context.md:53.
+- **Rule it implies**: C-10(a) applies to tool/CLI/API additions, not just UI routes — enumerate
+  the discovery surfaces (including task-oriented runbooks) at recon time and prove the shared one
+  with a test; the adversarial round is a required backstop for doc-surface completeness, so don't
+  skip or shortcut it even in quick mode.
+- **Merged from**: 2 entries (2026-07-20, 2026-08-06) — the detailed "five discovery surfaces" entry and its re-distillation ("recon's surface list is provisional; the adversarial round is the backstop"), both feature 066.
 
 ### 2026-08-06 — trigger-backfill-mcp-tool — reuse
 - **Pattern**: `MessageToDict` renders proto int64 fields as strings.
@@ -1304,7 +1301,7 @@ reusing.
 - **Evidence**: `docs/roadmap/features/123-shadcn-migration-custom-composites/design.md` § Round 3 (Step 1 restructured into 4 nested `Questionnaire.Item` sub-screens inside an unchanged outer "Step 1 — Identity" heading, while Steps 2-4 keep their existing step-number identity).
 - **Rule it implies**: when a partial-scope override changes one part of an already-speced component's internal structure, check whether nesting the change inside the unchanged outer framing preserves more of the existing e2e contract than flattening does — the nesting choice is often the lower-e2e-risk option even when it's structurally less "clean."
 
-### 2026-08-08 — shadcn-migration-custom-composites — reuse (candidate follow-up, not this feature's scope)
+### 2026-08-08 — shadcn-migration-custom-composites — reuse
 - **Pattern**: `useCandlestickChart.ts` hardcodes this app's dark-theme colors as literal hex values (`#22c55e`/`#ef4444`/`#94a3b8`/etc.) rather than reading the app's CSS custom properties, the same way `ui/chart.tsx`'s `ChartContainer`/`ChartConfig` composition does for the `recharts`-based charts. Swapping the hardcoded hex for the CSS variables would get `ChartPanel.tsx` (which stays on `lightweight-charts`, see the FR-5 sanctioned exception in `services/xstockstrat-ui/CLAUDE.md` § Styling) partial visual theming consistency with the rest of the app's charts, without a full chart-library migration.
 - **Evidence**: `docs/roadmap/features/123-shadcn-migration-custom-composites/design.md` § Round 2 (FR-5 discussion) and Open Risks; `services/xstockstrat-ui/src/hooks/useCandlestickChart.ts`.
 - **Rule it implies**: a candidate low-risk follow-up feature, not a rule to apply now — recorded here so it isn't lost, since it surfaced during design but is explicitly out of this feature's scope.
@@ -1429,7 +1426,7 @@ reusing.
   brief, and passes that brief — never a bare URL a tool-less subagent can't follow — into the
   proposer/adversary prompts.
 
-### 2026-08-13 — fundamentals-provider-alternative — execute
+### 2026-08-13 — fundamentals-provider-alternative — design
 - **Pattern**: When a spec step's open risk can only be closed by a **live call to a
   credential-gated external API** (not just docs research — a design-time `WebFetch`/`WebSearch`
   pass had already exhausted what secondary sources could confirm, per this feature's own
@@ -1740,7 +1737,7 @@ reusing.
 - **Evidence**: `docs/roadmap/features/122-shadcn-migration-low-confidence/context.md` sdd-design Rounds 1-2 (react-hook-form/zod dependency sweep; decision to decline `ui/form.tsx` in favor of `ui/field.tsx` to avoid a 2-call-site dependency)
 - **Rule it implies**: Treat `npx shadcn add` as a tentative installation; always review and trim collateral installs that the feature's actual call sites don't need before committing the result.
 
-### 2026-08-16 — symbol-page-section-nav — pattern
+### 2026-08-16 — symbol-page-section-nav — design
 
 - **Pattern**: For same-page section navigation over a long stack of cards, a sticky **anchor-nav**
   (shadcn `ToggleGroup type="single"` + native `scrollIntoView` + an `IntersectionObserver` scroll-spy,
@@ -1758,7 +1755,7 @@ reusing.
   existing "multiple sections visible" e2e or drop live queries; always co-locate sticky-offset +
   scroll-margin constants and pick a collision-free nav `aria-label`.
 
-### 2026-08-18 — 145-symbol-page-panel-refinements — derive precedence, don't seed it
+### 2026-08-18 — 145-symbol-page-panel-refinements — design
 - **Insight**: When a UI value has a precedence chain of sources (URL query → server-derived binding →
   user pick, default empty), model it as a PURE DERIVATION `effective = picked ?? url ?? bound ?? ''`
   with the user's pick as the only React state — not `useState(seed)` + a `watchlistsLoading`-gated
@@ -1772,7 +1769,7 @@ reusing.
 - **Rule it implies**: a precedence chain of read-only sources feeding one user-overridable selection is
   a derivation, not synchronized state; the only state is the override, defaulted `undefined`.
 
-### 2026-08-18 — 146-unify-symbol-chart-libraries — align charts on one engine, not two
+### 2026-08-18 — 146-unify-symbol-chart-libraries — design
 - **Insight**: To make two stacked charts share a time axis so a vertical at bar D lines up across all
   of them (a hard "lines up" AC), put them on the SAME rendering engine driven by the SAME time array —
   do not sync two different engines (e.g. lightweight-charts + recharts). Cross-engine tick algorithms
@@ -2065,7 +2062,7 @@ reusing.
   in the single backend owner. Candidate to fold into the `xstockstrat-agent` MCP-tool-contract review
   focus.
 
-### 2026-08-24 — market-regime-benchmark-operand — proto/fingerprint-stability
+### 2026-08-24 — market-regime-benchmark-operand — design
 - **Insight**: When adding an OPTIONAL field to a proto message whose serialized JSON feeds a
   definition **fingerprint** (here `StrategyComponent.source_symbol=6` → `definition_json` →
   `_definition_fingerprint`, `services/xstockstrat-analysis/app/handlers/servicer.py:3994`), use a
@@ -2902,3 +2899,198 @@ reusing.
   the default, legacy Update passes `""`; `source==SIGNAL` (system-managed signal auto-adds) skipped.
 - **Rule it implies**: implement an add-time default at the one insert chokepoint with a source guard and
   a per-caller default argument, never as a read-time fallback or a second write path.
+
+### 2026-09-04 — 173-fix-python-config-zero-trap — design
+- **Pattern**: Fixing a Python config-watcher zero-trap (`v.int_val or default` collapsing a stored 0)
+  is a **targeted per-key** switch, not a blanket accessor swap: port the `HasField`-based
+  `get_int_present`/`get_str_present` alongside the trapping accessor and re-point only the keys whose 0
+  is meaningful. Keys whose 0 is nonsensical (a value feeding `asyncio.Semaphore(N)` — `Semaphore(0)`
+  deadlocks) and keys intentionally clamped ≥1 at read must STAY on the trapping accessor, each carrying
+  a ≤2-line "zero-trap intentional, cites the real consumer site" comment (fails-151) so the next sweep
+  doesn't "fix" them into a hang. A blanket swap silently un-clamps those and widens the blast radius.
+- **Evidence**: `services/xstockstrat-ingest/app/config/watcher.py` (route `max_retry_attempts`/
+  `dedup_window_hours`, leave `max_concurrent_*` at `servicer.py:191`/`:519`); `ConfigValue` oneof
+  `packages/proto/config/v1/config.proto:60-71` makes `HasField` legal; analysis precedent
+  `xstockstrat-analysis/app/config/watcher.py:102,131`.
+- **Rule it implies**: (a) route only the confirmed 0-meaningful keys through a present-aware accessor;
+  annotate every intentional retention. (b) To make an INLINE config-consumer expression RED-provable
+  without driving a slow loop (e.g. a `2**attempt` retry backoff), extract it into a named seam that
+  becomes the SOLE definition the loop consumes — not a parallel echo (that would re-open fails-074's
+  vacuous-green trap); prove wiring with the pre-existing loop tests. Reinforces C-08/P-06, no new ID.
+
+### 2026-09-04 — 171-fix-agent-trading-mode-otel-attr — design
+- **Pattern**: A comment-audit item filed as a single-service defect can be a **fleet-wide convention** —
+  recon before assuming scope. Here `trading_mode` was flagged as an agent-only stale OTel attribute but
+  is emitted identically by all 12 telemetry modules and is redundant with `deployment.environment` 1:1
+  in every deploy target. Agent-only "fixing" it creates divergence; the honest fix is fleet-wide or none.
+  Also: a removed **OTel resource attribute**'s real consumers are **out-of-repo** Grafana dashboards/alerts
+  (grep clears only in-repo dashboards/collector config) — an unavoidable blind spot (fails-1638 analog);
+  record it as an examined, accepted residual, de-risked here by `OTEL_ENABLED=false` in both `.do` specs.
+- **Evidence**: 12 `**/telemetry.{py,ts},**/otel.go` emit it; `.do/app.yaml:31`/`.do/app.dev.yaml:31`
+  (env↔mode 1:1, OTEL off); `packages/otel/dashboards/README.md:40` the only in-repo reference.
+- **Rule it implies**: for a "stale attribute/label" bug, grep the fleet for the same emission before
+  scoping to one service, and treat out-of-repo observability consumers as an examined residual, not a
+  grep-clean all-clear. Reinforces P-03, no new ID.
+
+### 2026-09-04 — 175-fix-dead-code-cleanup-batch — design
+- **Pattern**: For a **pure-deletion** feature, three traps recur and each has a cheap guard. (1) A
+  "dedicated test" is often a FUNCTION inside a SHARED test file — deleting the *file* nukes live
+  regressions. Verify with `grep -c '^func Test'` (here config_test.go held 7/9/15 funcs); the step
+  must say "delete the `TestX` function," never the file. (2) The AC "X no longer exists" has NO
+  build-RED (a pre-deletion tree is fully green) — the honest RED→GREEN is a **construct-scoped**
+  presence assertion (`grep 'func getEnvBool'`, `git ls-files '*/propagation.ts'` empty), living as a
+  named `**Covers**: AC-N` impl-spec step, NOT a permanent CI guard (overbuild) and NOT "recorded in
+  context.md" (C-15 wants a re-run step). (3) A doc pattern's **"Reference store"** cite (here
+  `header-propagation.md:123` → ledger `propagation.ts` + snippet) is a teardown target the deletion
+  orphans — recon must list it or `/sdd-spec` misses it (fails-670).
+- **Also**: a **`@types/node` major bump** verifies ONLY via a real `tsc` (a service whose CI runs
+  `node --experimental-strip-types --test` type-checks NOTHING — fails-021 — so gate on `pnpm build`,
+  not `test`); a Next.js service's sole type gate is `next build` (a bare `tsc --noEmit` false-REDs
+  because the `next` tsconfig plugin is LSP-only and `.next/types` exist only post-build — fails-155).
+  And per-service `pnpm-lock.yaml` can be **vestigial**: check the Dockerfile's actual `COPY … pnpm-lock`
+  source before regenerating or gating on them (here all leaf Dockerfiles use the ROOT lock).
+- **Evidence**: config_test.go func counts (grep); ledger/identity `package.json` `build`=tsc vs
+  `test`=strip-types; `xstockstrat-ui/next.config.js` (no `ignoreBuildErrors`); leaf `Dockerfile:13,17`
+  (root lock + `--frozen-lockfile`); `header-propagation.md:123`/`:126-151`.
+- **Rule it implies**: a deletion PR's AC discharge is `(construct-scoped presence RED→GREEN as a named
+  step) + (the service's REAL compile gate)`; verify the compile gate and lockfile source per service,
+  never assume. Reinforces C-08/C-15/P-06 and fails-021/110/155/670; no new ID.
+
+### 2026-09-05 — analysis-concurrency-offload — perf
+- **Lesson**: to parallelize a serial async fan-out or move a CPU core off the event loop with
+  BYTE-FOR-BYTE output, two patterns paid off. (1) **Optional-semaphore evaluator**: add a
+  `component_sem=None` param where `None ⇒ verbatim serial` and a semaphore ⇒ `asyncio.gather` under
+  that bound, reassembling from the ORDER-PRESERVING gather result (gather keeps input order) so the
+  concurrent path is identical regardless of completion order — no `return_exceptions` (keeps the
+  serial per-item exception scope). (2) **Nested-closure CPU offload**: wrap an await-free core in a
+  local `def _core(): …` and `await loop.run_in_executor(self._compute_executor, _core)` — the closure
+  captures the prologue locals automatically, avoiding the error-prone explicit-param extraction the
+  spec sketched, while keeping the core off the loop.
+- **Evidence**: `evaluator.py` `evaluate_conditions_traced` branch; `servicer.py` `_backtest_symbol`/
+  `_simulate_portfolio` `_core` closures; feature 176 Steps 4/10.
+- **Rule it implies**: bound a parallel fan-out with a semaphore DISTINCT from any inner sem the tasks
+  re-acquire (feature 176 `_candidates_sem` vs `_bars_fetch_sem`), or a self-reentry deadlocks; prove
+  the offload with a peak-counter teeth test (exact bound, not an upper bound) + a head-of-line
+  isolation test (a spinning core in the executor must not stall a concurrent reader). No new ID.
+
+### 2026-09-05 — quote-fanout-batching — perf
+- **Pattern**: Collapse a serial per-item fan-out (N gRPC or N DB calls) into a batch WITHOUT changing
+  the response contract or losing the "missing ≠ zero" discipline. Three shapes landed: (1) an
+  **additive batch RPC** mirroring an existing `*Multi` precedent, returning `repeated <Elem>`
+  **self-keyed** on the element's own id (an absent item is omitted → null-not-zero, no
+  `map<>` needed, buf-breaking-safe); (2) a cache-first batch service method = one batched repo read
+  (`DISTINCT ON (key) ... ORDER BY key, ts DESC` over the *existing* per-key index — no migration) +
+  one upstream fetch for the cold remainder **coalesced under a `singleflight.Group` keyed on the
+  sorted cold set** (concurrent callers share one fetch); (3) a `WHERE key = ANY($1::uuid[])` +
+  `ORDER BY key, sub` read that replaces a 1+N loop, grouped into `map[key][]row` preserving per-key
+  order. Consumer side: one helper that batches then re-keys by id, where a whole-call RPC error
+  returns an empty map so every item is "missing" — the same neutral outcome as N failing singular
+  calls (never a fabricated zero).
+- **Evidence**: `marketdata.proto` `GetLatestQuotes`; `marketdata_repo.go` `GetLatestQuotesBatch`,
+  `marketdata_service.go` `GetLatestQuotes` (+`quoteSingleflight`); `portfolio_service.go`
+  `latestQuotesFor` (4 sites); `watchlist_repo.go` `bindingsByWatchlist`; feature 178 Steps 3/5/7.
+- **Rule it implies**: (a) batch by mirroring the closest existing `*Multi`/`ANY` precedent, not a new
+  shape; (b) a batched "latest per key" repo read is a NEW method (`DISTINCT ON`), never a `LIMIT`ed
+  clone of the singular `... LIMIT 1`; (c) key single-flight on the SORTED cold SET so it actually
+  coalesces; (d) preserve any per-site formula byte-identical + add a cross-path parity test (PR#735
+  scar); (e) for the offline test, a concrete `*pgxpool.Pool` field blocks pgxmock — add the mockable
+  `queryRower` seam (as PortfolioRepo already did) rather than a live DB. No new ID.
+
+### 2026-09-05 — ui-resume-halted-account — reuse
+- **Pattern**: Adding a confirm-gated privileged row action reuses the canonical `RowActionsMenu`
+  (admin-gated action + reason-surfacing `AlertDialog`) rather than a bespoke button. Two e2e
+  consequences to plan for: the dropdown stays *mounted* through the confirm flow (Radix
+  `onSelect` `preventDefault`), so (a) the halt reason renders in both the dialog and the row behind
+  it — scope reason assertions to `getByRole('alertdialog')` to avoid a strict-mode dup; and (b)
+  re-opening the row menu after confirm must `Escape`-reset first or the trigger click deadlocks
+  against the still-open menu.
+- **Evidence**: `services/xstockstrat-ui/src/components/shared/RowActionsMenu.tsx:90-100`;
+  `services/xstockstrat-ui/e2e/trader/account-resume.spec.ts` @AC-3/@AC-6; feature 179 Deviation Log.
+- **Rule it implies**: reuse `RowActionsMenu` for confirm-gated row actions (C-17); when e2e-testing
+  one, scope dialog assertions and reset the menu between interactions — no new Constitution ID.
+
+### 2026-09-05 — ui-resume-halted-account — design
+- **Pattern**: An "optimistic clear then refetch" UI mutation reads cleanest as a full-replace context
+  mutator (`applyAccountUpdate`, fail-loud on a missing id) fed by the *authoritative* server response,
+  followed by a background `refreshAccounts()`. The e2e mock should echo the requested id back mutated
+  so the optimistic path is actually exercised, not masked by the refetch.
+- **Evidence**: `services/xstockstrat-ui/src/context/AccountContext.tsx` `applyAccountUpdate`;
+  `services/xstockstrat-ui/src/components/trader/accountShared.tsx` `handleResume`;
+  `services/xstockstrat-ui/e2e/mock-backend.ts` `resumeAccount` (id echo).
+- **Rule it implies**: drive an optimistic-then-refetch mutation from the server response, and make the
+  mock echo identity so the optimistic frame is under test — no new ID.
+
+### 2026-09-05 — readiness-caching-poll-discipline — perf
+- **Pattern**: Cache a decide-surface read WITHOUT ever presenting stale-as-fresh by keying the cache
+  entry on the *inputs that must invalidate it* and carrying an explicit `computed_at`. Three shapes
+  landed: (1) a per-`(user,strategy,rule,symbol)` FAST/SLOW cache keyed on the **definition
+  fingerprint + `bar_epoch`** (`max(evaluated, benchmark)` last-bar) so a FAST hit is byte-identical
+  to a fresh compute and a new bar always busts it — never a slow-path `bar_epoch` reuse (a same-
+  `time.seconds` intraday 1d update must re-evaluate); (2) a **dedicated compute-state table** (not an
+  in-band queue sentinel — the sentinel is eaten by the read's conviction floor and re-kicks every
+  poll) that stamps a short TTL only on an **empty** compute, gating redundant recompute while a
+  background self-heal covers empty→non-empty; (3) a **success-only** process-lifetime memo for
+  read-time live enrichment (a failed/unavailable fetch is never cached, so it drops within the TTL).
+  The response `computed_at` = the **oldest** served row's stamp (never fresher than its oldest input).
+- **Evidence**: `analysis/app/repositories/{readiness_cache,opportunity_compute_state}.py`; migrations
+  `022`/`023`; `servicer.py` `EvaluateReadiness` FAST/SLOW, `_replace_and_stamp_compute_state` (the
+  three empty `replace_for_user` sites), `_enrich_opportunities_live` memo; feature 177 Steps 6/8/10.
+- **Rule it implies**: when caching a recompute-on-read surface, (a) key the entry on every input that
+  must invalidate it (fingerprint + freshest-bar epoch), not wall-clock alone; (b) prefer a dedicated
+  state table over an in-band sentinel whenever a read-side filter would hide the sentinel; (c)
+  memoize live values **success-only**; (d) always surface an oldest-of `computed_at` so no consumer
+  can read the response as fresher than its stalest input. Client mirror: a per-query `staleTime`
+  (never a `QueryClient` default — a default forces a whole-list refetch). No new ID.
+
+### 2026-09-05 — watchlist-readiness-precompute — design
+- **Pattern**: When a "pre-warm a cache in the background" feature is proposed, the decisive question
+  is not *which loop* hosts it but *whether the host loop already fetches the exact keys the reader
+  reads*. Here the live loop looked like a free host (it evaluates the same live strategies), but it
+  fetches each strategy's **resolved universe** (`allowlist OR (watchlist ∪ held ∪ signals) − denied`,
+  `live_loop.py:103-105`), which is neither a subset nor a superset of the watchlist-bound pairs the
+  overlay reads — allowlist-override strategies yield **0%** binding coverage. "Reuse the bars the
+  loop already has" collapsed under a re-grep. Verify the host's actual key set against the reader's
+  key set before trading a dedicated loop away for "free" reuse.
+- **Pattern**: A cross-path cache whose freshness must survive a shared gate is safest when the
+  bust condition is **data-derived (a stored `bar_epoch` vs the latest bar), not time-derived (TTL)**.
+  A per-origin `valid_until` policy under one gate creates two silent freshness semantics on one
+  table (a C-16 dishonesty); moving the bust into one pure `is_fresh(row, now, latest_epoch)`
+  predicate shared by every read path keeps a single honest semantic and confines the change to a
+  reviewable unit. (feature 180 — bar_epoch-aware FAST gate over feature 177's `servicer.py:2780`.)
+- **Evidence**: `docs/roadmap/features/180-watchlist-readiness-precompute/design.md` §§ Chosen
+  Approach, Option A vs B, @AC-2 reconciliation; `services/xstockstrat-analysis/app/engine/live_loop.py:103-105,341-347`;
+  `services/xstockstrat-analysis/app/handlers/servicer.py:2780,2786-2818`.
+
+### 2026-09-05 — watchlist-readiness-precompute — execute
+- **Pattern**: A background pre-warm loop and its interactive read path stay honest when they share
+  ONE compute unit and ONE freshness predicate. Extracting the SLOW `EvaluateReadiness` body into
+  `app/services/readiness.py` (`compute_readiness_row` + pure `is_readiness_row_fresh`) let the new
+  `run_readiness_materializer_forever` loop produce byte-identical rows and let the FAST gate become
+  `bar_epoch`-aware for both origins with no two-policies-per-table risk — the modularization the
+  operator asked for, and the cheapest correctness guarantee (feature 180, Steps 1/3/5).
+- **Pattern**: Before adding a "new" helper a spec calls for, grep the target service — feature 180's
+  Step 5 was specced to add `_drain_watchlist_bindings`, but the servicer already had exactly that
+  method (built for `_compute_opportunities`); reusing it avoided a duplicate. The spec's D-1
+  correction (that `live_loop._drain_watchlist` discards `strategy_id`) was right about the *live_loop*
+  method but missed the servicer's own binding-aware drain.
+- **Evidence**: `services/xstockstrat-analysis/app/services/readiness.py`;
+  `app/handlers/servicer.py` (`_readiness_materializer_tick`, `_drain_watchlist_bindings` reuse,
+  FAST gate); `docs/roadmap/features/180-watchlist-readiness-precompute/implementation-spec.md` Deviation Log.
+
+## 2026-09-06 — config write-bounds are write-path only (feature 182)
+
+- **Pattern**: Registering a `SCALAR_BOUNDS_REGISTRY` entry for a config key rejects only out-of-range
+  future `SetConfig` writes (`configServiceImpl.ts` write edge) and touches **no read path** — so
+  adding bounds does NOT break a "no-runtime-behavior-change" registration contract. A design that
+  defers bounds "to stay no-behavior-change" is miscalibrated: the behavior-change fear belongs to the
+  *seeded value* (seed == code default = no change), not to the bounds.
+- **Rule it implies**: when a feature makes a numeric operational key operator-editable (seeding it so
+  config-ui can show it), evaluate write-bounds on their own merits (footgun exposure), not against the
+  no-behavior-change contract. Two footgun classes to check at the reader: a `max(1,…)` clamp guards
+  only the low side (upper is still an operator lever — e.g. `max_concurrent_bars_fetches` re-opening
+  the feature-141 SEV-2), and a key fed to a scheduler/`seconds_until_hour_utc` may have **no** clamp
+  (`refresh_hour_utc`). Bound the upper side in the registry, keyed on the FULL dotted key path.
+- **Evidence**: `services/xstockstrat-config/src/grpc/configServiceImpl.ts:98-103` (float-only registry
+  today — int support is the open verify for a new int-key bound);
+  `services/xstockstrat-analysis/app/handlers/servicer.py:454` (`get_int` + low-only `max(1,…)`), `:4075`
+  (`refresh_hour_utc`, no clamp); feature 182 design.md.

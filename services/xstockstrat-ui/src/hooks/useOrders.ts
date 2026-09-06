@@ -6,10 +6,8 @@ import type { ListOrdersResponse } from '@xstockstrat/proto/trading/v1/trading_p
 
 type ListOrdersInput = Parameters<typeof tradingClient.listOrders>[0];
 
-// OrderFilters are the server-side filters (FR-2) forwarded to ListOrders. An empty
-// string or undefined enum means "no filter on this dimension" (matches the gRPC service
-// semantics). `range`/`status` are existing request fields; the four additive filters
-// (symbol/side/orderType/accountId) landed in Steps 1–5.
+// Server-side filters forwarded to ListOrders. An empty string or undefined enum means "no filter
+// on this dimension" (matches the gRPC service semantics).
 export interface OrderFilters {
   symbol?: string;
   side?: PbOrderSide;

@@ -1,9 +1,7 @@
 import { cn } from '../ui/utils';
 import { Eyebrow } from './Eyebrow';
 
-// Nocturne "kicker stat" tile (feature 083): a mono uppercase kicker label, a large tabular
-// value tinted by semantic tone, and an optional sub line. Single source of truth for the
-// Opportunities / Exposure (and other) stat rows (DRY guard rail).
+// Single source of truth for the platform's kicker stat tiles (Opportunities / Exposure and others).
 export function StatTile({
   label,
   value,

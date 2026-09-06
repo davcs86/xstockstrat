@@ -47,9 +47,8 @@ interface OrderFiltersProps {
   onChange: (filters: OrderFilters) => void;
 }
 
-// OrderFilters renders the controlled, server-side filter inputs (FR-2): symbol, side,
-// order type, status, and a created-at date range. Account scoping is handled globally by
-// the AppShell AccountSelector and merged in by the page.
+// OrderFilters renders the controlled, server-side filter inputs: symbol, side, order type, status,
+// and a created-at date range. Account scoping is handled globally by the AppShell and merged in by the page.
 export function OrderFiltersPanel({ onChange }: OrderFiltersProps) {
   const [symbol, setSymbol] = useState('');
   const [side, setSide] = useState<string>(ANY);
@@ -115,9 +114,8 @@ export function OrderFiltersPanel({ onChange }: OrderFiltersProps) {
             aria-label="Filter by symbol"
           />
 
-          {/* side/order-type/status Selects + date range render inside FilterToolbar (FR-12) —
-              symbol stays a sibling Input here since it's free text, not a Select (see
-              121-shadcn-migration-medium-confidence implementation-spec.md Step 14). */}
+          {/* Selects + date range render inside FilterToolbar; symbol stays a sibling Input here since
+              it's free text, not a Select. */}
           <FilterToolbar
             filters={[
               {

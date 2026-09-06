@@ -1,18 +1,6 @@
-// Package timeframe reconciles the OHLCV bar-interval vocabulary across services.
-//
-// The DB stores literal canonical strings ("15m","1h","1d"). Different callers
-// historically sent different spellings — analysis used "1Day" while the backfill path
-// used "1d" — so bars written by one were invisible to the other. This package maps
-// the shared common.v1.Timeframe enum and all known legacy aliases to the single
-// canonical DB string, and computes coverage gaps. It is pure (no DB/gRPC deps) so it
-// is unit-testable and counts toward coverage.
-//
-// 15 minutes is the smallest supported interval — the free Alpaca data plan serves
-// 15-minute-delayed data and the platform is not a real-time trader. The deprecated
-// TIMEFRAME_1MIN/5MIN enum values and their "1m"/"5m" string spellings are no longer
-// resolvable; callers sending them get an unresolvable-timeframe error. TIMEFRAME_1MIN is
-// still set directly by the Alpaca WS stream path (bypassing this package) to describe
-// already-produced 1-minute bars that are never persisted.
+// Package timeframe maps the common.v1.Timeframe enum and all legacy aliases to the single
+// canonical DB bar-interval string ("15m"/"1h"/"1d") and computes coverage gaps. 15m is the smallest
+// supported interval; "1m"/"5m" are unresolvable (the WS stream path labels 1m bars directly).
 package timeframe
 
 import (
@@ -39,9 +27,8 @@ func ToCanonical(tf commonv1.Timeframe) (string, bool) {
 	}
 }
 
-// Interval returns the wall-clock duration of one bar for a canonical timeframe string
-// ("15m"/"1h"/"1d"). Unknown / unsupported inputs return 0. Used to size a default history
-// window from a requested bar count when the caller supplies no explicit time range.
+// Interval returns the wall-clock duration of one bar for a canonical timeframe ("15m"/"1h"/"1d").
+// Unknown/unsupported inputs return 0.
 func Interval(canonical string) time.Duration {
 	switch canonical {
 	case "15m":
@@ -55,9 +42,8 @@ func Interval(canonical string) time.Duration {
 	}
 }
 
-// FromString accepts all known aliases for backward compatibility during the deprecation
-// cycle. This is what reconciles the "1Day" (analysis) vs "1d" (backfill) mismatch.
-// Returns TIMEFRAME_UNSPECIFIED for unrecognized input.
+// FromString maps all known aliases (e.g. "1Day"→canonical) to the enum, reconciling the
+// analysis-vs-backfill spelling mismatch. Unrecognized input returns TIMEFRAME_UNSPECIFIED.
 func FromString(s string) commonv1.Timeframe {
 	switch s {
 	case "15m", "15Min":
@@ -93,11 +79,8 @@ type Gap struct {
 	End   time.Time
 }
 
-// ComputeGaps returns the missing ranges within the requested [reqStart, reqEnd] given the
-// covered [earliest, latest] span and the stored bar count. Interior-hole detection is out of
-// scope for P1 (deferred to P2 resumable-chunked-backfills): when there are no bars the whole
-// requested window is a gap; otherwise only the leading [reqStart, earliest) and trailing
-// (latest, reqEnd] segments are reported.
+// ComputeGaps returns the missing ranges in [reqStart,reqEnd] given the covered [earliest,latest]
+// span. No bars → whole window; else only leading/trailing segments (interior holes out of scope).
 func ComputeGaps(reqStart, reqEnd, earliest, latest time.Time, count int64) []Gap {
 	if !reqEnd.After(reqStart) {
 		return nil

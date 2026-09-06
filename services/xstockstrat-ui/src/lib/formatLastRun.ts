@@ -1,8 +1,5 @@
-// Screener "last run" relative-time formatter (feature 098).
-//
-// Pure and tick-free by design (R3): the screener passes `now = Date.now()` at render, so the label
-// freshens on any interaction without a `setInterval`. A perfectly idle post-scan page keeping a
-// slightly stale "2m ago" is an accepted, cosmetic tradeoff (How-to-Act #2 — no speculative timer).
+// Screener "last run" relative-time formatter. Pure and tick-free: the caller passes `now` at render,
+// so the label freshens on interaction without a setInterval (a slightly stale idle label is accepted).
 
 /** Relative-time label for the last screener scan, e.g. `"last run 2m ago"` / `"last run just now"`. */
 export function formatLastRun(then: Date, now: number): string {

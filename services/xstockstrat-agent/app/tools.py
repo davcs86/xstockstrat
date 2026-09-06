@@ -55,11 +55,8 @@ from app.scopes import MCP_CLAIMS_SCOPE_KEY, resolve_scope, roles_to_access_scop
 _ALERT_THRESHOLD_DEFAULT = 0.6
 _ALERT_THRESHOLD_CONFIG_KEY = "signal.alert_threshold"
 
-# feature 093: secure per-source extract credentials are not yet supported. The old path read a
-# plaintext `source.<slug>.credentials` config key — a C-05 / config-invariant-#6 violation (secrets
-# are is_secret references that GetConfig redacts; a plaintext value would be disclosed unredacted).
-# So a source that requires credentials raises loudly (AC-2) instead of silently fetching
-# unauthenticated. The secure resolver (AC-3) is a deferred follow-up.
+# Secure per-source extract credentials are not supported yet: a source requiring credentials
+# raises loudly instead of fetching unauthenticated (plaintext creds would bypass secret redaction).
 _CREDENTIALS_UNSUPPORTED = (
     "secure per-source credential resolution is not supported yet: source '{slug}' is registered "
     "with credentials (has_credentials=true), but the platform's secret store is not wired to the "
@@ -200,9 +197,7 @@ def _grpc_error_message(exc: grpc.aio.AioRpcError, not_found: str = "not found")
     return exc.details() or str(code)
 
 
-# Type-level mapping: source_type → extractor_tool
-# Derives extractor_tool from source_type at the agent layer only.
-# The underlying ListSignalSources RPC and proto are unchanged.
+# source_type → extractor_tool (derived at the agent layer only).
 _EXTRACTOR_TOOL_MAP: dict[str, str | None] = {
     "mediated_email_attachment": "extract_email_content",
     "mediated_linked_email": "extract_email_content",
@@ -213,9 +208,7 @@ _EXTRACTOR_TOOL_MAP: dict[str, str | None] = {
 
 
 def register_tools(server: MCPServer) -> None:
-    # Edge header propagation (PR #994): one middleware binds the caller's verified identity for the
-    # duration of each tools/call so every backend gRPC forwards x-user-id + x-access-scope +
-    # x-trace-id — no per-tool plumbing. Registered before the tools so it wraps all of them.
+    # Register the propagation middleware before the tools so it wraps every tools/call.
     server.middleware.append(CallerPropagationMiddleware())
 
     @server.tool()
@@ -232,10 +225,8 @@ def register_tools(server: MCPServer) -> None:
         source_type: optional filter list
             (e.g. ['mediated_simple_email', 'mediated_email_attachment'])."""
         sources = await client.list_signal_sources(include_inactive=False)
-        # Enrich each source with extractor_tool derived from source_type.
-        # feature 166 — the boolean has_credentials IS surfaced (product-spec-committed,
-        # @AC-1/@AC-2);
-        # the token / credentials_ref remain intentionally excluded — never exposed to Claude.
+        # has_credentials (boolean) is surfaced; the token / credentials_ref are never exposed
+        # to Claude.
         enriched = []
         for src in sources:
             st = src["source_type"]
@@ -246,9 +237,7 @@ def register_tools(server: MCPServer) -> None:
                     "source_type": st,
                     "config_json": src["config_json"],
                     "extractor_tool": _EXTRACTOR_TOOL_MAP.get(st, None),
-                    # feature 166 — whether a bearer/credential is configured (boolean only).
                     "has_credentials": src["has_credentials"],
-                    # feature 161 — surface the per-source reliability weight (was dropped here).
                     "reliability_weight": src["reliability_weight"],
                 }
             )
@@ -372,10 +361,8 @@ def register_tools(server: MCPServer) -> None:
             raw_url=raw_url,
             tags=tags,
         )
-        # Auto-emit alert for high-conviction signals — deterministic rule, not model-driven.
-        # feature 093: env-scoped read (was env-blind → always the dev row → the default). Broad
-        # try/except because this read is POST-COMMIT (the signal is already persisted above), so it
-        # must never fail ingest_signal — any error falls back to the default.
+        # Post-commit best-effort: the signal is already persisted, so an alert-threshold read
+        # failure must never fail ingest_signal — fall back to the default.
         env = _resolve_scope("")
         try:
             threshold_str = await client.get_config_value(
@@ -409,10 +396,8 @@ def register_tools(server: MCPServer) -> None:
                 log.warning(
                     "Auto-alert failed after ingest_signal (signal already ingested): %s", e
                 )
-        # Auto-add to the caller's system-managed signals watchlist (feature 127) — post-commit,
-        # best-effort, structurally identical to the auto-alert above. Gated on
-        # direction='watchlist' and a non-deduplicated ingest (FR-4/FR-6). _caller_user_id raising
-        # on the unauthenticated stdio transport is caught here → add skipped, signal ingested.
+        # Post-commit best-effort, gated on direction='watchlist' + non-dedup. _caller_user_id
+        # raising on stdio is caught here → add skipped, signal still ingested.
         if direction == "watchlist" and not result.get("deduplicated"):
             try:
                 user_id = _caller_user_id(ctx, "ingest_signal")
@@ -465,9 +450,8 @@ def register_tools(server: MCPServer) -> None:
             correlation_id=correlation_id,
         )
 
-    # structured_output=False is forward-protection, not load-bearing today: for a bare `-> list`
-    # the SDK builds no output schema either way. It becomes load-bearing only if the annotation is
-    # ever parameterized (`list[ContentBlock]`), which would build one by default.
+    # structured_output=False matters only if the `-> list` return is ever parameterized
+    # (e.g. list[ContentBlock]), which the SDK would otherwise build an output schema for.
     @server.tool(structured_output=False)
     async def run_backtest(
         ctx: Context,
@@ -522,9 +506,8 @@ def register_tools(server: MCPServer) -> None:
           echoed in the summary. Note (display-only): in next-bar mode a diagnostics row can show an
           ENTER/EXIT on a bar whose conviction reads hold — the action lands on the fill bar while
           conviction stays that bar's own value; the grade is unaffected."""
-        # feature 133: forward the caller's own user id so analysis resolves ownership from the
-        # header — a non-owner strategy_id_ref is rejected PERMISSION_DENIED there. Wrap the RPC so
-        # that denial surfaces as a tool-level error, not an unwrapped AioRpcError (AC-6).
+        # Forward the caller's own user id so analysis resolves ownership from the header; wrap the
+        # RPC so a PERMISSION_DENIED surfaces as a tool-level error, not a raw AioRpcError.
         user_id = _caller_user_id(ctx, "run_backtest")
         try:
             result = await client.run_backtest(
@@ -708,18 +691,11 @@ def register_tools(server: MCPServer) -> None:
         RESPONSE CASING: this tool returns the definition with camelCase keys (e.g. `refName`,
         `entryRule`), UNLIKE get_strategy, which returns snake_case. To round-trip an edit, fetch
         with get_strategy (snake_case matches this tool's INPUT), not from this response."""
-        # feature 070: send ONLY what the caller supplied. The previous version defaulted these
-        # to ""/[] and shipped them unconditionally, so `manage_strategy(operation="update",
-        # strategy_id=..., cooldown_days=45)` transmitted explicit-empty components and rules and
-        # a blanked display_name — which is what wiped stored strategies. Generalizes the
-        # `is not None` treatment `cooldown_days` already had to every optional field.
+        # Send ONLY what the caller supplied (is not None) — shipping defaulted ""/[] on update
+        # is what wiped stored strategies.
         #
-        # feature 149: a rule may arrive as a JSON object (dict) from an MCP client whose transport
-        # pre-parses JSON arguments, or as a pre-encoded JSON string. Serialize a dict to the same
-        # JSON string a string-passing caller would send. Bare json.dumps (NO sort_keys) so the
-        # string path stays byte-for-byte; a str is never re-encoded. This runs BEFORE the mask
-        # below, so an omitted None still drops out and an empty dict {} → "{}" (non-None) enters
-        # the mask (the server then rejects a contentless rule, INVALID_ARGUMENT).
+        # A dict rule is serialized with bare json.dumps (NO sort_keys) so a string-passing caller's
+        # bytes match; runs before the mask, so None drops out and {} → "{}" enters it.
         if isinstance(entry_rule, dict):
             entry_rule = json.dumps(entry_rule)
         if isinstance(exit_rule, dict):
@@ -740,9 +716,8 @@ def register_tools(server: MCPServer) -> None:
         for name in mask:
             definition[name] = supplied[name]
 
-        # `clear_fields` names paths to erase. They join the mask but carry no value, which the
-        # server reads as an explicit clear (AIP-161). This is the only way to blank a rule or
-        # revert cooldown_days to the platform default.
+        # clear_fields join the mask with no value — the server reads that as an explicit clear
+        # (AIP-161); the only way to blank a rule or revert cooldown_days to default.
         for name in clear_fields or []:
             if name not in mask:
                 mask.append(name)
@@ -758,14 +733,9 @@ def register_tools(server: MCPServer) -> None:
                 )
             update_mask = mask
 
-        # feature 092: forward the caller's REAL derived scope (was a hardcoded admin 7). NOTE
-        # (feature 133): ManageStrategy is no longer admin-gated — it is ownership-gated. Analysis
-        # resolves the owner from the propagated x-user-id header and returns PERMISSION_DENIED for
-        # a non-owner; any authenticated caller acts on their OWN strategies regardless of admin.
-        # The scope is still forwarded (harmless defence-in-depth), but it is no longer the gate.
+        # ManageStrategy is ownership-gated, not admin-gated: analysis resolves the owner from
+        # x-user-id (PERMISSION_DENIED for a non-owner); the scope is forwarded only for defence.
         access_scope = _caller_access_scope(ctx, "manage_strategy")
-        # feature 133: forward the caller's own user id so analysis resolves ownership from the
-        # header (never the request body) — a non-owner is rejected PERMISSION_DENIED there.
         user_id = _caller_user_id(ctx, "manage_strategy")
         try:
             return await client.manage_strategy(
@@ -855,9 +825,8 @@ def register_tools(server: MCPServer) -> None:
             "warmup_period": warmup_period or 0,
         }
         if operation == "update":
-            # Derive the AIP-161 update_mask from the fields actually supplied (non-None), so an
-            # omitted field is preserved rather than wiped. Never fall back to a maskless full
-            # replace from the tool.
+            # Derive the update_mask from supplied (non-None) fields so an omitted field is
+            # preserved; never fall back to a maskless full replace.
             supplied = {
                 "name": name,
                 "description": description,
@@ -961,19 +930,17 @@ def register_tools(server: MCPServer) -> None:
                 "extractor_module": extractor_module,
                 "config_json": config_json,
                 "credentials_ref": credentials_ref,
-                # feature 161: include reliability_weight in the mask ONLY when the caller
-                # supplied it, so a field-only update never resets the stored weight to 0.0.
+                # Mask reliability_weight ONLY when supplied, so a field-only update never resets
+                # it to 0.0.
                 "reliability_weight": reliability_weight,
             }
             update_mask = [field for field, val in supplied.items() if val is not None]
             if not update_mask:
                 raise RuntimeError("update requires at least one field to change")
-        access_scope = _caller_access_scope(ctx, "manage_signal_source")  # feature 092
-        # feature 166 — mcp_client bearer orchestration (secret-first). When registering an
-        # mcp_client source with a bearer token, write the token to an encrypted config secret
-        # FIRST, then register the source pointing at it via credentials_ref. The token is never
-        # placed in config_json and never echoed back (FR-12). A failed register after a successful
-        # secret write leaves only a harmless redacted orphan secret (no compensating cleanup).
+        access_scope = _caller_access_scope(ctx, "manage_signal_source")
+        # Secret-first: write the bearer to an encrypted config secret, THEN register the source
+        # pointing at it. The token is never in config_json or echoed; a failed register only
+        # orphans a harmless redacted secret.
         if operation == "register" and source_type == "mcp_client" and bearer_token:
             secret_key = f"mcp_credential.{slug}"
             await client.set_config(
@@ -1016,9 +983,8 @@ def register_tools(server: MCPServer) -> None:
             config, so you can always turn live off.
         Returns a 4-field subset, NOT the full definition:
             {"strategy_id", "display_name", "live_enabled", "active"}."""
-        access_scope = _caller_access_scope(ctx, "set_strategy_live")  # feature 092
-        # feature 133: forward the caller's own user id so analysis resolves ownership from the
-        # header — a non-owner is rejected PERMISSION_DENIED there.
+        access_scope = _caller_access_scope(ctx, "set_strategy_live")
+        # Forward the caller's own user id — analysis resolves ownership from the header.
         user_id = _caller_user_id(ctx, "set_strategy_live")
         try:
             return await client.set_strategy_live(
@@ -1053,7 +1019,7 @@ def register_tools(server: MCPServer) -> None:
         Returns {"job_id", "status"}. Ingest performs NO synchronous input validation —
         it queues unconditionally and bad input surfaces as a terminal FAILED/PARTIAL
         job; poll get_backfill_status with the returned job_id to observe the outcome."""
-        access_scope = _caller_access_scope(ctx, "trigger_backfill")  # feature 092
+        access_scope = _caller_access_scope(ctx, "trigger_backfill")
         try:
             return await client.trigger_backfill(
                 symbols=symbols,
@@ -1081,7 +1047,7 @@ def register_tools(server: MCPServer) -> None:
         Returns the FundamentalsScanSummary: {"run_id", "symbols_processed", "signals_emitted",
             "calls_spent", "deferred_count", "status", "finished_at"}. Admin-scoped — a non-admin
             caller is rejected PERMISSION_DENIED by the analysis backend gate."""
-        access_scope = _caller_access_scope(ctx, "run_fundamentals_scan")  # feature 156
+        access_scope = _caller_access_scope(ctx, "run_fundamentals_scan")
         try:
             return await client.run_fundamentals_scan(
                 force=force, dry_run=dry_run, symbols=symbols, access_scope=access_scope
@@ -1127,7 +1093,7 @@ def register_tools(server: MCPServer) -> None:
         Use this to stop a paid backfill you started that is no longer wanted. A job that has
             already completed/failed cannot be canceled.
         Returns {"job": {...}} with the updated BackfillJob (status should be canceled)."""
-        access_scope = _caller_access_scope(ctx, "cancel_backfill")  # feature 092
+        access_scope = _caller_access_scope(ctx, "cancel_backfill")
         try:
             return await client.cancel_backfill(job_id, access_scope=access_scope)
         except grpc.aio.AioRpcError as e:
@@ -1170,8 +1136,7 @@ def register_tools(server: MCPServer) -> None:
         Returns {"strategies": [<definition>, ...]} — each definition is snake_case, matching
             get_strategy (so a list → get → manage_strategy edit loop stays consistent).
         Only the calling user's OWN strategies are returned."""
-        # feature 133: forward the caller's own user id so analysis filters to the caller's
-        # strategies (never another user's) from the header.
+        # Forward the caller's own user id — analysis filters to the caller's strategies.
         user_id = _caller_user_id(ctx, "list_strategies")
         try:
             return {"strategies": await client.list_strategy_definitions(user_id, include_inactive)}
@@ -1188,8 +1153,7 @@ def register_tools(server: MCPServer) -> None:
             enrichment: live_price, change_pct, target_price, stop_price, a sparkline (recent daily
             closes; a gap is null), and the traced conditions. Unavailable live values are OMITTED,
             never fabricated. Only the calling user's OWN queue is returned."""
-        # feature 095: caller-scoped via x-user-id (like list_watchlists/list_strategies); no admin
-        # scope — analysis resolves the owner from the header, never a request-body id.
+        # Caller-scoped via x-user-id (no admin scope) — analysis resolves the owner from headers.
         user_id = _caller_user_id(ctx, "list_opportunities")
         try:
             return await client.list_opportunities(user_id, min_conviction)
@@ -1207,8 +1171,7 @@ def register_tools(server: MCPServer) -> None:
         verify the change landed. Keys are snake_case, matching manage_strategy's input, so a
         fetch → edit → resend round-trip works directly.
         Fetching a strategy the caller does not own is rejected PERMISSION_DENIED."""
-        # feature 133: forward the caller's own user id so analysis resolves ownership from the
-        # header — a non-owner is rejected PERMISSION_DENIED there.
+        # Forward the caller's own user id — analysis resolves ownership from the header.
         user_id = _caller_user_id(ctx, "get_strategy")
         try:
             return await client.get_strategy(user_id=user_id, strategy_id=strategy_id)
@@ -1216,10 +1179,7 @@ def register_tools(server: MCPServer) -> None:
             raise RuntimeError(_grpc_error_message(e, not_found="strategy not found")) from e
 
     # ── xstockstrat-config tools (feature 073) ───────────────────────────────────────────────
-    #
-    # Scope resolution lives in app/scopes.py `resolve_scope` (feature 093 lifted it there so
-    # oauth_server.py, outside this closure, shares one normalizer). This thin wrapper keeps the
-    # three tool call sites below unchanged.
+    # `_resolve_scope` just forwards to app/scopes.py `resolve_scope` (shared with oauth_server.py).
 
     def _resolve_scope(environment: str) -> str:
         return resolve_scope(environment)
@@ -1315,8 +1275,7 @@ def register_tools(server: MCPServer) -> None:
         only the ciphertext is stored and only allow-listed internal services can decrypt it via
         GetSecret. Requires the Streamable HTTP transport, the only remote transport the agent
         serves since feature 079 removed the legacy SSE one."""
-        # feature 092: shared with the other management tools; fails fast when no verified claims
-        # are present. The backend admin gate is what actually authorizes the write.
+        # Fails fast when no verified claims are present; the backend admin gate authorizes writes.
         access_scope = _caller_access_scope(ctx, "set_config")
 
         env = _resolve_scope("")
@@ -1375,10 +1334,8 @@ def register_tools(server: MCPServer) -> None:
             raise RuntimeError(_grpc_error_message(e, not_found="user not found")) from e
 
     # ── xstockstrat-portfolio watchlist tools (feature 148) ──────────────────────────────────
-    # Thin ownership-gated wrappers over the existing PortfolioService watchlist RPCs. Each forwards
-    # ONLY the caller's own x-user-id (never an admin x-access-scope) — portfolio enforces ownership
-    # from the header and returns PERMISSION_DENIED for a non-owner, matching get_strategy (feature
-    # 133). No user_id is ever taken from a tool argument.
+    # Each forwards ONLY the caller's x-user-id (never an admin scope); portfolio enforces ownership
+    # and rejects a non-owner PERMISSION_DENIED. No user_id is ever taken from a tool argument.
 
     @server.tool()
     async def list_watchlists(ctx: Context, limit: int = 0, page_token: str = "") -> dict:
@@ -1737,9 +1694,9 @@ def register_tools(server: MCPServer) -> None:
             raise RuntimeError(_grpc_error_message(e)) from e
 
     # ── xstockstrat-portfolio position tools (feature 169) ─────────────────────────────────
-    # Read-only, user-bound position queries. Both forward ONLY the caller's x-user-id (never
-    # admin x-access-scope) — portfolio enforces ownership via WHERE user_id = $1 and returns
-    # an empty list for non-owned accounts (no data leakage, no PERMISSION_DENIED).
+    # Both forward ONLY the caller's x-user-id; portfolio scopes by user_id and returns an empty
+    # list for non-owned accounts — no data leakage, and no PERMISSION_DENIED (unlike the
+    # watchlist tools).
 
     @server.tool()
     async def get_positions(ctx: Context, limit: int = 0, page_token: str = "") -> dict:

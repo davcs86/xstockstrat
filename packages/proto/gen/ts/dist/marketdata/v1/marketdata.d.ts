@@ -201,6 +201,12 @@ export interface GetFundamentalsMultiRequest {
 export interface GetFundamentalsMultiResponse {
     fundamentals: Fundamentals[];
 }
+export interface GetLatestQuotesRequest {
+    symbols: string[];
+}
+export interface GetLatestQuotesResponse {
+    quotes: Quote[];
+}
 export declare const Bar: MessageFns<Bar>;
 export declare const Quote: MessageFns<Quote>;
 export declare const GetLatestPriceRequest: MessageFns<GetLatestPriceRequest>;
@@ -225,6 +231,8 @@ export declare const GetFundamentalsRequest: MessageFns<GetFundamentalsRequest>;
 export declare const GetFundamentalsResponse: MessageFns<GetFundamentalsResponse>;
 export declare const GetFundamentalsMultiRequest: MessageFns<GetFundamentalsMultiRequest>;
 export declare const GetFundamentalsMultiResponse: MessageFns<GetFundamentalsMultiResponse>;
+export declare const GetLatestQuotesRequest: MessageFns<GetLatestQuotesRequest>;
+export declare const GetLatestQuotesResponse: MessageFns<GetLatestQuotesResponse>;
 /**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
@@ -341,6 +349,19 @@ export declare const MarketDataServiceService: {
         readonly responseSerialize: (value: GetFundamentalsMultiResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => GetFundamentalsMultiResponse;
     };
+    /**
+     * Batched latest quotes — partial by design: a symbol with no quote is omitted from the
+     * response (null-not-zero), never returned as a fabricated zero-price Quote.
+     */
+    readonly getLatestQuotes: {
+        readonly path: "/xstockstrat.marketdata.v1.MarketDataService/GetLatestQuotes";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetLatestQuotesRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetLatestQuotesRequest;
+        readonly responseSerialize: (value: GetLatestQuotesResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => GetLatestQuotesResponse;
+    };
 };
 export interface MarketDataServiceServer extends UntypedServiceImplementation {
     /** Stream live bar data for symbols */
@@ -365,6 +386,11 @@ export interface MarketDataServiceServer extends UntypedServiceImplementation {
     getFundamentals: handleUnaryCall<GetFundamentalsRequest, GetFundamentalsResponse>;
     /** Batched fundamentals for a watchlist scan (core metrics via one FMP quote call) */
     getFundamentalsMulti: handleUnaryCall<GetFundamentalsMultiRequest, GetFundamentalsMultiResponse>;
+    /**
+     * Batched latest quotes — partial by design: a symbol with no quote is omitted from the
+     * response (null-not-zero), never returned as a fabricated zero-price Quote.
+     */
+    getLatestQuotes: handleUnaryCall<GetLatestQuotesRequest, GetLatestQuotesResponse>;
 }
 export interface MarketDataServiceClient extends Client {
     /** Stream live bar data for symbols */
@@ -409,6 +435,13 @@ export interface MarketDataServiceClient extends Client {
     getFundamentalsMulti(request: GetFundamentalsMultiRequest, callback: (error: ServiceError | null, response: GetFundamentalsMultiResponse) => void): ClientUnaryCall;
     getFundamentalsMulti(request: GetFundamentalsMultiRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetFundamentalsMultiResponse) => void): ClientUnaryCall;
     getFundamentalsMulti(request: GetFundamentalsMultiRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetFundamentalsMultiResponse) => void): ClientUnaryCall;
+    /**
+     * Batched latest quotes — partial by design: a symbol with no quote is omitted from the
+     * response (null-not-zero), never returned as a fabricated zero-price Quote.
+     */
+    getLatestQuotes(request: GetLatestQuotesRequest, callback: (error: ServiceError | null, response: GetLatestQuotesResponse) => void): ClientUnaryCall;
+    getLatestQuotes(request: GetLatestQuotesRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetLatestQuotesResponse) => void): ClientUnaryCall;
+    getLatestQuotes(request: GetLatestQuotesRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetLatestQuotesResponse) => void): ClientUnaryCall;
 }
 export declare const MarketDataServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): MarketDataServiceClient;

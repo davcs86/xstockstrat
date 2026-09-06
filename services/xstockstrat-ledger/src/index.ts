@@ -22,7 +22,6 @@ async function main() {
   await configWatcher.waitForSnapshot(90_000);
   log.info('Config snapshot received');
 
-  // TimescaleDB connection pool
   const sslDisabled = databaseUrl.includes('sslmode=disable');
   let dbUrl = databaseUrl;
   if (!sslDisabled) {
@@ -39,27 +38,21 @@ async function main() {
   };
   const pool = new Pool({
     connectionString: dbUrl,
-    // Query pool. Live streaming no longer borrows from this pool (it uses the
-    // dedicated EventNotifier connection below), so a small pool is sufficient.
-    // Default 1 keeps the ledger's total DB connections at 2 (1 pool + 1
-    // listener), within DigitalOcean's shared 20-connection budget (see root
-    // CLAUDE.md). Override with DB_POOL_MAX.
+    // Query pool default 1: total ledger DB conns = 2 (pool + dedicated listener),
+    // within the shared cluster budget. Override with DB_POOL_MAX.
     max: parseInt(process.env.DB_POOL_MAX ?? '1', 10),
     ssl: sslOption,
   });
-  await pool.query('SELECT 1'); // verify connectivity
+  await pool.query('SELECT 1');
   log.info('Database connected');
 
-  // Dedicated LISTEN/NOTIFY connection (separate from the query pool) that fans
-  // live events out to every StreamEvents subscriber. Decoupling streaming from
-  // the pool prevents N concurrent streams from starving AppendEvent.
+  // Dedicated LISTEN/NOTIFY connection (separate from the query pool) so live streams never starve AppendEvent.
   const notifier = new EventNotifier(() => new Client({ connectionString: dbUrl, ssl: sslOption }));
   await notifier.start();
   log.info('Event notifier started');
 
   const ledgerImpl = new LedgerServiceImpl(pool, configWatcher, notifier);
 
-  // ── gRPC server (internal service-to-service, port 50057) ──────────────
   const grpcServer = new grpc.Server();
   grpcServer.addService(createLedgerServiceDefinition(), ledgerImpl as unknown as grpc.UntypedServiceImplementation);
 
@@ -76,7 +69,6 @@ async function main() {
     }
   );
 
-  // Graceful shutdown
   const shutdown = async () => {
     log.info('Shutting down ledger service...');
     grpcServer.tryShutdown(async () => {

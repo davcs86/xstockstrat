@@ -186,6 +186,20 @@ export declare enum ReadinessRule {
 export declare function readinessRuleFromJSON(object: any): ReadinessRule;
 export declare function readinessRuleToJSON(object: ReadinessRule): string;
 export declare function readinessRuleToNumber(object: ReadinessRule): number;
+/** Per-row readiness lifecycle state (feature 181). Closed set → enum (C-04). */
+export declare enum ReadinessState {
+    READINESS_STATE_UNSPECIFIED = "READINESS_STATE_UNSPECIFIED",
+    /** READINESS_STATE_RESOLVED - `readiness` populated; served from the FAST cache path */
+    READINESS_STATE_RESOLVED = "READINESS_STATE_RESOLVED",
+    /** READINESS_STATE_PENDING - not-yet-fresh; a background refresh was kicked; poll again */
+    READINESS_STATE_PENDING = "READINESS_STATE_PENDING",
+    /** READINESS_STATE_UNKNOWN - data-unavailable (bar_epoch < 0 sentinel); best-effort retry */
+    READINESS_STATE_UNKNOWN = "READINESS_STATE_UNKNOWN",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function readinessStateFromJSON(object: any): ReadinessState;
+export declare function readinessStateToJSON(object: ReadinessState): string;
+export declare function readinessStateToNumber(object: ReadinessState): number;
 /** The persisted per-user disposition of a queued opportunity (feature 097). Closed set → enum (C-04). */
 export declare enum OpportunityAction {
     OPPORTUNITY_ACTION_UNSPECIFIED = "OPPORTUNITY_ACTION_UNSPECIFIED",
@@ -786,6 +800,36 @@ export interface EvaluateReadinessRequest {
 }
 export interface EvaluateReadinessResponse {
     readiness: SymbolReadiness[];
+    /**
+     * The oldest per-symbol cache "computed at" among the served rows — the response is never
+     * presented as fresher than this (feature 177, FR-5). Bounded by the readiness staleness window.
+     */
+    computedAt?: Date | undefined;
+}
+/**
+ * One decorated watchlist row (feature 181). `strategy_id` is the join key onto the ['watchlists']
+ * read's binding; it is NOT a display payload and carries no provenance/source (the client renders
+ * those from the binding). `readiness` is populated iff state == READINESS_STATE_RESOLVED.
+ */
+export interface WatchlistReadinessRow {
+    symbol: string;
+    strategyId: string;
+    state: ReadinessState;
+    readiness?: SymbolReadiness | undefined;
+    computedAt?: Date | undefined;
+}
+/**
+ * user_id is intentionally absent — taken from the propagated x-user-id header server-side
+ * (match the ListOpportunitiesRequest convention), never from the wire. The server derives the
+ * (symbol, strategy_id) pairs from the OWNER'S OWN watchlist (anti-IDOR, fails.md:1153).
+ */
+export interface GetWatchlistReadinessRequest {
+    watchlistId: string;
+    page?: PageRequest | undefined;
+}
+export interface GetWatchlistReadinessResponse {
+    rows: WatchlistReadinessRow[];
+    page?: PageResponse | undefined;
 }
 /**
  * user_id is intentionally absent — taken from the propagated x-user-id header server-side
@@ -974,6 +1018,9 @@ export declare const ListOpportunitiesRequest: MessageFns<ListOpportunitiesReque
 export declare const ListOpportunitiesResponse: MessageFns<ListOpportunitiesResponse>;
 export declare const EvaluateReadinessRequest: MessageFns<EvaluateReadinessRequest>;
 export declare const EvaluateReadinessResponse: MessageFns<EvaluateReadinessResponse>;
+export declare const WatchlistReadinessRow: MessageFns<WatchlistReadinessRow>;
+export declare const GetWatchlistReadinessRequest: MessageFns<GetWatchlistReadinessRequest>;
+export declare const GetWatchlistReadinessResponse: MessageFns<GetWatchlistReadinessResponse>;
 export declare const SetOpportunityActionRequest: MessageFns<SetOpportunityActionRequest>;
 export declare const SetOpportunityActionResponse: MessageFns<SetOpportunityActionResponse>;
 export declare const GetStrategyAnalyticsRequest: MessageFns<GetStrategyAnalyticsRequest>;
@@ -1197,6 +1244,20 @@ export declare const AnalysisServiceService: {
         readonly responseSerialize: (value: GetAttributionResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => GetAttributionResponse;
     };
+    /**
+     * Cache-first readiness decoration for a page of a watchlist's bound (symbol, strategy_id)
+     * pairs (feature 181). Owner from x-user-id; RESOLVED rows carry inline SymbolReadiness,
+     * PENDING/UNKNOWN rows resolve on a subsequent poll (the server kicks a background refresh).
+     */
+    readonly getWatchlistReadiness: {
+        readonly path: "/xstockstrat.analysis.v1.AnalysisService/GetWatchlistReadiness";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetWatchlistReadinessRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetWatchlistReadinessRequest;
+        readonly responseSerialize: (value: GetWatchlistReadinessResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => GetWatchlistReadinessResponse;
+    };
 };
 export interface AnalysisServiceServer extends UntypedServiceImplementation {
     runBacktest: handleUnaryCall<RunBacktestRequest, BacktestResult>;
@@ -1251,6 +1312,12 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
      * aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
      */
     getAttribution: handleUnaryCall<GetAttributionRequest, GetAttributionResponse>;
+    /**
+     * Cache-first readiness decoration for a page of a watchlist's bound (symbol, strategy_id)
+     * pairs (feature 181). Owner from x-user-id; RESOLVED rows carry inline SymbolReadiness,
+     * PENDING/UNKNOWN rows resolve on a subsequent poll (the server kicks a background refresh).
+     */
+    getWatchlistReadiness: handleUnaryCall<GetWatchlistReadinessRequest, GetWatchlistReadinessResponse>;
 }
 export interface AnalysisServiceClient extends Client {
     runBacktest(request: RunBacktestRequest, callback: (error: ServiceError | null, response: BacktestResult) => void): ClientUnaryCall;
@@ -1343,6 +1410,14 @@ export interface AnalysisServiceClient extends Client {
     getAttribution(request: GetAttributionRequest, callback: (error: ServiceError | null, response: GetAttributionResponse) => void): ClientUnaryCall;
     getAttribution(request: GetAttributionRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetAttributionResponse) => void): ClientUnaryCall;
     getAttribution(request: GetAttributionRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetAttributionResponse) => void): ClientUnaryCall;
+    /**
+     * Cache-first readiness decoration for a page of a watchlist's bound (symbol, strategy_id)
+     * pairs (feature 181). Owner from x-user-id; RESOLVED rows carry inline SymbolReadiness,
+     * PENDING/UNKNOWN rows resolve on a subsequent poll (the server kicks a background refresh).
+     */
+    getWatchlistReadiness(request: GetWatchlistReadinessRequest, callback: (error: ServiceError | null, response: GetWatchlistReadinessResponse) => void): ClientUnaryCall;
+    getWatchlistReadiness(request: GetWatchlistReadinessRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetWatchlistReadinessResponse) => void): ClientUnaryCall;
+    getWatchlistReadiness(request: GetWatchlistReadinessRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetWatchlistReadinessResponse) => void): ClientUnaryCall;
 }
 export declare const AnalysisServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): AnalysisServiceClient;

@@ -1,10 +1,8 @@
 import type { ReactNode } from 'react';
 
 /**
- * Shared empty-state block (feature 083, FR-18). A centered title + optional description (and
- * optional action) for the "no data yet / nothing matches the filter" case — distinct from the
- * one-line CardNotice and the error path. Keep the copy specific ("No backfill jobs match the
- * filter", "No portfolio data") so the empty state reads as intentional, not broken.
+ * Shared empty-state block for the "no data yet / nothing matches" case — distinct from the
+ * one-line CardNotice and the error path. Keep the copy specific so it reads as intentional, not broken.
  */
 export function EmptyState({
   title,

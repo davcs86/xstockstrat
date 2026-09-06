@@ -46,7 +46,6 @@ async def serve():
     await cfg_watcher.wait_for_snapshot(timeout_seconds=90)
     log.info("config snapshot received")
 
-    # Open asyncpg connection pool for signal persistence
     _ssl_ctx: _ssl.SSLContext | None = None
     if "sslmode=disable" not in DATABASE_URL:
         _ssl_ctx = _ssl.create_default_context()
@@ -57,15 +56,13 @@ async def serve():
         min_size=1,
         max_size=int(os.environ.get("DB_POOL_MAX", "2")),
         ssl=_ssl_ctx,
-        # PgBouncer transaction mode: disable asyncpg's prepared-statement cache,
-        # unsafe when consecutive queries land on different backend connections.
-        # Keeps asyncpg's default (100) on the direct-connection path.
+        # PgBouncer transaction mode needs the prepared-statement cache off (0): consecutive
+        # queries can land on different backend connections; direct path keeps the default.
         statement_cache_size=0 if os.environ.get("DB_PGBOUNCER") in ("true", "1") else 100,
     )
     log.info("database pool established")
 
-    # FR-3: reconcile backfill jobs left RUNNING/QUEUED by a previous process. Enum ints are
-    # passed in so the repository stays proto-free. No automatic resume (P0 scope).
+    # Reconcile jobs left RUNNING/QUEUED by a prior process to FAILED; no automatic resume.
     from gen.ingest.v1 import ingest_pb2
 
     from app.repositories import backfill_jobs
@@ -91,7 +88,6 @@ async def serve():
         notify_channel=notify_channel,
     )
 
-    # ── gRPC server (internal, port 50055) ────────────────────────────────
     grpc_server = grpc.aio.server()
     ingest_pb2_grpc.add_IngestServiceServicer_to_server(servicer, grpc_server)
 
@@ -105,14 +101,12 @@ async def serve():
     log.info("ingest gRPC service starting on port %s", GRPC_PORT)
     await grpc_server.start()
 
-    # FR-3: resume backfill jobs that still have incomplete chunks from a prior process.
-    # Runs after the reconcile pass above; re-drives chunked jobs to completion (the reconcile
-    # only flips chunk-less jobs to FAILED). Each resumed job runs as a background task.
+    # Resume jobs with incomplete chunks; must run after the reconcile pass, which only
+    # flips chunk-less jobs to FAILED and leaves chunked ones for this to re-drive.
     resumed = await servicer.resume_incomplete_jobs()
     log.info("resumed %d backfill job(s) with incomplete chunks", resumed)
 
-    # feature 166 — server-side MCP query loop for mcp_client signal sources. Non-fatal: a failure
-    # to start (or inside) the loop must never take down the gRPC service (OTel-init-style).
+    # Non-fatal: a failure to start the mcp_client query loop must never take down the service.
     try:
         from app.engine.mcp_client_loop import run_mcp_client_loop
         from app.mcp_client import StreamableHttpMcpClient

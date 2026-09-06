@@ -29,13 +29,11 @@ type BrokerAccountRecord struct {
 	CredentialCheckedAt *time.Time // nil until first validation
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
-	// Halted / HaltedAt / HaltReason are the persisted automated per-account halt
-	// (feature 030), mirroring the CredentialStatus persisted-column + boot-hydrate
-	// precedent above.
+	// Halted / HaltedAt / HaltReason are the persisted automated per-account halt.
 	Halted     bool
 	HaltedAt   *time.Time
 	HaltReason string
-	// HaltSource distinguishes which automated mechanism halted this account (feature 102).
+	// HaltSource distinguishes which automated mechanism halted this account.
 	// Matches trading.v1.HaltSource: 0=UNSPECIFIED, 1=BRACKET_PROTECTION, 2=RECONCILIATION.
 	HaltSource int32
 }
@@ -51,10 +49,8 @@ type AccountRepository interface {
 	UpdateCredentials(ctx context.Context, id string, credentialsEnc []byte) error
 	// UpdateCredentialStatus records the outcome of a credential validation.
 	UpdateCredentialStatus(ctx context.Context, id string, status int32, checkedAt time.Time) error
-	// UpdateHaltStatus persists an automated per-account halt (feature 030; haltSource added
-	// by feature 102). Mirrors UpdateCredentialStatus's shape — best-effort from the caller's
-	// perspective; the caller (isAccountHalted's dual-write) does not roll back its in-memory
-	// state on a persistence failure (fail-safe: stay halted, retry the write later).
+	// UpdateHaltStatus persists an automated per-account halt. Best-effort: the caller does not
+	// roll back its in-memory halt on a persistence failure (fail-safe — stay halted, retry later).
 	UpdateHaltStatus(ctx context.Context, id string, halted bool, reason string, haltedAt *time.Time, haltSource int32) error
 }
 
@@ -162,8 +158,7 @@ func (r *pgAccountRepo) UpdateCredentialStatus(ctx context.Context, id string, s
 	return err
 }
 
-// UpdateHaltStatus persists an automated per-account halt (feature 030; haltSource added by
-// feature 102).
+// UpdateHaltStatus persists an automated per-account halt.
 func (r *pgAccountRepo) UpdateHaltStatus(ctx context.Context, id string, halted bool, reason string, haltedAt *time.Time, haltSource int32) error {
 	_, err := r.pool.Exec(ctx, `
 		UPDATE trading.broker_accounts

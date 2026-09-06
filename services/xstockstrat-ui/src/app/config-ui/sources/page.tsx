@@ -64,7 +64,7 @@ interface FormState {
   scrapeSelector: string;
   credentialsRef: string;
   reliabilityWeight: string;
-  // feature 166 — mcp_client fields. The bearer token is WRITE-ONLY (never rendered back).
+  // mcp_client fields. The bearer token is WRITE-ONLY (never rendered back).
   mcpEndpoint: string;
   mcpTool: string;
   bearerToken: string;
@@ -83,7 +83,7 @@ const EMPTY_FORM: FormState = {
   url: '',
   scrapeSelector: '',
   credentialsRef: '',
-  reliabilityWeight: '1', // feature 161 — default 1.0 (neutral)
+  reliabilityWeight: '1', // default 1.0 (neutral)
   mcpEndpoint: '',
   mcpTool: '',
   bearerToken: '',
@@ -158,8 +158,8 @@ function buildConfigJson(form: FormState): JsonObject {
     return { url: form.url, scrape_selector: form.scrapeSelector };
   }
   if (isMcpClientType(form.sourceType)) {
-    // feature 166 — only the endpoint + tool ride config_json; the bearer is NEVER here (it is
-    // written separately as an encrypted config secret).
+    // Only the endpoint + tool ride config_json; the bearer is NEVER here (written separately as an
+    // encrypted config secret).
     return { mcp_endpoint: form.mcpEndpoint, mcp_tool: form.mcpTool };
   }
   return {};
@@ -198,7 +198,7 @@ export default function SourcesPage() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // feature 134 — inline reliability-weight cell editing (separate from the full edit modal).
+  // Inline reliability-weight cell editing (separate from the full edit modal).
   const [editingWeightSlug, setEditingWeightSlug] = useState<string | null>(null);
   const [weightValue, setWeightValue] = useState('');
   const [weightError, setWeightError] = useState<string | null>(null);
@@ -251,8 +251,7 @@ export default function SourcesPage() {
   }
 
   function handleToggle(src: SignalSource) {
-    // Feature 088: reactivation is its own honest verb, decoupled from update (which no longer
-    // touches `active`). Deactivate stays a distinct verb.
+    // Reactivation and deactivation are distinct verbs; update does not touch `active`.
     const req = src.active
       ? { source: { slug: src.slug }, operation: 'deactivate' }
       : { source: { slug: src.slug }, operation: 'reactivate' };
@@ -261,8 +260,8 @@ export default function SourcesPage() {
 
   function handleSave() {
     setSaveError(null);
-    // feature 161: validate the reliability weight with the same [0,1] scalar shape as the inline
-    // editor (NOT validateFloatMap, which parses a JSON map). Blocks the write on a bad value.
+    // Validate the reliability weight with the same [0,1] scalar shape as the inline editor
+    // (NOT validateFloatMap, which parses a JSON map). Blocks the write on a bad value.
     const weight = Number(form.reliabilityWeight);
     if (form.reliabilityWeight.trim() === '' || Number.isNaN(weight) || weight < 0 || weight > 1) {
       setSaveError('Reliability weight must be a number in [0, 1]');
@@ -270,9 +269,8 @@ export default function SourcesPage() {
     }
     const isNew = editingSlug === '__new__';
     const configJson = buildConfigJson(form);
-    // feature 166 — registering a mcp_client source is a secret-first two-write: the bearer is
-    // written to an encrypted config secret, then the source is registered with credentials_ref
-    // (never the token in config_json). The bearer is mandatory on register.
+    // Registering an mcp_client source is a secret-first two-write: the bearer goes to an encrypted
+    // config secret, then the source registers with credentials_ref (never the token in config_json).
     if (isNew && isMcpClientType(form.sourceType)) {
       if (!form.bearerToken.trim()) {
         setSaveError('A bearer token is required to register an MCP client source');
@@ -308,10 +306,8 @@ export default function SourcesPage() {
       },
       ...(form.credentialsRef ? { credentialsRef: form.credentialsRef } : {}),
     };
-    // Feature 088: on update, derive an AIP-161 update_mask so an omitted secret is PRESERVED.
-    // Always submit the editable text fields; include credentials_ref only when a new secret was
-    // typed. Paths are the backend's snake_case field names. `active`/`slug` are never masked
-    // (column-authoritative; lifecycle uses the reactivate/deactivate verbs).
+    // On update, derive an AIP-161 update_mask so an omitted secret is PRESERVED; include
+    // credentials_ref only when a new secret was typed. `active`/`slug` are never masked.
     const req = isNew
       ? { ...base, operation: 'register' }
       : {
@@ -323,7 +319,7 @@ export default function SourcesPage() {
               'source_type',
               'extractor_module',
               'config_json',
-              'reliability_weight', // feature 161 — persist the weight edited on the form
+              'reliability_weight', // persist the weight edited on the form
               ...(form.credentialsRef ? ['credentials_ref'] : []),
             ],
           },
@@ -415,7 +411,6 @@ export default function SourcesPage() {
                 </Button>
                 {weightError && <span className="text-xs text-destructive">{weightError}</span>}
               </div>
-              {/* feature 161 — guidance on the inline weight editor */}
               <p className="text-muted-foreground text-xs mt-0.5">
                 Ranking multiplier in [0, 1] (default 1.0). Higher = this source&apos;s signals rank
                 higher; 0 ignores the source.
@@ -492,7 +487,6 @@ export default function SourcesPage() {
         </Button>
       </div>
 
-      {/* Health stat row (feature 083) — from ListSignalSources health/signals_fed. */}
       {sources.length > 0 &&
         (() => {
           const live = sources.filter((s) => s.health === SourceHealthStatus.LIVE).length;

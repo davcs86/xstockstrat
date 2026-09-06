@@ -137,3 +137,72 @@ func TestGetFeesAccum(t *testing.T) {
 		}
 	})
 }
+
+// TestGetAccountDrawdowns_ScopesToUserAndMode is the feature-172 regression proving the drawdown
+// fetch projects account_id/equity/peak_equity and scopes to (user_id=$1, trading_mode=$2). CI
+// provisions no database, so the query shape is asserted through pgxmock.
+func TestGetAccountDrawdowns_ScopesToUserAndMode(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+
+	repo := &PortfolioRepo{db: mock}
+
+	rows := mock.NewRows([]string{"account_id", "equity", "peak_equity"}).
+		AddRow("acc-breach", 97.0, 100.0). // 3% drawdown
+		AddRow("acc-ok", 99.0, 100.0)      // 1% drawdown
+
+	mock.ExpectQuery(`SELECT account_id, equity, peak_equity.*WHERE user_id=\$1 AND trading_mode=\$2`).
+		WithArgs("user-1", commonv1.TradingMode_TRADING_MODE_PAPER.String()).
+		WillReturnRows(rows)
+
+	got, err := repo.GetAccountDrawdowns(
+		context.Background(), "user-1", commonv1.TradingMode_TRADING_MODE_PAPER.String())
+	if err != nil {
+		t.Fatalf("GetAccountDrawdowns: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("len = %d, want 2", len(got))
+	}
+	if got[0].AccountID != "acc-breach" || got[0].Equity != 97.0 || got[0].PeakEquity != 100.0 {
+		t.Fatalf("row[0] = %+v, want {acc-breach 97 100}", got[0])
+	}
+	if got[1].AccountID != "acc-ok" || got[1].Equity != 99.0 || got[1].PeakEquity != 100.0 {
+		t.Fatalf("row[1] = %+v, want {acc-ok 99 100}", got[1])
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+// TestUpsertAccountBalance_RaisesPeakEquityWithGreatest asserts the feature-172 HWM SQL contract:
+// the upsert carries peak_equity in the INSERT and raises it with GREATEST on conflict, so the
+// high-water-mark rises with each balance sync and never falls. The runtime GREATEST semantics
+// (rises to 120, stays 120 on a later 90) are proven at CI/deploy migration apply, not in unit
+// tests — CI provisions no database (mirrors offline migration verification).
+func TestUpsertAccountBalance_RaisesPeakEquityWithGreatest(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+
+	repo := &PortfolioRepo{db: mock}
+
+	mock.ExpectExec(`(?s)peak_equity.*peak_equity = GREATEST\(portfolio\.account_balances\.peak_equity, EXCLUDED\.equity\)`).
+		WithArgs("acc-1", "user-1", commonv1.TradingMode_TRADING_MODE_PAPER.String(),
+			0.0, 0.0, 120.0, 100.0).
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+
+	err = repo.UpsertAccountBalance(
+		context.Background(), "acc-1", "user-1",
+		commonv1.TradingMode_TRADING_MODE_PAPER.String(), 0.0, 0.0, 120.0, 100.0)
+	if err != nil {
+		t.Fatalf("UpsertAccountBalance: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}

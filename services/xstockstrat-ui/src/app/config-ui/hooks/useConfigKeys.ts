@@ -3,7 +3,7 @@ import { configClient } from '@/lib/browserClients/configClient';
 import type { ListKeysResponse } from '@xstockstrat/proto/config/v1/config_pb';
 import { Environment } from '@xstockstrat/proto/common/v1/common_pb';
 
-// Feature 147: config is scoped by environment (production/staging) x optional per-user (user_id).
+// Config is scoped by environment (production/staging) x optional per-user (user_id).
 export function envToProto(e: string): Environment {
   return e === 'production' ? Environment.PRODUCTION : Environment.STAGING;
 }

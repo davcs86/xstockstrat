@@ -167,5 +167,5 @@ async def run_mcp_client_loop(servicer, cfg_watcher, mcp_client: McpClientProtoc
         await asyncio.sleep(interval)
         try:
             await run_one_cycle(servicer, cfg_watcher, mcp_client)
-        except Exception as e:  # a whole-cycle failure (e.g. listing sources) — retry next tick
+        except Exception as e:
             log.warning("mcp_client loop cycle failed: %s", e)

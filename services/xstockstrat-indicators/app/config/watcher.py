@@ -16,12 +16,12 @@ log = logging.getLogger(__name__)
 
 def resolve_environment(application_env: str) -> int:
     """Map APPLICATION_ENV ("development" | "production") to the proto Environment enum.
-    Anything other than "production" resolves to staging (feature 147).
+    Anything other than "production" resolves to staging.
     """
     return (
         common_pb2.ENVIRONMENT_PRODUCTION
         if application_env == "production"
-        else common_pb2.ENVIRONMENT_STAGING  # feature 147: non-production => staging
+        else common_pb2.ENVIRONMENT_STAGING
     )
 
 
@@ -41,9 +41,8 @@ class ConfigWatcher:
     def __init__(self, endpoint: str, namespace: str):
         self.endpoint = endpoint
         self.namespace = namespace
-        # This deployment's own resolved scope (APPLICATION_ENV/TRADING_MODE) — passed on
-        # every WatchConfig request so the server serves this deployment's config rows
-        # instead of the zero-value dev/all default.
+        # Scope sent on every WatchConfig request; without it the server serves the
+        # zero-value dev/all default rows, not this deployment's.
         self._environment = resolve_environment(os.environ.get("APPLICATION_ENV", "development"))
         self._trading_mode = resolve_trading_mode(os.environ.get("TRADING_MODE", "paper"))
         self._snapshot: config_pb2.ConfigSnapshot | None = None
@@ -92,6 +91,16 @@ class ConfigWatcher:
             return default
         return v.string_val or default
 
+    def get_str_present(self, key: str, default: str) -> str:
+        """Use this (never get_str) for keys where a stored "" is meaningful: HasField honors
+        a present empty string instead of collapsing it to the default."""
+        if self._snapshot is None:
+            return default
+        v = self._snapshot.values.get(key)
+        if v is None:
+            return default
+        return v.string_val if v.HasField("string_val") else default
+
     def get_int(self, key: str, default: int = 0) -> int:
         if self._snapshot is None:
             return default
@@ -116,7 +125,6 @@ class ConfigWatcher:
             return default
         return v.float_val or default
 
-    # Sandbox config helpers — indicators.sandbox.*
     @property
     def sandbox_timeout_ms(self) -> int:
         return self.get_int("indicators.sandbox.timeout_ms", default=5000)
@@ -127,7 +135,10 @@ class ConfigWatcher:
 
     @property
     def sandbox_allowed_imports(self) -> list[str]:
-        raw = self.get_str(
+        raw = self.get_str_present(
             "indicators.sandbox.allowed_imports", default="numpy,pandas,math,statistics"
         )
         return [m.strip() for m in raw.split(",") if m.strip()]
+
+    def sandbox_max_concurrent(self) -> int:
+        return self.get_int("indicators.sandbox.max_concurrent", default=4)

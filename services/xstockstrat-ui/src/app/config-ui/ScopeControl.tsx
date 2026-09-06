@@ -4,14 +4,10 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 
 /**
- * Per-user scope control for the Config UI (feature 147 / PR #994).
- *
- * Per-user config is **owner-only self-service**: an operator may only ever view/edit their OWN
- * per-user overrides — never another user's — so this control offers exactly two scopes and takes
- * NO free-form user id: `global` (the shared value) and `my overrides` (the authenticated caller's
- * own per-user layer, `selfUserId`). Navigates by updating the `user` URL search param so the
- * selected scope carries through namespace links. `my overrides` is hidden when there is no
- * resolvable session user (`selfUserId` empty).
+ * Per-user scope control for the Config UI. Per-user config is owner-only self-service, so this
+ * offers exactly two scopes and takes NO free-form user id: `global` and `my overrides` (the
+ * caller's own layer, `selfUserId`). Navigates via the `user` URL param; `my overrides` hides when
+ * there is no resolvable session user.
  */
 export function ScopeControl({
   env,

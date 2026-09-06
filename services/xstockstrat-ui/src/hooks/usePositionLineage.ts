@@ -2,10 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import type { JsonObject } from '@bufbuild/protobuf';
 import { ledgerClient } from '@/lib/browserClients/ledgerClient';
 
-// usePositionLineage returns the order.filled ledger events that built a given position,
-// joined client-side on payload.symbol / account_id / trading_mode. The lineage source is the
-// ledger order.filled event (source_service "trading"); trading_mode in the payload is the proto
-// enum String() form ("TRADING_MODE_PAPER" / "TRADING_MODE_LIVE"). Disabled until a symbol is set.
+// order.filled ledger events (source_service "trading"), joined client-side on symbol/account_id/
+// trading_mode — where trading_mode is the proto enum String() form ("TRADING_MODE_PAPER"/"_LIVE").
 export function usePositionLineage(
   symbol: string | null,
   accountId: string | null,

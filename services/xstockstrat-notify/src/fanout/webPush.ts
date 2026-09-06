@@ -1,17 +1,6 @@
 /**
- * fanout/webPush.ts — best-effort Web Push channel (feature 165, pwa-notifications).
- *
- * A third side-channel bolted onto EmitAlert alongside FanoutDispatcher (Slack/SendGrid). Qualifying
- * alerts are delivered as OS notifications to the target user's installed PWA devices via the Web Push
- * protocol (`web-push` library, VAPID-signed). It is DISJOINT from FanoutDispatcher — it holds
- * DB-backed subscription state + a prune side-effect and shares no state with the fanout dedup Map, so
- * the fanout channel's isolation/dedup guarantees (notify-external-fanout @AC-*) are untouched.
- *
- * Like fanout it NEVER affects the primary in-process StreamAlerts delivery or the EmitAlert RPC
- * result — the whole dispatch body is caught and logged at WARN. VAPID credentials come from env
- * (`VAPID_PRIVATE_KEY` type:SECRET, `VAPID_PUBLIC_KEY`, `VAPID_SUBJECT`); the push severity gate is the
- * live `notify.push.min_severity` config key read on every dispatch. Push is silently disabled when the
- * VAPID keys are absent (same posture as Slack fanout when SLACK_WEBHOOK_URL is unset).
+ * Best-effort Web Push side-channel on EmitAlert (feature 165), disjoint from FanoutDispatcher and
+ * sharing no dedup state. Must never affect the primary StreamAlerts delivery or the EmitAlert RPC result.
  */
 import webpush from 'web-push';
 import { Pool } from 'pg';
@@ -21,15 +10,8 @@ import { getLogger } from '../services/logger';
 
 const log = getLogger('notify:webpush');
 
-// Two distinct concerns, previously conflated in one mis-named constant (defect 2026-09-03):
-//   - WEBPUSH_TTL_SECONDS: how long the push service (FCM/Mozilla/Apple) RETAINS an alert for a
-//     device that is currently offline before dropping it. 1 hour — a trading alert older than that
-//     is stale, but a brief disconnect (lock screen, tunnel) still receives it. Product decision
-//     2026-09-03. The prior code passed the 10s HTTP-timeout value here, giving a 10-second TTL that
-//     silently dropped every alert to a device offline for more than ~10s.
-//   - WEBPUSH_SEND_TIMEOUT_MS: a REAL socket timeout on the outbound push HTTP request, so a
-//     slow/black-holed push endpoint fails fast instead of hanging the best-effort dispatch.
-// Both are fixed code constants — NOT config keys (F-07).
+// TTL = push-service retention for an offline device; SEND_TIMEOUT = the outbound socket timeout —
+// distinct concerns, do not conflate. Both fixed constants, not config keys (F-07).
 const WEBPUSH_TTL_SECONDS = 3600;
 const WEBPUSH_SEND_TIMEOUT_MS = 10000;
 
@@ -58,9 +40,8 @@ interface PushPayload {
   title: string;
   body: string;
   icon: string;
-  // Deterministic OS-notification tag so the service worker coalesces concurrently-visible
-  // notifications of the same category (design Decision 4 — this is OS-level visible-window
-  // coalescing, NOT content-hash dedup; the fanout dedup window is untouched).
+  // Deterministic tag → OS-level visible-window coalescing of same-category notifications,
+  // NOT content-hash dedup (the fanout dedup window is untouched).
   tag: string;
   url?: string;
 }
@@ -78,9 +59,8 @@ export class WebPushDispatcher {
     const subjectValid = /^(mailto:|https:)/.test(subject);
 
     if (priv && pub && subject && !subjectValid) {
-      // Keys present but the subject is malformed — web-push would throw on EVERY send, and the
-      // per-dispatch catch would swallow it to WARN, leaving the channel looking "enabled" while
-      // silently black-holing every push. Fail loud once here and disable the channel instead.
+      // Malformed subject → web-push throws on every send, swallowed to WARN, silently black-holing
+      // all pushes. Fail loud once and disable the channel instead.
       log.error(
         'VAPID_SUBJECT must be a mailto: or https: URL — Web Push disabled until corrected',
         { subject },
@@ -130,7 +110,6 @@ export class WebPushDispatcher {
       };
       const body = JSON.stringify(payload);
 
-      // Sequential send — one row per installed device; already off the hot path in a microtask.
       for (const row of rows) {
         await this.sendOne(row, body, alert.alertId);
       }
@@ -139,11 +118,8 @@ export class WebPushDispatcher {
     }
   }
 
-  /**
-   * The single outbound-network seam. Wraps `web-push`'s VAPID-signed send. Isolated as a
-   * protected method so unit tests can override it (simulating success / 410 Gone / network error)
-   * while the surrounding gate, subscription query, and prune logic run for real.
-   */
+  // Single outbound-network seam, isolated as a protected method so tests can override it
+  // (success / 410 Gone / network error) while gate, query, and prune run for real.
   protected async deliver(subscription: webpush.PushSubscription, body: string): Promise<void> {
     await webpush.sendNotification(subscription, body, {
       TTL: WEBPUSH_TTL_SECONDS,

@@ -21,17 +21,13 @@ const (
 	// streamReadLimit lifts coder/websocket's default 32 KiB frame cap; Alpaca data
 	// frames batching many symbols can exceed it.
 	streamReadLimit = 4 << 20 // 4 MiB
-	// streamBarTimeframe labels streamed bars. Alpaca's `bars` WebSocket channel emits
-	// 1-minute bars only — it has no 15-minute granularity — so streamed bars carry the
-	// canonical "1m" interval. The platform's 15m/1h/1d storage is owned by the always-on
-	// REST bar ingester (StartBarIngestPoller); streamed bars are forwarded to live
-	// subscribers and not persisted into the 15m ohlcv table.
+	// streamBarTimeframe labels streamed bars "1m": Alpaca's WS emits 1-minute bars only.
+	// Streamed bars are forwarded to live subscribers and never persisted (see StartBarIngestPoller).
 	streamBarTimeframe = "1m"
 )
 
-// streamMessage is one element of an Alpaca stream frame (frames are JSON arrays of
-// these). The `T` discriminator selects the message type: "b" bar, "q" quote,
-// "success"/"subscription" control, "error" error.
+// streamMessage is one element of an Alpaca stream frame (a JSON array). The `T` field
+// discriminates: "b" bar, "q" quote, "success"/"subscription" control, "error" error.
 type streamMessage struct {
 	T    string `json:"T"`
 	S    string `json:"S"`
@@ -53,9 +49,8 @@ type streamMessage struct {
 	BS int32   `json:"bs"`
 }
 
-// streamSubscriber is one StreamBars/StreamQuotes caller. Exactly one of barCh/quoteCh
-// is non-nil. symbols is the set the caller asked for; the manager only forwards matching
-// messages.
+// streamSubscriber is one StreamBars/StreamQuotes caller. Exactly one of barCh/quoteCh is
+// non-nil; symbols is the requested set — only matching messages are forwarded.
 type streamSubscriber struct {
 	ctx     context.Context
 	symbols map[string]bool
@@ -63,10 +58,8 @@ type streamSubscriber struct {
 	quoteCh chan *marketdatav1.Quote
 }
 
-// streamManager owns a single shared Alpaca WebSocket connection (the free plan allows
-// only one concurrent connection per account) and fans incoming bars/quotes out to all
-// registered subscribers. The connection is established lazily on the first subscription
-// and reconnects with backoff on drop.
+// streamManager owns the single shared Alpaca WebSocket (the free plan allows one connection
+// per account) and fans bars/quotes out to all subscribers. Lazy connect, reconnect with backoff.
 type streamManager struct {
 	cfg ClientConfig
 
@@ -84,9 +77,8 @@ func (c *Client) streamMgr() *streamManager {
 	return c.stream
 }
 
-// StreamBars returns a channel of live bars for the given symbols, backed by the shared
-// Alpaca WebSocket. Alpaca streams 1-minute bars; the timeframe argument is accepted for
-// interface compatibility but does not change the source granularity.
+// StreamBars returns a channel of live bars for the given symbols. Alpaca streams 1-minute
+// bars; the timeframe argument is accepted for interface compatibility only.
 func (c *Client) StreamBars(ctx context.Context, symbols []string, _ string) (<-chan *marketdatav1.Bar, error) {
 	return c.streamMgr().subscribe(ctx, symbols, true), nil
 }
@@ -98,8 +90,7 @@ func (c *Client) StreamQuotes(ctx context.Context, symbols []string) (<-chan *ma
 	return sub, nil
 }
 
-// subscribe registers a bar subscriber and returns its channel. Kept generic so a future
-// quote variant can share the wiring; bars set wantBars=true.
+// subscribe registers a bar subscriber and returns its channel.
 func (m *streamManager) subscribe(ctx context.Context, symbols []string, _ bool) <-chan *marketdatav1.Bar {
 	ch := make(chan *marketdatav1.Bar, 256)
 	sub := &streamSubscriber{ctx: ctx, symbols: toSet(symbols), barCh: ch}
@@ -130,7 +121,6 @@ func (m *streamManager) add(ctx context.Context, sub *streamSubscriber) {
 	if startLoop {
 		go m.run()
 	}
-	// Remove the subscriber and close its channel when its context ends.
 	go func() {
 		<-ctx.Done()
 		m.mu.Lock()
@@ -205,13 +195,11 @@ func (m *streamManager) connectAndRead() error {
 	conn.SetReadLimit(streamReadLimit)
 	defer func() { _ = conn.Close(websocket.StatusNormalClosure, "") }()
 
-	// 1. Authenticate.
 	authMsg := map[string]string{"action": "auth", "key": m.cfg.APIKey, "secret": m.cfg.APISecret}
 	if err := writeJSON(ctx, conn, authMsg); err != nil {
 		return fmt.Errorf("auth write: %w", err)
 	}
 
-	// 2. Subscribe to the union of bar and quote symbols across all subscribers.
 	barSyms, quoteSyms := m.unionSymbols()
 	if len(barSyms) == 0 && len(quoteSyms) == 0 {
 		return nil // nothing to do
@@ -228,7 +216,6 @@ func (m *streamManager) connectAndRead() error {
 	}
 	slog.Info("alpaca stream connected", "feed", feed, "bars", len(barSyms), "quotes", len(quoteSyms))
 
-	// 3. Read loop.
 	for {
 		if m.subscriberCount() == 0 {
 			return nil

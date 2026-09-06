@@ -17,16 +17,14 @@ import (
 	"github.com/xstockstrat/portfolio/internal/service"
 )
 
-// callerUserID returns the caller identity from the trusted x-user-id header, populated by the
-// unary propagation interceptor. Used to validate self-scoped RPCs instead of the deprecated
-// request-body user_id field.
+// callerUserID returns the caller identity from the trusted x-user-id header (set by the unary
+// propagation interceptor), not the deprecated request-body user_id.
 func callerUserID(ctx context.Context) string {
 	return middleware.FromContext(ctx).UserID
 }
 
-// streamUserID reads x-user-id directly from incoming gRPC metadata. Server-streaming RPCs do not
-// pass through the unary interceptor (no stream interceptor is registered), so middleware.FromContext
-// is empty for them — read the header off the stream context instead.
+// streamUserID reads x-user-id from incoming metadata directly: server-streaming RPCs bypass the
+// unary interceptor (none is registered for streams), so middleware.FromContext is empty for them.
 func streamUserID(ctx context.Context) string {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
@@ -39,7 +37,6 @@ func streamUserID(ctx context.Context) string {
 	return vals[0]
 }
 
-// Ensure PortfolioHandler implements the Connect interface at compile time.
 var _ portfoliov1connect.PortfolioServiceHandler = (*PortfolioHandler)(nil)
 
 // PortfolioHandler implements the Connect-RPC PortfolioServiceHandler interface.
@@ -151,9 +148,7 @@ func (h *PortfolioHandler) ListPortfolios(ctx context.Context, req *connect.Requ
 }
 
 // ─── Watchlists (feature 058) ────────────────────────────────────────────────
-// The service returns *connect.Error values carrying the right code (InvalidArgument
-// / PermissionDenied / NotFound / Internal); Connect handlers pass them through and
-// the gRPC adapter maps them via toGRPCError.
+// The service returns *connect.Error with the right code; handlers pass them through unchanged.
 
 func (h *PortfolioHandler) CreateWatchlist(ctx context.Context, req *connect.Request[portfoliov1.CreateWatchlistRequest]) (*connect.Response[portfoliov1.CreateWatchlistResponse], error) {
 	resp, err := h.svc.CreateWatchlist(ctx, req.Msg)
@@ -416,11 +411,8 @@ func errorf(msg string) error {
 	return fmt.Errorf("%s", msg)
 }
 
-// classifyGetPositionError maps a GetPosition error to a Connect code: NotFound only for
-// a confirmed absent position (repository.ErrPositionNotFound); every other error (DB
-// failure, timeout) is Internal — previously both collapsed to NotFound unconditionally,
-// which made REDUCE_ONLY's fail-closed design (trading.go) unable to tell "no position,
-// definitely safe to block" from "backend down, block out of caution" (feature 100).
+// classifyGetPositionError maps GetPosition errors: NotFound only for repository.ErrPositionNotFound,
+// else Internal — trading's REDUCE_ONLY fail-closed depends on telling "no position" from "backend down".
 func classifyGetPositionError(err error) connect.Code {
 	if errors.Is(err, repository.ErrPositionNotFound) {
 		return connect.CodeNotFound

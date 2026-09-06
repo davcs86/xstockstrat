@@ -1,15 +1,12 @@
-// Shared mobile "section" model (feature 083, FR-16). Every screen's mobile view is a list of
-// these typed sections, drawn by the one SectionRenderer so the phone frames stay 1:1 with the
-// desktop screens without a second component tree. Kinds mirror the design's section taxonomy:
-// head / stat / signal / chart / row / form / note / action.
+// Shared mobile "section" model: every screen's mobile view is a list of these typed sections, drawn
+// by the one SectionRenderer so phone frames stay 1:1 with desktop without a second component tree.
 
 import type { ReactNode } from 'react';
 import type { EnumRender } from '@/lib/opportunityShared';
 
 /**
- * One signal's fields (feature 083; strategy/source/expiry tags added by feature 155, FR-4 — mobile
- * parity with the desktop `OpportunityRow`). Shared by the flat `signal` section and the grouped
- * `signalGroup` section so both render through the one `SignalRow` (no divergent mobile tree).
+ * One signal's fields, shared by the flat `signal` section and the grouped `signalGroup` section so
+ * both render through the one `SignalRow` (no divergent mobile tree).
  */
 export interface SignalItem {
   symbol: string;
@@ -20,8 +17,7 @@ export interface SignalItem {
   readiness?: { passing: number; total: number };
   caption?: string;
   href?: string;
-  muted?: boolean; // feature 132 — deny-listed row: a "Muted" marker in place of the action badge
-  // feature 155 (FR-4) — the desktop-parity tags the flat mobile signal used to omit.
+  muted?: boolean; // deny-listed row: a "Muted" marker in place of the action badge
   strategyId?: string;
   chips?: string[];
   expiry?: string;
@@ -31,8 +27,7 @@ export type Section =
   | { kind: 'head'; title: string; subtitle?: string }
   | { kind: 'stat'; label: string; value: string | number; tone?: 'up' | 'down' | 'neutral' }
   | ({ kind: 'signal' } & SignalItem)
-  // feature 155 (FR-4, AC-9) — one card per symbol grouping its signals, mirroring the desktop
-  // `SymbolGroupCard`; `signals` render through the same `SignalRow` as the flat `signal` kind.
+  // One card per symbol grouping its signals; `signals` render through the same `SignalRow` as the flat `signal` kind.
   | { kind: 'signalGroup'; symbol: string; href?: string; signals: SignalItem[] }
   | { kind: 'chart'; label: string; render: ReactNode }
   | { kind: 'row'; label: string; value: ReactNode }

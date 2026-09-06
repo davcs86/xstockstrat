@@ -30,9 +30,8 @@ log = logging.getLogger(__name__)
 
 UI_BASE_URL = os.environ.get("UI_BASE_URL", "http://localhost:3000")
 AGENT_PUBLIC_URL = os.environ.get("AGENT_PUBLIC_URL", "http://localhost:9000")
-# Feature 147: the OAuth `txn` blob is HMAC-signed with JWT_SECRET (a shared platform secret now
-# injected into the agent), replacing the retired MCP_AGENT_SECRET. A shared key is required so a
-# txn issued by one agent instance verifies on another instance's callback (statelessness).
+# JWT_SECRET must be a shared platform key: a txn signed by one agent instance is verified on
+# another instance's callback, so a per-instance key would break the stateless flow.
 JWT_SECRET = os.environ.get("JWT_SECRET", "")
 
 
@@ -79,8 +78,7 @@ async def register(request):
             {"error": "invalid_request", "error_description": "invalid JSON body"}, 400
         )
 
-    # agent.oauth.registration_enabled (bool, default true). Disabled => 403.
-    # feature 093: env-scoped read; best-effort (a config failure must not 500 DCR).
+    # Best-effort: a config read failure must not 500 DCR.
     _env = resolve_scope("")
     try:
         reg_enabled = await client.get_config_value(
@@ -101,8 +99,7 @@ async def register(request):
             {"error": "invalid_redirect_uri", "error_description": "redirect_uris required"}, 400
         )
 
-    # agent.oauth.allowed_redirect_uris (comma-separated exact URIs). When set, require an exact
-    # match; otherwise fall back to the https:// minimum (identity enforces the same).
+    # identity enforces the same allowlist / https rule server-side; this is the pre-check.
     try:
         allowed_raw = await client.get_config_value(
             "oauth.allowed_redirect_uris", namespace="agent", environment=_env

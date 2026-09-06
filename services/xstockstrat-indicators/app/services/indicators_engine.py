@@ -103,7 +103,6 @@ def _bb(arr: np.ndarray, params: dict) -> list[dict]:
 def _atr(arr: np.ndarray, params: dict) -> list[dict]:
     """ATR requires high, low, close. If only 1D array, approximates using range."""
     period = int(params.get("period", 14))
-    # Simple approximation: use rolling max-min range as proxy
     s = pd.Series(arr)
     atr = s.diff().abs().rolling(window=period).mean()
     return [{"value": float(v) if not np.isnan(v) else None} for v in atr]

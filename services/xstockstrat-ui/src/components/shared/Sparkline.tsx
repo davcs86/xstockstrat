@@ -1,10 +1,8 @@
 import type { SparklinePoint } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
 /**
- * feature 095 — a compact Decide-surface sparkline over an Opportunity's recent daily closes.
- * Each `SparklinePoint` with a present `close` renders a bar scaled between the min/max close; a
- * point with an UNSET close (warm-up/missing bar) renders a muted gap bar — never a NaN/0 spike
- * (AC-4/P-03). Shared by the Opportunities queue card and the Signal-detail header (DRY).
+ * Compact sparkline over an Opportunity's recent daily closes. A point with an UNSET close
+ * (warm-up/missing bar) renders a muted gap bar — never a NaN/0 spike. Shared, so keep it DRY.
  */
 export function Sparkline({ points, testId }: { points: SparklinePoint[]; testId?: string }) {
   const closes = points.map((p) => (p.close === undefined ? null : p.close));

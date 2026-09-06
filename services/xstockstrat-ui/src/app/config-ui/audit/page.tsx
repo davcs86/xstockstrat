@@ -24,7 +24,7 @@ interface AuditEntry {
 }
 
 export default function AuditPage() {
-  const { data: entries = [], isLoading: loading } = useAuditLog();
+  const { data: entries = [], isLoading: loading, error } = useAuditLog();
 
   const columns = useMemo<ColumnDef<AuditEntry>[]>(
     () => [
@@ -98,7 +98,15 @@ export default function AuditPage() {
 
       {loading && <p className="text-muted-foreground text-sm">Loading…</p>}
 
-      {!loading && (
+      {!loading && error && (
+        <Card>
+          <CardContent className="py-6 text-center text-sm text-destructive">
+            Failed to load audit log: {error.message}
+          </CardContent>
+        </Card>
+      )}
+
+      {!loading && !error && (
         <Card>
           <CardContent className="pt-0 p-0">
             <DataTable

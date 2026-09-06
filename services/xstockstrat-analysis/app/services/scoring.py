@@ -36,10 +36,10 @@ def compute_signal_score(
             count += 1
 
     if count == 0:
-        return 0.5  # neutral
+        return 0.5
 
     net = (buy_conviction - sell_conviction) / count
-    return (net + 1.0) / 2.0  # map -1..1 to 0..1
+    return (net + 1.0) / 2.0
 
 
 def combine_score(
@@ -56,7 +56,6 @@ def combine_score(
     """
     if signal_weight > 0 and signals_present:
         return technical_weight * (tech_signal * 0.5 + 0.5) + signal_weight * signal_score
-    # Pure technical: map tech_signal to 0-1 for threshold comparison.
     return tech_signal * 0.5 + 0.5
 
 

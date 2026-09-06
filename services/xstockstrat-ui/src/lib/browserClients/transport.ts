@@ -1,11 +1,7 @@
-// Shared browser (connect-web) transport factory (feature 153).
-//
-// Every `browserClients/*.ts` client is built on this factory so the "Unauthorized -> refresh-first,
-// then redirect to login" behavior is applied uniformly to ALL segment data calls — no client is
-// left unguarded. Do not call `createConnectTransport` directly in a client module; use this instead.
-//
-// BROWSER-ONLY (imports connect-web + `authRedirect`, which reference `window`). Never reachable from
-// `middleware.ts`/`auth.ts` (the Edge bundle).
+// Shared browser (connect-web) transport factory. Every `browserClients/*.ts` client uses this so the
+// "Unauthorized -> refresh-first, then redirect to login" guard covers ALL data calls — don't call
+// `createConnectTransport` directly. BROWSER-ONLY (references `window` via connect-web + authRedirect);
+// never reachable from middleware.ts/auth.ts (Edge bundle).
 
 import { createConnectTransport } from '@connectrpc/connect-web';
 import { Code, ConnectError, type Interceptor } from '@connectrpc/connect';
@@ -16,10 +12,8 @@ function isUnauthenticated(err: unknown): boolean {
 }
 
 /**
- * Wrap a server-stream's message iterable so a mid-stream Unauthenticated (e.g. the session expiring
- * while the trader alert / order-update stream is open) triggers refresh-or-redirect instead of the
- * consumer silently swallowing the error. The stream is not replayed on refresh success — it recovers
- * on the next reconnect/navigation (documented open risk).
+ * Wrap a server-stream so a mid-stream Unauthenticated triggers refresh-or-redirect instead of being
+ * silently swallowed. The stream is NOT replayed on refresh — it recovers on the next reconnect.
  */
 async function* guardStream<O>(stream: AsyncIterable<O>): AsyncIterable<O> {
   try {

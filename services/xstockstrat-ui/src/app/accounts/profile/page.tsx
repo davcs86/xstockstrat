@@ -22,11 +22,9 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Read-only fields
   const [userId, setUserId] = useState('');
   const [email, setEmail] = useState('');
 
-  // Editable fields
   const [phone, setPhone] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [metadataJson, setMetadataJson] = useState('');
@@ -58,7 +56,6 @@ export default function ProfilePage() {
     setError(null);
     setSuccess(null);
 
-    // Validate metadata JSON before sending
     let parsedMetadata: Record<string, unknown> | undefined;
     if (metadataJson.trim()) {
       try {
@@ -120,7 +117,6 @@ export default function ProfilePage() {
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : (
             <>
-              {/* Read-only fields */}
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">User ID</label>
                 <Input value={userId} readOnly disabled aria-label="User ID" />
@@ -130,7 +126,6 @@ export default function ProfilePage() {
                 <Input value={email} readOnly disabled aria-label="Email" />
               </div>
 
-              {/* Editable fields */}
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">Display name</label>
                 <Input

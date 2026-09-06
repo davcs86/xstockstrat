@@ -54,10 +54,8 @@ import {
 } from './formulaReference';
 
 /**
- * Reserved author marking a platform-managed, built-in formula (mirrors the indicators
- * service's SYSTEM_AUTHOR). These are seeded at startup and depended on by other services
- * (e.g. the fundamentals scoring formula referenced by feature 062), so the editor renders
- * them read-only and the backend rejects every UpdateFormula/DeleteFormula on them.
+ * Reserved author marking a platform-managed, built-in formula (mirrors the indicators service's
+ * SYSTEM_AUTHOR). The editor renders these read-only and the backend rejects every UpdateFormula/DeleteFormula on them.
  */
 export const SYSTEM_FORMULA_AUTHOR = 'system';
 
@@ -132,9 +130,8 @@ export function FormulaWorkspace({
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [showReference, setShowReference] = useState(true);
 
-  // Built-in system formulas are immutable, and a soft-deleted formula (feature 086) cannot be
-  // edited: both hide Save/Delete and disable every editor input. The Run cell stays enabled so the
-  // formula can still be inspected/executed.
+  // Built-in system formulas and soft-deleted formulas are read-only: both hide Save/Delete and disable
+  // every editor input. The Run cell stays enabled so the formula can still be inspected/executed.
   const readOnly = author === SYSTEM_FORMULA_AUTHOR || deleted;
 
   const executeMut = useExecuteFormula();

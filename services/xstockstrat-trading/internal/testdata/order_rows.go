@@ -1,13 +1,11 @@
 // Package testdata holds shared test fixtures for xstockstrat-trading's repository tests
-// (Constitution C-13 — Go canonical fixture home, materialized at the second consumer of a
-// shared literal).
+// (Constitution C-13 — Go canonical fixture home).
 package testdata
 
 import "time"
 
-// OrderRowColumns is the exact positional column order TradingRepo.scanOrder expects
-// (internal/repository/trading_repo.go's scanOrder Scan call) — every mocked pgxmock row built
-// from NewOrderRow must match it.
+// OrderRowColumns is the exact positional column order TradingRepo.scanOrder expects — every
+// mocked pgxmock row built from NewOrderRow must match it.
 var OrderRowColumns = []string{
 	"order_id", "client_order_id", "broker_order_id",
 	"symbol", "side", "order_type", "status",
@@ -18,9 +16,7 @@ var OrderRowColumns = []string{
 }
 
 // NewOrderRow builds one fixture row (positionally matching OrderRowColumns) with a non-NULL
-// intent state, proving a LATERAL-join consumer genuinely exercises that path (not
-// NULL-bypassed). Shared across GetOrder/ListOrders/ListSubmittedOrders regression tests, which
-// otherwise duplicate the identical 21-column literal three times.
+// intent state, so a LATERAL-join consumer genuinely exercises that path (not NULL-bypassed).
 func NewOrderRow(orderID string, updatedAt time.Time, intentState int16) []any {
 	return []any{
 		orderID, "client-" + orderID, "broker-" + orderID,

@@ -90,6 +90,9 @@ const (
 	// AnalysisServiceGetAttributionProcedure is the fully-qualified name of the AnalysisService's
 	// GetAttribution RPC.
 	AnalysisServiceGetAttributionProcedure = "/xstockstrat.analysis.v1.AnalysisService/GetAttribution"
+	// AnalysisServiceGetWatchlistReadinessProcedure is the fully-qualified name of the
+	// AnalysisService's GetWatchlistReadiness RPC.
+	AnalysisServiceGetWatchlistReadinessProcedure = "/xstockstrat.analysis.v1.AnalysisService/GetWatchlistReadiness"
 )
 
 // AnalysisServiceClient is a client for the xstockstrat.analysis.v1.AnalysisService service.
@@ -134,6 +137,10 @@ type AnalysisServiceClient interface {
 	// Per-source trading-performance attribution over closed positions (feature 029). Read-only;
 	// aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
 	GetAttribution(context.Context, *connect.Request[v1.GetAttributionRequest]) (*connect.Response[v1.GetAttributionResponse], error)
+	// Cache-first readiness decoration for a page of a watchlist's bound (symbol, strategy_id)
+	// pairs (feature 181). Owner from x-user-id; RESOLVED rows carry inline SymbolReadiness,
+	// PENDING/UNKNOWN rows resolve on a subsequent poll (the server kicks a background refresh).
+	GetWatchlistReadiness(context.Context, *connect.Request[v1.GetWatchlistReadinessRequest]) (*connect.Response[v1.GetWatchlistReadinessResponse], error)
 }
 
 // NewAnalysisServiceClient constructs a client for the xstockstrat.analysis.v1.AnalysisService
@@ -261,6 +268,12 @@ func NewAnalysisServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(analysisServiceMethods.ByName("GetAttribution")),
 			connect.WithClientOptions(opts...),
 		),
+		getWatchlistReadiness: connect.NewClient[v1.GetWatchlistReadinessRequest, v1.GetWatchlistReadinessResponse](
+			httpClient,
+			baseURL+AnalysisServiceGetWatchlistReadinessProcedure,
+			connect.WithSchema(analysisServiceMethods.ByName("GetWatchlistReadiness")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -285,6 +298,7 @@ type analysisServiceClient struct {
 	getIndicatorSeries      *connect.Client[v1.GetIndicatorSeriesRequest, v1.GetIndicatorSeriesResponse]
 	queryPnLPatterns        *connect.Client[v1.QueryPnLPatternsRequest, v1.QueryPnLPatternsResponse]
 	getAttribution          *connect.Client[v1.GetAttributionRequest, v1.GetAttributionResponse]
+	getWatchlistReadiness   *connect.Client[v1.GetWatchlistReadinessRequest, v1.GetWatchlistReadinessResponse]
 }
 
 // RunBacktest calls xstockstrat.analysis.v1.AnalysisService.RunBacktest.
@@ -382,6 +396,11 @@ func (c *analysisServiceClient) GetAttribution(ctx context.Context, req *connect
 	return c.getAttribution.CallUnary(ctx, req)
 }
 
+// GetWatchlistReadiness calls xstockstrat.analysis.v1.AnalysisService.GetWatchlistReadiness.
+func (c *analysisServiceClient) GetWatchlistReadiness(ctx context.Context, req *connect.Request[v1.GetWatchlistReadinessRequest]) (*connect.Response[v1.GetWatchlistReadinessResponse], error) {
+	return c.getWatchlistReadiness.CallUnary(ctx, req)
+}
+
 // AnalysisServiceHandler is an implementation of the xstockstrat.analysis.v1.AnalysisService
 // service.
 type AnalysisServiceHandler interface {
@@ -425,6 +444,10 @@ type AnalysisServiceHandler interface {
 	// Per-source trading-performance attribution over closed positions (feature 029). Read-only;
 	// aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
 	GetAttribution(context.Context, *connect.Request[v1.GetAttributionRequest]) (*connect.Response[v1.GetAttributionResponse], error)
+	// Cache-first readiness decoration for a page of a watchlist's bound (symbol, strategy_id)
+	// pairs (feature 181). Owner from x-user-id; RESOLVED rows carry inline SymbolReadiness,
+	// PENDING/UNKNOWN rows resolve on a subsequent poll (the server kicks a background refresh).
+	GetWatchlistReadiness(context.Context, *connect.Request[v1.GetWatchlistReadinessRequest]) (*connect.Response[v1.GetWatchlistReadinessResponse], error)
 }
 
 // NewAnalysisServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -548,6 +571,12 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 		connect.WithSchema(analysisServiceMethods.ByName("GetAttribution")),
 		connect.WithHandlerOptions(opts...),
 	)
+	analysisServiceGetWatchlistReadinessHandler := connect.NewUnaryHandler(
+		AnalysisServiceGetWatchlistReadinessProcedure,
+		svc.GetWatchlistReadiness,
+		connect.WithSchema(analysisServiceMethods.ByName("GetWatchlistReadiness")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.analysis.v1.AnalysisService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AnalysisServiceRunBacktestProcedure:
@@ -588,6 +617,8 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 			analysisServiceQueryPnLPatternsHandler.ServeHTTP(w, r)
 		case AnalysisServiceGetAttributionProcedure:
 			analysisServiceGetAttributionHandler.ServeHTTP(w, r)
+		case AnalysisServiceGetWatchlistReadinessProcedure:
+			analysisServiceGetWatchlistReadinessHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -671,4 +702,8 @@ func (UnimplementedAnalysisServiceHandler) QueryPnLPatterns(context.Context, *co
 
 func (UnimplementedAnalysisServiceHandler) GetAttribution(context.Context, *connect.Request[v1.GetAttributionRequest]) (*connect.Response[v1.GetAttributionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.GetAttribution is not implemented"))
+}
+
+func (UnimplementedAnalysisServiceHandler) GetWatchlistReadiness(context.Context, *connect.Request[v1.GetWatchlistReadinessRequest]) (*connect.Response[v1.GetWatchlistReadinessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.GetWatchlistReadiness is not implemented"))
 }

@@ -20,7 +20,7 @@ import { useConfigKeys } from '@/app/config-ui/hooks/useConfigKeys';
 import { useSetConfig } from '@/app/config-ui/hooks/useSetConfig';
 
 function envToProto(env: string): number {
-  // Feature 147: production=2, staging=3 (Environment enum). trading_mode is no longer a config axis.
+  // production=2, staging=3 (Environment enum).
   return env === 'production' ? 2 : 3;
 }
 function errMessage(err: unknown): string {
@@ -28,11 +28,10 @@ function errMessage(err: unknown): string {
 }
 
 // config.v1.ValueType.VALUE_TYPE_FLOAT_SCALAR (numeric on the es-generated browser client).
-// The former VALUE_TYPE_FLOAT_MAP (= 1) validation path was removed with its sole key (feature 161).
 const VALUE_TYPE_FLOAT_SCALAR = 2;
 
-// feature 161: a scalar-float key's single numeric value must lie within [min, max]. Pre-validation
-// only — the config service enforces the same bounds at the SetConfig write path (authoritative).
+// A scalar-float key's value must lie within [min, max]. Pre-validation only — the config service
+// enforces the same bounds at the SetConfig write path (authoritative).
 function validateScalar(value: string, min: number, max: number): string | null {
   const n = Number(value);
   if (value.trim() === '' || Number.isNaN(n) || n < min || n > max) {
@@ -82,7 +81,7 @@ export function NamespaceEditor({ namespace, env, user, nativeEnv }: Props) {
   function handleSave(key: string) {
     const meta = keys.find((kk) => kk.key === key);
     if (meta?.isSecret && user) {
-      // Secrets are global-scope only (feature 147) — the backend rejects a per-user secret write.
+      // Secrets are global-scope only — the backend rejects a per-user secret write.
       setValidationError('Secret keys are global-scope only; switch to the global scope to edit.');
       return;
     }
@@ -95,12 +94,11 @@ export function NamespaceEditor({ namespace, env, user, nativeEnv }: Props) {
     }
     if (key === 'platform.trading_state' && !editReason.trim()) {
       setValidationError('A reason is required when changing platform.trading_state');
-      return; // no SetConfig call when a required reason is missing
+      return;
     }
     setValidationError(null);
     // Target the row's own registered environment when ListKeys reported one, else the viewed env.
-    // The scope is (namespace, key, environment, user_id) — feature 147; the viewed per-user scope
-    // is carried on the request so a per-user override edits the user's row, not the global one.
+    // The per-user scope is carried so a per-user override edits the user's row, not the global one.
     setConfigMutate(
       {
         namespace,
@@ -212,7 +210,7 @@ export function NamespaceEditor({ namespace, env, user, nativeEnv }: Props) {
                       onClick={() => {
                         setEditingKey(k.key);
                         // Never seed a secret's editor with its redacted placeholder — a secret
-                        // write is always a fresh plaintext the operator types (feature 147).
+                        // write is always a fresh plaintext the operator types.
                         setEditValue(k.isSecret ? '' : k.currentValue);
                         setEditReason('');
                       }}
@@ -256,7 +254,6 @@ export function NamespaceEditor({ namespace, env, user, nativeEnv }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Breadcrumb */}
       <div className="flex flex-wrap items-center gap-2">
         <PageBreadcrumb
           ariaLabel="Namespace path"

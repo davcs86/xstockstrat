@@ -1,5 +1,4 @@
 /**
- * services/logger.ts
  * Winston-based structured JSON logger for all Node.js services.
  */
 import { createLogger, format, transports } from 'winston';

@@ -27,12 +27,12 @@ import {
   summaryStats,
 } from '@/lib/performanceMetrics';
 
-/** FR-5 default poll cadence — the dashboard re-derives every metric from a fresh fetch each tick,
- * with no full reload (resolves design.md R4; no config key). */
+/** Default poll cadence — the dashboard re-derives every metric from a fresh fetch each tick, with
+ * no full reload (no config key). */
 export const POLL_INTERVAL_MS = 60_000;
 
 const MS_PER_DAY = 86_400_000;
-/** Rolling-Sharpe lookback window (FR-3 "rolling 30-day"). */
+/** Rolling-Sharpe lookback window (rolling 30-day). */
 const SHARPE_LOOKBACK_DAYS = 30;
 
 // Series color is driven through ChartConfig → the --chart-* design tokens (C-17), never a
@@ -89,7 +89,7 @@ function PerformanceDashboardInner() {
     const earliestMs = allTrades[0]?.occurredAtMs ?? Date.now();
     const configStartMs = readStartDateMs(values, earliestMs);
 
-    // The date-range picker overrides the configured base date (FR-7/AC-8); either bound may be unset.
+    // The date-range picker overrides the configured base date; either bound may be unset.
     const startMs = parseDate(startStr) ?? configStartMs;
     const endMs = parseDate(endStr);
     const windowed = filterByWindow(allTrades, startMs, endMs);
@@ -280,11 +280,10 @@ function PerformanceDashboardInner() {
 }
 
 /**
- * feature 031 — the /insights strategy-performance dashboard. Reads `portfolio.position.closed`
- * ledger events + one-shot `ui.performance.*` config through the insights BFF, derives every metric
- * with the pure {@link '@/lib/performanceMetrics'} lib, and re-polls every {@link POLL_INTERVAL_MS}.
- * Wrapped in AccountProvider so the env-derived paper/live mode drives the "Paper Trading" label
- * (AC-9/AC-10) — its browser tradingClient posts same-origin to /trader/api (sanctioned exception).
+ * The /insights strategy-performance dashboard. Reads `portfolio.position.closed` ledger events +
+ * one-shot `ui.performance.*` config via the insights BFF, derives metrics with the pure
+ * performanceMetrics lib, and re-polls every {@link POLL_INTERVAL_MS}. Wrapped in AccountProvider for
+ * the paper/live label; its browser tradingClient posts same-origin to /trader/api (sanctioned exception).
  */
 export function PerformanceDashboard() {
   return (

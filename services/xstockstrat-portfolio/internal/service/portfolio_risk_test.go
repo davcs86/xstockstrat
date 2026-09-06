@@ -8,6 +8,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"google.golang.org/grpc"
@@ -16,7 +17,47 @@ import (
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
+
+	"github.com/xstockstrat/portfolio/internal/repository"
 )
+
+// TestEvaluateDrawdowns is the feature-172 @AC-1 regression for the pure per-account drawdown
+// decision seam: a breach beyond the limit is reported (naming the account), a sub-limit account
+// is silent, and a zero peak (no history) is skipped without a divide-by-zero.
+func TestEvaluateDrawdowns(t *testing.T) {
+	breach := repository.AccountDrawdown{AccountID: "acc-1", Equity: 97, PeakEquity: 100}   // 3%
+	subLimit := repository.AccountDrawdown{AccountID: "acc-2", Equity: 99, PeakEquity: 100} // 1%
+	noHistory := repository.AccountDrawdown{AccountID: "acc-3", Equity: 0, PeakEquity: 0}
+
+	t.Run("breach beyond limit is reported and names the account", func(t *testing.T) {
+		msgs := evaluateDrawdowns([]repository.AccountDrawdown{breach}, 0.02)
+		if len(msgs) != 1 {
+			t.Fatalf("len(msgs) = %d, want 1", len(msgs))
+		}
+		if !strings.Contains(msgs[0], "acc-1") {
+			t.Fatalf("msg %q does not name acc-1", msgs[0])
+		}
+	})
+
+	t.Run("sub-limit account is silent", func(t *testing.T) {
+		if msgs := evaluateDrawdowns([]repository.AccountDrawdown{subLimit}, 0.02); len(msgs) != 0 {
+			t.Fatalf("len(msgs) = %d, want 0", len(msgs))
+		}
+	})
+
+	t.Run("zero peak (no history) is skipped without divide-by-zero", func(t *testing.T) {
+		if msgs := evaluateDrawdowns([]repository.AccountDrawdown{noHistory}, 0.02); len(msgs) != 0 {
+			t.Fatalf("len(msgs) = %d, want 0", len(msgs))
+		}
+	})
+
+	t.Run("mixed slice names only the breaching account (per-account grain)", func(t *testing.T) {
+		msgs := evaluateDrawdowns([]repository.AccountDrawdown{breach, subLimit, noHistory}, 0.02)
+		if len(msgs) != 1 || !strings.Contains(msgs[0], "acc-1") {
+			t.Fatalf("msgs = %v, want exactly one naming acc-1", msgs)
+		}
+	})
+}
 
 func TestApplyStopRisk_DistanceOffCurrentPrice(t *testing.T) {
 	p := &portfoliov1.Position{Qty: 10, CurrentPrice: 100}

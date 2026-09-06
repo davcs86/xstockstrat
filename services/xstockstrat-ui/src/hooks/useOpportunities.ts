@@ -5,9 +5,8 @@ import { isNotFoundError } from '@/lib/scoreDisplay';
 import type { OpportunityAction, ReadinessRule } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
 /**
- * feature 083 — Decide surface data hooks. All read-only queries against the insights BFF
- * (AnalysisService). ListOpportunities takes the user from the propagated x-user-id header,
- * so the request carries only the min-conviction filter.
+ * Decide-surface read-only hooks (insights BFF). ListOpportunities takes the user from the
+ * x-user-id header, so the request carries only the min-conviction filter.
  */
 
 type ListOpportunitiesResult = Awaited<ReturnType<typeof analysisClient.listOpportunities>>;
@@ -23,11 +22,10 @@ export function useOpportunities(minConviction = 0) {
 }
 
 /**
- * feature 097 — persist a per-user disposition (SNOOZE / DISMISS / TAKE) against the
- * server-authoritative `opportunityKey`. On success it invalidates `['opportunities']` so the
- * server-filtered read drops the row — the disposition survives reload and syncs across devices
- * (FR-5, AC-3), unlike the transient client-side `Set` it replaces. `snoozeUntil` is optional;
- * omit it to let the server apply its bounded `analysis.opportunity.snooze_default_hours` default.
+ * Persist a per-user disposition (SNOOZE / DISMISS / TAKE) against the server-authoritative
+ * `opportunityKey`. On success it invalidates `['opportunities']` so the server-filtered read drops
+ * the row. `snoozeUntil` is optional — omit it to let the server apply its bounded
+ * `analysis.opportunity.snooze_default_hours` default.
  */
 export interface SetOpportunityActionInput {
   opportunityKey: string;
@@ -44,13 +42,12 @@ export function useSetOpportunityAction() {
 
 /**
  * Per-symbol readiness (traced condition leaves) for a strategy. Enabled only with a strategy.
- * feature 138 — `rule` selects the entry (default) or exit rule tree; the Signal-detail panel
- * passes EXIT for a held (REDUCE/ADD) opportunity so the trace matches the queue's exit-derived
- * conviction. The rule is part of the query key so entry/exit results cache separately.
+ * `rule` selects the entry (default) or exit rule tree, and is part of the query key so entry/exit
+ * results cache separately.
  */
 export function useReadiness(strategyId: string, symbols: string[], rule?: ReadinessRule) {
-  // A stale/deleted `?strategy=` param makes EvaluateReadiness abort NOT_FOUND — an expected,
-  // externally-controllable case, not a retriable failure. Mirrors useBacktestDetail (useStrategies.ts).
+  // A stale/deleted `?strategy=` param makes EvaluateReadiness abort NOT_FOUND — expected, not
+  // retriable.
   const query = useQuery<EvaluateReadinessResult, Error>({
     queryKey: ['readiness', strategyId, [...symbols].sort(), rule ?? 0],
     queryFn: () => analysisClient.evaluateReadiness({ strategyId, symbols, rule }),

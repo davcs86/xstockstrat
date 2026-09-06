@@ -1,0 +1,93 @@
+# Product Spec: fix-portfolio-max-drawdown-unenforced
+
+**Type**: bug
+**Defect Report**: `docs/reports/2026-09-04-comment-audit-triage.md` (item 2)
+**Severity**: SEV-3
+**Created**: 2026-09-04
+
+---
+
+## Problem Statement
+
+**Observed**: `services/xstockstrat-portfolio/internal/service/portfolio_service.go` reads the
+`portfolio.risk.max_drawdown_pct` config key (`:722`, `GetFloat("portfolio.risk.max_drawdown_pct",
+0.10)`) then explicitly discards it (`:750`, `_ = maxDrawdownPct // drawdown requires historical P&L
+tracking — handled by snapshots over time`). No drawdown-halt or drawdown-alert logic consumes the
+value. Only `concentration_limit_pct` is actually enforced in the risk path.
+
+**Expected**: either the configured maximum drawdown is enforced (a halt/alert fires when breached),
+or the key is honestly documented as not-yet-implemented so an operator is not misled into believing
+a protection exists. The current state — read, silently discarded — is the worst of both: it looks
+wired but does nothing.
+
+**Already logged**: this re-confirms `services/xstockstrat-portfolio/docs/context-constitution-findings.md`
+(Dead/orphaned code) and the `**Read but not yet enforced**` note already present in the portfolio
+`CLAUDE.md` Config Keys table. The comment-audit re-surfaced it for routing so it is not lost.
+
+## Reproduction Steps
+
+1. Set `portfolio.risk.max_drawdown_pct` to a tight value (e.g. `0.02`) via config-ui / SetConfig.
+2. Drive the portfolio into a drawdown exceeding 2%.
+3. Observe no halt, no alert, and no error — the limit has no effect.
+
+## Root Cause Hypothesis
+
+Drawdown tracking was never built. The config key and its read were added ahead of the enforcement
+logic (which needs historical P&L / snapshot series), and the placeholder `_ = maxDrawdownPct`
+suppressor was left in place. Same class as `trading.risk.daily_loss_limit`
+(documented-not-implemented).
+
+## Affected Services
+
+- `xstockstrat-portfolio` (`internal/service/portfolio_service.go`) — single service.
+- If the "implement" path is chosen, `xstockstrat-notify` may be a secondary dependency (alert
+  emission) and historical P&L snapshot storage is in scope.
+
+## Functional Requirements
+
+- **FR-1** — `portfolio.risk.max_drawdown_pct` is no longer **read-then-silently-discarded**. The
+  design gate picks exactly one path, and either satisfies FR-1: **(Path A)** the configured maximum
+  drawdown is enforced — a halt and/or alert fires when a portfolio's peak-to-current drawdown exceeds
+  the configured pct; or **(Path B)** the key is honestly marked **Documented, not yet implemented**
+  (parity with `trading.risk.daily_loss_limit`) and the misleading `_ = maxDrawdownPct` discard is
+  removed or annotated with the explaining contract. An operator must never be able to set the key and
+  believe a protection exists when none does.
+
+## Consumer Surface(s)
+
+**Path-dependent — resolved with the Path A/B decision at design (C-14):**
+- **Path A (enforce)** has an end-user-visible consequence: a drawdown breach produces a halt/alert
+  reaching the user through `xstockstrat-notify` and/or the `/trader` risk display in `xstockstrat-ui`.
+  Under Path A those surfaces earn their own implementation step(s) and must not be left stale.
+- **Path B (document)** is **internal/platform-only** — a docs + code-annotation change with no new
+  RPC/response field or UI; the only "surface" is the corrected portfolio `CLAUDE.md` config-key note.
+
+The product spec cannot pre-name the surface because the path is undecided; the design gate fixes it
+and `@AC-1`/`@AC-2` collapse to the chosen path's scenario.
+
+## Fix Scope
+
+- [x] No proto changes anticipated (either fix path)
+- [x] **Database migration REQUIRED** (resolved at design): migration `016` adds a `peak_equity`
+      high-water-mark column to `portfolio.account_balances`. DBA + service-owner approval at PR.
+- [x] No config key changes anticipated (the key already exists; no new key)
+- [x] **Decision resolved (design gate, user sign-off): Path A — enforce, per-account.** Drawdown is
+      computed **per account** over broker-authoritative `account_balances.equity` (cash+positions)
+      against the persisted `peak_equity` HWM, emitting a WARNING alert on breach via the existing
+      `emitRiskAlert`. Path B (document-only) and the cashless-`snapshots.equity` basis were rejected;
+      cash-flow-aware netting is a named follow-up (the platform models no funding events). Full
+      rationale + rejected alternatives + accepted cash-flow limitation → `design.md`.
+
+## Acceptance Criteria
+
+See `acceptance.feature`. The regression scenario differs by decision:
+- Path A: a drawdown breach produces the enforced outcome (halt/alert); test fails on today's no-op.
+- Path B: the key's status is unambiguously "not enforced" in docs and the discard is annotated so no
+  operator is misled; test asserts the documented contract.
+
+Plus: existing portfolio tests pass; risk path smoke-tested on dev.
+
+## Out of Scope
+
+- Reworking `concentration_limit_pct` enforcement (already functional).
+- `trading.risk.daily_loss_limit` (a sibling documented-not-implemented key; separate item).

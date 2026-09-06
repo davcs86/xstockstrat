@@ -1,0 +1,179 @@
+# Context: ui-resume-halted-account
+
+**Feature**: `docs/roadmap/features/179-ui-resume-halted-account/feature.md`
+**Product Spec**: `docs/roadmap/features/179-ui-resume-halted-account/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/179-ui-resume-halted-account/implementation-spec.md`
+
+---
+
+## Session 2026-09-04 — sdd-story
+
+- Created from performance-audit Track D (`docs/reports/2026-09-04-performance-bottlenecks-audit.md`
+  § 4). The audit corrected the original premise: the ResumeAccount RPC, agent trigger, agent
+  indicator, and a positions-page halt indicator already exist (features 169/102). The residual gap
+  is UI-only — no browser Resume trigger, and no halt indicator beside the account-management
+  controls. This is exactly what feature 169's product-spec deferred (`:37,:52`).
+- Predominantly a UI/BFF feature (no proto/schema/config change), so lower backend risk than
+  176/177/178.
+- Open scope question folded in: RPC enforces admin-only (`RequireAdminScope`) vs. feature 169 FR-5's
+  operator-or-admin — must be reconciled in `/sdd-design`, not silently chosen. Security-role review
+  flagged because the control reaches a broker account.
+- Known trap folded in: C-10 nav/surface reachability (fails.md:71) — ensure the indicator/control
+  land on the rendered account-management surface, not an orphan component.
+
+## Session 2026-09-04 — sdd-review product-spec
+
+- FIRST PASS: FAIL. Blocker: criterion 9 — four unresolved Open Questions, chiefly the admin-vs-operator scope contradiction (ResumeAccount is code-confirmed admin-only, RequireAdminScope at trading.go:2749; feature 169 FR-5 intended operator-or-admin).
+- RESOLUTION (recorded decisions): (1) SCOPE — conservative: this UI feature matches the RPC's current admin-only enforcement (FR-5), does NOT modify the RPC; widening ResumeAccount to operator-or-admin is a separate xstockstrat-trading authz change, Out of Scope, FLAGGED FOR OPERATOR OVERRIDE. (2) confirm-UX — yes, folded into FR-3 + AC-6 (surfaces halt_reason). (3) action-site duplication — Resume control solely on account-mgmt surface; positions page stays indicator-only. (4) nav-reachability — deferred to /sdd-design recon (verify AccountsModule/AccountSelector/accountShared is the rendered surface). Added C-2 broker-agnostic note to FR-2; rephrased AC-1/AC-5.
+- RE-REVIEW: PASS (no blockers, no warnings). Status: draft → spec-ready.
+- OPEN DECISION carried to design + surfaced to operator: whether to keep admin-only (this feature's scope) or widen the RPC per 169's original intent. Design/recon must carry the override flag forward.
+- Overlap: CLEAN.
+
+## Session 2026-09-05 — sdd-design quick, ROUND 1 (PAUSED, not approved)
+
+Status unchanged: **spec-ready** (user chose "Hold, run another round"). recon.md written + committed. design.md NOT yet written.
+
+**USER DECISION (locked):** scope = **Admin-only, no RPC change**. Accepted limitation: there is NO `operator` scope in code (rolesToAccessScope grants the admin bit only to the `admin` role; a `trader` never gets it — auth.ts:81-92), so the Resume control is visible/usable ONLY to admin-role users, NOT the "operator/trader" persona the user story names. Widening to operator-or-admin (169 FR-5's original intent) stays OUT OF SCOPE (a separate xstockstrat-trading authz C-16 CHANGE). This resolves the adversary's crux fork (fails.md:66) in favor of admin-only.
+
+- **Proposer (r1):** UI-only; forwardAdmin BFF route (resumeAccount after traderBff.ts:57); halt badge in AccountRow shared badge row (reuse positions-page HALT_SOURCE map + EnumBadge); Resume as admin-gated RowActionsMenu action with confirm surfacing halt_reason; handleResume → BFF → refreshAccounts(); AccountSelector gets a warning-dot OR (no control).
+- **Adversary (r1): NEEDS WORK, no Floor breach.** Mechanics affirmed sound (forwardAdmin rejects server-side; React auto-escapes halt_reason; sequential await avoids clear-order race). Fixes to fold into round 2:
+  1. **Scope fork → RESOLVED by user = admin-only (above).**
+  2. **Defense-in-depth test (@AC-4/169):** add a BFF-level test invoking the resumeAccount route with a NON-admin session asserting PermissionDenied (separate from the hidden-button test) — else a future forwardAdmin→forward refactor silently reopens it.
+  3. **Gate badge strictly on `account.halted===true` (@AC-2/159):** rendering HALT_SOURCE[haltSource] unconditionally paints a stray '—' badge (UNSPECIFIED) on EVERY row incl OFFLINE → resurfaces a broker-derived field. Add e2e: a non-halted/offline row shows NO halt badge. (Halt sources BRACKET_PROTECTION/RECONCILIATION are unreachable for OFFLINE, so a gated badge never shows there.)
+  4. **Silent-refetch failure (P-03/FR-4):** refreshAccounts()=fetchAccounts has `catch {}` (AccountContext.tsx:41-43) — if the post-resume refetch fails, resume succeeded but indicator still shows halted. FIX: update context state from ResumeAccountResponse.account (optimistic), then background refetch.
+  5. **FR-2 AccountSelector under-delivery (OPEN for round 2):** the warning-dot OR shows neither reason nor source — a partial delivery of a literally-named FR-2 surface. Needs explicit sign-off that the dot satisfies FR-2 (detail deferred to the row), OR add the full indicator to the selector. Confirm a halted account stays in the activeAccounts filter so the dot fires. **← unresolved; ask user at round-2 gate.**
+  6. Correct the product-spec Open Questions citation: `docs/context-constitution-findings.md` does NOT record the admin-vs-operator discrepancy (recon confirmed) — fix the citation.
+  7. Minor: browser tradingClient already exposes resumeAccount (no-op); the load-bearing change is the traderBff.ts registration.
+  - Nav reachability (fails.md:71) NOT triggered — /trader/accounts pre-exists in AppShell.
+- **NEXT (round 2):** re-propose admin-only (locked) + BFF non-admin rejection test, halted-gated badge + offline e2e, optimistic clear from RPC response, corrected findings citation; surface the AccountSelector FR-2-dot sign-off (#5) at the round-2 user gate.
+
+## Session 2026-09-05 — sdd-design ROUND 2 (complete) + USER DECISION; round 3 pending
+
+Status unchanged: **spec-ready** (user chose "Hold, run another round" → round 3). design.md NOT yet written. Scope: admin-only (locked r1).
+
+- **Round-2 proposer:** forwardAdmin BFF route; halt badge in AccountRow gated strictly on halted===true; admin-gated RowActionsMenu Resume with confirm surfacing halt_reason; optimistic clear via a new narrow AccountContext.applyAccountUpdate(account) from ResumeAccountResponse.account then background refreshAccounts(); AccountSelector option (a) marker; BFF non-admin rejection test.
+- **Round-2 adversary: NEEDS WORK, no Floor breach, no @AC regression.** Round-1 fixes CONFIRMED sound (server-side admin enforcement; halted-gated badge; optimistic applyAccountUpdate — NO stale-clobber race because ListBrokerAccounts reports DB halted and resume does DB-clear-first, await before refetch; halt_reason is system-generated + React-escaped, no injection; OFFLINE never halted in practice but the gate is still the correct defense). Fold into round 3:
+  1. **DRY/C-17 (fails.md:742-744):** `HALT_SOURCE` is a NON-exported module-local const in positions/page.tsx:43 ("Kept local"). "Reuse" as written = copy = status-map drift across surfaces. FIX: EXTRACT `HALT_SOURCE` to a shared module (alongside EnumBadge/EnumRender in `@/lib/opportunityShared.tsx`) and REWIRE the positions page to import it — same PR (C-10 update-every-instance).
+  2. **Sparse-merge fallback is DEAD CODE:** ResumeAccountSvc returns recordToProtoAccount(fresh DB re-fetch) which sets EVERY field AccountRow renders (trading.go:2651-2671, 2798-2803) — response is never sparse. FIX: drop the sparse-merge branch (over-build), OR if kept as defensive it must FAIL LOUDLY on a missing field, never silently mask a contract regression.
+  3. **BFF non-admin test must isolate the BFF gate (fails.md:1650 vacuous-green):** the e2e mock backend's resumeAccount must return success UNCONDITIONALLY so PermissionDenied can ONLY come from forwardAdmin; drive through the real dispatchConnect router, not a unit stub. "confirm-then-clears" must exercise the refetch IN PLACE, never a remount (would reset the optimistic state under test).
+  4. AccountSelector marker: reusing the credential `AlertTriangle` conflates "halted" with "bad keys"; the collapsed gear dot (hasCredentialIssue) doesn't include halt → a halted non-selected account gives zero signal when collapsed.
+- **USER DECISION (locked):** FR-2 selector = **a DISTINCT halt-specific marker (NOT the reused credential AlertTriangle) on BOTH the AccountSelector AND the Accounts-page AccountRow**, with full halt_reason + HaltSource on the AccountRow; fold halt into the collapsed gear dot so a halted non-selected account still signals. (Distinct marker resolves the adversary's conflation objection #4.)
+- **NEXT (round 3):** re-propose with HALT_SOURCE extracted to opportunityShared + positions page rewired; drop sparse-merge (or fail-loud); BFF-isolating non-admin test + in-place-refetch e2e; distinct halt marker on selector + accounts page + gear dot. Then re-adversary, then user gate.
+
+## Session 2026-09-05 — sdd-design ROUND 3 (proposer + adversary complete); final gate pending
+
+Status unchanged: **spec-ready**. design.md NOT yet written (awaiting consolidated final gate). Scope admin-only (locked); distinct marker on selector+row+gear-dot (locked).
+
+- **Round-3 proposer:** extract HALT_SOURCE to opportunityShared + rewire positions page; new HaltBadge.tsx (distinct marker); full-replace applyAccountUpdate (fail-loud on !id, no sparse merge); forwardAdmin BFF route; gated strictly on halted===true + useIsAdmin; gear-dot OR folds halt; BFF-isolating non-admin e2e + in-place confirm-then-clears.
+- **Round-3 adversary: NEEDS WORK, no Floor breach.** All round-2 objections RESOLVED; verify-only checks all SOUND (no circular import; full-replace safe — no memo/referential dependency; in-place confirm correct — AlertDialog sibling survives dropdown close; no @AC regression; BFF test at right layer). TWO fold-ins for design.md:
+  1. **isActive gate (fails.md:1650 vacuous-green):** every added surface is gated on account.isActive (RowActionsMenu block accountShared.tsx:306; selector lists only activeAccounts; gear-dot iterates activeAccounts). A halted account MUST have isActive===true or the whole feature is unreachable AND the e2e passes without ever rendering the button. FIX: spec states the invariant; the halt fixture sets isActive:true + halted:true together; confirm the halted row survives AccountsModule status filter (:38-40) in the default e2e view.
+  2. **HaltBadge color = `warning` (amber), NOT `sell`:** `sell` is a real token but red-family, colliding with credential-invalid `destructive` AND the RECONCILIATION HALT_SOURCE EnumBadge (itself role:'sell') → three red badges, undercutting the locked "distinct marker" intent. `warning` reserves red for credential-invalid and reads as "paused/blocked". Icon(Ban)+label("Halted")+tooltip distinctness preserved.
+  - Minor: rename the selector gear-dot boolean hasCredentialIssue → hasAccountIssue/hasAnyIssue (it now ORs halt); step 1 must delete the orphaned local HALT_SOURCE const + "Kept local" comment at positions/page.tsx:41-47.
+- **NET:** essentially SOUND. Ready to write design.md with: HaltBadge variant=warning; isActive:true+halted:true fixture invariant; boolean rename. No new user fork.
+
+## Session 2026-09-05 — design HELD at approval gate
+
+- Round-3 debate complete and SOUND-with-doc-fold-ins (see the round-3 block above); design.md NOT written.
+- At the consolidated approval gate the user approved 176 & 178 and HELD this feature for a further look. Status stays spec-ready.
+- To resume: /sdd-design <slug> quick re-reads this context and can go straight to writing design.md + design-approved once the user confirms (all round-3 fold-ins + locked decisions are already recorded here — no further debate needed unless the user requests changes).
+
+## Session 2026-09-05 — sdd-design COMPLETE (design-approved)
+
+- Phase 1 Grilling: 4 rounds (quick, extended by user through rounds 2-4). Round-4 adversary SOUND, no Floor breach, no @AC regression. design.md written.
+- Chosen approach: extract HALT_SOURCE to opportunityShared (rewire positions page, same PR; React-free data map only — server-bundle safe); new HaltBadge.tsx (Ban icon + variant="warning" amber + iconOnly); forwardAdmin BFF route; AccountContext.applyAccountUpdate full-replace fail-loud; AccountRow badge row renders indicator UNCONDITIONALLY gated on halted===true (survives halted&&!isActive deregistered rows) while the Resume action stays isActive-gated; AccountSelector HaltBadge iconOnly + rename hasCredentialIssue→hasAccountIssue (ORs halt into gear dot); BFF-isolating non-admin e2e + STATEFUL mock (resumeAccount flips halted→false) in-place confirm-then-clears.
+- Constitution: C-17 (warning token, no hardcoded color), C-10 (same-PR extract+rewire), C-08/C-15 (isolated BFF test, stateful in-place e2e). Floor breaches: none. All @AC PRESERVE.
+- Locked decisions honored: admin-only (no RPC change); distinct halt marker on selector+row+gear-dot; HaltBadge=warning.
+- USER APPROVED design 2026-09-05. Status: spec-ready → design-approved.
+- Open risks to /sdd-spec: place HaltBadge in the :295-304 badge row (not the action block); stateful e2e mock; verify server-bundle safety with a real next build (fails.md:1652).
+- Next: /sdd-spec ui-resume-halted-account.
+
+## Session 2026-09-05 — sdd-spec
+
+- Generated implementation-spec.md with 8 steps. Status → implementation-ready.
+- All 8 steps modify `xstockstrat-ui` only (no backend/proto/migration/config change). Reviewers
+  snapshot finalized: xstockstrat-ui owner + Security (Steps 3/5/8, privileged mutation); no trading
+  reviewer (RPC consumed unchanged).
+- Every `@AC-*` (AC-1..AC-6) is covered by the single Playwright spec in Step 8; supporting service
+  steps mapped in the Scenario Coverage table. Consumer surface (C-14): UI `/trader` account-mgmt,
+  already nav-reachable at `/trader/accounts` (AppShell) — no PLATFORM_SUBNAV registration needed.
+- Key codebase findings (all verified against current tree, not just recon):
+  - `resumeAccount` / `ResumeAccount` is **absent** everywhere in `src/`+`e2e/` today — the BFF route,
+    the AccountRow control, and the e2e are all net-new. The generated `TradingService` client already
+    carries `resumeAccount` (proto `trading.proto:43,299-306`), so no browser-client file edit.
+  - `HALT_SOURCE` is a non-exported local const at `positions/page.tsx:41-46` (comment "Kept local");
+    Step 1 extracts it to `opportunityShared.tsx` (data-only, server-bundle-safe per fails.md:1652) and
+    rewires the positions page — same PR (C-10).
+  - `forwardAdmin` (`bffShared.ts:72-76`) = `forward + requireAdminScope`, applies `backendHeaders`
+    (x-user-id/x-access-scope/x-trace-id) — Step 3 reuses it (no header re-implementation; mirrors the
+    RPC's admin-only gate at the edge without widening).
+  - `Badge` has an app-specific `warning` (amber) variant at `badge.tsx:25` — HaltBadge (Step 2) uses
+    it; distinct from the red `destructive` credential badge and red `RECONCILIATION` EnumBadge (C-17).
+  - AccountRow badge row (`accountShared.tsx:295-304`) renders unconditionally (outside the `:306`
+    `isActive` gate) — indicator goes there (survives halted&&!isActive), Resume action stays
+    isActive-gated in `RowActionsMenu`. `useIsAdmin()` at `useLiveStrategies.ts:41`; `/api/auth/me`
+    returns `isAdmin` from `roles.includes('admin')`.
+  - AccountContext has a swallowed-catch refetch (`AccountContext.tsx:41-43`); Step 4 adds
+    `applyAccountUpdate` (full-replace, fail-loud on missing id) for optimistic clear.
+  - e2e auth helpers exist: `addAdminCookie` (roles ['admin']) / `addAuthCookie` (no roles = non-admin),
+    `e2e/helpers/auth.ts:64-73`. Halt-mock via `page.route(...ListBrokerAccounts...)` pattern proven at
+    `positions-reconciliation.spec.ts:56-100`. Mock-backend trader TradingService (`mock-backend.ts:242-306`)
+    has no `resumeAccount` handler — Step 7 adds an unconditional-success one so the non-admin test
+    isolates the `forwardAdmin` gate (fails.md:1650 vacuous-green). Halted fixture must set
+    `isActive:true + halted:true` together (context.md round-3 invariant).
+
+## Session 2026-09-05 — sdd-review impl-spec (advisory)
+
+- Result: PASS WITH WARNINGS — 0 blockers, all findings advisory/NOTE-level (8/8 steps grounded,
+  no Floor risk; UI-only, no proto/migration/config/backend change). Every referenced symbol/path
+  resolved in `services/xstockstrat-ui/` + `packages/proto/` — `HALT_SOURCE` local const, the
+  `opportunityShared.tsx` export lines, `Badge variant="warning"` (`badge.tsx:25`), `forwardAdmin`
+  (`bffShared.ts:72`), `AccountContext`/`AccountRow`/`AccountSelector`, `useIsAdmin`, and the generated
+  `TradingService.resumeAccount` (no client-file edit). C-14/C-10/C-15 clean; C-03 header propagation
+  inherited via `forwardAdmin`→`forward`→`backendHeaders`.
+- Overlap findings: CLEAN — UI-only; no proto/migration/config; none of the shared UI files 179 edits
+  (`opportunityShared.tsx`, `accountShared.tsx`, `AccountContext`, `AccountSelector`, `traderBff.ts`,
+  positions/page.tsx, e2e fixtures) is touched by any other in-flight feature. `ResumeAccount` RPC +
+  `BrokerAccount` halt fields already on trunk (features 030/102). No merge-order entry warranted.
+- Advisory NOTEs carried into execution (none blocking, no spec change made):
+  - Step 2 (C-17): the reused `Badge variant="warning"` uses raw Tailwind palette utilities
+    (`bg-yellow-500/text-yellow-400`) rather than a `--warning` role token — [x] PRE-EXISTING in
+    `ui/badge.tsx` (features 083/119), guarded by `badge.test.ts`, NOT introduced here; 179's own call
+    sites are C-17-clean (no color literals, iconOnly carries aria-label). Track in the ui-ux-governance
+    deviation backlog if not already; not this feature's to fix.
+  - Steps 7/8 (C-08): `test` steps state no coverage threshold — [x] accepted (xstockstrat-ui e2e has no
+    coverage gate; documented in the Execution Summary).
+  - Step 7 (DRY): proposed inline `credentialStatus: 1` diverges from the file's `CREDENTIAL_STATUS_VALID`
+    const — [ ] use the named const at execute (trivial local-DRY).
+  - Step 1 (C-01): local const line-ref off-by-one (`:43-47` vs cited `:43-46`) — [ ] re-anchor at execute.
+  - Step 8 (C-15 minor): the @AC-1 e2e case exercises the BRACKET_PROTECTION fixture while
+    acceptance @AC-1's illustrative Given names RECONCILIATION — [x] accepted (both are valid halted
+    states; the behavioral assertion — indicator + reason + source badge shown pre-order — is identical).
+
+## Session 2026-09-05 — sdd-execute sequential (Steps 1–8, code-completed)
+
+- **Executed all 8 steps** on `feature/ui-resume-halted-account`, one commit per step, red-before-green
+  anchored on the Step 8 Playwright spec.
+  - RED: authored `e2e/trader/account-resume.spec.ts` first; against the pre-implementation tree all
+    6 @AC-* cases FAIL (no HaltBadge, no Resume action, no `resumeAccount` BFF route) — `RED_EXIT=1`.
+  - GREEN after Steps 1–7: `pnpm exec playwright test e2e/trader/account-resume.spec.ts --project=chromium`
+    → **7 passed** (6 @AC-* + SSR warmup setup), no flake on the stateful @AC-3. `pnpm run lint` clean
+    (only pre-existing warnings in unrelated files; none reference the new/changed files).
+- **Files landed** (by step): 1 `opportunityShared.tsx` + `positions/page.tsx` (extract `HALT_SOURCE`);
+  2 `HaltBadge.tsx` (new); 3 `traderBff.ts` (`resumeAccount: forwardAdmin`); 4 `AccountContext.tsx`
+  (`applyAccountUpdate`); 5 `accountShared.tsx` (indicator + admin Resume via `RowActionsMenu`);
+  6 `AccountSelector.tsx` (iconOnly badge + `hasAccountIssue` gear dot); 7 `e2e/fixtures/accounts.ts`
+  (`BROKER_ACCOUNT_HALTED`), `INVENTORY.md`, `e2e/mock-backend.ts` (mock `resumeAccount`); 8
+  `e2e/trader/account-resume.spec.ts` (new).
+- **GREEN-phase test-robustness fixes** (Deviation Log): @AC-6 scoped the reason assertion to the
+  `alertdialog` (strict-mode dup with the row behind it); @AC-3 added an `Escape` reset before
+  re-opening the row menu (Radix keeps the dropdown mounted through the confirm flow via
+  `onSelect` `preventDefault`). `RowActionsMenu` itself untouched (out of scope). The mock
+  `resumeAccount` echoes the requested id cleared so @AC-3 truly exercises `applyAccountUpdate`.
+- **Advisory NOTEs from impl-spec review** resolved at execute: Step 7 used the named
+  `CREDENTIAL_STATUS_VALID` const (not inline `1`); the `Badge variant="warning"` C-17 palette NOTE is
+  pre-existing/guarded, not this feature's to fix; @AC-1 uses the BRACKET_PROTECTION fixture (both
+  halted states are behaviorally equivalent for the indicator assertion).
+- **Constitution**: C-14 (single UI `/trader` consumer surface, no Agent change); C-03 header
+  propagation inherited via `forwardAdmin`→`forward`→`backendHeaders` (no re-implementation); C-12
+  fixtures from `../fixtures` + `../helpers/auth` (no inline domain literals); no proto/migration/config
+  /backend change (UI-only, against the pre-existing admin-only `ResumeAccount` RPC).

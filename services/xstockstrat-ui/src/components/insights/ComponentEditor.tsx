@@ -66,9 +66,8 @@ export function ComponentEditor({ value, onChange, onRemove }: ComponentEditorPr
   }
 
   function selectFormula(formulaId: string) {
-    // Pre-fill the formula's numeric parameters with their declared defaults so
-    // each strategy component carries known, typed knobs. bool/string params are
-    // not settable per component (FR-5) and are shown read-only below.
+    // Pre-fill the formula's numeric parameters with their declared defaults; bool/string params are
+    // not settable per component and are shown read-only below.
     const f = formulas.find((x) => x.formulaId === formulaId);
     const params: Record<string, number> = {};
     for (const p of f?.parameters ?? []) {

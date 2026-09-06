@@ -14,14 +14,11 @@ async function main() {
   const grpcPort = process.env.GRPC_PORT ?? '50060';
   const databaseUrl = process.env.DATABASE_URL ?? '';
 
-  // Fail fast if the secret-encryption master key is missing/malformed — the config service is the
-  // only holder of the key and must never boot able to serve GetSecret with a zero/short key
-  // (feature 147). loadMasterKey throws unless CONFIG_SECRETS_ENCRYPTION_KEY is 32 bytes of hex.
+  // Fail fast: the service must never boot able to serve GetSecret with a missing/short master key.
   loadMasterKey();
   log.info('CONFIG_SECRETS_ENCRYPTION_KEY validated');
 
-  // NOTE: xstockstrat-config does NOT subscribe to itself.
-  // It is the config source of truth. All other services subscribe to it.
+  // Config source of truth — never subscribes to itself.
   log.info('xstockstrat-config is the config source — no self-subscription');
 
   const sslDisabled = databaseUrl.includes('sslmode=disable');
@@ -36,8 +33,7 @@ async function main() {
   const caCert = process.env.DATABASE_CA_CERT;
   const pool = new Pool({
     connectionString: dbUrl,
-    // Cap pool size to stay within DigitalOcean's shared 20-connection budget
-    // (see root CLAUDE.md). Override with DB_POOL_MAX.
+    // Cap pool size for DigitalOcean's shared DB connection budget (root CLAUDE.md).
     max: parseInt(process.env.DB_POOL_MAX ?? '2', 10),
     ssl: sslDisabled ? false : {
       rejectUnauthorized: !!caCert,
@@ -50,7 +46,6 @@ async function main() {
   const configImpl = new ConfigServiceImpl(pool);
   await configImpl.initialize();
 
-  // ── gRPC server (internal service-to-service, port 50060) ──────────────
   const grpcServer = new grpc.Server();
   grpcServer.addService(createConfigServiceDefinition(), configImpl as unknown as grpc.UntypedServiceImplementation);
 

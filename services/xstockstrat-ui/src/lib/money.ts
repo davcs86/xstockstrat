@@ -1,5 +1,4 @@
-// Shared money / percentage formatters for the trader Book screens (Exposure, Portfolio, …).
-// Single source of truth (DRY guard rail) — these were previously inlined per page.
+// Shared money / percentage formatters for the trader Book screens (DRY guard rail).
 
 /** `$1,234.56`, or `—` for null/NaN. */
 export function fmtUsd(n: number | undefined | null): string {

@@ -1,9 +1,7 @@
 'use client';
 
-// Shared login UI for the standard login page and the OAuth agent-authorize page. The card
-// shell, the email/password form, and the POST /api/auth/login call live here once (DRY
-// guard rail — see docs/patterns/dry-guard-rail.md). Pages supply the title, button labels,
-// and the on-success behavior (redirect vs. agent callback).
+// Shared login UI for the standard login page and the OAuth agent-authorize page — the card shell,
+// the form, and the POST /api/auth/login call live here once (DRY); pages supply title/labels/on-success.
 
 import { useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
@@ -30,13 +28,11 @@ export function AuthCardShell({ title, children }: { title: string; children: Re
   );
 }
 
-// FR-2 (feature 122): email format + required, password required — reproduces the native
-// type="email"/required checks with equivalent messages, not new stricter copy.
+// Validation reproduces the native type=email/required checks with equivalent messages, not stricter copy.
 const credentialsSchema = z.object({
   email: z.email('Enter a valid email address'),
   password: z.string().min(1, 'Password is required'),
-  // Extended session opt-in (feature 153). Sent in the login POST body; the login route persists
-  // the auth cookies (Max-Age) only when true. Rendered only when showRememberMe is set.
+  // Extended-session opt-in: sent in the login POST body; the login route persists cookies (Max-Age) only when true.
   rememberMe: z.boolean(),
 });
 
@@ -52,8 +48,7 @@ export function CredentialsForm({
   submitLabel: string;
   loadingLabel: string;
   onSuccess: () => void;
-  // Opt-in: only the operator login page shows the extended-session checkbox (feature 153).
-  // The shared OAuth authorize page leaves it off (default), so no checkbox appears there.
+  // Only the operator login page shows the extended-session checkbox; the OAuth authorize page leaves it off.
   showRememberMe?: boolean;
 }) {
   // Submit-level network/server error — not zod-expressible, kept as local state.

@@ -14,9 +14,8 @@ callers resolve rows via :meth:`get_by_owner_and_id` and pass ``user_id`` into e
 
 import json
 
-# feature 131 — the single source of truth for "a strategy the live loop evaluates". Shared
-# (no leading underscore, designed for cross-module import) so live_loop.py interpolates the exact
-# same predicate rather than re-declaring the literal (parity is structural, not test-enforced).
+# Single source of truth for "a strategy the live loop evaluates"; shared (no underscore) so
+# live_loop.py imports the exact predicate rather than re-declaring the literal (parity untested).
 LIVE_ENABLED_PREDICATE_SQL = "live_enabled = TRUE AND active = TRUE"
 
 

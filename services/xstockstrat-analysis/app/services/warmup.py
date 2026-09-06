@@ -47,9 +47,8 @@ import math
 # 3 -> e**-6 ~= 0.25%, which is below any price tick's significance.
 _IIR_CONVERGENCE_MULTIPLE = 3
 
-# Mirrors of the indicator engine's `int(params.get(..., D))` defaults. Keep the int()
-# truncation semantics identical — a rounded period would desynchronize the prefix from the
-# window the engine actually uses.
+# Mirror the indicator engine's `int(params.get(..., D))` defaults; keep the int() truncation
+# identical — a rounded period would desynchronize the prefix from the engine's own window.
 _DEFAULT_PERIOD = 14
 _DEFAULT_BB_PERIOD = 20
 _DEFAULT_MACD_FAST = 12
@@ -107,9 +106,8 @@ def builtin_lookback_bars(indicator: str, params) -> int:
         return _IIR_CONVERGENCE_MULTIPLE * (max(fast, slow) + signal) + _CROSSOVER_LOOKBACK
 
     if name == "VWAP":
-        # Expanding cumulative average, defined at index 0 — no warm-up of its own.
-        # NOTE: it is anchored at index 0, so when a *sibling* component drives a prefix every
-        # in-window VWAP value shifts. Deterministic, but different from an unprefixed run.
+        # Expanding cumulative average, defined at index 0 — no warm-up of its own. But it is
+        # anchored at index 0, so a sibling-driven prefix shifts every in-window VWAP value.
         return 0
 
     return 0

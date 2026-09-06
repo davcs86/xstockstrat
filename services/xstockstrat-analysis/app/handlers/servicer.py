@@ -11,12 +11,15 @@ ScoreStrategy grades backtests using Sharpe ratio, max drawdown, and win rate.
 """
 
 import asyncio
+import base64
 import hashlib
 import json
 import logging
 import math
 import random
+import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
@@ -42,9 +45,11 @@ from app.repositories.backtest_run_symbols import BacktestRunSymbolsRepository
 from app.repositories.backtest_runs import BacktestRunsRepository
 from app.repositories.opportunities import OpportunitiesRepository
 from app.repositories.opportunity_actions import OpportunityActionsRepository
+from app.repositories.opportunity_compute_state import OpportunityComputeStateRepository
 from app.repositories.order_snapshots import OrderSnapshotsRepository
 from app.repositories.pnl_pattern_samples import PnLPatternSamplesRepository
 from app.repositories.pnl_positions import PnLPositionsRepository
+from app.repositories.readiness_cache import ReadinessCacheRepository
 from app.repositories.strategies import StrategiesRepository
 from app.repositories.strategy_scores import StrategyScoresRepository
 from app.services import scoring, warmup
@@ -57,11 +62,14 @@ from app.services.evaluator import (
     align_indicator_points,
     referenced_refs,
 )
+from app.services.readiness import (
+    compute_readiness_row,
+    is_readiness_row_fresh,
+    readiness_valid_until,
+)
 from app.services.screener import ScreenerEngine
 
-# Backward-compat alias: the source-weighted signal math moved to app.services.scoring
-# (feature 060). Re-exported so existing imports of `_compute_signal_score` from this
-# module stay valid.
+# Back-compat alias: existing imports of _compute_signal_score from this module must stay valid.
 _compute_signal_score = scoring.compute_signal_score
 
 log = logging.getLogger(__name__)
@@ -163,7 +171,7 @@ def _apply_fill(
     px = bar.open if fill_model == analysis_pb2.FILL_MODEL_NEXT_BAR_OPEN else bar.close
     state.pending = None
     if p.side == "enter":
-        # Re-entry cooldown (feature 069), keyed on the fill-bar time.
+        # Re-entry cooldown, keyed on the fill-bar time.
         if is_cooldown_active(state.last_exit_time, bar.time.ToDatetime(tzinfo=UTC), cooldown_days):
             return None
         fill_price = px * (1 + slippage)
@@ -178,8 +186,7 @@ def _apply_fill(
             state.equity -= cost
             return analysis_pb2.BAR_ACTION_ENTER_LONG
         return None
-    # exit
-    # Exit cooldown / min-hold (feature 116), keyed on the fill-bar time vs the entry-bar time.
+    # Exit cooldown / min-hold, keyed on the fill-bar time vs the entry-bar time.
     entry_dt = state.entry_time.ToDatetime(tzinfo=UTC) if state.entry_time is not None else None
     if is_cooldown_active(entry_dt, bar.time.ToDatetime(tzinfo=UTC), exit_cooldown_days):
         return None
@@ -206,7 +213,7 @@ def _apply_fill(
     state.position = 0.0
     state.entry_price = 0.0
     state.entry_time = None
-    state.last_exit_time = bar.time.ToDatetime(tzinfo=UTC)  # feature 069: cooldown clock
+    state.last_exit_time = bar.time.ToDatetime(tzinfo=UTC)  # cooldown clock
     return analysis_pb2.BAR_ACTION_EXIT_LONG
 
 
@@ -230,28 +237,33 @@ class _InsufficientData(Exception):
         self.symbol = symbol
         self.bars_have = bars_have
         self.bars_need = bars_need
-        # feature 071: for a pre-window warm-up shortfall the actionable backfill span is the
-        # PREFIX (start - warmup … start), not the caller's window — the window itself may be
-        # fully covered. None → the caller's requested range, as before.
+        # For a pre-window warm-up shortfall the actionable backfill span is the PREFIX
+        # (start - warmup … start), not the caller's window. None → the caller's requested range.
         self.gap_range = gap_range
 
 
-# feature 071: marketdata's GetBars defaults to a 500-bar page and orders ASC, so an
-# unpaginated request silently drops the NEWEST bars once a range exceeds that. A 730-day
-# range is already ~504 trading days, so the default path has been quietly truncated all
-# along; pre-window warm-up would make it worse. `_fetch_bars_paged` below pages properly.
+# marketdata's GetBars defaults to a 500-bar page ordered ASC, so an unpaginated request silently
+# drops the NEWEST bars once a range exceeds that (730 days ≈ 504 bars). _fetch_bars_paged pages.
 _BAR_PAGE_SIZE = 1000
 
-# Backstop against a non-advancing cursor. 32 pages x 1000 bars ~= 128 years of daily data,
-# unreachable by legitimate data under the max_range_days cap. Exhausting it RAISES rather
-# than returning what it has: silently truncating here would reintroduce the very bug this
-# helper exists to fix, and would do so as a function of a config value.
+# Backstop against a non-advancing cursor (32 pages × 1000 bars ≈ 128 years, unreachable under
+# max_range_days). Exhausting it RAISES — silently truncating would reintroduce the fixed bug.
 _MAX_BAR_PAGES = 32
 
-# feature 083 — opportunity queue / readiness.
-# Recent-bar lookback for EvaluateReadiness: ~400 calendar days ≈ 280 trading bars, enough
-# to warm up long indicators (e.g. SMA/EMA up to ~200 periods) for a last-bar readiness read.
+# Recent-bar lookback for EvaluateReadiness: ~400 calendar days ≈ 280 trading bars, enough to
+# warm up long indicators (e.g. SMA/EMA up to ~200 periods) for a last-bar readiness read.
 _READINESS_LOOKBACK_DAYS = 400
+# Feature 180: narrow window for the FAST-gate GetDataCoverage latest-bar probe — wide enough to
+# always contain the most recent daily bar across weekends/holidays, small enough to bound the
+# server-side MIN/MAX/COUNT scan (we consume only `.latest`).
+_READINESS_COVERAGE_PROBE_DAYS = 10
+# Feature 181: cooldown before an UNKNOWN (bar_epoch < 0 sentinel) watchlist-readiness row is
+# re-kicked, so a persistently data-unavailable pair retries at most once per this window rather
+# than on every poll. A module constant (not a config key) — an internal recovery heuristic.
+_READINESS_UNKNOWN_RETRY_SECONDS = 300
+# Feature 181: default page size for GetWatchlistReadiness when the request omits one (mirrors the
+# UI's 25-row page).
+_DEFAULT_WATCHLIST_READINESS_PAGE_SIZE = 25
 # Backstop for draining paginated QuerySignals / ListPositions in ListOpportunities.
 _MAX_DRAIN_PAGES = 50
 # Default queue page size when the request omits one.
@@ -368,23 +380,20 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         trading_channel=None,
     ):
         self._cfg = config_watcher
-        # Raw asyncpg pool (feature 158) — the servicer otherwise keeps db_pool only inside its
-        # repos; DurableSchedule (the opportunity refresh's wall-clock schedule) needs the raw pool.
-        # Same F-06 shared pool, no new pool. None in the no-DB test path.
+        # Raw asyncpg pool: the servicer otherwise keeps db_pool only inside its repos, but
+        # DurableSchedule (the opportunity refresh) needs the raw pool. None in the no-DB test path.
         self._db_pool = db_pool
         self._marketdata = marketdata_pb2_grpc.MarketDataServiceStub(marketdata_channel)
         self._indicators = indicators_pb2_grpc.IndicatorsServiceStub(indicators_channel)
         self._ingest = ingest_pb2_grpc.IngestServiceStub(ingest_channel)
         self._ledger = ledger_pb2_grpc.LedgerServiceStub(ledger_channel)
         self._notify = notify_pb2_grpc.NotifyServiceStub(notify_channel) if notify_channel else None
-        # Trading stub (feature 083) — GetStrategyAnalytics reads ListOrders(strategy_id) for the
-        # "taken" count. New analysis→trading edge (non-cyclic; trading does not dial analysis).
-        # nil when TRADING_ENDPOINT is not wired (tests).
+        # Trading stub — GetStrategyAnalytics reads ListOrders for the "taken" count (non-cyclic
+        # analysis→trading edge). None when TRADING_ENDPOINT is not wired (tests).
         self._trading = (
             trading_pb2_grpc.TradingServiceStub(trading_channel) if trading_channel else None
         )
-        # Portfolio stub (feature 062) — used by the fundamentals signal producer for the
-        # watchlist universe read. nil when PORTFOLIO_ENDPOINT is not wired (tests).
+        # Portfolio stub — watchlist/held reads. None when PORTFOLIO_ENDPOINT is not wired (tests).
         self._portfolio = (
             portfolio_pb2_grpc.PortfolioServiceStub(portfolio_channel)
             if portfolio_channel
@@ -393,66 +402,86 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         self._backtests: dict[str, analysis_pb2.BacktestResult] = {}
         self._strategies: dict[str, analysis_pb2.StrategyScore] = {}
         self._strategies_repo = StrategiesRepository(db_pool) if db_pool else None
-        # feature 125 (FR-6): process-lifetime singleton semaphore bounding cross-request
-        # concurrency of per-component indicator/formula compute driven by GetIndicatorSeries, so a
-        # routinely-visited Symbol page can't starve the live loop. Mirrors ScreenerEngine's own
-        # semaphore. `max(1, …)` guards a negative config value from reaching asyncio.Semaphore.
+        # Process-lifetime singleton semaphore bounding cross-request GetIndicatorSeries compute so
+        # a busy Symbol page can't starve the live loop. max(1, …) guards a negative config value.
         self._component_series_sem = asyncio.Semaphore(
             max(1, self._cfg.get_int("analysis.series.max_concurrent_components", 4))
         )
-        # feature 141: process-lifetime singleton semaphore bounding cross-request concurrency
-        # of _compute_opportunities' bars-fetch calls (SEV-2 fix — TimescaleDB "out of shared
-        # memory" under multi-user load, see docs/roadmap/features/141-fix-opportunities-bars-
-        # fetch-oom). Modeled on self._component_series_sem above (the one existing precedent
-        # that is itself process-lifetime + cross-request-scoped) — not the per-call semaphores
-        # in screener.py:84-86 or entry_backfill.py:55-57, which would bound nothing across
-        # different users' calls. `max(1, …)` guards a negative config value from reaching
-        # asyncio.Semaphore.
+        # Process-lifetime singleton semaphore bounding cross-request _compute_opportunities bars
+        # fetches (TimescaleDB OOM fix); per-call semaphores would bound nothing across users.
         self._bars_fetch_sem = asyncio.Semaphore(
             max(1, self._cfg.get_int("analysis.opportunity.max_concurrent_bars_fetches", 2))
         )
-        # Durable backup for the in-memory _strategies dict (feature 064). Reads stay
-        # in-memory; this persists on score and hydrates it at boot. None in the no-DB
-        # test path so make_servicer()-based tests are unaffected.
+        # Bounds the Phase-2 per-candidate fan-out in _compute_opportunities (feature 176, FR-1).
+        # DISTINCT from _bars_fetch_sem (avoids a self-deadlock re-entering the benchmark loader,
+        # and keeps a large opportunity compute from starving interactive readiness).
+        self._candidates_sem = asyncio.Semaphore(
+            max(1, self._cfg.get_int("analysis.opportunity.max_concurrent_candidates", 4))
+        )
+        # Dedicated bounded pool for the pure-CPU simulator cores + screener sync tail (feature 176,
+        # FR-4) so a long backtest burst runs OFF the event loop and can't block interactive reads.
+        # F-06: these cores touch only in-memory bars/proto (fetched in the async prologue) and open
+        # NO DB connection, so the asyncpg pool stays 2.
+        self._compute_executor = ThreadPoolExecutor(
+            max_workers=max(1, self._cfg.get_int("analysis.compute.max_worker_threads", 4)),
+            thread_name_prefix="analysis-compute",
+        )
+        # Durable backup for the in-memory _strategies dict: reads stay in-memory, this persists on
+        # score and hydrates at boot. None in the no-DB test path.
         self._scores_repo = StrategyScoresRepository(db_pool) if db_pool else None
-        # Durable backtest-run history (fixes "cannot see past run results"). RunBacktest
-        # appends a summary row here; the ListBacktests RPC reads it back. None in the no-DB
-        # test path so make_servicer()-based tests are unaffected.
+        # Durable backtest-run history: RunBacktest appends a summary row, ListBacktests reads it
+        # back. None in the no-DB test path.
         self._backtest_runs_repo = BacktestRunsRepository(db_pool) if db_pool else None
-        # Full per-run detail (feature 068): OK runs persist their serialized BacktestResult
-        # here; GetBacktest reads it back (DB-only — never the in-memory dict). None in the
-        # no-DB test path.
+        # Full per-run detail: OK runs persist their serialized BacktestResult here; GetBacktest
+        # reads it back (DB-only, never the in-memory dict). None in the no-DB test path.
         self._backtest_details_repo = BacktestDetailsRepository(db_pool) if db_pool else None
-        # Per-symbol evidence cells for the derived headline grade (feature 065). RunBacktest
-        # buffers one cell per symbol on an OK run and flushes here; _recompute_headline reads
-        # them back. None in the no-DB test path.
+        # Per-symbol evidence cells for the derived headline grade: RunBacktest buffers one cell
+        # per symbol on an OK run, _recompute_headline reads them back. None in the no-DB test path.
         self._backtest_run_symbols_repo = BacktestRunSymbolsRepository(db_pool) if db_pool else None
-        # Persisted per-user opportunity dispositions (feature 097). Reuses db_pool (F-06);
-        # None in the no-DB test path. Read back by ListOpportunities (Step 12).
+        # Persisted per-user opportunity dispositions, read by ListOpportunities. None in no-DB.
         self._opportunity_actions_repo = OpportunityActionsRepository(db_pool) if db_pool else None
-        # Materialized per-user opportunity queue (feature 097). ListOpportunities is a pure read
-        # of this table; lazy compute-on-read + stale-while-revalidate + a daily refresh keep it
-        # fresh. Reuses db_pool (F-06); None in the no-DB test path.
+        # Materialized per-user opportunity queue: ListOpportunities is a pure read of this table,
+        # kept fresh by compute-on-read + stale-while-revalidate + a daily refresh. None in no-DB.
         self._opportunities_repo = OpportunitiesRepository(db_pool) if db_pool else None
-        # P&L pattern attribution samples (feature 042). Written by the pnl_pattern_consumer;
-        # read here by QueryPnLPatterns with query-time quantile bucketing. Reuses db_pool (F-06).
+        # feature 177 FR-1: per-(user,strategy,rule,symbol) readiness cache backing the FAST path.
+        self._readiness_cache_repo = ReadinessCacheRepository(db_pool) if db_pool else None
+        # feature 180: the readiness materializer's OWN bars-fetch semaphore — SEPARATE from
+        # _bars_fetch_sem so the background pre-warm can never starve interactive readiness
+        # (feature-176 priority-inversion guard). max(1, …) guards a negative config value.
+        self._readiness_materializer_bars_sem = asyncio.Semaphore(
+            max(
+                1,
+                self._cfg.get_int("analysis.readiness_materializer.max_concurrent_bars_fetches", 2),
+            )
+        )
+        # feature 177 FR-3: per-user empty-universe compute-state gating redundant recompute.
+        self._opportunity_compute_state_repo = (
+            OpportunityComputeStateRepository(db_pool) if db_pool else None
+        )
+        # P&L pattern attribution samples: written by the pnl_pattern_consumer, read here by
+        # QueryPnLPatterns with query-time quantile bucketing.
         self._pnl_samples_repo = PnLPatternSamplesRepository(db_pool) if db_pool else None
-        # Signal-performance attribution reads (feature 029): closed positions (net = realized -
-        # fees_total) + their order-snapshot signal inputs. Reuses db_pool (F-06); None in tests.
+        # Signal-performance attribution reads: closed positions (net = realized - fees_total) +
+        # their order-snapshot signal inputs. None in tests.
         self._pnl_positions_repo = PnLPositionsRepository(db_pool) if db_pool else None
         self._order_snapshots_repo = OrderSnapshotsRepository(db_pool) if db_pool else None
-        # Per-user compute serialization (OR-A): a lazy asyncio.Lock so two tabs' cold reads
-        # don't double-compute; a set marks users with a background recompute already in flight
-        # (stale-while-revalidate) so a burst of stale reads kicks exactly one recompute.
-        # Single-process protection only (documented, like _recompute_locks).
+        # Per-user compute serialization: a lazy Lock so two tabs' cold reads don't double-compute;
+        # the set marks users with a background recompute in flight. Single-process protection only.
         self._opportunity_locks: dict[str, asyncio.Lock] = {}
         self._opportunity_recomputing: set[str] = set()
-        # Per-strategy recompute serialization (feature 065). asyncio.Lock is non-reentrant, so
-        # a trigger already holding the lock calls only _recompute_headline_locked. Single-process
-        # protection only (documented). Keyed by strategy_id, created lazily.
+        # feature 181: in-flight guard for the GetWatchlistReadiness background refresh, keyed
+        # (owner, strategy_id, symbol) — the true unit of work, so disjoint pages proceed
+        # concurrently and two views of one pair collapse to one kick (like the opportunity guard).
+        self._readiness_kicking: set[tuple[str, str, str]] = set()
+        # feature 177 FR-4: process-lifetime, success-only per-symbol live-enrichment memo —
+        # symbol → (monotonic_expiry, {"last_price", "prev_close", "spark"}). A fetch failure or an
+        # unavailable quote is never memoized (AC-11), so a stale price is never served as current.
+        self._live_enrich_memo: dict[str, tuple[float, dict]] = {}
+        # Per-strategy recompute serialization: asyncio.Lock is non-reentrant, so a trigger already
+        # holding it calls only _recompute_headline_locked. Single-process only, by strategy_id.
         self._recompute_locks: dict[str, asyncio.Lock] = {}
-        # Set by main.py after the fundamentals signal loop is constructed (feature 062);
-        # RunFundamentalsScan invokes its shared run_once path.
+        # Set by main.py after the fundamentals signal loop is constructed; RunFundamentalsScan
+        # invokes its shared run_once path.
         self._fundsignal_loop = None
 
     @staticmethod
@@ -554,7 +583,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             for k, v in context.invocation_metadata()
             if k in ("x-user-id", "x-access-scope", "x-trace-id")
         ]
-        # Feature 086: refuse binding a strategy to a soft-deleted formula (aborts on the first).
+        # Refuse binding a strategy to a soft-deleted formula (aborts on the first).
         if await self._refuse_deleted_bindings(definition, context, propagation_meta):
             return
         formula_outputs = await self._fetch_formula_outputs(definition, propagation_meta)
@@ -567,9 +596,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         backtest_id = str(uuid.uuid4())
         commission = self._cfg.get_float("analysis.backtest.default_commission_pct", 0.001)
         slippage = self._cfg.get_float("analysis.backtest.default_slippage_pct", 0.0005)
-        # feature 151: resolve the effective fill model once (mirrors commission/slippage). Request
-        # value wins; else the config default; else legacy. The get_int zero-trap is INTENTIONAL —
-        # both an absent key and a configured 0 mean FILL_MODEL_UNSPECIFIED → legacy same-bar-close.
+        # Resolve the effective fill model: request wins, else config default, else legacy. The
+        # get_int zero-trap is INTENTIONAL — an absent key and a configured 0 both mean legacy.
         effective_fill_model = (
             request.fill_model
             if request.fill_model != analysis_pb2.FILL_MODEL_UNSPECIFIED
@@ -590,11 +618,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             for k, v in context.invocation_metadata()
             if k in ("x-user-id", "x-access-scope", "x-trace-id")
         ]
-        # Feature 133: the caller owns any registered strategy this run touches (ref branch below)
-        # and any headline recompute afterward.
+        # The caller owns any registered strategy this run touches and any headline recompute after.
         caller_user_id = self._caller_user_id(context)
 
-        # Emit start event
         from google.protobuf.struct_pb2 import Struct
 
         payload = Struct()
@@ -609,7 +635,6 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             metadata=propagation_meta,
         )
 
-        # Extract strategy params from the Struct
         params = {}
         if request.HasField("strategy_params"):
             params = dict(request.strategy_params.fields)
@@ -618,23 +643,19 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         fast_period = int(params.get("fast_period", 20))
         slow_period = int(params.get("slow_period", 50))
         min_conviction = float(params.get("min_conviction", 0.0))
-        # feature 097 (Option 2): a strategy's backtest score is TECHNICAL-ONLY. The legacy
-        # `signal_sources`/`signal_weight`/`technical_weight` blend was retired here — a signal is
-        # no longer an input to a strategy's internal score; it is a universe + independent queue
-        # ranking axis (ListOpportunities). `scoring.compute_signal_score`/`combine_score` stay for
-        # the screener (ScreenSymbols), and `StrategyDefinition.signal_params` (live-loop symbol
-        # universe) + the 065 fingerprint are untouched (ANALYSIS-3).
+        # A strategy's backtest score is TECHNICAL-ONLY — a signal is a separate queue ranking axis,
+        # never an input to the score (compute_signal_score/combine_score stay for the screener).
 
-        # Resolve strategy definition: inline takes precedence over strategy_id_ref (FR-7).
-        # If neither is supplied, fall through to the legacy SMA-crossover path (FR-8).
+        # Resolve strategy definition: inline takes precedence over strategy_id_ref; if neither is
+        # supplied, fall through to the legacy SMA-crossover path.
         active_definition = None
         executed_row = None
         if request.HasField("inline_definition"):
             active_definition = request.inline_definition
         elif request.strategy_id_ref:
             if self._strategies_repo:
-                # Feature 133: a backtest against a REGISTERED strategy is owner-scoped — a caller
-                # can only run their own. Inline/legacy runs (no strategy_id_ref) are unaffected.
+                # A backtest against a REGISTERED strategy is owner-scoped — a caller can only run
+                # their own. Inline/legacy runs (no strategy_id_ref) are unaffected.
                 row = (
                     await self._strategies_repo.get_by_owner_and_id(
                         caller_user_id, request.strategy_id_ref
@@ -652,12 +673,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     )
                     return
 
-        # feature 065: fingerprint the executed definition only when the run executes the
-        # strategy's OWN registered definition (strategy_id == strategy_id_ref). Inline runs,
-        # the legacy-SMA fallback, id-mismatches, and unregistered ids leave the cells'
-        # fingerprint NULL so they never contribute to that strategy's headline grade. The hash
-        # is taken from the DB-returned definition_json (post-_to_dict), never a request dict
-        # (design.md § fingerprint — the canonicalization rule the fingerprint fn documents).
+        # Fingerprint the executed definition only when the run executes the strategy's OWN
+        # registered definition; the hash is from the DB definition_json, never a request dict.
         run_fingerprint = None
         if (
             request.strategy_id_ref
@@ -666,9 +683,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         ):
             run_fingerprint = _definition_fingerprint(executed_row["definition_json"])
 
-        # feature 064 (FR-4b): cap every backtest to `analysis.backtest.max_range_days` (~2 years).
-        # Both bounds set + span over the cap → reject (reproducibility, not silent clamp). An unset
-        # bound (e.g. the agent sends no range) is defaulted so ALL backtests stay bounded.
+        # Cap every backtest to analysis.backtest.max_range_days: both bounds set + span over cap
+        # → reject (not silent clamp); an unset bound is defaulted so ALL backtests stay bounded.
         max_range_days = self._cfg.get_int("analysis.backtest.max_range_days", 730)
         cap_seconds = max_range_days * 86_400
         start_set = request.range.start.seconds > 0
@@ -697,32 +713,28 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         initial_equity = equity
         daily_equity: list[float] = [equity]
         coverage_gaps: list[analysis_pb2.CoverageGap] = []
-        all_diagnostics: list[analysis_pb2.SymbolDiagnostics] = []  # feature 064
-        # feature 067: count symbols dropped by a custom-formula execution error. Used by the
-        # status gate below so a no-usable-evidence run reports INSUFFICIENT_DATA (never OK+scored).
+        all_diagnostics: list[analysis_pb2.SymbolDiagnostics] = []
+        # Count symbols dropped by a custom-formula execution error, so the status gate reports
+        # INSUFFICIENT_DATA (never OK+scored) on a no-usable-evidence run.
         formula_errors: int = 0
-        # feature 065: one per-symbol evidence cell buffered per traded symbol; flushed on OK.
+        # One per-symbol evidence cell buffered per traded symbol; flushed on OK.
         symbol_cells: list[dict] = []
-        # feature 150: per-symbol signal-intent lists, buffered for the optional portfolio simulator
-        # (Step 7). Populated in both modes but only consumed on the portfolio branch; the legacy
-        # aggregate curve/metrics are unaffected.
+        # Per-symbol signal-intent lists, buffered for the optional portfolio simulator. Populated
+        # in both modes but only consumed on the portfolio branch; legacy metrics are unaffected.
         symbol_intents: dict[str, list[BarIntent]] = {}
-        # feature 064: declared formula warm-ups fetched once per run, reused across symbols.
+        # Declared formula warm-ups fetched once per run, reused across symbols.
         formula_warmup_cache: dict[str, int] = {}
-        # feature 086: deleted-formula warnings captured during that same single fetch per formula.
+        # Deleted-formula warnings captured during that same single fetch per formula.
         formula_deleted_cache: dict[str, str] = {}
-        # feature 071: and resolved BEFORE the loop, so symbol 1 sizes its prefix from the same
-        # cache symbol N does (see _prefetch_formula_warmups).
+        # Resolved BEFORE the loop, so symbol 1 sizes its prefix from the same cache symbol N
+        # does (see _prefetch_formula_warmups).
         if active_definition is not None and start_set:
             await self._prefetch_formula_warmups(
                 active_definition, formula_warmup_cache, propagation_meta, formula_deleted_cache
             )
 
-        # feature 152: preload benchmark (source_symbol) bars ONCE per run — a benchmark
-        # (e.g. VOO) is shared by every evaluated symbol, so it is fetched a single time
-        # (window + warmup) and reused across the per-symbol loop. A benchmark warmup
-        # shortfall is a run-wide coverage gap naming the benchmark (AC-4); the run then
-        # reports INSUFFICIENT_DATA rather than evaluating a gate it cannot resolve.
+        # Benchmark (source_symbol) bars preloaded ONCE per run, shared across evaluated symbols.
+        # A benchmark warmup shortfall is a run-wide coverage gap → INSUFFICIENT_DATA (AC-4).
         benchmark_bars = None
         symbols_to_run = list(request.symbols)
         if active_definition is not None:
@@ -773,9 +785,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         slippage=slippage,
                         propagation_meta=propagation_meta,
                         formula_warmup_cache=formula_warmup_cache,
-                        # feature 071 / FR-2: prefix ONLY when the caller supplied an explicit
-                        # start. `start_set` is snapshotted before the defaulting block above
-                        # mutates request.range in place and destroys the distinction.
+                        # Prefix ONLY when the caller supplied an explicit start; `start_set` is
+                        # snapshotted before the defaulting block mutates request.range in place.
                         warmup_prefix=start_set,
                         fill_model=effective_fill_model,  # feature 151
                         benchmark_bars=benchmark_bars,  # feature 152
@@ -800,13 +811,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         warmup_prefix=start_set,
                         fill_model=effective_fill_model,  # feature 151
                     )
-                # feature 150: buffer intent for the optional portfolio simulator (Step 7).
+                # Buffer intent for the optional portfolio simulator.
                 symbol_intents[symbol] = sym_intent
-                # feature 065: buffer one evidence cell for this symbol before merging into the
-                # aggregate curve. daily_eq[0] is the symbol's own (compounded) starting equity,
-                # so the cell metrics are per-symbol, not aggregate. Symbols with no usable curve
-                # (<= the seed point) contribute nothing. Zero-trade cells ARE buffered —
-                # non-participation is evidence (traded-first dedup keeps it from shadowing).
+                # Buffer one per-symbol evidence cell (metrics from daily_eq[0], the symbol's own
+                # start). Zero-trade cells ARE buffered — non-participation is evidence.
                 if len(daily_eq) > 1:
                     cell_m = _compute_metrics(daily_eq, trades, daily_eq[0])
                     symbol_cells.append(
@@ -838,21 +846,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         requested_range=request.range,
                         bars_have=ins.bars_have,
                         bars_need=ins.bars_need,
-                        # feature 071: for a warm-up shortfall the actionable backfill span is
-                        # the prefix, not the caller's window (which may be fully covered).
+                        # For a warm-up shortfall the actionable backfill span is the prefix,
+                        # not the caller's window (which may be fully covered).
                         gap=ins.gap_range if ins.gap_range is not None else request.range,
                     )
                 )
                 continue
             except FormulaExecutionError as fe:
-                # feature 067: a custom-formula component failed to execute / returned an
-                # out-of-contract series. Surface it as a distinct, UI-visible reason instead
-                # of silently degrading to an all-None series (→ ENTRY_NEVER_TRUE). The
-                # indicators resp.error is surfaced via log only (F-04 — no invented proto
-                # error field). Stamp the reason DIRECTLY here — this branch is the single
-                # site that sets FORMULA_ERROR; _classify_no_trade_reason (which only sees
-                # trades/warmup/n) never returns it and this symbol never reaches
-                # _finalize_symbol_diagnostics.
+                # A custom-formula execution/contract error stamps FORMULA_ERROR directly here —
+                # the single site that sets it (_classify_no_trade_reason never returns it).
                 log.warning("backtest symbol %s formula error: %s — skipping", symbol, fe.error)
                 all_diagnostics.append(
                     analysis_pb2.SymbolDiagnostics(
@@ -872,18 +874,16 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 log.warning("backtest symbol %s error: %s — skipping", symbol, e)
                 continue
 
-        # feature 150: resolve the capital-allocation model. UNSPECIFIED/LEGACY → the legacy serial
-        # per-symbol path (unchanged); PORTFOLIO → the shared-pool simulator. A completed run always
-        # records LEGACY or PORTFOLIO, never UNSPECIFIED.
+        # Resolve capital-allocation model: LEGACY → serial per-symbol path; PORTFOLIO → shared-pool
+        # simulator. A completed run always records LEGACY or PORTFOLIO, never UNSPECIFIED.
         sizing_mode = (
             analysis_pb2.SIZING_MODE_PORTFOLIO
             if request.sizing_mode == analysis_pb2.SIZING_MODE_PORTFOLIO
             else analysis_pb2.SIZING_MODE_LEGACY
         )
 
-        # Annualize over the real window span (request.range is already defaulted above), not the
-        # concatenated multi-symbol curve length (feature 149). Order-independent (FR-2), so the
-        # portfolio path reuses the same span.
+        # Annualize over the real window span, not the concatenated multi-symbol curve length.
+        # Order-independent, so the portfolio path reuses the same span.
         _span_seconds = request.range.end.seconds - request.range.start.seconds
         _period_years = (_span_seconds / 86_400.0) / 365.25 if _span_seconds > 0 else None
 
@@ -893,8 +893,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         resolved_max_concurrent: int | None = None
         if sizing_mode == analysis_pb2.SIZING_MODE_PORTFOLIO:
             # Resolve sizing params once (zero-trap helpers: a stored 0 disables the portfolio →
-            # the default; max_concurrent additionally clamped ≥ 1 so a stored negative can't reach
-            # the sim). Keys declared in the service CLAUDE.md § Config Keys Consumed (feature 150).
+            # default; max_concurrent clamped ≥ 1 so a stored negative can't reach the sim).
             resolved_position_weight = self._cfg.get_float(
                 "analysis.backtest.portfolio_position_weight", 0.10
             )
@@ -959,55 +958,47 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             profit_factor=metrics["profit_factor"],
             completed_at=now,
             trades=agg_trades,
-            # feature 068: the effective seed (100k default when the request omitted it) —
-            # required to interpret the persisted equity curve for a historical run.
+            # The effective seed (100k default when omitted) — required to interpret the
+            # persisted equity curve for a historical run.
             initial_capital=initial_equity,
-            # feature 150: the mode actually used (never UNSPECIFIED on a completed run).
+            # The mode actually used (never UNSPECIFIED on a completed run).
             sizing_mode=sizing_mode,
-            # feature 151: the effective fill model the run used (never UNSPECIFIED — normalized
-            # above), so the echoed value always equals what routed the sim (AC-5).
+            # The effective fill model the run used (never UNSPECIFIED — normalized above), so
+            # the echoed value always equals what routed the sim.
             fill_model=effective_fill_model,
         )
-        # feature 150: portfolio-only outputs (empty in legacy mode — additive, so a legacy run's
-        # persisted bytes are unchanged apart from the new sizing_mode field 17).
+        # Portfolio-only outputs (empty in legacy mode — additive; a legacy run's persisted bytes
+        # are unchanged apart from the new sizing_mode field 17).
         if capital_skips:
             result.capital_skips.extend(capital_skips)
         if portfolio_equity_curve:
             result.portfolio_equity_curve.extend(portfolio_equity_curve)
-        # FR-2: if every symbol was insufficient (no trades, no usable bars beyond the seed
-        # equity point), report INSUFFICIENT_DATA instead of a fabricated flat-equity success.
-        # A partial multi-symbol backtest stays OK but still carries the per-symbol gaps.
-        # feature 067: an all-failed / single-symbol-failed formula run (no trades, no usable
-        # curve) is likewise no-usable-evidence — fold formula_errors into the gate so it does
-        # not masquerade as OK and persist a spurious per-run score (feature 053 regression).
-        # A partial run where some sibling traded (all_trades non-empty or the curve grew) stays OK.
+        # No trades + no usable curve (all symbols insufficient, or all formula-failed) →
+        # INSUFFICIENT_DATA, never a fabricated flat-equity success. A partial run stays OK.
         if not all_trades and len(daily_equity) <= 1 and (coverage_gaps or formula_errors):
             result.status = analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
         else:
             result.status = analysis_pb2.BACKTEST_STATUS_OK
         if coverage_gaps:
             result.coverage_gaps.extend(coverage_gaps)
-        if all_diagnostics:  # feature 064 — per-bar diagnostics for every simulated symbol
+        if all_diagnostics:  # per-bar diagnostics for every simulated symbol
             result.diagnostics.extend(all_diagnostics)
-        # Feature 086: flag any referenced formula that has been soft-deleted (the run still
-        # completed using its last-saved definition). The deletion was detected during the warm-up
-        # prefetch's single GetFormula per formula — no extra fetch here.
+        # Flag any referenced formula that was soft-deleted (run completed on its last-saved
+        # definition). Detected during the warm-up prefetch's GetFormula — no extra fetch here.
         if formula_deleted_cache:
             result.warnings.extend(formula_deleted_cache.values())
         self._backtests[backtest_id] = result
-        # Index by strategy_id for ScoreStrategy lookup
         self._backtests[request.strategy_id] = result
 
-        # feature 065: the backtest range (always fully set after the defaulting block above) is
-        # stamped on the run-history row and on every evidence cell.
+        # The backtest range (fully set after defaulting) is stamped on the run-history row and
+        # every evidence cell.
         range_start_dt = (
             request.range.start.ToDatetime() if request.range.start.seconds > 0 else None
         )
         range_end_dt = request.range.end.ToDatetime() if request.range.end.seconds > 0 else None
 
-        # feature 065: persist per-symbol evidence cells for OK runs — the breadth+duration base
-        # the derived headline grade aggregates over. Best-effort (mirrors the score/history
-        # persists): a cells-flush failure never fails the run.
+        # Persist per-symbol evidence cells for OK runs (the base the derived headline grade
+        # aggregates over). Best-effort — a cells-flush failure never fails the run.
         if result.status == analysis_pb2.BACKTEST_STATUS_OK:
             await self._persist_symbol_cells(
                 symbol_cells,
@@ -1018,9 +1009,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 range_end=range_end_dt,
             )
 
-        # Grade THIS run for the run-history row only (feature 065: the headline grade is no
-        # longer last-run-wins — it is derived from the strategy's full evidence base below).
-        # OK runs earn a per-run score; INSUFFICIENT_DATA runs record history with score = None.
+        # Grade THIS run for the run-history row only — the headline grade is derived from the
+        # strategy's full evidence base below. INSUFFICIENT_DATA runs record score = None.
         score = None
         if result.status == analysis_pb2.BACKTEST_STATUS_OK:
             sharpe_weight = self._cfg.get_float("analysis.scoring.sharpe_weight", 0.4)
@@ -1035,28 +1025,23 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             score,
             range_start=range_start_dt,
             range_end=range_end_dt,
-            # feature 150: record the resolved sizing model + params (None on the legacy branch).
+            # Record the resolved sizing model + params (None on the legacy branch).
             position_weight=resolved_position_weight,
             max_concurrent=resolved_max_concurrent,
         )
-        # feature 068: persist the full result (trades + per-bar equity + diagnostics) for
-        # OK runs only — INSUFFICIENT runs never get detail (permanent FR-6 state, mirrors
-        # the symbol-cells gate above). Best-effort; ordered after the summary insert so the
-        # FK (detail ⇒ listed summary) can hold.
+        # Persist full result (trades + equity + diagnostics) for OK runs only. Best-effort;
+        # ordered after the summary insert so the FK (detail ⇒ listed summary) can hold.
         if result.status == analysis_pb2.BACKTEST_STATUS_OK:
             await self._persist_backtest_detail(result)
 
-        # feature 065: recompute the headline grade from the strategy's full evidence base (all
-        # eligible cells) now that this run's cells have landed. Best-effort — a recompute failure
-        # never fails the run — and ordered BEFORE the completion emit so a subscriber that reads
-        # the grade on completion sees the post-run value.
+        # Recompute the headline grade from the strategy's full evidence base. Best-effort;
+        # ordered BEFORE the completion emit so a subscriber sees the post-run grade.
         if result.status == analysis_pb2.BACKTEST_STATUS_OK:
             try:
                 await self._recompute_headline(caller_user_id, request.strategy_id)
             except Exception as e:
                 log.warning("failed to recompute headline score: %s", e)
 
-        # Emit completion event
         payload2 = Struct()
         payload2.update(
             {
@@ -1197,8 +1182,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         it defaults to legacy so existing callers/tests are byte-for-byte unchanged.
         """
 
-        # 1. Fetch OHLCV bars (feature 071: paged, plus a pre-window prefix when the caller
-        # supplied an explicit start). The legacy engine's binding lookback is slow_period.
+        # 1. Fetch OHLCV bars (paged, plus a pre-window prefix when the caller supplied an explicit
+        # start). The legacy engine's binding lookback is slow_period.
         required_prefix = (
             warmup.builtin_lookback_bars("SMA", {"period": slow_period}) if warmup_prefix else 0
         )
@@ -1235,182 +1220,174 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             metadata=propagation_meta,
         )
 
-        # Build bar-aligned SMA maps (points only available after warm-up period).
-        # ComputeIndicator omits warm-up rows without preserving indices, so tail-align
-        # the shortened result back onto the bars (same helper as the evaluator path).
-        n = len(bars)
-        fast_values = {
-            i: v
-            for i, v in enumerate(align_indicator_points(fast_resp.result, n)["value"])
-            if v is not None
-        }
-        slow_values = {
-            i: v
-            for i, v in enumerate(align_indicator_points(slow_resp.result, n)["value"])
-            if v is not None
-        }
+        def _core():
+            # Tail-align SMA maps: ComputeIndicator omits warm-up rows without preserving indices,
+            # so map the shortened result back onto the bars (same helper as the evaluator path).
+            n = len(bars)
+            fast_values = {
+                i: v
+                for i, v in enumerate(align_indicator_points(fast_resp.result, n)["value"])
+                if v is not None
+            }
+            slow_values = {
+                i: v
+                for i, v in enumerate(align_indicator_points(slow_resp.result, n)["value"])
+                if v is not None
+            }
 
-        # feature 097 (Option 2): the backtest score is technical-only — no newsletter-signal
-        # fetch or blend here. A signal is a universe + queue ranking axis (ListOpportunities),
-        # never an input to a strategy's internal score. The QuerySignals fetch + signals_map that
-        # used to live here were removed with the blend.
+            # The backtest score is technical-only — no newsletter-signal fetch or blend. It is
+            # a queue ranking axis, never an input to a strategy's internal score.
 
-        # feature 064: warm-up = first bar where BOTH SMAs are resolved (observed Option-C).
-        warmup_bars = max(min(fast_values, default=n - 1), min(slow_values, default=n - 1))
-        # feature 071: warmup_bars indexes the fetched series, which may carry a pre-window
-        # prefix. Report it relative to the first in-window bar — a fully-warmed prefixed run
-        # legitimately reports 0. On an unprefixed run (k == 0) this is a no-op.
-        warmup_bars = max(0, warmup_bars - trade_start_idx)
+            # Warm-up = first bar where BOTH SMAs are resolved.
+            warmup_bars = max(min(fast_values, default=n - 1), min(slow_values, default=n - 1))
+            # warmup_bars indexes the fetched series (may carry a pre-window prefix); report it
+            # relative to the first in-window bar. On an unprefixed run (k == 0) this is a no-op.
+            warmup_bars = max(0, warmup_bars - trade_start_idx)
 
-        # feature 064: one diagnostic row per bar, iterated independently of the trade loop
-        # (which starts at index 1) so bar 0 is captured. Present-only indicators map.
-        diags = []
-        for i in range(trade_start_idx, n):
-            indicators = {}
-            if i in fast_values:
-                indicators["sma_fast"] = fast_values[i]
-            if i in slow_values:
-                indicators["sma_slow"] = slow_values[i]
-            diags.append(
-                _build_bar_diagnostic(
-                    symbol=symbol,
-                    bar_index=i - trade_start_idx,
-                    bar=bars[i],
-                    indicators=indicators,
-                    signal_score=0.0,
-                    conviction=0.0,
-                    action=analysis_pb2.BAR_ACTION_HOLD_FLAT,
-                    warmup=False,
+            # One diagnostic row per bar, iterated independently of the trade loop (from index 1)
+            # so bar 0 is captured. Present-only indicators map.
+            diags = []
+            for i in range(trade_start_idx, n):
+                indicators = {}
+                if i in fast_values:
+                    indicators["sma_fast"] = fast_values[i]
+                if i in slow_values:
+                    indicators["sma_slow"] = slow_values[i]
+                diags.append(
+                    _build_bar_diagnostic(
+                        symbol=symbol,
+                        bar_index=i - trade_start_idx,
+                        bar=bars[i],
+                        indicators=indicators,
+                        signal_score=0.0,
+                        conviction=0.0,
+                        action=analysis_pb2.BAR_ACTION_HOLD_FLAT,
+                        warmup=False,
+                    )
                 )
-            )
 
-        # 4. Simulate trades bar by bar (feature 151: shared deferred-execution state machine;
-        # the SMA path has no cooldown, so it passes 0/0 gates — byte-identical to the legacy inline
-        # blocks in same-bar mode).
-        state = SimState(equity=initial_equity)
-        # feature 071: daily_equity[j] pairs with diags[j]. On an unprefixed run (k == 0) index 0
-        # is the seed point at bar 0, which is never simulated. With a pre-window prefix the first
-        # simulated bar IS bar k, so there is no separate seed row — otherwise the two lists would
-        # differ in length by one and every per-bar equity stamp would shift.
-        daily_equity = [state.equity] if trade_start_idx == 0 else []
-        # feature 150: per-in-window-bar signal intent (independent of position/capital), consumed
-        # only by the portfolio simulator; the legacy return/flow below is unchanged.
-        intents: list[BarIntent] = []
-        buy_threshold = scoring.buy_threshold(min_conviction)
-        sell_threshold = scoring.sell_threshold()
+            # 4. Simulate trades bar by bar (shared deferred-execution state machine; SMA has no
+            # cooldown, so it passes 0/0 gates — byte-identical to legacy inline blocks same-bar).
+            state = SimState(equity=initial_equity)
+            # daily_equity[j] pairs 1:1 with diags[j]. Unprefixed (k==0): index 0 is the bar-0 seed;
+            # prefixed: bar k is the first simulated bar with no separate seed row (else drift).
+            daily_equity = [state.equity] if trade_start_idx == 0 else []
+            # Per-in-window-bar signal intent (independent of position/capital), consumed by the
+            # portfolio simulator; the legacy return/flow below is unchanged.
+            intents: list[BarIntent] = []
+            buy_threshold = scoring.buy_threshold(min_conviction)
+            sell_threshold = scoring.sell_threshold()
 
-        for i in range(max(1, trade_start_idx), n):
-            bar = bars[i]
-            price = bar.close
+            for i in range(max(1, trade_start_idx), n):
+                bar = bars[i]
+                price = bar.close
 
-            # feature 151 (A): execute any pending fill scheduled for THIS bar (a next-bar-open
-            # deferral from a prior iteration) BEFORE the warm-up continue, so a pending fill is
-            # never skipped (design invariant; practically unreachable since a post-signal bar has
-            # resolved SMAs). In same-bar mode `state.pending` is always None here (set+executed
-            # within one iteration below), so this call is inert and legacy stays byte-for-byte.
-            action = _apply_fill(state, bars, i, fill_model, commission, slippage, symbol, 0, 0)
+                # (A) Execute any pending fill due THIS bar BEFORE the warm-up continue, so it is
+                # never skipped. Inert in same-bar mode (state.pending is always None here).
+                action = _apply_fill(state, bars, i, fill_model, commission, slippage, symbol, 0, 0)
 
-            # Skip until both SMAs are available (these are warm-up bars — labelled below)
-            if i not in fast_values or i not in slow_values:
-                if (
-                    action is not None
-                ):  # unreachable in practice; keep the loop the sole diag writer
-                    diags[i - trade_start_idx].action = action
+                # Skip until both SMAs are available (these are warm-up bars — labelled below)
+                if i not in fast_values or i not in slow_values:
+                    if (
+                        action is not None
+                    ):  # unreachable in practice; keep the loop the sole diag writer
+                        diags[i - trade_start_idx].action = action
+                    daily_equity.append(state.equity + state.position * price)
+                    intents.append(BarIntent(bar.time, price, False, False, 0.0))
+                    continue
+
+                prev_fast = fast_values.get(i - 1)
+                prev_slow = slow_values.get(i - 1)
+                curr_fast = fast_values[i]
+                curr_slow = slow_values[i]
+
+                if prev_fast is None or prev_slow is None:
+                    if action is not None:
+                        diags[i - trade_start_idx].action = action
+                    daily_equity.append(state.equity + state.position * price)
+                    intents.append(BarIntent(bar.time, price, False, False, 0.0))
+                    continue
+
+                # Technical signal: +1 (bullish crossover), -1 (bearish crossover), 0 (no change)
+                if prev_fast <= prev_slow and curr_fast > curr_slow:
+                    tech_signal = 1.0
+                elif prev_fast >= prev_slow and curr_fast < curr_slow:
+                    tech_signal = -1.0
+                else:
+                    tech_signal = 0.0
+
+                # Technical-only conviction: the pure-technical mapping (-1→0, 0→0.5, +1→1) with no
+                # newsletter-signal blend.
+                combined = tech_signal * 0.5 + 0.5
+                diags[i - trade_start_idx].signal_score = 0.0
+                diags[i - trade_start_idx].conviction = combined
+                # Signal intent, independent of the position/capital gate below
+                intents.append(
+                    BarIntent(
+                        bar.time,
+                        price,
+                        combined >= buy_threshold,
+                        combined <= sell_threshold,
+                        combined,
+                    )
+                )
+                # (B) Detect a new signal → queue a pending fill; (C) execute it if due this bar
+                # (same-bar mode). Next-bar mode defers the fill to (A) next iteration.
+                _set_pending(
+                    state, i, combined >= buy_threshold, combined <= sell_threshold, fill_model
+                )
+                action2 = _apply_fill(
+                    state, bars, i, fill_model, commission, slippage, symbol, 0, 0
+                )
+                if action2 is not None:
+                    action = action2
+
+                bar_action = (
+                    action
+                    if action is not None
+                    else (
+                        analysis_pb2.BAR_ACTION_HOLD_LONG
+                        if state.position > 0.0
+                        else analysis_pb2.BAR_ACTION_HOLD_FLAT
+                    )
+                )
+                diags[i - trade_start_idx].action = bar_action
                 daily_equity.append(state.equity + state.position * price)
-                intents.append(BarIntent(bar.time, price, False, False, 0.0))  # feature 150
-                continue
 
-            prev_fast = fast_values.get(i - 1)
-            prev_slow = slow_values.get(i - 1)
-            curr_fast = fast_values[i]
-            curr_slow = slow_values[i]
-
-            if prev_fast is None or prev_slow is None:
-                if action is not None:
-                    diags[i - trade_start_idx].action = action
-                daily_equity.append(state.equity + state.position * price)
-                intents.append(BarIntent(bar.time, price, False, False, 0.0))  # feature 150
-                continue
-
-            # Technical signal: +1 (bullish crossover), -1 (bearish crossover), 0 (no change)
-            if prev_fast <= prev_slow and curr_fast > curr_slow:
-                tech_signal = 1.0
-            elif prev_fast >= prev_slow and curr_fast < curr_slow:
-                tech_signal = -1.0
-            else:
-                tech_signal = 0.0
-
-            # feature 097 (Option 2): technical-only conviction — the pure-technical mapping
-            # (-1→0, 0→0.5, +1→1) with no newsletter-signal blend. This is identical to the
-            # prior no-signal path (combine_score with signals_present=False), so a run that
-            # never weighted signals is byte-for-byte unchanged; only signal-weighted runs move.
-            combined = tech_signal * 0.5 + 0.5
-            diags[i - trade_start_idx].signal_score = 0.0
-            diags[i - trade_start_idx].conviction = combined
-            # feature 150: signal intent, independent of the position/capital gate below
-            intents.append(
-                BarIntent(
-                    bar.time,
-                    price,
-                    combined >= buy_threshold,
-                    combined <= sell_threshold,
-                    combined,
+            # Close any open position at last bar price
+            if state.position > 0.0 and bars:
+                last_bar = bars[-1]
+                fill_price = last_bar.close * (1 - slippage)
+                proceeds = state.position * fill_price * (1 - commission)
+                pnl = proceeds - (state.position * state.entry_price * (1 + commission))
+                now_ts = Timestamp()
+                now_ts.CopyFrom(last_bar.time)
+                entry_ts2 = Timestamp()
+                entry_ts2.CopyFrom(state.entry_time)
+                state.trades.append(
+                    analysis_pb2.TradeRecord(
+                        symbol=symbol,
+                        side="long",
+                        qty=state.position,
+                        entry_price=state.entry_price,
+                        exit_price=fill_price,
+                        pnl=pnl,
+                        entry_time=entry_ts2,
+                        exit_time=now_ts,
+                    )
                 )
-            )
-            # feature 151 (B): detect a new signal → queue a pending fill (slot-free-guarded), then
-            # (C) execute it if it is due this bar (same-bar mode → fill_idx == i). In next-bar mode
-            # this call is inert (fill_idx == i+1) and the fill lands at (A) next iteration.
-            _set_pending(
-                state, i, combined >= buy_threshold, combined <= sell_threshold, fill_model
-            )
-            action2 = _apply_fill(state, bars, i, fill_model, commission, slippage, symbol, 0, 0)
-            if action2 is not None:
-                action = action2
+                state.equity += proceeds
+                daily_equity[-1] = state.equity
+                # The forced close labels the last bar an exit (AC-3)
+                diags[-1].action = analysis_pb2.BAR_ACTION_EXIT_LONG
 
-            bar_action = (
-                action
-                if action is not None
-                else (
-                    analysis_pb2.BAR_ACTION_HOLD_LONG
-                    if state.position > 0.0
-                    else analysis_pb2.BAR_ACTION_HOLD_FLAT
-                )
+            symbol_diag = _finalize_symbol_diagnostics(
+                symbol, diags, warmup_bars, state.trades, daily_equity
             )
-            diags[i - trade_start_idx].action = bar_action
-            daily_equity.append(state.equity + state.position * price)
+            # intents is the additive 5th element; legacy callers ignore it.
+            return state.trades, state.equity, daily_equity, symbol_diag, intents
 
-        # Close any open position at last bar price
-        if state.position > 0.0 and bars:
-            last_bar = bars[-1]
-            fill_price = last_bar.close * (1 - slippage)
-            proceeds = state.position * fill_price * (1 - commission)
-            pnl = proceeds - (state.position * state.entry_price * (1 + commission))
-            now_ts = Timestamp()
-            now_ts.CopyFrom(last_bar.time)
-            entry_ts2 = Timestamp()
-            entry_ts2.CopyFrom(state.entry_time)
-            state.trades.append(
-                analysis_pb2.TradeRecord(
-                    symbol=symbol,
-                    side="long",
-                    qty=state.position,
-                    entry_price=state.entry_price,
-                    exit_price=fill_price,
-                    pnl=pnl,
-                    entry_time=entry_ts2,
-                    exit_time=now_ts,
-                )
-            )
-            state.equity += proceeds
-            daily_equity[-1] = state.equity
-            # feature 064: the forced close labels the last bar an exit (AC-3)
-            diags[-1].action = analysis_pb2.BAR_ACTION_EXIT_LONG
-
-        symbol_diag = _finalize_symbol_diagnostics(
-            symbol, diags, warmup_bars, state.trades, daily_equity
-        )
-        # feature 150: intents is the additive 5th element; legacy callers ignore it.
-        return state.trades, state.equity, daily_equity, symbol_diag, intents
+        return await asyncio.get_running_loop().run_in_executor(self._compute_executor, _core)
 
     async def _load_benchmark_bars(
         self,
@@ -1435,9 +1412,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return None
         out: dict = {}
         for sym in source_symbols:
-            # Slice the definition to just this symbol's components (keep the rules) so
-            # required_prefix_bars sizes warmup on the benchmark's own components. The
-            # ref-walk tolerates the missing non-benchmark refs (ref_to_comp.get→None).
+            # Slice the definition to this symbol's components (keep the rules) so warmup sizes on
+            # the benchmark's own components; the ref-walk tolerates missing non-benchmark refs.
             sliced = analysis_pb2.StrategyDefinition()
             sliced.CopyFrom(definition)
             del sliced.components[:]
@@ -1535,8 +1511,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         ``fill_model`` (feature 151) selects same-bar-close (legacy) vs next-bar-open execution;
         defaults to legacy so existing callers/tests are byte-for-byte unchanged.
         """
-        # feature 071: paged, plus a pre-window prefix when the caller supplied an explicit
-        # start. Declared (never observed) — see app/services/warmup.py.
+        # Paged, plus a pre-window prefix when the caller supplied an explicit start.
+        # Declared (never observed) — see app/services/warmup.py.
         required_prefix = (
             warmup.required_prefix_bars(definition, formula_warmup_cache) if warmup_prefix else 0
         )
@@ -1547,11 +1523,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             log.warning("symbol %s has insufficient bars (%d)", symbol, len(bars))
             raise _InsufficientData(symbol, len(bars), 2)
 
-        evaluator = StrategyEvaluator(self._indicators, propagation_meta)
-        # feature 064: also capture the computed component series for diagnostics.
-        # feature 152: benchmark_bars ({source_symbol: [bars]}) is preloaded once per run
-        # by the caller and shared across evaluated symbols; a source_symbol component
-        # resolves against those bars via the evaluator's _assemble_component_series.
+        # Batch backtest path: SERIAL component assembly (component_sem=None).
+        evaluator = StrategyEvaluator(self._indicators, propagation_meta, component_sem=None)
+        # Capture the computed component series for diagnostics. benchmark_bars (preloaded once
+        # per run, shared across symbols) resolve source_symbol components via the evaluator.
         decisions, component_series = await evaluator.evaluate_with_series(
             definition, bars, None, benchmark_bars
         )
@@ -1560,152 +1535,148 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         warmup_bars_full = await self._compute_evaluated_warmup(
             definition, component_series, n, formula_warmup_cache, propagation_meta
         )
-        # feature 071: that index is into the fetched series, which may carry a pre-window
-        # prefix. Report it relative to the first in-window bar — a fully-warmed prefixed run
-        # legitimately reports 0. On an unprefixed run (k == 0) this is a no-op.
-        warmup_bars = max(0, warmup_bars_full - trade_start_idx)
 
-        # feature 064: per-bar diagnostics (independent of the trade loop → bar 0 captured).
-        # Present-only indicators map, dropping the redundant "<ref>.value" alias (the bare
-        # ref_name already carries the primary series).
-        diags = []
-        for i in range(trade_start_idx, n):
-            indicators = {
-                key: series[i]
-                for key, series in component_series.items()
-                if not key.endswith(".value") and i < len(series) and series[i] is not None
-            }
-            diags.append(
-                _build_bar_diagnostic(
-                    symbol=symbol,
-                    bar_index=i - trade_start_idx,
-                    bar=bars[i],
-                    indicators=indicators,
-                    signal_score=0.0,  # evaluator path carries no newsletter signals (FR-4a)
-                    conviction=decisions[i].conviction,
-                    action=analysis_pb2.BAR_ACTION_HOLD_FLAT,
-                    warmup=False,
+        def _core():
+            # That index is into the fetched series (may carry a pre-window prefix); report it
+            # relative to the first in-window bar. On an unprefixed run (k == 0) this is a no-op.
+            warmup_bars = max(0, warmup_bars_full - trade_start_idx)
+
+            # Per-bar diagnostics (independent of the trade loop → bar 0 captured). Present-only
+            # indicators map, dropping the redundant "<ref>.value" alias.
+            diags = []
+            for i in range(trade_start_idx, n):
+                indicators = {
+                    key: series[i]
+                    for key, series in component_series.items()
+                    if not key.endswith(".value") and i < len(series) and series[i] is not None
+                }
+                diags.append(
+                    _build_bar_diagnostic(
+                        symbol=symbol,
+                        bar_index=i - trade_start_idx,
+                        bar=bars[i],
+                        indicators=indicators,
+                        signal_score=0.0,  # evaluator path carries no newsletter signals (FR-4a)
+                        conviction=decisions[i].conviction,
+                        action=analysis_pb2.BAR_ACTION_HOLD_FLAT,
+                        warmup=False,
+                    )
                 )
+
+            # Shared deferred-execution state machine (byte-identical to legacy inline blocks in
+            # same-bar mode); _apply_fill is the sole opener/closer.
+            state = SimState(equity=initial_equity)
+            # daily_equity[j] pairs 1:1 with diags[j]. Unprefixed (k==0): index 0 is the bar-0 seed;
+            # prefixed: bar k is the first simulated bar with no separate seed row (else drift).
+            daily_equity = [state.equity] if trade_start_idx == 0 else []
+            # Per-in-window-bar signal intent (independent of position/cooldown/capital), consumed
+            # only by the portfolio simulator; the legacy return/flow below is unchanged.
+            intents: list[BarIntent] = []
+
+            # Re-entry cooldown: ephemeral per-RunBacktest state — last_exit_time is a plain local,
+            # never persisted to analysis.strategy_cooldowns, so two runs can't cross-contaminate.
+            cooldown_days = effective_cooldown_days(
+                definition.cooldown_days if definition.HasField("cooldown_days") else None,
+                self._cfg.get_int("analysis.strategy.default_cooldown_days", 31),
+            )
+            # Exit cooldown (min holding period), ephemeral per-RunBacktest state. get_int_present
+            # (not get_int) — a configured 0 is legitimate and must not be zero-trapped.
+            exit_cooldown_days = effective_cooldown_days(
+                definition.exit_cooldown_days
+                if definition.HasField("exit_cooldown_days")
+                else None,
+                self._cfg.get_int_present("analysis.strategy.default_exit_cooldown_days", 0),
             )
 
-        # feature 151: shared deferred-execution state machine (byte-identical to the legacy inline
-        # blocks in same-bar mode). state.trades/equity/position/entry_*/last_exit_time replace the
-        # former locals; _apply_fill is the sole opener/closer.
-        state = SimState(equity=initial_equity)
-        # feature 071: daily_equity[j] pairs with diags[j]. On an unprefixed run (k == 0) index 0
-        # is the seed point at bar 0, which is never simulated. With a pre-window prefix the first
-        # simulated bar IS bar k, so there is no separate seed row — otherwise the two lists would
-        # differ in length by one and every per-bar equity stamp would shift.
-        daily_equity = [state.equity] if trade_start_idx == 0 else []
-        # feature 150: per-in-window-bar signal intent (independent of position/cooldown/capital),
-        # consumed only by the portfolio simulator; the legacy return/flow below is unchanged.
-        intents: list[BarIntent] = []
-
-        # Re-entry cooldown (feature 069). Ephemeral per-RunBacktest state (FR-7): last_exit_time is
-        # a plain local, never read from or written to analysis.strategy_cooldowns, so two runs of
-        # the same strategy/symbol can never cross-contaminate. Resolved once per symbol-run.
-        cooldown_days = effective_cooldown_days(
-            definition.cooldown_days if definition.HasField("cooldown_days") else None,
-            self._cfg.get_int("analysis.strategy.default_cooldown_days", 31),
-        )
-        # Exit cooldown (feature 116) — minimum holding period. Ephemeral per-RunBacktest state
-        # (FR-5/FR-7), symmetric to the re-entry cooldown above. get_int_present (not get_int) —
-        # a configured 0 is a legitimate, meaningful default and must not be zero-trapped.
-        exit_cooldown_days = effective_cooldown_days(
-            definition.exit_cooldown_days if definition.HasField("exit_cooldown_days") else None,
-            self._cfg.get_int_present("analysis.strategy.default_exit_cooldown_days", 0),
-        )
-
-        for i in range(max(1, trade_start_idx), n):
-            bar = bars[i]
-            price = bar.close
-            decision = decisions[i]
-            # feature 150: signal intent, independent of the position/cooldown/capital gate below
-            intents.append(
-                BarIntent(
-                    bar.time,
-                    price,
-                    decision.entry,
-                    decision.exit,
-                    decision.conviction,
+            for i in range(max(1, trade_start_idx), n):
+                bar = bars[i]
+                price = bar.close
+                decision = decisions[i]
+                # Signal intent, independent of the position/cooldown/capital gate below
+                intents.append(
+                    BarIntent(
+                        bar.time,
+                        price,
+                        decision.entry,
+                        decision.exit,
+                        decision.conviction,
+                    )
                 )
-            )
-            # feature 151 (A): execute a pending fill due this bar (a next-bar-open deferral from a
-            # prior iteration); inert in same-bar mode. Cooldown is pinned to the fill-bar time
-            # inside _apply_fill (byte-identical to legacy when signal==fill).
-            action = _apply_fill(
-                state,
-                bars,
-                i,
-                fill_model,
-                commission,
-                slippage,
-                symbol,
-                cooldown_days,
-                exit_cooldown_days,
-            )
-            # feature 151 (B) detect this bar's signal → queue a pending fill; (C) execute it if due
-            # this bar (same-bar mode). The cooldown gate lives in _apply_fill, so detection queues
-            # on the raw signal + position and _apply_fill rejects a cooldown-blocked fill (same
-            # no-trade outcome to the legacy in-condition cooldown check, in same-bar mode).
-            _set_pending(state, i, decision.entry, decision.exit, fill_model)
-            action2 = _apply_fill(
-                state,
-                bars,
-                i,
-                fill_model,
-                commission,
-                slippage,
-                symbol,
-                cooldown_days,
-                exit_cooldown_days,
-            )
-            if action2 is not None:
-                action = action2
-
-            bar_action = (
-                action
-                if action is not None
-                else (
-                    analysis_pb2.BAR_ACTION_HOLD_LONG
-                    if state.position > 0.0
-                    else analysis_pb2.BAR_ACTION_HOLD_FLAT
+                # (A) Execute a pending fill due this bar; inert in same-bar mode. Cooldown pins
+                # to the fill-bar time in _apply_fill (byte-identical to legacy when signal==fill).
+                action = _apply_fill(
+                    state,
+                    bars,
+                    i,
+                    fill_model,
+                    commission,
+                    slippage,
+                    symbol,
+                    cooldown_days,
+                    exit_cooldown_days,
                 )
-            )
-            diags[i - trade_start_idx].action = bar_action
-            daily_equity.append(state.equity + state.position * price)
-
-        # Close any open position at the last bar price
-        if state.position > 0.0 and bars:
-            last_bar = bars[-1]
-            fill_price = last_bar.close * (1 - slippage)
-            proceeds = state.position * fill_price * (1 - commission)
-            pnl = proceeds - (state.position * state.entry_price * (1 + commission))
-            now_ts = Timestamp()
-            now_ts.CopyFrom(last_bar.time)
-            entry_ts2 = Timestamp()
-            entry_ts2.CopyFrom(state.entry_time)
-            state.trades.append(
-                analysis_pb2.TradeRecord(
-                    symbol=symbol,
-                    side="long",
-                    qty=state.position,
-                    entry_price=state.entry_price,
-                    exit_price=fill_price,
-                    pnl=pnl,
-                    entry_time=entry_ts2,
-                    exit_time=now_ts,
+                # (B) Detect this bar's signal → queue a pending fill; (C) execute if due this bar.
+                # cooldown gate lives in _apply_fill, which rejects a cooldown-blocked fill.
+                _set_pending(state, i, decision.entry, decision.exit, fill_model)
+                action2 = _apply_fill(
+                    state,
+                    bars,
+                    i,
+                    fill_model,
+                    commission,
+                    slippage,
+                    symbol,
+                    cooldown_days,
+                    exit_cooldown_days,
                 )
-            )
-            state.equity += proceeds
-            daily_equity[-1] = state.equity
-            diags[-1].action = analysis_pb2.BAR_ACTION_EXIT_LONG
+                if action2 is not None:
+                    action = action2
 
-        symbol_diag = _finalize_symbol_diagnostics(
-            symbol, diags, warmup_bars, state.trades, daily_equity
-        )
-        # feature 150: intents is the additive 5th element; legacy callers ignore it.
-        return state.trades, state.equity, daily_equity, symbol_diag, intents
+                bar_action = (
+                    action
+                    if action is not None
+                    else (
+                        analysis_pb2.BAR_ACTION_HOLD_LONG
+                        if state.position > 0.0
+                        else analysis_pb2.BAR_ACTION_HOLD_FLAT
+                    )
+                )
+                diags[i - trade_start_idx].action = bar_action
+                daily_equity.append(state.equity + state.position * price)
+
+            # Close any open position at the last bar price
+            if state.position > 0.0 and bars:
+                last_bar = bars[-1]
+                fill_price = last_bar.close * (1 - slippage)
+                proceeds = state.position * fill_price * (1 - commission)
+                pnl = proceeds - (state.position * state.entry_price * (1 + commission))
+                now_ts = Timestamp()
+                now_ts.CopyFrom(last_bar.time)
+                entry_ts2 = Timestamp()
+                entry_ts2.CopyFrom(state.entry_time)
+                state.trades.append(
+                    analysis_pb2.TradeRecord(
+                        symbol=symbol,
+                        side="long",
+                        qty=state.position,
+                        entry_price=state.entry_price,
+                        exit_price=fill_price,
+                        pnl=pnl,
+                        entry_time=entry_ts2,
+                        exit_time=now_ts,
+                    )
+                )
+                state.equity += proceeds
+                daily_equity[-1] = state.equity
+                diags[-1].action = analysis_pb2.BAR_ACTION_EXIT_LONG
+
+            symbol_diag = _finalize_symbol_diagnostics(
+                symbol, diags, warmup_bars, state.trades, daily_equity
+            )
+            # intents is the additive 5th element; legacy callers ignore it.
+            return state.trades, state.equity, daily_equity, symbol_diag, intents
+
+        return await asyncio.get_running_loop().run_in_executor(self._compute_executor, _core)
 
     async def _simulate_portfolio(
         self,
@@ -1747,111 +1718,59 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
           ``max_drawdown`` is understated — legacy-realized parity is chosen over gap fidelity here.
         - The symbol-ASC entry tiebreak is a systematic bias, not neutral.
         """
-        # Build per-symbol close/intent maps keyed by tz-aware-UTC datetime, and the union calendar.
-        close_maps: dict[str, dict[datetime, float]] = {}
-        intent_maps: dict[str, dict[datetime, BarIntent]] = {}
-        all_dts: set[datetime] = set()
-        for sym, sym_intents in symbol_intents.items():
-            cmap: dict[datetime, float] = {}
-            imap: dict[datetime, BarIntent] = {}
-            for it in sym_intents:
-                d = it.timestamp.ToDatetime(tzinfo=UTC)
-                cmap[d] = it.close
-                imap[d] = it
-                all_dts.add(d)
-            close_maps[sym] = cmap
-            intent_maps[sym] = imap
-        calendar = sorted(all_dts)
 
-        cash = float(initial_capital)
-        alloc = position_weight * initial_capital  # cash committed per concurrent position
-        positions: dict[str, dict] = {}  # symbol -> {shares, entry_price, entry_ts, entry_dt}
-        last_close: dict[str, float] = {}  # forward-fill state (updated on-or-before each date)
-        last_exit: dict[str, datetime] = {}  # portfolio-local re-entry anchor (FR-6)
+        def _core():
+            # Build per-symbol close/intent maps keyed by tz-aware-UTC datetime + union calendar.
+            close_maps: dict[str, dict[datetime, float]] = {}
+            intent_maps: dict[str, dict[datetime, BarIntent]] = {}
+            all_dts: set[datetime] = set()
+            for sym, sym_intents in symbol_intents.items():
+                cmap: dict[datetime, float] = {}
+                imap: dict[datetime, BarIntent] = {}
+                for it in sym_intents:
+                    d = it.timestamp.ToDatetime(tzinfo=UTC)
+                    cmap[d] = it.close
+                    imap[d] = it
+                    all_dts.add(d)
+                close_maps[sym] = cmap
+                intent_maps[sym] = imap
+            calendar = sorted(all_dts)
 
-        equity_curve: list = []
-        capital_skips: list = []
-        trades: list = []
+            cash = float(initial_capital)
+            alloc = position_weight * initial_capital  # cash committed per concurrent position
+            positions: dict[str, dict] = {}  # symbol -> {shares, entry_price, entry_ts, entry_dt}
+            last_close: dict[str, float] = {}  # forward-fill state (updated on-or-before each date)
+            last_exit: dict[str, datetime] = {}  # portfolio-local re-entry anchor (FR-6)
 
-        for idx, d in enumerate(calendar):
-            is_terminal = idx == len(calendar) - 1
-            ts_d = Timestamp()
-            ts_d.FromDatetime(d)
+            equity_curve: list = []
+            capital_skips: list = []
+            trades: list = []
 
-            # 1. Advance forward-fill: any symbol with a bar exactly on d updates its last close.
-            for sym, cmap in close_maps.items():
-                if d in cmap:
-                    last_close[sym] = cmap[d]
+            for idx, d in enumerate(calendar):
+                is_terminal = idx == len(calendar) - 1
+                ts_d = Timestamp()
+                ts_d.FromDatetime(d)
 
-            # 2. Exits first (free cash). Only symbols with a bar (intent) on d can act.
-            for sym in sorted(positions.keys()):
-                intent = intent_maps[sym].get(d)
-                if intent is None or not intent.exit_intent:
-                    continue
-                if is_cooldown_active(positions[sym]["entry_dt"], d, exit_cooldown_days):
-                    continue  # min-hold not satisfied yet (feature 116 parity)
-                pos = positions.pop(sym)
-                fill_price = intent.close * (1 - slippage)
-                proceeds = pos["shares"] * fill_price * (1 - commission)
-                pnl = proceeds - (pos["shares"] * pos["entry_price"] * (1 + commission))
-                cash += proceeds
-                last_exit[sym] = d
-                exit_ts = Timestamp()
-                exit_ts.CopyFrom(intent.timestamp)
-                trades.append(
-                    analysis_pb2.TradeRecord(
-                        symbol=sym,
-                        side="long",
-                        qty=pos["shares"],
-                        entry_price=pos["entry_price"],
-                        exit_price=fill_price,
-                        pnl=pnl,
-                        entry_time=pos["entry_ts"],
-                        exit_time=exit_ts,
-                    )
-                )
+                # 1. Advance forward-fill: any symbol with a bar on d updates its last close.
+                for sym, cmap in close_maps.items():
+                    if d in cmap:
+                        last_close[sym] = cmap[d]
 
-            # 3. Entries: symbols signaling entry, not held, symbol-ASC. Cooldown, then capital.
-            for sym in sorted(intent_maps.keys()):
-                intent = intent_maps[sym].get(d)
-                if intent is None or not intent.entry_intent or sym in positions:
-                    continue
-                if is_cooldown_active(last_exit.get(sym), d, cooldown_days):
-                    continue  # re-entry cooldown active (feature 069 parity); not a capital skip
-                if len(positions) >= max_concurrent or cash < alloc:
-                    capital_skips.append(
-                        analysis_pb2.PortfolioCapitalSkip(
-                            symbol=sym,
-                            timestamp=intent.timestamp,
-                            intended_weight=alloc,
-                            available_cash=cash,
-                        )
-                    )
-                    continue  # never a zero-sized fill (FR-5/AC-6)
-                fill_price = intent.close * (1 + slippage)
-                if fill_price <= 0.0:
-                    continue
-                shares = alloc / (fill_price * (1 + commission))
-                cost = shares * fill_price * (1 + commission)
-                cash -= cost
-                entry_ts = Timestamp()
-                entry_ts.CopyFrom(intent.timestamp)
-                positions[sym] = {
-                    "shares": shares,
-                    "entry_price": fill_price,
-                    "entry_ts": entry_ts,
-                    "entry_dt": d,
-                }
-
-            # 4. Terminal force-close (realized semantics; matches the serial forced-close).
-            if is_terminal:
+                # 2. Exits first (free cash). Only symbols with a bar (intent) on d can act.
                 for sym in sorted(positions.keys()):
+                    intent = intent_maps[sym].get(d)
+                    if intent is None or not intent.exit_intent:
+                        continue
+                    if is_cooldown_active(positions[sym]["entry_dt"], d, exit_cooldown_days):
+                        continue  # min-hold not satisfied yet
                     pos = positions.pop(sym)
-                    close_px = last_close.get(sym, pos["entry_price"])
-                    fill_price = close_px * (1 - slippage)
+                    fill_price = intent.close * (1 - slippage)
                     proceeds = pos["shares"] * fill_price * (1 - commission)
                     pnl = proceeds - (pos["shares"] * pos["entry_price"] * (1 + commission))
                     cash += proceeds
+                    last_exit[sym] = d
+                    exit_ts = Timestamp()
+                    exit_ts.CopyFrom(intent.timestamp)
                     trades.append(
                         analysis_pb2.TradeRecord(
                             symbol=sym,
@@ -1861,18 +1780,74 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                             exit_price=fill_price,
                             pnl=pnl,
                             entry_time=pos["entry_ts"],
-                            exit_time=ts_d,
+                            exit_time=exit_ts,
                         )
                     )
 
-            # 5. Per-bar equity = cash + Σ marked-to-market open positions (AC-2).
-            mtm = sum(
-                pos["shares"] * last_close.get(sym, pos["entry_price"])
-                for sym, pos in positions.items()
-            )
-            equity_curve.append(analysis_pb2.EquityPoint(timestamp=ts_d, equity=cash + mtm))
+                # 3. Entries: symbols signaling entry, not held, symbol-ASC. Cooldown, then capital.
+                for sym in sorted(intent_maps.keys()):
+                    intent = intent_maps[sym].get(d)
+                    if intent is None or not intent.entry_intent or sym in positions:
+                        continue
+                    if is_cooldown_active(last_exit.get(sym), d, cooldown_days):
+                        continue  # re-entry cooldown active; not a capital skip
+                    if len(positions) >= max_concurrent or cash < alloc:
+                        capital_skips.append(
+                            analysis_pb2.PortfolioCapitalSkip(
+                                symbol=sym,
+                                timestamp=intent.timestamp,
+                                intended_weight=alloc,
+                                available_cash=cash,
+                            )
+                        )
+                        continue  # never a zero-sized fill (FR-5/AC-6)
+                    fill_price = intent.close * (1 + slippage)
+                    if fill_price <= 0.0:
+                        continue
+                    shares = alloc / (fill_price * (1 + commission))
+                    cost = shares * fill_price * (1 + commission)
+                    cash -= cost
+                    entry_ts = Timestamp()
+                    entry_ts.CopyFrom(intent.timestamp)
+                    positions[sym] = {
+                        "shares": shares,
+                        "entry_price": fill_price,
+                        "entry_ts": entry_ts,
+                        "entry_dt": d,
+                    }
 
-        return equity_curve, capital_skips, trades
+                # 4. Terminal force-close (realized semantics; matches the serial forced-close).
+                if is_terminal:
+                    for sym in sorted(positions.keys()):
+                        pos = positions.pop(sym)
+                        close_px = last_close.get(sym, pos["entry_price"])
+                        fill_price = close_px * (1 - slippage)
+                        proceeds = pos["shares"] * fill_price * (1 - commission)
+                        pnl = proceeds - (pos["shares"] * pos["entry_price"] * (1 + commission))
+                        cash += proceeds
+                        trades.append(
+                            analysis_pb2.TradeRecord(
+                                symbol=sym,
+                                side="long",
+                                qty=pos["shares"],
+                                entry_price=pos["entry_price"],
+                                exit_price=fill_price,
+                                pnl=pnl,
+                                entry_time=pos["entry_ts"],
+                                exit_time=ts_d,
+                            )
+                        )
+
+                # 5. Per-bar equity = cash + Σ marked-to-market open positions (AC-2).
+                mtm = sum(
+                    pos["shares"] * last_close.get(sym, pos["entry_price"])
+                    for sym, pos in positions.items()
+                )
+                equity_curve.append(analysis_pb2.EquityPoint(timestamp=ts_d, equity=cash + mtm))
+
+            return equity_curve, capital_skips, trades
+
+        return await asyncio.get_running_loop().run_in_executor(self._compute_executor, _core)
 
     async def _compute_evaluated_warmup(
         self, definition, component_series, n, formula_warmup_cache, propagation_meta
@@ -1969,7 +1944,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         if self._strategies_repo is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "strategy store unavailable")
             return
-        # Feature 133: owner-scoped — uniform PERMISSION_DENIED on a non-owned/missing strategy.
+        # Owner-scoped — uniform PERMISSION_DENIED on a non-owned/missing strategy.
         caller_user_id = self._caller_user_id(context)
         row = (
             await self._strategies_repo.get_by_owner_and_id(caller_user_id, request.strategy_id)
@@ -1990,9 +1965,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 await context.abort(grpc.StatusCode.UNAVAILABLE, "evidence store unavailable")
                 return
             if score is None:
-                # No eligible evidence: clear any stale grade. Unlike the trigger path this delete
-                # is NON-best-effort — a delete failure aborts UNAVAILABLE rather than silently
-                # leaving a stale grade behind.
+                # No eligible evidence: clear any stale grade. This delete is NON-best-effort —
+                # a failure aborts UNAVAILABLE rather than leaving a stale grade behind.
                 self._strategies.pop(request.strategy_id, None)
                 if self._scores_repo is not None:
                     try:
@@ -2007,7 +1981,6 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 return
             await self._persist_strategy_score(score)
 
-        # Emit ledger event
         from google.protobuf.struct_pb2 import Struct
 
         payload = Struct()
@@ -2216,9 +2189,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         """
         if self._backtest_details_repo is None:
             return
-        # Clamp: a negative config value would make the eviction LIMIT raise (and be
-        # silently swallowed by the wrapper → unbounded growth). The get_int zero-trap
-        # means a stored 0 reads as the default 20 (documented in CLAUDE.md).
+        # Clamp: a negative config value makes the eviction LIMIT raise (swallowed → unbounded
+        # growth). get_int zero-trap: a stored 0 reads as the default 20.
         retention = max(1, self._cfg.get_int("analysis.backtest.detail_retention_per_strategy", 20))
         try:
             await self._backtest_details_repo.insert(
@@ -2279,9 +2251,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             self._strategies[r["strategy_id"]] = _row_to_score(r)
 
     async def ListStrategies(self, request, context):
-        # Feature 133: owner-scoped — return only the caller's own strategy scores. The in-memory
-        # _strategies cache is keyed by bare strategy_id, so cross-check ownership against the repo
-        # (no strategy_scores re-key; a shared strategy_id's grade value is an accepted limitation).
+        # Owner-scoped — return only the caller's own scores. The _strategies cache is keyed by
+        # bare strategy_id, so cross-check ownership against the repo.
         if self._strategies_repo is not None:
             caller_user_id = self._caller_user_id(context)
             owned, _ = await self._strategies_repo.list(caller_user_id, include_inactive=True)
@@ -2292,8 +2263,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return analysis_pb2.ListStrategiesResponse(strategies=strategies)
 
     async def GetStrategyReport(self, request, context):
-        # Feature 133: owner-scoped — uniform PERMISSION_DENIED for a non-owned/missing strategy
-        # (the in-memory score/backtest caches are keyed by bare strategy_id).
+        # Owner-scoped — uniform PERMISSION_DENIED for a non-owned/missing strategy (the in-memory
+        # score/backtest caches are keyed by bare strategy_id).
         if self._strategies_repo is not None:
             caller_user_id = self._caller_user_id(context)
             owned = (
@@ -2330,7 +2301,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         """
         if self._backtest_runs_repo is None:
             return analysis_pb2.ListBacktestsResponse()
-        # Feature 133: owner-scoped — resolve ownership before returning another user's run history.
+        # Owner-scoped — resolve ownership before returning another user's run history.
         if self._strategies_repo is not None:
             caller_user_id = self._caller_user_id(context)
             owned = (
@@ -2370,8 +2341,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             except Exception as e:
                 log.warning("failed to read backtest detail: %s", e)
                 row_bytes = None
-        # Abort OUTSIDE the except block: context.abort raises, and a nested abort would
-        # be swallowed by the bare except (impl-spec advisory review note).
+        # Abort OUTSIDE the except block: context.abort raises, and a nested abort would be
+        # swallowed by the bare except.
         if row_bytes is None:
             await context.abort(grpc.StatusCode.NOT_FOUND, "no detailed data for this run")
             return
@@ -2380,10 +2351,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return result
 
     async def ManageStrategy(self, request, context):
-        # Feature 133: ownership-gated (the admin gate was removed — see design decision 4).
-        # REGISTER opens to any authenticated caller under their own header-derived user_id;
-        # UPDATE/DEACTIVATE/REACTIVATE require ownership. An unauthenticated caller (no x-user-id)
-        # can never own a row.
+        # Ownership-gated (no admin gate). REGISTER opens to any authenticated caller under their
+        # own user_id; UPDATE/DEACTIVATE/REACTIVATE require ownership. No x-user-id owns nothing.
         caller_user_id = self._caller_user_id(context)
         if not caller_user_id:
             await context.abort(grpc.StatusCode.PERMISSION_DENIED, "authenticated caller required")
@@ -2395,19 +2364,17 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         definition = request.definition
         op = request.operation
 
-        # feature 152: normalize benchmark source_symbol server-side (uppercase/trim, empty →
-        # unset) on every write path, before REGISTER's MessageToDict and UPDATE's merge/replace
-        # both serialize this proto — never client-side (bypassable) and never two sites to drift.
+        # Normalize benchmark source_symbol server-side (uppercase/trim, empty → unset) on every
+        # write path before serialization — never client-side (bypassable) and never two sites.
         _normalize_source_symbols(definition)
 
         if op == analysis_pb2.STRATEGY_OPERATION_REGISTER:
             await self._validate_definition_proto(definition, context)
-            # Feature 133: the owner is server-authoritative — set from the header, never trusted
-            # from the request body. Two different users may register the same strategy_id
-            # (composite (user_id, strategy_id) PK), so the duplicate check is owner-scoped.
+            # Owner is server-authoritative — set from the header, never the request body. Two
+            # users may share a strategy_id (composite PK), so the duplicate check is owner-scoped.
             definition.user_id = caller_user_id
-            # Feature 089: strict register. An existing id (active OR deactivated) is a conflict —
-            # route the caller to reactivate rather than silently overwrite or crash on the PK.
+            # Strict register: an existing id (active OR deactivated) is a conflict — route the
+            # caller to reactivate rather than silently overwrite or crash on the PK.
             if (
                 await self._strategies_repo.get_by_owner_and_id(
                     caller_user_id, definition.strategy_id
@@ -2439,8 +2406,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 return
             return _row_to_strategy_definition(row)
         if op == analysis_pb2.STRATEGY_OPERATION_UPDATE:
-            # feature 070: an update_mask turns UPDATE into a partial merge. Absent mask keeps the
-            # pre-070 full-replace path byte-for-byte, so existing clients are unaffected.
+            # An update_mask turns UPDATE into a partial merge; an absent mask keeps the
+            # full-replace path byte-for-byte, so existing clients are unaffected.
             has_mask = request.HasField("update_mask")
             mask_paths = list(request.update_mask.paths) if has_mask else []
             for path in mask_paths:
@@ -2463,24 +2430,20 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 for k, v in context.invocation_metadata()
                 if k in ("x-user-id", "x-access-scope", "x-trace-id")
             ]
-            # Pre-fetch formula outputs BEFORE opening the transaction — `apply_fn` runs with the
-            # row locked and must not do I/O. Fetch for the union of the request's components and
-            # the stored ones, so any merge outcome is covered. A component that somehow escapes
-            # the union fails closed: `_validate_definition` treats a missing entry as {"value"}.
+            # Pre-fetch formula outputs BEFORE the txn — `apply_fn` runs row-locked and must not do
+            # I/O. Fetch the union of request + stored components; a missing entry fails closed.
             pre = await self._strategies_repo.get_by_owner_and_id(
                 caller_user_id, definition.strategy_id
             )
             if pre is None:
-                # Uniform PERMISSION_DENIED (feature 133): never reveal whether the id exists
-                # under another owner.
+                # Uniform PERMISSION_DENIED: never reveal whether the id exists under another owner.
                 await context.abort(
                     grpc.StatusCode.PERMISSION_DENIED,
                     f"strategy '{definition.strategy_id}' not found or not owned",
                 )
                 return
-            # Feature 086: refuse a new binding to a soft-deleted formula. Checks the request's own
-            # components only, so an update that leaves an existing (already-deleted) binding
-            # untouched is not blocked.
+            # Refuse a new binding to a soft-deleted formula. Checks the request's own components
+            # only, so an update leaving an existing (already-deleted) binding is not blocked.
             if await self._refuse_deleted_bindings(definition, context, propagation_meta):
                 return
             union = analysis_pb2.StrategyDefinition()
@@ -2492,9 +2455,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 old_json = current["definition_json"] or {}
                 if _has:
                     merged_json = _merge_definition_json(old_json, _defn, _mask)
-                    # Rebuild through the shared row→proto mapper so the column-authoritative
-                    # overlay stays the single source of that logic — but feed it the merged
-                    # display_name, or a masked rename would be overwritten by the stored value.
+                    # Rebuild through the shared row→proto mapper (single source of the overlay),
+                    # but feed it the merged display_name or a masked rename would be lost.
                     synthetic = {
                         **current,
                         "definition_json": merged_json,
@@ -2532,12 +2494,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     f"strategy '{definition.strategy_id}' not found",
                 )
                 return
-            # feature 065: a definition change usually changes the fingerprint, so the old
-            # evidence base no longer applies. Under the strategy's lock, unconditionally clear
-            # the stale in-memory grade FIRST, then best-effort recompute against the NEW
-            # fingerprint (typically empty until a fresh backtest → grade cleared). The UPDATE
-            # response never fails on a recompute error. (A display-name-only edit keeps the same
-            # fingerprint, so recompute simply reinstates the same grade.)
+            # A definition change usually changes the fingerprint, so clear the stale in-memory
+            # grade FIRST, then best-effort recompute; the UPDATE never fails on a recompute error.
             sid = definition.strategy_id
             async with self._lock_for(sid):
                 self._strategies.pop(sid, None)
@@ -2556,9 +2514,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 return
             return _row_to_strategy_definition(row)
         if op == analysis_pb2.STRATEGY_OPERATION_REACTIVATE:
-            # Feature 089: reactivation decoupled from update. Re-validate the STORED definition
-            # first (a referenced formula may have gone missing while it was deactivated) so a
-            # reactivated strategy satisfies the firing contract, rather than erroring each cycle.
+            # Reactivation re-validates the STORED definition first (a referenced formula may have
+            # gone missing while deactivated) so it satisfies the firing contract.
             existing = await self._strategies_repo.get_by_owner_and_id(
                 caller_user_id, definition.strategy_id
             )
@@ -2583,8 +2540,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         if self._strategies_repo is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "strategy store unavailable")
             return
-        # Feature 133: owner-scoped read. A non-owner (or unauthenticated caller) gets a uniform
-        # PERMISSION_DENIED, never NOT_FOUND — no existence probing via response code.
+        # Owner-scoped read. A non-owner gets a uniform PERMISSION_DENIED, never NOT_FOUND —
+        # no existence probing via response code.
         caller_user_id = self._caller_user_id(context)
         row = (
             await self._strategies_repo.get_by_owner_and_id(caller_user_id, request.strategy_id)
@@ -2598,9 +2555,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             )
             return
         definition = _row_to_strategy_definition(row)
-        # Feature 086 (live-status flag): surface a warning if this strategy references a
-        # soft-deleted formula. It still evaluates (live and in backtests) on the last-saved
-        # definition, but the deletion is flagged to whoever reads the strategy.
+        # Surface a warning if this strategy references a soft-deleted formula; it still evaluates
+        # on the last-saved definition, but the deletion is flagged to whoever reads it.
         propagation_meta = [
             (k, v)
             for k, v in context.invocation_metadata()
@@ -2614,8 +2570,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
     async def ListStrategyDefinitions(self, request, context):
         if self._strategies_repo is None:
             return analysis_pb2.ListStrategyDefinitionsResponse()
-        # Feature 133: header-derived owner filter (never read ListStrategiesRequest.user_id from
-        # the wire). An empty caller id lists nothing.
+        # Header-derived owner filter (never read ListStrategiesRequest.user_id from the wire).
+        # An empty caller id lists nothing.
         caller_user_id = self._caller_user_id(context)
         rows, total = await self._strategies_repo.list(
             caller_user_id,
@@ -2629,9 +2585,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         )
 
     async def SetStrategyLive(self, request, context):
-        # Feature 133: ownership-gated (the admin gate was removed — design decision 4). Any
-        # authenticated caller may toggle live on their OWN strategy; a non-owner (or empty caller)
-        # gets a uniform PERMISSION_DENIED.
+        # Ownership-gated (no admin gate). Any authenticated caller may toggle live on their OWN
+        # strategy; a non-owner (or empty caller) gets a uniform PERMISSION_DENIED.
         caller_user_id = self._caller_user_id(context)
         if not caller_user_id:
             await context.abort(grpc.StatusCode.PERMISSION_DENIED, "authenticated caller required")
@@ -2647,13 +2602,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if k in ("x-user-id", "x-access-scope", "x-trace-id")
         ]
 
-        # Feature 089 (F-7): enabling live on an inactive strategy stores a flag that never fires,
-        # so reject that at enable time (FAILED_PRECONDITION). Disabling is ALWAYS allowed — even on
-        # an inert config — so an operator can always turn live off.
-        # Feature 132: the empty-signal_params.symbols reject was REMOVED. Under the deny model, an
-        # empty allowlist no longer means "never fires" — the strategy fires its whole owner union
-        # (watchlist ∪ held ∪ signals-iff-eligible, minus the deny list), so the feature-089
-        # precondition would now wrongly block a valid allowlist-free config (AC-1).
+        # Enabling live on an inactive strategy is rejected FAILED_PRECONDITION; disabling is
+        # ALWAYS allowed. An empty allowlist is valid (fires the whole owner union), not rejected.
         if request.live_enabled:
             existing = await self._strategies_repo.get_by_owner_and_id(
                 caller_user_id, request.strategy_id
@@ -2717,14 +2667,17 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if k in ("x-user-id", "x-access-scope", "x-trace-id")
         ]
 
-        # feature 134 (FR-4 genuine replace): source weights now come from
-        # ingest.SignalSource.reliability_weight (reject-at-write in [0,1]), not the former
-        # analysis.signals.source_weights config key (removed by feature 161). Both analysis read
-        # paths (this + the Opportunities queue) share the one _drain_source_weights helper.
+        # Source weights come from ingest.SignalSource.reliability_weight ([0,1]). Both analysis
+        # read paths share the one _drain_source_weights helper.
         source_weights = await self._drain_source_weights(propagation_meta)
 
         engine = ScreenerEngine(
-            self._marketdata, self._indicators, self._ingest, self._cfg, source_weights
+            self._marketdata,
+            self._indicators,
+            self._ingest,
+            self._cfg,
+            source_weights,
+            compute_executor=self._compute_executor,
         )
 
         # Enforce the overall scan deadline (default 120s).
@@ -2740,17 +2693,16 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             )
             return
         except ValueError as e:
-            # feature 090: an unknown fundamental metric_name (a typo of a closed field, or an
-            # open metric absent from every scanned symbol) surfaces as INVALID_ARGUMENT rather
-            # than a silent skip.
+            # An unknown fundamental metric_name surfaces as INVALID_ARGUMENT rather than a
+            # silent skip.
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
             return
-        # feature 083 (FR-8) — mark rows the caller already holds (best-effort cross-ref).
+        # Mark rows the caller already holds (best-effort cross-ref).
         user_id = dict(context.invocation_metadata()).get("x-user-id", "")
         held = await self._drain_held_symbols(user_id, propagation_meta)
         for r in resp.results:
-            # feature 131: _drain_held_symbols now keys by normalized symbol, so normalize the
-            # membership test (no-op for already-uppercase broker tickers; correct for mixed case).
+            # _drain_held_symbols keys by normalized symbol, so normalize the membership test
+            # (no-op for uppercase broker tickers; correct for mixed case).
             if _normalize_symbol(r.symbol) in held:
                 r.held = True
         return resp
@@ -2802,7 +2754,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         if self._strategies_repo is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "strategy store unavailable")
             return
-        # Feature 133: owner-scoped — uniform PERMISSION_DENIED on a non-owned/missing strategy.
+        # Owner-scoped — uniform PERMISSION_DENIED on a non-owned/missing strategy.
         caller_user_id = self._caller_user_id(context)
         row = (
             await self._strategies_repo.get_by_owner_and_id(caller_user_id, request.strategy_id)
@@ -2816,38 +2768,335 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             )
             return
         definition = _row_to_strategy_definition(row)
-        # feature 138 — trace the exit rule only when explicitly requested (held REDUCE/ADD panel);
-        # UNSPECIFIED/ENTRY keep the entry-rule default so watchlist readiness is unchanged.
+        # Trace the exit rule only when explicitly requested (held REDUCE/ADD panel); UNSPECIFIED/
+        # ENTRY keep the entry-rule default so watchlist readiness is unchanged.
         rule = "exit" if request.rule == analysis_pb2.READINESS_RULE_EXIT else "entry"
-        evaluator = StrategyEvaluator(self._indicators, propagation_meta)
+        # Interactive readiness path: per-component fan-out bounded by the shared component sem.
+        evaluator = StrategyEvaluator(
+            self._indicators, propagation_meta, component_sem=self._component_series_sem
+        )
         range_msg = _recent_range(_READINESS_LOOKBACK_DAYS)
-        # feature 152: one benchmark load for the whole request (shared across request.symbols).
+        # One benchmark load for the whole request (shared across request.symbols).
         benchmark_bars = await self._load_benchmark_bars_windowed(
             definition, range_msg, propagation_meta
         )
-        readiness = []
-        for symbol in request.symbols:
-            fetch_ok = True
-            try:
-                bars = await self._fetch_bars_paged(symbol, range_msg, propagation_meta)
-            except Exception as e:  # bar fetch is best-effort per symbol
-                log.warning("EvaluateReadiness: bars fetch failed for %s: %s", symbol, e)
-                bars = []
-                fetch_ok = False
-            if fetch_ok and not bars:
-                # feature 140 FR-6: a successful-but-empty fetch was previously silent — the empty
-                # readiness surfaced only in the response the UI reads. Request-bounded loop, so a
-                # per-symbol WARN is rate-safe (unlike the live loop / screener, which summarize).
-                log.warning(
-                    "EvaluateReadiness: no 1d bars for %s (strategy %s) — readiness will be empty",
-                    symbol,
-                    request.strategy_id,
-                )
-            trace = await evaluator.evaluate_conditions_traced(
-                definition, bars, symbol, rule=rule, benchmark_bars=benchmark_bars
+
+        # FR-1 readiness cache: read the staleness window + definition fingerprint once, load the
+        # request set in a single query. A fresh, fingerprint-matching, unexpired row serves FAST.
+        now = datetime.now(UTC)
+        stale_after = self._cfg.get_int_present("analysis.readiness.stale_after_seconds", 30)
+        fingerprint = _definition_fingerprint(row["definition_json"])
+        cached = (
+            await self._readiness_cache_repo.read_many(
+                caller_user_id, request.strategy_id, rule, list(request.symbols)
             )
-            readiness.append(_readiness_to_proto(trace))
-        return analysis_pb2.EvaluateReadinessResponse(readiness=readiness)
+            if self._readiness_cache_repo is not None
+            else {}
+        )
+
+        def _benchmark_epoch():
+            e = 0
+            if benchmark_bars:
+                for bench in benchmark_bars.values():
+                    if bench:
+                        e = max(e, bench[-1].time.seconds)
+            return e
+
+        # FR-2: SLOW per-symbol body gated by _bars_fetch_sem (opportunity bars-fetch bound, default
+        # 2). FR-1: FAST serves a fresh cache hit WITHOUT the sem, a fetch, or a re-evaluation.
+        # Returns (proto, staged_cache_row | None, computed_at). gather preserves request order.
+        async def _readiness_for(symbol):
+            c = cached.get(symbol)
+            if c is not None and is_readiness_row_fresh(
+                c,
+                now=now,
+                fingerprint=fingerprint,
+                latest_bar_epoch=latest_bar_epoch.get(symbol, 0),
+            ):
+                return (
+                    _symbol_readiness_from_json(c["readiness_json"], symbol),
+                    None,
+                    c["computed_at"],
+                )
+            # SLOW body extracted to the shared compute path (feature 180) so the interactive
+            # handler and the readiness materializer produce byte-identical rows.
+            staged = await compute_readiness_row(
+                symbol,
+                fetch_bars=self._fetch_bars_paged,
+                bars_sem=self._bars_fetch_sem,
+                evaluator=evaluator,
+                definition=definition,
+                range_msg=range_msg,
+                propagation_meta=propagation_meta,
+                benchmark_bars=benchmark_bars,
+                rule=rule,
+                fingerprint=fingerprint,
+                strategy_id=request.strategy_id,
+                user_id=caller_user_id,
+                now=now,
+                valid_until=now + timedelta(seconds=stale_after),
+                benchmark_epoch=_benchmark_epoch(),
+            )
+            return _readiness_to_proto(staged["readiness_json"]), staged, now
+
+        # Feature 180: bar_epoch-aware FAST gate. Fetch each distinct symbol's latest 1d-bar epoch
+        # ONCE, before the gather (C-08: fill-before-loop, never lazily inside it), so a new daily
+        # bar busts a still-in-window cached row. GetDataCoverage is a MIN/MAX/COUNT metadata read;
+        # bound the scan to a narrow recent window (we only consume .latest) so this per-symbol
+        # per-read probe stays cheap. Best-effort — a coverage miss (0) never falsely busts a row.
+        latest_bar_epoch: dict[str, int] = {}
+        coverage_range = _recent_range(_READINESS_COVERAGE_PROBE_DAYS)
+        for symbol in dict.fromkeys(request.symbols):
+            try:
+                cov = await self._marketdata.GetDataCoverage(
+                    marketdata_pb2.GetDataCoverageRequest(
+                        symbol=symbol,
+                        timeframe=common_pb2.Timeframe.TIMEFRAME_1DAY,
+                        range=coverage_range,
+                    ),
+                    metadata=propagation_meta,
+                )
+                latest_bar_epoch[symbol] = cov.latest.seconds
+            except Exception as e:  # best-effort — a coverage miss never blocks the read
+                log.warning("EvaluateReadiness: GetDataCoverage failed for %s: %s", symbol, e)
+                latest_bar_epoch[symbol] = 0
+
+        results = await asyncio.gather(*[_readiness_for(s) for s in request.symbols])
+        protos = [r[0] for r in results]
+        staged_rows = [r[1] for r in results if r[1] is not None]
+        # Persist the SLOW rows once, out of the per-symbol hot path (best-effort — a write failure
+        # never fails the read, mirroring the opportunity recompute).
+        if staged_rows and self._readiness_cache_repo is not None:
+            try:
+                await self._readiness_cache_repo.upsert_many(staged_rows)
+            except Exception as e:  # noqa: BLE001 — cache write is best-effort
+                log.warning("EvaluateReadiness: readiness cache upsert failed: %s", e)
+        # FR-5: computed_at = the OLDEST per-symbol computed_at served — never fresher than that.
+        resp = analysis_pb2.EvaluateReadinessResponse(readiness=protos)
+        served = [r[2] for r in results if r[2] is not None]
+        if served:
+            resp.computed_at.FromDatetime(min(served))
+        return resp
+
+    async def GetWatchlistReadiness(self, request, context):
+        """Cache-first readiness decoration for a keyset page of a watchlist's bound
+        (symbol, strategy_id) pairs (feature 181). The server derives the pairs from the OWNER'S OWN
+        watchlist over the existing analysis→portfolio edge (anti-IDOR; no reverse cycle),
+        reads the readiness cache ONLY (never a SLOW compute in the RPC body), and classifies each
+        pair four ways — sentinel(bar_epoch<0)→UNKNOWN, fresh→RESOLVED (inline SymbolReadiness),
+        else→PENDING — kicking a best-effort background refresh for the not-fresh pairs. Owner from
+        the x-user-id header; body carries no user_id. Propagates the C-03 header trio."""
+        propagation_meta = [
+            (k, v)
+            for k, v in context.invocation_metadata()
+            if k in ("x-user-id", "x-access-scope", "x-trace-id")
+        ]
+        if self._portfolio is None or self._strategies_repo is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "watchlist/strategy store unavailable")
+            return
+        caller_user_id = self._caller_user_id(context)
+        if not caller_user_id:
+            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "unauthenticated")
+            return
+
+        # Watchlist read over the existing analysis→portfolio stub; portfolio enforces ownership
+        # server-side from the forwarded x-user-id. A portfolio failure is the RPC's own error.
+        try:
+            wl_resp = await self._portfolio.GetWatchlist(
+                portfolio_pb2.GetWatchlistRequest(watchlist_id=request.watchlist_id),
+                metadata=propagation_meta,
+            )
+        except grpc.aio.AioRpcError as e:
+            await context.abort(e.code(), e.details())
+            return
+
+        # Total order over the owner's bound pairs, then keyset slice (drift-proof — ListPositions
+        # precedent, NOT ListOpportunities' offset). Only bound pairs (strategy_id != "").
+        pairs = sorted(
+            {(b.symbol, b.strategy_id) for b in wl_resp.watchlist.bindings if b.strategy_id}
+        )
+        cursor = _decode_pair_token(request.page.page_token)
+        if cursor is not None:
+            pairs = [p for p in pairs if p > cursor]
+        page_size = (
+            request.page.page_size
+            if request.page.page_size > 0
+            else _DEFAULT_WATCHLIST_READINESS_PAGE_SIZE
+        )
+        page_pairs = pairs[:page_size]
+        next_token = _encode_pair_token(page_pairs[-1]) if len(pairs) > page_size else ""
+
+        now = datetime.now(UTC)
+
+        # Probe each distinct page symbol's latest 1d-bar epoch ONCE (bar_epoch-aware freshness),
+        # bounded/best-effort (a miss → 0 never falsely busts). Mirrors EvaluateReadiness's probe.
+        page_symbols = list(dict.fromkeys(sym for sym, _ in page_pairs))
+        latest_bar_epoch: dict[str, int] = {}
+        coverage_range = _recent_range(_READINESS_COVERAGE_PROBE_DAYS)
+        for symbol in page_symbols:
+            try:
+                cov = await self._marketdata.GetDataCoverage(
+                    marketdata_pb2.GetDataCoverageRequest(
+                        symbol=symbol,
+                        timeframe=common_pb2.Timeframe.TIMEFRAME_1DAY,
+                        range=coverage_range,
+                    ),
+                    metadata=propagation_meta,
+                )
+                latest_bar_epoch[symbol] = cov.latest.seconds
+            except Exception as e:  # best-effort — a coverage miss never blocks the read
+                log.warning("GetWatchlistReadiness: GetDataCoverage failed for %s: %s", symbol, e)
+                latest_bar_epoch[symbol] = 0
+
+        # Classify per distinct strategy on the page (cache read only). Group symbols per strategy.
+        by_strategy: dict[str, list[str]] = {}
+        for sym, sid in page_pairs:
+            by_strategy.setdefault(sid, []).append(sym)
+
+        # (symbol, strategy_id) -> (state, SymbolReadiness|None, computed_at)
+        classified: dict[tuple[str, str], tuple[int, object, datetime]] = {}
+        not_fresh: dict[str, list[str]] = {}  # strategy_id -> symbols to refresh
+        for sid, syms in by_strategy.items():
+            srow = await self._strategies_repo.get_by_owner_and_id(caller_user_id, sid)
+            if srow is None:
+                # Binding to a non-owned/missing strategy — cannot evaluate; degrade to UNKNOWN
+                # (best-effort per row, FR-5), never a kick.
+                for sym in syms:
+                    classified[(sym, sid)] = (
+                        analysis_pb2.READINESS_STATE_UNKNOWN,
+                        None,
+                        now,
+                    )
+                continue
+            fingerprint = _definition_fingerprint(srow["definition_json"])
+            cached = (
+                await self._readiness_cache_repo.read_many(caller_user_id, sid, "entry", syms)
+                if self._readiness_cache_repo is not None
+                else {}
+            )
+            for sym in syms:
+                c = cached.get(sym)
+                lbe = latest_bar_epoch.get(sym, 0)
+                if c is not None and c["bar_epoch"] < 0:
+                    # Data-unavailable sentinel → UNKNOWN (checked first). Re-kick only after the
+                    # cooldown so a persistently-down source retries at most once per window.
+                    classified[(sym, sid)] = (
+                        analysis_pb2.READINESS_STATE_UNKNOWN,
+                        None,
+                        c["computed_at"],
+                    )
+                    if now - c["computed_at"] > timedelta(seconds=_READINESS_UNKNOWN_RETRY_SECONDS):
+                        not_fresh.setdefault(sid, []).append(sym)
+                elif c is not None and is_readiness_row_fresh(
+                    c, now=now, fingerprint=fingerprint, latest_bar_epoch=lbe
+                ):
+                    classified[(sym, sid)] = (
+                        analysis_pb2.READINESS_STATE_RESOLVED,
+                        _symbol_readiness_from_json(c["readiness_json"], sym),
+                        c["computed_at"],
+                    )
+                else:
+                    classified[(sym, sid)] = (
+                        analysis_pb2.READINESS_STATE_PENDING,
+                        None,
+                        c["computed_at"] if c is not None else now,
+                    )
+                    not_fresh.setdefault(sid, []).append(sym)
+
+        # Fire the best-effort, guard-set-deduped background refresh for the not-fresh pairs.
+        if not_fresh:
+            self._kick_readiness_refresh(caller_user_id, not_fresh, propagation_meta)
+
+        rows = []
+        for sym, sid in page_pairs:
+            state, readiness, computed_at = classified[(sym, sid)]
+            row_msg = analysis_pb2.WatchlistReadinessRow(symbol=sym, strategy_id=sid, state=state)
+            if readiness is not None:
+                row_msg.readiness.CopyFrom(readiness)
+            if computed_at is not None:
+                row_msg.computed_at.FromDatetime(computed_at)
+            rows.append(row_msg)
+        return analysis_pb2.GetWatchlistReadinessResponse(
+            rows=rows,
+            page=common_pb2.PageResponse(next_page_token=next_token),
+        )
+
+    def _kick_readiness_refresh(self, user_id: str, by_strategy: dict, propagation_meta) -> None:
+        """Fire-and-forget background readiness refresh for GetWatchlistReadiness not-fresh pairs
+        (feature 181). Guard-set deduped per (owner, strategy_id, symbol); bars gated by the
+        materializer's OWN semaphore (never the interactive one — feature-176 priority-inversion
+        guard); stamps the 24h materializer backstop so a warmed page stays RESOLVED across polls.
+        Mirrors _kick_opportunity_recompute; a refresh failure never touches the RPC response."""
+        triples: list[tuple[str, str]] = []
+        for sid, syms in by_strategy.items():
+            for sym in syms:
+                key = (user_id, sid, sym)
+                if key in self._readiness_kicking:
+                    continue
+                self._readiness_kicking.add(key)
+                triples.append((sid, sym))
+        if not triples:
+            return
+
+        async def _run():
+            try:
+                now = datetime.now(UTC)
+                valid_window = self._cfg.get_int_present(
+                    "analysis.readiness_materializer.valid_window_hours", 24
+                )
+                range_msg = _recent_range(_READINESS_LOOKBACK_DAYS)
+                grouped: dict[str, list[str]] = {}
+                for sid, sym in triples:
+                    grouped.setdefault(sid, []).append(sym)
+                staged_all = []
+                for sid, syms in grouped.items():
+                    srow = await self._strategies_repo.get_by_owner_and_id(user_id, sid)
+                    if srow is None:
+                        continue
+                    definition = _row_to_strategy_definition(srow)
+                    fingerprint = _definition_fingerprint(srow["definition_json"])
+                    evaluator = StrategyEvaluator(
+                        self._indicators, propagation_meta, component_sem=self._component_series_sem
+                    )
+                    benchmark_bars = await self._load_benchmark_bars_windowed(
+                        definition, range_msg, propagation_meta
+                    )
+                    bench_epoch = 0
+                    if benchmark_bars:
+                        for bench in benchmark_bars.values():
+                            if bench:
+                                bench_epoch = max(bench_epoch, bench[-1].time.seconds)
+                    for sym in syms:
+                        staged_all.append(
+                            await compute_readiness_row(
+                                sym,
+                                fetch_bars=self._fetch_bars_paged,
+                                bars_sem=self._readiness_materializer_bars_sem,
+                                evaluator=evaluator,
+                                definition=definition,
+                                range_msg=range_msg,
+                                propagation_meta=propagation_meta,
+                                benchmark_bars=benchmark_bars,
+                                rule="entry",
+                                fingerprint=fingerprint,
+                                strategy_id=sid,
+                                user_id=user_id,
+                                now=now,
+                                valid_until=readiness_valid_until(
+                                    now, valid_window_hours=valid_window
+                                ),
+                                benchmark_epoch=bench_epoch,
+                            )
+                        )
+                if staged_all and self._readiness_cache_repo is not None:
+                    await self._readiness_cache_repo.upsert_many(staged_all)
+            except Exception as e:  # a refresh failure never fails the read
+                log.warning("readiness refresh kick failed for user=%s: %s", user_id, e)
+            finally:
+                for sid, sym in triples:
+                    self._readiness_kicking.discard((user_id, sid, sym))
+
+        asyncio.get_event_loop().create_task(_run())
 
     async def QueryPnLPatterns(self, request, context):
         """Ranked P&L-attribution factors (feature 042). Reads the raw pnl_pattern_samples for the
@@ -3017,14 +3266,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             )
             return
         definition = _row_to_strategy_definition(row)
-        evaluator = StrategyEvaluator(self._indicators, propagation_meta)
+        # ScoreStrategy already acquires _component_series_sem at its call site — pass None to
+        # avoid a double-acquire (SERIAL assembly inside the already-held bound).
+        evaluator = StrategyEvaluator(self._indicators, propagation_meta, component_sem=None)
         closes = list(request.closes)
         component_series = []
-        # Sequential loop (no gather) so the singleton semaphore bounds cross-request total
-        # in-flight compute, not intra-request.
-        # feature 152: benchmark (source_symbol) components are computed on the benchmark's own
-        # bars (fetched server-side over the chart window + warmup) and aligned onto the caller's
-        # request.times; a plain component keeps the caller-supplied closes (no re-fetch).
+        # Sequential loop (no gather) so the singleton semaphore bounds cross-request compute.
+        # Benchmark components compute on the benchmark's own bars, aligned onto request.times.
         eval_dates = (
             [t.ToDatetime(tzinfo=UTC).date() for t in request.times]
             if any(c.source_symbol for c in definition.components)
@@ -3105,11 +3353,23 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         )
         if not rows:
             if await self._opportunities_repo.count_for_user(user_id) == 0:
-                # Cold read: bounded synchronous compute, then serve.
-                await self._materialize_opportunities(user_id, propagation_meta)
-                rows = await self._opportunities_repo.read(
-                    user_id, request.min_conviction, w, include_expired=False
+                # Cold read (never materialized) OR a legitimately-empty universe. Feature 177
+                # FR-3: consult compute-state — a still-fresh empty stamp serves empty without a
+                # synchronous recompute (a background revalidate self-heals an empty→non-empty
+                # transition within ≈ one poll cycle); otherwise compute synchronously.
+                state = (
+                    await self._opportunity_compute_state_repo.get(user_id)
+                    if self._opportunity_compute_state_repo is not None
+                    else None
                 )
+                if state is not None and datetime.now(UTC) < state["valid_until"]:
+                    self._kick_opportunity_recompute(user_id, propagation_meta)
+                    # rows stays [] → falls through to (empty) pagination/enrichment.
+                else:
+                    await self._materialize_opportunities(user_id, propagation_meta)
+                    rows = await self._opportunities_repo.read(
+                        user_id, request.min_conviction, w, include_expired=False
+                    )
             else:
                 # All rows stale: serve stale now, revalidate in the background.
                 self._kick_opportunity_recompute(user_id, propagation_meta)
@@ -3126,8 +3386,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         window = rows[offset : offset + page_size]
         next_token = str(offset + page_size) if offset + page_size < len(rows) else ""
         opps = [_row_to_opportunity(r) for r in window]
-        # feature 095 — read-time live-market enrichment, AFTER ranking + _row_to_opportunity, so
-        # the live quote never enters the conviction/ORDER BY path (FR-8/AC-14 by construction).
+        # Read-time live-market enrichment, AFTER ranking, so the live quote never enters the
+        # conviction/ORDER BY path.
         await self._enrich_opportunities_live(opps, propagation_meta)
         return analysis_pb2.ListOpportunitiesResponse(
             opportunities=opps,
@@ -3146,12 +3406,37 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         if not opps:
             return
         sparkline_bars = max(1, self._cfg.get_int("analysis.opportunity.sparkline_bars", 20))
+        # FR-4: a short success-only memo skips the two live RPCs for a symbol re-enriched within
+        # the window (0 disables the memo → always fetch). Read once per pass (F-07).
+        ttl = self._cfg.get_int_present("analysis.opportunity.live_enrich_ttl_seconds", 10)
         # Dedup the marketdata reads per symbol — several opportunities can share one symbol.
         by_symbol: dict[str, list] = {}
         for opp in opps:
             by_symbol.setdefault(opp.symbol, []).append(opp)
 
+        def _apply_live_fields(targets: list, last_price, prev_close, spark) -> None:
+            for opp in targets:
+                if last_price is not None:
+                    opp.live_price = last_price
+                    if prev_close is not None and prev_close != 0.0:
+                        opp.change_pct = (last_price - prev_close) / prev_close
+                if spark is not None:
+                    del opp.sparkline[:]
+                    for b in spark:
+                        # Finite close → set it; a warm-up/missing bar → unset close (never NaN/0).
+                        pt = analysis_pb2.SparklinePoint()
+                        if b.close == b.close and b.close not in (float("inf"), float("-inf")):
+                            pt.close = b.close
+                        opp.sparkline.append(pt)
+
         async def _enrich_symbol(symbol: str, targets: list) -> None:
+            # FR-4 memo hit: an unexpired success-only entry applies its fields and skips BOTH RPCs.
+            if ttl > 0:
+                cached = self._live_enrich_memo.get(symbol)
+                if cached is not None and time.monotonic() < cached[0]:
+                    m = cached[1]
+                    _apply_live_fields(targets, m["last_price"], m["prev_close"], m["spark"])
+                    return
             last_price = None
             prev_close = None
             spark: list | None = None
@@ -3183,19 +3468,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 spark = list(resp.bars)
             except Exception as e:  # sparkline is best-effort; leave unset on any failure (AC-11)
                 log.warning("_enrich_opportunities_live: GetBars failed for %s: %s", symbol, e)
-            for opp in targets:
-                if last_price is not None:
-                    opp.live_price = last_price
-                    if prev_close is not None and prev_close != 0.0:
-                        opp.change_pct = (last_price - prev_close) / prev_close
-                if spark is not None:
-                    del opp.sparkline[:]
-                    for b in spark:
-                        # Finite close → set it; a warm-up/missing bar → unset close (never NaN/0).
-                        pt = analysis_pb2.SparklinePoint()
-                        if b.close == b.close and b.close not in (float("inf"), float("-inf")):
-                            pt.close = b.close
-                        opp.sparkline.append(pt)
+            # Memoize ONLY a full success (both a live price and a sparkline obtained); a failed or
+            # unavailable fetch is never cached, so it re-fetches within the TTL (AC-11).
+            if ttl > 0 and last_price is not None and spark is not None:
+                self._live_enrich_memo[symbol] = (
+                    time.monotonic() + ttl,
+                    {"last_price": last_price, "prev_close": prev_close, "spark": spark},
+                )
+            _apply_live_fields(targets, last_price, prev_close, spark)
 
         await asyncio.gather(*(_enrich_symbol(sym, targets) for sym, targets in by_symbol.items()))
 
@@ -3209,6 +3489,28 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             self._opportunity_locks[user_id] = lock
         return lock
 
+    async def _replace_and_stamp_compute_state(
+        self, user_id: str, rows, propagation_meta=None
+    ) -> None:
+        """Replace the user's materialized rows, then (feature 177 FR-3) stamp the empty-universe
+        compute-state when the compute yielded nothing. An empty ``replace_for_user`` DELETEs
+        without inserting, so ``count_for_user`` stays 0 and every poll recomputes; the stamp
+        records a short ``valid_until`` window so the empty result is served without a synchronous
+        recompute until it elapses. Stamping is best-effort (mirrors the recompute try/except) — it
+        never fails the write path. ``propagation_meta`` is accepted for call-site symmetry (the
+        DB-only stamp needs no header trio)."""
+        await self._opportunities_repo.replace_for_user(user_id, rows)
+        if not rows and self._opportunity_compute_state_repo is not None:
+            ttl = max(
+                1, self._cfg.get_int_present("analysis.opportunity.empty_recompute_ttl_seconds", 30)
+            )
+            try:
+                await self._opportunity_compute_state_repo.upsert(
+                    user_id, datetime.now(UTC) + timedelta(seconds=ttl)
+                )
+            except Exception as e:  # best-effort — a stamp failure never fails the read/refresh
+                log.warning("empty-universe compute-state stamp failed for user=%s: %s", user_id, e)
+
     async def _materialize_opportunities(self, user_id: str, propagation_meta) -> None:
         """Compute the user's Universe and replace their materialized rows, serialized per user.
         Double-checks under the lock so a second waiter behind a cold read doesn't recompute."""
@@ -3216,7 +3518,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if await self._opportunities_repo.count_for_user(user_id) > 0:
                 return  # another cold reader populated it while we waited
             rows = await self._compute_opportunities(user_id, propagation_meta)
-            await self._opportunities_repo.replace_for_user(user_id, rows)
+            await self._replace_and_stamp_compute_state(user_id, rows, propagation_meta)
 
     def _kick_opportunity_recompute(self, user_id: str, propagation_meta) -> None:
         """Fire-and-forget background recompute (stale-while-revalidate). Guarded so a burst of
@@ -3229,7 +3531,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             try:
                 async with self._opportunity_lock(user_id):
                     rows = await self._compute_opportunities(user_id, propagation_meta)
-                    await self._opportunities_repo.replace_for_user(user_id, rows)
+                    await self._replace_and_stamp_compute_state(user_id, rows, propagation_meta)
             except Exception as e:  # a recompute failure never takes down the loop/read
                 log.warning("opportunity recompute failed for user=%s: %s", user_id, e)
             finally:
@@ -3253,9 +3555,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         a single row whose ``provenance`` lists them all (FR-4/AC-2).
         """
         signals = await self._drain_active_signals(propagation_meta)
-        # feature 022 — one reference instant per compute pass, captured immediately after the
-        # signals await resolves (FR-5): a signal ingested concurrently with the drain could
-        # otherwise carry ingested_at > a now taken earlier, yielding a spurious negative age.
+        # One reference instant per compute pass, captured right after the signals await — else a
+        # concurrently-ingested signal could carry ingested_at > now, yielding a negative age.
         now_utc = datetime.now(UTC)
         half_life = self._cfg.get_float_present(
             "analysis.scoring.signal_decay_half_life_hours", 24.0
@@ -3264,7 +3565,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         total_signal_count = len(signals)
         held_value_by_symbol = await self._drain_held_symbols(user_id, propagation_meta)
         bindings = await self._drain_watchlist_bindings(propagation_meta)
-        # feature 134 — per-source reliability weight scales the signal ranking axis below.
+        # Per-source reliability weight scales the signal ranking axis below.
         source_weights = await self._drain_source_weights(propagation_meta)
 
         # Index the origins by normalized symbol.
@@ -3274,28 +3575,22 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         signals_by_symbol: dict[str, list] = {}
         for sig in signals:
             signals_by_symbol.setdefault(_normalize_symbol(sig.symbol), []).append(sig)
-        held_norm = set(held_value_by_symbol)  # keys already normalized (feature 131)
+        held_norm = set(held_value_by_symbol)  # keys already normalized
 
-        # feature 131 — live-strategy symbol coverage: a held/signal symbol covered by a
-        # live-enabled strategy's universe surfaces that strategy's readiness trace instead of
-        # falling through to unattributed. list_live_enabled is owner-scoped (feature-131 D-1) so
-        # this per-user compute never attributes another user's live strategy to this user's
-        # symbols (the other origins — watchlist/held/signals — are already owner-scoped).
+        # Live-strategy symbol coverage: a held/signal symbol covered by a live strategy surfaces
+        # that strategy's trace. list_live_enabled is owner-scoped (no cross-user attribution).
         live_by_symbol: dict[str, set[str]] = {}
         created_at_by_strategy: dict[str, object] = {}
-        # feature 132: (sym, strat) pairs where sym is on strat's deny list AND within its pre-deny
-        # coverage — these become muted rows below (held+denied keeps its exit; non-held gets a 0/0
-        # placeholder), never conviction=0.
+        # (sym, strat) pairs where sym is deny-listed AND within pre-deny coverage become muted
+        # rows below (held+denied keeps its exit; non-held gets a 0/0 placeholder).
         denied_covered: list[tuple[str, str]] = []
         if self._strategies_repo is not None:
             from app.engine.live_loop import (  # noqa: PLC0415 (avoids import cycle)
                 resolve_universe,
             )
 
-            # feature 132: resolve_universe.union is the strategy's pre-deny coverage (a non-empty
-            # signal_params.symbols allowlist is an explicit override, else watchlist ∪ held ∪
-            # signals-iff-eligible) — the source of "which symbols this live strategy covers", and
-            # already normalized. Supersedes 131's allowlist-only strategy_symbols source.
+            # resolve_universe.union is the strategy's pre-deny coverage (allowlist override, else
+            # watchlist ∪ held ∪ signals-iff-eligible), already normalized.
             wl_set = set(watchlist_by_symbol)
             sig_set = set(signals_by_symbol)
             for row in await self._strategies_repo.list_live_enabled(user_id):
@@ -3307,12 +3602,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 for sym in resolved.denied & resolved.union:
                     denied_covered.append((sym, row["strategy_id"]))
 
-        # feature 131 — per-symbol live-attribution fan-out cap (read once, F-07). Applies ONLY at
-        # candidate-CREATION sites (the held loop's live_new delta and the live-only step below);
-        # tagging an already-existing curated row is uncapped. The exclude-before-slice order is
-        # LOAD-BEARING for the held loop's _capped_live(sym, exclude=watch) composition: excluding
-        # already-tagged watchlist strategies before the [:cap] slice lets the budget go to
-        # genuinely-new live strategies rather than being consumed by ones already attributed.
+        # Per-symbol live-attribution fan-out cap, applied ONLY at candidate-CREATION sites. The
+        # exclude-before-slice order is LOAD-BEARING so the budget goes to genuinely-new strategies.
         max_live_strats = self._cfg.get_int(
             "analysis.opportunity.max_live_strategies_per_symbol", 5
         )
@@ -3338,7 +3629,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     "is_watchlist": False,
                     "is_held": False,
                     "is_live": False,
-                    "muted": False,  # feature 132 — on the strategy's deny list
+                    "muted": False,  # on the strategy's deny list
                     "best_direction": "",
                     "_best_sig_conv": -1.0,
                 }
@@ -3355,15 +3646,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 c = _candidate(sym, strat)
                 c["is_watchlist"] = True
                 _add_provenance(c, "watchlist")
-                # feature 131 — tag (never cap) a watchlist strategy that is also live-covered.
+                # Tag (never cap) a watchlist strategy that is also live-covered.
                 if strat in live_by_symbol.get(sym, set()):
                     c["is_live"] = True
                     _add_provenance(c, "live_strategy")
 
-        # 2. Held positions — attribute to each watchlist strategy for the symbol if any, plus
-        #    live-covered strategies (bounded, feature 131); else an unattributed (symbol, "")
-        #    candidate (no fabricated strategy). Every held symbol still yields ≥1 row — the cap
-        #    governs only the extra live-attribution fan-out, never the base held row.
+        # 2. Held positions — attribute to each watchlist strategy, plus bounded live-covered
+        #    strategies; else an unattributed (symbol, "") row. Every held symbol yields ≥1 row.
         max_live_held = self._cfg.get_int(
             "analysis.opportunity.max_live_held_symbols_per_compute", 20
         )
@@ -3390,10 +3679,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     c["is_live"] = True
                     _add_provenance(c, "live_strategy")
 
-        # 2b. Live-only symbols (feature 131, design step 6) — distinct NON-held symbols carrying
-        #     both an active signal and live coverage get a new live-attributed row, bounded per
-        #     compute. Pre-seeds the (symbol, strategy) row so the signals-merge loop below finds
-        #     it and folds in signal provenance + signal_axis.
+        # 2b. Live-only symbols — distinct NON-held symbols with both an active signal and live
+        #     coverage get a new live-attributed row, bounded per compute. Pre-seeds the row.
         def _new_live_strats(sym: str) -> list[str]:
             # _capped_live with no exclude — exclude-before-slice would breach the per-symbol cap.
             return [s for s in _capped_live(sym) if (sym, s) not in candidates]
@@ -3423,14 +3710,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 _candidate(sym, "")
                 targets = [(sym, "")]
 
-            # feature 022 — decay + feature-134 source weighting computed ONCE per signal, hoisted
-            # above the targets loop into sig_contribs so a symbol bound to multiple watchlist
-            # strategies (len(targets) > 1) does not re-decay/re-log/re-count the same signal.
+            # Decay + source weighting computed ONCE per signal, hoisted above the targets loop so
+            # a symbol bound to multiple strategies does not re-decay/re-count the same signal.
             sig_contribs = []
             for sig in sigs:
                 raw_conviction = sig.conviction
-                # feature 134 — per-source reliability weight (neutral 1.0 for an unknown/unweighted
-                # source, mirroring scoring.compute_signal_score).
+                # Per-source reliability weight (neutral 1.0 for an unknown/unweighted source,
+                # mirroring scoring.compute_signal_score).
                 source_weight = source_weights.get(sig.source, 1.0)
                 if sig.HasField("ingested_at"):
                     ingested_dt = sig.ingested_at.ToDatetime(tzinfo=UTC)
@@ -3443,9 +3729,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     age_clamped = False
                     age_known = False
                     missing_ingested_at_count += 1
-                # Age-derivation branches ONLY on HasField(ingested_at); decay-application branches
-                # ONLY on half_life. Neither gates the other, so all log-referenced names are bound
-                # in every combination (closes the UnboundLocalError on FR-3's disable path).
+                # Age-derivation branches on HasField(ingested_at); decay on half_life. Neither
+                # gates the other, so all log-referenced names are bound in every combination.
                 decay_multiplier = (
                     math.exp(-math.log(2) / half_life * age_hours)
                     if (half_life > 0 and age_known)
@@ -3481,9 +3766,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         if not c["thesis"]:
                             c["thesis"] = sig.headline
 
-        # feature 022 — one aggregated WARNING per compute pass (never one-per-signal: this runs
-        # per-user, so per-signal warnings would scale as active-signals × active-users during an
-        # ingest/analysis deploy-ordering race). Signals missing ingested_at are treated as fresh.
+        # One aggregated WARNING per compute pass (never one-per-signal — it would scale as
+        # signals × users). Signals missing ingested_at are treated as fresh.
         if missing_ingested_at_count > 0:
             log.warning(
                 "%d of %d signals missing ingested_at this compute pass; treated as fresh "
@@ -3492,10 +3776,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 total_signal_count,
             )
 
-        # feature 132 — muted (deny-listed) rows: exactly one row per denied (sym, strat) covered by
-        # the strategy. Held+denied flags the existing exit-traced row (deny is entry-only, exit
-        # still shows); non-held denied gets a 0/0 placeholder. muted is a bool carried by the
-        # "denied" provenance marker (the persistence carrier) — never conviction=0 (fails.md 023).
+        # Muted (deny-listed) rows: one per denied (sym, strat). Held+denied flags its exit-traced
+        # row; non-held gets a 0/0 placeholder. muted rides the "denied" provenance marker.
         for sym, strat in denied_covered:
             c = _candidate(sym, strat)
             if sym in held_norm:
@@ -3504,9 +3786,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             _add_provenance(c, "denied")
             c["muted"] = "denied" in c["provenance"]
 
-        # FR-1: rank watchlist/held/live (curated) ABOVE the max_universe_size cut so a curated
-        # candidate is never truncated; feature 132 adds a muted_only bucket ranked above the
-        # speculative tail too, so a deny-listed row is never dropped for a higher signal.
+        # Rank curated (watchlist/held/live) ABOVE the max_universe_size cut so it is never
+        # truncated; a muted_only bucket ranks above the speculative tail too.
         max_universe = self._cfg.get_int("analysis.opportunity.max_universe_size", 100)
 
         def _sel(c: dict) -> bool:
@@ -3521,95 +3802,129 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         # Readiness + row assembly. Attributed candidates fetch bars once each and trace; the
         # session date (for valid_until) is the newest bar seen across the whole compute.
-        evaluator = StrategyEvaluator(self._indicators, propagation_meta)
+        # Interactive opportunity path: per-component fan-out bounded by the shared component sem.
+        evaluator = StrategyEvaluator(
+            self._indicators, propagation_meta, component_sem=self._component_series_sem
+        )
         range_msg = _recent_range(_READINESS_LOOKBACK_DAYS)
         strategy_defs: dict[str, object] = {}  # strategy_id → StrategyDefinition | None (cache)
-        # feature 141: per-pass symbol-keyed bars dedup — one bars-fetch per unique symbol, not
-        # per (symbol, strategy) candidate. A failed fetch caches [] and is not retried by a later
-        # candidate sharing the symbol this pass (an explicit trade-off, design.md § Chosen
-        # Approach) — every candidate still resolves to a real trace or the 0/0 empty-readiness
-        # fallback, never an unhandled exception.
+        # Per-pass symbol-keyed bars dedup — one fetch per unique symbol. A failed fetch caches []
+        # and is not retried this pass; every candidate still resolves to a trace or 0/0 fallback.
         bars_by_symbol: dict[str, list] = {}
-        # feature 152: benchmark (source_symbol) bars deduped once per compute pass — one VOO
-        # fetch shared across every evaluated symbol/strategy, bounded by _bars_fetch_sem.
+        # Benchmark (source_symbol) bars deduped once per compute pass — one fetch shared across
+        # evaluated symbols/strategies, bounded by _bars_fetch_sem.
         benchmark_bars_cache: dict[str, list] = {}
         session_end_seconds = 0
         window_hours = self._cfg.get_int("analysis.opportunity.valid_window_hours", 24)
 
-        rows: list[dict] = []
-        for c in selected:
-            sym = c["symbol"]
-            strat = c["strategy_id"]
-            readiness = _empty_readiness(sym)
-            exit_fires = False
+        # FR-1/FR-6 (feature 176): three-phase single-flight fan-out. Serial-identical output —
+        # per-candidate eligibility, session_end, dedup and ordering are all preserved; only the
+        # fetch/evaluate scheduling is parallelized. user_id is the caller's (owner-scoping / IDOR
+        # guard, fails.md:1153) and is closed over by every phase — no unscoped read.
 
-            # feature 132: a muted NON-held row is a deny-listed placeholder — skip the bars-fetch/
-            # trace and emit a 0/0 (a held+denied row still traces its exit, since deny is
-            # entry-only).
-            if strat and not (c["muted"] and not c["is_held"]):
-                definition = await self._load_strategy_definition(user_id, strat, strategy_defs)
-                if definition is not None:
-                    if sym in bars_by_symbol:
-                        bars = bars_by_symbol[sym]
+        # Phase 0 — one StrategyDefinition load per unique eligible strategy_id (owner-scoped).
+        # Eligible = attributed AND not a muted-non-held deny placeholder (verbatim serial rule).
+        eligible = [
+            c for c in selected if c["strategy_id"] and not (c["muted"] and not c["is_held"])
+        ]
+        for strat_id in dict.fromkeys(c["strategy_id"] for c in eligible):
+            await self._load_strategy_definition(user_id, strat_id, strategy_defs)
+        defined_eligible = [c for c in eligible if strategy_defs.get(c["strategy_id"]) is not None]
+
+        # Phase 1 — single-flight: fetch each unique defined-eligible symbol + each unique benchmark
+        # once, under _bars_fetch_sem (feature-141 bound). Fetching exactly the serial-eligible set
+        # keeps session_end_seconds identical (an over-fetch would raise it, breaking @AC-14).
+        async def _fetch_into(sym):
+            async with self._bars_fetch_sem:
+                try:
+                    return sym, await self._fetch_bars_paged(sym, range_msg, propagation_meta)
+                except Exception as e:  # bar fetch is best-effort per symbol
+                    log.warning("_compute_opportunities: bars fetch failed for %s: %s", sym, e)
+                    return sym, []
+
+        unique_symbols = list(dict.fromkeys(c["symbol"] for c in defined_eligible))
+        for sym, bars in await asyncio.gather(*[_fetch_into(s) for s in unique_symbols]):
+            bars_by_symbol[sym] = bars
+            if bars:
+                session_end_seconds = max(session_end_seconds, bars[-1].time.seconds)
+
+        async def _fetch_benchmark_into(sym):
+            async with self._bars_fetch_sem:
+                try:
+                    return sym, await self._fetch_bars_paged(sym, range_msg, propagation_meta)
+                except Exception as e:  # noqa: BLE001 — benchmark fetch is best-effort
+                    log.warning("benchmark bars fetch failed for %s: %s", sym, e)
+                    return sym, []
+
+        benchmark_syms = list(
+            dict.fromkeys(
+                ss
+                for sid in dict.fromkeys(c["strategy_id"] for c in defined_eligible)
+                for ss in sorted(
+                    {
+                        comp.source_symbol
+                        for comp in strategy_defs[sid].components
+                        if comp.source_symbol
+                    }
+                )
+            )
+        )
+        for sym, bars in await asyncio.gather(*[_fetch_benchmark_into(s) for s in benchmark_syms]):
+            benchmark_bars_cache[sym] = bars
+
+        # Phase 2 — per-candidate evaluate under _candidates_sem, CACHE-ONLY: Phase 1 warmed both
+        # caches so every _load_benchmark_bars_windowed here is a cache hit (no sem); component RPCs
+        # still fan out bounded by _component_series_sem. No return_exceptions (serial per-candidate
+        # scope); gather keeps `selected` order and dropping None reproduces the serial `continue`.
+        async def _row_for(c):
+            async with self._candidates_sem:
+                sym = c["symbol"]
+                strat = c["strategy_id"]
+                readiness = _empty_readiness(sym)
+                exit_fires = False
+
+                if strat and not (c["muted"] and not c["is_held"]):
+                    definition = strategy_defs.get(strat)
+                    if definition is not None:
+                        bars = bars_by_symbol.get(sym, [])
+                        benchmark_bars = await self._load_benchmark_bars_windowed(
+                            definition,
+                            range_msg,
+                            propagation_meta,
+                            cache=benchmark_bars_cache,
+                            sem=self._bars_fetch_sem,
+                        )
+                        # Held + attributed → exit-rule trace (FR-8); else entry-rule trace.
+                        rule = "exit" if c["is_held"] else "entry"
+                        readiness = await evaluator.evaluate_conditions_traced(
+                            definition, bars, sym, rule=rule, benchmark_bars=benchmark_bars
+                        )
+                        if c["is_held"]:
+                            total = readiness["total_conditions"]
+                            exit_fires = total > 0 and readiness["passing_conditions"] == total
+                        # Persist strategy target/stop from signal_params into readiness JSONB
+                        # (no new column); present → store, absent → nothing (never fabricated).
+                        _sp = json_format.MessageToDict(definition.signal_params)
+                        for _key, _dst in (("target", "target_price"), ("stop", "stop_price")):
+                            _val = _sp.get(_key)
+                            if isinstance(_val, (int, float)) and not isinstance(_val, bool):
+                                readiness[_dst] = float(_val)
+
+                action = _resolve_action_tag(c, exit_fires)
+                if action is None:
+                    if c["muted"]:
+                        # A muted, otherwise-non-actionable row is informational — keep it
+                        # (UNSPECIFIED tag), never drop it. The mute is the signal.
+                        action = analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED
                     else:
-                        async with self._bars_fetch_sem:
-                            try:
-                                bars = await self._fetch_bars_paged(
-                                    sym, range_msg, propagation_meta
-                                )
-                            except Exception as e:  # bar fetch is best-effort per symbol
-                                log.warning(
-                                    "_compute_opportunities: bars fetch failed for %s: %s", sym, e
-                                )
-                                bars = []
-                        bars_by_symbol[sym] = bars
-                    if bars:
-                        newest = bars[-1].time.seconds
-                        session_end_seconds = max(session_end_seconds, newest)
-                    # feature 152: benchmark bars for this definition, deduped once per pass.
-                    benchmark_bars = await self._load_benchmark_bars_windowed(
-                        definition,
-                        range_msg,
-                        propagation_meta,
-                        cache=benchmark_bars_cache,
-                        sem=self._bars_fetch_sem,
-                    )
-                    # Held + attributed → exit-rule trace (FR-8); else entry-rule trace.
-                    rule = "exit" if c["is_held"] else "entry"
-                    readiness = await evaluator.evaluate_conditions_traced(
-                        definition, bars, sym, rule=rule, benchmark_bars=benchmark_bars
-                    )
-                    if c["is_held"]:
-                        total = readiness["total_conditions"]
-                        exit_fires = total > 0 and readiness["passing_conditions"] == total
-                    # feature 095 — persist strategy-derived target/stop from signal_params into the
-                    # readiness JSONB (no new column) so _row_to_opportunity carries them. Present →
-                    # store; absent → store nothing (AC-8, never fabricated). This is compute-time
-                    # and ranking-neutral — only live-market fields are read-time (FR-8/AC-14).
-                    _sp = json_format.MessageToDict(definition.signal_params)
-                    for _key, _dst in (("target", "target_price"), ("stop", "stop_price")):
-                        _val = _sp.get(_key)
-                        if isinstance(_val, (int, float)) and not isinstance(_val, bool):
-                            readiness[_dst] = float(_val)
+                        return None  # speculative sell-with-no-position → not actionable, drop
 
-            action = _resolve_action_tag(c, exit_fires)
-            if action is None:
-                if c["muted"]:
-                    # feature 132: a muted, otherwise-non-actionable row is informational — keep it
-                    # (UNSPECIFIED tag), never drop it. The mute is the signal (fails.md 023).
-                    action = analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED
-                else:
-                    continue  # speculative sell-with-no-position → not actionable, drop
+                # Carry the raw max ExternalSignal.conviction via readiness_json (no column).
+                # _best_sig_conv stays -1.0 with no signal → leave unset, never a fabricated 0.0.
+                if c["_best_sig_conv"] >= 0.0:
+                    readiness["signal_confidence"] = c["_best_sig_conv"]
 
-            # feature 110 — carry the raw max ExternalSignal.conviction (JSONB-ride via
-            # readiness_json, no column). _best_sig_conv stays -1.0 when the symbol had no active
-            # signal → leave unset so Opportunity.signal_confidence is a genuine explicit-presence
-            # unset (P-03), never a fabricated 0.0. Parallel to conviction/signal_axis (post-rank).
-            if c["_best_sig_conv"] >= 0.0:
-                readiness["signal_confidence"] = c["_best_sig_conv"]
-
-            rows.append(
-                {
+                return {
                     "opportunity_key": _opportunity_key(user_id, sym, strat),
                     "symbol": sym,
                     "strategy_id": strat,
@@ -3620,11 +3935,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     "provenance": c["provenance"],
                     "thesis": c["thesis"],
                 }
-            )
 
-        # OR-D: one session date for the whole compute → uniform valid_until. Fall back to now
-        # when no bars were fetched (e.g. an all-unattributed Universe). The holiday/crypto
-        # mixed-calendar residual is accepted (revalidated on next read + the daily pass).
+        rows = [r for r in await asyncio.gather(*[_row_for(c) for c in selected]) if r is not None]
+
+        # One session date for the whole compute → uniform valid_until; fall back to now when no
+        # bars were fetched. The mixed-calendar residual is accepted (revalidated on next read).
         if session_end_seconds > 0:
             session_end = datetime.fromtimestamp(session_end_seconds, tz=UTC)
         else:
@@ -3644,10 +3959,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return cache[strategy_id]
         definition = None
         if self._strategies_repo is not None:
-            # Feature 133: resolve the binding under the computing user's ownership. A watchlist
-            # binding to a legacy strategy_id now owned by a different user resolves to None → the
-            # candidate falls back to unattributed (strategy_id="", 0/0), never cross-attributing
-            # (design decision 10 — an accepted migration-time trade-off).
+            # Resolve the binding under the computing user's ownership; a binding to a strategy_id
+            # owned by another user resolves to None → unattributed, never cross-attributing.
             row = await self._strategies_repo.get_by_owner_and_id(user_id, strategy_id)
             if row is not None and row.get("active") and row.get("live_enabled"):
                 definition = _row_to_strategy_definition(row)
@@ -3719,7 +4032,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             try:
                 async with self._opportunity_lock(uid):
                     rows = await self._compute_opportunities(uid, meta)
-                    await self._opportunities_repo.replace_for_user(uid, rows)
+                    await self._replace_and_stamp_compute_state(uid, rows, meta)
             except Exception as e:  # one bad user never kills the pass
                 log.warning("opportunity daily refresh failed for user=%s: %s", uid, e)
             await asyncio.sleep(0)  # cooperative pacing point
@@ -3752,6 +4065,160 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         await asyncio.sleep(random.uniform(0, max(0, jitter)))
         while True:
             await asyncio.sleep(await self._opportunity_refresh_tick(schedule))
+
+    # ── Readiness materializer (feature 180) ────────────────────────────────────
+
+    def _readiness_materializer_hour(self) -> int:
+        """Wall-clock anchor hour (UTC) for the daily readiness re-warm — a DEDICATED key,
+        decoupled from the opportunity refresh (D-2), so tuning one loop never moves the other.
+        Read presence-aware (`0` = midnight is legitimate)."""
+        return self._cfg.get_int_present("analysis.readiness_materializer.refresh_hour_utc", 0)
+
+    async def _materialize_readiness_for_owner(self, owner: str, live_by_id: dict) -> None:
+        """Warm one owner's watchlist-bound (symbol, strategy) entry-rule readiness rows.
+        Best-effort: a failure here is caught by the caller so one bad owner never halts a cycle."""
+        meta = [("x-user-id", owner)]
+        bindings = await self._drain_watchlist_bindings(meta)
+        # Keep only bindings to THIS owner's live strategies (FR-6). A binding to a non-live/foreign
+        # strategy is skipped, never fabricated (P-03 / fails.md:1153). Group symbols per strategy.
+        by_strategy: dict[str, list[str]] = {}
+        for symbol, strategy_id in bindings:
+            if strategy_id and strategy_id in live_by_id:
+                by_strategy.setdefault(strategy_id, []).append(_normalize_symbol(symbol))
+        if not by_strategy:
+            return
+        now = datetime.now(UTC)
+        valid_window = self._cfg.get_int_present(
+            "analysis.readiness_materializer.valid_window_hours", 24
+        )
+        range_msg = _recent_range(_READINESS_LOOKBACK_DAYS)
+        coverage_range = _recent_range(_READINESS_COVERAGE_PROBE_DAYS)
+        staged_rows: list[dict] = []
+        for strategy_id, symbols in by_strategy.items():
+            row = live_by_id[strategy_id]
+            definition = _row_to_strategy_definition(row)
+            fingerprint = _definition_fingerprint(row["definition_json"])
+            evaluator = StrategyEvaluator(self._indicators, meta, component_sem=None)
+            benchmark_bars = await self._load_benchmark_bars_windowed(definition, range_msg, meta)
+            benchmark_epoch = 0
+            if benchmark_bars:
+                for bench in benchmark_bars.values():
+                    if bench:
+                        benchmark_epoch = max(benchmark_epoch, bench[-1].time.seconds)
+            existing = (
+                await self._readiness_cache_repo.read_many(owner, strategy_id, "entry", symbols)
+                if self._readiness_cache_repo is not None
+                else {}
+            )
+            # Fill the latest-bar epoch memo once, before the per-symbol compute (C-08).
+            latest_bar_epoch: dict[str, int] = {}
+            for symbol in dict.fromkeys(symbols):
+                try:
+                    cov = await self._marketdata.GetDataCoverage(
+                        marketdata_pb2.GetDataCoverageRequest(
+                            symbol=symbol,
+                            timeframe=common_pb2.Timeframe.TIMEFRAME_1DAY,
+                            range=coverage_range,
+                        ),
+                        metadata=meta,
+                    )
+                    latest_bar_epoch[symbol] = cov.latest.seconds
+                except Exception as e:  # best-effort — a coverage miss never falsely busts a row
+                    log.warning(
+                        "readiness materializer: GetDataCoverage failed for %s: %s", symbol, e
+                    )
+                    latest_bar_epoch[symbol] = 0
+            for symbol in symbols:
+                c = existing.get(symbol)
+                if c is not None and is_readiness_row_fresh(
+                    c,
+                    now=now,
+                    fingerprint=fingerprint,
+                    latest_bar_epoch=latest_bar_epoch.get(symbol, 0),
+                ):
+                    continue  # skip-fresh (fails.md:118 steady state)
+                staged_rows.append(
+                    await compute_readiness_row(
+                        symbol,
+                        fetch_bars=self._fetch_bars_paged,
+                        bars_sem=self._readiness_materializer_bars_sem,
+                        evaluator=evaluator,
+                        definition=definition,
+                        range_msg=range_msg,
+                        propagation_meta=meta,
+                        benchmark_bars=benchmark_bars,
+                        rule="entry",
+                        fingerprint=fingerprint,
+                        strategy_id=strategy_id,
+                        user_id=owner,
+                        now=now,
+                        valid_until=readiness_valid_until(now, valid_window_hours=valid_window),
+                        benchmark_epoch=benchmark_epoch,
+                    )
+                )
+        if staged_rows and self._readiness_cache_repo is not None:
+            try:
+                await self._readiness_cache_repo.upsert_many(staged_rows)
+            except Exception as e:  # noqa: BLE001 — cache write is best-effort
+                log.warning("readiness materializer: upsert failed for owner=%s: %s", owner, e)
+
+    async def _readiness_materializer_tick(self, schedule: "DurableSchedule") -> float:
+        """One scheduler iteration for the readiness materializer. Returns the seconds to sleep.
+        When due: kill-switch check, enumerate live strategies, warm each owner's bound pairs, then
+        advance to the next wall-clock hour. Enumeration failure retries soon (mirrors the
+        opportunity loop); a per-owner failure is swallowed so a completed pass advances."""
+        sleep_s = await schedule.next_sleep_seconds()
+        if sleep_s > 0:
+            return sleep_s
+        if not self._cfg.get_bool("analysis.readiness_materializer.enabled", False):
+            # Kill-switch OFF (default): advance to the next wall-clock hour, do nothing.
+            await schedule.advance(seconds_until_hour_utc(self._readiness_materializer_hour()))
+            return 0.0
+        try:
+            live_rows = await self._strategies_repo.list_live_enabled()
+        except Exception as e:
+            log.warning("readiness materializer: live-strategy enumeration failed: %s", e)
+            retry = max(1, self._cfg.get_int_present("analysis.opportunity.retry_seconds", 300))
+            await schedule.advance(retry)
+            return 0.0
+        # Group live strategies by owner → {strategy_id: row} (warm-set = live strategies, FR-6).
+        by_owner: dict[str, dict[str, dict]] = {}
+        for row in live_rows:
+            by_owner.setdefault(row["user_id"], {})[row["strategy_id"]] = row
+        for owner, live_by_id in by_owner.items():
+            try:
+                await self._materialize_readiness_for_owner(owner, live_by_id)
+            except Exception as e:  # one bad owner never kills the cycle (@AC-6)
+                log.warning("readiness materializer failed for owner=%s: %s", owner, e)
+            await asyncio.sleep(0)  # cooperative pacing point
+        await schedule.advance(seconds_until_hour_utc(self._readiness_materializer_hour()))
+        return 0.0
+
+    async def run_readiness_materializer_forever(self):
+        """Feature 180: dedicated daily background loop that pre-warms watchlist-bound readiness
+        rows into ``analysis.readiness_cache`` so the /insights overlay reads cache-only. Wall-clock
+        anchored to the DEDICATED ``analysis.readiness_materializer.refresh_hour_utc`` (decoupled
+        from the opportunity loop, D-2); kill-switch default OFF. Reuses the shared asyncpg pool
+        (F-06) and mirrors ``run_opportunity_refresh_forever``'s durable-schedule scaffolding."""
+        if (
+            self._readiness_cache_repo is None
+            or self._strategies_repo is None
+            or self._db_pool is None
+        ):
+            return
+        schedule = DurableSchedule(
+            self._db_pool,
+            "readiness_materializer",
+            "wallclock",
+            anchor_hour=self._readiness_materializer_hour,
+        )
+        await schedule.seed()
+        # One-shot bounded startup jitter (reuse the opportunity operational knob — not the daily
+        # anchor, which is the dedicated key above).
+        jitter = self._cfg.get_int_present("analysis.opportunity.startup_jitter_seconds", 30)
+        await asyncio.sleep(random.uniform(0, max(0, jitter)))
+        while True:
+            await asyncio.sleep(await self._readiness_materializer_tick(schedule))
 
     async def SetOpportunityAction(self, request, context):
         """Persist a per-user disposition (snooze/dismiss/take) for a queued opportunity
@@ -3881,9 +4348,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         user_id = dict(context.invocation_metadata()).get("x-user-id", "")
         strategy_id = request.strategy_id
 
-        # Feature 133: owner-scoped analytics. When the strategy store is available, a caller may
-        # only read analytics for their OWN strategy — uniform PERMISSION_DENIED otherwise (the
-        # no-DB test path, repo is None, is unaffected).
+        # Owner-scoped analytics: a caller may only read analytics for their OWN strategy — uniform
+        # PERMISSION_DENIED otherwise (the no-DB test path, repo is None, is unaffected).
         if self._strategies_repo is not None:
             owned = (
                 await self._strategies_repo.get_by_owner_and_id(user_id, strategy_id)
@@ -3934,7 +4400,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             except grpc.RpcError as e:
                 log.warning("GetStrategyAnalytics: ListOrders failed: %s", e)
 
-        # Real queue_share + taken reconciliation over the materialized queue (feature 097, FR-7).
+        # Real queue_share + taken reconciliation over the materialized queue.
         queue_share = 0.0
         if self._opportunities_repo is not None:
             try:
@@ -3960,6 +4426,25 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
 
 # ── Opportunity queue / readiness helpers (feature 083) ─────────────────────────
+
+
+def _encode_pair_token(pair: tuple[str, str]) -> str:
+    """Opaque keyset cursor for GetWatchlistReadiness (feature 181): base64 of
+    ``symbol\\x00strategy_id`` — the last-seen pair of the ``(symbol, strategy_id)``-sorted page."""
+    raw = f"{pair[0]}\x00{pair[1]}".encode()
+    return base64.urlsafe_b64encode(raw).decode()
+
+
+def _decode_pair_token(token: str) -> "tuple[str, str] | None":
+    """Decode an ``_encode_pair_token`` cursor back to ``(symbol, strategy_id)``; empty/garbage →
+    ``None`` (first page). Best-effort: a malformed token is treated as the first page."""
+    if not token:
+        return None
+    try:
+        symbol, _, strategy_id = base64.urlsafe_b64decode(token.encode()).decode().partition("\x00")
+        return (symbol, strategy_id)
+    except Exception:
+        return None
 
 
 def _recent_range(lookback_days: int) -> "common_pb2.TimeRange":
@@ -3992,6 +4477,15 @@ def _readiness_to_proto(trace: dict) -> "analysis_pb2.SymbolReadiness":
             for c in trace["conditions"]
         ],
     )
+
+
+def _symbol_readiness_from_json(
+    readiness_json: dict, symbol: str
+) -> "analysis_pb2.SymbolReadiness":
+    """Rebuild a SymbolReadiness proto from a cached readiness_json trace (feature 177 FR-1). Routes
+    through _readiness_to_proto so a FAST-served row is byte-identical to a freshly computed one; an
+    empty ({}) cache row rebuilds the zero-conviction empty readiness."""
+    return _readiness_to_proto(readiness_json if readiness_json else _empty_readiness(symbol))
 
 
 def _action_for(direction: str, held: bool):
@@ -4089,18 +4583,15 @@ def _row_to_opportunity(row: dict) -> "analysis_pb2.Opportunity":
         source=_primary_source(provenance),
         opportunity_key=row["opportunity_key"],
         provenance=provenance,
-        # feature 132 — muted is derived from the "denied" provenance marker (the persistence
-        # carrier; analysis.opportunities has no muted column), so it survives the DB round-trip.
+        # muted is derived from the "denied" provenance marker (analysis.opportunities has no
+        # muted column), so it survives the DB round-trip.
         muted=("denied" in provenance),
     )
     valid_until = row.get("valid_until")
     if valid_until is not None:
         opp.valid_until.FromDatetime(valid_until)
-    # feature 095 — compute-time strategy-derived enrichment, persisted in readiness_json and
-    # carried here so it joins _MAPPED in the OR-F parity guard. conditions = the already-traced
-    # leaves (no recompute, AC-5); an unattributed row has [] (AC-6). target_price/stop_price are
-    # carried ONLY when present (guarded on presence, never a fabricated 0 — AC-8); they stay unset
-    # until the strategy-target-stop-authoring follow-up populates signal_params.{target,stop}.
+    # Compute-time strategy enrichment persisted in readiness_json. conditions = the already-traced
+    # leaves (no recompute); target_price/stop_price carried ONLY when present, never fabricated.
     for cond in readiness.get("conditions") or []:
         opp.conditions.append(
             analysis_pb2.ConditionEval(
@@ -4118,8 +4609,8 @@ def _row_to_opportunity(row: dict) -> "analysis_pb2.Opportunity":
     stop_price = readiness.get("stop_price")
     if stop_price is not None:
         opp.stop_price = float(stop_price)
-    # feature 110 — the raw max ExternalSignal.conviction, carried from readiness_json as
-    # explicit-presence (unset when the symbol had no active signal — never a fabricated 0.0).
+    # The raw max ExternalSignal.conviction, carried from readiness_json as explicit-presence
+    # (unset when the symbol had no active signal — never a fabricated 0.0).
     signal_confidence = readiness.get("signal_confidence")
     if signal_confidence is not None:
         opp.signal_confidence = float(signal_confidence)
@@ -4199,11 +4690,8 @@ def _finalize_symbol_diagnostics(symbol, diags, warmup_bars, trades, daily_equit
     so it cannot carry the value (context.md, sdd-spec session).
     """
     n = len(diags)
-    # feature 071: the two lists must stay 1:1 — `diags[j].equity = daily_equity[j]` below is
-    # positional. The two engine paths build them differently (the legacy loop has two
-    # continue-with-append branches, the evaluator appends unconditionally), which is exactly the
-    # shape of ledger fail 056 "fixed one path, forgot the second". Assert it in the shared pass
-    # so a drift in either path fails loudly instead of silently shifting every equity stamp.
+    # The two lists must stay 1:1 — `diags[j].equity = daily_equity[j]` is positional. The two
+    # engine paths build them differently, so assert it here to fail loudly on any drift.
     assert n == len(daily_equity), (
         f"diags/daily_equity length mismatch for {symbol}: {n} vs {len(daily_equity)} — "
         f"the per-bar equity stamps would be misaligned"
@@ -4345,12 +4833,12 @@ def _row_to_backtest_summary(row: dict) -> "analysis_pb2.BacktestRunSummary":
         status = analysis_pb2.BacktestStatus.Value(row.get("status") or "")
     except ValueError:
         status = analysis_pb2.BACKTEST_STATUS_UNSPECIFIED
-    # feature 150: sizing_mode stored as the enum name; a null/legacy row → UNSPECIFIED.
+    # sizing_mode stored as the enum name; a null/legacy row → UNSPECIFIED.
     try:
         sizing_mode = analysis_pb2.SizingMode.Value(row.get("sizing_mode") or "")
     except ValueError:
         sizing_mode = analysis_pb2.SIZING_MODE_UNSPECIFIED
-    # feature 151: fill_model stored as the enum name; a null/pre-151 row → UNSPECIFIED.
+    # fill_model stored as the enum name; a null/pre-151 row → UNSPECIFIED.
     try:
         fill_model = analysis_pb2.FillModel.Value(row.get("fill_model") or "")
     except ValueError:
@@ -4369,8 +4857,8 @@ def _row_to_backtest_summary(row: dict) -> "analysis_pb2.BacktestRunSummary":
         symbols=list(row.get("symbols") or []),
         overall_score=float(row["overall_score"]) if row.get("overall_score") is not None else 0.0,
         rating=row.get("rating") or "",
-        sizing_mode=sizing_mode,  # feature 150
-        fill_model=fill_model,  # feature 151
+        sizing_mode=sizing_mode,
+        fill_model=fill_model,
     )
     completed = row.get("completed_at")
     if completed is not None:
@@ -4380,7 +4868,7 @@ def _row_to_backtest_summary(row: dict) -> "analysis_pb2.BacktestRunSummary":
     return summary
 
 
-# ── Feature 070: partial strategy update ─────────────────────────────────────
+# ── Partial strategy update ───────────────────────────────────────────────────
 #
 # Top-level StrategyDefinition paths an update_mask may name. Deliberately flat and closed —
 # a mask is an authorization-shaped input and an open path set invites surprises.
@@ -4393,8 +4881,8 @@ _MASKABLE_PATHS = frozenset(
         "signal_params",
         "cooldown_days",
         "exit_cooldown_days",
-        "denied_symbols",  # feature 132 — entry-only deny list (rides definition_json)
-        "signal_eligible",  # feature 132 — gates the platform-wide active-signal universe term
+        "denied_symbols",  # entry-only deny list (rides definition_json)
+        "signal_eligible",  # gates the platform-wide active-signal universe term
     }
 )
 
@@ -4496,7 +4984,7 @@ def _row_to_score(row: dict) -> "analysis_pb2.StrategyScore":
         overall_score=row["overall_score"],
         rating=row["rating"],
         component_scores=row.get("component_scores") or {},
-        # Evidence provenance (feature 065); pre-007 rows lack these keys → defaults.
+        # Evidence provenance; pre-007 rows lack these keys → defaults.
         evidence_symbols=int(row.get("n_symbols") or 0),
         evidence_days=int(row.get("total_trading_days") or 0),
         provisional=bool(row.get("provisional") or False),
@@ -4513,11 +5001,10 @@ def _row_to_strategy_definition(row: dict) -> "analysis_pb2.StrategyDefinition":
     definition.strategy_id = row["strategy_id"]
     definition.display_name = row["display_name"]
     definition.active = row["active"]
-    # live_enabled column added by feature 048 (absent on rows predating that migration).
+    # live_enabled column absent on rows predating that migration.
     definition.live_enabled = bool(row.get("live_enabled", False))
-    # feature 133: the user_id column is authoritative — a migrated row carries its owner only on
-    # the column, not in the embedded definition_json, and the live loop keys its state by this
-    # value (so it must match the cooldown rows hydrated by the same column).
+    # The user_id column is authoritative — a migrated row carries its owner only on the column;
+    # the live loop keys its state by this value (must match the cooldown rows).
     definition.user_id = row.get("user_id", "") or ""
     return definition
 
@@ -4538,8 +5025,7 @@ def _unwrap_value(v):
     return None
 
 
-# _compute_signal_score moved to app.services.scoring.compute_signal_score (feature 060);
-# the module-level alias near the imports preserves the old name for existing callers/tests.
+# The module-level alias near the imports preserves the old _compute_signal_score name for callers.
 
 
 def _compute_metrics(

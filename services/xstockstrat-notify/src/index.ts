@@ -33,9 +33,8 @@ async function main() {
   const caCert = process.env.DATABASE_CA_CERT;
   const pool = new Pool({
     connectionString: dbUrl,
-    // Cap pool size to stay within DigitalOcean's shared 20-connection budget
-    // (see root CLAUDE.md). notify makes light DB use (alert history only), so
-    // it defaults to 1. Override with DB_POOL_MAX.
+    // Cap pool size to stay within DigitalOcean's shared connection budget (root CLAUDE.md);
+    // notify's DB use is light (alert history), so default 1. Override with DB_POOL_MAX.
     max: parseInt(process.env.DB_POOL_MAX ?? '1', 10),
     ssl: sslDisabled ? false : {
       rejectUnauthorized: !!caCert,
@@ -47,7 +46,6 @@ async function main() {
   const webPush = new WebPushDispatcher(pool, configWatcher);
   const notifyImpl = new NotifyServiceImpl(pool, configWatcher, fanout, webPush);
 
-  // ── gRPC server (internal service-to-service, port 50059) ──────────────
   const grpcServer = new grpc.Server();
   grpcServer.addService(createNotifyServiceDefinition(), notifyImpl as unknown as grpc.UntypedServiceImplementation);
 

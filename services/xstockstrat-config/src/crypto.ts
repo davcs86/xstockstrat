@@ -1,20 +1,6 @@
 /**
- * Secret-at-rest encryption for xstockstrat-config (feature 147).
- *
- * Ports the AES-256-GCM scheme used by xstockstrat-trading for broker-account credentials
- * (services/xstockstrat-trading/internal/repository/account_repo.go EncryptCredentials/
- * DecryptCredentials) so config secrets are stored the same way, with the same env-var-hex key
- * custody as BROKER_ACCOUNTS_ENCRYPTION_KEY. Wire layout is byte-compatible with the Go side:
- *
- *   nonce(12) || ciphertext || authTag(16)
- *
- * (Go's gcm.Seal(nonce, nonce, plaintext, nil) prepends the 12-byte nonce and appends the 16-byte
- * GCM tag; Node's cipher produces ciphertext then getAuthTag() separately, so we concatenate.)
- *
- * The master key is CONFIG_SECRETS_ENCRYPTION_KEY — a 64-hex-char (32-byte) string. It is a
- * bootstrap secret delivered as a type: SECRET env var (never itself stored in config). decrypt
- * throws on any GCM authentication failure (wrong key / corrupt bytes) so callers can distinguish a
- * decrypt failure from an unset secret — never returning a partial/garbage plaintext.
+ * Secret-at-rest encryption (AES-256-GCM). Wire layout `nonce(12) || ciphertext || authTag(16)`
+ * must stay byte-compatible with the Go side (xstockstrat-trading's account_repo.go).
  */
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 
@@ -23,11 +9,7 @@ const TAG_BYTES = 16;
 const KEY_BYTES = 32; // AES-256
 const ENV_KEY = 'CONFIG_SECRETS_ENCRYPTION_KEY';
 
-/**
- * Parse and validate the master key from CONFIG_SECRETS_ENCRYPTION_KEY. Throws if the env var is
- * absent or not exactly 32 bytes of hex, so the service never silently encrypts with a zero/short
- * key. Called at boot (index.ts) to fail fast, and per-operation here.
- */
+/** Parse the master key from CONFIG_SECRETS_ENCRYPTION_KEY; throws unless it is 32 bytes of hex. */
 export function loadMasterKey(): Buffer {
   const hex = process.env[ENV_KEY];
   if (!hex) {
