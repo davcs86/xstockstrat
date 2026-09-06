@@ -38,6 +38,7 @@ const (
 	AnalysisService_GetIndicatorSeries_FullMethodName      = "/xstockstrat.analysis.v1.AnalysisService/GetIndicatorSeries"
 	AnalysisService_QueryPnLPatterns_FullMethodName        = "/xstockstrat.analysis.v1.AnalysisService/QueryPnLPatterns"
 	AnalysisService_GetAttribution_FullMethodName          = "/xstockstrat.analysis.v1.AnalysisService/GetAttribution"
+	AnalysisService_GetWatchlistReadiness_FullMethodName   = "/xstockstrat.analysis.v1.AnalysisService/GetWatchlistReadiness"
 )
 
 // AnalysisServiceClient is the client API for AnalysisService service.
@@ -84,6 +85,10 @@ type AnalysisServiceClient interface {
 	// Per-source trading-performance attribution over closed positions (feature 029). Read-only;
 	// aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
 	GetAttribution(ctx context.Context, in *GetAttributionRequest, opts ...grpc.CallOption) (*GetAttributionResponse, error)
+	// Cache-first readiness decoration for a page of a watchlist's bound (symbol, strategy_id)
+	// pairs (feature 181). Owner from x-user-id; RESOLVED rows carry inline SymbolReadiness,
+	// PENDING/UNKNOWN rows resolve on a subsequent poll (the server kicks a background refresh).
+	GetWatchlistReadiness(ctx context.Context, in *GetWatchlistReadinessRequest, opts ...grpc.CallOption) (*GetWatchlistReadinessResponse, error)
 }
 
 type analysisServiceClient struct {
@@ -284,6 +289,16 @@ func (c *analysisServiceClient) GetAttribution(ctx context.Context, in *GetAttri
 	return out, nil
 }
 
+func (c *analysisServiceClient) GetWatchlistReadiness(ctx context.Context, in *GetWatchlistReadinessRequest, opts ...grpc.CallOption) (*GetWatchlistReadinessResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetWatchlistReadinessResponse)
+	err := c.cc.Invoke(ctx, AnalysisService_GetWatchlistReadiness_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AnalysisServiceServer is the server API for AnalysisService service.
 // All implementations should embed UnimplementedAnalysisServiceServer
 // for forward compatibility.
@@ -328,6 +343,10 @@ type AnalysisServiceServer interface {
 	// Per-source trading-performance attribution over closed positions (feature 029). Read-only;
 	// aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
 	GetAttribution(context.Context, *GetAttributionRequest) (*GetAttributionResponse, error)
+	// Cache-first readiness decoration for a page of a watchlist's bound (symbol, strategy_id)
+	// pairs (feature 181). Owner from x-user-id; RESOLVED rows carry inline SymbolReadiness,
+	// PENDING/UNKNOWN rows resolve on a subsequent poll (the server kicks a background refresh).
+	GetWatchlistReadiness(context.Context, *GetWatchlistReadinessRequest) (*GetWatchlistReadinessResponse, error)
 }
 
 // UnimplementedAnalysisServiceServer should be embedded to have
@@ -393,6 +412,9 @@ func (UnimplementedAnalysisServiceServer) QueryPnLPatterns(context.Context, *Que
 }
 func (UnimplementedAnalysisServiceServer) GetAttribution(context.Context, *GetAttributionRequest) (*GetAttributionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetAttribution not implemented")
+}
+func (UnimplementedAnalysisServiceServer) GetWatchlistReadiness(context.Context, *GetWatchlistReadinessRequest) (*GetWatchlistReadinessResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetWatchlistReadiness not implemented")
 }
 func (UnimplementedAnalysisServiceServer) testEmbeddedByValue() {}
 
@@ -756,6 +778,24 @@ func _AnalysisService_GetAttribution_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AnalysisService_GetWatchlistReadiness_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetWatchlistReadinessRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalysisServiceServer).GetWatchlistReadiness(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalysisService_GetWatchlistReadiness_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalysisServiceServer).GetWatchlistReadiness(ctx, req.(*GetWatchlistReadinessRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AnalysisService_ServiceDesc is the grpc.ServiceDesc for AnalysisService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -838,6 +878,10 @@ var AnalysisService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetAttribution",
 			Handler:    _AnalysisService_GetAttribution_Handler,
+		},
+		{
+			MethodName: "GetWatchlistReadiness",
+			Handler:    _AnalysisService_GetWatchlistReadiness_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
