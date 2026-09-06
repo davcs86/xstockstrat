@@ -53,6 +53,9 @@ router.service(AnalysisService, {
   // Opportunity queue + readiness + analytics. All read-only; user comes from the x-user-id header.
   listOpportunities: forward((req, opts) => analysisClient.listOpportunities(req, opts)),
   evaluateReadiness: forward((req, opts) => analysisClient.evaluateReadiness(req, opts)),
+  // Cache-first watchlist readiness decoration (feature 181). Owner from x-user-id; body carries
+  // no user_id. Read-only forward — inherits createDispatch's ConnectError passthrough (fails.md:552).
+  getWatchlistReadiness: forward((req, opts) => analysisClient.getWatchlistReadiness(req, opts)),
   getStrategyAnalytics: forward((req, opts) => analysisClient.getStrategyAnalytics(req, opts)),
   // Per-component indicator series for the Symbol page's overlay panels.
   getIndicatorSeries: forward((req, opts) => analysisClient.getIndicatorSeries(req, opts)),

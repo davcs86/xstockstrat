@@ -79,7 +79,10 @@ async def compute_readiness_row(
         )
     # bar_epoch = newest served bar (evaluated symbol or benchmark) — never a slow-path reuse, so a
     # same-time.seconds intraday 1d bar update never freezes a day-one verdict (feature 177).
-    bar_epoch = max(bars[-1].time.seconds if bars else 0, benchmark_epoch)
+    # bar_epoch = -1 is the data-unavailable sentinel: written ONLY when the primary bars fetch
+    # RAISED (feature 181 R-E) — the sole UNKNOWN discriminant the GetWatchlistReadiness classifier
+    # reads. A successful (even empty) fetch never produces it (stays RESOLVED best-effort).
+    bar_epoch = -1 if not fetch_ok else max(bars[-1].time.seconds if bars else 0, benchmark_epoch)
     return {
         "user_id": user_id,
         "strategy_id": strategy_id,

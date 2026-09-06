@@ -353,6 +353,7 @@ export function WatchlistDetail({
       )}
 
       <WatchlistReadiness
+        watchlistId={watchlist.watchlistId}
         bindings={bindings}
         inQueue={inQueue}
         strategies={allStrategies}

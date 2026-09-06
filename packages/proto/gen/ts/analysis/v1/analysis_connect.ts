@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BacktestResult, EvaluateReadinessRequest, EvaluateReadinessResponse, FundamentalsScanSummary, GetAttributionRequest, GetAttributionResponse, GetBacktestRequest, GetIndicatorSeriesRequest, GetIndicatorSeriesResponse, GetStrategyAnalyticsRequest, GetStrategyReportRequest, GetStrategyRequest, ListBacktestsRequest, ListBacktestsResponse, ListOpportunitiesRequest, ListOpportunitiesResponse, ListStrategiesRequest, ListStrategiesResponse, ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse, ManageStrategyRequest, QueryPnLPatternsRequest, QueryPnLPatternsResponse, RunBacktestRequest, RunFundamentalsScanRequest, ScoreStrategyRequest, ScreenSymbolsRequest, ScreenSymbolsResponse, SetOpportunityActionRequest, SetOpportunityActionResponse, SetStrategyLiveRequest, SetStrategyLiveResponse, StrategyAnalytics, StrategyDefinition, StrategyReport, StrategyScore } from "./analysis_pb.js";
+import { BacktestResult, EvaluateReadinessRequest, EvaluateReadinessResponse, FundamentalsScanSummary, GetAttributionRequest, GetAttributionResponse, GetBacktestRequest, GetIndicatorSeriesRequest, GetIndicatorSeriesResponse, GetStrategyAnalyticsRequest, GetStrategyReportRequest, GetStrategyRequest, GetWatchlistReadinessRequest, GetWatchlistReadinessResponse, ListBacktestsRequest, ListBacktestsResponse, ListOpportunitiesRequest, ListOpportunitiesResponse, ListStrategiesRequest, ListStrategiesResponse, ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse, ManageStrategyRequest, QueryPnLPatternsRequest, QueryPnLPatternsResponse, RunBacktestRequest, RunFundamentalsScanRequest, ScoreStrategyRequest, ScreenSymbolsRequest, ScreenSymbolsResponse, SetOpportunityActionRequest, SetOpportunityActionResponse, SetStrategyLiveRequest, SetStrategyLiveResponse, StrategyAnalytics, StrategyDefinition, StrategyReport, StrategyScore } from "./analysis_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -213,6 +213,19 @@ export const AnalysisService = {
       name: "GetAttribution",
       I: GetAttributionRequest,
       O: GetAttributionResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Cache-first readiness decoration for a page of a watchlist's bound (symbol, strategy_id)
+     * pairs (feature 181). Owner from x-user-id; RESOLVED rows carry inline SymbolReadiness,
+     * PENDING/UNKNOWN rows resolve on a subsequent poll (the server kicks a background refresh).
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.GetWatchlistReadiness
+     */
+    getWatchlistReadiness: {
+      name: "GetWatchlistReadiness",
+      I: GetWatchlistReadinessRequest,
+      O: GetWatchlistReadinessResponse,
       kind: MethodKind.Unary,
     },
   }

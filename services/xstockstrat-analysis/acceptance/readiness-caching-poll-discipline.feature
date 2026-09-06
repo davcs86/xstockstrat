@@ -38,3 +38,22 @@ Feature: readiness-caching-poll-discipline
     When ListOpportunities serves that warm queue on a routine poll
     Then it does not issue the per-symbol GetLatestPrice + GetBars enrichment calls
     And it issues them only when the enriched values are stale
+
+  # feature 181: GetWatchlistReadiness cache-first decoration must obey the same bar_epoch bust the
+  # interactive/materialized paths do — the four-way classifier never serves a bar-busted row as a
+  # stale RESOLVED. (Also promotes the feature-180 FAST/bar_epoch guarantee into this durable suite:
+  # a materialized row is governed by the same bar_epoch-aware freshness gate, recon R3 / design R-A.)
+  @AC-3 @feature-181 @feature-180
+  Scenario: A bar-busted watchlist-readiness row is decorated PENDING, never a stale RESOLVED
+    Given a cached readiness row for a watchlist's (symbol, strategy) pair at bar epoch E
+    When a new daily bar advances the coverage probe to E+1
+    And GetWatchlistReadiness decorates that pair from the cache
+    Then the row is decorated PENDING (not a stale RESOLVED) and a background refresh is kicked
+    And a subsequent poll after the refresh serves the pair RESOLVED at the E+1 bar
+
+  @AC-2 @feature-181
+  Scenario: A data-unavailable readiness row is decorated UNKNOWN, not perpetual PENDING
+    Given a readiness row whose primary bars fetch persistently failed (bar_epoch = -1 sentinel)
+    When GetWatchlistReadiness decorates that pair from the cache
+    Then the row is decorated UNKNOWN rather than looping forever on PENDING
+    And it is re-kicked only after the UNKNOWN recovery cooldown elapses

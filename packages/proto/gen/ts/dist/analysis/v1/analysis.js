@@ -5,8 +5,8 @@
 //   protoc               unknown
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ScreenResult_CriterionRawValuesEntry = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.EquityPoint = exports.PortfolioCapitalSkip = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.FactorType = exports.SnapshotEventType = exports.OpportunityAction = exports.ReadinessRule = exports.ConditionState = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.FillModel = exports.SizingMode = exports.BacktestStatus = exports.protobufPackage = void 0;
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.GetAttributionResponse = exports.SourceAttribution = exports.GetAttributionRequest = exports.QueryPnLPatternsResponse = exports.QueryPnLPatternsRequest = exports.PnLPatternFactor = exports.OrderSnapshot_IndicatorValuesEntry = exports.OrderSnapshot = exports.SignalEntry = exports.IndicatorValue = exports.NamedSeries = exports.ComponentSeries = exports.GetIndicatorSeriesResponse = exports.GetIndicatorSeriesRequest = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = exports.SparklinePoint = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionPassedEntry = void 0;
+exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.EquityPoint = exports.PortfolioCapitalSkip = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.FactorType = exports.SnapshotEventType = exports.OpportunityAction = exports.ReadinessState = exports.ReadinessRule = exports.ConditionState = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.FillModel = exports.SizingMode = exports.BacktestStatus = exports.protobufPackage = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.GetAttributionResponse = exports.SourceAttribution = exports.GetAttributionRequest = exports.QueryPnLPatternsResponse = exports.QueryPnLPatternsRequest = exports.PnLPatternFactor = exports.OrderSnapshot_IndicatorValuesEntry = exports.OrderSnapshot = exports.SignalEntry = exports.IndicatorValue = exports.NamedSeries = exports.ComponentSeries = exports.GetIndicatorSeriesResponse = exports.GetIndicatorSeriesRequest = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.GetWatchlistReadinessResponse = exports.GetWatchlistReadinessRequest = exports.WatchlistReadinessRow = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = exports.SparklinePoint = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionPassedEntry = exports.ScreenResult_CriterionRawValuesEntry = void 0;
 exports.backtestStatusFromJSON = backtestStatusFromJSON;
 exports.backtestStatusToJSON = backtestStatusToJSON;
 exports.backtestStatusToNumber = backtestStatusToNumber;
@@ -46,6 +46,9 @@ exports.conditionStateToNumber = conditionStateToNumber;
 exports.readinessRuleFromJSON = readinessRuleFromJSON;
 exports.readinessRuleToJSON = readinessRuleToJSON;
 exports.readinessRuleToNumber = readinessRuleToNumber;
+exports.readinessStateFromJSON = readinessStateFromJSON;
+exports.readinessStateToJSON = readinessStateToJSON;
+exports.readinessStateToNumber = readinessStateToNumber;
 exports.opportunityActionFromJSON = opportunityActionFromJSON;
 exports.opportunityActionToJSON = opportunityActionToJSON;
 exports.opportunityActionToNumber = opportunityActionToNumber;
@@ -874,6 +877,68 @@ function readinessRuleToNumber(object) {
         case ReadinessRule.READINESS_RULE_EXIT:
             return 2;
         case ReadinessRule.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/** Per-row readiness lifecycle state (feature 181). Closed set → enum (C-04). */
+var ReadinessState;
+(function (ReadinessState) {
+    ReadinessState["READINESS_STATE_UNSPECIFIED"] = "READINESS_STATE_UNSPECIFIED";
+    /** READINESS_STATE_RESOLVED - `readiness` populated; served from the FAST cache path */
+    ReadinessState["READINESS_STATE_RESOLVED"] = "READINESS_STATE_RESOLVED";
+    /** READINESS_STATE_PENDING - not-yet-fresh; a background refresh was kicked; poll again */
+    ReadinessState["READINESS_STATE_PENDING"] = "READINESS_STATE_PENDING";
+    /** READINESS_STATE_UNKNOWN - data-unavailable (bar_epoch < 0 sentinel); best-effort retry */
+    ReadinessState["READINESS_STATE_UNKNOWN"] = "READINESS_STATE_UNKNOWN";
+    ReadinessState["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(ReadinessState || (exports.ReadinessState = ReadinessState = {}));
+function readinessStateFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "READINESS_STATE_UNSPECIFIED":
+            return ReadinessState.READINESS_STATE_UNSPECIFIED;
+        case 1:
+        case "READINESS_STATE_RESOLVED":
+            return ReadinessState.READINESS_STATE_RESOLVED;
+        case 2:
+        case "READINESS_STATE_PENDING":
+            return ReadinessState.READINESS_STATE_PENDING;
+        case 3:
+        case "READINESS_STATE_UNKNOWN":
+            return ReadinessState.READINESS_STATE_UNKNOWN;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return ReadinessState.UNRECOGNIZED;
+    }
+}
+function readinessStateToJSON(object) {
+    switch (object) {
+        case ReadinessState.READINESS_STATE_UNSPECIFIED:
+            return "READINESS_STATE_UNSPECIFIED";
+        case ReadinessState.READINESS_STATE_RESOLVED:
+            return "READINESS_STATE_RESOLVED";
+        case ReadinessState.READINESS_STATE_PENDING:
+            return "READINESS_STATE_PENDING";
+        case ReadinessState.READINESS_STATE_UNKNOWN:
+            return "READINESS_STATE_UNKNOWN";
+        case ReadinessState.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function readinessStateToNumber(object) {
+    switch (object) {
+        case ReadinessState.READINESS_STATE_UNSPECIFIED:
+            return 0;
+        case ReadinessState.READINESS_STATE_RESOLVED:
+            return 1;
+        case ReadinessState.READINESS_STATE_PENDING:
+            return 2;
+        case ReadinessState.READINESS_STATE_UNKNOWN:
+            return 3;
+        case ReadinessState.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -7385,6 +7450,281 @@ exports.EvaluateReadinessResponse = {
         return message;
     },
 };
+function createBaseWatchlistReadinessRow() {
+    return {
+        symbol: "",
+        strategyId: "",
+        state: ReadinessState.READINESS_STATE_UNSPECIFIED,
+        readiness: undefined,
+        computedAt: undefined,
+    };
+}
+exports.WatchlistReadinessRow = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        if (message.strategyId !== "") {
+            writer.uint32(18).string(message.strategyId);
+        }
+        if (message.state !== ReadinessState.READINESS_STATE_UNSPECIFIED) {
+            writer.uint32(24).int32(readinessStateToNumber(message.state));
+        }
+        if (message.readiness !== undefined) {
+            exports.SymbolReadiness.encode(message.readiness, writer.uint32(34).fork()).join();
+        }
+        if (message.computedAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.computedAt), writer.uint32(42).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseWatchlistReadinessRow();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.strategyId = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.state = readinessStateFromJSON(reader.int32());
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.readiness = exports.SymbolReadiness.decode(reader, reader.uint32());
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.computedAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            strategyId: isSet(object.strategyId)
+                ? globalThis.String(object.strategyId)
+                : isSet(object.strategy_id)
+                    ? globalThis.String(object.strategy_id)
+                    : "",
+            state: isSet(object.state) ? readinessStateFromJSON(object.state) : ReadinessState.READINESS_STATE_UNSPECIFIED,
+            readiness: isSet(object.readiness) ? exports.SymbolReadiness.fromJSON(object.readiness) : undefined,
+            computedAt: isSet(object.computedAt)
+                ? fromJsonTimestamp(object.computedAt)
+                : isSet(object.computed_at)
+                    ? fromJsonTimestamp(object.computed_at)
+                    : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.strategyId !== "") {
+            obj.strategyId = message.strategyId;
+        }
+        if (message.state !== ReadinessState.READINESS_STATE_UNSPECIFIED) {
+            obj.state = readinessStateToJSON(message.state);
+        }
+        if (message.readiness !== undefined) {
+            obj.readiness = exports.SymbolReadiness.toJSON(message.readiness);
+        }
+        if (message.computedAt !== undefined) {
+            obj.computedAt = message.computedAt.toISOString();
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.WatchlistReadinessRow.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseWatchlistReadinessRow();
+        message.symbol = object.symbol ?? "";
+        message.strategyId = object.strategyId ?? "";
+        message.state = object.state ?? ReadinessState.READINESS_STATE_UNSPECIFIED;
+        message.readiness = (object.readiness !== undefined && object.readiness !== null)
+            ? exports.SymbolReadiness.fromPartial(object.readiness)
+            : undefined;
+        message.computedAt = object.computedAt ?? undefined;
+        return message;
+    },
+};
+function createBaseGetWatchlistReadinessRequest() {
+    return { watchlistId: "", page: undefined };
+}
+exports.GetWatchlistReadinessRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.watchlistId !== "") {
+            writer.uint32(10).string(message.watchlistId);
+        }
+        if (message.page !== undefined) {
+            common_1.PageRequest.encode(message.page, writer.uint32(18).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetWatchlistReadinessRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.watchlistId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.page = common_1.PageRequest.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            watchlistId: isSet(object.watchlistId)
+                ? globalThis.String(object.watchlistId)
+                : isSet(object.watchlist_id)
+                    ? globalThis.String(object.watchlist_id)
+                    : "",
+            page: isSet(object.page) ? common_1.PageRequest.fromJSON(object.page) : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.watchlistId !== "") {
+            obj.watchlistId = message.watchlistId;
+        }
+        if (message.page !== undefined) {
+            obj.page = common_1.PageRequest.toJSON(message.page);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetWatchlistReadinessRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetWatchlistReadinessRequest();
+        message.watchlistId = object.watchlistId ?? "";
+        message.page = (object.page !== undefined && object.page !== null)
+            ? common_1.PageRequest.fromPartial(object.page)
+            : undefined;
+        return message;
+    },
+};
+function createBaseGetWatchlistReadinessResponse() {
+    return { rows: [], page: undefined };
+}
+exports.GetWatchlistReadinessResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.rows) {
+            exports.WatchlistReadinessRow.encode(v, writer.uint32(10).fork()).join();
+        }
+        if (message.page !== undefined) {
+            common_1.PageResponse.encode(message.page, writer.uint32(18).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetWatchlistReadinessResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.rows.push(exports.WatchlistReadinessRow.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.page = common_1.PageResponse.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            rows: globalThis.Array.isArray(object?.rows)
+                ? object.rows.map((e) => exports.WatchlistReadinessRow.fromJSON(e))
+                : [],
+            page: isSet(object.page) ? common_1.PageResponse.fromJSON(object.page) : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.rows?.length) {
+            obj.rows = message.rows.map((e) => exports.WatchlistReadinessRow.toJSON(e));
+        }
+        if (message.page !== undefined) {
+            obj.page = common_1.PageResponse.toJSON(message.page);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetWatchlistReadinessResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetWatchlistReadinessResponse();
+        message.rows = object.rows?.map((e) => exports.WatchlistReadinessRow.fromPartial(e)) || [];
+        message.page = (object.page !== undefined && object.page !== null)
+            ? common_1.PageResponse.fromPartial(object.page)
+            : undefined;
+        return message;
+    },
+};
 function createBaseSetOpportunityActionRequest() {
     return { opportunityKey: "", action: OpportunityAction.OPPORTUNITY_ACTION_UNSPECIFIED, snoozeUntil: undefined };
 }
@@ -9259,6 +9599,20 @@ exports.AnalysisServiceService = {
         requestDeserialize: (value) => exports.GetAttributionRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.GetAttributionResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.GetAttributionResponse.decode(value),
+    },
+    /**
+     * Cache-first readiness decoration for a page of a watchlist's bound (symbol, strategy_id)
+     * pairs (feature 181). Owner from x-user-id; RESOLVED rows carry inline SymbolReadiness,
+     * PENDING/UNKNOWN rows resolve on a subsequent poll (the server kicks a background refresh).
+     */
+    getWatchlistReadiness: {
+        path: "/xstockstrat.analysis.v1.AnalysisService/GetWatchlistReadiness",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.GetWatchlistReadinessRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.GetWatchlistReadinessRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.GetWatchlistReadinessResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.GetWatchlistReadinessResponse.decode(value),
     },
 };
 exports.AnalysisServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.AnalysisServiceService, "xstockstrat.analysis.v1.AnalysisService");

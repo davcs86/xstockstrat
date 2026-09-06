@@ -11,6 +11,7 @@ ScoreStrategy grades backtests using Sharpe ratio, max drawdown, and win rate.
 """
 
 import asyncio
+import base64
 import hashlib
 import json
 import logging
@@ -256,6 +257,13 @@ _READINESS_LOOKBACK_DAYS = 400
 # always contain the most recent daily bar across weekends/holidays, small enough to bound the
 # server-side MIN/MAX/COUNT scan (we consume only `.latest`).
 _READINESS_COVERAGE_PROBE_DAYS = 10
+# Feature 181: cooldown before an UNKNOWN (bar_epoch < 0 sentinel) watchlist-readiness row is
+# re-kicked, so a persistently data-unavailable pair retries at most once per this window rather
+# than on every poll. A module constant (not a config key) — an internal recovery heuristic.
+_READINESS_UNKNOWN_RETRY_SECONDS = 300
+# Feature 181: default page size for GetWatchlistReadiness when the request omits one (mirrors the
+# UI's 25-row page).
+_DEFAULT_WATCHLIST_READINESS_PAGE_SIZE = 25
 # Backstop for draining paginated QuerySignals / ListPositions in ListOpportunities.
 _MAX_DRAIN_PAGES = 50
 # Default queue page size when the request omits one.
@@ -461,6 +469,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # the set marks users with a background recompute in flight. Single-process protection only.
         self._opportunity_locks: dict[str, asyncio.Lock] = {}
         self._opportunity_recomputing: set[str] = set()
+        # feature 181: in-flight guard for the GetWatchlistReadiness background refresh, keyed
+        # (owner, strategy_id, symbol) — the true unit of work, so disjoint pages proceed
+        # concurrently and two views of one pair collapse to one kick (like the opportunity guard).
+        self._readiness_kicking: set[tuple[str, str, str]] = set()
         # feature 177 FR-4: process-lifetime, success-only per-symbol live-enrichment memo —
         # symbol → (monotonic_expiry, {"last_price", "prev_close", "spark"}). A fetch failure or an
         # unavailable quote is never memoized (AC-11), so a stale price is never served as current.
@@ -2866,6 +2878,226 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             resp.computed_at.FromDatetime(min(served))
         return resp
 
+    async def GetWatchlistReadiness(self, request, context):
+        """Cache-first readiness decoration for a keyset page of a watchlist's bound
+        (symbol, strategy_id) pairs (feature 181). The server derives the pairs from the OWNER'S OWN
+        watchlist over the existing analysis→portfolio edge (anti-IDOR; no reverse cycle),
+        reads the readiness cache ONLY (never a SLOW compute in the RPC body), and classifies each
+        pair four ways — sentinel(bar_epoch<0)→UNKNOWN, fresh→RESOLVED (inline SymbolReadiness),
+        else→PENDING — kicking a best-effort background refresh for the not-fresh pairs. Owner from
+        the x-user-id header; body carries no user_id. Propagates the C-03 header trio."""
+        propagation_meta = [
+            (k, v)
+            for k, v in context.invocation_metadata()
+            if k in ("x-user-id", "x-access-scope", "x-trace-id")
+        ]
+        if self._portfolio is None or self._strategies_repo is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "watchlist/strategy store unavailable")
+            return
+        caller_user_id = self._caller_user_id(context)
+        if not caller_user_id:
+            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "unauthenticated")
+            return
+
+        # Watchlist read over the existing analysis→portfolio stub; portfolio enforces ownership
+        # server-side from the forwarded x-user-id. A portfolio failure is the RPC's own error.
+        try:
+            wl_resp = await self._portfolio.GetWatchlist(
+                portfolio_pb2.GetWatchlistRequest(watchlist_id=request.watchlist_id),
+                metadata=propagation_meta,
+            )
+        except grpc.aio.AioRpcError as e:
+            await context.abort(e.code(), e.details())
+            return
+
+        # Total order over the owner's bound pairs, then keyset slice (drift-proof — ListPositions
+        # precedent, NOT ListOpportunities' offset). Only bound pairs (strategy_id != "").
+        pairs = sorted(
+            {(b.symbol, b.strategy_id) for b in wl_resp.watchlist.bindings if b.strategy_id}
+        )
+        cursor = _decode_pair_token(request.page.page_token)
+        if cursor is not None:
+            pairs = [p for p in pairs if p > cursor]
+        page_size = (
+            request.page.page_size
+            if request.page.page_size > 0
+            else _DEFAULT_WATCHLIST_READINESS_PAGE_SIZE
+        )
+        page_pairs = pairs[:page_size]
+        next_token = _encode_pair_token(page_pairs[-1]) if len(pairs) > page_size else ""
+
+        now = datetime.now(UTC)
+
+        # Probe each distinct page symbol's latest 1d-bar epoch ONCE (bar_epoch-aware freshness),
+        # bounded/best-effort (a miss → 0 never falsely busts). Mirrors EvaluateReadiness's probe.
+        page_symbols = list(dict.fromkeys(sym for sym, _ in page_pairs))
+        latest_bar_epoch: dict[str, int] = {}
+        coverage_range = _recent_range(_READINESS_COVERAGE_PROBE_DAYS)
+        for symbol in page_symbols:
+            try:
+                cov = await self._marketdata.GetDataCoverage(
+                    marketdata_pb2.GetDataCoverageRequest(
+                        symbol=symbol,
+                        timeframe=common_pb2.Timeframe.TIMEFRAME_1DAY,
+                        range=coverage_range,
+                    ),
+                    metadata=propagation_meta,
+                )
+                latest_bar_epoch[symbol] = cov.latest.seconds
+            except Exception as e:  # best-effort — a coverage miss never blocks the read
+                log.warning("GetWatchlistReadiness: GetDataCoverage failed for %s: %s", symbol, e)
+                latest_bar_epoch[symbol] = 0
+
+        # Classify per distinct strategy on the page (cache read only). Group symbols per strategy.
+        by_strategy: dict[str, list[str]] = {}
+        for sym, sid in page_pairs:
+            by_strategy.setdefault(sid, []).append(sym)
+
+        # (symbol, strategy_id) -> (state, SymbolReadiness|None, computed_at)
+        classified: dict[tuple[str, str], tuple[int, object, datetime]] = {}
+        not_fresh: dict[str, list[str]] = {}  # strategy_id -> symbols to refresh
+        for sid, syms in by_strategy.items():
+            srow = await self._strategies_repo.get_by_owner_and_id(caller_user_id, sid)
+            if srow is None:
+                # Binding to a non-owned/missing strategy — cannot evaluate; degrade to UNKNOWN
+                # (best-effort per row, FR-5), never a kick.
+                for sym in syms:
+                    classified[(sym, sid)] = (
+                        analysis_pb2.READINESS_STATE_UNKNOWN,
+                        None,
+                        now,
+                    )
+                continue
+            fingerprint = _definition_fingerprint(srow["definition_json"])
+            cached = (
+                await self._readiness_cache_repo.read_many(caller_user_id, sid, "entry", syms)
+                if self._readiness_cache_repo is not None
+                else {}
+            )
+            for sym in syms:
+                c = cached.get(sym)
+                lbe = latest_bar_epoch.get(sym, 0)
+                if c is not None and c["bar_epoch"] < 0:
+                    # Data-unavailable sentinel → UNKNOWN (checked first). Re-kick only after the
+                    # cooldown so a persistently-down source retries at most once per window.
+                    classified[(sym, sid)] = (
+                        analysis_pb2.READINESS_STATE_UNKNOWN,
+                        None,
+                        c["computed_at"],
+                    )
+                    if now - c["computed_at"] > timedelta(seconds=_READINESS_UNKNOWN_RETRY_SECONDS):
+                        not_fresh.setdefault(sid, []).append(sym)
+                elif c is not None and is_readiness_row_fresh(
+                    c, now=now, fingerprint=fingerprint, latest_bar_epoch=lbe
+                ):
+                    classified[(sym, sid)] = (
+                        analysis_pb2.READINESS_STATE_RESOLVED,
+                        _symbol_readiness_from_json(c["readiness_json"], sym),
+                        c["computed_at"],
+                    )
+                else:
+                    classified[(sym, sid)] = (
+                        analysis_pb2.READINESS_STATE_PENDING,
+                        None,
+                        c["computed_at"] if c is not None else now,
+                    )
+                    not_fresh.setdefault(sid, []).append(sym)
+
+        # Fire the best-effort, guard-set-deduped background refresh for the not-fresh pairs.
+        if not_fresh:
+            self._kick_readiness_refresh(caller_user_id, not_fresh, propagation_meta)
+
+        rows = []
+        for sym, sid in page_pairs:
+            state, readiness, computed_at = classified[(sym, sid)]
+            row_msg = analysis_pb2.WatchlistReadinessRow(symbol=sym, strategy_id=sid, state=state)
+            if readiness is not None:
+                row_msg.readiness.CopyFrom(readiness)
+            if computed_at is not None:
+                row_msg.computed_at.FromDatetime(computed_at)
+            rows.append(row_msg)
+        return analysis_pb2.GetWatchlistReadinessResponse(
+            rows=rows,
+            page=common_pb2.PageResponse(next_page_token=next_token),
+        )
+
+    def _kick_readiness_refresh(self, user_id: str, by_strategy: dict, propagation_meta) -> None:
+        """Fire-and-forget background readiness refresh for GetWatchlistReadiness not-fresh pairs
+        (feature 181). Guard-set deduped per (owner, strategy_id, symbol); bars gated by the
+        materializer's OWN semaphore (never the interactive one — feature-176 priority-inversion
+        guard); stamps the 24h materializer backstop so a warmed page stays RESOLVED across polls.
+        Mirrors _kick_opportunity_recompute; a refresh failure never touches the RPC response."""
+        triples: list[tuple[str, str]] = []
+        for sid, syms in by_strategy.items():
+            for sym in syms:
+                key = (user_id, sid, sym)
+                if key in self._readiness_kicking:
+                    continue
+                self._readiness_kicking.add(key)
+                triples.append((sid, sym))
+        if not triples:
+            return
+
+        async def _run():
+            try:
+                now = datetime.now(UTC)
+                valid_window = self._cfg.get_int_present(
+                    "analysis.readiness_materializer.valid_window_hours", 24
+                )
+                range_msg = _recent_range(_READINESS_LOOKBACK_DAYS)
+                grouped: dict[str, list[str]] = {}
+                for sid, sym in triples:
+                    grouped.setdefault(sid, []).append(sym)
+                staged_all = []
+                for sid, syms in grouped.items():
+                    srow = await self._strategies_repo.get_by_owner_and_id(user_id, sid)
+                    if srow is None:
+                        continue
+                    definition = _row_to_strategy_definition(srow)
+                    fingerprint = _definition_fingerprint(srow["definition_json"])
+                    evaluator = StrategyEvaluator(
+                        self._indicators, propagation_meta, component_sem=self._component_series_sem
+                    )
+                    benchmark_bars = await self._load_benchmark_bars_windowed(
+                        definition, range_msg, propagation_meta
+                    )
+                    bench_epoch = 0
+                    if benchmark_bars:
+                        for bench in benchmark_bars.values():
+                            if bench:
+                                bench_epoch = max(bench_epoch, bench[-1].time.seconds)
+                    for sym in syms:
+                        staged_all.append(
+                            await compute_readiness_row(
+                                sym,
+                                fetch_bars=self._fetch_bars_paged,
+                                bars_sem=self._readiness_materializer_bars_sem,
+                                evaluator=evaluator,
+                                definition=definition,
+                                range_msg=range_msg,
+                                propagation_meta=propagation_meta,
+                                benchmark_bars=benchmark_bars,
+                                rule="entry",
+                                fingerprint=fingerprint,
+                                strategy_id=sid,
+                                user_id=user_id,
+                                now=now,
+                                valid_until=readiness_valid_until(
+                                    now, valid_window_hours=valid_window
+                                ),
+                                benchmark_epoch=bench_epoch,
+                            )
+                        )
+                if staged_all and self._readiness_cache_repo is not None:
+                    await self._readiness_cache_repo.upsert_many(staged_all)
+            except Exception as e:  # a refresh failure never fails the read
+                log.warning("readiness refresh kick failed for user=%s: %s", user_id, e)
+            finally:
+                for sid, sym in triples:
+                    self._readiness_kicking.discard((user_id, sid, sym))
+
+        asyncio.get_event_loop().create_task(_run())
+
     async def QueryPnLPatterns(self, request, context):
         """Ranked P&L-attribution factors (feature 042). Reads the raw pnl_pattern_samples for the
         symbol (optionally narrowed by strategy/time) and buckets at QUERY time (design § 3):
@@ -4194,6 +4426,25 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
 
 # ── Opportunity queue / readiness helpers (feature 083) ─────────────────────────
+
+
+def _encode_pair_token(pair: tuple[str, str]) -> str:
+    """Opaque keyset cursor for GetWatchlistReadiness (feature 181): base64 of
+    ``symbol\\x00strategy_id`` — the last-seen pair of the ``(symbol, strategy_id)``-sorted page."""
+    raw = f"{pair[0]}\x00{pair[1]}".encode()
+    return base64.urlsafe_b64encode(raw).decode()
+
+
+def _decode_pair_token(token: str) -> "tuple[str, str] | None":
+    """Decode an ``_encode_pair_token`` cursor back to ``(symbol, strategy_id)``; empty/garbage →
+    ``None`` (first page). Best-effort: a malformed token is treated as the first page."""
+    if not token:
+        return None
+    try:
+        symbol, _, strategy_id = base64.urlsafe_b64decode(token.encode()).decode().partition("\x00")
+        return (symbol, strategy_id)
+    except Exception:
+        return None
 
 
 def _recent_range(lookback_days: int) -> "common_pb2.TimeRange":

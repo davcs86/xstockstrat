@@ -147,3 +147,10 @@ Feature: Platform-wide guarantees
     When the documented attribute list is inspected
     Then it does NOT list "trading_mode"
     And it still lists "service.name", "deployment.environment", and "platform"
+
+  @AC-5 @FR-4 @feature-181
+  Scenario: Watchlist readiness decoration introduces no analysis-to-portfolio dependency cycle
+    Given xstockstrat-analysis already depends on xstockstrat-portfolio for watchlist reads
+    When readiness decoration is added to the watchlist read path (GetWatchlistReadiness)
+    Then xstockstrat-portfolio declares no AnalysisService client/stub and issues no outbound call to analysis
+    And the root CLAUDE.md Inter-Service Dependencies graph gains no portfolio->analysis edge (stays acyclic)
