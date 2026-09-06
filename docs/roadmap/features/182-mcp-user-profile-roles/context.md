@@ -141,3 +141,14 @@
 - Ran buf-gen.sh in the xstockstrat-codegen Docker image; regenerated Go/Python/TS stubs (12 files) with the 2 new admin RPCs. Confirmed AdminGetUserMetadata/AdminUpdateUserMetadata in identity_pb2_grpc.py; freshness re-run gave empty `git diff` (C-09).
 - Files modified: `packages/proto/gen/{go,python,ts}/identity/v1/*` (+ ts/dist)
 - Deviations: buf-gen via Docker image (host buf absent) — CI-equivalent (Deviation Log).
+
+### Step 3 — service: admin metadata RPCs + shared helpers + mapDbError [done]
+- Extracted `rowToUserMetadata`/`selectUserMetadata`/`buildMetadataSet` + `mapDbError` (module-level); refactored self getUserMetadata/updateUserMetadata onto them (self 8KB leak now maps 23514→INVALID_ARGUMENT); routed createUser catch through mapDbError; added `adminGetUserMetadata` (adminGate, body user_id, no audit) + `adminUpdateUserMetadata` (adminGate, buildMetadataSet, audit `identity.user.metadata_updated`, no values); updated the adminGate doc comment six→eight.
+- TDD (AC-7/AC-8/AC-10): red→green — pre-Step-3 tree 12 failing (new admin tests + mapDbError self-leak), post 64/64 pass; coverage 76% lines (≥40%); `tsc` build + eslint (0 errors) pass. Run via tsc-compile CI-equivalent (Node 22 strip-types skips — see Deviation Log + fails.md).
+- Files modified: `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts`
+- Deviations: identity tests run via tsc-compile (Node-22 strip-types vacuous-skip) — CI-equivalent (Deviation Log); latent repo trap logged to fails.md.
+
+### Step 4 — test: identity admin metadata RPCs + mapDbError + camelCase parity [done]
+- Added feature-182 test block: AC-10 gate denial (both new RPCs, no query), AC-7 (target by request user_id), AC-8 (partial update + metadata_updated_at + audit acting-admin/target, no values, read no-audit), NOT_FOUND, mapDbError 23514→code 3 on self + admin (+ generic→13), empty-update, camelCase-only user_id read, handler-registration smoke.
+- Covers AC-7/AC-8/AC-10; red→green captured with Step 3 (12 red → 0). Existing self tests (feature 130/043) stay green.
+- Files modified: `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts` (note: real path is `src/__tests__/`, not the spec's cited `src/grpc/` — path corrected, deviation).

@@ -168,7 +168,7 @@ new symbols exist: `grep -rn "AdminGetUserMetadata\|AdminUpdateUserMetadata" pac
 
 ### Step 3 — service: implement admin metadata RPCs + extract shared helpers + mapDbError (xstockstrat-identity)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts` — modify
@@ -251,7 +251,7 @@ cd services/xstockstrat-identity && pnpm run lint && pnpm run test:coverage
 
 ### Step 4 — test: identity admin metadata RPCs + mapDbError + camelCase/projection parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/identityServiceImpl.test.ts` — modify
@@ -577,3 +577,19 @@ executable guard already enforces the 40-name set (Step 8, `test_tools_endpoint.
   `buf-gen.sh` (Step 2) run inside the version-pinned `xstockstrat-codegen` Docker image (built from
   `Dockerfile.codegen`). **Disposition**: CI-equivalent fallback (sequential-mode verification
   fallback — matches the `proto-freshness` toolchain).
+- **Step 3/4 (identity) — tests run via tsc-compile, not the specced `pnpm test`.** The sandbox has
+  Node 22 (`.nvmrc`), but the identity `test`/`test:coverage` scripts use
+  `node --experimental-strip-types`, which on Node 22 (a) can't lower TypeScript parameter properties
+  and (b) doesn't resolve the tests' `../grpc/*.js` specifiers to `.ts` — so the suite silently
+  **skips every test** (the file's `before()` try/catch swallows the import error). CI runs Node 24
+  (`.github/workflows/ci.yml` setup-node "24"), where strip-types handles both and the suite executes.
+  CI-equivalent here: `tsc -p` (temp tsconfig incl. tests) → `node --test dist-test/**` + `c8`.
+  Verified real red→green: pre-Step-3 tree = **12 failures** (all new admin-metadata tests + the
+  mapDbError self-leak fix), post-Step-3 = **64/64 pass**, coverage **76% lines** (≥ 40%).
+  `tsc` build also passes (compile-checks the change). **Disposition**: CI-equivalent fallback.
+  (Latent repo condition surfaced, not caused by this feature: identity tests are vacuous under
+  Node 22 strip-types — logged to `fails.md`.)
+- **Step 4 — test file path correction.** Step 4's `**Files**` cited
+  `services/xstockstrat-identity/src/grpc/identityServiceImpl.test.ts`; the real (and only) identity
+  test file is `src/__tests__/identityServiceImpl.test.ts` (per `package.json` `test` glob). Used the
+  real path. **Disposition**: unambiguous path correction — no scope change.

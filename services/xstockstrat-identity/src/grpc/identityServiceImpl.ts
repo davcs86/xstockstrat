@@ -40,6 +40,52 @@ function secondsToDate(seconds: number): Date {
   return new Date(seconds * 1000);
 }
 
+// ── User-metadata helpers (shared by self + admin RPCs) ──────────────────────
+// One row→proto mapper, one SELECT, one SET-builder so the self and admin metadata
+// paths cannot drift (a new column added in one place is added for both).
+const METADATA_COLUMNS = 'user_id, email, phone, display_name, metadata, metadata_updated_at';
+
+// Emits all six keys unconditionally (`?? undefined` shape, never conditional-spread) so a
+// projection-parity test can assert an exact key set against the proto message fields.
+function rowToUserMetadata(r: any) {
+  return {
+    userId: r.user_id,
+    email: r.email,
+    phone: r.phone ?? undefined,
+    displayName: r.display_name ?? undefined,
+    metadata: r.metadata ? JSON.parse(JSON.stringify(r.metadata)) : {},
+    metadataUpdatedAt: r.metadata_updated_at ? new Date(r.metadata_updated_at) : undefined,
+  };
+}
+
+async function selectUserMetadata(pool: Pool, userId: string): Promise<any[]> {
+  const result = await pool.query(
+    `SELECT ${METADATA_COLUMNS} FROM identity.users WHERE user_id = $1`,
+    [userId],
+  );
+  return result.rows;
+}
+
+// Dynamic SET clause from present optional fields (ts-proto camelCase presence). The emptiness
+// check stays in each handler so self and admin behave identically.
+function buildMetadataSet(req: any): { sets: string[]; params: any[] } {
+  const sets: string[] = [];
+  const params: any[] = [];
+  let idx = 1;
+  if (req.phone !== undefined) { sets.push(`phone = $${idx++}`); params.push(req.phone); }
+  if (req.displayName !== undefined) { sets.push(`display_name = $${idx++}`); params.push(req.displayName); }
+  if (req.metadata !== undefined) { sets.push(`metadata = $${idx++}`); params.push(JSON.stringify(req.metadata)); }
+  return { sets, params };
+}
+
+// Map known Postgres SQLSTATEs to gRPC status. 23514 (the users_metadata_size CHECK, migration 006)
+// is a client error, not INTERNAL — shared by createUser + both metadata write paths.
+function mapDbError(err: any): { code: number; message: string } {
+  if (err?.code === '23505') return { code: 6, message: 'user already exists' };
+  if (err?.code === '23514') return { code: 3, message: 'metadata exceeds 8KB limit' };
+  return { code: 13, message: err?.message };
+}
+
 export class IdentityServiceImpl {
   constructor(
     private readonly pool: Pool,
@@ -540,28 +586,14 @@ export class IdentityServiceImpl {
     const userId = userIdFrom(call.metadata);
     if (!userId) return callback({ code: 3, message: 'x-user-id header required' });
     try {
-      const result = await this.pool.query(
-        `SELECT user_id, email, phone, display_name, metadata, metadata_updated_at
-         FROM identity.users WHERE user_id = $1`,
-        [userId]
-      );
-      if (result.rows.length === 0) {
+      const rows = await selectUserMetadata(this.pool, userId);
+      if (rows.length === 0) {
         return callback({ code: 5, message: 'user not found' });
       }
-      const r = result.rows[0];
-      callback(null, {
-        userMetadata: {
-          userId: r.user_id,
-          email: r.email,
-          phone: r.phone ?? undefined,
-          displayName: r.display_name ?? undefined,
-          metadata: r.metadata ? JSON.parse(JSON.stringify(r.metadata)) : {},
-          metadataUpdatedAt: r.metadata_updated_at ? new Date(r.metadata_updated_at) : undefined,
-        },
-      });
+      callback(null, { userMetadata: rowToUserMetadata(rows[0]) });
     } catch (err: any) {
       log.error('getUserMetadata failed', { error: err.message });
-      callback({ code: 13, message: err.message });
+      callback(mapDbError(err));
     }
   }
 
@@ -575,14 +607,7 @@ export class IdentityServiceImpl {
     }
     const userId = userIdFrom(call.metadata);
     if (!userId) return callback({ code: 3, message: 'x-user-id header required' });
-    const { phone, displayName, metadata } = call.request;
-    // Build dynamic SET clause from non-undefined optional fields (ts-proto optional presence)
-    const sets: string[] = [];
-    const params: any[] = [];
-    let idx = 1;
-    if (phone !== undefined) { sets.push(`phone = $${idx++}`); params.push(phone); }
-    if (displayName !== undefined) { sets.push(`display_name = $${idx++}`); params.push(displayName); }
-    if (metadata !== undefined) { sets.push(`metadata = $${idx++}`); params.push(JSON.stringify(metadata)); }
+    const { sets, params } = buildMetadataSet(call.request);
     if (sets.length === 0) {
       return callback({ code: 3, message: 'at least one field required' });
     }
@@ -590,27 +615,72 @@ export class IdentityServiceImpl {
     params.push(userId);
     try {
       const result = await this.pool.query(
-        `UPDATE identity.users SET ${sets.join(', ')} WHERE user_id = $${idx}
-         RETURNING user_id, email, phone, display_name, metadata, metadata_updated_at`,
-        params
+        `UPDATE identity.users SET ${sets.join(', ')} WHERE user_id = $${params.length}
+         RETURNING ${METADATA_COLUMNS}`,
+        params,
       );
       if (result.rows.length === 0) {
         return callback({ code: 5, message: 'user not found' });
       }
-      const r = result.rows[0];
-      callback(null, {
-        userMetadata: {
-          userId: r.user_id,
-          email: r.email,
-          phone: r.phone ?? undefined,
-          displayName: r.display_name ?? undefined,
-          metadata: r.metadata ? JSON.parse(JSON.stringify(r.metadata)) : {},
-          metadataUpdatedAt: r.metadata_updated_at ? new Date(r.metadata_updated_at) : undefined,
-        },
-      });
+      callback(null, { userMetadata: rowToUserMetadata(result.rows[0]) });
     } catch (err: any) {
       log.error('updateUserMetadata failed', { error: err.message });
-      callback({ code: 13, message: err.message });
+      callback(mapDbError(err));
+    }
+  }
+
+  /**
+   * AdminGetUserMetadata — read ANY user's profile metadata (feature 182). Target selected by the
+   * request-body user_id (never x-user-id). ADMIN-gated; no audit on read (like getUser/listUsers).
+   */
+  async adminGetUserMetadata(call: any, callback: any) {
+    if (!this.adminGate(call, callback)) return;
+    const userId = call.request.userId;
+    if (!userId) return callback({ code: 3, message: 'user_id required' });
+    try {
+      const rows = await selectUserMetadata(this.pool, userId);
+      if (rows.length === 0) return callback({ code: 5, message: 'user not found' });
+      callback(null, { userMetadata: rowToUserMetadata(rows[0]) });
+    } catch (err: any) {
+      log.error('adminGetUserMetadata failed', { error: err.message });
+      callback(mapDbError(err));
+    }
+  }
+
+  /**
+   * AdminUpdateUserMetadata — partial-update ANY user's profile metadata (feature 182). Target from
+   * request-body user_id. ADMIN-gated; emits a best-effort ledger audit (acting admin + target,
+   * no metadata values / no secrets).
+   */
+  async adminUpdateUserMetadata(call: any, callback: any) {
+    if (!this.adminGate(call, callback)) return;
+    const userId = call.request.userId;
+    if (!userId) return callback({ code: 3, message: 'user_id required' });
+    const { sets, params } = buildMetadataSet(call.request);
+    if (sets.length === 0) {
+      return callback({ code: 3, message: 'at least one field required' });
+    }
+    sets.push(`metadata_updated_at = NOW()`);
+    params.push(userId);
+    try {
+      const result = await this.pool.query(
+        `UPDATE identity.users SET ${sets.join(', ')} WHERE user_id = $${params.length}
+         RETURNING ${METADATA_COLUMNS}`,
+        params,
+      );
+      if (result.rows.length === 0) return callback({ code: 5, message: 'user not found' });
+      const updatedFields = ['phone', 'displayName', 'metadata'].filter(
+        (k) => call.request[k] !== undefined,
+      );
+      await this.auditSafe('identity.user.metadata_updated', userId, call.metadata, {
+        acting_admin_user_id: userIdFrom(call.metadata),
+        target_user_id: userId,
+        updated_fields: updatedFields,
+      });
+      callback(null, { userMetadata: rowToUserMetadata(result.rows[0]) });
+    } catch (err: any) {
+      log.error('adminUpdateUserMetadata failed', { error: err.message });
+      callback(mapDbError(err));
     }
   }
 
@@ -635,7 +705,7 @@ export class IdentityServiceImpl {
     }
   }
 
-  /** Guard shared by all six admin RPCs: metadata present + ADMIN bit. Returns false + calls back on denial. */
+  /** Guard shared by all eight admin RPCs: metadata present + ADMIN bit. Returns false + calls back on denial. */
   private adminGate(call: any, callback: any): boolean {
     if (!call.metadata?.get) {
       callback({ code: 13, message: 'missing metadata' });
@@ -670,9 +740,9 @@ export class IdentityServiceImpl {
       });
       callback(null, { user: toUserView(row) });
     } catch (err: any) {
-      if (err.code === '23505') return callback({ code: 6, message: 'user already exists' });
-      log.error('createUser failed', { error: err.message });
-      callback({ code: 13, message: err.message });
+      const mapped = mapDbError(err);
+      if (mapped.code === 13) log.error('createUser failed', { error: err.message });
+      callback(mapped);
     }
   }
 
