@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-09-06 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-06 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS; 3 advisory warnings fixed: FR-7 C-17 primitives/a11y + @AC-6, @AC-5 firmed, known-traps reclassified); overlap CLEAN |
+| 2026-09-06 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds) + approved. Chosen: additive cache-first `AnalysisService.GetWatchlistReadiness(watchlist_id, page)` — keyset-paged, probe-gated freshness (full `is_readiness_row_fresh`), background kick for stale, client polls the same RPC. IDOR closed structurally; cycle-free (no portfolio→analysis edge). 2 operator forks resolved: probe-gate (keep @AC-2), poll-new-RPC (kill N+1). |
 
 ---
 
@@ -19,6 +20,8 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon Dossier](recon.md) — grounded codebase map, patterns to reuse, existing business rules, risks
+- [Design](design.md) — debated + approved architecture, rejected alternatives, open risks
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec <slug>`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -47,4 +50,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design watchlist-readiness-list-ux` — recon + design debate (resolve the decoration-owner fork)
+`/sdd-spec watchlist-readiness-list-ux` — turn the approved design into a numbered implementation spec

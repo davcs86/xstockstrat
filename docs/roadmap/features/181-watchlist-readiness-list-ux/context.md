@@ -46,3 +46,39 @@
   (180/177/176 already in main-dev). Surfaced constraint (added to spec): the useQueries rewrite must
   PRESERVE 177's staleTime:30_000 cadence + 180's warm-cache FAST path (WatchlistReadiness.tsx:186-200).
   Conditional 032↔181 analysis.proto overlap (if 181 picks Option A) is rebase-only — recheck at Mode B.
+
+## Session 2026-09-06 — sdd-design (recon + 2-round debate)
+
+- **Phase 0 Recon** written to `recon.md` (codebase map, patterns to reuse, C-16 existing business
+  rules, risks R1-R5, decoration-owner options A/B/C).
+- **Phase 1 grilling — Round 1.** Proposer chose Option A with **client-supplied `(symbol, strategy_id)`
+  pairs**. Adversary NEEDS WORK — decisive **IDOR** (fails.md:1153): a client-supplied `strategy_id`
+  lets a caller request readiness for a non-owned strategy and leak `SymbolReadiness.conditions` rule
+  internals. Recommended Option C or the `watchlist_id` runner-up.
+- **Operator steering (reshaped the design).** Chose the runner-up but decoupled the cycle: the watchlist
+  stock-list RPC **decorates from cache**, fans out a background refresh for not-fresh entries, and
+  returns a **pending** state so clients poll; **payload bounded to cached data**. → IDOR closed
+  structurally by keying on `watchlist_id` (server derives pairs from the owner's own watchlist).
+- **Round 2.** Proposer grounded the cache-first `GetWatchlistReadiness(watchlist_id, page)` design;
+  adversary NEEDS WORK with two decisive objections + conditions:
+  - **Obj 1 (BLOCKER-sev).** `valid_until`-only inline freshness drops the authoritative `bar_epoch`
+    conjunct of `is_readiness_row_fresh` (`readiness.py:16-28`); the `stale_after < 86400` bound caps
+    bar-staleness at one bar but does not eliminate it — a stale `RESOLVED` verdict with no self-heal
+    path (a C-16 @AC-2 regression + product-spec out-of-scope violation).
+  - **Obj 7 (BLOCKER-sev).** Offset paging drifts (skip/dup on concurrent rebind) vs the cited keyset
+    precedent.
+  - Obj 3/4/5/6: two row-list sources (keep `['watchlists']` for management/in-queue/provenance), kick
+    dedupe via guard-set not blocking lock, N+1-kill contingent on the 180 materializer, @AC-6 preserved
+    by the separate query key.
+- **Operator forks resolved at the gate (AskUserQuestion):**
+  1. **Inline freshness = Probe-gate (keep @AC-2)** — gate `RESOLVED` on the full `is_readiness_row_fresh`
+     predicate via one cheap `GetDataCoverage` probe per distinct page symbol (still cache-only compute:
+     no bars fetch, no re-eval). Rejected pure-cache (window-only) — would have needed C-16 CHANGE sign-off.
+  2. **PENDING resolution = Poll the new RPC** — pending rows resolve by re-fetching the page-bounded
+     `GetWatchlistReadiness`, not the old per-strategy `EvaluateReadiness`. Overrides the initial "poll the
+     old endpoint" steering (which re-introduced the N+1 + double-computed with the kick).
+- **All engineering-only conditions settled with safe defaults** (not operator forks): keyset paging;
+  retain `['watchlists']` for the management surface + layer `['watchlistReadiness']` only for the verdict
+  column; guard-set kick dedupe; document the materializer-contingent N+1 win (R-B).
+- `design.md` written; status `spec-ready` → `design-approved`. Open risks R-A..R-D carried to /sdd-spec.
+- Branch: work continues on `claude/watchlist-stock-list-perf-o3qoqb` (PR into main-dev).
