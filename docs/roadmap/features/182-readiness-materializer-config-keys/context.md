@@ -106,3 +106,22 @@
 - [ ] **config-ui visibility needs a config-service reload** — raw INSERT fires no pg_notify; keys show
   only after config-service restart (deploy) or next analysis-namespace SetConfig; note in rollout.
 - Status: spec-ready → design-approved.
+
+## Session 2026-09-06 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 2 warnings, 3 notes across 5 steps (advisory — did not block). No Floor risk.
+  Overlap: CLEAN (027 unique; 4 keys unique — 180 declared no-seed, 182 supersedes; config-service
+  files last touched by 177, already on trunk; no concurrent editor). No merge-order row required.
+- Every code-checkable claim verified against trunk (migration 027 next-free; getters at
+  servicer.py:454/3044/4075/4092/4173; int enforcement at configServiceImpl.ts:379-389 already works;
+  two-operand lookup backward-compatible — stripped 2-segment keys can't collide with 3-segment
+  registry keys).
+- Warnings carried into execution:
+  - Step 2: two-operand registry lookup is a spec-time scope addition beyond design's "migration + 3
+    registry entries" (C-16-adjacent/P-03) — [x] ACCEPTED: user signed off on "all four + bounds" at the
+    design gate; the robust lookup is the mechanically-necessary way to make bounds fire with the
+    full-dotted `key` column (verified correct, minimal, no regression to decay/stale keys). Recorded here.
+  - Step 2: stale inline comment at configServiceImpl.ts:493-494 will contradict the bare-key-first
+    logic (F-09) — [x] RESOLVED in spec: Step 2 body now folds in the :493-494 comment reconciliation.
+- Notes (informational): 019 decay-key latent reader-orphan (out of scope, future triage);
+  C-14 "/config-ui, no UI code change" is a justified reached-no-change, not a stale surface.

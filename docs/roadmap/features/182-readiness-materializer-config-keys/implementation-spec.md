@@ -205,6 +205,11 @@ is still next-free: `ls services/xstockstrat-config/migrations/ | grep -oE '^[0-
    Update the registry's `:96-97` doc comment to record that the lookup tries the bare key first (for a
    full-dotted `key` column, e.g. the readiness_materializer keys) then the `namespace.key` form (for a
    namespace-stripped `key` column, e.g. decay/stale) — ≤2 lines.
+   - **Also reconcile the stale `listKeys` inline comment at `:493-494`** in the SAME step body (F-09 —
+     no mid-execution edit): it currently asserts the DB `key` column is namespace-stripped so a bare
+     `r.key` lookup would miss. Once the bare-key-first operand lands that rationale is contradictory —
+     rewrite it (≤2 lines) to state the two-operand lookup handles both the full-dotted and stripped
+     `key`-column forms. (impl-spec review warning 2.)
    - **Backward-compat:** decay (`key='scoring.signal_decay_half_life_hours'`) → `registry['scoring...']`
      undefined ⇒ falls through to `registry['analysis.scoring...']` (unchanged). No regression.
    - **Alternatives considered (recorded, not chosen):** (A) register the three under double-prefixed
