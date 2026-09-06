@@ -136,3 +136,8 @@
 - Verified via Docker codegen image: `buf lint` OK, `buf breaking` against main-dev non-breaking.
 - Files modified: `packages/proto/identity/v1/identity.proto`
 - Deviations: buf run inside the `xstockstrat-codegen` Docker image (host buf absent) — CI-equivalent; recorded in Deviation Log.
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Ran buf-gen.sh in the xstockstrat-codegen Docker image; regenerated Go/Python/TS stubs (12 files) with the 2 new admin RPCs. Confirmed AdminGetUserMetadata/AdminUpdateUserMetadata in identity_pb2_grpc.py; freshness re-run gave empty `git diff` (C-09).
+- Files modified: `packages/proto/gen/{go,python,ts}/identity/v1/*` (+ ts/dist)
+- Deviations: buf-gen via Docker image (host buf absent) — CI-equivalent (Deviation Log).

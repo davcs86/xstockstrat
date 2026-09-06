@@ -72,6 +72,12 @@ const (
 	// IdentityServiceUpdateUserMetadataProcedure is the fully-qualified name of the IdentityService's
 	// UpdateUserMetadata RPC.
 	IdentityServiceUpdateUserMetadataProcedure = "/xstockstrat.identity.v1.IdentityService/UpdateUserMetadata"
+	// IdentityServiceAdminGetUserMetadataProcedure is the fully-qualified name of the IdentityService's
+	// AdminGetUserMetadata RPC.
+	IdentityServiceAdminGetUserMetadataProcedure = "/xstockstrat.identity.v1.IdentityService/AdminGetUserMetadata"
+	// IdentityServiceAdminUpdateUserMetadataProcedure is the fully-qualified name of the
+	// IdentityService's AdminUpdateUserMetadata RPC.
+	IdentityServiceAdminUpdateUserMetadataProcedure = "/xstockstrat.identity.v1.IdentityService/AdminUpdateUserMetadata"
 	// IdentityServiceCreateUserProcedure is the fully-qualified name of the IdentityService's
 	// CreateUser RPC.
 	IdentityServiceCreateUserProcedure = "/xstockstrat.identity.v1.IdentityService/CreateUser"
@@ -111,6 +117,10 @@ type IdentityServiceClient interface {
 	// User profile metadata self-management (feature 130)
 	GetUserMetadata(context.Context, *connect.Request[v1.GetUserMetadataRequest]) (*connect.Response[v1.GetUserMetadataResponse], error)
 	UpdateUserMetadata(context.Context, *connect.Request[v1.UpdateUserMetadataRequest]) (*connect.Response[v1.UpdateUserMetadataResponse], error)
+	// Admin cross-user profile metadata (admin-gated, feature 182). Target selected by request
+	// body user_id, never x-user-id (C-03). Reuse the self responses.
+	AdminGetUserMetadata(context.Context, *connect.Request[v1.AdminGetUserMetadataRequest]) (*connect.Response[v1.GetUserMetadataResponse], error)
+	AdminUpdateUserMetadata(context.Context, *connect.Request[v1.AdminUpdateUserMetadataRequest]) (*connect.Response[v1.UpdateUserMetadataResponse], error)
 	// User management (admin-gated, feature 043). Every RPC requires the admin access-scope bit;
 	// passwords are write-only (never returned). Additive over the existing service.
 	CreateUser(context.Context, *connect.Request[v1.CreateUserRequest]) (*connect.Response[v1.CreateUserResponse], error)
@@ -210,6 +220,18 @@ func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(identityServiceMethods.ByName("UpdateUserMetadata")),
 			connect.WithClientOptions(opts...),
 		),
+		adminGetUserMetadata: connect.NewClient[v1.AdminGetUserMetadataRequest, v1.GetUserMetadataResponse](
+			httpClient,
+			baseURL+IdentityServiceAdminGetUserMetadataProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("AdminGetUserMetadata")),
+			connect.WithClientOptions(opts...),
+		),
+		adminUpdateUserMetadata: connect.NewClient[v1.AdminUpdateUserMetadataRequest, v1.UpdateUserMetadataResponse](
+			httpClient,
+			baseURL+IdentityServiceAdminUpdateUserMetadataProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("AdminUpdateUserMetadata")),
+			connect.WithClientOptions(opts...),
+		),
 		createUser: connect.NewClient[v1.CreateUserRequest, v1.CreateUserResponse](
 			httpClient,
 			baseURL+IdentityServiceCreateUserProcedure,
@@ -251,25 +273,27 @@ func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 
 // identityServiceClient implements IdentityServiceClient.
 type identityServiceClient struct {
-	authenticateUser    *connect.Client[v1.AuthenticateUserRequest, v1.AuthTokenResponse]
-	validateToken       *connect.Client[v1.ValidateTokenRequest, v1.TokenClaims]
-	refreshToken        *connect.Client[v1.RefreshTokenRequest, v1.AuthTokenResponse]
-	revokeToken         *connect.Client[v1.RevokeTokenRequest, v1.RevokeTokenResponse]
-	registerOAuthClient *connect.Client[v1.RegisterOAuthClientRequest, v1.OAuthClient]
-	getOAuthClient      *connect.Client[v1.GetOAuthClientRequest, v1.OAuthClient]
-	issueAuthCode       *connect.Client[v1.IssueAuthCodeRequest, v1.IssueAuthCodeResponse]
-	exchangeAuthCode    *connect.Client[v1.ExchangeAuthCodeRequest, v1.OAuthTokenResponse]
-	refreshOAuthToken   *connect.Client[v1.RefreshOAuthTokenRequest, v1.OAuthTokenResponse]
-	listAuthorizedApps  *connect.Client[v1.ListAuthorizedAppsRequest, v1.ListAuthorizedAppsResponse]
-	revokeAuthorizedApp *connect.Client[v1.RevokeAuthorizedAppRequest, v1.RevokeAuthorizedAppResponse]
-	getUserMetadata     *connect.Client[v1.GetUserMetadataRequest, v1.GetUserMetadataResponse]
-	updateUserMetadata  *connect.Client[v1.UpdateUserMetadataRequest, v1.UpdateUserMetadataResponse]
-	createUser          *connect.Client[v1.CreateUserRequest, v1.CreateUserResponse]
-	listUsers           *connect.Client[v1.ListUsersRequest, v1.ListUsersResponse]
-	getUser             *connect.Client[v1.GetUserRequest, v1.GetUserResponse]
-	updatePassword      *connect.Client[v1.UpdatePasswordRequest, v1.UpdatePasswordResponse]
-	setUserRoles        *connect.Client[v1.SetUserRolesRequest, v1.SetUserRolesResponse]
-	setUserActive       *connect.Client[v1.SetUserActiveRequest, v1.SetUserActiveResponse]
+	authenticateUser        *connect.Client[v1.AuthenticateUserRequest, v1.AuthTokenResponse]
+	validateToken           *connect.Client[v1.ValidateTokenRequest, v1.TokenClaims]
+	refreshToken            *connect.Client[v1.RefreshTokenRequest, v1.AuthTokenResponse]
+	revokeToken             *connect.Client[v1.RevokeTokenRequest, v1.RevokeTokenResponse]
+	registerOAuthClient     *connect.Client[v1.RegisterOAuthClientRequest, v1.OAuthClient]
+	getOAuthClient          *connect.Client[v1.GetOAuthClientRequest, v1.OAuthClient]
+	issueAuthCode           *connect.Client[v1.IssueAuthCodeRequest, v1.IssueAuthCodeResponse]
+	exchangeAuthCode        *connect.Client[v1.ExchangeAuthCodeRequest, v1.OAuthTokenResponse]
+	refreshOAuthToken       *connect.Client[v1.RefreshOAuthTokenRequest, v1.OAuthTokenResponse]
+	listAuthorizedApps      *connect.Client[v1.ListAuthorizedAppsRequest, v1.ListAuthorizedAppsResponse]
+	revokeAuthorizedApp     *connect.Client[v1.RevokeAuthorizedAppRequest, v1.RevokeAuthorizedAppResponse]
+	getUserMetadata         *connect.Client[v1.GetUserMetadataRequest, v1.GetUserMetadataResponse]
+	updateUserMetadata      *connect.Client[v1.UpdateUserMetadataRequest, v1.UpdateUserMetadataResponse]
+	adminGetUserMetadata    *connect.Client[v1.AdminGetUserMetadataRequest, v1.GetUserMetadataResponse]
+	adminUpdateUserMetadata *connect.Client[v1.AdminUpdateUserMetadataRequest, v1.UpdateUserMetadataResponse]
+	createUser              *connect.Client[v1.CreateUserRequest, v1.CreateUserResponse]
+	listUsers               *connect.Client[v1.ListUsersRequest, v1.ListUsersResponse]
+	getUser                 *connect.Client[v1.GetUserRequest, v1.GetUserResponse]
+	updatePassword          *connect.Client[v1.UpdatePasswordRequest, v1.UpdatePasswordResponse]
+	setUserRoles            *connect.Client[v1.SetUserRolesRequest, v1.SetUserRolesResponse]
+	setUserActive           *connect.Client[v1.SetUserActiveRequest, v1.SetUserActiveResponse]
 }
 
 // AuthenticateUser calls xstockstrat.identity.v1.IdentityService.AuthenticateUser.
@@ -337,6 +361,16 @@ func (c *identityServiceClient) UpdateUserMetadata(ctx context.Context, req *con
 	return c.updateUserMetadata.CallUnary(ctx, req)
 }
 
+// AdminGetUserMetadata calls xstockstrat.identity.v1.IdentityService.AdminGetUserMetadata.
+func (c *identityServiceClient) AdminGetUserMetadata(ctx context.Context, req *connect.Request[v1.AdminGetUserMetadataRequest]) (*connect.Response[v1.GetUserMetadataResponse], error) {
+	return c.adminGetUserMetadata.CallUnary(ctx, req)
+}
+
+// AdminUpdateUserMetadata calls xstockstrat.identity.v1.IdentityService.AdminUpdateUserMetadata.
+func (c *identityServiceClient) AdminUpdateUserMetadata(ctx context.Context, req *connect.Request[v1.AdminUpdateUserMetadataRequest]) (*connect.Response[v1.UpdateUserMetadataResponse], error) {
+	return c.adminUpdateUserMetadata.CallUnary(ctx, req)
+}
+
 // CreateUser calls xstockstrat.identity.v1.IdentityService.CreateUser.
 func (c *identityServiceClient) CreateUser(ctx context.Context, req *connect.Request[v1.CreateUserRequest]) (*connect.Response[v1.CreateUserResponse], error) {
 	return c.createUser.CallUnary(ctx, req)
@@ -388,6 +422,10 @@ type IdentityServiceHandler interface {
 	// User profile metadata self-management (feature 130)
 	GetUserMetadata(context.Context, *connect.Request[v1.GetUserMetadataRequest]) (*connect.Response[v1.GetUserMetadataResponse], error)
 	UpdateUserMetadata(context.Context, *connect.Request[v1.UpdateUserMetadataRequest]) (*connect.Response[v1.UpdateUserMetadataResponse], error)
+	// Admin cross-user profile metadata (admin-gated, feature 182). Target selected by request
+	// body user_id, never x-user-id (C-03). Reuse the self responses.
+	AdminGetUserMetadata(context.Context, *connect.Request[v1.AdminGetUserMetadataRequest]) (*connect.Response[v1.GetUserMetadataResponse], error)
+	AdminUpdateUserMetadata(context.Context, *connect.Request[v1.AdminUpdateUserMetadataRequest]) (*connect.Response[v1.UpdateUserMetadataResponse], error)
 	// User management (admin-gated, feature 043). Every RPC requires the admin access-scope bit;
 	// passwords are write-only (never returned). Additive over the existing service.
 	CreateUser(context.Context, *connect.Request[v1.CreateUserRequest]) (*connect.Response[v1.CreateUserResponse], error)
@@ -483,6 +521,18 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 		connect.WithSchema(identityServiceMethods.ByName("UpdateUserMetadata")),
 		connect.WithHandlerOptions(opts...),
 	)
+	identityServiceAdminGetUserMetadataHandler := connect.NewUnaryHandler(
+		IdentityServiceAdminGetUserMetadataProcedure,
+		svc.AdminGetUserMetadata,
+		connect.WithSchema(identityServiceMethods.ByName("AdminGetUserMetadata")),
+		connect.WithHandlerOptions(opts...),
+	)
+	identityServiceAdminUpdateUserMetadataHandler := connect.NewUnaryHandler(
+		IdentityServiceAdminUpdateUserMetadataProcedure,
+		svc.AdminUpdateUserMetadata,
+		connect.WithSchema(identityServiceMethods.ByName("AdminUpdateUserMetadata")),
+		connect.WithHandlerOptions(opts...),
+	)
 	identityServiceCreateUserHandler := connect.NewUnaryHandler(
 		IdentityServiceCreateUserProcedure,
 		svc.CreateUser,
@@ -547,6 +597,10 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 			identityServiceGetUserMetadataHandler.ServeHTTP(w, r)
 		case IdentityServiceUpdateUserMetadataProcedure:
 			identityServiceUpdateUserMetadataHandler.ServeHTTP(w, r)
+		case IdentityServiceAdminGetUserMetadataProcedure:
+			identityServiceAdminGetUserMetadataHandler.ServeHTTP(w, r)
+		case IdentityServiceAdminUpdateUserMetadataProcedure:
+			identityServiceAdminUpdateUserMetadataHandler.ServeHTTP(w, r)
 		case IdentityServiceCreateUserProcedure:
 			identityServiceCreateUserHandler.ServeHTTP(w, r)
 		case IdentityServiceListUsersProcedure:
@@ -618,6 +672,14 @@ func (UnimplementedIdentityServiceHandler) GetUserMetadata(context.Context, *con
 
 func (UnimplementedIdentityServiceHandler) UpdateUserMetadata(context.Context, *connect.Request[v1.UpdateUserMetadataRequest]) (*connect.Response[v1.UpdateUserMetadataResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.UpdateUserMetadata is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) AdminGetUserMetadata(context.Context, *connect.Request[v1.AdminGetUserMetadataRequest]) (*connect.Response[v1.GetUserMetadataResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.AdminGetUserMetadata is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) AdminUpdateUserMetadata(context.Context, *connect.Request[v1.AdminUpdateUserMetadataRequest]) (*connect.Response[v1.UpdateUserMetadataResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.AdminUpdateUserMetadata is not implemented"))
 }
 
 func (UnimplementedIdentityServiceHandler) CreateUser(context.Context, *connect.Request[v1.CreateUserRequest]) (*connect.Response[v1.CreateUserResponse], error) {

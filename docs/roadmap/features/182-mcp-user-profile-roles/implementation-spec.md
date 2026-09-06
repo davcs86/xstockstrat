@@ -121,7 +121,7 @@ Both green (additions are non-breaking). If the feature branch does not yet exis
 
 ### Step 2 — proto-gen: regenerate stubs for the new identity RPCs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files** (regenerated wholesale by `./scripts/buf-gen.sh` — never hand-edited; the exact set below is
 the current `identity/v1` output, re-emitted with the two new RPCs/messages):
