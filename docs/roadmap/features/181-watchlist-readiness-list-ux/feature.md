@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-06 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-09-06 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS; 3 advisory warnings fixed: FR-7 C-17 primitives/a11y + @AC-6, @AC-5 firmed, known-traps reclassified); overlap CLEAN |
 
 ---
 
@@ -46,4 +47,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review watchlist-readiness-list-ux product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design watchlist-readiness-list-ux` — recon + design debate (resolve the decoration-owner fork)

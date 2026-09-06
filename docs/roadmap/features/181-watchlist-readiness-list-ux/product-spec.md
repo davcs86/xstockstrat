@@ -45,6 +45,13 @@ FR-6. With feature 180's materializer enabled, decoration for **covered, warm** 
 the FAST cache path (no re-fetch/re-eval); only cold/uncovered pairs on the visible page pay the SLOW
 path — so pagination + the warm cache together bound worst-case load.
 
+FR-7. The new per-row readiness states (loading / resolved / `unknown`-error) and the pagination
+control use the platform's **canonical C-17 UI state primitives** (per
+`docs/patterns/ui-ux-governance.md` — the shared skeleton/loading, query-state, and empty/error
+primitives, and the shared table/list primitive — not ad-hoc spinners) and meet the C-17
+**accessibility baseline**: the loading state is announced to assistive technology (`aria-busy` /
+`role="status"`), and the pagination control is keyboard-operable and has an accessible label.
+
 ## Out of Scope
 
 - The backend readiness materializer / cache itself (feature 180 — already shipped).
@@ -117,6 +124,9 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
+_Genuine design forks — deliberately deferred to `/sdd-design` (C-11 / P-03: surfaced, not
+guessed). The `FR-1..7` requirements are testable independent of which option is chosen._
+
 - [ ] **Decoration owner (the core design fork — FR-4).** Analysis-side batch/paginated RPC (Option A)
   vs. an optional field on an existing response (Option B) vs. BFF-only aggregation (Option C)? The
   cycle constraint (analysis→portfolio already exists) rules out portfolio calling analysis. Weigh:
@@ -127,11 +137,18 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 - [ ] **Pagination model.** Page size default + control (offset/token). `ListWatchlists` already
   paginates *watchlists*; here we paginate the **bound-pair rows** within the selected watchlist —
   confirm where the page boundary is drawn.
-- [ ] **Known trap — every new BFF gRPC call needs an e2e mock** (fails.md:1281, 1317): proto3 JSON
-  flattened-oneof shape + a mock-map entry, or CI e2e goes red though local passes.
-- [ ] **Known trap — second BFF call site** (fails.md:1138): if an RPC signature changes, update
-  *every* BFF (`insightsBff.ts` and any other), not just the obvious one.
-- [ ] **Known trap — BFF error passthrough** (fails.md:552): a new BFF `dispatch*` path must not
-  collapse backend errors into generic HTTP 400.
-- [ ] **Known trap — proto field → agent parity** (fails.md:1151): Option B on an agent-projected
-  message breaks `test_*_projection.py` unless the agent projection is updated in the same PR.
+
+## Known Traps & Constraints (design/spec must honor — not open questions)
+
+- **Preserve 177 + 180 behavior when rewriting the fan-out.** The `useQueries` block this feature
+  rewrites (`WatchlistReadiness.tsx:186-200`) already carries feature 177's `staleTime: 30_000`
+  cadence and relies on feature 180's warm-cache FAST path (FR-6). The rewrite must preserve both —
+  do not regress the 30s client cadence or the FAST-path serving of warm pairs (overlap scan, C-16).
+- **Every new BFF gRPC call needs an e2e mock** (fails.md:1281, 1317): proto3 JSON flattened-oneof
+  shape + a mock-map entry, or CI e2e goes red though local passes.
+- **Second BFF call site** (fails.md:1138): if an RPC signature changes, update *every* BFF
+  (`insightsBff.ts` and any other), not just the obvious one.
+- **BFF error passthrough** (fails.md:552): a new BFF `dispatch*` path must not collapse backend
+  errors into a generic HTTP 400.
+- **Proto field → agent parity** (fails.md:1151): Option B on an agent-projected message breaks
+  `test_*_projection.py` unless the agent projection is updated in the same PR.

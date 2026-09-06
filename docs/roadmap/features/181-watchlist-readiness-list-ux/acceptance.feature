@@ -40,5 +40,13 @@ Feature: watchlist-readiness-list-ux
   Scenario: The decoration introduces no analysis-to-portfolio dependency cycle
     Given analysis already depends on portfolio for watchlist reads
     When readiness decoration is added to the list read path
-    Then portfolio does not make an outbound call to analysis
-    And the chosen decoration owner (analysis RPC or the ui BFF) keeps the dependency graph acyclic
+    Then the xstockstrat-portfolio service declares no AnalysisService client/stub and issues no outbound call to analysis
+    And the root CLAUDE.md Inter-Service Dependencies graph gains no portfolio->analysis edge (stays acyclic)
+
+  @AC-6 @FR-7
+  Scenario: New readiness states use the canonical C-17 primitives and are accessible
+    Given the watchlist page renders rows whose readiness is still pending
+    When a row is in the loading state and later resolves
+    Then the loading state is rendered via the shared C-17 skeleton/query-state primitive, not an ad-hoc spinner
+    And the loading state is announced to assistive technology (aria-busy or role="status")
+    And the pagination control is keyboard-operable and has an accessible label

@@ -28,3 +28,21 @@
 - Branch note: PR #1102 (feature 180) merged; per the merged-PR rule the designated branch
   `claude/watchlist-stock-list-perf-o3qoqb` was restarted from the updated `main-dev` (180 present)
   before filing this feature.
+
+## Session 2026-09-06 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Criteria: PASS WITH WARNINGS (spec-reviewer), no blockers, no Floor breach. All cited UI files
+  exist; /insights/watchlists confirmed in PLATFORM_SUBNAV (existing page, no nav debt).
+- 3 advisory warnings — ALL FIXED this session before moving on:
+  1. C-17 (new loading/error states + pagination not bound to canonical primitives) → added FR-7 +
+     @AC-6 requiring the shared C-17 skeleton/query-state/empty primitives + a11y baseline
+     (aria-busy/role=status, keyboard-operable labeled pagination).
+  2. @AC-5 Then was an architectural invariant → firmed to concrete checkable assertions (portfolio
+     declares no AnalysisService client/stub; root CLAUDE.md dep graph gains no portfolio→analysis edge).
+  3. Open Questions mixed genuine design forks with "known traps" → reclassified: 3 forks stay as
+     /sdd-design inputs; the 4 BFF/proto traps moved to a "Known Traps & Constraints" section.
+- Overlap: CLEAN — no shared config key / proto field / migration NNN; no merge-order row needed
+  (180/177/176 already in main-dev). Surfaced constraint (added to spec): the useQueries rewrite must
+  PRESERVE 177's staleTime:30_000 cadence + 180's warm-cache FAST path (WatchlistReadiness.tsx:186-200).
+  Conditional 032↔181 analysis.proto overlap (if 181 picks Option A) is rebase-only — recheck at Mode B.
