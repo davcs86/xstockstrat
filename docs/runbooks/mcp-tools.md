@@ -1,6 +1,6 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the thirty-five tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the forty tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 ---
@@ -34,7 +34,7 @@ directly on port 9000.
 
 **Direct (local):** `http://localhost:9000`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same thirty-five tools' `name`,
+**Tool catalog (UI display).** `GET /api/tools` returns the same forty tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
 capabilities (the same data documented below), never user data or credentials. It powers the
 `xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
@@ -945,7 +945,10 @@ Returns `{version, updated_at}` — **never the value**.
 calling user's derived `x-access-scope`, so `xstockstrat-config` rejects a non-admin caller with
 `PERMISSION_DENIED` ("admin scope required"). Since feature 092 this is how **every** management
 write tool works (it was `set_config`-only under feature 073); the hardcoded admin scope was removed
-(invariant **AGENT-3/AGENT-4**).
+(invariant **AGENT-3/AGENT-4**). The feature-182 user-administration tools (`manage_user`,
+`list_users`, `get_user`, `admin_get_user_metadata`, `admin_set_user_metadata`) follow the same rule
+with an added friendly early `scope & 0x04` check (`_require_admin`) that rejects a non-admin before
+any backend call; identity's `adminGate` remains the authoritative server-side gate.
 
 **Secret keys ARE writable (PR #994).** The earlier client-side refusal was removed. The value is
 encrypted at rest by `xstockstrat-config` (AES-256-GCM, `is_secret` **row-authoritative on write**),
@@ -1276,6 +1279,79 @@ the backend returns an empty list (no data leakage).
 Returns `{"positions": [...], "next_page_token": "<str>"}` — same shape as `get_positions`.
 
 **Errors:** `ValueError` → `account_id` is empty; `RuntimeError` → no verified caller claims.
+
+---
+
+### `manage_user`
+
+Administer users (**ADMIN only**, feature 182). A non-admin caller is rejected `PermissionError`
+("manage_user requires admin scope") before any backend call. The caller's derived `x-access-scope`
+is forwarded so identity's `adminGate` is the authoritative gate. Passwords are write-only — never
+echoed in the result or logged.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `operation` | string | _(required)_ | `create` \| `set_roles` \| `set_active` \| `reset_password` |
+| `user_id` | string | `""` | Target user (required for set_roles/set_active/reset_password) |
+| `email` | string | `""` | New user's email (required for create) |
+| `password` | string | `""` | Plaintext password (required for create/reset_password); write-only |
+| `roles` | list[str] | `null` | Non-empty subset of `admin`/`trader`/`viewer` (required for create/set_roles) |
+| `active` | bool | `null` | Required for set_active (true/false) |
+
+Returns the created/updated user (`userId`, `email`, `roles`, `isActive`) for create/set_roles/
+set_active; `{"success": true, "userId": ...}` for reset_password.
+
+**Errors:** `PermissionError` → non-admin; `ValueError` → unknown operation, unknown/empty role, or a
+missing required arg; `RuntimeError` → `NOT_FOUND` ("user not found"), or the last active admin cannot
+be demoted/deactivated (`FAILED_PRECONDITION` "cannot remove last admin").
+
+### `list_users`
+
+List all users (**ADMIN only**, read-only, feature 182). Returns `{"users": [...]}` with password-free
+views (`userId`, `email`, `roles`, `isActive`, `createdAt`). No parameters.
+
+**Errors:** `PermissionError` → non-admin; `RuntimeError` → no verified caller claims.
+
+### `get_user`
+
+Read one user by id (**ADMIN only**, read-only, feature 182).
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `user_id` | string | _(required)_ | The user to read |
+
+Returns the password-free user view. **Errors:** `PermissionError` → non-admin; `ValueError` →
+empty `user_id`; `RuntimeError` → `NOT_FOUND` ("user not found").
+
+### `admin_get_user_metadata`
+
+Read **any** user's profile metadata by `user_id` (**ADMIN only**, read-only, feature 182). Distinct
+from the self-only `get_user_metadata` — the target is the request-body `user_id`, not the caller.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `user_id` | string | _(required)_ | The target user |
+
+Returns `userId`, `email`, `phone`, `displayName`, `metadata`, `metadataUpdatedAt`.
+**Errors:** `PermissionError` → non-admin; `ValueError` → empty `user_id`; `RuntimeError` →
+`NOT_FOUND` ("user not found").
+
+### `admin_set_user_metadata`
+
+Partial-update **any** user's profile metadata by `user_id` (**ADMIN only**, feature 182). Only
+provided fields change; email is read-only. Distinct from the self-only `set_user_metadata`. The write
+emits a ledger audit event (`identity.user.metadata_updated`, acting admin + target, no values).
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `user_id` | string | _(required)_ | The target user |
+| `phone` | string | `null` | Optional new phone |
+| `display_name` | string | `null` | Optional new display name |
+| `metadata` | object | `null` | Optional JSON object (max 8KB) |
+
+Returns the updated profile (same shape as `admin_get_user_metadata`). **Errors:** `PermissionError`
+→ non-admin; `ValueError` → empty `user_id` or no field provided; `RuntimeError` → `NOT_FOUND`, or
+`INVALID_ARGUMENT` ("metadata exceeds 8KB limit").
 
 ---
 

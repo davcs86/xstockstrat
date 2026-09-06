@@ -174,3 +174,11 @@
 - TDD (AC-1..AC-9): red→green — pre-Step-7 tree 24 failing (tools unregistered + 40-name guard) → 389 passed; ruff clean; coverage 80.55% (≥40%).
 - Files modified: `services/xstockstrat-agent/tests/test_user_tools.py`, `services/xstockstrat-agent/tests/test_tools_endpoint.py`
 - Deviations: none.
+
+### Step 9 — docs: sync all six MCP inventory surfaces to 40 tools [done]
+- Updated: app/tools.py module docstring (35→"Forty tools:" + 5 lines); docs/runbooks/mcp-tools.md (:3/:37 counts + 5 full reference entries + management-denial note); services/xstockstrat-agent/CLAUDE.md (count + 5 table rows + user-admin management-auth paragraph); services/xstockstrat-ui/src/lib/copilot.ts (COPILOT_MCP_TOOL_COUNT 32→40 + rewritten comment + cross-ref to test_tools_endpoint.py). strat-lab plugin: no change (references only strategy/backtest tools).
+- Verified: no surviving "thirty-five"; executable 40-name guard green (test_tools_endpoint.py); ruff clean.
+- TEARDOWN AUDIT (CLAUDE.md rule): edited a CLAUDE.md (agent). The `/context-forge:context-constitution refresh` command is NOT in this session's skill set — performed the manual equivalent: re-read the edited agent CLAUDE.md sections against the just-written code; the count (40), the 5 new table rows, and the user-admin management-auth paragraph all match app/tools.py + app/client.py. No grounded drift. (Recorded in the integration PR body.)
+- Files modified: `services/xstockstrat-agent/app/tools.py`, `docs/runbooks/mcp-tools.md`, `services/xstockstrat-agent/CLAUDE.md`, `services/xstockstrat-ui/src/lib/copilot.ts`
+- Deviations: none.
+- Status: in-progress → code-completed. All 9 steps done.

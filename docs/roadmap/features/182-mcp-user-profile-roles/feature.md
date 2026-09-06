@@ -15,6 +15,7 @@
 | 2026-09-06 | `design-approved` (unchanged) | /sdd-review | Product-spec review PASS (advisory re-run at design-approved); OQ-1/OQ-2 reconciled to design decisions; overlap CLEAN |
 | 2026-09-06 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 | 2026-09-06 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Step 1 proto landed) |
+| 2026-09-06 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done (proto + identity + agent + docs); integration PR next |
 
 ---
 

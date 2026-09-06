@@ -9,8 +9,15 @@ import { OPPORTUNITY_ACTION } from './opportunityShared';
 export const COPILOT_STREAM_PREFIX = 'copilot:';
 export const COPILOT_EVENT_TYPE = 'copilot.message';
 export const COPILOT_THREAD = 'default';
-/** Number of MCP tools surfaced in the beta footer (read-only unless confirmed). */
-export const COPILOT_MCP_TOOL_COUNT = 32;
+/**
+ * Total count of registered MCP tools, shown in the copilot beta footer. This is a
+ * MANUALLY-SYNCED surface: the UI learns the agent's tool set at runtime (GET /api/tools), so there
+ * is no build-time cross-service guard. The authoritative source of truth is the agent's exact
+ * tool-name set asserted in
+ * `services/xstockstrat-agent/tests/test_tools_endpoint.py::test_list_tools_returns_all_registered_tools`
+ * — update this number in the same PR that changes that set (24 → 32 → 35 → 40, feature 182).
+ */
+export const COPILOT_MCP_TOOL_COUNT = 40;
 
 /**
  * Per-user append-only thread key. The BFF forces this key server-side from the verified session, so

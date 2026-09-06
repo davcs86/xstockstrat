@@ -1,6 +1,6 @@
 # Implementation Spec: mcp-user-profile-roles
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-09-06
 **Feature**: `docs/roadmap/features/182-mcp-user-profile-roles/feature.md`
 **Total Steps**: 9
@@ -524,7 +524,7 @@ against the 40-name set.
 
 ### Step 9 — docs: sync all six MCP inventory surfaces to 40 tools
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/` + `xstockstrat-agent` + `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify (module docstring)

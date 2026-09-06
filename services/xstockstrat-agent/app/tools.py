@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Thirty-five tools:
+Forty tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -37,6 +37,11 @@ Thirty-five tools:
   list_accounts        — lists the caller's broker + offline accounts together (read-only)
   get_positions        — lists the caller's positions across all accounts (read-only)
   get_positions_by_account_id — lists the caller's positions for one account (read-only)
+  manage_user          — admin: create/set_roles/set_active/reset_password a user (admin-gated)
+  list_users           — admin: lists all users, password-free views (read-only, admin-gated)
+  get_user             — admin: reads one user by id (read-only, admin-gated)
+  admin_get_user_metadata — admin: reads ANY user's profile metadata by user_id (read-only)
+  admin_set_user_metadata — admin: partial-updates ANY user's profile metadata by user_id
 """
 
 import base64
