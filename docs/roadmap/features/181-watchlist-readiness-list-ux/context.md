@@ -343,3 +343,31 @@ RPC (F-06 clean). No Floor breach; no ledger repeat.
   `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` pointed there and `--timeout=120000` (the SSR warmup exceeds
   the 10s non-CI default on a cold `next dev` compile). All 6 tests pass. CI runs the hermetic
   `Dockerfile.e2e` image with the matched browser — unaffected.
+
+### C-16 promotion (integration) [done]
+- Operator: no preference → followed the recommended "promote now into PR #1103".
+- Promoted the feature's acceptance scenarios into the durable suites (provenance `@feature-181`):
+  @AC-1/2/3/4/6 → new `services/xstockstrat-ui/acceptance/watchlist-readiness-list-ux.feature`;
+  @AC-5 (no analysis→portfolio cycle) → `docs/sdd/business-rules/platform.feature`. (Step 6 already
+  promoted the analysis-side bar-bust/UNKNOWN guarantees into `readiness-caching-poll-discipline.feature`.)
+- Teardown (context files touched — analysis `CLAUDE.md` in Step 12): the context-forge
+  `context-constitution refresh` command is not available in this session; performed the manual
+  equivalent — re-read the analysis `CLAUDE.md` additions (GetWatchlistReadiness subsection, R-F
+  sem-coupling row note, R-B prerequisite) against the shipped `servicer.py`/`readiness.py` code and
+  confirmed no grounded drift (every claim matches the code just landed). Recorded in the PR body.
+
+### CI fix — pre-existing watchlists.spec.ts e2e regression [done]
+- The WatchlistReadiness rewrite changed the readiness source from the per-strategy `EvaluateReadiness`
+  fan-out to the single `GetWatchlistReadiness` decoration call. Five tests in the EXISTING
+  `e2e/insights/watchlists.spec.ts` (:64, :286, :373, :433, :668) still assumed the old source and
+  went red on PR #1103's Frontend E2E shard.
+- Fixes (all test-harness, no production behavior change): (a) the mock's `GetWatchlistReadiness`
+  route now merges the shared `READINESS_BUCKET_OVERRIDE` (hoisted to `e2e/fixtures/opportunities.ts`,
+  DRY) over the default verdict, matching the pre-181 `EvaluateReadiness` mock shape; (b) the
+  `useWatchlistReadiness` query key gained a bound-pair signature so a rebind (which mutates the
+  `['watchlists']` bindings, not `pageToken`) refetches immediately — the removed `useQueries` got
+  this free by keying on symbols — and `enabled` now requires `pagePairs.length > 0` so switching to
+  an empty watchlist issues no decoration call; (c) test :668's readiness-call counter migrated from
+  `/EvaluateReadiness` to `/GetWatchlistReadiness`.
+- Verified: all 26 tests in `watchlists.spec.ts` + `watchlist-readiness-list.spec.ts` pass; `pnpm lint`
+  clean (pre-existing exhaustive-deps warnings only, none in touched files).
