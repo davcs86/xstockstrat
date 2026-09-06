@@ -125,3 +125,18 @@
     logic (F-09) — [x] RESOLVED in spec: Step 2 body now folds in the :493-494 comment reconciliation.
 - Notes (informational): 019 decay-key latent reader-orphan (out of scope, future triage);
   C-14 "/config-ui, no UI code change" is a justified reached-no-change, not a stale surface.
+
+## Session 2026-09-06 — sdd-execute (sequential, on claude/watchlist-stock-list-perf-o3qoqb)
+
+- Up-front confirm: operator chose "Proceed" (all 5 steps). Branch: executing on the harness-designated
+  claude/* branch (not feature/<slug>), per the standing constraint — the SDD dev-branch model is
+  overridden here; one integration PR to main-dev at the end.
+- Pre-execute: 027 reconfirmed next-free vs origin/main-dev (tip 026); config toolchain present
+  (node v22, pnpm 9.15.9, node_modules present).
+
+### Step 1 — migration: seed the four readiness_materializer keys (027) [done]
+- Created 027_analysis_readiness_materializer_keys.{up,down}.sql mirroring 026: 8 rows (4 keys × 2 envs),
+  global, full-dotted key column, code-default values (enabled=false → no behavior change), ON CONFLICT
+  DO NOTHING; down = explicit key-IN, user_id IS NULL, no SQL LIKE. Offline read-back verified.
+- Files modified: services/xstockstrat-config/migrations/027_analysis_readiness_materializer_keys.{up,down}.sql
+- Deviations: none (offline migration verification per HARD CONSTRAINT — live apply deferred to CI/deploy).

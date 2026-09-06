@@ -79,7 +79,7 @@ The keys become visible only after a **config-service reload** (a raw migration 
 
 ### Step 1 — migration: seed the four readiness_materializer keys (027)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/027_analysis_readiness_materializer_keys.up.sql` — create
