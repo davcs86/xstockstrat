@@ -76,3 +76,33 @@
   175 (identity) and 171 (agent) share the service dirs but touch disjoint files. No merge-order entry
   required.
 - Net: product-spec review PASS after Open-Questions reconciliation. Next: /sdd-spec.
+
+## Session 2026-09-06 — sdd-spec
+
+- Generated implementation-spec.md with 9 steps. Status → implementation-ready.
+- Step shape (from design.md's 5 ordered boundaries, C-08-paired): 1 proto, 2 proto-gen,
+  3 identity service + 4 identity test, 5 agent client + 6 agent client test, 7 agent tools +
+  8 agent tools test (incl. the 40-name `test_tools_endpoint.py` guard), 9 docs/F-12 inventory sync.
+- Codebase findings verified against source (all anchors confirmed accurate):
+  - Proto: self-metadata RPCs `identity.proto:30-31`, service block closes `:41`; `UserMetadata`
+    `:130-137`, `GetUserMetadataResponse` `:139`, `UpdateUserMetadataResponse` `:145`. New RPCs append
+    after `:31`, new request messages after `:145`; reuse existing responses (no `Admin*Response`).
+    `import struct.proto` already at `:7`.
+  - identity `identityServiceImpl.ts`: `adminGate` `:638-649`, `auditSafe` `:625-636`, self
+    `getUserMetadata` `:536-566` / `updateUserMetadata` `:572-615`, role maps `:15-24`. Confirmed the
+    pre-existing 8KB-error leak — self `updateUserMetadata` catch at `:611-614` maps ALL errors to
+    code 13; migration `006_user_metadata.up.sql:7-8` CHECK raises SQLSTATE 23514. `setUserRoles` audit
+    example `:768` (`identity.user.roles_updated`). Auto-wire: `src/index.ts:49-52` single `addService`
+    — NO index.ts edit; name two class methods.
+  - agent: `_metadata()` `client.py:56-75`; self helpers `get_user_metadata` `:1270-1290` /
+    `update_user_metadata` `:1293-1330`. `manage_account` op-dispatch `tools.py:1601-1685` (friendly
+    admin early check `:1667`, `_caller_access_scope` `:106`, `_caller_user_id` `:118`). Test template
+    `test_account_tools.py:168-181`; conftest `ADMIN/TRADER/VIEWER`+`_ctx` `:12-27`; tool-name guard
+    `test_tools_endpoint.py:17-58` currently 35 names. Agent coverage threshold = 40% (`ci.yml`,
+    `--cov=app`).
+  - F-12 surfaces: `tools.py:4` "Thirty-five tools", `mcp-tools.md:3`/`:37`/`:946`, agent `CLAUDE.md:43`,
+    `copilot.ts` `COPILOT_MCP_TOOL_COUNT = 32` (stale → 40, operator-approved in-scope).
+- Scenario coverage (C-15): all 10 @AC-* mapped — @AC-7/@AC-8/@AC-10 to identity test (step 4),
+  @AC-1..6/@AC-9 to agent tools test (step 8), @AC-4 also to agent client test (step 6, caplog).
+- Reviewers snapshot finalized in feature.md: Proto Reviewer, xstockstrat-identity owner,
+  xstockstrat-agent owner, Security.

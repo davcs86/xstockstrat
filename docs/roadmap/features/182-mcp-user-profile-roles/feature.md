@@ -13,6 +13,7 @@
 | 2026-09-06 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-06 | `draft` → `design-approved` | /sdd-design | Design debated (4 rounds, quick mode extended by operator) and approved; recon.md + design.md written |
 | 2026-09-06 | `design-approved` (unchanged) | /sdd-review | Product-spec review PASS (advisory re-run at design-approved); OQ-1/OQ-2 reconciled to design decisions; overlap CLEAN |
+| 2026-09-06 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 
 ---
 
@@ -22,7 +23,7 @@
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Recon Dossier](recon.md) — grounded codebase map + patterns to reuse (Phase 0)
 - [Design](design.md) — debated, approved architecture (Phase 1)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec mcp-user-profile-roles`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -49,4 +50,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec mcp-user-profile-roles` — generate implementation spec from the approved design
+`/sdd-review mcp-user-profile-roles impl-spec` — validate implementation spec, then `/sdd-execute mcp-user-profile-roles`
