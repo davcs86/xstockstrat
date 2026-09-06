@@ -1,6 +1,6 @@
 # Implementation Spec: watchlist-readiness-list-ux
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-09-06
 **Feature**: `docs/roadmap/features/181-watchlist-readiness-list-ux/feature.md`
 **Total Steps**: 12
@@ -62,7 +62,7 @@ suites at launch (C-16, `/sdd-execute` integration PR).
 
 ### Step 1 — proto: add `GetWatchlistReadiness` RPC, `WatchlistReadinessRow`, `ReadinessState`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -133,7 +133,7 @@ Both pass (additive RPC + additive messages/enum → non-breaking).
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/**` — modify (generated)
@@ -533,4 +533,21 @@ The new RPC, the R-F coupling note, and the sentinel note are present.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### D-1 — Development branch (session-wide)
+- **Step(s)**: all. **Disposition**: harness-mandated branch override.
+- The skill derives `<dev-branch>` = `feature/watchlist-readiness-list-ux` from feature.md, but this
+  session's harness rules mandate developing on `claude/watchlist-stock-list-perf-o3qoqb` (where all
+  SDD artifacts live and PR #1103 → main-dev is open). All step commits land on
+  `claude/watchlist-stock-list-perf-o3qoqb`; the existing PR #1103 is the integration PR. Operator
+  confirmed at the sequential mode-entry gate.
+
+### D-2 — Proto codegen via Docker + host tsc (Steps 1–2)
+- **Step(s)**: 1, 2. **Disposition**: CI-equivalent fallback (sequential-mode verification fallback).
+- `buf` is absent on the host, so Step 1's `buf lint`/`buf breaking` and Step 2's `buf generate`
+  ran inside the version-pinned `Dockerfile.codegen` container via `./scripts/localenv-setup.sh`
+  (started `dockerd` first). Both `buf lint` and `buf breaking --against main-dev` PASSED in-container
+  (additive RPC + messages/enum → non-breaking). The container's final TS→JS `tsc` compile failed
+  (`gen/ts/node_modules` absent in the image); completed on the host via the workspace
+  `pnpm install --frozen-lockfile` `prepare` hook (`tsc`). Generated diff is scoped entirely to
+  `packages/proto/gen/**/analysis/v1/**` (Go, Python, TS source + `dist`), mirroring CI's stale-stub
+  check.

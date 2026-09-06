@@ -252,3 +252,23 @@ RPC (F-06 clean). No Floor breach; no ledger repeat.
     a whole codegen tree cannot be enumerated exactly; this is the accepted codegen pattern, not a
     real path defect. No unaddressed item carried into execution.
 - Overlap findings: none.
+
+## Session 2026-09-06 — sdd-execute (sequential)
+
+- Mode-entry + up-front confirm approved by operator. Dev branch = `claude/watchlist-stock-list-perf-o3qoqb`
+  (harness override of the skill's `feature/<slug>` default — D-1). Toolchain: docker✓ uv✓ pnpm✓ go✓;
+  buf ABSENT → Docker codegen fallback (D-2).
+
+### Step 1 — proto: GetWatchlistReadiness RPC + WatchlistReadinessRow + ReadinessState [done]
+- Appended the additive RPC (after GetAttribution), the `ReadinessState` enum (READINESS_STATE_* prefixed
+  per buf STANDARD), `WatchlistReadinessRow` (no `source` field — join key only), and the
+  request/response messages (header-owner convention, no wire user_id).
+- Verification: `buf lint` + `buf breaking --against main-dev` PASSED inside the codegen container (D-2).
+- Files modified: `packages/proto/analysis/v1/analysis.proto`. Deviations: D-2 (codegen tool path).
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Regenerated Go + Python + TS (+ compiled `dist`) stubs; diff scoped entirely to `analysis/v1`.
+  GetWatchlistReadiness present in all three language stubs and the TS `dist`.
+- Verification: Docker `buf generate` + grpcio-tools + host `tsc` (pnpm prepare); `git status` shows
+  only `packages/proto/gen/**/analysis/v1/**`. Deviations: D-2.
+- Files modified: `packages/proto/gen/{go,python,ts}/analysis/v1/**`.

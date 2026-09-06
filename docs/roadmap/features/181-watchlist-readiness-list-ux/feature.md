@@ -14,6 +14,7 @@
 | 2026-09-06 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS; 3 advisory warnings fixed: FR-7 C-17 primitives/a11y + @AC-6, @AC-5 firmed, known-traps reclassified); overlap CLEAN |
 | 2026-09-06 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds) + approved. Chosen: additive cache-first `AnalysisService.GetWatchlistReadiness(watchlist_id, page)` — keyset-paged (ListPositions precedent), probe-gated freshness (full `is_readiness_row_fresh`), background kick for stale (guard-set per owner+strategy+symbol), client polls the same RPC. IDOR closed structurally; cycle-free (no portfolio→analysis edge). 2 operator forks resolved R2 (probe-gate keep @AC-2, poll-new-RPC kill N+1); Obj 3-7 closed R3 (dropped redundant `source` field, fixed ListPositions/ListOpportunities keyset citation, split FR-2/FR-6 R-B). R4 mechanized the R-E infinite-PENDING trap via a `bar_epoch=-1` failure sentinel in the shared compute path + cooldown-gated UNKNOWN recovery re-kick — an **operator-approved scope deviation** (touches shipped 177/180 compute; re-verify @AC-2 at /sdd-spec). |
 | 2026-09-06 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
+| 2026-09-06 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Steps 1–2: proto + codegen). Dev branch is `claude/watchlist-stock-list-perf-o3qoqb` (harness override, D-1). |
 
 ---
 
