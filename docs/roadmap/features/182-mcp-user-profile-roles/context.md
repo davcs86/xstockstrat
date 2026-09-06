@@ -64,3 +64,15 @@
   dual proto-flavor parity indirection; copilot.ts manual-sync residual; self-metadata C-16 gap
   (pinned by local identity tests :493-582).
 - Status: draft → design-approved.
+
+## Session 2026-09-06 — sdd-review product-spec (advisory re-run)
+
+- Ran at status design-approved (past spec-ready); did NOT regress status.md.
+- Criteria pass: FAIL on criterion 9 only (unchecked `- [ ]` Open Questions) — all other criteria OK,
+  all code-checkable claims verified (proto RPCs, ADMIN_SCOPE=0x04, adminGate, migration 006, service
+  names). Resolved by reconciling Open Questions with the design decisions already made: OQ-1 (dedicated
+  admin tools), OQ-2 (caller-supplied plaintext), and the three known-traps folded into design.md steps.
+- Overlap scan: CLEAN — no proto-name/field, migration, config-key, or source-file collisions. In-flight
+  175 (identity) and 171 (agent) share the service dirs but touch disjoint files. No merge-order entry
+  required.
+- Net: product-spec review PASS after Open-Questions reconciliation. Next: /sdd-spec.

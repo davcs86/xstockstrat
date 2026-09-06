@@ -118,22 +118,28 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **OQ-1 (tool shape for admin profile).** Should admin cross-user profile read/write be *new*
-  dedicated tools, or an optional admin `target_user_id` argument on the existing
-  `get_user_metadata`/`set_user_metadata` tools? The latter is DRYer but changes two shipped tool
-  contracts and mixes self-service + admin authz in one tool. Decide in `/sdd-design`.
-- [ ] **OQ-2 (create-user password handling).** `manage_user create` and `reset_password` take a
-  plaintext password argument. Confirm the agent tool never echoes it back and that it is not logged
-  (identity hashes server-side). Should initial-password be optional with a generated value returned
-  once instead?
-- [ ] **Known trap (ledger F-12 / RC-1, fails.md:308-310).** Adding agent tools drifts the six MCP
-  inventory surfaces (tool docstrings, `docs/runbooks/mcp-tools.md`, the `strat-lab` skill/plugin,
-  the tool-count statements, `app/client.py` request builders, and any parity test). All must be
-  updated in the **same** PR, and the new request/response projections pinned by a parity/contract
-  test (mirror `tests/test_backtest_view.py`).
-- [ ] **Known trap (ledger, fails.md:532 & 546-549).** Admin `x-access-scope` must be forwarded only
-  from verified OAuth claims via the established caller-propagation path — never from a tool
-  parameter or a pre-auth signed blob. Target `user_id` is a request *selector*, never the identity.
-- [ ] **Known trap (ledger, fails.md:667-669 & 537-539).** identity is TS: new proto request fields
-  must be read via ts-proto camelCase (or `?? both`) and proven with a wire-level loopback test, and
-  any row→proto mapper for `UserMetadata` updated in lockstep with the new RPCs.
+_All resolved in `/sdd-design` (4-round debate, see `design.md` § Chosen Approach / Rejected
+Alternatives and `context.md` sdd-design session)._
+
+- [x] **OQ-1 (tool shape for admin profile) — RESOLVED.** New *dedicated* admin tools
+  (`admin_get_user_metadata` / `admin_set_user_metadata`), not a `target_user_id` arg on the shipped
+  self-service tools. Overloading the self tools mixes two authz models and risks regressing
+  `@AC-1 @feature-148`; residual DRY is paid below the tool boundary (shared identity helpers). See
+  `design.md` Rejected Alternatives.
+- [x] **OQ-2 (create-user / reset-password handling) — RESOLVED.** Caller-supplied plaintext password
+  (reuses the feature-043 `CreateUser`/`UpdatePassword` contract; identity hashes server-side); never
+  echoed or logged (asserted by a `caplog` test). Generated-and-returned-once was rejected. Operator
+  sign-off recorded in `context.md`.
+- [x] **Known trap (ledger F-12 / RC-1, fails.md:308-310) — FOLDED INTO DESIGN.** All six MCP
+  inventory surfaces updated in the same PR (design.md step 5), the executable guard
+  `tests/test_tools_endpoint.py:17` extended to the 40-name set, and the `UserMetadata` projection
+  pinned by a **protobuf-es** schema-reflection parity test (ts-proto has no field reflection —
+  design.md step 2). `copilot.ts` is corrected to 40 as a manually-synced surface (no cross-service
+  auto-guard is feasible).
+- [x] **Known trap (ledger, fails.md:532 & 546-549) — FOLDED INTO DESIGN.** Admin `x-access-scope`
+  forwarded only via the derived `_metadata()` caller-propagation path; target `user_id` rides the
+  request body as a selector, never as identity; backend `adminGate()` is the sole authority.
+- [x] **Known trap (ledger, fails.md:667-669 & 537-539) — FOLDED INTO DESIGN.** New request fields
+  read via ts-proto camelCase, proven with a wire-level loopback test; the `UserMetadata` row→proto
+  mapper is extracted to a single shared `rowToUserMetadata` used by self + both admin handlers
+  (design.md step 2).

@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-09-06 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-06 | `draft` → `design-approved` | /sdd-design | Design debated (4 rounds, quick mode extended by operator) and approved; recon.md + design.md written |
+| 2026-09-06 | `design-approved` (unchanged) | /sdd-review | Product-spec review PASS (advisory re-run at design-approved); OQ-1/OQ-2 reconciled to design decisions; overlap CLEAN |
 
 ---
 
