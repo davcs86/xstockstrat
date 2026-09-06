@@ -3,6 +3,30 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-09-06
+
+### Features
+- fix-agent-trading-mode-otel-attr: `xstockstrat-agent`'s OTel init reads `TRADING_MODE` into a `trading_mode` resource attribute (`app/telemetry.py:33,39`).
+- fix-portfolio-max-drawdown-unenforced: `portfolio.risk.max_drawdown_pct` is fetched (`portfolio_service.go:722` `GetFloat`) then discarded (`:750` `_ = maxDrawdownPct`).
+- fix-python-config-zero-trap: The indicators and ingest config watchers use `v.int_val or default` / `v.float_val or default` / `v.string_val or default`, so a legitimately-stored `0` / `0.0` / `""` silently reverts to the coded default.
+- fix-config-watcher-client-id: The analysis and ingest config watchers both build `WatchConfig` requests with `client_id=f"indicators-{id(self)}"` — copied verbatim from the indicators watcher template.
+- fix-dead-code-cleanup-batch: Consolidated low-risk dead-code cleanup batching three "Cleanup"-track findings from the comment-audit report: (5) the dead `getEnvBool` in the three Go services, (6) the dead `middleware/propagation.ts` in the Node leaf services, and (7) the `@types/node ^20` pin against a Node 24 runtime.
+- analysis-concurrency-offload: Parallelize the serial cross-service RPC fan-out in `xstockstrat-analysis` and move CPU-bound / blocking work (backtest simulators, the `xstockstrat-indicators` sandbox `subprocess.run`) off the single asyncio event loop, so Opportunities and Watchlist readiness load fast and per-user latency stays flat as concurrent user count grows.
+- readiness-caching-poll-discipline: Eliminate redundant recompute on the decide-surface read paths: cache/materialize Watchlist readiness the way Opportunities already is, stop the every-15s recompute for empty-universe users, make warm-poll live enrichment conditional, and give the readiness client a `staleTime` so switching panes doesn't re-trigger a full fan-out.
+- quote-fanout-batching: Collapse the N+1 fan-out on the portfolio→marketdata and portfolio→DB read edges: add an additive `GetLatestQuotes` batch RPC to marketdata (wrapping its existing internal `MultiSymbolSource` helper) and switch `enrichPositions` from per-position `GetLatestQuote` to it, collapse `ListWatchlists`' per-watchlist `listBindings` into one `ANY`-array query, and add single-flight to marketdata's cold-symbol live fallback.
+- ui-resume-halted-account: Close the UI-side gap left explicitly out of scope by feature 169: add a browser-side Resume control (BFF route + button) for a halted account, and surface the halt indicator beside the account-management controls (not only on the positions page), so an operator can see a halt and clear it from the UI instead of falling back to the agent or a DBA.
+- watchlist-readiness-precompute: Move the per-symbol strategy readiness computation off the synchronous UI render path by materializing readiness rows into `analysis.readiness_cache` in the background, so the watchlist readiness overlay reads cache-only and loads fast even for large watchlists.
+- watchlist-readiness-list-ux: UI follow-up to feature 180: make the `/insights/watchlists` list render immediately with a per-row readiness **loading state** and **pagination**, instead of the current N+1 fan-out that leaves the list blank until every per-symbol `EvaluateReadiness` promise resolves.
+
+### Proto Changes
+- analysis/v1/analysis.proto
+- marketdata/v1/marketdata.proto
+
+### Summary
+13 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-09-03
 
 ### Summary
