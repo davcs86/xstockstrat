@@ -176,3 +176,10 @@
 **Progress**: 5 done / 5 total
 **Stopped at**: all complete → code-completed
 **Next**: open integration PR to main-dev
+
+### C-16 promotion (integration)
+- Promoted the durable config-service guarantees to services/xstockstrat-config/acceptance/readiness-materializer-config-keys.feature
+  (@AC-5 settable-without-create_key, @AC-7 in-bounds accepted, @AC-8 out-of-bounds rejected, @AC-9
+  write-path-only), all tagged @feature-182. @AC-1..4 (migration shape) + @AC-6 (docs) are not
+  behavioral service guarantees to promote; feature-161's decay-key scenarios already cover the generic
+  register/bounds pattern (EXTEND, not duplicated). Operator approved the full execute→PR flow ("Proceed").
