@@ -106,3 +106,20 @@
   @AC-1..6/@AC-9 to agent tools test (step 8), @AC-4 also to agent client test (step 6, caplog).
 - Reviewers snapshot finalized in feature.md: Proto Reviewer, xstockstrat-identity owner,
   xstockstrat-agent owner, Security.
+
+## Session 2026-09-06 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 2 warnings + 1 note (advisory — did not block). PASS WITH WARNINGS.
+  All path:line anchors verified; C-08 pairing (3→4, 5→6, 7→8) and C-15 coverage (AC-1..AC-10 → RED
+  assertions) fully satisfied. B3 ordering clean.
+- Warnings addressed in the spec before execution:
+  - [x] Step 9 / Execution Summary / Step Dependencies cited "F-12" as a Constitution ID — the Floor
+    stops at F-11. "F-12" is a triage-report finding / ledger RC-1 (fails.md:308-310), not a rule.
+    Corrected all three occurrences to reference RC-1/fails.md:308-310 (C-01).
+  - [x] adminGate doc comment "shared by all six admin RPCs" (identityServiceImpl.ts:638) goes stale
+    at eight callers — added Step 3 item 6 to fix the comment in the same file.
+  - [ ] (inherent, no fix) Step 2 `**Files**` lists gen/{go,python,ts} directories rather than files —
+    correct for regenerated codegen output; carried as-is.
+- Overlap scan: CLEAN — no migration/proto-field/config-key/file collisions with any non-launched
+  feature; shared agent surfaces touched only by already-launched features (rebase-only). No merge-order
+  row required.

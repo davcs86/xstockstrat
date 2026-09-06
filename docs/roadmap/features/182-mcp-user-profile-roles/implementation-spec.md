@@ -20,7 +20,8 @@ Order follows the dependency chain: **proto first** (add RPCs + request messages
 stubs), then **identity service + test** (implement the two new RPCs behind `adminGate`, extract shared
 metadata helpers, add a shared `mapDbError` that also fixes the pre-existing self-path 8KB-error leak),
 then **agent client + test** (8 gRPC helpers), then **agent tools + test** (register the 5 tools + extend
-the executable tool-name guard), then **docs/inventory sync** (the six F-12 surfaces). Each non-frontend
+the executable tool-name guard), then **docs/inventory sync** (the six MCP inventory surfaces — ledger
+RC-1, `fails.md:308-310`). Each non-frontend
 `service` step is paired with a red-first `test` step (C-08/P-06).
 
 **Consumer surface (C-14):** the named surface is the Agent — the 5 MCP tools land in Steps 7–8. There is
@@ -55,7 +56,8 @@ config-ui page in scope).
 - Step 8 (agent tools test) covers Step 7 [service] — paired, red-first; also extends the executable
   tool-name guard `tests/test_tools_endpoint.py` to the 40-name set (must run green after Step 7).
 - Step 9 (docs/inventory sync) requires Steps 7–8: the tool count (35→40) and tool descriptions are
-  only final once the tools are registered. F-12: all inventory surfaces land in the same PR.
+  only final once the tools are registered. Inventory-drift guard (ledger RC-1, `fails.md:308-310`, not
+  a Constitution Floor ID): all inventory surfaces land in the same PR.
 
 ---
 
@@ -228,6 +230,8 @@ new symbols exist: `grep -rn "AdminGetUserMetadata\|AdminUpdateUserMetadata" pac
    - Catch block routes through `mapDbError(err)`; log only `err.message`.
 5. Read `call.request.userId` and all new fields via ts-proto **camelCase** (fails.md:667-669); a
    snake_case read silently no-ops.
+6. Update the stale `adminGate` doc comment ("shared by all **six** admin RPCs", `:638`) to reflect the
+   two new callers (now eight) — a one-line comment fix, in the same file, to avoid doc drift.
 
 **Verification**: (run in the paired test Step 4)
 ```
@@ -509,7 +513,7 @@ against the 40-name set.
 
 ---
 
-### Step 9 — docs: sync all F-12 inventory surfaces to 40 tools
+### Step 9 — docs: sync all six MCP inventory surfaces to 40 tools
 
 **Status**: `pending`
 **Service**: `docs/runbooks/` + `xstockstrat-agent` + `xstockstrat-ui`
