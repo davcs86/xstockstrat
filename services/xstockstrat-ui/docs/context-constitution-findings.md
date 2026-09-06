@@ -27,7 +27,7 @@ Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2
 
 ## Open questions (unresolved *why* — needs a maintainer)
 
-- `config-ui/api/audit/route.ts` returns `{ entries: [] }` (200) silently when `DATABASE_URL` is unset — is a silent empty audit log the intended dev-mode behavior, or should it signal misconfiguration? `src/app/config-ui/api/audit/route.ts:29-30` — status: **open**
+- `config-ui/api/audit/route.ts` returns `{ entries: [] }` (200) silently when `DATABASE_URL` is unset — is a silent empty audit log the intended dev-mode behavior, or should it signal misconfiguration? `src/app/config-ui/api/audit/route.ts:46-48` — status: **open** (note: the bigger SSL-missing bug that caused "always empty" in DO was fixed; this item is about the deliberate graceful-degradation path for unset `DATABASE_URL` only)
 - Is the `>= 400` header/encoding normalization (UI gotcha) still required with `@connectrpc` 2.x, or a workaround droppable on upgrade? `src/lib/bffShared.ts:132-136` — status: **open**
 
 ---

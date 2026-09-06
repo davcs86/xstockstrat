@@ -64,6 +64,18 @@ test.describe('/config-ui/audit table content and sorting', () => {
     }
   });
 
+  test('shows error message when the API returns 500', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.route('**/config-ui/api/audit*', (route) =>
+      route.fulfill({ status: 500, json: { error: 'Database connection failed' } }),
+    );
+    await page.goto(AUDIT_PAGE);
+
+    await expect(
+      page.getByText('Failed to load audit log: Database connection failed'),
+    ).toBeVisible();
+  });
+
   // New sort capability (Step 1/7) — the plain pre-migration Table had no sort affordance, so
   // this has no pre-migration equivalent to satisfy; it is the red-before-green proof that
   // clicking a sortable header actually re-orders the rendered rows.
