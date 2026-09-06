@@ -24,11 +24,12 @@ schedule/concurrency) without a code change or a raw admin-scoped `SetConfig`.
 
 FR-1. A config seed migration registers all four materializer keys as **global** rows for **both**
 environments (`staging`, `production`), each keyed by the **full dotted key** the analysis service
-reads and typed to match its getter:
-- `analysis.readiness_materializer.enabled` — `bool`, seeded `false`
-- `analysis.readiness_materializer.refresh_hour_utc` — `int`, seeded `0`
-- `analysis.readiness_materializer.valid_window_hours` — `int`, seeded `24`
-- `analysis.readiness_materializer.max_concurrent_bars_fetches` — `int`, seeded `2`
+reads and with a `value_type` matching that key's getter (verified against
+`services/xstockstrat-analysis/app/handlers/servicer.py`):
+- `analysis.readiness_materializer.enabled` — `bool`, seeded `false` (read via `get_bool`, servicer.py:4173)
+- `analysis.readiness_materializer.refresh_hour_utc` — `int`, seeded `0` (read via `get_int_present`, servicer.py:4075)
+- `analysis.readiness_materializer.valid_window_hours` — `int`, seeded `24` (read via `get_int_present`, servicer.py:3044/4092)
+- `analysis.readiness_materializer.max_concurrent_bars_fetches` — `int`, seeded `2` (read via **`get_int`**, the zero-trap getter, servicer.py:454). Seeding `int`/`2` is correct because the seeded value **equals** the code default, so the zero-trap never fires for this row — but a future operator must not set it to `0` expecting "unlimited"; `get_int`'s zero-trap would collapse `0` back to the default `2`.
 
 FR-2. Each key is seeded at its **current code default**, so applying the migration is a
 **no-behavior-change** registration: `enabled=false` means the materializer stays OFF until an operator
@@ -104,14 +105,20 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **Known trap (migration 026 scar):** the seeded `key` column must equal the **full dotted**
-  string the analysis `ConfigWatcher` reads (`analysis.readiness_materializer.*`) — the WatchConfig
-  snapshot is keyed by `values[row.key]` with no namespace prefix added, so a bare
+_All resolved at spec time (verified against the code); carried into design as assertions, not open forks._
+
+- [x] **Known trap (migration 026 scar) — RESOLVED (design must assert):** the seeded `key` column must
+  equal the **full dotted** string the analysis `ConfigWatcher` reads (`analysis.readiness_materializer.*`)
+  — the WatchConfig snapshot is keyed by `values[row.key]` with no namespace prefix added
+  (`services/xstockstrat-config/src/grpc/configServiceImpl.ts:138/162`), so a bare
   `readiness_materializer.*` form would be a silent orphan (the exact bug that left staging's
-  `fundsignal.*` rows dead). And `value_type` must match the getter (`get_bool` / `get_int_present`)
-  or the value silently returns the default. Design must assert both.
-- [ ] **Should `refresh_hour_utc`/`valid_window_hours` be seeded presence-aware?** They are read via
-  `get_int_present` (0 = midnight is legitimate), so seeding `0`/`24` is safe; confirm no getter reads
-  them via the zero-trap `get_int`.
-- [ ] Confirm whether config-ui needs the key to carry a `default_value`/`description` for a good
-  render (026 populated both) — mirror 026's column set.
+  `fundsignal.*` rows dead). `value_type` must match each key's getter. Migration 027 uses the full
+  dotted `key` and the per-key types in FR-1; design/execute assert this with a post-apply read-back.
+- [x] **Getter typing — RESOLVED (spec corrected):** getters verified in `servicer.py` — `enabled`→`get_bool`,
+  `refresh_hour_utc`/`valid_window_hours`→`get_int_present`, and **`max_concurrent_bars_fetches`→`get_int`**
+  (the zero-trap getter, servicer.py:454), NOT `get_int_present`. Seeding `int`/`2` is nonetheless correct
+  (seeded value == code default `2`, so no zero-trap and no orphan). FR-1 now records the exact getter per key.
+- [x] **config-ui render columns — RESOLVED:** mirror 026's column set — populate `description` and
+  `default_value` on every seeded row (026 did) so the `analysis` namespace editor renders each key with
+  a meaningful label/hint. Migration 027 follows 026's `INSERT ... (namespace, key, value_type, value_data,
+  description, default_value, consuming_service, environment, user_id)` shape verbatim.
