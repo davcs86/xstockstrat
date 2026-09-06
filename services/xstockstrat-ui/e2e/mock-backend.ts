@@ -838,6 +838,12 @@ export async function startMockBackend(): Promise<void> {
             })),
           };
         },
+        // feature 181 — cache-first watchlist readiness decoration. Default empty (the in-process
+        // listWatchlists default is [] too); the watchlists specs drive the decorated rows via the
+        // per-test page.route in e2e/helpers/watchlistMock.ts.
+        async getWatchlistReadiness() {
+          return { rows: [], page: {} };
+        },
         // feature 083 — per-strategy analytics for the Engine → Strategies detail.
         async getStrategyAnalytics(req) {
           return {

@@ -1,4 +1,5 @@
 import { type Page } from '@playwright/test';
+import { symbolReadiness } from '../fixtures/opportunities';
 
 /**
  * Shared stateful in-memory mock of the PortfolioService watchlist RPCs (feature 058/097/098).
@@ -30,7 +31,18 @@ export type MockWatchlist = {
 
 const SOURCE_SIGNAL = 2; // WATCHLIST_ENTRY_SOURCE_SIGNAL
 
-export async function mockWatchlists(page: Page, seed: MockWatchlist[] = []): Promise<void> {
+/**
+ * feature 181 — optional per-symbol forced readiness state for the GetWatchlistReadiness route.
+ * A symbol absent from the map decorates RESOLVED (with the `symbolReadiness` default verdict);
+ * `'pending'`/`'unknown'` force those states so a spec can exercise the loading/error cells.
+ */
+export type ReadinessStateOverrides = Record<string, 'pending' | 'unknown'>;
+
+export async function mockWatchlists(
+  page: Page,
+  seed: MockWatchlist[] = [],
+  readinessOverrides: ReadinessStateOverrides = {},
+): Promise<void> {
   const state: { lists: MockWatchlist[]; seq: number } = {
     lists: seed.map((w) => ({ ...w, bindings: w.bindings.map((b) => ({ ...b })) })),
     seq: seed.length,
@@ -190,5 +202,57 @@ export async function mockWatchlists(page: Page, seed: MockWatchlist[] = []): Pr
     const req = JSON.parse(route.request().postData() ?? '{}');
     state.lists = state.lists.filter((w) => w.watchlistId !== req.watchlistId);
     return json(route, {});
+  });
+
+  // feature 181 — cache-first watchlist readiness decoration (analysis GetWatchlistReadiness).
+  // Derives rows from the SAME seeded bindings, sorted (symbol, strategyId), keyset-sliced by the
+  // opaque base64 page token — mirroring the server so the paging e2e is faithful. Flattened
+  // proto3-JSON camelCase shape (enum-name `state`, nested `readiness` only for RESOLVED).
+  const cmpPair = (a: MockBinding, b: MockBinding) =>
+    a.symbol !== b.symbol
+      ? a.symbol < b.symbol
+        ? -1
+        : 1
+      : a.strategyId === b.strategyId
+        ? 0
+        : a.strategyId < b.strategyId
+          ? -1
+          : 1;
+  const encTok = (b: MockBinding) =>
+    Buffer.from(`${b.symbol}\x00${b.strategyId}`).toString('base64url');
+  const decTok = (t: string): MockBinding | null => {
+    if (!t) return null;
+    const raw = Buffer.from(t, 'base64url').toString();
+    const i = raw.indexOf('\x00');
+    return i < 0
+      ? { symbol: raw, strategyId: '' }
+      : { symbol: raw.slice(0, i), strategyId: raw.slice(i + 1) };
+  };
+  await page.route('**/xstockstrat.analysis.v1.AnalysisService/GetWatchlistReadiness', (route) => {
+    const req = JSON.parse(route.request().postData() ?? '{}');
+    const wl = find(req.watchlistId);
+    const bound = (wl?.bindings ?? []).filter((b) => b.strategyId).sort(cmpPair);
+    const cursor = decTok(req.page?.pageToken ?? '');
+    const after = cursor ? bound.filter((b) => cmpPair(b, cursor) > 0) : bound;
+    const size = req.page?.pageSize > 0 ? req.page.pageSize : 25;
+    const pageRows = after.slice(0, size);
+    const nextPageToken = after.length > size ? encTok(pageRows[pageRows.length - 1]) : '';
+    const rows = pageRows.map((b) => {
+      const forced = readinessOverrides[b.symbol];
+      if (forced === 'pending') {
+        return { symbol: b.symbol, strategyId: b.strategyId, state: 'READINESS_STATE_PENDING' };
+      }
+      if (forced === 'unknown') {
+        return { symbol: b.symbol, strategyId: b.strategyId, state: 'READINESS_STATE_UNKNOWN' };
+      }
+      return {
+        symbol: b.symbol,
+        strategyId: b.strategyId,
+        state: 'READINESS_STATE_RESOLVED',
+        readiness: symbolReadiness(b.symbol),
+        computedAt: new Date().toISOString(),
+      };
+    });
+    return json(route, { rows, page: { nextPageToken } });
   });
 }
