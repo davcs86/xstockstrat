@@ -140,3 +140,18 @@
   DO NOTHING; down = explicit key-IN, user_id IS NULL, no SQL LIKE. Offline read-back verified.
 - Files modified: services/xstockstrat-config/migrations/027_analysis_readiness_materializer_keys.{up,down}.sql
 - Deviations: none (offline migration verification per HARD CONSTRAINT — live apply deferred to CI/deploy).
+
+### Step 2 — service: register 3 bounds + robust registry lookup [done]
+- Added 3 SCALAR_BOUNDS_REGISTRY entries (refresh_hour_utc[0,23], valid_window_hours[1,168],
+  max_concurrent_bars_fetches[1,5]) under full-dotted names; extracted a shared lookupScalarBounds()
+  helper (bare key ?? namespace.key) used at both the setConfig write edge and the listKeys render-hint;
+  reconciled the :96-97 registry + :493-494 listKeys comments. DRY helper vs inline ?? = minor in-scope
+  deviation (logged).
+- Files modified: services/xstockstrat-config/src/grpc/configServiceImpl.ts
+
+### Step 3 — test: config bounds + registration acceptance [done]
+- Extended setConfigScalarBounds.test.ts with the readiness_materializer block (AC-5/7/8/9), full-dotted
+  keys. TDD red→green: RED captured pre-Step-2 (`not ok 10 ... AC-8` — out-of-bounds accepted, no bounds);
+  GREEN after Step 2 (`ok 10`; 104/104 pass, lint 0 errors, coverage 80.6% > 40%).
+- Files modified: services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts
+- Deviations: none (Step 2's helper deviation covers the pair).

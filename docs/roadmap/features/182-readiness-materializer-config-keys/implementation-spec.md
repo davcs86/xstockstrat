@@ -157,7 +157,7 @@ is still next-free: `ls services/xstockstrat-config/migrations/ | grep -oE '^[0-
 
 ### Step 2 — service: register the three numeric bounds + make the registry lookup robust
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -229,7 +229,7 @@ shows the two-operand `?? ` lookup at both the setConfig (`:~379`) and listKeys 
 
 ### Step 3 — test: config bounds + registration acceptance for the readiness_materializer keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` — modify
@@ -375,4 +375,4 @@ bounds; confirm the feature-180 entry is unchanged (append-only rule).
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **Step 2 — helper extraction (minor, in-scope).** The spec text showed the two-operand lookup inlined as `SCALAR_BOUNDS_REGISTRY[key] ?? SCALAR_BOUNDS_REGISTRY[\`${namespace}.${key}\`]` at both `:379` and `:495`. Implemented instead as a shared `lookupScalarBounds(namespace, key)` helper called at both sites, to avoid duplicating the `??` probe (DRY guard rail). Same behavior; **Disposition**: in-scope refinement, no re-gate needed.
