@@ -102,6 +102,27 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 182 — readiness-materializer-config-keys (`xstockstrat-config` / `xstockstrat-analysis`)
+
+**Supersedes feature 180's no-seed/no-bounds registration** of the same four
+`analysis.readiness_materializer.*` keys. Registers them via **seed migration
+`027_analysis_readiness_materializer_keys`** (global rows, both environments) so config-ui shows them
+and an admin can enable the materializer without a raw `SetConfig(create_key)`. All four are seeded at
+their **current code default** (`enabled=false`), so applying 027 is a **no-runtime-behavior change** —
+enabling stays a later operator config-ui toggle. The three int tuning keys additionally gain
+**write-side `SCALAR_BOUNDS_REGISTRY` bounds** (`configServiceImpl.ts`, feature 182) resolved via a
+two-operand lookup (the seeded `key` column is full-dotted). Bounds reject only out-of-range future
+`SetConfig` writes — no read path is affected. **Visibility caveat:** a raw migration `INSERT` fires no
+`pg_notify`, so the keys appear in config-ui only after a config-service reload (restart/deploy, or the
+next analysis-namespace `SetConfig`).
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `analysis.readiness_materializer.enabled` | bool | `false` | — | Master kill-switch. Seeded `false` (no behavior change). `get_bool`. |
+| `analysis.readiness_materializer.refresh_hour_utc` | int | `0` | `[0,23]` | Daily wall-clock UTC anchor. `get_int_present` (`0` = midnight legitimate). |
+| `analysis.readiness_materializer.valid_window_hours` | int | `24` | `[1,168]` | Backstop TTL; authoritative bust is the `bar_epoch` FAST gate. `get_int_present`; 1h floor. |
+| `analysis.readiness_materializer.max_concurrent_bars_fetches` | int | `2` | `[1,5]` | Materializer bars-fetch semaphore; ceiling = marketdata PgBouncer pool size (feature-141 SEV-2 guard). `get_int` — never set `0`. |
+
 ### feature 180 — watchlist-readiness-precompute (`xstockstrat-analysis`)
 
 Registers four `analysis.readiness_materializer.*` keys for the background readiness materializer

@@ -3076,3 +3076,21 @@ reusing.
 - **Evidence**: `services/xstockstrat-analysis/app/services/readiness.py`;
   `app/handlers/servicer.py` (`_readiness_materializer_tick`, `_drain_watchlist_bindings` reuse,
   FAST gate); `docs/roadmap/features/180-watchlist-readiness-precompute/implementation-spec.md` Deviation Log.
+
+## 2026-09-06 — config write-bounds are write-path only (feature 182)
+
+- **Pattern**: Registering a `SCALAR_BOUNDS_REGISTRY` entry for a config key rejects only out-of-range
+  future `SetConfig` writes (`configServiceImpl.ts` write edge) and touches **no read path** — so
+  adding bounds does NOT break a "no-runtime-behavior-change" registration contract. A design that
+  defers bounds "to stay no-behavior-change" is miscalibrated: the behavior-change fear belongs to the
+  *seeded value* (seed == code default = no change), not to the bounds.
+- **Rule it implies**: when a feature makes a numeric operational key operator-editable (seeding it so
+  config-ui can show it), evaluate write-bounds on their own merits (footgun exposure), not against the
+  no-behavior-change contract. Two footgun classes to check at the reader: a `max(1,…)` clamp guards
+  only the low side (upper is still an operator lever — e.g. `max_concurrent_bars_fetches` re-opening
+  the feature-141 SEV-2), and a key fed to a scheduler/`seconds_until_hour_utc` may have **no** clamp
+  (`refresh_hour_utc`). Bound the upper side in the registry, keyed on the FULL dotted key path.
+- **Evidence**: `services/xstockstrat-config/src/grpc/configServiceImpl.ts:98-103` (float-only registry
+  today — int support is the open verify for a new int-key bound);
+  `services/xstockstrat-analysis/app/handlers/servicer.py:454` (`get_int` + low-only `max(1,…)`), `:4075`
+  (`refresh_hour_utc`, no clamp); feature 182 design.md.

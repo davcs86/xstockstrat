@@ -93,14 +93,31 @@ interface Subscriber {
   lastVersion: string;
 }
 
-// Scalar-float bounds, keyed on the FULL config key path (namespace.key), NOT the namespace-stripped
-// DB `key` column — a bare `key` lookup would miss the registry and skip validation.
+// Scalar numeric bounds, keyed on the FULL config key path. Looked up (feature 182) with a two-operand
+// probe — the bare DB `key` first (for a full-dotted `key` column, e.g. the readiness_materializer keys),
+// then `${namespace}.${key}` (for a namespace-stripped `key` column, e.g. decay/stale) — so both column
+// forms resolve. Enforced write-side only (rejects out-of-range SetConfig); no read path is affected.
 const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: number }> = {
   'analysis.scoring.signal_decay_half_life_hours': { minValue: 0, maxValue: 8760 },
   // feature 177 FR-1: readiness cache staleness window. < 86400 (the 1d bar cadence) so a
   // served-stale readiness verdict can never outlive a new daily bar. 0 = always stale (min inclusive).
   'analysis.readiness.stale_after_seconds': { minValue: 0, maxValue: 86399 },
+  // feature 182: readiness materializer tuning keys, operator-editable in config-ui once seeded
+  // (migration 027). Bounds are the write-edge guardrail for those newly-exposed keys.
+  'analysis.readiness_materializer.refresh_hour_utc': { minValue: 0, maxValue: 23 },
+  'analysis.readiness_materializer.valid_window_hours': { minValue: 1, maxValue: 168 },
+  // Ceiling tracks marketdata's PgBouncer pool size (root CLAUDE.md § Connection Pool Budget): an
+  // operator raising this above what marketdata can execute re-opens the feature-141 SEV-2 (TimescaleDB
+  // "out of shared memory"). min 1 — 0 is not "unlimited" (the get_int reader would collapse it to 2).
+  'analysis.readiness_materializer.max_concurrent_bars_fetches': { minValue: 1, maxValue: 5 },
 };
+
+// feature 182: resolve a scalar-bounds entry for a config key whose DB `key` column may be full-dotted
+// (bare key already equals the registry key) or namespace-stripped (needs the `${namespace}.${key}`
+// form). Backward-compatible: stripped two-segment keys never collide with three-segment registry keys.
+function lookupScalarBounds(namespace: string, key: string) {
+  return SCALAR_BOUNDS_REGISTRY[key] ?? SCALAR_BOUNDS_REGISTRY[`${namespace}.${key}`];
+}
 
 export class ConfigServiceImpl {
   private subscribers: Map<string, Subscriber> = new Map();
@@ -376,7 +393,7 @@ export class ConfigServiceImpl {
 
     // Server-side scalar-float bounds — the authoritative gate. Parse via extractValueData (all oneof
     // shapes), NOT string-only: the agent writes float_val, and 0 is valid (no falsy-zero trap).
-    const scalarBounds = SCALAR_BOUNDS_REGISTRY[`${namespace}.${key}`];
+    const scalarBounds = lookupScalarBounds(namespace, key);
     if (scalarBounds) {
       const n = Number(extractValueData(value));
       if (Number.isNaN(n) || n < scalarBounds.minValue || n > scalarBounds.maxValue) {
@@ -490,9 +507,10 @@ export class ConfigServiceImpl {
       );
       callback(null, {
         keys: result.rows.map((r) => {
-          // Index the registry with the FULL key path: the DB `key` column is namespace-stripped, so a
-          // bare `r.key` lookup would miss the full-path registry key and skip validation.
-          const scalarBounds = SCALAR_BOUNDS_REGISTRY[`${call.request.namespace}.${r.key}`];
+          // Resolve the registry entry via the two-operand lookup (feature 182): a full-dotted `key`
+          // column matches directly, a namespace-stripped one via the `${namespace}.${key}` form — so
+          // the config-ui validation hint fires for both column forms.
+          const scalarBounds = lookupScalarBounds(call.request.namespace, r.key);
           const secret = r.is_secret === true;
           return {
             key: r.key,
