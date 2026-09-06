@@ -238,7 +238,7 @@ export interface UpdateUserMetadataResponse {
 }
 
 /**
- * ── Admin cross-user profile metadata (admin-gated, feature 182) ──────────────
+ * ── Admin cross-user profile metadata (admin-gated, feature 183) ──────────────
  * Target selected by request-body user_id (never x-user-id). Responses reuse
  * GetUserMetadataResponse / UpdateUserMetadataResponse above.
  */
@@ -3826,7 +3826,7 @@ export const IdentityServiceService = {
     responseDeserialize: (value: Buffer): UpdateUserMetadataResponse => UpdateUserMetadataResponse.decode(value),
   },
   /**
-   * Admin cross-user profile metadata (admin-gated, feature 182). Target selected by request
+   * Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
    * body user_id, never x-user-id (C-03). Reuse the self responses.
    */
   adminGetUserMetadata: {
@@ -3939,7 +3939,7 @@ export interface IdentityServiceServer extends UntypedServiceImplementation {
   getUserMetadata: handleUnaryCall<GetUserMetadataRequest, GetUserMetadataResponse>;
   updateUserMetadata: handleUnaryCall<UpdateUserMetadataRequest, UpdateUserMetadataResponse>;
   /**
-   * Admin cross-user profile metadata (admin-gated, feature 182). Target selected by request
+   * Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
    * body user_id, never x-user-id (C-03). Reuse the self responses.
    */
   adminGetUserMetadata: handleUnaryCall<AdminGetUserMetadataRequest, GetUserMetadataResponse>;
@@ -4162,7 +4162,7 @@ export interface IdentityServiceClient extends Client {
     callback: (error: ServiceError | null, response: UpdateUserMetadataResponse) => void,
   ): ClientUnaryCall;
   /**
-   * Admin cross-user profile metadata (admin-gated, feature 182). Target selected by request
+   * Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
    * body user_id, never x-user-id (C-03). Reuse the self responses.
    */
   adminGetUserMetadata(

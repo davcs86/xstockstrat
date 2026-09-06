@@ -1151,7 +1151,7 @@ class TestListOpportunitiesClient:
         assert not any(k == "x-access-scope" for k, _ in meta)
 
 
-# ── Admin user management + cross-user profile client helpers (feature 182) ──
+# ── Admin user management + cross-user profile client helpers (feature 183) ──
 
 
 def _identity_stub_cm(mock_stub):

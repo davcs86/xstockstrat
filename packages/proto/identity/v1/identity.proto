@@ -30,7 +30,7 @@ service IdentityService {
   rpc GetUserMetadata(GetUserMetadataRequest) returns (GetUserMetadataResponse);
   rpc UpdateUserMetadata(UpdateUserMetadataRequest) returns (UpdateUserMetadataResponse);
 
-  // Admin cross-user profile metadata (admin-gated, feature 182). Target selected by request
+  // Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
   // body user_id, never x-user-id (C-03). Reuse the self responses.
   rpc AdminGetUserMetadata(AdminGetUserMetadataRequest) returns (GetUserMetadataResponse);
   rpc AdminUpdateUserMetadata(AdminUpdateUserMetadataRequest) returns (UpdateUserMetadataResponse);
@@ -149,7 +149,7 @@ message UpdateUserMetadataRequest {
 }
 message UpdateUserMetadataResponse { UserMetadata user_metadata = 1; }
 
-// ── Admin cross-user profile metadata (admin-gated, feature 182) ──────────────
+// ── Admin cross-user profile metadata (admin-gated, feature 183) ──────────────
 // Target selected by request-body user_id (never x-user-id). Responses reuse
 // GetUserMetadataResponse / UpdateUserMetadataResponse above.
 message AdminGetUserMetadataRequest { string user_id = 1; }

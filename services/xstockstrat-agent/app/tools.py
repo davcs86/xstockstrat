@@ -121,7 +121,7 @@ def _caller_access_scope(ctx: Context, tool: str) -> int:
 
 
 def _require_admin(ctx: Context, tool: str) -> None:
-    """Reject a non-admin caller before any backend call (feature 182 user-admin tools).
+    """Reject a non-admin caller before any backend call (feature 183 user-admin tools).
 
     A friendly early check mirroring `manage_account resume`; identity's `adminGate` remains the
     authoritative server-side gate (the derived scope is forwarded via `client._metadata()`)."""
@@ -1347,7 +1347,7 @@ def register_tools(server: MCPServer) -> None:
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="user not found")) from e
 
-    # ── xstockstrat-identity admin: user management + cross-user profile (feature 182) ─────────
+    # ── xstockstrat-identity admin: user management + cross-user profile (feature 183) ─────────
     # Every tool below is ADMIN-only: a friendly early _require_admin check rejects a non-admin
     # before any backend call (no state change), and the caller's derived x-access-scope is
     # forwarded so identity's adminGate stays the authoritative gate. The target user is always a
@@ -1364,7 +1364,7 @@ def register_tools(server: MCPServer) -> None:
         roles: list[str] | None = None,
         active: bool | None = None,
     ) -> dict:
-        """Administer users (ADMIN only) — feature 182. Non-admin callers are rejected.
+        """Administer users (ADMIN only) — feature 183. Non-admin callers are rejected.
 
         operation:
           'create'         — create a user. Requires email, password, and roles (a non-empty subset
@@ -1417,7 +1417,7 @@ def register_tools(server: MCPServer) -> None:
 
     @server.tool()
     async def list_users(ctx: Context) -> dict:
-        """List all users — ADMIN only (feature 182). Returns {"users": [...]} with password-free
+        """List all users — ADMIN only (feature 183). Returns {"users": [...]} with password-free
         views (userId/email/roles/isActive/createdAt). Non-admin callers are rejected."""
         _require_admin(ctx, "list_users")
         try:
@@ -1427,7 +1427,7 @@ def register_tools(server: MCPServer) -> None:
 
     @server.tool()
     async def get_user(ctx: Context, user_id: str) -> dict:
-        """Read one user by id — ADMIN only (feature 182). Returns the password-free user view.
+        """Read one user by id — ADMIN only (feature 183). Returns the password-free user view.
         Non-admin callers are rejected."""
         _require_admin(ctx, "get_user")
         if not user_id:
@@ -1439,7 +1439,7 @@ def register_tools(server: MCPServer) -> None:
 
     @server.tool()
     async def admin_get_user_metadata(ctx: Context, user_id: str) -> dict:
-        """Read ANY user's profile metadata by user_id — ADMIN only (feature 182).
+        """Read ANY user's profile metadata by user_id — ADMIN only (feature 183).
         Returns userId, email, phone, displayName, metadata, metadataUpdatedAt. Non-admin
         callers are rejected. For your own profile use get_user_metadata."""
         _require_admin(ctx, "admin_get_user_metadata")
@@ -1458,7 +1458,7 @@ def register_tools(server: MCPServer) -> None:
         display_name: str | None = None,
         metadata: dict | None = None,
     ) -> dict:
-        """Partial-update ANY user's profile metadata by user_id — ADMIN only (feature 182).
+        """Partial-update ANY user's profile metadata by user_id — ADMIN only (feature 183).
         Only provided fields change; email is read-only. Non-admin callers are rejected. For your
         own profile use set_user_metadata.
         user_id: the target user.

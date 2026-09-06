@@ -15,7 +15,7 @@ export const COPILOT_THREAD = 'default';
  * is no build-time cross-service guard. The authoritative source of truth is the agent's exact
  * tool-name set asserted in
  * `services/xstockstrat-agent/tests/test_tools_endpoint.py::test_list_tools_returns_all_registered_tools`
- * — update this number in the same PR that changes that set (24 → 32 → 35 → 40, feature 182).
+ * — update this number in the same PR that changes that set (24 → 32 → 35 → 40, feature 183).
  */
 export const COPILOT_MCP_TOOL_COUNT = 40;
 

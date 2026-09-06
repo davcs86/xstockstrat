@@ -140,7 +140,7 @@ export interface UpdateUserMetadataResponse {
     userMetadata?: UserMetadata | undefined;
 }
 /**
- * ── Admin cross-user profile metadata (admin-gated, feature 182) ──────────────
+ * ── Admin cross-user profile metadata (admin-gated, feature 183) ──────────────
  * Target selected by request-body user_id (never x-user-id). Responses reuse
  * GetUserMetadataResponse / UpdateUserMetadataResponse above.
  */
@@ -373,7 +373,7 @@ export declare const IdentityServiceService: {
         readonly responseDeserialize: (value: Buffer) => UpdateUserMetadataResponse;
     };
     /**
-     * Admin cross-user profile metadata (admin-gated, feature 182). Target selected by request
+     * Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
      * body user_id, never x-user-id (C-03). Reuse the self responses.
      */
     readonly adminGetUserMetadata: {
@@ -477,7 +477,7 @@ export interface IdentityServiceServer extends UntypedServiceImplementation {
     getUserMetadata: handleUnaryCall<GetUserMetadataRequest, GetUserMetadataResponse>;
     updateUserMetadata: handleUnaryCall<UpdateUserMetadataRequest, UpdateUserMetadataResponse>;
     /**
-     * Admin cross-user profile metadata (admin-gated, feature 182). Target selected by request
+     * Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
      * body user_id, never x-user-id (C-03). Reuse the self responses.
      */
     adminGetUserMetadata: handleUnaryCall<AdminGetUserMetadataRequest, GetUserMetadataResponse>;
@@ -543,7 +543,7 @@ export interface IdentityServiceClient extends Client {
     updateUserMetadata(request: UpdateUserMetadataRequest, metadata: Metadata, callback: (error: ServiceError | null, response: UpdateUserMetadataResponse) => void): ClientUnaryCall;
     updateUserMetadata(request: UpdateUserMetadataRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: UpdateUserMetadataResponse) => void): ClientUnaryCall;
     /**
-     * Admin cross-user profile metadata (admin-gated, feature 182). Target selected by request
+     * Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
      * body user_id, never x-user-id (C-03). Reuse the self responses.
      */
     adminGetUserMetadata(request: AdminGetUserMetadataRequest, callback: (error: ServiceError | null, response: GetUserMetadataResponse) => void): ClientUnaryCall;

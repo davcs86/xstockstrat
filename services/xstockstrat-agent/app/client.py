@@ -1329,7 +1329,7 @@ async def update_user_metadata(
     }
 
 
-# ── Admin user management + cross-user profile (feature 182) ─────────────────
+# ── Admin user management + cross-user profile (feature 183) ─────────────────
 # Role string ↔ proto Role enum ints (mirrors identity ROLE_STRING_TO_ENUM). The backend
 # silently drops unknown/0 enums, so the tool layer validates role strings before dispatch.
 ROLE_STRING_TO_ENUM = {"admin": 1, "trader": 2, "viewer": 3}

@@ -632,7 +632,7 @@ export const UpdateUserMetadataResponseSchema: GenMessage<UpdateUserMetadataResp
   messageDesc(file_identity_v1_identity, 24);
 
 /**
- * ── Admin cross-user profile metadata (admin-gated, feature 182) ──────────────
+ * ── Admin cross-user profile metadata (admin-gated, feature 183) ──────────────
  * Target selected by request-body user_id (never x-user-id). Responses reuse
  * GetUserMetadataResponse / UpdateUserMetadataResponse above.
  *
@@ -1100,7 +1100,7 @@ export const IdentityService: GenService<{
     output: typeof UpdateUserMetadataResponseSchema;
   },
   /**
-   * Admin cross-user profile metadata (admin-gated, feature 182). Target selected by request
+   * Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
    * body user_id, never x-user-id (C-03). Reuse the self responses.
    *
    * @generated from rpc xstockstrat.identity.v1.IdentityService.AdminGetUserMetadata

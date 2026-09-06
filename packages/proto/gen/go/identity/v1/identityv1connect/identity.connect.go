@@ -117,7 +117,7 @@ type IdentityServiceClient interface {
 	// User profile metadata self-management (feature 130)
 	GetUserMetadata(context.Context, *connect.Request[v1.GetUserMetadataRequest]) (*connect.Response[v1.GetUserMetadataResponse], error)
 	UpdateUserMetadata(context.Context, *connect.Request[v1.UpdateUserMetadataRequest]) (*connect.Response[v1.UpdateUserMetadataResponse], error)
-	// Admin cross-user profile metadata (admin-gated, feature 182). Target selected by request
+	// Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
 	// body user_id, never x-user-id (C-03). Reuse the self responses.
 	AdminGetUserMetadata(context.Context, *connect.Request[v1.AdminGetUserMetadataRequest]) (*connect.Response[v1.GetUserMetadataResponse], error)
 	AdminUpdateUserMetadata(context.Context, *connect.Request[v1.AdminUpdateUserMetadataRequest]) (*connect.Response[v1.UpdateUserMetadataResponse], error)
@@ -422,7 +422,7 @@ type IdentityServiceHandler interface {
 	// User profile metadata self-management (feature 130)
 	GetUserMetadata(context.Context, *connect.Request[v1.GetUserMetadataRequest]) (*connect.Response[v1.GetUserMetadataResponse], error)
 	UpdateUserMetadata(context.Context, *connect.Request[v1.UpdateUserMetadataRequest]) (*connect.Response[v1.UpdateUserMetadataResponse], error)
-	// Admin cross-user profile metadata (admin-gated, feature 182). Target selected by request
+	// Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
 	// body user_id, never x-user-id (C-03). Reuse the self responses.
 	AdminGetUserMetadata(context.Context, *connect.Request[v1.AdminGetUserMetadataRequest]) (*connect.Response[v1.GetUserMetadataResponse], error)
 	AdminUpdateUserMetadata(context.Context, *connect.Request[v1.AdminUpdateUserMetadataRequest]) (*connect.Response[v1.UpdateUserMetadataResponse], error)

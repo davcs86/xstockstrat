@@ -228,7 +228,7 @@ class IdentityServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def AdminGetUserMetadata(self, request, context):
-        """Admin cross-user profile metadata (admin-gated, feature 182). Target selected by request
+        """Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
         body user_id, never x-user-id (C-03). Reuse the self responses.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)

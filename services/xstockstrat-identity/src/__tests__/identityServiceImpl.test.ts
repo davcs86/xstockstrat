@@ -925,7 +925,7 @@ describe('ledger audit emits (AC-8/AC-10)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Admin cross-user profile metadata (feature 182) — AC-7 / AC-8 / AC-10
+// Admin cross-user profile metadata (feature 183) — AC-7 / AC-8 / AC-10
 // ---------------------------------------------------------------------------
 
 const META_ROW = {

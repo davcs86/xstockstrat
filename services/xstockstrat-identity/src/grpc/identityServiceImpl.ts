@@ -630,7 +630,7 @@ export class IdentityServiceImpl {
   }
 
   /**
-   * AdminGetUserMetadata — read ANY user's profile metadata (feature 182). Target selected by the
+   * AdminGetUserMetadata — read ANY user's profile metadata (feature 183). Target selected by the
    * request-body user_id (never x-user-id). ADMIN-gated; no audit on read (like getUser/listUsers).
    */
   async adminGetUserMetadata(call: any, callback: any) {
@@ -648,7 +648,7 @@ export class IdentityServiceImpl {
   }
 
   /**
-   * AdminUpdateUserMetadata — partial-update ANY user's profile metadata (feature 182). Target from
+   * AdminUpdateUserMetadata — partial-update ANY user's profile metadata (feature 183). Target from
    * request-body user_id. ADMIN-gated; emits a best-effort ledger audit (acting admin + target,
    * no metadata values / no secrets).
    */

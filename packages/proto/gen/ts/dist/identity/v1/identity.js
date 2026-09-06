@@ -3237,7 +3237,7 @@ exports.IdentityServiceService = {
         responseDeserialize: (value) => exports.UpdateUserMetadataResponse.decode(value),
     },
     /**
-     * Admin cross-user profile metadata (admin-gated, feature 182). Target selected by request
+     * Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
      * body user_id, never x-user-id (C-03). Reuse the self responses.
      */
     adminGetUserMetadata: {

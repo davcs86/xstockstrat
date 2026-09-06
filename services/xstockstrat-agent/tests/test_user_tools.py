@@ -1,4 +1,4 @@
-"""Feature 182 — admin user-management + cross-user profile MCP tools (tool layer).
+"""Feature 183 — admin user-management + cross-user profile MCP tools (tool layer).
 
 Drives the registered `manage_user` / `list_users` / `get_user` / `admin_get_user_metadata` /
 `admin_set_user_metadata` `.fn`s: verb dispatch + argument/role validation, per-tool admin gating

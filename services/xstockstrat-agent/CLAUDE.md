@@ -80,11 +80,11 @@ reference):
 | `list_accounts` | List the caller's own accounts — broker and offline together, each by `broker_type` (read-only, feature 164) |
 | `get_positions` | List the caller's positions across all accounts, broker + offline (read-only, feature 169) |
 | `get_positions_by_account_id` | List the caller's positions for one account (read-only, feature 169) |
-| `manage_user` | **Admin**: create / set_roles / set_active / reset_password a user (admin-gated write, feature 182); passwords write-only, never echoed |
-| `list_users` | **Admin**: list all users, password-free views (read-only, admin-gated, feature 182) |
-| `get_user` | **Admin**: read one user by id (read-only, admin-gated, feature 182) |
-| `admin_get_user_metadata` | **Admin**: read ANY user's profile metadata by `user_id` (read-only, feature 182) — distinct from the self-only `get_user_metadata` |
-| `admin_set_user_metadata` | **Admin**: partial-update ANY user's profile metadata by `user_id` (feature 182) — distinct from the self-only `set_user_metadata` |
+| `manage_user` | **Admin**: create / set_roles / set_active / reset_password a user (admin-gated write, feature 183); passwords write-only, never echoed |
+| `list_users` | **Admin**: list all users, password-free views (read-only, admin-gated, feature 183) |
+| `get_user` | **Admin**: read one user by id (read-only, admin-gated, feature 183) |
+| `admin_get_user_metadata` | **Admin**: read ANY user's profile metadata by `user_id` (read-only, feature 183) — distinct from the self-only `get_user_metadata` |
+| `admin_set_user_metadata` | **Admin**: partial-update ANY user's profile metadata by `user_id` (feature 183) — distinct from the self-only `set_user_metadata` |
 
 ### Management-tool authorization
 
@@ -100,7 +100,7 @@ publishes them on the request's ASGI scope under `MCP_CLAIMS_SCOPE_KEY`; each to
 injected `ctx: Context`. The old hardcoded `_admin_metadata()` (`x-access-scope=7`) tuple was
 **removed** by feature 092.
 
-**The user-administration tools are admin-gated (feature 182).** `manage_user`, `list_users`,
+**The user-administration tools are admin-gated (feature 183).** `manage_user`, `list_users`,
 `get_user`, `admin_get_user_metadata`, and `admin_set_user_metadata` each call `_require_admin(ctx,
 tool)` — a friendly early `scope & 0x04` check that rejects a non-admin `PermissionError` **before any
 backend call** (no state change) — then forward the caller's derived `x-access-scope` via

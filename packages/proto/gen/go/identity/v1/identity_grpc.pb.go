@@ -64,7 +64,7 @@ type IdentityServiceClient interface {
 	// User profile metadata self-management (feature 130)
 	GetUserMetadata(ctx context.Context, in *GetUserMetadataRequest, opts ...grpc.CallOption) (*GetUserMetadataResponse, error)
 	UpdateUserMetadata(ctx context.Context, in *UpdateUserMetadataRequest, opts ...grpc.CallOption) (*UpdateUserMetadataResponse, error)
-	// Admin cross-user profile metadata (admin-gated, feature 182). Target selected by request
+	// Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
 	// body user_id, never x-user-id (C-03). Reuse the self responses.
 	AdminGetUserMetadata(ctx context.Context, in *AdminGetUserMetadataRequest, opts ...grpc.CallOption) (*GetUserMetadataResponse, error)
 	AdminUpdateUserMetadata(ctx context.Context, in *AdminUpdateUserMetadataRequest, opts ...grpc.CallOption) (*UpdateUserMetadataResponse, error)
@@ -318,7 +318,7 @@ type IdentityServiceServer interface {
 	// User profile metadata self-management (feature 130)
 	GetUserMetadata(context.Context, *GetUserMetadataRequest) (*GetUserMetadataResponse, error)
 	UpdateUserMetadata(context.Context, *UpdateUserMetadataRequest) (*UpdateUserMetadataResponse, error)
-	// Admin cross-user profile metadata (admin-gated, feature 182). Target selected by request
+	// Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
 	// body user_id, never x-user-id (C-03). Reuse the self responses.
 	AdminGetUserMetadata(context.Context, *AdminGetUserMetadataRequest) (*GetUserMetadataResponse, error)
 	AdminUpdateUserMetadata(context.Context, *AdminUpdateUserMetadataRequest) (*UpdateUserMetadataResponse, error)

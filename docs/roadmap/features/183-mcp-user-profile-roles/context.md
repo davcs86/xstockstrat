@@ -1,8 +1,8 @@
 # Context: mcp-user-profile-roles
 
-**Feature**: `docs/roadmap/features/182-mcp-user-profile-roles/feature.md`
-**Product Spec**: `docs/roadmap/features/182-mcp-user-profile-roles/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/182-mcp-user-profile-roles/implementation-spec.md`
+**Feature**: `docs/roadmap/features/183-mcp-user-profile-roles/feature.md`
+**Product Spec**: `docs/roadmap/features/183-mcp-user-profile-roles/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/183-mcp-user-profile-roles/implementation-spec.md`
 
 ---
 
@@ -149,7 +149,7 @@
 - Deviations: identity tests run via tsc-compile (Node-22 strip-types vacuous-skip) — CI-equivalent (Deviation Log); latent repo trap logged to fails.md.
 
 ### Step 4 — test: identity admin metadata RPCs + mapDbError + camelCase parity [done]
-- Added feature-182 test block: AC-10 gate denial (both new RPCs, no query), AC-7 (target by request user_id), AC-8 (partial update + metadata_updated_at + audit acting-admin/target, no values, read no-audit), NOT_FOUND, mapDbError 23514→code 3 on self + admin (+ generic→13), empty-update, camelCase-only user_id read, handler-registration smoke.
+- Added feature-183 test block: AC-10 gate denial (both new RPCs, no query), AC-7 (target by request user_id), AC-8 (partial update + metadata_updated_at + audit acting-admin/target, no values, read no-audit), NOT_FOUND, mapDbError 23514→code 3 on self + admin (+ generic→13), empty-update, camelCase-only user_id read, handler-registration smoke.
 - Covers AC-7/AC-8/AC-10; red→green captured with Step 3 (12 red → 0). Existing self tests (feature 130/043) stay green.
 - Files modified: `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts` (note: real path is `src/__tests__/`, not the spec's cited `src/grpc/` — path corrected, deviation).
 

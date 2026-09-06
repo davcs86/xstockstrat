@@ -945,7 +945,7 @@ Returns `{version, updated_at}` — **never the value**.
 calling user's derived `x-access-scope`, so `xstockstrat-config` rejects a non-admin caller with
 `PERMISSION_DENIED` ("admin scope required"). Since feature 092 this is how **every** management
 write tool works (it was `set_config`-only under feature 073); the hardcoded admin scope was removed
-(invariant **AGENT-3/AGENT-4**). The feature-182 user-administration tools (`manage_user`,
+(invariant **AGENT-3/AGENT-4**). The feature-183 user-administration tools (`manage_user`,
 `list_users`, `get_user`, `admin_get_user_metadata`, `admin_set_user_metadata`) follow the same rule
 with an added friendly early `scope & 0x04` check (`_require_admin`) that rejects a non-admin before
 any backend call; identity's `adminGate` remains the authoritative server-side gate.
@@ -1284,7 +1284,7 @@ Returns `{"positions": [...], "next_page_token": "<str>"}` — same shape as `ge
 
 ### `manage_user`
 
-Administer users (**ADMIN only**, feature 182). A non-admin caller is rejected `PermissionError`
+Administer users (**ADMIN only**, feature 183). A non-admin caller is rejected `PermissionError`
 ("manage_user requires admin scope") before any backend call. The caller's derived `x-access-scope`
 is forwarded so identity's `adminGate` is the authoritative gate. Passwords are write-only — never
 echoed in the result or logged.
@@ -1307,14 +1307,14 @@ be demoted/deactivated (`FAILED_PRECONDITION` "cannot remove last admin").
 
 ### `list_users`
 
-List all users (**ADMIN only**, read-only, feature 182). Returns `{"users": [...]}` with password-free
+List all users (**ADMIN only**, read-only, feature 183). Returns `{"users": [...]}` with password-free
 views (`userId`, `email`, `roles`, `isActive`, `createdAt`). No parameters.
 
 **Errors:** `PermissionError` → non-admin; `RuntimeError` → no verified caller claims.
 
 ### `get_user`
 
-Read one user by id (**ADMIN only**, read-only, feature 182).
+Read one user by id (**ADMIN only**, read-only, feature 183).
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -1325,7 +1325,7 @@ empty `user_id`; `RuntimeError` → `NOT_FOUND` ("user not found").
 
 ### `admin_get_user_metadata`
 
-Read **any** user's profile metadata by `user_id` (**ADMIN only**, read-only, feature 182). Distinct
+Read **any** user's profile metadata by `user_id` (**ADMIN only**, read-only, feature 183). Distinct
 from the self-only `get_user_metadata` — the target is the request-body `user_id`, not the caller.
 
 | Parameter | Type | Default | Description |
@@ -1338,7 +1338,7 @@ Returns `userId`, `email`, `phone`, `displayName`, `metadata`, `metadataUpdatedA
 
 ### `admin_set_user_metadata`
 
-Partial-update **any** user's profile metadata by `user_id` (**ADMIN only**, feature 182). Only
+Partial-update **any** user's profile metadata by `user_id` (**ADMIN only**, feature 183). Only
 provided fields change; email is read-only. Distinct from the self-only `set_user_metadata`. The write
 emits a ledger audit event (`identity.user.metadata_updated`, acting admin + target, no values).
 

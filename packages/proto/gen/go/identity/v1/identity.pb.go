@@ -1471,7 +1471,7 @@ func (x *UpdateUserMetadataResponse) GetUserMetadata() *UserMetadata {
 	return nil
 }
 
-// ── Admin cross-user profile metadata (admin-gated, feature 182) ──────────────
+// ── Admin cross-user profile metadata (admin-gated, feature 183) ──────────────
 // Target selected by request-body user_id (never x-user-id). Responses reuse
 // GetUserMetadataResponse / UpdateUserMetadataResponse above.
 type AdminGetUserMetadataRequest struct {

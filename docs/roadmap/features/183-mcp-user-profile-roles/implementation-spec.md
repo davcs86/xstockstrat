@@ -2,7 +2,7 @@
 
 **Status**: `complete`
 **Created**: 2026-09-06
-**Feature**: `docs/roadmap/features/182-mcp-user-profile-roles/feature.md`
+**Feature**: `docs/roadmap/features/183-mcp-user-profile-roles/feature.md`
 **Total Steps**: 9
 **Feature Branch**: `feature/mcp-user-profile-roles`
 
@@ -90,7 +90,7 @@ config-ui page in scope).
    `identity.proto:31` (group them with the existing metadata self RPCs). Reuse the existing response
    messages (do **not** add `Admin*Response` messages — rejected in design.md):
    ```proto
-   // Admin cross-user profile metadata (admin-gated, feature 182). Target selected by request
+   // Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
    // body user_id, never x-user-id (C-03). Reuse the self responses.
    rpc AdminGetUserMetadata(AdminGetUserMetadataRequest) returns (GetUserMetadataResponse);
    rpc AdminUpdateUserMetadata(AdminUpdateUserMetadataRequest) returns (UpdateUserMetadataResponse);
