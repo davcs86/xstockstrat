@@ -29,7 +29,9 @@ rows immediately and self-heals pending rows by polling the **same** RPC. No por
   (`WatchlistReadiness.tsx:32-39,276`), so carrying it on the verdict Row would duplicate it (Round-3 Obj 3).
   The client keys each verdict cell by `(symbol, strategy_id)` (`WatchlistReadiness.tsx:270` today keys by
   `symbol` alone — the composite key is strictly more correct when a symbol binds multiple strategies).
-- **Enum**: `ReadinessState { READINESS_STATE_UNSPECIFIED = 0; RESOLVED = 1; PENDING = 2; UNKNOWN = 3; }`
+- **Enum**: `ReadinessState { READINESS_STATE_UNSPECIFIED = 0; READINESS_STATE_RESOLVED = 1; READINESS_STATE_PENDING = 2; READINESS_STATE_UNKNOWN = 3; }`
+  — values MUST be `READINESS_STATE_`-prefixed (`buf lint` STANDARD `ENUM_VALUE_PREFIX`, matching
+  `CONDITION_STATE_*` / `READINESS_RULE_*`); prose below uses the bare `RESOLVED/PENDING/UNKNOWN` shorthand.
   (enum-over-string governance; `_UNSPECIFIED = 0`). Reuses `SymbolReadiness` (`analysis.proto:595-601`)
   and `common.v1.PageRequest`/`PageResponse` — appended after `GetAttribution` (`analysis.proto:52`).
 

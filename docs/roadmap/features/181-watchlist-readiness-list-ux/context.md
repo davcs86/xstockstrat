@@ -181,3 +181,58 @@ RPC (F-06 clean). No Floor breach; no ledger repeat.
   Operator-Decisions phrasing was left as-is per the adversary — it is the historical decision ledger,
   superseded by the authoritative current client spec.)
 - Design is settled at 5 rounds (full-mode cap). Ready for /sdd-spec.
+
+## Session 2026-09-06 — sdd-spec
+
+- Generated implementation-spec.md with 12 steps. Status → implementation-ready.
+- Reused recon.md's grounded Codebase Map + design.md as authoritative inputs; re-verified every
+  load-bearing citation against the live tree (proto, servicer, readiness compute, cache, UI
+  component/hook/BFF, e2e mock homes, migration, buf lint config) before writing steps.
+- Step order: proto (1) → codegen (2) → shared-compute `-1` sentinel + test (3–4, the R-E fix that
+  touches shipped 177/180 — operator-approved scope deviation) → new `GetWatchlistReadiness` handler
+  + test (5–6) → UI hook/component/BFF/mock (7–10) → UI e2e (11) → docs (12).
+- Scenario coverage (C-15): AC-1/AC-2/AC-6 → Step 11 (UI e2e); AC-3/AC-4 → Step 11 + Step 6 (backend
+  FAST serve + keyset paging); AC-5 (no cycle) → Step 6 (structural grep + handler edge assertion).
+- Key codebase findings:
+  - **Grounded correction to design.md's enum shorthand:** `buf.yaml` uses `STANDARD` lint (no
+    `ENUM_VALUE_PREFIX` exception) and every existing enum prefixes its values
+    (`CONDITION_STATE_*`, `READINESS_RULE_*`). The design's `RESOLVED=1` shorthand would fail
+    `buf lint` (C-09) — the spec writes `READINESS_STATE_UNSPECIFIED/RESOLVED/PENDING/UNKNOWN`.
+  - `AnalysisService` block `analysis.proto:12-53`; last RPC `GetAttribution` `:52`; readiness
+    messages at `:595-649`; `common.PageRequest{page_size=1,page_token=2}` / `PageResponse` at
+    `common.proto:10-16`. New RPC + messages are additive (non-breaking).
+  - `EvaluateReadiness` handler (`servicer.py:2727+`) is the exact template for the new handler:
+    `_caller_user_id` (`:492`/`:2746`), `get_by_owner_and_id` (`strategies.py:66`),
+    `_definition_fingerprint` (`:4706`), `GetDataCoverage` probe loop (`:2835-2850`,
+    `_READINESS_COVERAGE_PROBE_DAYS=10` `:258`), `read_many`/`is_readiness_row_fresh`/
+    `_symbol_readiness_from_json`/`compute_readiness_row`. Kick template `_kick_opportunity_recompute`
+    (`:3291-3308`); materializer bars-sem `self._readiness_materializer_bars_sem` (`:443`).
+  - Watchlist read: existing analysis→portfolio stub `self._portfolio` (`:389-390`);
+    `GetWatchlist` RPC `portfolio.proto:22`, `GetWatchlistRequest{watchlist_id=1}` →
+    `GetWatchlistResponse{watchlist=1}` (`:264-269`), `Watchlist.bindings=8` /
+    `WatchlistBinding{symbol=1,strategy_id=2,source=3}` (`:220-239`). No new edge (FR-4/AC-5).
+  - R-E sentinel is schema-safe: `readiness_cache.bar_epoch BIGINT NOT NULL`, no non-negative
+    constraint (`migrations/022_readiness_cache.up.sql:14`) → **no migration** (F-06). The exception
+    path is at `readiness.py:65-68`; `bar_epoch` fold at `:82`. Successful-empty fetch is a distinct
+    path and must stay `>= 0`.
+  - UI: N+1 fan-out to remove is `WatchlistReadiness.tsx:193-203` (`useQueries` +
+    `analysisClient.evaluateReadiness`, `staleTime:30_000`). New hook uses disjoint key
+    `['watchlistReadiness',...]` (never `['watchlists']`, protecting feature-167 @AC-6 cache patch at
+    `useWatchlists.ts:140-192`). Pagination stack precedent `usePortfolio.ts:33,46-56` +
+    `trader/positions/page.tsx:47-54`. C-17 primitives all exist (`Skeleton`/`QueryStateMessages`/
+    `EmptyState`). BFF forward goes in `insightsBff.ts:55` region; single site (trader/config BFFs
+    carry no watchlist RPCs). e2e mock homes: `mock-backend.ts` (`evaluateReadiness` `:821`,
+    `listWatchlists` `:351`) + `watchlistMock.ts:33,75`; flattened proto3-JSON camelCase, no oneof.
+
+### Decisions
+- Enum values written buf-lint-compliant (`READINESS_STATE_*` prefix), overriding design.md's shorthand.
+- No `xstockstrat-portfolio` reviewer / no portfolio step — watchlist read uses the existing edge.
+- No migration and no config key (page size 25, poll 30s, UNKNOWN retry 300s are UI/module constants).
+
+### Open Threads (carried to /sdd-execute)
+- R-A: durable C-16 scenario added to analysis `readiness-caching-poll-discipline.feature` in Step 6;
+  flag feature-180 FAST/bar_epoch guarantee for promotion in the same edit.
+- R-B: FR-6 warm-FAST-first-render is contingent on `analysis.readiness_materializer.enabled`
+  (default OFF) — Step 12 documents the prerequisite; do NOT flip the default.
+- R-E/R-F: shared-compute `-1` sentinel changes shipped 177/180 (operator-approved); Step 4 re-verifies
+  feature-177 @AC-1 (success FAST skip) and @AC-2 (bar bust). R-F semaphore coupling documented in Step 12.
