@@ -13,6 +13,7 @@
 | 2026-09-06 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-06 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings); overlap CLEAN |
 | 2026-09-06 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written. Operator chose "all four keys + write-bounds" (max_concurrent_bars_fetches ceiling=5) |
+| 2026-09-06 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
 
 ---
 
@@ -22,7 +23,7 @@
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Recon](recon.md) — grounded codebase dossier (/sdd-design Phase 0)
 - [Design](design.md) — debated, approved architecture (/sdd-design Phase 1)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec <slug>`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -42,9 +43,10 @@ re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
-| Config service owner | Config seed migration correctness, key naming/scoping, registered-keys log |
-| Analysis service owner | Key names/defaults match the analysis reader getters (feature 180) |
+| DBA | Migration run order + reversibility (Step 1) |
+| xstockstrat-config owner | Config seed migration correctness, key naming/scoping, config mutation safety + WatchConfig stream stability (bounds registry), registered-keys log (Steps 1–3, 5) |
+| (docs steps) | None — analysis CLAUDE.md + config-governance edits are docs-only (reviewer-registry.md `docs` → None) |
 
 ## Next Action
 
-`/sdd-spec readiness-materializer-config-keys` — generate implementation spec from the approved design
+`/sdd-review readiness-materializer-config-keys impl-spec` — validate implementation spec, then `/sdd-execute readiness-materializer-config-keys`

@@ -55,7 +55,46 @@
   (`AND user_id IS NULL`).
 - Constitution rules touched: C-05, C-07, C-16, P-03, F-01, F-04, F-06, F-07. Floor breaches: none.
 
+## Session 2026-09-06 — sdd-spec
+
+- Generated implementation-spec.md with 5 steps. Status → implementation-ready.
+- Key codebase findings:
+  - Migration 027 confirmed next-free (last is `026_analysis_engine_blend_keys`); `024` is a permanent
+    documented gap. Mirror 026's INSERT tuple + `ON CONFLICT (namespace,key,environment,COALESCE(user_id,'')) DO NOTHING`;
+    down = explicit key-IN delete + `AND user_id IS NULL`.
+  - **Full-dotted `key` column is mandatory.** analysis reads via exact-string lookup
+    `watcher.py:90 values.get(key)` with the full-dotted key (servicer.py:4173/4075/3044/4092/454). 026
+    (full-dotted) is the verified-correct precedent; **019 (`scoring.signal_decay_half_life_hours`,
+    stripped) is a latent reader-orphan masked by default==seeded 24.0** — the migration-008 trap. Do not
+    replicate stripped form.
+  - **design.md Open Risk #1 RESOLVED + refined.** `SCALAR_BOUNDS_REGISTRY` int enforcement IS present
+    (`configServiceImpl.ts:379-389` `Number(extractValueData(value))`, type-agnostic; `extractValueData`
+    reads `int_val ?? intVal`, `:559-563`; existing `setConfigScalarBounds.test.ts:131-147` already tests
+    the int path). But discovery found a NEW wrinkle the design missed: the registry/listKeys/setConfig
+    lookup is `` `${namespace}.${key}` ``, keyed on the SetConfig **request** key (= DB `key` column).
+    The two existing bounded keys use a **stripped** `key` column so it matches; 182's **full-dotted** key
+    column makes config-ui's lookup `analysis.analysis.readiness_materializer.*` (double prefix) → miss →
+    bounds silently wouldn't fire. **Chosen fix (Step 2): robust two-operand lookup** — bare `key` first,
+    then `` `${namespace}.${key}` `` — at BOTH `:379` (setConfig) and `:495` (listKeys). Backward-compatible
+    (stripped keys fall through), registers the 3 keys under natural full-dotted names, self-documenting.
+    Alternatives (A double-prefix registry keys; B re-gate to seed-only-enabled) recorded, not chosen.
+    **Flagged for /sdd-review impl-spec sign-off** (a spec-time refinement of the design's Open Risk #1).
+  - Bounds: `refresh_hour_utc [0,23]`, `valid_window_hours [1,168]`, `max_concurrent_bars_fetches [1,5]`
+    (ceiling = marketdata PgBouncer pool size 5, feature-141 SEV-2 guard). `enabled` bool → no bound.
+  - Consumer surface C-14: `/config-ui` reached with **no UI code change** (generic NamespaceEditor +
+    ListKeys ValidationRule render); visibility needs a config-service reload (raw INSERT → no pg_notify).
+  - config test/lint: `pnpm run test:coverage` (c8 --lines 40) + `pnpm run lint` (eslint), confirmed in
+    package.json.
+
 ## Open Threads (carry into /sdd-spec + /sdd-execute)
+
+- [ ] **Bounds-registry double-prefix fix (Step 2, NEW at spec time)** — the robust two-operand lookup is
+  a config-service code change beyond design's "migration + 3 registry entries"; get impl-spec review
+  sign-off. If rejected, fall back to double-prefixed registry keys (Option A) or seed-only-enabled
+  (Option B, re-gate).
+- [ ] **019 decay-key reader orphan (out of scope, informational)** — migration 019 stores the stripped
+  `key` column while the reader reads full-dotted; operator config-ui edits never reach the analysis
+  reader (masked because default==seeded 24.0). NOT fixed by 182; noted for a future triage.
 
 - [ ] **SCALAR_BOUNDS_REGISTRY int support** — registry holds only float keys today
   (`configServiceImpl.ts:98-103`); /sdd-spec MUST verify the enforcement path (~`:379-386`) applies to
