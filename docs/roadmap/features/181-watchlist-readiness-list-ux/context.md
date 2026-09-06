@@ -160,3 +160,24 @@ into concrete, code-verified mechanisms.
 - design.md updated to 4-round state (classifier rewritten, sentinel + recovery in step 5, two rejected
   discriminators added, R-A/R-E resolved). **New /sdd-spec obligation:** RED-test the sentinel write + the
   four-way classifier, and re-verify feature-177 @AC-2 in the same PR (shared-compute change).
+
+### Round 5 (operator-requested) — final holistic coherence pass
+
+Ran a fifth adversary pass over the COMPLETE design.md end-to-end. **Verdict: APPROVE — approvable as
+written, no required design.md edit.** Confirmed: (a) the four-way state machine
+(`bar_epoch<0→UNKNOWN / fresh→RESOLVED / else→PENDING`) is described identically in every section — no
+leftover "stale/missing→PENDING" binary, no "poll only while PENDING" phrasing; (b) the `-1` sentinel
+blast radius is complete — one writer (`readiness.py:82`), three readers all via the `is_readiness_row_fresh`
+`>=` predicate (decorated classifier checks `<0` first; interactive FAST gate → SLOW recompute, its response
+built from `readiness_json` not `bar_epoch` so unchanged; materializer skip-fresh → recompute), no
+sort/arithmetic/metric consumes `bar_epoch`; (c) no pair can get permanently stuck; (d) a successful-EMPTY
+fetch (distinct from the exception path) is NOT stranded — probe window (10d) ⊂ fetch window (400d), so
+empty fetch ⇒ `lbe=0` ⇒ RESOLVED best-effort, so the sentinel correctly targets only the exception path;
+(e) every FR-1..7 / @AC-1..6 still maps, dropping `source` orphans nothing, `GetWatchlist` is a pre-existing
+RPC (F-06 clean). No Floor breach; no ledger repeat.
+- **One optional polish folded in:** R-E's re-verification obligation now names feature-177 **@AC-1** as well
+  as @AC-2 — the shared-compute edit changes only the *failure* stamp, so /sdd-spec must assert the
+  happy-path FAST skip for *successful* symbols is unchanged, not just the bar-bust. (The stale Round-2
+  Operator-Decisions phrasing was left as-is per the adversary — it is the historical decision ledger,
+  superseded by the authoritative current client spec.)
+- Design is settled at 5 rounds (full-mode cap). Ready for /sdd-spec.

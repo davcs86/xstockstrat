@@ -3,9 +3,10 @@
 **Created**: 2026-09-06
 **Mode**: /sdd-design full (4 rounds) — gates `spec-ready` → `design-approved`
 **Inputs**: `product-spec.md` (FR-1..7), `recon.md`, Constitution `docs/sdd/constitution.md`, ledger `fails.md`
-**Debate**: design-proposer vs design-adversary, 4 rounds; 2 operator forks resolved at the Round-2 gate,
-Obj 3–7 closed at Round 3 (adversary-verified), R-E infinite-PENDING trap mechanized at Round 4 (failure
-sentinel; operator-approved shared-compute scope deviation). No Floor breach at any round.
+**Debate**: design-proposer vs design-adversary, 5 rounds (full-mode cap); 2 operator forks resolved at the
+Round-2 gate, Obj 3–7 closed at Round 3 (adversary-verified), R-E infinite-PENDING trap mechanized at
+Round 4 (failure sentinel; operator-approved shared-compute scope deviation), Round 5 final holistic
+coherence pass → APPROVE. No Floor breach at any round.
 
 ---
 
@@ -231,8 +232,10 @@ rows immediately and self-heals pending rows by polling the **same** RPC. No por
   behavior change to shipped features 177/180 — a benchmark-present primary-failure row that today can
   FAST-serve a degraded verdict now becomes non-fresh/`UNKNOWN`. This exceeds 181's "presentation +
   read-shape only" scope; the operator **explicitly approved** it (recorded in context.md, C-11/P-03).
-  /sdd-spec MUST re-verify feature-177 @AC-2 against `readiness-caching-poll-discipline.feature` in the
-  same PR, and RED-test the sentinel write + the four-way classifier.
+  /sdd-spec MUST re-verify feature-177 @AC-2 **and @AC-1** against `readiness-caching-poll-discipline.feature`
+  in the same PR (the shared-compute edit changes only the *failure* stamp, so @AC-1's happy-path FAST skip
+  for *successful* symbols must be asserted unchanged, not just @AC-2's bar-bust), and RED-test the sentinel
+  write + the four-way classifier.
 - **R-F (Obj 4a, NEW) — semaphore config coupling.** Reusing `self._readiness_materializer_bars_sem`
   (`servicer.py:443`) for on-read kicks means `analysis.readiness_materializer.max_concurrent_bars_fetches`
   now **also** throttles interactive watchlist-read kicks. Document in the spec and `analysis/CLAUDE.md`
