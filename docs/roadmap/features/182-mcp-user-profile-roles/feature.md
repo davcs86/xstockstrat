@@ -14,6 +14,7 @@
 | 2026-09-06 | `draft` → `design-approved` | /sdd-design | Design debated (4 rounds, quick mode extended by operator) and approved; recon.md + design.md written |
 | 2026-09-06 | `design-approved` (unchanged) | /sdd-review | Product-spec review PASS (advisory re-run at design-approved); OQ-1/OQ-2 reconciled to design decisions; overlap CLEAN |
 | 2026-09-06 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
+| 2026-09-06 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Step 1 proto landed) |
 
 ---
 

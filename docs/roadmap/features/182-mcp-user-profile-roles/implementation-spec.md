@@ -63,7 +63,7 @@ config-ui page in scope).
 
 ### Step 1 — proto: add AdminGetUserMetadata / AdminUpdateUserMetadata RPCs + request messages
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/identity/v1/identity.proto` — modify
@@ -573,4 +573,7 @@ executable guard already enforces the 40-name set (Step 8, `test_tools_endpoint.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **Step 1/2 (proto) — buf via Docker.** Host `buf` is absent; `buf lint`/`buf breaking` (Step 1) and
+  `buf-gen.sh` (Step 2) run inside the version-pinned `xstockstrat-codegen` Docker image (built from
+  `Dockerfile.codegen`). **Disposition**: CI-equivalent fallback (sequential-mode verification
+  fallback — matches the `proto-freshness` toolchain).

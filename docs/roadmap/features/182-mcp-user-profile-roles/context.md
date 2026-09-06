@@ -125,3 +125,14 @@
 - Overlap scan: CLEAN — no migration/proto-field/config-key/file collisions with any non-launched
   feature; shared agent surfaces touched only by already-launched features (rebase-only). No merge-order
   row required.
+
+## Session 2026-09-06 — sdd-execute (sequential)
+
+- Tooling setup (steps 1–9): node ✓ v22.22.2 · pnpm ✓ 9.15.9 (identity deps installed) · uv ✓ 0.8.17 · ruff ✓ 0.15.8 · agent deps installed (uv sync --extra dev) · buf ✗ host → Docker codegen image `xstockstrat-codegen` built (dockerd started) · migration N/A. Host python 3.11 (uv fetches pinned 3.13 for agent).
+- §5.3 re-spec gate: merged origin/main-dev (only unrelated config-ui audit files); all step anchors validated against live code; directive none, no mismatch → no re-spec.
+
+### Step 1 — proto: add AdminGetUserMetadata/AdminUpdateUserMetadata RPCs + request messages [done]
+- Added 2 additive RPCs (reusing GetUserMetadataResponse/UpdateUserMetadataResponse) + AdminGetUserMetadataRequest/AdminUpdateUserMetadataRequest messages to identity.proto.
+- Verified via Docker codegen image: `buf lint` OK, `buf breaking` against main-dev non-breaking.
+- Files modified: `packages/proto/identity/v1/identity.proto`
+- Deviations: buf run inside the `xstockstrat-codegen` Docker image (host buf absent) — CI-equivalent; recorded in Deviation Log.
