@@ -405,7 +405,7 @@ Confirm coverage ≥ 40% and the new cases pass.
 
 ### Step 7 — service: register the 5 admin MCP tools (xstockstrat-agent)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -465,7 +465,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run
 
 ### Step 8 — test: agent tool dispatch + per-tool admin denial + 40-name inventory guard (xstockstrat-agent)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_user_tools.py` — create

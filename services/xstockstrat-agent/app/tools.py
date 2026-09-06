@@ -115,6 +115,15 @@ def _caller_access_scope(ctx: Context, tool: str) -> int:
     return roles_to_access_scope(claims.get("roles"))
 
 
+def _require_admin(ctx: Context, tool: str) -> None:
+    """Reject a non-admin caller before any backend call (feature 182 user-admin tools).
+
+    A friendly early check mirroring `manage_account resume`; identity's `adminGate` remains the
+    authoritative server-side gate (the derived scope is forwarded via `client._metadata()`)."""
+    if not (_caller_access_scope(ctx, tool) & 0x04):
+        raise PermissionError(f"{tool} requires admin scope")
+
+
 def _caller_user_id(ctx: Context, tool: str) -> str:
     """Derive the REAL caller's own user id from their verified claims, raising if empty.
 
@@ -1329,6 +1338,135 @@ def register_tools(server: MCPServer) -> None:
                 phone=phone,
                 display_name=display_name,
                 metadata=metadata,
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="user not found")) from e
+
+    # ── xstockstrat-identity admin: user management + cross-user profile (feature 182) ─────────
+    # Every tool below is ADMIN-only: a friendly early _require_admin check rejects a non-admin
+    # before any backend call (no state change), and the caller's derived x-access-scope is
+    # forwarded so identity's adminGate stays the authoritative gate. The target user is always a
+    # request-body user_id, never the caller's x-user-id. Passwords are write-only, never echoed.
+    _VALID_ROLES = {"admin", "trader", "viewer"}
+
+    @server.tool()
+    async def manage_user(
+        ctx: Context,
+        operation: str,
+        user_id: str = "",
+        email: str = "",
+        password: str = "",
+        roles: list[str] | None = None,
+        active: bool | None = None,
+    ) -> dict:
+        """Administer users (ADMIN only) — feature 182. Non-admin callers are rejected.
+
+        operation:
+          'create'         — create a user. Requires email, password, and roles (a non-empty subset
+              of admin/trader/viewer). Returns the new user (userId/email/roles/isActive). The
+              password is write-only and never echoed back.
+          'set_roles'      — replace a user's roles. Requires user_id and a non-empty roles
+              subset of admin/trader/viewer. Returns the updated user.
+          'set_active'     — activate/deactivate a user. Requires user_id and active (true/false).
+              Returns the updated user. (The last active admin cannot be deactivated.)
+          'reset_password' — set a user's password. Requires user_id and password. Returns a success
+              result; the password is never echoed back.
+
+        For reads use list_users / get_user; for profile metadata use admin_get_user_metadata /
+        admin_set_user_metadata."""
+        _require_admin(ctx, "manage_user")
+
+        def _validate_roles(rs: list[str] | None) -> list[str]:
+            if not rs:
+                raise ValueError("roles must be a non-empty subset of admin/trader/viewer")
+            unknown = [r for r in rs if r not in _VALID_ROLES]
+            if unknown:
+                raise ValueError(f"unknown role(s) {unknown}; valid roles are admin/trader/viewer")
+            return rs
+
+        try:
+            if operation == "create":
+                if not email or not password:
+                    raise ValueError("create requires email and password")
+                return await client.create_user(email, password, _validate_roles(roles))
+            if operation == "set_roles":
+                if not user_id:
+                    raise ValueError("set_roles requires a user_id")
+                return await client.set_user_roles(user_id, _validate_roles(roles))
+            if operation == "set_active":
+                if not user_id:
+                    raise ValueError("set_active requires a user_id")
+                if active is None:
+                    raise ValueError("set_active requires 'active' (true or false)")
+                return await client.set_user_active(user_id, active)
+            if operation == "reset_password":
+                if not user_id or not password:
+                    raise ValueError("reset_password requires user_id and password")
+                return await client.reset_password(user_id, password)
+            raise ValueError(
+                f"unknown operation '{operation}' "
+                "(expected create/set_roles/set_active/reset_password)"
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="user not found")) from e
+
+    @server.tool()
+    async def list_users(ctx: Context) -> dict:
+        """List all users — ADMIN only (feature 182). Returns {"users": [...]} with password-free
+        views (userId/email/roles/isActive/createdAt). Non-admin callers are rejected."""
+        _require_admin(ctx, "list_users")
+        try:
+            return {"users": await client.list_users()}
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
+
+    @server.tool()
+    async def get_user(ctx: Context, user_id: str) -> dict:
+        """Read one user by id — ADMIN only (feature 182). Returns the password-free user view.
+        Non-admin callers are rejected."""
+        _require_admin(ctx, "get_user")
+        if not user_id:
+            raise ValueError("get_user requires a user_id")
+        try:
+            return await client.get_user(user_id)
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="user not found")) from e
+
+    @server.tool()
+    async def admin_get_user_metadata(ctx: Context, user_id: str) -> dict:
+        """Read ANY user's profile metadata by user_id — ADMIN only (feature 182).
+        Returns userId, email, phone, displayName, metadata, metadataUpdatedAt. Non-admin
+        callers are rejected. For your own profile use get_user_metadata."""
+        _require_admin(ctx, "admin_get_user_metadata")
+        if not user_id:
+            raise ValueError("admin_get_user_metadata requires a user_id")
+        try:
+            return await client.admin_get_user_metadata(user_id)
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="user not found")) from e
+
+    @server.tool()
+    async def admin_set_user_metadata(
+        ctx: Context,
+        user_id: str,
+        phone: str | None = None,
+        display_name: str | None = None,
+        metadata: dict | None = None,
+    ) -> dict:
+        """Partial-update ANY user's profile metadata by user_id — ADMIN only (feature 182).
+        Only provided fields change; email is read-only. Non-admin callers are rejected. For your
+        own profile use set_user_metadata.
+        user_id: the target user.
+        phone / display_name: optional.
+        metadata: optional JSON object (max 8KB)."""
+        _require_admin(ctx, "admin_set_user_metadata")
+        if not user_id:
+            raise ValueError("admin_set_user_metadata requires a user_id")
+        if phone is None and display_name is None and metadata is None:
+            raise ValueError("at least one field (phone, display_name, metadata) must be provided")
+        try:
+            return await client.admin_update_user_metadata(
+                user_id, phone=phone, display_name=display_name, metadata=metadata
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="user not found")) from e

@@ -163,3 +163,14 @@
 - TDD (AC-4): red→green — pre-Step-5 tree 6 failing (helpers absent) → 366 passed; ruff clean; coverage 80.67% (≥40%).
 - Files modified: `services/xstockstrat-agent/tests/test_client.py`
 - Deviations: none.
+
+### Step 7 — service: register the 5 admin MCP tools [done]
+- Added `_require_admin(ctx, tool)` helper + 5 `@server.tool()`s to app/tools.py: manage_user (op-dispatch create/set_roles/set_active/reset_password with role validation against {admin,trader,viewer} + unknown-op ValueError), list_users, get_user, admin_get_user_metadata, admin_set_user_metadata (all-None precheck). Each does the friendly early admin check before any backend call; AioRpcError → RuntimeError via _grpc_error_message.
+- Files modified: `services/xstockstrat-agent/app/tools.py`
+- Deviations: none.
+
+### Step 8 — test: agent tool dispatch + per-tool admin denial + 40-name guard [done]
+- Added tests/test_user_tools.py (dispatch AC-1..AC-8, unknown-op/role ValueError, all-None precheck, parametrized @AC-9 non-admin denial across all 5 tools with client-never-awaited) + extended tests/test_tools_endpoint.py exact set to 40 names.
+- TDD (AC-1..AC-9): red→green — pre-Step-7 tree 24 failing (tools unregistered + 40-name guard) → 389 passed; ruff clean; coverage 80.55% (≥40%).
+- Files modified: `services/xstockstrat-agent/tests/test_user_tools.py`, `services/xstockstrat-agent/tests/test_tools_endpoint.py`
+- Deviations: none.
