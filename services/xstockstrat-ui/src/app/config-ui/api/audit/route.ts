@@ -6,11 +6,29 @@ let pool: Pool | null = null;
 
 function getPool(): Pool {
   if (!pool) {
+    // Follow the platform SSL convention (config/identity/ledger/notify services):
+    // strip sslmode from the URL and pass an explicit ssl option so DO managed-DB
+    // connections use TLS without rejecting the DO-signed certificate.
+    let connectionString = process.env.DATABASE_URL ?? '';
+    const sslDisabled = connectionString.includes('sslmode=disable');
+    if (!sslDisabled && connectionString) {
+      try {
+        const u = new URL(connectionString);
+        u.searchParams.delete('sslmode');
+        connectionString = u.toString();
+      } catch {
+        /* keep original if URL parsing fails */
+      }
+    }
+    const caCert = process.env.DATABASE_CA_CERT;
     pool = new Pool({
-      connectionString: process.env.DATABASE_URL ?? '',
+      connectionString,
       // Admin-only audit endpoint, light use. Kept to 1 so the UI fits within
       // DigitalOcean's shared 20-connection budget (see root CLAUDE.md).
       max: parseInt(process.env.DB_POOL_MAX ?? '1', 10),
+      ssl: sslDisabled
+        ? false
+        : { rejectUnauthorized: !!caCert, ...(caCert ? { ca: caCert } : {}) },
     });
   }
   return pool;
