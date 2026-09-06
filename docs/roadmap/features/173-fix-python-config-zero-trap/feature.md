@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-09-04
 **Last Updated**: 2026-09-04
+**Committed to main**: 83743049da1ec2e2337ef49bad54c49a10721841
+**Launched date**: 2026-09-06
 
 ---
 
@@ -20,6 +22,7 @@
 | 2026-09-04 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run started; Step 1 (ingest watcher `get_int_present`) done |
 | 2026-09-04 | `in-progress` → `code-completed` | /sdd-execute | All 6 steps done (ingest + indicators present-aware reads, tests, docs); stacked integration PR #1 |
 
+| 2026-09-06 | `code-completed` → `launched` | CI workflow | Promoted via PR #1104; committed 83743049da1ec2e2337ef49bad54c49a10721841 |
 ---
 
 ## Artifacts

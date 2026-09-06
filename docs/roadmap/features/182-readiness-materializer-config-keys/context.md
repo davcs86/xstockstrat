@@ -183,3 +183,10 @@
   write-path-only), all tagged @feature-182. @AC-1..4 (migration shape) + @AC-6 (docs) are not
   behavioral service guarantees to promote; feature-161's decay-key scenarios already cover the generic
   register/bounds pattern (EXTEND, not duplicated). Operator approved the full execute→PR flow ("Proceed").
+
+## Session 2026-09-06 (CI: feature status automation)
+
+- Promotion PR #1104 merged to main
+- Feature promoted and committed: 83743049da1ec2e2337ef49bad54c49a10721841
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-06

@@ -177,3 +177,10 @@ Status unchanged: **spec-ready**. design.md NOT yet written (awaiting consolidat
   propagation inherited via `forwardAdmin`→`forward`→`backendHeaders` (no re-implementation); C-12
   fixtures from `../fixtures` + `../helpers/auth` (no inline domain literals); no proto/migration/config
   /backend change (UI-only, against the pre-existing admin-only `ResumeAccount` RPC).
+
+## Session 2026-09-06 (CI: feature status automation)
+
+- Promotion PR #1104 merged to main
+- Feature promoted and committed: 83743049da1ec2e2337ef49bad54c49a10721841
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-06

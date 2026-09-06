@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-09-04
 **Last Updated**: 2026-09-04
+**Committed to main**: 83743049da1ec2e2337ef49bad54c49a10721841
+**Launched date**: 2026-09-06
 
 ---
 
@@ -20,6 +22,7 @@
 | 2026-09-04 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run (stacked PR #2 on 173); Steps 1-2 (analysis `_build_watch_request`) done |
 | 2026-09-04 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done (analysis + ingest client_id identity fix, wire-object tests, findings teardown) |
 
+| 2026-09-06 | `code-completed` → `launched` | CI workflow | Promoted via PR #1104; committed 83743049da1ec2e2337ef49bad54c49a10721841 |
 ---
 
 ## Artifacts

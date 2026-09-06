@@ -227,3 +227,10 @@ pairs), red-before-green on every code step. FR-1 (opportunity single-flight fan
 parallel), FR-3 (evaluator component_sem), FR-4 (backtest/screener CPU offload), FR-5 (indicators
 sandbox offload), FR-6 (owner-scoped parallel). Ready for the integration PR into main-dev
 (merge-order: 176 before 177).
+
+## Session 2026-09-06 (CI: feature status automation)
+
+- Promotion PR #1104 merged to main
+- Feature promoted and committed: 83743049da1ec2e2337ef49bad54c49a10721841
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-06

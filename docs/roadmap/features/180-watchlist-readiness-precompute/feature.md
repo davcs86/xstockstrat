@@ -3,6 +3,8 @@
 **Development Branch**: `feature/watchlist-readiness-precompute`
 **Created**: 2026-09-05
 **Last Updated**: 2026-09-05
+**Committed to main**: 83743049da1ec2e2337ef49bad54c49a10721841
+**Launched date**: 2026-09-06
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-09-05 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Steps 1-2 done) |
 | 2026-09-05 | `in-progress` → `code-completed` | /sdd-execute | All 7 steps done (sequential); analysis suite 696 passed @ 84.66%, ruff clean |
 
+| 2026-09-06 | `code-completed` → `launched` | CI workflow | Promoted via PR #1104; committed 83743049da1ec2e2337ef49bad54c49a10721841 |
 ---
 
 ## Artifacts

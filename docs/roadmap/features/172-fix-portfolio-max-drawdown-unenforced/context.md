@@ -159,3 +159,10 @@ Path A per-account drawdown enforcement. Go 1.27; golangci-lint v2.13.1 rebuilt 
 **Stopped at**: all complete → code-completed
 **Accountability**: out-of-scope changes: none. Open questions: cash-flow-funding drawdown is an accepted known limitation with a named follow-up ('model funding events') — recorded at design, not this PR's scope. Unaddressed review warnings: none. Migration 016 needs DBA + service-owner approval at the PR.
 **Next**: stacked integration PR #3 (base `feature/fix-config-watcher-client-id`); then feature 171.
+
+## Session 2026-09-06 (CI: feature status automation)
+
+- Promotion PR #1104 merged to main
+- Feature promoted and committed: 83743049da1ec2e2337ef49bad54c49a10721841
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-06

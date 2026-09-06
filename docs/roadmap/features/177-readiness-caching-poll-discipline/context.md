@@ -274,3 +274,10 @@ anchors resolve on the post-176 tree) — no mismatch, no re-spec.
   budget) with `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium` (this sandbox pre-bakes
   a single Chromium and `global-setup.ts` reads that env var directly). Same image/flow CI uses; full
   suite 420 green. No product/behavior deviation.
+
+## Session 2026-09-06 (CI: feature status automation)
+
+- Promotion PR #1104 merged to main
+- Feature promoted and committed: 83743049da1ec2e2337ef49bad54c49a10721841
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-06

@@ -195,3 +195,10 @@ Dead-code cleanup batch + @types/node type-pin. Stacked on 171 (final of the seq
 **Stopped at**: all complete → code-completed
 **Accountability**: out-of-scope changes: none in 175's own diff. Open questions: none. **Surfaced (fixed on 171/PR #1095)**: a latent tsc-build break from feature 171's ledger/identity telemetry test `.ts` import — fixed there, inherited via the stack, not a 175 diff-gate path. C-16: deliberate NON-promotion (one-time removal guards).
 **Next**: stacked integration PR #5 (base `feature/fix-agent-trading-mode-otel-attr`) — end of sequence.
+
+## Session 2026-09-06 (CI: feature status automation)
+
+- Promotion PR #1104 merged to main
+- Feature promoted and committed: 83743049da1ec2e2337ef49bad54c49a10721841
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-06

@@ -3,6 +3,8 @@
 **Development Branch**: `feature/readiness-materializer-config-keys`
 **Created**: 2026-09-06
 **Last Updated**: 2026-09-06
+**Committed to main**: 83743049da1ec2e2337ef49bad54c49a10721841
+**Launched date**: 2026-09-06
 
 ---
 
@@ -16,6 +18,7 @@
 | 2026-09-06 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
 | 2026-09-06 | `implementation-ready` → `code-completed` | /sdd-execute | All 5 steps done (migration 027 + bounds + tests + docs); TDD red-green on Steps 2-3 |
 
+| 2026-09-06 | `code-completed` → `launched` | CI workflow | Promoted via PR #1104; committed 83743049da1ec2e2337ef49bad54c49a10721841 |
 ---
 
 ## Artifacts
