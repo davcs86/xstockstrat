@@ -272,3 +272,18 @@ RPC (F-06 clean). No Floor breach; no ledger repeat.
 - Verification: Docker `buf generate` + grpcio-tools + host `tsc` (pnpm prepare); `git status` shows
   only `packages/proto/gen/**/analysis/v1/**`. Deviations: D-2.
 - Files modified: `packages/proto/gen/{go,python,ts}/analysis/v1/**`.
+
+### Step 3 — service: bar_epoch = -1 sentinel on primary-bars-fetch failure [done]
+- `compute_readiness_row` now stamps `bar_epoch = -1` only on the exception (fetch raised) path;
+  the successful-empty path keeps `max(0, benchmark_epoch)`. Shared compute (177/180) — the
+  operator-approved scope deviation (D-1/design R-E). FAST-gate/@AC-1/@AC-2 units unchanged.
+- Files modified: `app/services/readiness.py`.
+
+### Step 4 — test: R-E sentinel + feature-177 @AC-1/@AC-2 re-verify [done]
+- TDD: R-E red → green — `test_compute_readiness_row_exception_stamps_minus_one_sentinel` failed
+  `assert 500 == -1` against pre-Step-3 tree → passes after. Guard
+  `test_compute_readiness_row_successful_empty_keeps_benchmark_epoch` (500 stays 500) green both sides.
+  @AC-1 (`test_is_readiness_row_fresh_all_conditions_met`) + @AC-2
+  (`test_is_readiness_row_fresh_stale_on_new_daily_bar`) still pass (feature-177 re-verify, R-A).
+- Verification: `ruff check` + `ruff format --check` clean; `pytest --cov=app` 698 passed, 84.76%.
+- Files modified: `tests/test_readiness.py`.

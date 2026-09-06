@@ -164,7 +164,7 @@ Confirms the checked-in stubs match the `.proto` (the `proto-freshness` gate).
 
 ### Step 3 — service: stamp `bar_epoch = -1` on a primary-bars-fetch failure (R-E sentinel)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/readiness.py` — modify
@@ -193,7 +193,7 @@ Confirms the checked-in stubs match the `.proto` (the `proto-freshness` gate).
 
 ### Step 4 — test: R-E sentinel write + feature-177 @AC-1/@AC-2 unchanged
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_readiness.py` — modify
