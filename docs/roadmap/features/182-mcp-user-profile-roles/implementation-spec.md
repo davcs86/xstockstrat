@@ -303,7 +303,7 @@ Confirm the coverage summary reports ≥ 40% (CI threshold for `xstockstrat-iden
 
 ### Step 5 — service: agent client gRPC helpers for the 8 identity RPCs (xstockstrat-agent)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -361,7 +361,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . && uv run
 
 ### Step 6 — test: agent client projection + no-plaintext-password (xstockstrat-agent)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_client.py` — modify or create (confirm existing filename in the

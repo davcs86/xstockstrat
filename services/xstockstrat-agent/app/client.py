@@ -1329,6 +1329,145 @@ async def update_user_metadata(
     }
 
 
+# ── Admin user management + cross-user profile (feature 182) ─────────────────
+# Role string ↔ proto Role enum ints (mirrors identity ROLE_STRING_TO_ENUM). The backend
+# silently drops unknown/0 enums, so the tool layer validates role strings before dispatch.
+ROLE_STRING_TO_ENUM = {"admin": 1, "trader": 2, "viewer": 3}
+_ROLE_ENUM_TO_STRING = {v: k for k, v in ROLE_STRING_TO_ENUM.items()}
+
+
+def _project_user(u: Any) -> dict:
+    """Project a proto User (password-free) to a camelCase dict; roles back to strings."""
+    return {
+        "userId": u.user_id,
+        "email": u.email,
+        "roles": [_ROLE_ENUM_TO_STRING[r] for r in u.roles if r in _ROLE_ENUM_TO_STRING],
+        "isActive": u.is_active,
+        "createdAt": u.created_at.ToJsonString() if u.HasField("created_at") else None,
+    }
+
+
+def _project_user_metadata(m: Any) -> dict:
+    """Project a proto UserMetadata to a camelCase dict (shared by the admin metadata helpers)."""
+    return {
+        "userId": m.user_id,
+        "email": m.email,
+        "phone": m.phone if m.HasField("phone") else None,
+        "displayName": m.display_name if m.HasField("display_name") else None,
+        "metadata": dict(m.metadata) if m.metadata else {},
+        "metadataUpdatedAt": (
+            m.metadata_updated_at.ToJsonString() if m.HasField("metadata_updated_at") else None
+        ),
+    }
+
+
+async def create_user(email: str, password: str, roles: list[str]) -> dict:
+    """Admin: create a user. Password is write-only — never echoed back."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    req = identity_pb2.CreateUserRequest(
+        email=email, password=password, roles=[ROLE_STRING_TO_ENUM[r] for r in roles]
+    )
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.CreateUser(req, metadata=_metadata())
+    return _project_user(resp.user)
+
+
+async def list_users() -> list[dict]:
+    """Admin: list all users (password-free views)."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.ListUsers(identity_pb2.ListUsersRequest(), metadata=_metadata())
+    return [_project_user(u) for u in resp.users]
+
+
+async def get_user(user_id: str) -> dict:
+    """Admin: read one user by id."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.GetUser(
+            identity_pb2.GetUserRequest(user_id=user_id), metadata=_metadata()
+        )
+    return _project_user(resp.user)
+
+
+async def set_user_roles(user_id: str, roles: list[str]) -> dict:
+    """Admin: replace a user's roles."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    req = identity_pb2.SetUserRolesRequest(
+        user_id=user_id, roles=[ROLE_STRING_TO_ENUM[r] for r in roles]
+    )
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.SetUserRoles(req, metadata=_metadata())
+    return _project_user(resp.user)
+
+
+async def set_user_active(user_id: str, active: bool) -> dict:
+    """Admin: activate/deactivate a user."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    req = identity_pb2.SetUserActiveRequest(user_id=user_id, active=active)
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.SetUserActive(req, metadata=_metadata())
+    return _project_user(resp.user)
+
+
+async def reset_password(user_id: str, new_password: str) -> dict:
+    """Admin: set a user's password. Write-only — the plaintext is never echoed back or logged."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    req = identity_pb2.UpdatePasswordRequest(user_id=user_id, new_password=new_password)
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        await stub.UpdatePassword(req, metadata=_metadata())
+    return {"success": True, "userId": user_id}
+
+
+async def admin_get_user_metadata(user_id: str) -> dict:
+    """Admin: read ANY user's profile metadata (target by request-body user_id)."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.AdminGetUserMetadata(
+            identity_pb2.AdminGetUserMetadataRequest(user_id=user_id), metadata=_metadata()
+        )
+    return _project_user_metadata(resp.user_metadata)
+
+
+async def admin_update_user_metadata(
+    user_id: str,
+    phone: str | None = None,
+    display_name: str | None = None,
+    metadata: dict | None = None,
+) -> dict:
+    """Admin: partial-update ANY user's profile metadata (target by request-body user_id)."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+    from google.protobuf.struct_pb2 import Struct  # noqa: PLC0415
+
+    req = identity_pb2.AdminUpdateUserMetadataRequest(user_id=user_id)
+    if phone is not None:
+        req.phone = phone
+    if display_name is not None:
+        req.display_name = display_name
+    if metadata is not None:
+        s = Struct()
+        s.update(metadata)
+        req.metadata.CopyFrom(s)
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.AdminUpdateUserMetadata(req, metadata=_metadata())
+    return _project_user_metadata(resp.user_metadata)
+
+
 async def set_strategy_live(
     user_id: str, strategy_id: str, live_enabled: bool, access_scope: int = 0
 ) -> dict[str, Any]:

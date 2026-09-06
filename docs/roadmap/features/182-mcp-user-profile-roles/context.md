@@ -152,3 +152,14 @@
 - Added feature-182 test block: AC-10 gate denial (both new RPCs, no query), AC-7 (target by request user_id), AC-8 (partial update + metadata_updated_at + audit acting-admin/target, no values, read no-audit), NOT_FOUND, mapDbError 23514→code 3 on self + admin (+ generic→13), empty-update, camelCase-only user_id read, handler-registration smoke.
 - Covers AC-7/AC-8/AC-10; red→green captured with Step 3 (12 red → 0). Existing self tests (feature 130/043) stay green.
 - Files modified: `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts` (note: real path is `src/__tests__/`, not the spec's cited `src/grpc/` — path corrected, deviation).
+
+### Step 5 — service: agent client gRPC helpers [done]
+- Added `ROLE_STRING_TO_ENUM` + `_project_user`/`_project_user_metadata` + 8 async helpers (create_user, list_users, get_user, set_user_roles, set_user_active, reset_password, admin_get_user_metadata, admin_update_user_metadata) to app/client.py — lazy identity_pb2 import, ephemeral channel, `_metadata()` (derived scope, target user_id in body only), camelCase projection; reset_password/create_user never echo the password.
+- Files modified: `services/xstockstrat-agent/app/client.py`
+- Deviations: none.
+
+### Step 6 — test: agent client projection + no-plaintext-password [done]
+- Added test_client.py cases: projection parity (real UserMetadata proto → exact 6 keys), role-string→enum mapping, no-plaintext-password (create_user + reset_password, caplog), derived-scope-forward (x-access-scope=15 + caller x-user-id, target in body), password-free user views.
+- TDD (AC-4): red→green — pre-Step-5 tree 6 failing (helpers absent) → 366 passed; ruff clean; coverage 80.67% (≥40%).
+- Files modified: `services/xstockstrat-agent/tests/test_client.py`
+- Deviations: none.
