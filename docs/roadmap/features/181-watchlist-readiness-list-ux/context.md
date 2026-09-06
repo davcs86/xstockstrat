@@ -82,3 +82,39 @@
   column; guard-set kick dedupe; document the materializer-contingent N+1 win (R-B).
 - `design.md` written; status `spec-ready` → `design-approved`. Open risks R-A..R-D carried to /sdd-spec.
 - Branch: work continues on `claude/watchlist-stock-list-perf-o3qoqb` (PR into main-dev).
+
+### Round 3 (operator-requested) — close Obj 3-7
+
+Ran a third proposer→adversary round to convert the engineering-only conditions (Obj 3-7) from
+"settled by default" into code-verified, testable design decisions. Adversary verdict: **all CLOSED /
+CLOSED-WITH-CONDITION, no Floor breach, no blocker.** design.md + recon.md tightened accordingly.
+
+- **Obj 3 (two row sources) — CLOSED.** Keep `['watchlists']` as the row source; the readiness Row carries
+  no affordance field. Affordance provenance verified in code (in-queue ← `useOpportunities`; provenance ←
+  `binding.source`; system-managed ← `watchlist.systemManaged`; cues/blocking/firing ← the verdict; jump
+  href ← `binding.strategyId`). **Dropped the redundant `source` Row field** (was field 3). Verdict cells
+  keyed by `(symbol, strategy_id)` (composite — more correct than today's `symbol`-only key when a symbol
+  binds multiple strategies). R-D resolved (verified, not deferred).
+- **Obj 4 (kick dedupe) — CLOSED w/ condition.** Guard-set per `(owner, strategy_id, symbol)`
+  (`self._readiness_kicking`), materializer bars sem (`servicer.py:443`) not the interactive one, idempotent
+  upsert. **NEW R-E (highest priority):** cache-read-only + probe-gate introduces an **infinite-PENDING**
+  trap (coverage OK but bars-fetch persistently fails → `bar_epoch=0 >= latest>0` False forever) — must
+  bound to `PENDING`→`UNKNOWN` after N polls (FR-5/@AC-2). **NEW R-F:** materializer-sem reuse couples
+  `max_concurrent_bars_fetches` to on-read kicks — document it.
+- **Obj 5 (contingent N+1) — CLOSED w/ condition.** Verified the 24h vs 30s stamp sites differ
+  (`servicer.py:3923` vs `:2825`); the kick stamps 24h so a warmed page stays RESOLVED (probe-gate still
+  busts on new bar → not a staleness hole). **R-B SPLIT:** FR-1 + FR-2 unconditional; FR-6 (FAST *first*
+  render) contingent on the 180 loop (default off) — document the prerequisite, do NOT flip the default.
+- **Obj 6 (@AC-6) — CLOSED w/ condition.** Verified `WATCHLISTS_KEY=['watchlists']` single+bulk no-invalidate
+  patch (`useWatchlists.ts:7,140-155,180-192`) untouched by the disjoint readiness key. **NEW gap folded
+  into client behavior:** five existing `['watchlists']` invalidators (create/update/delete/add/remove) don't
+  refresh the readiness key → a just-added symbol renders with no readiness entry; "hasPending" must be
+  computed from the *rendered* (binding⋈readiness) rows, else the new row hangs on Skeleton.
+- **Obj 7 (keyset) — CLOSED + citation fix.** Verified `ListOpportunities` is **offset**
+  (`servicer.py:3148-3155`), NOT the keyset precedent; corrected the citation in design.md **and**
+  recon.md:34 → **`ListPositions`** (`portfolio_repo.go:155-166`). Composite `(symbol, strategy_id)` cursor
+  = opaque base64 in `common.PageRequest.page_token` (a `string`, `common.proto:12`); a net-new lexicographic
+  extension of the single-column ListPositions keyset. Keyset bounds compute+response, not the portfolio read.
+- **Also corrected:** design.md step 1 anchors `GetWatchlist` to a new method on the existing `self._portfolio`
+  stub (RPC `portfolio.proto:22`), not the `ListWatchlists` drain line — no new edge (F-06 clean).
+- All conditions are /sdd-spec obligations (R-A..R-F); no new operator fork. design.md at 3-round state.

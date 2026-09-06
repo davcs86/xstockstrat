@@ -12,7 +12,7 @@
 |---|---|---|---|
 | 2026-09-06 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-06 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS; 3 advisory warnings fixed: FR-7 C-17 primitives/a11y + @AC-6, @AC-5 firmed, known-traps reclassified); overlap CLEAN |
-| 2026-09-06 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds) + approved. Chosen: additive cache-first `AnalysisService.GetWatchlistReadiness(watchlist_id, page)` — keyset-paged, probe-gated freshness (full `is_readiness_row_fresh`), background kick for stale, client polls the same RPC. IDOR closed structurally; cycle-free (no portfolio→analysis edge). 2 operator forks resolved: probe-gate (keep @AC-2), poll-new-RPC (kill N+1). |
+| 2026-09-06 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds) + approved. Chosen: additive cache-first `AnalysisService.GetWatchlistReadiness(watchlist_id, page)` — keyset-paged (ListPositions precedent), probe-gated freshness (full `is_readiness_row_fresh`), background kick for stale (guard-set per owner+strategy+symbol), client polls the same RPC. IDOR closed structurally; cycle-free (no portfolio→analysis edge). 2 operator forks resolved R2 (probe-gate keep @AC-2, poll-new-RPC kill N+1); Obj 3-7 closed R3 (adversary-verified: dropped redundant `source` field, fixed ListPositions/ListOpportunities keyset citation, bounded PENDING→UNKNOWN R-E, split FR-2/FR-6 R-B). |
 
 ---
 

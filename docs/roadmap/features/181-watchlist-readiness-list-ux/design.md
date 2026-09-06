@@ -1,9 +1,10 @@
 # Design: watchlist-readiness-list-ux (feature 181)
 
 **Created**: 2026-09-06
-**Mode**: /sdd-design full (2 rounds) — gates `spec-ready` → `design-approved`
+**Mode**: /sdd-design full (3 rounds) — gates `spec-ready` → `design-approved`
 **Inputs**: `product-spec.md` (FR-1..7), `recon.md`, Constitution `docs/sdd/constitution.md`, ledger `fails.md`
-**Debate**: design-proposer vs design-adversary, 2 rounds; 2 operator forks resolved at the Round-2 gate.
+**Debate**: design-proposer vs design-adversary, 3 rounds; 2 operator forks resolved at the Round-2 gate,
+Obj 3–7 closed at Round 3 (adversary-verified against code, no blocker).
 
 ---
 
@@ -18,20 +19,36 @@ rows immediately and self-heals pending rows by polling the **same** RPC. No por
 - **Request**: `{ string watchlist_id = 1; PageRequest page = 2; }` — owner is the `x-user-id` header,
   never on the wire (mirrors `ListOpportunities`, `analysis.proto:617-626`).
 - **Response**: `{ repeated WatchlistReadinessRow rows = 1; PageResponse page = 2; }`.
-- **Row**: `{ string symbol = 1; string strategy_id = 2; string source = 3; ReadinessState state = 4;`
-  `SymbolReadiness readiness = 5; google.protobuf.Timestamp computed_at = 6; }` — `readiness` populated
+- **Row**: `{ string symbol = 1; string strategy_id = 2; ReadinessState state = 3;`
+  `SymbolReadiness readiness = 4; google.protobuf.Timestamp computed_at = 5; }` — `readiness` populated
   **iff** `state == RESOLVED`. **Not a `oneof`** (dodges the flattened-oneof e2e trap, fails.md:1281/1317).
+  `strategy_id` is the **join key only** (not a display payload). **No `source` field** — the @feature-127
+  provenance badge already renders from `binding.source` on the `['watchlists']` read
+  (`WatchlistReadiness.tsx:32-39,276`), so carrying it on the verdict Row would duplicate it (Round-3 Obj 3).
+  The client keys each verdict cell by `(symbol, strategy_id)` (`WatchlistReadiness.tsx:270` today keys by
+  `symbol` alone — the composite key is strictly more correct when a symbol binds multiple strategies).
 - **Enum**: `ReadinessState { READINESS_STATE_UNSPECIFIED = 0; RESOLVED = 1; PENDING = 2; UNKNOWN = 3; }`
   (enum-over-string governance; `_UNSPECIFIED = 0`). Reuses `SymbolReadiness` (`analysis.proto:595-601`)
   and `common.v1.PageRequest`/`PageResponse` — appended after `GetAttribution` (`analysis.proto:52`).
 
 ### Server behavior (analysis servicer, new handler beside `EvaluateReadiness:2727`)
 
-1. Owner-gated `GetWatchlist(watchlist_id)` over the **existing** analysis→portfolio edge
-   (same stub `_drain_watchlist_bindings` uses, `servicer.py:3745-3770`) — **no portfolio change, no cycle**.
-2. Flatten `bindings` (carry `WatchlistBinding.source`, `portfolio.proto:220-226`), impose a **total
-   order** `(symbol ASC, strategy_id ASC)`, **keyset-slice** the page (page token = last-seen
-   `(symbol, strategy_id)` — drift-proof, matches the `ListOpportunities`/`usePortfolio` precedent).
+1. Owner-gated `GetWatchlist(watchlist_id)` — a **new method on the existing `self._portfolio` stub**
+   (RPC `portfolio.proto:22`), invoked over the **existing** analysis→portfolio edge the
+   `_drain_watchlist_bindings` drain already uses (`servicer.py:3745-3770`). **No new edge, no portfolio
+   change, no cycle** (F-06 clean).
+2. Flatten `bindings`, impose a **total order** `(symbol ASC, strategy_id ASC)`, **keyset-slice** the
+   page. Page token = the last-seen `(symbol, strategy_id)` of the sorted set, encoded as an **opaque
+   base64 string** into `common.v1.PageRequest.page_token` (a `string`, `common.proto:12`); resume with
+   the lexicographic `(symbol, strategy_id) > (cursor.symbol, cursor.strategy_id)`. Keyset (not offset) is
+   drift-proof: a binding added/removed between page reads shifts no cursor, so no row is skipped or
+   duplicated. **Precedent is `ListPositions`** (single-column keyset: `WHERE ($N='' OR symbol > $N) ORDER
+   BY symbol ASC LIMIT`, `portfolio_repo.go:155-166`; client stack `usePortfolio.ts:46-56`) — the
+   **composite** `(symbol, strategy_id)` cursor is a net-new lexicographic **extension** of it. NOTE:
+   `ListOpportunities` is **offset**-paginated (`servicer.py:3148-3155`), the counter-example — do **not**
+   copy its slice. This keyset bounds readiness **compute + response size**, not the portfolio read
+   (`GetWatchlist` returns bindings whole, `watchlist_repo.go:441`) — which satisfies FR-3 ("evaluated
+   only for the visible page").
 3. `readiness_cache.read_many(caller_user_id, strategy_id, "entry", symbols)` — **cache read only**,
    never SLOW compute in this RPC.
 4. **Freshness = full `is_readiness_row_fresh` predicate** (`readiness.py:16-28`): fingerprint match
@@ -41,13 +58,24 @@ rows immediately and self-heals pending rows by polling the **same** RPC. No por
    (`servicer.py:3883-3898`) already run. This is a bounded metadata read, **not** a bars fetch and
    **not** a re-eval — "cache-only compute" is preserved. Fresh → `RESOLVED` + inline `SymbolReadiness`;
    stale/missing → `PENDING`.
-5. For the page's not-fresh pairs, fire a **best-effort, per-owner-deduped background refresh** — reuse
-   `compute_readiness_row` + `upsert_many` (`readiness.py:38`, `readiness_cache.py:44`) grouped by
-   strategy, each definition loaded owner-scoped via `get_by_owner_and_id` (`strategies.py:66`), bars
-   gated by the materializer's own semaphore (feature 180). Dedupe via a **guard-set** mirroring
-   `_kick_opportunity_recompute` (`servicer.py:3291-3308`: set-add on entry, `finally: discard`,
-   exception-swallow, un-awaited `create_task`) — **not** a blocking per-owner lock (which would starve
-   a second page's cold pairs). Returns immediately; a refresh failure never touches the response (FR-5).
+5. For the page's not-fresh pairs, fire a **best-effort background refresh** — reuse `compute_readiness_row`
+   + `upsert_many` (`readiness.py:38`, `readiness_cache.py:44`) grouped by strategy, each definition loaded
+   owner-scoped via `get_by_owner_and_id` (`strategies.py:66`). Dedupe via a **guard-set keyed per
+   `(owner, strategy_id, symbol)`** — a new `self._readiness_kicking` mirroring the
+   `_kick_opportunity_recompute` shape (`servicer.py:3291-3308`: set-add on entry, `finally: discard`,
+   exception-swallow, un-awaited `create_task`), **not** a blocking per-owner lock (which starves a second
+   open page). The triple granularity is the true unit of work: disjoint pages proceed concurrently; two
+   views of the same pair collapse to one refresh (all triples in a strategy-group added/discarded
+   coherently). Bars gated by the **materializer's own** semaphore `self._readiness_materializer_bars_sem`
+   (`servicer.py:443`), **not** the interactive `_bars_fetch_sem` (`servicer.py:404`) — preserves the
+   feature-176 priority-inversion guard (a background kick never starves interactive readiness). The kick
+   stamps `valid_until = readiness_valid_until(now, valid_window_hours)` (**24h backstop**, `readiness.py:31-35`,
+   the materializer's window at `servicer.py:3923`), **not** the 30s interactive `stale_after` the
+   `EvaluateReadiness` SLOW body stamps (`servicer.py:2825`) — so a page warmed once by any read stays
+   `RESOLVED` across polls until a `bar_epoch` bust, even with the 180 loop off. `upsert_many` is an
+   idempotent `ON CONFLICT … DO UPDATE` (`readiness_cache.py:52-61`) and the kick + loop run the same
+   `compute_readiness_row`, so a double-fire on one pair is last-write-wins, not corruption. Returns
+   immediately; a refresh failure never touches the response (FR-5).
 
 ### Client behavior (UI)
 
@@ -55,10 +83,21 @@ rows immediately and self-heals pending rows by polling the **same** RPC. No por
   `['watchlistReadiness', watchlistId, pageToken]` — **never** `['watchlists']` (preserves the
   feature-167 single-row patch, @AC-6 / recon R1). Page-token stack reused from `usePortfolio.ts:33,46-55`
   + `trader/positions/page.tsx:47-55,508-520`.
+- **Page agreement.** Rows render from the existing `['watchlists']` cache (bindings held whole), sliced
+  client-side with the **same** `(symbol ASC, strategy_id ASC)` total order and the same keyset token
+  passed to the RPC, so client and server bound roughly the same page. Correctness does **not** depend on
+  membership agreeing exactly: each verdict is matched onto its row by the `(symbol, strategy_id)` cell
+  key, so a rebind race can only leave a since-removed pair unmatched (→ stays `PENDING`/drops on next
+  poll), never land a wrong verdict on a row.
 - Rows render immediately (FR-1). `RESOLVED` → verdict; `PENDING` → C-17 `Skeleton` (`aria-busy`) and the
   hook **re-fetches `GetWatchlistReadiness` on an interval** (staleTime:30_000-equivalent cadence,
   `refetchInterval` while any row is `PENDING`) until no `PENDING` rows remain; `UNKNOWN` → icon+text
   error via `QueryStateMessages`. Pagination control keyboard-operable + labeled (FR-7).
+- **"hasPending" is computed from the *rendered* rows** (the binding rows joined to the readiness map),
+  **not** from the readiness response alone — otherwise a symbol just added via `useAddWatchlistSymbols`
+  (which invalidates `['watchlists']` and re-renders a new binding row) would have no readiness entry, so
+  a pending-from-response-only check would never re-poll it and the new row would hang on `Skeleton`
+  forever (Round-3 Obj 6 gap). The union keeps the poll alive until every rendered row resolves.
 - `WatchlistReadiness.tsx:186-202` `useQueries` fan-out is **removed**; the per-strategy client
   `EvaluateReadiness` fan-out is **not** reintroduced — pending rows resolve through the one page-bounded
   RPC (the N+1 is killed, not relocated).
@@ -120,16 +159,39 @@ rows immediately and self-heals pending rows by polling the **same** RPC. No por
   durable C-16 suite. The probe-gate decision keeps this surface consistent with feature-177 @AC-2, but
   /sdd-spec should add a regression test asserting a bar-busted row renders `PENDING` (not a stale
   `RESOLVED`), and flag the 180 promotion.
-- **R-B (Obj 5, fails.md:118).** The N+1-**kill** (FR-2/FR-6) is contingent on the feature-180
-  materializer being enabled with a `valid_window` covering the read cadence; `enabled` defaults **off**
-  and default `stale_after=30s` re-colds rows. **FR-1** (immediate render + loading state) is the
-  unconditional win. Record this contingency in the spec; do not overclaim FR-2/FR-6.
+- **R-B (Obj 5, fails.md:118) — SPLIT.** **FR-1** (immediate render + per-row loading) and **FR-2** (the
+  client per-strategy N+1 elimination — one page-bounded RPC + interval refetch of that same RPC, never N
+  `EvaluateReadiness` calls) are **UNCONDITIONAL**. **FR-6** (visible page served FAST with no server-side
+  re-eval on *first* render) is **contingent** on the feature-180 materializer being enabled with a
+  `valid_window` covering the read cadence — `analysis.readiness_materializer.enabled` defaults **off**. On
+  a cold page every row is `PENDING`; the single page-bounded refetch loop + the 24h-stamping kick warm the
+  pairs over one RPC (the N+1 is killed, not relocated), and the durable stamp keeps them warm thereafter.
+  /sdd-spec documents the "enable the 180 materializer for a warm first render" operator prerequisite and
+  does **not** flip the shipped default (that is an ops/config-governance decision beyond this read-shape feature).
 - **R-C (Obj 3/6).** A rebind reflects on the readiness view only on its next refetch/poll, and a rebind
-  on a non-visible page is invisible until paged to — accepted for the 1-day-bar cadence. The rebind
-  mutation must **not** add an `invalidateQueries` full-page refetch on either key.
-- **R-D (Obj 3).** /sdd-spec must confirm the retained `['watchlists']` read still supplies every
-  @feature-155 / @feature-127 affordance field (in-queue marker, provenance, system-managed delete) that
-  the readiness Row does not carry.
+  on a non-visible page is invisible until paged to — accepted for the 1-day-bar cadence, violates no `@AC`
+  or FR (FR-1/2/3 are visible-page only). The rebind mutation must **not** add an `invalidateQueries`
+  full-page refetch on either key.
+- **R-D (Obj 3) — RESOLVED (verified, not deferred).** The retained `['watchlists']` read supplies every
+  non-readiness affordance; the readiness Row carries none of them. Provenance mapping (each verified in
+  code): in-queue marker ← `useOpportunities()` (`WatchlistDetail.tsx:72,90` → `WatchlistReadiness.tsx:265,293`);
+  provenance badge ← `binding.source` (`WatchlistReadiness.tsx:32-39,276`); system-managed delete ←
+  `watchlist.systemManaged` (`WatchlistDetail.tsx:221`); firing/watching cues + blocking + firing-row jump
+  `firing` ← the verdict via `readinessState/isFiring/blockingCondition` (`WatchlistReadiness.tsx:42-75,266-296`);
+  jump href ← `binding.strategyId` (`WatchlistReadiness.tsx:301`). /sdd-spec records this table.
+- **R-E (Obj 4c, NEW — highest-priority) — bounded `PENDING`→`UNKNOWN`.** The cache-read-only + probe-gate
+  combination introduces an infinite-`PENDING` trap the interactive `EvaluateReadiness` does not have: if
+  `GetDataCoverage` succeeds (`latest_bar_epoch > 0`) but `_fetch_bars_paged` **persistently** fails,
+  `compute_readiness_row` swallows the fetch error and upserts `bar_epoch = max(0, benchmark_epoch)`
+  (`readiness.py:61-82`), so `is_readiness_row_fresh`'s `bar_epoch(0) >= latest(>0)` is **False forever** →
+  the RPC returns `PENDING` on every poll → infinite poll + infinite kick + log spam, never resolving.
+  /sdd-spec MUST bound this: after a kicked pair stays stale past N polls (or the kick's compute could not
+  reach `latest_bar_epoch`), degrade the row to **`UNKNOWN`** (the state @AC-2/FR-5 already define), not
+  perpetual loading. This is a required condition, not implicit.
+- **R-F (Obj 4a, NEW) — semaphore config coupling.** Reusing `self._readiness_materializer_bars_sem`
+  (`servicer.py:443`) for on-read kicks means `analysis.readiness_materializer.max_concurrent_bars_fetches`
+  now **also** throttles interactive watchlist-read kicks. Document in the spec and `analysis/CLAUDE.md`
+  so operators know the coupling. (Contention is low: the materializer is a once-daily loop, default off.)
 
 ---
 

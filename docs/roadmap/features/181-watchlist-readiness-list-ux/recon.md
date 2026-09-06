@@ -31,7 +31,7 @@ without an analysis↔portfolio dependency cycle (FR-4). Design must pick the de
 - Shared compute (feature 180): `app/services/readiness.py` `compute_readiness_row`/`is_readiness_row_fresh`/`readiness_valid_until`; cache `app/repositories/readiness_cache.py` `read_many`/`upsert_many` (PK `(user_id,strategy_id,rule,symbol)`).
 - Owner-scoped binding drain: `_drain_watchlist_bindings(propagation_meta)` `servicer.py:3738` → `(symbol, strategy_id)` from `ListWatchlists`.
 - **analysis→portfolio edge already exists** (no new edge): `PortfolioServiceStub` `servicer.py:388-390`, `PORTFOLIO_ENDPOINT` `main.py:33`.
-- Pagination proto precedent: `ListOpportunitiesRequest{page=1,...}` / `Response{...,page=2}` `analysis.proto:619-626` (user_id from `x-user-id` header, not the body).
+- Pagination proto precedent: `ListOpportunitiesRequest{page=1,...}` / `Response{...,page=2}` `analysis.proto:619-626` (user_id from `x-user-id` header, not the body). **Proto-SHAPE reference only — `ListOpportunities` is OFFSET-paginated** (`servicer.py:3148-3155`, `page_token` = int offset). The **keyset** precedent (feature 181 uses keyset, Obj 7) is **`ListPositions`** (`portfolio_repo.go:155-166`, `WHERE ($N='' OR symbol > $N) ORDER BY symbol ASC LIMIT`; client stack `usePortfolio.ts:46-56`); 181's composite `(symbol, strategy_id)` cursor is a net-new lexicographic extension of it.
 - **No agent hand-projection** of `SymbolReadiness`/`EvaluateReadiness` (grep of `xstockstrat-agent` → only a `ConditionEval` test fixture) — fails.md:1151 parity risk does NOT apply.
 
 ### xstockstrat-portfolio (watchlist read)
