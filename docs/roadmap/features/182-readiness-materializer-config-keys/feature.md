@@ -14,6 +14,7 @@
 | 2026-09-06 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings); overlap CLEAN |
 | 2026-09-06 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written. Operator chose "all four keys + write-bounds" (max_concurrent_bars_fetches ceiling=5) |
 | 2026-09-06 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
+| 2026-09-06 | `implementation-ready` → `code-completed` | /sdd-execute | All 5 steps done (migration 027 + bounds + tests + docs); TDD red-green on Steps 2-3 |
 
 ---
 

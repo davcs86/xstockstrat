@@ -155,3 +155,24 @@
   GREEN after Step 2 (`ok 10`; 104/104 pass, lint 0 errors, coverage 80.6% > 40%).
 - Files modified: services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts
 - Deviations: none (Step 2's helper deviation covers the pair).
+
+### Step 4 — docs: correct analysis CLAUDE.md "No seed migration" notes (4 rows) [done]
+- Flipped only the four readiness_materializer.* rows to cite migration 027 + their bounds; the ~4
+  sibling no-seed rows untouched ("No seed migration" count 8→4). Files: services/xstockstrat-analysis/CLAUDE.md
+
+### Step 5 — docs: config-governance registered-keys log [done]
+- Added a newest-first feature-182 entry above feature-180 (supersede note, 4-key table with bounds,
+  reload-visibility caveat); feature-180 entry unchanged (append-only). Files: docs/patterns/config-governance.md
+
+### Teardown (context files touched)
+- context-forge context-constitution refresh command unavailable this session → manual equivalent:
+  the analysis CLAUDE.md edit IS the reconciliation (the four rows now match shipped migration 027 +
+  the SCALAR_BOUNDS_REGISTRY bounds in configServiceImpl.ts); config-governance.md registered-keys log
+  updated to match. Re-read both against the landed code — no residual drift. README.md and
+  ui-ux-governance.md (scrubberExtraTargets) untouched — not in this diff.
+
+## Session 2026-09-06 — sdd-execute complete
+**Steps this session**: 1,2,3,4,5
+**Progress**: 5 done / 5 total
+**Stopped at**: all complete → code-completed
+**Next**: open integration PR to main-dev

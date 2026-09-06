@@ -1,6 +1,6 @@
 # Implementation Spec: readiness-materializer-config-keys
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-09-06
 **Feature**: `docs/roadmap/features/182-readiness-materializer-config-keys/feature.md`
 **Total Steps**: 5
@@ -291,7 +291,7 @@ tree first (execute TDD gate) to capture the RED failure, then after Step 2 for 
 
 ### Step 4 — docs: correct the analysis CLAUDE.md "No seed migration" notes (4 rows only)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis` (docs only)
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
@@ -332,7 +332,7 @@ remaining no-seed count matches the untouched sibling rows (design: only the fou
 
 ### Step 5 — docs: config-governance per-feature registered-keys log entry
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (`xstockstrat-config` governance)
 **Files**:
 - `docs/patterns/config-governance.md` — modify
