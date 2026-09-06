@@ -224,7 +224,7 @@ All pass; the two new tests are RED against the pre-Step-3 tree.
 
 ### Step 5 — service: `GetWatchlistReadiness` handler + cache-first classifier + guard-set kick
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -273,7 +273,7 @@ All pass; the two new tests are RED against the pre-Step-3 tree.
 
 ### Step 6 — test: classifier states, keyset paging, cooldown, no-cycle, durable C-16 scenario
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_readiness.py` — modify (or a new `tests/test_watchlist_readiness.py`)

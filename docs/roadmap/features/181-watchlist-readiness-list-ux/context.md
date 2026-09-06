@@ -287,3 +287,23 @@ RPC (F-06 clean). No Floor breach; no ledger repeat.
   (`test_is_readiness_row_fresh_stale_on_new_daily_bar`) still pass (feature-177 re-verify, R-A).
 - Verification: `ruff check` + `ruff format --check` clean; `pytest --cov=app` 698 passed, 84.76%.
 - Files modified: `tests/test_readiness.py`.
+
+### Step 5 — service: GetWatchlistReadiness handler + classifier + guard-set kick [done]
+- New `GetWatchlistReadiness` handler (cache-only four-way classifier `bar_epoch<0→UNKNOWN /
+  fresh→RESOLVED / else→PENDING`, keyset paging via base64 `(symbol,strategy_id)` cursor over the
+  owner's `GetWatchlist` bindings — existing analysis→portfolio edge, no cycle), `_kick_readiness_refresh`
+  (guard-set `_readiness_kicking` per (owner,strategy,symbol); materializer bars-sem; 24h stamp;
+  UNKNOWN re-kick gated by `_READINESS_UNKNOWN_RETRY_SECONDS=300` cooldown), module constants +
+  `_encode/_decode_pair_token` helpers, `import base64`. Header trio propagated (C-03).
+- Files modified: `app/handlers/servicer.py`.
+
+### Step 6 — test: classifier/paging/cooldown/no-cycle + durable C-16 [done]
+- TDD red→green: new `tests/test_watchlist_readiness.py` (10 cases) all failed method-missing against
+  the Step-5-stashed tree → all pass after. Covers RESOLVED/UNKNOWN-sentinel/PENDING/bar-busted-not-stale
+  (R-A load-bearing)/probe-miss best-effort/UNKNOWN cooldown/keyset paging (bounded to visible page)+
+  composite order/no-cycle (GetWatchlist edge only).
+- Durable C-16 (R-A): appended 2 scenarios to `acceptance/readiness-caching-poll-discipline.feature`
+  tagged `@feature-181` (+`@feature-180` on the bar-bust one, promoting 180's guarantee).
+- Verification: ruff clean; `pytest --cov=app` 708 passed, 83.90%; no-cycle grep over
+  xstockstrat-portfolio finds no analysis client (AC-5).
+- Files modified: `tests/test_watchlist_readiness.py`, `acceptance/readiness-caching-poll-discipline.feature`.
