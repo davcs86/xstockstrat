@@ -13,6 +13,7 @@ import pytest
 from gen.analysis.v1 import analysis_pb2
 
 from app.services.readiness import (
+    compute_readiness_row,
     is_readiness_row_fresh,
     readiness_valid_until,
 )
@@ -71,6 +72,57 @@ def test_readiness_valid_until_floors_at_one_hour():
     now = datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
     assert readiness_valid_until(now, valid_window_hours=0) == now + timedelta(hours=1)
     assert readiness_valid_until(now, valid_window_hours=-5) == now + timedelta(hours=1)
+
+
+# ── Feature 181 R-E: bar_epoch = -1 data-unavailable sentinel (Step 3) ──────
+#
+# The exception (primary-bars-fetch raised) path must stamp bar_epoch = -1 — the sole UNKNOWN
+# discriminant the feature-181 classifier reads. A successful-but-empty fetch must NOT: it keeps
+# bar_epoch = max(0, benchmark_epoch) so it stays RESOLVED best-effort (design.md Round-5 (d)).
+# The @AC-1 (all-conditions-fresh) and @AC-2 (new-daily-bar busts) freshness units above are the
+# feature-177 re-verification required by design R-A — the shared-compute edit must not change them.
+
+
+def _fake_evaluator():
+    return SimpleNamespace(evaluate_conditions_traced=AsyncMock(return_value={}))
+
+
+async def _compute(fetch_bars, *, benchmark_epoch):
+    import asyncio
+
+    return await compute_readiness_row(
+        "AAPL",
+        fetch_bars=fetch_bars,
+        bars_sem=asyncio.Semaphore(1),
+        evaluator=_fake_evaluator(),
+        definition={},
+        range_msg=None,
+        propagation_meta=[],
+        benchmark_bars=[],
+        rule="entry",
+        fingerprint="fp",
+        strategy_id="s1",
+        user_id="u1",
+        now=datetime.now(UTC),
+        valid_until=datetime.now(UTC) + timedelta(hours=1),
+        benchmark_epoch=benchmark_epoch,
+    )
+
+
+@pytest.mark.asyncio
+async def test_compute_readiness_row_exception_stamps_minus_one_sentinel():
+    """R-E: a primary-bars-fetch that RAISES stamps bar_epoch = -1 even when a benchmark epoch is
+    present (RED before Step 3 — today it is max(0, benchmark_epoch) = benchmark_epoch)."""
+    row = await _compute(AsyncMock(side_effect=RuntimeError("boom")), benchmark_epoch=500)
+    assert row["bar_epoch"] == -1
+
+
+@pytest.mark.asyncio
+async def test_compute_readiness_row_successful_empty_keeps_benchmark_epoch():
+    """R-E guard: a successful-but-empty fetch (no raise) is NOT the sentinel — it keeps
+    bar_epoch = max(0, benchmark_epoch), so an empty-coverage symbol stays RESOLVED best-effort."""
+    row = await _compute(AsyncMock(return_value=[]), benchmark_epoch=500)
+    assert row["bar_epoch"] == 500
 
 
 # ── AC-1: byte-identity of the shared SLOW compute path ─────────────────────
