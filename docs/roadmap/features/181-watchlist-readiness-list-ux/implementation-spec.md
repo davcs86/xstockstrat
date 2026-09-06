@@ -74,7 +74,7 @@ suites at launch (C-16, `/sdd-execute` integration PR).
 - `SymbolReadiness { string symbol=1; double conviction=2; int32 passing_conditions=3; int32 total_conditions=4; repeated ConditionEval conditions=5; }` at `analysis.proto:595-601` — **reused** as the verdict payload (no new readiness-shape message).
 - Pagination + header-owner precedent: `ListOpportunitiesRequest { xstockstrat.common.v1.PageRequest page=1; double min_conviction=2; }` / `ListOpportunitiesResponse { repeated Opportunity opportunities=1; xstockstrat.common.v1.PageResponse page=2; }` at `analysis.proto:617-626`, with the comment "user_id is intentionally absent — taken from the propagated x-user-id header" (`:614-616`).
 - `common.v1.PageRequest { int32 page_size=1; string page_token=2; }` / `PageResponse { string next_page_token=1; ... }` at `common/v1/common.proto:10-16`; already imported at `analysis.proto:10`.
-- Enum-value-prefix convention (buf STANDARD lint, `buf.yaml:6-11` uses `STANDARD` with no `ENUM_VALUE_PREFIX` exception): existing enums prefix every value with the enum name — `ConditionState { CONDITION_STATE_UNSPECIFIED=0; CONDITION_STATE_PASS=1; ... }` (`analysis.proto:535-539`), `ReadinessRule { READINESS_RULE_UNSPECIFIED=0; ... }` (`analysis.proto:632-636`). **The design.md shorthand `RESOLVED=1` must be written prefixed as `READINESS_STATE_RESOLVED=1` or `buf lint` fails C-09** — grounded correction of design.md's shorthand.
+- Enum-value-prefix convention (buf STANDARD lint, `buf.yaml:6-11` uses `STANDARD` with no `ENUM_VALUE_PREFIX` exception): existing enums prefix every value with the enum name — `ConditionState { CONDITION_STATE_UNSPECIFIED=0; CONDITION_STATE_PASS=1; ... }` (`analysis.proto:535-539`), `ReadinessRule { READINESS_RULE_UNSPECIFIED=0; ... }` (`analysis.proto:629-633`). **The design.md shorthand `RESOLVED=1` must be written prefixed as `READINESS_STATE_RESOLVED=1` or `buf lint` fails C-09** — grounded correction of design.md's shorthand.
 
 **TDD**: `N/A (proto)`
 
@@ -125,7 +125,7 @@ suites at launch (C-16, `/sdd-execute` integration PR).
 
 **Verification**:
 ```bash
-cd packages/proto && buf lint && buf breaking --against ".git#branch=feature/watchlist-readiness-list-ux"
+cd packages/proto && buf lint && buf breaking --against ".git#branch=main-dev,subdir=packages/proto"
 ```
 Both pass (additive RPC + additive messages/enum → non-breaking).
 
@@ -246,7 +246,7 @@ All pass; the two new tests are RED against the pre-Step-3 tree.
 
 **Instructions**:
 1. **New module constant** beside `_READINESS_LOOKBACK_DAYS` / `_READINESS_COVERAGE_PROBE_DAYS` (`servicer.py:254-258`): `_READINESS_UNKNOWN_RETRY_SECONDS = 300` — the `UNKNOWN` recovery re-kick cooldown (stateless, not a config key; design.md step 5, context.md Round 4 constants).
-2. **New guard-set** in `AnalysisServicer.__init__` (beside where `self._opportunity_recomputing` is initialized, near the sem defs `servicer.py:389-443`): `self._readiness_kicking: set[tuple[str, str, str]] = set()` keyed `(owner, strategy_id, symbol)`.
+2. **New guard-set** in `AnalysisServicer.__init__` (beside where `self._opportunity_recomputing` is initialized at `servicer.py:463`, just below the sem defs `:404`/`:443`): `self._readiness_kicking: set[tuple[str, str, str]] = set()` keyed `(owner, strategy_id, symbol)`.
 3. **Handler body** `async def GetWatchlistReadiness(self, request, context):`
    a. Extract `propagation_meta` and `caller_user_id` (mirror `:2737-2746`); if `self._portfolio is None` or `self._strategies_repo is None`, `context.abort(UNAVAILABLE, ...)`.
    b. `GetWatchlist(request.watchlist_id)` over `self._portfolio`; ownership is enforced by portfolio server-side from the forwarded `x-user-id` (do not send a body user_id). Collect **bound** pairs only (`b.strategy_id != ""`).

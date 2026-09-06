@@ -236,3 +236,19 @@ RPC (F-06 clean). No Floor breach; no ledger repeat.
   (default OFF) — Step 12 documents the prerequisite; do NOT flip the default.
 - R-E/R-F: shared-compute `-1` sentinel changes shipped 177/180 (operator-approved); Step 4 re-verifies
   feature-177 @AC-1 (success FAST skip) and @AC-2 (bar bust). R-F semaphore coupling documented in Step 12.
+
+## Session 2026-09-06 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 3 advisory warnings across 12 steps (advisory — did not block). No Floor risk.
+  All R-A..R-F discharged; C-15 AC-1..6 each trace to a test step; overlap CLEAN (no collision, no
+  merge-order row — the 032↔181 analysis.proto overlap is additive same-file only, 032 is draft).
+- Warnings — addressed this session before execution:
+  - Step 1: `buf breaking` baseline pointed at the feature branch, which can mask a break already
+    committed to the branch — [x] fixed → `--against ".git#branch=main-dev,subdir=packages/proto"`
+    (canonical merge-base baseline).
+  - Step 1: `ReadinessRule` citation drift `:632-636` → [x] fixed to `:629-633`.
+  - Step 5: `_opportunity_recomputing` init cited "near :389-443" → [x] fixed to `:463`.
+  - Step 2: generated-tree `**Files**` use `gen/{go,python,ts}/**` wildcards — [x] WON'T-FIX (inherent):
+    a whole codegen tree cannot be enumerated exactly; this is the accepted codegen pattern, not a
+    real path defect. No unaddressed item carried into execution.
+- Overlap findings: none.
