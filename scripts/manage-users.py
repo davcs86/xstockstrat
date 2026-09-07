@@ -5,17 +5,19 @@
 #     "typer>=0.15",
 #     "bcrypt>=4.2",
 #     "psycopg[binary]>=3.2",
+#     "questionary>=2.1",
 # ]
 # ///
-"""Manage identity service users: reset passwords and create new users.
+"""Manage identity service users: reset passwords, create users, update roles.
 
 Run with uv (preferred — auto-installs deps):
     uv run scripts/manage-users.py create-user admin@example.com
+    uv run scripts/manage-users.py update-roles admin@example.com
     uv run scripts/manage-users.py reset-password admin@example.com
 
-Or install deps manually and run directly:
-    pip install 'typer[all]>=0.15' 'bcrypt>=4.2' 'psycopg[binary]>=3.2'
-    python scripts/manage-users.py create-user admin@example.com
+Non-interactive (CI/scripts) — bypass the role selector:
+    uv run scripts/manage-users.py create-user admin@example.com --roles admin,trader
+    uv run scripts/manage-users.py update-roles admin@example.com --roles trader
 
 DATABASE_URL must be set, or POSTGRES_PASSWORD in .env will be used to
 construct a local-dev connection string.
@@ -29,13 +31,14 @@ from pathlib import Path
 
 import bcrypt
 import psycopg
+import questionary
 import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
 BCRYPT_ROUNDS = 10
-VALID_ROLES = {"admin", "trader"}
+VALID_ROLES = ["admin", "trader"]  # ordered for display
 
 app = typer.Typer(
     name="manage-users",
@@ -120,16 +123,39 @@ def _validate_roles(roles_csv: str) -> list[str]:
         err.print("[red bold]Error:[/] At least one role is required.")
         raise typer.Exit(1)
 
-    invalid = set(role_list) - VALID_ROLES
+    invalid = set(role_list) - set(VALID_ROLES)
     if invalid:
         err.print(
             f"[red bold]Error:[/] Invalid role(s): "
             f"[bold]{', '.join(sorted(invalid))}[/]\n"
-            f"  Available: {', '.join(sorted(VALID_ROLES))}"
+            f"  Available: {', '.join(VALID_ROLES)}"
         )
         raise typer.Exit(1)
 
     return role_list
+
+
+def _select_roles(preselected: list[str] | None = None) -> list[str]:
+    """Interactive checkbox multi-select for roles."""
+    checked = set(preselected or [])
+    choices = [
+        questionary.Choice(role, checked=role in checked)
+        for role in VALID_ROLES
+    ]
+
+    selected = questionary.checkbox(
+        "Select roles (↑↓ navigate, space toggle, enter confirm):",
+        choices=choices,
+        instruction="",
+    ).ask()
+
+    if selected is None:
+        raise typer.Abort()
+    if not selected:
+        err.print("[red bold]Error:[/] At least one role is required.")
+        raise typer.Exit(1)
+
+    return selected
 
 
 # ── Commands ─────────────────────────────────────────────────────────────
@@ -186,13 +212,16 @@ def reset_password(
 @app.command("create-user")
 def create_user(
     email: str = typer.Argument(help="Email for the new user"),
-    roles: str = typer.Argument(
-        default="trader",
-        help="Comma-separated roles, e.g. 'admin,trader'",
+    roles: str = typer.Option(
+        None,
+        "--roles", "-r",
+        help="Comma-separated roles (bypasses interactive selector)",
     ),
 ) -> None:
     """Create a new user with the given email and roles."""
-    role_list = _validate_roles(roles)
+    role_list = (
+        _validate_roles(roles) if roles else _select_roles(preselected=["trader"])
+    )
     db_url = _load_db_url()
     password = _prompt_password(email)
 
@@ -291,33 +320,17 @@ def list_users(
 @app.command("update-roles")
 def update_roles(
     email: str = typer.Argument(help="Email of the user to update"),
-    roles: str = typer.Argument(
-        help="Comma-separated roles to set, e.g. 'admin,trader'",
+    roles: str = typer.Option(
+        None,
+        "--roles", "-r",
+        help="Comma-separated roles (bypasses interactive selector)",
     ),
 ) -> None:
     """Replace a user's roles with the given set."""
-    role_list = _validate_roles(roles)
     db_url = _load_db_url()
 
     try:
-        with psycopg.connect(db_url) as conn:
-            row = conn.execute(
-                "UPDATE identity.users "
-                "SET roles = %s::text[], updated_at = NOW() "
-                "WHERE email = %s "
-                "RETURNING roles",
-                (role_list, email),
-            ).fetchone()
-
-            if row is None:
-                err.print(
-                    f"[red bold]Error:[/] No user found with email "
-                    f"[bold]'{email}'[/].\n"
-                    "  Use [green]list-users[/] to see existing users."
-                )
-                raise typer.Exit(1)
-
-            conn.commit()
+        conn = psycopg.connect(db_url)
     except psycopg.OperationalError as exc:
         err.print(
             Panel(
@@ -327,6 +340,49 @@ def update_roles(
             )
         )
         raise typer.Exit(1) from exc
+
+    with conn:
+        if roles:
+            role_list = _validate_roles(roles)
+        else:
+            # Fetch current roles so the selector pre-checks them
+            current = conn.execute(
+                "SELECT roles FROM identity.users WHERE email = %s",
+                (email,),
+            ).fetchone()
+
+            if current is None:
+                err.print(
+                    f"[red bold]Error:[/] No user found with email "
+                    f"[bold]'{email}'[/].\n"
+                    "  Use [green]list-users[/] to see existing users."
+                )
+                raise typer.Exit(1)
+
+            current_roles: list[str] = current[0] or []
+            err.print(
+                f"Current roles for [bold]{email}[/]: "
+                f"{', '.join(current_roles) or '[dim]none[/]'}"
+            )
+            role_list = _select_roles(preselected=current_roles)
+
+        row = conn.execute(
+            "UPDATE identity.users "
+            "SET roles = %s::text[], updated_at = NOW() "
+            "WHERE email = %s "
+            "RETURNING roles",
+            (role_list, email),
+        ).fetchone()
+
+        if row is None:
+            err.print(
+                f"[red bold]Error:[/] No user found with email "
+                f"[bold]'{email}'[/].\n"
+                "  Use [green]list-users[/] to see existing users."
+            )
+            raise typer.Exit(1)
+
+        conn.commit()
 
     out.print(
         Panel(
