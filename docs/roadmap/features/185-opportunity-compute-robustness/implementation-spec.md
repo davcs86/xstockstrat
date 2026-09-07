@@ -1,6 +1,6 @@
 # Implementation Spec: opportunity-compute-robustness
 
-**Status**: `pending`
+**Status**: `code-completed`
 **Created**: 2026-09-07
 **Feature**: `docs/roadmap/features/185-opportunity-compute-robustness/feature.md`
 **Total Steps**: 15
@@ -827,7 +827,7 @@ imports come from `e2e/fixtures/` and `INVENTORY.md` was updated (C-12).
 
 ### Step 15 — docs: reconcile mcp-tools.md with the agent return shape
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify
