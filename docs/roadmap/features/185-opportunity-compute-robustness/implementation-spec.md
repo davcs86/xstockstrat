@@ -231,7 +231,7 @@ Behavioral verification is in the paired Step 4 (coverage + RED assertions).
 
 ### Step 4 — test (analysis, FR-1): sentinel behavior, round-trip, parity, abort-contract
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -887,3 +887,23 @@ Confirm the new fields are documented under `list_opportunities`.
   `_MAPPED` addition to land with Step 4; it was landed with Step 3 instead so the OR-F parity test
   (`test_mapper_covers_every_proto_field`, RED since Step 2 added the proto field) returns green in the
   same commit as the mapper change that populates it. Step 4 adds only behavioral tests.
+- **Step 4 (tests drive `_compute_opportunities` directly, not the cold `ListOpportunities` path):**
+  the FR-1 sentinel is a compute-path concern, so the new `TestOpportunityDataUnavailable` tests call
+  `svc._compute_opportunities("u1", meta)` + `_row_to_opportunity` + `_FakeOppRepo` directly rather
+  than driving the compute through a cold `_list_opps`. This is deliberate: **Step 7 (FR-4) makes the
+  cold `ListOpportunities` read non-blocking** (kick + empty, no synchronous compute), so any Step-4
+  test coupled to the cold path would break at Step 7. RED-first proof was captured by reverting the
+  Step-3 source to `8a32213` and re-running (AC-1 marking, AC-5 floor+round-trip, and the
+  abort-contract test all failed — the abort-contract's uncaught `RpcError` proved the pre-Step-3
+  whole-compute abort — then passed after restore). Full suite: 714 passed, 83.86% coverage.
+- **⚠ SURFACED for Step 7/8 (`[ ] unaddressed`): cold-read test blast radius.** Step 7 changes the
+  cold `ListOpportunities` branch (`servicer.py:3368-3372`) from synchronous compute to
+  kick+empty. Beyond `test_cold_read_computes_synchronously_then_serves` (which Step 8 explicitly
+  rewrites), **many** `TestListOpportunitiesMaterialized` tests drive the compute via a cold
+  `_list_opps(svc)` and then assert on the served rows / `svc._opportunities_repo.rows` (e.g.
+  `test_watchlist_and_held_add_rows_with_real_readiness`, `test_min_conviction_filters_on_readiness`,
+  `test_signal_and_watchlist_collapse_into_one_row`, the feature-132 muted tests, the feature-131
+  live-attribution tests). These will return empty after Step 7 unless migrated to drain the
+  background kick (the `for _ in range(100): await asyncio.sleep(0)` pattern already used by
+  `test_stale_read_serves_stale_and_kicks_recompute`). Step 7/8 MUST migrate this whole set, not only
+  the three named cold/stale/empty tests. Resolved when Step 8's full-suite run is green.

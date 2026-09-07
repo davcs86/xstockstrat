@@ -27,7 +27,7 @@ from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.config.watcher import ConfigWatcher
-from app.handlers.servicer import AnalysisServicer, _InsufficientData
+from app.handlers.servicer import AnalysisServicer, _InsufficientData, _row_to_opportunity
 from app.services import warmup as warmup_sizing
 from app.services.evaluator import FormulaExecutionError, StrategyEvaluator
 
@@ -3912,9 +3912,15 @@ class _FakeOppRepo:
         for r in self.rows.get(user_id, []):
             if not include_expired and r["valid_until"] <= now:
                 continue
-            # feature 132: muted (deny-listed) rows are exempt from the conviction floor — they
-            # carry conviction 0 by design (mirrors the SQL `OR provenance ? 'denied'`).
-            if r["conviction"] < min_conviction and "denied" not in (r.get("provenance") or []):
+            # feature 132/185: muted (deny-listed) AND data-unavailable rows are exempt from the
+            # conviction floor — both carry conviction 0 by design (mirrors the SQL
+            # `OR provenance ? 'denied' OR provenance ? 'unavailable'`).
+            _prov = r.get("provenance") or []
+            if (
+                r["conviction"] < min_conviction
+                and "denied" not in _prov
+                and "unavailable" not in _prov
+            ):
                 continue
             act = self.actions.get((user_id, r["opportunity_key"]))
             if act:
@@ -4622,6 +4628,161 @@ class TestListOpportunitiesMaterialized:
         by_symbol, _ = await _list_opps(svc, min_conviction=0.5)
         assert "XYZ" in by_symbol  # exempt from the floor
         assert by_symbol["XYZ"].muted is True
+
+
+class TestOpportunityDataUnavailable:
+    """feature 185 FR-1 — a data-unavailable candidate (bars/indicator fetch failure) is a terminal
+    'unavailable' sentinel, distinct from an evaluated 0/N quiet row, and it survives the
+    materialization round-trip + the read conviction floor. These drive ``_compute_opportunities``
+    directly (the sentinel is a compute-path concern), so they are independent of the
+    ListOpportunities cold-read semantics that feature 185 FR-4 later reworks."""
+
+    _META = [("x-user-id", "u1"), ("x-access-scope", "7"), ("x-trace-id", "t1")]
+
+    @pytest.mark.asyncio
+    async def test_primary_fetch_failure_is_marked_unavailable(self):
+        """@AC-1: a candidate whose primary bars fetch RAISES is stamped 'unavailable' with both
+        ranking axes zeroed, and is distinguishable from a sibling that evaluated 0/N."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx"), ("MSFT", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+        )
+
+        def _bars(req, metadata=None):
+            if req.symbol == "AAPL":
+                raise RuntimeError("marketdata down")  # a primary-fetch outage for AAPL only
+            return _recent_bars_resp([50.0, 60.0, 70.0])  # MSFT: SMA≈60 < 100 → evaluated 0/1
+
+        svc._marketdata.GetBars = AsyncMock(side_effect=_bars)
+
+        rows = await svc._compute_opportunities("u1", self._META)
+        by_sym = {r["symbol"]: r for r in rows}
+        assert set(by_sym) == {"AAPL", "MSFT"}
+        # AAPL: terminal unavailable, zeroed on BOTH ranking axes so it sinks in the read ORDER BY.
+        assert "unavailable" in by_sym["AAPL"]["provenance"]
+        assert by_sym["AAPL"]["conviction"] == 0.0
+        assert by_sym["AAPL"]["signal_axis"] == 0.0
+        assert _row_to_opportunity(by_sym["AAPL"]).data_unavailable is True
+        # MSFT: an evaluated 0/1 quiet row — NOT unavailable (distinguishable, @AC-1).
+        assert "unavailable" not in by_sym["MSFT"]["provenance"]
+        msft = _row_to_opportunity(by_sym["MSFT"])
+        assert msft.data_unavailable is False
+        assert (msft.passing_conditions, msft.total_conditions) == (0, 1)
+
+    @pytest.mark.asyncio
+    async def test_thin_empty_bars_is_not_unavailable(self):
+        """@AC-2 (design top risk): a symbol that returns ``[]`` WITHOUT raising (a warm-up-thin
+        symbol) stays an evaluated row — failure is recorded only in an except branch, never
+        inferred from an empty bars list."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={},  # AAPL absent → GetBars returns [] (no raise)
+        )
+        rows = await svc._compute_opportunities("u1", self._META)
+        aapl = {r["symbol"]: r for r in rows}["AAPL"]
+        assert "unavailable" not in aapl["provenance"]
+        assert _row_to_opportunity(aapl).data_unavailable is False
+
+    @pytest.mark.asyncio
+    async def test_evaluated_zero_of_n_is_not_unavailable(self):
+        """@AC-2: an evaluated 0-of-N row (real bars, no condition passing) is classified quiet,
+        never data-unavailable."""
+        three_fail = {
+            "op": "AND",
+            "conditions": [
+                {"fn": ">", "lhs": "sma", "rhs": 200.0},
+                {"fn": ">", "lhs": "sma", "rhs": 300.0},
+                {"fn": ">", "lhs": "sma", "rhs": 400.0},
+            ],
+        }
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=three_fail)},
+            bars={"AAPL": [50.0, 60.0, 70.0]},  # SMA≈60 — none of the three thresholds pass
+        )
+        rows = await svc._compute_opportunities("u1", self._META)
+        opp = _row_to_opportunity({r["symbol"]: r for r in rows}["AAPL"])
+        assert opp.data_unavailable is False
+        assert (opp.passing_conditions, opp.total_conditions) == (0, 3)
+
+    @pytest.mark.asyncio
+    async def test_sentinel_survives_round_trip_and_conviction_floor(self):
+        """@AC-5: an 'unavailable'-provenance row written to the repo reads back (no recompute) with
+        data_unavailable still derived True, and a conviction=0 unavailable row is exempt from a
+        non-zero min_conviction floor (every-layer filter, fails.md:1547 — mirrors muted)."""
+        svc = _materialized_svc()
+        future = datetime(2999, 1, 1, tzinfo=UTC)
+        row = {
+            "opportunity_key": "u1|AAPL|sx",
+            "symbol": "AAPL",
+            "strategy_id": "sx",
+            "action": int(analysis_pb2.OPPORTUNITY_ACTION_TAG_ENTER),
+            "conviction": 0.0,
+            "readiness_json": {"passing_conditions": 0, "total_conditions": 1},
+            "signal_axis": 0.0,
+            "provenance": ["watchlist", "unavailable"],
+            "thesis": "",
+            "valid_until": future,
+        }
+        await svc._opportunities_repo.replace_for_user("u1", [row])
+        got = await svc._opportunities_repo.read("u1", 0.5, 0.3, include_expired=False)
+        assert [r["symbol"] for r in got] == ["AAPL"]  # not dropped by the 0.5 floor
+        assert _row_to_opportunity(got[0]).data_unavailable is True
+
+    @pytest.mark.asyncio
+    async def test_indicator_rpc_error_is_unavailable_not_whole_compute_abort(self):
+        """Abort-contract change (design Rejected Alt 8): an indicators ``grpc.RpcError`` for one
+        candidate marks THAT candidate unavailable while others still produce real rows — the
+        compute no longer aborts wholesale (the gather had no return_exceptions)."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx"), ("MSFT", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS, "MSFT": _FIRING_BARS},
+        )
+        _real = StrategyEvaluator.evaluate_conditions_traced
+
+        async def _maybe_raise(
+            self, definition, bars, symbol, signals_map=None, *, rule="entry", benchmark_bars=None
+        ):
+            if symbol == "AAPL":
+                raise grpc.RpcError("indicators transport down")
+            return await _real(
+                self,
+                definition,
+                bars,
+                symbol,
+                signals_map,
+                rule=rule,
+                benchmark_bars=benchmark_bars,
+            )
+
+        with patch.object(StrategyEvaluator, "evaluate_conditions_traced", _maybe_raise):
+            rows = await svc._compute_opportunities("u1", self._META)
+        by_sym = {r["symbol"]: r for r in rows}
+        assert _row_to_opportunity(by_sym["AAPL"]).data_unavailable is True
+        msft = _row_to_opportunity(by_sym["MSFT"])
+        assert msft.data_unavailable is False  # the compute completed for the other candidate
+        assert msft.passing_conditions == 1
+
+    @pytest.mark.asyncio
+    async def test_formula_execution_error_still_propagates(self):
+        """A ``FormulaExecutionError`` is a formula BUG, not a data outage — it must NOT be
+        swallowed as unavailable; it propagates out of the compute (design Rejected Alt 8)."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS},
+        )
+
+        async def _boom(
+            self, definition, bars, symbol, signals_map=None, *, rule="entry", benchmark_bars=None
+        ):
+            raise FormulaExecutionError("f-bad", "boom")
+
+        with patch.object(StrategyEvaluator, "evaluate_conditions_traced", _boom):
+            with pytest.raises(FormulaExecutionError):
+                await svc._compute_opportunities("u1", self._META)
 
 
 class TestOpportunityBarsFetchDedup:
