@@ -3099,3 +3099,24 @@ reusing.
   today — int support is the open verify for a new int-key bound);
   `services/xstockstrat-analysis/app/handlers/servicer.py:454` (`get_int` + low-only `max(1,…)`), `:4075`
   (`refresh_hour_utc`, no clamp); feature 182 design.md.
+
+## 2026-09-07 — config write-bound lower edge is a getter-semantics decision (feature 184)
+
+- **Pattern**: The *lower* bound of a `SCALAR_BOUNDS_REGISTRY` entry is not a free choice — it must be
+  read off how the consuming service reads the key. Three cases: (1) a `get_int_present`/`get_float_present`
+  reader (HasField) honors a stored `0` as a real value, so a bound that excludes `0` silently makes a
+  currently-settable value unsettable = a C-16 regression (needs sign-off) — use lower `0`; (2) a
+  zero-trap `get_int`/`get_float` reader (`v.int_val or default`) already collapses a stored `0` to the
+  code default, so lower `1` is correct and *documents* that `0` is intentionally unreachable; (3) a
+  spec/`@AC` may mandate a lower edge (e.g. a weight `[0,1]`) that overrides (1)/(2). A bounded key whose
+  lower edge is a legitimate value (`refresh_hour_utc=0`=midnight) needs its **own** `@AC` asserting that
+  value is ACCEPTED — a rejection-only acceptance set leaves the whole lower-bound split unverified (C-15).
+- **Rule it implies**: before bounding a numeric config key, read its getter; pick the lower bound per the
+  three cases above; and for any bounded key whose lower edge is a documented value, add an @AC that the
+  edge is accepted, not just an out-of-range rejection. Also: bound only keys with a cited failure mode or
+  precedent (Behavior #2) — under-bounding is a one-line registry edit to reverse, an unjustified ceiling
+  is a latent regression; and do not bound a key read by *two* loops (shared reader) unless the single
+  bound is sane for both consumers.
+- **Evidence**: feature 184 design.md § Bounds registry growth + Rejected Alternatives;
+  `docs/roadmap/features/184-opportunity-config-operability/recon.md:94,99`;
+  `services/xstockstrat-config/src/grpc/configServiceImpl.ts:100,118-120`; acceptance.feature @AC-8.

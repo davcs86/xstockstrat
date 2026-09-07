@@ -48,3 +48,32 @@
   feature's mechanism, distinct from 184's interactive max_concurrent_bars_fetches — not a duplicate.
 - Advisory note carried to /sdd-spec: spec cites getters "in servicer.py"; resolved path is
   services/xstockstrat-analysis/app/handlers/servicer.py (use full path in impl-spec, C-01).
+
+## Session 2026-09-07 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: config [migration+registry], analysis [docs-only],
+  ui /config-ui [C-14, no code]). Key reuse patterns: 027 seed-migration shape; SCALAR_BOUNDS_REGISTRY
+  + two-operand lookupScalarBounds (data-only growth, no new code); generic NamespaceEditor renders
+  registered+bounded keys automatically; CONFIG_KEY_FIXTURES signal_decay row as e2e template.
+- Phase 1 Grilling: 1 round (quick). Proposer=bound-all-15; adversary=NEEDS WORK (no Floor breach) on
+  (a) C-15/C-16: the min-0 settability guard the design rests on had no @AC; (b) Behavior #2: bounding
+  ~7 keys with no documented failure mode overreaches FR-2.
+- Chosen approach (user decision): **justified set (~10) bounds** — FR-2's 8 + sparkline_bars
+  (documented per-candidate fetch cost) + valid_window_hours (feature-182 twin precedent [1,168]);
+  seed all 15, leave 5 (TTLs/retry/jitter/snooze) unbounded (cheap-to-loosen > latent regression).
+  Rejected: bound-all-15, bound-only-8, in-feature get_float_present, in-feature kill-switch.
+- Folded adversary fixes: added @AC-8 (bounded-key lower-edge-0 accepted: refresh_hour_utc=0,
+  signal_rank_weight=0); lower-bound-per-getter-semantics rule (get_int_present bounded key → min 0;
+  get_int zero-trap → min 1); restart-only sem-key description caveat (verified NamespaceEditor renders
+  the description column, NamespaceEditor.tsx:181-183); signal_rank_weight get_float zero-trap
+  description caveat; 028 = bind-at-rebase.
+- Routed to feature 185 (named home, C-14 defer rule): the refresh kill-switch (analysis code change)
+  AND the signal_rank_weight get_float→get_float_present fix.
+- Constitution rules touched: C-05, C-07, C-08/P-06, C-10(c), C-12/C-13, C-14, C-15, C-16, F-01, F-07.
+  Floor breaches: none.
+- Status: spec-ready → design-approved.
+
+### Open Threads (carry to /sdd-spec + /sdd-execute)
+- [ ] Migration 028 collision — reconfirm max(NNN)+1 vs main-dev at execute (C-07). → step 1
+- [ ] signal_rank_weight zero-trap live until feature 185 fixes the reader — description caveat only. → step 2
+- [ ] No live valve for a runaway opportunity refresh (kill-switch deferred to 185). → feature 185

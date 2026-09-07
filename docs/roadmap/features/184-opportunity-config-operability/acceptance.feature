@@ -55,3 +55,10 @@ Feature: opportunity-config-operability
     Then those rows cite the new seed migration (and bounds where applicable)
     And the config-governance per-feature registered-keys log records the registration
     And any analysis.* row that is still genuinely no-seed keeps its note unchanged
+
+  @AC-8 @FR-2
+  Scenario: A bounded key whose lower edge is a legitimate value accepts that value
+    Given refresh_hour_utc is bounded [0,23] and signal_rank_weight is bounded [0,1]
+    When an admin sets analysis.opportunity.refresh_hour_utc to 0
+    Then the SetConfig write succeeds (0 = midnight is a documented value, not rejected)
+    And setting analysis.opportunity.signal_rank_weight to 0 is likewise accepted within its bound

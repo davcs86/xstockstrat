@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-09-07 | `idea` → `draft` | /sdd-story | Product spec generated (opportunities-queue audit follow-up) |
 | 2026-09-07 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings; FR-6 kill-switch demoted to design option to clear C-15/criterion-8 blocker) |
+| 2026-09-07 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written. Justified-set (~10) bounds scope chosen; kill-switch + get_float_present fix routed to feature 185 |
 
 ---
 
@@ -19,6 +20,8 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon Dossier](recon.md) — grounded codebase map, patterns to reuse, existing business rules (C-16), risks
+- [Design](design.md) — debated & approved architecture, rejected alternatives, open risks, Constitution rules touched
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec <slug>`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -43,4 +46,4 @@ change types. Override as needed for this feature. Snapshot finalized at /sdd-sp
 
 ## Next Action
 
-`/sdd-design opportunity-config-operability quick` — recon + design debate before /sdd-spec
+`/sdd-spec opportunity-config-operability` — generate implementation spec from the approved design
