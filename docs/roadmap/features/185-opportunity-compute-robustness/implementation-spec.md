@@ -483,7 +483,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check . \
 
 ### Step 9 — service (analysis, FR-5): surgical read-time recovery + readiness-cache subset heal
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -861,6 +861,29 @@ Confirm the new fields are documented under `list_opportunities`.
 
 ## Deviation Log
 
+- **Step 9 (`replace_symbols(user_id, rows)` — dropped the spec's `symbols` param):** the impl-spec
+  signature was `replace_symbols(user_id, symbols, rows)`, but `symbols` is redundant — each heal row
+  is keyed by `opportunity_key` (which encodes the symbol) and the WHERE matches on it. Two-arg
+  signature; no functional change.
+- **Step 9 (`_signal_decay` extracted — DRY):** the decay + source-weight arithmetic was inline in the
+  compute loop and is also needed by the recovery to restore `signal_axis` (@AC-8). Extracted to a
+  module-level `_signal_decay(...)` used by BOTH sites (jscpd/dry-reviewer would flag a duplicate);
+  the compute keeps its aggregated missing-`ingested_at` count + per-signal debug log around the call.
+  Behavior-preserving (full suite stayed green).
+- **Step 9 (recovery uses the strategy ROW, not just the definition):** the @AC-9 readiness-cache heal
+  needs `_definition_fingerprint(row["definition_json"])`, so the recovery fetches the owner-scoped
+  row via `get_by_owner_and_id` (same active + live_enabled gate), caches per distinct strategy, and
+  derives both the definition and fingerprint from it.
+- **Step 9 (@AC-9 readiness heal re-fetches via `compute_readiness_row`):** that helper does its own
+  bounded per-symbol fetch, so a healed watchlist-entry symbol is fetched again for its readiness row.
+  Accepted — the design mandates reusing `compute_readiness_row` + `upsert_many`; footprint stays
+  per-symbol bounded. Success-only enforced by staging only rows with returned `bar_epoch >= 0`.
+- **Step 9 (`FormulaExecutionError` propagates from the recovery, mirrors Step 3):** the eval is a
+  `try/except grpc.RpcError` (transport → still-unavailable) inside an `else` after a separate
+  bars-fetch `try/except Exception`; a `FormulaExecutionError` is caught by neither and propagates to
+  `_kick_opportunity_retry._run`'s guard (logged, retry aborts) — a formula bug is not a data outage.
+- **Step 9 (line drift):** the compute is now at `servicer.py:3582` (post Steps 3/5/7), not `3542`;
+  all cited symbols resolved. Full suite after Step 9: 719 passed, 82.06% coverage.
 - **Step 1 (proto verification):** `buf` is not on the host, so Step-1 `buf lint`/`buf breaking`
   and Step-2 codegen were run via the pinned `Dockerfile.codegen` image
   (`docker run … ./scripts/buf-gen.sh`, which runs lint + breaking-against-`main-dev` + generate in

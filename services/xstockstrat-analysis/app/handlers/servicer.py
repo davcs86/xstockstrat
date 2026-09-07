@@ -265,6 +265,11 @@ _READINESS_UNKNOWN_RETRY_SECONDS = 300
 # compute_failed state instead of "computing" forever (@AC-7). A module constant (not a config key)
 # — an internal recovery heuristic, mirroring the _READINESS_UNKNOWN_RETRY_SECONDS precedent (F-07).
 _OPPORTUNITY_COMPUTE_MAX_ATTEMPTS = 3
+# feature 185 FR-5: a served data-unavailable opportunity row older than this cooldown triggers a
+# surgical read-time recovery of only that symbol; a still-unavailable retry re-stamps computed_at
+# so it does not re-kick before the next window. A module constant (not a config key), mirroring the
+# _READINESS_UNKNOWN_RETRY_SECONDS precedent (F-07).
+_OPPORTUNITY_UNAVAILABLE_RETRY_SECONDS = 300
 # Feature 181: default page size for GetWatchlistReadiness when the request omits one (mirrors the
 # UI's 25-row page).
 _DEFAULT_WATCHLIST_READINESS_PAGE_SIZE = 25
@@ -478,6 +483,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # once it reaches _OPPORTUNITY_COMPUTE_MAX_ATTEMPTS. In-memory (process-local, reset on
         # restart) — the _opportunity_recomputing guard precedent.
         self._opportunity_compute_failures: dict[str, int] = {}
+        # feature 185 FR-5: in-flight guard for the surgical read-time recovery, keyed by user_id,
+        # so concurrent fresh reads don't stack duplicate per-symbol retries. Cleared in a finally.
+        self._opportunity_retrying: set[str] = set()
         # feature 181: in-flight guard for the GetWatchlistReadiness background refresh, keyed
         # (owner, strategy_id, symbol) — the true unit of work, so disjoint pages proceed
         # concurrently and two views of one pair collapse to one kick (like the opportunity guard).
@@ -3370,6 +3378,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # WITHOUT the flag); only a cold, never-materialized read sets computing / compute_failed.
         computing = False
         compute_failed = False
+        served_fresh = bool(rows)  # feature 185 FR-5 — only a fresh read is scanned for retry
         if not rows:
             if await self._opportunities_repo.count_for_user(user_id) == 0:
                 # Cold read (never materialized) OR a legitimately-empty universe. Feature 177
@@ -3408,6 +3417,24 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 rows = await self._opportunities_repo.read(
                     user_id, request.min_conviction, w, include_expired=True
                 )
+
+        # feature 185 FR-5 — surgical read-time recovery. On a FRESH read (real rows were served),
+        # if any served row is data-unavailable and older than the retry cooldown, kick a background
+        # per-symbol recovery (not the full universe). NOT run on the cold/empty branches (no rows
+        # to scan) nor the stale branch (it already fired a full recompute — avoid double work +
+        # lock contention). Deduped by the _opportunity_retrying guard.
+        if served_fresh and user_id not in self._opportunity_retrying:
+            now = datetime.now(UTC)
+            stale_unavailable = {
+                r["symbol"]
+                for r in rows
+                if "unavailable" in (r.get("provenance") or [])
+                and r.get("computed_at") is not None
+                and (now - r["computed_at"]).total_seconds()
+                > _OPPORTUNITY_UNAVAILABLE_RETRY_SECONDS
+            }
+            if stale_unavailable:
+                self._kick_opportunity_retry(user_id, stale_unavailable, propagation_meta)
 
         # Simple offset pagination (page_token = integer offset).
         page_size = request.page.page_size if request.page.page_size > 0 else _DEFAULT_OPP_PAGE_SIZE
@@ -3570,6 +3597,220 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 self._opportunity_recomputing.discard(user_id)
 
         asyncio.get_event_loop().create_task(_run())
+
+    def _kick_opportunity_retry(self, user_id: str, symbols, propagation_meta) -> None:
+        """feature 185 FR-5 — generic, reusable fire-and-forget SURGICAL recovery: re-fetch +
+        re-evaluate ONLY ``symbols`` (a bounded per-symbol footprint, NOT a full-universe recompute,
+        the scalable choice under a marketdata outage) and heal their data-unavailable rows
+        UPDATE-in-place. Built generic for later fundsignal adoption (feature 186); wired only into
+        opportunities here.
+
+        Skipped when a full recompute is already in flight (it heals these too) or a retry is
+        already running for this user (dedup); the retry guard is cleared in a ``finally``."""
+        if user_id in self._opportunity_recomputing or user_id in self._opportunity_retrying:
+            return
+        self._opportunity_retrying.add(user_id)
+
+        async def _run():
+            try:
+                async with self._opportunity_lock(user_id):
+                    await self._retry_unavailable_symbols(user_id, set(symbols), propagation_meta)
+            except Exception as e:  # a surgical retry failure never takes down the read
+                log.warning("opportunity surgical retry failed for user=%s: %s", user_id, e)
+            finally:
+                self._opportunity_retrying.discard(user_id)
+
+        asyncio.get_event_loop().create_task(_run())
+
+    async def _retry_unavailable_symbols(
+        self, user_id: str, symbols: set, propagation_meta
+    ) -> None:
+        """Re-fetch + re-evaluate only the data-unavailable rows for ``symbols`` and heal them in
+        place (feature 185 FR-5). Never resurrects a dropped row (heal-only UPDATE via
+        ``replace_symbols``); re-drains active signals so a healed row restores BOTH conviction and
+        ``signal_axis`` (@AC-8); a row still unavailable keeps the sentinel with computed_at
+        re-stamped (cooldown holds); and a recovered watchlist×strategy ENTRY pair also upserts the
+        fresh readiness-cache subset, success-only (@AC-9). Runs the fetch on the background sem
+        (FR-3) and NEVER stamps the empty-universe compute-state (that stays the full compute's
+        concern — @AC-4 untouched). A ``FormulaExecutionError`` propagates (a formula bug is not a
+        data outage, mirroring the compute)."""
+        w = self._cfg.get_float("analysis.opportunity.signal_rank_weight", 0.3)
+        current = await self._opportunities_repo.read(user_id, 0.0, w, include_expired=True)
+        targets = [
+            r
+            for r in current
+            if r["symbol"] in symbols and "unavailable" in (r.get("provenance") or [])
+        ]
+        if not targets:
+            return
+
+        evaluator = StrategyEvaluator(
+            self._indicators, propagation_meta, component_sem=self._component_series_sem
+        )
+        range_msg = _recent_range(_READINESS_LOOKBACK_DAYS)
+        window_hours = self._cfg.get_int("analysis.opportunity.valid_window_hours", 24)
+
+        # Re-drain active signals once so a healed row restores signal_axis (both axes, @AC-8).
+        signals = await self._drain_active_signals(propagation_meta)
+        now_utc = datetime.now(UTC)
+        half_life = self._cfg.get_float_present(
+            "analysis.scoring.signal_decay_half_life_hours", 24.0
+        )
+        source_weights = await self._drain_source_weights(propagation_meta)
+        signals_by_symbol: dict[str, list] = {}
+        for sig in signals:
+            signals_by_symbol.setdefault(_normalize_symbol(sig.symbol), []).append(sig)
+
+        def _axis_for(sym: str) -> float:
+            axis = 0.0
+            for sig in signals_by_symbol.get(_normalize_symbol(sym), []):
+                axis = max(axis, _signal_decay(sig, source_weights, now_utc, half_life)[0])
+            return axis
+
+        strat_rows: dict[str, dict | None] = {}
+
+        async def _strategy_row(strategy_id: str):
+            # Owner-scoped row (same active + live_enabled gate as _load_strategy_definition),
+            # cached per distinct strategy. The ROW (not just definition) is needed for the
+            # readiness fingerprint (@AC-9).
+            if strategy_id not in strat_rows:
+                row = await self._strategies_repo.get_by_owner_and_id(user_id, strategy_id)
+                strat_rows[strategy_id] = (
+                    row
+                    if row is not None and row.get("active") and row.get("live_enabled")
+                    else None
+                )
+            return strat_rows[strategy_id]
+
+        benchmark_cache: dict[str, list] = {}
+        session_end_seconds = 0
+        heal_rows: list[dict] = []
+        readiness_stage: list[dict] = []
+        for r in targets:
+            sym = r["symbol"]
+            strat = r["strategy_id"]
+            provenance = list(r.get("provenance") or [])
+            readiness = _empty_readiness(sym)
+            rule = "exit" if "position" in provenance else "entry"
+            still_unavailable = True  # until a fetch + eval both succeed
+            row = await _strategy_row(strat) if strat else None
+            definition = _row_to_strategy_definition(row) if row is not None else None
+            benchmark_bars = None
+            if definition is not None:
+                try:
+                    async with self._readiness_materializer_bars_sem:
+                        bars = await self._fetch_bars_paged(sym, range_msg, propagation_meta)
+                except Exception as e:  # noqa: BLE001 — bars fetch still best-effort per symbol
+                    log.warning("surgical retry: bars fetch still failing for %s: %s", sym, e)
+                else:
+                    benchmark_bars = await self._load_benchmark_bars_windowed(
+                        definition,
+                        range_msg,
+                        propagation_meta,
+                        cache=benchmark_cache,
+                        sem=self._readiness_materializer_bars_sem,
+                    )
+                    try:
+                        readiness = await evaluator.evaluate_conditions_traced(
+                            definition, bars, sym, rule=rule, benchmark_bars=benchmark_bars
+                        )
+                    except (
+                        grpc.RpcError
+                    ) as e:  # transport outage only — FormulaExecutionError propagates
+                        log.warning(
+                            "surgical retry: indicator RPC still failing for %s: %s", sym, e
+                        )
+                    else:
+                        still_unavailable = False
+                        if bars:
+                            session_end_seconds = max(session_end_seconds, bars[-1].time.seconds)
+
+            if still_unavailable:
+                # Keep the sentinel + zeroed axes; replace_symbols re-stamps computed_at (cooldown),
+                # and the existing valid_until is preserved (never extend a dead row).
+                if "unavailable" not in provenance:
+                    provenance.append("unavailable")
+                heal_rows.append(
+                    {
+                        "opportunity_key": r["opportunity_key"],
+                        "conviction": 0.0,
+                        "readiness_json": readiness,
+                        "signal_axis": 0.0,
+                        "provenance": provenance,
+                        "thesis": r.get("thesis", ""),
+                        "valid_until": r["valid_until"],
+                        "_healed": False,
+                    }
+                )
+                continue
+
+            # Healed — drop the sentinel, restore BOTH ranking axes.
+            provenance = [p for p in provenance if p != "unavailable"]
+            heal_rows.append(
+                {
+                    "opportunity_key": r["opportunity_key"],
+                    "conviction": readiness["conviction"],
+                    "readiness_json": readiness,
+                    "signal_axis": _axis_for(sym),
+                    "provenance": provenance,
+                    "thesis": r.get("thesis", ""),
+                    "valid_until": None,  # filled with the fresh window post-loop
+                    "_healed": True,
+                }
+            )
+            # @AC-9 — a recovered watchlist×strategy ENTRY pair also refreshes the readiness cache
+            # (success-only). Reuses compute_readiness_row + upsert_many; a still-down re-fetch
+            # (bar_epoch < 0) is NOT staged.
+            if (
+                rule == "entry"
+                and "watchlist" in provenance
+                and strat
+                and row is not None
+                and self._readiness_cache_repo is not None
+            ):
+                benchmark_epoch = 0
+                if benchmark_bars:
+                    for bench in benchmark_bars.values():
+                        if bench:
+                            benchmark_epoch = max(benchmark_epoch, bench[-1].time.seconds)
+                staged = await compute_readiness_row(
+                    sym,
+                    fetch_bars=self._fetch_bars_paged,
+                    bars_sem=self._readiness_materializer_bars_sem,
+                    evaluator=evaluator,
+                    definition=definition,
+                    range_msg=range_msg,
+                    propagation_meta=propagation_meta,
+                    benchmark_bars=benchmark_bars,
+                    rule="entry",
+                    fingerprint=_definition_fingerprint(row["definition_json"]),
+                    strategy_id=strat,
+                    user_id=user_id,
+                    now=now_utc,
+                    valid_until=readiness_valid_until(now_utc, valid_window_hours=window_hours),
+                    benchmark_epoch=benchmark_epoch,
+                )
+                if staged.get("bar_epoch", -1) >= 0:  # success-only
+                    readiness_stage.append(staged)
+
+        # Healed rows get a fresh window (session date + valid_window, fall back to now); a still-
+        # unavailable row keeps its existing valid_until.
+        session_end = (
+            datetime.fromtimestamp(session_end_seconds, tz=UTC)
+            if session_end_seconds > 0
+            else datetime.now(UTC)
+        )
+        healed_valid_until = session_end + timedelta(hours=window_hours)
+        for hr in heal_rows:
+            if hr.pop("_healed", False):
+                hr["valid_until"] = healed_valid_until
+
+        await self._opportunities_repo.replace_symbols(user_id, heal_rows)
+        if readiness_stage:
+            try:
+                await self._readiness_cache_repo.upsert_many(readiness_stage)
+            except Exception as e:  # noqa: BLE001 — readiness-cache heal is best-effort
+                log.warning("surgical retry: readiness-cache upsert failed for %s: %s", user_id, e)
 
     async def _compute_opportunities(self, user_id: str, propagation_meta) -> list[dict]:
         """Build the user's opportunity Universe and return persistable row dicts (feature 097).
@@ -3746,39 +3987,26 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             # a symbol bound to multiple strategies does not re-decay/re-count the same signal.
             sig_contribs = []
             for sig in sigs:
-                raw_conviction = sig.conviction
-                # Per-source reliability weight (neutral 1.0 for an unknown/unweighted source,
-                # mirroring scoring.compute_signal_score).
-                source_weight = source_weights.get(sig.source, 1.0)
-                if sig.HasField("ingested_at"):
-                    ingested_dt = sig.ingested_at.ToDatetime(tzinfo=UTC)
-                    raw_age_hours = (now_utc - ingested_dt).total_seconds() / 3600
-                    age_hours = max(0.0, raw_age_hours)  # defensive clamp (race / clock skew)
-                    age_clamped = raw_age_hours < 0.0
-                    age_known = True
-                else:
-                    age_hours = None
-                    age_clamped = False
-                    age_known = False
+                # feature 185 — the decay/source-weight arithmetic is now the shared _signal_decay
+                # helper (reused by the FR-5 surgical recovery); the compute keeps the aggregated
+                # missing-ingested_at count + per-signal debug log here.
+                (
+                    effective_conviction,
+                    age_hours,
+                    age_known,
+                    age_clamped,
+                    decay_multiplier,
+                ) = _signal_decay(sig, source_weights, now_utc, half_life)
+                if not age_known:
                     missing_ingested_at_count += 1
-                # Age-derivation branches on HasField(ingested_at); decay on half_life. Neither
-                # gates the other, so all log-referenced names are bound in every combination.
-                decay_multiplier = (
-                    math.exp(-math.log(2) / half_life * age_hours)
-                    if (half_life > 0 and age_known)
-                    else 1.0
-                )
-                effective_conviction = raw_conviction * source_weight * decay_multiplier
-                if not math.isfinite(effective_conviction):
-                    effective_conviction = 0.0  # explicit guard (future-refactor insurance)
                 log.debug(
                     "signal_axis decay: symbol=%s source=%s raw_conviction=%s source_weight=%s "
                     "age_hours=%s age_known=%s age_clamped=%s decay_multiplier=%s "
                     "effective_conviction=%s",
                     sym,
                     sig.source,
-                    raw_conviction,
-                    source_weight,
+                    sig.conviction,
+                    source_weights.get(sig.source, 1.0),
                     age_hours,
                     age_known,
                     age_clamped,
@@ -4609,6 +4837,33 @@ def _normalize_source_symbols(definition) -> None:
     normalization."""
     for comp in definition.components:
         comp.source_symbol = _normalize_symbol(comp.source_symbol)
+
+
+def _signal_decay(sig, source_weights: dict, now_utc: datetime, half_life: float):
+    """One active signal's decayed, source-weighted contribution to the ranking ``signal_axis``
+    (feature 022/134). Returns ``(effective_conviction, age_hours|None, age_known, age_clamped,
+    decay_multiplier)``; ``effective_conviction`` is finite (a non-finite product guards to 0.0).
+    Extracted (feature 185) so the compute fan-out AND the FR-5 surgical recovery derive the axis
+    identically — a healed row's restored ``signal_axis`` matches what a full compute would produce.
+    """
+    source_weight = source_weights.get(sig.source, 1.0)
+    if sig.HasField("ingested_at"):
+        ingested_dt = sig.ingested_at.ToDatetime(tzinfo=UTC)
+        raw_age_hours = (now_utc - ingested_dt).total_seconds() / 3600
+        age_hours = max(0.0, raw_age_hours)  # defensive clamp (race / clock skew)
+        age_clamped = raw_age_hours < 0.0
+        age_known = True
+    else:
+        age_hours = None
+        age_clamped = False
+        age_known = False
+    decay_multiplier = (
+        math.exp(-math.log(2) / half_life * age_hours) if (half_life > 0 and age_known) else 1.0
+    )
+    effective_conviction = sig.conviction * source_weight * decay_multiplier
+    if not math.isfinite(effective_conviction):
+        effective_conviction = 0.0  # explicit guard (future-refactor insurance)
+    return effective_conviction, age_hours, age_known, age_clamped, decay_multiplier
 
 
 def _opportunity_key(user_id: str, symbol: str, strategy_id: str) -> str:

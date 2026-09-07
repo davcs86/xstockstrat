@@ -74,6 +74,49 @@ class OpportunitiesRepository:
                 ],
             )
 
+    async def replace_symbols(self, user_id: str, rows: list[dict]) -> None:
+        """Heal-only UPDATE-in-place of specific materialized rows (feature 185 FR-5 surgical
+        recovery). For each row (keyed by ``opportunity_key``) UPDATE conviction/readiness_json/
+        signal_axis/provenance/thesis/valid_until and re-stamp ``computed_at = now()``.
+
+        It **never INSERTs** — a ``(user_id, opportunity_key)`` absent from the table is silently
+        skipped (the UPDATE matches zero rows). This honors the whole-user-replace authoritative
+        drop invariant to the degree a partial refresh can: a candidate that dropped out of the
+        Universe is never resurrected here; membership reconciles at the next daily full compute.
+        One transaction. Re-stamping ``computed_at`` for a still-unavailable scanned row is
+        intentional — it holds the FR-5 retry cooldown so a persistently-down symbol does not
+        re-kick every poll.
+        """
+        if not rows:
+            return
+        async with self._db.acquire() as conn, conn.transaction():
+            await conn.executemany(
+                """
+                UPDATE analysis.opportunities
+                   SET conviction = $3,
+                       readiness_json = $4::jsonb,
+                       signal_axis = $5,
+                       provenance = $6::jsonb,
+                       thesis = $7,
+                       valid_until = $8,
+                       computed_at = now()
+                 WHERE user_id = $1 AND opportunity_key = $2
+                """,
+                [
+                    (
+                        user_id,
+                        r["opportunity_key"],
+                        float(r.get("conviction", 0.0)),
+                        json.dumps(r.get("readiness_json", {})),
+                        float(r.get("signal_axis", 0.0)),
+                        json.dumps(r.get("provenance", [])),
+                        r.get("thesis", ""),
+                        r["valid_until"],
+                    )
+                    for r in rows
+                ],
+            )
+
     async def read(
         self,
         user_id: str,
@@ -114,7 +157,12 @@ class OpportunitiesRepository:
                     AND a.snooze_until IS NOT NULL
                     AND a.snooze_until > now()
               )
-            ORDER BY ((1 - $3) * o.conviction + $3 * o.signal_axis) DESC, o.conviction DESC
+            -- feature 185 FR-5: opportunity_key ASC is a deterministic final tiebreak so offset
+            -- paging is stable across polls when a surgical partial UPDATE reshuffles physical row
+            -- order (all data-unavailable rows tie at conviction=0, signal_axis=0). Pure tiebreak —
+            -- it never reorders non-tied rows, so no @AC-14 ranking change.
+            ORDER BY ((1 - $3) * o.conviction + $3 * o.signal_axis) DESC, o.conviction DESC,
+                     o.opportunity_key ASC
             """,
             user_id,
             min_conviction,
