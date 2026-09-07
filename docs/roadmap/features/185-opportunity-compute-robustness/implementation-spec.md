@@ -620,7 +620,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check . \
 
 ### Step 11 — service (agent, FR-6): project data_unavailable + computing/failed
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -667,7 +667,7 @@ Behavioral + parity verification is in Step 12.
 
 ### Step 12 — test (agent, FR-6): Opportunity descriptor-parity + projection
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_opportunity_projection.py` — create
