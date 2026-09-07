@@ -288,5 +288,53 @@ def list_users(
     out.print(table)
 
 
+@app.command("update-roles")
+def update_roles(
+    email: str = typer.Argument(help="Email of the user to update"),
+    roles: str = typer.Argument(
+        help="Comma-separated roles to set, e.g. 'admin,trader'",
+    ),
+) -> None:
+    """Replace a user's roles with the given set."""
+    role_list = _validate_roles(roles)
+    db_url = _load_db_url()
+
+    try:
+        with psycopg.connect(db_url) as conn:
+            row = conn.execute(
+                "UPDATE identity.users "
+                "SET roles = %s::text[], updated_at = NOW() "
+                "WHERE email = %s "
+                "RETURNING roles",
+                (role_list, email),
+            ).fetchone()
+
+            if row is None:
+                err.print(
+                    f"[red bold]Error:[/] No user found with email "
+                    f"[bold]'{email}'[/].\n"
+                    "  Use [green]list-users[/] to see existing users."
+                )
+                raise typer.Exit(1)
+
+            conn.commit()
+    except psycopg.OperationalError as exc:
+        err.print(
+            Panel(
+                f"[red bold]Database connection failed[/]\n\n{exc}",
+                title="Connection Error",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(1) from exc
+
+    out.print(
+        Panel(
+            f"Roles updated for [bold]{email}[/]: {', '.join(role_list)}",
+            border_style="green",
+        )
+    )
+
+
 if __name__ == "__main__":
     app()
