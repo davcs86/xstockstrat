@@ -53,37 +53,45 @@ def _opp_svc():
     return svc
 
 
-async def test_empty_universe_recomputes_at_most_once_over_window():
-    """AC-4: four polls of a legitimately-empty universe recompute synchronously at most once — the
-    cold poll computes + stamps; polls 2-4 serve empty and only kick a background self-heal."""
+async def test_empty_universe_never_recomputes_synchronously():
+    """AC-4 (feature 177) under feature 185 FR-4: a legitimately-empty universe is NEVER recomputed
+    synchronously — every poll returns empty non-blocking and delegates the recompute to a guarded
+    background kick. This STRENGTHENS the pre-185 guarantee ("at most one synchronous compute over
+    the window") to zero synchronous computes; the cold pending signal is surfaced instead."""
     svc = _opp_svc()
-    svc._kick_opportunity_recompute = MagicMock()
+    svc._kick_opportunity_recompute = MagicMock()  # isolate synchronous computes from background
     req = analysis_pb2.ListOpportunitiesRequest(min_conviction=0.0)
 
     for _ in range(4):
         resp = await svc.ListOpportunities(req, _ctx(_HEADERS))
         assert len(resp.opportunities) == 0
+        assert resp.computing is True  # cold (the mocked kick never stamps) → pending signal
 
-    assert svc._compute_opportunities.await_count == 1  # only the cold poll computed
-    assert svc._opportunity_compute_state_repo.upsert.await_count == 1  # stamped once
-    assert svc._kick_opportunity_recompute.call_count == 3  # polls 2-4 self-heal in background
+    assert svc._compute_opportunities.await_count == 0  # FR-4: never a synchronous recompute
+    assert svc._kick_opportunity_recompute.call_count == 4  # each poll delegates to the background
 
 
 async def test_fresh_empty_serve_kicks_self_heal_and_writes_new_row():
-    """empty→non-empty within one TTL: after the empty stamp, a poll kicks the background recompute,
-    which surfaces the newly-appeared row (replace_for_user receives it) — the self-heal path."""
+    """empty→non-empty within one TTL under FR-4: the cold poll kicks a background recompute that
+    stamps empty; a later poll (fresh stamp) kicks a self-heal that surfaces the newly-appeared row
+    (replace_for_user receives it) — neither poll recomputes synchronously."""
     svc = _opp_svc()
     svc._compute_opportunities = AsyncMock(side_effect=[[], [{"symbol": "AAPL"}]])
     req = analysis_pb2.ListOpportunitiesRequest(min_conviction=0.0)
 
-    await svc.ListOpportunities(req, _ctx(_HEADERS))  # poll1: cold → empty stamp
-    await svc.ListOpportunities(req, _ctx(_HEADERS))  # poll2: fresh stamp → kick self-heal
-    # poll2 must NOT recompute synchronously — the fresh empty stamp serves empty and only kicks a
-    # background revalidate (contrast the pre-FR-3 tree, which re-materializes on every empty poll).
-    assert svc._compute_opportunities.await_count == 1
-    for _ in range(3):  # let the fire-and-forget recompute task run
-        await asyncio.sleep(0)
+    async def _drain():
+        for _ in range(200):
+            if "u1" not in svc._opportunity_recomputing:
+                break
+            await asyncio.sleep(0)
 
+    await svc.ListOpportunities(req, _ctx(_HEADERS))  # poll1: cold → kick bg recompute (#1 → [])
+    await _drain()
+    assert svc._compute_opportunities.await_count == 1  # background (not synchronous) — FR-4
+    assert svc._opportunity_compute_state_repo.upsert.await_count == 1  # empty pass stamped
+
+    await svc.ListOpportunities(req, _ctx(_HEADERS))  # poll2: fresh stamp → kick self-heal (#2)
+    await _drain()
     assert svc._compute_opportunities.await_count == 2  # the background self-heal recomputed
     assert svc._opportunities_repo.replace_for_user.await_args.args[1] == [{"symbol": "AAPL"}]
 

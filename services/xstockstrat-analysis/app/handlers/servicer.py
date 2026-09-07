@@ -261,6 +261,10 @@ _READINESS_COVERAGE_PROBE_DAYS = 10
 # re-kicked, so a persistently data-unavailable pair retries at most once per this window rather
 # than on every poll. A module constant (not a config key) — an internal recovery heuristic.
 _READINESS_UNKNOWN_RETRY_SECONDS = 300
+# feature 185 FR-4: bounded cold-recompute attempts before ListOpportunities reports a terminal
+# compute_failed state instead of "computing" forever (@AC-7). A module constant (not a config key)
+# — an internal recovery heuristic, mirroring the _READINESS_UNKNOWN_RETRY_SECONDS precedent (F-07).
+_OPPORTUNITY_COMPUTE_MAX_ATTEMPTS = 3
 # Feature 181: default page size for GetWatchlistReadiness when the request omits one (mirrors the
 # UI's 25-row page).
 _DEFAULT_WATCHLIST_READINESS_PAGE_SIZE = 25
@@ -469,6 +473,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # the set marks users with a background recompute in flight. Single-process protection only.
         self._opportunity_locks: dict[str, asyncio.Lock] = {}
         self._opportunity_recomputing: set[str] = set()
+        # feature 185 FR-4: per-user consecutive cold-recompute failure count. Incremented on a
+        # kicked recompute's failure, reset on success; ListOpportunities reports compute_failed
+        # once it reaches _OPPORTUNITY_COMPUTE_MAX_ATTEMPTS. In-memory (process-local, reset on
+        # restart) — the _opportunity_recomputing guard precedent.
+        self._opportunity_compute_failures: dict[str, int] = {}
         # feature 181: in-flight guard for the GetWatchlistReadiness background refresh, keyed
         # (owner, strategy_id, symbol) — the true unit of work, so disjoint pages proceed
         # concurrently and two views of one pair collapse to one kick (like the opportunity guard).
@@ -3332,7 +3341,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         by ``(1-w)·conviction + w·signal_axis`` (the independent signal axis — Option 2/OR-G).
 
         Freshness (lazy compute-on-read + stale-while-revalidate — OR-A/OR-B):
-        - **Cold** (never materialized): compute **synchronously** under a per-user lock, then read.
+        - **Cold** (never materialized): feature 185 FR-4 — **non-blocking**. Kick a background
+          recompute and return an empty page with ``computing=True`` (or ``compute_failed=True``
+          after ``_OPPORTUNITY_COMPUTE_MAX_ATTEMPTS`` consecutive failures); the client polls. No
+          synchronous compute under the per-user lock.
+        - **Empty universe** (a fresh empty-compute stamp): serve empty with **neither** flag set —
+          the distinctness proof vs. cold (feature 177 FR-3 kick preserved).
         - **Stale** (rows exist but all expired): serve the stale rows immediately and kick a
           background recompute; the UI shows ``computed_at`` as "as of".
         - **Fresh**: read and serve.
@@ -3351,6 +3365,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         rows = await self._opportunities_repo.read(
             user_id, request.min_conviction, w, include_expired=False
         )
+        # feature 185 FR-4 — response-level cold-read pending signals. Both stay False for a fresh,
+        # stale, or legitimately-empty read (the distinctness proof: an empty universe returns empty
+        # WITHOUT the flag); only a cold, never-materialized read sets computing / compute_failed.
+        computing = False
+        compute_failed = False
         if not rows:
             if await self._opportunities_repo.count_for_user(user_id) == 0:
                 # Cold read (never materialized) OR a legitimately-empty universe. Feature 177
@@ -3364,12 +3383,25 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 )
                 if state is not None and datetime.now(UTC) < state["valid_until"]:
                     self._kick_opportunity_recompute(user_id, propagation_meta)
+                    # Legitimately-empty universe (a fresh empty stamp): serve empty WITHOUT a
+                    # pending flag (@AC-6 distinctness) — computing/compute_failed stay False.
                     # rows stays [] → falls through to (empty) pagination/enrichment.
                 else:
-                    await self._materialize_opportunities(user_id, propagation_meta)
-                    rows = await self._opportunities_repo.read(
-                        user_id, request.min_conviction, w, include_expired=False
-                    )
+                    # feature 185 FR-4 — cold (never-materialized) read is NON-BLOCKING: kick a
+                    # background recompute and serve an empty page + a pending signal, instead of
+                    # computing synchronously under the per-user lock (a cold user has no cached
+                    # rows to show, so the synchronous wait bought nothing; the client polls).
+                    self._kick_opportunity_recompute(user_id, propagation_meta)
+                    if (
+                        self._opportunity_compute_failures.get(user_id, 0)
+                        >= _OPPORTUNITY_COMPUTE_MAX_ATTEMPTS
+                    ):
+                        # Terminal: bounded attempts exhausted — render an error, not an infinite
+                        # spinner (@AC-7). Still kicked above so it self-heals when data recovers.
+                        compute_failed = True
+                    else:
+                        computing = True  # recompute in flight (@AC-6)
+                    # rows stays [] → falls through to the (empty) pagination below.
             else:
                 # All rows stale: serve stale now, revalidate in the background.
                 self._kick_opportunity_recompute(user_id, propagation_meta)
@@ -3392,6 +3424,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return analysis_pb2.ListOpportunitiesResponse(
             opportunities=opps,
             page=common_pb2.PageResponse(next_page_token=next_token),
+            computing=computing,
+            compute_failed=compute_failed,
         )
 
     async def _enrich_opportunities_live(self, opps, propagation_meta) -> None:
@@ -3511,15 +3545,6 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             except Exception as e:  # best-effort — a stamp failure never fails the read/refresh
                 log.warning("empty-universe compute-state stamp failed for user=%s: %s", user_id, e)
 
-    async def _materialize_opportunities(self, user_id: str, propagation_meta) -> None:
-        """Compute the user's Universe and replace their materialized rows, serialized per user.
-        Double-checks under the lock so a second waiter behind a cold read doesn't recompute."""
-        async with self._opportunity_lock(user_id):
-            if await self._opportunities_repo.count_for_user(user_id) > 0:
-                return  # another cold reader populated it while we waited
-            rows = await self._compute_opportunities(user_id, propagation_meta)
-            await self._replace_and_stamp_compute_state(user_id, rows, propagation_meta)
-
     def _kick_opportunity_recompute(self, user_id: str, propagation_meta) -> None:
         """Fire-and-forget background recompute (stale-while-revalidate). Guarded so a burst of
         stale reads kicks exactly one recompute per user at a time."""
@@ -3532,7 +3557,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 async with self._opportunity_lock(user_id):
                     rows = await self._compute_opportunities(user_id, propagation_meta)
                     await self._replace_and_stamp_compute_state(user_id, rows, propagation_meta)
+                # feature 185 FR-4 — a successful recompute clears the terminal-failed counter.
+                self._opportunity_compute_failures.pop(user_id, None)
             except Exception as e:  # a recompute failure never takes down the loop/read
+                # feature 185 FR-4 — count consecutive failures so a persistently-failing cold
+                # compute surfaces compute_failed (@AC-7) rather than "computing" forever.
+                self._opportunity_compute_failures[user_id] = (
+                    self._opportunity_compute_failures.get(user_id, 0) + 1
+                )
                 log.warning("opportunity recompute failed for user=%s: %s", user_id, e)
             finally:
                 self._opportunity_recomputing.discard(user_id)

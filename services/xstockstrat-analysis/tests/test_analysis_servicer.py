@@ -4120,6 +4120,17 @@ def _materialized_svc(
     return svc
 
 
+async def _drain_opportunity_recompute(svc, user_id, *, budget=20000):
+    """feature 185 FR-4: a cold ListOpportunities read is non-blocking — it kicks a fire-and-forget
+    background recompute. Tests that assert on the *materialized* queue drain that task here (the
+    stale-read test's inline pattern, generalized): yield to the event loop until the per-user
+    ``_opportunity_recomputing`` guard clears. The budget caps a pathological non-clearing guard."""
+    for _ in range(budget):
+        if user_id not in svc._opportunity_recomputing:
+            break
+        await asyncio.sleep(0)
+
+
 async def _list_opps(svc, **kwargs):
     # feature 095: ListOpportunities now does read-time live-market enrichment (GetLatestPrice per
     # returned symbol). Give it a benign default so pre-095 tests that assert on compute-path
@@ -4131,6 +4142,16 @@ async def _list_opps(svc, **kwargs):
     resp = await svc.ListOpportunities(
         analysis_pb2.ListOpportunitiesRequest(**kwargs), _ctx(_HEADERS)
     )
+    # feature 185 FR-4: a cold read is now NON-BLOCKING — it returns an empty page + computing=True
+    # and kicks a background recompute instead of computing synchronously. For the compute-path
+    # tests below (which assert on the *materialized* queue), transparently drain the kick and
+    # re-read so those assertions still see the computed rows. Tests that assert on the cold pending
+    # signal itself call ``svc.ListOpportunities`` directly instead of this helper.
+    if resp.computing and not resp.opportunities:
+        await _drain_opportunity_recompute(svc, "u1")
+        resp = await svc.ListOpportunities(
+            analysis_pb2.ListOpportunitiesRequest(**kwargs), _ctx(_HEADERS)
+        )
     return {o.symbol: o for o in resp.opportunities}, resp.opportunities
 
 
@@ -6254,6 +6275,10 @@ class TestOpportunityConcurrencyFeature176:
         svc._strategies_repo.get_by_owner_and_id = AsyncMock(side_effect=_owner_scoped)
 
         ctx_b = _ctx({"x-user-id": "uB", "x-access-scope": "7", "x-trace-id": "t1"})
+        # feature 185 FR-4: cold read is non-blocking — drain the kicked background recompute for uB
+        # and re-read so the owner-scoping assertions see the materialized result.
+        await svc.ListOpportunities(analysis_pb2.ListOpportunitiesRequest(), ctx_b)
+        await _drain_opportunity_recompute(svc, "uB")
         resp = await svc.ListOpportunities(analysis_pb2.ListOpportunitiesRequest(), ctx_b)
         by_symbol = {o.symbol: o for o in resp.opportunities}
 

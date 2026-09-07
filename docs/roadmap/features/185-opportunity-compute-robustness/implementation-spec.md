@@ -378,7 +378,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check . \
 
 ### Step 7 — service (analysis, FR-4): non-blocking cold read + computing/failed
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -905,7 +905,7 @@ Confirm the new fields are documented under `list_opportunities`.
   `TestOpportunitySemaphoreIsolation` class, Steps 5 and 6 were committed as one unit to keep the
   commit's suite green. Step 6 RED was proven first (reverting Step 5 → `test_compute_fanout…`
   failed `0 >= 2`). Full suite: 716 passed, 83.86% coverage.
-- **⚠ SURFACED for Step 7/8 (`[ ] unaddressed`): cold-read test blast radius.** Step 7 changes the
+- **✅ RESOLVED [x] (Step 7): cold-read test blast radius.** Step 7 changes the
   cold `ListOpportunities` branch (`servicer.py:3368-3372`) from synchronous compute to
   kick+empty. Beyond `test_cold_read_computes_synchronously_then_serves` (which Step 8 explicitly
   rewrites), **many** `TestListOpportunitiesMaterialized` tests drive the compute via a cold
@@ -916,3 +916,19 @@ Confirm the new fields are documented under `list_opportunities`.
   background kick (the `for _ in range(100): await asyncio.sleep(0)` pattern already used by
   `test_stale_read_serves_stale_and_kicks_recompute`). Step 7/8 MUST migrate this whole set, not only
   the three named cold/stale/empty tests. Resolved when Step 8's full-suite run is green.
+  **Resolution:** migrated at a single point — the `_list_opps` helper now drains the guarded
+  background kick (new `_drain_opportunity_recompute`, budget 20000: the 240-candidate compute needs
+  more than 200 loop turns) and re-reads on a cold `computing`+empty response, so every compute-path
+  assertion sees the materialized queue. `test_owner_scoping_preserved_under_parallel_fanout` (direct
+  `ListOpportunities` for `uB`) got an inline drain. Two feature-177 tests in
+  `test_opportunity_compute_state.py` were rewritten (see next note). Full suite: 716 passed, 83.82%.
+- **Step 7 (`_materialize_opportunities` removed):** grep confirmed its only caller was the cold
+  branch this step replaces (no daily-refresh or test caller), so the now-dead method was deleted.
+  The daily refresh + `_kick` call `_replace_and_stamp_compute_state` directly, unaffected.
+- **Step 7 (feature-177 AC-4 mechanism strengthened, guarantee PRESERVED — C-16):** FR-4 makes the
+  cold path non-blocking, so feature-177's "a legitimately-empty universe is not repeatedly
+  *synchronously* recomputed" is **strengthened** to "never synchronously recomputed" (delegated to
+  the guarded background kick). The observable AC-4 guarantee is preserved, not weakened, so this is
+  within FR-4's operator-approved scope (not a new C-16 CHANGE). `test_empty_universe_recomputes_at_
+  most_once_over_window` → rewritten to assert zero synchronous computes + the cold pending signal;
+  `test_fresh_empty_serve_kicks_self_heal_and_writes_new_row` → drains the kicked recompute per poll.
