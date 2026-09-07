@@ -14,6 +14,8 @@
 | 2026-09-07 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 advisory; FR-4 cold-read demoted to design option to clear C-15/criterion-8 blocker; C-14 agent + C-16 turned into design Open Questions) |
 | 2026-09-07 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written. FR-4 re-committed by operator; FR-5 surgical read-time recovery (reusable, +readiness-cache subset heal) + FR-6 agent surface added; FR-3 reuses materializer sem (no new key) |
 | 2026-09-07 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 15 steps |
+| 2026-09-07 | `implementation-ready` → `in-progress` | /sdd-execute | Execution started (sequential) |
+| 2026-09-07 | `in-progress` → `code-completed` | /sdd-execute | All 15 steps landed RED-green across proto/analysis/agent/ui/docs. analysis suite 730 passed 84%; agent 392 passed 81%; UI e2e 439 passed. C-16 scenarios promoted to per-service suites. Teardown: context-forge plugin unavailable → manual reconciliation performed (see PR body). |
 
 ---
 
@@ -49,5 +51,5 @@ all step `**Reviewers**` values. Stable unless /sdd-spec re-runs.)_
 
 ## Next Action
 
-`/sdd-review opportunity-compute-robustness impl-spec` — validate implementation spec, then
-`/sdd-execute opportunity-compute-robustness`
+Merge the integration PR into `main-dev` (check `docs/roadmap/features/merge-order.md`), then
+`/sdd-archiver` at launch.
