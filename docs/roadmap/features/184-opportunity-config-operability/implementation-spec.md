@@ -149,7 +149,7 @@ v5 executors hanging on containers).
 
 ### Step 2 — service: Add SCALAR_BOUNDS_REGISTRY entries for the 10 footgun keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -214,7 +214,7 @@ grep -c "analysis.opportunity." services/xstockstrat-config/src/grpc/configServi
 
 ### Step 3 — test: Bounds enforcement for the analysis.opportunity.* keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` — modify
