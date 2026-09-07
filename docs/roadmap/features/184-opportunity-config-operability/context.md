@@ -127,3 +127,14 @@ Tooling setup (steps 1-5): node ✓ v22.22.2 · pnpm ✓ 9.15.9 · config deps �
 - Offline-verified (no DB): 30 VALUES rows, 15 distinct keys up==down, float count 2, staging 15/production 15, ON CONFLICT present. AC-1/2/3 satisfied by inspection.
 - Files modified: services/xstockstrat-config/migrations/028_analysis_opportunity_keys.{up,down}.sql
 - Deviations: none
+
+### Step 2 — service: SCALAR_BOUNDS_REGISTRY 10 entries [done]
+- Added 10 full-dotted analysis.opportunity.* bounds to SCALAR_BOUNDS_REGISTRY (justified set): refresh_hour_utc[0,23], max_concurrent_bars_fetches[1,5], signal_rank_weight[0,1], max_universe_size[1,1000], max_live_strategies_per_symbol[1,50], max_live_only_symbols_per_compute[1,500], max_live_held_symbols_per_compute[1,500], max_concurrent_candidates[1,50], sparkline_bars[1,500], valid_window_hours[1,168]. Data-only growth; no touch to lookupScalarBounds/write-edge/ListKeys hint.
+- Files modified: services/xstockstrat-config/src/grpc/configServiceImpl.ts
+- Deviations: none
+
+### Step 3 — test: bounds enforcement [done]
+- Added opportunity block to setConfigScalarBounds.test.ts (AC-4 reject 10000/99/1.5; AC-5 accept 50 + inclusive-max 5 without create_key; AC-8 accept lower-edge 0 for refresh_hour_utc + signal_rank_weight).
+- TDD red→green: RED (Step 2 stashed) → "not ok 12 ... AC-4" (out-of-range wrongly accepted), 1 fail/13 pass in the bounds file. GREEN (Step 2 restored) → 107/107 pass, lint 0 errors (143 pre-existing any-warnings), coverage 80.95% lines ≥ 40%.
+- Files modified: services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts
+- Deviations: none

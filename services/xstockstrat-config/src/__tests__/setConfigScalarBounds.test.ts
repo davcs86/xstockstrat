@@ -202,4 +202,55 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     assert.equal(err, null, 'enabled is a bool with no numeric bound — accepted');
     assert.ok(insertQuery(), 'the enabled write must reach the INSERT');
   });
+
+  // feature 184: the analysis.opportunity.* keys are seeded full-dotted (migration 028) and gain
+  // write-side SCALAR_BOUNDS_REGISTRY bounds on the justified footgun set. Sent full-dotted, the same
+  // way config-ui echoes the DB `key` column, and resolved by the two-operand registry lookup.
+  const OPP_REFRESH = 'analysis.opportunity.refresh_hour_utc'; // [0,23], lower-0 legitimate (midnight)
+  const OPP_CONC = 'analysis.opportunity.max_concurrent_bars_fetches'; // [1,5], feature-141 SEV-2 guard
+  const OPP_WEIGHT = 'analysis.opportunity.signal_rank_weight'; // [0,1] float, lower-0 legitimate
+  const OPP_UNIVERSE = 'analysis.opportunity.max_universe_size'; // [1,1000]
+
+  it('rejects out-of-bounds opportunity tuning writes with INVALID_ARGUMENT, nothing written — AC-4', async () => {
+    queries = [];
+    let r = await setConfig({ intVal: 10000 }, OPP_CONC);
+    assert.equal(r.err?.code, grpc.status.INVALID_ARGUMENT, 'max_concurrent_bars_fetches 10000 must be rejected');
+    assert.match(r.err.details ?? r.err.message, /\[1, 5\]/);
+    assert.equal(insertQuery(), undefined, 'no INSERT for an out-of-range value');
+    queries = [];
+    r = await setConfig({ intVal: 99 }, OPP_REFRESH);
+    assert.equal(r.err?.code, grpc.status.INVALID_ARGUMENT, 'refresh_hour_utc 99 is out of [0,23]');
+    assert.match(r.err.details ?? r.err.message, /\[0, 23\]/);
+    assert.equal(insertQuery(), undefined);
+    queries = [];
+    // floatVal is the wire shape the agent sends for a float key — the round-3 fail-open guard.
+    r = await setConfig({ floatVal: 1.5 }, OPP_WEIGHT);
+    assert.equal(r.err?.code, grpc.status.INVALID_ARGUMENT, 'signal_rank_weight 1.5 is out of [0,1]');
+    assert.match(r.err.details ?? r.err.message, /\[0, 1\]/);
+    assert.equal(insertQuery(), undefined);
+  });
+
+  it('accepts an in-bounds opportunity write without create_key — AC-5', async () => {
+    // AC-5: the request carries no create_key; reaching the INSERT proves the seeded row satisfies the
+    // existence gate (the recording pool's {is_secret:false} row models the migration-028 seed).
+    queries = [];
+    const { err } = await setConfig({ intVal: 50 }, OPP_UNIVERSE);
+    assert.equal(err, null, 'max_universe_size=50 in [1,1000]');
+    assert.ok(insertQuery(), 'a valid in-bounds write must reach the INSERT (registered, no create_key)');
+    queries = [];
+    assert.equal((await setConfig({ intVal: 5 }, OPP_CONC)).err, null, 'max_concurrent_bars_fetches=5 (inclusive max)');
+    assert.ok(insertQuery());
+  });
+
+  it('accepts a bounded key whose lower edge is a legitimate 0 — AC-8', async () => {
+    // The C-16 guard the whole lower-bound split rests on: a min>=1 on these two keys would silently
+    // make a currently-settable, documented value unsettable. refresh_hour_utc=0 is midnight;
+    // signal_rank_weight=0 is a valid weight within [0,1].
+    queries = [];
+    assert.equal((await setConfig({ intVal: 0 }, OPP_REFRESH)).err, null, 'refresh_hour_utc=0 (midnight) is accepted');
+    assert.ok(insertQuery(), 'the lower-edge-0 write must reach the INSERT');
+    queries = [];
+    assert.equal((await setConfig({ floatVal: 0 }, OPP_WEIGHT)).err, null, 'signal_rank_weight=0 is accepted (min inclusive)');
+    assert.ok(insertQuery());
+  });
 });
