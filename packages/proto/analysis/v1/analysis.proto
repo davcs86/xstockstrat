@@ -577,6 +577,10 @@ message Opportunity {
   // 0.0). Deliberately NAMED signal_confidence and kept distinct from the ordinal `conviction = 3`
   // (NOT a probability) and the decayed/weighted signal_axis. Next free after 095's 13-18 block.
   optional double signal_confidence = 19;
+  // feature 185 — a per-symbol bars/indicator fetch failure during the compute (terminal
+  // data-unavailable), derived at read from the "unavailable" provenance marker (no column).
+  // Distinct from an evaluated 0/N row; conviction+signal_axis are zeroed so it sinks in ranking.
+  bool data_unavailable = 20;
 }
 
 // One recent daily-bar close for the Decide-surface sparkline (feature 095). Explicit presence — an
@@ -627,6 +631,12 @@ message ListOpportunitiesRequest {
 message ListOpportunitiesResponse {
   repeated Opportunity opportunities = 1;
   xstockstrat.common.v1.PageResponse page = 2;
+  // feature 185 — cold (never-materialized) read: empty page returned non-blocking while a
+  // background recompute runs. FALSE for a legitimately-empty universe (distinctness proof).
+  bool computing = 3;
+  // feature 185 — a persistently-failing cold recompute (past the bounded attempt count):
+  // renders a terminal error instead of an infinite "computing" spinner.
+  bool compute_failed = 4;
 }
 
 // Which rule tree EvaluateReadiness traces (feature 138). Closed set → enum (C-04).

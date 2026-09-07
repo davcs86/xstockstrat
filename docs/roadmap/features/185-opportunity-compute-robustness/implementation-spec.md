@@ -73,7 +73,7 @@ opportunities only.
 
 ### Step 1 — proto: additive data-unavailable + computing/failed fields
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
