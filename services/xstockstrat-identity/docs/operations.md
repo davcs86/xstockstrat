@@ -21,7 +21,7 @@ DATABASE_URL='postgres://user:pass@host:25060/db?sslmode=require' \
   uv run scripts/manage-users.py list-users
 ```
 
-The script resolves `DATABASE_URL` from the environment, or falls back to constructing a local-dev URL from `POSTGRES_PASSWORD` in `.env`. It is **not** copied into the Docker image — run it from the repo root (or any machine with Python ≥ 3.12 and network access to the database).
+The script resolves `DATABASE_URL` from the environment, or falls back to constructing a local-dev URL from `POSTGRES_PASSWORD` in `.env`. It is copied into the identity Docker image at `/app/scripts/manage-users.py` (Python + deps installed in the runner stage), so it can also be run via `docker exec` against the running container.
 
 ## JWT_SECRET
 

@@ -32,7 +32,12 @@ ENV NODE_ENV=production
 COPY --from=builder /deploy ./
 COPY scripts/wait-for-deps.sh /usr/local/bin/wait-for-deps.sh
 COPY scripts/docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/wait-for-deps.sh /docker-entrypoint.sh
+# manage-users.py — Python CLI for user provisioning / password resets
+RUN apk add --no-cache python3 py3-pip \
+ && pip3 install --break-system-packages --no-cache-dir \
+      'typer>=0.15' 'bcrypt>=4.2' 'psycopg[binary]>=3.2' 'questionary>=2.1'
+COPY scripts/manage-users.py /app/scripts/manage-users.py
+RUN chmod +x /usr/local/bin/wait-for-deps.sh /docker-entrypoint.sh /app/scripts/manage-users.py
 EXPOSE 50058
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["node", "dist/index.js"]
