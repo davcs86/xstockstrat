@@ -7,7 +7,7 @@
 ## Problem Statement
 
 Platform administrators can manage users and roles today only through the identity service's gRPC
-RPCs directly or the `scripts/manage-users.sh` shell helper — there is no way to do it through the
+RPCs directly or the `scripts/manage-users.py` CLI tool — there is no way to do it through the
 MCP agent, where an administrator otherwise operates the platform. This feature exposes user
 administration (create, list, inspect, set roles, activate/deactivate, reset password) and admin
 view/edit of any user's profile metadata as MCP agent tools, all gated on the ADMIN access scope.

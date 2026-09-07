@@ -27,15 +27,19 @@ RUN pnpm --filter xstockstrat-identity run build
 RUN pnpm deploy --filter xstockstrat-identity --prod /deploy
 
 FROM node:24-alpine AS runner
-# hadolint ignore=DL3018
-RUN apk add --no-cache postgresql-client
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder /deploy ./
 COPY scripts/wait-for-deps.sh /usr/local/bin/wait-for-deps.sh
 COPY scripts/docker-entrypoint.sh /docker-entrypoint.sh
-COPY scripts/manage-users.sh /app/scripts/manage-users.sh
-RUN chmod +x /usr/local/bin/wait-for-deps.sh /docker-entrypoint.sh /app/scripts/manage-users.sh
+# manage-users.py — Python CLI for user provisioning / password resets
+# hadolint ignore=DL3018
+RUN apk add --no-cache python3 py3-pip
+COPY scripts/requirements-manage-users.txt /tmp/requirements-manage-users.txt
+RUN pip3 install --break-system-packages --no-cache-dir -r /tmp/requirements-manage-users.txt \
+ && rm /tmp/requirements-manage-users.txt
+COPY scripts/manage-users.py /app/scripts/manage-users.py
+RUN chmod +x /usr/local/bin/wait-for-deps.sh /docker-entrypoint.sh /app/scripts/manage-users.py
 EXPOSE 50058
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["node", "dist/index.js"]
