@@ -62,3 +62,57 @@
 - [ ] FR-4 terminal compute-failed shape (bounded-retry vs failed stamp). → FR-4 step
 - [ ] Agent one-shot must surface computing/failed (not silently empty). → FR-6 step
 - [ ] fundsignal adoption of the generic recovery helper → feature 186 (named follow-up).
+
+## Session 2026-09-07 — sdd-spec
+
+- Generated implementation-spec.md with 15 steps. Status → implementation-ready.
+- Consumed recon.md + design.md; verified all load-bearing path:line evidence against the current
+  tree (line numbers drifted slightly from recon; spec cites the verified current lines).
+- Two design-deferred open threads settled in the spec (no new config/migration — F-07-compliant):
+  - FR-4 terminal compute-failed: in-memory `_opportunity_compute_failures: dict[str,int]` counter
+    (mirrors the in-memory `_opportunity_recomputing` guard) + additive `bool compute_failed = 4` on
+    `ListOpportunitiesResponse`; bounded by module constant `_OPPORTUNITY_COMPUTE_MAX_ATTEMPTS=3`.
+    Keeps kicking (self-heal) but reports failed after N consecutive failures — avoids a
+    stuck-forever state. No column, no migration.
+  - FR-5 retry cadence: module constant `_OPPORTUNITY_UNAVAILABLE_RETRY_SECONDS=300` (mirrors
+    `_READINESS_UNKNOWN_RETRY_SECONDS`); new heal-only repo method `replace_symbols` (UPDATE-in-place,
+    never INSERT → no resurrection); `opportunity_key ASC` ORDER BY tiebreak for paging stability.
+- Key verified codebase findings:
+  - Proto: `Opportunity` next free = 20 (highest `signal_confidence = 19`, analysis.proto:579);
+    `ListOpportunitiesResponse` has only fields 1/2 → `computing = 3`, `compute_failed = 4`.
+  - Highest analysis migration on disk = `023_opportunity_compute_state` → confirms NO analysis
+    migration needed (sentinel rides `provenance` JSONB; muted precedent at `_row_to_opportunity`
+    servicer.py:4588 / read floor opportunities.py:107).
+  - FR-3 reuse target confirmed: compute fan-out at servicer.py:3838/3852/3895 on `_bars_fetch_sem`;
+    background bucket `_readiness_materializer_bars_sem` (servicer.py:451) already shared by the
+    feature-181 R-F on-read kick (analysis CLAUDE.md:137/342) — extend it to the compute fan-out;
+    interactive `_enrich_opportunities_live` (3444/3458) + EvaluateReadiness (2826) stay on
+    `_bars_fetch_sem`.
+  - FR-1 abort-contract: `_row_for`'s `evaluate_conditions_traced` (servicer.py:3899) currently has
+    no try/except and gather has no return_exceptions → one indicators grpc.RpcError aborts the whole
+    compute; spec adds a `grpc.RpcError`-only catch (NOT FormulaExecutionError — fails 2026-08-05).
+  - Agent projection `_opportunity_to_dict` (client.py:747) already drifts (omits valid_until #9 +
+    signal_confidence #19); FR-6 back-fills both so the new descriptor-parity test (template
+    test_backtest_view.py:189) passes with no silent allow-list. No `Opportunity` parity test today.
+  - UI path is pure passthrough (insightsBff.ts:55 forward, browserClients/analysisClient.ts:6); hook
+    already polls 15s (useOpportunities.ts:20) — only render branches + e2e mock/fixture change.
+  - `list_opportunities` documented at mcp-tools.md:848 (docs step 15); NOT a strat-lab plugin API →
+    no plugin update owed.
+
+### Open Threads (carry to /sdd-execute)
+- [ ] FR-4 `_materialize_opportunities` may become unused by the RPC read path — grep for other
+  callers (e.g. daily `_refresh_all` at servicer.py:4033 uses `_compute_opportunities` directly, not
+  `_materialize_opportunities`) before removing; touch-only-what-the-task-requires. (Step 7)
+- [ ] FR-5 `replace_symbols` correctness is the top risk — RED tests: heal-in-place, no-resurrection,
+  thin-[]-not-flagged, paging-stable, finally-cleared dedup, readiness-cache success-only. (Step 10)
+- [ ] Confirm a Step-10 repo test module exists or create `tests/test_opportunities_repo.py`. (Step 10)
+- [ ] fundsignal adoption of the generic recovery helper → feature 186 (named follow-up).
+
+## Session 2026-09-07 — sdd-review impl-spec (advisory)
+- Result: 0 failures, 4 warnings (advisory — did not block). 0 Floor risks (no migration → F-01 N/A; all symbols resolve → C-01/F-04 satisfied). All 15 steps grounded; @AC-1..10 all covered; red-green pairing complete; both C-14 surfaces (ui + agent) have dedicated steps.
+- Unresolved ⚠ carried into execution:
+  - Step 3: (C-01 precision) the `evaluator.py:364` citation points at an unrelated RpcError-swallow site; the load-bearing claim (evaluate_conditions_traced→_assemble_component_series has no local grpc.RpcError guard, so an RpcError propagates and the no-return_exceptions gather aborts the whole compute) still holds — re-point the citation at the real propagation site during discovery. — [ ] unaddressed
+  - Step 3: (F-08 hygiene) instruction 6 edits tests/test_analysis_servicer.py (`_MAPPED`), a Step-4 file — land that edit under Step 4 to stay within **Files** (spec self-flags this). — [ ] unaddressed
+  - Steps 7/9: (C-01 line drift) several cited line numbers shifted (row build ~:3927-3937, gather :3939, empty-stamp :3365-3367) — symbols/structure resolve; re-confirm exact lines at discovery. — [ ] unaddressed
+  - Step 14: (B2 letter) UI e2e has no --cov-fail-under — the sanctioned xstockstrat-ui carve-out (e2e is the gate). Acceptable. — [x] accepted (carve-out)
+- Overlap findings: two shared-doc collisions with sibling 184 — services/xstockstrat-analysis/CLAUDE.md (185 Step 5 vs 184 Step 5) and services/xstockstrat-ui/e2e/fixtures/INVENTORY.md (185 Step 14 vs 184 Step 4). BENIGN: 184 is code-completed on the SAME shared branch (claude/opportunity-queue-philosophy), so 185's edits append on top of 184's already-committed edits — intra-branch sequencing, not a cross-branch merge conflict. (The feature.md `feature/<slug>` Development Branch fields are the unused SDD-convention default; actual dev is on the shared claude/* branch.) Proto fields 20/3/4 free; no config/migration/186-dir collision. No merge-order row needed.
