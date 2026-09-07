@@ -92,4 +92,44 @@ export const CONFIG_KEY_FIXTURES = [
     tradingMode: 0,
     validation: { valueType: 2, minValue: 0.0, maxValue: 8760 },
   },
+  {
+    // feature 184: opportunity-queue keys seeded (migration 028) + write-bounded. A bounded INT key —
+    // the ListKeys hint emits VALUE_TYPE_FLOAT_SCALAR (2) for every bounded key regardless of int/float
+    // (configServiceImpl.ts:529), so valueType is 2, same as the float row. 0 (midnight) is a legitimate
+    // lower edge (min inclusive).
+    key: 'analysis.opportunity.refresh_hour_utc',
+    description:
+      'Hour (UTC) of the daily opportunity refresh pass. 0 = midnight is legitimate. Bounds [0, 23].',
+    defaultValue: '0',
+    isSecret: false,
+    consumingService: 'xstockstrat-analysis',
+    environment: 1,
+    tradingMode: 0,
+    validation: { valueType: 2, minValue: 0, maxValue: 23 },
+  },
+  {
+    // feature 184: a bounded FLOAT key. 0 reads as the 0.3 default (get_float zero-trap) — read-path fix
+    // routed to feature 185; the bound still admits 0 as a valid operator write within [0, 1].
+    key: 'analysis.opportunity.signal_rank_weight',
+    description:
+      'Weight of the signal axis in the queue ORDER BY. Bounds [0, 1]. 0 reads as the 0.3 default (get_float).',
+    defaultValue: '0.3',
+    isSecret: false,
+    consumingService: 'xstockstrat-analysis',
+    environment: 1,
+    tradingMode: 0,
+    validation: { valueType: 2, minValue: 0, maxValue: 1 },
+  },
+  {
+    // feature 184: a seeded-but-UNBOUNDED opportunity key — proves a registered key with no documented
+    // failure mode surfaces in config-ui with no validation hint (no validation field).
+    key: 'analysis.opportunity.snooze_default_hours',
+    description:
+      'Default bounded "snooze until" when a SNOOZE carries no explicit timestamp. Seeded unbounded.',
+    defaultValue: '24',
+    isSecret: false,
+    consumingService: 'xstockstrat-analysis',
+    environment: 1,
+    tradingMode: 0,
+  },
 ];

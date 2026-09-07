@@ -249,6 +249,44 @@ test.describe('validation field in ListKeysResponse', () => {
     expect(keys.find((k) => k.key === 'analysis.signals.source_weights')).toBeUndefined();
   });
 
+  test('opportunity keys surface bounded hints (int + float) and an unbounded key (AC-6)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/auth/login');
+    const { status, body } = await callBff(page, CONFIG_BFF, {
+      namespace: 'analysis',
+      environment: 3,
+      userId: '',
+    });
+    expect(status).toBe(200);
+    const keys = body.keys as Array<Record<string, unknown>>;
+
+    // Bounded INT key: valueType is VALUE_TYPE_FLOAT_SCALAR (the hint enum for every bounded key),
+    // min 0 is omitted by proto3 JSON (treat as 0), max 23.
+    const refresh = keys.find((k) => k.key === 'analysis.opportunity.refresh_hour_utc');
+    expect(refresh).toBeDefined();
+    const rv = refresh!.validation as Record<string, unknown>;
+    expect(rv).toBeDefined();
+    expect(rv.valueType).toBe('VALUE_TYPE_FLOAT_SCALAR');
+    expect(Number(rv.minValue ?? 0)).toBeCloseTo(0);
+    expect(Number(rv.maxValue)).toBeCloseTo(23);
+
+    // Bounded FLOAT key: bounds [0, 1].
+    const weight = keys.find((k) => k.key === 'analysis.opportunity.signal_rank_weight');
+    expect(weight).toBeDefined();
+    const wv = weight!.validation as Record<string, unknown>;
+    expect(wv).toBeDefined();
+    expect(wv.valueType).toBe('VALUE_TYPE_FLOAT_SCALAR');
+    expect(Number(wv.minValue ?? 0)).toBeCloseTo(0);
+    expect(Number(wv.maxValue)).toBeCloseTo(1);
+
+    // Seeded-but-unbounded key: present with no validation hint.
+    const snooze = keys.find((k) => k.key === 'analysis.opportunity.snooze_default_hours');
+    expect(snooze).toBeDefined();
+    expect(snooze!.validation).toBeUndefined();
+  });
+
   test('non-weight key has no validation field', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto('/auth/login');

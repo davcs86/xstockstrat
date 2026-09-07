@@ -274,7 +274,7 @@ applies (the existing test uses the same inline convention).
 
 ### Step 4 — test: config-ui e2e fixture + bound-hint coverage (C-14 / C-12 / FR-4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/configKeys.ts` — modify
@@ -413,3 +413,6 @@ before pushing (or the manual equivalent recorded in the PR body if the plugin i
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 4 — CI-equivalent Playwright fallback
+- **Disposition**: CI-equivalent fallback. The pinned @playwright/test browser revision (chromium-1234) is not installed in the sandbox; the pre-provisioned build is chromium-1194. Ran the api-smoke e2e with `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome` and `CI=1` (isCI path builds a prod server + 30s per-test timeout; dev-mode's 10s per-test timeout was too short for the cold SSR warmup compile). This is real e2e execution (14/14 pass; red-green captured), matching how CI runs the suite — not the `tsc+lint` last-resort fallback.

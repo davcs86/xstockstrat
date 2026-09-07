@@ -138,3 +138,10 @@ Tooling setup (steps 1-5): node ✓ v22.22.2 · pnpm ✓ 9.15.9 · config deps �
 - TDD red→green: RED (Step 2 stashed) → "not ok 12 ... AC-4" (out-of-range wrongly accepted), 1 fail/13 pass in the bounds file. GREEN (Step 2 restored) → 107/107 pass, lint 0 errors (143 pre-existing any-warnings), coverage 80.95% lines ≥ 40%.
 - Files modified: services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts
 - Deviations: none
+
+### Step 4 — test: config-ui e2e fixture + bound-hint coverage [done]
+- Added 3 analysis.opportunity.* rows to CONFIG_KEY_FIXTURES (bounded int refresh_hour_utc valueType 2 [0,23]; bounded float signal_rank_weight [0,1]; unbounded snooze_default_hours no validation); updated INVENTORY.md row; added api-smoke.spec.ts test "opportunity keys surface bounded hints (int + float) and an unbounded key (AC-6)". Zero UI component code (generic NamespaceEditor).
+- TDD red→green: RED (fixtures stashed) → new test fails (keys absent, toBeDefined). GREEN (restored) → 14/14 pass in api-smoke.spec.ts. next lint clean (pre-existing warnings only, untouched src/).
+- DEVIATION (CI-equivalent fallback): Playwright's pinned browser build (1234) is absent; the env ships build 1194. Ran with PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome and CI=1 (prod server + 30s timeout; dev-mode 10s cold-compile timed out the SSR warmup). Verification is real e2e execution, matching CI. See Deviation Log.
+- Files modified: services/xstockstrat-ui/e2e/fixtures/configKeys.ts, e2e/fixtures/INVENTORY.md, e2e/config-ui/api-smoke.spec.ts
+- Deviations: CI-equivalent Playwright browser-path + CI-mode fallback (above)
