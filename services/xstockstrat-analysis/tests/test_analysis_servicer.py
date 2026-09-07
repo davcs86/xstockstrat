@@ -3929,8 +3929,33 @@ class _FakeOppRepo:
                 if act["action"] == 1 and act.get("snooze_until") and act["snooze_until"] > now:
                     continue
             out.append(r)
-        out.sort(key=lambda r: (1 - ww) * r["conviction"] + ww * r["signal_axis"], reverse=True)
+        # feature 185 FR-5: mirror the SQL's deterministic tiebreak — rank DESC, conviction DESC,
+        # then opportunity_key ASC (so offset paging is stable across a partial UPDATE).
+        out.sort(
+            key=lambda r: (
+                -((1 - ww) * r["conviction"] + ww * r["signal_axis"]),
+                -r["conviction"],
+                r["opportunity_key"],
+            )
+        )
         return out
+
+    async def replace_symbols(self, user_id, rows):
+        # feature 185 FR-5: heal-only UPDATE-in-place — mirror the real SQL (UPDATE … WHERE
+        # opportunity_key; a key absent from the table is silently skipped, never INSERTed) and
+        # re-stamp computed_at on every matched row.
+        existing = {r["opportunity_key"]: r for r in self.rows.get(user_id, [])}
+        for hr in rows:
+            row = existing.get(hr["opportunity_key"])
+            if row is None:
+                continue  # no resurrection
+            row["conviction"] = hr["conviction"]
+            row["readiness_json"] = hr["readiness_json"]
+            row["signal_axis"] = hr["signal_axis"]
+            row["provenance"] = hr["provenance"]
+            row["thesis"] = hr["thesis"]
+            row["valid_until"] = hr["valid_until"]
+            row["computed_at"] = datetime.now(UTC)
 
     async def distinct_user_ids(self):
         return list(self.rows.keys())
@@ -3953,6 +3978,38 @@ class _FakeOppRepo:
                 if row and row["strategy_id"] == strategy_id:
                     c += 1
         return c
+
+
+class _FakeReadinessCache:
+    """In-memory ReadinessCacheRepository stub for the FR-5 @AC-9 subset-heal assertions —
+    records upserted rows; read_many returns no existing rows (always a miss)."""
+
+    def __init__(self):
+        self.upserted: list[dict] = []
+
+    async def read_many(self, user_id, strategy_id, rule, symbols):
+        return {}
+
+    async def upsert_many(self, rows):
+        self.upserted.extend(rows)
+
+
+def _unavailable_served_row(symbol, strategy, *, provenance, computed_at, valid_until=None):
+    """A served ``analysis.opportunities`` row carrying the data-unavailable sentinel (conviction 0,
+    signal_axis 0), shaped as ``_FakeOppRepo.read`` would return it (feature 185 FR-5 recovery)."""
+    return {
+        "opportunity_key": f"u1|{symbol}|{strategy}",
+        "symbol": symbol,
+        "strategy_id": strategy,
+        "action": int(analysis_pb2.OPPORTUNITY_ACTION_TAG_ENTER),
+        "conviction": 0.0,
+        "readiness_json": {"passing_conditions": 0, "total_conditions": 0},
+        "signal_axis": 0.0,
+        "provenance": list(provenance),
+        "thesis": "",
+        "valid_until": valid_until or (datetime.now(UTC) + timedelta(hours=24)),
+        "computed_at": computed_at,
+    }
 
 
 def _recent_bars_resp(closes):
@@ -4942,6 +4999,227 @@ class TestColdReadNonBlocking:
         # Still kicked so it self-heals when data recovers — a success clears the counter.
         await _drain_opportunity_recompute(svc, "u1")
         assert "u1" not in svc._opportunity_compute_failures
+
+
+class TestOpportunitySurgicalRecovery:
+    """feature 185 FR-5 (@AC-8/@AC-9) — a served data-unavailable row self-heals via a surgical,
+    per-symbol read-time recovery: it re-fetches ONLY the stale symbols (not the full universe),
+    heals in place restoring BOTH ranking axes, re-stamps a still-down row, never resurrects a
+    dropped row, keeps offset paging stable, dedups concurrent kicks, and refreshes the readiness
+    cache for a recovered watchlist-entry pair (success-only)."""
+
+    _META = [("x-user-id", "u1"), ("x-access-scope", "7"), ("x-trace-id", "t1")]
+
+    @pytest.mark.asyncio
+    async def test_surgical_heal_restores_both_axes_in_place(self):
+        """@AC-8: a recovered data-unavailable row heals in place with conviction AND signal_axis
+        restored (signal_axis re-drained, not left 0), and ONLY that symbol is re-fetched (the full
+        universe drain — ListWatchlists/ListPositions — is not run)."""
+        svc = _materialized_svc(
+            signals=[_sig("AAPL", "buy", 0.7, source="uw")],
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS},  # market data recovered
+        )
+        old = datetime.now(UTC) - timedelta(seconds=400)
+        svc._opportunities_repo.rows["u1"] = [
+            _unavailable_served_row(
+                "AAPL", "sx", provenance=["watchlist", "unavailable"], computed_at=old
+            )
+        ]
+        await svc._retry_unavailable_symbols("u1", {"AAPL"}, self._META)
+        healed = svc._opportunities_repo.rows["u1"][0]
+        assert "unavailable" not in healed["provenance"]  # sentinel dropped
+        assert healed["conviction"] == 1.0  # readiness restored (firing)
+        assert healed["signal_axis"] == pytest.approx(0.7)  # re-drained, not left 0 (@AC-8)
+        # Surgical, not a full recompute: the universe drains were never called.
+        assert svc._portfolio.ListWatchlists.await_count == 0
+        assert svc._portfolio.ListPositions.await_count == 0
+
+    @pytest.mark.asyncio
+    async def test_still_unavailable_is_restamped_not_healed(self):
+        """@AC-8: a symbol whose re-fetch still fails keeps the sentinel (conviction 0) but has its
+        computed_at re-stamped so it does not re-kick before the next 300s cooldown."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("BAD", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+        )
+        svc._marketdata.GetBars = AsyncMock(side_effect=RuntimeError("still down"))
+        old = datetime.now(UTC) - timedelta(seconds=400)
+        svc._opportunities_repo.rows["u1"] = [
+            _unavailable_served_row(
+                "BAD", "sx", provenance=["watchlist", "unavailable"], computed_at=old
+            )
+        ]
+        await svc._retry_unavailable_symbols("u1", {"BAD"}, self._META)
+        row = svc._opportunities_repo.rows["u1"][0]
+        assert "unavailable" in row["provenance"]  # still marked
+        assert row["conviction"] == 0.0
+        assert row["computed_at"] > old  # re-stamped → cooldown holds
+
+    @pytest.mark.asyncio
+    async def test_replace_symbols_never_resurrects_absent_key(self):
+        """No-resurrection: replace_symbols given a key absent from the table does NOT INSERT it (a
+        symbol dropped from the universe stays dropped until the daily full compute)."""
+        svc = _materialized_svc()
+        svc._opportunities_repo.rows["u1"] = []
+        await svc._opportunities_repo.replace_symbols(
+            "u1",
+            [
+                {
+                    "opportunity_key": "u1|GONE|sx",
+                    "conviction": 1.0,
+                    "readiness_json": {},
+                    "signal_axis": 0.5,
+                    "provenance": ["watchlist"],
+                    "thesis": "",
+                    "valid_until": datetime.now(UTC),
+                }
+            ],
+        )
+        assert svc._opportunities_repo.rows["u1"] == []  # never inserted
+
+    @pytest.mark.asyncio
+    async def test_fresh_read_scan_kicks_retry_for_stale_unavailable_only(self):
+        """@AC-8 scan: a FRESH read kicks the surgical retry for data-unavailable rows older than
+        the cooldown ONLY — a within-cooldown unavailable row and an evaluated (non-unavailable) row
+        do not trigger it."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS},
+        )
+        from gen.marketdata.v1 import marketdata_pb2 as _md
+
+        svc._marketdata.GetLatestPrice = AsyncMock(return_value=_md.LatestPrice())
+        svc._kick_opportunity_retry = MagicMock()
+        old = datetime.now(UTC) - timedelta(seconds=400)
+        recent = datetime.now(UTC)
+        normal = _unavailable_served_row("OK", "sx", provenance=["watchlist"], computed_at=old)
+        normal["conviction"] = 1.0  # an evaluated row, NOT unavailable
+        svc._opportunities_repo.rows["u1"] = [
+            _unavailable_served_row(
+                "AAPL", "sx", provenance=["watchlist", "unavailable"], computed_at=old
+            ),
+            _unavailable_served_row(
+                "MSFT", "sx", provenance=["watchlist", "unavailable"], computed_at=recent
+            ),
+            normal,
+        ]
+        await svc.ListOpportunities(analysis_pb2.ListOpportunitiesRequest(), _ctx(_HEADERS))
+        svc._kick_opportunity_retry.assert_called_once()
+        assert svc._kick_opportunity_retry.call_args.args[1] == {"AAPL"}  # stale-unavailable only
+
+    @pytest.mark.asyncio
+    async def test_retry_guard_cleared_after_run(self):
+        """Dedup: _kick_opportunity_retry adds the user to _opportunity_retrying synchronously and
+        clears it in a finally (no stuck flag after the run)."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS},
+        )
+        old = datetime.now(UTC) - timedelta(seconds=400)
+        svc._opportunities_repo.rows["u1"] = [
+            _unavailable_served_row(
+                "AAPL", "sx", provenance=["watchlist", "unavailable"], computed_at=old
+            )
+        ]
+        svc._kick_opportunity_retry("u1", {"AAPL"}, self._META)
+        assert "u1" in svc._opportunity_retrying  # added synchronously
+        for _ in range(500):
+            if "u1" not in svc._opportunity_retrying:
+                break
+            await asyncio.sleep(0)
+        assert "u1" not in svc._opportunity_retrying  # cleared in the finally
+
+    @pytest.mark.asyncio
+    async def test_retry_skipped_when_full_recompute_in_flight(self):
+        """Dedup: a surgical retry is skipped when a full recompute is already in flight (it heals
+        these rows too)."""
+        svc = _materialized_svc()
+        svc._opportunity_recomputing.add("u1")
+        svc._kick_opportunity_retry("u1", {"AAPL"}, self._META)
+        assert "u1" not in svc._opportunity_retrying  # never started
+
+    @pytest.mark.asyncio
+    async def test_recovered_watchlist_entry_refreshes_readiness_cache(self):
+        """@AC-9: a recovered watchlist×strategy entry pair upserts the fresh readiness-cache subset
+        (success-only)."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS},
+        )
+        cache = _FakeReadinessCache()
+        svc._readiness_cache_repo = cache
+        old = datetime.now(UTC) - timedelta(seconds=400)
+        svc._opportunities_repo.rows["u1"] = [
+            _unavailable_served_row(
+                "AAPL", "sx", provenance=["watchlist", "unavailable"], computed_at=old
+            )
+        ]
+        await svc._retry_unavailable_symbols("u1", {"AAPL"}, self._META)
+        assert len(cache.upserted) == 1
+        staged = cache.upserted[0]
+        assert staged["symbol"] == "AAPL"
+        assert staged["strategy_id"] == "sx"
+        assert staged["rule"] == "entry"
+        assert staged["bar_epoch"] >= 0  # success
+
+    @pytest.mark.asyncio
+    async def test_still_down_symbol_not_written_to_readiness_cache(self):
+        """@AC-9 success-only: a symbol whose re-fetch still fails is NOT written to the readiness
+        cache."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("BAD", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+        )
+        svc._marketdata.GetBars = AsyncMock(side_effect=RuntimeError("down"))
+        cache = _FakeReadinessCache()
+        svc._readiness_cache_repo = cache
+        old = datetime.now(UTC) - timedelta(seconds=400)
+        svc._opportunities_repo.rows["u1"] = [
+            _unavailable_served_row(
+                "BAD", "sx", provenance=["watchlist", "unavailable"], computed_at=old
+            )
+        ]
+        await svc._retry_unavailable_symbols("u1", {"BAD"}, self._META)
+        assert cache.upserted == []  # still-down → not staged
+
+    @pytest.mark.asyncio
+    async def test_paging_stable_across_tied_unavailable_rows(self):
+        """Paging determinism: several rows tied at conviction=0, signal_axis=0 paginate via the
+        opportunity_key ASC tiebreak so each row is returned once across two offset polls."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS},
+        )
+        from gen.marketdata.v1 import marketdata_pb2 as _md
+
+        svc._marketdata.GetLatestPrice = AsyncMock(return_value=_md.LatestPrice())
+        svc._kick_opportunity_retry = MagicMock()  # keep the scan from mutating rows mid-page
+        recent = datetime.now(UTC)
+        svc._opportunities_repo.rows["u1"] = [
+            _unavailable_served_row(
+                f"S{i}", "sx", provenance=["watchlist", "unavailable"], computed_at=recent
+            )
+            for i in range(4)
+        ]
+        page1 = await svc.ListOpportunities(
+            analysis_pb2.ListOpportunitiesRequest(page=common_pb2.PageRequest(page_size=2)),
+            _ctx(_HEADERS),
+        )
+        page2 = await svc.ListOpportunities(
+            analysis_pb2.ListOpportunitiesRequest(
+                page=common_pb2.PageRequest(page_size=2, page_token="2")
+            ),
+            _ctx(_HEADERS),
+        )
+        seen = [o.symbol for o in page1.opportunities] + [o.symbol for o in page2.opportunities]
+        assert sorted(seen) == ["S0", "S1", "S2", "S3"]
+        assert len(seen) == len(set(seen))  # each row exactly once (stable paging)
 
 
 class TestOpportunityBarsFetchDedup:

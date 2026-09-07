@@ -570,7 +570,7 @@ Behavioral verification is in Step 10.
 
 ### Step 10 — test (analysis, FR-5): heal-in-place, no-resurrection, paging, readiness-cache subset
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -884,6 +884,17 @@ Confirm the new fields are documented under `list_opportunities`.
   `_kick_opportunity_retry._run`'s guard (logged, retry aborts) — a formula bug is not a data outage.
 - **Step 9 (line drift):** the compute is now at `servicer.py:3582` (post Steps 3/5/7), not `3542`;
   all cited symbols resolved. Full suite after Step 9: 719 passed, 82.06% coverage.
+- **Step 10 (test topology):** the FR-5 behavior tests drive `_retry_unavailable_symbols` and the
+  ListOpportunities fresh-read scan directly (like Step 4 drove `_compute_opportunities`), using an
+  extended `_FakeOppRepo` (new `replace_symbols` mirroring the real heal-only/no-INSERT semantics +
+  the `opportunity_key` ASC tiebreak in `read`) and a new `_FakeReadinessCache`. `test_opportunities_
+  repo.py` was created (no such module existed) for the real `replace_symbols` SQL/bind assertions
+  via an AsyncMock pool (the sibling repo-test pattern — no real DB). @AC-8 (heal both axes in place,
+  surgical not full-compute), @AC-8 still-down-re-stamped, no-resurrection (fake + real SQL),
+  paging-stable (offset paging over tied 0/0 rows), dedup (guard cleared in finally; skipped under a
+  full recompute), @AC-9 (readiness-cache subset upsert, success-only). RED proven by reverting the
+  Step-9 source to `97d8cda` (9 failed — recovery methods + real `replace_symbols` absent). Full
+  suite after Step 10: 730 passed, 84.01% coverage.
 - **Step 1 (proto verification):** `buf` is not on the host, so Step-1 `buf lint`/`buf breaking`
   and Step-2 codegen were run via the pinned `Dockerfile.codegen` image
   (`docker run … ./scripts/buf-gen.sh`, which runs lint + breaking-against-`main-dev` + generate in
