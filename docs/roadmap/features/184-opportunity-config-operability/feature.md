@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-07 | `idea` → `draft` | /sdd-story | Product spec generated (opportunities-queue audit follow-up) |
+| 2026-09-07 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings; FR-6 kill-switch demoted to design option to clear C-15/criterion-8 blocker) |
 
 ---
 
@@ -42,4 +43,4 @@ change types. Override as needed for this feature. Snapshot finalized at /sdd-sp
 
 ## Next Action
 
-`/sdd-review opportunity-config-operability product-spec` — AI review before /sdd-design
+`/sdd-design opportunity-config-operability quick` — recon + design debate before /sdd-spec

@@ -27,3 +27,24 @@
 - Known trap carried: full-dotted `key` column + getter-matching `value_type` or silent orphan
   (migration-026/182 scar); several opportunity keys use the `get_int`/`get_float` zero-trap so a min≥1
   bound makes "0" intentionally unreachable — document per key.
+
+## Session 2026-09-07 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- First criteria pass FAILED on one blocker (C-15 / criterion 8): FR-6 (refresh kill-switch) was a
+  numbered functional requirement with no covering @AC-* scenario AND simultaneously open question #3
+  ("include it or not") — a spec cannot both mandate a requirement and ask whether to do it.
+- Fix (Behavior 1 / C-11 — surface the fork, defer to design): demoted the kill-switch out of the
+  numbered FR list into a "Design option" note + the "Refresh kill-switch" Open Question. Committed
+  requirements are now FR-1..FR-5 only, each with @AC coverage (FR-1→AC-1/2/3, FR-2→AC-4/5, FR-3→AC-1,
+  FR-4→AC-6, FR-5→AC-7). Reconciled the Affected Services / Proto / Config Key Changes cross-refs and
+  fixed the kill-switch key name to C-05 3-segment (`analysis.opportunity.refresh_enabled`).
+- Re-review: PASS, 0 blockers, 0 warnings.
+- Warnings: none.
+- Overlap findings: CLEAN — no other active feature seeds/registers any analysis.opportunity.* key;
+  next-free config seed migration is 028 (182 took 027 off the merge-order pre-assignment note, which
+  only reached 026); feature 185's FR-3 semaphore key
+  (analysis.opportunity.materializer_max_concurrent_bars_fetches) is a declared dependency on THIS
+  feature's mechanism, distinct from 184's interactive max_concurrent_bars_fetches — not a duplicate.
+- Advisory note carried to /sdd-spec: spec cites getters "in servicer.py"; resolved path is
+  services/xstockstrat-analysis/app/handlers/servicer.py (use full path in impl-spec, C-01).

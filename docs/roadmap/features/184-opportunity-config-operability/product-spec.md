@@ -54,10 +54,12 @@ FR-5. Docs reconciled: the analysis `CLAUDE.md` Config Keys table rows for the r
 "No seed migration" note and cite the new migration + bounds (surgically — leave any genuinely
 still-no-seed rows intact); a config-governance per-feature registered-keys log entry is added.
 
-FR-6. _(Design option — G6 from the audit.)_ Optionally add an `analysis.opportunity.refresh.enabled`
-kill-switch for `run_opportunity_refresh_forever` (mirrors `readiness_materializer.enabled`) as an ops
-safety valve. Unlike the materializer, the opportunities queue is a core surface, so an always-on
-default is expected; design decides whether the kill-switch earns its place.
+> **Design option (audit G6), not a committed requirement — see Open Question "Refresh kill-switch"
+> below.** Whether to add an `analysis.opportunity.refresh_enabled` kill-switch for
+> `run_opportunity_refresh_forever` (mirroring `readiness_materializer.enabled`) is a design decision,
+> not a numbered FR: the opportunities queue is a core always-on surface, so unlike the materializer it
+> may not warrant one. Design decides; if taken, it is an additive bool key registered via this
+> feature's same mechanism and gets its own `@AC-*` scenario before it becomes a requirement.
 
 ## Out of Scope
 
@@ -72,7 +74,8 @@ default is expected; design decides whether the kill-switch earns its place.
 - `xstockstrat-config` — new seed migration under `migrations/` + `SCALAR_BOUNDS_REGISTRY` entries in
   `src/grpc/configServiceImpl.ts` (reusing feature-182's `lookupScalarBounds`). No schema change.
 - `xstockstrat-analysis` — **docs only** (`CLAUDE.md` Config Keys table). The readers already exist.
-  (FR-6, if taken, adds a `get_bool` gate in `run_opportunity_refresh_forever` — an analysis code change.)
+  (The optional refresh kill-switch, if design takes it, would add a `get_bool` gate in
+  `run_opportunity_refresh_forever` — an analysis code change scoped by its own `@AC-*` at that point.)
 - `xstockstrat-ui` (`/config-ui`) — **no code change**; the generic namespace editor renders the keys.
 
 ## Consumer Surface(s)
@@ -86,13 +89,13 @@ _Constitution **C-14**._
 
 ## Proto Contract Changes
 
-- [x] No proto changes required (FR-6's optional kill-switch is a config key, not proto).
+- [x] No proto changes required (the optional kill-switch, if taken, is a config key, not proto).
 
 ## Config Key Changes
 
 Registers (does not invent) the `analysis.opportunity.*` keys above as seeded global rows + adds
-write-bounds to the numeric ones. FR-6 optionally adds one new key
-`analysis.opportunity.refresh.enabled` (bool, default `true`).
+write-bounds to the numeric ones. The optional refresh kill-switch (see Open Questions) would, if
+design takes it, add one new key `analysis.opportunity.refresh_enabled` (bool, default `true`).
 
 ## Database Changes
 
@@ -119,5 +122,8 @@ See `acceptance.feature` (`@AC-*`) — single source of acceptance truth (C-15).
   several are read via the `get_int` zero-trap (`max_concurrent_bars_fetches`, `max_universe_size`,
   `snooze_default_hours`, `signal_rank_weight` via `get_float`) — a min ≥ 1 bound means "0" is
   intentionally unreachable; document per key (feature-182 precedent).
-- [ ] **FR-6 kill-switch:** include it, or leave the queue always-on? (Ops-safety vs a core surface
-  that should not be casually disabled.)
+- [ ] **Refresh kill-switch (audit G6 design option):** add an `analysis.opportunity.refresh_enabled`
+  bool (default `true`, C-05 3-segment to match the `readiness_materializer.enabled` precedent) gating
+  `run_opportunity_refresh_forever`, or leave the queue always-on? Ops-safety valve vs a core surface
+  that should not be casually disabled. If taken, it becomes a numbered FR with its own `@AC-*` scenario
+  at design/spec time — deliberately NOT a committed requirement in this product spec.
