@@ -3834,12 +3834,19 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Phase 1 — single-flight: fetch each unique defined-eligible symbol + each unique benchmark
         # once, under _bars_fetch_sem (feature-141 bound). Fetching exactly the serial-eligible set
         # keeps session_end_seconds identical (an over-fetch would raise it, breaking @AC-14).
+        # feature 185 — symbols whose bars/indicator data could not be fetched during this
+        # compute. Distinct from a legitimate thin-`[]` return (a warm-up-thin symbol that did
+        # NOT raise stays an evaluated 0/N row, @AC-2) — membership is recorded ONLY in an
+        # except branch, never inferred from `bars == []`.
+        fetch_failed: set[str] = set()
+
         async def _fetch_into(sym):
             async with self._bars_fetch_sem:
                 try:
                     return sym, await self._fetch_bars_paged(sym, range_msg, propagation_meta)
                 except Exception as e:  # bar fetch is best-effort per symbol
                     log.warning("_compute_opportunities: bars fetch failed for %s: %s", sym, e)
+                    fetch_failed.add(sym)
                     return sym, []
 
         unique_symbols = list(dict.fromkeys(c["symbol"] for c in defined_eligible))
@@ -3854,6 +3861,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     return sym, await self._fetch_bars_paged(sym, range_msg, propagation_meta)
                 except Exception as e:  # noqa: BLE001 — benchmark fetch is best-effort
                     log.warning("benchmark bars fetch failed for %s: %s", sym, e)
+                    fetch_failed.add(sym)
                     return sym, []
 
         benchmark_syms = list(
@@ -3872,6 +3880,22 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         for sym, bars in await asyncio.gather(*[_fetch_benchmark_into(s) for s in benchmark_syms]):
             benchmark_bars_cache[sym] = bars
 
+        # feature 185 — a failed benchmark (source_symbol) fetch makes every candidate whose
+        # strategy depends on that benchmark data-unavailable: the cross-symbol regime gate
+        # cannot be evaluated honestly. Map each failed benchmark back to those candidate symbols
+        # via the same strategy_defs[sid].components[*].source_symbol relation that built
+        # benchmark_syms.
+        failed_benchmarks = {s for s in benchmark_syms if s in fetch_failed}
+        if failed_benchmarks:
+            for c in defined_eligible:
+                srcs = {
+                    comp.source_symbol
+                    for comp in strategy_defs[c["strategy_id"]].components
+                    if comp.source_symbol
+                }
+                if srcs & failed_benchmarks:
+                    fetch_failed.add(c["symbol"])
+
         # Phase 2 — per-candidate evaluate under _candidates_sem, CACHE-ONLY: Phase 1 warmed both
         # caches so every _load_benchmark_bars_windowed here is a cache hit (no sem); component RPCs
         # still fan out bounded by _component_series_sem. No return_exceptions (serial per-candidate
@@ -3883,7 +3907,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 readiness = _empty_readiness(sym)
                 exit_fires = False
 
-                if strat and not (c["muted"] and not c["is_held"]):
+                evaluated = bool(strat) and not (c["muted"] and not c["is_held"])
+                if evaluated:
                     definition = strategy_defs.get(strat)
                     if definition is not None:
                         bars = bars_by_symbol.get(sym, [])
@@ -3896,19 +3921,32 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         )
                         # Held + attributed → exit-rule trace (FR-8); else entry-rule trace.
                         rule = "exit" if c["is_held"] else "entry"
-                        readiness = await evaluator.evaluate_conditions_traced(
-                            definition, bars, sym, rule=rule, benchmark_bars=benchmark_bars
-                        )
-                        if c["is_held"]:
-                            total = readiness["total_conditions"]
-                            exit_fires = total > 0 and readiness["passing_conditions"] == total
-                        # Persist strategy target/stop from signal_params into readiness JSONB
-                        # (no new column); present → store, absent → nothing (never fabricated).
-                        _sp = json_format.MessageToDict(definition.signal_params)
-                        for _key, _dst in (("target", "target_price"), ("stop", "stop_price")):
-                            _val = _sp.get(_key)
-                            if isinstance(_val, (int, float)) and not isinstance(_val, bool):
-                                readiness[_dst] = float(_val)
+                        try:
+                            readiness = await evaluator.evaluate_conditions_traced(
+                                definition, bars, sym, rule=rule, benchmark_bars=benchmark_bars
+                            )
+                        except grpc.RpcError as e:
+                            # feature 185 — an indicators TRANSPORT outage is a data-unavailable
+                            # signal for THIS candidate, not a whole-compute abort (deliberate
+                            # abort-contract change: the gather had no return_exceptions, so one
+                            # RpcError previously aborted the entire compute). FormulaExecutionError
+                            # is a formula bug, NOT a data outage, so it is left to propagate.
+                            log.warning(
+                                "_compute_opportunities: indicator RPC failed for %s: %s", sym, e
+                            )
+                            fetch_failed.add(sym)
+                            readiness = _empty_readiness(sym)
+                        else:
+                            if c["is_held"]:
+                                total = readiness["total_conditions"]
+                                exit_fires = total > 0 and readiness["passing_conditions"] == total
+                            # Persist strategy target/stop from signal_params into readiness JSONB
+                            # (no new column); present → store, absent → nothing (never fabricated).
+                            _sp = json_format.MessageToDict(definition.signal_params)
+                            for _key, _dst in (("target", "target_price"), ("stop", "stop_price")):
+                                _val = _sp.get(_key)
+                                if isinstance(_val, (int, float)) and not isinstance(_val, bool):
+                                    readiness[_dst] = float(_val)
 
                 action = _resolve_action_tag(c, exit_fires)
                 if action is None:
@@ -3924,14 +3962,23 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 if c["_best_sig_conv"] >= 0.0:
                     readiness["signal_confidence"] = c["_best_sig_conv"]
 
+                # feature 185 — a data-unavailable candidate (primary/benchmark bars fetch failure
+                # or an indicators transport outage) is stamped terminal-unavailable via the
+                # "unavailable" provenance marker (rides the existing JSONB, feature-131 precedent)
+                # and zeroed on BOTH ranking axes so the read ORDER BY sinks it out of the hot
+                # path — distinct from an evaluated 0/N quiet row (which keeps its real conviction).
+                sym_unavailable = evaluated and sym in fetch_failed
+                if sym_unavailable:
+                    _add_provenance(c, "unavailable")
+
                 return {
                     "opportunity_key": _opportunity_key(user_id, sym, strat),
                     "symbol": sym,
                     "strategy_id": strat,
                     "action": int(action),
-                    "conviction": readiness["conviction"],
+                    "conviction": 0.0 if sym_unavailable else readiness["conviction"],
                     "readiness_json": readiness,
-                    "signal_axis": c["signal_axis"],
+                    "signal_axis": 0.0 if sym_unavailable else c["signal_axis"],
                     "provenance": c["provenance"],
                     "thesis": c["thesis"],
                 }
@@ -4586,6 +4633,9 @@ def _row_to_opportunity(row: dict) -> "analysis_pb2.Opportunity":
         # muted is derived from the "denied" provenance marker (analysis.opportunities has no
         # muted column), so it survives the DB round-trip.
         muted=("denied" in provenance),
+        # feature 185 — data_unavailable is likewise derived from the "unavailable" provenance
+        # marker (no column), so a terminal data-unavailable sentinel survives the JSONB round-trip.
+        data_unavailable=("unavailable" in provenance),
     )
     valid_until = row.get("valid_until")
     if valid_until is not None:

@@ -155,7 +155,7 @@ The `proto-freshness` CI job re-runs `buf-gen.sh` and fails on any uncommitted s
 
 ### Step 3 — service (analysis, FR-1): data-unavailable sentinel
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -861,4 +861,29 @@ Confirm the new fields are documented under `list_opportunities`.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **Step 1 (proto verification):** `buf` is not on the host, so Step-1 `buf lint`/`buf breaking`
+  and Step-2 codegen were run via the pinned `Dockerfile.codegen` image
+  (`docker run … ./scripts/buf-gen.sh`, which runs lint + breaking-against-`main-dev` + generate in
+  one pass) rather than a bare-host `buf`. This is the CI-parity path (`proto-freshness` re-runs the
+  same script). Both gates passed; additive fields are non-breaking.
+- **Step 3 (abort-contract change, design-sanctioned):** `_row_for` now wraps
+  `evaluate_conditions_traced` in `try/except grpc.RpcError`. Previously an indicators transport
+  outage propagated out of the `asyncio.gather` (no `return_exceptions`) and aborted the *entire*
+  compute; now it marks only that candidate data-unavailable and the compute completes. This is the
+  deliberate abort-contract deviation called out in the design (Rejected Alt 8). `FormulaExecutionError`
+  (a formula bug, not a data outage) is intentionally left to propagate.
+- **Step 3 (impl-spec evidence line drift):** the impl-spec cited `evaluator.py:364` as "the RpcError
+  shape"; that line is inside `declared_formula_warmups` (an unrelated helper that catches RpcError).
+  The load-bearing fact is unchanged and confirmed: the main eval path
+  (`_assemble_component_series` → `ExecuteFormula`/`ComputeIndicator`/`GetFormula`, `evaluator.py:303`+)
+  *propagates* `grpc.RpcError` — it is caught only in the new `_row_for` guard.
+- **Step 3 (stamp/zero placement, equivalent to spec intent):** the impl-spec described a post-assembly
+  pass (":3944") to stamp `unavailable` + zero the axes. Implemented instead at the row-dict build
+  inside `_row_for` (single pass): `provenance` is a shared list reference and `conviction`/`signal_axis`
+  are by-value, so a build-time `sym in fetch_failed` check is equivalent and avoids a second loop.
+  The check is guarded by `evaluated` (a muted-non-held candidate never evaluates, so it is never
+  spuriously marked unavailable even if it shares a symbol with a failed eligible candidate).
+- **Step 3 (`_MAPPED` parity-set edit landed here, not with Step 4):** the impl-spec allowed the
+  `_MAPPED` addition to land with Step 4; it was landed with Step 3 instead so the OR-F parity test
+  (`test_mapper_covers_every_proto_field`, RED since Step 2 added the proto field) returns green in the
+  same commit as the mapper change that populates it. Step 4 adds only behavioral tests.

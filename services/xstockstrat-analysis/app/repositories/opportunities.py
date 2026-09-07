@@ -104,7 +104,10 @@ class OpportunitiesRepository:
               {valid_clause}
               -- feature 132: a min_conviction floor must still return muted (deny-listed) rows,
               -- which carry conviction 0 by design (the mute is the signal, not a low score).
-              AND (o.conviction >= $2 OR o.provenance ? 'denied')
+              -- feature 185: likewise return data-unavailable rows (conviction 0 by design — the
+              -- unavailable sentinel is the signal); the floor must be exempted at every layer
+              -- (fails.md:1547 vanish trap) or the sentinel would silently vanish at the DB read.
+              AND (o.conviction >= $2 OR o.provenance ? 'denied' OR o.provenance ? 'unavailable')
               AND COALESCE(a.action, 0) <> $4
               AND NOT (
                     COALESCE(a.action, 0) = $5
