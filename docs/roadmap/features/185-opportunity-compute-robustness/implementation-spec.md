@@ -713,7 +713,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . \
 
 ### Step 13 — service (UI, FR-2 + FR-4): render unavailable + computing/failed states
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx` — modify
@@ -770,7 +770,7 @@ Behavioral verification (renders) is in Step 14.
 
 ### Step 14 — test (UI): e2e for unavailable + computing/failed states
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/opportunities.spec.ts` — modify
@@ -861,6 +861,27 @@ Confirm the new fields are documented under `list_opportunities`.
 
 ## Deviation Log
 
+- **Step 13 (client-side floor exemption — every-layer):** the impl-spec named the OpportunityRow
+  render + the two empty branches, but the page's own `rows` useMemo re-filters by the min-conviction
+  slider and exempted only `muted`. A data-unavailable row (conviction 0) would vanish when the user
+  raised the slider — the same "filter at every layer" trap the backend read floor avoids
+  (fails.md:1547). Added `|| o.dataUnavailable` to that client filter so the sentinel survives the
+  slider, mirroring the backend/mock exemptions.
+- **Step 13 (mobile companion cue threaded):** the impl-spec's "mirror into the mobile signalGroup
+  mapping if the mobile row renders readiness" — it does, so `SignalItem` gained `dataUnavailable`,
+  the page's `mobileSections` maps it, and `SectionRenderer`'s `SignalRow` renders an explicit
+  unavailable cue (using this file's phosphor `Warning` icon for consistency, not lucide) in the
+  readiness slot instead of a 0/0 meter (`data-testid=opportunity-unavailable-mobile-<sym>`).
+- **Step 13 (pre-existing tsc error, NOT introduced):** `npx tsc --noEmit` reports one error in
+  `src/middleware.test.ts` (a vitest `MockInstance` typing incompatibility) that exists on
+  `origin/main-dev` and is unrelated to this feature — left untouched (touch-only-what-the-task-
+  requires). The Step-13/14 gate (`pnpm run lint` + `pnpm test:e2e`) is clean; my touched files
+  carry zero tsc errors.
+- **Step 14 (e2e ran under the CI-parity path):** `buf` and a pinned Playwright build are absent, so
+  the e2e ran with `CI=1` (prod `pnpm build && pnpm start`) + the Chromium-1194 fallback
+  (`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`), the same deviation feature 184 recorded. All 6 new
+  feature-185 e2e tests pass (unavailable cue desktop + mobile, floor survival, computing, terminal
+  failed, empty-universe distinctness); the full UI e2e suite is green (439 passed).
 - **Step 9 (`replace_symbols(user_id, rows)` — dropped the spec's `symbols` param):** the impl-spec
   signature was `replace_symbols(user_id, symbols, rows)`, but `symbols` is redundant — each heal row
   is keyed by `opportunity_key` (which encodes the symbol) and the WHERE matches on it. Two-arg

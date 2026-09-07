@@ -37,6 +37,8 @@ import type { Section } from '@/components/mobile/sections';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { StatTile } from '@/components/shared/StatTile';
+import { TriangleAlert } from 'lucide-react';
+import { QueryStateMessages } from '@/components/shared/QueryStateMessages';
 
 type SortKey = 'conviction' | 'expiry';
 const NINETY_MIN_MS = 90 * 60 * 1000;
@@ -151,9 +153,11 @@ export default function OpportunitiesPage() {
   const rows = useMemo(() => {
     const filtered = opportunities.filter(
       (o) =>
-        // A muted (deny-listed) row carries conviction 0 by design and must bypass the min-conviction
-        // filter — the mute is the signal, not a low score.
-        (o.muted || o.conviction >= minConviction) &&
+        // A muted (deny-listed) row and a data-unavailable row (feature 185) each carry conviction 0
+        // by design and must bypass the min-conviction filter — the mute / the unavailable sentinel
+        // IS the signal, not a low score. Exempt at every layer (mirrors the backend read floor,
+        // fails.md:1547) so raising the slider never silently hides an unavailable row.
+        (o.muted || o.dataUnavailable || o.conviction >= minConviction) &&
         (effectiveSources.length === 0 || effectiveSources.includes(o.source)) &&
         (actionFilter === 'any' || String(o.action) === actionFilter),
     );
@@ -209,6 +213,7 @@ export default function OpportunitiesPage() {
       badge: OPPORTUNITY_ACTION[o.action],
       conviction: o.conviction,
       readiness: { passing: o.passingConditions, total: o.totalConditions },
+      dataUnavailable: o.dataUnavailable,
       caption: o.thesis || undefined,
       href: reviewHref(o),
       muted: o.muted,
@@ -336,6 +341,20 @@ export default function OpportunitiesPage() {
             </div>
           ) : error ? (
             <p className="text-sm text-sell">Failed to load opportunities.</p>
+          ) : data?.computeFailed ? (
+            // feature 185 FR-4 — a persistently-failing compute is a terminal error, not an
+            // infinite spinner nor a silently-empty queue.
+            <p className="text-sm text-sell" data-testid="opportunities-compute-failed">
+              Couldn&apos;t compute your opportunities. This usually clears on its own — try again
+              shortly.
+            </p>
+          ) : data?.computing ? (
+            // feature 185 FR-4 — a cold (never-materialized) queue is still computing; the 15s poll
+            // resolves it. Distinct from a legitimately-empty universe (below).
+            <div className="space-y-2" data-testid="opportunities-computing">
+              <p className="text-sm text-muted-foreground">Computing your opportunities…</p>
+              <Skeleton className="h-14 w-full" />
+            </div>
           ) : rows.length === 0 ? (
             <EmptyState
               title="No opportunities match the filter"
@@ -355,6 +374,16 @@ export default function OpportunitiesPage() {
             </div>
           ) : error ? (
             <p className="text-sm text-sell">Failed to load opportunities.</p>
+          ) : data?.computeFailed ? (
+            <p className="text-sm text-sell" data-testid="opportunities-compute-failed-desktop">
+              Couldn&apos;t compute your opportunities. This usually clears on its own — try again
+              shortly.
+            </p>
+          ) : data?.computing ? (
+            <div className="space-y-3" data-testid="opportunities-computing-desktop">
+              <p className="text-sm text-muted-foreground">Computing your opportunities…</p>
+              <Skeleton className="h-28 w-full" />
+            </div>
           ) : rows.length === 0 ? (
             <EmptyState
               title="No opportunities match the filter"
@@ -495,7 +524,19 @@ function OpportunityRow({
           <span className="w-14 shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
             Readiness
           </span>
-          {hasReadiness ? (
+          {o.dataUnavailable ? (
+            // feature 185 FR-2 — a terminal data-unavailable row: an explicit "unavailable" cue via
+            // the shared C-17 primitives (mirrors the watchlist readiness UNKNOWN cell), never a
+            // "quiet" 0/0 verdict and never a silent reclass of an evaluated row.
+            <span
+              className="flex flex-1 items-center gap-1 text-destructive"
+              role="status"
+              data-testid={`opportunity-unavailable-${o.symbol}`}
+            >
+              <TriangleAlert className="h-3 w-3" aria-hidden="true" />
+              <QueryStateMessages error errorText="unavailable" />
+            </span>
+          ) : hasReadiness ? (
             <>
               <Progress
                 value={readyPct}
