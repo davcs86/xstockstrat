@@ -13,6 +13,7 @@
 | 2026-09-07 | `idea` → `draft` | /sdd-story | Product spec generated (opportunities-queue audit follow-up) |
 | 2026-09-07 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings; FR-6 kill-switch demoted to design option to clear C-15/criterion-8 blocker) |
 | 2026-09-07 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written. Justified-set (~10) bounds scope chosen; kill-switch + get_float_present fix routed to feature 185 |
+| 2026-09-07 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
 
 ---
 
@@ -22,7 +23,7 @@
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Recon Dossier](recon.md) — grounded codebase map, patterns to reuse, existing business rules (C-16), risks
 - [Design](design.md) — debated & approved architecture, rejected alternatives, open risks, Constitution rules touched
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec <slug>`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -36,14 +37,15 @@ footgun keys — closing the "operator can't see/tune, and can set unsafe values
 
 ## Reviewers
 
-_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
-change types. Override as needed for this feature. Snapshot finalized at /sdd-spec time.)_
+_(Snapshot from docs/runbooks/reviewer-registry.md, finalized at /sdd-spec time from the distinct
+per-step reviewers. Stable unless /sdd-spec re-runs.)_
 
 | Role | Review Focus |
 |---|---|
-| xstockstrat-config owner | Config seed migration correctness, key naming/scoping, bounds registry, registered-keys log |
-| xstockstrat-analysis owner | Bound ranges match each key's reader semantics/clamps (opportunity compute + refresh loop) |
+| DBA | Migration NNN numbering (no gaps, no conflicts), up+down pair present, run-order compliance (Step 1) |
+| xstockstrat-config owner | Config seed migration correctness, key naming/scoping, bounds registry, WatchConfig stream stability, registered-keys log (Steps 1–3) |
+| xstockstrat-ui owner | config-ui mutation safety, environment scope correctness, e2e fixture (C-12) (Step 4) |
 
 ## Next Action
 
-`/sdd-spec opportunity-config-operability` — generate implementation spec from the approved design
+`/sdd-review opportunity-config-operability impl-spec` — validate implementation spec, then `/sdd-execute opportunity-config-operability`

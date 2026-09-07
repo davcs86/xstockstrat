@@ -77,3 +77,44 @@
 - [ ] Migration 028 collision — reconfirm max(NNN)+1 vs main-dev at execute (C-07). → step 1
 - [ ] signal_rank_weight zero-trap live until feature 185 fixes the reader — description caveat only. → step 2
 - [ ] No live valve for a runaway opportunity refresh (kill-switch deferred to 185). → feature 185
+
+## Session 2026-09-07 — sdd-spec
+
+- Generated implementation-spec.md with 5 steps. Status → implementation-ready.
+- Step map: 1 migration (028 seed, 15 keys × 2 envs, offline-verified) · 2 service (config
+  SCALAR_BOUNDS_REGISTRY +10 entries) · 3 test (setConfigScalarBounds.test.ts, paired w/ step 2,
+  red-before-green; AC-4/5/8) · 4 test (config-ui e2e fixture + api-smoke, C-14/C-12, AC-6, zero
+  component code) · 5 docs (analysis CLAUDE.md + config-governance log, AC-7).
+- Key codebase findings (all re-confirmed live this session, not just from recon):
+  - Config migration tip is `027_analysis_readiness_materializer_keys` (contiguous through 027; `024`
+    is a permanent gap) → next-free NNN = `028`; bind-at-rebase reconfirm at execute (C-07).
+  - `SCALAR_BOUNDS_REGISTRY` at `configServiceImpl.ts:100-113`; two-operand `lookupScalarBounds`
+    `:118-120`; write-edge reject `:396-405`; ListKeys hint `:527-533` — all consume the registry with
+    NO new code (data-only growth). Existing feature-182 RM int-key bounds prove int enforcement works.
+  - `setConfigScalarBounds.test.ts` feature-182 RM block `:149-204` is the exact test template
+    (in-process loopback gRPC harness, recording pool `{is_secret:false}`, `insertQuery()` guard).
+  - config-ui is fully generic (`NamespaceEditor.tsx:69`; mock `listKeys` at `mock-backend.ts:1208-1215`
+    spreads `validation`) → C-14 surface reached with zero component code; e2e fixture
+    `CONFIG_KEY_FIXTURES` (`configKeys.ts:86-93` decay row) is the C-12 template.
+  - analysis `CLAUDE.md` no-seed notes: 4 opportunity rows (`:333,:335,:337,:338`) drop the note; the
+    5th note-bearing row `:334` (`analysis.compute.max_worker_threads`) is a compute key, genuinely
+    still no-seed → its note MUST stay (FR-5, ledger fails 1512).
+- Reviewers snapshot finalized from distinct per-step reviewers: DBA (step 1), xstockstrat-config owner
+  (steps 1–3), xstockstrat-ui owner (step 4); step 5 docs = none.
+
+## Session 2026-09-07 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 1 warning, 3 notes (advisory — did not block). Overlap: CLEAN.
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 4: (C-01) instruction told the executor to set the bounded-int fixture row's
+    `validation.valueType` to a nonexistent "int-scalar enum" — `config.proto` ValueType has no such
+    member; the service emits VALUE_TYPE_FLOAT_SCALAR (2) for ALL bounded keys (configServiceImpl.ts:529).
+    — [x] resolved pre-execute: spec Step 4 corrected to `valueType: 2` for both bounded rows.
+  - Step 1/2: (cosmetic note) `grep -c "analysis.opportunity." … # expect 30/10` over-counts if the
+    mandated header comment matches — at execute, verify the row/entry count by inspection, not a bare
+    line count. — [ ] unaddressed (cosmetic; announce at execute).
+  - Scenario coverage (C-15 note): AC-1/2/3 (migration) + AC-7 (docs) have no runnable RED assertion —
+    verified by offline SQL inspection + doc-state review, matching the feature-182 precedent for a
+    config-only/docs feature. — [ ] unaddressed (accepted deviation; announce at execute).
+- Overlap findings: none (migration 028, the 15 keys, proto surface, all shared files uncontested;
+  185's materializer_max_concurrent_bars_fetches is a distinct one-way dependency, not a duplicate).
