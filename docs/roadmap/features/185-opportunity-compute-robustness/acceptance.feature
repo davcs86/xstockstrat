@@ -35,3 +35,11 @@ Feature: opportunity-compute-robustness
     Given a data-unavailable candidate is written to analysis.opportunities during a compute
     When the row is read back by a later ListOpportunities without recompute
     Then the data-unavailable sentinel is still present on the row (not lost through persistence)
+
+  @AC-6 @FR-4
+  Scenario: A cold ListOpportunities read does not block on a synchronous compute
+    Given a user who has never had opportunities materialized (a cold queue)
+    When that user's first ListOpportunities read arrives
+    Then the read returns promptly without waiting for a synchronous compute under the per-user lock
+    And it returns an empty page carrying a "computing" pending signal and kicks a background recompute
+    And a subsequent poll returns the materialized rows once the background compute completes

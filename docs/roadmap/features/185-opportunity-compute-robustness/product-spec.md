@@ -42,12 +42,14 @@ separate from the interactive read path (`_enrich_opportunities_live`), so a bac
 starve an interactive read — mirroring the readiness materializer's own-semaphore split (feature 176/180).
 The new bound is a config key (governed under feature 184's config-operability work: registered + bounded).
 
-> **Design option (audit G4), not a committed requirement — see the Open Question "Cold-read
-> non-blocking" below.** Whether to make the **cold** (never-materialized) `ListOpportunities` read
-> non-blocking (return empty + a "computing" pending signal + kick + poll) instead of computing
-> synchronously under the per-user lock is a genuine design fork (a cold user has no cached rows to show
-> anyway), not a numbered FR. Design decides; if taken, it becomes a numbered FR with its own `@AC-*`
-> scenario at design/spec time.
+FR-4. _(audit G4 — committed by operator, 2026-09-07.)_ The **cold** (never-materialized)
+`ListOpportunities` read is **non-blocking**: instead of computing synchronously under the per-user lock
+(`_materialize_opportunities`), it returns an empty page + a "computing" pending signal, kicks a
+background recompute (`_kick_opportunity_recompute`), and lets the client poll — mirroring the
+feature-181 cold readiness path. A cold user has no cached rows to show anyway, so the synchronous wait
+buys nothing; making it non-blocking keeps the first read snappy and removes the per-user-lock stall.
+Design settles the exact pending signal (a response flag / empty + a recompute-in-progress marker) and
+its own `@AC-*`.
 
 ## Out of Scope
 
@@ -61,8 +63,8 @@ The new bound is a config key (governed under feature 184's config-operability w
 ## Affected Services
 
 - `xstockstrat-analysis` — `_compute_opportunities` sentinel (FR-1), `_materialize_opportunities` +
-  `opportunities` repo carry-through, a dedicated background semaphore (FR-3), and (the cold-read design
-  option, if design takes it) the cold-read branch of `ListOpportunities`.
+  `opportunities` repo carry-through, a dedicated background semaphore (FR-3), and the non-blocking
+  cold-read branch of `ListOpportunities` (FR-4).
 - `packages/proto` — likely a **new additive field** on `Opportunity` (`analysis.proto`) for the
   data-unavailable state (design confirms; if an existing field can carry it, no proto change).
 - `xstockstrat-ui` — render the unavailable state on the `/insights/opportunities` queue (FR-2).
@@ -113,9 +115,10 @@ See `acceptance.feature` (`@AC-*`) — single source of acceptance truth (C-15).
 - [ ] **C-16 impact:** does marking data-unavailable rows change any existing `@AC-*` guarantee about the
   opportunities queue (e.g. rollup counts, "quiet" classification)? scenario-recon at design will surface
   which guarantees PRESERVE/EXTEND/CHANGE.
-- [ ] **Cold-read non-blocking (audit G4 design option):** change the cold `ListOpportunities` read to
-  non-blocking (return empty + pending + kick + poll) or keep the synchronous cold compute? If taken, it
-  becomes a numbered FR with its own `@AC-*` at design/spec time — deliberately NOT a committed FR here.
+- [x] **Cold-read non-blocking (audit G4):** RESOLVED — committed as **FR-4** by operator (2026-09-07).
+  Cold `ListOpportunities` returns empty + a "computing" pending signal + kicks a recompute, non-blocking.
+  Remaining sub-decision for design: the exact pending-signal shape (a response flag vs empty + a
+  recompute-in-progress marker) and its `@AC-6` wording.
 - [ ] **Agent consumer surface (C-14):** does the new data-unavailable state need an explicit
   `list_opportunities` MCP-tool mapping in `xstockstrat-agent` (a new proto field does NOT surface through
   the agent automatically), or is it internal-only with a stated reason? Design MUST commit to an explicit
