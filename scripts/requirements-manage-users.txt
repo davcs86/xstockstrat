@@ -1,0 +1,4 @@
+typer>=0.15
+bcrypt>=4.2
+psycopg[binary]>=3.2
+questionary>=2.1
