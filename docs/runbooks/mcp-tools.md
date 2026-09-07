@@ -857,16 +857,31 @@ admin scope) — analysis resolves the owner from the header, never a request-bo
 |---|---|---|---|
 | `min_conviction` | `float` | No | Drop rows below this conviction floor (default `0.0`); muted deny-list rows are exempt |
 
-**Return** — `{ "opportunities": [ <opportunity>, … ] }`. Each opportunity is **snake_case** and
-always carries `symbol`, `action`, `conviction`, `passing_conditions`, `total_conditions`, `thesis`,
-`strategy_id`, `source`, `opportunity_key`, `provenance`, and `muted`. The live-market enrichment is
+**Return** — `{ "opportunities": [ <opportunity>, … ], "computing": <bool>, "compute_failed": <bool> }`.
+Each opportunity is **snake_case** and always carries `symbol`, `action`, `conviction`,
+`passing_conditions`, `total_conditions`, `thesis`, `strategy_id`, `source`, `opportunity_key`,
+`provenance`, `muted`, and `data_unavailable` (feature 185 — `true` for a **terminal
+data-unavailable** row: a per-symbol bars/indicator fetch failure during the compute, zeroed on both
+ranking axes and **distinct** from an evaluated 0-of-N "quiet" row). The live-market enrichment is
 **omit-not-fabricate**:
 
 - `live_price`, `change_pct`, `target_price`, `stop_price` — present **only** when the backend has a
   value; an unavailable field is **omitted entirely**, never a fabricated `0`.
+- `valid_until` — the row's expiry as an ISO-8601 string; omitted when unset (feature 185 back-fill).
+- `signal_confidence` — the raw max active-signal conviction (0.0–1.0); omitted when the symbol has
+  no active signal, never a fabricated `0.0` (feature 185 back-fill).
 - `sparkline` — a list of recent daily closes; a warm-up/missing bar is JSON `null` (never `NaN`).
 - `conditions` — the traced `{ref_name, lhs_value, threshold, fn, state, distance_to_threshold}`
   leaves; an unattributed row omits the key.
+
+The two **top-level** flags surface a cold/failed queue explicitly to this one-shot, non-polling
+consumer instead of reporting it as a silently-empty list (feature 185 FR-4):
+
+- `computing: true` — a **cold** (never-materialized) queue is still being computed in the background;
+  the read returned empty non-blocking. Call again shortly. A legitimately-empty universe returns
+  `computing: false` (the distinctness).
+- `compute_failed: true` — a persistently-failing background compute (past the bounded attempt
+  count): a terminal error state, not an infinite "computing".
 
 Risk/reward and suggested share size are **not** returned — they are a UI-only presentation computed
 client-side, carried on no wire field.

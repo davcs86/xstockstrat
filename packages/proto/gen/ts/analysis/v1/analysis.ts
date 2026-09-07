@@ -1679,7 +1679,15 @@ export interface Opportunity {
    * 0.0). Deliberately NAMED signal_confidence and kept distinct from the ordinal `conviction = 3`
    * (NOT a probability) and the decayed/weighted signal_axis. Next free after 095's 13-18 block.
    */
-  signalConfidence?: number | undefined;
+  signalConfidence?:
+    | number
+    | undefined;
+  /**
+   * feature 185 — a per-symbol bars/indicator fetch failure during the compute (terminal
+   * data-unavailable), derived at read from the "unavailable" provenance marker (no column).
+   * Distinct from an evaluated 0/N row; conviction+signal_axis are zeroed so it sinks in ranking.
+   */
+  dataUnavailable: boolean;
 }
 
 /**
@@ -1738,7 +1746,19 @@ export interface ListOpportunitiesRequest {
 
 export interface ListOpportunitiesResponse {
   opportunities: Opportunity[];
-  page?: PageResponse | undefined;
+  page?:
+    | PageResponse
+    | undefined;
+  /**
+   * feature 185 — cold (never-materialized) read: empty page returned non-blocking while a
+   * background recompute runs. FALSE for a legitimately-empty universe (distinctness proof).
+   */
+  computing: boolean;
+  /**
+   * feature 185 — a persistently-failing cold recompute (past the bounded attempt count):
+   * renders a terminal error instead of an infinite "computing" spinner.
+   */
+  computeFailed: boolean;
 }
 
 export interface EvaluateReadinessRequest {
@@ -7604,6 +7624,7 @@ function createBaseOpportunity(): Opportunity {
     sparkline: [],
     conditions: [],
     signalConfidence: undefined,
+    dataUnavailable: false,
   };
 }
 
@@ -7665,6 +7686,9 @@ export const Opportunity: MessageFns<Opportunity> = {
     }
     if (message.signalConfidence !== undefined) {
       writer.uint32(153).double(message.signalConfidence);
+    }
+    if (message.dataUnavailable !== false) {
+      writer.uint32(160).bool(message.dataUnavailable);
     }
     return writer;
   },
@@ -7828,6 +7852,14 @@ export const Opportunity: MessageFns<Opportunity> = {
           message.signalConfidence = reader.double();
           continue;
         }
+        case 20: {
+          if (tag !== 160) {
+            break;
+          }
+
+          message.dataUnavailable = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -7906,6 +7938,11 @@ export const Opportunity: MessageFns<Opportunity> = {
         : isSet(object.signal_confidence)
         ? globalThis.Number(object.signal_confidence)
         : undefined,
+      dataUnavailable: isSet(object.dataUnavailable)
+        ? globalThis.Boolean(object.dataUnavailable)
+        : isSet(object.data_unavailable)
+        ? globalThis.Boolean(object.data_unavailable)
+        : false,
     };
   },
 
@@ -7968,6 +8005,9 @@ export const Opportunity: MessageFns<Opportunity> = {
     if (message.signalConfidence !== undefined) {
       obj.signalConfidence = message.signalConfidence;
     }
+    if (message.dataUnavailable !== false) {
+      obj.dataUnavailable = message.dataUnavailable;
+    }
     return obj;
   },
 
@@ -7995,6 +8035,7 @@ export const Opportunity: MessageFns<Opportunity> = {
     message.sparkline = object.sparkline?.map((e) => SparklinePoint.fromPartial(e)) || [];
     message.conditions = object.conditions?.map((e) => ConditionEval.fromPartial(e)) || [];
     message.signalConfidence = object.signalConfidence ?? undefined;
+    message.dataUnavailable = object.dataUnavailable ?? false;
     return message;
   },
 };
@@ -8609,7 +8650,7 @@ export const ListOpportunitiesRequest: MessageFns<ListOpportunitiesRequest> = {
 };
 
 function createBaseListOpportunitiesResponse(): ListOpportunitiesResponse {
-  return { opportunities: [], page: undefined };
+  return { opportunities: [], page: undefined, computing: false, computeFailed: false };
 }
 
 export const ListOpportunitiesResponse: MessageFns<ListOpportunitiesResponse> = {
@@ -8619,6 +8660,12 @@ export const ListOpportunitiesResponse: MessageFns<ListOpportunitiesResponse> = 
     }
     if (message.page !== undefined) {
       PageResponse.encode(message.page, writer.uint32(18).fork()).join();
+    }
+    if (message.computing !== false) {
+      writer.uint32(24).bool(message.computing);
+    }
+    if (message.computeFailed !== false) {
+      writer.uint32(32).bool(message.computeFailed);
     }
     return writer;
   },
@@ -8646,6 +8693,22 @@ export const ListOpportunitiesResponse: MessageFns<ListOpportunitiesResponse> = 
           message.page = PageResponse.decode(reader, reader.uint32());
           continue;
         }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.computing = reader.bool();
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.computeFailed = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -8661,6 +8724,12 @@ export const ListOpportunitiesResponse: MessageFns<ListOpportunitiesResponse> = 
         ? object.opportunities.map((e: any) => Opportunity.fromJSON(e))
         : [],
       page: isSet(object.page) ? PageResponse.fromJSON(object.page) : undefined,
+      computing: isSet(object.computing) ? globalThis.Boolean(object.computing) : false,
+      computeFailed: isSet(object.computeFailed)
+        ? globalThis.Boolean(object.computeFailed)
+        : isSet(object.compute_failed)
+        ? globalThis.Boolean(object.compute_failed)
+        : false,
     };
   },
 
@@ -8671,6 +8740,12 @@ export const ListOpportunitiesResponse: MessageFns<ListOpportunitiesResponse> = 
     }
     if (message.page !== undefined) {
       obj.page = PageResponse.toJSON(message.page);
+    }
+    if (message.computing !== false) {
+      obj.computing = message.computing;
+    }
+    if (message.computeFailed !== false) {
+      obj.computeFailed = message.computeFailed;
     }
     return obj;
   },
@@ -8684,6 +8759,8 @@ export const ListOpportunitiesResponse: MessageFns<ListOpportunitiesResponse> = 
     message.page = (object.page !== undefined && object.page !== null)
       ? PageResponse.fromPartial(object.page)
       : undefined;
+    message.computing = object.computing ?? false;
+    message.computeFailed = object.computeFailed ?? false;
     return message;
   },
 };

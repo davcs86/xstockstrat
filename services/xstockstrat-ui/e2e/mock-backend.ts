@@ -791,10 +791,17 @@ export async function startMockBackend(): Promise<void> {
         // feature 083 — ranked opportunity queue; honors the min_conviction filter.
         async listOpportunities(req) {
           const min = req.minConviction ?? 0;
-          // feature 132: muted (deny-listed) rows are exempt from the conviction floor (they carry
-          // conviction 0 by design) — mirrors the backend `OR provenance ? 'denied'` read exemption.
+          // feature 132/185: muted (deny-listed) AND data-unavailable rows are exempt from the
+          // conviction floor (both carry conviction 0 by design) — mirrors the backend
+          // `OR provenance ? 'denied' OR provenance ? 'unavailable'` read exemption (fails.md:1547).
           return {
-            opportunities: OPPORTUNITIES.filter((o) => o.muted || o.conviction >= min),
+            opportunities: OPPORTUNITIES.filter(
+              (o) => o.muted || o.dataUnavailable || o.conviction >= min,
+            ),
+            // feature 185 FR-4 — the cold/failed pending signals default false here; a per-test
+            // page.route mock overrides them to exercise the computing / compute-failed UI states.
+            computing: false,
+            computeFailed: false,
           };
         },
         // feature 097 — the persisted-disposition RPC exists on the server so a call resolves.

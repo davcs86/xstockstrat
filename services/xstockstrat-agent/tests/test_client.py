@@ -1150,6 +1150,45 @@ class TestListOpportunitiesClient:
         assert ("x-user-id", "u1") in meta
         assert not any(k == "x-access-scope" for k, _ in meta)
 
+    @pytest.mark.asyncio
+    async def test_projects_data_unavailable_and_response_pending_flags(self):
+        """feature 185 FR-6/@AC-10: a data_unavailable row is projected with the flag (an evaluated
+        row with False), and the response-level computing/compute_failed flags are surfaced at the
+        top level so a cold/failed queue is not reported as a silently-empty list."""
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+
+        unavailable = analysis_pb2.Opportunity(
+            symbol="GME",
+            action=analysis_pb2.OPPORTUNITY_ACTION_TAG_ENTER,
+            conviction=0.0,
+            opportunity_key="u1|GME|s",
+            provenance=["watchlist", "unavailable"],
+            data_unavailable=True,
+        )
+        evaluated = analysis_pb2.Opportunity(
+            symbol="AAPL",
+            action=analysis_pb2.OPPORTUNITY_ACTION_TAG_ENTER,
+            conviction=0.4,
+            opportunity_key="u1|AAPL|s",
+            provenance=["watchlist"],
+        )
+        resp = analysis_pb2.ListOpportunitiesResponse(
+            opportunities=[unavailable, evaluated], computing=True, compute_failed=False
+        )
+        mock_stub = MagicMock()
+        mock_stub.ListOpportunities = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
+                result = await client.list_opportunities(user_id="u1", min_conviction=0.0)
+
+        assert result["opportunities"][0]["data_unavailable"] is True
+        assert (
+            result["opportunities"][1]["data_unavailable"] is False
+        )  # evaluated → not unavailable
+        assert result["computing"] is True
+        assert result["compute_failed"] is False
+
 
 # ── Admin user management + cross-user profile client helpers (feature 183) ──
 

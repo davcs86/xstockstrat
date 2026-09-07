@@ -15,6 +15,9 @@ export interface SignalItem {
   // Strategy readiness (passing/total conditions) — rendered as a labeled meter alongside
   // conviction so the phone view isn't missing the desktop's readiness signal.
   readiness?: { passing: number; total: number };
+  // feature 185 — a terminal data-unavailable row: the readiness slot shows an explicit
+  // "unavailable" cue instead of a 0/0 meter (mirrors the desktop OpportunityRow).
+  dataUnavailable?: boolean;
   caption?: string;
   href?: string;
   muted?: boolean; // deny-listed row: a "Muted" marker in place of the action badge

@@ -1162,11 +1162,16 @@ def register_tools(server: MCPServer) -> None:
         """List the caller's ranked Decide-queue opportunities with live-market enrichment
         (xstockstrat-analysis ListOpportunities, feature 095, read-only).
         min_conviction: drop rows below this conviction floor (muted deny-list rows are exempt).
-        Returns {"opportunities": [<opportunity>, ...]} — each carries symbol, action, conviction,
-            thesis, strategy_id, source, provenance, muted, and (when the backend has them) the live
-            enrichment: live_price, change_pct, target_price, stop_price, a sparkline (recent daily
-            closes; a gap is null), and the traced conditions. Unavailable live values are OMITTED,
-            never fabricated. Only the calling user's OWN queue is returned."""
+        Returns {"opportunities": [<opportunity>, ...], "computing": bool, "compute_failed": bool}.
+            Each opportunity carries symbol, action, conviction, thesis, strategy_id, source,
+            provenance, muted, data_unavailable (true = a terminal data-unavailable row, distinct
+            from an evaluated 0/N), and (when the backend has them) the live enrichment: live_price,
+            change_pct, target_price, stop_price, a sparkline (recent daily closes; a gap is null),
+            valid_until, signal_confidence, and the traced conditions. Unavailable values are
+            OMITTED, never fabricated. Top-level computing=true means a cold queue is still
+            materializing (poll again); compute_failed=true means a persistently-failing compute
+            (a terminal error, not an empty queue). Only the calling user's OWN queue is
+            returned."""
         # Caller-scoped via x-user-id (no admin scope) — analysis resolves the owner from headers.
         user_id = _caller_user_id(ctx, "list_opportunities")
         try:

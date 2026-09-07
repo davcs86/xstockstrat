@@ -763,6 +763,9 @@ def _opportunity_to_dict(o, analysis_pb2) -> dict[str, Any]:
         "opportunity_key": o.opportunity_key,
         "provenance": list(o.provenance),
         "muted": o.muted,
+        # feature 185 — a terminal data-unavailable row (bars/indicator fetch failure), distinct
+        # from an evaluated 0/N; the agent (a one-shot, non-polling consumer) must surface it.
+        "data_unavailable": o.data_unavailable,
     }
     if o.HasField("live_price"):
         d["live_price"] = o.live_price
@@ -786,6 +789,13 @@ def _opportunity_to_dict(o, analysis_pb2) -> dict[str, Any]:
             }
             for c in o.conditions
         ]
+    # feature 185 (FR-6) — back-fill the two fields the projection historically drifted (so the new
+    # descriptor-parity test passes with no silent allow-list), both omit-not-fabricate: an unset
+    # signal_confidence (no active signal) / valid_until is omitted, never a fabricated 0/epoch.
+    if o.HasField("signal_confidence"):
+        d["signal_confidence"] = o.signal_confidence
+    if o.HasField("valid_until"):
+        d["valid_until"] = o.valid_until.ToDatetime(tzinfo=UTC).isoformat()
     return d
 
 
@@ -802,7 +812,13 @@ async def list_opportunities(user_id: str, min_conviction: float = 0.0) -> dict[
             analysis_pb2.ListOpportunitiesRequest(min_conviction=min_conviction),
             metadata=_metadata(("x-user-id", user_id)),
         )
-    return {"opportunities": [_opportunity_to_dict(o, analysis_pb2) for o in resp.opportunities]}
+    # feature 185 (FR-4/FR-6) — carry the response-level pending signals so a cold or persistently
+    # failed queue is reported explicitly, never as a silently-empty list to a one-shot consumer.
+    return {
+        "opportunities": [_opportunity_to_dict(o, analysis_pb2) for o in resp.opportunities],
+        "computing": resp.computing,
+        "compute_failed": resp.compute_failed,
+    }
 
 
 async def manage_strategy(

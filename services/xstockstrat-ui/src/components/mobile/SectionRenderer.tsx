@@ -212,7 +212,18 @@ function SignalRow({ item: s, showSymbol = true }: { item: SignalItem; showSymbo
               <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
                 ready
               </span>
-              {hasReadiness ? (
+              {s.dataUnavailable ? (
+                // feature 185 FR-2 — explicit data-unavailable cue (mirrors the desktop row), never
+                // a 0/0 meter. Uses this file's phosphor icon set for consistency.
+                <span
+                  className="flex flex-1 items-center gap-1 text-[11px] text-destructive"
+                  role="status"
+                  data-testid={`opportunity-unavailable-mobile-${s.symbol}`}
+                >
+                  <Warning className="h-3 w-3" aria-hidden="true" />
+                  unavailable
+                </span>
+              ) : hasReadiness ? (
                 <>
                   <Progress value={readyPct} className="h-1.5 flex-1" variant={readyVariant} />
                   <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
