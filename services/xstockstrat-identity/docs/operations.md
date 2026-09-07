@@ -4,19 +4,24 @@
 
 ## User Management
 
-`scripts/manage-users.sh` (repo root) creates and resets passwords for identity service users. It uses `bcrypt` from the identity service's `node_modules` and requires `psql`.
+`scripts/manage-users.py` (repo root) creates users, resets passwords, and lists users. It uses Python `bcrypt` (cost 10, matching the identity service) and `psycopg` for direct DB access — no Node.js or `psql` dependency.
 
 ```bash
-# From repo root (local dev):
-./scripts/manage-users.sh create-user admin@example.com admin,trader
-./scripts/manage-users.sh reset-password admin@example.com
+# Preferred — uv auto-installs deps in an ephemeral venv:
+uv run scripts/manage-users.py create-user admin@example.com admin,trader
+uv run scripts/manage-users.py reset-password admin@example.com
+uv run scripts/manage-users.py list-users --active-only
 
-# Inside a running container (docker exec):
-docker exec -it xstockstrat-identity \
-  DATABASE_URL=<url> /app/scripts/manage-users.sh create-user admin@example.com admin
+# Or install deps manually (once) and run directly:
+pip install 'typer>=0.15' 'bcrypt>=4.2' 'psycopg[binary]>=3.2'
+python scripts/manage-users.py create-user admin@example.com
+
+# Remote DB (e.g. managed DigitalOcean):
+DATABASE_URL='postgres://user:pass@host:25060/db?sslmode=require' \
+  uv run scripts/manage-users.py list-users
 ```
 
-The script is copied into the Docker image at `/app/scripts/manage-users.sh` by the `Dockerfile` runner stage. When run inside the container it auto-detects the container layout (`node_modules` at `/app` instead of the local service directory).
+The script resolves `DATABASE_URL` from the environment, or falls back to constructing a local-dev URL from `POSTGRES_PASSWORD` in `.env`. It is **not** copied into the Docker image — run it from the repo root (or any machine with Python ≥ 3.12 and network access to the database).
 
 ## JWT_SECRET
 
