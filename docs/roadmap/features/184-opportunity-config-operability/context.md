@@ -145,3 +145,10 @@ Tooling setup (steps 1-5): node ✓ v22.22.2 · pnpm ✓ 9.15.9 · config deps �
 - DEVIATION (CI-equivalent fallback): Playwright's pinned browser build (1234) is absent; the env ships build 1194. Ran with PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome and CI=1 (prod server + 30s timeout; dev-mode 10s cold-compile timed out the SSR warmup). Verification is real e2e execution, matching CI. See Deviation Log.
 - Files modified: services/xstockstrat-ui/e2e/fixtures/configKeys.ts, e2e/fixtures/INVENTORY.md, e2e/config-ui/api-smoke.spec.ts
 - Deviations: CI-equivalent Playwright browser-path + CI-mode fallback (above)
+
+### Step 5 — docs: reconcile analysis CLAUDE.md + config-governance log [done]
+- analysis CLAUDE.md: 15 analysis.opportunity.* Config Keys rows now cite "Seeded by migration 028 (feature 184)" + bound (or "unbounded"); the 4 prior no-seed notes removed; analysis.compute.max_worker_threads (:334) left intact (non-opportunity, genuinely no-seed).
+- config-governance.md: added feature-184 Per-Feature Registered Keys entry (newest-first) — 15-key table with bounds/unbounded, restart caveat on the 2 __init__ sem keys, signal_rank_weight get_float zero-trap caveat, pg_notify visibility caveat.
+- TEARDOWN (root CLAUDE.md): touched a context file (analysis CLAUDE.md). `/context-forge:context-constitution refresh` is NOT available this session (only context-forge:context-scrubber). Manual equivalent performed: cross-checked the 15 doc rows against migration 028 (values/defaults) and the 10 bounded rows against SCALAR_BOUNDS_REGISTRY (configServiceImpl.ts) — all match, no drift (docs written to match code in the same step). Recorded in the integration PR body.
+- Files modified: services/xstockstrat-analysis/CLAUDE.md, docs/patterns/config-governance.md
+- Deviations: none (teardown plugin-unavailable handled manually, per rule)

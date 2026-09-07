@@ -1,6 +1,6 @@
 # Implementation Spec: opportunity-config-operability
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-09-07
 **Feature**: `docs/roadmap/features/184-opportunity-config-operability/feature.md`
 **Total Steps**: 5
@@ -347,7 +347,7 @@ grep -n "from '../fixtures'\|configKeys\|CONFIG_KEY_FIXTURES" services/xstockstr
 
 ### Step 5 — docs: Reconcile analysis CLAUDE.md + config-governance registered-keys log (FR-5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis` (docs) + `docs/patterns/`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify

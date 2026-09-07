@@ -15,6 +15,7 @@
 | 2026-09-07 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written. Justified-set (~10) bounds scope chosen; kill-switch + get_float_present fix routed to feature 185 |
 | 2026-09-07 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
 | 2026-09-07 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done — migration 028 seeds the 15 analysis.opportunity.* keys (config-only) |
+| 2026-09-07 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done (migration 028 + 10 bounds + red-green tests + config-ui e2e + docs). Integration PR next |
 
 ---
 
