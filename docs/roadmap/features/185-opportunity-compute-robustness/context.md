@@ -33,3 +33,11 @@
   field trips the parity test — fails.md:1151); every new proto field needs the e2e mock shape
   (fails.md:1281/1317); the sentinel must survive the JSONB persistence round-trip (feature-131 `muted`
   provenance-marker precedent — survives with no migration).
+
+## Session 2026-09-07 — sdd-review product-spec
+- Product spec approved. Status: draft → spec-ready.
+- First pass FAILED (C-15/criterion 8): FR-4 (cold-read non-blocking) was a numbered but non-testable "evaluate this fork" requirement with no covering @AC. Fixed: demoted FR-4 to a "Design option" note + the "Cold-read non-blocking" Open Question; numbered requirements are now FR-1/2/3 (FR-1→AC-1/2/5, FR-2→AC-3, FR-3→AC-4). Reconciled the Affected Services cold-read cross-ref; fixed evaluator path to app/services/evaluator.py:775.
+- Also folded two prior warnings into explicit design Open Questions: (C-14) the agent list_opportunities MCP mapping for the new proto field must be an explicit step or a documented internal-only justification at design (not "design confirms"); (C-16) the sentinel may CHANGE an opportunities @AC guarantee (0/0 meaning) → scenario-recon classifies PRESERVE/EXTEND/CHANGE; a CHANGE needs explicit user sign-off in context.md.
+- Re-review: PASS WITH WARNINGS. 1 advisory carried to design/spec: AC-4's Then states the semaphore mechanism rather than the observable non-starvation outcome — reframe toward observable responsiveness at design/spec.
+- Overlap findings: CLEAN — new sem key (analysis.opportunity.materializer_max_concurrent_bars_fetches) distinct from 184's; additive Opportunity field lands at #20 (highest is signal_confidence=19); no migration; no other in-flight collision. 032 shares analysis.proto but disjoint (new RPC/messages, not the Opportunity message).
+- Warning: proto/design-heavy feature → run FULL design debate (not quick).

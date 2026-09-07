@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-07 | `idea` → `draft` | /sdd-story | Product spec generated (opportunities-queue audit follow-up) |
+| 2026-09-07 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 advisory; FR-4 cold-read demoted to design option to clear C-15/criterion-8 blocker; C-14 agent + C-16 turned into design Open Questions) |
 
 ---
 
@@ -43,4 +44,4 @@ change types. Override as needed for this feature. Snapshot finalized at /sdd-sp
 
 ## Next Action
 
-`/sdd-review opportunity-compute-robustness product-spec` — AI review before /sdd-design
+`/sdd-design opportunity-compute-robustness` — recon + FULL design debate (proto/sentinel fork) before /sdd-spec

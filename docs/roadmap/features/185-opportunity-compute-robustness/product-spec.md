@@ -9,7 +9,7 @@
 The opportunities compute (`_compute_opportunities` in `xstockstrat-analysis`) diverges from the
 readiness philosophy in two correctness/isolation respects the audit found:
 1. **No data-unavailable sentinel.** A per-symbol bars-fetch failure caches `[]` and degrades the row
-   to `_empty_readiness` (`0/0`, `evaluator.py:775`) — **indistinguishable from "evaluated, nothing
+   to `_empty_readiness` (`0/0`, `app/services/evaluator.py:775`) — **indistinguishable from "evaluated, nothing
    passing."** A data-down symbol shows as a misleading quiet/`N-away` row rather than a terminal
    "unavailable" state. This is the same class as the readiness infinite-PENDING trap feature 181
    fixed with the `bar_epoch=-1` → UNKNOWN sentinel; here it surfaces as a *misleading verdict* instead.
@@ -42,11 +42,12 @@ separate from the interactive read path (`_enrich_opportunities_live`), so a bac
 starve an interactive read — mirroring the readiness materializer's own-semaphore split (feature 176/180).
 The new bound is a config key (governed under feature 184's config-operability work: registered + bounded).
 
-FR-4. _(Design option — audit G4.)_ Evaluate making the **cold** (never-materialized) `ListOpportunities`
-read non-blocking — return empty + a "computing" pending signal + kick + let the client poll — instead of
-computing synchronously under the per-user lock. The UX tradeoff (a cold user has no cached rows to show
-anyway) is a genuine design fork, not a mechanical port; design decides whether to change it or keep the
-synchronous cold compute.
+> **Design option (audit G4), not a committed requirement — see the Open Question "Cold-read
+> non-blocking" below.** Whether to make the **cold** (never-materialized) `ListOpportunities` read
+> non-blocking (return empty + a "computing" pending signal + kick + poll) instead of computing
+> synchronously under the per-user lock is a genuine design fork (a cold user has no cached rows to show
+> anyway), not a numbered FR. Design decides; if taken, it becomes a numbered FR with its own `@AC-*`
+> scenario at design/spec time.
 
 ## Out of Scope
 
@@ -60,8 +61,8 @@ synchronous cold compute.
 ## Affected Services
 
 - `xstockstrat-analysis` — `_compute_opportunities` sentinel (FR-1), `_materialize_opportunities` +
-  `opportunities` repo carry-through, a dedicated background semaphore (FR-3), and (FR-4, if taken) the
-  cold-read branch of `ListOpportunities`.
+  `opportunities` repo carry-through, a dedicated background semaphore (FR-3), and (the cold-read design
+  option, if design takes it) the cold-read branch of `ListOpportunities`.
 - `packages/proto` — likely a **new additive field** on `Opportunity` (`analysis.proto`) for the
   data-unavailable state (design confirms; if an existing field can carry it, no proto change).
 - `xstockstrat-ui` — render the unavailable state on the `/insights/opportunities` queue (FR-2).
@@ -112,9 +113,17 @@ See `acceptance.feature` (`@AC-*`) — single source of acceptance truth (C-15).
 - [ ] **C-16 impact:** does marking data-unavailable rows change any existing `@AC-*` guarantee about the
   opportunities queue (e.g. rollup counts, "quiet" classification)? scenario-recon at design will surface
   which guarantees PRESERVE/EXTEND/CHANGE.
-- [ ] **FR-4 cold-read:** change to non-blocking (return empty+pending+kick+poll) or keep synchronous?
-- [ ] **FR-3 sem key ownership:** define/register/bound the new semaphore key here, or depend on feature
-  184 landing first? (merge-order decision.)
+- [ ] **Cold-read non-blocking (audit G4 design option):** change the cold `ListOpportunities` read to
+  non-blocking (return empty + pending + kick + poll) or keep the synchronous cold compute? If taken, it
+  becomes a numbered FR with its own `@AC-*` at design/spec time — deliberately NOT a committed FR here.
+- [ ] **Agent consumer surface (C-14):** does the new data-unavailable state need an explicit
+  `list_opportunities` MCP-tool mapping in `xstockstrat-agent` (a new proto field does NOT surface through
+  the agent automatically), or is it internal-only with a stated reason? Design MUST commit to an explicit
+  agent-mapping step or a documented internal-only justification (not a vague "design confirms").
+- [ ] **FR-3 sem key ownership + naming:** define/register/bound the new semaphore key here or depend on
+  feature 184's mechanism (184 is now code-completed on the shared branch) — and pick the C-05 shape:
+  `analysis.opportunity.materializer_max_concurrent_bars_fetches` vs. the sibling
+  `analysis.readiness_materializer.*` category shape. (merge-order + naming decision.)
 - [ ] **Sentinel retry semantics:** like readiness's UNKNOWN 300s cooldown, should a data-unavailable
   opportunity re-attempt on a cadence, or wait for the next scheduled recompute? (avoid both a hot retry
   loop and a stuck-forever row.)
