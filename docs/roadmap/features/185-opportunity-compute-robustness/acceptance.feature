@@ -37,9 +37,37 @@ Feature: opportunity-compute-robustness
     Then the data-unavailable sentinel is still present on the row (not lost through persistence)
 
   @AC-6 @FR-4
-  Scenario: A cold ListOpportunities read does not block on a synchronous compute
-    Given a user who has never had opportunities materialized (a cold queue)
-    When that user's first ListOpportunities read arrives
-    Then the read returns promptly without waiting for a synchronous compute under the per-user lock
-    And it returns an empty page carrying a "computing" pending signal and kicks a background recompute
-    And a subsequent poll returns the materialized rows once the background compute completes
+  Scenario: A cold read is non-blocking and distinguishable from an empty universe
+    Given a user who has never had opportunities materialized
+    When ListOpportunities is called
+    Then it returns an empty page with the "computing" pending signal set (not a synchronous compute wait)
+    And a background recompute is kicked
+    And a user whose universe is legitimately empty returns an empty page with "computing" NOT set
+
+  @AC-7 @FR-4
+  Scenario: A persistently-failing cold compute renders a terminal error, not an infinite spinner
+    Given a cold user whose background recompute keeps failing
+    When ListOpportunities is polled repeatedly
+    Then after the bounded attempts it returns a terminal compute-failed state (not "computing" forever)
+
+  @AC-8 @FR-5
+  Scenario: A data-unavailable row self-heals via a surgical read-time recompute
+    Given a served data-unavailable row older than the 300s retry cooldown
+    When ListOpportunities is read and market data has recovered
+    Then only that symbol's rows are re-fetched and re-evaluated (not the full universe)
+    And the row heals in place with both conviction and signal_axis restored (signal_axis re-drained, not left 0)
+    And a still-unavailable symbol has its computed_at re-stamped so it does not re-kick before the next 300s
+
+  @AC-9 @FR-5
+  Scenario: A recovered watchlist-entry symbol also refreshes the readiness cache
+    Given a recovered symbol that participates in a watchlist x strategy entry-rule readiness
+    When the surgical recovery re-evaluates it successfully
+    Then the fresh readiness rows for that (symbol, strategy, entry) subset are upserted to analysis.readiness_cache
+    And a symbol whose re-fetch still fails is NOT written to the readiness cache (success-only)
+
+  @AC-10 @FR-6
+  Scenario: The agent list_opportunities tool surfaces the data-unavailable state
+    Given ListOpportunities returns a row with data_unavailable set
+    When the list_opportunities MCP tool projects the response
+    Then the projected row carries data_unavailable
+    And the Opportunity descriptor-parity test asserts every proto field is projected (no silent drift)

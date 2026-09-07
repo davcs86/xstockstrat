@@ -3120,3 +3120,20 @@ reusing.
 - **Evidence**: feature 184 design.md § Bounds registry growth + Rejected Alternatives;
   `docs/roadmap/features/184-opportunity-config-operability/recon.md:94,99`;
   `services/xstockstrat-config/src/grpc/configServiceImpl.ts:100,118-120`; acceptance.feature @AC-8.
+
+## 2026-09-07 — opportunity-compute-robustness — design (feature 185)
+
+- **Pattern**: On a data-source (marketdata) outage, the SCALABLE self-heal for cached per-symbol rows is a
+  read-time, cooldown-gated, per-symbol SURGICAL recompute (re-fetch + re-evaluate ONLY the down symbols,
+  UPDATE-in-place heal-only, re-stamp unconditionally) — NOT a full-universe recompute per affected user.
+  Full-recompute-on-read during an outage is a retry-amplification/thundering-herd (N users × full-universe
+  fetches every cooldown) that re-creates the exact multi-user pressure of the feature-141 SEV-2. Bound the
+  retry footprint to what actually failed.
+- **Rule it implies**: a "retry harder" recovery must scale DOWN its footprint during the dependency outage
+  that triggered it (per-symbol, cooldown-gated, deduped), and must restore ALL derived ranking inputs on
+  heal (re-drain signals — never leave a computed axis dishonestly zeroed, P-03), UPDATE-in-place heal-only
+  to honor the whole-user-replace invariant (no resurrection), and add a unique ORDER BY tiebreak before any
+  partial re-INSERT/UPDATE (offset paging dups/skips otherwise). Reuse the existing background semaphore
+  bucket rather than minting a third independent [1,5] bars-fetch sem (three sum to 15 > the marketdata pool
+  ceiling of 5 = SEV-2 re-open).
+- **Evidence**: feature 185 design.md §FR-3/FR-5 + Rejected Alternatives; `services/xstockstrat-analysis/app/repositories/opportunities.py:44-46,107,114`; `app/handlers/servicer.py:448-456,3492-3512,3841-3857`; ledger fails 141/1547.

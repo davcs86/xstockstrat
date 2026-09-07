@@ -37,10 +37,38 @@ FR-2. The opportunities queue UI renders the data-unavailable state as an explic
 the shared C-17 primitives (not a `0/0` "quiet" row and not a bare `<p>`), consistent with the watchlist
 readiness UNKNOWN cell.
 
-FR-3. The opportunity compute/materializer bars-fetch fan-out uses a **dedicated background semaphore**,
-separate from the interactive read path (`_enrich_opportunities_live`), so a background recompute cannot
-starve an interactive read — mirroring the readiness materializer's own-semaphore split (feature 176/180).
-The new bound is a config key (governed under feature 184's config-operability work: registered + bounded).
+FR-3. The `_compute_opportunities` bars-fetch fan-out runs on a **background** semaphore, separate from
+the interactive read path (`_enrich_opportunities_live` + `EvaluateReadiness`), so a background recompute
+cannot starve an interactive read. **It reuses the existing `_readiness_materializer_bars_sem`** (the
+feature-176/180/181 background bucket) rather than minting a third independent bars-fetch semaphore —
+which keeps the aggregate marketdata concurrency bounded by one `[1,5]` key and cannot re-open the
+feature-141 SEV-2 (three independent `[1,5]` sems would sum to 15 > the marketdata pool ceiling of 5).
+**No new config key and no config migration** (design decision, 2026-09-07 — supersedes the story's
+"new key via feature 184" note).
+
+FR-5. **Surgical read-time recovery.** On a `ListOpportunities` fresh read, if any served row is
+`data_unavailable` and older than a ~300s cooldown (the feature-181 `_READINESS_UNKNOWN_RETRY_SECONDS`
+model), a background task re-fetches + re-evaluates **only those symbols** (a bounded per-symbol
+footprint, NOT a full-universe recompute — the scalable choice under a marketdata outage) and heals their
+rows **UPDATE-in-place** (never resurrecting a row a full compute would have dropped). It restores **both**
+ranking axes (re-drains signals for `signal_axis`), re-stamps `computed_at` unconditionally (so the 300s
+cooldown holds even when still-down), and is guarded/deduped so concurrent reads don't stack kicks. The
+recovery is a **generic reusable helper** designed for later adoption by the fundsignal loop (feature 186,
+a named follow-up) — wired in 185 **only** into opportunities. **Because a watchlist×strategy entry-rule
+readiness is a subset of the opportunity compute**, when the helper re-evaluates a recovered symbol it
+also upserts the fresh readiness rows for that subset into `analysis.readiness_cache` (reusing the
+compute's existing `_readiness_cache_repo.upsert_many`, **success-only** — a still-down symbol stays
+uncached), so the `/insights/watchlists` overlay heals in lockstep. This EXTENDS the compute's existing
+readiness-cache write to the recovered subset; it does **not** change the readiness materializer loop or
+the readiness read path (features 180/181/182 stay PRESERVE).
+
+FR-6. **Agent consumer surface (C-14).** The `data_unavailable` field is projected in the
+`xstockstrat-agent` `list_opportunities` tool (`_opportunity_to_dict`), and an `Opportunity`
+descriptor-parity test is added (there is none today — the projection already silently drifts, omitting
+`valid_until`/`signal_confidence`); those two drifted fields are back-filled so the new parity test passes
+with no silent allow-list. The FR-4 `computing` pending signal and the terminal compute-failed state are
+surfaced to the agent (a one-shot, non-polling consumer) so a cold/failed queue is not reported as a
+silently-empty one.
 
 FR-4. _(audit G4 — committed by operator, 2026-09-07.)_ The **cold** (never-materialized)
 `ListOpportunities` read is **non-blocking**: instead of computing synchronously under the per-user lock
@@ -48,54 +76,74 @@ FR-4. _(audit G4 — committed by operator, 2026-09-07.)_ The **cold** (never-ma
 background recompute (`_kick_opportunity_recompute`), and lets the client poll — mirroring the
 feature-181 cold readiness path. A cold user has no cached rows to show anyway, so the synchronous wait
 buys nothing; making it non-blocking keeps the first read snappy and removes the per-user-lock stall.
-Design settles the exact pending signal (a response flag / empty + a recompute-in-progress marker) and
-its own `@AC-*`.
+The pending signal is a response-level flag **provably distinct from a legitimately-empty universe**
+(empty-universe → empty **without** the flag, preserving @AC-4's no-recompute-per-poll; cold → empty
+**with** it). A **terminal compute-failed** state is required so a persistently-failing recompute renders
+an error rather than an infinite "computing" spinner (the synchronous path surfaced the error to the RPC;
+the async path must not lose that). Design settles the exact signal shape + `@AC-6`.
 
 ## Out of Scope
 
 - Config registration/bounds of the `analysis.opportunity.*` keys — **feature 184
-  (opportunity-config-operability)** (this feature's FR-3 new semaphore key is *registered/bounded there*,
-  or here if 184 has already merged — sequencing decided at design).
+  (opportunity-config-operability)**. FR-3 no longer adds a config key (it reuses the existing
+  materializer sem — design decision), so this feature registers **no** new config key.
 - Keyset pagination of `ListOpportunities` (audit G5) — a separate, lower-priority efficiency change;
-  fold in only if design finds it cheap alongside FR-1.
-- Any change to the watchlist readiness paths (features 180/181/182) — already aligned.
+  fold in only if design finds it cheap alongside FR-1. (185 does add one bounded ORDER BY tiebreak —
+  `opportunity_key ASC` — to make offset paging deterministic under the surgical partial-replace; a pure
+  tiebreak, not a ranking change.)
+- Generalizing the FR-5 surgical-recovery helper to the **fundamentals-signal (fundsignal) loop** —
+  **feature 186 (named follow-up)**, its own SDD pipeline. 185 builds the helper generic but wires it only
+  into opportunities.
+- Any change to the watchlist readiness **materializer loop or read path** (features 180/181/182) — stays
+  PRESERVE. (Note: FR-5 does upsert `analysis.readiness_cache` for a recovered symbol subset — but that is
+  the opportunity compute's **existing** write extended to the healed subset, success-only, not a change to
+  the readiness loop/read path.)
 
 ## Affected Services
 
 - `xstockstrat-analysis` — `_compute_opportunities` sentinel (FR-1), `_materialize_opportunities` +
-  `opportunities` repo carry-through, a dedicated background semaphore (FR-3), and the non-blocking
-  cold-read branch of `ListOpportunities` (FR-4).
-- `packages/proto` — likely a **new additive field** on `Opportunity` (`analysis.proto`) for the
-  data-unavailable state (design confirms; if an existing field can carry it, no proto change).
-- `xstockstrat-ui` — render the unavailable state on the `/insights/opportunities` queue (FR-2).
+  `opportunities` repo carry-through, the compute fan-out routed onto `_readiness_materializer_bars_sem`
+  (FR-3), the non-blocking cold-read + `computing`/failed states (FR-4), and the surgical read-time
+  recovery helper incl. the readiness-cache subset upsert (FR-5).
+- `packages/proto` — additive `bool data_unavailable = 20` on `Opportunity` **and** `bool computing = 3`
+  (+ a terminal-failed marker) on `ListOpportunitiesResponse` (`analysis.proto`), non-breaking.
+- `xstockstrat-ui` — render the unavailable state on the `/insights/opportunities` queue (FR-2) + the
+  cold `computing` / failed states (FR-4).
+- `xstockstrat-agent` — project `data_unavailable` + `computing`/failed in `list_opportunities`; add the
+  `Opportunity` descriptor-parity test (FR-6, C-14).
 
 ## Consumer Surface(s)
 
 _Constitution **C-14**._
 
 - [x] **UI** — `xstockstrat-ui` `/insights/opportunities` (the Decide queue): a symbol with unavailable
-  data renders an explicit "unavailable" cue instead of a `0/0` quiet row.
-- [ ] **Agent** — `list_opportunities` MCP tool response gains the state passively if a proto field is
-  added (no new tool); design confirms whether the agent mapping needs a touch.
+  data renders an explicit "unavailable" cue instead of a `0/0` quiet row; a cold queue renders a
+  "computing" state and a persistently-failed compute an error state (FR-4).
+- [x] **Agent** — `list_opportunities` MCP tool: the hand-projection (`_opportunity_to_dict`) does **not**
+  surface a new field automatically (no parity test today), so FR-6 explicitly projects `data_unavailable`
+  + the `computing`/failed states and adds the `Opportunity` descriptor-parity test (C-14, mandatory —
+  the agent is a one-shot non-polling consumer).
 - [ ] **None**.
 
 ## Proto Contract Changes
 
-- [ ] No proto changes required, **OR**
-- [x] (likely) an **additive** field on `Opportunity` in `packages/proto/analysis/v1/analysis.proto`
-  for the data-unavailable state — non-breaking, zero-value sentinel if an enum. Runs the proto
-  governance gate (`docs/runbooks/proto-versioning.md`) + `./scripts/buf-gen.sh`. Design confirms.
+- [x] Two **additive**, non-breaking fields (design-confirmed): `bool data_unavailable = 20` on
+  `Opportunity` (a binary flag mirroring the `muted = 12` precedent — a bool, not an enum, so C-04's
+  zero-value rule does not apply), and `bool computing = 3` on `ListOpportunitiesResponse` (+ a terminal
+  compute-failed marker). Runs the proto governance gate (`docs/runbooks/proto-versioning.md`) +
+  `./scripts/buf-gen.sh` (all three stubs) + `buf breaking`.
 
 ## Config Key Changes
 
-- FR-3 adds one bound-worthy key for the dedicated background semaphore
-  (e.g. `analysis.opportunity.materializer_max_concurrent_bars_fetches`, default matching marketdata's
-  pool). Registered + bounded under the feature-184 config-operability mechanism.
+- **None.** FR-3 reuses the existing `_readiness_materializer_bars_sem` (design decision) — no new config
+  key, no config migration. The FR-5 300s retry cooldown is a module constant mirroring
+  `_READINESS_UNKNOWN_RETRY_SECONDS` (a code tuning constant precedent, not a WatchConfig value).
 
 ## Database Changes
 
-- [ ] No schema change expected — the sentinel rides existing `analysis.opportunities` JSONB/columns
-  (like feature 131's `muted` provenance marker), confirmed at design. No new migration if so.
+- [x] No schema change — the `data_unavailable` sentinel rides the existing `analysis.opportunities`
+  `provenance` JSONB (derived at read like `muted`), and the FR-5 recovery reuses the existing
+  `analysis.readiness_cache` upsert. No new migration.
 
 ## Feature Workflow Notes
 
