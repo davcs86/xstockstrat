@@ -3812,7 +3812,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # and is not retried this pass; every candidate still resolves to a trace or 0/0 fallback.
         bars_by_symbol: dict[str, list] = {}
         # Benchmark (source_symbol) bars deduped once per compute pass — one fetch shared across
-        # evaluated symbols/strategies, bounded by _bars_fetch_sem.
+        # evaluated symbols/strategies, bounded by the background _readiness_materializer_bars_sem
+        # (feature 185 FR-3, same background bucket as the primary fetch).
         benchmark_bars_cache: dict[str, list] = {}
         session_end_seconds = 0
         window_hours = self._cfg.get_int("analysis.opportunity.valid_window_hours", 24)
@@ -3832,8 +3833,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         defined_eligible = [c for c in eligible if strategy_defs.get(c["strategy_id"]) is not None]
 
         # Phase 1 — single-flight: fetch each unique defined-eligible symbol + each unique benchmark
-        # once, under _bars_fetch_sem (feature-141 bound). Fetching exactly the serial-eligible set
-        # keeps session_end_seconds identical (an over-fetch would raise it, breaking @AC-14).
+        # once. feature 185 (FR-3): the compute fan-out runs on the BACKGROUND
+        # _readiness_materializer_bars_sem (NOT the interactive _bars_fetch_sem), so a heavy
+        # cold/daily recompute cannot starve an interactive read (_enrich_opportunities_live /
+        # EvaluateReadiness, which stay on _bars_fetch_sem). Reuses the existing materializer sem
+        # rather than minting a third [1,5] key (avoids the feature-141 SEV-2: 3×[1,5]=15 > the
+        # marketdata pool ceiling). Fetching exactly the serial-eligible set keeps
+        # session_end_seconds identical (an over-fetch would raise it, breaking @AC-14).
         # feature 185 — symbols whose bars/indicator data could not be fetched during this
         # compute. Distinct from a legitimate thin-`[]` return (a warm-up-thin symbol that did
         # NOT raise stays an evaluated 0/N row, @AC-2) — membership is recorded ONLY in an
@@ -3841,7 +3847,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         fetch_failed: set[str] = set()
 
         async def _fetch_into(sym):
-            async with self._bars_fetch_sem:
+            async with self._readiness_materializer_bars_sem:
                 try:
                     return sym, await self._fetch_bars_paged(sym, range_msg, propagation_meta)
                 except Exception as e:  # bar fetch is best-effort per symbol
@@ -3856,7 +3862,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 session_end_seconds = max(session_end_seconds, bars[-1].time.seconds)
 
         async def _fetch_benchmark_into(sym):
-            async with self._bars_fetch_sem:
+            async with self._readiness_materializer_bars_sem:
                 try:
                     return sym, await self._fetch_bars_paged(sym, range_msg, propagation_meta)
                 except Exception as e:  # noqa: BLE001 — benchmark fetch is best-effort
@@ -3916,8 +3922,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                             definition,
                             range_msg,
                             propagation_meta,
+                            # feature 185 FR-3 — background sem (Phase 1 warmed the cache so this is
+                            # normally a hit with no acquire; a miss still runs off the background
+                            # bucket, never the interactive _bars_fetch_sem).
                             cache=benchmark_bars_cache,
-                            sem=self._bars_fetch_sem,
+                            sem=self._readiness_materializer_bars_sem,
                         )
                         # Held + attributed → exit-rule trace (FR-8); else entry-rule trace.
                         rule = "exit" if c["is_held"] else "entry"

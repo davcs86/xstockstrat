@@ -287,7 +287,7 @@ row), pass after. Coverage ≥ 40%.
 
 ### Step 5 — service (analysis, FR-3): route compute fan-out onto the background sem
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -340,7 +340,7 @@ interactive sites still name `_bars_fetch_sem`. Behavioral verification is in St
 
 ### Step 6 — test (analysis, FR-3): background/interactive semaphore isolation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -896,6 +896,15 @@ Confirm the new fields are documented under `list_opportunities`.
   Step-3 source to `8a32213` and re-running (AC-1 marking, AC-5 floor+round-trip, and the
   abort-contract test all failed — the abort-contract's uncaught `RpcError` proved the pre-Step-3
   whole-compute abort — then passed after restore). Full suite: 714 passed, 83.86% coverage.
+- **Steps 5 + 6 committed together:** Step 5's FR-3 sem move broke a pre-existing feature-141 test
+  (`test_cross_user_concurrency_bounded_by_semaphore`, which asserted `peak == 2` counting *all*
+  GetBars) — post-FR-3 the compute and enrichment no longer share permits, so cross-user peak can
+  reach 4. That test was migrated to count only compute-path (range-bearing) fetches (the same
+  `HasField("range")` distinguisher the sibling dedup test uses), asserting the compute sem's bound
+  in isolation. Because that migrated test lives in the same file as the new Step-6
+  `TestOpportunitySemaphoreIsolation` class, Steps 5 and 6 were committed as one unit to keep the
+  commit's suite green. Step 6 RED was proven first (reverting Step 5 → `test_compute_fanout…`
+  failed `0 >= 2`). Full suite: 716 passed, 83.86% coverage.
 - **⚠ SURFACED for Step 7/8 (`[ ] unaddressed`): cold-read test blast radius.** Step 7 changes the
   cold `ListOpportunities` branch (`servicer.py:3368-3372`) from synchronous compute to
   kick+empty. Beyond `test_cold_read_computes_synchronously_then_serves` (which Step 8 explicitly

@@ -4785,6 +4785,65 @@ class TestOpportunityDataUnavailable:
                 await svc._compute_opportunities("u1", self._META)
 
 
+class _CountingSem:
+    """Wraps an ``asyncio.Semaphore``, counting ``async with`` acquisitions so a test can assert
+    WHICH semaphore a code path uses (feature 185 FR-3 background/interactive isolation)."""
+
+    def __init__(self, inner):
+        self._inner = inner
+        self.acquires = 0
+
+    async def __aenter__(self):
+        self.acquires += 1
+        return await self._inner.__aenter__()
+
+    async def __aexit__(self, *exc):
+        return await self._inner.__aexit__(*exc)
+
+
+class TestOpportunitySemaphoreIsolation:
+    """feature 185 FR-3 (@AC-4) — the background opportunity compute fan-out and the interactive
+    read path do NOT contend on the same semaphore permits: the compute runs on
+    `_readiness_materializer_bars_sem`, the interactive `_enrich_opportunities_live` on
+    `_bars_fetch_sem`, so a heavy recompute cannot starve an interactive read."""
+
+    @pytest.mark.asyncio
+    async def test_compute_fanout_uses_background_sem_not_interactive(self):
+        """The compute's primary/benchmark bars-fetch fan-out acquires the BACKGROUND
+        `_readiness_materializer_bars_sem` and never the interactive `_bars_fetch_sem`."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx"), ("MSFT", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS, "MSFT": _FIRING_BARS},
+        )
+        bg = _CountingSem(svc._readiness_materializer_bars_sem)
+        fg = _CountingSem(svc._bars_fetch_sem)
+        svc._readiness_materializer_bars_sem = bg
+        svc._bars_fetch_sem = fg
+        await svc._compute_opportunities("u1", [("x-user-id", "u1")])
+        assert bg.acquires >= 2  # AAPL + MSFT primary fetches on the background sem
+        assert fg.acquires == 0  # the interactive sem is untouched by the compute (isolation)
+
+    @pytest.mark.asyncio
+    async def test_interactive_enrich_uses_interactive_sem_not_background(self):
+        """The interactive read-time `_enrich_opportunities_live` acquires the interactive
+        `_bars_fetch_sem` and never the background compute sem — the other side of the split."""
+        from gen.marketdata.v1 import marketdata_pb2 as _md
+
+        svc = _materialized_svc()
+        svc._marketdata.GetLatestPrice = AsyncMock(return_value=_md.LatestPrice())
+        svc._marketdata.GetBars = AsyncMock(return_value=_recent_bars_resp([1.0, 2.0, 3.0]))
+        bg = _CountingSem(svc._readiness_materializer_bars_sem)
+        fg = _CountingSem(svc._bars_fetch_sem)
+        svc._readiness_materializer_bars_sem = bg
+        svc._bars_fetch_sem = fg
+        await svc._enrich_opportunities_live(
+            [analysis_pb2.Opportunity(symbol="AAPL")], [("x-user-id", "u1")]
+        )
+        assert fg.acquires >= 1  # live enrichment runs on the interactive sem
+        assert bg.acquires == 0  # never on the background compute sem
+
+
 class TestOpportunityBarsFetchDedup:
     """feature 141 — per-pass bars dedup + cross-request semaphore fixing the "out of shared
     memory" (SQLSTATE 53200) bars-fetch failures caused by feature 131/132's widened candidate
@@ -4887,10 +4946,16 @@ class TestOpportunityBarsFetchDedup:
         over N=6 concurrent ListOpportunities calls for 6 different user_ids against ONE shared
         servicer instance (mirrors production: AnalysisServicer is constructed once,
         instance_count=1 per .do/app.yaml:232), with the bars-fetch mocked to block on a shared
-        counter. Asserts peak in-flight fetches == the configured max_concurrent_bars_fetches (2,
-        default) — proving BOTH that fetches genuinely overlap (a "teeth" assertion — insights.md
-        2026-07-27: an upper bound alone can pass vacuously if nothing ever overlaps) AND that the
-        semaphore caps them at exactly the configured bound, not some other number."""
+        counter. Asserts peak in-flight fetches == the configured bound (2, default) — proving BOTH
+        that fetches genuinely overlap (a "teeth" assertion — insights.md 2026-07-27: an upper bound
+        alone can pass vacuously if nothing ever overlaps) AND that the semaphore caps them at
+        exactly the configured bound, not some other number.
+
+        feature 185 (FR-3): the compute fan-out moved from `_bars_fetch_sem` onto the background
+        `_readiness_materializer_bars_sem` (default also 2). This test now counts ONLY the
+        compute-path (range-bearing) GetBars calls — the read-time sparkline enrichment (page-only)
+        runs on the separate interactive `_bars_fetch_sem` and would otherwise inflate the peak now
+        that the two paths no longer share permits (that non-sharing IS the FR-3 isolation)."""
         svc = _materialized_svc(
             watchlists=[_wl(bindings=[("SOLO", "wl0")])],
             strategies={"wl0": _strat_row("wl0", entry=_GT_100)},
@@ -4901,6 +4966,10 @@ class TestOpportunityBarsFetchDedup:
 
         async def _blocking_get_bars(req, metadata=None):
             nonlocal in_flight, peak
+            # Only the compute path carries a range; the interactive sparkline enrichment is
+            # page-only and runs on the other (now-separate) sem, so it must not be counted here.
+            if not req.HasField("range"):
+                return _recent_bars_resp(_FIRING_BARS)
             async with state_lock:
                 in_flight += 1
                 peak = max(peak, in_flight)
@@ -4921,7 +4990,7 @@ class TestOpportunityBarsFetchDedup:
             ]
         )
 
-        assert peak == 2  # exactly the configured max_concurrent_bars_fetches default
+        assert peak == 2  # exactly the configured background bars-fetch bound (default)
 
 
 class TestGetStrategyAnalytics:
