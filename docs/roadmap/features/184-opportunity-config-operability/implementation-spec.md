@@ -69,7 +69,7 @@ respectively so no scenario is left unclaimed.
 
 ### Step 1 — migration: Seed the 15 analysis.opportunity.* keys (028)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/028_analysis_opportunity_keys.up.sql` — create

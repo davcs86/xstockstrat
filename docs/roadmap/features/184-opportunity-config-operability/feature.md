@@ -14,6 +14,7 @@
 | 2026-09-07 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings; FR-6 kill-switch demoted to design option to clear C-15/criterion-8 blocker) |
 | 2026-09-07 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written. Justified-set (~10) bounds scope chosen; kill-switch + get_float_present fix routed to feature 185 |
 | 2026-09-07 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
+| 2026-09-07 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done — migration 028 seeds the 15 analysis.opportunity.* keys (config-only) |
 
 ---
 

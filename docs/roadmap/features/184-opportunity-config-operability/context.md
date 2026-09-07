@@ -118,3 +118,12 @@
     config-only/docs feature. — [ ] unaddressed (accepted deviation; announce at execute).
 - Overlap findings: none (migration 028, the 15 keys, proto surface, all shared files uncontested;
   185's materializer_max_concurrent_bars_fetches is a distinct one-way dependency, not a duplicate).
+
+## Session 2026-09-07 — sdd-execute (sequential)
+Tooling setup (steps 1-5): node ✓ v22.22.2 · pnpm ✓ 9.15.9 · config deps ⬇ · ui deps deferred to step 4 · steps 1/5 need none · migration step 1 = offline (no DB). Executing on branch claude/opportunity-queue-philosophy (DEVIATION: feature.md names feature/opportunity-config-operability; user granted this session's branch, PR #1109 already open, shared with feature 185). main-dev merged (0 behind). Open review warnings: Step-4 int-enum FIXED pre-execute; grep-count fragility → verify by inspection; AC-1/2/3/7 offline-verified (accepted, feature-182 precedent).
+
+### Step 1 — migration: seed 15 analysis.opportunity.* keys (028) [done]
+- Created 028_analysis_opportunity_keys.{up,down}.sql mirroring 027: 30 rows (15 keys × staging/production), full-dotted key, value_type float for signal_rank_weight + int for the other 14, value_data==default_value==code default, ON CONFLICT DO NOTHING. Design §4 caveats in descriptions (restart-only on the 2 __init__ sem keys; get_float zero-trap on signal_rank_weight). Down: explicit key IN (15 keys), user_id IS NULL, no LIKE.
+- Offline-verified (no DB): 30 VALUES rows, 15 distinct keys up==down, float count 2, staging 15/production 15, ON CONFLICT present. AC-1/2/3 satisfied by inspection.
+- Files modified: services/xstockstrat-config/migrations/028_analysis_opportunity_keys.{up,down}.sql
+- Deviations: none
