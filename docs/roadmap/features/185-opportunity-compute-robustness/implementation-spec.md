@@ -122,7 +122,7 @@ Both pass (additive fields are non-breaking). If the feature branch does not yet
 
 ### Step 2 — proto-gen: regenerate all three stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/**` — modify (generated)
