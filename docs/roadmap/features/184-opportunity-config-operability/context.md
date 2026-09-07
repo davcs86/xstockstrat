@@ -152,3 +152,6 @@ Tooling setup (steps 1-5): node ✓ v22.22.2 · pnpm ✓ 9.15.9 · config deps �
 - TEARDOWN (root CLAUDE.md): touched a context file (analysis CLAUDE.md). `/context-forge:context-constitution refresh` is NOT available this session (only context-forge:context-scrubber). Manual equivalent performed: cross-checked the 15 doc rows against migration 028 (values/defaults) and the 10 bounded rows against SCALAR_BOUNDS_REGISTRY (configServiceImpl.ts) — all match, no drift (docs written to match code in the same step). Recorded in the integration PR body.
 - Files modified: services/xstockstrat-analysis/CLAUDE.md, docs/patterns/config-governance.md
 - Deviations: none (teardown plugin-unavailable handled manually, per rule)
+
+### C-16 promotion — code-completed
+- Promoted 6 config-service scenarios (AC-1,2,3,4,5,8) → NEW services/xstockstrat-config/acceptance/opportunity-config-operability.feature, each tagged @feature-184. AC-6 (config-ui visibility) SKIPPED — generic namespace-editor guarantee already covered by feature-161's ui surface-signal-weight-decay-config.feature (feature 182 set the same no-UI-suite precedent). AC-7 (doc-state) SKIPPED — one-time landing assertion, not a durable runtime rule. Plan via scenario-promoter; no conflicts.
