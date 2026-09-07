@@ -33,6 +33,7 @@ COPY --from=builder /deploy ./
 COPY scripts/wait-for-deps.sh /usr/local/bin/wait-for-deps.sh
 COPY scripts/docker-entrypoint.sh /docker-entrypoint.sh
 # manage-users.py — Python CLI for user provisioning / password resets
+# hadolint ignore=DL3018
 RUN apk add --no-cache python3 py3-pip
 COPY scripts/requirements-manage-users.txt /tmp/requirements-manage-users.txt
 RUN pip3 install --break-system-packages --no-cache-dir -r /tmp/requirements-manage-users.txt \
