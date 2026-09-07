@@ -4429,16 +4429,19 @@ class TestListOpportunitiesMaterialized:
         assert meta == {"x-user-id": "u1", "x-access-scope": "7", "x-trace-id": "t1"}
 
     @pytest.mark.asyncio
-    async def test_cold_read_computes_synchronously_then_serves(self):
-        """Cold (never-materialized) read runs the compute inline and serves the result."""
+    async def test_cold_read_serves_queue_after_background_recompute(self):
+        """feature 185 FR-4: a cold read no longer computes synchronously — it kicks a background
+        recompute and the polling client (here: the `_list_opps` drain) sees the computed queue on a
+        subsequent read. The raw non-blocking pending signal is asserted in
+        TestColdReadNonBlocking."""
         svc = _materialized_svc(
             watchlists=[_wl(bindings=[("AAPL", "sx")])],
             strategies={"sx": _strat_row("sx", entry=_GT_100)},
             bars={"AAPL": _FIRING_BARS},
         )
         assert await svc._opportunities_repo.count_for_user("u1") == 0
-        by_symbol, _ = await _list_opps(svc)
-        assert "AAPL" in by_symbol  # served from the synchronous compute
+        by_symbol, _ = await _list_opps(svc)  # drains the background kick + re-reads
+        assert "AAPL" in by_symbol  # served after the background recompute materialized it
         assert svc._ingest.QuerySignals.await_count == 1
 
     @pytest.mark.asyncio
@@ -4863,6 +4866,82 @@ class TestOpportunitySemaphoreIsolation:
         )
         assert fg.acquires >= 1  # live enrichment runs on the interactive sem
         assert bg.acquires == 0  # never on the background compute sem
+
+
+class _StampedComputeState:
+    """In-memory OpportunityComputeStateRepository stub returning a fixed (fresh) stamp — used to
+    exercise the feature-177 legitimately-empty-universe branch (a fresh empty stamp present)."""
+
+    def __init__(self, valid_until):
+        self._row = {"computed_at": datetime.now(UTC), "valid_until": valid_until}
+
+    async def get(self, user_id):
+        return self._row
+
+    async def upsert(self, user_id, valid_until):
+        self._row = {"computed_at": datetime.now(UTC), "valid_until": valid_until}
+
+
+class TestColdReadNonBlocking:
+    """feature 185 FR-4 (@AC-6/@AC-7) — a cold (never-materialized) ListOpportunities read returns
+    empty + a pending signal WITHOUT computing synchronously, distinct from a legitimately-empty
+    universe; a persistently-failing cold compute renders a terminal compute_failed state. These
+    call ``svc.ListOpportunities`` DIRECTLY to observe the raw response-level signals."""
+
+    @pytest.mark.asyncio
+    async def test_cold_read_is_non_blocking_and_kicks_recompute(self):
+        """@AC-6: a cold read returns empty + computing=True, does NOT compute synchronously, and a
+        background recompute is kicked (draining it materializes the queue)."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS},
+        )
+        resp = await svc.ListOpportunities(analysis_pb2.ListOpportunitiesRequest(), _ctx(_HEADERS))
+        assert list(resp.opportunities) == []
+        assert resp.computing is True
+        assert resp.compute_failed is False
+        # Non-blocking: the compute did NOT run synchronously in the RPC body (the fire-and-forget
+        # kick has not executed yet — no await has yielded to it).
+        assert svc._ingest.QuerySignals.await_count == 0
+        # ... but a background recompute WAS kicked; draining it materializes the queue.
+        await _drain_opportunity_recompute(svc, "u1")
+        assert svc._ingest.QuerySignals.await_count >= 1
+        assert await svc._opportunities_repo.count_for_user("u1") >= 1
+
+    @pytest.mark.asyncio
+    async def test_empty_universe_is_distinct_from_cold(self):
+        """@AC-6 distinctness: a legitimately-empty universe (a fresh empty-compute stamp) returns
+        empty with computing=False — the proof it is distinguishable from a cold read."""
+        svc = _materialized_svc()  # no watchlist/held/signals → empty universe
+        svc._opportunity_compute_state_repo = _StampedComputeState(
+            datetime.now(UTC) + timedelta(seconds=60)
+        )
+        resp = await svc.ListOpportunities(analysis_pb2.ListOpportunitiesRequest(), _ctx(_HEADERS))
+        assert list(resp.opportunities) == []
+        assert resp.computing is False  # NOT cold — a legitimately-empty universe
+        assert resp.compute_failed is False
+        await _drain_opportunity_recompute(svc, "u1")  # settle the feature-177 self-heal kick
+
+    @pytest.mark.asyncio
+    async def test_persistently_failing_cold_read_reports_terminal_failed(self):
+        """@AC-7: once the cold recompute has failed _OPPORTUNITY_COMPUTE_MAX_ATTEMPTS times the
+        read reports compute_failed=True (not "computing" forever); a later success resets it."""
+        from app.handlers.servicer import _OPPORTUNITY_COMPUTE_MAX_ATTEMPTS
+
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS},
+        )
+        svc._opportunity_compute_failures["u1"] = _OPPORTUNITY_COMPUTE_MAX_ATTEMPTS
+        resp = await svc.ListOpportunities(analysis_pb2.ListOpportunitiesRequest(), _ctx(_HEADERS))
+        assert list(resp.opportunities) == []
+        assert resp.compute_failed is True  # terminal, not an infinite spinner
+        assert resp.computing is False
+        # Still kicked so it self-heals when data recovers — a success clears the counter.
+        await _drain_opportunity_recompute(svc, "u1")
+        assert "u1" not in svc._opportunity_compute_failures
 
 
 class TestOpportunityBarsFetchDedup:

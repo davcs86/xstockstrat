@@ -440,7 +440,7 @@ Behavioral verification is in Step 8.
 
 ### Step 8 — test (analysis, FR-4): cold non-blocking, distinctness, terminal-failed
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
