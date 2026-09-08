@@ -15,6 +15,8 @@
 | 2026-09-08 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings after fix) |
 | 2026-09-08 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, quick) and approved; recon.md + design.md written |
 | 2026-09-08 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (6 steps) |
+| 2026-09-08 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 completed |
+| 2026-09-08 | `in-progress` → `code-completed` | /sdd-execute | All 6 steps completed |
 
 ---
 
@@ -44,4 +46,4 @@ Re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review fundamentals-blend-strategy-restrictions impl-spec` — AI review of the implementation spec, then `/sdd-execute`
+All steps complete (`code-completed`). Open integration PR to merge `feature/fundamentals-blend-strategy-restrictions` → `main-dev`.

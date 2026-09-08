@@ -1116,8 +1116,8 @@ class TestLiveLoopBlendUniverse:
 
     @pytest.mark.asyncio
     async def test_kill_switch_disables_override(self):
-        # AC-6 (kill-switch): fundamentals_blend_enabled=false → the blend gets its ordinary
-        # watchlist/held universe and no fundamentals resolution is attempted.
+        # AC-1 (feature 186): fundamentals_blend_enabled=false → the blend strategy is SKIPPED
+        # entirely (never falls through to resolve_universe).
         loop = _make_loop()
         self._cfg(loop, enabled=False)
         loop._db.fetch = AsyncMock(return_value=[_live_row(self.BLEND_ID, "u-1")])
@@ -1129,5 +1129,88 @@ class TestLiveLoopBlendUniverse:
         )
         seen = self._seen_capture(loop)
         await loop._run_cycle()
-        assert {sym for (sid, sym) in seen if sid == self.BLEND_ID} == {"AAPL", "GME"}
+        assert {sym for (sid, sym) in seen if sid == self.BLEND_ID} == set()
         assert loop._marketdata.GetFundamentalsMulti.await_count == 0
+
+    @pytest.mark.asyncio
+    async def test_blend_skipped_when_disabled(self):
+        # AC-1 (feature 186): blend_enabled=False → blend strategy is not evaluated at all.
+        # Also assert no fundamentals QuerySignals call is issued.
+        loop = _make_loop()
+        self._cfg(loop, enabled=False)
+        loop._db.fetch = AsyncMock(return_value=[_live_row(self.BLEND_ID, "u-1")])
+        self._wire(loop, fundamentals_signals=("AAPL",), fundamentals_rows=("AAPL",))
+        seen = self._seen_capture(loop)
+        await loop._run_cycle()
+        assert seen == set()
+        # No fundamentals resolution attempted when kill-switch is off.
+        assert loop._marketdata.GetFundamentalsMulti.await_count == 0
+
+    @pytest.mark.asyncio
+    async def test_blend_skipped_when_universe_empty(self):
+        # AC-2 (feature 186): blend_enabled=True but fundamentals universe is empty →
+        # blend strategy is SKIPPED entirely.
+        loop = _make_loop()
+        self._cfg(loop, enabled=True)
+        loop._db.fetch = AsyncMock(return_value=[_live_row(self.BLEND_ID, "u-1")])
+        self._wire(loop, fundamentals_signals=(), fundamentals_rows=())
+        seen = self._seen_capture(loop)
+        await loop._run_cycle()
+        assert seen == set()
+
+    @pytest.mark.asyncio
+    async def test_blend_evaluates_only_fundamentals_universe(self):
+        # AC-3 (feature 186): blend evaluates ONLY against the fundamentals universe; a
+        # co-owner's non-blend strategy still resolves its own watchlist universe.
+        loop = _make_loop()
+        self._cfg(loop, enabled=True)
+        loop._db.fetch = AsyncMock(
+            return_value=[
+                _live_row(self.BLEND_ID, "u-1"),
+                _live_row("sma_cross", "u-1"),
+            ]
+        )
+        self._wire(
+            loop,
+            watch_by_owner={"u-1": ["TSLA"]},
+            fundamentals_signals=("AAPL", "MSFT", "GOOG"),
+            fundamentals_rows=("AAPL", "MSFT", "GOOG"),
+        )
+        seen = self._seen_capture(loop)
+        await loop._run_cycle()
+        blend_syms = {sym for (sid, sym) in seen if sid == self.BLEND_ID}
+        assert blend_syms == {"AAPL", "MSFT", "GOOG"}
+        assert ("sma_cross", "TSLA") in seen
+        # Blend does not see TSLA (not in fundamentals universe).
+        assert (self.BLEND_ID, "TSLA") not in seen
+
+    @pytest.mark.asyncio
+    async def test_blend_does_not_fallthrough_to_resolve_universe(self):
+        # AC-1/AC-2 reinforcement (feature 186): when kill-switch is off, the blend strategy
+        # must NOT trigger a resolve_universe call. Only the non-blend strategy should.
+        from unittest.mock import patch
+
+        from app.engine.live_loop import resolve_universe
+
+        loop = _make_loop()
+        self._cfg(loop, enabled=False)
+        loop._db.fetch = AsyncMock(
+            return_value=[
+                _live_row(self.BLEND_ID, "u-1"),
+                _live_row("sma_cross", "u-1"),
+            ]
+        )
+        self._wire(
+            loop,
+            watch_by_owner={"u-1": ["AAPL"]},
+            fundamentals_signals=("AAPL",),
+            fundamentals_rows=("AAPL",),
+        )
+        seen = self._seen_capture(loop)
+        with patch("app.engine.live_loop.resolve_universe", wraps=resolve_universe) as mock_resolve:
+            await loop._run_cycle()
+        # resolve_universe called once — for sma_cross only.
+        assert mock_resolve.call_count == 1
+        assert mock_resolve.call_args[0][0].strategy_id == "sma_cross"
+        # Blend was skipped entirely.
+        assert {sym for (sid, sym) in seen if sid == self.BLEND_ID} == set()

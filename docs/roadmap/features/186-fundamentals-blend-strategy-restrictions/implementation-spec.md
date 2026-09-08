@@ -44,7 +44,7 @@ the new `FAILED_PRECONDITION` rejections. C-10(c) UI waiver signed off in `conte
 
 ### Step 1 — service: Execution restriction in _run_cycle
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/live_loop.py` — modify
@@ -99,7 +99,7 @@ Confirm: the `else` branch that calls `resolve_universe` is now unreachable for 
 
 ### Step 2 — test: Execution restriction tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_live_loop.py` — modify
@@ -142,7 +142,7 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_live_loop.py -k "Te
 
 ### Step 3 — service: Lifecycle guards in ManageStrategy and SetStrategyLive
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -214,7 +214,7 @@ Confirm: the DEACTIVATE guard is placed **before** the ownership `deactivate()` 
 
 ### Step 4 — test: Lifecycle guard tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -263,7 +263,7 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_analysis_servicer.p
 
 ### Step 5 — docs: Update strat-lab plugin documentation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `plugins/strat-lab`
 **Files**:
 - `plugins/strat-lab/skills/backtest/SKILL.md` — modify
@@ -301,7 +301,7 @@ Confirm the paragraph is present and references feature 186.
 
 ### Step 6 — docs: Update mcp-tools.md manage_strategy error table
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify

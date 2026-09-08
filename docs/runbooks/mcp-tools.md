@@ -498,6 +498,7 @@ gate.
 | `update` with no fields and no `clear_fields` | `ValueError` raised client-side, before any RPC |
 | An `update` that would empty `components` or blank a rule without naming it for erasure | `invalid argument` (INVALID_ARGUMENT) — the server refuses; the message names `update_mask` as the escape hatch |
 | `update`/`deactivate`/`reactivate` on unknown strategy | `strategy not found` (NOT_FOUND) |
+| `deactivate` on the fundamentals blend strategy (feature 186) | `the fundamentals blend strategy cannot be deactivated; it is a protected platform resource` (FAILED_PRECONDITION) |
 | `register` on an existing strategy_id (active or deactivated) | `strategy already exists` (ALREADY_EXISTS) |
 
 **Effect on the derived grade.** Changing a scoring-relevant field (`components`, rules,

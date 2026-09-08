@@ -60,3 +60,16 @@
   - Step 3: `return` after `context.abort` is defensive/harmless (abort raises internally).
   - Step 3: SetStrategyLive guard insertion point flow analyzed — correct.
 - Overlap findings: CLEAN. Shared servicer.py/test_analysis_servicer.py/mcp-tools.md with feature 185 at disjoint function ranges (rebase-only).
+
+## Session 2026-09-08T00:05:00Z — sdd-execute (all steps, unattended)
+
+- Executed all 6 steps in unattended mode (no Phase 2 confirmations — user authorized).
+- **Step 1 (done)**: Replaced two-way branch in `live_loop.py:296-308` with identity-first predicate. Blend strategy now `continue`s when disabled or universe empty — never falls through to `resolve_universe`. TDD RED: existing `test_kill_switch_disables_override` broke (expected `{"AAPL", "GME"}`, got `set()`) — confirmed FR-1 behavior change. Verification: ruff clean.
+- **Step 2 (done)**: Added 4 tests to `TestLiveLoopBlendUniverse`: `test_blend_skipped_when_disabled` (AC-1), `test_blend_skipped_when_universe_empty` (AC-2), `test_blend_evaluates_only_fundamentals_universe` (AC-3), `test_blend_does_not_fallthrough_to_resolve_universe` (AC-1/AC-2). Updated `test_kill_switch_disables_override` assertion to `== set()`. TDD GREEN: 11 blend tests pass, 734 total, 84.02% coverage. Ruff format fix applied.
+- **Step 3 (done)**: Inserted DEACTIVATE guard before ownership check at `servicer.py:2524`. Inserted SetStrategyLive disable guard before `set_live_enabled`. Updated stale comment at `:2622-2623`. Verification: ruff clean.
+- **Step 4 (done)**: Added 3 `TestManageStrategy` tests (AC-4, AC-5, AC-8) and 3 `TestSetStrategyLive` tests (AC-6, AC-7, enable-not-blocked negative). TDD GREEN: 740 total tests pass, 84.03% coverage. Ruff line-length fix + format applied.
+- **Step 5 (done)**: Added "Protected strategy (feature 186)" paragraph to `plugins/strat-lab/skills/backtest/SKILL.md` after the "Mutation guard" section.
+- **Step 6 (done)**: Added DEACTIVATE rejection row to `docs/runbooks/mcp-tools.md` `manage_strategy` error table.
+- Status: implementation-ready → in-progress → code-completed.
+- Open review warnings from impl-spec advisory: none (0 failures, 0 warnings; 2 notes were informational only).
+- Deviation log: empty (no deviations from spec).
