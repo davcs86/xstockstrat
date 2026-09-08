@@ -131,6 +131,8 @@ jobs:
           content = content.replace('YOUR_DEV_OTEL_EXPORTER_OTLP_ENDPOINT', otel_endpoint)
           content = content.replace('YOUR_PROD_OTEL_EXPORTER_OTLP_ENDPOINT', otel_endpoint)
           otel_headers = os.environ.get('OTEL_EXPORTER_OTLP_HEADERS', '')
+          if otel_headers and not otel_headers.startswith('Authorization='):
+              otel_headers = 'Authorization=' + otel_headers
           content = content.replace('YOUR_DEV_OTEL_EXPORTER_OTLP_HEADERS', otel_headers)
           content = content.replace('YOUR_PROD_OTEL_EXPORTER_OTLP_HEADERS', otel_headers)
           sys.stdout.write(content)

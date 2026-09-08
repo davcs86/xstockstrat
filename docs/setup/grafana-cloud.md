@@ -178,7 +178,7 @@ Resource attributes (`environment`, `trading_mode`, `platform`) are derived auto
 
 **Python services** use gRPC OTLP — same endpoint URL works.
 
-> `OTEL_EXPORTER_OTLP_HEADERS` must be a raw string: `Basic <base64-token>` — no quotes, no `Authorization=` prefix. The DO app spec's `type: SECRET` handles it. The deploy workflow injects the value from GitHub Secrets at substitution time.
+> **GitHub Secret format: just `Basic <token>`** — the same format as the local-dev `.env`. The deploy workflow automatically prepends `Authorization=` before injecting the value into the DO app spec, so the OTel SDK (which expects `key=value` pairs) receives the correct `Authorization=Basic <token>` format. Both `deploy.yml` and `scripts/do-inject-prod-secrets.py` apply this transform; if the value already starts with `Authorization=` it is left as-is.
 
 ---
 

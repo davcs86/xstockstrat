@@ -66,6 +66,12 @@ def main():
     for placeholder, env_key in OPTIONAL_PLACEHOLDER_KEYS:
         value = os.environ.get(env_key, "")
         if value:
+            # OTel SDK expects OTEL_EXPORTER_OTLP_HEADERS in key=value format
+            # (e.g. Authorization=Basic <token>). The GitHub Secret stores just
+            # the auth value (Basic <token>) — matching the local-dev .env
+            # format — so prepend the header name here if absent.
+            if env_key == "OTEL_EXPORTER_OTLP_HEADERS" and not value.startswith("Authorization="):
+                value = "Authorization=" + value
             content = content.replace(placeholder, value)
 
     sys.stdout.write(content)
