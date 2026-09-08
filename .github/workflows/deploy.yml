@@ -54,6 +54,16 @@ on:
       VAPID_SUBJECT:
         required: false
         # Non-secret VAPID subject (a mailto:/https: URL). Same substitution path (feature 165).
+      OTEL_EXPORTER_OTLP_ENDPOINT:
+        required: false
+        # Callers pass DEV_OTEL_EXPORTER_OTLP_ENDPOINT or PROD_OTEL_EXPORTER_OTLP_ENDPOINT from
+        # GitHub Secrets. Optional — OTel is off until OTEL_ENABLED=true and the endpoint is set.
+        # Grafana Cloud OTLP gateway URL, e.g. https://otlp-gateway-<region>.grafana.net/otlp
+      OTEL_EXPORTER_OTLP_HEADERS:
+        required: false
+        # Callers pass DEV_OTEL_EXPORTER_OTLP_HEADERS or PROD_OTEL_EXPORTER_OTLP_HEADERS from
+        # GitHub Secrets. Optional — OTel auth header value, e.g. Basic <base64(instanceId:apiKey)>.
+        # Stored as type: SECRET in the DO app spec; set as encrypted env var.
 
 jobs:
   deploy:
@@ -75,6 +85,8 @@ jobs:
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
           VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+          OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}
+          OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}
         run: |
           sed \
             -e "s|YOUR_GITHUB_ORG|${{ github.repository_owner }}|g" \
@@ -115,6 +127,12 @@ jobs:
           vapid_subject = os.environ.get('VAPID_SUBJECT', '')
           content = content.replace('YOUR_DEV_VAPID_SUBJECT', vapid_subject)
           content = content.replace('YOUR_PROD_VAPID_SUBJECT', vapid_subject)
+          otel_endpoint = os.environ.get('OTEL_EXPORTER_OTLP_ENDPOINT', '')
+          content = content.replace('YOUR_DEV_OTEL_EXPORTER_OTLP_ENDPOINT', otel_endpoint)
+          content = content.replace('YOUR_PROD_OTEL_EXPORTER_OTLP_ENDPOINT', otel_endpoint)
+          otel_headers = os.environ.get('OTEL_EXPORTER_OTLP_HEADERS', '')
+          content = content.replace('YOUR_DEV_OTEL_EXPORTER_OTLP_HEADERS', otel_headers)
+          content = content.replace('YOUR_PROD_OTEL_EXPORTER_OTLP_HEADERS', otel_headers)
           sys.stdout.write(content)
           " > /tmp/app_spec_substituted.yaml
 
