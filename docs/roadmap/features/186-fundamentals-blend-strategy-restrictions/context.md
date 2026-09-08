@@ -13,3 +13,9 @@
 - Proto has no DELETE operation — only DEACTIVATE (soft delete). User's "removed" requirement maps to DEACTIVATE protection.
 - Known trap from ledger fails.md (063-fundamentals-scoring-model): protect seeded/shared resources using config-driven identity, not hardcoded IDs (C-10(c)).
 - Affected service: xstockstrat-analysis only. No proto, migration, or new config key changes needed.
+
+## Session 2026-09-08T00:01:00Z — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: Open Questions checkbox unchecked (fixed — FR-4 + @AC-8 address the known trap).
+- Overlap findings: none. Shared servicer.py with feature 185 is disjoint-function (standard rebase).

@@ -75,4 +75,4 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **Known trap (063-fundamentals-scoring-model)**: The ledger records a prior assumption failure around protecting seeded/shared resources from mutation (C-10(c)). This feature's lifecycle guards must use the config-driven `fundamentals_blend_strategy_id` — not a hardcoded ID — so the protection tracks the runtime identity of the blend strategy.
+- [x] **Known trap (063-fundamentals-scoring-model)**: The ledger records a prior assumption failure around protecting seeded/shared resources from mutation (C-10(c)). Resolved by FR-4: all three protections use the runtime config value of `fundamentals_blend_strategy_id`, not a hardcoded ID. Covered by @AC-8.

@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-08 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-09-08 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings after fix) |
 
 ---
 
@@ -40,4 +41,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review fundamentals-blend-strategy-restrictions product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design fundamentals-blend-strategy-restrictions quick` — design debate before running /sdd-spec
