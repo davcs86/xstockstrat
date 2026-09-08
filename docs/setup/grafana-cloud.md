@@ -147,9 +147,9 @@ Add these four secrets in your GitHub repo (**Settings → Secrets and variables
 | GitHub Secret | Value | Example |
 |---|---|---|
 | `DEV_OTEL_EXPORTER_OTLP_ENDPOINT` | Grafana Cloud OTLP gateway URL (dev stack) | `https://otlp-gateway-prod-us-central-0.grafana.net/otlp` |
-| `DEV_OTEL_EXPORTER_OTLP_HEADERS` | `Basic <base64(instanceId:apiKey)>` (dev stack) | `Basic MjM0NTY3OmdsY19l...` |
+| `DEV_OTEL_EXPORTER_OTLP_HEADERS` | `Authorization=Basic <base64(instanceId:apiKey)>` (dev stack) | `Authorization=Basic MjM0NTY3OmdsY19l...` |
 | `PROD_OTEL_EXPORTER_OTLP_ENDPOINT` | Grafana Cloud OTLP gateway URL (prod stack) | Same URL if sharing one Grafana stack |
-| `PROD_OTEL_EXPORTER_OTLP_HEADERS` | `Basic <base64(instanceId:apiKey)>` (prod stack) | Same token if sharing one Grafana stack |
+| `PROD_OTEL_EXPORTER_OTLP_HEADERS` | `Authorization=Basic <base64(instanceId:apiKey)>` (prod stack) | Same token if sharing one Grafana stack |
 
 > If you use the **same** Grafana Cloud stack for dev and prod (differentiated by the `environment` resource attribute), set identical values for the dev and prod pairs.
 
@@ -178,7 +178,7 @@ Resource attributes (`environment`, `trading_mode`, `platform`) are derived auto
 
 **Python services** use gRPC OTLP — same endpoint URL works.
 
-> `OTEL_EXPORTER_OTLP_HEADERS` must be a raw string: `Basic <base64-token>` — no quotes, no `Authorization=` prefix. The DO app spec's `type: SECRET` handles it. The deploy workflow injects the value from GitHub Secrets at substitution time.
+> **Format difference between local dev and production:** In local dev the `.env` value is `Basic <token>` (the otel-collector config prepends `Authorization:` itself — see `packages/otel/otel-collector-config.yaml`). In production, services read `OTEL_EXPORTER_OTLP_HEADERS` via the OTel SDK directly, which parses `key=value` pairs — so the GitHub Secret must include the `Authorization=` prefix: `Authorization=Basic <token>`. Without it the SDK treats the whole string as a header key and fails with "contains illegal characters".
 
 ---
 
