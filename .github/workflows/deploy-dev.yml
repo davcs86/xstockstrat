@@ -55,6 +55,8 @@ jobs:
       VAPID_PRIVATE_KEY: ${{ secrets.DEV_VAPID_PRIVATE_KEY }}
       VAPID_PUBLIC_KEY: ${{ secrets.DEV_VAPID_PUBLIC_KEY }}
       VAPID_SUBJECT: ${{ secrets.DEV_VAPID_SUBJECT }}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.DEV_OTEL_EXPORTER_OTLP_ENDPOINT }}
+      OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.DEV_OTEL_EXPORTER_OTLP_HEADERS }}
     with:
       app_spec: .do/app.dev.yaml
       image_tag: ${{ needs.prepare.outputs.short_sha }}

@@ -138,14 +138,37 @@ Expected output:
 
 ## Step 4 — Production Setup (DO App Platform)
 
-In production there is no collector container — each service pushes OTLP **directly** to Grafana Cloud. These variables are declared once at the **global `envs:` level** in `.do/app.yaml` / `.do/app.dev.yaml` and inherited by every component (each component sets its own `SERVICE_NAME`). Set the values via the DO App Platform console or `doctl`:
+In production there is no collector container — each service pushes OTLP **directly** to Grafana Cloud. The endpoint and auth header are declared at the **global `envs:` level** in `.do/app.yaml` / `.do/app.dev.yaml` as `YOUR_*` placeholder tokens, substituted at deploy time by the GitHub Actions deploy workflow from GitHub Secrets.
 
+### 4a. Add GitHub Secrets
+
+Add these four secrets in your GitHub repo (**Settings → Secrets and variables → Actions → New repository secret**):
+
+| GitHub Secret | Value | Example |
+|---|---|---|
+| `DEV_OTEL_EXPORTER_OTLP_ENDPOINT` | Grafana Cloud OTLP gateway URL (dev stack) | `https://otlp-gateway-prod-us-central-0.grafana.net/otlp` |
+| `DEV_OTEL_EXPORTER_OTLP_HEADERS` | `Basic <base64(instanceId:apiKey)>` (dev stack) | `Basic MjM0NTY3OmdsY19l...` |
+| `PROD_OTEL_EXPORTER_OTLP_ENDPOINT` | Grafana Cloud OTLP gateway URL (prod stack) | Same URL if sharing one Grafana stack |
+| `PROD_OTEL_EXPORTER_OTLP_HEADERS` | `Basic <base64(instanceId:apiKey)>` (prod stack) | Same token if sharing one Grafana stack |
+
+> If you use the **same** Grafana Cloud stack for dev and prod (differentiated by the `environment` resource attribute), set identical values for the dev and prod pairs.
+
+### 4b. Enable OTel in the app spec
+
+The app specs ship with `OTEL_ENABLED: "false"` by default. To enable telemetry, change the value in `.do/app.yaml` and/or `.do/app.dev.yaml`:
+
+```yaml
+- key: OTEL_ENABLED
+  value: "true"
 ```
-OTEL_ENABLED=true
-SERVICE_NAME=<service-name>
-OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp-gateway-<region>.grafana.net/otlp
-OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic <base64-token>
-```
+
+Commit and push — the next deploy will have OTel active.
+
+### 4c. How the substitution works
+
+The deploy chain (`deploy-dev.yml` / `deploy-prod.yml` → `deploy.yml`) passes the environment-specific GitHub Secrets into the reusable workflow, which `sed`+Python-replaces the `YOUR_DEV_*` / `YOUR_PROD_*` placeholder tokens in the app spec before calling `doctl apps update`. The `prod-up.yml` (manual prod bring-up) uses `scripts/do-inject-prod-secrets.py` for the same substitution.
+
+Each component inherits the global `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` and sets its own `SERVICE_NAME`.
 
 Resource attributes (`environment`, `trading_mode`, `platform`) are derived automatically at startup from each service's `APPLICATION_ENV` and `TRADING_MODE` env vars — no `OTEL_RESOURCE_ATTRIBUTES` setting required.
 
@@ -155,9 +178,7 @@ Resource attributes (`environment`, `trading_mode`, `platform`) are derived auto
 
 **Python services** use gRPC OTLP — same endpoint URL works.
 
-> `OTEL_EXPORTER_OTLP_HEADERS` must be set as a single string: `Authorization=Basic <base64-token>` — note no quotes around the value. DigitalOcean App Platform passes this directly as an HTTP header.
-
-Set these as **encrypted** environment variables in the DO console (App → Settings → App-Level Environment Variables → Add → check **Encrypt**) so the token is never exposed in logs.
+> `OTEL_EXPORTER_OTLP_HEADERS` must be a raw string: `Basic <base64-token>` — no quotes, no `Authorization=` prefix. The DO app spec's `type: SECRET` handles it. The deploy workflow injects the value from GitHub Secrets at substitution time.
 
 ---
 

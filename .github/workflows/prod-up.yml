@@ -49,6 +49,9 @@ jobs:
           # Feature 020: app-level notify fanout secrets (optional; off until set).
           SLACK_WEBHOOK_URL: ${{ secrets.PROD_SLACK_WEBHOOK_URL }}
           SENDGRID_API_KEY: ${{ secrets.PROD_SENDGRID_API_KEY }}
+          # OTel: Grafana Cloud OTLP gateway (optional; OTel is off until OTEL_ENABLED=true).
+          OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.PROD_OTEL_EXPORTER_OTLP_ENDPOINT }}
+          OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.PROD_OTEL_EXPORTER_OTLP_HEADERS }}
         run: |
           sed \
             -e "s|YOUR_GITHUB_ORG|${{ github.repository_owner }}|g" \
