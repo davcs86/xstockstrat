@@ -51,3 +51,12 @@
 - All 8 AC scenarios mapped to test steps (Scenario Coverage table in spec).
 - Reviewers finalized: Service owner (xstockstrat-analysis) for Steps 1-4; no reviewer for docs-only Steps 5-6.
 - Status: design-approved → implementation-ready.
+
+## Session 2026-09-08T00:04:00Z — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 0 warnings, 2 notes (advisory — did not block).
+- All 6 steps pass criteria check. All codebase evidence verified at stated line numbers.
+- Notes (informational only, no action needed):
+  - Step 3: `return` after `context.abort` is defensive/harmless (abort raises internally).
+  - Step 3: SetStrategyLive guard insertion point flow analyzed — correct.
+- Overlap findings: CLEAN. Shared servicer.py/test_analysis_servicer.py/mcp-tools.md with feature 185 at disjoint function ranges (rebase-only).
