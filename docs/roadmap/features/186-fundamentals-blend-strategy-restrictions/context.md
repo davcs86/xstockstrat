@@ -41,3 +41,13 @@
 ### Open Threads
 
 - [ ] **deny_entry exit edges on skip** — accepted risk; revisit if product spec changes to require exit-only evaluation when universe is empty. Target: none (deferred).
+
+## Session 2026-09-08T00:03:00Z — sdd-spec
+
+- Generated implementation-spec.md with 6 steps: (1) execution restriction in `_run_cycle`, (2) execution restriction tests, (3) lifecycle guards in ManageStrategy/SetStrategyLive, (4) lifecycle guard tests, (5) strat-lab plugin docs, (6) mcp-tools.md error table.
+- Codebase evidence re-verified: live_loop.py:296-308 confirmed as THE GAP; servicer.py DEACTIVATE at :2524, SetStrategyLive disable at :2641, FAILED_PRECONDITION pattern at :2636, stale comment at :2622-2623.
+- Test helpers confirmed reusable (C-13): `_cfg()`, `_wire()`, `_seen_capture()`, `_live_row()`, `_make_loop()` in test_live_loop.py; `make_servicer()`, `_owned_ctx()`, `_valid_definition()`, `_row_for()` in test_analysis_servicer.py — no new fixture homes needed.
+- Consumer Surface confirmed: UI=None, Agent=error-path only — no new tool parameters or response mappings; existing error propagation handles new FAILED_PRECONDITION rejections.
+- All 8 AC scenarios mapped to test steps (Scenario Coverage table in spec).
+- Reviewers finalized: Service owner (xstockstrat-analysis) for Steps 1-4; no reviewer for docs-only Steps 5-6.
+- Status: design-approved → implementation-ready.
