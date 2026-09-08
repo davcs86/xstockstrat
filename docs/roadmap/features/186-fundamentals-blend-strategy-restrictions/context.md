@@ -19,3 +19,25 @@
 - Product spec approved. Status: draft → spec-ready.
 - Warnings: Open Questions checkbox unchecked (fixed — FR-4 + @AC-8 address the known trap).
 - Overlap findings: none. Shared servicer.py with feature 185 is disjoint-function (standard rebase).
+
+## Session 2026-09-08T00:02:00Z — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-analysis; key reuse patterns: FAILED_PRECONDITION rejection at servicer.py:2636, ConfigWatcher get_str for config-driven identity).
+- Phase 1 Grilling: 3 rounds (quick). Chosen approach: two-way branch on strategy identity in live_loop + FAILED_PRECONDITION guards in ManageStrategy/SetStrategyLive. Rejected: fold-into-variable (breaks AC-2 same as AC-1), three-way branch (order-sensitive), smaller-diff elif (splits identity check).
+- Round 1: adversary found AC-2 gap (empty universe not covered by `else` continue). Round 2: adversary found strat-lab co-change, mcp-tools.md, stale comment, C-10(c) waiver. Round 3: adversary found deny_entry NameError on blend happy path + AC message substring mismatch. All resolved.
+- Constitution rules touched: C-08, C-10(c), C-14, C-15, C-16, P-01, P-02, P-04, P-05, F-04. Floor breaches: none.
+- C-10(c) UI waiver sign-off: product spec Consumer Surface is "None" for UI / Agent error-path only — no UI segment change needed. Signed off by user at design approval.
+- Status: spec-ready → design-approved.
+
+### Decisions
+
+- **Two-way branch on strategy identity** (not blend_active state) — co-locates all blend logic under a single `if strategy_id == blend_id` predicate; blend strategy never enters `else` branch.
+- **Deny-list preserved in blend happy path** — `denied`, `deny_entry`, universe subtraction + held-denied reinsertion kept so downstream `_eval_pair` and symbol checks work correctly.
+- **Guards before ownership check** (anti-IDOR) — non-owners get FAILED_PRECONDITION for blend strategy instead of PERMISSION_DENIED; acceptable since blend ID is a config value.
+- **deny_entry exit edges dropped on skip** — intentional per spec "SKIPPED entirely"; exit-only evaluation deferred until universe resolves.
+- **Error messages match AC substrings** — "the fundamentals blend strategy cannot be deactivated" / "cannot be set non-live" to satisfy acceptance.feature assertions.
+- **mcp-tools.md scoped to manage_strategy only** — set_strategy_live has no section (pre-existing gap, outside scope).
+
+### Open Threads
+
+- [ ] **deny_entry exit edges on skip** — accepted risk; revisit if product spec changes to require exit-only evaluation when universe is empty. Target: none (deferred).

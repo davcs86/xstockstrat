@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-09-08 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-08 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings after fix) |
+| 2026-09-08 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, quick) and approved; recon.md + design.md written |
 
 ---
 
@@ -19,6 +20,8 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon Dossier](recon.md) — grounded codebase discovery (Phase 0)
+- [Design](design.md) — debated, user-approved architecture (Phase 1, 3 rounds)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fundamentals-blend-strategy-restrictions`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -41,4 +44,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design fundamentals-blend-strategy-restrictions quick` — design debate before running /sdd-spec
+`/sdd-spec fundamentals-blend-strategy-restrictions` — generate implementation spec from the approved design
