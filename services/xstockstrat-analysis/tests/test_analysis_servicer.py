@@ -5112,11 +5112,6 @@ class TestOpportunitySemaphoreIsolation:
                 results=[_md.LatestPrice(symbol="AAPL", last_price=150.0, prev_close=148.0)]
             )
         )
-        svc._marketdata.BatchGetBars = AsyncMock(
-            return_value=_md.BatchGetBarsResponse(
-                results=[_md.SymbolBars(symbol="AAPL", bars=[_md.Bar(symbol="AAPL", close=150.0)])]
-            )
-        )
         bg = _CountingSem(svc._readiness_materializer_bars_sem)
         fg = _CountingSem(svc._bars_fetch_sem)
         svc._readiness_materializer_bars_sem = bg
@@ -5124,9 +5119,8 @@ class TestOpportunitySemaphoreIsolation:
         await svc._enrich_opportunities_live(
             [analysis_pb2.Opportunity(symbol="AAPL")], [("x-user-id", "u1")]
         )
-        # Batch RPCs called — no per-symbol sem acquisition needed (feature 183).
+        # Only BatchGetLatestPrice called — sparkline bars moved to the UI (async useSparklines hook).
         assert svc._marketdata.BatchGetLatestPrice.await_count == 1
-        assert svc._marketdata.BatchGetBars.await_count == 1
         assert fg.acquires == 0  # interactive sem untouched (batch, not per-symbol)
         assert bg.acquires == 0  # background sem untouched
 
@@ -6598,9 +6592,9 @@ class TestOpportunityLiveEnrichment:
         assert not bare.HasField("target_price")
         assert not bare.HasField("stop_price")
 
-    def test_read_time_enrichment_sets_live_price_change_and_sparkline(self):
-        """AC-1/AC-4 — BatchGetLatestPrice sets live_price + the DERIVED change_pct; BatchGetBars
-        builds the sparkline, with an unset close for a non-finite (warm-up/missing) bar.
+    def test_read_time_enrichment_sets_live_price_and_change(self):
+        """AC-1 — BatchGetLatestPrice sets live_price + the DERIVED change_pct.
+        Sparkline bars are now fetched client-side (async useSparklines hook).
         Updated for feature 183: enrichment uses batch RPCs."""
         from gen.marketdata.v1 import marketdata_pb2
 
@@ -6613,30 +6607,14 @@ class TestOpportunityLiveEnrichment:
                 ]
             )
         )
-        svc._marketdata.BatchGetBars = AsyncMock(
-            return_value=marketdata_pb2.BatchGetBarsResponse(
-                results=[
-                    marketdata_pb2.SymbolBars(
-                        symbol="CAPR",
-                        bars=[
-                            marketdata_pb2.Bar(symbol="CAPR", close=12.0),
-                            marketdata_pb2.Bar(symbol="CAPR", close=float("nan")),
-                            marketdata_pb2.Bar(symbol="CAPR", close=12.34),
-                        ],
-                    )
-                ]
-            )
-        )
         opp = analysis_pb2.Opportunity(symbol="CAPR", conviction=0.8)
         asyncio.run(svc._enrich_opportunities_live([opp], []))
 
         assert opp.HasField("live_price") and abs(opp.live_price - 12.34) < 1e-9
         assert opp.HasField("change_pct")
         assert abs(opp.change_pct - (12.34 - 12.09) / 12.09) < 1e-9
-        assert len(opp.sparkline) == 3
-        assert opp.sparkline[0].HasField("close") and opp.sparkline[0].close == 12.0
-        assert not opp.sparkline[1].HasField("close")  # AC-4: gap → unset, never NaN/0
-        assert opp.sparkline[2].close == 12.34
+        # Sparkline is no longer populated server-side.
+        assert len(opp.sparkline) == 0
 
     def test_missing_quote_leaves_live_fields_unset(self):
         """AC-11 — a BatchGetLatestPrice returning no last_price leaves live_price/change_pct unset
