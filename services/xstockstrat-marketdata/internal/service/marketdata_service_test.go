@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -1304,4 +1305,185 @@ func (*fakeBatchBarsSource) StreamBars(context.Context, []string, string) (<-cha
 }
 func (*fakeBatchBarsSource) StreamQuotes(context.Context, []string) (<-chan *marketdatav1.Quote, error) {
 	return nil, nil
+}
+func (*fakeBatchBarsSource) GetLatestTradesMulti(context.Context, []string) (map[string]*source.Trade, error) {
+	return nil, nil
+}
+
+// ── feature 183: BatchGetLatestPrice (opportunities-latency-fix) ────────────────
+
+// fakeBatchPriceSource implements source.DataSourceClient + source.MultiSymbolSource for
+// BatchGetLatestPrice tests. Returns trades from the pre-seeded map; absent symbols are omitted.
+type fakeBatchPriceSource struct {
+	trades map[string]*source.Trade
+}
+
+func (f *fakeBatchPriceSource) GetLatestTradesMulti(_ context.Context, symbols []string) (map[string]*source.Trade, error) {
+	out := make(map[string]*source.Trade, len(symbols))
+	for _, s := range symbols {
+		if t, ok := f.trades[s]; ok {
+			out[s] = t
+		}
+	}
+	return out, nil
+}
+func (f *fakeBatchPriceSource) GetBarsMulti(context.Context, []string, string, time.Time, time.Time) (map[string][]*marketdatav1.Bar, error) {
+	return nil, nil
+}
+func (f *fakeBatchPriceSource) GetLatestQuotesMulti(context.Context, []string) (map[string]*marketdatav1.Quote, error) {
+	return nil, nil
+}
+func (*fakeBatchPriceSource) GetBars(context.Context, string, string, time.Time, time.Time) ([]*marketdatav1.Bar, error) {
+	return nil, nil
+}
+func (*fakeBatchPriceSource) GetLatestQuote(context.Context, string) (*marketdatav1.Quote, error) {
+	return nil, nil
+}
+func (*fakeBatchPriceSource) ListAssets(context.Context, string) ([]*commonv1.Asset, error) {
+	return nil, nil
+}
+func (*fakeBatchPriceSource) StreamBars(context.Context, []string, string) (<-chan *marketdatav1.Bar, error) {
+	return nil, nil
+}
+func (*fakeBatchPriceSource) StreamQuotes(context.Context, []string) (<-chan *marketdatav1.Quote, error) {
+	return nil, nil
+}
+
+// fakeLatestTradeOnlySource implements source.DataSourceClient + source.LatestTradeSource but
+// NOT source.MultiSymbolSource — used to verify the per-symbol fallback path in BatchGetLatestPrice.
+type fakeLatestTradeOnlySource struct {
+	trades map[string]*source.Trade
+}
+
+func (f *fakeLatestTradeOnlySource) GetLatestTrade(_ context.Context, symbol string) (float64, time.Time, error) {
+	if t, ok := f.trades[symbol]; ok {
+		return t.Price, t.TradeTime, nil
+	}
+	return 0, time.Time{}, fmt.Errorf("no trade for %s", symbol)
+}
+func (*fakeLatestTradeOnlySource) GetBars(context.Context, string, string, time.Time, time.Time) ([]*marketdatav1.Bar, error) {
+	return nil, nil
+}
+func (*fakeLatestTradeOnlySource) GetLatestQuote(context.Context, string) (*marketdatav1.Quote, error) {
+	return nil, nil
+}
+func (*fakeLatestTradeOnlySource) ListAssets(context.Context, string) ([]*commonv1.Asset, error) {
+	return nil, nil
+}
+func (*fakeLatestTradeOnlySource) StreamBars(context.Context, []string, string) (<-chan *marketdatav1.Bar, error) {
+	return nil, nil
+}
+func (*fakeLatestTradeOnlySource) StreamQuotes(context.Context, []string) (<-chan *marketdatav1.Quote, error) {
+	return nil, nil
+}
+
+// TestBatchGetLatestPrice_MultipleSymbols — @AC-4: batch returns latest price + prev close
+// for each requested symbol from the cold path (nil repo → no prev close, trades from source).
+func TestBatchGetLatestPrice_MultipleSymbols(t *testing.T) {
+	ts := time.Date(2025, 1, 15, 14, 30, 0, 0, time.UTC)
+	priceSrc := &fakeBatchPriceSource{
+		trades: map[string]*source.Trade{
+			"AAPL": {Price: 185.50, TradeTime: ts},
+			"MSFT": {Price: 420.10, TradeTime: ts},
+		},
+	}
+	reg := source.NewRegistry()
+	reg.Register("alpaca", priceSrc)
+	// nil repo → no prev close data, so only trades appear
+	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}}
+
+	resp, err := svc.BatchGetLatestPrice(context.Background(), &marketdatav1.BatchGetLatestPriceRequest{
+		Symbols: []string{"AAPL", "MSFT"},
+	})
+	if err != nil {
+		t.Fatalf("BatchGetLatestPrice: %v", err)
+	}
+	bySym := map[string]*marketdatav1.LatestPrice{}
+	for _, lp := range resp.Results {
+		bySym[lp.Symbol] = lp
+	}
+	if len(bySym) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(bySym))
+	}
+	aaplLP := bySym["AAPL"]
+	if aaplLP.LastPrice == nil || *aaplLP.LastPrice != 185.50 {
+		t.Errorf("AAPL: want LastPrice=185.50, got %v", aaplLP.LastPrice)
+	}
+	msftLP := bySym["MSFT"]
+	if msftLP.LastPrice == nil || *msftLP.LastPrice != 420.10 {
+		t.Errorf("MSFT: want LastPrice=420.10, got %v", msftLP.LastPrice)
+	}
+	if aaplLP.Source != "alpaca" {
+		t.Errorf("AAPL: want Source='alpaca', got %q", aaplLP.Source)
+	}
+}
+
+// TestBatchGetLatestPrice_OmitMissingSymbols — @AC-5: a symbol the source can't serve is absent
+// from the response (omit-not-fabricate, AC-11 pattern).
+func TestBatchGetLatestPrice_OmitMissingSymbols(t *testing.T) {
+	priceSrc := &fakeBatchPriceSource{
+		trades: map[string]*source.Trade{
+			"AAPL": {Price: 185.50, TradeTime: time.Now()},
+		}, // ZZZZ deliberately absent
+	}
+	reg := source.NewRegistry()
+	reg.Register("alpaca", priceSrc)
+	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}}
+
+	resp, err := svc.BatchGetLatestPrice(context.Background(), &marketdatav1.BatchGetLatestPriceRequest{
+		Symbols: []string{"AAPL", "ZZZZ"},
+	})
+	if err != nil {
+		t.Fatalf("BatchGetLatestPrice: %v", err)
+	}
+	bySym := map[string]*marketdatav1.LatestPrice{}
+	for _, lp := range resp.Results {
+		bySym[lp.Symbol] = lp
+	}
+	if _, ok := bySym["AAPL"]; !ok {
+		t.Fatal("AAPL must be present in response")
+	}
+	if _, ok := bySym["ZZZZ"]; ok {
+		t.Fatal("ZZZZ must be omitted (omit-not-fabricate), got an entry")
+	}
+	if len(resp.Results) != 1 {
+		t.Fatalf("expected exactly 1 LatestPrice entry, got %d", len(resp.Results))
+	}
+}
+
+// TestBatchGetLatestPrice_FallbackWhenNotMultiSymbolSource — source implements only
+// LatestTradeSource (not MultiSymbolSource); verify fallback to per-symbol GetLatestTrade.
+func TestBatchGetLatestPrice_FallbackWhenNotMultiSymbolSource(t *testing.T) {
+	ts := time.Date(2025, 1, 15, 15, 0, 0, 0, time.UTC)
+	tradeOnly := &fakeLatestTradeOnlySource{
+		trades: map[string]*source.Trade{
+			"AAPL": {Price: 186.00, TradeTime: ts},
+			"GOOG": {Price: 175.25, TradeTime: ts},
+		},
+	}
+	reg := source.NewRegistry()
+	reg.Register("alpaca", tradeOnly)
+	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}}
+
+	resp, err := svc.BatchGetLatestPrice(context.Background(), &marketdatav1.BatchGetLatestPriceRequest{
+		Symbols: []string{"AAPL", "GOOG"},
+	})
+	if err != nil {
+		t.Fatalf("BatchGetLatestPrice: %v", err)
+	}
+	bySym := map[string]*marketdatav1.LatestPrice{}
+	for _, lp := range resp.Results {
+		bySym[lp.Symbol] = lp
+	}
+	if len(bySym) != 2 {
+		t.Fatalf("expected 2 results from per-symbol fallback, got %d", len(bySym))
+	}
+	aaplLP := bySym["AAPL"]
+	if aaplLP.LastPrice == nil || *aaplLP.LastPrice != 186.00 {
+		t.Errorf("AAPL: want LastPrice=186.00, got %v", aaplLP.LastPrice)
+	}
+	googLP := bySym["GOOG"]
+	if googLP.LastPrice == nil || *googLP.LastPrice != 175.25 {
+		t.Errorf("GOOG: want LastPrice=175.25, got %v", googLP.LastPrice)
+	}
 }

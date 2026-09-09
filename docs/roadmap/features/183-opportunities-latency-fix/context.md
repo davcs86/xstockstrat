@@ -102,3 +102,11 @@
 - Handler: added Connect handler `BatchGetLatestPrice` + `grpcMarketDataAdapter.BatchGetLatestPrice` (3-method pattern)
 - Verification: `GOWORK=off go build ./...` — pass
 - TDD: red-green deferred to Step 6 (paired test step)
+
+### Step 6 — test: BatchGetLatestPrice
+- Added `GetLatestTradesMulti` stub to `fakeBatchBarsSource` (compile fix for updated `MultiSymbolSource` interface)
+- Added `fakeBatchPriceSource` mock (implements `DataSourceClient` + `MultiSymbolSource`) for multi-symbol trade tests
+- Added `fakeLatestTradeOnlySource` mock (implements `DataSourceClient` + `LatestTradeSource` only) for fallback path test
+- Added 3 tests: `TestBatchGetLatestPrice_MultipleSymbols` (AC-4), `TestBatchGetLatestPrice_OmitMissingSymbols` (AC-5), `TestBatchGetLatestPrice_FallbackWhenNotMultiSymbolSource`
+- TDD: red implicit (Step 5 had no tests) → green: all 3 pass, coverage 45.4% ≥ 40%
+- Lint: `golangci-lint` skipped (Go 1.25 < target 1.27); `go vet` passes

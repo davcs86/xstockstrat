@@ -303,7 +303,7 @@ Confirm the service compiles without errors.
 
 ### Step 6 — test: BatchGetLatestPrice
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify
