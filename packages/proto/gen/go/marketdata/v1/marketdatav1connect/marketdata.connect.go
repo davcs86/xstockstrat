@@ -69,6 +69,12 @@ const (
 	// MarketDataServiceGetLatestQuotesProcedure is the fully-qualified name of the MarketDataService's
 	// GetLatestQuotes RPC.
 	MarketDataServiceGetLatestQuotesProcedure = "/xstockstrat.marketdata.v1.MarketDataService/GetLatestQuotes"
+	// MarketDataServiceBatchGetBarsProcedure is the fully-qualified name of the MarketDataService's
+	// BatchGetBars RPC.
+	MarketDataServiceBatchGetBarsProcedure = "/xstockstrat.marketdata.v1.MarketDataService/BatchGetBars"
+	// MarketDataServiceBatchGetLatestPriceProcedure is the fully-qualified name of the
+	// MarketDataService's BatchGetLatestPrice RPC.
+	MarketDataServiceBatchGetLatestPriceProcedure = "/xstockstrat.marketdata.v1.MarketDataService/BatchGetLatestPrice"
 )
 
 // MarketDataServiceClient is a client for the xstockstrat.marketdata.v1.MarketDataService service.
@@ -98,6 +104,10 @@ type MarketDataServiceClient interface {
 	// Batched latest quotes — partial by design: a symbol with no quote is omitted from the
 	// response (null-not-zero), never returned as a fabricated zero-price Quote.
 	GetLatestQuotes(context.Context, *connect.Request[v1.GetLatestQuotesRequest]) (*connect.Response[v1.GetLatestQuotesResponse], error)
+	// Batched historical bars for multiple symbols in a single round-trip (feature 183).
+	BatchGetBars(context.Context, *connect.Request[v1.BatchGetBarsRequest]) (*connect.Response[v1.BatchGetBarsResponse], error)
+	// Batched latest price for multiple symbols in a single round-trip (feature 183).
+	BatchGetLatestPrice(context.Context, *connect.Request[v1.BatchGetLatestPriceRequest]) (*connect.Response[v1.BatchGetLatestPriceResponse], error)
 }
 
 // NewMarketDataServiceClient constructs a client for the
@@ -184,6 +194,18 @@ func NewMarketDataServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(marketDataServiceMethods.ByName("GetLatestQuotes")),
 			connect.WithClientOptions(opts...),
 		),
+		batchGetBars: connect.NewClient[v1.BatchGetBarsRequest, v1.BatchGetBarsResponse](
+			httpClient,
+			baseURL+MarketDataServiceBatchGetBarsProcedure,
+			connect.WithSchema(marketDataServiceMethods.ByName("BatchGetBars")),
+			connect.WithClientOptions(opts...),
+		),
+		batchGetLatestPrice: connect.NewClient[v1.BatchGetLatestPriceRequest, v1.BatchGetLatestPriceResponse](
+			httpClient,
+			baseURL+MarketDataServiceBatchGetLatestPriceProcedure,
+			connect.WithSchema(marketDataServiceMethods.ByName("BatchGetLatestPrice")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -201,6 +223,8 @@ type marketDataServiceClient struct {
 	getFundamentals      *connect.Client[v1.GetFundamentalsRequest, v1.GetFundamentalsResponse]
 	getFundamentalsMulti *connect.Client[v1.GetFundamentalsMultiRequest, v1.GetFundamentalsMultiResponse]
 	getLatestQuotes      *connect.Client[v1.GetLatestQuotesRequest, v1.GetLatestQuotesResponse]
+	batchGetBars         *connect.Client[v1.BatchGetBarsRequest, v1.BatchGetBarsResponse]
+	batchGetLatestPrice  *connect.Client[v1.BatchGetLatestPriceRequest, v1.BatchGetLatestPriceResponse]
 }
 
 // StreamBars calls xstockstrat.marketdata.v1.MarketDataService.StreamBars.
@@ -263,6 +287,16 @@ func (c *marketDataServiceClient) GetLatestQuotes(ctx context.Context, req *conn
 	return c.getLatestQuotes.CallUnary(ctx, req)
 }
 
+// BatchGetBars calls xstockstrat.marketdata.v1.MarketDataService.BatchGetBars.
+func (c *marketDataServiceClient) BatchGetBars(ctx context.Context, req *connect.Request[v1.BatchGetBarsRequest]) (*connect.Response[v1.BatchGetBarsResponse], error) {
+	return c.batchGetBars.CallUnary(ctx, req)
+}
+
+// BatchGetLatestPrice calls xstockstrat.marketdata.v1.MarketDataService.BatchGetLatestPrice.
+func (c *marketDataServiceClient) BatchGetLatestPrice(ctx context.Context, req *connect.Request[v1.BatchGetLatestPriceRequest]) (*connect.Response[v1.BatchGetLatestPriceResponse], error) {
+	return c.batchGetLatestPrice.CallUnary(ctx, req)
+}
+
 // MarketDataServiceHandler is an implementation of the xstockstrat.marketdata.v1.MarketDataService
 // service.
 type MarketDataServiceHandler interface {
@@ -291,6 +325,10 @@ type MarketDataServiceHandler interface {
 	// Batched latest quotes — partial by design: a symbol with no quote is omitted from the
 	// response (null-not-zero), never returned as a fabricated zero-price Quote.
 	GetLatestQuotes(context.Context, *connect.Request[v1.GetLatestQuotesRequest]) (*connect.Response[v1.GetLatestQuotesResponse], error)
+	// Batched historical bars for multiple symbols in a single round-trip (feature 183).
+	BatchGetBars(context.Context, *connect.Request[v1.BatchGetBarsRequest]) (*connect.Response[v1.BatchGetBarsResponse], error)
+	// Batched latest price for multiple symbols in a single round-trip (feature 183).
+	BatchGetLatestPrice(context.Context, *connect.Request[v1.BatchGetLatestPriceRequest]) (*connect.Response[v1.BatchGetLatestPriceResponse], error)
 }
 
 // NewMarketDataServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -372,6 +410,18 @@ func NewMarketDataServiceHandler(svc MarketDataServiceHandler, opts ...connect.H
 		connect.WithSchema(marketDataServiceMethods.ByName("GetLatestQuotes")),
 		connect.WithHandlerOptions(opts...),
 	)
+	marketDataServiceBatchGetBarsHandler := connect.NewUnaryHandler(
+		MarketDataServiceBatchGetBarsProcedure,
+		svc.BatchGetBars,
+		connect.WithSchema(marketDataServiceMethods.ByName("BatchGetBars")),
+		connect.WithHandlerOptions(opts...),
+	)
+	marketDataServiceBatchGetLatestPriceHandler := connect.NewUnaryHandler(
+		MarketDataServiceBatchGetLatestPriceProcedure,
+		svc.BatchGetLatestPrice,
+		connect.WithSchema(marketDataServiceMethods.ByName("BatchGetLatestPrice")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.marketdata.v1.MarketDataService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case MarketDataServiceStreamBarsProcedure:
@@ -398,6 +448,10 @@ func NewMarketDataServiceHandler(svc MarketDataServiceHandler, opts ...connect.H
 			marketDataServiceGetFundamentalsMultiHandler.ServeHTTP(w, r)
 		case MarketDataServiceGetLatestQuotesProcedure:
 			marketDataServiceGetLatestQuotesHandler.ServeHTTP(w, r)
+		case MarketDataServiceBatchGetBarsProcedure:
+			marketDataServiceBatchGetBarsHandler.ServeHTTP(w, r)
+		case MarketDataServiceBatchGetLatestPriceProcedure:
+			marketDataServiceBatchGetLatestPriceHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -453,4 +507,12 @@ func (UnimplementedMarketDataServiceHandler) GetFundamentalsMulti(context.Contex
 
 func (UnimplementedMarketDataServiceHandler) GetLatestQuotes(context.Context, *connect.Request[v1.GetLatestQuotesRequest]) (*connect.Response[v1.GetLatestQuotesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.GetLatestQuotes is not implemented"))
+}
+
+func (UnimplementedMarketDataServiceHandler) BatchGetBars(context.Context, *connect.Request[v1.BatchGetBarsRequest]) (*connect.Response[v1.BatchGetBarsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.BatchGetBars is not implemented"))
+}
+
+func (UnimplementedMarketDataServiceHandler) BatchGetLatestPrice(context.Context, *connect.Request[v1.BatchGetLatestPriceRequest]) (*connect.Response[v1.BatchGetLatestPriceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.BatchGetLatestPrice is not implemented"))
 }

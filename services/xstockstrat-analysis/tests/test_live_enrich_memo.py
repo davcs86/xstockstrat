@@ -7,6 +7,9 @@ memoized — the next pass still issues the RPC and a recovered quote appears (A
 
 C-13: the marketdata-stub literals are single-consumer to this file (the sibling servicer tests
 build their own inline) → kept inline. Reuses ``make_servicer`` from the servicer test module.
+
+Updated for feature 183: enrichment now uses BatchGetLatestPrice + BatchGetBars (one call each)
+instead of per-symbol GetLatestPrice/GetBars fan-out.
 """
 
 from unittest.mock import AsyncMock, MagicMock
@@ -21,16 +24,26 @@ pytestmark = pytest.mark.asyncio
 
 
 def _md_svc(last_price=12.34, prev_close=12.09, bars=(12.0, 12.5, 12.34)):
+    """Build a servicer with batch-RPC mocks for enrichment (feature 183)."""
     svc = make_servicer()
     svc._marketdata = MagicMock()
-    svc._marketdata.GetLatestPrice = AsyncMock(
-        return_value=marketdata_pb2.LatestPrice(
-            symbol="CAPR", last_price=last_price, prev_close=prev_close
+    svc._marketdata.BatchGetLatestPrice = AsyncMock(
+        return_value=marketdata_pb2.BatchGetLatestPriceResponse(
+            results=[
+                marketdata_pb2.LatestPrice(
+                    symbol="CAPR", last_price=last_price, prev_close=prev_close
+                )
+            ]
         )
     )
-    svc._marketdata.GetBars = AsyncMock(
-        return_value=marketdata_pb2.GetBarsResponse(
-            bars=[marketdata_pb2.Bar(symbol="CAPR", close=c) for c in bars]
+    svc._marketdata.BatchGetBars = AsyncMock(
+        return_value=marketdata_pb2.BatchGetBarsResponse(
+            results=[
+                marketdata_pb2.SymbolBars(
+                    symbol="CAPR",
+                    bars=[marketdata_pb2.Bar(symbol="CAPR", close=c) for c in bars],
+                )
+            ]
         )
     )
     return svc
@@ -45,24 +58,24 @@ async def test_memo_hit_skips_both_rpcs_within_ttl_then_refetches(monkeypatch):
 
     opp1 = analysis_pb2.Opportunity(symbol="CAPR", conviction=0.8)
     await svc._enrich_opportunities_live([opp1], [])
-    assert svc._marketdata.GetLatestPrice.await_count == 1
-    assert svc._marketdata.GetBars.await_count == 1
+    assert svc._marketdata.BatchGetLatestPrice.await_count == 1
+    assert svc._marketdata.BatchGetBars.await_count == 1
 
-    # Pass 2 within the TTL (default 10s) → memo hit, no new RPCs, identical live fields.
+    # Pass 2 within the TTL (default 20s) → memo hit, no new RPCs, identical live fields.
     opp2 = analysis_pb2.Opportunity(symbol="CAPR", conviction=0.8)
     clock[0] = 1005.0
     await svc._enrich_opportunities_live([opp2], [])
-    assert svc._marketdata.GetLatestPrice.await_count == 1  # not re-fetched
-    assert svc._marketdata.GetBars.await_count == 1
+    assert svc._marketdata.BatchGetLatestPrice.await_count == 1  # not re-fetched
+    assert svc._marketdata.BatchGetBars.await_count == 1
     assert opp2.live_price == opp1.live_price
     assert [p.close for p in opp2.sparkline] == [p.close for p in opp1.sparkline]
 
     # Past the TTL → memo expired → both RPCs fire again.
     opp3 = analysis_pb2.Opportunity(symbol="CAPR", conviction=0.8)
-    clock[0] = 1011.0
+    clock[0] = 1025.0
     await svc._enrich_opportunities_live([opp3], [])
-    assert svc._marketdata.GetLatestPrice.await_count == 2
-    assert svc._marketdata.GetBars.await_count == 2
+    assert svc._marketdata.BatchGetLatestPrice.await_count == 2
+    assert svc._marketdata.BatchGetBars.await_count == 2
 
 
 async def test_ttl_zero_disables_memo():
@@ -73,7 +86,7 @@ async def test_ttl_zero_disables_memo():
     )
     await svc._enrich_opportunities_live([analysis_pb2.Opportunity(symbol="CAPR")], [])
     await svc._enrich_opportunities_live([analysis_pb2.Opportunity(symbol="CAPR")], [])
-    assert svc._marketdata.GetLatestPrice.await_count == 2  # always fetch
+    assert svc._marketdata.BatchGetLatestPrice.await_count == 2  # always fetch
 
 
 async def test_failed_fetch_is_never_memoized_and_recovers(monkeypatch):
@@ -83,19 +96,23 @@ async def test_failed_fetch_is_never_memoized_and_recovers(monkeypatch):
     monkeypatch.setattr("app.handlers.servicer.time.monotonic", lambda: clock[0])
     svc = _md_svc()
     # Pass 1: price unavailable (last_price unset) → not memoized even though the sparkline was OK.
-    svc._marketdata.GetLatestPrice = AsyncMock(
-        return_value=marketdata_pb2.LatestPrice(symbol="CAPR")
+    svc._marketdata.BatchGetLatestPrice = AsyncMock(
+        return_value=marketdata_pb2.BatchGetLatestPriceResponse(
+            results=[marketdata_pb2.LatestPrice(symbol="CAPR")]
+        )
     )
     opp1 = analysis_pb2.Opportunity(symbol="CAPR")
     await svc._enrich_opportunities_live([opp1], [])
     assert not opp1.HasField("live_price")
 
     # Pass 2 within the TTL: the memo must NOT suppress the RPC; the quote is now available.
-    svc._marketdata.GetLatestPrice = AsyncMock(
-        return_value=marketdata_pb2.LatestPrice(symbol="CAPR", last_price=20.0, prev_close=19.0)
+    svc._marketdata.BatchGetLatestPrice = AsyncMock(
+        return_value=marketdata_pb2.BatchGetLatestPriceResponse(
+            results=[marketdata_pb2.LatestPrice(symbol="CAPR", last_price=20.0, prev_close=19.0)]
+        )
     )
     clock[0] = 1002.0
     opp2 = analysis_pb2.Opportunity(symbol="CAPR")
     await svc._enrich_opportunities_live([opp2], [])
-    assert svc._marketdata.GetLatestPrice.await_count == 1  # the fresh mock was re-fetched
+    assert svc._marketdata.BatchGetLatestPrice.await_count == 1  # the fresh mock was re-fetched
     assert opp2.HasField("live_price") and abs(opp2.live_price - 20.0) < 1e-9
