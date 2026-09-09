@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/opportunities-latency-fix`
 **Created**: 2026-09-08
-**Last Updated**: 2026-09-08
+**Last Updated**: 2026-09-09
 
 ---
 
@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-08 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-09-09 | `draft` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + design.md written |
 
 ---
 
@@ -18,6 +19,8 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon Dossier](recon.md) — grounded codebase map, patterns to reuse, existing business rules
+- [Design](design.md) — debated architecture (4 rounds, full), chosen approach, rejected alternatives
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec <slug>`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -42,4 +45,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review <slug> product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec opportunities-latency-fix` — generate implementation spec from the approved design

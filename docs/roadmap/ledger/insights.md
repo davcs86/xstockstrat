@@ -3137,3 +3137,8 @@ reusing.
   bucket rather than minting a third independent [1,5] bars-fetch sem (three sum to 15 > the marketdata pool
   ceiling of 5 = SEV-2 re-open).
 - **Evidence**: feature 185 design.md §FR-3/FR-5 + Rejected Alternatives; `services/xstockstrat-analysis/app/repositories/opportunities.py:44-46,107,114`; `app/handlers/servicer.py:448-456,3492-3512,3841-3857`; ledger fails 141/1547.
+
+### 2026-09-09 — opportunities-latency-fix — design
+- **Pattern**: For batch queries over TimescaleDB hypertables that need a per-symbol row LIMIT, use `CROSS JOIN LATERAL (SELECT ... WHERE symbol = s.sym ... LIMIT $N) b` with `unnest($1::text[])` — the LATERAL pushes the LIMIT into the per-symbol index scan, while the hypertable's time-based partitioning means lock count is bounded by chunk count (~14 for a 400-day range on 30-day chunks), NOT by symbol count. This avoids the ROW_NUMBER alternative (materializes all rows before filtering) and the flat `WHERE symbol = ANY($1)` without LIMIT (unbounded rows).
+- **Evidence**: feature 183 design.md § Step 2; `services/xstockstrat-marketdata/migrations/001_marketdata_hypertables.up.sql:31-32` (index `(symbol, time DESC)`); `docs/runbooks/ohlcv-lock-budget-tuning.md` (`max_locks_per_transaction = 1024`).
+- **Rule it implies**: prefer LATERAL JOIN over ROW_NUMBER for per-group LIMIT queries on TimescaleDB hypertables; reserve ROW_NUMBER for cases needing exactly 1 row/group (e.g. prev daily close).
