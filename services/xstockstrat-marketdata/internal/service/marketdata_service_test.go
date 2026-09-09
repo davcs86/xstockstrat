@@ -1013,6 +1013,9 @@ func (f *fakeMultiSource) GetLatestQuotesMulti(_ context.Context, symbols []stri
 	return out, nil
 }
 
+func (*fakeMultiSource) GetLatestTradesMulti(context.Context, []string) (map[string]*source.Trade, error) {
+	return nil, nil
+}
 func (*fakeMultiSource) GetBarsMulti(context.Context, []string, string, time.Time, time.Time) (map[string][]*marketdatav1.Bar, error) {
 	return nil, nil
 }
