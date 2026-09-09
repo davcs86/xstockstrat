@@ -35,3 +35,10 @@
 - [ ] EXPLAIN ANALYZE the LATERAL JOIN on staging with ~100 symbols, 400-day range — target: /sdd-spec Step 2.
 - [ ] Verify Alpaca multi-symbol trades endpoint exists and its rate limits — target: /sdd-spec Step 3.
 - [ ] Verify Connect-es `CallOptions.timeoutMs` emits `DeadlineExceeded` status code — target: /sdd-spec Step 8.
+
+## Session 2026-09-09 — sdd-review product-spec
+
+- Product spec reviewed (retroactive — status already design-approved). Result: PASS WITH WARNINGS (1 warning, 0 blockers).
+- Warning: criterion 9 — unchecked open-question checkbox for ledger 141 trap; resolved by checking box (substance was already resolved in design.md/recon.md).
+- Overlap findings: CLEAN — no collisions with 7 in-flight features.
+- Trading domain checks: skipped (non-trading feature).
