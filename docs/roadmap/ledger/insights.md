@@ -3142,3 +3142,48 @@ reusing.
 - **Pattern**: For batch queries over TimescaleDB hypertables that need a per-symbol row LIMIT, use `CROSS JOIN LATERAL (SELECT ... WHERE symbol = s.sym ... LIMIT $N) b` with `unnest($1::text[])` — the LATERAL pushes the LIMIT into the per-symbol index scan, while the hypertable's time-based partitioning means lock count is bounded by chunk count (~14 for a 400-day range on 30-day chunks), NOT by symbol count. This avoids the ROW_NUMBER alternative (materializes all rows before filtering) and the flat `WHERE symbol = ANY($1)` without LIMIT (unbounded rows).
 - **Evidence**: feature 183 design.md § Step 2; `services/xstockstrat-marketdata/migrations/001_marketdata_hypertables.up.sql:31-32` (index `(symbol, time DESC)`); `docs/runbooks/ohlcv-lock-budget-tuning.md` (`max_locks_per_transaction = 1024`).
 - **Rule it implies**: prefer LATERAL JOIN over ROW_NUMBER for per-group LIMIT queries on TimescaleDB hypertables; reserve ROW_NUMBER for cases needing exactly 1 row/group (e.g. prev daily close).
+
+### 2026-09-09 — 168-fundamentals-blend-universe — design
+- **Pattern**: Per-strategy universe-override as a conditional branch inside the shared `_run_cycle` loop — force-run a strategy on exactly the qualifying universe while excluding it from every other symbol — rather than a parallel loop (which duplicates fair-share rotation, DRY violation) or a global/platform strategy (which abandons the per-user ownership model). Fundamentals universe resolved once per cycle (platform-global data makes per-user resolution wasteful and a pacing/F-06 violation).
+- **Evidence**: `services/xstockstrat-analysis/app/handlers/servicer.py` (`_run_cycle` universe-override branch); feature 168 design.md.
+- **Rule it implies**: when a specific strategy needs a derived sub-universe, implement as a conditional branch in the shared orchestration loop, resolving the universe once per cycle; a parallel loop is a DRY violation and per-user fan-out violates pacing (F-06).
+
+### 2026-09-09 — 168-fundamentals-blend-universe — reuse
+- **Pattern**: `get_bool`'s `HasField("bool_val")` on proto3 `optional bool` means explicit `false` is honored, distinct from "not set." This makes boolean config keys safe for kill-switches — setting to `false` disables the feature, and the `HasField` presence gate prevents fallback to default.
+- **Evidence**: `services/xstockstrat-analysis/app/config/watcher.py` (`get_bool` accessor); feature 168 design.md.
+- **Rule it implies**: for any boolean config key intended as a kill-switch, use `HasField("bool_val")` presence gating to distinguish explicit `false` from unset; reinforces the zero-trap pattern (insights-069).
+
+### 2026-09-09 — 169-mcp-get-positions-tools — design
+- **Pattern**: Consolidate an old client method into the new one (rename+extend) rather than adding a second wrapper, to avoid a dual-path divergence trap (C-10(b)). First proactive C-10(b) application.
+- **Evidence**: `services/xstockstrat-agent/app/clients/portfolio_client.py` (legacy `list_account_positions` consolidated into paginated `list_positions`); feature 169 design.md.
+- **Rule it implies**: when adding a new client method that subsumes an existing one, consolidate (rename+extend) rather than adding alongside; a second wrapper creates a dual-path that future callers will pick the wrong one from.
+
+### 2026-09-09 — 169-resume-halted-account — reuse
+- **Pattern**: `WithPropagationData` test helper injects `x-user-id`, `x-access-scope`, and `x-trace-id` into a Go `context.Context` for handler-level testing without requiring the full middleware chain.
+- **Evidence**: `services/xstockstrat-trading/internal/service/trading_test.go` (WithPropagationData); feature 169 implementation.
+- **Rule it implies**: for Go handler tests that need header-propagated values, use this helper instead of constructing raw metadata; it matches the production middleware's key format.
+
+### 2026-09-09 — 169-resume-halted-account — reuse
+- **Pattern**: `requireAdminScope` is the first Go-native `ADMIN_SCOPE=0x04` bitmask check, providing admin-only authorization for RPCs without requiring a separate auth middleware.
+- **Evidence**: `services/xstockstrat-trading/internal/service/authz.go` (requireAdminScope); feature 169 implementation.
+- **Rule it implies**: reuse `requireAdminScope` for future admin-only Go RPCs; the bitmask pattern is extensible to other scope levels.
+
+### 2026-09-09 — 170-watchlist-bulk-default-strategy — reuse
+- **Pattern**: Playwright `waitForRequest` must use `endsWith('.ServiceName/MethodName')` for Connect-RPC paths — the path delimiter is a **dot** before the service name (e.g. `.xstockstrat.portfolio.v1.PortfolioService/BulkReassignStrategy`), not a slash.
+- **Evidence**: feature 170 e2e tests; `services/xstockstrat-ui/e2e/` Playwright fixtures.
+- **Rule it implies**: when intercepting Connect-RPC requests in Playwright, always match on the dot-delimited fully-qualified service name; a slash-delimited `ServiceName/Method` pattern silently never matches. Same family as fails.md:2187-2192 (feature 167).
+
+### 2026-09-09 — 172-fix-portfolio-max-drawdown-unenforced — design
+- **Pattern**: When recon advertises a fix as "cheap because column X already exists," verify that the **writer** of X encodes the quantity the name implies — a column named `equity` in one table was cashless mark-to-market, not account equity. The "cheap" cost estimate was an artifact of the wrong column; the correct basis required a new migration, turning a SEV-3 one-liner into a medium change.
+- **Evidence**: `services/xstockstrat-portfolio/internal/service/portfolio_service.go:706` (`cash=0` hardcoded in snapshot writer) vs `internal/repository/portfolio_repo.go:376-398` (broker-authoritative `account_balances.equity`); feature 172 design.md R1 adversary.
+- **Rule it implies**: a "cheap because we can reuse X" scope estimate is only as good as verifying X's writer — read the write site, not just the column name. Reinforces C-01/P-03.
+
+### 2026-09-09 — 172-fix-portfolio-max-drawdown-unenforced — design
+- **Pattern**: For a per-entity risk control on an entity-keyed table, prefer per-entity grain over cross-entity aggregation — SUM inflates drawdown via peak-timing skew (`sum-of-per-entity-peaks >= peak-of-summed-equity` when entities peak at different times), reintroducing the false-positive class the fix exists to prevent.
+- **Evidence**: feature 172 design.md R2; `services/xstockstrat-portfolio/internal/service/portfolio_service.go` (per-account `evaluateDrawdowns`).
+- **Rule it implies**: default to per-entity grain for entity-keyed risk controls; cross-entity aggregation is safe only when peaks are synchronized.
+
+### 2026-09-09 — 174-fix-config-watcher-client-id — design
+- **Pattern**: When testing a config/request-builder fix, prefer a whole-request wire-object seam (`_build_watch_request() -> ProtoMessage`) over a string-source seam (`_client_id() -> str`). The wire-object seam catches a future inline revert that re-hardcodes a value directly on the request construction — a str-source seam stays green because it asserts the accessor, not the call site.
+- **Evidence**: feature 174 design.md:31-34; R1 adversary feedback on fails-074 trap.
+- **Rule it implies**: for any test guarding a request-field value, assert the built request object, not the intermediate variable. Reinforces C-08/P-06 (non-vacuous).

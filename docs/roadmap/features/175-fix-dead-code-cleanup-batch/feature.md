@@ -8,6 +8,7 @@
 **Last Updated**: 2026-09-04
 **Committed to main**: 83743049da1ec2e2337ef49bad54c49a10721841
 **Launched date**: 2026-09-06
+**Archived**: 2026-09-09
 
 ---
 
@@ -23,6 +24,7 @@
 | 2026-09-04 | `in-progress` → `code-completed` | /sdd-execute | All 7 steps done: @types/node bump, dead getEnvBool (3 Go) + propagation.ts (4 Node) removed, 6-doc teardown; landed-diff gate = exactly the 23 paths (vs PR base). C-16 non-promotion |
 
 | 2026-09-06 | `code-completed` → `launched` | CI workflow | Promoted via PR #1104; committed 83743049da1ec2e2337ef49bad54c49a10721841 |
+| 2026-09-09 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(0)/fails(1); promoted 4 scenarios; pruned 4 specs |
 ---
 
 ## Reviewers

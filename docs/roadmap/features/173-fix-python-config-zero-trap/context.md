@@ -1,208 +1,26 @@
-# Context Log: fix-python-config-zero-trap
+# Context: fix-python-config-zero-trap  (archived 2026-09-09)
 
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-09-09 — /sdd-archiver
 
-## Session 2026-09-04 (/sdd-triage --from-report)
+**What**: Fixed a SEV-2 Python config-watcher defect where `v.int_val or default` / `v.string_val or default` silently swallowed a deliberately-stored `0` or `""`, reverting it to the coded default. Ported `get_int_present` (from analysis) to ingest for two confirmed 0-meaningful keys (`max_retry_attempts`, `dedup_window_hours`), authored a net-new `get_str_present` for indicators (`allowed_imports=""` = deny-all was reverting to the permissive 4-module default — a security-relevant trap), and extracted `_effective_max_attempts()` as a testable seam.
 
-- Bug surfaced via `docs/reports/2026-09-04-comment-audit-triage.md` item 3 (comment-audit pass).
-  No GitHub issue — Issues disabled on this repo; the dated report is the routable artifact.
-- Severity: **SEV-2** (silent-wrong-behavior: a deliberate operator config value is silently ignored).
-- Routed to SDD path (Track C). Environment is dev/local (main-dev), not a production emergency → C,
-  not a hotfix.
-- Created: feature.md, product-spec.md, acceptance.feature (regression scenario), context.md, status.md.
-- Affected services: `xstockstrat-indicators`, `xstockstrat-ingest` (both `app/config/watcher.py`).
-- Triage verification: **confirmed**.
-  - indicators watcher: `get_str` (`:92` `v.string_val or default`), `get_int` (`:100`),
-    `get_float` (`:116`) — all trapping; only `get_bool` (`:108`) uses `HasField`.
-  - ingest watcher: same shape — `get_str` (`:105`), `get_int` (`:113`), `get_float` (`:129`);
-    `get_bool` (`:121`) `HasField`-safe.
-  - analysis watcher precedent: `get_int_present` (`:102`, `HasField` `:113`) and `get_float_present`
-    (`:131`, `:142`) already exist. **Caveat**: analysis added int+float `_present` variants ONLY —
-    there is no `get_str_present` anywhere, so the empty-string trap is unsolved platform-wide. The
-    design must decide whether a string escape hatch is in scope.
-- Root cause hypothesis: consumer defect — `or default` conflates falsy-0 with unset. The `HasField`
-  fix landed in analysis but was never ported to indicators/ingest. `ConfigValue` is a `oneof`, so
-  present-but-zero is distinguishable; this is not a proto/contract limit (re-confirms CF-N10).
-- Recommended design depth: **full** → `/sdd-design fix-python-config-zero-trap`.
-  Rationale (C-0): SEV-2 AND affected services ≥ 2 → full. Tempering note: the fix pattern is already
-  proven in `xstockstrat-analysis`, so the real debate surface is narrow (mainly: shared-home vs
-  per-service copy under the DRY guard rail, and whether `get_str_present` is in scope). A maintainer
-  may reasonably downgrade to `quick`; recording `full` to honor the deterministic C-0 rule.
-- Development branch: `feature/fix-python-config-zero-trap`.
+**Why (irrecoverable rationale)**: (1) Per-key, not blanket swap — blanket `get_int`→`get_int_present` would un-clamp the intentionally-clamped `ingest.mcp_client.*` keys (clamped ≥1 at read) and need new clamps at 4 sites, widening blast radius. (2) `max_concurrent_jobs`/`max_concurrent_chunks` stay on `get_int` intentionally — configured `0` reaching `Semaphore(0)` deadlocks the event loop; the default fallback is protective, not a bug. (3) Per-service copy over shared package — no importable shared Python package exists; watcher classes diverge (ingest carries `resolve_secret`/credential-split). (4) FR-1 int-only narrowing — no ingest float key consumes `get_float_present`, so it would be consumerless dead API. (5) `_effective_max_attempts()` seam — inline expression carries `2**attempt` backoff (~14s over 3 attempts); seam extraction makes it testable deterministically.
 
----
+**Rejected alternatives**: Blanket accessor swap + clamps (un-clamps intentionally-clamped keys); shared `_present` accessor package (no shared Python package, watcher divergence); `get_float_present` parity (consumerless dead API); loop-driving @AC-1 RED (hits real 14s backoff); "assert the inline expression" fallback (vacuous-green, fails-074/151 trap).
 
-## Session 2026-09-04 — sdd-review product-spec
+**Scars & gotchas**: `ConfigWatcher.__new__` bypasses constructor's channel + watch-task dial (only way to get testable watcher without hanging); ingest watcher carries dead copy of indicators' sandbox helpers (pre-declared known-dead, FR-3 audit won't false-stop); `/context-forge:context-constitution refresh` unavailable in execute session (manual reconciliation performed).
 
-- Product spec approved. Status: draft → spec-ready.
-- First pass FAILED (2 blockers, 3 warnings). Revised and re-reviewed → PASS (0 blockers, 0 warnings).
-- Blockers fixed:
-  - C-15 (acceptance malformed): bound scenarios to concrete 0-meaningful keys with `@FR-*` tags.
-  - C-14 (missing Consumer Surface(s)): added `None — internal/platform-only` with the operator-visible
-    config-ui/agent edge addressed.
-- Warnings fixed: numbered FR-1/FR-2/FR-3 (criterion 2); Open Questions OQ-1..OQ-4 surfaced (criterion 9).
-- **Substantive resolution** (was the reviewer's key concern — "fix may be defensive-only"): confirmed
-  concrete 0-meaningful keys DO exist in ingest — `ingest.backfill.max_retry_attempts` (0 = no retries,
-  passed through with no re-clamp at `servicer.py:521`) and `ingest.signals.dedup_window_hours`
-  (0 = disable dedup, consumed at `servicer.py:823`). So this is a real SEV-2 bug in ingest, not merely
-  defensive. Indicators' numeric keys (`timeout_ms`, `memory_bytes`) are NOT 0-meaningful → numeric port
-  there is hardening; its real 0-case is the string `allowed_imports=""` (needs the nonexistent
-  `get_str_present`) → carried as OQ-1.
-- Overlap findings: none (CLEAN). Soft/rebase textual overlap with draft feature 174 on
-  `ingest/app/config/watcher.py` (disjoint regions — 173 the accessor bodies, 174 the `client_id` line);
-  not a live collision, no merge-order row required. Whichever lands second rebases.
-- Warnings carried into design: none blocking. Open questions OQ-1..OQ-4 to be closed by `/sdd-design`.
+**Permanent deviations**: None. FR-1 int-only narrowing was design-time, not shipped-vs-design.
 
----
+**Cross-feature signal**: Zero-trap pattern now has three ledger-documented manifestations: (a) proto3 scalar `optional` presence (insights-069), (b) Python config `get_*` accessor `or default` (this feature), (c) TS config `!n`/`?? 0` (insights-161).
 
-## Session 2026-09-04 — sdd-design
+**Deferred follow-ons**: `get_int_present` copy across analysis+ingest may trip jscpd (waivable); no `get_str_present` in ingest/analysis; no `get_float_present` in ingest.
 
-- Phase 0 Recon: wrote recon.md (services: xstockstrat-ingest, xstockstrat-indicators; key reuse
-  patterns: analysis `get_int_present`/`get_float_present` port, `get_bool` `HasField` idiom, the
-  `ConfigValue` oneof `config.proto:60-71`). Confirmed both ingest 0-meaningful sites have no downstream
-  re-clamp; the mcp_client keys are intentionally clamped ≥1 (must not un-clamp).
-- Phase 1 Grilling: **3 rounds (full), approved**, no Floor breach.
-  - Chosen approach: targeted add-not-replace port — `get_int_present` → ingest (route
-    `max_retry_attempts` + `dedup_window_hours`); net-new `get_str_present` → indicators (route
-    `allowed_imports=""` → deny-all); per-service copies; excluded `max_concurrent_*` semaphore keys
-    annotated with intentional-zero-trap comments at their real Semaphore sites (`servicer.py:191` jobs,
-    `:519` chunks); extract `_effective_max_attempts()` seam so the retry consumer is testably RED.
-  - Rejected: blanket accessor swap (would un-clamp mcp_client keys); shared `_present` package (services
-    share no importable lib; classes diverge); the "assert inline expression" test fallback (vacuous,
-    fails-074); loop-driving @AC-1 (14s backoff).
-- **Decisions closing the open questions**:
-  - OQ-1 (string escape hatch): **RESOLVED — in scope.** Add `get_str_present`, fix
-    `indicators.sandbox.allowed_imports=""` (a live security-relevant trap: today the empty allow-list
-    reverts to the permissive 4-module default, making the sandbox MORE permissive than configured).
-    User-approved at the R1 gate; `@AC-4` authored in acceptance.feature.
-  - OQ-2 (DRY shared home): **RESOLVED — per-service copy.** No shared importable Python package exists;
-    watcher classes diverge. Deferred jscpd waiver noted for the `dry-reviewer` (design.md Open Risks).
-  - OQ-3 (indicators numeric port): **RESOLVED — no numeric port** (indicators numeric keys aren't
-    0-meaningful → dead code). Indicators is in scope for the string fix only.
-  - OQ-4 (retry semantics): **RESOLVED — intended least-surprise.** `max_retry_attempts=0` with
-    `retry_on_failure=true` converging to the same 0-attempt outcome as `retry_on_failure=false` is a
-    respected independent knob, not a defect.
-  - **FR-1 narrowing (signed off)**: drop the consumerless `get_float_present` from ingest — int-only
-    port. Deliberate narrowing of product-spec FR-1's literal text (which named both); `/sdd-spec` must
-    honor int-only. Recorded here + design.md Open Risks (How-to-Act #2).
-- Constitution rules touched: C-05, C-08, C-13, C-15, C-16, P-06, F-04, F-07 (all honored). Floor
-  breaches: none in any round.
-- Business rules: 3 PRESERVE (platform.feature @AC-1/@AC-3 auto-add; ingest @AC-4 dedup) — held at the
-  default window; no CHANGE, no sign-off owed.
-- Status: spec-ready → design-approved.
-- Open Threads (carry into /sdd-spec): FR-1 int-only; `_effective_max_attempts()` sole-definition seam;
-  `_snapshot`-injection vs `_StubWatcher` fallback; @AC-4 subprocess-sandbox test cost; deferred DRY.
+**Ledger entries written**: insights.md (0), fails.md (0) — all candidates were DUP.
 
----
+**Runtime-invariant recommendations (→ /context-constitution)**: None.
 
-## Session 2026-09-04 — sdd-spec
-
-- Generated implementation-spec.md with 6 steps. Status → implementation-ready.
-- Structure: ingest first (Steps 1-3: watcher `get_int_present` + `_effective_max_attempts()` seam +
-  paired regression test), indicators second (Steps 4-5: net-new `get_str_present` + `allowed_imports`
-  re-point + paired test), then Step 6 docs/FR-3 audit. Consumer surface confirmed internal-only (C-14),
-  restated in Execution Summary — no consumer-surface step.
-- FR-1 int-only narrowing honored: `get_float_present` NOT ported into ingest (dead public API).
-- Key codebase findings (grep/Read-confirmed against the current tree):
-  - Ingest watcher (`services/xstockstrat-ingest/app/config/watcher.py`): `get_int` `:107-113`
-    (`v.int_val or default`); `get_bool` `:115-121` HasField-safe; `backfill_max_retry_attempts`
-    `:174-176` and `dedup_window_hours` `:192-194` are the two keys to re-point;
-    `backfill_max_concurrent_jobs` `:166-168` / `backfill_max_concurrent_chunks` `:187-189` stay on
-    `get_int` (Semaphore-deadlock keys, annotate). This file carries the documented copy-paste defect
-    (docstring + `client_id="indicators-"` + leftover sandbox helpers) but its accessor/property line
-    numbers match recon/design exactly.
-  - Port source: `services/xstockstrat-analysis/app/config/watcher.py:102-113` `get_int_present`
-    (verbatim). No `get_str_present` exists anywhere → net-new in indicators.
-  - Ingest servicer seam site: `servicer.py:520-522` inline `max_attempts` expression inside
-    `_run_chunks` (`:513`), consumed at loop guard `:568` and short-circuit `:564`; real backoff
-    `asyncio.sleep(2**attempt)` at `:571` (~14s) — the reason for the seam. Jobs semaphore `:191`,
-    chunks semaphore `:519`, dedup SQL `$7` at `:809-810`/`:823`.
-  - Indicators watcher: `get_str` `:86-92`, `get_bool` `:102-108` (mirror idiom),
-    `sandbox_allowed_imports` `:126-131`; consumer `app/handlers/servicer.py:127`.
-  - Tests: analysis `test_config_watcher.py` has NO accessor tests (only resolve_* helpers) → the
-    accessor/property tests here are net-new. `test_ingest_servicer.py:31-63` `make_servicer` is the
-    consumer scaffold (imports `config_pb2` + `ConfigWatcher`); indicators `test_formulas.py`
-    `IndicatorsServicer(config_watcher=…)` is the optional end-to-end scaffold.
-  - Test discipline applied: real `config_pb2.ConfigSnapshot`/`ConfigValue` + dial-free
-    `ConfigWatcher.__new__` (insights-069/1060 real-proto rule; fails-074 no-live-watcher / no
-    zero-assertion rule). `int_val=0` / `string_val=""` set the oneof case so `HasField` is True.
-
-## Open Threads (carry into /sdd-execute)
-
-- Step 2 seam must be the SOLE definition of `max_attempts` (delete the inline expr; keep the
-  `make_servicer(max_retry=…)` loop tests green) — design.md Open Risk.
-- `@AC-4` primary is the deterministic property assertion (`sandbox_allowed_imports == []`); the
-  subprocess end-to-end run is optional/reviewer-gated (flake fallback per design.md Open Risk).
-- Deferred DRY (OQ-2): the ~11-line `get_int_present` copy across analysis+ingest may trip jscpd —
-  accepted per-service duplication, waivable at execute time (note for `dry-reviewer`).
-- Step 6 teardown: context-constitution refresh scoped to the two edited service `CLAUDE.md` files.
-
----
-
-## Session 2026-09-04T18:52:00Z — sdd-review impl-spec (advisory)
-
-- Result: **PASS** — 0 failures, 1 warning (advisory — did not block). ConfigValue oneof premise + seam sites + excluded semaphore keys verified; tests non-vacuous with genuine RED; no Floor risk.
-- Carried into execution:
-  - Step 6: the FR-3 audit grep over ingest/app/config/watcher.py will also surface the DEAD `indicators.sandbox.*` helper copy at ingest watcher.py:149-163 (a get_str read of indicators.sandbox.allowed_imports) — [ ] unaddressed: pre-declare this dead copy as known-out-of-scope in the Step 6 enumeration so the "stop and reconcile" instruction does not false-stop on it (C-01 evidence completeness). It is dead code (ingest runs no sandbox); NOT a correctness/security/Floor issue. Same dead helper 174 deliberately leaves open.
-- Overlap findings: SOFT (WARN, rebase-only) — 173 and 174 both edit three xstockstrat-ingest files (app/config/watcher.py, tests/test_ingest_servicer.py, CLAUDE.md) at DISJOINT line ranges. Recommend sequencing: land 173 (SEV-2 correctness) BEFORE 174 (cosmetic); 174 rebases. No shared migration/proto/config. No merge-order row written (WARN-level, not FAIL) — pending operator decision.
-
----
-
-## Session 2026-09-04 — sdd-execute (sequential; stacked PR #1 of 5, base main-dev)
-
-Order 173→174→172→171→175, one stacked PR per feature (operator-approved: SDD feature/<slug> stack, auto-proceed through checkpoints). Branch `feature/fix-python-config-zero-trap` off `origin/main-dev` (5256cca).
-
-### Step 1 — ingest watcher: add `get_int_present`, re-point 2 keys, annotate semaphore keys [done]
-- Added `get_int_present` (HasField-based, ported verbatim from analysis watcher `:102-113`) after `get_int`. Re-pointed `backfill_max_retry_attempts` and `dedup_window_hours` to it; annotated `backfill_max_concurrent_jobs`/`backfill_max_concurrent_chunks` with the intentional-zero-trap comment (Semaphore(0) deadlock at servicer.py:191/:519). No `get_float_present` (FR-1 int-only).
-- Files modified: `services/xstockstrat-ingest/app/config/watcher.py`
-- TDD (cluster 1+2 covered by Step 3): AC-3 red — `get_int_present` AttributeError; AC-2 red — `dedup_window_hours == 24` not 0 → green after Steps 1-2.
-- Deviations: none
-
-### Step 2 — ingest servicer: extract `_effective_max_attempts()` seam [done]
-- Added `_effective_max_attempts()` on `IngestServicer` and replaced the inline `max_attempts = (... if backfill_retry_on_failure else 0)` in `_run_chunks` with a single call to it — the sole definition of `max_attempts` (no duplicate inline copy; seam-integrity per design.md Open Risk).
-- Files modified: `services/xstockstrat-ingest/app/handlers/servicer.py`
-- TDD (covered by Step 3): AC-1 red — `_effective_max_attempts` AttributeError → green after seam added.
-- Deviations: none
-
-### Step 3 — ingest accessor + consumer regression tests (AC-1/AC-2/AC-3) [done]
-- Added dial-free `ConfigWatcher.__new__` builders + real `ConfigSnapshot`/`ConfigValue` (insights-069/fails-074). `test_config_watcher.py`: `get_int_present` honors stored 0 (both keys), defaults when absent, `dedup_window_hours == 0`. `test_ingest_servicer.py`: `_effective_max_attempts() == 0` through the full watcher→property→seam chain against a real watcher.
-- Red→green: 5 tests failed on pre-fix tree (AttributeError ×3, `24 != 0`) → 5 passed after Steps 1-2. Full suite: 212 passed, coverage 78.15% (≥40). ruff check + format clean.
-- Files modified: `services/xstockstrat-ingest/tests/test_config_watcher.py`, `services/xstockstrat-ingest/tests/test_ingest_servicer.py`
-- Deviations: none. Existing `make_servicer(max_retry=…)` loop tests left untouched and green (seam-integrity).
-
-### Step 4 — indicators watcher: add net-new `get_str_present`, re-point `sandbox_allowed_imports` [done]
-- Added `get_str_present` (net-new; no `get_str_present` existed in any watcher) after `get_str`, mirroring `get_bool`'s HasField idiom. Re-pointed `sandbox_allowed_imports` to it, leaving the split unchanged so a stored "" resolves to `[]` (deny all imports) instead of the permissive 4-module default. No numeric present accessor (OQ-3: indicators numeric keys not 0-meaningful).
-- Files modified: `services/xstockstrat-indicators/app/config/watcher.py`
-- TDD (covered by Step 5): AC-4 red — `get_str_present` AttributeError / `sandbox_allowed_imports == [4-module default]` → green after.
-- Deviations: none
-
-### Step 5 — indicators `get_str_present` + deny-all `allowed_imports` tests (AC-4) [done]
-- Added dial-free `_str_watcher` builder + cases: `get_str_present` honors "", defaults when absent, `sandbox_allowed_imports == []`. Property assertion is the primary AC-4 check (subprocess end-to-end left out per design.md Open Risk — flake/cost).
-- Red→green: 3 failed pre-fix (AttributeError ×2, 4-module list != []) → 3 passed. Full suite: 128 passed, coverage 81.10% (≥50). ruff check + format clean (formatted my own AC-4 assertion line).
-- Files modified: `services/xstockstrat-indicators/tests/test_config_watcher.py`
-- Deviations: none
-
-### Step 6 — docs: present-aware read notes + FR-3 audit [done]
-- Annotated 3 config-key rows (ingest `max_retry_attempts`, `dedup_window_hours`; indicators `allowed_imports`) with the `get_int_present`/`get_str_present` present-aware read notes. FR-3 audit: no live 0-meaningful key remains on a trapping accessor; the ingest watcher's `indicators.sandbox.*` get_str/get_int reads (`:166/:170/:174`) are the pre-declared KNOWN-DEAD copy (ingest runs no sandbox) — expected, not a false-stop.
-- Teardown (How-to-Act): `/context-forge:context-constitution refresh` not invocable this session; manual reconciliation performed — annotations match watcher.py exactly, no drift. Recorded in Deviation Log + PR body.
-- Files modified: `services/xstockstrat-ingest/CLAUDE.md`, `services/xstockstrat-indicators/CLAUDE.md`
-- Deviations: teardown-manual (see Deviation Log)
-
-## Session 2026-09-04 — sdd-execute summary (feature 173)
-**Steps this session**: 1–6 (all)
-**Progress**: 6 done / 6 total
-**Stopped at**: all complete → code-completed
-**Accountability**: out-of-scope changes: none. Open questions: none. Unaddressed review warnings: none (the pre-declared known-dead ingest sandbox copy was handled in the Step 6 audit as planned).
-**Next**: stacked integration PR #1 (base `main-dev`); then feature 174.
-
-### C-16 promotion (integration)
-- Promoted AC-1/AC-2/AC-3 → `services/xstockstrat-ingest/acceptance/fix-python-config-zero-trap.feature`; AC-4 → `services/xstockstrat-indicators/acceptance/fix-python-config-zero-trap.feature` (new dir), each tagged `@feature-173`. All PRESERVE-class additive regression guards (no CHANGE to existing guarantees); staged into PR #1. Operator pre-authorized auto-proceed; surfaced in the per-feature summary.
-
-## Session 2026-09-06 (CI: feature status automation)
-
-- Promotion PR #1104 merged to main
-- Feature promoted and committed: 83743049da1ec2e2337ef49bad54c49a10721841
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-09-06
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 6c53133e315c7978a97fa36aa05fcdf11aca00a9.
