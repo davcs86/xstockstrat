@@ -8,5 +8,8 @@ export async function GET(req: NextRequest) {
   if (!claims) {
     return NextResponse.json({ isAdmin: false }, { status: 401 });
   }
-  return NextResponse.json({ isAdmin: claims.roles?.includes('admin') ?? false });
+  return NextResponse.json({
+    userId: claims.user_id,
+    isAdmin: claims.roles?.includes('admin') ?? false,
+  });
 }
