@@ -16,6 +16,7 @@ import { openR, fmtR, sideLabel } from '@/lib/positionRisk';
 import { POSITION_RISK_FLAG, OPPORTUNITY_ACTION, EnumBadge } from '@/lib/opportunityShared';
 import { useWatchlists } from '@/hooks/useWatchlists';
 import { useOpportunities, useStrategyAnalytics } from '@/hooks/useOpportunities';
+import { useSparklines } from '@/hooks/useSparklines';
 import { useFundamentals } from '@/hooks/useFundamentals';
 import { MuteForStrategy } from '@/components/insights/MuteForStrategy';
 import { useBacktestHistory } from '@/hooks/useStrategies';
@@ -216,6 +217,11 @@ function PositionDetailInner() {
     headerLivePrice,
     oppStop,
   );
+
+  // Sparkline bars fetched async (latency M-1) — single-symbol, cached with 2min staleTime.
+  const sparklineSymbols = useMemo(() => (symbol ? [symbol] : []), [symbol]);
+  const sparklines = useSparklines(sparklineSymbols);
+  const headerSparkline = sparklines.get(symbol);
 
   // loadBars is held in a ref so the poll interval runs the latest closure; latestReqRef discards
   // stale responses from a superseded load.
@@ -469,8 +475,8 @@ function PositionDetailInner() {
               {fmtPct(headerChangePct)}
             </span>
           )}
-          {headerOpp && headerOpp.sparkline.length > 0 && (
-            <Sparkline points={headerOpp.sparkline} testId="detail-sparkline" />
+          {headerSparkline && headerSparkline.length > 0 && (
+            <Sparkline points={headerSparkline} testId="detail-sparkline" />
           )}
         </div>
 
