@@ -234,10 +234,10 @@ Confirm the service compiles without errors.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/... -run "TestBatchGetBars" -race -count=1 -v
+cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/... -run "TestBatchGetBars" -race -count=1 -v -coverprofile=cover.out && go tool cover -func=cover.out | grep total | awk '{print $3}' | sed 's/%//' | xargs -I{} sh -c '[ $(echo "{} >= 40" | bc) -eq 1 ] && echo "Coverage OK: {}%" || (echo "Coverage FAIL: {}% < 40%" && exit 1)'
 cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
 ```
-Confirm all `TestBatchGetBars*` tests pass and lint passes.
+Confirm all `TestBatchGetBars*` tests pass, coverage ≥40% (C-08), and lint passes.
 
 ---
 
@@ -330,10 +330,10 @@ Confirm the service compiles without errors.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/... -run "TestBatchGetLatestPrice" -race -count=1 -v
+cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/... -run "TestBatchGetLatestPrice" -race -count=1 -v -coverprofile=cover.out && go tool cover -func=cover.out | grep total | awk '{print $3}' | sed 's/%//' | xargs -I{} sh -c '[ $(echo "{} >= 40" | bc) -eq 1 ] && echo "Coverage OK: {}%" || (echo "Coverage FAIL: {}% < 40%" && exit 1)'
 cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
 ```
-Confirm all `TestBatchGetLatestPrice*` tests pass and lint passes.
+Confirm all `TestBatchGetLatestPrice*` tests pass, coverage ≥40% (C-08), and lint passes.
 
 ---
 
@@ -546,10 +546,10 @@ Confirm the default is `20`.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-analysis && pytest tests/ -k "test_phase0_drains_concurrent or test_phase1_uses_batch_get_bars or test_enrichment_uses_batch_rpcs or test_memo_ttl_default_exceeds_poll_interval" -v
+cd services/xstockstrat-analysis && pytest tests/ -k "test_phase0_drains_concurrent or test_phase1_uses_batch_get_bars or test_enrichment_uses_batch_rpcs or test_memo_ttl_default_exceeds_poll_interval" -v --cov=app --cov-fail-under=40
 cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 ```
-Confirm all four tests pass and lint passes.
+Confirm all four tests pass, coverage ≥40% (C-08), and lint passes.
 
 ---
 
@@ -577,18 +577,23 @@ Confirm all four tests pass and lint passes.
 
 **Instructions**:
 
-1. **Widen `forward()` opts type** — In `bffShared.ts`, widen the `opts` parameter type from `{ headers: Headers }` to `{ headers: Headers; timeoutMs?: number }`. Pass `timeoutMs` through to the Connect-es `CallOptions`:
+1. **Add `forwardOpts` parameter to `forward()`** — In `bffShared.ts`, add an optional second parameter to `forward()` for caller-specified call options:
    ```typescript
-   // In the forwarded call, spread opts to include timeoutMs:
-   const result = await fn(req, { ...opts, timeoutMs: opts.timeoutMs });
+   // forward() currently: (fn: (req, opts: { headers: Headers }) => Promise<Res>) => ...
+   // Add second param:    forwardOpts?: { timeoutMs?: number }
    ```
-   This uses Connect-es per-call `CallOptions.timeoutMs` (NOT a transport-level `defaultTimeoutMs`, which does not exist).
+   Inside `forward()`, merge `forwardOpts` into the opts object passed to `fn`. The current call at `:67` passes `{ headers: backendHeaders(claims, ctx) }` — extend it to:
+   ```typescript
+   const callOpts = { headers: backendHeaders(claims, ctx), ...forwardOpts };
+   const result = await fn(req, callOpts);
+   ```
+   This threads `timeoutMs` from `forward()`'s call site into the Connect-es `CallOptions` that the callback's `opts` parameter carries to the client method. Connect-es per-call `CallOptions.timeoutMs` emits `DeadlineExceeded` status code (NOT a transport-level `defaultTimeoutMs`, which does not exist).
 
-2. **Add deadline to `listOpportunities`** — In `insightsBff.ts`, pass `timeoutMs: 30_000` in the `forward()` call for `listOpportunities`:
+2. **Add deadline to `listOpportunities`** — In `insightsBff.ts:54`, pass `{ timeoutMs: 30_000 }` as `forward()`'s second argument:
    ```typescript
    forward((req, opts) => analysisClient.listOpportunities(req, opts), { timeoutMs: 30_000 })
    ```
-   (Exact plumbing depends on how `forward` accepts the timeout — either as a second options argument or merged into the callback opts.)
+   The `timeoutMs` flows: call site → `forwardOpts` → merged into `callOpts` → passed as `opts` to the callback → Connect-es client receives `timeoutMs` in its `CallOptions`.
 
 3. No other `forward()` callers are affected — `timeoutMs` is optional and defaults to undefined (no timeout), preserving existing behavior for all other BFF handlers.
 
