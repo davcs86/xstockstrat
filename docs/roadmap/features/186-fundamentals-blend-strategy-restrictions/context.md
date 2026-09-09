@@ -73,3 +73,10 @@
 - Status: implementation-ready → in-progress → code-completed.
 - Open review warnings from impl-spec advisory: none (0 failures, 0 warnings; 2 notes were informational only).
 - Deviation log: empty (no deviations from spec).
+
+## Session 2026-09-09 (CI: feature status automation)
+
+- Promotion PR #1118 merged to main
+- Feature promoted and committed: 19c6d036e603077557cf93e305f7299c950568d0
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-09

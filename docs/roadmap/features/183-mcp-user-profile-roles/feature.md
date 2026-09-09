@@ -3,6 +3,8 @@
 **Development Branch**: `feature/mcp-user-profile-roles`
 **Created**: 2026-09-06
 **Last Updated**: 2026-09-06
+**Committed to main**: 19c6d036e603077557cf93e305f7299c950568d0
+**Launched date**: 2026-09-09
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-09-06 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Step 1 proto landed) |
 | 2026-09-06 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done (proto + identity + agent + docs); integration PR next |
 
+| 2026-09-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #1118; committed 19c6d036e603077557cf93e305f7299c950568d0 |
 ---
 
 ## Artifacts
