@@ -339,7 +339,7 @@ Confirm all `TestBatchGetLatestPrice*` tests pass, coverage ≥40% (C-08), and l
 
 ### Step 7 — service: Analysis Python — Phase 0 drain parallelization
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify

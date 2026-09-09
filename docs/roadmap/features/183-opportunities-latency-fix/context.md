@@ -63,3 +63,12 @@
   - Step 12: Note — forward() opts merge imprecision (conflated `forward`'s own options with callback opts) — [x] addressed (clarified `forwardOpts` second param → merged into `callOpts` → threaded to callback)
   - Step 2: ⚠ Wildcard paths for codegen stubs (`*.go`, `*_pb2*.py`, `*`) — [ ] accepted (codegen output; exact filenames depend on `buf.gen.yaml` template and are not stable to pin)
 - Overlap findings: CLEAN — no collisions with 7 in-flight features.
+
+## Session 2026-09-09 — sdd-execute Step 7
+
+- Step 7 (service): Phase 0 drain parallelization in `_compute_opportunities`.
+- Replaced 4 sequential drain calls (`_drain_active_signals`, `_drain_held_symbols`, `_drain_watchlist_bindings`, `_drain_source_weights`) with `asyncio.gather` at `servicer.py:3854`.
+- Moved `now_utc = datetime.now(UTC)` to AFTER `asyncio.gather` (design decision: prevents timestamp staleness equal to the duration of the slowest drain).
+- Deviation: spec referenced lines 3557-3569, actual code at lines 3854-3866 (file grew since spec generation). Same symbols, same logic — no semantic deviation.
+- Verification: `ruff check .` ✓, `ruff format --check .` ✓, `ast.parse` syntax ✓.
+- TDD: N/A — structural refactor (sequential→concurrent), no paired test step; tests at Step 11.
