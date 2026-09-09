@@ -14,6 +14,7 @@
 | 2026-09-09 | `draft` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + design.md written |
 | 2026-09-09 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (13 steps, 9 AC scenarios covered) |
 | 2026-09-09 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (proto definitions) |
+| 2026-09-09 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done (sequential mode) |
 
 ---
 
@@ -47,4 +48,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review opportunities-latency-fix impl-spec` — then `/sdd-execute opportunities-latency-fix`
+All steps complete. Create integration PR from `feature/opportunities-latency-fix` → `main-dev`.

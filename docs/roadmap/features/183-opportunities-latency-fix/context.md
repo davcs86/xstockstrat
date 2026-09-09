@@ -128,3 +128,31 @@
 - Benchmark bars fetch section (lines 4160+) unchanged — still uses per-symbol `_fetch_bars_paged` via `_fetch_benchmark_into`.
 - TDD: N/A (paired test step is Step 11).
 - Verification: ruff check + ruff format + ast.parse — all pass.
+
+## Session 2026-09-09 — sdd-execute Steps 11–13 (sequential mode, continued)
+
+### Step 11 — Analysis Python tests (AC-6, AC-7, AC-8, AC-9)
+- Created `tests/test_opportunities_latency.py` with 4 AC tests: concurrent Phase 0 drains (AC-6), BatchGetBars for Phase 1 (AC-7), batch enrichment RPCs (AC-8), TTL ≥15s (AC-9).
+- Fixed 10 pre-existing test failures in `test_analysis_servicer.py` caused by Steps 8–10's batch RPC changes:
+  - `test_intra_compute_bars_fetch_bounded` → asserts BatchGetBars used instead of per-symbol peak-concurrency.
+  - `test_cross_user_concurrency_bounded_by_semaphore` → renamed to `test_cross_user_concurrency_uses_batch_per_user`; asserts 6 users × BatchGetBars; drains background recomputes.
+  - `test_bars_fetch_deduped_at_documented_worst_case_scale` → M00 (muted symbol) now included in batch request (mute resolved post-evaluation); changed from exact-set to superset assertion.
+  - 7 additional tests updated in prior session segment (batch mock wiring, enrichment mock updates).
+- Ruff lint clean (9 violations fixed: unused imports, long lines, unused variables). Format clean.
+- All 744 tests pass. TDD: red-green verified.
+
+### Step 12 — UI BFF deadline plumbing
+- Widened `forward()` in `bffShared.ts` to accept `options.timeoutMs` (optional), threaded into the Connect-es `CallOptions` passed to the backend client method.
+- `insightsBff.ts` `listOpportunities` now passes `{ timeoutMs: 30_000 }` — 30s BFF-side deadline.
+- All other `forward()` callers unaffected (timeoutMs defaults undefined).
+- Build and lint pass. TDD: paired with Step 13.
+
+### Step 13 — BFF deadline tests (AC-1)
+- Created `src/lib/__tests__/insightsBff.test.ts` with 3 tests: timeoutMs threading, no-timeout non-breaking, identity headers alongside timeout.
+- Mocks `verifyAccessToken` to avoid real JWT verification.
+- Uses canonical `HEADER_*` imports (DRY guard rail compliance).
+- All 3 tests pass, lint clean. TDD: red-green verified.
+
+### Status
+- All 13 steps complete. Status: `in-progress` → `code-completed`.
+- Ready for acceptance-scenario promotion (C-16) and integration PR.

@@ -515,7 +515,7 @@ Confirm the default is `20`.
 
 ### Step 11 — test: Analysis changes (Phase 0, Phase 1, enrichment, TTL)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_servicer.py` — modify (or create test file if not existing)
@@ -555,7 +555,7 @@ Confirm all four tests pass, coverage ≥40% (C-08), and lint passes.
 
 ### Step 12 — service: UI BFF — deadline plumbing
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/bffShared.ts` — modify
@@ -608,7 +608,7 @@ Confirm build and lint pass.
 
 ### Step 13 — test: BFF deadline
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/__tests__/insightsBff.test.ts` — create
