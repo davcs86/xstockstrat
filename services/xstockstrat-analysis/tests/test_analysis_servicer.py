@@ -710,6 +710,79 @@ class TestManageStrategy:
         with pytest.raises(Exception, match="not found"):
             await svc.ManageStrategy(req, context)
 
+    # --- feature 186: fundamentals blend strategy restrictions ---
+
+    @pytest.mark.asyncio
+    async def test_deactivate_rejected_for_blend_strategy(self):
+        """AC-4: DEACTIVATE the fundamentals blend strategy → FAILED_PRECONDITION."""
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_DEACTIVATE,
+            definition=_valid_definition(strategy_id="fundamentals_macd_blend"),
+        )
+        context = _admin_ctx()
+        context.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(req, context)
+        context.abort.assert_called_once()
+        assert context.abort.await_args.args[0] == grpc.StatusCode.FAILED_PRECONDITION
+        msg = context.abort.await_args.args[1]
+        assert "fundamentals blend strategy cannot be deactivated" in msg
+        svc._strategies_repo.deactivate.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_deactivate_succeeds_for_non_blend_strategy(self):
+        """AC-5: DEACTIVATE a non-blend strategy proceeds to the ownership check."""
+        svc = make_servicer()
+        definition = _valid_definition(strategy_id="my_custom_strategy")
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.deactivate = AsyncMock(return_value=_row_for(definition))
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_DEACTIVATE,
+            definition=definition,
+        )
+        result = await svc.ManageStrategy(req, context=_admin_ctx())
+        assert result.strategy_id == "my_custom_strategy"
+        svc._strategies_repo.deactivate.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_deactivate_guard_uses_runtime_config(self):
+        """AC-8: the protected ID tracks config, not a hardcoded string."""
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        # Override config to protect "custom_blend_v2" instead of the default.
+        svc._cfg.get_str = MagicMock(
+            side_effect=lambda key, default="": (
+                "custom_blend_v2"
+                if key == "analysis.engine.fundamentals_blend_strategy_id"
+                else default
+            )
+        )
+        # Attempt DEACTIVATE on the new protected ID → rejected.
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_DEACTIVATE,
+            definition=_valid_definition(strategy_id="custom_blend_v2"),
+        )
+        ctx = _admin_ctx()
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.FAILED_PRECONDITION
+
+        # Attempt DEACTIVATE on the old default ID → NOT rejected (proceeds to ownership).
+        svc2 = make_servicer()
+        svc2._strategies_repo = AsyncMock()
+        svc2._cfg.get_str = svc._cfg.get_str
+        definition = _valid_definition(strategy_id="fundamentals_macd_blend")
+        svc2._strategies_repo.deactivate = AsyncMock(return_value=_row_for(definition))
+        req2 = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_DEACTIVATE,
+            definition=definition,
+        )
+        result = await svc2.ManageStrategy(req2, context=_admin_ctx())
+        assert result.strategy_id == "fundamentals_macd_blend"
+
 
 class TestGetStrategy:
     @pytest.mark.asyncio
@@ -932,6 +1005,75 @@ class TestSetStrategyLive:
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception, match="aborted"):
             await svc.SetStrategyLive(req, ctx)
+
+    # --- feature 186: fundamentals blend strategy restrictions ---
+
+    @pytest.mark.asyncio
+    async def test_disable_rejected_for_blend_strategy(self):
+        """AC-6: SetStrategyLive(live_enabled=false) on the blend strategy → FAILED_PRECONDITION."""
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        req = MagicMock()
+        req.strategy_id = "fundamentals_macd_blend"
+        req.live_enabled = False
+        ctx = _owned_ctx()
+        with pytest.raises(Exception, match="aborted"):
+            await svc.SetStrategyLive(req, ctx)
+        ctx.abort.assert_called_once()
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.FAILED_PRECONDITION
+        assert "fundamentals blend strategy cannot be set non-live" in ctx.abort.await_args.args[1]
+        svc._strategies_repo.set_live_enabled.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_disable_succeeds_for_non_blend_strategy(self):
+        """AC-7: SetStrategyLive(live_enabled=false) on a non-blend strategy proceeds."""
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        live_row = {
+            "strategy_id": "my_custom_strategy",
+            "display_name": "Custom",
+            "active": True,
+            "live_enabled": False,
+            "definition_json": {"strategy_id": "my_custom_strategy"},
+        }
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=live_row)
+        svc._strategies_repo.set_live_enabled = AsyncMock(return_value=live_row)
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        req = MagicMock()
+        req.strategy_id = "my_custom_strategy"
+        req.live_enabled = False
+        ctx = MagicMock()
+        ctx.invocation_metadata.return_value = [("x-user-id", "u1"), ("x-access-scope", "7")]
+        resp = await svc.SetStrategyLive(req, ctx)
+        assert resp.definition.strategy_id == "my_custom_strategy"
+        svc._strategies_repo.set_live_enabled.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_enable_not_blocked_for_blend_strategy(self):
+        """Negative: live_enabled=True for the blend strategy is NOT rejected by the guard."""
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        live_row = {
+            "strategy_id": "fundamentals_macd_blend",
+            "display_name": "Blend",
+            "active": True,
+            "live_enabled": True,
+            "definition_json": {"strategy_id": "fundamentals_macd_blend"},
+        }
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=live_row)
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=live_row)
+        svc._strategies_repo.set_live_enabled = AsyncMock(return_value=live_row)
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        req = MagicMock()
+        req.strategy_id = "fundamentals_macd_blend"
+        req.live_enabled = True
+        ctx = MagicMock()
+        ctx.invocation_metadata.return_value = [("x-user-id", "u1"), ("x-access-scope", "7")]
+        resp = await svc.SetStrategyLive(req, ctx)
+        assert resp.definition.strategy_id == "fundamentals_macd_blend"
+        assert resp.definition.live_enabled is True
 
 
 # ---------------------------------------------------------------------------

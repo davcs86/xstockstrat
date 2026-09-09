@@ -2522,6 +2522,17 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     log.warning("failed to recompute headline after update: %s", e)
             return _row_to_strategy_definition(row)
         if op == analysis_pb2.STRATEGY_OPERATION_DEACTIVATE:
+            blend_strategy_id = self._cfg.get_str(
+                "analysis.engine.fundamentals_blend_strategy_id",
+                "fundamentals_macd_blend",
+            )
+            if definition.strategy_id == blend_strategy_id:
+                await context.abort(
+                    grpc.StatusCode.FAILED_PRECONDITION,
+                    "the fundamentals blend strategy cannot be deactivated; "
+                    "it is a protected platform resource",
+                )
+                return
             row = await self._strategies_repo.deactivate(caller_user_id, definition.strategy_id)
             if row is None:
                 await context.abort(
@@ -2620,7 +2631,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         ]
 
         # Enabling live on an inactive strategy is rejected FAILED_PRECONDITION; disabling is
-        # ALWAYS allowed. An empty allowlist is valid (fires the whole owner union), not rejected.
+        # allowed for all strategies except the fundamentals blend strategy (feature 186).
         if request.live_enabled:
             existing = await self._strategies_repo.get_by_owner_and_id(
                 caller_user_id, request.strategy_id
@@ -2635,6 +2646,19 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 await context.abort(
                     grpc.StatusCode.FAILED_PRECONDITION,
                     "cannot enable live evaluation on an inactive strategy; reactivate it first",
+                )
+                return
+
+        if not request.live_enabled:
+            blend_strategy_id = self._cfg.get_str(
+                "analysis.engine.fundamentals_blend_strategy_id",
+                "fundamentals_macd_blend",
+            )
+            if request.strategy_id == blend_strategy_id:
+                await context.abort(
+                    grpc.StatusCode.FAILED_PRECONDITION,
+                    "the fundamentals blend strategy cannot be set non-live; "
+                    "it is a protected platform resource",
                 )
                 return
 
