@@ -82,4 +82,4 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **Known trap (ledger 141):** feature 141 established that a fan-out semaphore must be sized to the downstream's real execution capacity (marketdata `DB_POOL_MAX`). The batch RPCs eliminate the per-symbol fan-out entirely, but the batch handler's own query parallelism in Go must respect the same pool budget — a `WHERE symbol = ANY($1)` single-query pattern (as in `GetLatestQuotesBatch`) is preferred over per-symbol goroutine fan-out.
+- [x] **Resolved (design):** Known trap (ledger 141) — batch handler uses `WHERE symbol = ANY($1)` single-query pattern (confirmed in design.md § Step 2/3; template at `GetLatestQuotesBatch` repo:311-320). No per-symbol goroutine fan-out.
