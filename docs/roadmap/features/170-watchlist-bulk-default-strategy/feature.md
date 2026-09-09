@@ -5,6 +5,7 @@
 **Last Updated**: 2026-09-03
 **Committed to main**: 69c5f9c9d18d9c34d6053bceeef2edf261498ced
 **Launched date**: 2026-09-03
+**Archived**: 2026-09-09
 
 ---
 
@@ -19,6 +20,7 @@
 | 2026-09-03 | `implementation-ready` → `code-completed` | /sdd-execute | All 15 steps implemented on the claude/* branch; portfolio Go + UI e2e + agent pytest all green |
 
 | 2026-09-03 | `code-completed` → `launched` | CI workflow | Promoted via PR #1087; committed 69c5f9c9d18d9c34d6053bceeef2edf261498ced |
+| 2026-09-09 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); promoted 13 scenarios; pruned 4 specs |
 ---
 
 ## Artifacts
