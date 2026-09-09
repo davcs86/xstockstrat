@@ -3851,19 +3851,20 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         into readiness (FR-3/AC-4). Multiple origins for one ``(symbol, strategy)`` collapse into
         a single row whose ``provenance`` lists them all (FR-4/AC-2).
         """
-        signals = await self._drain_active_signals(propagation_meta)
-        # One reference instant per compute pass, captured right after the signals await — else a
-        # concurrently-ingested signal could carry ingested_at > now, yielding a negative age.
+        signals, held_value_by_symbol, bindings, source_weights = await asyncio.gather(
+            self._drain_active_signals(propagation_meta),
+            self._drain_held_symbols(user_id, propagation_meta),
+            self._drain_watchlist_bindings(propagation_meta),
+            self._drain_source_weights(propagation_meta),
+        )
+        # One reference instant per compute pass, captured AFTER asyncio.gather — prevents
+        # timestamp staleness equal to the duration of the slowest drain.
         now_utc = datetime.now(UTC)
         half_life = self._cfg.get_float_present(
             "analysis.scoring.signal_decay_half_life_hours", 24.0
         )
         missing_ingested_at_count = 0
         total_signal_count = len(signals)
-        held_value_by_symbol = await self._drain_held_symbols(user_id, propagation_meta)
-        bindings = await self._drain_watchlist_bindings(propagation_meta)
-        # Per-source reliability weight scales the signal ranking axis below.
-        source_weights = await self._drain_source_weights(propagation_meta)
 
         # Index the origins by normalized symbol.
         watchlist_by_symbol: dict[str, set[str]] = {}

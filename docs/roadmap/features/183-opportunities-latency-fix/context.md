@@ -110,3 +110,10 @@
 - Added 3 tests: `TestBatchGetLatestPrice_MultipleSymbols` (AC-4), `TestBatchGetLatestPrice_OmitMissingSymbols` (AC-5), `TestBatchGetLatestPrice_FallbackWhenNotMultiSymbolSource`
 - TDD: red implicit (Step 5 had no tests) → green: all 3 pass, coverage 45.4% ≥ 40%
 - Lint: `golangci-lint` skipped (Go 1.25 < target 1.27); `go vet` passes
+
+### Step 7 — service: Phase 0 drain parallelization
+- Replaced 4 sequential drain calls (`_drain_active_signals`, `_drain_held_symbols`, `_drain_watchlist_bindings`, `_drain_source_weights`) with `asyncio.gather` at `servicer.py:3854`.
+- Moved `now_utc = datetime.now(UTC)` to AFTER `asyncio.gather` (design decision: prevents timestamp staleness equal to the duration of the slowest drain).
+- Deviation: spec referenced lines 3557-3569, actual code at lines 3854-3866 (file grew since spec generation). Same symbols, same logic — no semantic deviation.
+- Verification: `ruff check .` ✓, `ruff format --check .` ✓, `ast.parse` syntax ✓.
+- TDD: N/A — structural refactor (sequential→concurrent), no paired test step; tests at Step 11.
