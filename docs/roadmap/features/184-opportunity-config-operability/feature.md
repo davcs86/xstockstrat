@@ -3,6 +3,8 @@
 **Development Branch**: `feature/opportunity-config-operability`
 **Created**: 2026-09-07
 **Last Updated**: 2026-09-07
+**Committed to main**: 19c6d036e603077557cf93e305f7299c950568d0
+**Launched date**: 2026-09-09
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-09-07 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done — migration 028 seeds the 15 analysis.opportunity.* keys (config-only) |
 | 2026-09-07 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done (migration 028 + 10 bounds + red-green tests + config-ui e2e + docs). Integration PR next |
 
+| 2026-09-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #1118; committed 19c6d036e603077557cf93e305f7299c950568d0 |
 ---
 
 ## Artifacts

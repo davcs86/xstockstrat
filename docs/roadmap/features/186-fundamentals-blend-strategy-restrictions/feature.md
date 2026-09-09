@@ -3,6 +3,8 @@
 **Development Branch**: `feature/fundamentals-blend-strategy-restrictions`
 **Created**: 2026-09-08
 **Last Updated**: 2026-09-08
+**Committed to main**: 19c6d036e603077557cf93e305f7299c950568d0
+**Launched date**: 2026-09-09
 
 
 ---
@@ -18,6 +20,7 @@
 | 2026-09-08 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 completed |
 | 2026-09-08 | `in-progress` → `code-completed` | /sdd-execute | All 6 steps completed |
 
+| 2026-09-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #1118; committed 19c6d036e603077557cf93e305f7299c950568d0 |
 ---
 
 ## Artifacts

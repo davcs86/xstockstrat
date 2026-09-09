@@ -155,3 +155,10 @@ Tooling setup (steps 1-5): node ✓ v22.22.2 · pnpm ✓ 9.15.9 · config deps �
 
 ### C-16 promotion — code-completed
 - Promoted 6 config-service scenarios (AC-1,2,3,4,5,8) → NEW services/xstockstrat-config/acceptance/opportunity-config-operability.feature, each tagged @feature-184. AC-6 (config-ui visibility) SKIPPED — generic namespace-editor guarantee already covered by feature-161's ui surface-signal-weight-decay-config.feature (feature 182 set the same no-UI-suite precedent). AC-7 (doc-state) SKIPPED — one-time landing assertion, not a durable runtime rule. Plan via scenario-promoter; no conflicts.
+
+## Session 2026-09-09 (CI: feature status automation)
+
+- Promotion PR #1118 merged to main
+- Feature promoted and committed: 19c6d036e603077557cf93e305f7299c950568d0
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-09

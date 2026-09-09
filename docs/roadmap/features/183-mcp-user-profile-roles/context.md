@@ -182,3 +182,10 @@
 - Files modified: `services/xstockstrat-agent/app/tools.py`, `docs/runbooks/mcp-tools.md`, `services/xstockstrat-agent/CLAUDE.md`, `services/xstockstrat-ui/src/lib/copilot.ts`
 - Deviations: none.
 - Status: in-progress → code-completed. All 9 steps done.
+
+## Session 2026-09-09 (CI: feature status automation)
+
+- Promotion PR #1118 merged to main
+- Feature promoted and committed: 19c6d036e603077557cf93e305f7299c950568d0
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-09

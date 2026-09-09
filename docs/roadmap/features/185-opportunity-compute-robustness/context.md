@@ -131,3 +131,10 @@ Branch synced with origin/main-dev (already up to date). Commits on claude/oppor
 - Step 8 (97d8cda): FR-4 tests — TestColdReadNonBlocking @AC-6/@AC-7 (direct ListOpportunities). RED proven (revert to 2fd7cb3). Old synchronous cold-read test rewritten to drained-poll happy path.
 
 Full analysis suite green throughout: 719 passed, ~83.8% coverage. Next: Steps 9–10 (FR-5 surgical recovery), then agent (11/12), UI (13/14), docs (15). Checkpoints due after 10, 12, 14.
+
+## Session 2026-09-09 (CI: feature status automation)
+
+- Promotion PR #1118 merged to main
+- Feature promoted and committed: 19c6d036e603077557cf93e305f7299c950568d0
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-09
