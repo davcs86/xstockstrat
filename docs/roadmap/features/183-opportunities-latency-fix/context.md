@@ -79,3 +79,11 @@
 - Ran `./scripts/buf-gen.sh` — generated Go, Python, TS stubs (13 files changed, 1786 insertions)
 - TS build (`pnpm run build`) passed
 - TDD: N/A (proto-gen — non-code-bearing)
+
+### Step 3 — service: Marketdata Go — BatchGetBars handler/service/repo
+- Repo: added `QueryBarsBatch` with LATERAL JOIN (`unnest($1::text[]) CROSS JOIN LATERAL … LIMIT $5`), reuses `scanBars`, clamps maxBarsPerSymbol to [1, 5000]
+- Service: added `BatchGetBars` method following warm-DB → cold-singleflight → `MultiSymbolSource.GetBarsMulti` pattern; added `barsSingleflight singleflight.Group` field; normalizes timeframe, rejects non-`1d`
+- Handler: added Connect handler `BatchGetBars` + `grpcMarketDataAdapter.BatchGetBars` (3-method pattern from GetLatestQuotes)
+- Deviation: spec referenced `source/alpaca/client.go` but actual path is `internal/alpaca/client.go` — no impact on implementation
+- Verification: `GOWORK=off go build ./...` — pass
+- TDD: red-green deferred to Step 4 (paired test step)

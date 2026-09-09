@@ -148,7 +148,7 @@ Confirm both succeed with exit code 0. Confirm `git diff --stat packages/proto/g
 
 ### Step 3 — service: Marketdata Go — BatchGetBars handler/service/repo
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go` — modify
