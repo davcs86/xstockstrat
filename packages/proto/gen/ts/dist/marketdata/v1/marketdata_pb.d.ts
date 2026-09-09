@@ -688,6 +688,96 @@ export type GetLatestQuotesResponse = Message<"xstockstrat.marketdata.v1.GetLate
  */
 export declare const GetLatestQuotesResponseSchema: GenMessage<GetLatestQuotesResponse>;
 /**
+ * @generated from message xstockstrat.marketdata.v1.BatchGetBarsRequest
+ */
+export type BatchGetBarsRequest = Message<"xstockstrat.marketdata.v1.BatchGetBarsRequest"> & {
+    /**
+     * @generated from field: repeated string symbols = 1;
+     */
+    symbols: string[];
+    /**
+     * @generated from field: string timeframe = 2;
+     */
+    timeframe: string;
+    /**
+     * @generated from field: google.protobuf.Timestamp start = 3;
+     */
+    start?: Timestamp | undefined;
+    /**
+     * @generated from field: google.protobuf.Timestamp end = 4;
+     */
+    end?: Timestamp | undefined;
+    /**
+     * @generated from field: int32 max_bars_per_symbol = 5;
+     */
+    maxBarsPerSymbol: number;
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.BatchGetBarsRequest.
+ * Use `create(BatchGetBarsRequestSchema)` to create a new message.
+ */
+export declare const BatchGetBarsRequestSchema: GenMessage<BatchGetBarsRequest>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.SymbolBars
+ */
+export type SymbolBars = Message<"xstockstrat.marketdata.v1.SymbolBars"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * @generated from field: repeated xstockstrat.marketdata.v1.Bar bars = 2;
+     */
+    bars: Bar[];
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.SymbolBars.
+ * Use `create(SymbolBarsSchema)` to create a new message.
+ */
+export declare const SymbolBarsSchema: GenMessage<SymbolBars>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.BatchGetBarsResponse
+ */
+export type BatchGetBarsResponse = Message<"xstockstrat.marketdata.v1.BatchGetBarsResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.marketdata.v1.SymbolBars results = 1;
+     */
+    results: SymbolBars[];
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.BatchGetBarsResponse.
+ * Use `create(BatchGetBarsResponseSchema)` to create a new message.
+ */
+export declare const BatchGetBarsResponseSchema: GenMessage<BatchGetBarsResponse>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.BatchGetLatestPriceRequest
+ */
+export type BatchGetLatestPriceRequest = Message<"xstockstrat.marketdata.v1.BatchGetLatestPriceRequest"> & {
+    /**
+     * @generated from field: repeated string symbols = 1;
+     */
+    symbols: string[];
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.BatchGetLatestPriceRequest.
+ * Use `create(BatchGetLatestPriceRequestSchema)` to create a new message.
+ */
+export declare const BatchGetLatestPriceRequestSchema: GenMessage<BatchGetLatestPriceRequest>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.BatchGetLatestPriceResponse
+ */
+export type BatchGetLatestPriceResponse = Message<"xstockstrat.marketdata.v1.BatchGetLatestPriceResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.marketdata.v1.LatestPrice results = 1;
+     */
+    results: LatestPrice[];
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.BatchGetLatestPriceResponse.
+ * Use `create(BatchGetLatestPriceResponseSchema)` to create a new message.
+ */
+export declare const BatchGetLatestPriceResponseSchema: GenMessage<BatchGetLatestPriceResponse>;
+/**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
  *
@@ -814,5 +904,25 @@ export declare const MarketDataService: GenService<{
         methodKind: "unary";
         input: typeof GetLatestQuotesRequestSchema;
         output: typeof GetLatestQuotesResponseSchema;
+    };
+    /**
+     * Batched historical bars for multiple symbols in a single round-trip (feature 183).
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.BatchGetBars
+     */
+    batchGetBars: {
+        methodKind: "unary";
+        input: typeof BatchGetBarsRequestSchema;
+        output: typeof BatchGetBarsResponseSchema;
+    };
+    /**
+     * Batched latest price for multiple symbols in a single round-trip (feature 183).
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.BatchGetLatestPrice
+     */
+    batchGetLatestPrice: {
+        methodKind: "unary";
+        input: typeof BatchGetLatestPriceRequestSchema;
+        output: typeof BatchGetLatestPriceResponseSchema;
     };
 }>;

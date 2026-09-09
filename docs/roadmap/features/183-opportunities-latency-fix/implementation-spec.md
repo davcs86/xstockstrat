@@ -115,7 +115,7 @@ Confirm both pass with exit code 0.
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/marketdata/v1/*.go` — modify (generated)

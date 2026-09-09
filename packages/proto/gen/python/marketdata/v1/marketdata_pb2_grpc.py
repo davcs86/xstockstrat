@@ -96,6 +96,16 @@ class MarketDataServiceStub(object):
                 request_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetLatestQuotesRequest.SerializeToString,
                 response_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetLatestQuotesResponse.FromString,
                 _registered_method=True)
+        self.BatchGetBars = channel.unary_unary(
+                '/xstockstrat.marketdata.v1.MarketDataService/BatchGetBars',
+                request_serializer=marketdata_dot_v1_dot_marketdata__pb2.BatchGetBarsRequest.SerializeToString,
+                response_deserializer=marketdata_dot_v1_dot_marketdata__pb2.BatchGetBarsResponse.FromString,
+                _registered_method=True)
+        self.BatchGetLatestPrice = channel.unary_unary(
+                '/xstockstrat.marketdata.v1.MarketDataService/BatchGetLatestPrice',
+                request_serializer=marketdata_dot_v1_dot_marketdata__pb2.BatchGetLatestPriceRequest.SerializeToString,
+                response_deserializer=marketdata_dot_v1_dot_marketdata__pb2.BatchGetLatestPriceResponse.FromString,
+                _registered_method=True)
 
 
 class MarketDataServiceServicer(object):
@@ -188,6 +198,20 @@ class MarketDataServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def BatchGetBars(self, request, context):
+        """Batched historical bars for multiple symbols in a single round-trip (feature 183).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def BatchGetLatestPrice(self, request, context):
+        """Batched latest price for multiple symbols in a single round-trip (feature 183).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_MarketDataServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -250,6 +274,16 @@ def add_MarketDataServiceServicer_to_server(servicer, server):
                     servicer.GetLatestQuotes,
                     request_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetLatestQuotesRequest.FromString,
                     response_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetLatestQuotesResponse.SerializeToString,
+            ),
+            'BatchGetBars': grpc.unary_unary_rpc_method_handler(
+                    servicer.BatchGetBars,
+                    request_deserializer=marketdata_dot_v1_dot_marketdata__pb2.BatchGetBarsRequest.FromString,
+                    response_serializer=marketdata_dot_v1_dot_marketdata__pb2.BatchGetBarsResponse.SerializeToString,
+            ),
+            'BatchGetLatestPrice': grpc.unary_unary_rpc_method_handler(
+                    servicer.BatchGetLatestPrice,
+                    request_deserializer=marketdata_dot_v1_dot_marketdata__pb2.BatchGetLatestPriceRequest.FromString,
+                    response_serializer=marketdata_dot_v1_dot_marketdata__pb2.BatchGetLatestPriceResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -578,6 +612,60 @@ class MarketDataService(object):
             '/xstockstrat.marketdata.v1.MarketDataService/GetLatestQuotes',
             marketdata_dot_v1_dot_marketdata__pb2.GetLatestQuotesRequest.SerializeToString,
             marketdata_dot_v1_dot_marketdata__pb2.GetLatestQuotesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def BatchGetBars(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.marketdata.v1.MarketDataService/BatchGetBars',
+            marketdata_dot_v1_dot_marketdata__pb2.BatchGetBarsRequest.SerializeToString,
+            marketdata_dot_v1_dot_marketdata__pb2.BatchGetBarsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def BatchGetLatestPrice(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.marketdata.v1.MarketDataService/BatchGetLatestPrice',
+            marketdata_dot_v1_dot_marketdata__pb2.BatchGetLatestPriceRequest.SerializeToString,
+            marketdata_dot_v1_dot_marketdata__pb2.BatchGetLatestPriceResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -74,3 +74,8 @@
 - Verification: `buf lint` pass, `buf breaking --against main-dev` pass
 - TDD: N/A (proto — non-code-bearing)
 - Status: implementation-ready → in-progress
+
+### Step 2 — proto-gen: regenerate stubs
+- Ran `./scripts/buf-gen.sh` — generated Go, Python, TS stubs (13 files changed, 1786 insertions)
+- TS build (`pnpm run build`) passed
+- TDD: N/A (proto-gen — non-code-bearing)
