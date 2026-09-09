@@ -435,7 +435,7 @@ Confirm lint passes and the file is syntactically valid.
 
 ### Step 9 — service: Analysis Python — enrichment batch
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -478,7 +478,7 @@ Confirm lint passes and the file is syntactically valid.
 
 ### Step 10 — config: Analysis Python — TTL raise
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
