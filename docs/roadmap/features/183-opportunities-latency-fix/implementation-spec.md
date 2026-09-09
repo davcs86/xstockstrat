@@ -50,7 +50,7 @@ is reached by Step 12 (C-14). Every `@AC-*` scenario is covered by at least one 
 
 ### Step 1 — proto: BatchGetBars and BatchGetLatestPrice definitions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/marketdata/v1/marketdata.proto` — modify

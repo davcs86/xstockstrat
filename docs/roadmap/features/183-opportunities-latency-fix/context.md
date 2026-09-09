@@ -63,3 +63,14 @@
   - Step 12: Note — forward() opts merge imprecision (conflated `forward`'s own options with callback opts) — [x] addressed (clarified `forwardOpts` second param → merged into `callOpts` → threaded to callback)
   - Step 2: ⚠ Wildcard paths for codegen stubs (`*.go`, `*_pb2*.py`, `*`) — [ ] accepted (codegen output; exact filenames depend on `buf.gen.yaml` template and are not stable to pin)
 - Overlap findings: CLEAN — no collisions with 7 in-flight features.
+
+## Session 2026-09-09T — sdd-execute (unattended, all steps)
+
+**Mode**: unattended execution — user approved skipping per-step Phase 2 confirmation for all steps.
+**Open review warnings**: 0 failures, 1 accepted wildcard note (Step 2, codegen output).
+
+### Step 1 — proto: BatchGetBars and BatchGetLatestPrice definitions
+- Added 2 RPCs (BatchGetBars, BatchGetLatestPrice) and 5 messages to marketdata.proto
+- Verification: `buf lint` pass, `buf breaking --against main-dev` pass
+- TDD: N/A (proto — non-code-bearing)
+- Status: implementation-ready → in-progress

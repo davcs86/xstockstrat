@@ -13,6 +13,7 @@
 | 2026-09-08 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-09 | `draft` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + design.md written |
 | 2026-09-09 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated (13 steps, 9 AC scenarios covered) |
+| 2026-09-09 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (proto definitions) |
 
 ---
 
