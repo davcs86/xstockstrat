@@ -3094,3 +3094,8 @@ reusing.
   today — int support is the open verify for a new int-key bound);
   `services/xstockstrat-analysis/app/handlers/servicer.py:454` (`get_int` + low-only `max(1,…)`), `:4075`
   (`refresh_hour_utc`, no clamp); feature 182 design.md.
+
+### 2026-09-09 — opportunities-latency-fix — design
+- **Pattern**: For batch queries over TimescaleDB hypertables that need a per-symbol row LIMIT, use `CROSS JOIN LATERAL (SELECT ... WHERE symbol = s.sym ... LIMIT $N) b` with `unnest($1::text[])` — the LATERAL pushes the LIMIT into the per-symbol index scan, while the hypertable's time-based partitioning means lock count is bounded by chunk count (~14 for a 400-day range on 30-day chunks), NOT by symbol count. This avoids the ROW_NUMBER alternative (materializes all rows before filtering) and the flat `WHERE symbol = ANY($1)` without LIMIT (unbounded rows).
+- **Evidence**: feature 183 design.md § Step 2; `services/xstockstrat-marketdata/migrations/001_marketdata_hypertables.up.sql:31-32` (index `(symbol, time DESC)`); `docs/runbooks/ohlcv-lock-budget-tuning.md` (`max_locks_per_transaction = 1024`).
+- **Rule it implies**: prefer LATERAL JOIN over ROW_NUMBER for per-group LIMIT queries on TimescaleDB hypertables; reserve ROW_NUMBER for cases needing exactly 1 row/group (e.g. prev daily close).
