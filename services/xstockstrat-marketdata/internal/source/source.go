@@ -24,6 +24,13 @@ type DataSourceClient interface {
 type MultiSymbolSource interface {
 	GetBarsMulti(ctx context.Context, symbols []string, timeframe string, start, end time.Time) (map[string][]*marketdatav1.Bar, error)
 	GetLatestQuotesMulti(ctx context.Context, symbols []string) (map[string]*marketdatav1.Quote, error)
+	GetLatestTradesMulti(ctx context.Context, symbols []string) (map[string]*Trade, error)
+}
+
+// Trade is the provider-agnostic latest-trade result returned by GetLatestTradesMulti.
+type Trade struct {
+	Price     float64
+	TradeTime time.Time
 }
 
 // LatestTradeSource is an optional capability to fetch the most recent trade price + timestamp.

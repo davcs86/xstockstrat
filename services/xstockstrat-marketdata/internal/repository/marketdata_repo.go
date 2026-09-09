@@ -391,6 +391,41 @@ func (r *MarketDataRepo) QueryBarsBatch(ctx context.Context, symbols []string, t
 	return out, nil
 }
 
+// GetPreviousDailyCloseBatch returns the prior-session daily close for multiple symbols in one
+// query (feature 183). Uses ROW_NUMBER to pick the second-newest 1d bar per symbol. A symbol
+// with fewer than two daily bars is absent from the map (null-not-zero, AC-11).
+func (r *MarketDataRepo) GetPreviousDailyCloseBatch(ctx context.Context, symbols []string) (map[string]float64, error) {
+	out := make(map[string]float64, len(symbols))
+	if len(symbols) == 0 {
+		return out, nil
+	}
+	const q = `
+		WITH ranked AS (
+			SELECT symbol, close,
+				ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY time DESC) AS rn
+			FROM marketdata.ohlcv
+			WHERE symbol = ANY($1) AND timeframe = '1d'
+		)
+		SELECT symbol, close FROM ranked WHERE rn = 2`
+	rows, err := r.pool.Query(ctx, q, symbols)
+	if err != nil {
+		return nil, fmt.Errorf("prev daily close batch: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var sym string
+		var cl float64
+		if err := rows.Scan(&sym, &cl); err != nil {
+			return nil, fmt.Errorf("scan prev daily close batch: %w", err)
+		}
+		out[sym] = cl
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate prev daily close batch: %w", err)
+	}
+	return out, nil
+}
+
 // ── Fundamentals cache (feature 059) ─────────────────────────────────────────
 // Reuses the existing pgxpool — no second pool (DB budget stays 2).
 

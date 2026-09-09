@@ -93,3 +93,12 @@
 - Added `fakeBatchBarsSource` mock implementing `DataSourceClient` + `MultiSymbolSource` for cold-path testing (nil repo forces cold)
 - TDD: red implicit (Step 3 had no tests) → green: all 5 pass, coverage 45.8% ≥ 40%
 - Lint: `golangci-lint` skipped (built with Go 1.25 < target 1.27); `go vet` passes
+
+### Step 5 — service: Marketdata Go — BatchGetLatestPrice handler/service/repo
+- Source: added `GetLatestTradesMulti(ctx, symbols) (map[string]*Trade, error)` to `MultiSymbolSource` interface; added `Trade` struct to `source` package
+- Alpaca: added `GetLatestTradesMulti` using `GET /v2/stocks/trades/latest?symbols=…` (follows `GetLatestQuotesMulti` pattern)
+- Repo: added `GetPreviousDailyCloseBatch` with ROW_NUMBER (`rn=2` = second-newest 1d bar per symbol); follows `GetLatestQuotesBatch` pattern
+- Service: added `BatchGetLatestPrice` with `priceSingleflight` keyed `batch-price:{sorted_symbols}`; type-asserts `MultiSymbolSource` for batch trades, falls back to per-symbol `LatestTradeSource.GetLatestTrade`; omit-not-fabricate (AC-11)
+- Handler: added Connect handler `BatchGetLatestPrice` + `grpcMarketDataAdapter.BatchGetLatestPrice` (3-method pattern)
+- Verification: `GOWORK=off go build ./...` — pass
+- TDD: red-green deferred to Step 6 (paired test step)

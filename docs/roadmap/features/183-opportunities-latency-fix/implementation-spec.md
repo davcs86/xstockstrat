@@ -243,7 +243,7 @@ Confirm all `TestBatchGetBars*` tests pass, coverage ≥40% (C-08), and lint pas
 
 ### Step 5 — service: Marketdata Go — BatchGetLatestPrice handler/service/repo
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/source/source.go` — modify

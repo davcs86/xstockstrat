@@ -60,6 +60,9 @@ type MarketDataService struct {
 	// (feature 183). Same pattern as quoteSingleflight.
 	barsSingleflight singleflight.Group
 
+	// priceSingleflight coalesces concurrent batch-price fetches (feature 183).
+	priceSingleflight singleflight.Group
+
 	// fundamentals is the active fundamentals source, held separately from the OHLCV registry
 	// (FR-2). Always non-nil (feature 082); marketdata.<fundProvider>.enabled gates use, not construction.
 	fundamentals source.FundamentalsSource
@@ -656,6 +659,85 @@ func (s *MarketDataService) BatchGetBars(ctx context.Context, req *marketdatav1.
 		})
 	}
 	return &marketdatav1.BatchGetBarsResponse{Results: results}, nil
+}
+
+// BatchGetLatestPrice returns live price + previous daily close for multiple symbols in one
+// round-trip (feature 183). Symbols missing from Alpaca or DB are omitted (AC-11).
+func (s *MarketDataService) BatchGetLatestPrice(ctx context.Context, req *marketdatav1.BatchGetLatestPriceRequest) (*marketdatav1.BatchGetLatestPriceResponse, error) {
+	if len(req.Symbols) == 0 {
+		return &marketdatav1.BatchGetLatestPriceResponse{}, nil
+	}
+	for _, sym := range req.Symbols {
+		s.markWarm(sym)
+	}
+
+	// Singleflight keyed on sorted symbols.
+	sorted := append([]string(nil), req.Symbols...)
+	sort.Strings(sorted)
+	key := "batch-price:" + strings.Join(sorted, ",")
+
+	type batchResult struct {
+		trades    map[string]*source.Trade
+		prevClose map[string]float64
+	}
+	v, err, _ := s.priceSingleflight.Do(key, func() (interface{}, error) {
+		var trades map[string]*source.Trade
+
+		src, sErr := s.registry.Get("")
+		if sErr == nil {
+			// Prefer multi-symbol trade fetch if the source supports it.
+			if ms, ok := src.(source.MultiSymbolSource); ok {
+				trades, _ = ms.GetLatestTradesMulti(ctx, req.Symbols)
+			}
+			// Fall back to per-symbol if multi is nil or the source doesn't support it.
+			if trades == nil {
+				trades = make(map[string]*source.Trade, len(req.Symbols))
+				if lt, ok := src.(source.LatestTradeSource); ok {
+					for _, sym := range req.Symbols {
+						if price, ts, tErr := lt.GetLatestTrade(ctx, sym); tErr == nil {
+							trades[sym] = &source.Trade{Price: price, TradeTime: ts}
+						}
+					}
+				}
+			}
+		}
+		if trades == nil {
+			trades = map[string]*source.Trade{}
+		}
+
+		var prevClose map[string]float64
+		if s.repo != nil {
+			prevClose, _ = s.repo.GetPreviousDailyCloseBatch(ctx, req.Symbols)
+		}
+		if prevClose == nil {
+			prevClose = map[string]float64{}
+		}
+		return &batchResult{trades: trades, prevClose: prevClose}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	br := v.(*batchResult)
+
+	// Build response — only include symbols that have at least a trade or a prev close.
+	results := make([]*marketdatav1.LatestPrice, 0, len(req.Symbols))
+	for _, sym := range req.Symbols {
+		trade, hasTrade := br.trades[sym]
+		prev, hasPrev := br.prevClose[sym]
+		if !hasTrade && !hasPrev {
+			continue
+		}
+		lp := &marketdatav1.LatestPrice{Symbol: sym, Source: "alpaca"}
+		if hasTrade {
+			lp.LastPrice = &trade.Price
+			lp.LastTradeTime = timestamppb.New(trade.TradeTime)
+		}
+		if hasPrev {
+			lp.PrevClose = &prev
+		}
+		results = append(results, lp)
+	}
+	return &marketdatav1.BatchGetLatestPriceResponse{Results: results}, nil
 }
 
 // markWarm adds a symbol to the warm set polled by StartWarmQuotePoller.

@@ -214,6 +214,18 @@ func (h *MarketDataHandler) BatchGetBars(ctx context.Context, req *connect.Reque
 	return connect.NewResponse(resp), nil
 }
 
+// BatchGetLatestPrice returns batched latest price + prev close for multiple symbols (feature 183).
+func (h *MarketDataHandler) BatchGetLatestPrice(ctx context.Context, req *connect.Request[marketdatav1.BatchGetLatestPriceRequest]) (*connect.Response[marketdatav1.BatchGetLatestPriceResponse], error) {
+	if len(req.Msg.Symbols) == 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errorf("symbols required"))
+	}
+	resp, err := h.svc.BatchGetLatestPrice(ctx, req.Msg)
+	if err != nil {
+		return nil, forwardConnectErr(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
 // forwardConnectErr returns connect-coded errors unchanged and wraps the rest as Internal.
 func forwardConnectErr(err error) error {
 	var cErr *connect.Error
@@ -356,6 +368,14 @@ func (a *grpcMarketDataAdapter) GetLatestQuotes(ctx context.Context, req *market
 
 func (a *grpcMarketDataAdapter) BatchGetBars(ctx context.Context, req *marketdatav1.BatchGetBarsRequest) (*marketdatav1.BatchGetBarsResponse, error) {
 	resp, err := a.h.BatchGetBars(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcMarketDataAdapter) BatchGetLatestPrice(ctx context.Context, req *marketdatav1.BatchGetLatestPriceRequest) (*marketdatav1.BatchGetLatestPriceResponse, error) {
+	resp, err := a.h.BatchGetLatestPrice(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, toGRPCError(err)
 	}
