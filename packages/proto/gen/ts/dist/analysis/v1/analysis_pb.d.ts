@@ -1366,6 +1366,14 @@ export type Opportunity = Message<"xstockstrat.analysis.v1.Opportunity"> & {
      * @generated from field: optional double signal_confidence = 19;
      */
     signalConfidence?: number | undefined;
+    /**
+     * feature 185 — a per-symbol bars/indicator fetch failure during the compute (terminal
+     * data-unavailable), derived at read from the "unavailable" provenance marker (no column).
+     * Distinct from an evaluated 0/N row; conviction+signal_axis are zeroed so it sinks in ranking.
+     *
+     * @generated from field: bool data_unavailable = 20;
+     */
+    dataUnavailable: boolean;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.Opportunity.
@@ -1537,6 +1545,20 @@ export type ListOpportunitiesResponse = Message<"xstockstrat.analysis.v1.ListOpp
      * @generated from field: xstockstrat.common.v1.PageResponse page = 2;
      */
     page?: PageResponse | undefined;
+    /**
+     * feature 185 — cold (never-materialized) read: empty page returned non-blocking while a
+     * background recompute runs. FALSE for a legitimately-empty universe (distinctness proof).
+     *
+     * @generated from field: bool computing = 3;
+     */
+    computing: boolean;
+    /**
+     * feature 185 — a persistently-failing cold recompute (past the bounded attempt count):
+     * renders a terminal error instead of an infinite "computing" spinner.
+     *
+     * @generated from field: bool compute_failed = 4;
+     */
+    computeFailed: boolean;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.ListOpportunitiesResponse.

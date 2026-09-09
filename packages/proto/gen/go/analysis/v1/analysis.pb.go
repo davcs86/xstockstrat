@@ -3684,8 +3684,12 @@ type Opportunity struct {
 	// 0.0). Deliberately NAMED signal_confidence and kept distinct from the ordinal `conviction = 3`
 	// (NOT a probability) and the decayed/weighted signal_axis. Next free after 095's 13-18 block.
 	SignalConfidence *float64 `protobuf:"fixed64,19,opt,name=signal_confidence,json=signalConfidence,proto3,oneof" json:"signal_confidence,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// feature 185 — a per-symbol bars/indicator fetch failure during the compute (terminal
+	// data-unavailable), derived at read from the "unavailable" provenance marker (no column).
+	// Distinct from an evaluated 0/N row; conviction+signal_axis are zeroed so it sinks in ranking.
+	DataUnavailable bool `protobuf:"varint,20,opt,name=data_unavailable,json=dataUnavailable,proto3" json:"data_unavailable,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Opportunity) Reset() {
@@ -3849,6 +3853,13 @@ func (x *Opportunity) GetSignalConfidence() float64 {
 		return *x.SignalConfidence
 	}
 	return 0
+}
+
+func (x *Opportunity) GetDataUnavailable() bool {
+	if x != nil {
+		return x.DataUnavailable
+	}
+	return false
 }
 
 // One recent daily-bar close for the Decide-surface sparkline (feature 095). Explicit presence — an
@@ -4213,6 +4224,12 @@ type ListOpportunitiesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Opportunities []*Opportunity         `protobuf:"bytes,1,rep,name=opportunities,proto3" json:"opportunities,omitempty"`
 	Page          *v1.PageResponse       `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
+	// feature 185 — cold (never-materialized) read: empty page returned non-blocking while a
+	// background recompute runs. FALSE for a legitimately-empty universe (distinctness proof).
+	Computing bool `protobuf:"varint,3,opt,name=computing,proto3" json:"computing,omitempty"`
+	// feature 185 — a persistently-failing cold recompute (past the bounded attempt count):
+	// renders a terminal error instead of an infinite "computing" spinner.
+	ComputeFailed bool `protobuf:"varint,4,opt,name=compute_failed,json=computeFailed,proto3" json:"compute_failed,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4259,6 +4276,20 @@ func (x *ListOpportunitiesResponse) GetPage() *v1.PageResponse {
 		return x.Page
 	}
 	return nil
+}
+
+func (x *ListOpportunitiesResponse) GetComputing() bool {
+	if x != nil {
+		return x.Computing
+	}
+	return false
+}
+
+func (x *ListOpportunitiesResponse) GetComputeFailed() bool {
+	if x != nil {
+		return x.ComputeFailed
+	}
+	return false
 }
 
 type EvaluateReadinessRequest struct {
@@ -5900,7 +5931,7 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x0edeferred_count\x18\x05 \x01(\x05R\rdeferredCount\x12\x16\n" +
 	"\x06status\x18\x06 \x01(\tR\x06status\x12;\n" +
 	"\vfinished_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"finishedAt\"\xfc\x06\n" +
+	"finishedAt\"\xa7\a\n" +
 	"\vOpportunity\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12E\n" +
 	"\x06action\x18\x02 \x01(\x0e2-.xstockstrat.analysis.v1.OpportunityActionTagR\x06action\x12\x1e\n" +
@@ -5932,7 +5963,8 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\n" +
 	"conditions\x18\x12 \x03(\v2&.xstockstrat.analysis.v1.ConditionEvalR\n" +
 	"conditions\x120\n" +
-	"\x11signal_confidence\x18\x13 \x01(\x01H\x04R\x10signalConfidence\x88\x01\x01B\r\n" +
+	"\x11signal_confidence\x18\x13 \x01(\x01H\x04R\x10signalConfidence\x88\x01\x01\x12)\n" +
+	"\x10data_unavailable\x18\x14 \x01(\bR\x0fdataUnavailableB\r\n" +
 	"\v_live_priceB\r\n" +
 	"\v_change_pctB\x0f\n" +
 	"\r_target_priceB\r\n" +
@@ -5973,10 +6005,12 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"queueShare\"y\n" +
 	"\x18ListOpportunitiesRequest\x126\n" +
 	"\x04page\x18\x01 \x01(\v2\".xstockstrat.common.v1.PageRequestR\x04page\x12%\n" +
-	"\x0emin_conviction\x18\x02 \x01(\x01R\rminConviction\"\xa0\x01\n" +
+	"\x0emin_conviction\x18\x02 \x01(\x01R\rminConviction\"\xe5\x01\n" +
 	"\x19ListOpportunitiesResponse\x12J\n" +
 	"\ropportunities\x18\x01 \x03(\v2$.xstockstrat.analysis.v1.OpportunityR\ropportunities\x127\n" +
-	"\x04page\x18\x02 \x01(\v2#.xstockstrat.common.v1.PageResponseR\x04page\"\x91\x01\n" +
+	"\x04page\x18\x02 \x01(\v2#.xstockstrat.common.v1.PageResponseR\x04page\x12\x1c\n" +
+	"\tcomputing\x18\x03 \x01(\bR\tcomputing\x12%\n" +
+	"\x0ecompute_failed\x18\x04 \x01(\bR\rcomputeFailed\"\x91\x01\n" +
 	"\x18EvaluateReadinessRequest\x12\x1f\n" +
 	"\vstrategy_id\x18\x01 \x01(\tR\n" +
 	"strategyId\x12\x18\n" +

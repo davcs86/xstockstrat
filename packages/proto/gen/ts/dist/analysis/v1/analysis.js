@@ -6289,6 +6289,7 @@ function createBaseOpportunity() {
         sparkline: [],
         conditions: [],
         signalConfidence: undefined,
+        dataUnavailable: false,
     };
 }
 exports.Opportunity = {
@@ -6349,6 +6350,9 @@ exports.Opportunity = {
         }
         if (message.signalConfidence !== undefined) {
             writer.uint32(153).double(message.signalConfidence);
+        }
+        if (message.dataUnavailable !== false) {
+            writer.uint32(160).bool(message.dataUnavailable);
         }
         return writer;
     },
@@ -6492,6 +6496,13 @@ exports.Opportunity = {
                     message.signalConfidence = reader.double();
                     continue;
                 }
+                case 20: {
+                    if (tag !== 160) {
+                        break;
+                    }
+                    message.dataUnavailable = reader.bool();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -6569,6 +6580,11 @@ exports.Opportunity = {
                 : isSet(object.signal_confidence)
                     ? globalThis.Number(object.signal_confidence)
                     : undefined,
+            dataUnavailable: isSet(object.dataUnavailable)
+                ? globalThis.Boolean(object.dataUnavailable)
+                : isSet(object.data_unavailable)
+                    ? globalThis.Boolean(object.data_unavailable)
+                    : false,
         };
     },
     toJSON(message) {
@@ -6630,6 +6646,9 @@ exports.Opportunity = {
         if (message.signalConfidence !== undefined) {
             obj.signalConfidence = message.signalConfidence;
         }
+        if (message.dataUnavailable !== false) {
+            obj.dataUnavailable = message.dataUnavailable;
+        }
         return obj;
     },
     create(base) {
@@ -6656,6 +6675,7 @@ exports.Opportunity = {
         message.sparkline = object.sparkline?.map((e) => exports.SparklinePoint.fromPartial(e)) || [];
         message.conditions = object.conditions?.map((e) => exports.ConditionEval.fromPartial(e)) || [];
         message.signalConfidence = object.signalConfidence ?? undefined;
+        message.dataUnavailable = object.dataUnavailable ?? false;
         return message;
     },
 };
@@ -7218,7 +7238,7 @@ exports.ListOpportunitiesRequest = {
     },
 };
 function createBaseListOpportunitiesResponse() {
-    return { opportunities: [], page: undefined };
+    return { opportunities: [], page: undefined, computing: false, computeFailed: false };
 }
 exports.ListOpportunitiesResponse = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -7227,6 +7247,12 @@ exports.ListOpportunitiesResponse = {
         }
         if (message.page !== undefined) {
             common_1.PageResponse.encode(message.page, writer.uint32(18).fork()).join();
+        }
+        if (message.computing !== false) {
+            writer.uint32(24).bool(message.computing);
+        }
+        if (message.computeFailed !== false) {
+            writer.uint32(32).bool(message.computeFailed);
         }
         return writer;
     },
@@ -7251,6 +7277,20 @@ exports.ListOpportunitiesResponse = {
                     message.page = common_1.PageResponse.decode(reader, reader.uint32());
                     continue;
                 }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.computing = reader.bool();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 32) {
+                        break;
+                    }
+                    message.computeFailed = reader.bool();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -7265,6 +7305,12 @@ exports.ListOpportunitiesResponse = {
                 ? object.opportunities.map((e) => exports.Opportunity.fromJSON(e))
                 : [],
             page: isSet(object.page) ? common_1.PageResponse.fromJSON(object.page) : undefined,
+            computing: isSet(object.computing) ? globalThis.Boolean(object.computing) : false,
+            computeFailed: isSet(object.computeFailed)
+                ? globalThis.Boolean(object.computeFailed)
+                : isSet(object.compute_failed)
+                    ? globalThis.Boolean(object.compute_failed)
+                    : false,
         };
     },
     toJSON(message) {
@@ -7274,6 +7320,12 @@ exports.ListOpportunitiesResponse = {
         }
         if (message.page !== undefined) {
             obj.page = common_1.PageResponse.toJSON(message.page);
+        }
+        if (message.computing !== false) {
+            obj.computing = message.computing;
+        }
+        if (message.computeFailed !== false) {
+            obj.computeFailed = message.computeFailed;
         }
         return obj;
     },
@@ -7286,6 +7338,8 @@ exports.ListOpportunitiesResponse = {
         message.page = (object.page !== undefined && object.page !== null)
             ? common_1.PageResponse.fromPartial(object.page)
             : undefined;
+        message.computing = object.computing ?? false;
+        message.computeFailed = object.computeFailed ?? false;
         return message;
     },
 };

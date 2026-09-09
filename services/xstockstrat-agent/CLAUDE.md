@@ -40,7 +40,7 @@ Python 3.13 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
 
 ## MCP Tools
 
-The agent registers thirty-five tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
+The agent registers forty tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
 reference):
 
 | Tool | Purpose |
@@ -80,6 +80,11 @@ reference):
 | `list_accounts` | List the caller's own accounts — broker and offline together, each by `broker_type` (read-only, feature 164) |
 | `get_positions` | List the caller's positions across all accounts, broker + offline (read-only, feature 169) |
 | `get_positions_by_account_id` | List the caller's positions for one account (read-only, feature 169) |
+| `manage_user` | **Admin**: create / set_roles / set_active / reset_password a user (admin-gated write, feature 183); passwords write-only, never echoed |
+| `list_users` | **Admin**: list all users, password-free views (read-only, admin-gated, feature 183) |
+| `get_user` | **Admin**: read one user by id (read-only, admin-gated, feature 183) |
+| `admin_get_user_metadata` | **Admin**: read ANY user's profile metadata by `user_id` (read-only, feature 183) — distinct from the self-only `get_user_metadata` |
+| `admin_set_user_metadata` | **Admin**: partial-update ANY user's profile metadata by `user_id` (feature 183) — distinct from the self-only `set_user_metadata` |
 
 ### Management-tool authorization
 
@@ -94,6 +99,16 @@ succeeding under a hardcoded admin override. The claims come from `app/main.py` 
 publishes them on the request's ASGI scope under `MCP_CLAIMS_SCOPE_KEY`; each tool reads them via its
 injected `ctx: Context`. The old hardcoded `_admin_metadata()` (`x-access-scope=7`) tuple was
 **removed** by feature 092.
+
+**The user-administration tools are admin-gated (feature 183).** `manage_user`, `list_users`,
+`get_user`, `admin_get_user_metadata`, and `admin_set_user_metadata` each call `_require_admin(ctx,
+tool)` — a friendly early `scope & 0x04` check that rejects a non-admin `PermissionError` **before any
+backend call** (no state change) — then forward the caller's derived `x-access-scope` via
+`client._metadata()` so `xstockstrat-identity`'s `adminGate` remains the authoritative server-side gate
+(both new profile RPCs + the six feature-043 user RPCs check the ADMIN bit). The **target** user is
+always a request-body `user_id` (never the caller's `x-user-id`), so these are distinct from the
+self-only `get_user_metadata`/`set_user_metadata`. Passwords (`manage_user create`/`reset_password`)
+are write-only — never echoed in a tool result or logged.
 
 **`manage_strategy` / `set_strategy_live` are now ownership-gated, not admin-gated (feature 133).**
 The analysis `ManageStrategy`/`SetStrategyLive` admin gate was **removed**: strategies are per-user

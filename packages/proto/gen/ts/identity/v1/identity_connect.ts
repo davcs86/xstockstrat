@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AuthenticateUserRequest, AuthTokenResponse, CreateUserRequest, CreateUserResponse, ExchangeAuthCodeRequest, GetOAuthClientRequest, GetUserMetadataRequest, GetUserMetadataResponse, GetUserRequest, GetUserResponse, IssueAuthCodeRequest, IssueAuthCodeResponse, ListAuthorizedAppsRequest, ListAuthorizedAppsResponse, ListUsersRequest, ListUsersResponse, OAuthClient, OAuthTokenResponse, RefreshOAuthTokenRequest, RefreshTokenRequest, RegisterOAuthClientRequest, RevokeAuthorizedAppRequest, RevokeAuthorizedAppResponse, RevokeTokenRequest, RevokeTokenResponse, SetUserActiveRequest, SetUserActiveResponse, SetUserRolesRequest, SetUserRolesResponse, TokenClaims, UpdatePasswordRequest, UpdatePasswordResponse, UpdateUserMetadataRequest, UpdateUserMetadataResponse, ValidateTokenRequest } from "./identity_pb.js";
+import { AdminGetUserMetadataRequest, AdminUpdateUserMetadataRequest, AuthenticateUserRequest, AuthTokenResponse, CreateUserRequest, CreateUserResponse, ExchangeAuthCodeRequest, GetOAuthClientRequest, GetUserMetadataRequest, GetUserMetadataResponse, GetUserRequest, GetUserResponse, IssueAuthCodeRequest, IssueAuthCodeResponse, ListAuthorizedAppsRequest, ListAuthorizedAppsResponse, ListUsersRequest, ListUsersResponse, OAuthClient, OAuthTokenResponse, RefreshOAuthTokenRequest, RefreshTokenRequest, RegisterOAuthClientRequest, RevokeAuthorizedAppRequest, RevokeAuthorizedAppResponse, RevokeTokenRequest, RevokeTokenResponse, SetUserActiveRequest, SetUserActiveResponse, SetUserRolesRequest, SetUserRolesResponse, TokenClaims, UpdatePasswordRequest, UpdatePasswordResponse, UpdateUserMetadataRequest, UpdateUserMetadataResponse, ValidateTokenRequest } from "./identity_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -134,6 +134,27 @@ export const IdentityService = {
     updateUserMetadata: {
       name: "UpdateUserMetadata",
       I: UpdateUserMetadataRequest,
+      O: UpdateUserMetadataResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
+     * body user_id, never x-user-id (C-03). Reuse the self responses.
+     *
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.AdminGetUserMetadata
+     */
+    adminGetUserMetadata: {
+      name: "AdminGetUserMetadata",
+      I: AdminGetUserMetadataRequest,
+      O: GetUserMetadataResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.AdminUpdateUserMetadata
+     */
+    adminUpdateUserMetadata: {
+      name: "AdminUpdateUserMetadata",
+      I: AdminUpdateUserMetadataRequest,
       O: UpdateUserMetadataResponse,
       kind: MethodKind.Unary,
     },

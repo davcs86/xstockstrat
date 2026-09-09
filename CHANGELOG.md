@@ -3,6 +3,23 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-09-09
+
+### Features
+- mcp-user-profile-roles: New admin-gated MCP agent tools to manage users (create, list, get, set roles, activate/deactivate, reset password) and to view/edit any user's profile metadata — the last of which requires new admin cross-user identity RPCs, since today's `GetUserMetadata`/`UpdateUserMetadata` are self-only.
+- opportunity-config-operability: Apply the feature-182 config-operability philosophy to the opportunities queue: register the `analysis.opportunity.*` config keys (currently the invisible no-seed pattern) via a seed migration so they appear in config-ui, and add server-side `SCALAR_BOUNDS_REGISTRY` write-bounds to the numeric footgun keys — closing the "operator can't see/tune, and can set unsafe values" gap the audit found.
+- opportunity-compute-robustness: Apply the feature-181/176 correctness philosophy to the opportunities compute: give it a **data-unavailable sentinel** (so a bars-fetch failure surfaces as a terminal "unavailable" state, not a misleading `0/0` quiet row), and a **dedicated background bars-fetch semaphore** separate from the interactive read path (the feature-176/180 priority-inversion guard the materializer already has).
+- fundamentals-blend-strategy-restrictions: Harden the fundamentals blend strategy (configured via `analysis.engine.fundamentals_blend_strategy_id`) so it executes exclusively against the fundamentals signal universe and cannot be deactivated, toggled non-live, or soft-deleted via `ManageStrategy`/`SetStrategyLive` RPCs.
+
+### Proto Changes
+- analysis/v1/analysis.proto
+- identity/v1/identity.proto
+
+### Summary
+7 commits, 1 feature merges since last promotion.
+
+---
+
 ## 2026-09-06
 
 ### Features

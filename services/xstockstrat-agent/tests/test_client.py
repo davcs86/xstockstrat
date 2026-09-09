@@ -1149,3 +1149,224 @@ class TestListOpportunitiesClient:
         meta = mock_stub.ListOpportunities.call_args.kwargs["metadata"]
         assert ("x-user-id", "u1") in meta
         assert not any(k == "x-access-scope" for k, _ in meta)
+
+    @pytest.mark.asyncio
+    async def test_projects_data_unavailable_and_response_pending_flags(self):
+        """feature 185 FR-6/@AC-10: a data_unavailable row is projected with the flag (an evaluated
+        row with False), and the response-level computing/compute_failed flags are surfaced at the
+        top level so a cold/failed queue is not reported as a silently-empty list."""
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+
+        unavailable = analysis_pb2.Opportunity(
+            symbol="GME",
+            action=analysis_pb2.OPPORTUNITY_ACTION_TAG_ENTER,
+            conviction=0.0,
+            opportunity_key="u1|GME|s",
+            provenance=["watchlist", "unavailable"],
+            data_unavailable=True,
+        )
+        evaluated = analysis_pb2.Opportunity(
+            symbol="AAPL",
+            action=analysis_pb2.OPPORTUNITY_ACTION_TAG_ENTER,
+            conviction=0.4,
+            opportunity_key="u1|AAPL|s",
+            provenance=["watchlist"],
+        )
+        resp = analysis_pb2.ListOpportunitiesResponse(
+            opportunities=[unavailable, evaluated], computing=True, compute_failed=False
+        )
+        mock_stub = MagicMock()
+        mock_stub.ListOpportunities = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
+                result = await client.list_opportunities(user_id="u1", min_conviction=0.0)
+
+        assert result["opportunities"][0]["data_unavailable"] is True
+        assert (
+            result["opportunities"][1]["data_unavailable"] is False
+        )  # evaluated → not unavailable
+        assert result["computing"] is True
+        assert result["compute_failed"] is False
+
+
+# ── Admin user management + cross-user profile client helpers (feature 183) ──
+
+
+def _identity_stub_cm(mock_stub):
+    """Patch grpc + IdentityServiceStub; returns the patch context managers to enter."""
+    from gen.identity.v1 import identity_pb2_grpc  # type: ignore
+
+    grpc_patch = patch("app.client.grpc")
+    stub_patch = patch.object(identity_pb2_grpc, "IdentityServiceStub", return_value=mock_stub)
+    return grpc_patch, stub_patch
+
+
+def _make_user_metadata(um_cls, ts_cls, struct_cls):
+    um = um_cls(user_id="target-1", email="target@example.com", phone="+1-555-0100")
+    um.display_name = "Jane Q"
+    s = struct_cls()
+    s.update({"team": "quant"})
+    um.metadata.CopyFrom(s)
+    ts = ts_cls()
+    ts.FromJsonString("2026-02-02T00:00:00Z")
+    um.metadata_updated_at.CopyFrom(ts)
+    return um
+
+
+@pytest.mark.asyncio
+async def test_admin_get_user_metadata_projection_parity():
+    """admin_get_user_metadata projects the real UserMetadata proto to the 6 camelCase keys."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # type: ignore  # noqa: F401
+    from google.protobuf.struct_pb2 import Struct
+    from google.protobuf.timestamp_pb2 import Timestamp
+
+    um = _make_user_metadata(identity_pb2.UserMetadata, Timestamp, Struct)
+    resp = identity_pb2.GetUserMetadataResponse(user_metadata=um)
+    mock_stub = MagicMock()
+    mock_stub.AdminGetUserMetadata = AsyncMock(return_value=resp)
+
+    grpc_patch, stub_patch = _identity_stub_cm(mock_stub)
+    with grpc_patch as mock_grpc, stub_patch:
+        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        result = await client.admin_get_user_metadata("target-1")
+
+    assert set(result.keys()) == {
+        "userId",
+        "email",
+        "phone",
+        "displayName",
+        "metadata",
+        "metadataUpdatedAt",
+    }
+    assert result["userId"] == "target-1"
+    assert result["displayName"] == "Jane Q"
+    assert result["phone"] == "+1-555-0100"
+    assert result["metadata"] == {"team": "quant"}
+
+
+@pytest.mark.asyncio
+async def test_admin_update_user_metadata_sends_only_provided_fields():
+    """admin_update_user_metadata sets only display_name and targets the request-body user_id."""
+    from gen.identity.v1 import identity_pb2  # type: ignore
+    from google.protobuf.struct_pb2 import Struct
+    from google.protobuf.timestamp_pb2 import Timestamp
+
+    um = _make_user_metadata(identity_pb2.UserMetadata, Timestamp, Struct)
+    resp = identity_pb2.UpdateUserMetadataResponse(user_metadata=um)
+    mock_stub = MagicMock()
+    mock_stub.AdminUpdateUserMetadata = AsyncMock(return_value=resp)
+
+    grpc_patch, stub_patch = _identity_stub_cm(mock_stub)
+    with grpc_patch as mock_grpc, stub_patch:
+        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        await client.admin_update_user_metadata("target-1", display_name="Jane Quant")
+
+    req = mock_stub.AdminUpdateUserMetadata.call_args.args[0]
+    assert req.user_id == "target-1"
+    assert req.HasField("display_name") and req.display_name == "Jane Quant"
+    assert not req.HasField("phone")
+    assert not req.HasField("metadata")
+
+
+@pytest.mark.asyncio
+async def test_create_user_maps_role_strings_to_enums_and_hides_password(caplog):
+    """create_user maps role strings to Role enum ints; the plaintext password never leaks."""
+    from gen.identity.v1 import identity_pb2  # type: ignore
+
+    resp = identity_pb2.CreateUserResponse(
+        user=identity_pb2.User(user_id="new-1", email="q@example.com", roles=[2], is_active=True)
+    )
+    mock_stub = MagicMock()
+    mock_stub.CreateUser = AsyncMock(return_value=resp)
+
+    grpc_patch, stub_patch = _identity_stub_cm(mock_stub)
+    with caplog.at_level("DEBUG"), grpc_patch as mock_grpc, stub_patch:
+        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        result = await client.create_user("q@example.com", "Str0ng-P4ss!", ["trader", "admin"])
+
+    req = mock_stub.CreateUser.call_args.args[0]
+    assert list(req.roles) == [2, 1]  # trader=2, admin=1
+    assert result == {
+        "userId": "new-1",
+        "email": "q@example.com",
+        "roles": ["trader"],
+        "isActive": True,
+        "createdAt": None,
+    }
+    assert "password" not in result
+    assert "Str0ng-P4ss!" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_reset_password_never_echoes_or_logs_plaintext(caplog):
+    """reset_password returns a success dict without the password and logs no plaintext (AC-4)."""
+    from gen.identity.v1 import identity_pb2  # type: ignore
+
+    mock_stub = MagicMock()
+    mock_stub.UpdatePassword = AsyncMock(return_value=identity_pb2.UpdatePasswordResponse())
+
+    grpc_patch, stub_patch = _identity_stub_cm(mock_stub)
+    with caplog.at_level("DEBUG"), grpc_patch as mock_grpc, stub_patch:
+        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        result = await client.reset_password("target-1", "N3w-P4ssw0rd!")
+
+    assert result == {"success": True, "userId": "target-1"}
+    assert "N3w-P4ssw0rd!" not in caplog.text
+    assert "N3w-P4ssw0rd!" not in str(result)
+
+
+@pytest.mark.asyncio
+async def test_admin_helpers_forward_derived_scope_and_caller_not_target():
+    """Admin helpers forward the caller's derived scope + own x-user-id; target rides the body."""
+    from gen.identity.v1 import identity_pb2  # type: ignore
+    from google.protobuf.struct_pb2 import Struct
+    from google.protobuf.timestamp_pb2 import Timestamp
+
+    um = _make_user_metadata(identity_pb2.UserMetadata, Timestamp, Struct)
+    resp = identity_pb2.GetUserMetadataResponse(user_metadata=um)
+    mock_stub = MagicMock()
+    mock_stub.AdminGetUserMetadata = AsyncMock(return_value=resp)
+
+    token = client.set_caller("caller-admin", 15, "trace-1")  # 15 carries the ADMIN bit
+    try:
+        grpc_patch, stub_patch = _identity_stub_cm(mock_stub)
+        with grpc_patch as mock_grpc, stub_patch:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            await client.admin_get_user_metadata("target-9")
+    finally:
+        client.reset_caller(token)
+
+    meta = dict(mock_stub.AdminGetUserMetadata.call_args.kwargs["metadata"])
+    assert meta.get("x-access-scope") == "15"
+    assert meta.get("x-user-id") == "caller-admin"  # caller, NOT the target
+    req = mock_stub.AdminGetUserMetadata.call_args.args[0]
+    assert req.user_id == "target-9"  # target selected by request body
+
+
+@pytest.mark.asyncio
+async def test_list_users_projects_password_free_views():
+    """list_users returns password-free camelCase user views."""
+    from gen.identity.v1 import identity_pb2  # type: ignore
+
+    resp = identity_pb2.ListUsersResponse(
+        users=[identity_pb2.User(user_id="u1", email="a@b.c", roles=[1, 2], is_active=True)]
+    )
+    mock_stub = MagicMock()
+    mock_stub.ListUsers = AsyncMock(return_value=resp)
+
+    grpc_patch, stub_patch = _identity_stub_cm(mock_stub)
+    with grpc_patch as mock_grpc, stub_patch:
+        mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+        result = await client.list_users()
+
+    assert result == [
+        {
+            "userId": "u1",
+            "email": "a@b.c",
+            "roles": ["admin", "trader"],
+            "isActive": True,
+            "createdAt": None,
+        }
+    ]
+    assert all("password" not in u and "passwordHash" not in u for u in result)

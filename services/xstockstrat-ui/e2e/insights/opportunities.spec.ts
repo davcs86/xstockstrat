@@ -204,6 +204,66 @@ test.describe('Opportunities queue', () => {
     // AAPL carries no enrichment fields → the live-price stat is omitted, never fabricated.
     await expect(card(page, 'AAPL').getByTestId('opp-live-price-AAPL')).toHaveCount(0);
   });
+
+  // feature 185 FR-2 (@AC-3) — a data-unavailable row renders an explicit "unavailable" cue via the
+  // shared C-17 primitives, never a "quiet" 0/0 verdict.
+  test('feature 185: a data-unavailable row shows an explicit unavailable cue, not a quiet 0/0', async ({
+    page,
+  }) => {
+    await expect(card(page, 'PLTR')).toBeVisible();
+    const cue = page.getByTestId('opportunity-unavailable-PLTR');
+    await expect(cue).toBeVisible();
+    await expect(cue).toContainText('unavailable');
+    await expect(card(page, 'PLTR').getByText('no conditions')).toHaveCount(0); // not a quiet verdict
+  });
+
+  test('feature 185: a data-unavailable row survives the min-conviction floor', async ({
+    page,
+  }) => {
+    await page.getByLabel('Minimum conviction').fill('80');
+    await expect(card(page, 'MSFT')).toBeHidden(); // 0.75 — filtered out
+    // PLTR is a data-unavailable, conviction-0 row — it must NOT vanish behind the floor.
+    await expect(card(page, 'PLTR')).toBeVisible();
+    await expect(page.getByTestId('opportunity-unavailable-PLTR')).toBeVisible();
+  });
+
+  // feature 185 FR-4 — cold "computing", terminal "compute-failed", and the legitimately-empty
+  // distinctness, driven by a per-test ListOpportunities response shape (LIFO route precedence).
+  const routeList = (page: Page, body: object) =>
+    page.route('**/xstockstrat.analysis.v1.AnalysisService/ListOpportunities', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) }),
+    );
+
+  test('feature 185: a cold queue renders a computing state (FR-4 @AC-6)', async ({ page }) => {
+    await routeList(page, { opportunities: [], computing: true });
+    await page.reload();
+    await expect(page.getByTestId('opportunities-computing-desktop')).toBeVisible({
+      timeout: 8000,
+    });
+    await expect(page.getByTestId('empty-state')).toHaveCount(0); // not the plain empty state
+  });
+
+  test('feature 185: a persistently-failed compute renders a terminal error (FR-4 @AC-7)', async ({
+    page,
+  }) => {
+    await routeList(page, { opportunities: [], computeFailed: true });
+    await page.reload();
+    await expect(page.getByTestId('opportunities-compute-failed-desktop')).toBeVisible({
+      timeout: 8000,
+    });
+  });
+
+  test('feature 185: a legitimately-empty universe shows the plain empty state, not computing (FR-4 distinctness)', async ({
+    page,
+  }) => {
+    await routeList(page, { opportunities: [] });
+    await page.reload();
+    await expect(page.getByText('No opportunities match the filter').last()).toBeVisible({
+      timeout: 8000,
+    });
+    await expect(page.getByTestId('opportunities-computing-desktop')).toHaveCount(0);
+    await expect(page.getByTestId('opportunities-compute-failed-desktop')).toHaveCount(0);
+  });
 });
 
 // feature 155 (FR-4) — mobile Opportunities parity: signals grouped by symbol like the desktop, and
@@ -236,5 +296,10 @@ test.describe('Opportunities mobile parity (feature 155)', () => {
     await expect(group.getByText('quality-dip-buy', { exact: true })).toBeVisible(); // strategy id tag
     await expect(group.getByText('watchlist', { exact: true }).first()).toBeVisible(); // source chip
     await expect(group.getByText(`exp ${expiry}`).first()).toBeVisible(); // expiry tag
+  });
+
+  // feature 185 FR-2 — the mobile companion row also renders the explicit unavailable cue (not 0/0).
+  test('feature 185: a data-unavailable row shows the mobile unavailable cue', async ({ page }) => {
+    await expect(page.getByTestId('opportunity-unavailable-mobile-PLTR')).toBeVisible();
   });
 });

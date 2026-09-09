@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: identity/v1/identity.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IdentityServiceClient = exports.IdentityServiceService = exports.SetUserActiveResponse = exports.SetUserActiveRequest = exports.SetUserRolesResponse = exports.SetUserRolesRequest = exports.UpdatePasswordResponse = exports.UpdatePasswordRequest = exports.GetUserResponse = exports.GetUserRequest = exports.ListUsersResponse = exports.ListUsersRequest = exports.CreateUserResponse = exports.CreateUserRequest = exports.User = exports.UpdateUserMetadataResponse = exports.UpdateUserMetadataRequest = exports.GetUserMetadataResponse = exports.GetUserMetadataRequest = exports.UserMetadata = exports.RevokeAuthorizedAppResponse = exports.RevokeAuthorizedAppRequest = exports.ListAuthorizedAppsResponse = exports.ListAuthorizedAppsRequest = exports.AuthorizedApp = exports.RefreshOAuthTokenRequest = exports.OAuthTokenResponse = exports.ExchangeAuthCodeRequest = exports.IssueAuthCodeResponse = exports.IssueAuthCodeRequest = exports.GetOAuthClientRequest = exports.RegisterOAuthClientRequest = exports.OAuthClient = exports.RevokeTokenResponse = exports.RevokeTokenRequest = exports.RefreshTokenRequest = exports.ValidateTokenRequest = exports.TokenClaims = exports.AuthTokenResponse = exports.AuthenticateUserRequest = exports.Role = exports.protobufPackage = void 0;
+exports.IdentityServiceClient = exports.IdentityServiceService = exports.SetUserActiveResponse = exports.SetUserActiveRequest = exports.SetUserRolesResponse = exports.SetUserRolesRequest = exports.UpdatePasswordResponse = exports.UpdatePasswordRequest = exports.GetUserResponse = exports.GetUserRequest = exports.ListUsersResponse = exports.ListUsersRequest = exports.CreateUserResponse = exports.CreateUserRequest = exports.User = exports.AdminUpdateUserMetadataRequest = exports.AdminGetUserMetadataRequest = exports.UpdateUserMetadataResponse = exports.UpdateUserMetadataRequest = exports.GetUserMetadataResponse = exports.GetUserMetadataRequest = exports.UserMetadata = exports.RevokeAuthorizedAppResponse = exports.RevokeAuthorizedAppRequest = exports.ListAuthorizedAppsResponse = exports.ListAuthorizedAppsRequest = exports.AuthorizedApp = exports.RefreshOAuthTokenRequest = exports.OAuthTokenResponse = exports.ExchangeAuthCodeRequest = exports.IssueAuthCodeResponse = exports.IssueAuthCodeRequest = exports.GetOAuthClientRequest = exports.RegisterOAuthClientRequest = exports.OAuthClient = exports.RevokeTokenResponse = exports.RevokeTokenRequest = exports.RefreshTokenRequest = exports.ValidateTokenRequest = exports.TokenClaims = exports.AuthTokenResponse = exports.AuthenticateUserRequest = exports.Role = exports.protobufPackage = void 0;
 exports.roleFromJSON = roleFromJSON;
 exports.roleToJSON = roleToJSON;
 exports.roleToNumber = roleToNumber;
@@ -2105,6 +2105,169 @@ exports.UpdateUserMetadataResponse = {
         return message;
     },
 };
+function createBaseAdminGetUserMetadataRequest() {
+    return { userId: "" };
+}
+exports.AdminGetUserMetadataRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.userId !== "") {
+            writer.uint32(10).string(message.userId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseAdminGetUserMetadataRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.AdminGetUserMetadataRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseAdminGetUserMetadataRequest();
+        message.userId = object.userId ?? "";
+        return message;
+    },
+};
+function createBaseAdminUpdateUserMetadataRequest() {
+    return { userId: "", phone: undefined, displayName: undefined, metadata: undefined };
+}
+exports.AdminUpdateUserMetadataRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.userId !== "") {
+            writer.uint32(10).string(message.userId);
+        }
+        if (message.phone !== undefined) {
+            writer.uint32(18).string(message.phone);
+        }
+        if (message.displayName !== undefined) {
+            writer.uint32(26).string(message.displayName);
+        }
+        if (message.metadata !== undefined) {
+            struct_1.Struct.encode(struct_1.Struct.wrap(message.metadata), writer.uint32(34).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseAdminUpdateUserMetadataRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.phone = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.displayName = reader.string();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.metadata = struct_1.Struct.unwrap(struct_1.Struct.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
+            phone: isSet(object.phone) ? globalThis.String(object.phone) : undefined,
+            displayName: isSet(object.displayName)
+                ? globalThis.String(object.displayName)
+                : isSet(object.display_name)
+                    ? globalThis.String(object.display_name)
+                    : undefined,
+            metadata: isObject(object.metadata) ? object.metadata : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
+        if (message.phone !== undefined) {
+            obj.phone = message.phone;
+        }
+        if (message.displayName !== undefined) {
+            obj.displayName = message.displayName;
+        }
+        if (message.metadata !== undefined) {
+            obj.metadata = message.metadata;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.AdminUpdateUserMetadataRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseAdminUpdateUserMetadataRequest();
+        message.userId = object.userId ?? "";
+        message.phone = object.phone ?? undefined;
+        message.displayName = object.displayName ?? undefined;
+        message.metadata = object.metadata ?? undefined;
+        return message;
+    },
+};
 function createBaseUser() {
     return { userId: "", email: "", roles: [], isActive: false, createdAt: undefined };
 }
@@ -3070,6 +3233,28 @@ exports.IdentityServiceService = {
         responseStream: false,
         requestSerialize: (value) => Buffer.from(exports.UpdateUserMetadataRequest.encode(value).finish()),
         requestDeserialize: (value) => exports.UpdateUserMetadataRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.UpdateUserMetadataResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.UpdateUserMetadataResponse.decode(value),
+    },
+    /**
+     * Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
+     * body user_id, never x-user-id (C-03). Reuse the self responses.
+     */
+    adminGetUserMetadata: {
+        path: "/xstockstrat.identity.v1.IdentityService/AdminGetUserMetadata",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.AdminGetUserMetadataRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.AdminGetUserMetadataRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.GetUserMetadataResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.GetUserMetadataResponse.decode(value),
+    },
+    adminUpdateUserMetadata: {
+        path: "/xstockstrat.identity.v1.IdentityService/AdminUpdateUserMetadata",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.AdminUpdateUserMetadataRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.AdminUpdateUserMetadataRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.UpdateUserMetadataResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.UpdateUserMetadataResponse.decode(value),
     },

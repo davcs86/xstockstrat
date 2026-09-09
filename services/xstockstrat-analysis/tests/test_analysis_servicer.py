@@ -27,7 +27,7 @@ from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.config.watcher import ConfigWatcher
-from app.handlers.servicer import AnalysisServicer, _InsufficientData
+from app.handlers.servicer import AnalysisServicer, _InsufficientData, _row_to_opportunity
 from app.services import warmup as warmup_sizing
 from app.services.evaluator import FormulaExecutionError, StrategyEvaluator
 
@@ -710,6 +710,79 @@ class TestManageStrategy:
         with pytest.raises(Exception, match="not found"):
             await svc.ManageStrategy(req, context)
 
+    # --- feature 186: fundamentals blend strategy restrictions ---
+
+    @pytest.mark.asyncio
+    async def test_deactivate_rejected_for_blend_strategy(self):
+        """AC-4: DEACTIVATE the fundamentals blend strategy → FAILED_PRECONDITION."""
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_DEACTIVATE,
+            definition=_valid_definition(strategy_id="fundamentals_macd_blend"),
+        )
+        context = _admin_ctx()
+        context.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(req, context)
+        context.abort.assert_called_once()
+        assert context.abort.await_args.args[0] == grpc.StatusCode.FAILED_PRECONDITION
+        msg = context.abort.await_args.args[1]
+        assert "fundamentals blend strategy cannot be deactivated" in msg
+        svc._strategies_repo.deactivate.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_deactivate_succeeds_for_non_blend_strategy(self):
+        """AC-5: DEACTIVATE a non-blend strategy proceeds to the ownership check."""
+        svc = make_servicer()
+        definition = _valid_definition(strategy_id="my_custom_strategy")
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.deactivate = AsyncMock(return_value=_row_for(definition))
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_DEACTIVATE,
+            definition=definition,
+        )
+        result = await svc.ManageStrategy(req, context=_admin_ctx())
+        assert result.strategy_id == "my_custom_strategy"
+        svc._strategies_repo.deactivate.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_deactivate_guard_uses_runtime_config(self):
+        """AC-8: the protected ID tracks config, not a hardcoded string."""
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        # Override config to protect "custom_blend_v2" instead of the default.
+        svc._cfg.get_str = MagicMock(
+            side_effect=lambda key, default="": (
+                "custom_blend_v2"
+                if key == "analysis.engine.fundamentals_blend_strategy_id"
+                else default
+            )
+        )
+        # Attempt DEACTIVATE on the new protected ID → rejected.
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_DEACTIVATE,
+            definition=_valid_definition(strategy_id="custom_blend_v2"),
+        )
+        ctx = _admin_ctx()
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.FAILED_PRECONDITION
+
+        # Attempt DEACTIVATE on the old default ID → NOT rejected (proceeds to ownership).
+        svc2 = make_servicer()
+        svc2._strategies_repo = AsyncMock()
+        svc2._cfg.get_str = svc._cfg.get_str
+        definition = _valid_definition(strategy_id="fundamentals_macd_blend")
+        svc2._strategies_repo.deactivate = AsyncMock(return_value=_row_for(definition))
+        req2 = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_DEACTIVATE,
+            definition=definition,
+        )
+        result = await svc2.ManageStrategy(req2, context=_admin_ctx())
+        assert result.strategy_id == "fundamentals_macd_blend"
+
 
 class TestGetStrategy:
     @pytest.mark.asyncio
@@ -932,6 +1005,75 @@ class TestSetStrategyLive:
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception, match="aborted"):
             await svc.SetStrategyLive(req, ctx)
+
+    # --- feature 186: fundamentals blend strategy restrictions ---
+
+    @pytest.mark.asyncio
+    async def test_disable_rejected_for_blend_strategy(self):
+        """AC-6: SetStrategyLive(live_enabled=false) on the blend strategy → FAILED_PRECONDITION."""
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        req = MagicMock()
+        req.strategy_id = "fundamentals_macd_blend"
+        req.live_enabled = False
+        ctx = _owned_ctx()
+        with pytest.raises(Exception, match="aborted"):
+            await svc.SetStrategyLive(req, ctx)
+        ctx.abort.assert_called_once()
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.FAILED_PRECONDITION
+        assert "fundamentals blend strategy cannot be set non-live" in ctx.abort.await_args.args[1]
+        svc._strategies_repo.set_live_enabled.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_disable_succeeds_for_non_blend_strategy(self):
+        """AC-7: SetStrategyLive(live_enabled=false) on a non-blend strategy proceeds."""
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        live_row = {
+            "strategy_id": "my_custom_strategy",
+            "display_name": "Custom",
+            "active": True,
+            "live_enabled": False,
+            "definition_json": {"strategy_id": "my_custom_strategy"},
+        }
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=live_row)
+        svc._strategies_repo.set_live_enabled = AsyncMock(return_value=live_row)
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        req = MagicMock()
+        req.strategy_id = "my_custom_strategy"
+        req.live_enabled = False
+        ctx = MagicMock()
+        ctx.invocation_metadata.return_value = [("x-user-id", "u1"), ("x-access-scope", "7")]
+        resp = await svc.SetStrategyLive(req, ctx)
+        assert resp.definition.strategy_id == "my_custom_strategy"
+        svc._strategies_repo.set_live_enabled.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_enable_not_blocked_for_blend_strategy(self):
+        """Negative: live_enabled=True for the blend strategy is NOT rejected by the guard."""
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        live_row = {
+            "strategy_id": "fundamentals_macd_blend",
+            "display_name": "Blend",
+            "active": True,
+            "live_enabled": True,
+            "definition_json": {"strategy_id": "fundamentals_macd_blend"},
+        }
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=live_row)
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=live_row)
+        svc._strategies_repo.set_live_enabled = AsyncMock(return_value=live_row)
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        req = MagicMock()
+        req.strategy_id = "fundamentals_macd_blend"
+        req.live_enabled = True
+        ctx = MagicMock()
+        ctx.invocation_metadata.return_value = [("x-user-id", "u1"), ("x-access-scope", "7")]
+        resp = await svc.SetStrategyLive(req, ctx)
+        assert resp.definition.strategy_id == "fundamentals_macd_blend"
+        assert resp.definition.live_enabled is True
 
 
 # ---------------------------------------------------------------------------
@@ -3912,9 +4054,15 @@ class _FakeOppRepo:
         for r in self.rows.get(user_id, []):
             if not include_expired and r["valid_until"] <= now:
                 continue
-            # feature 132: muted (deny-listed) rows are exempt from the conviction floor — they
-            # carry conviction 0 by design (mirrors the SQL `OR provenance ? 'denied'`).
-            if r["conviction"] < min_conviction and "denied" not in (r.get("provenance") or []):
+            # feature 132/185: muted (deny-listed) AND data-unavailable rows are exempt from the
+            # conviction floor — both carry conviction 0 by design (mirrors the SQL
+            # `OR provenance ? 'denied' OR provenance ? 'unavailable'`).
+            _prov = r.get("provenance") or []
+            if (
+                r["conviction"] < min_conviction
+                and "denied" not in _prov
+                and "unavailable" not in _prov
+            ):
                 continue
             act = self.actions.get((user_id, r["opportunity_key"]))
             if act:
@@ -3923,8 +4071,33 @@ class _FakeOppRepo:
                 if act["action"] == 1 and act.get("snooze_until") and act["snooze_until"] > now:
                     continue
             out.append(r)
-        out.sort(key=lambda r: (1 - ww) * r["conviction"] + ww * r["signal_axis"], reverse=True)
+        # feature 185 FR-5: mirror the SQL's deterministic tiebreak — rank DESC, conviction DESC,
+        # then opportunity_key ASC (so offset paging is stable across a partial UPDATE).
+        out.sort(
+            key=lambda r: (
+                -((1 - ww) * r["conviction"] + ww * r["signal_axis"]),
+                -r["conviction"],
+                r["opportunity_key"],
+            )
+        )
         return out
+
+    async def replace_symbols(self, user_id, rows):
+        # feature 185 FR-5: heal-only UPDATE-in-place — mirror the real SQL (UPDATE … WHERE
+        # opportunity_key; a key absent from the table is silently skipped, never INSERTed) and
+        # re-stamp computed_at on every matched row.
+        existing = {r["opportunity_key"]: r for r in self.rows.get(user_id, [])}
+        for hr in rows:
+            row = existing.get(hr["opportunity_key"])
+            if row is None:
+                continue  # no resurrection
+            row["conviction"] = hr["conviction"]
+            row["readiness_json"] = hr["readiness_json"]
+            row["signal_axis"] = hr["signal_axis"]
+            row["provenance"] = hr["provenance"]
+            row["thesis"] = hr["thesis"]
+            row["valid_until"] = hr["valid_until"]
+            row["computed_at"] = datetime.now(UTC)
 
     async def distinct_user_ids(self):
         return list(self.rows.keys())
@@ -3947,6 +4120,38 @@ class _FakeOppRepo:
                 if row and row["strategy_id"] == strategy_id:
                     c += 1
         return c
+
+
+class _FakeReadinessCache:
+    """In-memory ReadinessCacheRepository stub for the FR-5 @AC-9 subset-heal assertions —
+    records upserted rows; read_many returns no existing rows (always a miss)."""
+
+    def __init__(self):
+        self.upserted: list[dict] = []
+
+    async def read_many(self, user_id, strategy_id, rule, symbols):
+        return {}
+
+    async def upsert_many(self, rows):
+        self.upserted.extend(rows)
+
+
+def _unavailable_served_row(symbol, strategy, *, provenance, computed_at, valid_until=None):
+    """A served ``analysis.opportunities`` row carrying the data-unavailable sentinel (conviction 0,
+    signal_axis 0), shaped as ``_FakeOppRepo.read`` would return it (feature 185 FR-5 recovery)."""
+    return {
+        "opportunity_key": f"u1|{symbol}|{strategy}",
+        "symbol": symbol,
+        "strategy_id": strategy,
+        "action": int(analysis_pb2.OPPORTUNITY_ACTION_TAG_ENTER),
+        "conviction": 0.0,
+        "readiness_json": {"passing_conditions": 0, "total_conditions": 0},
+        "signal_axis": 0.0,
+        "provenance": list(provenance),
+        "thesis": "",
+        "valid_until": valid_until or (datetime.now(UTC) + timedelta(hours=24)),
+        "computed_at": computed_at,
+    }
 
 
 def _recent_bars_resp(closes):
@@ -4114,6 +4319,17 @@ def _materialized_svc(
     return svc
 
 
+async def _drain_opportunity_recompute(svc, user_id, *, budget=20000):
+    """feature 185 FR-4: a cold ListOpportunities read is non-blocking — it kicks a fire-and-forget
+    background recompute. Tests that assert on the *materialized* queue drain that task here (the
+    stale-read test's inline pattern, generalized): yield to the event loop until the per-user
+    ``_opportunity_recomputing`` guard clears. The budget caps a pathological non-clearing guard."""
+    for _ in range(budget):
+        if user_id not in svc._opportunity_recomputing:
+            break
+        await asyncio.sleep(0)
+
+
 async def _list_opps(svc, **kwargs):
     # feature 095: ListOpportunities now does read-time live-market enrichment (GetLatestPrice per
     # returned symbol). Give it a benign default so pre-095 tests that assert on compute-path
@@ -4125,6 +4341,16 @@ async def _list_opps(svc, **kwargs):
     resp = await svc.ListOpportunities(
         analysis_pb2.ListOpportunitiesRequest(**kwargs), _ctx(_HEADERS)
     )
+    # feature 185 FR-4: a cold read is now NON-BLOCKING — it returns an empty page + computing=True
+    # and kicks a background recompute instead of computing synchronously. For the compute-path
+    # tests below (which assert on the *materialized* queue), transparently drain the kick and
+    # re-read so those assertions still see the computed rows. Tests that assert on the cold pending
+    # signal itself call ``svc.ListOpportunities`` directly instead of this helper.
+    if resp.computing and not resp.opportunities:
+        await _drain_opportunity_recompute(svc, "u1")
+        resp = await svc.ListOpportunities(
+            analysis_pb2.ListOpportunitiesRequest(**kwargs), _ctx(_HEADERS)
+        )
     return {o.symbol: o for o in resp.opportunities}, resp.opportunities
 
 
@@ -4402,16 +4628,19 @@ class TestListOpportunitiesMaterialized:
         assert meta == {"x-user-id": "u1", "x-access-scope": "7", "x-trace-id": "t1"}
 
     @pytest.mark.asyncio
-    async def test_cold_read_computes_synchronously_then_serves(self):
-        """Cold (never-materialized) read runs the compute inline and serves the result."""
+    async def test_cold_read_serves_queue_after_background_recompute(self):
+        """feature 185 FR-4: a cold read no longer computes synchronously — it kicks a background
+        recompute and the polling client (here: the `_list_opps` drain) sees the computed queue on a
+        subsequent read. The raw non-blocking pending signal is asserted in
+        TestColdReadNonBlocking."""
         svc = _materialized_svc(
             watchlists=[_wl(bindings=[("AAPL", "sx")])],
             strategies={"sx": _strat_row("sx", entry=_GT_100)},
             bars={"AAPL": _FIRING_BARS},
         )
         assert await svc._opportunities_repo.count_for_user("u1") == 0
-        by_symbol, _ = await _list_opps(svc)
-        assert "AAPL" in by_symbol  # served from the synchronous compute
+        by_symbol, _ = await _list_opps(svc)  # drains the background kick + re-reads
+        assert "AAPL" in by_symbol  # served after the background recompute materialized it
         assert svc._ingest.QuerySignals.await_count == 1
 
     @pytest.mark.asyncio
@@ -4624,6 +4853,517 @@ class TestListOpportunitiesMaterialized:
         assert by_symbol["XYZ"].muted is True
 
 
+class TestOpportunityDataUnavailable:
+    """feature 185 FR-1 — a data-unavailable candidate (bars/indicator fetch failure) is a terminal
+    'unavailable' sentinel, distinct from an evaluated 0/N quiet row, and it survives the
+    materialization round-trip + the read conviction floor. These drive ``_compute_opportunities``
+    directly (the sentinel is a compute-path concern), so they are independent of the
+    ListOpportunities cold-read semantics that feature 185 FR-4 later reworks."""
+
+    _META = [("x-user-id", "u1"), ("x-access-scope", "7"), ("x-trace-id", "t1")]
+
+    @pytest.mark.asyncio
+    async def test_primary_fetch_failure_is_marked_unavailable(self):
+        """@AC-1: a candidate whose primary bars fetch RAISES is stamped 'unavailable' with both
+        ranking axes zeroed, and is distinguishable from a sibling that evaluated 0/N."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx"), ("MSFT", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+        )
+
+        def _bars(req, metadata=None):
+            if req.symbol == "AAPL":
+                raise RuntimeError("marketdata down")  # a primary-fetch outage for AAPL only
+            return _recent_bars_resp([50.0, 60.0, 70.0])  # MSFT: SMA≈60 < 100 → evaluated 0/1
+
+        svc._marketdata.GetBars = AsyncMock(side_effect=_bars)
+
+        rows = await svc._compute_opportunities("u1", self._META)
+        by_sym = {r["symbol"]: r for r in rows}
+        assert set(by_sym) == {"AAPL", "MSFT"}
+        # AAPL: terminal unavailable, zeroed on BOTH ranking axes so it sinks in the read ORDER BY.
+        assert "unavailable" in by_sym["AAPL"]["provenance"]
+        assert by_sym["AAPL"]["conviction"] == 0.0
+        assert by_sym["AAPL"]["signal_axis"] == 0.0
+        assert _row_to_opportunity(by_sym["AAPL"]).data_unavailable is True
+        # MSFT: an evaluated 0/1 quiet row — NOT unavailable (distinguishable, @AC-1).
+        assert "unavailable" not in by_sym["MSFT"]["provenance"]
+        msft = _row_to_opportunity(by_sym["MSFT"])
+        assert msft.data_unavailable is False
+        assert (msft.passing_conditions, msft.total_conditions) == (0, 1)
+
+    @pytest.mark.asyncio
+    async def test_thin_empty_bars_is_not_unavailable(self):
+        """@AC-2 (design top risk): a symbol that returns ``[]`` WITHOUT raising (a warm-up-thin
+        symbol) stays an evaluated row — failure is recorded only in an except branch, never
+        inferred from an empty bars list."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={},  # AAPL absent → GetBars returns [] (no raise)
+        )
+        rows = await svc._compute_opportunities("u1", self._META)
+        aapl = {r["symbol"]: r for r in rows}["AAPL"]
+        assert "unavailable" not in aapl["provenance"]
+        assert _row_to_opportunity(aapl).data_unavailable is False
+
+    @pytest.mark.asyncio
+    async def test_evaluated_zero_of_n_is_not_unavailable(self):
+        """@AC-2: an evaluated 0-of-N row (real bars, no condition passing) is classified quiet,
+        never data-unavailable."""
+        three_fail = {
+            "op": "AND",
+            "conditions": [
+                {"fn": ">", "lhs": "sma", "rhs": 200.0},
+                {"fn": ">", "lhs": "sma", "rhs": 300.0},
+                {"fn": ">", "lhs": "sma", "rhs": 400.0},
+            ],
+        }
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=three_fail)},
+            bars={"AAPL": [50.0, 60.0, 70.0]},  # SMA≈60 — none of the three thresholds pass
+        )
+        rows = await svc._compute_opportunities("u1", self._META)
+        opp = _row_to_opportunity({r["symbol"]: r for r in rows}["AAPL"])
+        assert opp.data_unavailable is False
+        assert (opp.passing_conditions, opp.total_conditions) == (0, 3)
+
+    @pytest.mark.asyncio
+    async def test_sentinel_survives_round_trip_and_conviction_floor(self):
+        """@AC-5: an 'unavailable'-provenance row written to the repo reads back (no recompute) with
+        data_unavailable still derived True, and a conviction=0 unavailable row is exempt from a
+        non-zero min_conviction floor (every-layer filter, fails.md:1547 — mirrors muted)."""
+        svc = _materialized_svc()
+        future = datetime(2999, 1, 1, tzinfo=UTC)
+        row = {
+            "opportunity_key": "u1|AAPL|sx",
+            "symbol": "AAPL",
+            "strategy_id": "sx",
+            "action": int(analysis_pb2.OPPORTUNITY_ACTION_TAG_ENTER),
+            "conviction": 0.0,
+            "readiness_json": {"passing_conditions": 0, "total_conditions": 1},
+            "signal_axis": 0.0,
+            "provenance": ["watchlist", "unavailable"],
+            "thesis": "",
+            "valid_until": future,
+        }
+        await svc._opportunities_repo.replace_for_user("u1", [row])
+        got = await svc._opportunities_repo.read("u1", 0.5, 0.3, include_expired=False)
+        assert [r["symbol"] for r in got] == ["AAPL"]  # not dropped by the 0.5 floor
+        assert _row_to_opportunity(got[0]).data_unavailable is True
+
+    @pytest.mark.asyncio
+    async def test_indicator_rpc_error_is_unavailable_not_whole_compute_abort(self):
+        """Abort-contract change (design Rejected Alt 8): an indicators ``grpc.RpcError`` for one
+        candidate marks THAT candidate unavailable while others still produce real rows — the
+        compute no longer aborts wholesale (the gather had no return_exceptions)."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx"), ("MSFT", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS, "MSFT": _FIRING_BARS},
+        )
+        _real = StrategyEvaluator.evaluate_conditions_traced
+
+        async def _maybe_raise(
+            self, definition, bars, symbol, signals_map=None, *, rule="entry", benchmark_bars=None
+        ):
+            if symbol == "AAPL":
+                raise grpc.RpcError("indicators transport down")
+            return await _real(
+                self,
+                definition,
+                bars,
+                symbol,
+                signals_map,
+                rule=rule,
+                benchmark_bars=benchmark_bars,
+            )
+
+        with patch.object(StrategyEvaluator, "evaluate_conditions_traced", _maybe_raise):
+            rows = await svc._compute_opportunities("u1", self._META)
+        by_sym = {r["symbol"]: r for r in rows}
+        assert _row_to_opportunity(by_sym["AAPL"]).data_unavailable is True
+        msft = _row_to_opportunity(by_sym["MSFT"])
+        assert msft.data_unavailable is False  # the compute completed for the other candidate
+        assert msft.passing_conditions == 1
+
+    @pytest.mark.asyncio
+    async def test_formula_execution_error_still_propagates(self):
+        """A ``FormulaExecutionError`` is a formula BUG, not a data outage — it must NOT be
+        swallowed as unavailable; it propagates out of the compute (design Rejected Alt 8)."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS},
+        )
+
+        async def _boom(
+            self, definition, bars, symbol, signals_map=None, *, rule="entry", benchmark_bars=None
+        ):
+            raise FormulaExecutionError("f-bad", "boom")
+
+        with patch.object(StrategyEvaluator, "evaluate_conditions_traced", _boom):
+            with pytest.raises(FormulaExecutionError):
+                await svc._compute_opportunities("u1", self._META)
+
+
+class _CountingSem:
+    """Wraps an ``asyncio.Semaphore``, counting ``async with`` acquisitions so a test can assert
+    WHICH semaphore a code path uses (feature 185 FR-3 background/interactive isolation)."""
+
+    def __init__(self, inner):
+        self._inner = inner
+        self.acquires = 0
+
+    async def __aenter__(self):
+        self.acquires += 1
+        return await self._inner.__aenter__()
+
+    async def __aexit__(self, *exc):
+        return await self._inner.__aexit__(*exc)
+
+
+class TestOpportunitySemaphoreIsolation:
+    """feature 185 FR-3 (@AC-4) — the background opportunity compute fan-out and the interactive
+    read path do NOT contend on the same semaphore permits: the compute runs on
+    `_readiness_materializer_bars_sem`, the interactive `_enrich_opportunities_live` on
+    `_bars_fetch_sem`, so a heavy recompute cannot starve an interactive read."""
+
+    @pytest.mark.asyncio
+    async def test_compute_fanout_uses_background_sem_not_interactive(self):
+        """The compute's primary/benchmark bars-fetch fan-out acquires the BACKGROUND
+        `_readiness_materializer_bars_sem` and never the interactive `_bars_fetch_sem`."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx"), ("MSFT", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS, "MSFT": _FIRING_BARS},
+        )
+        bg = _CountingSem(svc._readiness_materializer_bars_sem)
+        fg = _CountingSem(svc._bars_fetch_sem)
+        svc._readiness_materializer_bars_sem = bg
+        svc._bars_fetch_sem = fg
+        await svc._compute_opportunities("u1", [("x-user-id", "u1")])
+        assert bg.acquires >= 2  # AAPL + MSFT primary fetches on the background sem
+        assert fg.acquires == 0  # the interactive sem is untouched by the compute (isolation)
+
+    @pytest.mark.asyncio
+    async def test_interactive_enrich_uses_interactive_sem_not_background(self):
+        """The interactive read-time `_enrich_opportunities_live` acquires the interactive
+        `_bars_fetch_sem` and never the background compute sem — the other side of the split."""
+        from gen.marketdata.v1 import marketdata_pb2 as _md
+
+        svc = _materialized_svc()
+        svc._marketdata.GetLatestPrice = AsyncMock(return_value=_md.LatestPrice())
+        svc._marketdata.GetBars = AsyncMock(return_value=_recent_bars_resp([1.0, 2.0, 3.0]))
+        bg = _CountingSem(svc._readiness_materializer_bars_sem)
+        fg = _CountingSem(svc._bars_fetch_sem)
+        svc._readiness_materializer_bars_sem = bg
+        svc._bars_fetch_sem = fg
+        await svc._enrich_opportunities_live(
+            [analysis_pb2.Opportunity(symbol="AAPL")], [("x-user-id", "u1")]
+        )
+        assert fg.acquires >= 1  # live enrichment runs on the interactive sem
+        assert bg.acquires == 0  # never on the background compute sem
+
+
+class _StampedComputeState:
+    """In-memory OpportunityComputeStateRepository stub returning a fixed (fresh) stamp — used to
+    exercise the feature-177 legitimately-empty-universe branch (a fresh empty stamp present)."""
+
+    def __init__(self, valid_until):
+        self._row = {"computed_at": datetime.now(UTC), "valid_until": valid_until}
+
+    async def get(self, user_id):
+        return self._row
+
+    async def upsert(self, user_id, valid_until):
+        self._row = {"computed_at": datetime.now(UTC), "valid_until": valid_until}
+
+
+class TestColdReadNonBlocking:
+    """feature 185 FR-4 (@AC-6/@AC-7) — a cold (never-materialized) ListOpportunities read returns
+    empty + a pending signal WITHOUT computing synchronously, distinct from a legitimately-empty
+    universe; a persistently-failing cold compute renders a terminal compute_failed state. These
+    call ``svc.ListOpportunities`` DIRECTLY to observe the raw response-level signals."""
+
+    @pytest.mark.asyncio
+    async def test_cold_read_is_non_blocking_and_kicks_recompute(self):
+        """@AC-6: a cold read returns empty + computing=True, does NOT compute synchronously, and a
+        background recompute is kicked (draining it materializes the queue)."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS},
+        )
+        resp = await svc.ListOpportunities(analysis_pb2.ListOpportunitiesRequest(), _ctx(_HEADERS))
+        assert list(resp.opportunities) == []
+        assert resp.computing is True
+        assert resp.compute_failed is False
+        # Non-blocking: the compute did NOT run synchronously in the RPC body (the fire-and-forget
+        # kick has not executed yet — no await has yielded to it).
+        assert svc._ingest.QuerySignals.await_count == 0
+        # ... but a background recompute WAS kicked; draining it materializes the queue.
+        await _drain_opportunity_recompute(svc, "u1")
+        assert svc._ingest.QuerySignals.await_count >= 1
+        assert await svc._opportunities_repo.count_for_user("u1") >= 1
+
+    @pytest.mark.asyncio
+    async def test_empty_universe_is_distinct_from_cold(self):
+        """@AC-6 distinctness: a legitimately-empty universe (a fresh empty-compute stamp) returns
+        empty with computing=False — the proof it is distinguishable from a cold read."""
+        svc = _materialized_svc()  # no watchlist/held/signals → empty universe
+        svc._opportunity_compute_state_repo = _StampedComputeState(
+            datetime.now(UTC) + timedelta(seconds=60)
+        )
+        resp = await svc.ListOpportunities(analysis_pb2.ListOpportunitiesRequest(), _ctx(_HEADERS))
+        assert list(resp.opportunities) == []
+        assert resp.computing is False  # NOT cold — a legitimately-empty universe
+        assert resp.compute_failed is False
+        await _drain_opportunity_recompute(svc, "u1")  # settle the feature-177 self-heal kick
+
+    @pytest.mark.asyncio
+    async def test_persistently_failing_cold_read_reports_terminal_failed(self):
+        """@AC-7: once the cold recompute has failed _OPPORTUNITY_COMPUTE_MAX_ATTEMPTS times the
+        read reports compute_failed=True (not "computing" forever); a later success resets it."""
+        from app.handlers.servicer import _OPPORTUNITY_COMPUTE_MAX_ATTEMPTS
+
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS},
+        )
+        svc._opportunity_compute_failures["u1"] = _OPPORTUNITY_COMPUTE_MAX_ATTEMPTS
+        resp = await svc.ListOpportunities(analysis_pb2.ListOpportunitiesRequest(), _ctx(_HEADERS))
+        assert list(resp.opportunities) == []
+        assert resp.compute_failed is True  # terminal, not an infinite spinner
+        assert resp.computing is False
+        # Still kicked so it self-heals when data recovers — a success clears the counter.
+        await _drain_opportunity_recompute(svc, "u1")
+        assert "u1" not in svc._opportunity_compute_failures
+
+
+class TestOpportunitySurgicalRecovery:
+    """feature 185 FR-5 (@AC-8/@AC-9) — a served data-unavailable row self-heals via a surgical,
+    per-symbol read-time recovery: it re-fetches ONLY the stale symbols (not the full universe),
+    heals in place restoring BOTH ranking axes, re-stamps a still-down row, never resurrects a
+    dropped row, keeps offset paging stable, dedups concurrent kicks, and refreshes the readiness
+    cache for a recovered watchlist-entry pair (success-only)."""
+
+    _META = [("x-user-id", "u1"), ("x-access-scope", "7"), ("x-trace-id", "t1")]
+
+    @pytest.mark.asyncio
+    async def test_surgical_heal_restores_both_axes_in_place(self):
+        """@AC-8: a recovered data-unavailable row heals in place with conviction AND signal_axis
+        restored (signal_axis re-drained, not left 0), and ONLY that symbol is re-fetched (the full
+        universe drain — ListWatchlists/ListPositions — is not run)."""
+        svc = _materialized_svc(
+            signals=[_sig("AAPL", "buy", 0.7, source="uw")],
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS},  # market data recovered
+        )
+        old = datetime.now(UTC) - timedelta(seconds=400)
+        svc._opportunities_repo.rows["u1"] = [
+            _unavailable_served_row(
+                "AAPL", "sx", provenance=["watchlist", "unavailable"], computed_at=old
+            )
+        ]
+        await svc._retry_unavailable_symbols("u1", {"AAPL"}, self._META)
+        healed = svc._opportunities_repo.rows["u1"][0]
+        assert "unavailable" not in healed["provenance"]  # sentinel dropped
+        assert healed["conviction"] == 1.0  # readiness restored (firing)
+        assert healed["signal_axis"] == pytest.approx(0.7)  # re-drained, not left 0 (@AC-8)
+        # Surgical, not a full recompute: the universe drains were never called.
+        assert svc._portfolio.ListWatchlists.await_count == 0
+        assert svc._portfolio.ListPositions.await_count == 0
+
+    @pytest.mark.asyncio
+    async def test_still_unavailable_is_restamped_not_healed(self):
+        """@AC-8: a symbol whose re-fetch still fails keeps the sentinel (conviction 0) but has its
+        computed_at re-stamped so it does not re-kick before the next 300s cooldown."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("BAD", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+        )
+        svc._marketdata.GetBars = AsyncMock(side_effect=RuntimeError("still down"))
+        old = datetime.now(UTC) - timedelta(seconds=400)
+        svc._opportunities_repo.rows["u1"] = [
+            _unavailable_served_row(
+                "BAD", "sx", provenance=["watchlist", "unavailable"], computed_at=old
+            )
+        ]
+        await svc._retry_unavailable_symbols("u1", {"BAD"}, self._META)
+        row = svc._opportunities_repo.rows["u1"][0]
+        assert "unavailable" in row["provenance"]  # still marked
+        assert row["conviction"] == 0.0
+        assert row["computed_at"] > old  # re-stamped → cooldown holds
+
+    @pytest.mark.asyncio
+    async def test_replace_symbols_never_resurrects_absent_key(self):
+        """No-resurrection: replace_symbols given a key absent from the table does NOT INSERT it (a
+        symbol dropped from the universe stays dropped until the daily full compute)."""
+        svc = _materialized_svc()
+        svc._opportunities_repo.rows["u1"] = []
+        await svc._opportunities_repo.replace_symbols(
+            "u1",
+            [
+                {
+                    "opportunity_key": "u1|GONE|sx",
+                    "conviction": 1.0,
+                    "readiness_json": {},
+                    "signal_axis": 0.5,
+                    "provenance": ["watchlist"],
+                    "thesis": "",
+                    "valid_until": datetime.now(UTC),
+                }
+            ],
+        )
+        assert svc._opportunities_repo.rows["u1"] == []  # never inserted
+
+    @pytest.mark.asyncio
+    async def test_fresh_read_scan_kicks_retry_for_stale_unavailable_only(self):
+        """@AC-8 scan: a FRESH read kicks the surgical retry for data-unavailable rows older than
+        the cooldown ONLY — a within-cooldown unavailable row and an evaluated (non-unavailable) row
+        do not trigger it."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS},
+        )
+        from gen.marketdata.v1 import marketdata_pb2 as _md
+
+        svc._marketdata.GetLatestPrice = AsyncMock(return_value=_md.LatestPrice())
+        svc._kick_opportunity_retry = MagicMock()
+        old = datetime.now(UTC) - timedelta(seconds=400)
+        recent = datetime.now(UTC)
+        normal = _unavailable_served_row("OK", "sx", provenance=["watchlist"], computed_at=old)
+        normal["conviction"] = 1.0  # an evaluated row, NOT unavailable
+        svc._opportunities_repo.rows["u1"] = [
+            _unavailable_served_row(
+                "AAPL", "sx", provenance=["watchlist", "unavailable"], computed_at=old
+            ),
+            _unavailable_served_row(
+                "MSFT", "sx", provenance=["watchlist", "unavailable"], computed_at=recent
+            ),
+            normal,
+        ]
+        await svc.ListOpportunities(analysis_pb2.ListOpportunitiesRequest(), _ctx(_HEADERS))
+        svc._kick_opportunity_retry.assert_called_once()
+        assert svc._kick_opportunity_retry.call_args.args[1] == {"AAPL"}  # stale-unavailable only
+
+    @pytest.mark.asyncio
+    async def test_retry_guard_cleared_after_run(self):
+        """Dedup: _kick_opportunity_retry adds the user to _opportunity_retrying synchronously and
+        clears it in a finally (no stuck flag after the run)."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS},
+        )
+        old = datetime.now(UTC) - timedelta(seconds=400)
+        svc._opportunities_repo.rows["u1"] = [
+            _unavailable_served_row(
+                "AAPL", "sx", provenance=["watchlist", "unavailable"], computed_at=old
+            )
+        ]
+        svc._kick_opportunity_retry("u1", {"AAPL"}, self._META)
+        assert "u1" in svc._opportunity_retrying  # added synchronously
+        for _ in range(500):
+            if "u1" not in svc._opportunity_retrying:
+                break
+            await asyncio.sleep(0)
+        assert "u1" not in svc._opportunity_retrying  # cleared in the finally
+
+    @pytest.mark.asyncio
+    async def test_retry_skipped_when_full_recompute_in_flight(self):
+        """Dedup: a surgical retry is skipped when a full recompute is already in flight (it heals
+        these rows too)."""
+        svc = _materialized_svc()
+        svc._opportunity_recomputing.add("u1")
+        svc._kick_opportunity_retry("u1", {"AAPL"}, self._META)
+        assert "u1" not in svc._opportunity_retrying  # never started
+
+    @pytest.mark.asyncio
+    async def test_recovered_watchlist_entry_refreshes_readiness_cache(self):
+        """@AC-9: a recovered watchlist×strategy entry pair upserts the fresh readiness-cache subset
+        (success-only)."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS},
+        )
+        cache = _FakeReadinessCache()
+        svc._readiness_cache_repo = cache
+        old = datetime.now(UTC) - timedelta(seconds=400)
+        svc._opportunities_repo.rows["u1"] = [
+            _unavailable_served_row(
+                "AAPL", "sx", provenance=["watchlist", "unavailable"], computed_at=old
+            )
+        ]
+        await svc._retry_unavailable_symbols("u1", {"AAPL"}, self._META)
+        assert len(cache.upserted) == 1
+        staged = cache.upserted[0]
+        assert staged["symbol"] == "AAPL"
+        assert staged["strategy_id"] == "sx"
+        assert staged["rule"] == "entry"
+        assert staged["bar_epoch"] >= 0  # success
+
+    @pytest.mark.asyncio
+    async def test_still_down_symbol_not_written_to_readiness_cache(self):
+        """@AC-9 success-only: a symbol whose re-fetch still fails is NOT written to the readiness
+        cache."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("BAD", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+        )
+        svc._marketdata.GetBars = AsyncMock(side_effect=RuntimeError("down"))
+        cache = _FakeReadinessCache()
+        svc._readiness_cache_repo = cache
+        old = datetime.now(UTC) - timedelta(seconds=400)
+        svc._opportunities_repo.rows["u1"] = [
+            _unavailable_served_row(
+                "BAD", "sx", provenance=["watchlist", "unavailable"], computed_at=old
+            )
+        ]
+        await svc._retry_unavailable_symbols("u1", {"BAD"}, self._META)
+        assert cache.upserted == []  # still-down → not staged
+
+    @pytest.mark.asyncio
+    async def test_paging_stable_across_tied_unavailable_rows(self):
+        """Paging determinism: several rows tied at conviction=0, signal_axis=0 paginate via the
+        opportunity_key ASC tiebreak so each row is returned once across two offset polls."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS},
+        )
+        from gen.marketdata.v1 import marketdata_pb2 as _md
+
+        svc._marketdata.GetLatestPrice = AsyncMock(return_value=_md.LatestPrice())
+        svc._kick_opportunity_retry = MagicMock()  # keep the scan from mutating rows mid-page
+        recent = datetime.now(UTC)
+        svc._opportunities_repo.rows["u1"] = [
+            _unavailable_served_row(
+                f"S{i}", "sx", provenance=["watchlist", "unavailable"], computed_at=recent
+            )
+            for i in range(4)
+        ]
+        page1 = await svc.ListOpportunities(
+            analysis_pb2.ListOpportunitiesRequest(page=common_pb2.PageRequest(page_size=2)),
+            _ctx(_HEADERS),
+        )
+        page2 = await svc.ListOpportunities(
+            analysis_pb2.ListOpportunitiesRequest(
+                page=common_pb2.PageRequest(page_size=2, page_token="2")
+            ),
+            _ctx(_HEADERS),
+        )
+        seen = [o.symbol for o in page1.opportunities] + [o.symbol for o in page2.opportunities]
+        assert sorted(seen) == ["S0", "S1", "S2", "S3"]
+        assert len(seen) == len(set(seen))  # each row exactly once (stable paging)
+
+
 class TestOpportunityBarsFetchDedup:
     """feature 141 — per-pass bars dedup + cross-request semaphore fixing the "out of shared
     memory" (SQLSTATE 53200) bars-fetch failures caused by feature 131/132's widened candidate
@@ -4726,10 +5466,16 @@ class TestOpportunityBarsFetchDedup:
         over N=6 concurrent ListOpportunities calls for 6 different user_ids against ONE shared
         servicer instance (mirrors production: AnalysisServicer is constructed once,
         instance_count=1 per .do/app.yaml:232), with the bars-fetch mocked to block on a shared
-        counter. Asserts peak in-flight fetches == the configured max_concurrent_bars_fetches (2,
-        default) — proving BOTH that fetches genuinely overlap (a "teeth" assertion — insights.md
-        2026-07-27: an upper bound alone can pass vacuously if nothing ever overlaps) AND that the
-        semaphore caps them at exactly the configured bound, not some other number."""
+        counter. Asserts peak in-flight fetches == the configured bound (2, default) — proving BOTH
+        that fetches genuinely overlap (a "teeth" assertion — insights.md 2026-07-27: an upper bound
+        alone can pass vacuously if nothing ever overlaps) AND that the semaphore caps them at
+        exactly the configured bound, not some other number.
+
+        feature 185 (FR-3): the compute fan-out moved from `_bars_fetch_sem` onto the background
+        `_readiness_materializer_bars_sem` (default also 2). This test now counts ONLY the
+        compute-path (range-bearing) GetBars calls — the read-time sparkline enrichment (page-only)
+        runs on the separate interactive `_bars_fetch_sem` and would otherwise inflate the peak now
+        that the two paths no longer share permits (that non-sharing IS the FR-3 isolation)."""
         svc = _materialized_svc(
             watchlists=[_wl(bindings=[("SOLO", "wl0")])],
             strategies={"wl0": _strat_row("wl0", entry=_GT_100)},
@@ -4740,6 +5486,10 @@ class TestOpportunityBarsFetchDedup:
 
         async def _blocking_get_bars(req, metadata=None):
             nonlocal in_flight, peak
+            # Only the compute path carries a range; the interactive sparkline enrichment is
+            # page-only and runs on the other (now-separate) sem, so it must not be counted here.
+            if not req.HasField("range"):
+                return _recent_bars_resp(_FIRING_BARS)
             async with state_lock:
                 in_flight += 1
                 peak = max(peak, in_flight)
@@ -4760,7 +5510,7 @@ class TestOpportunityBarsFetchDedup:
             ]
         )
 
-        assert peak == 2  # exactly the configured max_concurrent_bars_fetches default
+        assert peak == 2  # exactly the configured background bars-fetch bound (default)
 
 
 class TestGetStrategyAnalytics:
@@ -4903,6 +5653,8 @@ class TestOpportunityRowParity:
         "conditions",
         # feature 110 — raw max ExternalSignal.conviction, carried from readiness_json.
         "signal_confidence",
+        # feature 185 — derived from the "unavailable" provenance marker at read.
+        "data_unavailable",
     }
     # feature 095 — live-market fields set at read time in ListOpportunities (post-ranking), not by
     # the mapper, so they join _INTENTIONALLY_UNSET rather than _MAPPED.
@@ -6022,6 +6774,10 @@ class TestOpportunityConcurrencyFeature176:
         svc._strategies_repo.get_by_owner_and_id = AsyncMock(side_effect=_owner_scoped)
 
         ctx_b = _ctx({"x-user-id": "uB", "x-access-scope": "7", "x-trace-id": "t1"})
+        # feature 185 FR-4: cold read is non-blocking — drain the kicked background recompute for uB
+        # and re-read so the owner-scoping assertions see the materialized result.
+        await svc.ListOpportunities(analysis_pb2.ListOpportunitiesRequest(), ctx_b)
+        await _drain_opportunity_recompute(svc, "uB")
         resp = await svc.ListOpportunities(analysis_pb2.ListOpportunitiesRequest(), ctx_b)
         by_symbol = {o.symbol: o for o in resp.opportunities}
 

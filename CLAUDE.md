@@ -445,7 +445,7 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon
 | Proto-gen container | `Dockerfile.codegen` |
 | Bootstrap script | `scripts/bootstrap.sh` |
 | DB migration script | `scripts/db-migrate.sh` |
-| User management script | `scripts/manage-users.sh` — also at `/app/scripts/manage-users.sh` inside the identity container |
+| User management script | `scripts/manage-users.py` — Typer CLI; run via `uv run scripts/manage-users.py` |
 | Proto gen script | `scripts/buf-gen.sh` |
 | E2E test container | `Dockerfile.e2e` |
 | E2E test runner script | `scripts/run-e2e.sh` |

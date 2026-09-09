@@ -99,6 +99,16 @@ class IdentityServiceStub(object):
                 request_serializer=identity_dot_v1_dot_identity__pb2.UpdateUserMetadataRequest.SerializeToString,
                 response_deserializer=identity_dot_v1_dot_identity__pb2.UpdateUserMetadataResponse.FromString,
                 _registered_method=True)
+        self.AdminGetUserMetadata = channel.unary_unary(
+                '/xstockstrat.identity.v1.IdentityService/AdminGetUserMetadata',
+                request_serializer=identity_dot_v1_dot_identity__pb2.AdminGetUserMetadataRequest.SerializeToString,
+                response_deserializer=identity_dot_v1_dot_identity__pb2.GetUserMetadataResponse.FromString,
+                _registered_method=True)
+        self.AdminUpdateUserMetadata = channel.unary_unary(
+                '/xstockstrat.identity.v1.IdentityService/AdminUpdateUserMetadata',
+                request_serializer=identity_dot_v1_dot_identity__pb2.AdminUpdateUserMetadataRequest.SerializeToString,
+                response_deserializer=identity_dot_v1_dot_identity__pb2.UpdateUserMetadataResponse.FromString,
+                _registered_method=True)
         self.CreateUser = channel.unary_unary(
                 '/xstockstrat.identity.v1.IdentityService/CreateUser',
                 request_serializer=identity_dot_v1_dot_identity__pb2.CreateUserRequest.SerializeToString,
@@ -217,6 +227,20 @@ class IdentityServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def AdminGetUserMetadata(self, request, context):
+        """Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
+        body user_id, never x-user-id (C-03). Reuse the self responses.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def AdminUpdateUserMetadata(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def CreateUser(self, request, context):
         """User management (admin-gated, feature 043). Every RPC requires the admin access-scope bit;
         passwords are write-only (never returned). Additive over the existing service.
@@ -321,6 +345,16 @@ def add_IdentityServiceServicer_to_server(servicer, server):
             'UpdateUserMetadata': grpc.unary_unary_rpc_method_handler(
                     servicer.UpdateUserMetadata,
                     request_deserializer=identity_dot_v1_dot_identity__pb2.UpdateUserMetadataRequest.FromString,
+                    response_serializer=identity_dot_v1_dot_identity__pb2.UpdateUserMetadataResponse.SerializeToString,
+            ),
+            'AdminGetUserMetadata': grpc.unary_unary_rpc_method_handler(
+                    servicer.AdminGetUserMetadata,
+                    request_deserializer=identity_dot_v1_dot_identity__pb2.AdminGetUserMetadataRequest.FromString,
+                    response_serializer=identity_dot_v1_dot_identity__pb2.GetUserMetadataResponse.SerializeToString,
+            ),
+            'AdminUpdateUserMetadata': grpc.unary_unary_rpc_method_handler(
+                    servicer.AdminUpdateUserMetadata,
+                    request_deserializer=identity_dot_v1_dot_identity__pb2.AdminUpdateUserMetadataRequest.FromString,
                     response_serializer=identity_dot_v1_dot_identity__pb2.UpdateUserMetadataResponse.SerializeToString,
             ),
             'CreateUser': grpc.unary_unary_rpc_method_handler(
@@ -704,6 +738,60 @@ class IdentityService(object):
             target,
             '/xstockstrat.identity.v1.IdentityService/UpdateUserMetadata',
             identity_dot_v1_dot_identity__pb2.UpdateUserMetadataRequest.SerializeToString,
+            identity_dot_v1_dot_identity__pb2.UpdateUserMetadataResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def AdminGetUserMetadata(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.identity.v1.IdentityService/AdminGetUserMetadata',
+            identity_dot_v1_dot_identity__pb2.AdminGetUserMetadataRequest.SerializeToString,
+            identity_dot_v1_dot_identity__pb2.GetUserMetadataResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def AdminUpdateUserMetadata(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.identity.v1.IdentityService/AdminUpdateUserMetadata',
+            identity_dot_v1_dot_identity__pb2.AdminUpdateUserMetadataRequest.SerializeToString,
             identity_dot_v1_dot_identity__pb2.UpdateUserMetadataResponse.FromString,
             options,
             channel_credentials,

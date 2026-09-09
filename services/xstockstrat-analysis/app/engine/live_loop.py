@@ -293,9 +293,10 @@ class LiveEvaluationLoop:
                 held_cache[owner] = await self._drain_held(owner)
                 watch_cache[owner] = await self._drain_watchlist(owner)
             created_at = d.get("created_at")
-            if blend_active and definition.strategy_id == blend_id:
-                # Universe REPLACED by the fundamentals universe minus its deny list (held∩denied
-                # keeps its exit edge). Held not unioned in; the signal_params allowlist is ignored.
+            if definition.strategy_id == blend_id:
+                # Blend strategy — fundamentals-only execution (FR-1, FR-4)
+                if not blend_active or not fundamentals_universe:
+                    continue  # skip entirely — never resolve_universe
                 denied = {_normalize_symbol(s) for s in definition.denied_symbols}
                 deny_entry = held_cache[owner] & denied
                 universe = (fundamentals_universe - denied) | deny_entry

@@ -3077,6 +3077,11 @@ reusing.
   `app/handlers/servicer.py` (`_readiness_materializer_tick`, `_drain_watchlist_bindings` reuse,
   FAST gate); `docs/roadmap/features/180-watchlist-readiness-precompute/implementation-spec.md` Deviation Log.
 
+### 2026-09-06 — mcp-user-profile-roles — design
+- **Pattern**: The hand-maintained-projection parity guard (mirror of `test_backtest_view.py`'s `DESCRIPTOR.fields_by_name` check) has a **TS-service analog** for services whose runtime stub is ts-proto (which has NO field reflection): reflect via **protobuf-es v2** instead — import `<Msg>Schema` from the `_pb` module (`protoc-gen-es` is already generated per `packages/proto/buf.gen.yaml`; `@bufbuild/protobuf` is a dep) and assert `<Msg>Schema.fields.map(f => f.localName)` (camelCase) equals the emitted key set of the row→proto mapper. The mapper must emit every field unconditionally (`x ?? undefined`, never conditional-spread) or the key-set assertion becomes row-dependent. Mild dual-flavor indirection: the service serializes via ts-proto while the guard reflects via protobuf-es, but both derive from the same `.proto`.
+- **Evidence**: feature 183 design.md § Chosen Approach (step 2 test plan); `packages/proto/buf.gen.yaml:35` (protoc-gen-es); `services/xstockstrat-identity/package.json:20` (`@bufbuild/protobuf`); Python precedent `services/xstockstrat-agent/tests/test_backtest_view.py:189`.
+- **Rule it implies**: a hand-maintained proto projection in a TS/Node service must be pinned by a protobuf-es schema-reflection parity test (the ts-proto stub cannot back one) — extends the F-12/RC-1 "pin projections with a parity test" lesson across languages.
+
 ## 2026-09-06 — config write-bounds are write-path only (feature 182)
 
 - **Pattern**: Registering a `SCALAR_BOUNDS_REGISTRY` entry for a config key rejects only out-of-range
@@ -3094,3 +3099,41 @@ reusing.
   today — int support is the open verify for a new int-key bound);
   `services/xstockstrat-analysis/app/handlers/servicer.py:454` (`get_int` + low-only `max(1,…)`), `:4075`
   (`refresh_hour_utc`, no clamp); feature 182 design.md.
+
+## 2026-09-07 — config write-bound lower edge is a getter-semantics decision (feature 184)
+
+- **Pattern**: The *lower* bound of a `SCALAR_BOUNDS_REGISTRY` entry is not a free choice — it must be
+  read off how the consuming service reads the key. Three cases: (1) a `get_int_present`/`get_float_present`
+  reader (HasField) honors a stored `0` as a real value, so a bound that excludes `0` silently makes a
+  currently-settable value unsettable = a C-16 regression (needs sign-off) — use lower `0`; (2) a
+  zero-trap `get_int`/`get_float` reader (`v.int_val or default`) already collapses a stored `0` to the
+  code default, so lower `1` is correct and *documents* that `0` is intentionally unreachable; (3) a
+  spec/`@AC` may mandate a lower edge (e.g. a weight `[0,1]`) that overrides (1)/(2). A bounded key whose
+  lower edge is a legitimate value (`refresh_hour_utc=0`=midnight) needs its **own** `@AC` asserting that
+  value is ACCEPTED — a rejection-only acceptance set leaves the whole lower-bound split unverified (C-15).
+- **Rule it implies**: before bounding a numeric config key, read its getter; pick the lower bound per the
+  three cases above; and for any bounded key whose lower edge is a documented value, add an @AC that the
+  edge is accepted, not just an out-of-range rejection. Also: bound only keys with a cited failure mode or
+  precedent (Behavior #2) — under-bounding is a one-line registry edit to reverse, an unjustified ceiling
+  is a latent regression; and do not bound a key read by *two* loops (shared reader) unless the single
+  bound is sane for both consumers.
+- **Evidence**: feature 184 design.md § Bounds registry growth + Rejected Alternatives;
+  `docs/roadmap/features/184-opportunity-config-operability/recon.md:94,99`;
+  `services/xstockstrat-config/src/grpc/configServiceImpl.ts:100,118-120`; acceptance.feature @AC-8.
+
+## 2026-09-07 — opportunity-compute-robustness — design (feature 185)
+
+- **Pattern**: On a data-source (marketdata) outage, the SCALABLE self-heal for cached per-symbol rows is a
+  read-time, cooldown-gated, per-symbol SURGICAL recompute (re-fetch + re-evaluate ONLY the down symbols,
+  UPDATE-in-place heal-only, re-stamp unconditionally) — NOT a full-universe recompute per affected user.
+  Full-recompute-on-read during an outage is a retry-amplification/thundering-herd (N users × full-universe
+  fetches every cooldown) that re-creates the exact multi-user pressure of the feature-141 SEV-2. Bound the
+  retry footprint to what actually failed.
+- **Rule it implies**: a "retry harder" recovery must scale DOWN its footprint during the dependency outage
+  that triggered it (per-symbol, cooldown-gated, deduped), and must restore ALL derived ranking inputs on
+  heal (re-drain signals — never leave a computed axis dishonestly zeroed, P-03), UPDATE-in-place heal-only
+  to honor the whole-user-replace invariant (no resurrection), and add a unique ORDER BY tiebreak before any
+  partial re-INSERT/UPDATE (offset paging dups/skips otherwise). Reuse the existing background semaphore
+  bucket rather than minting a third independent [1,5] bars-fetch sem (three sum to 15 > the marketdata pool
+  ceiling of 5 = SEV-2 re-open).
+- **Evidence**: feature 185 design.md §FR-3/FR-5 + Rejected Alternatives; `services/xstockstrat-analysis/app/repositories/opportunities.py:44-46,107,114`; `app/handlers/servicer.py:448-456,3492-3512,3841-3857`; ledger fails 141/1547.

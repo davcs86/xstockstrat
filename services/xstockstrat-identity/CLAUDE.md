@@ -84,7 +84,7 @@ TRADING_MODE=paper                     # paper | live
 
 ## Operations
 
-User management (`scripts/manage-users.sh` create-user / reset-password, incl. `docker exec`) and the deploy-time `JWT_SECRET` wiring (`DEV_JWT_SECRET`/`PROD_JWT_SECRET` → `.do/app*.yaml`) live on-demand in this service's `docs/` folder (**`operations.md`**).
+User management (`scripts/manage-users.py` create-user / reset-password / list-users) and the deploy-time `JWT_SECRET` wiring (`DEV_JWT_SECRET`/`PROD_JWT_SECRET` → `.do/app*.yaml`) live on-demand in this service's `docs/` folder (**`operations.md`**).
 
 ## Running Locally
 

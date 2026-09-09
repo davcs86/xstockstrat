@@ -110,6 +110,21 @@ const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: numbe
   // operator raising this above what marketdata can execute re-opens the feature-141 SEV-2 (TimescaleDB
   // "out of shared memory"). min 1 — 0 is not "unlimited" (the get_int reader would collapse it to 2).
   'analysis.readiness_materializer.max_concurrent_bars_fetches': { minValue: 1, maxValue: 5 },
+  // feature 184: opportunity-queue tuning keys, operator-editable in config-ui once seeded
+  // (migration 028). Write-edge-only guardrails on the numeric footguns; the 5 cadence/TTL/snooze
+  // keys are seeded unbounded. Lower 0 where the getter honors a legitimate 0 (refresh_hour_utc =
+  // midnight, signal_rank_weight = a valid weight); lower 1 on get_int zero-trap keys where 0 already
+  // collapses to the code default. max_concurrent_bars_fetches ceiling = marketdata PgBouncer pool.
+  'analysis.opportunity.refresh_hour_utc': { minValue: 0, maxValue: 23 },
+  'analysis.opportunity.max_concurrent_bars_fetches': { minValue: 1, maxValue: 5 },
+  'analysis.opportunity.signal_rank_weight': { minValue: 0, maxValue: 1 },
+  'analysis.opportunity.max_universe_size': { minValue: 1, maxValue: 1000 },
+  'analysis.opportunity.max_live_strategies_per_symbol': { minValue: 1, maxValue: 50 },
+  'analysis.opportunity.max_live_only_symbols_per_compute': { minValue: 1, maxValue: 500 },
+  'analysis.opportunity.max_live_held_symbols_per_compute': { minValue: 1, maxValue: 500 },
+  'analysis.opportunity.max_concurrent_candidates': { minValue: 1, maxValue: 50 },
+  'analysis.opportunity.sparkline_bars': { minValue: 1, maxValue: 500 },
+  'analysis.opportunity.valid_window_hours': { minValue: 1, maxValue: 168 },
 };
 
 // feature 182: resolve a scalar-bounds entry for a config key whose DB `key` column may be full-dotted

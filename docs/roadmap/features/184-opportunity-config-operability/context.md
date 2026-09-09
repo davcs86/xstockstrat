@@ -1,0 +1,157 @@
+# Context: opportunity-config-operability
+
+**Feature**: `docs/roadmap/features/184-opportunity-config-operability/feature.md`
+**Product Spec**: `docs/roadmap/features/184-opportunity-config-operability/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/184-opportunity-config-operability/implementation-spec.md`
+
+---
+
+## Session 2026-09-07 — sdd-story
+
+- Created from the opportunities-queue audit (this session), which compared the opportunities
+  generator/materializer against the watchlists philosophy (features 180/181/182). This feature is the
+  **config-operability** half — the direct feature-182 parallel.
+- Audit finding (dim G1): the analysis code reads 15 `analysis.opportunity.*` keys; **0 are seeded**
+  (invisible no-seed pattern) and **0 are bounded** — including footguns `refresh_hour_utc` (unclamped)
+  and `max_concurrent_bars_fetches` (feature-141 SEV-2 lever). Confirmed via grep of migrations +
+  configServiceImpl.ts SCALAR_BOUNDS_REGISTRY (only decay/stale + the feature-182 materializer keys).
+- Scope: register at code defaults (no behavior change) + bounds on the numeric footguns; reuse
+  feature-182's `lookupScalarBounds()` two-operand helper + migration template. FR-6 (refresh
+  kill-switch, audit G6) carried as a design option.
+- Sibling feature: **185 opportunity-compute-robustness** (the compute-correctness half — sentinel +
+  dedicated sem + non-blocking cold read). Kept separate so config-only (184) can ship low-risk while
+  185 has its own design debate.
+- Numbering: 182 merged + launched, 183 (mcp-user-profile-roles) already exists on main-dev, so this is
+  184 (185 is the sibling). Branch: `claude/opportunity-queue-philosophy` off origin/main-dev (operator
+  granted the push OK; PR #1106's branch was left to the merged 182).
+- Known trap carried: full-dotted `key` column + getter-matching `value_type` or silent orphan
+  (migration-026/182 scar); several opportunity keys use the `get_int`/`get_float` zero-trap so a min≥1
+  bound makes "0" intentionally unreachable — document per key.
+
+## Session 2026-09-07 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- First criteria pass FAILED on one blocker (C-15 / criterion 8): FR-6 (refresh kill-switch) was a
+  numbered functional requirement with no covering @AC-* scenario AND simultaneously open question #3
+  ("include it or not") — a spec cannot both mandate a requirement and ask whether to do it.
+- Fix (Behavior 1 / C-11 — surface the fork, defer to design): demoted the kill-switch out of the
+  numbered FR list into a "Design option" note + the "Refresh kill-switch" Open Question. Committed
+  requirements are now FR-1..FR-5 only, each with @AC coverage (FR-1→AC-1/2/3, FR-2→AC-4/5, FR-3→AC-1,
+  FR-4→AC-6, FR-5→AC-7). Reconciled the Affected Services / Proto / Config Key Changes cross-refs and
+  fixed the kill-switch key name to C-05 3-segment (`analysis.opportunity.refresh_enabled`).
+- Re-review: PASS, 0 blockers, 0 warnings.
+- Warnings: none.
+- Overlap findings: CLEAN — no other active feature seeds/registers any analysis.opportunity.* key;
+  next-free config seed migration is 028 (182 took 027 off the merge-order pre-assignment note, which
+  only reached 026); feature 185's FR-3 semaphore key
+  (analysis.opportunity.materializer_max_concurrent_bars_fetches) is a declared dependency on THIS
+  feature's mechanism, distinct from 184's interactive max_concurrent_bars_fetches — not a duplicate.
+- Advisory note carried to /sdd-spec: spec cites getters "in servicer.py"; resolved path is
+  services/xstockstrat-analysis/app/handlers/servicer.py (use full path in impl-spec, C-01).
+
+## Session 2026-09-07 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: config [migration+registry], analysis [docs-only],
+  ui /config-ui [C-14, no code]). Key reuse patterns: 027 seed-migration shape; SCALAR_BOUNDS_REGISTRY
+  + two-operand lookupScalarBounds (data-only growth, no new code); generic NamespaceEditor renders
+  registered+bounded keys automatically; CONFIG_KEY_FIXTURES signal_decay row as e2e template.
+- Phase 1 Grilling: 1 round (quick). Proposer=bound-all-15; adversary=NEEDS WORK (no Floor breach) on
+  (a) C-15/C-16: the min-0 settability guard the design rests on had no @AC; (b) Behavior #2: bounding
+  ~7 keys with no documented failure mode overreaches FR-2.
+- Chosen approach (user decision): **justified set (~10) bounds** — FR-2's 8 + sparkline_bars
+  (documented per-candidate fetch cost) + valid_window_hours (feature-182 twin precedent [1,168]);
+  seed all 15, leave 5 (TTLs/retry/jitter/snooze) unbounded (cheap-to-loosen > latent regression).
+  Rejected: bound-all-15, bound-only-8, in-feature get_float_present, in-feature kill-switch.
+- Folded adversary fixes: added @AC-8 (bounded-key lower-edge-0 accepted: refresh_hour_utc=0,
+  signal_rank_weight=0); lower-bound-per-getter-semantics rule (get_int_present bounded key → min 0;
+  get_int zero-trap → min 1); restart-only sem-key description caveat (verified NamespaceEditor renders
+  the description column, NamespaceEditor.tsx:181-183); signal_rank_weight get_float zero-trap
+  description caveat; 028 = bind-at-rebase.
+- Routed to feature 185 (named home, C-14 defer rule): the refresh kill-switch (analysis code change)
+  AND the signal_rank_weight get_float→get_float_present fix.
+- Constitution rules touched: C-05, C-07, C-08/P-06, C-10(c), C-12/C-13, C-14, C-15, C-16, F-01, F-07.
+  Floor breaches: none.
+- Status: spec-ready → design-approved.
+
+### Open Threads (carry to /sdd-spec + /sdd-execute)
+- [ ] Migration 028 collision — reconfirm max(NNN)+1 vs main-dev at execute (C-07). → step 1
+- [ ] signal_rank_weight zero-trap live until feature 185 fixes the reader — description caveat only. → step 2
+- [ ] No live valve for a runaway opportunity refresh (kill-switch deferred to 185). → feature 185
+
+## Session 2026-09-07 — sdd-spec
+
+- Generated implementation-spec.md with 5 steps. Status → implementation-ready.
+- Step map: 1 migration (028 seed, 15 keys × 2 envs, offline-verified) · 2 service (config
+  SCALAR_BOUNDS_REGISTRY +10 entries) · 3 test (setConfigScalarBounds.test.ts, paired w/ step 2,
+  red-before-green; AC-4/5/8) · 4 test (config-ui e2e fixture + api-smoke, C-14/C-12, AC-6, zero
+  component code) · 5 docs (analysis CLAUDE.md + config-governance log, AC-7).
+- Key codebase findings (all re-confirmed live this session, not just from recon):
+  - Config migration tip is `027_analysis_readiness_materializer_keys` (contiguous through 027; `024`
+    is a permanent gap) → next-free NNN = `028`; bind-at-rebase reconfirm at execute (C-07).
+  - `SCALAR_BOUNDS_REGISTRY` at `configServiceImpl.ts:100-113`; two-operand `lookupScalarBounds`
+    `:118-120`; write-edge reject `:396-405`; ListKeys hint `:527-533` — all consume the registry with
+    NO new code (data-only growth). Existing feature-182 RM int-key bounds prove int enforcement works.
+  - `setConfigScalarBounds.test.ts` feature-182 RM block `:149-204` is the exact test template
+    (in-process loopback gRPC harness, recording pool `{is_secret:false}`, `insertQuery()` guard).
+  - config-ui is fully generic (`NamespaceEditor.tsx:69`; mock `listKeys` at `mock-backend.ts:1208-1215`
+    spreads `validation`) → C-14 surface reached with zero component code; e2e fixture
+    `CONFIG_KEY_FIXTURES` (`configKeys.ts:86-93` decay row) is the C-12 template.
+  - analysis `CLAUDE.md` no-seed notes: 4 opportunity rows (`:333,:335,:337,:338`) drop the note; the
+    5th note-bearing row `:334` (`analysis.compute.max_worker_threads`) is a compute key, genuinely
+    still no-seed → its note MUST stay (FR-5, ledger fails 1512).
+- Reviewers snapshot finalized from distinct per-step reviewers: DBA (step 1), xstockstrat-config owner
+  (steps 1–3), xstockstrat-ui owner (step 4); step 5 docs = none.
+
+## Session 2026-09-07 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 1 warning, 3 notes (advisory — did not block). Overlap: CLEAN.
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 4: (C-01) instruction told the executor to set the bounded-int fixture row's
+    `validation.valueType` to a nonexistent "int-scalar enum" — `config.proto` ValueType has no such
+    member; the service emits VALUE_TYPE_FLOAT_SCALAR (2) for ALL bounded keys (configServiceImpl.ts:529).
+    — [x] resolved pre-execute: spec Step 4 corrected to `valueType: 2` for both bounded rows.
+  - Step 1/2: (cosmetic note) `grep -c "analysis.opportunity." … # expect 30/10` over-counts if the
+    mandated header comment matches — at execute, verify the row/entry count by inspection, not a bare
+    line count. — [ ] unaddressed (cosmetic; announce at execute).
+  - Scenario coverage (C-15 note): AC-1/2/3 (migration) + AC-7 (docs) have no runnable RED assertion —
+    verified by offline SQL inspection + doc-state review, matching the feature-182 precedent for a
+    config-only/docs feature. — [ ] unaddressed (accepted deviation; announce at execute).
+- Overlap findings: none (migration 028, the 15 keys, proto surface, all shared files uncontested;
+  185's materializer_max_concurrent_bars_fetches is a distinct one-way dependency, not a duplicate).
+
+## Session 2026-09-07 — sdd-execute (sequential)
+Tooling setup (steps 1-5): node ✓ v22.22.2 · pnpm ✓ 9.15.9 · config deps ⬇ · ui deps deferred to step 4 · steps 1/5 need none · migration step 1 = offline (no DB). Executing on branch claude/opportunity-queue-philosophy (DEVIATION: feature.md names feature/opportunity-config-operability; user granted this session's branch, PR #1109 already open, shared with feature 185). main-dev merged (0 behind). Open review warnings: Step-4 int-enum FIXED pre-execute; grep-count fragility → verify by inspection; AC-1/2/3/7 offline-verified (accepted, feature-182 precedent).
+
+### Step 1 — migration: seed 15 analysis.opportunity.* keys (028) [done]
+- Created 028_analysis_opportunity_keys.{up,down}.sql mirroring 027: 30 rows (15 keys × staging/production), full-dotted key, value_type float for signal_rank_weight + int for the other 14, value_data==default_value==code default, ON CONFLICT DO NOTHING. Design §4 caveats in descriptions (restart-only on the 2 __init__ sem keys; get_float zero-trap on signal_rank_weight). Down: explicit key IN (15 keys), user_id IS NULL, no LIKE.
+- Offline-verified (no DB): 30 VALUES rows, 15 distinct keys up==down, float count 2, staging 15/production 15, ON CONFLICT present. AC-1/2/3 satisfied by inspection.
+- Files modified: services/xstockstrat-config/migrations/028_analysis_opportunity_keys.{up,down}.sql
+- Deviations: none
+
+### Step 2 — service: SCALAR_BOUNDS_REGISTRY 10 entries [done]
+- Added 10 full-dotted analysis.opportunity.* bounds to SCALAR_BOUNDS_REGISTRY (justified set): refresh_hour_utc[0,23], max_concurrent_bars_fetches[1,5], signal_rank_weight[0,1], max_universe_size[1,1000], max_live_strategies_per_symbol[1,50], max_live_only_symbols_per_compute[1,500], max_live_held_symbols_per_compute[1,500], max_concurrent_candidates[1,50], sparkline_bars[1,500], valid_window_hours[1,168]. Data-only growth; no touch to lookupScalarBounds/write-edge/ListKeys hint.
+- Files modified: services/xstockstrat-config/src/grpc/configServiceImpl.ts
+- Deviations: none
+
+### Step 3 — test: bounds enforcement [done]
+- Added opportunity block to setConfigScalarBounds.test.ts (AC-4 reject 10000/99/1.5; AC-5 accept 50 + inclusive-max 5 without create_key; AC-8 accept lower-edge 0 for refresh_hour_utc + signal_rank_weight).
+- TDD red→green: RED (Step 2 stashed) → "not ok 12 ... AC-4" (out-of-range wrongly accepted), 1 fail/13 pass in the bounds file. GREEN (Step 2 restored) → 107/107 pass, lint 0 errors (143 pre-existing any-warnings), coverage 80.95% lines ≥ 40%.
+- Files modified: services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts
+- Deviations: none
+
+### Step 4 — test: config-ui e2e fixture + bound-hint coverage [done]
+- Added 3 analysis.opportunity.* rows to CONFIG_KEY_FIXTURES (bounded int refresh_hour_utc valueType 2 [0,23]; bounded float signal_rank_weight [0,1]; unbounded snooze_default_hours no validation); updated INVENTORY.md row; added api-smoke.spec.ts test "opportunity keys surface bounded hints (int + float) and an unbounded key (AC-6)". Zero UI component code (generic NamespaceEditor).
+- TDD red→green: RED (fixtures stashed) → new test fails (keys absent, toBeDefined). GREEN (restored) → 14/14 pass in api-smoke.spec.ts. next lint clean (pre-existing warnings only, untouched src/).
+- DEVIATION (CI-equivalent fallback): Playwright's pinned browser build (1234) is absent; the env ships build 1194. Ran with PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome and CI=1 (prod server + 30s timeout; dev-mode 10s cold-compile timed out the SSR warmup). Verification is real e2e execution, matching CI. See Deviation Log.
+- Files modified: services/xstockstrat-ui/e2e/fixtures/configKeys.ts, e2e/fixtures/INVENTORY.md, e2e/config-ui/api-smoke.spec.ts
+- Deviations: CI-equivalent Playwright browser-path + CI-mode fallback (above)
+
+### Step 5 — docs: reconcile analysis CLAUDE.md + config-governance log [done]
+- analysis CLAUDE.md: 15 analysis.opportunity.* Config Keys rows now cite "Seeded by migration 028 (feature 184)" + bound (or "unbounded"); the 4 prior no-seed notes removed; analysis.compute.max_worker_threads (:334) left intact (non-opportunity, genuinely no-seed).
+- config-governance.md: added feature-184 Per-Feature Registered Keys entry (newest-first) — 15-key table with bounds/unbounded, restart caveat on the 2 __init__ sem keys, signal_rank_weight get_float zero-trap caveat, pg_notify visibility caveat.
+- TEARDOWN (root CLAUDE.md): touched a context file (analysis CLAUDE.md). `/context-forge:context-constitution refresh` is NOT available this session (only context-forge:context-scrubber). Manual equivalent performed: cross-checked the 15 doc rows against migration 028 (values/defaults) and the 10 bounded rows against SCALAR_BOUNDS_REGISTRY (configServiceImpl.ts) — all match, no drift (docs written to match code in the same step). Recorded in the integration PR body.
+- Files modified: services/xstockstrat-analysis/CLAUDE.md, docs/patterns/config-governance.md
+- Deviations: none (teardown plugin-unavailable handled manually, per rule)
+
+### C-16 promotion — code-completed
+- Promoted 6 config-service scenarios (AC-1,2,3,4,5,8) → NEW services/xstockstrat-config/acceptance/opportunity-config-operability.feature, each tagged @feature-184. AC-6 (config-ui visibility) SKIPPED — generic namespace-editor guarantee already covered by feature-161's ui surface-signal-weight-decay-config.feature (feature 182 set the same no-UI-suite precedent). AC-7 (doc-state) SKIPPED — one-time landing assertion, not a durable runtime rule. Plan via scenario-promoter; no conflicts.

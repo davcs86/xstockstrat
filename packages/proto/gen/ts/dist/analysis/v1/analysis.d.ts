@@ -733,6 +733,12 @@ export interface Opportunity {
      * (NOT a probability) and the decayed/weighted signal_axis. Next free after 095's 13-18 block.
      */
     signalConfidence?: number | undefined;
+    /**
+     * feature 185 — a per-symbol bars/indicator fetch failure during the compute (terminal
+     * data-unavailable), derived at read from the "unavailable" provenance marker (no column).
+     * Distinct from an evaluated 0/N row; conviction+signal_axis are zeroed so it sinks in ranking.
+     */
+    dataUnavailable: boolean;
 }
 /**
  * One recent daily-bar close for the Decide-surface sparkline (feature 095). Explicit presence — an
@@ -786,6 +792,16 @@ export interface ListOpportunitiesRequest {
 export interface ListOpportunitiesResponse {
     opportunities: Opportunity[];
     page?: PageResponse | undefined;
+    /**
+     * feature 185 — cold (never-materialized) read: empty page returned non-blocking while a
+     * background recompute runs. FALSE for a legitimately-empty universe (distinctness proof).
+     */
+    computing: boolean;
+    /**
+     * feature 185 — a persistently-failing cold recompute (past the bounded attempt count):
+     * renders a terminal error instead of an infinite "computing" spinner.
+     */
+    computeFailed: boolean;
 }
 export interface EvaluateReadinessRequest {
     strategyId: string;

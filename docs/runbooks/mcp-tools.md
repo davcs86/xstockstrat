@@ -1,6 +1,6 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the thirty-five tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the forty tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 ---
@@ -34,7 +34,7 @@ directly on port 9000.
 
 **Direct (local):** `http://localhost:9000`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same thirty-five tools' `name`,
+**Tool catalog (UI display).** `GET /api/tools` returns the same forty tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
 capabilities (the same data documented below), never user data or credentials. It powers the
 `xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
@@ -498,6 +498,7 @@ gate.
 | `update` with no fields and no `clear_fields` | `ValueError` raised client-side, before any RPC |
 | An `update` that would empty `components` or blank a rule without naming it for erasure | `invalid argument` (INVALID_ARGUMENT) — the server refuses; the message names `update_mask` as the escape hatch |
 | `update`/`deactivate`/`reactivate` on unknown strategy | `strategy not found` (NOT_FOUND) |
+| `deactivate` on the fundamentals blend strategy (feature 186) | `the fundamentals blend strategy cannot be deactivated; it is a protected platform resource` (FAILED_PRECONDITION) |
 | `register` on an existing strategy_id (active or deactivated) | `strategy already exists` (ALREADY_EXISTS) |
 
 **Effect on the derived grade.** Changing a scoring-relevant field (`components`, rules,
@@ -857,16 +858,31 @@ admin scope) — analysis resolves the owner from the header, never a request-bo
 |---|---|---|---|
 | `min_conviction` | `float` | No | Drop rows below this conviction floor (default `0.0`); muted deny-list rows are exempt |
 
-**Return** — `{ "opportunities": [ <opportunity>, … ] }`. Each opportunity is **snake_case** and
-always carries `symbol`, `action`, `conviction`, `passing_conditions`, `total_conditions`, `thesis`,
-`strategy_id`, `source`, `opportunity_key`, `provenance`, and `muted`. The live-market enrichment is
+**Return** — `{ "opportunities": [ <opportunity>, … ], "computing": <bool>, "compute_failed": <bool> }`.
+Each opportunity is **snake_case** and always carries `symbol`, `action`, `conviction`,
+`passing_conditions`, `total_conditions`, `thesis`, `strategy_id`, `source`, `opportunity_key`,
+`provenance`, `muted`, and `data_unavailable` (feature 185 — `true` for a **terminal
+data-unavailable** row: a per-symbol bars/indicator fetch failure during the compute, zeroed on both
+ranking axes and **distinct** from an evaluated 0-of-N "quiet" row). The live-market enrichment is
 **omit-not-fabricate**:
 
 - `live_price`, `change_pct`, `target_price`, `stop_price` — present **only** when the backend has a
   value; an unavailable field is **omitted entirely**, never a fabricated `0`.
+- `valid_until` — the row's expiry as an ISO-8601 string; omitted when unset (feature 185 back-fill).
+- `signal_confidence` — the raw max active-signal conviction (0.0–1.0); omitted when the symbol has
+  no active signal, never a fabricated `0.0` (feature 185 back-fill).
 - `sparkline` — a list of recent daily closes; a warm-up/missing bar is JSON `null` (never `NaN`).
 - `conditions` — the traced `{ref_name, lhs_value, threshold, fn, state, distance_to_threshold}`
   leaves; an unattributed row omits the key.
+
+The two **top-level** flags surface a cold/failed queue explicitly to this one-shot, non-polling
+consumer instead of reporting it as a silently-empty list (feature 185 FR-4):
+
+- `computing: true` — a **cold** (never-materialized) queue is still being computed in the background;
+  the read returned empty non-blocking. Call again shortly. A legitimately-empty universe returns
+  `computing: false` (the distinctness).
+- `compute_failed: true` — a persistently-failing background compute (past the bounded attempt
+  count): a terminal error state, not an infinite "computing".
 
 Risk/reward and suggested share size are **not** returned — they are a UI-only presentation computed
 client-side, carried on no wire field.
@@ -945,7 +961,10 @@ Returns `{version, updated_at}` — **never the value**.
 calling user's derived `x-access-scope`, so `xstockstrat-config` rejects a non-admin caller with
 `PERMISSION_DENIED` ("admin scope required"). Since feature 092 this is how **every** management
 write tool works (it was `set_config`-only under feature 073); the hardcoded admin scope was removed
-(invariant **AGENT-3/AGENT-4**).
+(invariant **AGENT-3/AGENT-4**). The feature-183 user-administration tools (`manage_user`,
+`list_users`, `get_user`, `admin_get_user_metadata`, `admin_set_user_metadata`) follow the same rule
+with an added friendly early `scope & 0x04` check (`_require_admin`) that rejects a non-admin before
+any backend call; identity's `adminGate` remains the authoritative server-side gate.
 
 **Secret keys ARE writable (PR #994).** The earlier client-side refusal was removed. The value is
 encrypted at rest by `xstockstrat-config` (AES-256-GCM, `is_secret` **row-authoritative on write**),
@@ -1276,6 +1295,79 @@ the backend returns an empty list (no data leakage).
 Returns `{"positions": [...], "next_page_token": "<str>"}` — same shape as `get_positions`.
 
 **Errors:** `ValueError` → `account_id` is empty; `RuntimeError` → no verified caller claims.
+
+---
+
+### `manage_user`
+
+Administer users (**ADMIN only**, feature 183). A non-admin caller is rejected `PermissionError`
+("manage_user requires admin scope") before any backend call. The caller's derived `x-access-scope`
+is forwarded so identity's `adminGate` is the authoritative gate. Passwords are write-only — never
+echoed in the result or logged.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `operation` | string | _(required)_ | `create` \| `set_roles` \| `set_active` \| `reset_password` |
+| `user_id` | string | `""` | Target user (required for set_roles/set_active/reset_password) |
+| `email` | string | `""` | New user's email (required for create) |
+| `password` | string | `""` | Plaintext password (required for create/reset_password); write-only |
+| `roles` | list[str] | `null` | Non-empty subset of `admin`/`trader`/`viewer` (required for create/set_roles) |
+| `active` | bool | `null` | Required for set_active (true/false) |
+
+Returns the created/updated user (`userId`, `email`, `roles`, `isActive`) for create/set_roles/
+set_active; `{"success": true, "userId": ...}` for reset_password.
+
+**Errors:** `PermissionError` → non-admin; `ValueError` → unknown operation, unknown/empty role, or a
+missing required arg; `RuntimeError` → `NOT_FOUND` ("user not found"), or the last active admin cannot
+be demoted/deactivated (`FAILED_PRECONDITION` "cannot remove last admin").
+
+### `list_users`
+
+List all users (**ADMIN only**, read-only, feature 183). Returns `{"users": [...]}` with password-free
+views (`userId`, `email`, `roles`, `isActive`, `createdAt`). No parameters.
+
+**Errors:** `PermissionError` → non-admin; `RuntimeError` → no verified caller claims.
+
+### `get_user`
+
+Read one user by id (**ADMIN only**, read-only, feature 183).
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `user_id` | string | _(required)_ | The user to read |
+
+Returns the password-free user view. **Errors:** `PermissionError` → non-admin; `ValueError` →
+empty `user_id`; `RuntimeError` → `NOT_FOUND` ("user not found").
+
+### `admin_get_user_metadata`
+
+Read **any** user's profile metadata by `user_id` (**ADMIN only**, read-only, feature 183). Distinct
+from the self-only `get_user_metadata` — the target is the request-body `user_id`, not the caller.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `user_id` | string | _(required)_ | The target user |
+
+Returns `userId`, `email`, `phone`, `displayName`, `metadata`, `metadataUpdatedAt`.
+**Errors:** `PermissionError` → non-admin; `ValueError` → empty `user_id`; `RuntimeError` →
+`NOT_FOUND` ("user not found").
+
+### `admin_set_user_metadata`
+
+Partial-update **any** user's profile metadata by `user_id` (**ADMIN only**, feature 183). Only
+provided fields change; email is read-only. Distinct from the self-only `set_user_metadata`. The write
+emits a ledger audit event (`identity.user.metadata_updated`, acting admin + target, no values).
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `user_id` | string | _(required)_ | The target user |
+| `phone` | string | `null` | Optional new phone |
+| `display_name` | string | `null` | Optional new display name |
+| `metadata` | object | `null` | Optional JSON object (max 8KB) |
+
+Returns the updated profile (same shape as `admin_get_user_metadata`). **Errors:** `PermissionError`
+→ non-admin; `ValueError` → empty `user_id` or no field provided; `RuntimeError` → `NOT_FOUND`, or
+`INVALID_ARGUMENT` ("metadata exceeds 8KB limit").
 
 ---
 

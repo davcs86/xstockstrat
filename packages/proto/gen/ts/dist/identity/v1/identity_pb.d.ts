@@ -510,6 +510,50 @@ export type UpdateUserMetadataResponse = Message<"xstockstrat.identity.v1.Update
  */
 export declare const UpdateUserMetadataResponseSchema: GenMessage<UpdateUserMetadataResponse>;
 /**
+ * ── Admin cross-user profile metadata (admin-gated, feature 183) ──────────────
+ * Target selected by request-body user_id (never x-user-id). Responses reuse
+ * GetUserMetadataResponse / UpdateUserMetadataResponse above.
+ *
+ * @generated from message xstockstrat.identity.v1.AdminGetUserMetadataRequest
+ */
+export type AdminGetUserMetadataRequest = Message<"xstockstrat.identity.v1.AdminGetUserMetadataRequest"> & {
+    /**
+     * @generated from field: string user_id = 1;
+     */
+    userId: string;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.AdminGetUserMetadataRequest.
+ * Use `create(AdminGetUserMetadataRequestSchema)` to create a new message.
+ */
+export declare const AdminGetUserMetadataRequestSchema: GenMessage<AdminGetUserMetadataRequest>;
+/**
+ * @generated from message xstockstrat.identity.v1.AdminUpdateUserMetadataRequest
+ */
+export type AdminUpdateUserMetadataRequest = Message<"xstockstrat.identity.v1.AdminUpdateUserMetadataRequest"> & {
+    /**
+     * @generated from field: string user_id = 1;
+     */
+    userId: string;
+    /**
+     * @generated from field: optional string phone = 2;
+     */
+    phone?: string | undefined;
+    /**
+     * @generated from field: optional string display_name = 3;
+     */
+    displayName?: string | undefined;
+    /**
+     * @generated from field: optional google.protobuf.Struct metadata = 4;
+     */
+    metadata?: JsonObject | undefined;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.AdminUpdateUserMetadataRequest.
+ * Use `create(AdminUpdateUserMetadataRequestSchema)` to create a new message.
+ */
+export declare const AdminUpdateUserMetadataRequestSchema: GenMessage<AdminUpdateUserMetadataRequest>;
+/**
  * Password-free admin view of a user (no password / password_hash — FR-10/AC-10).
  *
  * @generated from message xstockstrat.identity.v1.User
@@ -866,6 +910,25 @@ export declare const IdentityService: GenService<{
     updateUserMetadata: {
         methodKind: "unary";
         input: typeof UpdateUserMetadataRequestSchema;
+        output: typeof UpdateUserMetadataResponseSchema;
+    };
+    /**
+     * Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
+     * body user_id, never x-user-id (C-03). Reuse the self responses.
+     *
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.AdminGetUserMetadata
+     */
+    adminGetUserMetadata: {
+        methodKind: "unary";
+        input: typeof AdminGetUserMetadataRequestSchema;
+        output: typeof GetUserMetadataResponseSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.AdminUpdateUserMetadata
+     */
+    adminUpdateUserMetadata: {
+        methodKind: "unary";
+        input: typeof AdminUpdateUserMetadataRequestSchema;
         output: typeof UpdateUserMetadataResponseSchema;
     };
     /**
