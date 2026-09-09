@@ -117,3 +117,14 @@
 - Deviation: spec referenced lines 3557-3569, actual code at lines 3854-3866 (file grew since spec generation). Same symbols, same logic — no semantic deviation.
 - Verification: `ruff check .` ✓, `ruff format --check .` ✓, `ast.parse` syntax ✓.
 - TDD: N/A — structural refactor (sequential→concurrent), no paired test step; tests at Step 11.
+
+### Step 8 — Analysis Python — Phase 1 batch bars
+- Replaced per-symbol `_fetch_into` + `asyncio.gather` with a single `BatchGetBars` RPC call.
+- `max_bars_per_symbol` set to `_READINESS_LOOKBACK_DAYS` (400) — derived from the date range, NOT from `_BAR_PAGE_SIZE`/`_MAX_BAR_PAGES`.
+- Added 8MB gRPC receive limit to the marketdata channel in `app/main.py` — worst case ~100 symbols × 400 bars × ~80 bytes ≈ 3.2 MB, 8 MB provides 2.5× headroom.
+- `propagation_meta` forwarded via `metadata=` kwarg — identical to existing `_fetch_bars_paged` pattern.
+- `_bars_fetch_sem` semaphore no longer acquired per-symbol (batch RPC eliminates per-symbol serialization); but `fetch_failed` tracking preserved — a batch transport failure marks ALL symbols failed.
+- Symbols omitted from BatchGetBars response get empty `[]` (no crash).
+- Benchmark bars fetch section (lines 4160+) unchanged — still uses per-symbol `_fetch_bars_paged` via `_fetch_benchmark_into`.
+- TDD: N/A (paired test step is Step 11).
+- Verification: ruff check + ruff format + ast.parse — all pass.

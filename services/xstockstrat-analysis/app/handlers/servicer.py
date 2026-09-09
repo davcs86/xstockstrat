@@ -4131,20 +4131,32 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # except branch, never inferred from `bars == []`.
         fetch_failed: set[str] = set()
 
-        async def _fetch_into(sym):
-            async with self._readiness_materializer_bars_sem:
-                try:
-                    return sym, await self._fetch_bars_paged(sym, range_msg, propagation_meta)
-                except Exception as e:  # bar fetch is best-effort per symbol
-                    log.warning("_compute_opportunities: bars fetch failed for %s: %s", sym, e)
-                    fetch_failed.add(sym)
-                    return sym, []
-
         unique_symbols = list(dict.fromkeys(c["symbol"] for c in defined_eligible))
-        for sym, bars in await asyncio.gather(*[_fetch_into(s) for s in unique_symbols]):
-            bars_by_symbol[sym] = bars
-            if bars:
-                session_end_seconds = max(session_end_seconds, bars[-1].time.seconds)
+        if unique_symbols:
+            try:
+                batch_resp = await self._marketdata.BatchGetBars(
+                    marketdata_pb2.BatchGetBarsRequest(
+                        symbols=unique_symbols,
+                        timeframe="1d",
+                        start=range_msg.start,
+                        end=range_msg.end,
+                        max_bars_per_symbol=_READINESS_LOOKBACK_DAYS,
+                    ),
+                    metadata=propagation_meta,
+                )
+                returned = {sb.symbol for sb in batch_resp.results}
+                for sb in batch_resp.results:
+                    bars_by_symbol[sb.symbol] = list(sb.bars)
+                    if sb.bars:
+                        session_end_seconds = max(session_end_seconds, sb.bars[-1].time.seconds)
+                for sym in unique_symbols:
+                    if sym not in returned:
+                        bars_by_symbol[sym] = []
+            except Exception as e:  # batch transport failure — mark all symbols failed
+                log.warning("_compute_opportunities: BatchGetBars failed: %s", e)
+                for sym in unique_symbols:
+                    fetch_failed.add(sym)
+                    bars_by_symbol[sym] = []
 
         async def _fetch_benchmark_into(sym):
             async with self._readiness_materializer_bars_sem:
