@@ -3480,18 +3480,20 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         )
 
     async def _enrich_opportunities_live(self, opps, propagation_meta) -> None:
-        """Attach live_price / change_pct / sparkline to already-ranked Opportunities (feature 095).
+        """Attach live_price / change_pct to already-ranked Opportunities (feature 095).
 
         Read-time only — never called from _compute_opportunities, so the live quote is never a
         ranking input (FR-8/AC-14). Fan-out is bounded by the existing _bars_fetch_sem and deduped
-        per symbol per pass; prev_close/bars are served from marketdata's cache/DB. A GetLatestPrice
-        / GetBars miss or RPC error leaves the live fields UNSET (AC-11) and never aborts the read.
-        A SparklinePoint with an unset close models a warm-up/absent bar, never NaN/0 (AC-4/P-03).
+        per symbol per pass; prev_close is served from marketdata's cache/DB. A GetLatestPrice miss
+        or RPC error leaves the live fields UNSET (AC-11) and never aborts the read.
+
+        Sparkline bars were removed from the server-side enrichment path (latency M-1) — the UI
+        fetches them asynchronously via its own getBars calls, decoupling the heavyweight bars RPC
+        from the critical ListOpportunities read latency.
         """
         if not opps:
             return
-        sparkline_bars = max(1, self._cfg.get_int("analysis.opportunity.sparkline_bars", 20))
-        # FR-4: a short success-only memo skips the two live RPCs for a symbol re-enriched within
+        # FR-4: a short success-only memo skips the live RPC for a symbol re-enriched within
         # the window (0 disables the memo → always fetch). Read once per pass (F-07).
         ttl = self._cfg.get_int_present("analysis.opportunity.live_enrich_ttl_seconds", 20)
         # Dedup the marketdata reads per symbol — several opportunities can share one symbol.
@@ -3499,20 +3501,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         for opp in opps:
             by_symbol.setdefault(opp.symbol, []).append(opp)
 
-        def _apply_live_fields(targets: list, last_price, prev_close, spark) -> None:
+        def _apply_live_fields(targets: list, last_price, prev_close) -> None:
             for opp in targets:
                 if last_price is not None:
                     opp.live_price = last_price
                     if prev_close is not None and prev_close != 0.0:
                         opp.change_pct = (last_price - prev_close) / prev_close
-                if spark is not None:
-                    del opp.sparkline[:]
-                    for b in spark:
-                        # Finite close → set it; a warm-up/missing bar → unset close (never NaN/0).
-                        pt = analysis_pb2.SparklinePoint()
-                        if b.close == b.close and b.close not in (float("inf"), float("-inf")):
-                            pt.close = b.close
-                        opp.sparkline.append(pt)
 
         # Partition symbols into memo-hit vs needs-fetch.
         needs_fetch: list[str] = []
@@ -3521,7 +3515,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 cached = self._live_enrich_memo.get(symbol)
                 if cached is not None and time.monotonic() < cached[0]:
                     m = cached[1]
-                    _apply_live_fields(targets, m["last_price"], m["prev_close"], m["spark"])
+                    _apply_live_fields(targets, m["last_price"], m["prev_close"])
                     continue
             needs_fetch.append(symbol)
 
@@ -3542,33 +3536,16 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         except Exception as e:
             log.warning("_enrich_opportunities_live: BatchGetLatestPrice failed: %s", e)
 
-        # Batch sparkline bars — one RPC for all symbols (AC-8).
-        spark_by_symbol: dict[str, list] = {}
-        try:
-            bars_resp = await self._marketdata.BatchGetBars(
-                marketdata_pb2.BatchGetBarsRequest(
-                    symbols=needs_fetch,
-                    timeframe="1d",
-                    max_bars_per_symbol=sparkline_bars,
-                ),
-                metadata=propagation_meta,
-            )
-            for sb in bars_resp.results:
-                spark_by_symbol[sb.symbol] = list(sb.bars)
-        except Exception as e:
-            log.warning("_enrich_opportunities_live: BatchGetBars failed: %s", e)
-
         # Apply results per symbol, memoize full successes (AC-11 omit-not-fabricate).
         for symbol in needs_fetch:
             targets = by_symbol[symbol]
             last_price, prev_close = price_by_symbol.get(symbol, (None, None))
-            spark = spark_by_symbol.get(symbol)
-            if ttl > 0 and last_price is not None and spark is not None:
+            if ttl > 0 and last_price is not None:
                 self._live_enrich_memo[symbol] = (
                     time.monotonic() + ttl,
-                    {"last_price": last_price, "prev_close": prev_close, "spark": spark},
+                    {"last_price": last_price, "prev_close": prev_close},
                 )
-            _apply_live_fields(targets, last_price, prev_close, spark)
+            _apply_live_fields(targets, last_price, prev_close)
 
     # ── Materialized-queue compute (feature 097) ────────────────────────────────
 

@@ -799,10 +799,11 @@ test.describe('Signal-detail live-market enrichment (feature 095)', () => {
     // ZZZZ is not in the opportunity queue → the header falls back to a direct GetLatestPrice.
     await page.goto('/trader/positions/ZZZZ');
     await expect(page.getByTestId('detail-live-price')).toHaveText('$9.87', { timeout: 30000 });
-    // No opportunity → no target/stop overlay legend, no sparkline, no R:R/sizing block.
+    // No opportunity → no target/stop overlay legend, no R:R/sizing block.
     await expect(page.getByTestId('legend-target')).toHaveCount(0);
     await expect(page.getByTestId('legend-signal-stop')).toHaveCount(0);
-    await expect(page.getByTestId('detail-sparkline')).toHaveCount(0);
+    // Sparkline renders for all symbols (fetched async via getBars, not queue-dependent).
+    await expect(page.getByTestId('detail-sparkline')).toHaveCount(1);
     await expect(page.getByTestId('rr-sizing')).toHaveCount(0);
   });
 

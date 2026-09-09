@@ -193,34 +193,28 @@ async def test_phase1_uses_batch_get_bars():
 # ---------------------------------------------------------------------------
 
 
-async def test_enrichment_uses_batch_rpcs():
-    """AC-8: _enrich_opportunities_live calls BatchGetLatestPrice and BatchGetBars
-    each exactly once for all symbols, not per-symbol fan-out."""
+async def test_enrichment_uses_batch_price_rpc():
+    """AC-8: _enrich_opportunities_live calls BatchGetLatestPrice exactly once for all symbols,
+    not per-symbol fan-out. BatchGetBars was removed — sparklines are now fetched client-side
+    (async useSparklines hook)."""
     svc = make_servicer()
     symbols = [f"ENR{i}" for i in range(30)]
     opps = [analysis_pb2.Opportunity(symbol=sym, conviction=0.7) for sym in symbols]
 
     svc._marketdata = MagicMock()
     svc._marketdata.BatchGetLatestPrice = AsyncMock(return_value=_batch_price_response(symbols))
-    svc._marketdata.BatchGetBars = AsyncMock(
-        return_value=_batch_bars_response(symbols, bars_per_symbol=20)
-    )
     # Legacy per-symbol methods — must NOT be called.
     svc._marketdata.GetLatestPrice = AsyncMock()
     svc._marketdata.GetBars = AsyncMock()
 
     await svc._enrich_opportunities_live(opps, [("x-user-id", "u1")])
 
-    # Exactly one batch call per RPC.
+    # Exactly one batch call for prices.
     assert svc._marketdata.BatchGetLatestPrice.await_count == 1
-    assert svc._marketdata.BatchGetBars.await_count == 1
 
-    # All 30 symbols included in the batch requests.
+    # All 30 symbols included in the batch request.
     price_req = svc._marketdata.BatchGetLatestPrice.await_args.args[0]
     assert set(price_req.symbols) == set(symbols)
-
-    bars_req = svc._marketdata.BatchGetBars.await_args.args[0]
-    assert set(bars_req.symbols) == set(symbols)
 
     # Per-symbol RPCs NOT called.
     assert svc._marketdata.GetLatestPrice.await_count == 0

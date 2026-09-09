@@ -31,6 +31,7 @@ import { fmtUsd, fmtPct, pnlClass } from '@/lib/money';
 import { IN_QUEUE_CUE } from '@/lib/readinessCue';
 import { readinessState } from '@/lib/readinessRollup';
 import { useOpportunities, useSetOpportunityAction } from '@/hooks/useOpportunities';
+import { useSparklines } from '@/hooks/useSparklines';
 import { insightsPortfolioClient } from '@/lib/browserClients/insightsPortfolioClient';
 import { SectionRenderer } from '@/components/mobile/SectionRenderer';
 import type { Section } from '@/components/mobile/sections';
@@ -202,6 +203,11 @@ export default function OpportunitiesPage() {
     }
     return [...map.entries()].map(([symbol, opps]) => ({ symbol, opps }));
   }, [rows]);
+
+  // Sparkline bars fetched async per-symbol — decoupled from the ListOpportunities read path
+  // (latency M-1). The hook deduplicates by symbol and caches with a 2min staleTime.
+  const sparklineSymbols = useMemo(() => symbolGroups.map((g) => g.symbol), [symbolGroups]);
+  const sparklines = useSparklines(sparklineSymbols);
 
   // Mobile parity: one `signalGroup` per symbol, grouped like the desktop `SymbolGroupCard`.
   const mobileSections: Section[] = symbolGroups.map((g) => ({
@@ -395,6 +401,7 @@ export default function OpportunitiesPage() {
                 key={g.symbol}
                 symbol={g.symbol}
                 opps={g.opps}
+                sparklinePoints={sparklines.get(g.symbol)}
                 onSnooze={(o) => act(o, OpportunityAction.SNOOZE)}
                 onDismiss={(o) => act(o, OpportunityAction.DISMISS)}
                 onTake={(o) => act(o, OpportunityAction.TAKE)}
@@ -415,6 +422,7 @@ export default function OpportunitiesPage() {
 function SymbolGroupCard({
   symbol,
   opps,
+  sparklinePoints,
   onSnooze,
   onDismiss,
   onTake,
@@ -422,6 +430,7 @@ function SymbolGroupCard({
 }: {
   symbol: string;
   opps: Opportunity[];
+  sparklinePoints?: import('@xstockstrat/proto/analysis/v1/analysis_pb').SparklinePoint[];
   onSnooze: (o: Opportunity) => void;
   onDismiss: (o: Opportunity) => void;
   onTake: (o: Opportunity) => void;
@@ -456,6 +465,7 @@ function SymbolGroupCard({
           <OpportunityRow
             key={o.opportunityKey}
             o={o}
+            sparklinePoints={sparklinePoints}
             href={reviewHref(o)}
             onSnooze={() => onSnooze(o)}
             onDismiss={() => onDismiss(o)}
@@ -470,12 +480,14 @@ function SymbolGroupCard({
 /** A single opportunity within its symbol card: direction + meters + chips + act controls. */
 function OpportunityRow({
   o,
+  sparklinePoints,
   href,
   onSnooze,
   onDismiss,
   onTake,
 }: {
   o: Opportunity;
+  sparklinePoints?: import('@xstockstrat/proto/analysis/v1/analysis_pb').SparklinePoint[];
   href: string;
   onSnooze: () => void;
   onDismiss: () => void;
@@ -553,8 +565,11 @@ function OpportunityRow({
         </div>
       </div>
 
-      {/* Live-market enrichment: each stat omitted when its field is unset, never faked. */}
-      {(o.livePrice !== undefined || o.sparkline.length > 0 || o.conditions.length > 0) && (
+      {/* Live-market enrichment: each stat omitted when its field is unset, never faked.
+          Sparklines are fetched async by the UI (latency M-1) — absent until loaded. */}
+      {(o.livePrice !== undefined ||
+        (sparklinePoints && sparklinePoints.length > 0) ||
+        o.conditions.length > 0) && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
           {o.livePrice !== undefined && (
             <div className="flex items-baseline gap-2">
@@ -574,8 +589,8 @@ function OpportunityRow({
               )}
             </div>
           )}
-          {o.sparkline.length > 0 && (
-            <Sparkline points={o.sparkline} testId={`opp-sparkline-${o.symbol}`} />
+          {sparklinePoints && sparklinePoints.length > 0 && (
+            <Sparkline points={sparklinePoints} testId={`opp-sparkline-${o.symbol}`} />
           )}
           {(() => {
             const c = blockingCondition(o.conditions);

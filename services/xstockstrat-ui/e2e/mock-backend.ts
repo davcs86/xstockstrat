@@ -569,7 +569,29 @@ export async function startMockBackend(): Promise<void> {
       });
 
       router.service(MarketDataService, {
-        async getBars() {
+        async getBars(req) {
+          const sym = (req.symbol ?? '').toUpperCase();
+          // CAPR: 20 daily bars matching CAPR_SPARKLINE (index 5 = gap with close 0).
+          if (sym === 'CAPR') {
+            const bars = Array.from({ length: 20 }, (_v, i) => {
+              const c = i === 5 ? 0 : Number((11.9 + i * 0.023).toFixed(3));
+              return {
+                symbol: 'CAPR',
+                time: { seconds: BigInt(1704067200 + i * 86400), nanos: 0 },
+                open: c || 0.01,
+                high: c || 0.01,
+                low: c || 0.01,
+                close: c,
+                volume: BigInt(1000000),
+                vwap: c || 0.01,
+                tradeCount: 5000,
+                timeframe: '1d',
+                timeframeEnum: Timeframe.TIMEFRAME_1DAY,
+                source: 'alpaca',
+              };
+            });
+            return { bars };
+          }
           return {
             bars: [
               {
