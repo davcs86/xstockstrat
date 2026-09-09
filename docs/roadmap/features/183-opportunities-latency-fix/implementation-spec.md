@@ -205,7 +205,7 @@ Confirm the service compiles without errors.
 
 ### Step 4 — test: BatchGetBars
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify

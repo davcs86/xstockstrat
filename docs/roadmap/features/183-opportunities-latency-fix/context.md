@@ -87,3 +87,9 @@
 - Deviation: spec referenced `source/alpaca/client.go` but actual path is `internal/alpaca/client.go` — no impact on implementation
 - Verification: `GOWORK=off go build ./...` — pass
 - TDD: red-green deferred to Step 4 (paired test step)
+
+### Step 4 — test: BatchGetBars
+- Added 5 tests: `TestBatchGetBars_MultipleSymbols` (AC-2), `TestBatchGetBars_OmitMissingSymbols` (AC-3), `TestBatchGetBars_RejectsNonDailyTimeframe`, `TestBatchGetBars_ClampsMaxBarsPerSymbol`, `TestBatchGetBars_DefaultMaxBars`
+- Added `fakeBatchBarsSource` mock implementing `DataSourceClient` + `MultiSymbolSource` for cold-path testing (nil repo forces cold)
+- TDD: red implicit (Step 3 had no tests) → green: all 5 pass, coverage 45.8% ≥ 40%
+- Lint: `golangci-lint` skipped (built with Go 1.25 < target 1.27); `go vet` passes
