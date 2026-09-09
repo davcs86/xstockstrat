@@ -36,6 +36,16 @@
 - [ ] Verify Alpaca multi-symbol trades endpoint exists and its rate limits — target: /sdd-spec Step 3.
 - [ ] Verify Connect-es `CallOptions.timeoutMs` emits `DeadlineExceeded` status code — target: /sdd-spec Step 8.
 
+## Session 2026-09-09 — sdd-spec
+
+- Implementation spec generated: 13 steps (4 proto/gen, 4 marketdata Go service+test, 4 analysis Python service+test, 2 UI BFF service+test, 1 config).
+- All 9 acceptance scenarios (AC-1 through AC-9) mapped to test steps: AC-1→Step 13, AC-2/AC-3→Step 4, AC-4/AC-5→Step 6, AC-6/AC-7/AC-8/AC-9→Step 11.
+- Consumer surface `/insights` reached by Step 12 (BFF deadline plumbing) per C-14.
+- Test-step pairing (C-08) satisfied: Steps 3→4, 5→6, 7/8/9/10→11, 12→13.
+- Cross-cutting constraints applied: lint gates in all test step verifications, header propagation cited for Steps 8/9 (reuses existing channel/stub), C-13 single-consumer inline literals noted for test data.
+- Note: Go `service` steps (3, 5) land new logic in handler/repository/service packages — handler and repository are excluded from CI coverage measurement, so integration test verification is sufficient per spec-template.md; service-layer tests in Steps 4/6 cover the service package.
+- Status: design-approved → implementation-ready.
+
 ## Session 2026-09-09 — sdd-review product-spec
 
 - Product spec reviewed (retroactive — status already design-approved). Result: PASS WITH WARNINGS (1 warning, 0 blockers).
