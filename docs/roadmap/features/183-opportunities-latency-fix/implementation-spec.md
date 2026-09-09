@@ -384,7 +384,7 @@ Confirm lint passes and the file is syntactically valid.
 
 ### Step 8 — service: Analysis Python — Phase 1 batch bars
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
