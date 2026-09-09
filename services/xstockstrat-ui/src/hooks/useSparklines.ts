@@ -1,7 +1,11 @@
 import { useQueries } from '@tanstack/react-query';
+import { create } from '@bufbuild/protobuf';
 import { insightsMarketDataClient } from '@/lib/browserClients/insightsMarketDataClient';
 import { Timeframe } from '@xstockstrat/proto/common/v1/common_pb';
-import type { SparklinePoint } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import {
+  type SparklinePoint,
+  SparklinePointSchema,
+} from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
 const SPARKLINE_BARS = 20;
 const SPARKLINE_STALE_MS = 120_000; // 2 min — matches the server-side live_enrich_ttl_seconds bump
@@ -25,10 +29,10 @@ export function useSparklines(symbols: string[]): Map<string, SparklinePoint[]> 
           timeframeEnum: Timeframe.TIMEFRAME_1DAY,
           page: { pageSize: SPARKLINE_BARS },
         });
-        // Map marketdata Bar.close → SparklinePoint-compatible shape.
-        const points: SparklinePoint[] = res.bars.map((b) => ({
-          close: b.close !== 0 ? b.close : undefined,
-        }));
+        // Map marketdata Bar.close → proper SparklinePoint messages.
+        const points: SparklinePoint[] = res.bars.map((b) =>
+          create(SparklinePointSchema, { close: b.close !== 0 ? b.close : undefined }),
+        );
         return { symbol, points };
       },
       staleTime: SPARKLINE_STALE_MS,

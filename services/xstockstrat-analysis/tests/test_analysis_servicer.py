@@ -5119,7 +5119,7 @@ class TestOpportunitySemaphoreIsolation:
         await svc._enrich_opportunities_live(
             [analysis_pb2.Opportunity(symbol="AAPL")], [("x-user-id", "u1")]
         )
-        # Only BatchGetLatestPrice called — sparkline bars moved to the UI (async useSparklines hook).
+        # Only BatchGetLatestPrice — bars moved to UI.
         assert svc._marketdata.BatchGetLatestPrice.await_count == 1
         assert fg.acquires == 0  # interactive sem untouched (batch, not per-symbol)
         assert bg.acquires == 0  # background sem untouched
