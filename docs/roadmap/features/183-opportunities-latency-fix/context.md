@@ -52,3 +52,14 @@
 - Warning: criterion 9 — unchecked open-question checkbox for ledger 141 trap; resolved by checking box (substance was already resolved in design.md/recon.md).
 - Overlap findings: CLEAN — no collisions with 7 in-flight features.
 - Trading domain checks: skipped (non-trading feature).
+
+## Session 2026-09-09 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 4 warnings, 1 note (advisory — did not block).
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 4: ⚠ Missing explicit coverage threshold in Verification command (C-08) — [x] addressed (added `-coverprofile` + ≥40% gate)
+  - Step 6: ⚠ Missing explicit coverage threshold in Verification command (C-08) — [x] addressed (added `-coverprofile` + ≥40% gate)
+  - Step 11: ⚠ Missing explicit coverage threshold in Verification command (C-08) — [x] addressed (added `--cov=app --cov-fail-under=40`)
+  - Step 12: Note — forward() opts merge imprecision (conflated `forward`'s own options with callback opts) — [x] addressed (clarified `forwardOpts` second param → merged into `callOpts` → threaded to callback)
+  - Step 2: ⚠ Wildcard paths for codegen stubs (`*.go`, `*_pb2*.py`, `*`) — [ ] accepted (codegen output; exact filenames depend on `buf.gen.yaml` template and are not stable to pin)
+- Overlap findings: CLEAN — no collisions with 7 in-flight features.
