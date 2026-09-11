@@ -3,20 +3,19 @@ import Link from 'next/link';
 import { CaretRight, Warning } from '@phosphor-icons/react';
 import { EnumBadge } from '@/lib/opportunityShared';
 import { readinessState } from '@/lib/readinessRollup';
+import { OhlcBlock } from '@/components/shared/OhlcBlock';
 import { cn } from '../ui/utils';
 import { Alert, AlertDescription } from '../ui/alert';
 import { Badge } from '../ui/badge';
 import { Progress } from '../ui/progress';
 import type { Section, SignalItem } from './sections';
 
-// Every interactive row is at least 44px tall (FR-16 tap-target floor).
+// Every interactive row is at least 44px tall (tap-target floor).
 const TAP = 'min-h-[44px]';
 
 /**
- * The one shared mobile section renderer (feature 083, FR-16). Draws a screen's `Section[]` as
- * a stacked, thumb-friendly phone view — the same data the desktop screen shows, reflowed. All
- * tap targets are ≥44px. Used behind `sm:hidden` alongside the desktop layout so the two stay
- * in lock-step (no divergent mobile tree).
+ * The one shared mobile section renderer. Draws a screen's `Section[]` as a stacked phone view with
+ * ≥44px tap targets, used behind `sm:hidden` alongside the desktop layout (no divergent mobile tree).
  */
 export function SectionRenderer({ sections }: { sections: Section[] }) {
   return (
@@ -61,8 +60,7 @@ function SectionItem({ section: s }: { section: Section }) {
         </div>
       );
 
-    // feature 155 (FR-4, AC-9) — one card per symbol, mirroring the desktop `SymbolGroupCard`; each
-    // signal renders through the same `SignalRow` as the flat `signal` kind (no divergent tree).
+    // One card per symbol; each signal renders through the same `SignalRow` as the flat `signal` kind.
     case 'signalGroup':
       return (
         <div
@@ -70,14 +68,17 @@ function SectionItem({ section: s }: { section: Section }) {
           className="overflow-hidden rounded-md border bg-card"
         >
           <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-            {s.href ? (
-              <Link href={s.href} className="font-mono text-sm font-semibold hover:underline">
-                {s.symbol}
-              </Link>
-            ) : (
-              <span className="font-mono text-sm font-semibold">{s.symbol}</span>
-            )}
-            <span className="text-xs text-muted-foreground">
+            <div className="flex min-w-0 flex-col gap-0.5">
+              {s.href ? (
+                <Link href={s.href} className="font-mono text-sm font-semibold hover:underline">
+                  {s.symbol}
+                </Link>
+              ) : (
+                <span className="font-mono text-sm font-semibold">{s.symbol}</span>
+              )}
+              {s.ohlcData && <OhlcBlock data={s.ohlcData} testId={`mobile-ohlc-${s.symbol}`} />}
+            </div>
+            <span className="shrink-0 text-xs text-muted-foreground">
               {s.signals.length} {s.signals.length === 1 ? 'signal' : 'signals'}
             </span>
           </div>
@@ -145,11 +146,8 @@ function SectionItem({ section: s }: { section: Section }) {
 }
 
 /**
- * One signal row — the shared body for the flat `signal` section and each row inside a `signalGroup`
- * card (feature 155, FR-4). Carries the desktop-parity tags (strategy id, source/provenance chips,
- * expiry). `showSymbol` is false inside a group (the group card header already names the symbol). The
- * readiness meter's color derives from the shared `readinessState` bucketer — no 4th copy of the
- * 4-way branch.
+ * Shared body for the flat `signal` section and each row inside a `signalGroup` card. `showSymbol` is
+ * false inside a group (the header names the symbol); readiness color comes from the shared `readinessState` bucketer.
  */
 function SignalRow({ item: s, showSymbol = true }: { item: SignalItem; showSymbol?: boolean }) {
   const hasReadiness = !!s.readiness && s.readiness.total > 0;
@@ -177,7 +175,6 @@ function SignalRow({ item: s, showSymbol = true }: { item: SignalItem; showSymbo
           ) : (
             s.badge && <EnumBadge render={s.badge} />
           )}
-          {/* feature 155 (FR-4, AC-10) — the strategy id + provenance/source chips mobile omitted. */}
           {s.strategyId && (
             <span className="font-mono text-[11px] text-muted-foreground">{s.strategyId}</span>
           )}
@@ -195,9 +192,8 @@ function SignalRow({ item: s, showSymbol = true }: { item: SignalItem; showSymbo
         </div>
       </div>
       {s.caption && <p className="truncate text-xs text-muted-foreground">{s.caption}</p>}
-      {/* Conviction + strategy-readiness meters (mobile parity with the desktop card). The readiness
-          slot renders whenever the row carries readiness data — with a "—" when there are no traced
-          conditions — so both meters stay aligned across rows. */}
+      {/* Conviction + readiness meters. The readiness slot renders whenever the row carries readiness
+          data (with a "—" when no traced conditions) so both meters stay aligned across rows. */}
       {(typeof s.conviction === 'number' || s.readiness) && (
         <div className="flex items-center gap-4">
           {typeof s.conviction === 'number' && (
@@ -220,7 +216,18 @@ function SignalRow({ item: s, showSymbol = true }: { item: SignalItem; showSymbo
               <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
                 ready
               </span>
-              {hasReadiness ? (
+              {s.dataUnavailable ? (
+                // feature 185 FR-2 — explicit data-unavailable cue (mirrors the desktop row), never
+                // a 0/0 meter. Uses this file's phosphor icon set for consistency.
+                <span
+                  className="flex flex-1 items-center gap-1 text-[11px] text-destructive"
+                  role="status"
+                  data-testid={`opportunity-unavailable-mobile-${s.symbol}`}
+                >
+                  <Warning className="h-3 w-3" aria-hidden="true" />
+                  unavailable
+                </span>
+              ) : hasReadiness ? (
                 <>
                   <Progress value={readyPct} className="h-1.5 flex-1" variant={readyVariant} />
                   <span className="font-mono text-[11px] tabular-nums text-muted-foreground">

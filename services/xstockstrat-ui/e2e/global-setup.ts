@@ -1,4 +1,5 @@
 import { chromium } from '@playwright/test';
+import { resolveChromiumExecutable } from './helpers/browser-resolution';
 import { startMockBackend } from './mock-backend';
 
 /**
@@ -8,11 +9,11 @@ import { startMockBackend } from './mock-backend';
  */
 export default async function globalSetup() {
   // Fail fast if the browser is not launchable — surfaces environment issues
-  // in ~2s instead of burning through the 240s webServer timeout. Honor the same
-  // `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` override the chromium project uses
-  // (playwright.config.ts) so the preflight matches how tests actually launch —
-  // a no-op in CI, where the env var is unset and the pinned browser build matches.
-  const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined;
+  // in ~2s instead of burning through the 240s webServer timeout. Uses the same
+  // resolveChromiumExecutable() the chromium project uses (playwright.config.ts)
+  // so the preflight matches how tests actually launch: explicit env-var override →
+  // auto-detected pre-installed binary → Playwright's managed browser.
+  const executablePath = resolveChromiumExecutable();
   try {
     const browser = await chromium.launch(executablePath ? { executablePath } : undefined);
     await browser.close();

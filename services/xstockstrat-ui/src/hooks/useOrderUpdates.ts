@@ -3,10 +3,8 @@ import { useEffect, useState } from 'react';
 import { tradingClient } from '@/lib/browserClients/tradingClient';
 import type { Order, OrderStatus as PbOrderStatus } from '@xstockstrat/proto/trading/v1/trading_pb';
 
-// useOrderUpdates consumes the server-streaming StreamOrderUpdates RPC (mirroring
-// AlertStream's useEffect + AbortController pattern) and merges pushed Order updates into
-// local state keyed by orderId, so a list can reflect live status/fill transitions without
-// a manual refetch (FR-5/FR-6). userId is injected by the BFF from the verified session.
+// Server-streaming StreamOrderUpdates merged into state keyed by orderId. userId is injected by the
+// BFF from the verified session.
 export function useOrderUpdates(statusFilter: PbOrderStatus[] = []): Record<string, Order> {
   const [updates, setUpdates] = useState<Record<string, Order>>({});
 
@@ -25,7 +23,7 @@ export function useOrderUpdates(statusFilter: PbOrderStatus[] = []): Record<stri
           setUpdates((prev) => ({ ...prev, [order.orderId]: order }));
         }
       } catch {
-        // Stream aborted (unmount) or interrupted — silent stop, matches AlertStream.
+        // Stream aborted (unmount) or interrupted — silent stop.
       }
     })();
     return () => ctrl.abort();

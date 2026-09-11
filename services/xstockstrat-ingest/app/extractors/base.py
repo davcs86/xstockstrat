@@ -41,9 +41,8 @@ class AuthenticatedWebsiteInput:
 
 @dataclass
 class McpClientInput:
-    # feature 166 — the already-fetched MCP tool result (the parsed
-    # CallToolResult.structured_content list). The credential-bearing fetch happens in the loop;
-    # the extractor stays pure and JSON-typed.
+    # The already-fetched MCP tool result (CallToolResult.structured_content list);
+    # the fetch/credentials live in the loop so the extractor stays pure.
     result_items: list[dict]
 
 

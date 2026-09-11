@@ -41,9 +41,8 @@ export function useManageStrategy() {
     }: {
       operation: StrategyOperation;
       definition: StrategyDefinitionInit;
-      // feature 132: an optional field-mask for a partial (masked) update — the wizard leaves it
-      // undefined (full replace, unchanged), the Symbol-page mute control sets it to
-      // ['denied_symbols'] so it touches only the deny list.
+      // Optional field-mask for a partial (masked) update — undefined = full replace; the mute
+      // control sets ['denied_symbols'] to touch only the deny list.
       updateMask?: string[];
     }) =>
       analysisClient.manageStrategy({

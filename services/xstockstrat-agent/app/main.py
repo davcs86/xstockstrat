@@ -28,9 +28,8 @@ from app.tools import register_tools
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger(__name__)
 
-# Legacy HTTP+SSE transport paths, removed by feature 079. Matched exactly (never as a prefix):
-# handle_mcp is mounted at the root, so a prefix match would permanently reserve /sse* and
-# /messages* from the Streamable HTTP fall-through.
+# Match these exactly, never as a prefix: handle_mcp is mounted at root, so a prefix match would
+# reserve /sse* and /messages* from the Streamable HTTP fall-through.
 REMOVED_TRANSPORT_PATHS = ("/sse", "/messages")
 
 
@@ -44,24 +43,20 @@ def resolve_transport() -> str:
         )
         return "http"
     if raw not in ("stdio", "http"):
-        # Behavior is unchanged -- an unrecognized value still falls through to stdio. But the
-        # agent has no HTTP healthcheck (only a TCP probe on 9000), so a typo would otherwise
-        # produce a container that is up and serving nothing, with no diagnostic anywhere.
+        # The agent has no HTTP healthcheck (only a TCP probe on 9000), so an unrecognized value
+        # would serve nothing with no diagnostic — hence this warning before the stdio fall-through.
         log.warning("MCP_TRANSPORT=%r is not recognized; falling back to stdio", raw)
     return raw
 
 
 def resolve_http_port() -> int:
     """Port for the HTTP server. MCP_SSE_PORT is the deprecated fallback (feature 079)."""
-    deprecated = os.environ.get("MCP_SSE_PORT")  # deprecated alias, feature 079
+    deprecated = os.environ.get("MCP_SSE_PORT")
     return int(os.environ.get("MCP_HTTP_PORT") or deprecated or "9000")
 
 
-# Browser base URL for redirecting the OAuth login flow to the unified login page.
 UI_BASE_URL = os.environ.get("UI_BASE_URL", "http://localhost:3000")
-# Public (browser-reachable) base URL of the agent itself, used to build absolute OAuth
-# discovery + endpoint URLs (RFC 8414/9728). In DO this is ${APP_URL}/agent (the agent is
-# mounted under the /agent route prefix); in docker-compose it is http://localhost:9000.
+# In DO this is ${APP_URL}/agent (stripped to / by ingress); docker-compose uses localhost:9000.
 AGENT_PUBLIC_URL = os.environ.get("AGENT_PUBLIC_URL", "http://localhost:9000")
 
 
@@ -123,20 +118,9 @@ def build_http_app():
             }
         )
 
-    # Streamable HTTP transport (MCP 2025-03-26) — the only remote transport since feature 079.
-    # Claude.ai's remote connector speaks Streamable HTTP against the connector URL itself —
-    # POST <url> for client→server JSON-RPC and GET <url> for the server→client stream. The
-    # connector URL is AGENT_PUBLIC_URL (`${APP_URL}/agent`), which DO ingress strips to `/`, so
-    # the Streamable HTTP transport is served at the agent root (see handle_mcp).
-    #
-    # Prime the SDK's internal session manager once. The returned Starlette app itself is
-    # discarded -- the existing custom `handle_mcp` dispatch below is preserved unchanged.
-    # transport_security is explicitly disabled here: Server.streamable_http_app() auto-enables
-    # DNS-rebinding Host/Origin checks restricted to 127.0.0.1/localhost/::1 whenever `host` is
-    # left at its default, which would reject every real (non-localhost) production request with
-    # 421. Today's code never went through this path, so this restores that "no host
-    # restriction" behavior -- the actual access control is _authorized's aud-bound JWT check
-    # below, which already runs before this session manager ever sees the request.
+    # Prime the SDK session manager (its returned app is discarded; handle_mcp dispatches instead).
+    # transport_security off: the default DNS-rebinding check 421s every non-localhost request; the
+    # real gate is _authorized's aud-bound JWT, which runs before the session manager.
     server.streamable_http_app(
         streamable_http_path="/",
         transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
@@ -157,25 +141,12 @@ def build_http_app():
         claims = await validate_bearer_claims(token)
         if claims is None:
             return False
-        # Hand the verified claims down to the tool layer on this request's ASGI scope.
-        # handle_mcp forwards this same dict to the Streamable HTTP session manager, which
-        # builds its Starlette Request from it, so a tool can read the caller's real roles via
-        # ctx.request_context.request.scope (feature 073 FR-5).
-        #
-        # Feature 079 removed the legacy SSE transport, so every tool call now reaches a tool
-        # only by passing through here -- the unauthenticated POST /messages channel that used
-        # to return before this function ran no longer exists. set_config's absence-of-claims
-        # check is kept as defence in depth rather than as the live gate. Note it must stay
-        # shaped that way: a check for a Starlette Request or an Authorization header would NOT
-        # have distinguished the transports, because both carried both.
-        #
-        # Nothing is stored beyond the request: the dict dies with the scope, so the agent stays
-        # stateless and instance_count > 1 remains safe (FR-B13).
+        # Stamp verified claims on the request scope (tools read them via ctx...request.scope); the
+        # dict dies with the scope, so the agent stays stateless and multi-instance safe.
         scope.setdefault("state", {})[MCP_CLAIMS_SCOPE_KEY] = claims
         return True
 
     async def _send_unauthorized(scope, receive, send) -> None:
-        # 401 with a WWW-Authenticate discovery pointer so the client starts OAuth (FR-B0).
         response = Response(
             "Unauthorized",
             status_code=401,
@@ -189,13 +160,8 @@ def build_http_app():
         await response(scope, receive, send)
 
     async def _send_transport_removed(scope, receive, send) -> None:
-        # 404 BEFORE the auth gate (feature 079): a client still pointed at a removed path gets
-        # an immediate, unambiguous answer naming the URL to switch to, instead of a 401 that
-        # would start a pointless OAuth flow. Leaks nothing -- AGENT_PUBLIC_URL is already served
-        # unauthenticated by the 401 branch above and by the .well-known discovery routes.
-        #
-        # text/plain, not JSON: a JSON body on the MCP path risks a client parsing it as a
-        # JSON-RPC envelope, and the remediation here is a human editing a connector URL.
+        # 404 must precede the auth gate, else a client on a removed path gets a 401 that starts a
+        # pointless OAuth flow. text/plain, not JSON — a JSON body risks parsing as JSON-RPC.
         response = Response(
             "This MCP transport was removed. Use the Streamable HTTP endpoint at "
             f"{AGENT_PUBLIC_URL}",
@@ -216,9 +182,8 @@ def build_http_app():
         """
         path = (scope.get("path") or "/").rstrip("/") or "/"
 
-        # Exact membership, every method. The rstrip above already folds `/messages/` and
-        # `//messages//` into the literal, and the legacy `?session_id=…` lives in
-        # scope["query_string"], not scope["path"].
+        # Exact membership: the rstrip above folds `/messages/` and `//messages//` into the literal,
+        # and the legacy `?session_id=…` lives in query_string, not path.
         if path in REMOVED_TRANSPORT_PATHS:
             await _send_transport_removed(scope, receive, send)
             return

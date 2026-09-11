@@ -1,9 +1,13 @@
 'use client';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useQueries } from '@tanstack/react-query';
-import { X } from 'lucide-react';
+import { X, TriangleAlert } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
+import { QueryStateMessages } from '@/components/shared/QueryStateMessages';
 import {
   Select,
   SelectContent,
@@ -11,22 +15,28 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ConditionState } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import { ConditionState, ReadinessState } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { WatchlistEntrySource } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
-import { analysisClient } from '@/lib/browserClients/analysisClient';
 import { isFiring, rollupReadiness, readinessState } from '@/lib/readinessRollup';
 import { EnumBadge } from '@/lib/opportunityShared';
 import { READINESS_CUE, IN_QUEUE_CUE } from '@/lib/readinessCue';
 import { UNBOUND, toApiStrategyId } from '@/hooks/useWatchlists';
+import {
+  useWatchlistReadiness,
+  readinessRowMap,
+  readinessRowKey,
+  decodePairToken,
+  WATCHLIST_READINESS_PAGE_SIZE,
+  type WatchlistReadinessRow,
+} from '@/hooks/useWatchlistReadiness';
 
-type EvaluateReadinessResult = Awaited<ReturnType<typeof analysisClient.evaluateReadiness>>;
-type Readiness = EvaluateReadinessResult['readiness'][number];
+type Readiness = NonNullable<WatchlistReadinessRow['readiness']>;
 type Binding = { symbol: string; strategyId: string; source?: number };
 type StrategyDef = { strategyId: string; displayName?: string; liveEnabled: boolean };
 
 /**
- * Provenance badge (feature 127, FR-10): a small "Signal" tag on an entry the agent auto-added
- * from an ingest_signal(direction="watchlist"). Manual/unspecified entries render nothing.
+ * Provenance badge: a "Signal" tag on an entry the agent auto-added from an
+ * ingest_signal(direction="watchlist"). Manual/unspecified entries render nothing.
  */
 function SignalSourceBadge({ source }: { source?: number }) {
   if (source !== WatchlistEntrySource.SIGNAL) return null;
@@ -37,8 +47,7 @@ function SignalSourceBadge({ source }: { source?: number }) {
   );
 }
 
-/** Green = firing (all pass), paper = partway, sell = none pass, muted = no data (feature 083/097).
- * Derived from the shared `readinessState` bucketer (feature 155) — one 4-way decision site. */
+/** buy = firing (all pass), paper = partway, sell = none pass, muted = no data. */
 function barVariant(r: Readiness): 'buy' | 'paper' | 'sell' | 'muted' {
   switch (readinessState(r)) {
     case 'firing':
@@ -59,9 +68,8 @@ function blockingCondition(r: Readiness): string {
   return `${c.refName} ${c.fn} ${c.threshold.toFixed(2)}`;
 }
 
-/** Per-symbol state label: firing / N away / quiet / no data. Derived from the shared
- * `readinessState` bucketer so the text always agrees with the cue icon (feature 155, FIX B — a
- * 0-passing evaluated row now reads "quiet", not "N away"). */
+/** Per-symbol state label: firing / N away / quiet / no data. Derived from readinessState so the
+ * text always agrees with the cue icon. */
 function stateLabel(r: Readiness): string {
   switch (readinessState(r)) {
     case 'firing':
@@ -76,14 +84,8 @@ function stateLabel(r: Readiness): string {
 }
 
 /**
- * Remove + rebind controls for one readiness row (feature 110, FR-1/FR-2) — shared by the bound
- * and unbound row branches below. Stateless (no internal `useState`, matches this file's own
- * "never a fabricated binding" discipline). `strategies` is the full, unfiltered list; this
- * component replicates the live-strategy filter (+ keep the currently-bound strategy visible even
- * if it's gone non-live) that `WatchlistDetail.tsx`'s own `strategyOptions()` already applies to
- * the chip row this replaces, so relocating the control doesn't silently drop that behavior.
- * `onRebind`'s `onValueChange` is the ONE place the Select's UNBOUND sentinel is translated to the
- * wire-level '' strategyId before calling back up.
+ * Remove + rebind controls for one readiness row. Offers live strategies (+ the currently-bound one
+ * even if non-live); onRebind translates the UNBOUND sentinel to the wire-level '' strategyId.
  */
 function BindingRowControls({
   symbol,
@@ -141,72 +143,138 @@ function BindingRowControls({
   );
 }
 
+// Total order over the bound pairs matching the server's (symbol ASC, strategy_id ASC) keyset.
+function comparePairs(a: Binding, b: Binding): number {
+  if (a.symbol !== b.symbol) return a.symbol < b.symbol ? -1 : 1;
+  if (a.strategyId === b.strategyId) return 0;
+  return a.strategyId < b.strategyId ? -1 : 1;
+}
+
 /**
- * Per-watchlist readiness overlay (feature 083/098, per-symbol bindings by feature 097). Each
- * symbol is evaluated against **its own bound strategy** (FR-6) — the transient whole-list
- * `useState('')` strategy picker is gone. Symbols are grouped by their bound `strategyId` and one
- * `EvaluateReadiness` runs per distinct strategy (via `useQueries`); results merge into a per-symbol
- * map. An **unbound** symbol (`strategyId === ''`) is shown as *not evaluated* — never given a
- * fabricated binding (P-03). The ready/watching/quiet/no-data roll-up (over bound symbols) and the
- * "in queue" mark are preserved.
+ * Per-watchlist readiness overlay (feature 181). Rows render IMMEDIATELY from the `['watchlists']`
+ * bindings; each bound row's verdict is decorated by one page-bounded `GetWatchlistReadiness` call
+ * (no client N+1 fan-out). PENDING → Skeleton, UNKNOWN → icon+text error, RESOLVED → the verdict.
+ * The bound rows are keyset-paginated to match the server's page; unbound symbols follow, unpaged.
  */
 export function WatchlistReadiness({
+  watchlistId,
   bindings,
   inQueue,
   strategies,
   onRemoveSymbol,
   onRebindSymbol,
   disabled = false,
+  selected,
+  onSelectionChange,
 }: {
+  watchlistId: string;
   bindings: Binding[];
   inQueue?: Set<string>;
   strategies: StrategyDef[];
   onRemoveSymbol: (symbol: string) => void;
   onRebindSymbol: (symbol: string, strategyId: string) => void;
   disabled?: boolean;
+  // When onSelectionChange is provided, rows grow checkboxes and the parent owns the Set; absent →
+  // no checkboxes (backward-compatible for other callers).
+  selected?: Set<string>;
+  onSelectionChange?: (next: Set<string>) => void;
 }) {
-  const bound = bindings.filter((b) => b.strategyId);
+  const selectable = Boolean(onSelectionChange);
+  const sel = selected ?? new Set<string>();
+  const toggleOne = (symbol: string) => {
+    if (!onSelectionChange) return;
+    const next = new Set(sel);
+    if (next.has(symbol)) next.delete(symbol);
+    else next.add(symbol);
+    onSelectionChange(next);
+  };
+  const rowCheckbox = (symbol: string) =>
+    selectable ? (
+      <Checkbox
+        className="shrink-0"
+        checked={sel.has(symbol)}
+        onCheckedChange={() => toggleOne(symbol)}
+        disabled={disabled}
+        aria-label={`Select ${symbol}`}
+        data-testid={`select-${symbol}`}
+      />
+    ) : null;
+
+  // Keyset pagination state. A page token stack lets Prev walk back (mirrors trader/positions).
+  const [pageToken, setPageToken] = useState('');
+  const [pageStack, setPageStack] = useState<string[]>([]);
+  // Reset paging when the selected watchlist changes.
+  useEffect(() => {
+    setPageToken('');
+    setPageStack([]);
+  }, [watchlistId]);
+
+  const bound = bindings.filter((b) => b.strategyId).sort(comparePairs);
   const unbound = bindings.filter((b) => !b.strategyId);
 
-  // Group bound symbols by strategy so we issue one EvaluateReadiness per distinct strategy.
-  const byStrategy = new Map<string, string[]>();
-  for (const b of bound) {
-    byStrategy.set(b.strategyId, [...(byStrategy.get(b.strategyId) ?? []), b.symbol]);
-  }
-  const groups = [...byStrategy.entries()]; // [strategyId, symbols][]
+  // Slice this page from the bound pairs using the same keyset cursor the server issued.
+  const cursor = decodePairToken(pageToken);
+  const afterCursor = cursor
+    ? bound.filter((b) => comparePairs(b, { symbol: cursor[0], strategyId: cursor[1] }) > 0)
+    : bound;
+  const pageBound = afterCursor.slice(0, WATCHLIST_READINESS_PAGE_SIZE);
 
-  const results = useQueries({
-    queries: groups.map(([strategyId, symbols]) => ({
-      queryKey: ['readiness', strategyId, [...symbols].sort()],
-      queryFn: () => analysisClient.evaluateReadiness({ strategyId, symbols }),
-    })),
-  });
+  const { data, error } = useWatchlistReadiness(
+    watchlistId,
+    pageToken,
+    pageBound.map((b) => ({ symbol: b.symbol, strategyId: b.strategyId })),
+  );
+  const byPair = readinessRowMap(data?.rows);
+  const nextToken = data?.page?.nextPageToken ?? '';
 
-  // Merge every group's rows into one per-symbol readiness map (keyed upper-cased).
-  const readinessBySymbol = new Map<string, Readiness>();
-  results.forEach((res) => {
-    for (const r of res.data?.readiness ?? []) {
-      readinessBySymbol.set(r.symbol.toUpperCase(), r);
-    }
-  });
-
-  const evaluatedRows = bound
-    .map((b) => ({ binding: b, r: readinessBySymbol.get(b.symbol.toUpperCase()) }))
-    .filter((x): x is { binding: Binding; r: Readiness } => Boolean(x.r));
-
+  const resolved = pageBound
+    .map((b) => byPair.get(readinessRowKey(b.symbol, b.strategyId)))
+    .filter((rr): rr is WatchlistReadinessRow => !!rr && rr.state === ReadinessState.RESOLVED)
+    .map((rr) => rr.readiness)
+    .filter((r): r is Readiness => !!r);
   const counts = rollupReadiness(
-    evaluatedRows.map((x) => x.r),
-    bound.map((b) => b.symbol.toUpperCase()),
+    resolved,
+    pageBound.map((b) => b.symbol.toUpperCase()),
   );
 
   if (bindings.length === 0) return null;
 
+  const renderedSymbols = [...pageBound.map((b) => b.symbol), ...unbound.map((b) => b.symbol)];
+  const allSelected = renderedSymbols.length > 0 && renderedSymbols.every((s) => sel.has(s));
+  const toggleAll = () => {
+    if (!onSelectionChange) return;
+    onSelectionChange(allSelected ? new Set<string>() : new Set(renderedSymbols));
+  };
+
+  const goNext = () => {
+    if (!nextToken) return;
+    setPageStack((s) => [...s, pageToken]);
+    setPageToken(nextToken);
+  };
+  const goPrev = () => {
+    setPageStack((s) => {
+      if (s.length === 0) return s;
+      const prev = s[s.length - 1];
+      setPageToken(prev);
+      return s.slice(0, -1);
+    });
+  };
+
   return (
     <div className="mt-3 border-t border-border pt-3" data-testid="watchlist-readiness">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-xs text-muted-foreground">
+        <span className="flex items-center gap-2 text-xs text-muted-foreground">
+          {selectable && (
+            <Checkbox
+              checked={allSelected}
+              onCheckedChange={toggleAll}
+              disabled={disabled}
+              aria-label="Select all symbols"
+              data-testid="select-all"
+            />
+          )}
           Readiness — each symbol against its bound strategy
-          {bound.length > 0 && (
+          {pageBound.length > 0 && (
             <span className="ml-1" data-testid="readiness-rollup">
               · <span className="text-buy">{counts.ready} ready</span> · {counts.watching} watching
               · {counts.quiet} quiet
@@ -220,73 +288,90 @@ export function WatchlistReadiness({
           pane instead of forcing the whole page to scroll horizontally. */}
       <div className="overflow-x-auto">
         <ul className="min-w-[22rem] divide-y divide-border rounded-md border border-border">
-          {/* Bound symbols, ranked by conviction. */}
-          {[...evaluatedRows]
-            .sort((a, b) => b.r.conviction - a.r.conviction)
-            .map(({ binding, r }) => {
-              const queued = inQueue?.has(r.symbol.toUpperCase()) ?? false;
-              const state = readinessState(r);
-              const firing = isFiring(r);
-              return (
-                <li
-                  key={binding.symbol}
-                  className="flex items-center gap-3 px-3 py-2 text-xs"
-                  data-testid={`readiness-row-${binding.symbol}`}
-                >
-                  <span className="w-14 shrink-0 font-mono font-semibold">{r.symbol}</span>
-                  <SignalSourceBadge source={binding.source} />
+          {pageBound.map((binding) => {
+            const rr = byPair.get(readinessRowKey(binding.symbol, binding.strategyId));
+            const state = rr?.state ?? ReadinessState.PENDING;
+            const r = rr?.readiness;
+            const queued = inQueue?.has(binding.symbol.toUpperCase()) ?? false;
+            const cueState = r ? readinessState(r) : 'nodata';
+            const firing = state === ReadinessState.RESOLVED && r ? isFiring(r) : false;
+            return (
+              <li
+                key={`${binding.symbol}|${binding.strategyId}`}
+                className="flex items-center gap-3 px-3 py-2 text-xs"
+                data-testid={`readiness-row-${binding.symbol}`}
+              >
+                {rowCheckbox(binding.symbol)}
+                <span className="w-14 shrink-0 font-mono font-semibold">{binding.symbol}</span>
+                <SignalSourceBadge source={binding.source} />
+                {/* Verdict cell — per-row state via the canonical C-17 primitives. */}
+                {state === ReadinessState.RESOLVED && r ? (
                   <div className="flex shrink-0 items-center gap-2">
                     <Progress
                       value={Math.round(r.conviction * 100)}
                       className="h-1.5 w-20"
                       variant={barVariant(r)}
                     />
-                    {/* Icon + color + text state cue (feature 155, FR-1) — the dynamic "N away"
-                        label overrides the map's fallback; icon is never the sole differentiator. */}
                     <EnumBadge
-                      render={{ ...READINESS_CUE[state], label: stateLabel(r) }}
-                      testId={`readiness-cue-${state}`}
+                      render={{ ...READINESS_CUE[cueState], label: stateLabel(r) }}
+                      testId={`readiness-cue-${cueState}`}
                     />
                   </div>
-                  {/* Reserve the badge column on every row so the blocking-condition and control
-                      columns start at the same x whether or not this symbol is in queue. */}
-                  <span className="w-20 shrink-0">
-                    {queued && <EnumBadge render={IN_QUEUE_CUE} testId="in-queue" />}
+                ) : state === ReadinessState.UNKNOWN ? (
+                  <span
+                    className="flex shrink-0 items-center gap-1 text-destructive"
+                    role="status"
+                    data-testid={`readiness-unknown-${binding.symbol}`}
+                  >
+                    <TriangleAlert className="h-3 w-3" aria-hidden="true" />
+                    <QueryStateMessages error errorText="unavailable" />
                   </span>
-                  <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">
-                    {blockingCondition(r)}
-                  </span>
-                  {/* FR-2: a firing row jumps straight to the symbol's order/position detail
-                      (same target as Opportunities "Review & add"); non-firing rows show nothing. */}
-                  {firing && (
-                    <Link
-                      href={`/trader/positions/${r.symbol}?strategy=${binding.strategyId}`}
-                      aria-label={`Open ${r.symbol} detail`}
-                      data-testid={`jump-${binding.symbol}`}
-                      className="shrink-0 font-medium text-primary hover:underline"
-                    >
-                      Review
-                    </Link>
-                  )}
-                  <BindingRowControls
-                    symbol={binding.symbol}
-                    strategyId={binding.strategyId}
-                    strategies={strategies}
-                    onRebind={onRebindSymbol}
-                    onRemove={onRemoveSymbol}
-                    disabled={disabled}
+                ) : (
+                  <Skeleton
+                    className="h-4 w-40 shrink-0 rounded"
+                    role="status"
+                    aria-busy="true"
+                    aria-label={`Readiness loading for ${binding.symbol}`}
+                    data-testid={`readiness-loading-${binding.symbol}`}
                   />
-                </li>
-              );
-            })}
+                )}
+                {/* Reserve the badge column on every row so downstream columns start at the same x. */}
+                <span className="w-20 shrink-0">
+                  {queued && <EnumBadge render={IN_QUEUE_CUE} testId="in-queue" />}
+                </span>
+                <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">
+                  {state === ReadinessState.RESOLVED && r ? blockingCondition(r) : ''}
+                </span>
+                {firing && r && (
+                  <Link
+                    href={`/trader/positions/${r.symbol}?strategy=${binding.strategyId}`}
+                    aria-label={`Open ${r.symbol} detail`}
+                    data-testid={`jump-${binding.symbol}`}
+                    className="shrink-0 font-medium text-primary hover:underline"
+                  >
+                    Review
+                  </Link>
+                )}
+                <BindingRowControls
+                  symbol={binding.symbol}
+                  strategyId={binding.strategyId}
+                  strategies={strategies}
+                  onRebind={onRebindSymbol}
+                  onRemove={onRemoveSymbol}
+                  disabled={disabled}
+                />
+              </li>
+            );
+          })}
 
-          {/* Unbound symbols — shown as not-evaluated, never given a fabricated binding (P-03). */}
+          {/* Unbound symbols — shown as not-evaluated, never given a fabricated binding. */}
           {unbound.map((b) => (
             <li
               key={b.symbol}
               className="flex items-center gap-3 px-3 py-2 text-xs"
               data-testid={`readiness-row-${b.symbol}`}
             >
+              {rowCheckbox(b.symbol)}
               <span className="w-14 shrink-0 font-mono font-semibold">{b.symbol}</span>
               <SignalSourceBadge source={b.source} />
               <span
@@ -307,6 +392,39 @@ export function WatchlistReadiness({
           ))}
         </ul>
       </div>
+
+      {/* Keyset pagination — keyboard-operable, labeled (FR-7). Shown when a page boundary exists. */}
+      {(pageStack.length > 0 || nextToken) && (
+        <div
+          className="mt-2 flex items-center justify-end gap-2"
+          data-testid="readiness-pagination"
+        >
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={goPrev}
+            disabled={pageStack.length === 0}
+            aria-label="Previous page of watchlist rows"
+          >
+            Prev
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={goNext}
+            disabled={!nextToken}
+            aria-label="Next page of watchlist rows"
+          >
+            Next
+          </Button>
+        </div>
+      )}
+
+      {error ? (
+        <div className="mt-2">
+          <QueryStateMessages error errorText="Couldn't load readiness for this page." />
+        </div>
+      ) : null}
     </div>
   );
 }

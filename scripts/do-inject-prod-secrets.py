@@ -47,6 +47,9 @@ OPTIONAL_PLACEHOLDER_KEYS = (
     ("YOUR_PROD_VAPID_PRIVATE_KEY", "VAPID_PRIVATE_KEY"),
     ("YOUR_PROD_VAPID_PUBLIC_KEY", "VAPID_PUBLIC_KEY"),
     ("YOUR_PROD_VAPID_SUBJECT", "VAPID_SUBJECT"),
+    # OTel: Grafana Cloud OTLP gateway credentials (optional; OTel is off until OTEL_ENABLED=true).
+    ("YOUR_PROD_OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT"),
+    ("YOUR_PROD_OTEL_EXPORTER_OTLP_HEADERS", "OTEL_EXPORTER_OTLP_HEADERS"),
 )
 
 
@@ -63,6 +66,12 @@ def main():
     for placeholder, env_key in OPTIONAL_PLACEHOLDER_KEYS:
         value = os.environ.get(env_key, "")
         if value:
+            # OTel SDK expects OTEL_EXPORTER_OTLP_HEADERS in key=value format
+            # (e.g. Authorization=Basic <token>). The GitHub Secret stores just
+            # the auth value (Basic <token>) — matching the local-dev .env
+            # format — so prepend the header name here if absent.
+            if env_key == "OTEL_EXPORTER_OTLP_HEADERS" and not value.startswith("Authorization="):
+                value = "Authorization=" + value
             content = content.replace(placeholder, value)
 
     sys.stdout.write(content)

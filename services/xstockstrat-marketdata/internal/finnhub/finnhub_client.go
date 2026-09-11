@@ -1,8 +1,5 @@
-// Package finnhub is the Finnhub fundamentals integration for xstockstrat-marketdata
-// (feature 129). It implements source.FundamentalsSource and is held as a dedicated
-// service field alongside the FMP client — it is NEVER registered in the OHLCV
-// source.Registry (FR-2, carried over from feature 059: the Alpaca/OHLCV path stays
-// untouched).
+// Package finnhub is the Finnhub fundamentals integration for xstockstrat-marketdata. It
+// implements source.FundamentalsSource and is NEVER registered in the OHLCV source.Registry (FR-2).
 package finnhub
 
 import (
@@ -18,12 +15,11 @@ import (
 	"github.com/xstockstrat/marketdata/internal/source"
 )
 
-// ClientConfig holds the Finnhub connection settings. The API key is never logged.
-// Unlike FMP, Finnhub has no core/extended metric tiering — every fundamentals fetch
-// always issues all 3 calls (see GetFundamentalsMulti), so there is no Metrics field.
+// ClientConfig holds Finnhub connection settings. The API key is never logged. No metric
+// tiering (unlike FMP) — every fetch issues all 3 calls, so there is no Metrics field.
 type ClientConfig struct {
 	BaseURL string // e.g. https://api.finnhub.io/api/v1
-	APIKey  string // Finnhub API key (resolved from secret env var at startup)
+	APIKey  string // Finnhub API key (resolved from config secret at startup)
 	// HTTPClient is injectable so tests can assert call counts and stub responses.
 	HTTPClient *http.Client
 }
@@ -62,11 +58,8 @@ func (c *Client) GetFundamentals(ctx context.Context, symbol string) (*source.Fu
 	return out[0], nil
 }
 
-// GetFundamentalsMulti fetches fundamentals for every symbol in the chunk. Unlike FMP's
-// batchable /stable/quote, NONE of Finnhub's fundamentals endpoints accept more than one
-// symbol per call (confirmed live this session against api.finnhub.io — see design.md
-// Open Risk #2 and context.md's Step 2 session note), so this costs exactly 3 calls per
-// symbol (/stock/metric, /quote, /stock/profile2) with no batching to fall back to.
+// GetFundamentalsMulti fetches fundamentals for every symbol in the chunk. None of Finnhub's
+// endpoints batch, so this costs exactly 3 calls per symbol (/stock/metric, /quote, /stock/profile2).
 func (c *Client) GetFundamentalsMulti(ctx context.Context, symbols []string) ([]*source.Fundamentals, error) {
 	if len(symbols) == 0 {
 		return nil, nil
@@ -76,9 +69,8 @@ func (c *Client) GetFundamentalsMulti(ctx context.Context, symbols []string) ([]
 	for _, sym := range symbols {
 		f, err := c.fetchOne(ctx, sym, now)
 		if err != nil {
-			// Skip symbols Finnhub could not fully resolve, mirroring FMP's
-			// "skip symbols FMP did not return" behavior (fmp_client.go:107) rather
-			// than failing the whole batch on one bad symbol.
+			// Skip symbols Finnhub could not fully resolve rather than failing the whole batch
+			// on one bad symbol (mirrors FMP).
 			continue
 		}
 		out = append(out, f)
@@ -115,10 +107,8 @@ func (c *Client) fetchOne(ctx context.Context, symbol string, now time.Time) (*s
 
 // ── HTTP plumbing ────────────────────────────────────────────────────────────
 
-// getJSON builds a URL under baseURL with the token query param and decodes the JSON
-// object response into dst. The token is added to the query, never logged. Mirrors
-// fmp_client.go's getJSON exactly, except Finnhub's auth param is "token" (confirmed
-// live this session), not "apikey".
+// getJSON builds a URL under baseURL with the "token" auth param (never logged) and decodes
+// the JSON response into dst. Finnhub's auth param is "token", not FMP's "apikey".
 func (c *Client) getJSON(ctx context.Context, path string, params url.Values, dst any) error {
 	if params == nil {
 		params = url.Values{}
@@ -181,27 +171,16 @@ func (c *Client) fetchProfile(ctx context.Context, symbol string) (*finnhubProfi
 
 // ── Finnhub response shapes ──────────────────────────────────────────────────
 //
-// Every field name below was confirmed against a LIVE /stock/metric, /quote, and
-// /stock/profile2 response this session (context.md § Step 2 session note) — none are
-// guessed. Two unit conversions were discovered live and are NOT obvious from field
-// names alone:
-//   - marketCapitalization is denominated in MILLIONS of USD (Finnhub convention);
-//     FMP's marketCap is raw dollars, so this client multiplies by 1_000_000.
-//   - roeTTM and currentDividendYieldTTM are percentage-POINT numbers (e.g. 137.18
-//     meaning "137.18%"); FMP's ROE/DividendYield are fractions (e.g. 0.005 meaning
-//     "0.5%", confirmed via fmp_client_test.go's own fixture), so this client divides
-//     both by 100 to match FMP's convention. peTTM, pb, totalDebt/totalEquityQuarterly,
-//     and beta are true dimensionless ratios in both providers — no scaling needed.
+// Finnhub unit quirks vs FMP: marketCapitalization is in MILLIONS of USD (×1e6 to raw
+// dollars); roeTTM and currentDividendYieldTTM are percentage-points (÷100 to fractions).
 
 // finnhubMetricResponse is the /stock/metric?metric=all response envelope.
 type finnhubMetricResponse struct {
 	Metric finnhubMetric `json:"metric"`
 }
 
-// finnhubMetric carries the valuation/profitability ratios. The debt-to-equity field
-// name contains a literal "/" — this is Finnhub's actual JSON key, not a typo. Fields are
-// pointers: Finnhub commonly omits a key entirely for smaller-cap/foreign symbols, and an
-// omitted/null key must decode to nil, not Go's float64 zero value (bug fix).
+// finnhubMetric carries valuation/profitability ratios. The debt-to-equity JSON key literally
+// contains "/" (not a typo). Pointer fields: an omitted/null key must decode to nil, not 0.
 type finnhubMetric struct {
 	YearHigh            *float64 `json:"52WeekHigh"`
 	YearLow             *float64 `json:"52WeekLow"`
@@ -215,9 +194,7 @@ type finnhubMetric struct {
 	DividendYieldTTM    *float64 `json:"currentDividendYieldTTM"`
 }
 
-// scale100 divides a percentage-point pointer by 100 to match FMP's fraction convention,
-// preserving nil (unlike a plain `*v / 100`, which would need a nil check at every call
-// site — this centralizes it once).
+// scale100 divides a percentage-point pointer by 100 (FMP's fraction convention), preserving nil.
 func scale100(v *float64) *float64 {
 	if v == nil {
 		return nil
@@ -258,9 +235,7 @@ func (q *finnhubQuote) apply(f *source.Fundamentals) {
 }
 
 // finnhubProfile2 is the /stock/profile2 response — carries currency. Its own
-// marketCapitalization field is deliberately unused (see fetchOne / context.md):
-// /stock/metric's value is the single source of truth to avoid two different market
-// cap figures for the same symbol.
+// marketCapitalization is deliberately unused; /stock/metric is the single market-cap source.
 type finnhubProfile2 struct {
 	Currency string `json:"currency"`
 }

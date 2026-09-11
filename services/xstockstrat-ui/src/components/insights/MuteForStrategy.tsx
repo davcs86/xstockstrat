@@ -13,16 +13,9 @@ import { useStrategyDefinitions, useManageStrategy } from '@/hooks/useStrategyDe
 import { StrategyOperation } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
 /**
- * feature 132 — "mute this symbol for a strategy": pick one of the caller's own strategies and
- * append this symbol (uppercase) to its deny list via a MASKED manageStrategy update
- * (updateMask=['denied_symbols']) — touches only the deny list, never clobbering the rest of the
- * definition. The strategy-definitions query is invalidated on success (wired in useManageStrategy),
- * so the "already muted" state reflects after the write.
- *
- * Relocated from the retired `insights/market/[symbol]` page onto the unified
- * `/trader/positions/[symbol]` page (feature 125) so the control survives that page's retirement.
- * Composed from shadcn primitives (Select) per the feature's shadcn-first requirement — the former
- * inline version used a raw `<select>`.
+ * "Mute this symbol for a strategy": pick one of the caller's own strategies and append this symbol
+ * (uppercase) to its deny list via a MASKED manageStrategy update (updateMask=['denied_symbols']) —
+ * touches only the deny list, never clobbering the rest of the definition.
  */
 export function MuteForStrategy({ symbol }: { symbol: string }) {
   const { data } = useStrategyDefinitions(true);

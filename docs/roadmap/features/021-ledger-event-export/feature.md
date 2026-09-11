@@ -5,6 +5,7 @@
 **Last Updated**: 2026-08-31
 **Committed to main**: c086afc839f905c4f72b24d75e824e22d61af0b2
 **Launched date**: 2026-09-01
+**Archived**: 2026-09-02
 
 ---
 
@@ -21,13 +22,13 @@
 | 2026-08-31 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done — ledger ExportEvents + per-user stamp + `/trader` BFF route/button; e2e 8/8 green |
 
 | 2026-09-01 | `code-completed` → `launched` | CI workflow | Promoted via PR #1065; committed c086afc839f905c4f72b24d75e824e22d61af0b2 |
+| 2026-09-02 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
+- Specs (product-spec, recon, design, implementation-spec) — pruned by /sdd-archiver 2026-09-02; see [Context Log](context.md) Archive Synthesis
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Implementation Spec](implementation-spec.md) — numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

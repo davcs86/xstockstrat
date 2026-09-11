@@ -12,6 +12,16 @@ import pytest
 from app.handlers.servicer import IndicatorsServicer
 from app.services.formulas_repository import FormulasRepository
 
+
+def _cfg_stub():
+    """A config double for CRUD tests that don't touch the sandbox. IndicatorsServicer.__init__
+    reads sandbox_max_concurrent() to size the offload semaphore (feature 176), so the double must
+    answer it with a real int (a bare MagicMock() would make max()/Semaphore() raise)."""
+    cfg = MagicMock()
+    cfg.sandbox_max_concurrent.return_value = 4
+    return cfg
+
+
 # ---------------------------------------------------------------------------
 # FormulasRepository — asyncpg pool mocked
 # ---------------------------------------------------------------------------
@@ -169,7 +179,7 @@ class TestFormulasRepository:
 
 class TestIndicatorsServicerCRUD:
     def _servicer(self):
-        return IndicatorsServicer(config_watcher=MagicMock())
+        return IndicatorsServicer(config_watcher=_cfg_stub())
 
     async def test_list_formulas_empty_when_no_repo(self):
         servicer = self._servicer()
@@ -210,7 +220,7 @@ def _ctx(metadata: list[tuple[str, str]]):
 
 class TestRegisterFormulaAuthorGate:
     def _servicer(self):
-        return IndicatorsServicer(config_watcher=MagicMock())
+        return IndicatorsServicer(config_watcher=_cfg_stub())
 
     async def test_defaults_author_to_x_user_id(self):
         from gen.indicators.v1 import indicators_pb2
@@ -271,7 +281,7 @@ class TestRegisterFormulaAuthorGate:
 
 
 def _repo_servicer(author: str):
-    servicer = IndicatorsServicer(config_watcher=MagicMock())
+    servicer = IndicatorsServicer(config_watcher=_cfg_stub())
     repo = MagicMock()
     repo.get_by_id = AsyncMock(return_value={"author": author})
     repo.update = AsyncMock(
@@ -294,7 +304,7 @@ class TestExecuteFormulaParameterErrors:
     async def test_out_of_range_param_returns_parameter_errors(self):
         from gen.indicators.v1 import indicators_pb2
 
-        servicer = IndicatorsServicer(config_watcher=MagicMock())
+        servicer = IndicatorsServicer(config_watcher=_cfg_stub())
         repo = MagicMock()
         repo.get_by_id = AsyncMock(
             return_value={
@@ -327,6 +337,7 @@ class TestExecuteFormulaOutputEnforcement:
         cfg.sandbox_timeout_ms = 5000
         cfg.sandbox_memory_bytes = 256 * 1024 * 1024
         cfg.sandbox_allowed_imports = []
+        cfg.sandbox_max_concurrent.return_value = 4
         return cfg
 
     def _repo_for(self, source: str, outputs: list[dict]):
@@ -377,6 +388,7 @@ class TestExecuteFormulaInputData:
         cfg.sandbox_timeout_ms = 5000
         cfg.sandbox_memory_bytes = 256 * 1024 * 1024
         cfg.sandbox_allowed_imports = []
+        cfg.sandbox_max_concurrent.return_value = 4
         return cfg
 
     async def test_nested_list_input_data_serializes(self):
@@ -407,6 +419,7 @@ class TestExecuteFormulaInlineParameters:
         cfg.sandbox_timeout_ms = 5000
         cfg.sandbox_memory_bytes = 256 * 1024 * 1024
         cfg.sandbox_allowed_imports = []
+        cfg.sandbox_max_concurrent.return_value = 4
         return cfg
 
     async def test_inline_request_parameters_inject_into_params(self):
@@ -549,7 +562,7 @@ class TestFormulaAdminOverride:
 
 class TestFormulaWarmupPeriod:
     def _servicer(self):
-        return IndicatorsServicer(config_watcher=MagicMock())
+        return IndicatorsServicer(config_watcher=_cfg_stub())
 
     async def test_create_round_trips_warmup_period(self):
         pool = MagicMock()
@@ -627,7 +640,7 @@ class TestFormulaWarmupPeriod:
     async def test_update_round_trips_warmup_period(self):
         from gen.indicators.v1 import indicators_pb2
 
-        servicer = IndicatorsServicer(config_watcher=MagicMock())
+        servicer = IndicatorsServicer(config_watcher=_cfg_stub())
         repo = MagicMock()
         repo.get_by_id = AsyncMock(return_value={"author": "u"})
         repo.update = AsyncMock(
@@ -709,7 +722,7 @@ def _full_row(author="user-1", deleted_at=None):
 
 
 def _update_servicer(row):
-    servicer = IndicatorsServicer(config_watcher=MagicMock())
+    servicer = IndicatorsServicer(config_watcher=_cfg_stub())
     repo = MagicMock()
     repo.get_by_id = AsyncMock(return_value=row)
     # repo.update echoes a clean, parseable row (empty parameters/outputs so _row_to_formula works).

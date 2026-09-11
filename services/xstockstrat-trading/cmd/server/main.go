@@ -70,7 +70,6 @@ func main() {
 	}
 	slog.Info("config snapshot received, starting trading service")
 
-	// Open DB connection for order persistence.
 	repo, err := repository.NewTradingRepo(cfg.DBConnStr)
 	if err != nil {
 		slog.Error("db repo init failed", "error", err)
@@ -78,25 +77,22 @@ func main() {
 	}
 	slog.Info("db repository initialized")
 
-	// Account repository — shares the TradingRepo pool to avoid a second
-	// connection pool (keeps the service within the shared DB connection budget).
+	// Account repository shares the TradingRepo pool — no second pool (DB connection budget).
 	accountRepo := repository.NewAccountRepo(repo.Pool())
 	slog.Info("account repository initialized")
 
-	// Order-intent repository — shares the TradingRepo pool, no second connection (F-06).
+	// Order-intent repository shares the TradingRepo pool — no second connection.
 	orderIntentRepo := repository.NewOrderIntentRepo(repo.Pool())
 
-	// Bracket repository — shares the TradingRepo pool, no second connection (F-06, feature 030).
+	// Bracket repository shares the TradingRepo pool — no second connection.
 	bracketRepo := repository.NewBracketRepo(repo.Pool())
 
-	// Wire service layer.
 	svc, err := service.NewTradingService(cfg, cfgWatcher, accountRepo, repo, orderIntentRepo, bracketRepo, cfg.BrokerAccountsEncryptionKey)
 	if err != nil {
 		slog.Error("service init failed", "error", err)
 		os.Exit(1)
 	}
 
-	// Load registered broker accounts from DB into the in-memory pool.
 	if err := svc.LoadBrokerPool(ctx); err != nil {
 		slog.Error("broker pool load failed", "error", err)
 		os.Exit(1)
@@ -114,16 +110,13 @@ func main() {
 	go svc.StartPositionSyncPoller(ctx)
 	// Start credential health poller — flags accounts whose API secrets stopped working.
 	go svc.StartCredentialHealthPoller(ctx)
-	// Start order-intent sweeper — proactively reclaims orphaned PENDING intents (feature 101).
+	// Start order-intent sweeper — proactively reclaims orphaned PENDING intents.
 	go svc.StartOrderIntentSweeper(ctx)
-	// Start bracket protection watchdog — flattens+halts on an unconfirmed bracket
-	// past its protection window (feature 030).
+	// Start bracket protection watchdog — flattens+halts on a bracket unconfirmed past its window.
 	go svc.StartBracketProtectionWatchdog(ctx)
-	// Start broker-state reconciliation poller — compares open orders/positions against
-	// broker truth, self-heals benign drift, halts on a genuine mismatch (feature 102).
+	// Start broker-state reconciliation poller — compares against broker truth, halts on real mismatch.
 	go svc.StartReconciliationPoller(ctx)
 
-	// gRPC server.
 	grpcHdl := handler.NewTradingHandler(svc)
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.GRPCPort))
 	if err != nil {

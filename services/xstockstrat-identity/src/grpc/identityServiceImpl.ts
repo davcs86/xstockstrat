@@ -10,8 +10,8 @@ import { LedgerAudit, NOOP_LEDGER_AUDIT } from './ledgerAudit';
 
 const log = getLogger('identity:impl');
 
-// Role enum (packages/proto identity Role) ↔ DB role strings (feature 043). The generated enum
-// is numeric; identity.users.roles is TEXT[]. ROLE_UNSPECIFIED (0) is never written.
+// Role enum (numeric, packages/proto identity Role) ↔ identity.users.roles TEXT[].
+// ROLE_UNSPECIFIED (0) is never written.
 const ROLE_ENUM_TO_STRING: Record<number, string> = { 1: 'admin', 2: 'trader', 3: 'viewer' };
 const ROLE_STRING_TO_ENUM: Record<string, number> = { admin: 1, trader: 2, viewer: 3 };
 
@@ -34,29 +34,68 @@ function toUserView(row: any) {
   };
 }
 
-// ts-proto's grpc-js serializer maps `google.protobuf.Timestamp` fields to JS
-// `Date` and calls `.getTime()` on them during encode. Responses must therefore
-// carry `Date` instances, not `{ seconds }` plain objects — otherwise encoding
-// throws a TypeError, which grpc-js surfaces to callers as an INTERNAL
-// trailers-only error (the handler's own try/catch cannot intercept it because
-// the failure happens after `callback(null, ...)` returns). The Connect adapter
-// converts these Dates to protobuf-es Timestamps for the HTTP path.
+// Timestamp response fields must carry JS `Date` instances, not `{ seconds }` objects —
+// ts-proto's grpc-js encoder calls `.getTime()` and otherwise throws an uncatchable INTERNAL error.
 function secondsToDate(seconds: number): Date {
   return new Date(seconds * 1000);
+}
+
+// ── User-metadata helpers (shared by self + admin RPCs) ──────────────────────
+// One row→proto mapper, one SELECT, one SET-builder so the self and admin metadata
+// paths cannot drift (a new column added in one place is added for both).
+const METADATA_COLUMNS = 'user_id, email, phone, display_name, metadata, metadata_updated_at';
+
+// Emits all six keys unconditionally (`?? undefined` shape, never conditional-spread) so a
+// projection-parity test can assert an exact key set against the proto message fields.
+function rowToUserMetadata(r: any) {
+  return {
+    userId: r.user_id,
+    email: r.email,
+    phone: r.phone ?? undefined,
+    displayName: r.display_name ?? undefined,
+    metadata: r.metadata ? JSON.parse(JSON.stringify(r.metadata)) : {},
+    metadataUpdatedAt: r.metadata_updated_at ? new Date(r.metadata_updated_at) : undefined,
+  };
+}
+
+async function selectUserMetadata(pool: Pool, userId: string): Promise<any[]> {
+  const result = await pool.query(
+    `SELECT ${METADATA_COLUMNS} FROM identity.users WHERE user_id = $1`,
+    [userId],
+  );
+  return result.rows;
+}
+
+// Dynamic SET clause from present optional fields (ts-proto camelCase presence). The emptiness
+// check stays in each handler so self and admin behave identically.
+function buildMetadataSet(req: any): { sets: string[]; params: any[] } {
+  const sets: string[] = [];
+  const params: any[] = [];
+  let idx = 1;
+  if (req.phone !== undefined) { sets.push(`phone = $${idx++}`); params.push(req.phone); }
+  if (req.displayName !== undefined) { sets.push(`display_name = $${idx++}`); params.push(req.displayName); }
+  if (req.metadata !== undefined) { sets.push(`metadata = $${idx++}`); params.push(JSON.stringify(req.metadata)); }
+  return { sets, params };
+}
+
+// Map known Postgres SQLSTATEs to gRPC status. 23514 (the users_metadata_size CHECK, migration 006)
+// is a client error, not INTERNAL — shared by createUser + both metadata write paths.
+function mapDbError(err: any): { code: number; message: string } {
+  if (err?.code === '23505') return { code: 6, message: 'user already exists' };
+  if (err?.code === '23514') return { code: 3, message: 'metadata exceeds 8KB limit' };
+  return { code: 13, message: err?.message };
 }
 
 export class IdentityServiceImpl {
   constructor(
     private readonly pool: Pool,
     private readonly config: ConfigWatcher,
-    // Best-effort ledger audit sink (feature 043). Optional so existing tests constructing
-    // (pool, config) still work; production injects the real client in index.ts.
+    // Optional best-effort audit sink; defaults to no-op for tests.
     private readonly audit: LedgerAudit = NOOP_LEDGER_AUDIT,
   ) {}
 
   private get jwtSecret(): string {
-    // Secret keys are not stored in config service — sourced from env only.
-    // JWT_SECRET must be set in the environment; see .env.example.
+    // JWT signing key is env-only, never a config-service key (IDENTITY-1).
     const secret = process.env.JWT_SECRET;
     if (!secret) {
       throw new Error('JWT_SECRET environment variable is required but not set. See .env.example.');
@@ -246,9 +285,9 @@ export class IdentityServiceImpl {
     }
   }
 
-  // ── OAuth 2.1 authorization-server backend (feature 049 Part B) ───────────
+  // ── OAuth 2.1 authorization-server backend ───────────
 
-  /** Mint an audience-bound access JWT for the OAuth flow (reuses the standard claim shape). */
+  /** Mint an audience-bound access JWT for the OAuth flow. */
   private mintOAuthAccessToken(
     userId: string,
     email: string,
@@ -272,10 +311,8 @@ export class IdentityServiceImpl {
   }
 
   /**
-   * Insert a fresh rotating refresh token for a user; returns the raw token.
-   * An optional `clientId` tags the token with the OAuth client that minted it so
-   * "My Authorized Apps" (feature 051) can list/revoke it. First-party sessions pass
-   * no clientId → NULL client_id (unchanged behavior).
+   * Insert a fresh rotating refresh token; returns the raw token. Optional clientId tags it
+   * with the minting OAuth client (NULL for first-party sessions) for authorized-app listing.
    */
   private async issueRefreshToken(userId: string, clientId?: string): Promise<string> {
     const refreshToken = uuidv4();
@@ -297,8 +334,7 @@ export class IdentityServiceImpl {
     if (redirectUris.length === 0) {
       return callback({ code: 3, message: 'at least one redirect_uri is required' });
     }
-    // Minimum: every redirect URI must be https:// (the agent edge / config allowlist
-    // may tighten this further — Step 13/20).
+    // Every redirect URI must be https:// (the agent edge may tighten further).
     for (const uri of redirectUris) {
       if (!uri.startsWith('https://')) {
         return callback({ code: 3, message: 'redirect_uris must use https' });
@@ -416,7 +452,6 @@ export class IdentityServiceImpl {
       if (challenge !== row.code_challenge) {
         return callback({ code: 16, message: 'invalid_grant' });
       }
-      // Single-use: consume the code.
       await this.pool.query(
         'UPDATE identity.oauth_auth_codes SET consumed_at = NOW() WHERE code = $1',
         [codeHash]
@@ -436,7 +471,7 @@ export class IdentityServiceImpl {
 
   /**
    * RefreshOAuthToken — rotate the refresh token (revoke old, insert new) and mint a fresh
-   * audience-bound access JWT. Mirrors refreshToken but returns the OAuthTokenResponse shape.
+   * audience-bound access JWT.
    */
   async refreshOAuthToken(call: any, callback: any) {
     const { refreshToken, resource } = call.request;
@@ -455,13 +490,11 @@ export class IdentityServiceImpl {
       );
       if (result.rows.length === 0) return callback({ code: 16, message: 'invalid_grant' });
       const { token_id, user_id, client_id, email, roles } = result.rows[0];
-      // Best-effort "last refreshed" timestamp (feature 051) — bumped only on rotation,
-      // surfaced by ListAuthorizedApps and labeled "Last refreshed" in the UI (NOT per-request access).
+      // last_used_at is bumped only on rotation ("last refreshed"), never per-request access.
       await this.pool.query(
         'UPDATE identity.refresh_tokens SET last_used_at = NOW() WHERE token_id = $1',
         [token_id]
       );
-      // Rotation: revoke the presented refresh token.
       await this.pool.query(
         'UPDATE identity.refresh_tokens SET revoked_at = NOW() WHERE token_id = $1',
         [token_id]
@@ -479,13 +512,11 @@ export class IdentityServiceImpl {
     }
   }
 
-  // ── Authorized-apps management (feature 051) ──────────────────────────────
+  // ── Authorized-apps management ──────────────────────────────
 
   /**
-   * ListAuthorizedApps — the OAuth clients the calling user has active grants for, derived
-   * from `identity.refresh_tokens` rows tagged with a `client_id` (JOIN `oauth_clients` for
-   * name/redirects). Per-user scoped (WHERE rt.user_id = $1). Returns only non-sensitive
-   * metadata — never token hashes or secrets (FR-7).
+   * ListAuthorizedApps — the calling user's active OAuth grants (per-user scoped). Returns only
+   * non-sensitive metadata — never token hashes or secrets.
    */
   async listAuthorizedApps(call: any, callback: any) {
     const { userId } = call.request;
@@ -522,9 +553,8 @@ export class IdentityServiceImpl {
   }
 
   /**
-   * RevokeAuthorizedApp — revoke all of the calling user's active refresh tokens for one OAuth
-   * client (invalidates the grant; access JWTs expire naturally). Scoped by BOTH user_id AND
-   * client_id (IDOR-safe, mirrors revokeApiKey) — a forged/foreign client_id matches zero rows.
+   * RevokeAuthorizedApp — revoke the calling user's refresh tokens for one OAuth client (access
+   * JWTs expire naturally). Scoped by BOTH user_id AND client_id (IDOR-safe).
    */
   async revokeAuthorizedApp(call: any, callback: any) {
     const { userId, clientId } = call.request;
@@ -546,11 +576,8 @@ export class IdentityServiceImpl {
   }
 
   /**
-   * GetUserMetadata — return the calling user's own profile metadata.
-   *
-   * Unlike listAuthorizedApps/revokeAuthorizedApp (which accept userId in the request body),
-   * this RPC derives the caller from the propagated x-user-id metadata header (C-03). New
-   * identity RPCs should follow this pattern.
+   * GetUserMetadata — return the calling user's own profile metadata. Caller derived from the
+   * x-user-id metadata header, not the request body (C-03).
    */
   async getUserMetadata(call: any, callback: any) {
     if (!call.metadata?.get) {
@@ -559,37 +586,20 @@ export class IdentityServiceImpl {
     const userId = userIdFrom(call.metadata);
     if (!userId) return callback({ code: 3, message: 'x-user-id header required' });
     try {
-      const result = await this.pool.query(
-        `SELECT user_id, email, phone, display_name, metadata, metadata_updated_at
-         FROM identity.users WHERE user_id = $1`,
-        [userId]
-      );
-      if (result.rows.length === 0) {
+      const rows = await selectUserMetadata(this.pool, userId);
+      if (rows.length === 0) {
         return callback({ code: 5, message: 'user not found' });
       }
-      const r = result.rows[0];
-      callback(null, {
-        userMetadata: {
-          userId: r.user_id,
-          email: r.email,
-          phone: r.phone ?? undefined,
-          displayName: r.display_name ?? undefined,
-          metadata: r.metadata ? JSON.parse(JSON.stringify(r.metadata)) : {},
-          metadataUpdatedAt: r.metadata_updated_at ? new Date(r.metadata_updated_at) : undefined,
-        },
-      });
+      callback(null, { userMetadata: rowToUserMetadata(rows[0]) });
     } catch (err: any) {
       log.error('getUserMetadata failed', { error: err.message });
-      callback({ code: 13, message: err.message });
+      callback(mapDbError(err));
     }
   }
 
   /**
-   * UpdateUserMetadata — partial-update the calling user's own profile metadata.
-   *
-   * Unlike listAuthorizedApps/revokeAuthorizedApp (which accept userId in the request body),
-   * this RPC derives the caller from the propagated x-user-id metadata header (C-03). New
-   * identity RPCs should follow this pattern.
+   * UpdateUserMetadata — partial-update the calling user's own profile metadata. Caller derived
+   * from the x-user-id metadata header, not the request body (C-03).
    */
   async updateUserMetadata(call: any, callback: any) {
     if (!call.metadata?.get) {
@@ -597,14 +607,7 @@ export class IdentityServiceImpl {
     }
     const userId = userIdFrom(call.metadata);
     if (!userId) return callback({ code: 3, message: 'x-user-id header required' });
-    const { phone, displayName, metadata } = call.request;
-    // Build dynamic SET clause from non-undefined optional fields (ts-proto optional presence)
-    const sets: string[] = [];
-    const params: any[] = [];
-    let idx = 1;
-    if (phone !== undefined) { sets.push(`phone = $${idx++}`); params.push(phone); }
-    if (displayName !== undefined) { sets.push(`display_name = $${idx++}`); params.push(displayName); }
-    if (metadata !== undefined) { sets.push(`metadata = $${idx++}`); params.push(JSON.stringify(metadata)); }
+    const { sets, params } = buildMetadataSet(call.request);
     if (sets.length === 0) {
       return callback({ code: 3, message: 'at least one field required' });
     }
@@ -612,39 +615,82 @@ export class IdentityServiceImpl {
     params.push(userId);
     try {
       const result = await this.pool.query(
-        `UPDATE identity.users SET ${sets.join(', ')} WHERE user_id = $${idx}
-         RETURNING user_id, email, phone, display_name, metadata, metadata_updated_at`,
-        params
+        `UPDATE identity.users SET ${sets.join(', ')} WHERE user_id = $${params.length}
+         RETURNING ${METADATA_COLUMNS}`,
+        params,
       );
       if (result.rows.length === 0) {
         return callback({ code: 5, message: 'user not found' });
       }
-      const r = result.rows[0];
-      callback(null, {
-        userMetadata: {
-          userId: r.user_id,
-          email: r.email,
-          phone: r.phone ?? undefined,
-          displayName: r.display_name ?? undefined,
-          metadata: r.metadata ? JSON.parse(JSON.stringify(r.metadata)) : {},
-          metadataUpdatedAt: r.metadata_updated_at ? new Date(r.metadata_updated_at) : undefined,
-        },
-      });
+      callback(null, { userMetadata: rowToUserMetadata(result.rows[0]) });
     } catch (err: any) {
       log.error('updateUserMetadata failed', { error: err.message });
-      callback({ code: 13, message: err.message });
+      callback(mapDbError(err));
     }
   }
 
-  // ── User management (admin-gated, feature 043) ────────────────────────────
-  // Every RPC below (reads included, a deliberate divergence from config — AC-7) requires the
-  // ADMIN access-scope bit; passwords are write-only (never returned — AC-10). Audit emits are
-  // added in Step 6 after each successful mutation (best-effort, never rolled back).
+  /**
+   * AdminGetUserMetadata — read ANY user's profile metadata (feature 183). Target selected by the
+   * request-body user_id (never x-user-id). ADMIN-gated; no audit on read (like getUser/listUsers).
+   */
+  async adminGetUserMetadata(call: any, callback: any) {
+    if (!this.adminGate(call, callback)) return;
+    const userId = call.request.userId;
+    if (!userId) return callback({ code: 3, message: 'user_id required' });
+    try {
+      const rows = await selectUserMetadata(this.pool, userId);
+      if (rows.length === 0) return callback({ code: 5, message: 'user not found' });
+      callback(null, { userMetadata: rowToUserMetadata(rows[0]) });
+    } catch (err: any) {
+      log.error('adminGetUserMetadata failed', { error: err.message });
+      callback(mapDbError(err));
+    }
+  }
 
   /**
-   * Best-effort audit emit (design R5): a throwing/rejecting audit sink is logged and swallowed here
-   * so a ledger outage never surfaces as a mutation failure. Double-guards the LedgerAudit contract
-   * (which also swallows internally) so even a misbehaving sink can't roll back a user change.
+   * AdminUpdateUserMetadata — partial-update ANY user's profile metadata (feature 183). Target from
+   * request-body user_id. ADMIN-gated; emits a best-effort ledger audit (acting admin + target,
+   * no metadata values / no secrets).
+   */
+  async adminUpdateUserMetadata(call: any, callback: any) {
+    if (!this.adminGate(call, callback)) return;
+    const userId = call.request.userId;
+    if (!userId) return callback({ code: 3, message: 'user_id required' });
+    const { sets, params } = buildMetadataSet(call.request);
+    if (sets.length === 0) {
+      return callback({ code: 3, message: 'at least one field required' });
+    }
+    sets.push(`metadata_updated_at = NOW()`);
+    params.push(userId);
+    try {
+      const result = await this.pool.query(
+        `UPDATE identity.users SET ${sets.join(', ')} WHERE user_id = $${params.length}
+         RETURNING ${METADATA_COLUMNS}`,
+        params,
+      );
+      if (result.rows.length === 0) return callback({ code: 5, message: 'user not found' });
+      const updatedFields = ['phone', 'displayName', 'metadata'].filter(
+        (k) => call.request[k] !== undefined,
+      );
+      await this.auditSafe('identity.user.metadata_updated', userId, call.metadata, {
+        acting_admin_user_id: userIdFrom(call.metadata),
+        target_user_id: userId,
+        updated_fields: updatedFields,
+      });
+      callback(null, { userMetadata: rowToUserMetadata(result.rows[0]) });
+    } catch (err: any) {
+      log.error('adminUpdateUserMetadata failed', { error: err.message });
+      callback(mapDbError(err));
+    }
+  }
+
+  // ── User management (admin-gated) ────────────────────────────
+  // Every RPC below (reads included) requires the ADMIN access-scope bit; passwords are
+  // write-only (never returned); audit emits are best-effort after commit, never rolled back.
+
+  /**
+   * Best-effort audit emit: swallows every error so a ledger outage never fails the mutation.
+   * Double-guards the LedgerAudit contract (which also swallows internally).
    */
   private async auditSafe(
     eventType: string,
@@ -659,7 +705,7 @@ export class IdentityServiceImpl {
     }
   }
 
-  /** Guard shared by all six admin RPCs: metadata present + ADMIN bit. Returns false + calls back on denial. */
+  /** Guard shared by all eight admin RPCs: metadata present + ADMIN bit. Returns false + calls back on denial. */
   private adminGate(call: any, callback: any): boolean {
     if (!call.metadata?.get) {
       callback({ code: 13, message: 'missing metadata' });
@@ -694,9 +740,9 @@ export class IdentityServiceImpl {
       });
       callback(null, { user: toUserView(row) });
     } catch (err: any) {
-      if (err.code === '23505') return callback({ code: 6, message: 'user already exists' });
-      log.error('createUser failed', { error: err.message });
-      callback({ code: 13, message: err.message });
+      const mapped = mapDbError(err);
+      if (mapped.code === 13) log.error('createUser failed', { error: err.message });
+      callback(mapped);
     }
   }
 
@@ -743,8 +789,7 @@ export class IdentityServiceImpl {
         [hash, userId],
       );
       if (result.rowCount === 0) return callback({ code: 5, message: 'user not found' });
-      // Revoke the target's refresh tokens so a reset forces re-login (design R3), keyed on the
-      // target user_id (sidesteps the unsigned-token revoke finding).
+      // Revoke the target's refresh tokens so a reset forces re-login, keyed on target user_id.
       await this.pool.query(
         `UPDATE identity.refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL`,
         [userId],
@@ -754,7 +799,7 @@ export class IdentityServiceImpl {
         target_user_id: userId,
         target_email: result.rows[0]?.email,
       });
-      callback(null, {}); // empty — no password/hash echoed (AC-10)
+      callback(null, {}); // empty — no password/hash echoed
     } catch (err: any) {
       log.error('updatePassword failed', { error: err.message });
       callback({ code: 13, message: err.message });
@@ -768,8 +813,8 @@ export class IdentityServiceImpl {
     const roleStrings = rolesToStrings(call.request.roles);
     const newRolesHaveAdmin = roleStrings.includes('admin');
     try {
-      // Atomic last-admin guard (AC-11/FR-11): the UPDATE only strips admin from the target when it
-      // is NOT the final active admin — no count-then-write TOCTOU.
+      // Atomic last-admin guard: the UPDATE only strips admin when the target is not the final
+      // active admin — no count-then-write TOCTOU.
       const result = await this.pool.query(
         `UPDATE identity.users SET roles = $2::text[], updated_at = NOW()
            WHERE user_id = $1
@@ -810,8 +855,8 @@ export class IdentityServiceImpl {
     const active = Boolean(call.request.active);
     if (!userId) return callback({ code: 3, message: 'user_id required' });
     try {
-      // For active=false, the same atomic last-admin guard (AC-11): only deactivate when the target
-      // is not the final active admin. active=true is unguarded.
+      // For active=false, the same atomic last-admin guard: only deactivate when the target is not
+      // the final active admin. active=true is unguarded.
       const result = await this.pool.query(
         `UPDATE identity.users SET is_active = $2, updated_at = NOW()
            WHERE user_id = $1
@@ -833,7 +878,7 @@ export class IdentityServiceImpl {
         return callback({ code: 9, message: 'cannot remove last admin' });
       }
       if (!active) {
-        // Revoke the deactivated user's refresh tokens (design R3).
+        // Revoke the deactivated user's refresh tokens.
         await this.pool.query(
           `UPDATE identity.refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL`,
           [userId],

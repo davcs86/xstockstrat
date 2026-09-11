@@ -12,7 +12,7 @@ reusing.
 
 ## Rules
 
-- **Append-only.** Add new entries at the bottom; never rewrite or delete an existing one.
+- **Append newest-at-bottom; periodic lossless curation permitted.** New entries are still appended at the bottom (newest last). A periodic curation pass MAY merge duplicate/near-duplicate entries, normalize categories, and compress superseded entries — but only when every distinct lesson, every distinct piece of evidence, and a `- **Merged from**: …` provenance line are preserved. Curation is destructive-but-lossless; it never drops a unique lesson or citation.
 - **One entry, one lesson.** Keep it scannable.
 - **Cite evidence.** Point to a `path:line`, PR, or step so the reader can see the real thing.
 - **Categories:** `reuse` · `perf` · `design` · `ordering`.
@@ -30,16 +30,7 @@ reusing.
 
 <!-- Append entries below. Newest at the bottom. -->
 
-### 2026-07-03 — persist-strategy-scores — design
-- **Pattern**: To add DB durability to volatile in-memory service state without changing (and risking)
-  the read path, use **write-through + hydrate-at-boot**: keep the in-memory dict as the sole read
-  source, add a best-effort DB upsert on write, and hydrate the dict from the DB once at startup. Avoids
-  the false-success hazard of "best-effort write + read-from-DB" (a swallowed write then a DB read →
-  NOT_FOUND for a value the caller was just told succeeded).
-- **Evidence**: `services/xstockstrat-analysis/app/handlers/servicer.py` (`hydrate_scores`, best-effort
-  upsert in `ScoreStrategy`), `app/main.py` boot call; design.md § Chosen Approach (feature 064).
-- **Rule it implies**: prefer write-through+hydrate over DB-direct reads when a best-effort write and a
-  durable read path must coexist; reuse the existing repo/pool (no new pool — F-06).
+> Curated 2026-09-03: normalized 14 category labels to the canonical set (`execute`→`design`/`ordering`; `design round 2`→`design`; `pattern`→`design`; one `assumption` mislabel→`design`; `reuse (candidate follow-up…)`→`reuse`; and description-slot categories — "derive precedence, don't seed it", "align charts on one engine, not two", "proto/fingerprint-stability" — →`design`, with the descriptive detail already present in each entry body); merged 3 duplicate clusters (persist-strategy-scores write-through+hydrate, trigger-backfill five-discovery-surfaces, and the 069 shared-pure-gate-module loose bullet folded into its `###` entry); compressed 0 superseded entries. Lossless — every distinct lesson, evidence citation, and provenance retained. Entry count: 363→361 `### ` headings (two merges removed one duplicate `###` each; the third folded a non-`###` loose bullet).
 
 ### 2026-07-08 — backtest-debug-info — design
 - **Pattern**: To add a per-bar/observability read to an engine consumed by a live loop, keep the
@@ -93,22 +84,6 @@ reusing.
 - **Rule it implies**: when adding coverage gates to a codebase with large untested surface, gate on
   tested files, not the whole tree — a floor you can't reach on day one gets disabled, not met.
 
-### 2026-07-20 — trigger-backfill-mcp-tool — design
-- **Pattern**: A new MCP agent tool has **five** discovery/documentation surfaces, not one: the
-  `app/tools.py` module-docstring tool count + enumeration, the agent `CLAUDE.md` tool table, the
-  `docs/runbooks/mcp-tools.md` reference (header count + per-tool section), the
-  `docs/runbooks/CLAUDE.md` index line, and any **operational runbook** that documents how to do
-  the underlying task (e.g. `historical-backfill.md` for a backfill tool). Recon found four; the
-  adversarial round caught the fifth — the operational runbook is the surface that makes the
-  capability *findable* by an operator solving a problem. The `/api/tools` catalog itself is
-  automatic (FastMCP registration), but its name-set test is the built-in reachability proof.
-- **Evidence**: feature 066 design.md § Chosen Approach (Docs — five surfaces); adversary round-1
-  C-10(a) finding; `services/xstockstrat-agent/app/main.py:180` (auto catalog);
-  `tests/test_tools_endpoint.py:23-35` (name-set test).
-- **Rule it implies**: C-10(a) applies to tool/CLI/API additions, not just UI routes — enumerate
-  the discovery surfaces (including task-oriented runbooks) at recon time and prove the shared one
-  with a test.
-
 ### 2026-07-21 — fix-custom-formula-allnone — reuse
 - **Pattern**: Decoding a `google.protobuf.Struct` response field with `dict(resp.field)` +
   `isinstance(raw, (list, tuple))` silently **drops every list value** — `Struct.update()` marshals a
@@ -141,16 +116,20 @@ reusing.
 - **Pattern**: When two code paths must apply the *same* rule via a shared helper (here: backtest and
   live loop both calling `is_cooldown_active`), sharing the *function* is not enough — a cross-cutting
   input invariant (tz-aware-UTC datetimes) will silently drift if it is enforced by a comment at each
-  call site. Enforce the invariant **inside the helper** (raise `ValueError` on a naive datetime) and
-  unit-test the guard directly, so a third call site or a careless edit fails loudly instead of
-  reintroducing the two-paths-drift failure the shared helper was meant to prevent. Complements C-10(b):
-  the parity test proves the callers agree; the internal guard proves they *can't* feed the helper
-  incompatible inputs.
+  call site. Make the shared piece a single **pure** gate module (`app/services/cooldown.py`, no
+  DB/proto/gRPC imports) consumed identically by both engines, and enforce the invariant **inside the
+  helper** (raise `ValueError` on a naive datetime) with a direct unit test on the guard, so a third
+  call site or a careless edit fails loudly instead of reintroducing the two-paths-drift failure the
+  shared helper was meant to prevent (cf. fails 056). This made backtest/live parity (FR-4) directly
+  unit-testable. Complements C-10(b): the parity test proves the callers agree; the internal guard
+  proves they *can't* feed the helper incompatible inputs. Corollary: feed both call sites the **same**
+  time source (bar time), never one wall-clock + one bar-time.
 - **Evidence**: `docs/roadmap/features/069-strategy-reentry-cooldown/design.md` § Chosen Approach
   (`cooldown.py` `_require_aware`); 5-round design debate (the naive/aware split was flagged R2, "fix by
   comment" rejected R3, moved inside the helper R4).
 - **Rule it implies**: a shared helper reused across paths owns its input-contract enforcement (assert
   inside + a dedicated guard test), not a convention repeated at each call site — reinforces C-10(b), no new ID.
+- **Merged from**: 2 entries (both 2026-07-24) — the `### ` design entry and a loose bullet restating the same shared-pure-gate-module lesson (added: the pure/no-imports module detail and the same-time-source corollary).
 
 ### 2026-07-24 — 069-strategy-reentry-cooldown — design
 - **Pattern**: A proto3 scalar where the zero value is a *meaningful distinct choice* from "unset" (here:
@@ -168,13 +147,6 @@ reusing.
 - **Rule it implies**: if a scalar's zero is a real choice, declare it `optional` and check presence at
   every read/write layer — never `?? 0`, `x or default`, or a truthy guard; reinforces P-03 (verify the
   decoder/codegen contract), no new ID.
-
-- 2026-07-24 (069 strategy-reentry-cooldown): A single shared **pure** gate module
-  (`app/services/cooldown.py`, no DB/proto/gRPC imports) consumed identically by the backtest engine
-  and the live loop, with the tz-awareness invariant enforced *inside* the helper (`_require_aware`)
-  rather than by a per-call-site comment, made backtest/live parity (FR-4) directly unit-testable and
-  killed the class of "two enforcement paths drift apart" bugs (cf. fails 056). Feed both call sites the
-  **same** time source (bar time), never one wall-clock + one bar-time.
 
 ### 2026-07-26 — 071-backtest-time-window — design
 - **Pattern**: A "warm-up is verified at runtime, so the constant is safe" defense must be checked
@@ -243,7 +215,7 @@ reusing.
 - **Rule it implies**: reinforces **P-03** — verify the serializer's omission contract before designing
   merge semantics on top of it; presence rules differ per field kind and a two-rule merge will diverge.
 
-### 2026-07-27 — 071-backtest-time-window — execute
+### 2026-07-27 — 071-backtest-time-window — design
 - **Pattern**: When a value is **read at the top** of a per-item loop but **written at the bottom**,
   memoizing it in a shared cache silently makes item 1 behave differently from items 2+.
   `warmup.required_prefix_bars` reads the declared-formula-warm-up cache before fetching bars, while
@@ -259,7 +231,7 @@ reusing.
   than it is written needs a **multi-item** test asserting item 1 and item N behave identically. A
   docstring stating "caller must pre-populate" is a claim, not a guarantee.
 
-### 2026-07-27 — 071-backtest-time-window — execute
+### 2026-07-27 — 071-backtest-time-window — design
 - **Pattern**: A determinism assertion over a protobuf message must **clear the fields that differ
   per run by construction** (`backtest_id` uuid, `completed_at` stamp) rather than fall back to a
   field-by-field comparison. Left in, byte-identity is vacuously false and the natural next move —
@@ -271,7 +243,7 @@ reusing.
 - **Rule it implies**: extends **P-06** — when a test asserts "X does not change Y", add the
   companion assertion that something *does* change Y, so a no-op harness can't masquerade as a pass.
 
-### 2026-07-27 — 071-backtest-time-window — execute
+### 2026-07-27 — 071-backtest-time-window — design
 - **Pattern**: A mock that **echoes a request field back** as its response cannot distinguish a
   correct consumer from an incorrect one. `mock-backend.ts` returned `req.range` as both
   `requestedRange` and `gap`, so an e2e asserting the backfill action's range would pass whichever
@@ -312,7 +284,7 @@ reusing.
   best-effort, check whether the referrer can *detect* a failed persist. If it cannot, prefer
   carrying the value over referencing it.
 
-### 2026-07-27 — 072-backtest-result-attachment — design round 2
+### 2026-07-27 — 072-backtest-result-attachment — design
 - **Pattern**: A second grilling round on an **already-approved, already-specced** design is worth
   running when the first round closed on estimates. Round 2 here left the chosen approach untouched
   but still paid for itself: measuring the payload (5 symbols × 504 bars) showed the inline summary
@@ -327,7 +299,7 @@ reusing.
   measured, not estimated. If a design closes with figures nobody ran, a follow-up round that only
   measures them is a good trade even when the decision does not change.
 
-### 2026-07-27 — 072-backtest-result-attachment — design round 2
+### 2026-07-27 — 072-backtest-result-attachment — design
 - **Pattern**: When a feature writes a decision rule into the ledger, later rounds of that **same
   feature** must be checked against it. Round 2 proposed swapping the attachment to gzip, which would
   have inverted the failure-asymmetry rule this feature had recorded one day earlier and used to
@@ -340,7 +312,7 @@ reusing.
 - **Rule it implies**: reinforces **P-03** — a self-authored ledger rule binds the feature that wrote
   it. Re-read your own entries before adopting a change that trades the same axis.
 
-### 2026-07-27 — 072-backtest-result-attachment — execute
+### 2026-07-27 — 072-backtest-result-attachment — ordering
 - **Pattern**: When a step's verification cannot pass standalone because a *later* step adapts the
   test it breaks, the F-05-clean split is to carry **only the minimum adaptation** in the breaking
   step's commit, not to merge the two steps or to commit red. 072's step 3 changed
@@ -520,7 +492,7 @@ reusing.
 - **Evidence**: `docs/roadmap/features/086-fix-mcp-formula-lifecycle/design.md` §§ Chosen Approach 2/4, Rejected Alternatives; analysis `_fetch_formula_outputs` (`servicer.py:194-201`), `_declared_formula_warmup` (`servicer.py:1151`); root CLAUDE.md dep graph (analysis→indicators already exists, reverse edge would cycle — ledger 2026-07-31 083).
 - **Rule it implies**: extends **C-10(b)** and **F-06** — for a deletable resource another service depends on, prefer soft-delete + surfaced flag + run-flag at the consumer's existing fetch site over a reverse referential-delete edge; and "soft delete" is not honest unless the deleted state is observable in reads and flagged in runs.
 
-### 2026-08-02 — 097-remove-x-mcp-secret-header — execute
+### 2026-08-02 — 097-remove-x-mcp-secret-header — design
 - **Pattern**: Writing a **removal feature's** replacement doc/comment text is easy to get subtly
   wrong twice, both caught only at execute time, not spec time. First: when a step's own
   `**Verification**` demands a hard zero-count of the removed vocabulary in a set of files, the
@@ -680,7 +652,7 @@ reusing.
 - **Pattern**: A feature whose implementation step targets a service directory owned by an in-flight consolidation/rewrite feature (e.g. 045) should wait for that feature to merge before speccing file paths, not spec against the soon-to-be-deleted path and re-spec later.
 - **Evidence**: `docs/roadmap/features/016-config-ui-weight-validation/context.md` Session 2026-06-01 (W3 decision) + Session 2026-06-04 (actual re-spec of Steps 5-6 from `xstockstrat-config-ui` to `xstockstrat-ui`).
 - **Rule it implies**: At `/sdd-spec` time, check `merge-order.md` and in-flight feature statuses for the target service directory; if a consolidation feature is `draft`/`in-progress` and targets the same directory, flag it for re-spec-after-merge rather than speccing now.
-### 2026-08-05 — unified-login-page — assumption
+### 2026-08-05 — unified-login-page — design
 - **Pattern**: An implementation spec written before a prerequisite feature (045) fully landed assumed a structure that main-dev no longer matched by execution time, forcing a mid-execution re-spec.
 - **Evidence**: `docs/roadmap/features/019-unified-login-page/context.md:76-80`.
 - **Rule it implies**: When a feature's spec has a hard "must follow feature X being launched" dependency, re-verify the actual landed structure of X at execute-time (not just at spec-time) before trusting the spec's file list.
@@ -990,9 +962,20 @@ reusing.
 - **Rule it implies**: Before seeding any resource at startup, grep for an existing uniqueness constraint/upsert path; if absent, build one rather than re-inserting on restart.
 
 ### 2026-08-06 — persist-strategy-scores — design
-- **Pattern**: a best-effort write (FR-7-style) paired with a read path hitting the same store risks a false success ack on next read.
-- **Evidence**: design.md:12-16, 85-87.
-- **Rule it implies**: keep reads served from the in-memory/already-acked state (write-through), not the just-written durable store, unless the write is confirmed synchronous.
+- **Pattern**: To add DB durability to volatile in-memory service state without changing (and risking)
+  the read path, use **write-through + hydrate-at-boot**: keep the in-memory dict as the sole read
+  source, add a best-effort DB upsert on write, and hydrate the dict from the DB once at startup. A
+  best-effort write (FR-7-style) paired with a read path hitting the *same* store risks a false success
+  ack on the next read — the false-success hazard of "best-effort write + read-from-DB" (a swallowed
+  write then a DB read → NOT_FOUND for a value the caller was just told succeeded). Keep reads served
+  from the in-memory/already-acked state (write-through), not the just-written durable store, unless the
+  write is confirmed synchronous.
+- **Evidence**: `services/xstockstrat-analysis/app/handlers/servicer.py` (`hydrate_scores`, best-effort
+  upsert in `ScoreStrategy`), `app/main.py` boot call; design.md § Chosen Approach (feature 064);
+  design.md:12-16, 85-87.
+- **Rule it implies**: prefer write-through+hydrate over DB-direct reads when a best-effort write and a
+  durable read path must coexist; reuse the existing repo/pool (no new pool — F-06).
+- **Merged from**: 2 entries (2026-07-03, 2026-08-06) — the same write-through+hydrate / false-success-ack lesson for feature 064's persist-strategy-scores.
 
 ### 2026-08-06 — persist-strategy-scores — reuse
 - **Pattern**: DOUBLE PRECISION columns silently accept NaN/Infinity; JSONB columns reject them and fail the write.
@@ -1010,9 +993,23 @@ reusing.
 - **Rule it implies**: Record such standing approvals inline in context.md instead of re-prompting; only prompt when a real unresolved tradeoff remains.
 
 ### 2026-08-06 — trigger-backfill-mcp-tool — design
-- **Pattern**: Phase 0 Recon undercounted required docs-discovery surfaces (found 4 of 5); the mandated Phase 1 adversarial round is what caught the missing one (`historical-backfill.md`), not recon itself.
-- **Evidence**: design.md:72, context.md:53 (066).
-- **Rule it implies**: Treat recon's discovery-surface list as provisional, not final — the adversarial round is a required backstop for doc-surface completeness, so don't skip or shortcut it even in quick mode.
+- **Pattern**: A new MCP agent tool has **five** discovery/documentation surfaces, not one: the
+  `app/tools.py` module-docstring tool count + enumeration, the agent `CLAUDE.md` tool table, the
+  `docs/runbooks/mcp-tools.md` reference (header count + per-tool section), the
+  `docs/runbooks/CLAUDE.md` index line, and any **operational runbook** that documents how to do
+  the underlying task (e.g. `historical-backfill.md` for a backfill tool). Recon found only four; the
+  mandated Phase 1 adversarial round caught the fifth (`historical-backfill.md`) — the operational
+  runbook is the surface that makes the capability *findable* by an operator solving a problem, so
+  treat recon's own discovery-surface list as provisional, not final. The `/api/tools` catalog itself
+  is automatic (FastMCP registration), but its name-set test is the built-in reachability proof.
+- **Evidence**: feature 066 design.md § Chosen Approach (Docs — five surfaces); adversary round-1
+  C-10(a) finding; `services/xstockstrat-agent/app/main.py:180` (auto catalog);
+  `tests/test_tools_endpoint.py:23-35` (name-set test); design.md:72, context.md:53.
+- **Rule it implies**: C-10(a) applies to tool/CLI/API additions, not just UI routes — enumerate
+  the discovery surfaces (including task-oriented runbooks) at recon time and prove the shared one
+  with a test; the adversarial round is a required backstop for doc-surface completeness, so don't
+  skip or shortcut it even in quick mode.
+- **Merged from**: 2 entries (2026-07-20, 2026-08-06) — the detailed "five discovery surfaces" entry and its re-distillation ("recon's surface list is provisional; the adversarial round is the backstop"), both feature 066.
 
 ### 2026-08-06 — trigger-backfill-mcp-tool — reuse
 - **Pattern**: `MessageToDict` renders proto int64 fields as strings.
@@ -1304,7 +1301,7 @@ reusing.
 - **Evidence**: `docs/roadmap/features/123-shadcn-migration-custom-composites/design.md` § Round 3 (Step 1 restructured into 4 nested `Questionnaire.Item` sub-screens inside an unchanged outer "Step 1 — Identity" heading, while Steps 2-4 keep their existing step-number identity).
 - **Rule it implies**: when a partial-scope override changes one part of an already-speced component's internal structure, check whether nesting the change inside the unchanged outer framing preserves more of the existing e2e contract than flattening does — the nesting choice is often the lower-e2e-risk option even when it's structurally less "clean."
 
-### 2026-08-08 — shadcn-migration-custom-composites — reuse (candidate follow-up, not this feature's scope)
+### 2026-08-08 — shadcn-migration-custom-composites — reuse
 - **Pattern**: `useCandlestickChart.ts` hardcodes this app's dark-theme colors as literal hex values (`#22c55e`/`#ef4444`/`#94a3b8`/etc.) rather than reading the app's CSS custom properties, the same way `ui/chart.tsx`'s `ChartContainer`/`ChartConfig` composition does for the `recharts`-based charts. Swapping the hardcoded hex for the CSS variables would get `ChartPanel.tsx` (which stays on `lightweight-charts`, see the FR-5 sanctioned exception in `services/xstockstrat-ui/CLAUDE.md` § Styling) partial visual theming consistency with the rest of the app's charts, without a full chart-library migration.
 - **Evidence**: `docs/roadmap/features/123-shadcn-migration-custom-composites/design.md` § Round 2 (FR-5 discussion) and Open Risks; `services/xstockstrat-ui/src/hooks/useCandlestickChart.ts`.
 - **Rule it implies**: a candidate low-risk follow-up feature, not a rule to apply now — recorded here so it isn't lost, since it surfaced during design but is explicitly out of this feature's scope.
@@ -1429,7 +1426,7 @@ reusing.
   brief, and passes that brief — never a bare URL a tool-less subagent can't follow — into the
   proposer/adversary prompts.
 
-### 2026-08-13 — fundamentals-provider-alternative — execute
+### 2026-08-13 — fundamentals-provider-alternative — design
 - **Pattern**: When a spec step's open risk can only be closed by a **live call to a
   credential-gated external API** (not just docs research — a design-time `WebFetch`/`WebSearch`
   pass had already exhausted what secondary sources could confirm, per this feature's own
@@ -1740,7 +1737,7 @@ reusing.
 - **Evidence**: `docs/roadmap/features/122-shadcn-migration-low-confidence/context.md` sdd-design Rounds 1-2 (react-hook-form/zod dependency sweep; decision to decline `ui/form.tsx` in favor of `ui/field.tsx` to avoid a 2-call-site dependency)
 - **Rule it implies**: Treat `npx shadcn add` as a tentative installation; always review and trim collateral installs that the feature's actual call sites don't need before committing the result.
 
-### 2026-08-16 — symbol-page-section-nav — pattern
+### 2026-08-16 — symbol-page-section-nav — design
 
 - **Pattern**: For same-page section navigation over a long stack of cards, a sticky **anchor-nav**
   (shadcn `ToggleGroup type="single"` + native `scrollIntoView` + an `IntersectionObserver` scroll-spy,
@@ -1758,7 +1755,7 @@ reusing.
   existing "multiple sections visible" e2e or drop live queries; always co-locate sticky-offset +
   scroll-margin constants and pick a collision-free nav `aria-label`.
 
-### 2026-08-18 — 145-symbol-page-panel-refinements — derive precedence, don't seed it
+### 2026-08-18 — 145-symbol-page-panel-refinements — design
 - **Insight**: When a UI value has a precedence chain of sources (URL query → server-derived binding →
   user pick, default empty), model it as a PURE DERIVATION `effective = picked ?? url ?? bound ?? ''`
   with the user's pick as the only React state — not `useState(seed)` + a `watchlistsLoading`-gated
@@ -1772,7 +1769,7 @@ reusing.
 - **Rule it implies**: a precedence chain of read-only sources feeding one user-overridable selection is
   a derivation, not synchronized state; the only state is the override, defaulted `undefined`.
 
-### 2026-08-18 — 146-unify-symbol-chart-libraries — align charts on one engine, not two
+### 2026-08-18 — 146-unify-symbol-chart-libraries — design
 - **Insight**: To make two stacked charts share a time axis so a vertical at bar D lines up across all
   of them (a hard "lines up" AC), put them on the SAME rendering engine driven by the SAME time array —
   do not sync two different engines (e.g. lightweight-charts + recharts). Cross-engine tick algorithms
@@ -2065,7 +2062,7 @@ reusing.
   in the single backend owner. Candidate to fold into the `xstockstrat-agent` MCP-tool-contract review
   focus.
 
-### 2026-08-24 — market-regime-benchmark-operand — proto/fingerprint-stability
+### 2026-08-24 — market-regime-benchmark-operand — design
 - **Insight**: When adding an OPTIONAL field to a proto message whose serialized JSON feeds a
   definition **fingerprint** (here `StrategyComponent.source_symbol=6` → `definition_json` →
   `_definition_fingerprint`, `services/xstockstrat-analysis/app/handlers/servicer.py:3994`), use a
@@ -2670,3 +2667,523 @@ reusing.
   copilot.ts 24→32 deviation approved by operator; descriptor-parity test in `test_broker_account_client.py`).
 - **Rule it implies**: always update all six tool-count surfaces in the same PR as any agent tool
   addition; the parity test is the guard that survives refactors.
+
+### 2026-09-02 — resume-halted-account — design
+- **Pattern**: When a service has paired halt/resume operations that span DB + in-memory state, **invert
+  the ordering** between the two directions so that the failure mode is always the safer one. `haltAccount`
+  uses memory-first (a DB failure after memory-halt still blocks trading until restart re-reads DB).
+  `resumeAccount` uses DB-first (a DB failure after memory-clear would let the account trade until restart
+  re-halts from the still-halted DB row — so DB-first keeps "stay halted" as the failure mode).
+- **Evidence**: `services/xstockstrat-trading/internal/service/trading.go` `resumeAccount` (DB-first)
+  vs. `haltAccount` (memory-first); feature 169 `design.md` § Chosen Approach, adversary finding accepted.
+- **Rule it implies**: for any paired enable/disable state spanning persistent+volatile stores, choose
+  the write order that makes the *failure mode* safe — the two directions will have opposite orderings.
+
+### 2026-09-02 — 021-ledger-event-export — perf
+- **Pattern**: For a server-streaming export over an unbounded row set, batch the response message as
+  `repeated <Row>` per DB-cursor page rather than one message per row — identical streaming semantics,
+  but a 1M-row export becomes thousands of messages instead of millions.
+- **Evidence**: feature 021 `ExportEvents` on `xstockstrat-ledger` (streams NDJSON/CSV via `/trader`
+  BFF `route.ts`); design chose cursor-page batching over one-event-per-message.
+- **Rule it implies**: server-streaming RPCs over large scans batch by cursor page, never one message
+  per row.
+
+### 2026-09-02 — 021-ledger-event-export — design
+- **Pattern**: A raw Next.js BFF `route.ts` (a plain GET, not a `connectNodeAdapter` handler) owns its
+  own gRPC-code→HTTP-status mapping when acceptance codes diverge from the shared `connectCodeToHttp`
+  defaults (e.g. `FailedPrecondition`→403 for a config-disabled export, not the mapper's 400); it also
+  has no Connect `HandlerContext`, so the propagation headers (`x-user-id`/`x-access-scope`/`x-trace-id`)
+  must be rebuilt inline (`rolesToAccessScope`/`generateTraceId`) rather than via `backendHeaders`.
+- **Evidence**: feature 021 `services/xstockstrat-ui/src/app/trader/api/ledger/export/route.ts`;
+  design specified `connectCodeToHttp` but shipped an explicit map (context.md).
+- **Rule it implies**: BFF routes own their status mapping when acceptance codes diverge from
+  `connectCodeToHttp`; treat the shared mapper as a default, not a contract.
+
+### 2026-09-02 — 029-signal-performance-attribution — design
+- **Pattern**: When a value a feature needs may not exist upstream yet, build the carrier seam
+  end-to-end and correct (source → event `Struct` key → DB column → read-time computation), default it
+  to `0` where the source is absent, and name the follow-up — rather than blocking on the missing
+  source or faking it. The computation becomes exact the moment a real source populates it; unit tests
+  inject a value to prove the math today.
+- **Evidence**: feature 029 fee seam `broker.BrokerOrder.Fees` → `order.filled` `"fees"` key →
+  portfolio `fees_accum` → analysis `fees_total` → `net = realized_pnl - fees_total`; ships subtracting
+  a hard 0 in prod (Alpaca exposes no per-fill fee) with a named Activities-API follow-up.
+- **Rule it implies**: a seam populated with an honest 0 plus a named follow-up beats redefining the
+  acceptance criterion away — provided the absence is grep-established and surfaced in UI/docs, not
+  silently papered over (P-03).
+
+### 2026-09-02 — 029-signal-performance-attribution — reuse
+- **Pattern**: Realize a new "producer-side" attribution/analytics requirement as a read-only
+  aggregation over a *prior launched feature's already-persisted capture*, instead of stamping new
+  columns on the upstream producer — avoids duplicate storage and new runtime gRPC edges.
+- **Evidence**: feature 029 `GetAttribution` aggregates feature-042's `analysis.pnl_positions` +
+  `order_snapshots.signals`; the original producer-side plan (stamp a weight vector on `trading.orders`
+  + migration 010) was dropped in design.
+- **Rule it implies**: before adding a producer-side attribution column, check whether a sibling
+  consumer already seals the needed inputs at query-time granularity (adjacent to C-10(b)).
+
+### 2026-09-02 — 043-user-management-ui — design
+- **Pattern**: For a last-of-kind invariant (e.g. "≥1 active admin"), use an atomic conditional
+  `UPDATE` guarded by `EXISTS(other qualifying row)` and treat 0-rows-affected as the rejection,
+  instead of count-then-write — avoids the TOCTOU where two concurrent mutations both pass a count check.
+- **Evidence**: feature 043 identity `setUserRoles`/`setUserActive` last-admin guard.
+- **Rule it implies**: last-of-kind guards must be a single guarded write, never read-then-write.
+
+### 2026-09-02 — 043-user-management-ui — reuse
+- **Pattern**: A best-effort-after-commit cross-service audit is `await` + try/catch + log-on-failure
+  (never roll back — no cross-service transaction exists), with a stable `idempotency_key` derived from
+  the correlation id (not a timestamp) and a payload built from an explicit safe-field allow-list
+  (never spread the request → no secret leak). This is the correct default when a mutation must be
+  audited but the audit sink is a separate service.
+- **Evidence**: feature 043 identity admin handlers append a redacted `AppendEvent` to ledger after the
+  user mutation commits.
+- **Rule it implies**: audit sinks are best-effort post-commit with allow-listed, secret-free payloads
+  and correlation-derived idempotency keys.
+
+### 2026-09-02 — 095-opportunity-live-market-enrichment — design
+- **Pattern**: To guarantee an enrichment does not perturb a ranked/persisted result, attach the live
+  values at **read time, after** the persisted rows are read and ordered — the "unchanged ranking" /
+  no-look-ahead property then holds by construction, not by a test you might forget.
+- **Evidence**: feature 095 `ListOpportunities` attaches `live_price`/`change_pct`/sparkline after
+  `_compute_opportunities` has computed+persisted conviction/`signal_axis`/ORDER BY.
+- **Rule it implies**: a no-look-ahead / ranking-frozen invariant should be enforced structurally
+  (post-ranking decoration), not just asserted.
+
+### 2026-09-02 — 095-opportunity-live-market-enrichment — design
+- **Pattern**: A proto message pinned by an exhaustive mapper-parity test can absorb new fields by
+  classifying each into two sets — compute-time-persisted (join `_MAPPED`, carried by the row mapper)
+  vs read-time-decorated (join `_INTENTIONALLY_UNSET`, set on the returned message). This satisfies the
+  parity guard *and* keeps ranking-neutral fields out of the persisted path.
+- **Evidence**: feature 095 `_row_to_opportunity` pinned by `TestOpportunityRowParity`
+  (`_MAPPED | _INTENTIONALLY_UNSET == Opportunity.DESCRIPTOR.fields_by_name`); fields 13/14/17 read-time,
+  15/16/18 compute-time-persisted.
+- **Rule it implies**: when adding a field to a parity-guarded message, decide its set membership
+  first; a read-time field must never be added to `_MAPPED`.
+
+### 2026-09-02 — 095-opportunity-live-market-enrichment — reuse
+- **Pattern**: When a message is served from a cache/table that lacks the new columns, prefer a
+  **dedicated additive RPC** over adding fields — added fields return a fabricated `0` on cache hits,
+  indistinguishable from "no data". The "additive fields need no wiring" argument is also false when the
+  read is on no BFF yet.
+- **Evidence**: feature 095 chose a new marketdata `GetLatestPrice` RPC over adding last-trade/prev-close
+  fields to the `marketdata.quotes`-cache-served `Quote`.
+- **Rule it implies**: adding fields to a cache-served proto message requires proving the cache can
+  populate them, else use a new RPC with explicit presence.
+
+### 2026-09-02 — 110-wire-signal-confidence-to-position-sizing — design
+- **Pattern**: Name a new field for its *semantics*, not its surface shape, when siblings share a
+  plausible name/range. `signal_confidence` (raw 0–1 probability) was named to be unmistakable against
+  the `conviction` ordinal ("NOT a probability") and the decayed×source-weighted `signal_axis`.
+- **Evidence**: feature 110 `analysis.Opportunity.signal_confidence` field 19, populated from
+  `ExternalSignal.conviction`; three same-shaped 0–1 candidates, only one semantically correct.
+- **Rule it implies**: when ≥2 fields on a message share a plausible name/range, disambiguate the new
+  one by name — restating an existing collision trap in a comment is not enough.
+
+### 2026-09-02 — 110-wire-signal-confidence-to-position-sizing — design
+- **Pattern**: Scope a shared component's new behavior via a dedicated explicit prop
+  (`signalConfidence`, mirroring `allowOfflineRecord`), never via an incidental data prop
+  (`initialSymbol`) that other mounts also pass — otherwise the behavior leaks into every mount.
+- **Evidence**: feature 110 `OrderForm` blank-qty affordance gated on an explicit `signalConfidence`
+  prop; scoping on `initialSymbol` would have leaked blank-qty into non-signal `/trader` tickets.
+- **Rule it implies**: behavior-scoping props must be purpose-built and presence-checked, not
+  overloaded onto data props shared by other call sites.
+
+### 2026-09-02 — 128-ui-middleware-nodejs-runtime — design
+- **Pattern**: Moving `middleware.ts` to Next.js's stable Node.js runtime (`config.runtime='nodejs'`)
+  lets it import `@connectrpc/connect-node` and call backend gRPC (`refreshSession()`) in-process; a
+  real `output:'standalone'` build proved `serverExternalPackages` externalization covers the
+  Node-runtime middleware chunk (no `node:http` Edge bundling error, no `next.config.js` change). This
+  **supersedes/qualifies** the older Edge-only import ban at `insights.md:777-780` (`wire-fe-auth`) for
+  the Node runtime specifically.
+- **Evidence**: feature 128 `services/xstockstrat-ui/src/middleware.ts`; the self-referential loopback
+  `fetch()` to `/api/auth/refresh` (PR #925 TLS hotfix) and `buildInternalRefreshUrl()` were deleted.
+- **Rule it implies**: an Edge-runtime import ban on a Node-only transport is lifted by opting that
+  entry point into the Node.js runtime — but prove the standalone/Docker build before relying; treat
+  the old "never import" rule as runtime-scoped, not absolute.
+
+### 2026-09-02 — 128-ui-middleware-nodejs-runtime — design
+- **Pattern**: Treat a load-bearing feasibility claim (here: Node middleware lifts the bundling ban) as
+  a red-before-green **build gate** rather than a doc-supported assumption — docs confirmed runtime
+  stability but were silent on the standalone `.nft.json`/`serverExternalPackages` coverage of the
+  middleware chunk, which only a real build could prove.
+- **Evidence**: feature 128 AC-6 made the standalone build the proof; `/sdd-spec` was not allowed to
+  trace acceptance off a doc citation alone.
+- **Rule it implies**: when docs support a premise "in principle" but are silent on the exact
+  bundling/packaging edge, make the build the gate.
+
+### 2026-09-02 — 165-pwa-notifications — reuse
+- **Pattern**: Prove a BFF ownership/IDOR guard by driving the Connect endpoint directly with a spoofed
+  identity plus an echo mock, when the browser capability can't be minted in headless Chromium (Push
+  API, non-override-able `navigator.serviceWorker`). The mock echoes the received `user_id`; a response
+  stamped with the *session* user rather than the spoofed one is a stronger IDOR proof than any
+  browser-level assertion.
+- **Evidence**: feature 165 push-subscription IDOR e2e drives the `/accounts` BFF Connect endpoint with
+  `userId:'attacker-999'`; `callerUserId(ctx)` mock echoes back the session user.
+- **Rule it implies**: header-derived identity guards should be verified adversarially at the BFF/RPC
+  seam, not only through the happy-path UI.
+
+### 2026-09-02 — 166-mcp-client-signal-source — design
+- **Pattern**: Add a new registry "type" (a new `source_type`) with **zero proto change** by riding the
+  existing `config_json` `Struct` + a string type governed by a DB CHECK, and keep any credential in
+  encrypted config (`credentials_ref` only on the row) rather than adding typed or secret proto fields —
+  a proto `bearer_token` field would be a plaintext secret in transit, and `config_json` is returned
+  verbatim by `ListSignalSources`.
+- **Evidence**: feature 166 `mcp_client` source_type (`ingest` migration `011` CHECK); bearer stored as
+  encrypted config secret `ingest.mcp_credential.<slug>`, ingest holds only the `credentials_ref`.
+- **Rule it implies**: source-specific/credential config belongs in `config_json` + encrypted config,
+  never in new proto fields — proto churn and on-wire plaintext are the failure modes it avoids.
+
+### 2026-09-02 — 166-mcp-client-signal-source — design
+- **Pattern**: **Secret-first two-write** to register a credentialed entity — write the encrypted
+  `SetConfig(is_secret=true, create_key=true)` first, then register the entity referencing only the key;
+  skip the compensating saga because a failed register leaves only a harmless *redacted* orphan secret.
+- **Evidence**: feature 166 agent `manage_signal_source` + config-ui `useSignalSourceMutations.ts` both
+  write the secret before registering the source.
+- **Rule it implies**: order two-write credential registrations secret-first and accept the
+  redacted-orphan over saga complexity.
+
+### 2026-09-02 — 167-watchlist-single-strategy-update — design
+- **Pattern**: Resolve authz with the existing ownership read (`loadOwned`) before a targeted single-row
+  `UPDATE`, rather than folding ownership into the `UPDATE ... FROM` — a joined update returning 0 rows
+  collapses absent-parent (`NOT_FOUND`) and wrong-owner (`PERMISSION_DENIED`) into one indistinguishable
+  result, losing the per-case error codes siblings guarantee.
+- **Evidence**: feature 167 `UpdateWatchlistBinding` reuses `loadOwned` to keep AC-3 `NOT_FOUND` vs
+  AC-4 `PERMISSION_DENIED` distinct.
+- **Rule it implies**: when adding a targeted mutation, resolve authz with the existing read helper
+  rather than a joined update, to preserve per-case error semantics.
+
+### 2026-09-02 — 167-watchlist-single-strategy-update — design
+- **Pattern**: A single-column `UPDATE ... RETURNING <untouched-provenance-col>` makes the "provenance
+  reset" trap structurally impossible — writing only `strategy_id` and reading `source` back via
+  `RETURNING` (instead of reconstructing the row) means provenance can't be clobbered, with no guard
+  code.
+- **Evidence**: feature 167 `UpdateWatchlistBinding` writes `strategy_id` only and returns the
+  untouched `source` (avoids the fails-080 reset class).
+- **Rule it implies**: prefer narrow single-column writes with `RETURNING` of the untouched columns over
+  read-modify-write of the full row when provenance/flags must survive.
+
+### 2026-09-02 — 167-watchlist-single-strategy-update — perf
+- **Pattern**: A non-invalidating `queryClient.setQueryData` cache-patch replaces invalidate-and-refetch
+  for single-entry mutations when the RPC's response fully describes the changed entry — a plain
+  `useMutation` that patches one list entry avoids the full `listWatchlists` refetch that
+  `useInvalidatingMutation` forces.
+- **Evidence**: feature 167 rebind hook patches one watchlist binding from the
+  `UpdateWatchlistBinding` response instead of invalidating `['watchlists']`.
+- **Rule it implies**: when a mutation's response fully describes the changed entry, patch the cache
+  instead of invalidating the collection key.
+
+### 2026-09-03 — 170-watchlist-bulk-default-strategy — design
+- **Pattern**: To add a surgical single-field write to an existing **replace-all** RPC without a new
+  single-purpose RPC and without a clobber footgun, add a `google.protobuf.FieldMask update_mask` and
+  gate on mask **presence** (`req.UpdateMask != nil`), not emptiness: mask-absent runs the legacy
+  replace-all path **byte-for-byte unchanged** (strongest zero-regression story), mask-present routes to
+  a partial-update path that writes only masked columns via a **static `path→column` allowlist map**
+  (never interpolate mask strings; unknown path → `InvalidArgument`). Deliberately excluding the new
+  field from the legacy SET makes it "preserved-for-free" on every legacy edit (no RMW preserve-set
+  needed). Reuses the platform's existing FieldMask precedent (analysis/ingest/indicators servicers).
+- **Evidence**: feature 170 UpdateWatchlist gains `update_mask`; Connect-JSON serializes an empty
+  FieldMask to a present-but-empty value, so gating on emptiness (not presence) would misroute an
+  explicit empty mask into a destructive replace-all — presence-gate + empty-present→`InvalidArgument`.
+- **Rule it implies**: when field-masking a replace-all RPC, gate on mask presence and reject
+  empty-present + unknown-path + set-field-without-mask loudly; keep the no-mask path literally the old
+  code path so every existing `@AC` is preserved with zero new surface.
+
+### 2026-09-03 — 170-watchlist-bulk-default-strategy — design
+- **Pattern**: A watchlist/collection "default" that must be **add-time only** (no retroactive rebind,
+  no read-time fallback) belongs at the single shared insert chokepoint, applied source-aware: fill the
+  child's field only when it is empty AND `source != SIGNAL`, wrapping **every** return branch of the
+  normalize helper, with the replace-all caller passing an empty default to opt out. This keeps the fill
+  single-sourced (no dual-path divergence, fails-056) while the auto-add/replace paths opt out by
+  argument, not by a forked helper.
+- **Evidence**: feature 170 `applyDefaultStrategy` wraps both `requestBindings` returns; Create/Add pass
+  the default, legacy Update passes `""`; `source==SIGNAL` (system-managed signal auto-adds) skipped.
+- **Rule it implies**: implement an add-time default at the one insert chokepoint with a source guard and
+  a per-caller default argument, never as a read-time fallback or a second write path.
+
+### 2026-09-04 — 173-fix-python-config-zero-trap — design
+- **Pattern**: Fixing a Python config-watcher zero-trap (`v.int_val or default` collapsing a stored 0)
+  is a **targeted per-key** switch, not a blanket accessor swap: port the `HasField`-based
+  `get_int_present`/`get_str_present` alongside the trapping accessor and re-point only the keys whose 0
+  is meaningful. Keys whose 0 is nonsensical (a value feeding `asyncio.Semaphore(N)` — `Semaphore(0)`
+  deadlocks) and keys intentionally clamped ≥1 at read must STAY on the trapping accessor, each carrying
+  a ≤2-line "zero-trap intentional, cites the real consumer site" comment (fails-151) so the next sweep
+  doesn't "fix" them into a hang. A blanket swap silently un-clamps those and widens the blast radius.
+- **Evidence**: `services/xstockstrat-ingest/app/config/watcher.py` (route `max_retry_attempts`/
+  `dedup_window_hours`, leave `max_concurrent_*` at `servicer.py:191`/`:519`); `ConfigValue` oneof
+  `packages/proto/config/v1/config.proto:60-71` makes `HasField` legal; analysis precedent
+  `xstockstrat-analysis/app/config/watcher.py:102,131`.
+- **Rule it implies**: (a) route only the confirmed 0-meaningful keys through a present-aware accessor;
+  annotate every intentional retention. (b) To make an INLINE config-consumer expression RED-provable
+  without driving a slow loop (e.g. a `2**attempt` retry backoff), extract it into a named seam that
+  becomes the SOLE definition the loop consumes — not a parallel echo (that would re-open fails-074's
+  vacuous-green trap); prove wiring with the pre-existing loop tests. Reinforces C-08/P-06, no new ID.
+
+### 2026-09-04 — 171-fix-agent-trading-mode-otel-attr — design
+- **Pattern**: A comment-audit item filed as a single-service defect can be a **fleet-wide convention** —
+  recon before assuming scope. Here `trading_mode` was flagged as an agent-only stale OTel attribute but
+  is emitted identically by all 12 telemetry modules and is redundant with `deployment.environment` 1:1
+  in every deploy target. Agent-only "fixing" it creates divergence; the honest fix is fleet-wide or none.
+  Also: a removed **OTel resource attribute**'s real consumers are **out-of-repo** Grafana dashboards/alerts
+  (grep clears only in-repo dashboards/collector config) — an unavoidable blind spot (fails-1638 analog);
+  record it as an examined, accepted residual, de-risked here by `OTEL_ENABLED=false` in both `.do` specs.
+- **Evidence**: 12 `**/telemetry.{py,ts},**/otel.go` emit it; `.do/app.yaml:31`/`.do/app.dev.yaml:31`
+  (env↔mode 1:1, OTEL off); `packages/otel/dashboards/README.md:40` the only in-repo reference.
+- **Rule it implies**: for a "stale attribute/label" bug, grep the fleet for the same emission before
+  scoping to one service, and treat out-of-repo observability consumers as an examined residual, not a
+  grep-clean all-clear. Reinforces P-03, no new ID.
+
+### 2026-09-04 — 175-fix-dead-code-cleanup-batch — design
+- **Pattern**: For a **pure-deletion** feature, three traps recur and each has a cheap guard. (1) A
+  "dedicated test" is often a FUNCTION inside a SHARED test file — deleting the *file* nukes live
+  regressions. Verify with `grep -c '^func Test'` (here config_test.go held 7/9/15 funcs); the step
+  must say "delete the `TestX` function," never the file. (2) The AC "X no longer exists" has NO
+  build-RED (a pre-deletion tree is fully green) — the honest RED→GREEN is a **construct-scoped**
+  presence assertion (`grep 'func getEnvBool'`, `git ls-files '*/propagation.ts'` empty), living as a
+  named `**Covers**: AC-N` impl-spec step, NOT a permanent CI guard (overbuild) and NOT "recorded in
+  context.md" (C-15 wants a re-run step). (3) A doc pattern's **"Reference store"** cite (here
+  `header-propagation.md:123` → ledger `propagation.ts` + snippet) is a teardown target the deletion
+  orphans — recon must list it or `/sdd-spec` misses it (fails-670).
+- **Also**: a **`@types/node` major bump** verifies ONLY via a real `tsc` (a service whose CI runs
+  `node --experimental-strip-types --test` type-checks NOTHING — fails-021 — so gate on `pnpm build`,
+  not `test`); a Next.js service's sole type gate is `next build` (a bare `tsc --noEmit` false-REDs
+  because the `next` tsconfig plugin is LSP-only and `.next/types` exist only post-build — fails-155).
+  And per-service `pnpm-lock.yaml` can be **vestigial**: check the Dockerfile's actual `COPY … pnpm-lock`
+  source before regenerating or gating on them (here all leaf Dockerfiles use the ROOT lock).
+- **Evidence**: config_test.go func counts (grep); ledger/identity `package.json` `build`=tsc vs
+  `test`=strip-types; `xstockstrat-ui/next.config.js` (no `ignoreBuildErrors`); leaf `Dockerfile:13,17`
+  (root lock + `--frozen-lockfile`); `header-propagation.md:123`/`:126-151`.
+- **Rule it implies**: a deletion PR's AC discharge is `(construct-scoped presence RED→GREEN as a named
+  step) + (the service's REAL compile gate)`; verify the compile gate and lockfile source per service,
+  never assume. Reinforces C-08/C-15/P-06 and fails-021/110/155/670; no new ID.
+
+### 2026-09-05 — analysis-concurrency-offload — perf
+- **Lesson**: to parallelize a serial async fan-out or move a CPU core off the event loop with
+  BYTE-FOR-BYTE output, two patterns paid off. (1) **Optional-semaphore evaluator**: add a
+  `component_sem=None` param where `None ⇒ verbatim serial` and a semaphore ⇒ `asyncio.gather` under
+  that bound, reassembling from the ORDER-PRESERVING gather result (gather keeps input order) so the
+  concurrent path is identical regardless of completion order — no `return_exceptions` (keeps the
+  serial per-item exception scope). (2) **Nested-closure CPU offload**: wrap an await-free core in a
+  local `def _core(): …` and `await loop.run_in_executor(self._compute_executor, _core)` — the closure
+  captures the prologue locals automatically, avoiding the error-prone explicit-param extraction the
+  spec sketched, while keeping the core off the loop.
+- **Evidence**: `evaluator.py` `evaluate_conditions_traced` branch; `servicer.py` `_backtest_symbol`/
+  `_simulate_portfolio` `_core` closures; feature 176 Steps 4/10.
+- **Rule it implies**: bound a parallel fan-out with a semaphore DISTINCT from any inner sem the tasks
+  re-acquire (feature 176 `_candidates_sem` vs `_bars_fetch_sem`), or a self-reentry deadlocks; prove
+  the offload with a peak-counter teeth test (exact bound, not an upper bound) + a head-of-line
+  isolation test (a spinning core in the executor must not stall a concurrent reader). No new ID.
+
+### 2026-09-05 — quote-fanout-batching — perf
+- **Pattern**: Collapse a serial per-item fan-out (N gRPC or N DB calls) into a batch WITHOUT changing
+  the response contract or losing the "missing ≠ zero" discipline. Three shapes landed: (1) an
+  **additive batch RPC** mirroring an existing `*Multi` precedent, returning `repeated <Elem>`
+  **self-keyed** on the element's own id (an absent item is omitted → null-not-zero, no
+  `map<>` needed, buf-breaking-safe); (2) a cache-first batch service method = one batched repo read
+  (`DISTINCT ON (key) ... ORDER BY key, ts DESC` over the *existing* per-key index — no migration) +
+  one upstream fetch for the cold remainder **coalesced under a `singleflight.Group` keyed on the
+  sorted cold set** (concurrent callers share one fetch); (3) a `WHERE key = ANY($1::uuid[])` +
+  `ORDER BY key, sub` read that replaces a 1+N loop, grouped into `map[key][]row` preserving per-key
+  order. Consumer side: one helper that batches then re-keys by id, where a whole-call RPC error
+  returns an empty map so every item is "missing" — the same neutral outcome as N failing singular
+  calls (never a fabricated zero).
+- **Evidence**: `marketdata.proto` `GetLatestQuotes`; `marketdata_repo.go` `GetLatestQuotesBatch`,
+  `marketdata_service.go` `GetLatestQuotes` (+`quoteSingleflight`); `portfolio_service.go`
+  `latestQuotesFor` (4 sites); `watchlist_repo.go` `bindingsByWatchlist`; feature 178 Steps 3/5/7.
+- **Rule it implies**: (a) batch by mirroring the closest existing `*Multi`/`ANY` precedent, not a new
+  shape; (b) a batched "latest per key" repo read is a NEW method (`DISTINCT ON`), never a `LIMIT`ed
+  clone of the singular `... LIMIT 1`; (c) key single-flight on the SORTED cold SET so it actually
+  coalesces; (d) preserve any per-site formula byte-identical + add a cross-path parity test (PR#735
+  scar); (e) for the offline test, a concrete `*pgxpool.Pool` field blocks pgxmock — add the mockable
+  `queryRower` seam (as PortfolioRepo already did) rather than a live DB. No new ID.
+
+### 2026-09-05 — ui-resume-halted-account — reuse
+- **Pattern**: Adding a confirm-gated privileged row action reuses the canonical `RowActionsMenu`
+  (admin-gated action + reason-surfacing `AlertDialog`) rather than a bespoke button. Two e2e
+  consequences to plan for: the dropdown stays *mounted* through the confirm flow (Radix
+  `onSelect` `preventDefault`), so (a) the halt reason renders in both the dialog and the row behind
+  it — scope reason assertions to `getByRole('alertdialog')` to avoid a strict-mode dup; and (b)
+  re-opening the row menu after confirm must `Escape`-reset first or the trigger click deadlocks
+  against the still-open menu.
+- **Evidence**: `services/xstockstrat-ui/src/components/shared/RowActionsMenu.tsx:90-100`;
+  `services/xstockstrat-ui/e2e/trader/account-resume.spec.ts` @AC-3/@AC-6; feature 179 Deviation Log.
+- **Rule it implies**: reuse `RowActionsMenu` for confirm-gated row actions (C-17); when e2e-testing
+  one, scope dialog assertions and reset the menu between interactions — no new Constitution ID.
+
+### 2026-09-05 — ui-resume-halted-account — design
+- **Pattern**: An "optimistic clear then refetch" UI mutation reads cleanest as a full-replace context
+  mutator (`applyAccountUpdate`, fail-loud on a missing id) fed by the *authoritative* server response,
+  followed by a background `refreshAccounts()`. The e2e mock should echo the requested id back mutated
+  so the optimistic path is actually exercised, not masked by the refetch.
+- **Evidence**: `services/xstockstrat-ui/src/context/AccountContext.tsx` `applyAccountUpdate`;
+  `services/xstockstrat-ui/src/components/trader/accountShared.tsx` `handleResume`;
+  `services/xstockstrat-ui/e2e/mock-backend.ts` `resumeAccount` (id echo).
+- **Rule it implies**: drive an optimistic-then-refetch mutation from the server response, and make the
+  mock echo identity so the optimistic frame is under test — no new ID.
+
+### 2026-09-05 — readiness-caching-poll-discipline — perf
+- **Pattern**: Cache a decide-surface read WITHOUT ever presenting stale-as-fresh by keying the cache
+  entry on the *inputs that must invalidate it* and carrying an explicit `computed_at`. Three shapes
+  landed: (1) a per-`(user,strategy,rule,symbol)` FAST/SLOW cache keyed on the **definition
+  fingerprint + `bar_epoch`** (`max(evaluated, benchmark)` last-bar) so a FAST hit is byte-identical
+  to a fresh compute and a new bar always busts it — never a slow-path `bar_epoch` reuse (a same-
+  `time.seconds` intraday 1d update must re-evaluate); (2) a **dedicated compute-state table** (not an
+  in-band queue sentinel — the sentinel is eaten by the read's conviction floor and re-kicks every
+  poll) that stamps a short TTL only on an **empty** compute, gating redundant recompute while a
+  background self-heal covers empty→non-empty; (3) a **success-only** process-lifetime memo for
+  read-time live enrichment (a failed/unavailable fetch is never cached, so it drops within the TTL).
+  The response `computed_at` = the **oldest** served row's stamp (never fresher than its oldest input).
+- **Evidence**: `analysis/app/repositories/{readiness_cache,opportunity_compute_state}.py`; migrations
+  `022`/`023`; `servicer.py` `EvaluateReadiness` FAST/SLOW, `_replace_and_stamp_compute_state` (the
+  three empty `replace_for_user` sites), `_enrich_opportunities_live` memo; feature 177 Steps 6/8/10.
+- **Rule it implies**: when caching a recompute-on-read surface, (a) key the entry on every input that
+  must invalidate it (fingerprint + freshest-bar epoch), not wall-clock alone; (b) prefer a dedicated
+  state table over an in-band sentinel whenever a read-side filter would hide the sentinel; (c)
+  memoize live values **success-only**; (d) always surface an oldest-of `computed_at` so no consumer
+  can read the response as fresher than its stalest input. Client mirror: a per-query `staleTime`
+  (never a `QueryClient` default — a default forces a whole-list refetch). No new ID.
+
+### 2026-09-05 — watchlist-readiness-precompute — design
+- **Pattern**: When a "pre-warm a cache in the background" feature is proposed, the decisive question
+  is not *which loop* hosts it but *whether the host loop already fetches the exact keys the reader
+  reads*. Here the live loop looked like a free host (it evaluates the same live strategies), but it
+  fetches each strategy's **resolved universe** (`allowlist OR (watchlist ∪ held ∪ signals) − denied`,
+  `live_loop.py:103-105`), which is neither a subset nor a superset of the watchlist-bound pairs the
+  overlay reads — allowlist-override strategies yield **0%** binding coverage. "Reuse the bars the
+  loop already has" collapsed under a re-grep. Verify the host's actual key set against the reader's
+  key set before trading a dedicated loop away for "free" reuse.
+- **Pattern**: A cross-path cache whose freshness must survive a shared gate is safest when the
+  bust condition is **data-derived (a stored `bar_epoch` vs the latest bar), not time-derived (TTL)**.
+  A per-origin `valid_until` policy under one gate creates two silent freshness semantics on one
+  table (a C-16 dishonesty); moving the bust into one pure `is_fresh(row, now, latest_epoch)`
+  predicate shared by every read path keeps a single honest semantic and confines the change to a
+  reviewable unit. (feature 180 — bar_epoch-aware FAST gate over feature 177's `servicer.py:2780`.)
+- **Evidence**: `docs/roadmap/features/180-watchlist-readiness-precompute/design.md` §§ Chosen
+  Approach, Option A vs B, @AC-2 reconciliation; `services/xstockstrat-analysis/app/engine/live_loop.py:103-105,341-347`;
+  `services/xstockstrat-analysis/app/handlers/servicer.py:2780,2786-2818`.
+
+### 2026-09-05 — watchlist-readiness-precompute — execute
+- **Pattern**: A background pre-warm loop and its interactive read path stay honest when they share
+  ONE compute unit and ONE freshness predicate. Extracting the SLOW `EvaluateReadiness` body into
+  `app/services/readiness.py` (`compute_readiness_row` + pure `is_readiness_row_fresh`) let the new
+  `run_readiness_materializer_forever` loop produce byte-identical rows and let the FAST gate become
+  `bar_epoch`-aware for both origins with no two-policies-per-table risk — the modularization the
+  operator asked for, and the cheapest correctness guarantee (feature 180, Steps 1/3/5).
+- **Pattern**: Before adding a "new" helper a spec calls for, grep the target service — feature 180's
+  Step 5 was specced to add `_drain_watchlist_bindings`, but the servicer already had exactly that
+  method (built for `_compute_opportunities`); reusing it avoided a duplicate. The spec's D-1
+  correction (that `live_loop._drain_watchlist` discards `strategy_id`) was right about the *live_loop*
+  method but missed the servicer's own binding-aware drain.
+- **Evidence**: `services/xstockstrat-analysis/app/services/readiness.py`;
+  `app/handlers/servicer.py` (`_readiness_materializer_tick`, `_drain_watchlist_bindings` reuse,
+  FAST gate); `docs/roadmap/features/180-watchlist-readiness-precompute/implementation-spec.md` Deviation Log.
+
+### 2026-09-06 — mcp-user-profile-roles — design
+- **Pattern**: The hand-maintained-projection parity guard (mirror of `test_backtest_view.py`'s `DESCRIPTOR.fields_by_name` check) has a **TS-service analog** for services whose runtime stub is ts-proto (which has NO field reflection): reflect via **protobuf-es v2** instead — import `<Msg>Schema` from the `_pb` module (`protoc-gen-es` is already generated per `packages/proto/buf.gen.yaml`; `@bufbuild/protobuf` is a dep) and assert `<Msg>Schema.fields.map(f => f.localName)` (camelCase) equals the emitted key set of the row→proto mapper. The mapper must emit every field unconditionally (`x ?? undefined`, never conditional-spread) or the key-set assertion becomes row-dependent. Mild dual-flavor indirection: the service serializes via ts-proto while the guard reflects via protobuf-es, but both derive from the same `.proto`.
+- **Evidence**: feature 183 design.md § Chosen Approach (step 2 test plan); `packages/proto/buf.gen.yaml:35` (protoc-gen-es); `services/xstockstrat-identity/package.json:20` (`@bufbuild/protobuf`); Python precedent `services/xstockstrat-agent/tests/test_backtest_view.py:189`.
+- **Rule it implies**: a hand-maintained proto projection in a TS/Node service must be pinned by a protobuf-es schema-reflection parity test (the ts-proto stub cannot back one) — extends the F-12/RC-1 "pin projections with a parity test" lesson across languages.
+
+## 2026-09-06 — config write-bounds are write-path only (feature 182)
+
+- **Pattern**: Registering a `SCALAR_BOUNDS_REGISTRY` entry for a config key rejects only out-of-range
+  future `SetConfig` writes (`configServiceImpl.ts` write edge) and touches **no read path** — so
+  adding bounds does NOT break a "no-runtime-behavior-change" registration contract. A design that
+  defers bounds "to stay no-behavior-change" is miscalibrated: the behavior-change fear belongs to the
+  *seeded value* (seed == code default = no change), not to the bounds.
+- **Rule it implies**: when a feature makes a numeric operational key operator-editable (seeding it so
+  config-ui can show it), evaluate write-bounds on their own merits (footgun exposure), not against the
+  no-behavior-change contract. Two footgun classes to check at the reader: a `max(1,…)` clamp guards
+  only the low side (upper is still an operator lever — e.g. `max_concurrent_bars_fetches` re-opening
+  the feature-141 SEV-2), and a key fed to a scheduler/`seconds_until_hour_utc` may have **no** clamp
+  (`refresh_hour_utc`). Bound the upper side in the registry, keyed on the FULL dotted key path.
+- **Evidence**: `services/xstockstrat-config/src/grpc/configServiceImpl.ts:98-103` (float-only registry
+  today — int support is the open verify for a new int-key bound);
+  `services/xstockstrat-analysis/app/handlers/servicer.py:454` (`get_int` + low-only `max(1,…)`), `:4075`
+  (`refresh_hour_utc`, no clamp); feature 182 design.md.
+
+## 2026-09-07 — config write-bound lower edge is a getter-semantics decision (feature 184)
+
+- **Pattern**: The *lower* bound of a `SCALAR_BOUNDS_REGISTRY` entry is not a free choice — it must be
+  read off how the consuming service reads the key. Three cases: (1) a `get_int_present`/`get_float_present`
+  reader (HasField) honors a stored `0` as a real value, so a bound that excludes `0` silently makes a
+  currently-settable value unsettable = a C-16 regression (needs sign-off) — use lower `0`; (2) a
+  zero-trap `get_int`/`get_float` reader (`v.int_val or default`) already collapses a stored `0` to the
+  code default, so lower `1` is correct and *documents* that `0` is intentionally unreachable; (3) a
+  spec/`@AC` may mandate a lower edge (e.g. a weight `[0,1]`) that overrides (1)/(2). A bounded key whose
+  lower edge is a legitimate value (`refresh_hour_utc=0`=midnight) needs its **own** `@AC` asserting that
+  value is ACCEPTED — a rejection-only acceptance set leaves the whole lower-bound split unverified (C-15).
+- **Rule it implies**: before bounding a numeric config key, read its getter; pick the lower bound per the
+  three cases above; and for any bounded key whose lower edge is a documented value, add an @AC that the
+  edge is accepted, not just an out-of-range rejection. Also: bound only keys with a cited failure mode or
+  precedent (Behavior #2) — under-bounding is a one-line registry edit to reverse, an unjustified ceiling
+  is a latent regression; and do not bound a key read by *two* loops (shared reader) unless the single
+  bound is sane for both consumers.
+- **Evidence**: feature 184 design.md § Bounds registry growth + Rejected Alternatives;
+  `docs/roadmap/features/184-opportunity-config-operability/recon.md:94,99`;
+  `services/xstockstrat-config/src/grpc/configServiceImpl.ts:100,118-120`; acceptance.feature @AC-8.
+
+## 2026-09-07 — opportunity-compute-robustness — design (feature 185)
+
+- **Pattern**: On a data-source (marketdata) outage, the SCALABLE self-heal for cached per-symbol rows is a
+  read-time, cooldown-gated, per-symbol SURGICAL recompute (re-fetch + re-evaluate ONLY the down symbols,
+  UPDATE-in-place heal-only, re-stamp unconditionally) — NOT a full-universe recompute per affected user.
+  Full-recompute-on-read during an outage is a retry-amplification/thundering-herd (N users × full-universe
+  fetches every cooldown) that re-creates the exact multi-user pressure of the feature-141 SEV-2. Bound the
+  retry footprint to what actually failed.
+- **Rule it implies**: a "retry harder" recovery must scale DOWN its footprint during the dependency outage
+  that triggered it (per-symbol, cooldown-gated, deduped), and must restore ALL derived ranking inputs on
+  heal (re-drain signals — never leave a computed axis dishonestly zeroed, P-03), UPDATE-in-place heal-only
+  to honor the whole-user-replace invariant (no resurrection), and add a unique ORDER BY tiebreak before any
+  partial re-INSERT/UPDATE (offset paging dups/skips otherwise). Reuse the existing background semaphore
+  bucket rather than minting a third independent [1,5] bars-fetch sem (three sum to 15 > the marketdata pool
+  ceiling of 5 = SEV-2 re-open).
+- **Evidence**: feature 185 design.md §FR-3/FR-5 + Rejected Alternatives; `services/xstockstrat-analysis/app/repositories/opportunities.py:44-46,107,114`; `app/handlers/servicer.py:448-456,3492-3512,3841-3857`; ledger fails 141/1547.
+
+### 2026-09-09 — opportunities-latency-fix — design
+- **Pattern**: For batch queries over TimescaleDB hypertables that need a per-symbol row LIMIT, use `CROSS JOIN LATERAL (SELECT ... WHERE symbol = s.sym ... LIMIT $N) b` with `unnest($1::text[])` — the LATERAL pushes the LIMIT into the per-symbol index scan, while the hypertable's time-based partitioning means lock count is bounded by chunk count (~14 for a 400-day range on 30-day chunks), NOT by symbol count. This avoids the ROW_NUMBER alternative (materializes all rows before filtering) and the flat `WHERE symbol = ANY($1)` without LIMIT (unbounded rows).
+- **Evidence**: feature 183 design.md § Step 2; `services/xstockstrat-marketdata/migrations/001_marketdata_hypertables.up.sql:31-32` (index `(symbol, time DESC)`); `docs/runbooks/ohlcv-lock-budget-tuning.md` (`max_locks_per_transaction = 1024`).
+- **Rule it implies**: prefer LATERAL JOIN over ROW_NUMBER for per-group LIMIT queries on TimescaleDB hypertables; reserve ROW_NUMBER for cases needing exactly 1 row/group (e.g. prev daily close).
+
+### 2026-09-09 — 168-fundamentals-blend-universe — design
+- **Pattern**: Per-strategy universe-override as a conditional branch inside the shared `_run_cycle` loop — force-run a strategy on exactly the qualifying universe while excluding it from every other symbol — rather than a parallel loop (which duplicates fair-share rotation, DRY violation) or a global/platform strategy (which abandons the per-user ownership model). Fundamentals universe resolved once per cycle (platform-global data makes per-user resolution wasteful and a pacing/F-06 violation).
+- **Evidence**: `services/xstockstrat-analysis/app/handlers/servicer.py` (`_run_cycle` universe-override branch); feature 168 design.md.
+- **Rule it implies**: when a specific strategy needs a derived sub-universe, implement as a conditional branch in the shared orchestration loop, resolving the universe once per cycle; a parallel loop is a DRY violation and per-user fan-out violates pacing (F-06).
+
+### 2026-09-09 — 168-fundamentals-blend-universe — reuse
+- **Pattern**: `get_bool`'s `HasField("bool_val")` on proto3 `optional bool` means explicit `false` is honored, distinct from "not set." This makes boolean config keys safe for kill-switches — setting to `false` disables the feature, and the `HasField` presence gate prevents fallback to default.
+- **Evidence**: `services/xstockstrat-analysis/app/config/watcher.py` (`get_bool` accessor); feature 168 design.md.
+- **Rule it implies**: for any boolean config key intended as a kill-switch, use `HasField("bool_val")` presence gating to distinguish explicit `false` from unset; reinforces the zero-trap pattern (insights-069).
+
+### 2026-09-09 — 169-mcp-get-positions-tools — design
+- **Pattern**: Consolidate an old client method into the new one (rename+extend) rather than adding a second wrapper, to avoid a dual-path divergence trap (C-10(b)). First proactive C-10(b) application.
+- **Evidence**: `services/xstockstrat-agent/app/clients/portfolio_client.py` (legacy `list_account_positions` consolidated into paginated `list_positions`); feature 169 design.md.
+- **Rule it implies**: when adding a new client method that subsumes an existing one, consolidate (rename+extend) rather than adding alongside; a second wrapper creates a dual-path that future callers will pick the wrong one from.
+
+### 2026-09-09 — 169-resume-halted-account — reuse
+- **Pattern**: `WithPropagationData` test helper injects `x-user-id`, `x-access-scope`, and `x-trace-id` into a Go `context.Context` for handler-level testing without requiring the full middleware chain.
+- **Evidence**: `services/xstockstrat-trading/internal/service/trading_test.go` (WithPropagationData); feature 169 implementation.
+- **Rule it implies**: for Go handler tests that need header-propagated values, use this helper instead of constructing raw metadata; it matches the production middleware's key format.
+
+### 2026-09-09 — 169-resume-halted-account — reuse
+- **Pattern**: `requireAdminScope` is the first Go-native `ADMIN_SCOPE=0x04` bitmask check, providing admin-only authorization for RPCs without requiring a separate auth middleware.
+- **Evidence**: `services/xstockstrat-trading/internal/service/authz.go` (requireAdminScope); feature 169 implementation.
+- **Rule it implies**: reuse `requireAdminScope` for future admin-only Go RPCs; the bitmask pattern is extensible to other scope levels.
+
+### 2026-09-09 — 170-watchlist-bulk-default-strategy — reuse
+- **Pattern**: Playwright `waitForRequest` must use `endsWith('.ServiceName/MethodName')` for Connect-RPC paths — the path delimiter is a **dot** before the service name (e.g. `.xstockstrat.portfolio.v1.PortfolioService/BulkReassignStrategy`), not a slash.
+- **Evidence**: feature 170 e2e tests; `services/xstockstrat-ui/e2e/` Playwright fixtures.
+- **Rule it implies**: when intercepting Connect-RPC requests in Playwright, always match on the dot-delimited fully-qualified service name; a slash-delimited `ServiceName/Method` pattern silently never matches. Same family as fails.md:2187-2192 (feature 167).
+
+### 2026-09-09 — 172-fix-portfolio-max-drawdown-unenforced — design
+- **Pattern**: When recon advertises a fix as "cheap because column X already exists," verify that the **writer** of X encodes the quantity the name implies — a column named `equity` in one table was cashless mark-to-market, not account equity. The "cheap" cost estimate was an artifact of the wrong column; the correct basis required a new migration, turning a SEV-3 one-liner into a medium change.
+- **Evidence**: `services/xstockstrat-portfolio/internal/service/portfolio_service.go:706` (`cash=0` hardcoded in snapshot writer) vs `internal/repository/portfolio_repo.go:376-398` (broker-authoritative `account_balances.equity`); feature 172 design.md R1 adversary.
+- **Rule it implies**: a "cheap because we can reuse X" scope estimate is only as good as verifying X's writer — read the write site, not just the column name. Reinforces C-01/P-03.
+
+### 2026-09-09 — 172-fix-portfolio-max-drawdown-unenforced — design
+- **Pattern**: For a per-entity risk control on an entity-keyed table, prefer per-entity grain over cross-entity aggregation — SUM inflates drawdown via peak-timing skew (`sum-of-per-entity-peaks >= peak-of-summed-equity` when entities peak at different times), reintroducing the false-positive class the fix exists to prevent.
+- **Evidence**: feature 172 design.md R2; `services/xstockstrat-portfolio/internal/service/portfolio_service.go` (per-account `evaluateDrawdowns`).
+- **Rule it implies**: default to per-entity grain for entity-keyed risk controls; cross-entity aggregation is safe only when peaks are synchronized.
+
+### 2026-09-09 — 174-fix-config-watcher-client-id — design
+- **Pattern**: When testing a config/request-builder fix, prefer a whole-request wire-object seam (`_build_watch_request() -> ProtoMessage`) over a string-source seam (`_client_id() -> str`). The wire-object seam catches a future inline revert that re-hardcodes a value directly on the request construction — a str-source seam stays green because it asserts the accessor, not the call site.
+- **Evidence**: feature 174 design.md:31-34; R1 adversary feedback on fails-074 trap.
+- **Rule it implies**: for any test guarding a request-field value, assert the built request object, not the intermediate variable. Reinforces C-08/P-06 (non-vacuous).

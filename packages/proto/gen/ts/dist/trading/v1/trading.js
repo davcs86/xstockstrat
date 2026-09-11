@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: trading/v1/trading.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TradingServiceClient = exports.TradingServiceService = exports.SnapshotOfflinePositionsResponse = exports.RejectedBaselineRow = exports.SnapshotOfflinePositionsRequest = exports.PositionBaseline = exports.DeregisterBrokerAccountResponse = exports.DeregisterBrokerAccountRequest = exports.ListBrokerAccountsResponse = exports.ListBrokerAccountsRequest = exports.GetTradingEnvironmentResponse = exports.GetTradingEnvironmentRequest = exports.UpdateBrokerAccountCredentialsResponse = exports.UpdateBrokerAccountCredentialsRequest = exports.RegisterBrokerAccountResponse = exports.RegisterBrokerAccountRequest = exports.BrokerAccount = exports.ReplaceOrderRequest = exports.StreamOrderUpdatesRequest = exports.ListOrdersResponse = exports.ListOrdersRequest = exports.ConfirmOrderRequest = exports.GetOrderRequest = exports.CancelOrderResponse = exports.CancelOrderRequest = exports.PlaceOrderRequest = exports.Order = exports.HaltSource = exports.IntentState = exports.CredentialStatus = exports.OrderStatus = exports.OrderType = exports.OrderSide = exports.protobufPackage = void 0;
+exports.TradingServiceClient = exports.TradingServiceService = exports.SnapshotOfflinePositionsResponse = exports.RejectedBaselineRow = exports.SnapshotOfflinePositionsRequest = exports.PositionBaseline = exports.ResumeAccountResponse = exports.ResumeAccountRequest = exports.DeregisterBrokerAccountResponse = exports.DeregisterBrokerAccountRequest = exports.ListBrokerAccountsResponse = exports.ListBrokerAccountsRequest = exports.GetTradingEnvironmentResponse = exports.GetTradingEnvironmentRequest = exports.UpdateBrokerAccountCredentialsResponse = exports.UpdateBrokerAccountCredentialsRequest = exports.RegisterBrokerAccountResponse = exports.RegisterBrokerAccountRequest = exports.BrokerAccount = exports.ReplaceOrderRequest = exports.StreamOrderUpdatesRequest = exports.ListOrdersResponse = exports.ListOrdersRequest = exports.ConfirmOrderRequest = exports.GetOrderRequest = exports.CancelOrderResponse = exports.CancelOrderRequest = exports.PlaceOrderRequest = exports.Order = exports.HaltSource = exports.IntentState = exports.CredentialStatus = exports.OrderStatus = exports.OrderType = exports.OrderSide = exports.protobufPackage = void 0;
 exports.orderSideFromJSON = orderSideFromJSON;
 exports.orderSideToJSON = orderSideToJSON;
 exports.orderSideToNumber = orderSideToNumber;
@@ -2990,6 +2990,131 @@ exports.DeregisterBrokerAccountResponse = {
         return message;
     },
 };
+function createBaseResumeAccountRequest() {
+    return { accountId: "", reason: "" };
+}
+exports.ResumeAccountRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.accountId !== "") {
+            writer.uint32(10).string(message.accountId);
+        }
+        if (message.reason !== "") {
+            writer.uint32(18).string(message.reason);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseResumeAccountRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.accountId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.reason = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            accountId: isSet(object.accountId)
+                ? globalThis.String(object.accountId)
+                : isSet(object.account_id)
+                    ? globalThis.String(object.account_id)
+                    : "",
+            reason: isSet(object.reason) ? globalThis.String(object.reason) : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.accountId !== "") {
+            obj.accountId = message.accountId;
+        }
+        if (message.reason !== "") {
+            obj.reason = message.reason;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ResumeAccountRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseResumeAccountRequest();
+        message.accountId = object.accountId ?? "";
+        message.reason = object.reason ?? "";
+        return message;
+    },
+};
+function createBaseResumeAccountResponse() {
+    return { account: undefined };
+}
+exports.ResumeAccountResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.account !== undefined) {
+            exports.BrokerAccount.encode(message.account, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseResumeAccountResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.account = exports.BrokerAccount.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { account: isSet(object.account) ? exports.BrokerAccount.fromJSON(object.account) : undefined };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.account !== undefined) {
+            obj.account = exports.BrokerAccount.toJSON(message.account);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ResumeAccountResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseResumeAccountResponse();
+        message.account = (object.account !== undefined && object.account !== null)
+            ? exports.BrokerAccount.fromPartial(object.account)
+            : undefined;
+        return message;
+    },
+};
 function createBasePositionBaseline() {
     return { symbol: "", qty: 0, avgCostPerShare: 0 };
 }
@@ -3530,6 +3655,20 @@ exports.TradingServiceService = {
         requestDeserialize: (value) => exports.SnapshotOfflinePositionsRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.SnapshotOfflinePositionsResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.SnapshotOfflinePositionsResponse.decode(value),
+    },
+    /**
+     * ResumeAccount clears the persistent and in-memory halt on a broker account
+     * (feature 169). Admin-scope callers only. Idempotent: a non-halted account
+     * returns success with no state change. Emits a ledger event and INFO alert.
+     */
+    resumeAccount: {
+        path: "/xstockstrat.trading.v1.TradingService/ResumeAccount",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ResumeAccountRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ResumeAccountRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.ResumeAccountResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.ResumeAccountResponse.decode(value),
     },
 };
 exports.TradingServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.TradingServiceService, "xstockstrat.trading.v1.TradingService");

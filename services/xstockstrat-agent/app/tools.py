@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Forty-two tools:
+Forty-nine tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -35,6 +35,13 @@ Forty-two tools:
   manage_offline_account — offline-account create/record/confirm + read orders/positions
   manage_account       — register/update_credentials/deregister a broker account (ownership-gated)
   list_accounts        — lists the caller's broker + offline accounts together (read-only)
+  get_positions        — lists the caller's positions across all accounts (read-only)
+  get_positions_by_account_id — lists the caller's positions for one account (read-only)
+  manage_user          — admin: create/set_roles/set_active/reset_password a user (admin-gated)
+  list_users           — admin: lists all users, password-free views (read-only, admin-gated)
+  get_user             — admin: reads one user by id (read-only, admin-gated)
+  admin_get_user_metadata — admin: reads ANY user's profile metadata by user_id (read-only)
+  admin_set_user_metadata — admin: partial-updates ANY user's profile metadata by user_id
   db_list_schemas     — list database schemas via postgres-mcp (admin-only)
   db_list_objects     — list objects in a schema via postgres-mcp (admin-only)
   db_get_object_details — get DDL/stats for a named DB object via postgres-mcp (admin-only)
@@ -65,11 +72,8 @@ from app.scopes import MCP_CLAIMS_SCOPE_KEY, resolve_scope, roles_to_access_scop
 _ALERT_THRESHOLD_DEFAULT = 0.6
 _ALERT_THRESHOLD_CONFIG_KEY = "signal.alert_threshold"
 
-# feature 093: secure per-source extract credentials are not yet supported. The old path read a
-# plaintext `source.<slug>.credentials` config key — a C-05 / config-invariant-#6 violation (secrets
-# are is_secret references that GetConfig redacts; a plaintext value would be disclosed unredacted).
-# So a source that requires credentials raises loudly (AC-2) instead of silently fetching
-# unauthenticated. The secure resolver (AC-3) is a deferred follow-up.
+# Secure per-source extract credentials are not supported yet: a source requiring credentials
+# raises loudly instead of fetching unauthenticated (plaintext creds would bypass secret redaction).
 _CREDENTIALS_UNSUPPORTED = (
     "secure per-source credential resolution is not supported yet: source '{slug}' is registered "
     "with credentials (has_credentials=true), but the platform's secret store is not wired to the "
@@ -126,6 +130,15 @@ def _caller_access_scope(ctx: Context, tool: str) -> int:
     the tool call itself; the legacy SSE transport that didn't was removed by feature 079)."""
     claims = _require_claims(ctx, tool)
     return roles_to_access_scope(claims.get("roles"))
+
+
+def _require_admin(ctx: Context, tool: str) -> None:
+    """Reject a non-admin caller before any backend call (feature 183 user-admin tools).
+
+    A friendly early check mirroring `manage_account resume`; identity's `adminGate` remains the
+    authoritative server-side gate (the derived scope is forwarded via `client._metadata()`)."""
+    if not (_caller_access_scope(ctx, tool) & 0x04):
+        raise PermissionError(f"{tool} requires admin scope")
 
 
 def _caller_user_id(ctx: Context, tool: str) -> str:
@@ -210,9 +223,7 @@ def _grpc_error_message(exc: grpc.aio.AioRpcError, not_found: str = "not found")
     return exc.details() or str(code)
 
 
-# Type-level mapping: source_type → extractor_tool
-# Derives extractor_tool from source_type at the agent layer only.
-# The underlying ListSignalSources RPC and proto are unchanged.
+# source_type → extractor_tool (derived at the agent layer only).
 _EXTRACTOR_TOOL_MAP: dict[str, str | None] = {
     "mediated_email_attachment": "extract_email_content",
     "mediated_linked_email": "extract_email_content",
@@ -263,9 +274,7 @@ def _is_destructive(sql: str) -> bool:
 
 
 def register_tools(server: MCPServer) -> None:
-    # Edge header propagation (PR #994): one middleware binds the caller's verified identity for the
-    # duration of each tools/call so every backend gRPC forwards x-user-id + x-access-scope +
-    # x-trace-id — no per-tool plumbing. Registered before the tools so it wraps all of them.
+    # Register the propagation middleware before the tools so it wraps every tools/call.
     server.middleware.append(CallerPropagationMiddleware())
 
     @server.tool()
@@ -282,10 +291,8 @@ def register_tools(server: MCPServer) -> None:
         source_type: optional filter list
             (e.g. ['mediated_simple_email', 'mediated_email_attachment'])."""
         sources = await client.list_signal_sources(include_inactive=False)
-        # Enrich each source with extractor_tool derived from source_type.
-        # feature 166 — the boolean has_credentials IS surfaced (product-spec-committed,
-        # @AC-1/@AC-2);
-        # the token / credentials_ref remain intentionally excluded — never exposed to Claude.
+        # has_credentials (boolean) is surfaced; the token / credentials_ref are never exposed
+        # to Claude.
         enriched = []
         for src in sources:
             st = src["source_type"]
@@ -296,9 +303,7 @@ def register_tools(server: MCPServer) -> None:
                     "source_type": st,
                     "config_json": src["config_json"],
                     "extractor_tool": _EXTRACTOR_TOOL_MAP.get(st, None),
-                    # feature 166 — whether a bearer/credential is configured (boolean only).
                     "has_credentials": src["has_credentials"],
-                    # feature 161 — surface the per-source reliability weight (was dropped here).
                     "reliability_weight": src["reliability_weight"],
                 }
             )
@@ -422,10 +427,8 @@ def register_tools(server: MCPServer) -> None:
             raw_url=raw_url,
             tags=tags,
         )
-        # Auto-emit alert for high-conviction signals — deterministic rule, not model-driven.
-        # feature 093: env-scoped read (was env-blind → always the dev row → the default). Broad
-        # try/except because this read is POST-COMMIT (the signal is already persisted above), so it
-        # must never fail ingest_signal — any error falls back to the default.
+        # Post-commit best-effort: the signal is already persisted, so an alert-threshold read
+        # failure must never fail ingest_signal — fall back to the default.
         env = _resolve_scope("")
         try:
             threshold_str = await client.get_config_value(
@@ -459,10 +462,8 @@ def register_tools(server: MCPServer) -> None:
                 log.warning(
                     "Auto-alert failed after ingest_signal (signal already ingested): %s", e
                 )
-        # Auto-add to the caller's system-managed signals watchlist (feature 127) — post-commit,
-        # best-effort, structurally identical to the auto-alert above. Gated on
-        # direction='watchlist' and a non-deduplicated ingest (FR-4/FR-6). _caller_user_id raising
-        # on the unauthenticated stdio transport is caught here → add skipped, signal ingested.
+        # Post-commit best-effort, gated on direction='watchlist' + non-dedup. _caller_user_id
+        # raising on stdio is caught here → add skipped, signal still ingested.
         if direction == "watchlist" and not result.get("deduplicated"):
             try:
                 user_id = _caller_user_id(ctx, "ingest_signal")
@@ -515,9 +516,8 @@ def register_tools(server: MCPServer) -> None:
             correlation_id=correlation_id,
         )
 
-    # structured_output=False is forward-protection, not load-bearing today: for a bare `-> list`
-    # the SDK builds no output schema either way. It becomes load-bearing only if the annotation is
-    # ever parameterized (`list[ContentBlock]`), which would build one by default.
+    # structured_output=False matters only if the `-> list` return is ever parameterized
+    # (e.g. list[ContentBlock]), which the SDK would otherwise build an output schema for.
     @server.tool(structured_output=False)
     async def run_backtest(
         ctx: Context,
@@ -572,9 +572,8 @@ def register_tools(server: MCPServer) -> None:
           echoed in the summary. Note (display-only): in next-bar mode a diagnostics row can show an
           ENTER/EXIT on a bar whose conviction reads hold — the action lands on the fill bar while
           conviction stays that bar's own value; the grade is unaffected."""
-        # feature 133: forward the caller's own user id so analysis resolves ownership from the
-        # header — a non-owner strategy_id_ref is rejected PERMISSION_DENIED there. Wrap the RPC so
-        # that denial surfaces as a tool-level error, not an unwrapped AioRpcError (AC-6).
+        # Forward the caller's own user id so analysis resolves ownership from the header; wrap the
+        # RPC so a PERMISSION_DENIED surfaces as a tool-level error, not a raw AioRpcError.
         user_id = _caller_user_id(ctx, "run_backtest")
         try:
             result = await client.run_backtest(
@@ -758,18 +757,11 @@ def register_tools(server: MCPServer) -> None:
         RESPONSE CASING: this tool returns the definition with camelCase keys (e.g. `refName`,
         `entryRule`), UNLIKE get_strategy, which returns snake_case. To round-trip an edit, fetch
         with get_strategy (snake_case matches this tool's INPUT), not from this response."""
-        # feature 070: send ONLY what the caller supplied. The previous version defaulted these
-        # to ""/[] and shipped them unconditionally, so `manage_strategy(operation="update",
-        # strategy_id=..., cooldown_days=45)` transmitted explicit-empty components and rules and
-        # a blanked display_name — which is what wiped stored strategies. Generalizes the
-        # `is not None` treatment `cooldown_days` already had to every optional field.
+        # Send ONLY what the caller supplied (is not None) — shipping defaulted ""/[] on update
+        # is what wiped stored strategies.
         #
-        # feature 149: a rule may arrive as a JSON object (dict) from an MCP client whose transport
-        # pre-parses JSON arguments, or as a pre-encoded JSON string. Serialize a dict to the same
-        # JSON string a string-passing caller would send. Bare json.dumps (NO sort_keys) so the
-        # string path stays byte-for-byte; a str is never re-encoded. This runs BEFORE the mask
-        # below, so an omitted None still drops out and an empty dict {} → "{}" (non-None) enters
-        # the mask (the server then rejects a contentless rule, INVALID_ARGUMENT).
+        # A dict rule is serialized with bare json.dumps (NO sort_keys) so a string-passing caller's
+        # bytes match; runs before the mask, so None drops out and {} → "{}" enters it.
         if isinstance(entry_rule, dict):
             entry_rule = json.dumps(entry_rule)
         if isinstance(exit_rule, dict):
@@ -790,9 +782,8 @@ def register_tools(server: MCPServer) -> None:
         for name in mask:
             definition[name] = supplied[name]
 
-        # `clear_fields` names paths to erase. They join the mask but carry no value, which the
-        # server reads as an explicit clear (AIP-161). This is the only way to blank a rule or
-        # revert cooldown_days to the platform default.
+        # clear_fields join the mask with no value — the server reads that as an explicit clear
+        # (AIP-161); the only way to blank a rule or revert cooldown_days to default.
         for name in clear_fields or []:
             if name not in mask:
                 mask.append(name)
@@ -808,14 +799,9 @@ def register_tools(server: MCPServer) -> None:
                 )
             update_mask = mask
 
-        # feature 092: forward the caller's REAL derived scope (was a hardcoded admin 7). NOTE
-        # (feature 133): ManageStrategy is no longer admin-gated — it is ownership-gated. Analysis
-        # resolves the owner from the propagated x-user-id header and returns PERMISSION_DENIED for
-        # a non-owner; any authenticated caller acts on their OWN strategies regardless of admin.
-        # The scope is still forwarded (harmless defence-in-depth), but it is no longer the gate.
+        # ManageStrategy is ownership-gated, not admin-gated: analysis resolves the owner from
+        # x-user-id (PERMISSION_DENIED for a non-owner); the scope is forwarded only for defence.
         access_scope = _caller_access_scope(ctx, "manage_strategy")
-        # feature 133: forward the caller's own user id so analysis resolves ownership from the
-        # header (never the request body) — a non-owner is rejected PERMISSION_DENIED there.
         user_id = _caller_user_id(ctx, "manage_strategy")
         try:
             return await client.manage_strategy(
@@ -905,9 +891,8 @@ def register_tools(server: MCPServer) -> None:
             "warmup_period": warmup_period or 0,
         }
         if operation == "update":
-            # Derive the AIP-161 update_mask from the fields actually supplied (non-None), so an
-            # omitted field is preserved rather than wiped. Never fall back to a maskless full
-            # replace from the tool.
+            # Derive the update_mask from supplied (non-None) fields so an omitted field is
+            # preserved; never fall back to a maskless full replace.
             supplied = {
                 "name": name,
                 "description": description,
@@ -1011,19 +996,17 @@ def register_tools(server: MCPServer) -> None:
                 "extractor_module": extractor_module,
                 "config_json": config_json,
                 "credentials_ref": credentials_ref,
-                # feature 161: include reliability_weight in the mask ONLY when the caller
-                # supplied it, so a field-only update never resets the stored weight to 0.0.
+                # Mask reliability_weight ONLY when supplied, so a field-only update never resets
+                # it to 0.0.
                 "reliability_weight": reliability_weight,
             }
             update_mask = [field for field, val in supplied.items() if val is not None]
             if not update_mask:
                 raise RuntimeError("update requires at least one field to change")
-        access_scope = _caller_access_scope(ctx, "manage_signal_source")  # feature 092
-        # feature 166 — mcp_client bearer orchestration (secret-first). When registering an
-        # mcp_client source with a bearer token, write the token to an encrypted config secret
-        # FIRST, then register the source pointing at it via credentials_ref. The token is never
-        # placed in config_json and never echoed back (FR-12). A failed register after a successful
-        # secret write leaves only a harmless redacted orphan secret (no compensating cleanup).
+        access_scope = _caller_access_scope(ctx, "manage_signal_source")
+        # Secret-first: write the bearer to an encrypted config secret, THEN register the source
+        # pointing at it. The token is never in config_json or echoed; a failed register only
+        # orphans a harmless redacted secret.
         if operation == "register" and source_type == "mcp_client" and bearer_token:
             secret_key = f"mcp_credential.{slug}"
             await client.set_config(
@@ -1066,9 +1049,8 @@ def register_tools(server: MCPServer) -> None:
             config, so you can always turn live off.
         Returns a 4-field subset, NOT the full definition:
             {"strategy_id", "display_name", "live_enabled", "active"}."""
-        access_scope = _caller_access_scope(ctx, "set_strategy_live")  # feature 092
-        # feature 133: forward the caller's own user id so analysis resolves ownership from the
-        # header — a non-owner is rejected PERMISSION_DENIED there.
+        access_scope = _caller_access_scope(ctx, "set_strategy_live")
+        # Forward the caller's own user id — analysis resolves ownership from the header.
         user_id = _caller_user_id(ctx, "set_strategy_live")
         try:
             return await client.set_strategy_live(
@@ -1103,7 +1085,7 @@ def register_tools(server: MCPServer) -> None:
         Returns {"job_id", "status"}. Ingest performs NO synchronous input validation —
         it queues unconditionally and bad input surfaces as a terminal FAILED/PARTIAL
         job; poll get_backfill_status with the returned job_id to observe the outcome."""
-        access_scope = _caller_access_scope(ctx, "trigger_backfill")  # feature 092
+        access_scope = _caller_access_scope(ctx, "trigger_backfill")
         try:
             return await client.trigger_backfill(
                 symbols=symbols,
@@ -1131,7 +1113,7 @@ def register_tools(server: MCPServer) -> None:
         Returns the FundamentalsScanSummary: {"run_id", "symbols_processed", "signals_emitted",
             "calls_spent", "deferred_count", "status", "finished_at"}. Admin-scoped — a non-admin
             caller is rejected PERMISSION_DENIED by the analysis backend gate."""
-        access_scope = _caller_access_scope(ctx, "run_fundamentals_scan")  # feature 156
+        access_scope = _caller_access_scope(ctx, "run_fundamentals_scan")
         try:
             return await client.run_fundamentals_scan(
                 force=force, dry_run=dry_run, symbols=symbols, access_scope=access_scope
@@ -1177,7 +1159,7 @@ def register_tools(server: MCPServer) -> None:
         Use this to stop a paid backfill you started that is no longer wanted. A job that has
             already completed/failed cannot be canceled.
         Returns {"job": {...}} with the updated BackfillJob (status should be canceled)."""
-        access_scope = _caller_access_scope(ctx, "cancel_backfill")  # feature 092
+        access_scope = _caller_access_scope(ctx, "cancel_backfill")
         try:
             return await client.cancel_backfill(job_id, access_scope=access_scope)
         except grpc.aio.AioRpcError as e:
@@ -1220,8 +1202,7 @@ def register_tools(server: MCPServer) -> None:
         Returns {"strategies": [<definition>, ...]} — each definition is snake_case, matching
             get_strategy (so a list → get → manage_strategy edit loop stays consistent).
         Only the calling user's OWN strategies are returned."""
-        # feature 133: forward the caller's own user id so analysis filters to the caller's
-        # strategies (never another user's) from the header.
+        # Forward the caller's own user id — analysis filters to the caller's strategies.
         user_id = _caller_user_id(ctx, "list_strategies")
         try:
             return {"strategies": await client.list_strategy_definitions(user_id, include_inactive)}
@@ -1229,20 +1210,33 @@ def register_tools(server: MCPServer) -> None:
             raise RuntimeError(_grpc_error_message(e)) from e
 
     @server.tool()
-    async def list_opportunities(ctx: Context, min_conviction: float = 0.0) -> dict:
+    async def list_opportunities(
+        ctx: Context,
+        min_conviction: float = 0.0,
+        page_size: int = 50,
+        page_token: str = "",
+    ) -> dict:
         """List the caller's ranked Decide-queue opportunities with live-market enrichment
         (xstockstrat-analysis ListOpportunities, feature 095, read-only).
         min_conviction: drop rows below this conviction floor (muted deny-list rows are exempt).
-        Returns {"opportunities": [<opportunity>, ...]} — each carries symbol, action, conviction,
-            thesis, strategy_id, source, provenance, muted, and (when the backend has them) the live
-            enrichment: live_price, change_pct, target_price, stop_price, a sparkline (recent daily
-            closes; a gap is null), and the traced conditions. Unavailable live values are OMITTED,
-            never fabricated. Only the calling user's OWN queue is returned."""
-        # feature 095: caller-scoped via x-user-id (like list_watchlists/list_strategies); no admin
-        # scope — analysis resolves the owner from the header, never a request-body id.
+        page_size: max rows per page (default 50).
+        page_token: opaque token from a prior response's next_page_token to fetch the next page.
+        Returns {"opportunities": [...], "computing": bool, "compute_failed": bool,
+            "next_page_token": str}.
+            Each opportunity carries symbol, action, conviction, thesis, strategy_id, source,
+            provenance, muted, data_unavailable (true = a terminal data-unavailable row, distinct
+            from an evaluated 0/N), and (when the backend has them) the live enrichment: live_price,
+            change_pct, target_price, stop_price, a sparkline (recent daily closes; a gap is null),
+            valid_until, signal_confidence, and the traced conditions. Unavailable values are
+            OMITTED, never fabricated. Top-level computing=true means a cold queue is still
+            materializing (poll again); compute_failed=true means a persistently-failing compute
+            (a terminal error, not an empty queue). Use next_page_token to page through manually;
+            when it is empty, all rows have been returned. Only the calling user's OWN queue is
+            returned."""
+        # Caller-scoped via x-user-id (no admin scope) — analysis resolves the owner from headers.
         user_id = _caller_user_id(ctx, "list_opportunities")
         try:
-            return await client.list_opportunities(user_id, min_conviction)
+            return await client.list_opportunities(user_id, min_conviction, page_size, page_token)
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e)) from e
 
@@ -1257,8 +1251,7 @@ def register_tools(server: MCPServer) -> None:
         verify the change landed. Keys are snake_case, matching manage_strategy's input, so a
         fetch → edit → resend round-trip works directly.
         Fetching a strategy the caller does not own is rejected PERMISSION_DENIED."""
-        # feature 133: forward the caller's own user id so analysis resolves ownership from the
-        # header — a non-owner is rejected PERMISSION_DENIED there.
+        # Forward the caller's own user id — analysis resolves ownership from the header.
         user_id = _caller_user_id(ctx, "get_strategy")
         try:
             return await client.get_strategy(user_id=user_id, strategy_id=strategy_id)
@@ -1266,10 +1259,7 @@ def register_tools(server: MCPServer) -> None:
             raise RuntimeError(_grpc_error_message(e, not_found="strategy not found")) from e
 
     # ── xstockstrat-config tools (feature 073) ───────────────────────────────────────────────
-    #
-    # Scope resolution lives in app/scopes.py `resolve_scope` (feature 093 lifted it there so
-    # oauth_server.py, outside this closure, shares one normalizer). This thin wrapper keeps the
-    # three tool call sites below unchanged.
+    # `_resolve_scope` just forwards to app/scopes.py `resolve_scope` (shared with oauth_server.py).
 
     def _resolve_scope(environment: str) -> str:
         return resolve_scope(environment)
@@ -1365,8 +1355,7 @@ def register_tools(server: MCPServer) -> None:
         only the ciphertext is stored and only allow-listed internal services can decrypt it via
         GetSecret. Requires the Streamable HTTP transport, the only remote transport the agent
         serves since feature 079 removed the legacy SSE one."""
-        # feature 092: shared with the other management tools; fails fast when no verified claims
-        # are present. The backend admin gate is what actually authorizes the write.
+        # Fails fast when no verified claims are present; the backend admin gate authorizes writes.
         access_scope = _caller_access_scope(ctx, "set_config")
 
         env = _resolve_scope("")
@@ -1424,11 +1413,138 @@ def register_tools(server: MCPServer) -> None:
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="user not found")) from e
 
+    # ── xstockstrat-identity admin: user management + cross-user profile (feature 183) ─────────
+    # Every tool below is ADMIN-only: a friendly early _require_admin check rejects a non-admin
+    # before any backend call (no state change), and the caller's derived x-access-scope is
+    # forwarded so identity's adminGate stays the authoritative gate. The target user is always a
+    # request-body user_id, never the caller's x-user-id. Passwords are write-only, never echoed.
+    _VALID_ROLES = {"admin", "trader", "viewer"}
+
+    @server.tool()
+    async def manage_user(
+        ctx: Context,
+        operation: str,
+        user_id: str = "",
+        email: str = "",
+        password: str = "",
+        roles: list[str] | None = None,
+        active: bool | None = None,
+    ) -> dict:
+        """Administer users (ADMIN only) — feature 183. Non-admin callers are rejected.
+
+        operation:
+          'create'         — create a user. Requires email, password, and roles (a non-empty subset
+              of admin/trader/viewer). Returns the new user (userId/email/roles/isActive). The
+              password is write-only and never echoed back.
+          'set_roles'      — replace a user's roles. Requires user_id and a non-empty roles
+              subset of admin/trader/viewer. Returns the updated user.
+          'set_active'     — activate/deactivate a user. Requires user_id and active (true/false).
+              Returns the updated user. (The last active admin cannot be deactivated.)
+          'reset_password' — set a user's password. Requires user_id and password. Returns a success
+              result; the password is never echoed back.
+
+        For reads use list_users / get_user; for profile metadata use admin_get_user_metadata /
+        admin_set_user_metadata."""
+        _require_admin(ctx, "manage_user")
+
+        def _validate_roles(rs: list[str] | None) -> list[str]:
+            if not rs:
+                raise ValueError("roles must be a non-empty subset of admin/trader/viewer")
+            unknown = [r for r in rs if r not in _VALID_ROLES]
+            if unknown:
+                raise ValueError(f"unknown role(s) {unknown}; valid roles are admin/trader/viewer")
+            return rs
+
+        try:
+            if operation == "create":
+                if not email or not password:
+                    raise ValueError("create requires email and password")
+                return await client.create_user(email, password, _validate_roles(roles))
+            if operation == "set_roles":
+                if not user_id:
+                    raise ValueError("set_roles requires a user_id")
+                return await client.set_user_roles(user_id, _validate_roles(roles))
+            if operation == "set_active":
+                if not user_id:
+                    raise ValueError("set_active requires a user_id")
+                if active is None:
+                    raise ValueError("set_active requires 'active' (true or false)")
+                return await client.set_user_active(user_id, active)
+            if operation == "reset_password":
+                if not user_id or not password:
+                    raise ValueError("reset_password requires user_id and password")
+                return await client.reset_password(user_id, password)
+            raise ValueError(
+                f"unknown operation '{operation}' "
+                "(expected create/set_roles/set_active/reset_password)"
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="user not found")) from e
+
+    @server.tool()
+    async def list_users(ctx: Context) -> dict:
+        """List all users — ADMIN only (feature 183). Returns {"users": [...]} with password-free
+        views (userId/email/roles/isActive/createdAt). Non-admin callers are rejected."""
+        _require_admin(ctx, "list_users")
+        try:
+            return {"users": await client.list_users()}
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
+
+    @server.tool()
+    async def get_user(ctx: Context, user_id: str) -> dict:
+        """Read one user by id — ADMIN only (feature 183). Returns the password-free user view.
+        Non-admin callers are rejected."""
+        _require_admin(ctx, "get_user")
+        if not user_id:
+            raise ValueError("get_user requires a user_id")
+        try:
+            return await client.get_user(user_id)
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="user not found")) from e
+
+    @server.tool()
+    async def admin_get_user_metadata(ctx: Context, user_id: str) -> dict:
+        """Read ANY user's profile metadata by user_id — ADMIN only (feature 183).
+        Returns userId, email, phone, displayName, metadata, metadataUpdatedAt. Non-admin
+        callers are rejected. For your own profile use get_user_metadata."""
+        _require_admin(ctx, "admin_get_user_metadata")
+        if not user_id:
+            raise ValueError("admin_get_user_metadata requires a user_id")
+        try:
+            return await client.admin_get_user_metadata(user_id)
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="user not found")) from e
+
+    @server.tool()
+    async def admin_set_user_metadata(
+        ctx: Context,
+        user_id: str,
+        phone: str | None = None,
+        display_name: str | None = None,
+        metadata: dict | None = None,
+    ) -> dict:
+        """Partial-update ANY user's profile metadata by user_id — ADMIN only (feature 183).
+        Only provided fields change; email is read-only. Non-admin callers are rejected. For your
+        own profile use set_user_metadata.
+        user_id: the target user.
+        phone / display_name: optional.
+        metadata: optional JSON object (max 8KB)."""
+        _require_admin(ctx, "admin_set_user_metadata")
+        if not user_id:
+            raise ValueError("admin_set_user_metadata requires a user_id")
+        if phone is None and display_name is None and metadata is None:
+            raise ValueError("at least one field (phone, display_name, metadata) must be provided")
+        try:
+            return await client.admin_update_user_metadata(
+                user_id, phone=phone, display_name=display_name, metadata=metadata
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="user not found")) from e
+
     # ── xstockstrat-portfolio watchlist tools (feature 148) ──────────────────────────────────
-    # Thin ownership-gated wrappers over the existing PortfolioService watchlist RPCs. Each forwards
-    # ONLY the caller's own x-user-id (never an admin x-access-scope) — portfolio enforces ownership
-    # from the header and returns PERMISSION_DENIED for a non-owner, matching get_strategy (feature
-    # 133). No user_id is ever taken from a tool argument.
+    # Each forwards ONLY the caller's x-user-id (never an admin scope); portfolio enforces ownership
+    # and rejects a non-owner PERMISSION_DENIED. No user_id is ever taken from a tool argument.
 
     @server.tool()
     async def list_watchlists(ctx: Context, limit: int = 0, page_token: str = "") -> dict:
@@ -1471,6 +1587,7 @@ def register_tools(server: MCPServer) -> None:
         description: str | None = None,
         symbols: list[str] | None = None,
         bindings: list[dict] | None = None,
+        default_strategy_id: str | None = None,
     ) -> dict:
         """Create, update, or delete one of the caller's watchlists in xstockstrat-portfolio.
         operation: 'create' | 'update' | 'delete'.
@@ -1481,18 +1598,23 @@ def register_tools(server: MCPServer) -> None:
         bindings: optional list of {"symbol": <ticker>, "strategy_id": <id or "">} objects — a set
             strategy_id makes the symbol a ready-made strategy candidate; "" (or omitted) is an
             unbound bare symbol. symbols and bindings may be combined in one call.
+        default_strategy_id: (feature 170) the watchlist-level default strategy. It is stamped onto
+            newly-added, otherwise-unbound MANUAL symbols at add time only (no retroactive rebind,
+            no read-time fallback); "" clears it.
 
         CREATE: makes a new list owned by the caller from name (+ optional description/symbols/
-            bindings). New entries are recorded as MANUAL (user-curated).
+            bindings/default_strategy_id). New entries are recorded as MANUAL (user-curated); a
+            default_strategy_id binds the initial bare symbols.
 
-        UPDATE IS A READ-MODIFY-WRITE MERGE. The backend UpdateWatchlist is replace-all and requires
-            a name, so this tool fetches the current list first and preserves every field you do NOT
-            pass: an omitted name/description keeps the stored value, and omitting BOTH symbols and
-            bindings preserves the existing stocks exactly (so 'update' with only a new name renames
-            the list WITHOUT clearing its stocks). Passing symbols and/or bindings REPLACES the
-            whole stock set with those MANUAL entries. To add or remove individual stocks without
-            replacing the set, use manage_watchlist_symbols instead. (The read-then-write is not
-            atomic — a concurrent add between the two steps could be lost by the replace.)
+        UPDATE has two modes. Passing default_strategy_id does a PARTIAL field-mask write of the
+            scalar fields only (default_strategy_id, plus name/description when supplied); bindings
+            are untouched and it cannot also replace symbols/bindings in the same call. Otherwise
+            update is a READ-MODIFY-WRITE MERGE: the backend UpdateWatchlist is replace-all and
+            requires a name, so this fetches the current list first and preserves every field you do
+            NOT pass (omitting BOTH symbols and bindings keeps the existing stocks, so a name-only
+            update renames WITHOUT clearing stocks). Passing symbols and/or bindings REPLACES the
+            whole stock set with MANUAL entries; to add/remove individual stocks use
+            manage_watchlist_symbols instead. (The read-then-write is not atomic.)
 
         DELETE: removes the list. The one system-managed signals watchlist per user is
             delete-protected and its deletion is refused by the backend.
@@ -1511,6 +1633,7 @@ def register_tools(server: MCPServer) -> None:
                     description=description or "",
                     symbols=symbols,
                     bindings=bindings,
+                    default_strategy_id=default_strategy_id or "",
                 )
             if operation == "update":
                 if not watchlist_id:
@@ -1522,6 +1645,7 @@ def register_tools(server: MCPServer) -> None:
                     description=description,
                     symbols=symbols,
                     bindings=bindings,
+                    default_strategy_id=default_strategy_id,
                 )
             if operation == "delete":
                 if not watchlist_id:
@@ -1538,20 +1662,24 @@ def register_tools(server: MCPServer) -> None:
         watchlist_id: str,
         symbols: list[str] | None = None,
         bindings: list[dict] | None = None,
+        strategy_id: str = "",
     ) -> dict:
-        """Add or remove stocks on one of the caller's watchlists in xstockstrat-portfolio.
-        operation: 'add' | 'remove'.
+        """Add, remove, or bulk-assign a strategy to stocks on a caller-owned watchlist.
+        operation: 'add' | 'remove' | 'assign'.
         watchlist_id: required — the list to mutate.
-        symbols: bare ticker symbols. For 'add' these are unbound entries; for 'remove' these are
-            the symbols to drop.
+        symbols: bare ticker symbols. For 'add' these are unbound entries; for 'remove' the symbols
+            to drop; for 'assign' the symbols to rebind (they must already be on the list).
         bindings: (add only) list of {"symbol": <ticker>, "strategy_id": <id or "">} objects to add
             with a strategy binding. symbols and bindings may be combined in one add call.
+        strategy_id: (assign only) the strategy to apply across all `symbols`; "" unbinds them.
 
         ADD unions the given symbols/bindings into the list (an already-present symbol keeps its
             stored binding — first-writer-wins) and records new entries as MANUAL (user-curated),
             distinct from the SIGNAL entries the ingest_signal watchlist path adds. The per-list
             symbol cap is enforced by the backend. REMOVE drops the given symbols; symbols not on
-            the list are ignored.
+            the list are ignored. ASSIGN (feature 170) atomically sets `strategy_id` on every
+            listed symbol in one transaction — all-or-nothing: if any symbol is not on the list the
+            whole call is rejected NOT_FOUND with no partial write; "" unbinds the whole selection.
 
         Returns {"watchlist": <watchlist>} — the updated list (snake_case, as get_watchlist).
         Acting on a list the caller does not own is rejected (permission denied)."""
@@ -1567,7 +1695,15 @@ def register_tools(server: MCPServer) -> None:
                 return await client.remove_watchlist_symbols(
                     user_id, watchlist_id, symbols=symbols or []
                 )
-            raise ValueError(f"unknown operation '{operation}' (expected add/remove)")
+            if operation == "assign":
+                if not symbols:
+                    raise ValueError(
+                        "manage_watchlist_symbols(operation='assign') requires symbols"
+                    )
+                return await client.update_watchlist_bindings(
+                    user_id, watchlist_id, symbols=symbols, strategy_id=strategy_id
+                )
+            raise ValueError(f"unknown operation '{operation}' (expected add/remove/assign)")
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="watchlist not found")) from e
 
@@ -1652,7 +1788,9 @@ def register_tools(server: MCPServer) -> None:
             if operation == "list_positions":
                 if not account_id:
                     raise ValueError("list_positions requires an account_id")
-                return await client.list_account_positions(user_id, account_id)
+                result = await client.list_positions(user_id, account_id=account_id)
+                result.pop("next_page_token", None)
+                return result
             if operation == "snapshot_positions":
                 if not account_id or not positions_json:
                     raise ValueError("snapshot_positions requires account_id and positions_json")
@@ -1677,13 +1815,17 @@ def register_tools(server: MCPServer) -> None:
         display_name: str = "",
         broker_type: str = "",
         credentials_json: str = "",
+        reason: str = "",
     ) -> dict:
-        """Manage the CALLER's own BROKER accounts (Alpaca / IBKR) — feature 164.
+        """Manage BROKER accounts (Alpaca / IBKR) — feature 164.
 
-        All operations act on the caller's own accounts (ownership from the verified identity's
-        x-user-id); a non-owner is rejected PERMISSION_DENIED by the trading backend. Broker
-        credentials pass through to the backend (encrypted at rest) and are NEVER echoed back — the
-        returned account carries no credential field.
+        register/update_credentials/deregister act on the CALLER's own accounts (ownership from the
+        verified identity's x-user-id); a non-owner is rejected PERMISSION_DENIED by the trading
+        backend. resume requires ADMIN scope (0x04) and can act on any account — it clears a
+        reconciliation halt so the poller resumes ticking (feature 169).
+
+        Broker credentials pass through to the backend (encrypted at rest) and are NEVER echoed
+        back — the returned account carries no credential field.
 
         operation:
           'register'          — register a new broker account. Requires display_name, broker_type
@@ -1697,6 +1839,9 @@ def register_tools(server: MCPServer) -> None:
               (FAILED_PRECONDITION) and invalid JSON (INVALID_ARGUMENT).
           'deregister'        — deactivate an account. Requires account_id. Works for broker and
               offline accounts. Returns {"deregistered": true, "account_id": …}.
+          'resume'            — clear a reconciliation halt on a broker account (admin-only,
+              feature 169). Requires account_id; optional reason. Returns {"account": …}.
+              Idempotent — resuming an already-running account is a no-op success.
 
         For a read of all your accounts (broker + offline together), use list_accounts."""
         user_id = _caller_user_id(ctx, "manage_account")
@@ -1725,8 +1870,20 @@ def register_tools(server: MCPServer) -> None:
                 if not account_id:
                     raise ValueError("deregister requires an account_id")
                 return await client.deregister_broker_account(user_id, account_id)
+            if operation == "resume":
+                if not account_id:
+                    raise ValueError("resume requires an account_id")
+                scope = _caller_access_scope(ctx, "manage_account")
+                if not (scope & 0x04):
+                    raise PermissionError("manage_account resume requires admin scope")
+                return await client.resume_broker_account(
+                    user_id=user_id,
+                    account_id=account_id,
+                    reason=reason,
+                )
             raise ValueError(
-                f"unknown operation '{operation}' (expected register/update_credentials/deregister)"
+                f"unknown operation '{operation}' "
+                "(expected register/update_credentials/deregister/resume)"
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="broker account not found")) from e
@@ -1742,6 +1899,52 @@ def register_tools(server: MCPServer) -> None:
         user_id = _caller_user_id(ctx, "list_accounts")
         try:
             return await client.list_broker_accounts(user_id)
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
+
+    # ── xstockstrat-portfolio position tools ───────────────────────────────────────────────
+    # Both forward ONLY the caller's x-user-id; portfolio scopes by user_id and returns an empty
+    # list for non-owned accounts — no data leakage, and no PERMISSION_DENIED (unlike the
+    # watchlist tools).
+
+    @server.tool()
+    async def get_positions(ctx: Context, limit: int = 0, page_token: str = "") -> dict:
+        """List ALL positions for the calling user across all accounts — broker and offline
+        (read-only). User-bound: forwards only the caller's x-user-id; admins
+        see only their own positions.
+        Fields with zero/default values may be absent (proto3 serialization convention).
+        limit: max positions per page; 0 = server default (100, max 500).
+        page_token: opaque token from a prior call's next_page_token; "" starts at first page.
+        Returns {"positions": [...], "next_page_token": <str>}. Each position uses snake_case
+            proto field names. An empty next_page_token means no more pages."""
+        user_id = _caller_user_id(ctx, "get_positions")
+        try:
+            return await client.list_positions(user_id, limit=limit, page_token=page_token)
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
+
+    @server.tool()
+    async def get_positions_by_account_id(
+        ctx: Context, account_id: str, limit: int = 0, page_token: str = ""
+    ) -> dict:
+        """List positions for a SINGLE ACCOUNT owned by the calling user (read-only).
+        User-bound: forwards only the caller's x-user-id. If the caller does
+        not own the account, the backend returns an empty list (no data leakage).
+        Fields with zero/default values may be absent (proto3 serialization convention).
+        account_id: the account to query (required, non-empty).
+        limit: max positions per page; 0 = server default (100, max 500).
+        page_token: opaque token from a prior call's next_page_token; "" starts at first page.
+        Returns {"positions": [...], "next_page_token": <str>}. Same shape as get_positions."""
+        if not account_id:
+            raise ValueError("account_id is required")
+        user_id = _caller_user_id(ctx, "get_positions_by_account_id")
+        try:
+            return await client.list_positions(
+                user_id,
+                account_id=account_id,
+                limit=limit,
+                page_token=page_token,
+            )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e)) from e
 

@@ -27,11 +27,8 @@ TRADING_ENDPOINT = os.environ.get("TRADING_ENDPOINT", "xstockstrat-trading:50051
 
 
 # ── Caller propagation context (PR #994) ─────────────────────────────────────
-# The agent is a platform EDGE and forwards ALL propagation headers — `x-user-id`,
-# `x-access-scope`, `x-trace-id` — on every outbound backend gRPC, sourced from the caller's
-# verified OAuth claims (reversing the old AGENT-4 "originates, forwards nothing" stance). The
-# tool layer sets this per request via `set_caller`; `_metadata()` reads it. It defaults to None
-# so calls made OUTSIDE a tool request (the pre-token OAuth handshake, stdio) forward nothing.
+# Edge propagation: set per tool-request by `set_caller`, read by `_metadata()`. Defaults to None
+# so calls outside a tool request (pre-token OAuth handshake, stdio) forward nothing.
 _Caller = tuple[str, int, str]  # (user_id, access_scope, trace_id)
 _CALLER: contextvars.ContextVar[_Caller | None] = contextvars.ContextVar(
     "agent_caller", default=None
@@ -182,7 +179,6 @@ async def list_signal_sources(include_inactive: bool = False) -> list[dict[str, 
             "source_type": src.source_type,
             "config_json": MessageToDict(src.config_json),
             "has_credentials": src.has_credentials,
-            # Feature 087: surface active + source-health fields the projection had dropped
             "active": src.active,
             "health": _SOURCE_HEALTH_NAME(src.health),
             "last_seen_at": (
@@ -191,7 +187,7 @@ async def list_signal_sources(include_inactive: bool = False) -> list[dict[str, 
             "last_error": src.last_error,
             # int64 → a JSON number here (manual projection), not the int64-as-string contract.
             "signals_fed": src.signals_fed,
-            # feature 134 — per-source reliability weight (ranking multiplier in [0,1]).
+            # reliability weight — ranking multiplier in [0, 1].
             "reliability_weight": src.reliability_weight,
         }
         for src in resp.sources
@@ -272,7 +268,6 @@ async def emit_alert(
         correlation_id=correlation_id,
     )
     if context:
-        # Feature 087: structured context stored + fanned out by notify (context=7).
         req.context.CopyFrom(ParseDict(context, Struct()))
     if tags:
         req.tags.extend(tags)
@@ -295,7 +290,7 @@ async def ensure_signal_watchlist(user_id: str) -> str:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
         resp = await stub.EnsureSignalWatchlist(
             portfolio_pb2.EnsureSignalWatchlistRequest(),
-            metadata=[*_metadata(), ("x-user-id", user_id)],
+            metadata=_metadata(("x-user-id", user_id)),
         )
     return resp.watchlist.watchlist_id
 
@@ -313,16 +308,13 @@ async def add_watchlist_symbol(user_id: str, watchlist_id: str, symbol: str) -> 
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
         await stub.AddWatchlistSymbols(
             portfolio_pb2.AddWatchlistSymbolsRequest(watchlist_id=watchlist_id, bindings=[binding]),
-            metadata=[*_metadata(), ("x-user-id", user_id)],
+            metadata=_metadata(("x-user-id", user_id)),
         )
 
 
 # ── Watchlist management (feature 148) ───────────────────────────────────────
-# Thin wrappers over the existing PortfolioService watchlist RPCs (features 058/097/127) that back
-# the four `manage/list/get` watchlist MCP tools. Ownership is ALWAYS taken server-side from the
-# propagated `x-user-id` header (portfolio.proto:209-210) — no `user_id` is ever placed in a request
-# body. These curation tools stamp new entries `WATCHLIST_ENTRY_SOURCE_MANUAL`, distinct from the
-# `ingest_signal` `direction='watchlist'` path above, which stamps `SIGNAL`.
+# Ownership is always taken server-side from the `x-user-id` header — never a request-body user_id.
+# These curation tools stamp new entries MANUAL (vs the ingest_signal watchlist path's SIGNAL).
 
 
 def _watchlist_to_dict(wl) -> dict[str, Any]:
@@ -390,13 +382,19 @@ async def create_watchlist(
     description: str = "",
     symbols: list[str] | None = None,
     bindings: list[dict] | None = None,
+    default_strategy_id: str = "",
 ) -> dict[str, Any]:
-    """Create a new watchlist for the caller via gRPC CreateWatchlist."""
+    """Create a new watchlist for the caller via gRPC CreateWatchlist.
+
+    ``default_strategy_id`` (feature 170) is the watchlist-level default applied to initial
+    bare/MANUAL symbols at add time; "" = none.
+    """
     from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
 
     req = portfolio_pb2.CreateWatchlistRequest(
         name=name,
         description=description,
+        default_strategy_id=default_strategy_id,
         bindings=_watchlist_bindings_pb(
             symbols, bindings, portfolio_pb2.WATCHLIST_ENTRY_SOURCE_MANUAL
         ),
@@ -414,27 +412,58 @@ async def update_watchlist(
     description: str | None = None,
     symbols: list[str] | None = None,
     bindings: list[dict] | None = None,
+    default_strategy_id: str | None = None,
 ) -> dict[str, Any]:
-    """Update a watchlist via a READ-MODIFY-WRITE merge over the replace-only UpdateWatchlist RPC.
+    """Update a watchlist.
 
-    The backend UpdateWatchlist is replace-all — its repo DELETEs every symbol row then re-inserts
-    the request's bindings, and it requires a non-empty name (feature 058). So this fetches the
-    current watchlist first and preserves each field the caller did not supply: an omitted name /
-    description keeps the stored value, and an omitted symbol set (both ``symbols`` and ``bindings``
-    None) preserves the existing bindings verbatim (original ``source`` intact). Supplying either
-    ``symbols`` or ``bindings`` does an explicit full replace with MANUAL-sourced entries.
+    Two contracts, selected by whether ``default_strategy_id`` is supplied (feature 170):
 
-    NOT atomic — a concurrent add between the read and the write could be lost by the resend;
-    acceptable for single-user agent curation.
+    * ``default_strategy_id`` is None → the legacy READ-MODIFY-WRITE merge over the replace-only
+      UpdateWatchlist RPC. The backend replace-all path DELETEs every symbol row then re-inserts the
+      request's bindings and requires a non-empty name, so this fetches the current watchlist first
+      and preserves each field the caller did not supply (omitted name/description keep the stored
+      value; omitting both ``symbols`` and ``bindings`` preserves the existing bindings verbatim).
+      Supplying either does an explicit full replace with MANUAL-sourced entries. NOT atomic —
+      acceptable for single-user agent curation.
+    * ``default_strategy_id`` is not None → a PARTIAL (field-mask) write of the scalar fields only
+      (``default_strategy_id`` plus ``name``/``description`` when supplied). Bindings are left
+      untouched and no GetWatchlist round-trip is needed. The backend rejects a default without a
+      mask, so this is the only path that sets it. Supplying ``symbols``/``bindings`` here is
+      rejected — do the binding replace in a separate call (or use manage_watchlist_symbols).
     """
     from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
+    from google.protobuf import field_mask_pb2  # noqa: PLC0415
+
+    meta = _metadata(("x-user-id", user_id))
+
+    if default_strategy_id is not None:
+        if symbols is not None or bindings is not None:
+            raise ValueError(
+                "update with default_strategy_id is a scalar field-mask write and cannot also "
+                "replace symbols/bindings — do the binding change in a separate call"
+            )
+        paths = ["default_strategy_id"]
+        if name is not None:
+            paths.append("name")
+        if description is not None:
+            paths.append("description")
+        req = portfolio_pb2.UpdateWatchlistRequest(
+            watchlist_id=watchlist_id,
+            name=name or "",
+            description=description or "",
+            default_strategy_id=default_strategy_id,
+            update_mask=field_mask_pb2.FieldMask(paths=paths),
+        )
+        async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+            stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
+            resp = await stub.UpdateWatchlist(req, metadata=meta)
+        return {"watchlist": _watchlist_to_dict(resp.watchlist)}
 
     replace = None
     if symbols is not None or bindings is not None:
         replace = _watchlist_bindings_pb(
             symbols, bindings, portfolio_pb2.WATCHLIST_ENTRY_SOURCE_MANUAL
         )
-    meta = _metadata(("x-user-id", user_id))
     async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
         current = await stub.GetWatchlist(
@@ -501,6 +530,29 @@ async def remove_watchlist_symbols(
     return {"watchlist": _watchlist_to_dict(resp.watchlist)}
 
 
+async def update_watchlist_bindings(
+    user_id: str, watchlist_id: str, symbols: list[str], strategy_id: str = ""
+) -> dict[str, Any]:
+    """Atomically assign one ``strategy_id`` across ``symbols`` via gRPC UpdateWatchlistBindings
+    (feature 170). All-or-nothing — a symbol not on the list is rejected NOT_FOUND with no partial
+    write; ``strategy_id=""`` unbinds the whole set. Then re-reads the list so the tool returns the
+    full updated watchlist (as get_watchlist), matching the add/remove tools' return shape.
+    """
+    from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
+
+    meta = _metadata(("x-user-id", user_id))
+    req = portfolio_pb2.UpdateWatchlistBindingsRequest(
+        watchlist_id=watchlist_id, symbols=symbols, strategy_id=strategy_id
+    )
+    async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
+        stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
+        await stub.UpdateWatchlistBindings(req, metadata=meta)
+        current = await stub.GetWatchlist(
+            portfolio_pb2.GetWatchlistRequest(watchlist_id=watchlist_id), metadata=meta
+        )
+    return {"watchlist": _watchlist_to_dict(current.watchlist)}
+
+
 async def run_backtest(
     user_id: str,
     strategy_id: str,
@@ -545,10 +597,8 @@ async def run_backtest(
 
     req = analysis_pb2.RunBacktestRequest(
         strategy_id=strategy_id,
-        # feature 065: run the strategy's REGISTERED definition (strategy_id_ref ==
-        # strategy_id) so agent-triggered runs earn fingerprinted evidence toward the
-        # derived headline grade. An unregistered id now returns NOT_FOUND instead of
-        # silently running a legacy SMA backtest (design.md § Callers; C-10(b) parity).
+        # strategy_id_ref == strategy_id runs the REGISTERED definition (earns fingerprinted grade
+        # evidence); an unregistered id returns NOT_FOUND, never a legacy ad-hoc SMA run.
         strategy_id_ref=strategy_id,
         symbols=list(symbols),
         initial_capital=initial_capital,
@@ -562,14 +612,13 @@ async def run_backtest(
         # One-sided ranges are safe: the servicer defaults each unset bound independently.
         req.range.CopyFrom(tr)
 
-    # feature 150: map the sizing_mode string to the proto enum; leave unset for legacy/None so
-    # existing callers are unchanged (the server treats unset == legacy).
+    # Leave unset for legacy/None — the server treats unset == legacy.
     if sizing_mode is not None and sizing_mode.lower() == "portfolio":
         req.sizing_mode = analysis_pb2.SIZING_MODE_PORTFOLIO
     elif sizing_mode is not None and sizing_mode.lower() == "legacy":
         req.sizing_mode = analysis_pb2.SIZING_MODE_LEGACY
 
-    # feature 151: map the fill_model string to the proto enum; leave unset for legacy/None.
+    # Leave unset for legacy/None — the server defaults unset to legacy same-bar-close.
     if fill_model is not None and fill_model.lower() == "next_bar_open":
         req.fill_model = analysis_pb2.FILL_MODEL_NEXT_BAR_OPEN
     elif fill_model is not None and fill_model.lower() in ("same_bar_close", "legacy"):
@@ -578,11 +627,8 @@ async def run_backtest(
     async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.RunBacktest(req, metadata=_metadata(("x-user-id", user_id)))
-    # feature 064: return the full BacktestResult (including the per-bar `diagnostics`) so the
-    # agent can reason over the day-by-day OHLCV/indicator/decision data and suggest strategy or
-    # indicator changes. `preserving_proto_field_name` keeps the snake_case keys existing consumers
-    # expect; `always_print_fields_with_no_presence` keeps zero-valued metrics (e.g. total_return=0,
-    # the exact "0 trades / 0% return" case being debugged) present rather than omitted.
+    # preserving_proto_field_name keeps snake_case keys; always_print_fields_with_no_presence keeps
+    # zero-valued metrics (total_return=0 — the "0 trades / 0% return" case) present, not omitted.
     return MessageToDict(
         resp,
         preserving_proto_field_name=True,
@@ -608,8 +654,8 @@ def _build_component(c: dict[str, Any]):
         indicator=c.get("indicator", ""),
         formula_id=c.get("formula_id", ""),
         params={k: float(v) for k, v in (c.get("params") or {}).items()},
-        # feature 152: optional benchmark/reference symbol (e.g. "VOO"); empty = evaluated
-        # symbol. Normalized (uppercase/trim) server-side by analysis ManageStrategy.
+        # Optional benchmark symbol; empty = evaluated symbol. Normalized (uppercase/trim)
+        # server-side.
         source_symbol=c.get("source_symbol", ""),
     )
 
@@ -717,6 +763,9 @@ def _opportunity_to_dict(o, analysis_pb2) -> dict[str, Any]:
         "opportunity_key": o.opportunity_key,
         "provenance": list(o.provenance),
         "muted": o.muted,
+        # feature 185 — a terminal data-unavailable row (bars/indicator fetch failure), distinct
+        # from an evaluated 0/N; the agent (a one-shot, non-polling consumer) must surface it.
+        "data_unavailable": o.data_unavailable,
     }
     if o.HasField("live_price"):
         d["live_price"] = o.live_price
@@ -740,23 +789,48 @@ def _opportunity_to_dict(o, analysis_pb2) -> dict[str, Any]:
             }
             for c in o.conditions
         ]
+    # feature 185 (FR-6) — back-fill the two fields the projection historically drifted (so the new
+    # descriptor-parity test passes with no silent allow-list), both omit-not-fabricate: an unset
+    # signal_confidence (no active signal) / valid_until is omitted, never a fabricated 0/epoch.
+    if o.HasField("signal_confidence"):
+        d["signal_confidence"] = o.signal_confidence
+    if o.HasField("valid_until"):
+        d["valid_until"] = o.valid_until.ToDatetime(tzinfo=UTC).isoformat()
     return d
 
 
-async def list_opportunities(user_id: str, min_conviction: float = 0.0) -> dict[str, Any]:
+async def list_opportunities(
+    user_id: str,
+    min_conviction: float = 0.0,
+    page_size: int = 50,
+    page_token: str = "",
+) -> dict[str, Any]:
     """List the caller's ranked Decide-queue opportunities with live-market enrichment (feature 095,
     read-only). Caller-scoped via ``x-user-id`` (no admin ``x-access-scope``) — analysis resolves
     the owner from the header, never a request body id. See ``_opportunity_to_dict`` for the
-    projection's omit-not-fabricate contract."""
+    projection's omit-not-fabricate contract.
+
+    Feature 187: ``page_size`` / ``page_token`` pass-through for manual MCP caller pagination."""
     from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
+    from gen.common.v1 import common_pb2  # noqa: PLC0415
 
     async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.ListOpportunities(
-            analysis_pb2.ListOpportunitiesRequest(min_conviction=min_conviction),
+            analysis_pb2.ListOpportunitiesRequest(
+                min_conviction=min_conviction,
+                page=common_pb2.PageRequest(page_size=page_size, page_token=page_token),
+            ),
             metadata=_metadata(("x-user-id", user_id)),
         )
-    return {"opportunities": [_opportunity_to_dict(o, analysis_pb2) for o in resp.opportunities]}
+    # feature 185 (FR-4/FR-6) — carry the response-level pending signals so a cold or persistently
+    # failed queue is reported explicitly, never as a silently-empty list to a one-shot consumer.
+    return {
+        "opportunities": [_opportunity_to_dict(o, analysis_pb2) for o in resp.opportunities],
+        "computing": resp.computing,
+        "compute_failed": resp.compute_failed,
+        "next_page_token": resp.page.next_page_token,
+    }
 
 
 async def manage_strategy(
@@ -795,16 +869,13 @@ async def manage_strategy(
         components=components,
         entry_rule=definition.get("entry_rule", ""),
         exit_rule=definition.get("exit_rule", ""),
-        # feature 070: `active` is deliberately NOT sent. It is column-authoritative — the server
-        # overlays it at read time and never writes it from the definition — so including it only
-        # injected an unrequested key into the stored definition_json.
-        # protobuf treats field=None as omitted for an optional field, so an absent key stays unset
-        # and an explicit 0 sets presence (feature 069 — no post-construction assignment needed).
+        # `active` is deliberately NOT sent — it is column-authoritative (the server overlays it at
+        # read time); sending it would inject an unrequested key into stored definition_json.
+        # protobuf field=None is omitted for an optional field; an explicit 0 sets presence.
         cooldown_days=definition.get("cooldown_days"),
         exit_cooldown_days=definition.get("exit_cooldown_days"),
-        # feature 132 — entry-only deny list + platform-signal eligibility. denied_symbols is a
-        # repeated field (empty list when absent → sent empty, applied only if in the update_mask);
-        # signal_eligible is a plain bool (None → protobuf leaves it default false).
+        # denied_symbols is repeated (empty → sent empty, applied only if in update_mask);
+        # signal_eligible is a plain bool (None → protobuf default false).
         denied_symbols=definition.get("denied_symbols", []),
         signal_eligible=definition.get("signal_eligible"),
     )
@@ -818,8 +889,7 @@ async def manage_strategy(
     if update_mask is not None:
         req.update_mask.paths.extend(update_mask)
 
-    # feature 092: forward the caller's REAL derived scope (was a hardcoded admin 7). Analysis
-    # does the role check on the propagated x-access-scope (admin bit), so it rejects a non-admin.
+    # Forward the caller's real derived scope; analysis checks the admin bit, rejecting a non-admin.
     meta = _metadata(("x-user-id", user_id), ("x-access-scope", str(access_scope)))
     async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
@@ -864,7 +934,7 @@ async def list_strategy_definitions(
             analysis_pb2.ListStrategyDefinitionsRequest(include_inactive=include_inactive),
             metadata=_metadata(("x-user-id", user_id)),
         )
-    # Feature 087: snake_case to match get_strategy (avoids a third casing across list→get→manage).
+    # snake_case to match get_strategy (one casing across list→get→manage).
     return [MessageToDict(d, preserving_proto_field_name=True) for d in resp.definitions]
 
 
@@ -946,7 +1016,6 @@ async def manage_formula(
     parameters = [_build_formula_parameter(d) for d in formula.get("parameters", [])]
 
     def _build_output(d: dict):
-        # Feature 086: mirror _build_formula_parameter for declared output series (FormulaOutput).
         return indicators_pb2.FormulaOutput(
             name=d.get("name", ""),
             description=d.get("description", ""),
@@ -985,8 +1054,8 @@ async def manage_formula(
                 outputs=outputs,
                 warmup_period=warmup_period,
             )
-            # Feature 086: AIP-161 partial update. When update_mask is supplied, only the named
-            # paths are applied server-side (unlisted fields are preserved); absent = full replace.
+            # AIP-161: with update_mask only the named paths apply (others preserved);
+            # absent = full replace.
             update_mask = formula.get("update_mask")
             if update_mask:
                 req.update_mask.CopyFrom(field_mask_pb2.FieldMask(paths=list(update_mask)))
@@ -1075,9 +1144,8 @@ async def manage_signal_source(
         cfg.update(config_json)
         src.config_json.CopyFrom(cfg)
 
-    # feature 161: reliability_weight is proto `optional double` (explicit presence). Set it ONLY
-    # when supplied — an unconditional set writes 0.0, which (if masked) would reset a source's
-    # weight on a field-only update. The tool layer likewise masks it only when supplied.
+    # reliability_weight is optional double: set ONLY when supplied — an unconditional set writes
+    # 0.0, which (if masked) would reset the source's weight on a field-only update.
     reliability_weight = source.get("reliability_weight")
     if reliability_weight is not None:
         src.reliability_weight = reliability_weight
@@ -1090,14 +1158,14 @@ async def manage_signal_source(
     if update_mask:
         req.update_mask.CopyFrom(field_mask_pb2.FieldMask(paths=list(update_mask)))
 
-    # feature 092: forward the caller's REAL derived scope (was a hardcoded admin 7); ingest's
-    # role check (x-access-scope & 0x04) rejects a non-admin.
+    # Forward the caller's real derived scope; ingest checks x-access-scope & 0x04, rejecting
+    # a non-admin.
     meta = _metadata(("x-access-scope", str(access_scope)))
     async with grpc.aio.insecure_channel(INGEST_ENDPOINT) as channel:
         stub = ingest_pb2_grpc.IngestServiceStub(channel)
         resp = await stub.ManageSignalSource(req, metadata=meta)
 
-    # FR-12: never echo credentials_ref back to the caller.
+    # Never echo credentials_ref back to the caller.
     return {
         "slug": resp.source.slug,
         "display_name": resp.source.display_name,
@@ -1105,16 +1173,13 @@ async def manage_signal_source(
         "extractor_module": resp.source.extractor_module,
         "active": resp.source.active,
         "has_credentials": resp.source.has_credentials,
-        # feature 161 — echo the resulting per-source reliability weight (field 12).
         "reliability_weight": resp.source.reliability_weight,
     }
 
 
 # ── OAuth 2.1 backend gRPC helpers (feature 049 Part B) ──────────────────────
-# These call identity's OAuth RPCs over gRPC. DCR + the OAuth handshake happen before any
-# inbound user context exists and OUTSIDE a tools/call, so no caller context is bound: `_metadata()`
-# returns [] here (the PR-#994 edge propagation only binds during a tool call) — there is no
-# x-user-id/x-access-scope/x-trace-id to forward at the pre-token stage.
+# The OAuth handshake runs outside a tools/call, before any inbound user context — so no caller
+# context is bound and `_metadata()` returns [] (nothing to forward at the pre-token stage).
 
 
 async def register_oauth_client(redirect_uris: list[str], client_name: str) -> dict[str, Any]:
@@ -1292,6 +1357,145 @@ async def update_user_metadata(
     }
 
 
+# ── Admin user management + cross-user profile (feature 183) ─────────────────
+# Role string ↔ proto Role enum ints (mirrors identity ROLE_STRING_TO_ENUM). The backend
+# silently drops unknown/0 enums, so the tool layer validates role strings before dispatch.
+ROLE_STRING_TO_ENUM = {"admin": 1, "trader": 2, "viewer": 3}
+_ROLE_ENUM_TO_STRING = {v: k for k, v in ROLE_STRING_TO_ENUM.items()}
+
+
+def _project_user(u: Any) -> dict:
+    """Project a proto User (password-free) to a camelCase dict; roles back to strings."""
+    return {
+        "userId": u.user_id,
+        "email": u.email,
+        "roles": [_ROLE_ENUM_TO_STRING[r] for r in u.roles if r in _ROLE_ENUM_TO_STRING],
+        "isActive": u.is_active,
+        "createdAt": u.created_at.ToJsonString() if u.HasField("created_at") else None,
+    }
+
+
+def _project_user_metadata(m: Any) -> dict:
+    """Project a proto UserMetadata to a camelCase dict (shared by the admin metadata helpers)."""
+    return {
+        "userId": m.user_id,
+        "email": m.email,
+        "phone": m.phone if m.HasField("phone") else None,
+        "displayName": m.display_name if m.HasField("display_name") else None,
+        "metadata": dict(m.metadata) if m.metadata else {},
+        "metadataUpdatedAt": (
+            m.metadata_updated_at.ToJsonString() if m.HasField("metadata_updated_at") else None
+        ),
+    }
+
+
+async def create_user(email: str, password: str, roles: list[str]) -> dict:
+    """Admin: create a user. Password is write-only — never echoed back."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    req = identity_pb2.CreateUserRequest(
+        email=email, password=password, roles=[ROLE_STRING_TO_ENUM[r] for r in roles]
+    )
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.CreateUser(req, metadata=_metadata())
+    return _project_user(resp.user)
+
+
+async def list_users() -> list[dict]:
+    """Admin: list all users (password-free views)."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.ListUsers(identity_pb2.ListUsersRequest(), metadata=_metadata())
+    return [_project_user(u) for u in resp.users]
+
+
+async def get_user(user_id: str) -> dict:
+    """Admin: read one user by id."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.GetUser(
+            identity_pb2.GetUserRequest(user_id=user_id), metadata=_metadata()
+        )
+    return _project_user(resp.user)
+
+
+async def set_user_roles(user_id: str, roles: list[str]) -> dict:
+    """Admin: replace a user's roles."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    req = identity_pb2.SetUserRolesRequest(
+        user_id=user_id, roles=[ROLE_STRING_TO_ENUM[r] for r in roles]
+    )
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.SetUserRoles(req, metadata=_metadata())
+    return _project_user(resp.user)
+
+
+async def set_user_active(user_id: str, active: bool) -> dict:
+    """Admin: activate/deactivate a user."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    req = identity_pb2.SetUserActiveRequest(user_id=user_id, active=active)
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.SetUserActive(req, metadata=_metadata())
+    return _project_user(resp.user)
+
+
+async def reset_password(user_id: str, new_password: str) -> dict:
+    """Admin: set a user's password. Write-only — the plaintext is never echoed back or logged."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    req = identity_pb2.UpdatePasswordRequest(user_id=user_id, new_password=new_password)
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        await stub.UpdatePassword(req, metadata=_metadata())
+    return {"success": True, "userId": user_id}
+
+
+async def admin_get_user_metadata(user_id: str) -> dict:
+    """Admin: read ANY user's profile metadata (target by request-body user_id)."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.AdminGetUserMetadata(
+            identity_pb2.AdminGetUserMetadataRequest(user_id=user_id), metadata=_metadata()
+        )
+    return _project_user_metadata(resp.user_metadata)
+
+
+async def admin_update_user_metadata(
+    user_id: str,
+    phone: str | None = None,
+    display_name: str | None = None,
+    metadata: dict | None = None,
+) -> dict:
+    """Admin: partial-update ANY user's profile metadata (target by request-body user_id)."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+    from google.protobuf.struct_pb2 import Struct  # noqa: PLC0415
+
+    req = identity_pb2.AdminUpdateUserMetadataRequest(user_id=user_id)
+    if phone is not None:
+        req.phone = phone
+    if display_name is not None:
+        req.display_name = display_name
+    if metadata is not None:
+        s = Struct()
+        s.update(metadata)
+        req.metadata.CopyFrom(s)
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.AdminUpdateUserMetadata(req, metadata=_metadata())
+    return _project_user_metadata(resp.user_metadata)
+
+
 async def set_strategy_live(
     user_id: str, strategy_id: str, live_enabled: bool, access_scope: int = 0
 ) -> dict[str, Any]:
@@ -1379,8 +1583,7 @@ async def get_config_value(
                 metadata=_metadata(),
             )
     except grpc.aio.AioRpcError:
-        # AC-2: surface a transport failure, never swallow it to None (which is reserved for an
-        # absent key). The caller decides whether to fail or fall back to a default.
+        # Surface a transport failure — never swallow to None (reserved for an absent key).
         log.warning("get_config_value: GetConfig failed for %s.%s", namespace, key)
         raise
     cv = snapshot.values.get(key)
@@ -1392,12 +1595,8 @@ async def get_config_value(
 
 # ── backfill client (feature 066) ────────────────────────────────────────────
 
-# Mirror of ingest's accepted timeframe strings and enum values
-# (services/xstockstrat-ingest/app/handlers/servicer.py _TF_ALIASES/_STR_TO_ENUM).
-# Feature 143: only "1d"/"1Day" are accepted — the surviving set matches ingest's own narrowed
-# _TF_ALIASES. GetBars/BackfillBars/TriggerBackfill reject anything else, so accepting 15m/1h here
-# would only defer the same rejection to the backend. Accepted drift risk: if daily-only is ever
-# reversed, extend these maps in lockstep with ingest's (design.md, feature 066).
+# Mirrors ingest's accepted timeframes (xstockstrat-ingest servicer _TF_ALIASES) — daily only.
+# Keep in lockstep with ingest; the backend rejects anything else.
 _TF_ALIASES = {"1d": "1d", "1Day": "1d"}
 _TF_TO_ENUM = {"1d": 4}  # common.v1.Timeframe values
 _FILL_MODE_MAP = {"full": 1, "gaps_only": 2}  # ingest.v1.FillMode; None → UNSPECIFIED (server FULL)
@@ -1445,8 +1644,8 @@ async def trigger_backfill(
     canonical = _TF_ALIASES[timeframe]
     req = ingest_pb2.TriggerBackfillRequest(
         symbols=list(symbols),
-        # Dual-field send (FR-2): the deprecated string is populated with the canonical
-        # form alongside the enum — never the string alone (ingest persists it raw).
+        # Send both the canonical string and the enum — never the string alone
+        # (ingest persists it raw).
         timeframe=canonical,
         timeframe_enum=_TF_TO_ENUM[canonical],
         overwrite=overwrite,
@@ -1461,8 +1660,8 @@ async def trigger_backfill(
         # One-sided ranges are safe: ingest treats an unset bound (seconds == 0) as open.
         req.range.CopyFrom(tr)
 
-    # feature 092: forward the caller's REAL derived scope (was a hardcoded admin 7); ingest's
-    # new TriggerBackfill gate (x-access-scope & 0x04) rejects a non-admin.
+    # Forward the caller's real derived scope; ingest's gate (x-access-scope & 0x04) rejects
+    # a non-admin.
     meta = _metadata(("x-access-scope", str(access_scope)))
     async with grpc.aio.insecure_channel(INGEST_ENDPOINT) as channel:
         stub = ingest_pb2_grpc.IngestServiceStub(channel)
@@ -1493,8 +1692,8 @@ async def get_backfill_status(
             resp = await stub.GetBackfillStatus(
                 ingest_pb2.GetBackfillStatusRequest(job_id=job_id), metadata=_metadata()
             )
-        # run_backtest's MessageToDict variant: snake_case keys, zero-valued fields
-        # (bars_processed=0 while queued) stay visible during polling.
+        # snake_case keys; zero-valued fields (bars_processed=0 while queued) stay visible during
+        # polling.
         return {
             "job": MessageToDict(
                 resp,
@@ -1535,10 +1734,7 @@ async def get_backfill_status(
 
 
 # ── xstockstrat-config: read/write config (feature 073) ──────────────────────────────────────
-#
-# These deliberately do NOT reuse get_config_value() above, which hardcodes namespace="agent",
-# forwards no metadata, and swallows every exception. Errors here must reach the tool layer so
-# AGENT-5's mapping can turn them into a useful message -- PERMISSION_DENIED in particular.
+# Errors here must reach the tool layer so AGENT-5's mapping can surface PERMISSION_DENIED etc.
 
 
 def _config_env(environment: str) -> int:
@@ -1650,8 +1846,8 @@ async def set_config(
         cv.bool_val = value.strip().lower() in ("true", "1", "yes")
     else:
         cv.string_val = value
-    # feature 166 — is_secret rides the ConfigValue (SetConfigRequest has no such field); the
-    # backend reads value.is_secret and, for a NEW key (create_key), encrypts at rest accordingly.
+    # is_secret rides the ConfigValue (SetConfigRequest has no such field); the backend encrypts a
+    # NEW key (create_key) at rest accordingly.
     cv.is_secret = is_secret
 
     async with grpc.aio.insecure_channel(CONFIG_ENDPOINT) as channel:
@@ -1667,26 +1863,21 @@ async def set_config(
                 create_key=create_key,
                 user_id=user_id,
             ),
-            # The caller's real derived scope, so the server's gate decides (feature 092: every
-            # management tool now does this; the hardcoded-admin path was removed).
+            # The caller's real derived scope — the server's gate decides.
             metadata=_metadata(("x-access-scope", str(access_scope))),
         )
         return {"version": resp.version, "updated_at": resp.updated_at.ToDatetime().isoformat()}
 
 
 # ── Offline account management (feature 157) ─────────────────────────────────
-# Thin wrappers over TradingService backing the single `manage_offline_account` MCP tool. An
-# offline account is manually tracked (no broker), so orders are recorded and their fills
-# hand-confirmed via ConfirmOrder — the trading service enforces the offline-only + ownership
-# guard server-side. Ownership is always taken from the forwarded `x-user-id`; the request never
-# carries a caller-chosen user id for the account/positions reads.
+# Wrappers over TradingService for `manage_offline_account`. Trading enforces offline-only +
+# ownership server-side; ownership is always the forwarded x-user-id, never a caller-chosen id.
 
 _OFFLINE_SIDE = {"buy": 1, "sell": 2}  # common.v1.OrderSide
 _OFFLINE_ORDER_TYPE = {"market": 1, "limit": 2, "stop": 3, "stop_limit": 4, "trailing_stop": 5}
 
-# common.v1.BrokerType — the registrable broker kinds for `manage_account register`. OFFLINE (3) is
-# deliberately absent (created via `manage_offline_account`, steered at the tool layer) and
-# UNSPECIFIED (0) is unreachable: a `.get()` miss raises ValueError before any RPC is issued.
+# common.v1.BrokerType — registrable kinds for `manage_account register`. OFFLINE (3) is
+# deliberately absent (use manage_offline_account); a `.get()` miss raises ValueError pre-RPC.
 _BROKER_TYPE = {"alpaca": 1, "ibkr": 2}
 
 
@@ -1701,7 +1892,12 @@ def _account_to_dict(account: Any) -> dict[str, Any]:
     BrokerAccount carries no credential field, so this projection can never echo submitted
     credentials (api_key/api_secret/credentials_json).
     """
-    return MessageToDict(account, preserving_proto_field_name=True)
+    projected = MessageToDict(account, preserving_proto_field_name=True)
+    # proto3 scalar bools are omitted by MessageToDict at their false zero — pin is_paper/is_active/
+    # halted explicitly so their presence is uniform across every account (AGENT-7).
+    for _bool_field in ("is_paper", "is_active", "halted"):
+        projected[_bool_field] = getattr(account, _bool_field)
+    return projected
 
 
 async def register_offline_account(user_id: str, display_name: str) -> dict[str, Any]:
@@ -1870,28 +2066,34 @@ async def list_account_orders(user_id: str, account_id: str) -> dict[str, Any]:
     return {"orders": [_order_to_dict(o) for o in resp.orders]}
 
 
-async def list_account_positions(user_id: str, account_id: str) -> dict[str, Any]:
-    """List an account's positions via PortfolioService.ListPositions (read-only)."""
+async def list_positions(
+    user_id: str, account_id: str = "", limit: int = 0, page_token: str = ""
+) -> dict[str, Any]:
+    """List positions via PortfolioService.ListPositions (read-only, paginated).
+
+    When *account_id* is empty the backend returns positions across all the
+    user's accounts (broker + offline).  Pagination follows the nested
+    ``PageRequest``/``PageResponse`` submessage convention.
+    """
+    from gen.common.v1 import common_pb2  # noqa: PLC0415
     from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
 
+    req = portfolio_pb2.ListPositionsRequest(
+        account_id=account_id,
+        page=common_pb2.PageRequest(page_size=limit, page_token=page_token),
+    )
     async with grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT) as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
-        resp = await stub.ListPositions(
-            portfolio_pb2.ListPositionsRequest(account_id=account_id),
-            metadata=_metadata(("x-user-id", user_id)),
-        )
+        resp = await stub.ListPositions(req, metadata=_metadata(("x-user-id", user_id)))
     return {
-        "positions": [MessageToDict(p, preserving_proto_field_name=True) for p in resp.positions]
+        "positions": [MessageToDict(p, preserving_proto_field_name=True) for p in resp.positions],
+        "next_page_token": resp.page.next_page_token,
     }
 
 
 # ── Broker account management (feature 164) ──────────────────────────────────
-# Thin wrappers over TradingService backing the `manage_account` (write) and `list_accounts` (read)
-# MCP tools. Ownership is always taken from the forwarded `x-user-id`; the trading handler resolves
-# ownership server-side and rejects non-owners PERMISSION_DENIED. Broker credentials pass through to
-# the backend (which encrypts them at rest) and are never echoed back — BrokerAccount has no
-# credential field. JSON validity and the offline-account rejection are enforced server-side, so no
-# client-side validation is duplicated here.
+# Ownership is the forwarded x-user-id (server rejects non-owners). Credentials pass through,
+# encrypted at rest and never echoed (BrokerAccount has no credential field); validated server-side.
 
 
 async def register_broker_account(
@@ -1960,6 +2162,23 @@ async def deregister_broker_account(user_id: str, account_id: str) -> dict[str, 
             metadata=_metadata(("x-user-id", user_id)),
         )
     return {"deregistered": True, "account_id": account_id}
+
+
+async def resume_broker_account(user_id: str, account_id: str, reason: str = "") -> dict[str, Any]:
+    """Resume (un-halt) a broker account via ResumeAccount (feature 169).
+
+    Clears the persisted and in-memory halt on the account so the reconciliation poller
+    resumes ticking. Admin scope is enforced server-side from the forwarded x-access-scope.
+    """
+    from gen.trading.v1 import trading_pb2, trading_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(TRADING_ENDPOINT) as channel:
+        stub = trading_pb2_grpc.TradingServiceStub(channel)
+        resp = await stub.ResumeAccount(
+            trading_pb2.ResumeAccountRequest(account_id=account_id, reason=reason),
+            metadata=_metadata(("x-user-id", user_id)),
+        )
+    return {"account": _account_to_dict(resp.account)}
 
 
 async def list_broker_accounts(user_id: str) -> dict[str, Any]:

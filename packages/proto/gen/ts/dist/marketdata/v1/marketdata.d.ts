@@ -201,6 +201,32 @@ export interface GetFundamentalsMultiRequest {
 export interface GetFundamentalsMultiResponse {
     fundamentals: Fundamentals[];
 }
+export interface GetLatestQuotesRequest {
+    symbols: string[];
+}
+export interface GetLatestQuotesResponse {
+    quotes: Quote[];
+}
+export interface BatchGetBarsRequest {
+    symbols: string[];
+    timeframe: string;
+    start?: Date | undefined;
+    end?: Date | undefined;
+    maxBarsPerSymbol: number;
+}
+export interface SymbolBars {
+    symbol: string;
+    bars: Bar[];
+}
+export interface BatchGetBarsResponse {
+    results: SymbolBars[];
+}
+export interface BatchGetLatestPriceRequest {
+    symbols: string[];
+}
+export interface BatchGetLatestPriceResponse {
+    results: LatestPrice[];
+}
 export declare const Bar: MessageFns<Bar>;
 export declare const Quote: MessageFns<Quote>;
 export declare const GetLatestPriceRequest: MessageFns<GetLatestPriceRequest>;
@@ -225,6 +251,13 @@ export declare const GetFundamentalsRequest: MessageFns<GetFundamentalsRequest>;
 export declare const GetFundamentalsResponse: MessageFns<GetFundamentalsResponse>;
 export declare const GetFundamentalsMultiRequest: MessageFns<GetFundamentalsMultiRequest>;
 export declare const GetFundamentalsMultiResponse: MessageFns<GetFundamentalsMultiResponse>;
+export declare const GetLatestQuotesRequest: MessageFns<GetLatestQuotesRequest>;
+export declare const GetLatestQuotesResponse: MessageFns<GetLatestQuotesResponse>;
+export declare const BatchGetBarsRequest: MessageFns<BatchGetBarsRequest>;
+export declare const SymbolBars: MessageFns<SymbolBars>;
+export declare const BatchGetBarsResponse: MessageFns<BatchGetBarsResponse>;
+export declare const BatchGetLatestPriceRequest: MessageFns<BatchGetLatestPriceRequest>;
+export declare const BatchGetLatestPriceResponse: MessageFns<BatchGetLatestPriceResponse>;
 /**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
@@ -341,6 +374,39 @@ export declare const MarketDataServiceService: {
         readonly responseSerialize: (value: GetFundamentalsMultiResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => GetFundamentalsMultiResponse;
     };
+    /**
+     * Batched latest quotes — partial by design: a symbol with no quote is omitted from the
+     * response (null-not-zero), never returned as a fabricated zero-price Quote.
+     */
+    readonly getLatestQuotes: {
+        readonly path: "/xstockstrat.marketdata.v1.MarketDataService/GetLatestQuotes";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetLatestQuotesRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetLatestQuotesRequest;
+        readonly responseSerialize: (value: GetLatestQuotesResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => GetLatestQuotesResponse;
+    };
+    /** Batched historical bars for multiple symbols in a single round-trip (feature 183). */
+    readonly batchGetBars: {
+        readonly path: "/xstockstrat.marketdata.v1.MarketDataService/BatchGetBars";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: BatchGetBarsRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => BatchGetBarsRequest;
+        readonly responseSerialize: (value: BatchGetBarsResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => BatchGetBarsResponse;
+    };
+    /** Batched latest price for multiple symbols in a single round-trip (feature 183). */
+    readonly batchGetLatestPrice: {
+        readonly path: "/xstockstrat.marketdata.v1.MarketDataService/BatchGetLatestPrice";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: BatchGetLatestPriceRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => BatchGetLatestPriceRequest;
+        readonly responseSerialize: (value: BatchGetLatestPriceResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => BatchGetLatestPriceResponse;
+    };
 };
 export interface MarketDataServiceServer extends UntypedServiceImplementation {
     /** Stream live bar data for symbols */
@@ -365,6 +431,15 @@ export interface MarketDataServiceServer extends UntypedServiceImplementation {
     getFundamentals: handleUnaryCall<GetFundamentalsRequest, GetFundamentalsResponse>;
     /** Batched fundamentals for a watchlist scan (core metrics via one FMP quote call) */
     getFundamentalsMulti: handleUnaryCall<GetFundamentalsMultiRequest, GetFundamentalsMultiResponse>;
+    /**
+     * Batched latest quotes — partial by design: a symbol with no quote is omitted from the
+     * response (null-not-zero), never returned as a fabricated zero-price Quote.
+     */
+    getLatestQuotes: handleUnaryCall<GetLatestQuotesRequest, GetLatestQuotesResponse>;
+    /** Batched historical bars for multiple symbols in a single round-trip (feature 183). */
+    batchGetBars: handleUnaryCall<BatchGetBarsRequest, BatchGetBarsResponse>;
+    /** Batched latest price for multiple symbols in a single round-trip (feature 183). */
+    batchGetLatestPrice: handleUnaryCall<BatchGetLatestPriceRequest, BatchGetLatestPriceResponse>;
 }
 export interface MarketDataServiceClient extends Client {
     /** Stream live bar data for symbols */
@@ -409,6 +484,21 @@ export interface MarketDataServiceClient extends Client {
     getFundamentalsMulti(request: GetFundamentalsMultiRequest, callback: (error: ServiceError | null, response: GetFundamentalsMultiResponse) => void): ClientUnaryCall;
     getFundamentalsMulti(request: GetFundamentalsMultiRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetFundamentalsMultiResponse) => void): ClientUnaryCall;
     getFundamentalsMulti(request: GetFundamentalsMultiRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetFundamentalsMultiResponse) => void): ClientUnaryCall;
+    /**
+     * Batched latest quotes — partial by design: a symbol with no quote is omitted from the
+     * response (null-not-zero), never returned as a fabricated zero-price Quote.
+     */
+    getLatestQuotes(request: GetLatestQuotesRequest, callback: (error: ServiceError | null, response: GetLatestQuotesResponse) => void): ClientUnaryCall;
+    getLatestQuotes(request: GetLatestQuotesRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetLatestQuotesResponse) => void): ClientUnaryCall;
+    getLatestQuotes(request: GetLatestQuotesRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetLatestQuotesResponse) => void): ClientUnaryCall;
+    /** Batched historical bars for multiple symbols in a single round-trip (feature 183). */
+    batchGetBars(request: BatchGetBarsRequest, callback: (error: ServiceError | null, response: BatchGetBarsResponse) => void): ClientUnaryCall;
+    batchGetBars(request: BatchGetBarsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: BatchGetBarsResponse) => void): ClientUnaryCall;
+    batchGetBars(request: BatchGetBarsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: BatchGetBarsResponse) => void): ClientUnaryCall;
+    /** Batched latest price for multiple symbols in a single round-trip (feature 183). */
+    batchGetLatestPrice(request: BatchGetLatestPriceRequest, callback: (error: ServiceError | null, response: BatchGetLatestPriceResponse) => void): ClientUnaryCall;
+    batchGetLatestPrice(request: BatchGetLatestPriceRequest, metadata: Metadata, callback: (error: ServiceError | null, response: BatchGetLatestPriceResponse) => void): ClientUnaryCall;
+    batchGetLatestPrice(request: BatchGetLatestPriceRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: BatchGetLatestPriceResponse) => void): ClientUnaryCall;
 }
 export declare const MarketDataServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): MarketDataServiceClient;

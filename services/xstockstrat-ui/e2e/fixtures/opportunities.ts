@@ -135,6 +135,23 @@ export const OPPORTUNITIES = [
     provenance: ['denied'],
     muted: true,
   },
+  // feature 185 — a terminal data-unavailable row: a bars/indicator fetch failure zeroed both axes
+  // (conviction 0 — must survive the floor) and stamped the "unavailable" provenance marker; the UI
+  // renders an explicit "unavailable" cue, NOT a 0/0 "quiet" verdict.
+  {
+    symbol: 'PLTR',
+    action: OpportunityActionTag.ENTER,
+    conviction: 0,
+    passingConditions: 0,
+    totalConditions: 0,
+    thesis: '',
+    strategyId: 'strat-001',
+    source: '',
+    validUntil: VALID_UNTIL,
+    opportunityKey: 'u1|PLTR|strat-001',
+    provenance: ['watchlist', 'unavailable'],
+    dataUnavailable: true,
+  },
   // feature 145 — AMZN carries TWO live-strategy opportunities (a non-watchlisted symbol evaluated by
   // more than one strategy). Exercises the tabbed opportunity panel group (one card per strategy).
   {
@@ -260,3 +277,20 @@ export function symbolReadiness(symbol: string) {
     ],
   };
 }
+
+/**
+ * Per-symbol readiness bucket overrides (feature 098; reused by feature 181's watchlist readiness
+ * mock). Merged over `symbolReadiness(sym)` so READY1/WATCH1/QUIET1/NODATA1 exercise the
+ * firing/watching/quiet/no-data cue buckets; never AAPL/MSFT so the default 2/3 "1 away" shape other
+ * specs rely on is untouched. Single canonical home (DRY guard rail) — imported by both
+ * `e2e/mock-backend.ts` (EvaluateReadiness) and `e2e/helpers/watchlistMock.ts` (GetWatchlistReadiness).
+ */
+export const READINESS_BUCKET_OVERRIDE: Record<
+  string,
+  { passingConditions?: number; totalConditions?: number }
+> = {
+  READY1: { passingConditions: 3, totalConditions: 3 }, // ready (firing)
+  WATCH1: { passingConditions: 1, totalConditions: 3 }, // watching
+  QUIET1: { passingConditions: 0, totalConditions: 3 }, // quiet
+  NODATA1: { passingConditions: 0, totalConditions: 0 }, // no-data (un-evaluable)
+};

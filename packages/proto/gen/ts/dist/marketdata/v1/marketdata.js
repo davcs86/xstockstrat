@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: marketdata/v1/marketdata.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MarketDataServiceClient = exports.MarketDataServiceService = exports.GetFundamentalsMultiResponse = exports.GetFundamentalsMultiRequest = exports.GetFundamentalsResponse = exports.GetFundamentalsRequest = exports.Fundamentals_ExtraMetricsEntry = exports.Fundamentals = exports.DeleteBackfilledDataResponse = exports.DeleteBackfilledDataRequest = exports.ListAssetsResponse = exports.ListAssetsRequest = exports.GetDataCoverageResponse = exports.CoverageRange = exports.GetDataCoverageRequest = exports.BackfillBarsResponse = exports.BackfillBarsRequest = exports.GetLatestQuoteRequest = exports.GetBarsResponse = exports.GetBarsRequest = exports.StreamQuotesRequest = exports.StreamBarsRequest = exports.LatestPrice = exports.GetLatestPriceRequest = exports.Quote = exports.Bar = exports.protobufPackage = void 0;
+exports.MarketDataServiceClient = exports.MarketDataServiceService = exports.BatchGetLatestPriceResponse = exports.BatchGetLatestPriceRequest = exports.BatchGetBarsResponse = exports.SymbolBars = exports.BatchGetBarsRequest = exports.GetLatestQuotesResponse = exports.GetLatestQuotesRequest = exports.GetFundamentalsMultiResponse = exports.GetFundamentalsMultiRequest = exports.GetFundamentalsResponse = exports.GetFundamentalsRequest = exports.Fundamentals_ExtraMetricsEntry = exports.Fundamentals = exports.DeleteBackfilledDataResponse = exports.DeleteBackfilledDataRequest = exports.ListAssetsResponse = exports.ListAssetsRequest = exports.GetDataCoverageResponse = exports.CoverageRange = exports.GetDataCoverageRequest = exports.BackfillBarsResponse = exports.BackfillBarsRequest = exports.GetLatestQuoteRequest = exports.GetBarsResponse = exports.GetBarsRequest = exports.StreamQuotesRequest = exports.StreamBarsRequest = exports.LatestPrice = exports.GetLatestPriceRequest = exports.Quote = exports.Bar = exports.protobufPackage = void 0;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
@@ -2509,6 +2509,454 @@ exports.GetFundamentalsMultiResponse = {
         return message;
     },
 };
+function createBaseGetLatestQuotesRequest() {
+    return { symbols: [] };
+}
+exports.GetLatestQuotesRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.symbols) {
+            writer.uint32(10).string(v);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetLatestQuotesRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbols.push(reader.string());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbols?.length) {
+            obj.symbols = message.symbols;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetLatestQuotesRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetLatestQuotesRequest();
+        message.symbols = object.symbols?.map((e) => e) || [];
+        return message;
+    },
+};
+function createBaseGetLatestQuotesResponse() {
+    return { quotes: [] };
+}
+exports.GetLatestQuotesResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.quotes) {
+            exports.Quote.encode(v, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetLatestQuotesResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.quotes.push(exports.Quote.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { quotes: globalThis.Array.isArray(object?.quotes) ? object.quotes.map((e) => exports.Quote.fromJSON(e)) : [] };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.quotes?.length) {
+            obj.quotes = message.quotes.map((e) => exports.Quote.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetLatestQuotesResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetLatestQuotesResponse();
+        message.quotes = object.quotes?.map((e) => exports.Quote.fromPartial(e)) || [];
+        return message;
+    },
+};
+function createBaseBatchGetBarsRequest() {
+    return { symbols: [], timeframe: "", start: undefined, end: undefined, maxBarsPerSymbol: 0 };
+}
+exports.BatchGetBarsRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.symbols) {
+            writer.uint32(10).string(v);
+        }
+        if (message.timeframe !== "") {
+            writer.uint32(18).string(message.timeframe);
+        }
+        if (message.start !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.start), writer.uint32(26).fork()).join();
+        }
+        if (message.end !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.end), writer.uint32(34).fork()).join();
+        }
+        if (message.maxBarsPerSymbol !== 0) {
+            writer.uint32(40).int32(message.maxBarsPerSymbol);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseBatchGetBarsRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbols.push(reader.string());
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.timeframe = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.start = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.end = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.maxBarsPerSymbol = reader.int32();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+            timeframe: isSet(object.timeframe) ? globalThis.String(object.timeframe) : "",
+            start: isSet(object.start) ? fromJsonTimestamp(object.start) : undefined,
+            end: isSet(object.end) ? fromJsonTimestamp(object.end) : undefined,
+            maxBarsPerSymbol: isSet(object.maxBarsPerSymbol)
+                ? globalThis.Number(object.maxBarsPerSymbol)
+                : isSet(object.max_bars_per_symbol)
+                    ? globalThis.Number(object.max_bars_per_symbol)
+                    : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbols?.length) {
+            obj.symbols = message.symbols;
+        }
+        if (message.timeframe !== "") {
+            obj.timeframe = message.timeframe;
+        }
+        if (message.start !== undefined) {
+            obj.start = message.start.toISOString();
+        }
+        if (message.end !== undefined) {
+            obj.end = message.end.toISOString();
+        }
+        if (message.maxBarsPerSymbol !== 0) {
+            obj.maxBarsPerSymbol = Math.round(message.maxBarsPerSymbol);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.BatchGetBarsRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseBatchGetBarsRequest();
+        message.symbols = object.symbols?.map((e) => e) || [];
+        message.timeframe = object.timeframe ?? "";
+        message.start = object.start ?? undefined;
+        message.end = object.end ?? undefined;
+        message.maxBarsPerSymbol = object.maxBarsPerSymbol ?? 0;
+        return message;
+    },
+};
+function createBaseSymbolBars() {
+    return { symbol: "", bars: [] };
+}
+exports.SymbolBars = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        for (const v of message.bars) {
+            exports.Bar.encode(v, writer.uint32(18).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSymbolBars();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.bars.push(exports.Bar.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            bars: globalThis.Array.isArray(object?.bars) ? object.bars.map((e) => exports.Bar.fromJSON(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.bars?.length) {
+            obj.bars = message.bars.map((e) => exports.Bar.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SymbolBars.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSymbolBars();
+        message.symbol = object.symbol ?? "";
+        message.bars = object.bars?.map((e) => exports.Bar.fromPartial(e)) || [];
+        return message;
+    },
+};
+function createBaseBatchGetBarsResponse() {
+    return { results: [] };
+}
+exports.BatchGetBarsResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.results) {
+            exports.SymbolBars.encode(v, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseBatchGetBarsResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.results.push(exports.SymbolBars.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            results: globalThis.Array.isArray(object?.results) ? object.results.map((e) => exports.SymbolBars.fromJSON(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.results?.length) {
+            obj.results = message.results.map((e) => exports.SymbolBars.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.BatchGetBarsResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseBatchGetBarsResponse();
+        message.results = object.results?.map((e) => exports.SymbolBars.fromPartial(e)) || [];
+        return message;
+    },
+};
+function createBaseBatchGetLatestPriceRequest() {
+    return { symbols: [] };
+}
+exports.BatchGetLatestPriceRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.symbols) {
+            writer.uint32(10).string(v);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseBatchGetLatestPriceRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbols.push(reader.string());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbols?.length) {
+            obj.symbols = message.symbols;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.BatchGetLatestPriceRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseBatchGetLatestPriceRequest();
+        message.symbols = object.symbols?.map((e) => e) || [];
+        return message;
+    },
+};
+function createBaseBatchGetLatestPriceResponse() {
+    return { results: [] };
+}
+exports.BatchGetLatestPriceResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.results) {
+            exports.LatestPrice.encode(v, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseBatchGetLatestPriceResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.results.push(exports.LatestPrice.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            results: globalThis.Array.isArray(object?.results) ? object.results.map((e) => exports.LatestPrice.fromJSON(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.results?.length) {
+            obj.results = message.results.map((e) => exports.LatestPrice.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.BatchGetLatestPriceResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseBatchGetLatestPriceResponse();
+        message.results = object.results?.map((e) => exports.LatestPrice.fromPartial(e)) || [];
+        return message;
+    },
+};
 exports.MarketDataServiceService = {
     /** Stream live bar data for symbols */
     streamBars: {
@@ -2619,6 +3067,39 @@ exports.MarketDataServiceService = {
         requestDeserialize: (value) => exports.GetFundamentalsMultiRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.GetFundamentalsMultiResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.GetFundamentalsMultiResponse.decode(value),
+    },
+    /**
+     * Batched latest quotes — partial by design: a symbol with no quote is omitted from the
+     * response (null-not-zero), never returned as a fabricated zero-price Quote.
+     */
+    getLatestQuotes: {
+        path: "/xstockstrat.marketdata.v1.MarketDataService/GetLatestQuotes",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.GetLatestQuotesRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.GetLatestQuotesRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.GetLatestQuotesResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.GetLatestQuotesResponse.decode(value),
+    },
+    /** Batched historical bars for multiple symbols in a single round-trip (feature 183). */
+    batchGetBars: {
+        path: "/xstockstrat.marketdata.v1.MarketDataService/BatchGetBars",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.BatchGetBarsRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.BatchGetBarsRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.BatchGetBarsResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.BatchGetBarsResponse.decode(value),
+    },
+    /** Batched latest price for multiple symbols in a single round-trip (feature 183). */
+    batchGetLatestPrice: {
+        path: "/xstockstrat.marketdata.v1.MarketDataService/BatchGetLatestPrice",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.BatchGetLatestPriceRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.BatchGetLatestPriceRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.BatchGetLatestPriceResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.BatchGetLatestPriceResponse.decode(value),
     },
 };
 exports.MarketDataServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.MarketDataServiceService, "xstockstrat.marketdata.v1.MarketDataService");

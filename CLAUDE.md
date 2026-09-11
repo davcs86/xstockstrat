@@ -2,7 +2,7 @@
 ## How to Act
 
 Read this first — it governs *how* you work here; everything below is the *what* you work with.
-These four behaviors are the operating defaults; the rest of this file (and the constitution) is
+These five behaviors are the operating defaults; the rest of this file (and the constitution) is
 context you load per task.
 
 1. **Don't assume — ask, and surface tradeoffs.** On ambiguity, a missing detail, or a design fork,
@@ -16,6 +16,12 @@ context you load per task.
 4. **Define success up front, then loop until verified.** State the pass condition before you start,
    then run to it — write the check, run it, fix, re-run — and don't declare victory mid-loop.
    *(Enforced by the best-effort/verify norms **PLAT-N1** and the migration/proto CI gates.)*
+5. **Comments state constraints, not mechanism or history — cap 2 lines.** A comment earns its place
+   only if deleting it would silently break something (a caller's unstated assumption, a non-obvious
+   invariant, a load-bearing directive). How the system *works*, and why it got that way, goes in the
+   commit/PR description or the context files (`PLAT-*` constitution, findings, ledger, per-feature
+   `context.md`) — where it is read on purpose — never as inline narration. Apply the Litmus test
+   below to every comment you write or keep. *(Enforced in review; the durable homes are §Context Guide.)*
 
 > Litmus test for any future line in this file: *does it shape how the agent thinks (a behavior), or
 > restate a fact the agent can read from the code?* If it's a fact already in the repo, leave it out.
@@ -25,10 +31,16 @@ context you load per task.
 
 If your session changed any context file (a `CLAUDE.md`, a constitution or findings doc) or a doc
 listed in `.agents/context-forge.json` → `scrubberExtraTargets` (e.g. `README.md`) — **or changed
-behavior those files describe** — then run `/context-scrubber scan`, scoped to what you touched, as
-the last step before pushing, and fix the grounded findings it reports. Drift ships in the docs
-humans read first, so it must be caught before the PR, not after. If the context-forge plugin is
-not available in the session, say so in the PR body rather than skipping silently.
+behavior those files describe** — then run `/context-forge:context-constitution refresh`, scoped to
+what you touched, as the last step before pushing, and fix the grounded drift it reports. Drift
+ships in the docs humans read first, so it must be caught before the PR, not after.
+
+The teardown is **not discharged by a note.** If the context-forge plugin is unavailable in the
+session, you still owe the equivalent by hand: re-read every context file you touched against the
+current code, reconcile the drift you find, and record in the PR body **both** that the plugin was
+unavailable **and** the manual reconciliation you performed. A bare "plugin unavailable" line does
+not pass — silently skipping the audit, or waving it through with an empty note, is the exact
+failure this rule exists to stop (ledger `fails.md:670`).
 
 # xstockstrat — Root CLAUDE.md
 
@@ -137,22 +149,9 @@ to the frontends and the agent.
 
 ### Version Bump Workflow
 
-To change a language or tool version:
+Update this table first (the soft source of truth) and `Dockerfile.codegen`, then propagate to every other pinned copy — `.github/workflows/ci.yml`, the affected service Dockerfiles, `package.json`/lockfiles, `go.work` (a devDependency-only tool like Tailwind has no Dockerfile pin). Open a PR; CI catches most misses.
 
-1. **Update this table first** (CLAUDE.md §Language Versions & Tooling) — this is the soft source of truth
-2. **Update `Dockerfile.codegen`** — the proto-gen container
-3. **Propagate** to all other pinned locations:
-
-| Tool | Files to update |
-|---|---|
-| Go | `go.work`, `.github/workflows/ci.yml` (`go-version`), Go service Dockerfiles (`FROM golang:X`) |
-| Python | `.github/workflows/ci.yml` (`python-version`), Python service Dockerfiles (`FROM python:X-slim`) |
-| Node.js | `.github/workflows/ci.yml` (`node-version`), Node/Next service Dockerfiles (`FROM node:X-alpine`) |
-| pnpm | `package.json` (`packageManager`), `.github/workflows/ci.yml` (`pnpm@X`), Node service Dockerfiles |
-| Proto plugins (`protoc-gen-go`, `protoc-gen-go-grpc`, `protoc-gen-connect-go`) | `Dockerfile.codegen` (§"Go proto plugins") **and** `.github/workflows/ci.yml` `proto-freshness` job's "Install Go proto plugins" step — these two are the *only* places these pins live and CI's `proto-freshness` job installs its own copies rather than building `Dockerfile.codegen`, so it will not catch a drift between them. Bump both in the same PR; verify with an empty `git diff packages/proto/gen/` after `./scripts/buf-gen.sh` (see `docs/runbooks/codegen-toolchain-host-setup.md`) |
-| Tailwind | `services/xstockstrat-ui/package.json` (`tailwindcss`, `@tailwindcss/postcss`), `postcss.config.js` — devDependency, not a Docker base image, so no Dockerfile pin to update |
-
-1. Open a PR — CI will catch any missed files.
+**The one drift CI will NOT catch — proto-plugin pins** (`protoc-gen-go`, `protoc-gen-go-grpc`, `protoc-gen-connect-go`): they live in exactly two places — `Dockerfile.codegen` (§"Go proto plugins") **and** the `proto-freshness` job's "Install Go proto plugins" step, and `proto-freshness` installs its own copies rather than building `Dockerfile.codegen`. Bump both in the same PR; verify with an empty `git diff packages/proto/gen/` after `./scripts/buf-gen.sh` (see `docs/runbooks/codegen-toolchain-host-setup.md`).
 
 ---
 
@@ -218,13 +217,10 @@ Python `asyncpg.create_pool(max_size=…)`, Node `pg.Pool({ max })`). **When add
 service or raising any *direct* service's pool, re-check this table so the direct total stays safe.**
 
 The six stateless-query Go/Python services route through a per-database PgBouncer transaction pool
-(`:25061`) instead of the direct cluster port, so their client-pool maxes multiplex onto a handful of
-backend connections and no longer spike the shared cluster during rolling deploys; `DB_POOL_MAX` is
-left unset on those six (it would only bound the client→pooler count, not a scarce backend slot).
-Config, ledger, the other Node leaves, and the `db-migrator` job stay direct because they need
-`LISTEN`/`NOTIFY` or migration advisory locks — theirs is the real backend-slot budget. Full
-rationale, the direct-vs-pooled split, and the `DB_PGBOUNCER` driver requirements →
-`docs/patterns/database.md` § Connection pooling (PgBouncer).
+(`:25061`) with `DB_POOL_MAX` left unset; config, ledger, the other Node leaves, and the
+`db-migrator` job stay direct (`:25060`) because they need `LISTEN`/`NOTIFY` or migration advisory
+locks — theirs is the real backend-slot budget. Full rationale, the direct-vs-pooled split, and the
+`DB_PGBOUNCER` driver requirements → `docs/patterns/database.md` § Connection pooling (PgBouncer).
 
 | Service | Lang | Route | Pool max | Notes |
 |---|---|---|---|---|
@@ -299,37 +295,7 @@ First time: `./scripts/localenv-setup.sh` (builds proto-gen container, generates
 
 ## Dockerfile Update Workflow
 
-When modifying a service's `Dockerfile`, update the complete chain:
-
-1. **Update the Dockerfile** (`services/xstockstrat-<service>/Dockerfile`)
-   - Follow the pattern for your language: `docs/patterns/docker-build.md`
-   - Test locally: `docker compose build --no-cache xstockstrat-<service>`
-
-2. **Update the service's CLAUDE.md** (`services/xstockstrat-<service>/CLAUDE.md`)
-   - Verify or add the "Docker Build Pattern" section
-   - Ensure it references `docs/patterns/docker-build.md` with language-specific guidance
-   - Update any port numbers, env vars, or CMD/ENTRYPOINT if changed
-
-3. **Update `docs/patterns/docker-build.md`** (only if pattern changed)
-   - If you're introducing a new pattern or fixing an existing one, document it here
-   - Update templates, size comparisons, key points
-   - Add cross-references if the pattern affects other parts of the system
-
-4. **Test before committing**
-   - `docker compose build --no-cache` — rebuilds all services
-   - `docker compose up -d` — verify the service starts and health checks pass
-   - No changes to `.do/app.yaml` or `.do/app.dev.yaml` needed — they reference Dockerfiles by path, not content
-
-5. **Commit as a single PR**
-   - All three files (Dockerfile, service CLAUDE.md, docs pattern) in one commit
-   - Commit message: "Update <service> Dockerfile and documentation" (or "Update Docker patterns" if pattern-wide)
-   - CI validates: Docker builds and lint checks
-
-**Common updates:**
-
-- **Base image version bump** (Node 24 → 25, Python 3.13 → 3.14, etc.) → update the Dockerfile + version table in root CLAUDE.md + all affected service Dockerfiles
-- **Lock file tooling change** (pnpm@9 → pnpm@10) → update root CLAUDE.md version table + all Node service Dockerfiles + all Node service lock files
-- **Dependency strategy change** (e.g., switching from `--no-frozen-lockfile` to `--frozen-lockfile`) → update Dockerfile + service CLAUDE.md + `docs/patterns/docker-build.md`
+When you change a service `Dockerfile`, update its chain in one PR — the service `CLAUDE.md` "Docker Build Pattern" section, and `docs/patterns/docker-build.md` if the *pattern* (not just this service) changed — then `docker compose build --no-cache <service>` and `up -d` to verify it starts and passes health checks. `.do/app*.yaml` reference Dockerfiles by path, not content, so they need no change. Follow the language template and see the full rationale in `docs/patterns/docker-build.md`.
 
 ---
 
@@ -367,7 +333,7 @@ xstockstrat-analysis → xstockstrat-ingest (QuerySignals for signal-weighted ba
 
 ## Header Propagation Convention
 
-Every backend service **that makes outbound per-request gRPC calls** must propagate `x-user-id`, `x-access-scope`, and `x-trace-id` from the inbound request to those calls. The external edge injects/strips them after auth (the `xstockstrat-ui` middleware — the nginx proxy that formerly did this was removed by feature 045), so platform-internal values are trusted. The Node leaf services (ledger, identity, notify, config) currently make no outbound per-request calls, so their `src/middleware/propagation.ts` is presently unused (see `docs/context-constitution-findings.md`).
+Every backend service **that makes outbound per-request gRPC calls** must propagate `x-user-id`, `x-access-scope`, and `x-trace-id` from the inbound request to those calls. The external edge injects/strips them after auth (the `xstockstrat-ui` middleware — the nginx proxy that formerly did this was removed by feature 045), so platform-internal values are trusted. The Node leaf services (ledger, identity, notify, config) make no outbound per-request calls that need this trio, so the unused `src/middleware/propagation.ts` helper each carried was removed (feature 175). identity's admin-audit calls to ledger forward the trio via `ledgerAudit.ts`'s own `PROPAGATED_HEADERS` const, not that helper.
 
 **Language-specific patterns (Go interceptor, Python per-method, Node.js AsyncLocalStorage), code snippets, and reference implementations** → read `docs/patterns/header-propagation.md`.
 
@@ -480,8 +446,10 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon
 | Proto-gen container | `Dockerfile.codegen` |
 | Bootstrap script | `scripts/bootstrap.sh` |
 | DB migration script | `scripts/db-migrate.sh` |
-| User management script | `scripts/manage-users.sh` — also at `/app/scripts/manage-users.sh` inside the identity container |
+| User management script | `scripts/manage-users.py` — Typer CLI; run via `uv run scripts/manage-users.py` |
 | Proto gen script | `scripts/buf-gen.sh` |
+| E2E test container | `Dockerfile.e2e` |
+| E2E test runner script | `scripts/run-e2e.sh` |
 | Integration tests | `scripts/integration-test.sh` |
 | DRY duplication check (jscpd) | `scripts/check-duplication.sh`, `.jscpd.json` |
 | DRY pre-commit hook | `.husky/pre-commit` |

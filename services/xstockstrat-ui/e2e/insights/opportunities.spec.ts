@@ -183,26 +183,90 @@ test.describe('Opportunities queue', () => {
     );
   });
 
-  // feature 095 — live-market enrichment on the queue card.
-  test('the CAPR card shows live price, change%, a 20-point sparkline, and a condition chip', async ({
+  // feature 095/188 — live-market enrichment on the queue card.
+  test('the CAPR card shows live price, change%, previous day OHLC, and a condition chip', async ({
     page,
   }) => {
     const capr = card(page, 'CAPR');
-    // AC-1 — live price from the enriched Opportunity (both CAPR strategy rows carry it → first()).
+    // AC-1 (f095) — live price from the enriched Opportunity.
     await expect(capr.getByTestId('opp-live-price-CAPR').first()).toHaveText('$12.34');
     await expect(capr.getByTestId('opp-change-CAPR').first()).toContainText('%');
-    // AC-3 — a 20-point sparkline (one point is a gap, rendered as a muted bar, not dropped).
-    const spark = capr.getByTestId('opp-sparkline-CAPR').first();
-    await expect(spark).toBeVisible();
-    await expect(spark.locator('> span')).toHaveCount(20);
-    await expect(spark.locator('> span[data-gap]')).toHaveCount(1); // AC-4 the one warm-up gap
-    // AC-5 — the blocking-condition chip reuses an emitted ConditionEval leaf (no client recompute).
+    // AC-1 (f188) — OHLC text block with date and four price labels.
+    const ohlc = capr.getByTestId('opp-ohlc-CAPR').first();
+    await expect(ohlc).toBeVisible();
+    await expect(ohlc).toContainText('O $');
+    await expect(ohlc).toContainText('H $');
+    await expect(ohlc).toContainText('L $');
+    await expect(ohlc).toContainText('C $');
+    // No sparkline bar chart (feature 188 — replaced by OHLC text).
+    await expect(capr.locator('[aria-hidden] > span')).toHaveCount(0);
+    // AC-5 (f095) — the blocking-condition chip.
     await expect(capr.getByTestId('opp-condition-CAPR')).toBeVisible();
   });
 
   test('a symbol with no live quote omits the price stat (AC-11)', async ({ page }) => {
     // AAPL carries no enrichment fields → the live-price stat is omitted, never fabricated.
     await expect(card(page, 'AAPL').getByTestId('opp-live-price-AAPL')).toHaveCount(0);
+  });
+
+  // feature 185 FR-2 (@AC-3) — a data-unavailable row renders an explicit "unavailable" cue via the
+  // shared C-17 primitives, never a "quiet" 0/0 verdict.
+  test('feature 185: a data-unavailable row shows an explicit unavailable cue, not a quiet 0/0', async ({
+    page,
+  }) => {
+    await expect(card(page, 'PLTR')).toBeVisible();
+    const cue = page.getByTestId('opportunity-unavailable-PLTR');
+    await expect(cue).toBeVisible();
+    await expect(cue).toContainText('unavailable');
+    await expect(card(page, 'PLTR').getByText('no conditions')).toHaveCount(0); // not a quiet verdict
+  });
+
+  test('feature 185: a data-unavailable row survives the min-conviction floor', async ({
+    page,
+  }) => {
+    await page.getByLabel('Minimum conviction').fill('80');
+    await expect(card(page, 'MSFT')).toBeHidden(); // 0.75 — filtered out
+    // PLTR is a data-unavailable, conviction-0 row — it must NOT vanish behind the floor.
+    await expect(card(page, 'PLTR')).toBeVisible();
+    await expect(page.getByTestId('opportunity-unavailable-PLTR')).toBeVisible();
+  });
+
+  // feature 185 FR-4 — cold "computing", terminal "compute-failed", and the legitimately-empty
+  // distinctness, driven by a per-test ListOpportunities response shape (LIFO route precedence).
+  const routeList = (page: Page, body: object) =>
+    page.route('**/xstockstrat.analysis.v1.AnalysisService/ListOpportunities', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) }),
+    );
+
+  test('feature 185: a cold queue renders a computing state (FR-4 @AC-6)', async ({ page }) => {
+    await routeList(page, { opportunities: [], computing: true });
+    await page.reload();
+    await expect(page.getByTestId('opportunities-computing-desktop')).toBeVisible({
+      timeout: 8000,
+    });
+    await expect(page.getByTestId('empty-state')).toHaveCount(0); // not the plain empty state
+  });
+
+  test('feature 185: a persistently-failed compute renders a terminal error (FR-4 @AC-7)', async ({
+    page,
+  }) => {
+    await routeList(page, { opportunities: [], computeFailed: true });
+    await page.reload();
+    await expect(page.getByTestId('opportunities-compute-failed-desktop')).toBeVisible({
+      timeout: 8000,
+    });
+  });
+
+  test('feature 185: a legitimately-empty universe shows the plain empty state, not computing (FR-4 distinctness)', async ({
+    page,
+  }) => {
+    await routeList(page, { opportunities: [] });
+    await page.reload();
+    await expect(page.getByText('No opportunities match the filter').last()).toBeVisible({
+      timeout: 8000,
+    });
+    await expect(page.getByTestId('opportunities-computing-desktop')).toHaveCount(0);
+    await expect(page.getByTestId('opportunities-compute-failed-desktop')).toHaveCount(0);
   });
 });
 
@@ -236,5 +300,20 @@ test.describe('Opportunities mobile parity (feature 155)', () => {
     await expect(group.getByText('quality-dip-buy', { exact: true })).toBeVisible(); // strategy id tag
     await expect(group.getByText('watchlist', { exact: true }).first()).toBeVisible(); // source chip
     await expect(group.getByText(`exp ${expiry}`).first()).toBeVisible(); // expiry tag
+  });
+
+  // feature 188 — previous-day OHLC visible in mobile card header, underneath the symbol name.
+  test('feature 188: mobile card shows previous-day OHLC block', async ({ page }) => {
+    const ohlc = page.getByTestId('mobile-ohlc-CAPR');
+    await expect(ohlc).toBeVisible();
+    await expect(ohlc).toContainText('O $');
+    await expect(ohlc).toContainText('H $');
+    await expect(ohlc).toContainText('L $');
+    await expect(ohlc).toContainText('C $');
+  });
+
+  // feature 185 FR-2 — the mobile companion row also renders the explicit unavailable cue (not 0/0).
+  test('feature 185: a data-unavailable row shows the mobile unavailable cue', async ({ page }) => {
+    await expect(page.getByTestId('opportunity-unavailable-mobile-PLTR')).toBeVisible();
   });
 });

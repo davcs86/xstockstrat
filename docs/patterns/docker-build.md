@@ -1,6 +1,8 @@
 # Docker Build Patterns
 
-This guide documents the four optimized Dockerfile patterns used across the xstockstrat platform.
+This guide documents the optimized Dockerfile patterns used across the xstockstrat platform,
+including the two toolchain containers (`Dockerfile.codegen`, `Dockerfile.e2e`) that are NOT part
+of `docker-compose.yml` but provide hermetic CI/local environments.
 
 ## Overview
 
@@ -10,6 +12,8 @@ This guide documents the four optimized Dockerfile patterns used across the xsto
 | [Next.js Frontend](#nextjs-frontend-pattern) | Next.js | trader, insights, config-ui | Web apps with `.next/standalone` |
 | [Python](#python-pattern) | Python | indicators, ingest, analysis, agent | gRPC services with `uv` |
 | [Go](#go-pattern) | Go | trading, portfolio, marketdata | gRPC services with distroless |
+| [Codegen](#codegen-container) | Multi-lang | `Dockerfile.codegen` | Proto stub generation (buf + all language plugins) |
+| [E2E Tests](#e2e-test-container) | Node.js | `Dockerfile.e2e` | Playwright E2E suite with baked Chromium |
 
 ---
 
@@ -593,3 +597,69 @@ If a new service's `main()` calls an endpoint before returning (e.g. a one-time 
    ```
 2. **docker-compose.yml**: Add `healthcheck` block (using the appropriate probe method for the language), add `WAIT_FOR` env var with only startup-time deps (see table above), and upgrade `depends_on` conditions to `service_healthy`.
 3. **`.do/app.dev.yaml` / `.do/app.yaml`**: Add a `WAIT_FOR` entry to the service's `envs:` list using `${svc.PRIVATE_DOMAIN}:PORT` syntax.
+
+---
+
+## Codegen Container
+
+**File:** `Dockerfile.codegen` (repo root)
+
+Proto-generation toolchain — installs buf + all language plugins (Go, Python, TypeScript) and runs
+`scripts/buf-gen.sh`. Used by `scripts/localenv-setup.sh` so proto stubs can be generated without
+Go/Python/Node installed on the host. See `docs/runbooks/codegen-toolchain-host-setup.md` for
+manual alternatives. NOT part of `docker-compose.yml`.
+
+---
+
+## E2E Test Container
+
+**File:** `Dockerfile.e2e` (repo root)
+
+Hermetic Playwright E2E test environment — bakes Chromium, the Next.js build, all `node_modules`,
+and the in-process mock gRPC backend into a single image. No real backend services, database, or
+browser install required on the host or CI runner.
+
+**Characteristics:**
+- Multi-stage: `base` (Debian bookworm-slim) → `deps` (pnpm install + Playwright Chromium) → `builder` (Next.js build) → `runner` (system libs + everything needed to execute tests)
+- `node:24-bookworm-slim` base — Debian, not Alpine — because Playwright's Chromium requires glibc and X11 system libraries
+- Chromium + system dependencies installed in `deps` stage so the layer is cached when `package.json` is unchanged
+- Non-standalone Next.js build (`NEXT_DISABLE_STANDALONE=1`) so `next start` works (required by the Playwright `webServer` config)
+- `ENTRYPOINT ["pnpm", "test:e2e"]` — pass Playwright args (e.g. `--shard=1/2`, `--grep "auth"`) directly as `docker run` arguments
+
+### Usage
+
+**Local:**
+```bash
+# Full suite
+./scripts/run-e2e.sh
+
+# Sharded
+./scripts/run-e2e.sh --shard=1/2
+
+# Filter by test name
+./scripts/run-e2e.sh --grep "auth"
+
+# Force clean rebuild
+./scripts/run-e2e.sh --no-cache
+```
+
+The wrapper script (`scripts/run-e2e.sh`) builds the image, runs the tests, extracts the Playwright
+HTML report to `services/xstockstrat-ui/playwright-report/`, and cleans up the container. It follows
+the same egress-proxy CA passthrough pattern as `scripts/localenv-setup.sh`.
+
+**CI (`.github/workflows/ci.yml`):**
+The `frontend-e2e` job builds the Docker image (with GitHub Actions layer cache), runs 2 shards in
+parallel, extracts the Playwright report via `docker cp`, and uploads it as an artifact. No separate
+build job or artifact upload/download for the `.next` bundle — the Dockerfile handles everything.
+
+### Key Points
+
+- **No Docker Compose** — the mock gRPC backend is an in-process Node.js `http2` server started by
+  Playwright's `globalSetup`, not a container. The E2E container is fully self-contained.
+- **Layer caching** — the expensive layers (Chromium install, `pnpm install`, Next.js build) are
+  separate stages, so a code-only change rebuilds only the `builder` and `runner` stages.
+- **Report extraction** — Playwright writes its HTML report inside the container; `docker cp` or a
+  bind-mount extracts it after the run.
+- **Version pins** — Node, pnpm, and Playwright versions are pinned in the Dockerfile via the base
+  image tag, `corepack prepare`, and the lockfile respectively. Bump them per the root CLAUDE.md
+  §Version Bump Workflow.

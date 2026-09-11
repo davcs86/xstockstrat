@@ -27,7 +27,7 @@ import { RULE_FUNCTIONS, fnPhrase, type RuleFn, type OperandRef } from '@/lib/st
 //   { "op": "AND" | "OR", "conditions": [ { "fn": ">", "lhs": "sma_fast", "rhs": "sma_slow" } ] }
 // `lhs` is always a component ref_name; `rhs` is a ref_name (string) or a numeric
 // literal (JSON number). Both the visual builder and the raw JSON textarea produce
-// this identical string (AC-9).
+// this identical string.
 type Condition = { lhs: string; fn: RuleFn; rhs: string };
 type RuleTree = { op: 'AND' | 'OR'; conditions: Condition[] };
 
@@ -134,8 +134,7 @@ export function RuleEditor({ value, onChange, label, operands }: RuleEditorProps
     onChange(serialize(next, refNames));
   }
 
-  // FR-6/FR-8c: conditions is already a flat array, bound directly — no generalization
-  // of the hook needed. Replaces the ad hoc updateTree-based add/remove logic below.
+  // conditions is already a flat array, bound directly — no generalization of the hook needed.
   const {
     update: updateCondition,
     add: addCondition,

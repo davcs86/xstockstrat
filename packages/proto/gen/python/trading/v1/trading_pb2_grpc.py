@@ -99,6 +99,11 @@ class TradingServiceStub(object):
                 request_serializer=trading_dot_v1_dot_trading__pb2.SnapshotOfflinePositionsRequest.SerializeToString,
                 response_deserializer=trading_dot_v1_dot_trading__pb2.SnapshotOfflinePositionsResponse.FromString,
                 _registered_method=True)
+        self.ResumeAccount = channel.unary_unary(
+                '/xstockstrat.trading.v1.TradingService/ResumeAccount',
+                request_serializer=trading_dot_v1_dot_trading__pb2.ResumeAccountRequest.SerializeToString,
+                response_deserializer=trading_dot_v1_dot_trading__pb2.ResumeAccountResponse.FromString,
+                _registered_method=True)
 
 
 class TradingServiceServicer(object):
@@ -197,6 +202,15 @@ class TradingServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ResumeAccount(self, request, context):
+        """ResumeAccount clears the persistent and in-memory halt on a broker account
+        (feature 169). Admin-scope callers only. Idempotent: a non-halted account
+        returns success with no state change. Emits a ledger event and INFO alert.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_TradingServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -264,6 +278,11 @@ def add_TradingServiceServicer_to_server(servicer, server):
                     servicer.SnapshotOfflinePositions,
                     request_deserializer=trading_dot_v1_dot_trading__pb2.SnapshotOfflinePositionsRequest.FromString,
                     response_serializer=trading_dot_v1_dot_trading__pb2.SnapshotOfflinePositionsResponse.SerializeToString,
+            ),
+            'ResumeAccount': grpc.unary_unary_rpc_method_handler(
+                    servicer.ResumeAccount,
+                    request_deserializer=trading_dot_v1_dot_trading__pb2.ResumeAccountRequest.FromString,
+                    response_serializer=trading_dot_v1_dot_trading__pb2.ResumeAccountResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -617,6 +636,33 @@ class TradingService(object):
             '/xstockstrat.trading.v1.TradingService/SnapshotOfflinePositions',
             trading_dot_v1_dot_trading__pb2.SnapshotOfflinePositionsRequest.SerializeToString,
             trading_dot_v1_dot_trading__pb2.SnapshotOfflinePositionsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ResumeAccount(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.trading.v1.TradingService/ResumeAccount',
+            trading_dot_v1_dot_trading__pb2.ResumeAccountRequest.SerializeToString,
+            trading_dot_v1_dot_trading__pb2.ResumeAccountResponse.FromString,
             options,
             channel_credentials,
             insecure,

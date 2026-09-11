@@ -19,9 +19,8 @@ def _to_dict(row) -> dict | None:
 class BacktestRunSymbolsRepository:
     """Insert/read persistence for the ``analysis.backtest_run_symbols`` table."""
 
-    # Positional order for the executemany bind tuples — matches the INSERT column list.
-    # ``completed_at`` is intentionally omitted so the DB default (NOW()) stamps every cell
-    # from one run identically.
+    # Positional order must match the INSERT column list. completed_at is omitted on purpose
+    # so the DB default NOW() stamps every cell of one run identically.
     _COLUMNS = (
         "backtest_id",
         "strategy_id",

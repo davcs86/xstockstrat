@@ -1,9 +1,7 @@
 /**
- * Server-only (Node.js) identity helpers. These wrap the Node-only Connect client
- * (@connectrpc/connect-node). As of feature 128 `middleware.ts` runs in the Node.js
- * runtime and imports `refreshSession` from here for its in-process near-expiry refresh,
- * alongside the auth route handlers (app/api/auth/{refresh,logout}/route.ts). It is no
- * longer confined to route handlers to keep it out of an Edge bundle.
+ * Server-only (Node.js) identity helpers wrapping the Node-only Connect client
+ * (@connectrpc/connect-node). Imported by the Node-runtime `middleware.ts` (in-process near-expiry
+ * refresh) and the auth route handlers.
  */
 import { identityClient } from '@/lib/connectClients';
 import type { JwtClaims } from '@/lib/auth';

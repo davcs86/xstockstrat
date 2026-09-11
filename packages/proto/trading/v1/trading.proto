@@ -36,6 +36,11 @@ service TradingService {
   // effective-dated opening baseline for an OFFLINE account (feature 163). Rejected
   // with FailedPrecondition for broker (Alpaca/IBKR) accounts.
   rpc SnapshotOfflinePositions (SnapshotOfflinePositionsRequest) returns (SnapshotOfflinePositionsResponse);
+
+  // ResumeAccount clears the persistent and in-memory halt on a broker account
+  // (feature 169). Admin-scope callers only. Idempotent: a non-halted account
+  // returns success with no state change. Emits a ledger event and INFO alert.
+  rpc ResumeAccount (ResumeAccountRequest) returns (ResumeAccountResponse);
 }
 
 message Order {
@@ -288,6 +293,17 @@ message DeregisterBrokerAccountRequest {
 }
 
 message DeregisterBrokerAccountResponse {}
+
+// ── Resume halted account (feature 169) ─────────────────────────────────────
+
+message ResumeAccountRequest {
+  string account_id = 1;
+  string reason = 2;
+}
+
+message ResumeAccountResponse {
+  BrokerAccount account = 1;
+}
 
 // ── Snapshot offline positions (feature 163) ──────────────────────────────────
 

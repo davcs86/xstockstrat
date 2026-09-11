@@ -68,8 +68,8 @@ Namespace: `indicators`
 |---|---|---|---|
 | `indicators.sandbox.timeout_ms` | int | `5000` | Max formula execution time in ms |
 | `indicators.sandbox.memory_bytes` | int | `134217728` | Max memory (128 MiB) per formula |
-| `indicators.sandbox.allowed_imports` | string | `numpy,pandas,math,statistics` | Comma-separated allowed Python imports |
-| `indicators.sandbox.max_concurrent` | int | `4` | **Documented, not yet enforced** — intended concurrency cap; no `Semaphore`/limit reads it |
+| `indicators.sandbox.allowed_imports` | string | `numpy,pandas,math,statistics` | Comma-separated allowed Python imports. Read via `get_str_present` (never `get_str`): a configured `""` denies all imports rather than reverting to this permissive default (feature 173) |
+| `indicators.sandbox.max_concurrent` | int | `4` | Semaphore bound on concurrent off-loop sandbox `subprocess.run` spawns in `ExecuteFormula` (feature 176, FR-5). Read once in `IndicatorsServicer.__init__` via a new `ConfigWatcher.sandbox_max_concurrent()` accessor with a `max(1, …)` clamp. |
 
 ## Seeded Formulas
 
@@ -133,10 +133,6 @@ reference a formula series as `<ref_name>.<series>` and lets the sandbox enforce
   sandbox result dict must contain every declared series, else the run fails with
   `SANDBOX_EXIT_REASON_RUNTIME_ERROR` and an error naming the missing series. Inline
   `formula_source` runs have no stored definition, so no output enforcement applies.
-
-## Webhooks
-
-_No webhooks. Call the gRPC RPCs on port 50054 directly._
 
 ## Environment Variables
 

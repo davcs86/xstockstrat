@@ -237,6 +237,22 @@ export interface UpdateUserMetadataResponse {
   userMetadata?: UserMetadata | undefined;
 }
 
+/**
+ * ── Admin cross-user profile metadata (admin-gated, feature 183) ──────────────
+ * Target selected by request-body user_id (never x-user-id). Responses reuse
+ * GetUserMetadataResponse / UpdateUserMetadataResponse above.
+ */
+export interface AdminGetUserMetadataRequest {
+  userId: string;
+}
+
+export interface AdminUpdateUserMetadataRequest {
+  userId: string;
+  phone?: string | undefined;
+  displayName?: string | undefined;
+  metadata?: { [key: string]: any } | undefined;
+}
+
 /** Password-free admin view of a user (no password / password_hash — FR-10/AC-10). */
 export interface User {
   userId: string;
@@ -2537,6 +2553,188 @@ export const UpdateUserMetadataResponse: MessageFns<UpdateUserMetadataResponse> 
   },
 };
 
+function createBaseAdminGetUserMetadataRequest(): AdminGetUserMetadataRequest {
+  return { userId: "" };
+}
+
+export const AdminGetUserMetadataRequest: MessageFns<AdminGetUserMetadataRequest> = {
+  encode(message: AdminGetUserMetadataRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.userId !== "") {
+      writer.uint32(10).string(message.userId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AdminGetUserMetadataRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseAdminGetUserMetadataRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): AdminGetUserMetadataRequest {
+    return {
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
+    };
+  },
+
+  toJSON(message: AdminGetUserMetadataRequest): unknown {
+    const obj: any = {};
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<AdminGetUserMetadataRequest>, I>>(base?: I): AdminGetUserMetadataRequest {
+    return AdminGetUserMetadataRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AdminGetUserMetadataRequest>, I>>(object: I): AdminGetUserMetadataRequest {
+    const message = createBaseAdminGetUserMetadataRequest();
+    message.userId = object.userId ?? "";
+    return message;
+  },
+};
+
+function createBaseAdminUpdateUserMetadataRequest(): AdminUpdateUserMetadataRequest {
+  return { userId: "", phone: undefined, displayName: undefined, metadata: undefined };
+}
+
+export const AdminUpdateUserMetadataRequest: MessageFns<AdminUpdateUserMetadataRequest> = {
+  encode(message: AdminUpdateUserMetadataRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.userId !== "") {
+      writer.uint32(10).string(message.userId);
+    }
+    if (message.phone !== undefined) {
+      writer.uint32(18).string(message.phone);
+    }
+    if (message.displayName !== undefined) {
+      writer.uint32(26).string(message.displayName);
+    }
+    if (message.metadata !== undefined) {
+      Struct.encode(Struct.wrap(message.metadata), writer.uint32(34).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AdminUpdateUserMetadataRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseAdminUpdateUserMetadataRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.phone = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.displayName = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.metadata = Struct.unwrap(Struct.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): AdminUpdateUserMetadataRequest {
+    return {
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
+      phone: isSet(object.phone) ? globalThis.String(object.phone) : undefined,
+      displayName: isSet(object.displayName)
+        ? globalThis.String(object.displayName)
+        : isSet(object.display_name)
+        ? globalThis.String(object.display_name)
+        : undefined,
+      metadata: isObject(object.metadata) ? object.metadata : undefined,
+    };
+  },
+
+  toJSON(message: AdminUpdateUserMetadataRequest): unknown {
+    const obj: any = {};
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
+    if (message.phone !== undefined) {
+      obj.phone = message.phone;
+    }
+    if (message.displayName !== undefined) {
+      obj.displayName = message.displayName;
+    }
+    if (message.metadata !== undefined) {
+      obj.metadata = message.metadata;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<AdminUpdateUserMetadataRequest>, I>>(base?: I): AdminUpdateUserMetadataRequest {
+    return AdminUpdateUserMetadataRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AdminUpdateUserMetadataRequest>, I>>(
+    object: I,
+  ): AdminUpdateUserMetadataRequest {
+    const message = createBaseAdminUpdateUserMetadataRequest();
+    message.userId = object.userId ?? "";
+    message.phone = object.phone ?? undefined;
+    message.displayName = object.displayName ?? undefined;
+    message.metadata = object.metadata ?? undefined;
+    return message;
+  },
+};
+
 function createBaseUser(): User {
   return { userId: "", email: "", roles: [], isActive: false, createdAt: undefined };
 }
@@ -3628,6 +3826,32 @@ export const IdentityServiceService = {
     responseDeserialize: (value: Buffer): UpdateUserMetadataResponse => UpdateUserMetadataResponse.decode(value),
   },
   /**
+   * Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
+   * body user_id, never x-user-id (C-03). Reuse the self responses.
+   */
+  adminGetUserMetadata: {
+    path: "/xstockstrat.identity.v1.IdentityService/AdminGetUserMetadata" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: AdminGetUserMetadataRequest): Buffer =>
+      Buffer.from(AdminGetUserMetadataRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): AdminGetUserMetadataRequest => AdminGetUserMetadataRequest.decode(value),
+    responseSerialize: (value: GetUserMetadataResponse): Buffer =>
+      Buffer.from(GetUserMetadataResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetUserMetadataResponse => GetUserMetadataResponse.decode(value),
+  },
+  adminUpdateUserMetadata: {
+    path: "/xstockstrat.identity.v1.IdentityService/AdminUpdateUserMetadata" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: AdminUpdateUserMetadataRequest): Buffer =>
+      Buffer.from(AdminUpdateUserMetadataRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): AdminUpdateUserMetadataRequest => AdminUpdateUserMetadataRequest.decode(value),
+    responseSerialize: (value: UpdateUserMetadataResponse): Buffer =>
+      Buffer.from(UpdateUserMetadataResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): UpdateUserMetadataResponse => UpdateUserMetadataResponse.decode(value),
+  },
+  /**
    * User management (admin-gated, feature 043). Every RPC requires the admin access-scope bit;
    * passwords are write-only (never returned). Additive over the existing service.
    */
@@ -3714,6 +3938,12 @@ export interface IdentityServiceServer extends UntypedServiceImplementation {
   /** User profile metadata self-management (feature 130) */
   getUserMetadata: handleUnaryCall<GetUserMetadataRequest, GetUserMetadataResponse>;
   updateUserMetadata: handleUnaryCall<UpdateUserMetadataRequest, UpdateUserMetadataResponse>;
+  /**
+   * Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
+   * body user_id, never x-user-id (C-03). Reuse the self responses.
+   */
+  adminGetUserMetadata: handleUnaryCall<AdminGetUserMetadataRequest, GetUserMetadataResponse>;
+  adminUpdateUserMetadata: handleUnaryCall<AdminUpdateUserMetadataRequest, UpdateUserMetadataResponse>;
   /**
    * User management (admin-gated, feature 043). Every RPC requires the admin access-scope bit;
    * passwords are write-only (never returned). Additive over the existing service.
@@ -3927,6 +4157,40 @@ export interface IdentityServiceClient extends Client {
   ): ClientUnaryCall;
   updateUserMetadata(
     request: UpdateUserMetadataRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: UpdateUserMetadataResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Admin cross-user profile metadata (admin-gated, feature 183). Target selected by request
+   * body user_id, never x-user-id (C-03). Reuse the self responses.
+   */
+  adminGetUserMetadata(
+    request: AdminGetUserMetadataRequest,
+    callback: (error: ServiceError | null, response: GetUserMetadataResponse) => void,
+  ): ClientUnaryCall;
+  adminGetUserMetadata(
+    request: AdminGetUserMetadataRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetUserMetadataResponse) => void,
+  ): ClientUnaryCall;
+  adminGetUserMetadata(
+    request: AdminGetUserMetadataRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetUserMetadataResponse) => void,
+  ): ClientUnaryCall;
+  adminUpdateUserMetadata(
+    request: AdminUpdateUserMetadataRequest,
+    callback: (error: ServiceError | null, response: UpdateUserMetadataResponse) => void,
+  ): ClientUnaryCall;
+  adminUpdateUserMetadata(
+    request: AdminUpdateUserMetadataRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: UpdateUserMetadataResponse) => void,
+  ): ClientUnaryCall;
+  adminUpdateUserMetadata(
+    request: AdminUpdateUserMetadataRequest,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: UpdateUserMetadataResponse) => void,

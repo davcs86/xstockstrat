@@ -54,9 +54,8 @@ export default function FormulasPage() {
       {
         accessorKey: 'name',
         header: 'Name',
-        // Hard-cap the column so a long name/description can't stretch the table wide (a fixed
-        // width + truncate stays bounded regardless of the auto table layout; max-w-full lets it
-        // shrink on narrow screens).
+        // Hard-cap the column so a long name/description can't stretch the table wide; max-w-full
+        // lets it shrink on narrow screens.
         cell: ({ row }) => {
           const f = row.original;
           return (

@@ -24,6 +24,7 @@ import {
   useRemoveWatchlistSymbols,
   useUpdateWatchlist,
   useUpdateWatchlistBinding,
+  useUpdateWatchlistBindings,
   UNBOUND,
   toApiStrategyId,
 } from '@/hooks/useWatchlists';
@@ -39,19 +40,17 @@ type WatchlistLike = {
   name: string;
   description?: string;
   symbols: string[];
-  // feature 097 — authoritative (symbol, strategy) bindings; falls back to the deprecated flat
-  // `symbols` mirror for a legacy list that predates the shape change (FR-6).
+  // Authoritative (symbol, strategy) bindings; falls back to the flat `symbols` mirror for legacy lists.
   bindings?: Binding[];
-  // feature 127 — a system-managed signals watchlist is delete-protected (FR-9).
+  // A system-managed signals watchlist is delete-protected.
   systemManaged?: boolean;
+  // Watchlist-level default strategy applied to new bare symbols at add time.
+  defaultStrategyId?: string;
 };
 
 /**
- * Detail pane for the selected watchlist (feature 098, per-symbol bindings by feature 097). Owns
- * the symbol-chip CRUD, an inline per-symbol strategy binding editor, the "Build from screener"
- * link, and the readiness overlay. The opportunity queue is polled once here and passed to
- * WatchlistReadiness as an upper-cased set so a watched name currently on the queue is marked
- * "in queue" (FR-11) — the hook is called above any early return to keep hook order stable.
+ * Detail pane for the selected watchlist: symbol CRUD, per-symbol binding editor, and readiness
+ * overlay. The opportunity queue hook is called above any early return to keep hook order stable.
  */
 export function WatchlistDetail({
   watchlist,
@@ -64,30 +63,36 @@ export function WatchlistDetail({
   const removeSymbols = useRemoveWatchlistSymbols();
   const updateWatchlist = useUpdateWatchlist();
   const updateBinding = useUpdateWatchlistBinding();
+  const updateBindings = useUpdateWatchlistBindings();
   const { data: defs } = useStrategyDefinitions();
   const allStrategies = defs?.definitions ?? [];
-  // Only live-enabled strategies are offered for a NEW binding — `active` alone (the fetch
-  // default) also admits paused/never-enabled/test strategies. An already-bound strategy that
-  // is no longer live stays visible (labeled) so its existing binding doesn't appear to vanish.
+  // Only live-enabled strategies are offered for a NEW binding; an already-bound strategy that is no
+  // longer live stays visible so its binding doesn't appear to vanish.
   const liveStrategies = allStrategies.filter((s) => s.liveEnabled);
   const { data: oppData } = useOpportunities();
   const [symbolInput, setSymbolInput] = useState('');
   const [addStrategyId, setAddStrategyId] = useState(UNBOUND);
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(watchlist.name);
-  // Layer 1 of the concurrency guard (design.md §5) — disables every in-pane control while any of
-  // this component's own mutations is in flight, closing all 4 write-pairings (rebind/rebind,
-  // rebind/rename, rebind/remove, rename/remove). Layer 2 (Step 8) covers the cross-instance case.
+  // Bulk-select state lives here (not in WatchlistReadiness) so it resets for free when the pane is
+  // remounted per watchlist via key={watchlistId}.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkStrategyId, setBulkStrategyId] = useState(UNBOUND);
+  // Concurrency guard: disables every in-pane control while any of this component's mutations is in
+  // flight, closing the write-pairings.
   const writeInFlight =
     addSymbols.isPending ||
     removeSymbols.isPending ||
     updateWatchlist.isPending ||
-    updateBinding.isPending;
+    updateBinding.isPending ||
+    updateBindings.isPending;
 
-  const inQueue = new Set((oppData?.opportunities ?? []).map((o) => o.symbol.toUpperCase()));
+  const inQueue = new Set(
+    (oppData?.pages.flatMap((p) => p.opportunities) ?? []).map((o) => o.symbol.toUpperCase()),
+  );
 
-  // Authoritative bindings, else the deprecated flat mirror mapped to unbound (FR-6). De-duped by
-  // symbol so a transient double-entry (mid mutation+refetch) can never emit duplicate React keys.
+  // Authoritative bindings, else the flat mirror mapped to unbound. De-duped by symbol so a transient
+  // double-entry can't emit duplicate React keys.
   const rawBindings: Binding[] = watchlist.bindings?.length
     ? watchlist.bindings
     : watchlist.symbols.map((s) => ({ symbol: s, strategyId: '' }));
@@ -110,14 +115,14 @@ export function WatchlistDetail({
     );
   }
 
-  // Re-bind one symbol's strategy via the targeted single-row RPC (feature 167). Patches just this
-  // entry in the ['watchlists'] cache — no replace-all, no full-list refetch. Other rows untouched.
+  // Re-bind one symbol via the targeted single-row RPC. Patches just this entry in the cache — no
+  // replace-all, no full-list refetch.
   function setBinding(symbol: string, strategyId: string) {
     updateBinding.mutate({ watchlistId: watchlist.watchlistId, symbol, strategyId });
   }
 
-  // Commit the rename only if the trimmed draft is non-empty and actually changed. Sends the
-  // FULL current bindings/description unchanged (same fails-080 invariant as setBinding, FR-6).
+  // Commit the rename only if the trimmed draft is non-empty and changed. Sends the FULL current
+  // bindings/description unchanged.
   function commitRename() {
     const trimmed = nameDraft.trim();
     if (trimmed && trimmed !== watchlist.name) {
@@ -134,6 +139,38 @@ export function WatchlistDetail({
   function cancelRename() {
     setNameDraft(watchlist.name);
     setIsEditingName(false);
+  }
+
+  // Set the default strategy via a masked partial update (writes ONLY default_strategy_id; bindings/
+  // name untouched). Existing edits deliberately omit updateMask.
+  function setDefaultStrategy(v: string) {
+    updateWatchlist.mutate({
+      watchlistId: watchlist.watchlistId,
+      updateMask: ['default_strategy_id'],
+      defaultStrategyId: toApiStrategyId(v),
+    });
+  }
+
+  // Bulk-remove the selected symbols in one call, then clear the selection.
+  function handleBulkRemove() {
+    if (selected.size === 0) return;
+    removeSymbols.mutate(
+      { watchlistId: watchlist.watchlistId, symbols: [...selected] },
+      { onSuccess: () => setSelected(new Set()) },
+    );
+  }
+
+  // Bulk-assign one strategy across the selection atomically, then clear.
+  function handleBulkAssign() {
+    if (selected.size === 0) return;
+    updateBindings.mutate(
+      {
+        watchlistId: watchlist.watchlistId,
+        symbols: [...selected],
+        strategyId: toApiStrategyId(bulkStrategyId),
+      },
+      { onSuccess: () => setSelected(new Set()) },
+    );
   }
 
   return (
@@ -182,8 +219,7 @@ export function WatchlistDetail({
               Build from screener
             </Link>
           </Button>
-          {/* feature 127: a system-managed signals watchlist cannot be deleted (FR-9) —
-              omit the destructive affordance entirely. Rename/add/remove stay available. */}
+          {/* A system-managed signals watchlist can't be deleted — omit the destructive affordance. */}
           {!watchlist.systemManaged && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
@@ -239,7 +275,87 @@ export function WatchlistDetail({
         </Button>
       </div>
 
+      {/* Watchlist-level default strategy: applied to new bare symbols at add time. */}
+      <div className="mt-2 flex items-center gap-2" data-testid="default-strategy-control">
+        <span className="text-xs text-muted-foreground">Default strategy for new symbols</span>
+        <Select
+          value={watchlist.defaultStrategyId || UNBOUND}
+          onValueChange={setDefaultStrategy}
+          disabled={writeInFlight}
+        >
+          <SelectTrigger className="h-8 w-40 text-xs" aria-label="Default strategy for new symbols">
+            <SelectValue placeholder="None">
+              {liveStrategies.find((s) => s.strategyId === watchlist.defaultStrategyId)
+                ?.displayName ||
+                watchlist.defaultStrategyId ||
+                undefined}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={UNBOUND}>None</SelectItem>
+            {liveStrategies.map((s) => (
+              <SelectItem key={s.strategyId} value={s.strategyId}>
+                {s.displayName || s.strategyId}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Bulk action bar, shown only when a selection exists. */}
+      {selected.size > 0 && (
+        <div
+          className="mt-3 flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2"
+          data-testid="bulk-action-bar"
+        >
+          <span className="text-xs text-muted-foreground" data-testid="bulk-selection-count">
+            {selected.size} selected
+          </span>
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={handleBulkRemove}
+            disabled={writeInFlight}
+            data-testid="bulk-remove"
+          >
+            Remove selected
+          </Button>
+          <div className="ml-auto flex items-center gap-2">
+            <Select
+              value={bulkStrategyId}
+              onValueChange={setBulkStrategyId}
+              disabled={writeInFlight}
+            >
+              <SelectTrigger
+                className="h-8 w-40 text-xs"
+                aria-label="Strategy for selected symbols"
+              >
+                <SelectValue placeholder="Unbound" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={UNBOUND}>Unbound</SelectItem>
+                {liveStrategies.map((s) => (
+                  <SelectItem key={s.strategyId} value={s.strategyId}>
+                    {s.displayName || s.strategyId}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              variant="default"
+              onClick={handleBulkAssign}
+              disabled={writeInFlight}
+              data-testid="bulk-apply-strategy"
+            >
+              Apply strategy
+            </Button>
+          </div>
+        </div>
+      )}
+
       <WatchlistReadiness
+        watchlistId={watchlist.watchlistId}
         bindings={bindings}
         inQueue={inQueue}
         strategies={allStrategies}
@@ -248,6 +364,8 @@ export function WatchlistDetail({
         }
         onRebindSymbol={setBinding}
         disabled={writeInFlight}
+        selected={selected}
+        onSelectionChange={setSelected}
       />
     </div>
   );

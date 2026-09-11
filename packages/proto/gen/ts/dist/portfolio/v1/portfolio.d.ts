@@ -262,6 +262,11 @@ export interface Watchlist {
      * Delete-protected (FR-7/FR-8); one per user.
      */
     systemManaged: boolean;
+    /**
+     * Watchlist-level default strategy (feature 170): stamped onto newly-added, otherwise-unbound
+     * MANUAL symbols at add time only — no retroactive rebind, no read-time fallback. "" = none.
+     */
+    defaultStrategyId: string;
 }
 /**
  * user_id is intentionally absent from all request messages — ownership is taken
@@ -273,6 +278,11 @@ export interface CreateWatchlistRequest {
     symbols: string[];
     /** When present, authoritative (feature 097); legacy `symbols` remains accepted (unbound). */
     bindings: WatchlistBinding[];
+    /**
+     * Watchlist-level default strategy (feature 170) applied to initial bare/MANUAL symbols at
+     * creation. "" = none.
+     */
+    defaultStrategyId: string;
 }
 export interface CreateWatchlistResponse {
     watchlist?: Watchlist | undefined;
@@ -290,7 +300,11 @@ export interface ListWatchlistsResponse {
     watchlists: Watchlist[];
     page?: PageResponse | undefined;
 }
-/** Replace semantics for name/description/symbols per FR-1. */
+/**
+ * Replace semantics for name/description/symbols per FR-1 when `update_mask` is UNSET. When
+ * `update_mask` IS set (feature 170), this is a PARTIAL update: only masked paths of
+ * {name, description, default_strategy_id} are written; bindings are left untouched.
+ */
 export interface UpdateWatchlistRequest {
     watchlistId: string;
     name: string;
@@ -298,6 +312,16 @@ export interface UpdateWatchlistRequest {
     symbols: string[];
     /** When present, authoritative (feature 097); legacy `symbols` remains accepted (unbound). */
     bindings: WatchlistBinding[];
+    /**
+     * Watchlist-level default strategy (feature 170). Only written on the masked path (requires
+     * `update_mask` to name "default_strategy_id"); a no-mask request carrying this → InvalidArgument.
+     */
+    defaultStrategyId: string;
+    /**
+     * Partial-update mask (feature 170). Unset/absent = legacy replace-all of name/description/bindings.
+     * Present = write only the masked paths; allowed paths: {name, description, default_strategy_id}.
+     */
+    updateMask?: string[] | undefined;
 }
 export interface UpdateWatchlistResponse {
     watchlist?: Watchlist | undefined;
@@ -349,6 +373,20 @@ export interface UpdateWatchlistBindingResponse {
     /** list-level watchlists.updated_at, bumped in-tx */
     updatedAt?: Date | undefined;
 }
+/** user_id intentionally absent — ownership from the x-user-id header (feature 170). */
+export interface UpdateWatchlistBindingsRequest {
+    watchlistId: string;
+    /** deduped/normalized server-side; empty → InvalidArgument */
+    symbols: string[];
+    /** "" = unbind the whole set (matches WatchlistBinding.strategy_id) */
+    strategyId: string;
+}
+export interface UpdateWatchlistBindingsResponse {
+    /** changed rows only (symbol/strategy_id/source) */
+    bindings: WatchlistBinding[];
+    /** list-level watchlists.updated_at, bumped in-tx */
+    updatedAt?: Date | undefined;
+}
 export declare const Portfolio: MessageFns<Portfolio>;
 export declare const Position: MessageFns<Position>;
 export declare const PortfolioSnapshot: MessageFns<PortfolioSnapshot>;
@@ -384,6 +422,8 @@ export declare const ListAllWatchlistSymbolsRequest: MessageFns<ListAllWatchlist
 export declare const ListAllWatchlistSymbolsResponse: MessageFns<ListAllWatchlistSymbolsResponse>;
 export declare const UpdateWatchlistBindingRequest: MessageFns<UpdateWatchlistBindingRequest>;
 export declare const UpdateWatchlistBindingResponse: MessageFns<UpdateWatchlistBindingResponse>;
+export declare const UpdateWatchlistBindingsRequest: MessageFns<UpdateWatchlistBindingsRequest>;
+export declare const UpdateWatchlistBindingsResponse: MessageFns<UpdateWatchlistBindingsResponse>;
 export type PortfolioServiceService = typeof PortfolioServiceService;
 export declare const PortfolioServiceService: {
     readonly getPortfolio: {
@@ -559,6 +599,20 @@ export declare const PortfolioServiceService: {
         readonly responseSerialize: (value: UpdateWatchlistBindingResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => UpdateWatchlistBindingResponse;
     };
+    /**
+     * Atomic set-based rebind (feature 170): assign ONE strategy_id across a symbol set in a single
+     * UPDATE ... WHERE symbol = ANY(...). All-or-nothing — an absent symbol → NOT_FOUND with zero
+     * partial writes. Ownership from the x-user-id header; empty strategy_id unbinds the whole set.
+     */
+    readonly updateWatchlistBindings: {
+        readonly path: "/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlistBindings";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: UpdateWatchlistBindingsRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => UpdateWatchlistBindingsRequest;
+        readonly responseSerialize: (value: UpdateWatchlistBindingsResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => UpdateWatchlistBindingsResponse;
+    };
 };
 export interface PortfolioServiceServer extends UntypedServiceImplementation {
     getPortfolio: handleUnaryCall<GetPortfolioRequest, Portfolio>;
@@ -598,6 +652,12 @@ export interface PortfolioServiceServer extends UntypedServiceImplementation {
      * from the request body. NOT_FOUND if the symbol is not in the watchlist.
      */
     updateWatchlistBinding: handleUnaryCall<UpdateWatchlistBindingRequest, UpdateWatchlistBindingResponse>;
+    /**
+     * Atomic set-based rebind (feature 170): assign ONE strategy_id across a symbol set in a single
+     * UPDATE ... WHERE symbol = ANY(...). All-or-nothing — an absent symbol → NOT_FOUND with zero
+     * partial writes. Ownership from the x-user-id header; empty strategy_id unbinds the whole set.
+     */
+    updateWatchlistBindings: handleUnaryCall<UpdateWatchlistBindingsRequest, UpdateWatchlistBindingsResponse>;
 }
 export interface PortfolioServiceClient extends Client {
     getPortfolio(request: GetPortfolioRequest, callback: (error: ServiceError | null, response: Portfolio) => void): ClientUnaryCall;
@@ -670,6 +730,14 @@ export interface PortfolioServiceClient extends Client {
     updateWatchlistBinding(request: UpdateWatchlistBindingRequest, callback: (error: ServiceError | null, response: UpdateWatchlistBindingResponse) => void): ClientUnaryCall;
     updateWatchlistBinding(request: UpdateWatchlistBindingRequest, metadata: Metadata, callback: (error: ServiceError | null, response: UpdateWatchlistBindingResponse) => void): ClientUnaryCall;
     updateWatchlistBinding(request: UpdateWatchlistBindingRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: UpdateWatchlistBindingResponse) => void): ClientUnaryCall;
+    /**
+     * Atomic set-based rebind (feature 170): assign ONE strategy_id across a symbol set in a single
+     * UPDATE ... WHERE symbol = ANY(...). All-or-nothing — an absent symbol → NOT_FOUND with zero
+     * partial writes. Ownership from the x-user-id header; empty strategy_id unbinds the whole set.
+     */
+    updateWatchlistBindings(request: UpdateWatchlistBindingsRequest, callback: (error: ServiceError | null, response: UpdateWatchlistBindingsResponse) => void): ClientUnaryCall;
+    updateWatchlistBindings(request: UpdateWatchlistBindingsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: UpdateWatchlistBindingsResponse) => void): ClientUnaryCall;
+    updateWatchlistBindings(request: UpdateWatchlistBindingsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: UpdateWatchlistBindingsResponse) => void): ClientUnaryCall;
 }
 export declare const PortfolioServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): PortfolioServiceClient;

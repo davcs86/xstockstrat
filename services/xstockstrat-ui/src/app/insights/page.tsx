@@ -54,8 +54,7 @@ export default function Page() {
   );
 }
 
-// Score Trend chart config (feature 123 FR-12) — single series, color matches the original
-// fixed Line stroke unchanged.
+// Score Trend chart config — single series.
 const SCORE_TREND_CONFIG: ChartConfig = {
   score: { label: 'Score', color: 'hsl(163 100% 44%)' },
 };
@@ -89,7 +88,6 @@ function InsightsDashboard() {
       <div className="p-4 sm:p-6 space-y-4">
         <AccountPortfolioSelector accountId={accountId} onAccountChange={handleAccountChange} />
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-          {/* Strategy scores */}
           <div className="md:col-span-4">
             <Card className="h-full">
               <CardHeader>
@@ -151,7 +149,6 @@ function InsightsDashboard() {
             </Card>
           </div>
 
-          {/* Equity curve chart */}
           <div className="md:col-span-8">
             <Card className="h-full">
               <CardHeader>

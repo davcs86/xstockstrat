@@ -35,15 +35,13 @@ import {
   NavigationMenuLink,
 } from '../ui/navigation-menu';
 
-// Physical routes are UNCHANGED (/trader | /insights | /config-ui | /accounts); the
-// Decide / Discover / Engine / Book grouping is a presentation layer over them (feature 083,
-// design.md § Frontend). Retained for back-compat with callers that still import them.
+// Physical routes are UNCHANGED; the Decide/Discover/Engine/Book grouping is a presentation layer.
+// This type is retained for back-compat with callers that still import it.
 export type PlatformSegment = 'trader' | 'insights' | 'config' | 'accounts';
 
 /**
- * Provider-free admin check for the shared shell. useIsAdmin (react-query) is unavailable in
- * the /accounts and /config-ui segments (no QueryClientProvider), so the header reads the
- * non-sensitive `{ isAdmin }` flag from /api/auth/me directly. Defaults false until resolved.
+ * Provider-free admin check — useIsAdmin (react-query) is unavailable in /accounts and /config-ui,
+ * so the header reads the non-sensitive { isAdmin } flag from /api/auth/me. Defaults false.
  */
 function useHeaderIsAdmin(): boolean {
   const [isAdmin, setIsAdmin] = React.useState(false);
@@ -62,12 +60,11 @@ function useHeaderIsAdmin(): boolean {
   return isAdmin;
 }
 
-// The four opportunities-first groups + a pinned Settings surface that keeps every admin/account
-// screen reachable (C-10(a) — the nav-reachability test walks this rendered shell).
+// The nav-reachability test walks this rendered shell — every screen must stay reachable.
 
 /**
- * Canonical submodule lists per legacy segment — retained for any caller still importing it
- * (e.g. the mobile-companion renderer). The desktop shell now renders NAV_GROUPS.
+ * Canonical submodule lists per legacy segment — retained for callers still importing it. The
+ * desktop shell now renders NAV_GROUPS.
  */
 export const PLATFORM_SUBNAV: Record<PlatformSegment, SubNavItem[]> = {
   trader: [
@@ -120,14 +117,8 @@ interface PlatformHeaderProps {
 }
 
 /**
- * PlatformHeader — the shared opportunities-first shell chrome. A sticky top bar with the
- * Decide / Discover / Engine / Book (+ Settings) group nav, a `Group / Page` breadcrumb, and a
- * right-aligned actions slot, plus a mobile sheet that exposes every group and item so any
- * destination is reachable without switching context first.
- */
-/**
- * Copilot rail toggle — accent-filled when the rail is open (FR-19). Consumes ChromeContext,
- * so it must render inside the ChromeProvider mounted by PlatformHeader below.
+ * Copilot rail toggle — accent-filled when open. Consumes ChromeContext, so it must render inside
+ * the ChromeProvider mounted by PlatformHeader below.
  */
 function CopilotToggle() {
   const { showCopilot, toggleCopilot } = useChrome();
@@ -146,10 +137,8 @@ function CopilotToggle() {
 }
 
 /**
- * Mobile hamburger trigger (FR-11b) — a plain `useSidebar().toggleSidebar()` call. Not
- * `SidebarTrigger` itself: that component hardcodes its own icon/label and doesn't accept
- * children, and this shell keeps the existing `List` glyph rather than adopting shadcn's
- * `IconLayoutSidebar` default.
+ * Mobile hamburger trigger — a plain useSidebar().toggleSidebar(). Not SidebarTrigger (it hardcodes
+ * its icon/label and accepts no children).
  */
 function MobileNavTrigger({ className }: { className?: string }) {
   const { toggleSidebar } = useSidebar();
@@ -161,7 +150,7 @@ function MobileNavTrigger({ className }: { className?: string }) {
   );
 }
 
-/** A mobile nav item that closes the offcanvas panel on navigate (mirrors the old `SheetClose`). */
+/** A mobile nav item that closes the offcanvas panel on navigate. */
 function MobileNavLink({
   href,
   label,
@@ -181,14 +170,14 @@ function MobileNavLink({
 
 /**
  * PlatformHeader mounts the ChromeProvider so every segment shares the Copilot rail state, and
- * renders the rail alongside the header chrome (default off — FR-4).
+ * renders the rail alongside the header chrome.
  */
 export function PlatformHeader(props: PlatformHeaderProps) {
   return (
     <ChromeProvider>
       <PlatformHeaderInner {...props} />
       <CopilotRail />
-      {/* Fixed mobile bottom nav (FR-16). Content wrappers add pb for clearance (see AppShells). */}
+      {/* Fixed mobile bottom nav. Content wrappers add pb for clearance (see AppShells). */}
       <BottomTabBar />
     </ChromeProvider>
   );
@@ -199,13 +188,12 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
   const isAdmin = useHeaderIsAdmin();
   const { group: activeGroup } = resolveActive(pathname);
   const [expanded, setExpanded] = React.useState<string>(activeGroup.key);
-  // Admin-only entries (Backfills, FR-7) are hidden from non-admins.
+  // Admin-only entries (Backfills) are hidden from non-admins.
   const visibleItems = (items: NavItem[]) => items.filter((i) => !i.adminOnly || isAdmin);
   const activeItems = visibleItems(activeGroup.items);
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-sm">
-      {/* Row 1 — logo, group tabs, actions */}
       <div className="flex h-[49px] items-center gap-2 px-3 sm:gap-4 sm:px-6">
         <Link
           href={HOME_HREF}
@@ -217,11 +205,8 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
 
         <Separator orientation="vertical" className="h-6 hidden sm:block" />
 
-        {/* asChild + a nested Link (not a `render` prop) — @radix-ui/react-navigation-menu@1.2.22
-            (the version this radix-ui unified package re-exports) is the classic forwardRef/
-            asChild-based API, not the newer render-prop-based one design.md assumed; verified via
-            the installed package source (zero "render" occurrences, NavigationMenuLink built with
-            forwardRef) — see 121-shadcn-migration-medium-confidence context.md Step 18. */}
+        {/* asChild + a nested Link (not a render prop) — this radix navigation-menu version is the
+            classic forwardRef/asChild API, not the render-prop one. */}
         <NavigationMenu
           aria-label="Primary"
           viewport={false}
@@ -256,18 +241,10 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
         <div className="flex items-center gap-2 ml-auto">
           {actions}
           <CopilotToggle />
-          {/* SidebarProvider's own wrapper defaults to `flex min-h-svh w-full` (a page-root
-              sizing meant to wrap the whole app) — overridden here since it's scoped narrowly
-              around just the Row 1 trigger+panel pair, not the page (design.md's named
-              constraint: must not disturb Row 1's own flex layout). */}
-          {/* `sm:hidden` on the whole subtree (not just the trigger): `Sidebar`'s desktop/
-              non-mobile branch renders off-screen via a negative `left` offset, not
-              `display:none` — without this wrapper its full nav content (every group, not just
-              the expanded one — Radix Collapsible keeps closed content mounted) stays in the DOM
-              and the accessibility tree at `sm:`+ widths, duplicating every link Row 2's real
-              `Section` nav already exposes (found via breadcrumb.spec.ts's collision coverage,
-              FR-10/AC-9 Step 21 — not anticipated by design.md, which predates this FR-11
-              addition). `display:none` removes the whole subtree from both. */}
+          {/* Override SidebarProvider's default `flex min-h-svh w-full` page-root sizing — here it's
+              scoped to just the Row 1 trigger+panel, not the page. */}
+          {/* sm:hidden must wrap the whole subtree: Sidebar's desktop branch renders off-screen (negative
+              left, not display:none), so otherwise its full nav stays in the DOM + a11y tree at sm:+. */}
           <div className="sm:hidden">
             <SidebarProvider defaultOpen={false} className="w-auto min-h-0">
               <MobileNavTrigger />
@@ -287,12 +264,8 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
                           <SidebarGroupContent>
                             <SidebarMenu>
                               <SidebarMenuItem>
-                                {/* group/collapsible on the Collapsible root itself (not
-                                    group/menu-button) — matches shadcn's own "Collapsible
-                                    SidebarMenu" reference composition exactly. Radix's
-                                    Collapsible.Root reflects data-state on itself, so the chevron's
-                                    group-data-[state=open]/collapsible: selector picks it up the
-                                    same way it would off CollapsibleTrigger. */}
+                                {/* group/collapsible on the Collapsible root (not group/menu-button): Radix
+                                    reflects data-state there, so the chevron's rotate selector picks it up. */}
                                 <Collapsible
                                   className="group/collapsible"
                                   open={expanded === group.key}
@@ -343,8 +316,7 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
         </div>
       </div>
 
-      {/* Row 2 — the active group's item links (FR-10a: the shared Breadcrumb landmark moved
-          into each page's own layout as PageBreadcrumb) */}
+      {/* Row 2 — the active group's item links; the shared Breadcrumb moved into each page's layout. */}
       <div className="hidden sm:flex items-center gap-2 px-4 sm:px-6 h-9 border-t border-border/60">
         <NavigationMenu
           aria-label="Section"

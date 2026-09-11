@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -173,22 +174,49 @@ func newTestReconciliationService(brokers map[string]brokerPoolEntry, portfolio 
 // so every other reconcileTick test is unaffected either way).
 func newTestReconciliationServiceWithIntents(brokers map[string]brokerPoolEntry, portfolio portfoliov1.PortfolioServiceClient, ledger ledgerv1.LedgerServiceClient, notify notifyv1.NotifyServiceClient, accountRepo repository.AccountRepository, orderIntentRepo repository.OrderIntentRepository) *TradingService {
 	return &TradingService{
-		cfg:                 &config.Config{},
-		cfgW:                &config.Watcher{},
-		brokers:             brokers,
-		portfolio:           portfolio,
-		ledger:              ledger,
-		notify:              notify,
-		accountRepo:         accountRepo,
-		orderIntentRepo:     orderIntentRepo,
-		orders:              make(map[string]*tradingv1.Order),
-		credStatus:          make(map[string]int32),
-		halted:              make(map[string]bool),
-		haltReasons:         make(map[string]string),
-		haltedLastPolled:    make(map[string]time.Time),
-		reconcileCandidates: make(map[string]int),
+		cfg:                  &config.Config{},
+		cfgW:                 &config.Watcher{},
+		brokers:              brokers,
+		portfolio:            portfolio,
+		ledger:               ledger,
+		notify:               notify,
+		accountRepo:          accountRepo,
+		orderIntentRepo:      orderIntentRepo,
+		reconcileOrderLookup: &fakeBrokerOrderLookup{},
+		orders:               make(map[string]*tradingv1.Order),
+		credStatus:           make(map[string]int32),
+		halted:               make(map[string]bool),
+		haltReasons:          make(map[string]string),
+		haltedLastPolled:     make(map[string]time.Time),
+		reconcileCandidates:  make(map[string]int),
 	}
 }
+
+// fakeBrokerOrderLookup implements brokerOrderIDLookup for reconcileTick tests. By default it
+// reports NOTHING as persisted (empty known set), which is the pre-DB-grounding behavior every
+// existing unknown_broker_order test relies on (an unmatched broker order is genuinely foreign).
+// Tests exercising the DB-grounding set `known` (broker order IDs the platform DOES have on record,
+// e.g. a legitimate order the platform placed that has since gone terminal) or `err` (to prove the
+// fail-safe skip on a lookup error).
+type fakeBrokerOrderLookup struct {
+	known map[string]bool
+	err   error
+}
+
+func (f *fakeBrokerOrderLookup) KnownBrokerOrderIDs(ctx context.Context, accountID string, brokerOrderIDs []string) (map[string]bool, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	out := make(map[string]bool, len(brokerOrderIDs))
+	for _, id := range brokerOrderIDs {
+		if f.known[id] {
+			out[id] = true
+		}
+	}
+	return out, nil
+}
+
+var _ brokerOrderIDLookup = (*fakeBrokerOrderLookup)(nil)
 
 // noopAccountRepo satisfies repository.AccountRepository for tests that don't care about the
 // halt write itself (only whether haltAccount was invoked, observed via notify/ledger).
@@ -233,6 +261,78 @@ func TestReconcileTick_UnknownBrokerOrder_DetectedRegardlessOfFillState(t *testi
 				t.Errorf("expected a reconciliation.mismatch_found event for status %q, got %v", status, ledger.eventTypes())
 			}
 		})
+	}
+}
+
+// TestReconcileTick_TerminalPlatformOrder_AbsentFromMemory_NotFlaggedUnknown is the regression
+// test for the observed production false halt: a legitimate order the platform itself placed that
+// has since reached a terminal state (filled) and is no longer in the in-memory order map after a
+// restart (LoadInflightOrders only hydrates NEW/PARTIALLY_FILLED). The broker still lists it
+// (status=all), but trading.orders still has it — so the DB-grounded check must NOT flag it as
+// unknown_broker_order and must NOT halt the account, no matter how many ticks observe it.
+func TestReconcileTick_TerminalPlatformOrder_AbsentFromMemory_NotFlaggedUnknown(t *testing.T) {
+	fb := &fakeReconciliationBroker{
+		listOrdersFn: func(ctx context.Context) ([]broker.BrokerOrder, error) {
+			return []broker.BrokerOrder{{BrokerOrderID: "bo-platform-terminal", Status: "filled", FilledQty: 10}}, nil
+		},
+	}
+	ledger := &recordingLedgerClient{}
+	notify := &fakeNotifyClient{}
+	svc := newTestReconciliationService(
+		map[string]brokerPoolEntry{"acct-1": {client: fb, userID: "u-1"}},
+		&fakeReconciliationPortfolioClient{}, ledger, notify, noopAccountRepo{},
+	)
+	// The platform has this order on record in trading.orders — it is simply absent from the
+	// in-memory map. This is exactly the distinction the DB lookup adds.
+	svc.reconcileOrderLookup = &fakeBrokerOrderLookup{known: map[string]bool{"bo-platform-terminal": true}}
+
+	// graceTicks=0 → any real finding would fire immediately; run several ticks to prove it never does.
+	for i := 0; i < 3; i++ {
+		svc.reconcileTick(context.Background(), 0, 1.1)
+	}
+
+	if svc.isAccountHalted("acct-1") {
+		t.Fatal("account must NOT be halted for a platform-placed order the DB still knows about (the false-halt regression)")
+	}
+	for _, e := range ledger.eventTypes() {
+		if e == "reconciliation.mismatch_found" {
+			t.Fatalf("no reconciliation.mismatch_found expected for a DB-known order, got %v", ledger.eventTypes())
+		}
+	}
+	notify.mu.Lock()
+	alertCount := len(notify.calls)
+	notify.mu.Unlock()
+	if alertCount != 0 {
+		t.Errorf("EmitAlert called %d times, want 0 (no false-halt/finding alert)", alertCount)
+	}
+}
+
+// TestReconcileTick_UnknownOrderLookupError_SkipsClassification proves the fail-safe: a DB lookup
+// error must never cause a false unknown_broker_order halt. The unknown-order classification is
+// skipped for the account this tick (and re-evaluated next tick), so no finding and no halt.
+func TestReconcileTick_UnknownOrderLookupError_SkipsClassification(t *testing.T) {
+	fb := &fakeReconciliationBroker{
+		listOrdersFn: func(ctx context.Context) ([]broker.BrokerOrder, error) {
+			return []broker.BrokerOrder{{BrokerOrderID: "bo-unknown", Status: "filled", FilledQty: 5}}, nil
+		},
+	}
+	ledger := &recordingLedgerClient{}
+	notify := &fakeNotifyClient{}
+	svc := newTestReconciliationService(
+		map[string]brokerPoolEntry{"acct-1": {client: fb, userID: "u-1"}},
+		&fakeReconciliationPortfolioClient{}, ledger, notify, noopAccountRepo{},
+	)
+	svc.reconcileOrderLookup = &fakeBrokerOrderLookup{err: errors.New("db unavailable")}
+
+	svc.reconcileTick(context.Background(), 0, 1.1)
+
+	if svc.isAccountHalted("acct-1") {
+		t.Fatal("a DB lookup error must not halt the account (fail-safe skip)")
+	}
+	for _, e := range ledger.eventTypes() {
+		if e == "reconciliation.mismatch_found" {
+			t.Fatalf("no finding expected when the lookup errors, got %v", ledger.eventTypes())
+		}
 	}
 }
 

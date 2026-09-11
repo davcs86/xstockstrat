@@ -105,16 +105,11 @@ dedup).
 | `alert:{alert_id}` | xstockstrat-notify |
 | `config:{namespace}` | xstockstrat-config |
 
-## Webhooks
-
-_No webhooks. Call the gRPC RPCs on port 50057 directly._
-
 ## Environment Variables
 
 ```text
 GRPC_PORT=50057
 CONFIG_ENDPOINT=xstockstrat-config:50060
-DATABASE_URL=postgres://xstockstrat:${POSTGRES_PASSWORD}@timescaledb:5432/xstockstrat?sslmode=disable  # constructed by docker-compose from POSTGRES_PASSWORD in .env
 DB_POOL_MAX=1                          # query pool size; live streaming uses a separate dedicated LISTEN connection (1 + 1 = 2 total, see Live Streaming Architecture)
 APPLICATION_ENV=development         # development | production
 TRADING_MODE=paper                     # paper | live

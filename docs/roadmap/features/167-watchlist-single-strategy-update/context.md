@@ -1,181 +1,26 @@
-# Context: watchlist-single-strategy-update
+# Context: watchlist-single-strategy-update  (archived 2026-09-02)
 
-**Feature**: `docs/roadmap/features/167-watchlist-single-strategy-update/feature.md`
-**Product Spec**: `docs/roadmap/features/167-watchlist-single-strategy-update/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/167-watchlist-single-strategy-update/implementation-spec.md`
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-09-02 — /sdd-archiver
 
-## Session 2026-08-31 — sdd-story
+**What**: Shipped a targeted additive `UpdateWatchlistBinding` RPC on `xstockstrat-portfolio` (single-row `UPDATE ... RETURNING`, a new `ErrBindingNotFound` sentinel) plus a UI non-invalidating cache-patch hook, replacing the old flow where rebinding one symbol's strategy went through replace-all `UpdateWatchlist` (truncate+reinsert every `watchlist_symbols` row) followed by full `['watchlists']` invalidation and a `listWatchlists` refetch. No DB migration (the existing PK `(watchlist_id, symbol)` is directly addressable), no config keys, no agent change. One thin vertical slice mirroring the existing sibling watchlist-write shape end to end.
 
-- Created feature.md (status: draft), product-spec.md, acceptance.feature, context.md from user story.
-- **Grounding (codebase-discovery digest):**
-  - Watchlists owned by `xstockstrat-portfolio` (Go, gRPC 50052). Per-symbol strategy lives on the
-    entry: `WatchlistBinding.strategy_id` (`packages/proto/portfolio/v1/portfolio.proto:211-217`), DB
-    col `portfolio.watchlist_symbols.strategy_id` (`migrations/008_watchlist_symbol_strategy.up.sql`),
-    PK `(watchlist_id, symbol)` (`007_watchlists.up.sql`).
-  - **No targeted single-symbol update RPC exists.** Changing one symbol's strategy today goes through
-    replace-all `UpdateWatchlist` (`portfolio.proto:264-272`; repo truncate+reinsert
-    `internal/repository/watchlist_repo.go:170`). `AddWatchlistSymbols` is `ON CONFLICT DO NOTHING`
-    (`watchlist_repo.go:317`) so it cannot rebind. UI `WatchlistDetail.setBinding`
-    (`services/xstockstrat-ui/src/components/insights/WatchlistDetail.tsx:109-121`) resends the FULL
-    bindings array and `useUpdateWatchlist` invalidates `WATCHLISTS_KEY`
-    (`src/hooks/useWatchlists.ts:59-78`) → full `listWatchlists` refetch. That whole-list write+refetch
-    is the cost this feature removes.
-  - Precedent: **feature 070** added `FieldMask` AIP-161 partial update to the *analysis*
-    `ManageStrategyRequest` with a server-side erasure guard — the pattern to mirror here (targeted RPC
-    on portfolio instead of replace-all).
-- **Prior features to respect:** 058 (replace semantics of `UpdateWatchlist`; caps
-  `portfolio.watchlist.max_*`), 097 (strategy on the entry; the fails-080 "bare `symbols` write must
-  never reset `strategyId` to ''" trap, enforced by `ON CONFLICT DO NOTHING`), 127 (`source`
-  MANUAL/SIGNAL + `system_managed`, first-writer-wins — a rebind must not clobber `source`), 148
-  (`manage_watchlist` is a read-modify-write merge over replace-all — no partial path at the tool layer
-  either), 155 (`WatchlistReadiness` renders per-binding rows, wires `onRebindSymbol=setBinding`).
-- **Ledger trap folded in:** fails-080 reset trap → FR-2 (rebind touches only `strategy_id`, preserves
-  `source`/`system_managed`); MCP tool-surface drift (F-12) → agent-parity Open Question.
-- **Decisions:** no DB migration (existing PK addressable); additive non-breaking proto RPC; UI cache
-  patch instead of invalidation. Response-shape (binding vs whole watchlist) left as an Open Question —
-  returning only the binding is what enables the no-refetch UI patch.
-- **Consumer surface (C-14):** UI `/insights` watchlists (per-symbol strategy control). Agent parity
-  deferred (Open Question).
+**Why (irrecoverable rationale)**: The response returns **only** the updated `WatchlistBinding` + a list-level `updated_at`, deliberately not the whole `Watchlist` — returning the whole list would invite the UI to replace the whole cache entry and defeat the single-entry patch that is the entire point. `updated_at` is sourced from `watchlists.updated_at` (bumped in-tx via `touchWatchlistTx`) because `watchlist_symbols` has no `updated_at` column and adding one was forbidden by the no-migration commitment; it's a 1-row write on the parent table, so it rewrites no `watchlist_symbols` row and AC-1/AC-2 still hold. Ownership is resolved via the existing `loadOwned` read, not re-joined into the `UPDATE`, specifically to keep the `NotFound` (absent list) vs `PermissionDenied` (wrong owner) distinction AC-3/AC-4 need — a joined update returning 0 rows collapses those three cases into one.
 
-## Session 2026-08-31 — sdd-review product-spec
+**Rejected alternatives**: keep replace-all `UpdateWatchlist` and optimize the UI only (server still truncates+reinserts, so the write-write race window + O(n) cost remain); FieldMask/AIP-161 partial-merge (heavier contract, still routes through the replace-all repo path, and a mask over a `repeated bindings` field doesn't express "one symbol"); join ownership into the `UPDATE` to skip the `loadOwned` read (collapses AC-3 `NOT_FOUND` and AC-4 `PERMISSION_DENIED`); return the whole `Watchlist` (re-hydrates all bindings, invites whole-cache replacement); a per-binding `updated_at` column via migration (spec committed to no migration); reuse `useInvalidatingMutation` (unconditionally invalidates `WATCHLISTS_KEY` — the exact full-refetch AC-6 forbids).
 
-- Ran /sdd-review (not skipped). spec-reviewer + feature-overlap.
-- Initial verdict: FAIL (criterion 9 — four unchecked Open Questions) + warnings (C-14 agent surface deferred
-  via Open Question not a named follow-up; phantom `F-12` Floor citation; FR-2/AC-2 conflated list-level
-  `system_managed` with a per-binding field). Overlap: CLEAN (additive UpdateWatchlistBinding RPC; no
-  migration/config-key collision; next-free portfolio migration 014 if ever needed).
-- Fixes: Open Questions → "Resolved Design Decisions" (response=single WatchlistBinding+updated_at; UI-only,
-  agent already covered by feature-148 merge path; concurrency last-writer-wins + existing WATCHLIST_WRITE_KEY guard;
-  fails-080 encoded in FR-2). FR-2/AC-2 reworded (system_managed = watchlist-level flag; source = per-binding, preserved).
-  Removed phantom F-12 reference.
-- Re-review verdict: PASS (residual F-12 wording warning also cleared).
-- Status: draft → spec-ready. Next: /sdd-design watchlist-single-strategy-update quick.
+**Scars & gotchas**: Connect-JSON Timestamp shape — a raw `page.route` mock (not a `connectNodeAdapter` handler) must emit Connect-JSON: a `google.protobuf.Timestamp` encodes as an RFC3339 string, not `{seconds,nanos}`; the wrong shape threw on client-side response decode, the mutation never resolved, and every `bindStrategy`-driven test (8 of them) failed — a symptom far from the cause (fixed to `new Date(0).toISOString()`; already generalized into fails.md during execute). Connect request-path URL match — the Connect path is `…xstockstrat.portfolio.v1.PortfolioService/<Method>` (a dot precedes `PortfolioService`), so a counter using `.includes('/PortfolioService/<Method>')` never matched and read 0 — match on the unique `/<Method>` segment. Layer-1 guard regression — moving the rebind to a new mutation hook silently dropped it from `writeInFlight` (which only counted `updateWatchlist.isPending`); the new hook's `isPending` and the concurrency-guard test override both had to be re-pointed. Helper name collision — a fatal `bindingFor(t, wl, symbol)` already existed (feature 097); AC-3's "symbol NOT inserted" needed a non-fatal accessor, so a new `storeBinding` (returns nil when absent) was added. golangci-lint unrunnable locally against a go1.27 module — substituted `go build`+`vet`+`gofmt`; CI's `golangci-lint-action@v9` is authoritative.
 
-## Session 2026-08-31 — sdd-design
+**Permanent deviations**: none. The one signature change — widening `touchWatchlistTx` to return `(time.Time, error)` and updating both callers — was the design's explicitly stated reuse form, chosen at execute over the inline-bump alternative.
 
-- Phase 0 Recon: refreshed/extended recon.md (services: xstockstrat-portfolio, xstockstrat-ui). All
-  prior `path:line` citations re-verified against source. Key reuse patterns: `loadOwned`
-  (`portfolio_service.go:1322-1337`, NotFound/PermissionDenied authz), `touchWatchlistTx`
-  (`watchlist_repo.go:305-315`, parent `updated_at` bump), `WATCHLIST_WRITE_KEY` in-flight guard.
-- **New grounded findings (extend prior recon):**
-  - `portfolio.watchlist_symbols` has **no `updated_at` column** (only `added_at`/`strategy_id`/
-    `source`, migrations 007/008/011). The product-spec's "response ... plus an `updated_at`" cannot be
-    a per-binding column without a migration (forbidden). Resolution: source it from
-    `watchlists.updated_at` bumped in-tx via `touchWatchlistTx` (a 1-row write on a *different* table —
-    rewrites no `watchlist_symbols` row, AC-1/AC-2 hold), or omit it. → operator-confirmable fork.
-  - No `ErrBindingNotFound` sentinel exists; AC-3 needs one. Mechanism: `UPDATE ... RETURNING symbol,
-    strategy_id, source`; empty result → NOT_FOUND. Postgres counts WHERE-matched rows regardless of
-    value change, so a no-op `""`-unbind (AC-5) still returns the row (no false NOT_FOUND).
-  - UI Layer-1 guard regression risk: `writeInFlight` (`WatchlistDetail.tsx:80-81`) counts the rebind
-    only via `updateWatchlist.isPending`; moving rebind to a new hook drops it from Layer 1 unless the
-    new hook's `isPending` is added — mandatory per FR-5.
-  - The new hook must NOT use `useInvalidatingMutation` (always invalidates → full refetch, forbidden
-    by AC-6); use a plain `useMutation` + `queryClient.setQueryData` cache-patch + `WATCHLIST_WRITE_KEY`.
-- Phase 1 Grilling: 2 rounds (full). Chosen approach: additive `UpdateWatchlistBinding` RPC + single-row
-  `UPDATE ... RETURNING` (+ `ErrBindingNotFound`) + `loadOwned` authz reuse + `touchWatchlistTx` parent
-  bump + `portfolio.watchlist.updated` emit; UI new non-invalidating cache-patch hook + `setBinding`
-  rewire + `writeInFlight` fix + one-line BFF forward + mock/e2e. Rejected: replace-all + UI-only,
-  FieldMask partial-merge, ownership-joined UPDATE (collapses NotFound/PermissionDenied), whole-Watchlist
-  response, per-binding `updated_at` migration, `useInvalidatingMutation` reuse.
-- Constitution rules touched: C-14, C-16, C-09, C-08/P-06, C-03, C-04, C-12, C-17, F-01, F-04, F-06,
-  F-07, F-11. Floor breaches: none.
-- **Process note (P-04):** this /sdd-design ran in an isolated subagent; the live human approval gate
-  was not run here (nested-subagent `AskUserQuestion` unavailability — `fails.md` 2026-08-08/121-123).
-  The two-round proposer/adversary debate and Floor check ran in full; the one genuine fork (response
-  `updated_at` source) is surfaced in design.md Open Risks for operator ratification. status.md left
-  unchanged (spec-ready) — the orchestrator flips it to design-approved after ratifying.
-- Open threads (→ target step): `updated_at` source (Step 1 proto), `writeInFlight` wiring (Step 4 UI),
-  `ErrBindingNotFound` vs no-op (Step 2 repo test), request-symbol normalization (Step 3 service).
+**Cross-feature signal**: The Connect-JSON encoding traps (Timestamp = RFC3339 string; dot-prefixed service path in the request URL) are properties of any raw `page.route` Playwright mock of a Connect RPC, not watchlist-specific — they recur for every future hand-written mock that bypasses `connectNodeAdapter`. This feature is the reference template for "add a targeted single-row RPC alongside an existing replace-all one": proto append → single-row `UPDATE ... RETURNING` + sentinel → reuse `loadOwned` authz + `touchWatchlistTx` parent-touch → non-invalidating `setQueryData` hook → one-line BFF forward → raw mock + e2e.
 
-## Session 2026-08-31 — design decision resolved (updated_at source)
+**Deferred follow-ons**: batch multi-symbol rebind in one call was explicitly scoped out as a possible follow-up.
 
-- `portfolio.watchlist_symbols` has no `updated_at` column (only `added_at`). RESOLVED: the `UpdateWatchlistBindingResponse.updated_at` is sourced from `watchlists.updated_at`, bumped in the same tx via `touchWatchlistTx` (a 1-row write on the parent table). This keeps the response field meaningful and AC-1/AC-2 hold. `/sdd-spec` implements this option.
-- Secondary wiring notes for `/sdd-spec`: the new UI hook's `isPending` must be folded into `writeInFlight` (else the Layer-1 in-flight guard regresses), and the request `symbol` must be normalized before the `WHERE symbol` match.
+**Process note**: `/sdd-design` ran in an isolated subagent where nested `AskUserQuestion` was unavailable, so the live P-04 human approval gate did not run; the two-round debate + Floor check ran in full and the one genuine fork (`updated_at` source) was carried into Open Risks for operator ratification. The feature shipped in a Stage-2 stacked-PR mode (integration PR targeted `feature/user-management-ui` / 043, not `main-dev`; rebased onto 043's tip before push); final promotion PR #1065 merged to main.
 
-## Session 2026-08-31 — sdd-spec
-
-- Generated implementation-spec.md with **6 steps**. Status → implementation-ready. All 6 `@AC-*` traced
-  to a test step (AC-1..AC-5 → Step 4 Go service test; AC-6 → Step 6 Playwright e2e). Proto confirmed
-  **additive** (new RPC + 2 messages, per-message field numbers from 1, `buf breaking` vs main-dev
-  passes). No DB migration.
-- Key codebase findings (all `path:line`-grounded, no invented refs):
-  - Proto `PortfolioService` block ends at `portfolio.proto:35` (`ListAllWatchlistSymbols`); messages end
-    at `:311` — new RPC + `UpdateWatchlistBindingRequest{watchlist_id=1,symbol=2,strategy_id=3}` /
-    `UpdateWatchlistBindingResponse{binding=1,updated_at=2}` append there. `WatchlistBinding` `:211-217`,
-    `timestamp.proto` already imported `:7`.
-  - Handler has TWO adapters per RPC: Connect `PortfolioHandler.*` (`portfolio_handler.go:190-228`) **and**
-    gRPC `grpcPortfolioAdapter.*` with `toGRPCError` (`:343-381`) — both need an `UpdateWatchlistBinding`.
-  - `s.watchlists` is the `WatchlistStore` **interface** (`portfolio_service.go:1215-1228`); the new
-    `UpdateBinding` method must be added to the interface, the real `WatchlistRepo`, AND the in-memory
-    `fakeWatchlistStore` (`watchlist_service_test.go:26`). No DB-backed repo test harness — service-level
-    fake is the only unit seam (feature-154 `service/`-excluded note, `watchlist_service_test.go:20-21`);
-    fake models Postgres WHERE-match semantics for AC-3/AC-5.
-  - `touchWatchlistTx` (`watchlist_repo.go:305-315`) currently returns only `error` — spec extends it to
-    `(time.Time, error)` via `RETURNING updated_at` and updates its 2 callers (`:204`,`:224`) to `_, err`,
-    so `UpdateBinding` can source the response `updated_at` (design's reuse intent; DRY over an inline
-    duplicate). `ErrBindingNotFound` is the one net-new sentinel, modeled on `ErrWatchlistNotFound` `:17`.
-  - UI: `useInvalidatingMutation` always invalidates (forbidden by AC-6) → new hook is a plain
-    `useMutation` + `queryClient.setQueryData` cache-patch carrying `binding.source` through;
-    `WATCHLIST_WRITE_KEY` (`useWatchlists.ts:13`) kept for the Layer-2 guard; `writeInFlight`
-    (`WatchlistDetail.tsx:80-81`) gains `updateBinding.isPending`; `setBinding` (`:111-121`) rewired off
-    replace-all `updateWatchlist` (still used by `commitRename`). BFF one-line `forward` in
-    `insightsBff.ts:87-98`; browser client auto-exposes (no edit). E2e adds an `UpdateWatchlistBinding`
-    route to the shared `watchlistMock.ts` + INVENTORY row note; two live-enabled strategy options
-    (`strat-live-001`/`strat-001`) let the AC-6 test rebind between them.
-- Deduped Reviewers: **Proto Reviewer**, **xstockstrat-portfolio owner**, **xstockstrat-ui owner**.
-- No "Not found / create from scratch" steps — every symbol has an existing sibling pattern
-  (`ErrBindingNotFound`←`ErrWatchlistNotFound`; `UpdateBinding`←`Update`/`AddSymbols`;
-  `UpdateWatchlistBinding`←`UpdateWatchlist`; new hook←`useInvalidatingMutation` shape). Net-new
-  primitives named with their nearest pattern: `ErrBindingNotFound` sentinel and the
-  `setQueryData` non-invalidating cache-patch.
-- Next: `/sdd-review watchlist-single-strategy-update impl-spec`.
-
-## Session 2026-08-31 — sdd-review impl-spec (advisory)
-
-- Result: 0 failures, 4 advisory warnings (all accepted conventions), 1 note. No Floor risk. Every path:line confirmed; additive proto, single-row UPDATE...RETURNING with ErrBindingNotFound->NOT_FOUND, loadOwned authz, touchWatchlistTx updated_at, symbol normalized, writeInFlight fix present, non-invalidating setQueryData patch. No migration (008 already added strategy_id).
-- Notes (no execution action required): Step 2 gen wildcard (accepted); Step 4 no coverage threshold (service/ pkg CI-excluded, cited); Step 4 AC-2 source-preservation via fake not real SQL (proven at integration); Step 6 e2e no threshold (expected); touchWatchlistTx signature change is in-scope with both callers updated.
-- Overlap findings: batch scan CLEAN; 167 shares insightsBff.ts with 029/031/095 (distinct router blocks, rebase-only).
-
-## Session 2026-08-31 — sdd-execute (Steps 1–6, code-completed)
-
-Executed on `feature/watchlist-single-strategy-update`. **Stacked-PR mode** (operator directive):
-this feature's integration PR targets `feature/user-management-ui` (043, PR #1054), not `main-dev`;
-each later Stage-2 feature stacks on the prior. Branch was rebased onto 043's tip before pushing.
-
-- **Step 1–2 (proto + stubs)** [commit ea57973]: appended the additive `UpdateWatchlistBinding` RPC +
-  `UpdateWatchlistBindingRequest{watchlist_id,symbol,strategy_id}` / `UpdateWatchlistBindingResponse{
-  binding,updated_at}` to `portfolio.proto`; regenerated Go/Python/TS stubs via the codegen container.
-  `buf lint` + `buf breaking` (vs main-dev) both clean (additive). Empty `gen/` diff beyond portfolio/v1.
-- **Step 3–4 (Go backend + tests)** [commit 061a9b1]: single-row `UPDATE … RETURNING` repo method
-  (writes only `strategy_id`; `RETURNING source` reads provenance back untouched → fails-080 trap
-  structurally impossible), `ErrBindingNotFound` sentinel, `touchWatchlistTx` widened to return the
-  bumped `watchlists.updated_at` (both callers updated), `WatchlistStore` interface method, the service
-  method (`loadOwned` authz → NOT_FOUND/PERMISSION_DENIED; symbol normalized; ""→unbind;
-  ErrBindingNotFound→NOT_FOUND), and both handler adapters. Paired service tests AC-1…AC-5 via the
-  in-memory fake — **red** (undefined method/sentinel) → **green** (`-race`). `go build`+`vet`+`gofmt`
-  clean; golangci-lint deferred to CI (local go1.27 gate). Helper `storeBinding` avoids the fatal
-  feature-097 `bindingFor` collision.
-- **Step 5–6 (UI + e2e)** [commit pending]: `useUpdateWatchlistBinding` — a plain `useMutation` +
-  `queryClient.setQueryData(['watchlists'])` cache-patch, **no** `invalidateQueries` (AC-6), carrying
-  `WATCHLIST_WRITE_KEY` for the Layer-2 guard; `setBinding` rewired off replace-all `UpdateWatchlist`
-  (still used by `commitRename`); `writeInFlight += updateBinding.isPending` (FR-5); one-line BFF
-  `forward`. Browser client auto-exposed the RPC (no edit). AC-6 e2e proves one `UpdateWatchlistBinding`
-  request, zero `ListWatchlists` refetch, one row patched, others untouched. **red→green**: stashed
-  Step-5 → AC-6 failed; restored + 3 mock fixes → **15/15**. The 3 fixes (Connect-JSON Timestamp is
-  RFC3339 not `{seconds,nanos}`; request-counter matches the `/<Method>` segment since a dot precedes
-  the service; concurrency-guard delay override re-pointed at `UpdateWatchlistBinding`) are in
-  implementation-spec.md § Deviation Log; the Timestamp one is generalized to `fails.md`.
-- **C-16**: acceptance-scenario promotion into the portfolio business-rule suite deferred to `/promote`
-  at launch (documented backstop), not done here.
-- Local gates green: `buf lint`/`breaking`; Go `build`+`vet`+`gofmt` + AC-1…AC-5 `-race`; UI `lint`+
-  `build` (`/insights/watchlists` compiles) + `watchlists.spec.ts` 15/15. CI runs authoritative
-  golangci-lint, python, node, proto-freshness, and the full Playwright suite.
-
-## Session 2026-09-01 (CI: feature status automation)
-
-- Promotion PR #1065 merged to main
-- Feature promoted and committed: c086afc839f905c4f72b24d75e824e22d61af0b2
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-09-01
+**Ledger entries written**: insights.md (3), fails.md (2) — see the 2026-09-02 entries. (The Connect-JSON Timestamp fail was a DUP of the existing feature-167 entry at fails.md:1971, already written during execute; not re-added.)
+**Runtime-invariant recommendations (→ /context-constitution)**: PLAT-* — two encoding invariants for hand-written Playwright Connect mocks: (1) well-known types serialize as Connect-JSON (`Timestamp` = RFC3339 string), (2) the request path is `<pkg>.<Service>/<Method>` (dot-prefixed service). Platform-wide, not feature-specific; (1) is already captured in fails.md.
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 519e730.

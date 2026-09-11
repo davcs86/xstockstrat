@@ -1366,6 +1366,14 @@ export type Opportunity = Message<"xstockstrat.analysis.v1.Opportunity"> & {
      * @generated from field: optional double signal_confidence = 19;
      */
     signalConfidence?: number | undefined;
+    /**
+     * feature 185 — a per-symbol bars/indicator fetch failure during the compute (terminal
+     * data-unavailable), derived at read from the "unavailable" provenance marker (no column).
+     * Distinct from an evaluated 0/N row; conviction+signal_axis are zeroed so it sinks in ranking.
+     *
+     * @generated from field: bool data_unavailable = 20;
+     */
+    dataUnavailable: boolean;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.Opportunity.
@@ -1537,6 +1545,20 @@ export type ListOpportunitiesResponse = Message<"xstockstrat.analysis.v1.ListOpp
      * @generated from field: xstockstrat.common.v1.PageResponse page = 2;
      */
     page?: PageResponse | undefined;
+    /**
+     * feature 185 — cold (never-materialized) read: empty page returned non-blocking while a
+     * background recompute runs. FALSE for a legitimately-empty universe (distinctness proof).
+     *
+     * @generated from field: bool computing = 3;
+     */
+    computing: boolean;
+    /**
+     * feature 185 — a persistently-failing cold recompute (past the bounded attempt count):
+     * renders a terminal error instead of an infinite "computing" spinner.
+     *
+     * @generated from field: bool compute_failed = 4;
+     */
+    computeFailed: boolean;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.ListOpportunitiesResponse.
@@ -1578,12 +1600,93 @@ export type EvaluateReadinessResponse = Message<"xstockstrat.analysis.v1.Evaluat
      * @generated from field: repeated xstockstrat.analysis.v1.SymbolReadiness readiness = 1;
      */
     readiness: SymbolReadiness[];
+    /**
+     * The oldest per-symbol cache "computed at" among the served rows — the response is never
+     * presented as fresher than this (feature 177, FR-5). Bounded by the readiness staleness window.
+     *
+     * @generated from field: google.protobuf.Timestamp computed_at = 2;
+     */
+    computedAt?: Timestamp | undefined;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.EvaluateReadinessResponse.
  * Use `create(EvaluateReadinessResponseSchema)` to create a new message.
  */
 export declare const EvaluateReadinessResponseSchema: GenMessage<EvaluateReadinessResponse>;
+/**
+ * One decorated watchlist row (feature 181). `strategy_id` is the join key onto the ['watchlists']
+ * read's binding; it is NOT a display payload and carries no provenance/source (the client renders
+ * those from the binding). `readiness` is populated iff state == READINESS_STATE_RESOLVED.
+ *
+ * @generated from message xstockstrat.analysis.v1.WatchlistReadinessRow
+ */
+export type WatchlistReadinessRow = Message<"xstockstrat.analysis.v1.WatchlistReadinessRow"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * @generated from field: string strategy_id = 2;
+     */
+    strategyId: string;
+    /**
+     * @generated from field: xstockstrat.analysis.v1.ReadinessState state = 3;
+     */
+    state: ReadinessState;
+    /**
+     * @generated from field: xstockstrat.analysis.v1.SymbolReadiness readiness = 4;
+     */
+    readiness?: SymbolReadiness | undefined;
+    /**
+     * @generated from field: google.protobuf.Timestamp computed_at = 5;
+     */
+    computedAt?: Timestamp | undefined;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.WatchlistReadinessRow.
+ * Use `create(WatchlistReadinessRowSchema)` to create a new message.
+ */
+export declare const WatchlistReadinessRowSchema: GenMessage<WatchlistReadinessRow>;
+/**
+ * user_id is intentionally absent — taken from the propagated x-user-id header server-side
+ * (match the ListOpportunitiesRequest convention), never from the wire. The server derives the
+ * (symbol, strategy_id) pairs from the OWNER'S OWN watchlist (anti-IDOR, fails.md:1153).
+ *
+ * @generated from message xstockstrat.analysis.v1.GetWatchlistReadinessRequest
+ */
+export type GetWatchlistReadinessRequest = Message<"xstockstrat.analysis.v1.GetWatchlistReadinessRequest"> & {
+    /**
+     * @generated from field: string watchlist_id = 1;
+     */
+    watchlistId: string;
+    /**
+     * @generated from field: xstockstrat.common.v1.PageRequest page = 2;
+     */
+    page?: PageRequest | undefined;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.GetWatchlistReadinessRequest.
+ * Use `create(GetWatchlistReadinessRequestSchema)` to create a new message.
+ */
+export declare const GetWatchlistReadinessRequestSchema: GenMessage<GetWatchlistReadinessRequest>;
+/**
+ * @generated from message xstockstrat.analysis.v1.GetWatchlistReadinessResponse
+ */
+export type GetWatchlistReadinessResponse = Message<"xstockstrat.analysis.v1.GetWatchlistReadinessResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.WatchlistReadinessRow rows = 1;
+     */
+    rows: WatchlistReadinessRow[];
+    /**
+     * @generated from field: xstockstrat.common.v1.PageResponse page = 2;
+     */
+    page?: PageResponse | undefined;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.GetWatchlistReadinessResponse.
+ * Use `create(GetWatchlistReadinessResponseSchema)` to create a new message.
+ */
+export declare const GetWatchlistReadinessResponseSchema: GenMessage<GetWatchlistReadinessResponse>;
 /**
  * user_id is intentionally absent — taken from the propagated x-user-id header server-side
  * (match the ListOpportunitiesRequest convention), never from the wire.
@@ -2435,6 +2538,39 @@ export declare enum ReadinessRule {
  */
 export declare const ReadinessRuleSchema: GenEnum<ReadinessRule>;
 /**
+ * Per-row readiness lifecycle state (feature 181). Closed set → enum (C-04).
+ *
+ * @generated from enum xstockstrat.analysis.v1.ReadinessState
+ */
+export declare enum ReadinessState {
+    /**
+     * @generated from enum value: READINESS_STATE_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * `readiness` populated; served from the FAST cache path
+     *
+     * @generated from enum value: READINESS_STATE_RESOLVED = 1;
+     */
+    RESOLVED = 1,
+    /**
+     * not-yet-fresh; a background refresh was kicked; poll again
+     *
+     * @generated from enum value: READINESS_STATE_PENDING = 2;
+     */
+    PENDING = 2,
+    /**
+     * data-unavailable (bar_epoch < 0 sentinel); best-effort retry
+     *
+     * @generated from enum value: READINESS_STATE_UNKNOWN = 3;
+     */
+    UNKNOWN = 3
+}
+/**
+ * Describes the enum xstockstrat.analysis.v1.ReadinessState.
+ */
+export declare const ReadinessStateSchema: GenEnum<ReadinessState>;
+/**
  * The persisted per-user disposition of a queued opportunity (feature 097). Closed set → enum (C-04).
  *
  * @generated from enum xstockstrat.analysis.v1.OpportunityAction
@@ -2708,5 +2844,17 @@ export declare const AnalysisService: GenService<{
         methodKind: "unary";
         input: typeof GetAttributionRequestSchema;
         output: typeof GetAttributionResponseSchema;
+    };
+    /**
+     * Cache-first readiness decoration for a page of a watchlist's bound (symbol, strategy_id)
+     * pairs (feature 181). Owner from x-user-id; RESOLVED rows carry inline SymbolReadiness,
+     * PENDING/UNKNOWN rows resolve on a subsequent poll (the server kicks a background refresh).
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.GetWatchlistReadiness
+     */
+    getWatchlistReadiness: {
+        methodKind: "unary";
+        input: typeof GetWatchlistReadinessRequestSchema;
+        output: typeof GetWatchlistReadinessResponseSchema;
     };
 }>;

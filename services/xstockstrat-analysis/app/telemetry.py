@@ -10,6 +10,20 @@ import os
 log = logging.getLogger(__name__)
 
 
+def _build_resource():
+    """Build the sole OTel Resource passed to init_telemetry (SDK import deferred; the omitted
+    attributes are guarded by tests/test_telemetry.py)."""
+    from opentelemetry.sdk.resources import Resource
+
+    return Resource.create(
+        {
+            "service.name": os.getenv("SERVICE_NAME", "analysis"),
+            "deployment.environment": os.getenv("APPLICATION_ENV", "development"),
+            "platform": "xstockstrat",
+        }
+    )
+
+
 def init_telemetry() -> None:
     """Configure OTel TracerProvider and instrument gRPC. No-op when disabled."""
     if os.getenv("OTEL_ENABLED", "false").lower() != "true":
@@ -19,23 +33,13 @@ def init_telemetry() -> None:
         from opentelemetry import trace
         from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
         from opentelemetry.instrumentation.grpc import GrpcAioInstrumentorServer
-        from opentelemetry.sdk.resources import Resource
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
         endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "otel-collector:4317")
         svc_name = os.getenv("SERVICE_NAME", "analysis")
-        environment = os.getenv("APPLICATION_ENV", "development")
-        trading_mode = os.getenv("TRADING_MODE", "paper")
 
-        resource = Resource.create(
-            {
-                "service.name": svc_name,
-                "deployment.environment": environment,
-                "trading_mode": trading_mode,
-                "platform": "xstockstrat",
-            }
-        )
+        resource = _build_resource()
         exporter = OTLPSpanExporter(endpoint=endpoint, insecure=True)
         provider = TracerProvider(resource=resource)
         provider.add_span_processor(BatchSpanProcessor(exporter))

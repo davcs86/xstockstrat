@@ -7,12 +7,15 @@ test mocks.
 - **Branch model**: `**Development Branch**` in `feature.md` is the integration branch (PR target).
   Per-step work happens on `feature-steps/<slug>-step-<N>` sub-branches created by BRANCH SYNC. Boot
   Step B4 validates the current branch context.
-- **Proto edits**: after any `.proto` change, run from `packages/proto/`:
+- **Proto edits**: after any `.proto` change, run `buf lint` + `buf breaking`. The Docker codegen
+  script (`./scripts/localenv-setup.sh`) runs both inside the container as part of stub generation
+  (`buf breaking` against `main-dev` by default; override with `AGAINST_BRANCH`), so prefer it — see
+  the **After proto changes** bullet. Host-native, from `packages/proto/`:
   ```bash
   buf lint && buf breaking --against ".git#branch=<dev-branch>"
   ```
   where `<dev-branch>` is the `**Development Branch**` value from `feature.md` (parsed in Boot Step B4).
-  If `buf` is not installed: fall back to `grpc_tools.protoc` (precedent:
+  If `buf` is not installed and Docker is unavailable: fall back to `grpc_tools.protoc` (precedent:
   docs/roadmap/phase3-deviations.md) and document as deviation.
 - **Migrations**: naming is `NNN_description.up.sql` + `NNN_description.down.sql`. NNN is the next
   integer after the last file found by `ls services/<name>/migrations/ | sort | tail -1`.
@@ -21,8 +24,9 @@ test mocks.
   is CI's job at deploy. A step whose `**Verification**` names `docker run postgres` / `migrate` /
   `psql`-against-a-live-DB gets the offline check substituted (logged as a deviation) — do not hang
   waiting on a container (SKILL.md Phase 3 / HARD CONSTRAINTS).
-- **After proto changes**: run `./scripts/buf-gen.sh` to regenerate stubs; include generated files in
-  the commit.
+- **After proto changes**: regenerate stubs with **`./scripts/localenv-setup.sh`** (Docker codegen
+  image — builds once, installs nothing on the host); fall back to `./scripts/buf-gen.sh` (host-native)
+  only when the Docker daemon is unavailable. Include the generated files in the commit.
 - **Config keys**: format is `<service-short-name>.<category>.<key>` — verify before writing.
 - **Never edit applied migrations**: any applied `.up.sql` file (committed to main-dev) is immutable;
   add a new numbered migration for corrections.

@@ -1,8 +1,6 @@
 /**
- * services/configWatcher.ts
- * Shared ConfigWatcher for all Node.js services.
- * Subscribes to xstockstrat-config WatchConfig gRPC stream.
- * All services call waitForSnapshot() before accepting traffic.
+ * Shared ConfigWatcher for all Node.js services — subscribes to the config WatchConfig
+ * gRPC stream; callers await waitForSnapshot() before accepting traffic.
  */
 import * as grpc from '@grpc/grpc-js';
 import { EventEmitter } from 'events';
@@ -34,8 +32,7 @@ export class ConfigWatcher extends EventEmitter {
   }
 
   private startWatch() {
-    // Feature 147: config is scoped by environment (production/staging) x global/per-user.
-    // paper/live is derived from environment; trading_mode is deprecated and ignored by the server.
+    // Config is scoped by environment; trading_mode is deprecated (server ignores it).
     const appEnv = process.env.APPLICATION_ENV ?? 'development';
     const environment = appEnv === 'production' ? Environment.ENVIRONMENT_PRODUCTION : Environment.ENVIRONMENT_STAGING;
 

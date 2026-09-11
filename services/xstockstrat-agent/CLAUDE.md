@@ -40,7 +40,7 @@ Python 3.13 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
 
 ## MCP Tools
 
-The agent registers forty-two tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
+The agent registers forty-nine tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
 reference):
 
 | Tool | Purpose |
@@ -73,11 +73,18 @@ reference):
 | `set_user_metadata` | Partial-update the calling user's own profile metadata (feature 130) |
 | `list_watchlists` | List the caller's own watchlists from portfolio, paginated (read-only, feature 148) |
 | `get_watchlist` | Read one of the caller's watchlists incl. its stocks (read-only, feature 148) |
-| `manage_watchlist` | Create/update/delete a caller-owned watchlist; `update` is a **read-modify-write merge** over the replace-only `UpdateWatchlist` RPC so a name-only edit never wipes the stocks (feature 148) |
-| `manage_watchlist_symbols` | Add/remove stocks on a caller-owned watchlist; `add` records `MANUAL`-sourced entries (feature 148) |
+| `manage_watchlist` | Create/update/delete a caller-owned watchlist; `update` is a **read-modify-write merge** over the replace-only `UpdateWatchlist` RPC so a name-only edit never wipes the stocks (feature 148). A `default_strategy_id` arg sets the watchlist-level default (feature 170) — on `update` it takes the **field-mask** partial-write path (scalar fields only, bindings untouched) |
+| `manage_watchlist_symbols` | Add/remove/**assign** stocks on a caller-owned watchlist; `add` records `MANUAL`-sourced entries (feature 148); `assign` (feature 170) atomically rebinds a set of symbols to one strategy via `UpdateWatchlistBindings` (all-or-nothing) |
 | `manage_offline_account` | Create a caller-owned OFFLINE account, record its orders, confirm their fills (recomputes positions + realized P&L), snapshot a brokerage-statement baseline (effective-dated opening positions, feature 163), and read its orders/positions (with per-position `source`/`as_of` provenance) — the manual-book reconciliation surface (feature 157) |
 | `manage_account` | Register / update-credentials / deregister a caller-owned BROKER account (Alpaca/IBKR); ownership-gated on `x-user-id`, credentials never echoed back (feature 164) |
 | `list_accounts` | List the caller's own accounts — broker and offline together, each by `broker_type` (read-only, feature 164) |
+| `get_positions` | List the caller's positions across all accounts, broker + offline (read-only, feature 169) |
+| `get_positions_by_account_id` | List the caller's positions for one account (read-only, feature 169) |
+| `manage_user` | **Admin**: create / set_roles / set_active / reset_password a user (admin-gated write, feature 183); passwords write-only, never echoed |
+| `list_users` | **Admin**: list all users, password-free views (read-only, admin-gated, feature 183) |
+| `get_user` | **Admin**: read one user by id (read-only, admin-gated, feature 183) |
+| `admin_get_user_metadata` | **Admin**: read ANY user's profile metadata by `user_id` (read-only, feature 183) — distinct from the self-only `get_user_metadata` |
+| `admin_set_user_metadata` | **Admin**: partial-update ANY user's profile metadata by `user_id` (feature 183) — distinct from the self-only `set_user_metadata` |
 | `db_list_schemas` | List all database schemas via postgres-mcp co-process. Admin-only (feature 169) |
 | `db_list_objects` | List objects (tables, views, etc.) in a schema via postgres-mcp. Admin-only (feature 169) |
 | `db_get_object_details` | Get DDL and statistics for a named DB object via postgres-mcp. Admin-only (feature 169) |
@@ -101,6 +108,16 @@ succeeding under a hardcoded admin override. The claims come from `app/main.py` 
 publishes them on the request's ASGI scope under `MCP_CLAIMS_SCOPE_KEY`; each tool reads them via its
 injected `ctx: Context`. The old hardcoded `_admin_metadata()` (`x-access-scope=7`) tuple was
 **removed** by feature 092.
+
+**The user-administration tools are admin-gated (feature 183).** `manage_user`, `list_users`,
+`get_user`, `admin_get_user_metadata`, and `admin_set_user_metadata` each call `_require_admin(ctx,
+tool)` — a friendly early `scope & 0x04` check that rejects a non-admin `PermissionError` **before any
+backend call** (no state change) — then forward the caller's derived `x-access-scope` via
+`client._metadata()` so `xstockstrat-identity`'s `adminGate` remains the authoritative server-side gate
+(both new profile RPCs + the six feature-043 user RPCs check the ADMIN bit). The **target** user is
+always a request-body `user_id` (never the caller's `x-user-id`), so these are distinct from the
+self-only `get_user_metadata`/`set_user_metadata`. Passwords (`manage_user create`/`reset_password`)
+are write-only — never echoed in a tool result or logged.
 
 **`manage_strategy` / `set_strategy_live` are now ownership-gated, not admin-gated (feature 133).**
 The analysis `ManageStrategy`/`SetStrategyLive` admin gate was **removed**: strategies are per-user

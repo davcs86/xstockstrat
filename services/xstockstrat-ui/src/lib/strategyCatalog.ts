@@ -148,8 +148,7 @@ export const FUNDAMENTAL_METRICS: FundamentalMetric[] = [
   { name: 'year_low', description: '52-week low' },
 ];
 
-// Order-independent default (design.md § Chosen Approach point 3) — never
-// `FUNDAMENTAL_METRICS[0].name`; `pe_ratio` staying the default is load-bearing for FR-3.
+// Order-independent default — never `FUNDAMENTAL_METRICS[0].name`; `pe_ratio` staying the default is load-bearing.
 export const DEFAULT_FUNDAMENTAL_METRIC = FUNDAMENTAL_METRICS.find(
   (m) => m.name === 'pe_ratio',
 )!.name;

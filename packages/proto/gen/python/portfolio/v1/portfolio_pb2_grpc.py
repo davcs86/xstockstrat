@@ -119,6 +119,11 @@ class PortfolioServiceStub(object):
                 request_serializer=portfolio_dot_v1_dot_portfolio__pb2.UpdateWatchlistBindingRequest.SerializeToString,
                 response_deserializer=portfolio_dot_v1_dot_portfolio__pb2.UpdateWatchlistBindingResponse.FromString,
                 _registered_method=True)
+        self.UpdateWatchlistBindings = channel.unary_unary(
+                '/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlistBindings',
+                request_serializer=portfolio_dot_v1_dot_portfolio__pb2.UpdateWatchlistBindingsRequest.SerializeToString,
+                response_deserializer=portfolio_dot_v1_dot_portfolio__pb2.UpdateWatchlistBindingsResponse.FromString,
+                _registered_method=True)
 
 
 class PortfolioServiceServicer(object):
@@ -238,6 +243,15 @@ class PortfolioServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def UpdateWatchlistBindings(self, request, context):
+        """Atomic set-based rebind (feature 170): assign ONE strategy_id across a symbol set in a single
+        UPDATE ... WHERE symbol = ANY(...). All-or-nothing — an absent symbol → NOT_FOUND with zero
+        partial writes. Ownership from the x-user-id header; empty strategy_id unbinds the whole set.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_PortfolioServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -325,6 +339,11 @@ def add_PortfolioServiceServicer_to_server(servicer, server):
                     servicer.UpdateWatchlistBinding,
                     request_deserializer=portfolio_dot_v1_dot_portfolio__pb2.UpdateWatchlistBindingRequest.FromString,
                     response_serializer=portfolio_dot_v1_dot_portfolio__pb2.UpdateWatchlistBindingResponse.SerializeToString,
+            ),
+            'UpdateWatchlistBindings': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateWatchlistBindings,
+                    request_deserializer=portfolio_dot_v1_dot_portfolio__pb2.UpdateWatchlistBindingsRequest.FromString,
+                    response_serializer=portfolio_dot_v1_dot_portfolio__pb2.UpdateWatchlistBindingsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -786,6 +805,33 @@ class PortfolioService(object):
             '/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlistBinding',
             portfolio_dot_v1_dot_portfolio__pb2.UpdateWatchlistBindingRequest.SerializeToString,
             portfolio_dot_v1_dot_portfolio__pb2.UpdateWatchlistBindingResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateWatchlistBindings(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlistBindings',
+            portfolio_dot_v1_dot_portfolio__pb2.UpdateWatchlistBindingsRequest.SerializeToString,
+            portfolio_dot_v1_dot_portfolio__pb2.UpdateWatchlistBindingsResponse.FromString,
             options,
             channel_credentials,
             insecure,

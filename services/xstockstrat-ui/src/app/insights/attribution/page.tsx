@@ -12,10 +12,9 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { useSignalAttribution } from '@/hooks/useSignalAttribution';
 
 /**
- * feature 029 — Signal-performance Attribution. A sortable per-source table (trades, win rate, avg
- * return %, total P&L net of fees) over closed positions, filterable by date range and source, with
- * a CSV copy-to-clipboard export (FR-6/FR-7). Reads GetAttribution via the insights BFF
- * (useSignalAttribution); the handler is owner-scoped from the propagated x-user-id header.
+ * Signal-performance Attribution: a sortable per-source table (trades, win rate, avg return %, total
+ * P&L net of fees) over closed positions, filterable by date/source, with CSV copy-to-clipboard.
+ * Reads GetAttribution via the insights BFF; the handler is owner-scoped from the x-user-id header.
  */
 
 type Attribution = {

@@ -9,20 +9,14 @@ import {
 } from '../ui/breadcrumb';
 
 interface PageBreadcrumbProps {
-  /** No default — the collision-avoidance mechanism itself (feature 124, FR-10). Must be
-   *  distinct from any other labeled region or nav `Link` accessible name on the same page;
-   *  see `fails.md` 2026-08-09 for the `getByLabel`/`getByRole('link', ...)` collision classes
-   *  this guards against. */
+  /** No default — must be distinct from every other labeled region or nav link accessible name on
+   *  the page, so a11y/e2e locators don't collide. */
   ariaLabel: string;
   /** An item without `href` (or the last item) renders as the current, non-link crumb. */
   items: { label: string; href?: string }[];
 }
 
-/**
- * Page-level breadcrumb (feature 124, FR-10b) — generalizes the pattern `NamespaceEditor.tsx`
- * and `config-ui/audit/page.tsx` established before this component existed. Moved out of the
- * shared shell (`PlatformHeader.tsx`'s Row 2, removed by FR-10a) into each page's own layout.
- */
+/** Page-level breadcrumb, rendered in each page's own layout (not the shared shell). */
 export function PageBreadcrumb({ ariaLabel, items }: PageBreadcrumbProps) {
   return (
     <Breadcrumb aria-label={ariaLabel}>

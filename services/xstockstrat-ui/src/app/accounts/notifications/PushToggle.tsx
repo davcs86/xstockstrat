@@ -8,8 +8,7 @@ import { QueryStateMessages } from '@/components/shared/QueryStateMessages';
 import { notifyClient } from '@/lib/browserClients/notifyClient';
 import { useVapidKey } from '../VapidKeyContext';
 
-// Decode a base64url VAPID public key into the ArrayBuffer pushManager.subscribe expects as its
-// applicationServerKey. Returns the backing ArrayBuffer (a BufferSource) to satisfy lib.dom typing.
+// Decode a base64url VAPID key into the ArrayBuffer pushManager.subscribe expects as applicationServerKey.
 function urlBase64ToArrayBuffer(base64: string): ArrayBuffer {
   const padding = '='.repeat((4 - (base64.length % 4)) % 4);
   const b64 = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -29,11 +28,8 @@ export function PushToggle() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Derive current permission/subscription state on mount. Support is resolved SYNCHRONOUSLY from
-  // feature detection + Notification.permission — we must NOT block the 'unknown' loading state on
-  // `navigator.serviceWorker.ready`, which can hang indefinitely in some headless environments
-  // (CI), leaving the control stuck on the spinner. Reading the existing subscription is a
-  // best-effort enhancement that runs in the background and only flips `enabled`.
+  // Resolve support SYNCHRONOUSLY from feature detection + Notification.permission — never block the
+  // 'unknown' state on navigator.serviceWorker.ready, which can hang indefinitely in CI/headless.
   useEffect(() => {
     if (
       typeof navigator === 'undefined' ||

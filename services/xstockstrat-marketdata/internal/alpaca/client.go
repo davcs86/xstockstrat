@@ -17,6 +17,7 @@ import (
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
+	"github.com/xstockstrat/marketdata/internal/source"
 	tfpkg "github.com/xstockstrat/marketdata/internal/timeframe"
 )
 
@@ -24,16 +25,13 @@ import (
 const maxBarsLimit = 10000
 
 // ClientConfig holds Alpaca API credentials.
-// xstockstrat-marketdata is the ONLY service that imports or uses this package.
 type ClientConfig struct {
 	APIKey    string
 	APISecret string
 	BaseURL   string // e.g. https://paper-api.alpaca.markets
 	DataURL   string // e.g. https://data.alpaca.markets
-	// Feed selects the Alpaca market-data feed for bar/quote requests
-	// ("iex" | "sip" | "otc"). The free/basic (paper) data plan only permits
-	// "iex"; omitting feed defaults Alpaca to SIP, which those plans reject
-	// with HTTP 403. Empty falls back to "iex" via feedParam().
+	// Feed selects the market-data feed ("iex"|"sip"|"otc"). Empty → "iex": the free/basic
+	// paper plan permits only "iex" and rejects Alpaca's SIP default with HTTP 403.
 	Feed string
 	// BatchSize is the bars-per-request limit (marketdata.backfill.batch_size).
 	// Clamped to Alpaca's spec maximum (10000); zero/negative falls back to the max.
@@ -41,9 +39,8 @@ type ClientConfig struct {
 	// RateLimitRPS caps outbound REST calls per second (marketdata.backfill.rate_limit_rps).
 	// Zero/negative disables rate limiting.
 	RateLimitRPS int
-	// Adjustment is the corporate-action adjustment applied to historical bars
-	// ("raw" | "split" | "dividend" | "all"); default "all" so splits/dividends do
-	// not distort backtest OHLCV. Sourced from marketdata.alpaca.adjustment.
+	// Adjustment applied to historical bars ("raw"|"split"|"dividend"|"all"); default "all"
+	// so splits/dividends do not distort backtest OHLCV. From marketdata.alpaca.adjustment.
 	Adjustment string
 	// ReconnectDelayMs / MaxReconnects govern the streaming WebSocket reconnect loop
 	// (marketdata.stream.reconnect_delay_ms / marketdata.stream.max_reconnects).
@@ -94,8 +91,7 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 	return c.httpClient.Do(req)
 }
 
-// feedParam returns the configured market-data feed, defaulting to "iex" so the
-// free/basic data plan works without explicit configuration.
+// feedParam returns the configured feed, defaulting to "iex" (free-plan requirement).
 func (c *Client) feedParam() string {
 	if c.cfg.Feed == "" {
 		return "iex"
@@ -103,12 +99,8 @@ func (c *Client) feedParam() string {
 	return c.cfg.Feed
 }
 
-// alpacaTimeframe maps the platform's canonical bar-interval strings (15m/1h/1d —
-// the values stored in marketdata.ohlcv and passed by every caller, see internal/timeframe)
-// to the spellings Alpaca's v2 bars endpoint accepts (15Min/1Hour/1Day). Alpaca rejects
-// the canonical forms with HTTP 400 "invalid timeframe: 15m". Inputs already in Alpaca form,
-// and any unrecognized value, pass through unchanged so future intervals aren't silently dropped.
-// (Sub-15m intervals were removed from the product — see internal/timeframe.)
+// alpacaTimeframe maps canonical interval strings (15m/1h/1d) to Alpaca's v2 spellings
+// (15Min/1Hour/1Day); Alpaca rejects the canonical forms with HTTP 400. Unknowns pass through.
 func alpacaTimeframe(tf string) string {
 	switch tf {
 	case "15m", "15Min":
@@ -140,9 +132,8 @@ type alpacaBarsResponse struct {
 	NextPageToken string      `json:"next_page_token"`
 }
 
-// barFromAlpaca maps one decoded Alpaca bar to a proto Bar. Shared by the single- and
-// multi-symbol REST paths so the deprecated string and its timeframe_enum replacement
-// are set in exactly one place (feature 080).
+// barFromAlpaca maps one Alpaca bar to a proto Bar. Shared by the single- and multi-symbol
+// paths so the deprecated string timeframe and its enum are set in exactly one place.
 func barFromAlpaca(symbol string, b alpacaBar, t time.Time, timeframe string) *marketdatav1.Bar {
 	return &marketdatav1.Bar{
 		Symbol: symbol, Time: timestamppb.New(t),
@@ -153,9 +144,7 @@ func barFromAlpaca(symbol string, b alpacaBar, t time.Time, timeframe string) *m
 	}
 }
 
-// adjustmentParam returns the configured corporate-action adjustment, defaulting to
-// "all" so splits/dividends do not distort historical bars even if a Client is
-// constructed without NewClient.
+// adjustmentParam returns the configured adjustment, defaulting to "all" even without NewClient.
 func (c *Client) adjustmentParam() string {
 	if c.cfg.Adjustment == "" {
 		return "all"
@@ -272,9 +261,8 @@ type alpacaLatestTradeResponse struct {
 	} `json:"trade"`
 }
 
-// GetLatestTrade fetches the most recent trade price + timestamp from Alpaca (feature 095).
-// Mirrors GetLatestQuote's auth/rate-limit/feed handling; used by GetLatestPrice to source the
-// Decide-surface live price.
+// GetLatestTrade fetches the most recent trade price + timestamp from Alpaca. Used by
+// GetLatestPrice for the Decide-surface live price.
 func (c *Client) GetLatestTrade(ctx context.Context, symbol string) (float64, time.Time, error) {
 	url := fmt.Sprintf("%s/v2/stocks/%s/trades/latest?feed=%s", c.cfg.DataURL, symbol, c.feedParam())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -301,6 +289,50 @@ func (c *Client) GetLatestTrade(ctx context.Context, symbol string) (float64, ti
 	return result.Trade.P, t, nil
 }
 
+// multiLatestTradesResponse is the JSON shape of GET /v2/stocks/trades/latest (multi-symbol).
+type multiLatestTradesResponse struct {
+	Trades map[string]struct {
+		T string  `json:"t"`
+		P float64 `json:"p"`
+	} `json:"trades"`
+}
+
+// GetLatestTradesMulti fetches the latest trade for several symbols in one request
+// via GET /v2/stocks/trades/latest?symbols=A,B,…&feed=…. Returns a map keyed by symbol.
+func (c *Client) GetLatestTradesMulti(ctx context.Context, symbols []string) (map[string]*source.Trade, error) {
+	if len(symbols) == 0 {
+		return map[string]*source.Trade{}, nil
+	}
+	url := fmt.Sprintf("%s/v2/stocks/trades/latest?symbols=%s&feed=%s",
+		c.cfg.DataURL, strings.Join(symbols, ","), c.feedParam())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, fmt.Errorf("get latest trades multi: %w", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("alpaca trades multi %d: %s", resp.StatusCode, string(body))
+	}
+	var result multiLatestTradesResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("unmarshal trades multi: %w", err)
+	}
+	out := make(map[string]*source.Trade, len(result.Trades))
+	for sym, tr := range result.Trades {
+		t, _ := time.Parse(time.RFC3339, tr.T)
+		out[sym] = &source.Trade{Price: tr.P, TradeTime: t}
+	}
+	return out, nil
+}
+
 // multiBarsResponse is the JSON shape of GET /v2/stocks/bars (multi-symbol):
 // bars is keyed by symbol.
 type multiBarsResponse struct {
@@ -308,9 +340,8 @@ type multiBarsResponse struct {
 	NextPageToken string                 `json:"next_page_token"`
 }
 
-// GetBarsMulti fetches historical bars for several symbols in a single request via
-// GET /v2/stocks/bars?symbols=A,B,…, collapsing what would otherwise be one REST call
-// per symbol. Returns a map keyed by symbol. Pagination is followed transparently.
+// GetBarsMulti fetches historical bars for several symbols in one request, collapsing the
+// per-symbol REST fan-out. Returns a map keyed by symbol; pagination is followed transparently.
 func (c *Client) GetBarsMulti(ctx context.Context, symbols []string, timeframe string, start, end time.Time) (map[string][]*marketdatav1.Bar, error) {
 	if len(symbols) == 0 {
 		return map[string][]*marketdatav1.Bar{}, nil

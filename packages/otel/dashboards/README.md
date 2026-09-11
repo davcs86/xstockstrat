@@ -37,7 +37,7 @@ instrumentation is required for them to populate:
   `rpc_grpc_status_code` (`"0"` = OK). If your Grafana Cloud stack maps the histogram under a
   different name (e.g. `rpc_server_duration_milliseconds` vs `rpc_server_duration_ms`), adjust
   the panel `expr` accordingly — see the metric in **Explore** first.
-- **Resource attributes** (`service.name`, `deployment.environment`, `trading_mode`,
+- **Resource attributes** (`service.name`, `deployment.environment`,
   `platform=xstockstrat`) are attached by every service's telemetry module and surface as the
   `service_name` / `platform` labels (Grafana Cloud promotes `service.name`).
 - **Log-derived panels** (signals ingested, fills, scheduler runs, DB/OTLP errors) query Loki

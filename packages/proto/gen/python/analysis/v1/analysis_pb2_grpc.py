@@ -129,6 +129,11 @@ class AnalysisServiceStub(object):
                 request_serializer=analysis_dot_v1_dot_analysis__pb2.GetAttributionRequest.SerializeToString,
                 response_deserializer=analysis_dot_v1_dot_analysis__pb2.GetAttributionResponse.FromString,
                 _registered_method=True)
+        self.GetWatchlistReadiness = channel.unary_unary(
+                '/xstockstrat.analysis.v1.AnalysisService/GetWatchlistReadiness',
+                request_serializer=analysis_dot_v1_dot_analysis__pb2.GetWatchlistReadinessRequest.SerializeToString,
+                response_deserializer=analysis_dot_v1_dot_analysis__pb2.GetWatchlistReadinessResponse.FromString,
+                _registered_method=True)
 
 
 class AnalysisServiceServicer(object):
@@ -269,6 +274,15 @@ class AnalysisServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetWatchlistReadiness(self, request, context):
+        """Cache-first readiness decoration for a page of a watchlist's bound (symbol, strategy_id)
+        pairs (feature 181). Owner from x-user-id; RESOLVED rows carry inline SymbolReadiness,
+        PENDING/UNKNOWN rows resolve on a subsequent poll (the server kicks a background refresh).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_AnalysisServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -366,6 +380,11 @@ def add_AnalysisServiceServicer_to_server(servicer, server):
                     servicer.GetAttribution,
                     request_deserializer=analysis_dot_v1_dot_analysis__pb2.GetAttributionRequest.FromString,
                     response_serializer=analysis_dot_v1_dot_analysis__pb2.GetAttributionResponse.SerializeToString,
+            ),
+            'GetWatchlistReadiness': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetWatchlistReadiness,
+                    request_deserializer=analysis_dot_v1_dot_analysis__pb2.GetWatchlistReadinessRequest.FromString,
+                    response_serializer=analysis_dot_v1_dot_analysis__pb2.GetWatchlistReadinessResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -881,6 +900,33 @@ class AnalysisService(object):
             '/xstockstrat.analysis.v1.AnalysisService/GetAttribution',
             analysis_dot_v1_dot_analysis__pb2.GetAttributionRequest.SerializeToString,
             analysis_dot_v1_dot_analysis__pb2.GetAttributionResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetWatchlistReadiness(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.analysis.v1.AnalysisService/GetWatchlistReadiness',
+            analysis_dot_v1_dot_analysis__pb2.GetWatchlistReadinessRequest.SerializeToString,
+            analysis_dot_v1_dot_analysis__pb2.GetWatchlistReadinessResponse.FromString,
             options,
             channel_credentials,
             insecure,

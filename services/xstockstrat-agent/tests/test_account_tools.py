@@ -13,7 +13,7 @@ from mcp.server.mcpserver import MCPServer
 
 from app import client
 from app.tools import register_tools
-from tests.conftest import TRADER, _ctx
+from tests.conftest import ADMIN, TRADER, _ctx
 
 _ACCOUNT_TOOLS = ["manage_account", "list_accounts"]
 
@@ -158,8 +158,58 @@ async def test_deregister_permission_denied_maps_to_runtimeerror():
 async def test_unknown_operation_rejected():
     """@AC-8: an unknown operation is rejected listing the expected verbs."""
     server = _make_server()
-    with pytest.raises(ValueError, match="register/update_credentials/deregister"):
+    with pytest.raises(ValueError, match="register/update_credentials/deregister/resume"):
         await _tool_fn(server, "manage_account")(ctx=_ctx(TRADER), operation="delete_everything")
+
+
+# ── manage_account resume (feature 169: AC-1/AC-2/AC-5) ─────────────────────
+
+
+@pytest.mark.asyncio
+async def test_resume_dispatches_to_client():
+    """@AC-1/AC-5: resume with admin scope calls resume_broker_account and returns the account."""
+    mock = AsyncMock(return_value={"account": {"id": "acct-7", "halted": False}})
+    with patch.object(client, "resume_broker_account", mock):
+        server = _make_server()
+        out = await _tool_fn(server, "manage_account")(
+            ctx=_ctx(ADMIN), operation="resume", account_id="acct-7", reason="false alarm"
+        )
+    assert out["account"]["id"] == "acct-7"
+    assert out["account"]["halted"] is False
+    mock.assert_awaited_once_with(user_id="u-1", account_id="acct-7", reason="false alarm")
+
+
+@pytest.mark.asyncio
+async def test_resume_requires_admin_scope():
+    """@AC-2: resume with non-admin (trader) scope raises PermissionError."""
+    mock = AsyncMock()
+    with patch.object(client, "resume_broker_account", mock):
+        server = _make_server()
+        with pytest.raises(PermissionError, match="admin scope"):
+            await _tool_fn(server, "manage_account")(
+                ctx=_ctx(TRADER), operation="resume", account_id="acct-7"
+            )
+    mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_resume_requires_account_id():
+    """Resume without account_id raises ValueError."""
+    server = _make_server()
+    with pytest.raises(ValueError, match="resume requires"):
+        await _tool_fn(server, "manage_account")(ctx=_ctx(ADMIN), operation="resume", account_id="")
+
+
+@pytest.mark.asyncio
+async def test_resume_forwards_reason():
+    """The optional reason parameter is forwarded verbatim to the client."""
+    mock = AsyncMock(return_value={"account": {"id": "acct-7"}})
+    with patch.object(client, "resume_broker_account", mock):
+        server = _make_server()
+        await _tool_fn(server, "manage_account")(
+            ctx=_ctx(ADMIN), operation="resume", account_id="acct-7", reason="test reason"
+        )
+    mock.assert_awaited_once_with(user_id="u-1", account_id="acct-7", reason="test reason")
 
 
 # ── list_accounts (AC-6) ─────────────────────────────────────────────────────

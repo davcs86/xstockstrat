@@ -1,21 +1,15 @@
-// Shared client-side "Unauthorized -> refresh-first, then redirect to login" core (feature 153).
+// Shared client-side "Unauthorized -> refresh-first, then redirect to login" core.
 //
-// BROWSER-ONLY. Never import this from `middleware.ts` or `auth.ts` — those are bundled for the Edge
-// runtime, and this module references `window`/`fetch` and (transitively, via transport.ts) the
-// connect-web client. Consumers: `browserClients/transport.ts` (connect-web unary + streaming) and
-// the `/accounts` REST fetch call sites (via `apiFetch`).
-//
-// Behavior on any 401 / gRPC Unauthenticated from a data call: attempt a single token refresh
-// (`POST /api/auth/refresh`, cookie-only). If it succeeds the caller retries once (a still-valid
-// session recovers silently — access tokens expire every ~15 min but the refresh token lives days).
-// If it fails, redirect the browser to the unified login page, preserving the current location.
+// BROWSER-ONLY. Never import from `middleware.ts` or `auth.ts` (Edge bundle) — this references
+// `window`/`fetch` and (via transport.ts) the connect-web client. Consumers: transport.ts and the
+// `/accounts` REST call sites (via `apiFetch`).
 
 /** The unified login page path (domain root, outside every segment basePath). */
 const LOGIN_PATH = '/auth/login';
 
 /**
- * True when a login redirect is appropriate for the given pathname. Suppressed on the login page
- * itself so an Unauthorized observed there cannot cause a redirect loop (AC-7).
+ * True when a login redirect is appropriate. Suppressed on the login page itself so an Unauthorized
+ * observed there cannot cause a redirect loop.
  */
 export function shouldRedirectToLogin(pathname: string): boolean {
   return pathname !== LOGIN_PATH;
@@ -29,9 +23,8 @@ export function buildLoginRedirect(pathname: string, search: string): string {
   return `${LOGIN_PATH}?redirect=${encodeURIComponent(pathname + search)}`;
 }
 
-// Single in-flight refresh: a page firing many data calls at once will observe many 401s together;
-// they must share ONE refresh POST rather than each issuing their own (and rotating each other's
-// refresh token out from under them).
+// Single in-flight refresh: concurrent 401s must share ONE refresh POST, or they rotate each
+// other's refresh token out from under them.
 let refreshInFlight: Promise<boolean> | null = null;
 
 /** Attempt a token refresh. Deduplicated: concurrent callers await the same POST. */

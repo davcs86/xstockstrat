@@ -11,7 +11,6 @@ import {
 } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { TradingMode as PbTradingMode, BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
 import { ConnectError } from '@connectrpc/connect';
-// BASE_PATH no longer needed — calls go through the typed Connect client.
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -40,21 +39,13 @@ const ORDER_TYPE_ENUM: Record<OrderType, PbOrderType> = {
 
 interface OrderFormProps {
   mode: TradingMode;
-  // Optional caller-supplied symbol (feature 083 FR-6 — the Signal-detail order ticket is
-  // pinned to the signal's symbol, which arrives as a route param, not the ?symbol deep link).
+  // Caller-supplied symbol; takes precedence over the ?symbol deep link and pins the field.
   initialSymbol?: string;
-  // Feature 159: when true (the default, all /trader mounts), an OFFLINE account swaps the broker
-  // ticket for a minimal "Record order" control. The insights Signal-detail mount passes false —
-  // a signal→order ticket is broker-execution context, and the trading-side routing guard still
-  // guarantees an offline account is never broker-routed there. An explicit prop is required because
-  // a /trader mount (positions/[symbol]) also passes initialSymbol, so initialSymbol can't distinguish
-  // the insights mount.
+  // Explicit prop (not derived from initialSymbol — a /trader mount also passes that): when true,
+  // an OFFLINE account swaps the broker ticket for a minimal "Record order" control.
   allowOfflineRecord?: boolean;
-  // feature 110 — the scoped signal-detail affordance: when a finite in-[0,1] confidence is passed,
-  // the ticket lets quantity be left blank (coerced to 0) and attaches it as PlaceOrder.confidence,
-  // routing into feature 023's qty<=0 auto-sizing. Mirrors the allowOfflineRecord explicit-prop
-  // precedent — deliberately NOT keyed on initialSymbol (a plain /trader mount also passes that).
-  // Absent (every /trader + /trader/orders mount) → the qty field stays required, no confidence sent.
+  // Finite in-[0,1] confidence → qty may be left blank (coerced to 0) and sent as
+  // PlaceOrder.confidence for auto-sizing; absent → qty stays required, no confidence sent.
   signalConfidence?: number;
 }
 
@@ -64,52 +55,36 @@ export function OrderForm({
   allowOfflineRecord = true,
   signalConfidence,
 }: OrderFormProps) {
-  // Finite in-[0,1] gate (belt-and-suspenders; the backend re-guards [0,1]). Only a real value
-  // enables the blank-qty auto-size affordance — a NaN/out-of-range prop is ignored.
+  // Finite in-[0,1] gate; only a real value enables the blank-qty auto-size affordance.
   const hasSignalConfidence =
     typeof signalConfidence === 'number' &&
     Number.isFinite(signalConfidence) &&
     signalConfidence >= 0 &&
     signalConfidence <= 1;
   const { selectedAccountId, accounts } = useAccountContext();
-  // Offline detection reuses the canonical pattern (accountShared.tsx / PortfolioPanel showRealized):
-  // key on the selected account's broker type, since the portfolio contract carries no offline marker.
+  // Portfolio contract carries no offline marker — detect offline by broker type.
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
   const isRecordMode = allowOfflineRecord && selectedAccount?.brokerType === BrokerType.OFFLINE;
-  // Quick-trade deep link: the positions table links here as /trader?symbol=SYM so the
-  // ticket opens pre-filled. An explicit initialSymbol (Signal detail) takes precedence over
-  // the ?symbol param. Seed the initial value, then keep it in sync if it changes (without
-  // clobbering what the user types once it's empty).
+  // An explicit initialSymbol takes precedence over the ?symbol deep link.
   const searchParams = useSearchParams();
   const prefillSymbol = (initialSymbol || searchParams.get('symbol') || '').toUpperCase();
   const [symbol, setSymbol] = useState(prefillSymbol);
   useEffect(() => {
     if (prefillSymbol) setSymbol(prefillSymbol);
   }, [prefillSymbol]);
-  // An explicit initialSymbol (the signal-detail mount on /trader/positions/[symbol]) pins this
-  // ticket to one symbol — the chart, conviction, and edge stats above it are all keyed to it, so
-  // letting the field be edited away from it would desync the order from the analysis it was placed
-  // from. The generic ?symbol= quick-trade deep link (/trader) stays editable — it's a convenience
-  // prefill, not a pinned context.
+  // initialSymbol pins the field (signal-detail mount); the ?symbol quick-trade prefill stays editable.
   const symbolLocked = Boolean(initialSymbol);
   const [side, setSide] = useState<OrderSide>('buy');
   const [orderType, setOrderType] = useState<OrderType>('market');
   const [qty, setQty] = useState('');
   const [limitPrice, setLimitPrice] = useState('');
   const [stopPrice, setStopPrice] = useState('');
-  // Optional recorded fill price for an offline "Record order" (feature 159) — mapped to limitPrice on
-  // submit; an offline order records req.OrderType/req.LimitPrice verbatim (no broker), so MARKET + this
-  // price is sufficient. Broker order types / TIF / stop / trailing inputs are deliberately not shown in
-  // record mode (the broker trailing-stop validation runs before the offline branch).
+  // Optional offline "Record order" fill price — mapped to limitPrice on submit (no broker).
   const [fillPrice, setFillPrice] = useState('');
   const [message, setMessage] = useState('');
   const [isErrorMsg, setIsErrorMsg] = useState(false);
-  // Client-side idempotency nonce (feature 101, FR-1/FR-2): a stable ID per logical
-  // place-order action, generated once when the form opens and reused across retries of
-  // that same action (a network retry, a double-click, or the operator clicking "Place
-  // Order" again after seeing an error) so the server can dedup. Rotated only after a
-  // successful placement — a failed attempt must keep the same nonce so a resubmit is
-  // recognized as the same logical action, not a new one.
+  // Idempotency nonce: rotated only after a successful placement, so a resubmit after an
+  // error keeps the same nonce and the server dedups it as one logical action.
   const [clientOrderId, setClientOrderId] = useState(() => crypto.randomUUID());
   const { mutate: placeOrder, isPending } = usePlaceOrder();
 
@@ -120,18 +95,15 @@ export function OrderForm({
       {
         symbol: symbol.toUpperCase(),
         side: side === 'buy' ? PbOrderSide.BUY : PbOrderSide.SELL,
-        // Record mode forces MARKET and maps the optional fill price to limit_price; the explicit
-        // offline accountId makes the backend record a NEW offline order (no broker submit).
+        // The explicit offline accountId makes the backend record a NEW offline order (no broker submit).
         orderType: isRecordMode ? PbOrderType.MARKET : ORDER_TYPE_ENUM[orderType],
-        // feature 110 — with a signal confidence, a blank/NaN quantity coerces to a real 0 (never
-        // NaN — Go's `NaN <= 0` is false, which would bypass 023's qty<=0 sizing and reach the
-        // broker) so the order routes into confidence-based auto-sizing; an explicit qty overrides it.
+        // Blank/NaN qty must coerce to real 0, never NaN: Go's `NaN <= 0` is false, which would
+        // bypass 023's qty<=0 auto-sizing and reach the broker.
         qty: (() => {
           const parsed = parseFloat(qty);
           return hasSignalConfidence && !(parsed > 0) ? 0 : parsed;
         })(),
-        // Attach the confidence only on the scoped signal-detail mount; undefined is omitted by the
-        // typed client → unset → backend default 1.0 (exactly the plain forms' behavior today).
+        // undefined is omitted by the typed client → unset → backend default 1.0.
         confidence: hasSignalConfidence ? signalConfidence : undefined,
         limitPrice: isRecordMode
           ? fillPrice
@@ -148,11 +120,7 @@ export function OrderForm({
       {
         onSuccess: (order) => {
           setIsErrorMsg(false);
-          // Consumer surface requirement (C-14, feature 023): show the computed
-          // quantity/stop price whenever the server auto-sized the order (qty<=0
-          // submitted). stopPrice is shown only when non-zero — an ordinary override-mode
-          // buy/sell always sends stop_price=0, and printing "stop: 0" on every plain
-          // market/limit order would be noise.
+          // stopPrice shown only when non-zero — plain buy/sell sends stop_price=0 (would be noise).
           const stopInfo = order.stopPrice > 0 ? `, stop ${order.stopPrice}` : '';
           setMessage(
             isRecordMode
@@ -197,7 +165,6 @@ export function OrderForm({
             title={symbolLocked ? 'Symbol is locked to this signal' : undefined}
           />
 
-          {/* Buy / Sell toggle */}
           <ToggleGroup
             type="single"
             variant="outline"
@@ -213,8 +180,7 @@ export function OrderForm({
             </ToggleGroupItem>
           </ToggleGroup>
 
-          {/* Broker order type is meaningless for an offline record — hidden in record mode so a
-              broker-only type (e.g. Trailing Stop, validated before the offline branch) can't be sent. */}
+          {/* Hidden in record mode so a broker-only type (e.g. Trailing Stop) can't be sent offline. */}
           {!isRecordMode && (
             <Select value={orderType} onValueChange={(v) => setOrderType(v as OrderType)}>
               <SelectTrigger>
@@ -237,8 +203,7 @@ export function OrderForm({
             placeholder="Quantity"
             value={qty}
             onChange={(e) => setQty(e.target.value)}
-            // feature 110 — required on every plain mount (FR-3); optional only on the scoped
-            // signal-detail mount, where a blank qty routes into confidence auto-sizing.
+            // Optional only when a signal confidence enables blank-qty auto-sizing.
             required={!hasSignalConfidence}
           />
           {hasSignalConfidence && (
@@ -248,7 +213,6 @@ export function OrderForm({
             </p>
           )}
 
-          {/* Record mode: a single optional fill price (mapped to limit_price). */}
           {isRecordMode && (
             <Input
               type="number"

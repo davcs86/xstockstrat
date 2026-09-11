@@ -1,5 +1,5 @@
 """
-Config watcher for xstockstrat-indicators.
+Config watcher for xstockstrat-ingest.
 Subscribes to xstockstrat-config WatchConfig stream at startup.
 """
 
@@ -14,8 +14,7 @@ from gen.config.v1 import config_pb2, config_pb2_grpc
 log = logging.getLogger(__name__)
 
 
-# feature 166 — this service's internal-caller identity for GetSecret; matches the config
-# SECRET_CALLER_ALLOWLIST ingest grant (keyPrefixes ['mcp_credential.']).
+# Must match config's SECRET_CALLER_ALLOWLIST ingest grant (keyPrefixes ['mcp_credential.']).
 INGEST_INTERNAL_CALLER_ID = "ingest"
 HEADER_INTERNAL_CALLER = "x-internal-caller"
 
@@ -35,7 +34,7 @@ def resolve_environment(application_env: str) -> int:
     return (
         common_pb2.ENVIRONMENT_PRODUCTION
         if application_env == "production"
-        else common_pb2.ENVIRONMENT_STAGING  # feature 147: non-production => staging
+        else common_pb2.ENVIRONMENT_STAGING
     )
 
 
@@ -55,9 +54,8 @@ class ConfigWatcher:
     def __init__(self, endpoint: str, namespace: str):
         self.endpoint = endpoint
         self.namespace = namespace
-        # This deployment's own resolved scope (APPLICATION_ENV/TRADING_MODE) — passed on
-        # every WatchConfig request so the server serves this deployment's config rows
-        # instead of the zero-value dev/all default.
+        # Passed on every WatchConfig so the server serves this deployment's rows,
+        # not the zero-value dev default.
         self._environment = resolve_environment(os.environ.get("APPLICATION_ENV", "development"))
         self._trading_mode = resolve_trading_mode(os.environ.get("TRADING_MODE", "paper"))
         self._snapshot: config_pb2.ConfigSnapshot | None = None
@@ -66,17 +64,18 @@ class ConfigWatcher:
         self._stub = config_pb2_grpc.ConfigServiceStub(self._channel)
         asyncio.get_event_loop().create_task(self._watch())
 
+    def _build_watch_request(self) -> config_pb2.WatchConfigRequest:
+        return config_pb2.WatchConfigRequest(
+            namespace=self.namespace,
+            client_id=f"ingest-{id(self)}",
+            environment=self._environment,
+            trading_mode=self._trading_mode,
+        )
+
     async def _watch(self):
         while True:
             try:
-                stream = self._stub.WatchConfig(
-                    config_pb2.WatchConfigRequest(
-                        namespace=self.namespace,
-                        client_id=f"indicators-{id(self)}",
-                        environment=self._environment,
-                        trading_mode=self._trading_mode,
-                    )
-                )
+                stream = self._stub.WatchConfig(self._build_watch_request())
                 async for snapshot in stream:
                     self._snapshot = snapshot
                     self._snapshot_event.set()
@@ -113,6 +112,16 @@ class ConfigWatcher:
         if v is None:
             return default
         return v.int_val or default
+
+    def get_int_present(self, key: str, default: int) -> int:
+        """Use this (never get_int) for keys where a stored 0 is meaningful: HasField honors
+        a present 0 instead of collapsing it to the default."""
+        if self._snapshot is None:
+            return default
+        v = self._snapshot.values.get(key)
+        if v is None:
+            return default
+        return v.int_val if v.HasField("int_val") else default
 
     def get_bool(self, key: str, default: bool = False) -> bool:
         if self._snapshot is None:
@@ -167,6 +176,8 @@ class ConfigWatcher:
     # Backfill config helpers — ingest.backfill.*
     @property
     def backfill_max_concurrent_jobs(self) -> int:
+        # get_int (zero-trap intentional): a configured 0 → default 3; 0 would reach
+        # asyncio.Semaphore(0) at servicer.py:191 and deadlock. Do NOT switch to get_int_present.
         return self.get_int("ingest.backfill.max_concurrent_jobs", default=3)
 
     @property
@@ -175,9 +186,9 @@ class ConfigWatcher:
 
     @property
     def backfill_max_retry_attempts(self) -> int:
-        return self.get_int("ingest.backfill.max_retry_attempts", default=3)
+        return self.get_int_present("ingest.backfill.max_retry_attempts", default=3)
 
-    # Chunked-backfill config helpers — ingest.backfill.* (feature 054)
+    # Chunked-backfill config helpers — ingest.backfill.*
     @property
     def backfill_chunk_max_bars(self) -> int:
         return self.get_int("ingest.backfill.chunk_max_bars", default=200000)
@@ -188,9 +199,11 @@ class ConfigWatcher:
 
     @property
     def backfill_max_concurrent_chunks(self) -> int:
+        # get_int (zero-trap intentional): a configured 0 → default 3; 0 would reach
+        # asyncio.Semaphore(0) at servicer.py:519 and deadlock. Do NOT switch to get_int_present.
         return self.get_int("ingest.backfill.max_concurrent_chunks", default=3)
 
-    # Signal dedup config helper — ingest.signals.* (feature 111)
+    # Signal dedup config helper — ingest.signals.*
     @property
     def dedup_window_hours(self) -> int:
-        return self.get_int("ingest.signals.dedup_window_hours", default=24)
+        return self.get_int_present("ingest.signals.dedup_window_hours", default=24)

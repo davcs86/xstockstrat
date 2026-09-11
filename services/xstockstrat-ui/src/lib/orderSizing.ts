@@ -1,7 +1,5 @@
-// feature 095 — pure client-side order-ticket helpers: risk/reward and a suggested share count
-// derived from values already on hand (live price, target, stop, buying power). These are
-// PRESENTATION ONLY (FR-5/AC-10): the numbers are never sent to execution — usePlaceOrder is
-// untouched. No hardcoded colors, no side effects; unit-tested in orderSizing.test.ts.
+// Pure client-side order-ticket helpers (risk/reward + a suggested share count). PRESENTATION ONLY —
+// the numbers are never sent to execution.
 
 /** Fraction of buying power to risk on a single trade when suggesting a size (a conventional 1%). */
 const DEFAULT_RISK_FRACTION = 0.01;

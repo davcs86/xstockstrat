@@ -5,17 +5,13 @@ import { useInvalidatingMutation } from './useInvalidatingMutation';
 type ListWatchlistsResult = Awaited<ReturnType<typeof insightsPortfolioClient.listWatchlists>>;
 
 const WATCHLISTS_KEY = ['watchlists'];
-// Shared mutationKey for every per-symbol/rename write (add/remove/rebind/rename) — lets an
-// ancestor that never remounts (page.tsx) detect an in-flight write via `useIsMutating`, even one
-// started by a WatchlistDetail instance that has since unmounted on a watchlist switch (design.md
-// §5 Layer 2). Deliberately NOT per-watchlist ([..., watchlistId]) — watchlistId is only known at
-// `.mutate()` call time, not at this hook-definition time.
+// Shared mutationKey for every per-symbol/rename write, so `useIsMutating` still sees an in-flight
+// write after the originating child unmounts. NOT per-watchlist — watchlistId is only known at mutate time.
 export const WATCHLIST_WRITE_KEY = ['watchlist-write'];
 
 /**
- * feature 097 — a per-symbol `(symbol, strategyId)` binding (FR-6). The write path carries
- * `bindings` (authoritative) so a bare-`symbols` write never resets a symbol's `strategyId` to ''
- * (the fails-080 reset trap). `strategyId: ''` = a watched-but-unbound symbol.
+ * A per-symbol `(symbol, strategyId)` binding. The write path carries `bindings` (authoritative) so
+ * a bare-`symbols` write never resets a symbol's `strategyId` to ''. `strategyId: ''` = unbound.
  */
 export type WatchlistBindingInput = { symbol: string; strategyId: string };
 
@@ -45,32 +41,46 @@ export function useCreateWatchlist() {
       description?: string;
       symbols?: string[];
       bindings?: WatchlistBindingInput[];
+      // Watchlist-level default strategy applied to initial bare symbols at add time.
+      defaultStrategyId?: string;
     }) =>
       insightsPortfolioClient.createWatchlist({
         name: input.name,
         description: input.description ?? '',
         symbols: input.symbols ?? [],
         bindings: input.bindings ?? [],
+        defaultStrategyId: input.defaultStrategyId ?? '',
       }),
     [WATCHLISTS_KEY],
   );
 }
 
+/**
+ * Replace-all update, with a field mask. Pass `updateMask` (proto field-name paths, e.g.
+ * `['default_strategy_id']`) for a PARTIAL update of only those scalar fields, leaving bindings
+ * untouched; omit it for the replace-all of name/description/bindings. `defaultStrategyId` persists
+ * only on the masked path (the backend rejects it without a mask), so name/binding edits MUST omit
+ * `updateMask`.
+ */
 export function useUpdateWatchlist() {
   return useInvalidatingMutation(
     (input: {
       watchlistId: string;
-      name: string;
+      name?: string;
       description?: string;
       symbols?: string[];
       bindings?: WatchlistBindingInput[];
+      defaultStrategyId?: string;
+      updateMask?: string[];
     }) =>
       insightsPortfolioClient.updateWatchlist({
         watchlistId: input.watchlistId,
-        name: input.name,
+        name: input.name ?? '',
         description: input.description ?? '',
         symbols: input.symbols ?? [],
         bindings: input.bindings ?? [],
+        defaultStrategyId: input.defaultStrategyId ?? '',
+        updateMask: input.updateMask ? { paths: input.updateMask } : undefined,
       }),
     [WATCHLISTS_KEY],
     { mutationKey: WATCHLIST_WRITE_KEY },
@@ -107,11 +117,8 @@ export function useRemoveWatchlistSymbols() {
 }
 
 /**
- * feature 167 — targeted single-symbol rebind. A plain (non-invalidating) useMutation: on success it
- * PATCHES just the one binding in the cached ['watchlists'] list from the RPC's returned
- * WatchlistBinding (carrying `source`), with NO invalidateQueries → no listWatchlists refetch (AC-6).
- * Carries mutationKey WATCHLIST_WRITE_KEY so the Layer-2 `useIsMutating` guard still serializes it
- * against rename/remove (design.md §5 Layer 2).
+ * Targeted single-symbol rebind. Patches the one binding in the cached ['watchlists'] list from the
+ * RPC result, NO invalidateQueries (no refetch). WATCHLIST_WRITE_KEY serializes it against rename/remove.
  */
 export function useUpdateWatchlistBinding() {
   const queryClient = useQueryClient();
@@ -144,7 +151,44 @@ export function useUpdateWatchlistBinding() {
           ),
         };
       });
-      // NO invalidateQueries(['watchlists']) — the whole point of AC-6.
+      // NO invalidateQueries(['watchlists']) — patch the cache, never refetch.
+    },
+  });
+}
+
+/**
+ * Atomic bulk rebind. One transactional RPC assigns `strategyId` across all `symbols`; patches every
+ * changed row in the cached ['watchlists'] list, NO invalidateQueries. WATCHLIST_WRITE_KEY serializes it.
+ */
+export function useUpdateWatchlistBindings() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    Awaited<ReturnType<typeof insightsPortfolioClient.updateWatchlistBindings>>,
+    Error,
+    { watchlistId: string; symbols: string[]; strategyId: string }
+  >({
+    mutationKey: WATCHLIST_WRITE_KEY,
+    mutationFn: (input) =>
+      insightsPortfolioClient.updateWatchlistBindings({
+        watchlistId: input.watchlistId,
+        symbols: input.symbols,
+        strategyId: input.strategyId,
+      }),
+    onSuccess: (result, input) => {
+      const changed = new Map(result.bindings.map((b) => [b.symbol, b]));
+      if (changed.size === 0) return;
+      queryClient.setQueryData(WATCHLISTS_KEY, (old: ListWatchlistsResult | undefined) => {
+        if (!old) return old;
+        return {
+          ...old,
+          watchlists: old.watchlists.map((wl) =>
+            wl.watchlistId === input.watchlistId
+              ? { ...wl, bindings: wl.bindings.map((b) => changed.get(b.symbol) ?? b) }
+              : wl,
+          ),
+        };
+      });
+      // NO invalidateQueries(['watchlists']) — bulk patch mirrors the single-row cache-patch guarantee.
     },
   });
 }

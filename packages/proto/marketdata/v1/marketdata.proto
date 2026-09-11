@@ -42,6 +42,16 @@ service MarketDataService {
 
   // Batched fundamentals for a watchlist scan (core metrics via one FMP quote call)
   rpc GetFundamentalsMulti(GetFundamentalsMultiRequest) returns (GetFundamentalsMultiResponse);
+
+  // Batched latest quotes — partial by design: a symbol with no quote is omitted from the
+  // response (null-not-zero), never returned as a fabricated zero-price Quote.
+  rpc GetLatestQuotes(GetLatestQuotesRequest) returns (GetLatestQuotesResponse);
+
+  // Batched historical bars for multiple symbols in a single round-trip (feature 183).
+  rpc BatchGetBars(BatchGetBarsRequest) returns (BatchGetBarsResponse);
+
+  // Batched latest price for multiple symbols in a single round-trip (feature 183).
+  rpc BatchGetLatestPrice(BatchGetLatestPriceRequest) returns (BatchGetLatestPriceResponse);
 }
 
 message Bar {
@@ -224,4 +234,39 @@ message GetFundamentalsMultiRequest {
 
 message GetFundamentalsMultiResponse {
   repeated Fundamentals fundamentals = 1;
+}
+
+message GetLatestQuotesRequest {
+  repeated string symbols = 1;
+}
+
+message GetLatestQuotesResponse {
+  repeated Quote quotes = 1;
+}
+
+// --- Batch RPCs (feature 183 — opportunities-latency-fix) ---
+
+message BatchGetBarsRequest {
+  repeated string symbols = 1;
+  string timeframe = 2;
+  google.protobuf.Timestamp start = 3;
+  google.protobuf.Timestamp end = 4;
+  int32 max_bars_per_symbol = 5;
+}
+
+message SymbolBars {
+  string symbol = 1;
+  repeated Bar bars = 2;
+}
+
+message BatchGetBarsResponse {
+  repeated SymbolBars results = 1;
+}
+
+message BatchGetLatestPriceRequest {
+  repeated string symbols = 1;
+}
+
+message BatchGetLatestPriceResponse {
+  repeated LatestPrice results = 1;
 }

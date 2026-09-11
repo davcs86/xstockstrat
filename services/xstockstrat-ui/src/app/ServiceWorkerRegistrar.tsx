@@ -3,9 +3,8 @@
 import { useEffect } from 'react';
 
 /**
- * Registers the push service worker at the domain root (feature 165). Root scope lets one worker
- * control every segment (/trader, /insights, /config-ui, /accounts). Renders nothing; a browser
- * without service-worker support is a silent no-op (the PWA/push features simply stay unavailable).
+ * Registers the push service worker at the domain root. Root scope lets one worker control every
+ * segment (/trader, /insights, /config-ui, /accounts). No-op without service-worker support.
  */
 export function ServiceWorkerRegistrar() {
   useEffect(() => {

@@ -102,6 +102,113 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 184 — opportunity-config-operability (`xstockstrat-config` / `xstockstrat-analysis`)
+
+**Supersedes the `analysis.opportunity.*` no-seed pattern** (features 095/097/131/141/158/176/177 minted
+no DB row for these keys). Registers all **15** `analysis.opportunity.*` keys via **seed migration
+`028_analysis_opportunity_keys`** (global rows, both environments) so config-ui shows them and an admin
+can tune them without a raw `SetConfig(create_key)`. Every key is seeded at its **current code default**,
+so applying 028 is a **no-runtime-behavior change**. **10** numeric footgun keys additionally gain
+write-side `SCALAR_BOUNDS_REGISTRY` bounds (`configServiceImpl.ts`, feature 184), resolved via the
+feature-182 two-operand lookup (the seeded `key` column is full-dotted). **5** cadence/TTL/snooze keys
+are seeded **unbounded** (no documented failure mode; under-bounding is the cheap-to-reverse direction).
+Bounds reject only out-of-range future `SetConfig` writes — no read path is affected. Per-key lower bound
+follows the getter: `get_int_present`/`get_float` legitimate-0 keys keep lower `0` (`refresh_hour_utc`,
+`signal_rank_weight`); `get_int` zero-trap keys use lower `1` (a stored `0` already collapses to the code
+default). **Visibility caveat:** a raw migration `INSERT` fires no `pg_notify`, so the keys appear in
+config-ui only after a config-service reload (restart/deploy, or the next analysis-namespace `SetConfig`).
+**Restart caveat:** `max_concurrent_bars_fetches` and `max_concurrent_candidates` are read once in
+`AnalysisServicer.__init__`, so a config-ui edit takes effect only at service restart (noted in each
+seed `description`). **`signal_rank_weight` zero-trap:** read via `get_float` (no `_present`), so a stored
+`0` reads back as the `0.3` default (noted in the seed description); the read-path fix (`get_float_present`)
+is routed to feature 185.
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `analysis.opportunity.refresh_hour_utc` | int | `0` | `[0,23]` | Daily wall-clock UTC anchor. `get_int_present` (`0` = midnight legitimate). |
+| `analysis.opportunity.max_concurrent_bars_fetches` | int | `2` | `[1,5]` | Compute bars-fetch semaphore; ceiling = marketdata PgBouncer pool (feature-141 SEV-2). `get_int`, `__init__` — restart to apply. |
+| `analysis.opportunity.signal_rank_weight` | float | `0.3` | `[0,1]` | Signal-axis weight in the queue ORDER BY. `get_float` — `0` reads as `0.3` default. |
+| `analysis.opportunity.max_universe_size` | int | `100` | `[1,1000]` | Max candidates traced per compute. `get_int`. |
+| `analysis.opportunity.max_live_strategies_per_symbol` | int | `5` | `[1,50]` | Per-symbol live-attribution cap. `get_int`. |
+| `analysis.opportunity.max_live_only_symbols_per_compute` | int | `20` | `[1,500]` | Non-held live-covered symbol cap per compute. `get_int`. |
+| `analysis.opportunity.max_live_held_symbols_per_compute` | int | `20` | `[1,500]` | Held-symbol live-attribution cap per compute. `get_int`. |
+| `analysis.opportunity.max_concurrent_candidates` | int | `4` | `[1,50]` | Per-candidate evaluate fan-out (priority-inversion guard). `get_int`, `__init__` — restart to apply. |
+| `analysis.opportunity.sparkline_bars` | int | `20` | `[1,500]` | Daily bar closes fetched per opportunity for the sparkline. `get_int`. |
+| `analysis.opportunity.valid_window_hours` | int | `24` | `[1,168]` | `valid_until` window from the compute session date. `get_int`. |
+| `analysis.opportunity.snooze_default_hours` | int | `24` | — | Default snooze when a SNOOZE carries no timestamp. `get_int`. |
+| `analysis.opportunity.startup_jitter_seconds` | int | `30` | — | One-shot loop-entry jitter; `get_int_present` (`0` disables). |
+| `analysis.opportunity.retry_seconds` | int | `300` | — | Retry cadence on enumeration error; `get_int_present`. Shared with the feature-180 materializer loop. |
+| `analysis.opportunity.empty_recompute_ttl_seconds` | int | `30` | — | Empty-universe recompute suppression; `get_int_present`. |
+| `analysis.opportunity.live_enrich_ttl_seconds` | int | `10` | — | Live-quote/sparkline memo TTL; `get_int_present` (`0` = always fetch). |
+
+### feature 182 — readiness-materializer-config-keys (`xstockstrat-config` / `xstockstrat-analysis`)
+
+**Supersedes feature 180's no-seed/no-bounds registration** of the same four
+`analysis.readiness_materializer.*` keys. Registers them via **seed migration
+`027_analysis_readiness_materializer_keys`** (global rows, both environments) so config-ui shows them
+and an admin can enable the materializer without a raw `SetConfig(create_key)`. All four are seeded at
+their **current code default** (`enabled=false`), so applying 027 is a **no-runtime-behavior change** —
+enabling stays a later operator config-ui toggle. The three int tuning keys additionally gain
+**write-side `SCALAR_BOUNDS_REGISTRY` bounds** (`configServiceImpl.ts`, feature 182) resolved via a
+two-operand lookup (the seeded `key` column is full-dotted). Bounds reject only out-of-range future
+`SetConfig` writes — no read path is affected. **Visibility caveat:** a raw migration `INSERT` fires no
+`pg_notify`, so the keys appear in config-ui only after a config-service reload (restart/deploy, or the
+next analysis-namespace `SetConfig`).
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `analysis.readiness_materializer.enabled` | bool | `false` | — | Master kill-switch. Seeded `false` (no behavior change). `get_bool`. |
+| `analysis.readiness_materializer.refresh_hour_utc` | int | `0` | `[0,23]` | Daily wall-clock UTC anchor. `get_int_present` (`0` = midnight legitimate). |
+| `analysis.readiness_materializer.valid_window_hours` | int | `24` | `[1,168]` | Backstop TTL; authoritative bust is the `bar_epoch` FAST gate. `get_int_present`; 1h floor. |
+| `analysis.readiness_materializer.max_concurrent_bars_fetches` | int | `2` | `[1,5]` | Materializer bars-fetch semaphore; ceiling = marketdata PgBouncer pool size (feature-141 SEV-2 guard). `get_int` — never set `0`. |
+
+### feature 180 — watchlist-readiness-precompute (`xstockstrat-analysis`)
+
+Registers four `analysis.readiness_materializer.*` keys for the background readiness materializer
+loop — all **no-seed** (the `analysis.*` no-seed pattern) and **no `SCALAR_BOUNDS_REGISTRY` entry**
+(unlike feature 177's `stale_after_seconds`). The daily cadence anchor is the **dedicated**
+`refresh_hour_utc`, decoupled from `analysis.opportunity.refresh_hour_utc` (operator decision D-2) so
+the two daily loops tune independently. Jitter/retry reuse the existing `analysis.opportunity.*`
+operational knobs (bounded, non-cadence — not the daily anchor). No config migration.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.readiness_materializer.enabled` | bool | `false` | Master kill-switch for the loop. `get_bool` (HasField). Default OFF. No-seed. |
+| `analysis.readiness_materializer.refresh_hour_utc` | int | `0` | Dedicated wall-clock UTC anchor for the daily re-warm (decoupled from the opportunity loop, D-2). `get_int_present` (`0` = midnight legitimate). No-seed. |
+| `analysis.readiness_materializer.valid_window_hours` | int | `24` | Backstop TTL for a materialized row's `valid_until`; the authoritative bust is the `bar_epoch`-aware FAST gate. `get_int_present`; 1h floor. No-seed. |
+| `analysis.readiness_materializer.max_concurrent_bars_fetches` | int | `2` | The loop's own bars-fetch semaphore, separate from `analysis.opportunity.max_concurrent_bars_fetches` (feature-176 priority-inversion guard). `get_int` + `max(1, …)`. No-seed. |
+
+### feature 177 — readiness-caching-poll-discipline (`xstockstrat-analysis` / `xstockstrat-config`)
+
+Registers three `analysis` keys, all read once/per-pass via `get_int_present` (a legitimate `0` must
+not be swallowed by the `get_int` zero-trap). Two are **no-seed** (the `analysis.opportunity.*`
+pattern); the readiness key adds a **`SCALAR_BOUNDS_REGISTRY` code entry** in `xstockstrat-config`
+(`configServiceImpl.ts`, the feature-161 precedent) enforcing `[0, 86399]` at `SetConfig` — no seed
+migration (the bound is enforced regardless of a seed row; a config-ui-discoverability seed migration
+is a noted follow-up, next free config NNN `027`).
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.readiness.stale_after_seconds` | int | `30` | FR-1 readiness cache staleness window. Server-bounded `[0, 86399]` (`< 86400` so a served-stale verdict never crosses a daily-bar boundary). `0` = always stale. |
+| `analysis.opportunity.empty_recompute_ttl_seconds` | int | `30` | FR-3 empty-universe recompute suppression window. No-seed. |
+| `analysis.opportunity.live_enrich_ttl_seconds` | int | `10` | FR-4 TTL for the success-only per-symbol live-quote/sparkline memo. `0` disables the memo. No-seed. |
+
+### feature 176 — analysis-concurrency-offload (`xstockstrat-analysis`)
+
+Adds two process-lifetime concurrency-bound keys read once at `AnalysisServicer.__init__`, both
+**no-seed** (read at `__init__` via WatchConfig, resolving to the code defaults below until an
+operator `SetConfig`s them — the `analysis.opportunity.*` no-seed pattern, features 131/141). They
+bound the parallelized opportunity fan-out and the CPU-offload executor added when the serial
+cross-service fan-out was parallelized and the simulator cores moved off the event loop. Separately,
+`xstockstrat-indicators`' pre-existing `indicators.sandbox.max_concurrent` key (declared inert since
+feature 060) is now enforced by a real `asyncio.Semaphore` in `ExecuteFormula` — no new key, so it is
+not a row here (see `services/xstockstrat-indicators/CLAUDE.md`).
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.opportunity.max_concurrent_candidates` | int | `4` | Bounds the per-candidate `evaluate_conditions_traced` fan-out in `_compute_opportunities` Phase 2 — **separate** from `analysis.opportunity.max_concurrent_bars_fetches` so a large opportunity compute cannot starve interactive readiness (priority-inversion guard). `max(1, get_int(...))` clamp. No-seed (read at `__init__` via WatchConfig). |
+| `analysis.compute.max_worker_threads` | int | `4` | Size of the dedicated `ThreadPoolExecutor` running the pure-CPU backtest simulator cores + screener sync tail off the event loop (FR-4). Executor threads hold **no** asyncpg connection (F-06: direct pool stays 2). New `analysis.compute.*` category. `max(1, get_int(...))` clamp. No-seed (read at `__init__` via WatchConfig). |
+
 ### feature 168 — fundamentals-blend-universe (`xstockstrat-analysis` / `xstockstrat-config`)
 
 **Registers** two `analysis.engine.*` keys, seeded by migration **`026_analysis_engine_blend_keys`**

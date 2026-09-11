@@ -1,0 +1,118 @@
+# syntax=docker/dockerfile:1
+# Dockerfile.e2e
+# Hermetic E2E test container — installs Playwright + Chromium, builds the
+# Next.js bundle, and runs the full Playwright suite against in-process mock
+# gRPC backends. No real backend services or database required.
+#
+# Used by scripts/run-e2e.sh (local) and the frontend-e2e CI job. NOT part of
+# docker-compose.yml.
+#
+# Modelled after Dockerfile.codegen — a self-contained toolchain image that
+# encapsulates all dependencies so the host needs only Docker.
+#
+# Versions: keep in sync with CLAUDE.md §Language Versions & Tooling
+#   Node   24       → also in .github/workflows/ci.yml, Node service Dockerfiles
+#   pnpm   9.15.9   → also in package.json "packageManager", .github/workflows/ci.yml
+#   Playwright 1.62.1 → pinned in services/xstockstrat-ui/package.json
+
+# ── Base ──────────────────────────────────────────────────────────────────────
+# Debian (not Alpine) — Playwright's system dependencies require glibc + X11
+# libs that are unavailable or painful to install on musl/Alpine.
+FROM node:24-bookworm-slim AS base
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+# Configure npm to retry failed requests and use longer timeouts (mirrors the
+# production Dockerfile's resilience settings).
+RUN npm config set fetch-timeout 120000 && \
+    npm config set fetch-retry-mintimeout 20000 && \
+    npm config set fetch-retry-maxtimeout 120000 && \
+    npm config set fetch-retries 5
+
+# ── Optional extra CA (TLS-terminating egress proxy) ──────────────────────────
+# Same pattern as Dockerfile.codegen — see that file for full documentation.
+# Pass the proxy CA as a BuildKit secret:
+#   docker build --secret id=proxy_ca,src=/path/to/ca-bundle.crt ...
+# (scripts/run-e2e.sh wires this automatically when the CA is present.)
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -s /run/secrets/proxy_ca ]; then \
+      cp /run/secrets/proxy_ca /usr/local/share/ca-certificates/proxy-egress-ca.crt && \
+      update-ca-certificates; \
+    fi
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
+
+# ── Dependencies ──────────────────────────────────────────────────────────────
+FROM base AS deps
+WORKDIR /workspace
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml .npmrc ./
+COPY packages/proto/gen/ts/ ./packages/proto/gen/ts/
+COPY services/xstockstrat-ui/package.json ./services/xstockstrat-ui/
+RUN pnpm install --frozen-lockfile --filter xstockstrat-ui
+
+# ── Playwright browsers ──────────────────────────────────────────────────────
+# Install Chromium + its system dependencies in the deps stage so this layer is
+# cached across runs when package.json (and therefore the Playwright version)
+# hasn't changed.
+RUN pnpm --filter xstockstrat-ui exec playwright install chromium && \
+    pnpm --filter xstockstrat-ui exec playwright install-deps chromium
+
+# ── Builder ───────────────────────────────────────────────────────────────────
+FROM base AS builder
+WORKDIR /workspace
+COPY --from=deps /workspace ./
+COPY services/xstockstrat-ui/ ./services/xstockstrat-ui/
+# Build a non-standalone Next.js bundle so `next start` works (standalone mode
+# is incompatible with `next start` — see playwright.config.ts).
+ENV NEXT_DISABLE_STANDALONE=1
+RUN pnpm --filter xstockstrat-ui run build
+
+# ── Runner ────────────────────────────────────────────────────────────────────
+# The final image has everything needed: built .next, node_modules, Chromium,
+# system libs, e2e tests, and the entrypoint script.
+FROM base AS runner
+WORKDIR /workspace
+
+# Playwright system dependencies (X11, NSS, fonts, etc.) — install before
+# copying app files so this layer is cached.
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Playwright's Chromium runtime dependencies (subset of `playwright install-deps`
+    # output — the full list is Playwright-version-specific, so we install the deps
+    # in the deps stage and copy the marker; this install covers any libs that the
+    # base image doesn't include).
+    libnss3 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libdbus-1-3 \
+    libxkbcommon0 \
+    libatspi2.0-0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libasound2 \
+    libx11-xcb1 \
+    fonts-liberation \
+    fonts-noto-color-emoji \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the full workspace (deps + built .next + e2e tests + Chromium)
+COPY --from=builder /workspace ./
+# Copy the Playwright browser cache from the deps stage
+COPY --from=deps /root/.cache/ms-playwright /root/.cache/ms-playwright
+
+ENV CI=true
+ENV E2E_PREBUILT=1
+# Point Playwright at the pre-installed Chromium browser cache
+ENV PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
+# Skip browser download — browsers are baked into the image
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
+WORKDIR /workspace/services/xstockstrat-ui
+
+# Default: run all tests. Override with --shard=N/M via docker run args.
+ENTRYPOINT ["pnpm", "test:e2e"]

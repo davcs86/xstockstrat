@@ -23,10 +23,18 @@ useDefault = true
 # real `sk-live-`-shaped key is still detected. Sites: services/xstockstrat-ingest/tests/
 # {test_mcp_client,test_mcp_client_loop}.py, services/xstockstrat-agent/tests/test_tools.py,
 # services/xstockstrat-ui/e2e/config-ui/sources.spec.ts.
+#
+# False positive (comment audit, 2026-09-04): the Finnhub client's response-shape comment names
+# the public API field `marketCapitalization` — a 20-char alnum identifier that, sitting after the
+# word "Finnhub" + a colon, trips the default `finnhub-access-token` rule. It is a documented JSON
+# field name (also the struct json tag), not a credential. Scoped to that exact identifier so any
+# real, random 20-char Finnhub token is still detected. Site:
+# services/xstockstrat-marketdata/internal/finnhub/finnhub_client.go.
 [allowlist]
 regexTarget = "line"
 regexes = [
   '''first seeded secret: is_secret=TRUE''',
   '''00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff''',
   '''sk-live-abc123''',
+  '''marketCapitalization''',
 ]

@@ -3,6 +3,84 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-09-11
+
+### Features
+- opportunities-latency-fix: Fix the 2.9-minute ListOpportunities latency by adding batch marketdata RPCs (BatchGetBars, BatchGetLatestPrice), parallelizing sequential Phase 0 drains, aligning memo TTL with poll interval, and adding a BFF-side gRPC deadline to prevent unbounded calls that exceed the DO proxy timeout.
+
+### Proto Changes
+- marketdata/v1/marketdata.proto
+
+### Summary
+11 commits, 1 feature merges since last promotion.
+
+---
+
+## 2026-09-09
+
+### Features
+- mcp-user-profile-roles: New admin-gated MCP agent tools to manage users (create, list, get, set roles, activate/deactivate, reset password) and to view/edit any user's profile metadata — the last of which requires new admin cross-user identity RPCs, since today's `GetUserMetadata`/`UpdateUserMetadata` are self-only.
+- opportunity-config-operability: Apply the feature-182 config-operability philosophy to the opportunities queue: register the `analysis.opportunity.*` config keys (currently the invisible no-seed pattern) via a seed migration so they appear in config-ui, and add server-side `SCALAR_BOUNDS_REGISTRY` write-bounds to the numeric footgun keys — closing the "operator can't see/tune, and can set unsafe values" gap the audit found.
+- opportunity-compute-robustness: Apply the feature-181/176 correctness philosophy to the opportunities compute: give it a **data-unavailable sentinel** (so a bars-fetch failure surfaces as a terminal "unavailable" state, not a misleading `0/0` quiet row), and a **dedicated background bars-fetch semaphore** separate from the interactive read path (the feature-176/180 priority-inversion guard the materializer already has).
+- fundamentals-blend-strategy-restrictions: Harden the fundamentals blend strategy (configured via `analysis.engine.fundamentals_blend_strategy_id`) so it executes exclusively against the fundamentals signal universe and cannot be deactivated, toggled non-live, or soft-deleted via `ManageStrategy`/`SetStrategyLive` RPCs.
+
+### Proto Changes
+- analysis/v1/analysis.proto
+- identity/v1/identity.proto
+
+### Summary
+7 commits, 1 feature merges since last promotion.
+
+---
+
+## 2026-09-06
+
+### Features
+- fix-agent-trading-mode-otel-attr: `xstockstrat-agent`'s OTel init reads `TRADING_MODE` into a `trading_mode` resource attribute (`app/telemetry.py:33,39`).
+- fix-portfolio-max-drawdown-unenforced: `portfolio.risk.max_drawdown_pct` is fetched (`portfolio_service.go:722` `GetFloat`) then discarded (`:750` `_ = maxDrawdownPct`).
+- fix-python-config-zero-trap: The indicators and ingest config watchers use `v.int_val or default` / `v.float_val or default` / `v.string_val or default`, so a legitimately-stored `0` / `0.0` / `""` silently reverts to the coded default.
+- fix-config-watcher-client-id: The analysis and ingest config watchers both build `WatchConfig` requests with `client_id=f"indicators-{id(self)}"` — copied verbatim from the indicators watcher template.
+- fix-dead-code-cleanup-batch: Consolidated low-risk dead-code cleanup batching three "Cleanup"-track findings from the comment-audit report: (5) the dead `getEnvBool` in the three Go services, (6) the dead `middleware/propagation.ts` in the Node leaf services, and (7) the `@types/node ^20` pin against a Node 24 runtime.
+- analysis-concurrency-offload: Parallelize the serial cross-service RPC fan-out in `xstockstrat-analysis` and move CPU-bound / blocking work (backtest simulators, the `xstockstrat-indicators` sandbox `subprocess.run`) off the single asyncio event loop, so Opportunities and Watchlist readiness load fast and per-user latency stays flat as concurrent user count grows.
+- readiness-caching-poll-discipline: Eliminate redundant recompute on the decide-surface read paths: cache/materialize Watchlist readiness the way Opportunities already is, stop the every-15s recompute for empty-universe users, make warm-poll live enrichment conditional, and give the readiness client a `staleTime` so switching panes doesn't re-trigger a full fan-out.
+- quote-fanout-batching: Collapse the N+1 fan-out on the portfolio→marketdata and portfolio→DB read edges: add an additive `GetLatestQuotes` batch RPC to marketdata (wrapping its existing internal `MultiSymbolSource` helper) and switch `enrichPositions` from per-position `GetLatestQuote` to it, collapse `ListWatchlists`' per-watchlist `listBindings` into one `ANY`-array query, and add single-flight to marketdata's cold-symbol live fallback.
+- ui-resume-halted-account: Close the UI-side gap left explicitly out of scope by feature 169: add a browser-side Resume control (BFF route + button) for a halted account, and surface the halt indicator beside the account-management controls (not only on the positions page), so an operator can see a halt and clear it from the UI instead of falling back to the agent or a DBA.
+- watchlist-readiness-precompute: Move the per-symbol strategy readiness computation off the synchronous UI render path by materializing readiness rows into `analysis.readiness_cache` in the background, so the watchlist readiness overlay reads cache-only and loads fast even for large watchlists.
+- watchlist-readiness-list-ux: UI follow-up to feature 180: make the `/insights/watchlists` list render immediately with a per-row readiness **loading state** and **pagination**, instead of the current N+1 fan-out that leaves the list blank until every per-symbol `EvaluateReadiness` promise resolves.
+
+### Proto Changes
+- analysis/v1/analysis.proto
+- marketdata/v1/marketdata.proto
+
+### Summary
+13 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-09-03
+
+### Summary
+5 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-09-02
+
+### Summary
+3 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-09-02
+
+### Features
+- mcp-get-positions-tools: Add two standalone MCP tools — `get_positions` and `get_positions_by_account_id` — to expose portfolio position data through the agent.
+
+### Summary
+5 commits, 2 feature merges since last promotion.
+
+---
+
 ## 2026-09-01
 
 ### Features

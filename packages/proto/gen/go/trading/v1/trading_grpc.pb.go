@@ -32,6 +32,7 @@ const (
 	TradingService_UpdateBrokerAccountCredentials_FullMethodName = "/xstockstrat.trading.v1.TradingService/UpdateBrokerAccountCredentials"
 	TradingService_GetTradingEnvironment_FullMethodName          = "/xstockstrat.trading.v1.TradingService/GetTradingEnvironment"
 	TradingService_SnapshotOfflinePositions_FullMethodName       = "/xstockstrat.trading.v1.TradingService/SnapshotOfflinePositions"
+	TradingService_ResumeAccount_FullMethodName                  = "/xstockstrat.trading.v1.TradingService/ResumeAccount"
 )
 
 // TradingServiceClient is the client API for TradingService service.
@@ -66,6 +67,10 @@ type TradingServiceClient interface {
 	// effective-dated opening baseline for an OFFLINE account (feature 163). Rejected
 	// with FailedPrecondition for broker (Alpaca/IBKR) accounts.
 	SnapshotOfflinePositions(ctx context.Context, in *SnapshotOfflinePositionsRequest, opts ...grpc.CallOption) (*SnapshotOfflinePositionsResponse, error)
+	// ResumeAccount clears the persistent and in-memory halt on a broker account
+	// (feature 169). Admin-scope callers only. Idempotent: a non-halted account
+	// returns success with no state change. Emits a ledger event and INFO alert.
+	ResumeAccount(ctx context.Context, in *ResumeAccountRequest, opts ...grpc.CallOption) (*ResumeAccountResponse, error)
 }
 
 type tradingServiceClient struct {
@@ -215,6 +220,16 @@ func (c *tradingServiceClient) SnapshotOfflinePositions(ctx context.Context, in 
 	return out, nil
 }
 
+func (c *tradingServiceClient) ResumeAccount(ctx context.Context, in *ResumeAccountRequest, opts ...grpc.CallOption) (*ResumeAccountResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResumeAccountResponse)
+	err := c.cc.Invoke(ctx, TradingService_ResumeAccount_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // TradingServiceServer is the server API for TradingService service.
 // All implementations should embed UnimplementedTradingServiceServer
 // for forward compatibility.
@@ -247,6 +262,10 @@ type TradingServiceServer interface {
 	// effective-dated opening baseline for an OFFLINE account (feature 163). Rejected
 	// with FailedPrecondition for broker (Alpaca/IBKR) accounts.
 	SnapshotOfflinePositions(context.Context, *SnapshotOfflinePositionsRequest) (*SnapshotOfflinePositionsResponse, error)
+	// ResumeAccount clears the persistent and in-memory halt on a broker account
+	// (feature 169). Admin-scope callers only. Idempotent: a non-halted account
+	// returns success with no state change. Emits a ledger event and INFO alert.
+	ResumeAccount(context.Context, *ResumeAccountRequest) (*ResumeAccountResponse, error)
 }
 
 // UnimplementedTradingServiceServer should be embedded to have
@@ -294,6 +313,9 @@ func (UnimplementedTradingServiceServer) GetTradingEnvironment(context.Context, 
 }
 func (UnimplementedTradingServiceServer) SnapshotOfflinePositions(context.Context, *SnapshotOfflinePositionsRequest) (*SnapshotOfflinePositionsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SnapshotOfflinePositions not implemented")
+}
+func (UnimplementedTradingServiceServer) ResumeAccount(context.Context, *ResumeAccountRequest) (*ResumeAccountResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResumeAccount not implemented")
 }
 func (UnimplementedTradingServiceServer) testEmbeddedByValue() {}
 
@@ -542,6 +564,24 @@ func _TradingService_SnapshotOfflinePositions_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _TradingService_ResumeAccount_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResumeAccountRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TradingServiceServer).ResumeAccount(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TradingService_ResumeAccount_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TradingServiceServer).ResumeAccount(ctx, req.(*ResumeAccountRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // TradingService_ServiceDesc is the grpc.ServiceDesc for TradingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -596,6 +636,10 @@ var TradingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SnapshotOfflinePositions",
 			Handler:    _TradingService_SnapshotOfflinePositions_Handler,
+		},
+		{
+			MethodName: "ResumeAccount",
+			Handler:    _TradingService_ResumeAccount_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

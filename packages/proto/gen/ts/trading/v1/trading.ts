@@ -720,6 +720,15 @@ export interface DeregisterBrokerAccountRequest {
 export interface DeregisterBrokerAccountResponse {
 }
 
+export interface ResumeAccountRequest {
+  accountId: string;
+  reason: string;
+}
+
+export interface ResumeAccountResponse {
+  account?: BrokerAccount | undefined;
+}
+
 /** A single position row from a brokerage statement to be used as a baseline. */
 export interface PositionBaseline {
   symbol: string;
@@ -3543,6 +3552,146 @@ export const DeregisterBrokerAccountResponse: MessageFns<DeregisterBrokerAccount
   },
 };
 
+function createBaseResumeAccountRequest(): ResumeAccountRequest {
+  return { accountId: "", reason: "" };
+}
+
+export const ResumeAccountRequest: MessageFns<ResumeAccountRequest> = {
+  encode(message: ResumeAccountRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.accountId !== "") {
+      writer.uint32(10).string(message.accountId);
+    }
+    if (message.reason !== "") {
+      writer.uint32(18).string(message.reason);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ResumeAccountRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseResumeAccountRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.accountId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.reason = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ResumeAccountRequest {
+    return {
+      accountId: isSet(object.accountId)
+        ? globalThis.String(object.accountId)
+        : isSet(object.account_id)
+        ? globalThis.String(object.account_id)
+        : "",
+      reason: isSet(object.reason) ? globalThis.String(object.reason) : "",
+    };
+  },
+
+  toJSON(message: ResumeAccountRequest): unknown {
+    const obj: any = {};
+    if (message.accountId !== "") {
+      obj.accountId = message.accountId;
+    }
+    if (message.reason !== "") {
+      obj.reason = message.reason;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ResumeAccountRequest>, I>>(base?: I): ResumeAccountRequest {
+    return ResumeAccountRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ResumeAccountRequest>, I>>(object: I): ResumeAccountRequest {
+    const message = createBaseResumeAccountRequest();
+    message.accountId = object.accountId ?? "";
+    message.reason = object.reason ?? "";
+    return message;
+  },
+};
+
+function createBaseResumeAccountResponse(): ResumeAccountResponse {
+  return { account: undefined };
+}
+
+export const ResumeAccountResponse: MessageFns<ResumeAccountResponse> = {
+  encode(message: ResumeAccountResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.account !== undefined) {
+      BrokerAccount.encode(message.account, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ResumeAccountResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseResumeAccountResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.account = BrokerAccount.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ResumeAccountResponse {
+    return { account: isSet(object.account) ? BrokerAccount.fromJSON(object.account) : undefined };
+  },
+
+  toJSON(message: ResumeAccountResponse): unknown {
+    const obj: any = {};
+    if (message.account !== undefined) {
+      obj.account = BrokerAccount.toJSON(message.account);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ResumeAccountResponse>, I>>(base?: I): ResumeAccountResponse {
+    return ResumeAccountResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ResumeAccountResponse>, I>>(object: I): ResumeAccountResponse {
+    const message = createBaseResumeAccountResponse();
+    message.account = (object.account !== undefined && object.account !== null)
+      ? BrokerAccount.fromPartial(object.account)
+      : undefined;
+    return message;
+  },
+};
+
 function createBasePositionBaseline(): PositionBaseline {
   return { symbol: "", qty: 0, avgCostPerShare: 0 };
 }
@@ -4147,6 +4296,21 @@ export const TradingServiceService = {
     responseDeserialize: (value: Buffer): SnapshotOfflinePositionsResponse =>
       SnapshotOfflinePositionsResponse.decode(value),
   },
+  /**
+   * ResumeAccount clears the persistent and in-memory halt on a broker account
+   * (feature 169). Admin-scope callers only. Idempotent: a non-halted account
+   * returns success with no state change. Emits a ledger event and INFO alert.
+   */
+  resumeAccount: {
+    path: "/xstockstrat.trading.v1.TradingService/ResumeAccount" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ResumeAccountRequest): Buffer => Buffer.from(ResumeAccountRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ResumeAccountRequest => ResumeAccountRequest.decode(value),
+    responseSerialize: (value: ResumeAccountResponse): Buffer =>
+      Buffer.from(ResumeAccountResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ResumeAccountResponse => ResumeAccountResponse.decode(value),
+  },
 } as const;
 
 export interface TradingServiceServer extends UntypedServiceImplementation {
@@ -4191,6 +4355,12 @@ export interface TradingServiceServer extends UntypedServiceImplementation {
    * with FailedPrecondition for broker (Alpaca/IBKR) accounts.
    */
   snapshotOfflinePositions: handleUnaryCall<SnapshotOfflinePositionsRequest, SnapshotOfflinePositionsResponse>;
+  /**
+   * ResumeAccount clears the persistent and in-memory halt on a broker account
+   * (feature 169). Admin-scope callers only. Idempotent: a non-halted account
+   * returns success with no state change. Emits a ledger event and INFO alert.
+   */
+  resumeAccount: handleUnaryCall<ResumeAccountRequest, ResumeAccountResponse>;
 }
 
 export interface TradingServiceClient extends Client {
@@ -4401,6 +4571,26 @@ export interface TradingServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: SnapshotOfflinePositionsResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * ResumeAccount clears the persistent and in-memory halt on a broker account
+   * (feature 169). Admin-scope callers only. Idempotent: a non-halted account
+   * returns success with no state change. Emits a ledger event and INFO alert.
+   */
+  resumeAccount(
+    request: ResumeAccountRequest,
+    callback: (error: ServiceError | null, response: ResumeAccountResponse) => void,
+  ): ClientUnaryCall;
+  resumeAccount(
+    request: ResumeAccountRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ResumeAccountResponse) => void,
+  ): ClientUnaryCall;
+  resumeAccount(
+    request: ResumeAccountRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ResumeAccountResponse) => void,
   ): ClientUnaryCall;
 }
 

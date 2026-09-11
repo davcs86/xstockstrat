@@ -50,6 +50,10 @@ service AnalysisService {
   // Per-source trading-performance attribution over closed positions (feature 029). Read-only;
   // aggregates 042's analysis.pnl_positions + order_snapshots.signals. Owner-scoped via x-user-id.
   rpc GetAttribution(GetAttributionRequest) returns (GetAttributionResponse);
+  // Cache-first readiness decoration for a page of a watchlist's bound (symbol, strategy_id)
+  // pairs (feature 181). Owner from x-user-id; RESOLVED rows carry inline SymbolReadiness,
+  // PENDING/UNKNOWN rows resolve on a subsequent poll (the server kicks a background refresh).
+  rpc GetWatchlistReadiness(GetWatchlistReadinessRequest) returns (GetWatchlistReadinessResponse);
 }
 
 message RunBacktestRequest {
@@ -573,6 +577,10 @@ message Opportunity {
   // 0.0). Deliberately NAMED signal_confidence and kept distinct from the ordinal `conviction = 3`
   // (NOT a probability) and the decayed/weighted signal_axis. Next free after 095's 13-18 block.
   optional double signal_confidence = 19;
+  // feature 185 — a per-symbol bars/indicator fetch failure during the compute (terminal
+  // data-unavailable), derived at read from the "unavailable" provenance marker (no column).
+  // Distinct from an evaluated 0/N row; conviction+signal_axis are zeroed so it sinks in ranking.
+  bool data_unavailable = 20;
 }
 
 // One recent daily-bar close for the Decide-surface sparkline (feature 095). Explicit presence — an
@@ -623,6 +631,12 @@ message ListOpportunitiesRequest {
 message ListOpportunitiesResponse {
   repeated Opportunity opportunities = 1;
   xstockstrat.common.v1.PageResponse page = 2;
+  // feature 185 — cold (never-materialized) read: empty page returned non-blocking while a
+  // background recompute runs. FALSE for a legitimately-empty universe (distinctness proof).
+  bool computing = 3;
+  // feature 185 — a persistently-failing cold recompute (past the bounded attempt count):
+  // renders a terminal error instead of an infinite "computing" spinner.
+  bool compute_failed = 4;
 }
 
 // Which rule tree EvaluateReadiness traces (feature 138). Closed set → enum (C-04).
@@ -643,6 +657,40 @@ message EvaluateReadinessRequest {
 }
 message EvaluateReadinessResponse {
   repeated SymbolReadiness readiness = 1;
+  // The oldest per-symbol cache "computed at" among the served rows — the response is never
+  // presented as fresher than this (feature 177, FR-5). Bounded by the readiness staleness window.
+  google.protobuf.Timestamp computed_at = 2;
+}
+
+// Per-row readiness lifecycle state (feature 181). Closed set → enum (C-04).
+enum ReadinessState {
+  READINESS_STATE_UNSPECIFIED = 0;
+  READINESS_STATE_RESOLVED = 1;  // `readiness` populated; served from the FAST cache path
+  READINESS_STATE_PENDING = 2;   // not-yet-fresh; a background refresh was kicked; poll again
+  READINESS_STATE_UNKNOWN = 3;   // data-unavailable (bar_epoch < 0 sentinel); best-effort retry
+}
+
+// One decorated watchlist row (feature 181). `strategy_id` is the join key onto the ['watchlists']
+// read's binding; it is NOT a display payload and carries no provenance/source (the client renders
+// those from the binding). `readiness` is populated iff state == READINESS_STATE_RESOLVED.
+message WatchlistReadinessRow {
+  string symbol = 1;
+  string strategy_id = 2;
+  ReadinessState state = 3;
+  SymbolReadiness readiness = 4;
+  google.protobuf.Timestamp computed_at = 5;
+}
+
+// user_id is intentionally absent — taken from the propagated x-user-id header server-side
+// (match the ListOpportunitiesRequest convention), never from the wire. The server derives the
+// (symbol, strategy_id) pairs from the OWNER'S OWN watchlist (anti-IDOR, fails.md:1153).
+message GetWatchlistReadinessRequest {
+  string watchlist_id = 1;
+  xstockstrat.common.v1.PageRequest page = 2;
+}
+message GetWatchlistReadinessResponse {
+  repeated WatchlistReadinessRow rows = 1;
+  xstockstrat.common.v1.PageResponse page = 2;
 }
 
 // The persisted per-user disposition of a queued opportunity (feature 097). Closed set → enum (C-04).

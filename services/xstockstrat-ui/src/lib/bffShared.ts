@@ -1,8 +1,5 @@
-// Shared BFF machinery for the per-segment Connect routers (traderBff / insightsBff /
-// configUiBff). These helpers were previously copy-pasted into all three segment files;
-// they now live here so there is exactly one implementation of session verification,
-// header propagation, the admin-scope gate, the stream adapters, and the Connect dispatch
-// loop. See docs/patterns/dry-guard-rail.md.
+// Canonical BFF machinery shared by the per-segment Connect routers (DRY guard rail —
+// see docs/patterns/dry-guard-rail.md).
 //
 // Node-only (imports @connectrpc/connect-node) — never import from middleware/Edge code.
 
@@ -61,13 +58,17 @@ export function requireAdminScope(claims: JwtClaims): void {
  *   getBars: forward((req, opts) => marketDataClient.getBars(req, opts)),
  */
 export function forward<Req, Res>(
-  call: (req: Req, opts: { headers: Headers }) => Promise<Res>,
-  options: { admin?: boolean } = {},
+  call: (req: Req, opts: { headers: Headers; timeoutMs?: number }) => Promise<Res>,
+  options: { admin?: boolean; timeoutMs?: number } = {},
 ): (req: Req, ctx: HandlerContext) => Promise<Res> {
   return async (req, ctx) => {
     const claims = await requireSession(ctx);
     if (options.admin) requireAdminScope(claims);
-    return call(req, { headers: backendHeaders(claims, ctx) });
+    const callOpts: { headers: Headers; timeoutMs?: number } = {
+      headers: backendHeaders(claims, ctx),
+    };
+    if (options.timeoutMs !== undefined) callOpts.timeoutMs = options.timeoutMs;
+    return call(req, callOpts);
   };
 }
 
@@ -130,12 +131,8 @@ export function createDispatch(
     const responseHeaders = new Headers(uRes.header);
     uRes.trailer?.forEach((value, key) => responseHeaders.append(key, value));
 
-    // Connect unary errors are always uncompressed JSON. When a handler forwards a
-    // ConnectError from a downstream gRPC service, that error's metadata carries the
-    // gRPC response's content-type (application/grpc+proto) and content-encoding;
-    // createConnectRouter copies them onto the error response, so the browser's Connect
-    // client cannot parse the JSON body and surfaces a generic "HTTP <status>" instead
-    // of the real validation message. Normalise the headers on the error path.
+    // A forwarded downstream ConnectError carries the gRPC response's content-type/encoding, which
+    // makes the browser's Connect client unable to parse the JSON error body — normalise them here.
     if (uRes.status >= 400) {
       responseHeaders.set('content-type', 'application/json');
       responseHeaders.delete('content-encoding');

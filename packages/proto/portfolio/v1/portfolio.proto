@@ -5,6 +5,7 @@ package xstockstrat.portfolio.v1;
 option go_package = "github.com/xstockstrat/contracts/gen/go/portfolio/v1;portfoliov1";
 
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/field_mask.proto";
 import "common/v1/common.proto";
 
 service PortfolioService {
@@ -37,6 +38,10 @@ service PortfolioService {
   // UPDATE — no replace-all. Ownership from the propagated x-user-id header (server-side), never
   // from the request body. NOT_FOUND if the symbol is not in the watchlist.
   rpc UpdateWatchlistBinding(UpdateWatchlistBindingRequest) returns (UpdateWatchlistBindingResponse);
+  // Atomic set-based rebind (feature 170): assign ONE strategy_id across a symbol set in a single
+  // UPDATE ... WHERE symbol = ANY(...). All-or-nothing — an absent symbol → NOT_FOUND with zero
+  // partial writes. Ownership from the x-user-id header; empty strategy_id unbinds the whole set.
+  rpc UpdateWatchlistBindings(UpdateWatchlistBindingsRequest) returns (UpdateWatchlistBindingsResponse);
 }
 
 message Portfolio {
@@ -235,6 +240,9 @@ message Watchlist {
   // System-managed signals watchlist (feature 127), identified by this flag (not by name).
   // Delete-protected (FR-7/FR-8); one per user.
   bool system_managed = 9;
+  // Watchlist-level default strategy (feature 170): stamped onto newly-added, otherwise-unbound
+  // MANUAL symbols at add time only — no retroactive rebind, no read-time fallback. "" = none.
+  string default_strategy_id = 10;
 }
 
 // user_id is intentionally absent from all request messages — ownership is taken
@@ -245,6 +253,9 @@ message CreateWatchlistRequest {
   repeated string symbols = 3;
   // When present, authoritative (feature 097); legacy `symbols` remains accepted (unbound).
   repeated WatchlistBinding bindings = 4;
+  // Watchlist-level default strategy (feature 170) applied to initial bare/MANUAL symbols at
+  // creation. "" = none.
+  string default_strategy_id = 5;
 }
 message CreateWatchlistResponse {
   Watchlist watchlist = 1;
@@ -265,7 +276,9 @@ message ListWatchlistsResponse {
   xstockstrat.common.v1.PageResponse page = 2;
 }
 
-// Replace semantics for name/description/symbols per FR-1.
+// Replace semantics for name/description/symbols per FR-1 when `update_mask` is UNSET. When
+// `update_mask` IS set (feature 170), this is a PARTIAL update: only masked paths of
+// {name, description, default_strategy_id} are written; bindings are left untouched.
 message UpdateWatchlistRequest {
   string watchlist_id = 1;
   string name = 2;
@@ -273,6 +286,12 @@ message UpdateWatchlistRequest {
   repeated string symbols = 4;
   // When present, authoritative (feature 097); legacy `symbols` remains accepted (unbound).
   repeated WatchlistBinding bindings = 5;
+  // Watchlist-level default strategy (feature 170). Only written on the masked path (requires
+  // `update_mask` to name "default_strategy_id"); a no-mask request carrying this → InvalidArgument.
+  string default_strategy_id = 6;
+  // Partial-update mask (feature 170). Unset/absent = legacy replace-all of name/description/bindings.
+  // Present = write only the masked paths; allowed paths: {name, description, default_strategy_id}.
+  google.protobuf.FieldMask update_mask = 7;
 }
 message UpdateWatchlistResponse {
   Watchlist watchlist = 1;
@@ -322,5 +341,16 @@ message UpdateWatchlistBindingRequest {
 }
 message UpdateWatchlistBindingResponse {
   WatchlistBinding binding = 1;                 // the updated binding (symbol/strategy_id/source)
+  google.protobuf.Timestamp updated_at = 2;     // list-level watchlists.updated_at, bumped in-tx
+}
+
+// user_id intentionally absent — ownership from the x-user-id header (feature 170).
+message UpdateWatchlistBindingsRequest {
+  string watchlist_id = 1;
+  repeated string symbols = 2;   // deduped/normalized server-side; empty → InvalidArgument
+  string strategy_id = 3;        // "" = unbind the whole set (matches WatchlistBinding.strategy_id)
+}
+message UpdateWatchlistBindingsResponse {
+  repeated WatchlistBinding bindings = 1;       // changed rows only (symbol/strategy_id/source)
   google.protobuf.Timestamp updated_at = 2;     // list-level watchlists.updated_at, bumped in-tx
 }

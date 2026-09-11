@@ -50,14 +50,13 @@ async def serve():
         DATABASE_URL,
         min_size=1,
         max_size=int(os.environ.get("DB_POOL_MAX", "2")),
-        # PgBouncer transaction mode: disable asyncpg's prepared-statement cache,
-        # unsafe when consecutive queries land on different backend connections.
-        # Keeps asyncpg's default (100) on the direct-connection path.
+        # PgBouncer transaction mode: disable asyncpg's prepared-statement cache — unsafe when
+        # consecutive queries land on different backend connections; default (100) otherwise.
         statement_cache_size=0 if os.environ.get("DB_PGBOUNCER") in ("true", "1") else 100,
     )
     log.info("database pool established")
 
-    # Seed built-in formulas (feature 063) — idempotent, non-fatal — before serving.
+    # Seed built-in formulas — idempotent, non-fatal — before serving.
     await seed_default_formulas(db_pool)
 
     servicer = IndicatorsServicer(config_watcher=config_watcher, db_pool=db_pool)

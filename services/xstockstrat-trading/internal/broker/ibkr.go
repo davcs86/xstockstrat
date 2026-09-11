@@ -39,9 +39,8 @@ type IBKRClient struct {
 	httpClient        *http.Client
 }
 
-// IBKRRequestTimeout is IBKR's hardcoded HTTP client timeout (a confirmed pre-existing
-// bug — see docs/context-constitution-findings.md — this feature does not fix it, only
-// names it so design.md's staleness-threshold formula has one source of truth).
+// IBKRRequestTimeout is IBKR's hardcoded HTTP client timeout — a confirmed pre-existing bug
+// (docs/context-constitution-findings.md); also the staleness-threshold formula's floor.
 const IBKRRequestTimeout = 10 * time.Second
 
 func NewIBKRClient(cfg IBKRConfig) *IBKRClient {
@@ -82,8 +81,7 @@ func orderTypeToIBKR(t string) string {
 	}
 }
 
-// resolveConid looks up the IBKR contract ID for a stock symbol via
-// GET /iserver/secdef/search?symbol=<sym>&types=STK. IBKR requires a conid
+// resolveConid looks up the IBKR contract ID for a stock symbol. IBKR requires a conid
 // on every order submission — it cannot be inferred from the ticker alone.
 func (c *IBKRClient) resolveConid(ctx context.Context, symbol string) (int64, error) {
 	endpoint := fmt.Sprintf("%s/iserver/secdef/search", c.baseURL)
@@ -139,8 +137,7 @@ func (c *IBKRClient) SubmitOrder(ctx context.Context, req OrderRequest) (*Broker
 		body["auxPrice"] = req.StopPrice
 	}
 	if req.ClientOrderID != "" {
-		// cOID is IBKR's Client Portal Web API customer-order-id field (confirmed against
-		// IBKR's public docs at execute time — feature 101 design.md Open Risk #1, resolved).
+		// cOID is IBKR's Client Portal Web API customer-order-id field.
 		body["cOID"] = req.ClientOrderID
 	}
 
@@ -179,11 +176,8 @@ func (c *IBKRClient) SubmitOrder(ctx context.Context, req OrderRequest) (*Broker
 	return &BrokerOrder{BrokerOrderID: replies[0].OrderID, Status: replies[0].OrderStatus}, nil
 }
 
-// SubmitBracketLegs submits a stop-loss + optional take-profit leg as a linked pair
-// (feature 030). IBKR's Client Portal Web API has no client-settable OCA group name
-// field — grouping is done by submitting the linked orders together in one call, each
-// carrying isSingleGroup: true; the server assigns the OCA group ID. Parent/child
-// linkage uses parentId on each child, set to the parent (entry) order's own cOID.
+// SubmitBracketLegs submits a stop-loss + optional take-profit as a linked pair. IBKR has no
+// client-settable OCA group field, so legs carry isSingleGroup:true and parentId = parent cOID.
 func (c *IBKRClient) SubmitBracketLegs(ctx context.Context, parentBrokerOrderID, parentClientOrderID string, legs BracketLegsRequest) (*BracketLegsResponse, error) {
 	conid, err := c.resolveConid(ctx, legs.Symbol)
 	if err != nil {
@@ -258,13 +252,8 @@ func (c *IBKRClient) CancelOrder(ctx context.Context, brokerOrderID string) erro
 	return nil
 }
 
-// ReplaceOrder modifies a working order via POST /iserver/account/{accountID}/order/{orderId}.
-// Only the changed fields are included in the modify body; a zero Qty/LimitPrice/StopPrice
-// or empty TimeInForce is omitted so IBKR leaves that field unchanged.
-//
-// Netting-mode assumption: like the rest of this adapter, replace assumes the account
-// runs in netting mode (see "IBKR: Hedged Mode not supported" in the service CLAUDE.md);
-// a replaced quantity is interpreted as the new total order quantity.
+// ReplaceOrder modifies a working order; a zero Qty/LimitPrice/StopPrice or empty TimeInForce
+// is omitted (left unchanged). Netting-mode: a replaced quantity is the new total order quantity.
 func (c *IBKRClient) ReplaceOrder(ctx context.Context, brokerOrderID string, req OrderRequest) (*BrokerOrder, error) {
 	body := map[string]interface{}{}
 	if req.OrderType != "" {
@@ -356,14 +345,8 @@ func (c *IBKRClient) GetOrder(ctx context.Context, brokerOrderID string) (*Broke
 	return &BrokerOrder{BrokerOrderID: o.OrderID, Status: o.Status, FilledQty: o.FilledQty, FilledAvgPrice: o.AvgPrice}, nil
 }
 
-// ListOrders fetches every order currently known to IBKR for this account via
-// GET /iserver/account/orders?accountId={id} (feature 102). Reuses GetOrder's exact endpoint
-// and response shape, minus the single-order orderId filter — an explicit accountId query
-// param is required here (GetOrder relies on orderId alone to implicitly scope its single
-// result; a bulk call has nothing else scoping it under a Client Portal session that can span
-// multiple sub-accounts). ClientOrderID is deliberately left unpopulated: IBKR's SubmitOrder
-// (see SubmitOrder above) never sends a customer-order tag, so there is nothing for the broker
-// to echo back here.
+// ListOrders fetches every order IBKR knows for this account (explicit accountId query param
+// required). ClientOrderID stays unpopulated — IBKR never sends a customer-order tag to echo.
 func (c *IBKRClient) ListOrders(ctx context.Context) ([]BrokerOrder, error) {
 	endpoint := fmt.Sprintf("%s/iserver/account/orders", c.baseURL)
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
@@ -426,9 +409,8 @@ func (c *IBKRClient) GetPositions(ctx context.Context) ([]BrokerPosition, error)
 		return nil, fmt.Errorf("ibkr GetPositions: status %d: %s", resp.StatusCode, respBody)
 	}
 
-	// IBKR returns mark-to-market valuation as numeric JSON. unrealized P&L percentage is
-	// not provided, so derive it from unrealizedPnl over cost basis (qty * avgCost) when the
-	// cost basis is non-zero — matching how the broker-authoritative fields are consumed.
+	// IBKR does not provide unrealized P&L percentage, so derive it from unrealizedPnl over
+	// cost basis (qty * avgCost) when the cost basis is non-zero.
 	var raw []struct {
 		Ticker        string  `json:"ticker"`
 		Position      float64 `json:"position"`
@@ -460,11 +442,8 @@ func (c *IBKRClient) GetPositions(ctx context.Context) ([]BrokerPosition, error)
 	return positions, nil
 }
 
-// GetAccount fetches the account balance snapshot via
-// GET /v1/api/portfolio/{accountID}/summary. IBKR returns a map of named
-// figures, each an object with an `amount` field. Best-effort: figures absent
-// from the response are left zero (and LastEquity falls back to Equity so day
-// P&L is reported as zero rather than a spurious value).
+// GetAccount fetches the account balance via GET portfolio/{accountID}/summary. Best-effort:
+// absent figures are left zero, and LastEquity falls back to Equity (day P&L = 0).
 func (c *IBKRClient) GetAccount(ctx context.Context) (*BrokerBalance, error) {
 	endpoint := fmt.Sprintf("%s/portfolio/%s/summary", c.baseURL, c.ibkrAccountID)
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
@@ -502,9 +481,8 @@ func (c *IBKRClient) GetAccount(ctx context.Context) (*BrokerBalance, error) {
 	return bal, nil
 }
 
-// ValidateCredentials confirms the OAuth credentials still authenticate by
-// calling GET /portfolio/accounts. A 401/403 maps to ErrInvalidCredentials;
-// other non-200 responses and transport errors are returned as transient errors.
+// ValidateCredentials confirms the OAuth credentials via GET /portfolio/accounts: 401/403 maps
+// to ErrInvalidCredentials; other non-200s and transport errors return as transient errors.
 func (c *IBKRClient) ValidateCredentials(ctx context.Context) error {
 	endpoint := fmt.Sprintf("%s/portfolio/accounts", c.baseURL)
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
@@ -572,7 +550,6 @@ func (c *IBKRClient) signRequest(method, rawURL string) string {
 
 	oauthParams["oauth_signature"] = sig
 
-	// Build Authorization header value.
 	headerParts := make([]string, 0, len(oauthParams))
 	for k, v := range oauthParams {
 		headerParts = append(headerParts, url.QueryEscape(k)+`="`+url.QueryEscape(v)+`"`)

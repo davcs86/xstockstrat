@@ -226,7 +226,6 @@ export default function AuthorizedAppsPage() {
         </FormDialog>
       </div>
 
-      {/* Agent status lives in the page body under the header (not buried in the modal). */}
       {agentStatus}
 
       <Card>

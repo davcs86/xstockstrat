@@ -1,13 +1,9 @@
 /**
- * Equity-curve derivation for backtest results (feature 068).
- *
- * Pure functions over the generated analysis types — no JSX (vitest coverage is scoped to
- * src/lib/**). The curve is one time-aligned line per symbol built from
- * `diagnostics[].bars[]` (timestamp + per-bar equity); the run-level `daily_equity`
- * concatenation on the analysis side is a sequential per-symbol chain and is never plotted
- * (design.md § Equity chart). Multi-symbol runs render normalized % return per line —
- * absolute-dollar offsets between sequentially-compounded symbols encode iteration order,
- * not information; a single-symbol run keeps absolute dollars.
+ * Equity-curve derivation for backtest results. Pure (no JSX — vitest coverage is scoped to
+ * src/lib/**). The curve is one line per symbol from `diagnostics[].bars[]`; the run-level
+ * `daily_equity` chain is never plotted. Multi-symbol runs render normalized % return per line
+ * (absolute offsets between sequentially-compounded symbols encode iteration order, not info);
+ * a single-symbol run keeps absolute dollars.
  */
 
 import type { SymbolDiagnostics, TradeRecord } from '@xstockstrat/proto/analysis/v1/analysis_pb';
@@ -45,8 +41,7 @@ export interface TradeMarker {
   pnl: number;
 }
 
-/** True when any diagnostic bar carries a usable equity value — drives the explicit
- * no-curve-data state (there is no fallback derivation; rejected alternative). */
+/** True when any diagnostic bar carries a usable equity value — drives the explicit no-curve-data state. */
 export function hasEquityData(diagnostics: SymbolDiagnostics[] | undefined): boolean {
   return !!diagnostics?.some((d) => d.bars?.some((b) => (b.equity ?? 0) > 0));
 }
@@ -102,10 +97,9 @@ function nearestPoint(points: EquityPoint[], t: number): EquityPoint | undefined
 }
 
 /**
- * Entry/exit markers for each trade, y resolved by nearest-bar lookup within one bar
- * interval of the trade's symbol series. Exact-match would silently drop the forced-close
- * trade (its exit_time is patched onto the last bar); a marker farther than one interval
- * from any bar is dropped rather than drawn at a wrong height.
+ * Entry/exit markers for each trade, y resolved by nearest-bar lookup within one bar interval of the
+ * trade's symbol series. Exact-match would drop the forced-close trade (exit_time patched onto the
+ * last bar); a marker farther than one interval from any bar is dropped, not drawn at a wrong height.
  */
 export function buildTradeMarkers(
   trades: TradeRecord[] | undefined,

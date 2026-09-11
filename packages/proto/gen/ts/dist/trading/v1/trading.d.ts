@@ -317,6 +317,13 @@ export interface DeregisterBrokerAccountRequest {
 }
 export interface DeregisterBrokerAccountResponse {
 }
+export interface ResumeAccountRequest {
+    accountId: string;
+    reason: string;
+}
+export interface ResumeAccountResponse {
+    account?: BrokerAccount | undefined;
+}
 /** A single position row from a brokerage statement to be used as a baseline. */
 export interface PositionBaseline {
     symbol: string;
@@ -372,6 +379,8 @@ export declare const ListBrokerAccountsRequest: MessageFns<ListBrokerAccountsReq
 export declare const ListBrokerAccountsResponse: MessageFns<ListBrokerAccountsResponse>;
 export declare const DeregisterBrokerAccountRequest: MessageFns<DeregisterBrokerAccountRequest>;
 export declare const DeregisterBrokerAccountResponse: MessageFns<DeregisterBrokerAccountResponse>;
+export declare const ResumeAccountRequest: MessageFns<ResumeAccountRequest>;
+export declare const ResumeAccountResponse: MessageFns<ResumeAccountResponse>;
 export declare const PositionBaseline: MessageFns<PositionBaseline>;
 export declare const SnapshotOfflinePositionsRequest: MessageFns<SnapshotOfflinePositionsRequest>;
 export declare const RejectedBaselineRow: MessageFns<RejectedBaselineRow>;
@@ -520,6 +529,20 @@ export declare const TradingServiceService: {
         readonly responseSerialize: (value: SnapshotOfflinePositionsResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => SnapshotOfflinePositionsResponse;
     };
+    /**
+     * ResumeAccount clears the persistent and in-memory halt on a broker account
+     * (feature 169). Admin-scope callers only. Idempotent: a non-halted account
+     * returns success with no state change. Emits a ledger event and INFO alert.
+     */
+    readonly resumeAccount: {
+        readonly path: "/xstockstrat.trading.v1.TradingService/ResumeAccount";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ResumeAccountRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ResumeAccountRequest;
+        readonly responseSerialize: (value: ResumeAccountResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => ResumeAccountResponse;
+    };
 };
 export interface TradingServiceServer extends UntypedServiceImplementation {
     placeOrder: handleUnaryCall<PlaceOrderRequest, Order>;
@@ -560,6 +583,12 @@ export interface TradingServiceServer extends UntypedServiceImplementation {
      * with FailedPrecondition for broker (Alpaca/IBKR) accounts.
      */
     snapshotOfflinePositions: handleUnaryCall<SnapshotOfflinePositionsRequest, SnapshotOfflinePositionsResponse>;
+    /**
+     * ResumeAccount clears the persistent and in-memory halt on a broker account
+     * (feature 169). Admin-scope callers only. Idempotent: a non-halted account
+     * returns success with no state change. Emits a ledger event and INFO alert.
+     */
+    resumeAccount: handleUnaryCall<ResumeAccountRequest, ResumeAccountResponse>;
 }
 export interface TradingServiceClient extends Client {
     placeOrder(request: PlaceOrderRequest, callback: (error: ServiceError | null, response: Order) => void): ClientUnaryCall;
@@ -625,6 +654,14 @@ export interface TradingServiceClient extends Client {
     snapshotOfflinePositions(request: SnapshotOfflinePositionsRequest, callback: (error: ServiceError | null, response: SnapshotOfflinePositionsResponse) => void): ClientUnaryCall;
     snapshotOfflinePositions(request: SnapshotOfflinePositionsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: SnapshotOfflinePositionsResponse) => void): ClientUnaryCall;
     snapshotOfflinePositions(request: SnapshotOfflinePositionsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: SnapshotOfflinePositionsResponse) => void): ClientUnaryCall;
+    /**
+     * ResumeAccount clears the persistent and in-memory halt on a broker account
+     * (feature 169). Admin-scope callers only. Idempotent: a non-halted account
+     * returns success with no state change. Emits a ledger event and INFO alert.
+     */
+    resumeAccount(request: ResumeAccountRequest, callback: (error: ServiceError | null, response: ResumeAccountResponse) => void): ClientUnaryCall;
+    resumeAccount(request: ResumeAccountRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ResumeAccountResponse) => void): ClientUnaryCall;
+    resumeAccount(request: ResumeAccountRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ResumeAccountResponse) => void): ClientUnaryCall;
 }
 export declare const TradingServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): TradingServiceClient;

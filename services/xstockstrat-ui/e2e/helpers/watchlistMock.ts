@@ -1,4 +1,5 @@
 import { type Page } from '@playwright/test';
+import { symbolReadiness, READINESS_BUCKET_OVERRIDE } from '../fixtures/opportunities';
 
 /**
  * Shared stateful in-memory mock of the PortfolioService watchlist RPCs (feature 058/097/098).
@@ -24,9 +25,24 @@ export type MockWatchlist = {
   bindings: MockBinding[];
   // feature 127 — system-managed signals watchlist (delete-protected, its entries source-tagged).
   systemManaged?: boolean;
+  // feature 170 — watchlist-level default strategy ("" = none).
+  defaultStrategyId?: string;
 };
 
-export async function mockWatchlists(page: Page, seed: MockWatchlist[] = []): Promise<void> {
+const SOURCE_SIGNAL = 2; // WATCHLIST_ENTRY_SOURCE_SIGNAL
+
+/**
+ * feature 181 — optional per-symbol forced readiness state for the GetWatchlistReadiness route.
+ * A symbol absent from the map decorates RESOLVED (with the `symbolReadiness` default verdict);
+ * `'pending'`/`'unknown'` force those states so a spec can exercise the loading/error cells.
+ */
+export type ReadinessStateOverrides = Record<string, 'pending' | 'unknown'>;
+
+export async function mockWatchlists(
+  page: Page,
+  seed: MockWatchlist[] = [],
+  readinessOverrides: ReadinessStateOverrides = {},
+): Promise<void> {
   const state: { lists: MockWatchlist[]; seq: number } = {
     lists: seed.map((w) => ({ ...w, bindings: w.bindings.map((b) => ({ ...b })) })),
     seq: seed.length,
@@ -51,6 +67,19 @@ export async function mockWatchlists(page: Page, seed: MockWatchlist[] = []): Pr
   const sync = (wl: MockWatchlist) => {
     wl.symbols = wl.bindings.map((b) => b.symbol);
   };
+  // feature 170 add-time default (Option B): fill strategyId on bare, non-SIGNAL bindings only.
+  const applyDefault = (bindings: MockBinding[], def: string): MockBinding[] => {
+    if (!def) return bindings;
+    return bindings.map((b) =>
+      b.strategyId === '' && b.source !== SOURCE_SIGNAL ? { ...b, strategyId: def } : b,
+    );
+  };
+  // Connect-JSON encodes google.protobuf.FieldMask as a canonical comma-joined camelCase string
+  // (e.g. "defaultStrategyId,name"), NOT an object — a present, non-empty string = a partial update.
+  const maskPaths = (req: { updateMask?: unknown }): string[] =>
+    typeof req.updateMask === 'string' && req.updateMask.length > 0
+      ? req.updateMask.split(',')
+      : [];
   const find = (id: string) => state.lists.find((w) => w.watchlistId === id);
   const json = (route: Parameters<Parameters<Page['route']>[1]>[0], body: unknown) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
@@ -62,7 +91,8 @@ export async function mockWatchlists(page: Page, seed: MockWatchlist[] = []): Pr
   await page.route('**/xstockstrat.portfolio.v1.PortfolioService/CreateWatchlist', (route) => {
     const req = JSON.parse(route.request().postData() ?? '{}');
     state.seq += 1;
-    const bindings = normBindings(toBindings(req));
+    const def = req.defaultStrategyId ?? '';
+    const bindings = applyDefault(normBindings(toBindings(req)), def);
     const wl: MockWatchlist = {
       watchlistId: `wl-${state.seq}`,
       userId: 'test-user-001',
@@ -70,6 +100,7 @@ export async function mockWatchlists(page: Page, seed: MockWatchlist[] = []): Pr
       description: req.description ?? '',
       symbols: bindings.map((b) => b.symbol),
       bindings,
+      defaultStrategyId: def,
     };
     state.lists.push(wl);
     return json(route, { watchlist: wl });
@@ -79,11 +110,19 @@ export async function mockWatchlists(page: Page, seed: MockWatchlist[] = []): Pr
     const req = JSON.parse(route.request().postData() ?? '{}');
     const wl = find(req.watchlistId);
     if (wl) {
-      if (req.name !== undefined) wl.name = req.name;
-      if (req.description !== undefined) wl.description = req.description;
-      // Replace the binding set (the per-symbol re-bind write path — FR-6).
-      wl.bindings = normBindings(toBindings(req));
-      sync(wl);
+      const paths = maskPaths(req);
+      if (paths.length > 0) {
+        // feature 170 partial (field-mask) path: write ONLY masked scalar fields; bindings untouched.
+        if (paths.includes('name') && req.name !== undefined) wl.name = req.name;
+        if (paths.includes('description')) wl.description = req.description ?? '';
+        if (paths.includes('defaultStrategyId')) wl.defaultStrategyId = req.defaultStrategyId ?? '';
+      } else {
+        // Legacy replace-all path — name/description/bindings; defaultStrategyId is NOT written here.
+        if (req.name !== undefined) wl.name = req.name;
+        if (req.description !== undefined) wl.description = req.description;
+        wl.bindings = normBindings(toBindings(req));
+        sync(wl);
+      }
     }
     return json(route, { watchlist: wl });
   });
@@ -137,9 +176,85 @@ export async function mockWatchlists(page: Page, seed: MockWatchlist[] = []): Pr
     },
   );
 
+  // feature 170 — atomic bulk rebind: patch strategyId on every requested symbol (source untouched)
+  // and return { bindings: <changed rows>, updated_at }. Happy-path e2e assumes all symbols exist.
+  await page.route(
+    '**/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlistBindings',
+    (route) => {
+      const req = JSON.parse(route.request().postData() ?? '{}');
+      const wl = find(req.watchlistId);
+      const syms = (req.symbols ?? []).map((s: string) => (s ?? '').trim().toUpperCase());
+      const changed: MockBinding[] = [];
+      if (wl) {
+        for (const b of wl.bindings) {
+          if (syms.includes(b.symbol)) {
+            b.strategyId = req.strategyId ?? ''; // single-column patch; source untouched
+            changed.push({ symbol: b.symbol, strategyId: b.strategyId, source: b.source });
+          }
+        }
+        sync(wl);
+      }
+      return json(route, { bindings: changed, updatedAt: new Date(0).toISOString() });
+    },
+  );
+
   await page.route('**/xstockstrat.portfolio.v1.PortfolioService/DeleteWatchlist', (route) => {
     const req = JSON.parse(route.request().postData() ?? '{}');
     state.lists = state.lists.filter((w) => w.watchlistId !== req.watchlistId);
     return json(route, {});
+  });
+
+  // feature 181 — cache-first watchlist readiness decoration (analysis GetWatchlistReadiness).
+  // Derives rows from the SAME seeded bindings, sorted (symbol, strategyId), keyset-sliced by the
+  // opaque base64 page token — mirroring the server so the paging e2e is faithful. Flattened
+  // proto3-JSON camelCase shape (enum-name `state`, nested `readiness` only for RESOLVED).
+  const cmpPair = (a: MockBinding, b: MockBinding) =>
+    a.symbol !== b.symbol
+      ? a.symbol < b.symbol
+        ? -1
+        : 1
+      : a.strategyId === b.strategyId
+        ? 0
+        : a.strategyId < b.strategyId
+          ? -1
+          : 1;
+  const encTok = (b: MockBinding) =>
+    Buffer.from(`${b.symbol}\x00${b.strategyId}`).toString('base64url');
+  const decTok = (t: string): MockBinding | null => {
+    if (!t) return null;
+    const raw = Buffer.from(t, 'base64url').toString();
+    const i = raw.indexOf('\x00');
+    return i < 0
+      ? { symbol: raw, strategyId: '' }
+      : { symbol: raw.slice(0, i), strategyId: raw.slice(i + 1) };
+  };
+  await page.route('**/xstockstrat.analysis.v1.AnalysisService/GetWatchlistReadiness', (route) => {
+    const req = JSON.parse(route.request().postData() ?? '{}');
+    const wl = find(req.watchlistId);
+    const bound = (wl?.bindings ?? []).filter((b) => b.strategyId).sort(cmpPair);
+    const cursor = decTok(req.page?.pageToken ?? '');
+    const after = cursor ? bound.filter((b) => cmpPair(b, cursor) > 0) : bound;
+    const size = req.page?.pageSize > 0 ? req.page.pageSize : 25;
+    const pageRows = after.slice(0, size);
+    const nextPageToken = after.length > size ? encTok(pageRows[pageRows.length - 1]) : '';
+    const rows = pageRows.map((b) => {
+      const forced = readinessOverrides[b.symbol];
+      if (forced === 'pending') {
+        return { symbol: b.symbol, strategyId: b.strategyId, state: 'READINESS_STATE_PENDING' };
+      }
+      if (forced === 'unknown') {
+        return { symbol: b.symbol, strategyId: b.strategyId, state: 'READINESS_STATE_UNKNOWN' };
+      }
+      return {
+        symbol: b.symbol,
+        strategyId: b.strategyId,
+        state: 'READINESS_STATE_RESOLVED',
+        // Merge the per-symbol bucket override (READY1/WATCH1/QUIET1/NODATA1) over the default 2/3
+        // "1 away" verdict — same shape the pre-181 EvaluateReadiness mock produced.
+        readiness: { ...symbolReadiness(b.symbol), ...(READINESS_BUCKET_OVERRIDE[b.symbol] ?? {}) },
+        computedAt: new Date().toISOString(),
+      };
+    });
+    return json(route, { rows, page: { nextPageToken } });
   });
 }

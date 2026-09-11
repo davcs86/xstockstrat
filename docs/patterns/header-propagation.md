@@ -120,7 +120,9 @@ async def _background_task(self, arg, propagation_meta=()):
 Backend Node.js services are **gRPC-only** (`@grpc/grpc-js`). Use `AsyncLocalStorage` to carry
 the three headers from the inbound gRPC call's metadata to any outbound gRPC clients.
 
-Reference store: `services/xstockstrat-ledger/src/middleware/propagation.ts`
+The pattern below is the template a Node leaf would use if it made outbound per-request gRPC
+calls; none currently does, so there is no live reference store (the former per-leaf
+`src/middleware/propagation.ts` copies were unused and removed in feature 175).
 
 ```typescript
 import { AsyncLocalStorage } from 'async_hooks';

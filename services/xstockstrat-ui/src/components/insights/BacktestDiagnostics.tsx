@@ -12,17 +12,16 @@ import {
   SizingMode,
 } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
-// feature 150: exhaustive Record<SizingMode,…> (ledger 067) — a new enum value fails `tsc` here.
-// UNSPECIFIED renders as "Legacy" because a null/legacy run row deserializes to the 0 sentinel and
-// the legacy path is exactly what UNSPECIFIED means on the request side.
+// Exhaustive Record<SizingMode,…> — a new enum value fails `tsc` here. UNSPECIFIED renders as "Legacy":
+// a null/legacy run row deserializes to the 0 sentinel, which is exactly what UNSPECIFIED means.
 export const SIZING_MODE_LABEL: Record<SizingMode, string> = {
   [SizingMode.UNSPECIFIED]: 'Legacy',
   [SizingMode.LEGACY]: 'Legacy',
   [SizingMode.PORTFOLIO]: 'Portfolio',
 };
 
-// feature 151: exhaustive Record<FillModel,…> (ledger 067). UNSPECIFIED → "Legacy" (a null/pre-151
-// row deserializes to the 0 sentinel, which the server normalizes to same-bar-close).
+// Exhaustive Record<FillModel,…> — a new enum value fails `tsc`. UNSPECIFIED → "Legacy" (the 0
+// sentinel, which the server normalizes to same-bar-close).
 export const FILL_MODEL_LABEL: Record<FillModel, string> = {
   [FillModel.UNSPECIFIED]: 'Legacy',
   [FillModel.SAME_BAR_CLOSE]: 'Same-bar close',
@@ -66,10 +65,8 @@ function actionClass(action: BarAction): string {
 }
 
 /**
- * Day-by-day backtest diagnostics (feature 064). One card per symbol: the no-trade reason
- * (when a symbol produced 0 trades) plus a virtualized table of every bar — OHLCV, each
- * computed indicator series, warm-up flag, the engine's action, and conviction — so an author
- * can see exactly why a strategy did or didn't trade.
+ * Day-by-day backtest diagnostics: one card per symbol with the no-trade reason and a virtualized
+ * table of every bar (OHLCV, indicators, warm-up flag, action, conviction) — why a strategy traded or not.
  */
 export function BacktestDiagnostics({ diagnostics }: { diagnostics: SymbolDiagnostics[] }) {
   if (!diagnostics.length) return null;

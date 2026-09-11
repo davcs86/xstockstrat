@@ -1,7 +1,6 @@
 import { cn } from '../ui/utils';
 
-// Shared "eyebrow" kicker label (feature 124, FR-6): the mono/uppercase/tracked small-caps
-// heading style repeated across 14 sites in 7 files. Single source of truth (DRY guard rail).
+// Single source of truth for the shared mono/uppercase eyebrow kicker label style (DRY guard rail).
 const TAGS = { div: 'div', p: 'p', dt: 'dt', span: 'span' } as const;
 
 export function Eyebrow({

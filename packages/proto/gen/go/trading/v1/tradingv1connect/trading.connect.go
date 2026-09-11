@@ -71,6 +71,9 @@ const (
 	// TradingServiceSnapshotOfflinePositionsProcedure is the fully-qualified name of the
 	// TradingService's SnapshotOfflinePositions RPC.
 	TradingServiceSnapshotOfflinePositionsProcedure = "/xstockstrat.trading.v1.TradingService/SnapshotOfflinePositions"
+	// TradingServiceResumeAccountProcedure is the fully-qualified name of the TradingService's
+	// ResumeAccount RPC.
+	TradingServiceResumeAccountProcedure = "/xstockstrat.trading.v1.TradingService/ResumeAccount"
 )
 
 // TradingServiceClient is a client for the xstockstrat.trading.v1.TradingService service.
@@ -103,6 +106,10 @@ type TradingServiceClient interface {
 	// effective-dated opening baseline for an OFFLINE account (feature 163). Rejected
 	// with FailedPrecondition for broker (Alpaca/IBKR) accounts.
 	SnapshotOfflinePositions(context.Context, *connect.Request[v1.SnapshotOfflinePositionsRequest]) (*connect.Response[v1.SnapshotOfflinePositionsResponse], error)
+	// ResumeAccount clears the persistent and in-memory halt on a broker account
+	// (feature 169). Admin-scope callers only. Idempotent: a non-halted account
+	// returns success with no state change. Emits a ledger event and INFO alert.
+	ResumeAccount(context.Context, *connect.Request[v1.ResumeAccountRequest]) (*connect.Response[v1.ResumeAccountResponse], error)
 }
 
 // NewTradingServiceClient constructs a client for the xstockstrat.trading.v1.TradingService
@@ -194,6 +201,12 @@ func NewTradingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(tradingServiceMethods.ByName("SnapshotOfflinePositions")),
 			connect.WithClientOptions(opts...),
 		),
+		resumeAccount: connect.NewClient[v1.ResumeAccountRequest, v1.ResumeAccountResponse](
+			httpClient,
+			baseURL+TradingServiceResumeAccountProcedure,
+			connect.WithSchema(tradingServiceMethods.ByName("ResumeAccount")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -212,6 +225,7 @@ type tradingServiceClient struct {
 	updateBrokerAccountCredentials *connect.Client[v1.UpdateBrokerAccountCredentialsRequest, v1.UpdateBrokerAccountCredentialsResponse]
 	getTradingEnvironment          *connect.Client[v1.GetTradingEnvironmentRequest, v1.GetTradingEnvironmentResponse]
 	snapshotOfflinePositions       *connect.Client[v1.SnapshotOfflinePositionsRequest, v1.SnapshotOfflinePositionsResponse]
+	resumeAccount                  *connect.Client[v1.ResumeAccountRequest, v1.ResumeAccountResponse]
 }
 
 // PlaceOrder calls xstockstrat.trading.v1.TradingService.PlaceOrder.
@@ -280,6 +294,11 @@ func (c *tradingServiceClient) SnapshotOfflinePositions(ctx context.Context, req
 	return c.snapshotOfflinePositions.CallUnary(ctx, req)
 }
 
+// ResumeAccount calls xstockstrat.trading.v1.TradingService.ResumeAccount.
+func (c *tradingServiceClient) ResumeAccount(ctx context.Context, req *connect.Request[v1.ResumeAccountRequest]) (*connect.Response[v1.ResumeAccountResponse], error) {
+	return c.resumeAccount.CallUnary(ctx, req)
+}
+
 // TradingServiceHandler is an implementation of the xstockstrat.trading.v1.TradingService service.
 type TradingServiceHandler interface {
 	PlaceOrder(context.Context, *connect.Request[v1.PlaceOrderRequest]) (*connect.Response[v1.Order], error)
@@ -310,6 +329,10 @@ type TradingServiceHandler interface {
 	// effective-dated opening baseline for an OFFLINE account (feature 163). Rejected
 	// with FailedPrecondition for broker (Alpaca/IBKR) accounts.
 	SnapshotOfflinePositions(context.Context, *connect.Request[v1.SnapshotOfflinePositionsRequest]) (*connect.Response[v1.SnapshotOfflinePositionsResponse], error)
+	// ResumeAccount clears the persistent and in-memory halt on a broker account
+	// (feature 169). Admin-scope callers only. Idempotent: a non-halted account
+	// returns success with no state change. Emits a ledger event and INFO alert.
+	ResumeAccount(context.Context, *connect.Request[v1.ResumeAccountRequest]) (*connect.Response[v1.ResumeAccountResponse], error)
 }
 
 // NewTradingServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -397,6 +420,12 @@ func NewTradingServiceHandler(svc TradingServiceHandler, opts ...connect.Handler
 		connect.WithSchema(tradingServiceMethods.ByName("SnapshotOfflinePositions")),
 		connect.WithHandlerOptions(opts...),
 	)
+	tradingServiceResumeAccountHandler := connect.NewUnaryHandler(
+		TradingServiceResumeAccountProcedure,
+		svc.ResumeAccount,
+		connect.WithSchema(tradingServiceMethods.ByName("ResumeAccount")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.trading.v1.TradingService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TradingServicePlaceOrderProcedure:
@@ -425,6 +454,8 @@ func NewTradingServiceHandler(svc TradingServiceHandler, opts ...connect.Handler
 			tradingServiceGetTradingEnvironmentHandler.ServeHTTP(w, r)
 		case TradingServiceSnapshotOfflinePositionsProcedure:
 			tradingServiceSnapshotOfflinePositionsHandler.ServeHTTP(w, r)
+		case TradingServiceResumeAccountProcedure:
+			tradingServiceResumeAccountHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -484,4 +515,8 @@ func (UnimplementedTradingServiceHandler) GetTradingEnvironment(context.Context,
 
 func (UnimplementedTradingServiceHandler) SnapshotOfflinePositions(context.Context, *connect.Request[v1.SnapshotOfflinePositionsRequest]) (*connect.Response[v1.SnapshotOfflinePositionsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.trading.v1.TradingService.SnapshotOfflinePositions is not implemented"))
+}
+
+func (UnimplementedTradingServiceHandler) ResumeAccount(context.Context, *connect.Request[v1.ResumeAccountRequest]) (*connect.Response[v1.ResumeAccountResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.trading.v1.TradingService.ResumeAccount is not implemented"))
 }

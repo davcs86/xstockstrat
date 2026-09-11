@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { AuthCardShell, CredentialsForm } from '@/components/auth/AuthForm';
 import { Skeleton } from '@/components/ui/skeleton';
 
-// FR-3: only allow redirects back into one of the known basePaths.
+// Only allow redirects back into one of the known basePaths (open-redirect guard).
 function safeRedirect(target: string | null): string {
   if (
     target &&

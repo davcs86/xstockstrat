@@ -1,6 +1,6 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the forty-two tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the forty-nine tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 ---
@@ -34,7 +34,7 @@ directly on port 9000.
 
 **Direct (local):** `http://localhost:9000`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same forty-two tools' `name`,
+**Tool catalog (UI display).** `GET /api/tools` returns the same forty-nine tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
 capabilities (the same data documented below), never user data or credentials. It powers the
 `xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
@@ -498,6 +498,7 @@ gate.
 | `update` with no fields and no `clear_fields` | `ValueError` raised client-side, before any RPC |
 | An `update` that would empty `components` or blank a rule without naming it for erasure | `invalid argument` (INVALID_ARGUMENT) — the server refuses; the message names `update_mask` as the escape hatch |
 | `update`/`deactivate`/`reactivate` on unknown strategy | `strategy not found` (NOT_FOUND) |
+| `deactivate` on the fundamentals blend strategy (feature 186) | `the fundamentals blend strategy cannot be deactivated; it is a protected platform resource` (FAILED_PRECONDITION) |
 | `register` on an existing strategy_id (active or deactivated) | `strategy already exists` (ALREADY_EXISTS) |
 
 **Effect on the derived grade.** Changing a scoring-relevant field (`components`, rules,
@@ -856,17 +857,37 @@ admin scope) — analysis resolves the owner from the header, never a request-bo
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `min_conviction` | `float` | No | Drop rows below this conviction floor (default `0.0`); muted deny-list rows are exempt |
+| `page_size` | `int` | No | Max opportunities per page (default `50`) |
+| `page_token` | `str` | No | Opaque cursor from a previous response's `next_page_token`; empty string or omitted for the first page |
 
-**Return** — `{ "opportunities": [ <opportunity>, … ] }`. Each opportunity is **snake_case** and
-always carries `symbol`, `action`, `conviction`, `passing_conditions`, `total_conditions`, `thesis`,
-`strategy_id`, `source`, `opportunity_key`, `provenance`, and `muted`. The live-market enrichment is
+**Return** — `{ "opportunities": [ <opportunity>, … ], "computing": <bool>, "compute_failed": <bool>, "next_page_token": <str> }`.
+Each opportunity is **snake_case** and always carries `symbol`, `action`, `conviction`,
+`passing_conditions`, `total_conditions`, `thesis`, `strategy_id`, `source`, `opportunity_key`,
+`provenance`, `muted`, and `data_unavailable` (feature 185 — `true` for a **terminal
+data-unavailable** row: a per-symbol bars/indicator fetch failure during the compute, zeroed on both
+ranking axes and **distinct** from an evaluated 0-of-N "quiet" row). The live-market enrichment is
 **omit-not-fabricate**:
 
 - `live_price`, `change_pct`, `target_price`, `stop_price` — present **only** when the backend has a
   value; an unavailable field is **omitted entirely**, never a fabricated `0`.
+- `valid_until` — the row's expiry as an ISO-8601 string; omitted when unset (feature 185 back-fill).
+- `signal_confidence` — the raw max active-signal conviction (0.0–1.0); omitted when the symbol has
+  no active signal, never a fabricated `0.0` (feature 185 back-fill).
 - `sparkline` — a list of recent daily closes; a warm-up/missing bar is JSON `null` (never `NaN`).
 - `conditions` — the traced `{ref_name, lhs_value, threshold, fn, state, distance_to_threshold}`
   leaves; an unattributed row omits the key.
+
+The two **top-level** flags surface a cold/failed queue explicitly to this one-shot, non-polling
+consumer instead of reporting it as a silently-empty list (feature 185 FR-4):
+
+- `computing: true` — a **cold** (never-materialized) queue is still being computed in the background;
+  the read returned empty non-blocking. Call again shortly. A legitimately-empty universe returns
+  `computing: false` (the distinctness).
+- `compute_failed: true` — a persistently-failing background compute (past the bounded attempt
+  count): a terminal error state, not an infinite "computing".
+
+- `next_page_token` — an opaque cursor for the next page; empty string when no more pages remain.
+  Pass it back as `page_token` on the next call (feature 187).
 
 Risk/reward and suggested share size are **not** returned — they are a UI-only presentation computed
 client-side, carried on no wire field.
@@ -945,7 +966,10 @@ Returns `{version, updated_at}` — **never the value**.
 calling user's derived `x-access-scope`, so `xstockstrat-config` rejects a non-admin caller with
 `PERMISSION_DENIED` ("admin scope required"). Since feature 092 this is how **every** management
 write tool works (it was `set_config`-only under feature 073); the hardcoded admin scope was removed
-(invariant **AGENT-3/AGENT-4**).
+(invariant **AGENT-3/AGENT-4**). The feature-183 user-administration tools (`manage_user`,
+`list_users`, `get_user`, `admin_get_user_metadata`, `admin_set_user_metadata`) follow the same rule
+with an added friendly early `scope & 0x04` check (`_require_admin`) that rejects a non-admin before
+any backend call; identity's `adminGate` remains the authoritative server-side gate.
 
 **Secret keys ARE writable (PR #994).** The earlier client-side refusal was removed. The value is
 encrypted at rest by `xstockstrat-config` (AES-256-GCM, `is_secret` **row-authoritative on write**),
@@ -1076,16 +1100,21 @@ Create, update, or delete one of the caller's watchlists in `xstockstrat-portfol
 | `description` | string | no | List description. On `update`, omit to keep the current value |
 | `symbols` | string[] | no | Bare (unbound) ticker symbols |
 | `bindings` | dict[] | no | `{"symbol": <ticker>, "strategy_id": <id or "">}` objects; may combine with `symbols` |
+| `default_strategy_id` | string | no | Watchlist-level default strategy (feature 170). Stamped onto newly-added, otherwise-unbound `MANUAL` symbols at add time only (no retroactive rebind, no read-time fallback); `""` clears it |
 
 - **create** — makes a new caller-owned list from `name` (+ optional `description`/`symbols`/
-  `bindings`); new entries are recorded as `MANUAL` (user-curated).
-- **update — READ-MODIFY-WRITE MERGE.** The backend `UpdateWatchlist` is replace-all (it clears then
-  re-inserts the list's stocks) and requires a name, so this tool fetches the current list first and
-  **preserves every field you do not pass**: an omitted `name`/`description` keeps the stored value,
-  and omitting **both** `symbols` and `bindings` preserves the existing stocks exactly — so an
-  `update` with only a new `name` renames the list **without** clearing its stocks. Passing `symbols`
-  and/or `bindings` **replaces** the whole stock set with those `MANUAL` entries. Use
-  `manage_watchlist_symbols` to add/remove individual stocks without a full replace. (The
+  `bindings`/`default_strategy_id`); new entries are recorded as `MANUAL` (user-curated), and a
+  `default_strategy_id` binds the initial bare symbols.
+- **update — two modes.** Passing `default_strategy_id` does a **partial field-mask write** of the
+  scalar fields only (`default_strategy_id`, plus `name`/`description` when supplied) — bindings are
+  left untouched, and it **cannot** also replace `symbols`/`bindings` in the same call (rejected).
+  Otherwise `update` is a **READ-MODIFY-WRITE MERGE**: the backend `UpdateWatchlist` is replace-all
+  (it clears then re-inserts the list's stocks) and requires a name, so this tool fetches the current
+  list first and **preserves every field you do not pass** — an omitted `name`/`description` keeps the
+  stored value, and omitting **both** `symbols` and `bindings` preserves the existing stocks exactly,
+  so an `update` with only a new `name` renames the list **without** clearing its stocks. Passing
+  `symbols` and/or `bindings` **replaces** the whole stock set with those `MANUAL` entries. Use
+  `manage_watchlist_symbols` to add/remove/assign individual stocks without a full replace. (The
   read-then-write is **not atomic** — a concurrent add between the two steps could be lost.)
 - **delete** — removes the list. The one per-user **system-managed** signals watchlist is
   delete-protected and its deletion is refused (`FAILED_PRECONDITION`).
@@ -1102,27 +1131,34 @@ a name`/`a watchlist_id`; `watchlist not found`; `permission denied` (non-owner)
 
 ### `manage_watchlist_symbols`
 
-Add or remove stocks on one of the caller's watchlists in `xstockstrat-portfolio`. Wraps
-`AddWatchlistSymbols` / `RemoveWatchlistSymbols`. Ownership-gated on the caller's `x-user-id`.
+Add, remove, or bulk-assign a strategy to stocks on one of the caller's watchlists in
+`xstockstrat-portfolio`. Wraps `AddWatchlistSymbols` / `RemoveWatchlistSymbols` /
+`UpdateWatchlistBindings`. Ownership-gated on the caller's `x-user-id`.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `operation` | string | yes | `add` \| `remove` |
+| `operation` | string | yes | `add` \| `remove` \| `assign` |
 | `watchlist_id` | string | yes | The list to mutate |
-| `symbols` | string[] | no | For `add`: unbound tickers to add. For `remove`: tickers to drop |
+| `symbols` | string[] | no | For `add`: unbound tickers to add. For `remove`: tickers to drop. For `assign`: tickers to rebind (must already be on the list) |
 | `bindings` | dict[] | `add` only | `{"symbol": <ticker>, "strategy_id": <id or "">}` objects to add; may combine with `symbols` |
+| `strategy_id` | string | `assign` only | Strategy to apply across all `symbols`; `""` unbinds them |
 
 - **add** — unions the given symbols/bindings into the list (an already-present symbol keeps its
   stored binding — first-writer-wins) and records new entries as `MANUAL`, distinct from the `SIGNAL`
   entries `ingest_signal` (`direction='watchlist'`) adds. The per-list symbol cap is enforced by the
   backend.
 - **remove** — drops the given `symbols`; symbols not on the list are ignored.
+- **assign** (feature 170) — **atomically** sets `strategy_id` on every listed symbol in one
+  transaction: all-or-nothing, so if any symbol is not on the list the whole call is rejected
+  `NOT_FOUND` with **no partial write**; `""` unbinds the whole selection.
 
 Returns `{"watchlist": <watchlist>}` — the updated list.
 
-**Errors:** `unknown operation '<op>' (expected add/remove)`; `manage_watchlist_symbols requires a
-watchlist_id`; `watchlist not found`; `permission denied` (non-owner); `invalid argument` (per-list
-cap exceeded); `RuntimeError` → no verified caller claims.
+**Errors:** `unknown operation '<op>' (expected add/remove/assign)`;
+`manage_watchlist_symbols requires a watchlist_id`; `manage_watchlist_symbols(operation='assign')
+requires symbols`; `watchlist not found` (incl. an `assign` symbol absent from the list);
+`permission denied` (non-owner); `invalid argument` (per-list cap exceeded); `RuntimeError` → no
+verified caller claims.
 
 ---
 
@@ -1178,19 +1214,22 @@ found`; `permission denied` (non-owner); `FAILED_PRECONDITION` (confirm on a bro
 
 ### `manage_account`
 
-Manage the **caller's own BROKER accounts** (Alpaca / IBKR) in `xstockstrat-trading` (feature 164).
-All operations act on the **caller's own** accounts (ownership from the verified `x-user-id`); a
-non-owner is rejected `PERMISSION_DENIED`. Broker credentials pass through to the backend (which
-encrypts them at rest) and are **never echoed back** — a `BrokerAccount` carries no credential
-field. Offline accounts are **not** created here — use `manage_offline_account` (`create_account`).
+Manage **BROKER accounts** (Alpaca / IBKR) in `xstockstrat-trading` (feature 164, resume added by
+feature 169). `register` / `update_credentials` / `deregister` act on the **caller's own** accounts
+(ownership from the verified `x-user-id`); a non-owner is rejected `PERMISSION_DENIED`. `resume`
+requires **admin scope** and can act on any account. Broker credentials pass through to the backend
+(which encrypts them at rest) and are **never echoed back** — a `BrokerAccount` carries no
+credential field. Offline accounts are **not** created here — use `manage_offline_account`
+(`create_account`).
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `operation` | string | yes | `register` \| `update_credentials` \| `deregister` |
-| `account_id` | string | update/deregister | The broker account to act on |
+| `operation` | string | yes | `register` \| `update_credentials` \| `deregister` \| `resume` |
+| `account_id` | string | update/deregister/resume | The broker account to act on |
 | `display_name` | string | `register` | Name for the new account |
 | `broker_type` | string | `register` | `alpaca` \| `ibkr` (offline is rejected) |
 | `credentials_json` | string | register/update | Broker-specific credential blob (Alpaca `{"api_key":…,"api_secret":…}`; IBKR `{"consumer_key":…,"access_token":…,"access_token_secret":…,"ibkr_account_id":…}`) |
+| `reason` | string | no | Operator-supplied context for why the halt is being cleared (resume only; default `""`) |
 
 - **register** → `{"account": …}` with `credential_status`; the submitted credentials are never
   returned.
@@ -1198,12 +1237,18 @@ field. Offline accounts are **not** created here — use `manage_offline_account
   account (`FAILED_PRECONDITION`) and invalid JSON (`INVALID_ARGUMENT`).
 - **deregister** → `{"deregistered": true, "account_id": …}`. Works for broker **and** offline
   accounts (the RPC returns nothing; the confirmation is synthesized from the input).
+- **resume** → `{"account": …}` with `halted: false` (feature 169). Clears the persistent and
+  in-memory halt on the specified broker account so the reconciliation poller resumes ticking.
+  Idempotent — resuming an already-running account is a no-op success. Emits an
+  `account.halt.resumed` ledger event and an INFO-level alert via xstockstrat-notify. **Requires
+  admin scope** (`x-access-scope` bit `0x04`); unlike the other operations which use ownership
+  gating, `resume` acts on **any** account (the admin is un-halting on behalf of the platform).
 
-**Errors:** `unknown operation '<op>'` (expected `register/update_credentials/deregister`); missing
-required args per operation; offline steer on `register` (`broker_type=offline`); unsupported
-`broker_type`; `broker account not found`; `permission denied` (non-owner); `FAILED_PRECONDITION`
-(update_credentials on an offline account); `INVALID_ARGUMENT` (malformed `credentials_json`);
-`RuntimeError` → no verified caller claims.
+**Errors:** `unknown operation '<op>'` (expected `register/update_credentials/deregister/resume`);
+missing required args per operation; `PermissionError` (resume without admin scope); offline steer on
+`register` (`broker_type=offline`); unsupported `broker_type`; `broker account not found`;
+`permission denied` (non-owner); `FAILED_PRECONDITION` (update_credentials on an offline account);
+`INVALID_ARGUMENT` (malformed `credentials_json`); `RuntimeError` → no verified caller claims.
 
 ---
 
@@ -1218,6 +1263,116 @@ are never returned.
 Returns `{"accounts": [...]}` — the caller's accounts; empty list when the caller owns none.
 
 **Errors:** `permission denied`; `RuntimeError` → no verified caller claims.
+
+---
+
+### `get_positions`
+
+List **all positions** for the calling user across all accounts — broker and offline (read-only,
+feature 169). User-bound: forwards only the caller's `x-user-id`; admins see only their own
+positions.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `limit` | int | `0` | Max positions per page; 0 = server default (100, max 500) |
+| `page_token` | string | `""` | Opaque token from a prior call's `next_page_token` |
+
+Returns `{"positions": [...], "next_page_token": "<str>"}` — each position uses snake_case proto
+field names. Fields with zero/default values may be absent (proto3 serialization convention). An
+empty `next_page_token` means no more pages.
+
+**Errors:** `RuntimeError` → no verified caller claims.
+
+---
+
+### `get_positions_by_account_id`
+
+List positions for a **single account** owned by the calling user (read-only, feature 169).
+User-bound: forwards only the caller's `x-user-id`. If the caller does not own the account,
+the backend returns an empty list (no data leakage).
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `account_id` | string | _(required)_ | The account to query |
+| `limit` | int | `0` | Max positions per page; 0 = server default (100, max 500) |
+| `page_token` | string | `""` | Opaque token from a prior call's `next_page_token` |
+
+Returns `{"positions": [...], "next_page_token": "<str>"}` — same shape as `get_positions`.
+
+**Errors:** `ValueError` → `account_id` is empty; `RuntimeError` → no verified caller claims.
+
+---
+
+### `manage_user`
+
+Administer users (**ADMIN only**, feature 183). A non-admin caller is rejected `PermissionError`
+("manage_user requires admin scope") before any backend call. The caller's derived `x-access-scope`
+is forwarded so identity's `adminGate` is the authoritative gate. Passwords are write-only — never
+echoed in the result or logged.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `operation` | string | _(required)_ | `create` \| `set_roles` \| `set_active` \| `reset_password` |
+| `user_id` | string | `""` | Target user (required for set_roles/set_active/reset_password) |
+| `email` | string | `""` | New user's email (required for create) |
+| `password` | string | `""` | Plaintext password (required for create/reset_password); write-only |
+| `roles` | list[str] | `null` | Non-empty subset of `admin`/`trader`/`viewer` (required for create/set_roles) |
+| `active` | bool | `null` | Required for set_active (true/false) |
+
+Returns the created/updated user (`userId`, `email`, `roles`, `isActive`) for create/set_roles/
+set_active; `{"success": true, "userId": ...}` for reset_password.
+
+**Errors:** `PermissionError` → non-admin; `ValueError` → unknown operation, unknown/empty role, or a
+missing required arg; `RuntimeError` → `NOT_FOUND` ("user not found"), or the last active admin cannot
+be demoted/deactivated (`FAILED_PRECONDITION` "cannot remove last admin").
+
+### `list_users`
+
+List all users (**ADMIN only**, read-only, feature 183). Returns `{"users": [...]}` with password-free
+views (`userId`, `email`, `roles`, `isActive`, `createdAt`). No parameters.
+
+**Errors:** `PermissionError` → non-admin; `RuntimeError` → no verified caller claims.
+
+### `get_user`
+
+Read one user by id (**ADMIN only**, read-only, feature 183).
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `user_id` | string | _(required)_ | The user to read |
+
+Returns the password-free user view. **Errors:** `PermissionError` → non-admin; `ValueError` →
+empty `user_id`; `RuntimeError` → `NOT_FOUND` ("user not found").
+
+### `admin_get_user_metadata`
+
+Read **any** user's profile metadata by `user_id` (**ADMIN only**, read-only, feature 183). Distinct
+from the self-only `get_user_metadata` — the target is the request-body `user_id`, not the caller.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `user_id` | string | _(required)_ | The target user |
+
+Returns `userId`, `email`, `phone`, `displayName`, `metadata`, `metadataUpdatedAt`.
+**Errors:** `PermissionError` → non-admin; `ValueError` → empty `user_id`; `RuntimeError` →
+`NOT_FOUND` ("user not found").
+
+### `admin_set_user_metadata`
+
+Partial-update **any** user's profile metadata by `user_id` (**ADMIN only**, feature 183). Only
+provided fields change; email is read-only. Distinct from the self-only `set_user_metadata`. The write
+emits a ledger audit event (`identity.user.metadata_updated`, acting admin + target, no values).
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `user_id` | string | _(required)_ | The target user |
+| `phone` | string | `null` | Optional new phone |
+| `display_name` | string | `null` | Optional new display name |
+| `metadata` | object | `null` | Optional JSON object (max 8KB) |
+
+Returns the updated profile (same shape as `admin_get_user_metadata`). **Errors:** `PermissionError`
+→ non-admin; `ValueError` → empty `user_id` or no field provided; `RuntimeError` → `NOT_FOUND`, or
+`INVALID_ARGUMENT` ("metadata exceeds 8KB limit").
 
 ---
 

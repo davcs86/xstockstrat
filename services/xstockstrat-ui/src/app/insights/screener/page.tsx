@@ -49,14 +49,11 @@ import {
   ScreenResultStatus,
 } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
-// Top-N default for the "Add top N to watchlist" action (feature 098, FR-6). A UI display constant,
-// not a WatchConfig key (Floor F-07 unaffected).
+// UI display constant (not a WatchConfig key — Floor F-07 unaffected).
 const TOP_N = 5;
 
-// Feature 118: merges a poll response into the displayed results by symbol, preserving row order
-// (avoids the table visibly reordering every 60s) — safe because every poll response is a full,
-// correctly-normalized result set for the identical symbol+criteria universe, not a partial one to
-// reconcile (design.md § Chosen Approach — full-scan recheck, never narrowed).
+// Merges a poll response into the displayed results by symbol, preserving row order. Safe because
+// every poll response is a full, normalized result set for the identical symbol+criteria universe.
 function mergeResultsBySymbol(
   current: ScreenSymbolsResult['results'],
   incoming: ScreenSymbolsResult['results'],
@@ -78,13 +75,10 @@ export default function ScreenerPage() {
     remove: removeCriterion,
     update: updateCriterion,
   } = useCriteriaList();
-  // Last-run metadata (FR-4) — captured on scan success, rendered once from Date.now() at render
-  // (no live tick; see src/lib/formatLastRun.ts).
+  // Last-run metadata — rendered once from Date.now() at render (no live tick).
   const [lastRun, setLastRun] = useState<{ at: Date; count: number } | null>(null);
-  // Save-as-watchlist inline name panel (FR-5) + add-top-N target (FR-6).
   const [saveName, setSaveName] = useState('');
   const [targetListId, setTargetListId] = useState('');
-  // Feature 118 — background data-readiness polling state.
   const [results, setResults] = useState<ScreenSymbolsResult['results']>([]);
   const [scanGeneration, setScanGeneration] = useState(0);
   const [lastScanReq, setLastScanReq] = useState<ScreenSymbolsInput | null>(null);
@@ -105,9 +99,8 @@ export default function ScreenerPage() {
       symbols,
       criteria: criteria.map(buildScreenCriterion),
     };
-    // Feature 118 — scan-generation guard: bump before mutate so a still-in-flight poll from a
-    // superseded scan is orphaned; reset per-scan polling state so a stopped/exhausted previous
-    // scan's status never leaks into the new one (closes the "stale permanent opt-out" gap).
+    // Scan-generation guard: bump before mutate so a still-in-flight poll from a superseded scan is
+    // orphaned; reset per-scan polling state so a previous scan's status never leaks into the new one.
     setScanGeneration((g) => g + 1);
     setLastScanReq(null);
     setPollAttempts(0);
@@ -121,10 +114,8 @@ export default function ScreenerPage() {
     });
   }
 
-  // INSUFFICIENT_DATA has two distinct causes the backend already tells apart (see
-  // services/xstockstrat-analysis/app/services/screener.py): too few bars for a technical
-  // criterion (carries a `gap`) vs. the fundamentals data source being unavailable (no `gap`).
-  // Both drive the background auto-recheck uniformly (feature 118, FR-3).
+  // INSUFFICIENT_DATA has two backend causes: too few bars for a technical criterion (carries a
+  // `gap`) vs. the fundamentals source being unavailable (no `gap`). Both drive the auto-recheck.
   const pendingRows = results.filter((r) => r.status === ScreenResultStatus.INSUFFICIENT_DATA);
   const pendingFundamentals = pendingRows.filter((r) => !r.gap);
 
@@ -135,15 +126,8 @@ export default function ScreenerPage() {
   );
 
   useEffect(() => {
-    // Keyed on `dataUpdatedAt`/`errorUpdatedAt` (always-fresh timestamps), NOT `poll.data`/
-    // `poll.error` object identity. TanStack Query's structural sharing reuses the previous `data`
-    // reference when a new response is deeply equal to the last one — and that's the *normal* case
-    // here: a still-pending row comes back byte-identical on every retry until it resolves. Keying
-    // on `poll.data` would make this effect fire once and never again for identical retries,
-    // freezing `pollAttempts` and leaving the UI stuck on "Checking…" forever even after the query
-    // internally gave up (caught by running the Step 3 suite against this implementation — see
-    // context.md). Also covers the erroring-poll case (mirrors the hook's own attempt-counting,
-    // dataUpdateCount + errorUpdateCount, Step 1 §5) the same way.
+    // Key on dataUpdatedAt/errorUpdatedAt, NOT poll.data identity: TanStack's structural sharing
+    // reuses the same data reference for byte-identical retries, so keying on poll.data fires once only.
     if (poll.dataUpdatedAt === 0 && poll.errorUpdatedAt === 0) return;
     if (poll.data !== undefined) {
       setResults((prev) => mergeResultsBySymbol(prev, poll.data!.results));
@@ -153,7 +137,7 @@ export default function ScreenerPage() {
   }, [poll.dataUpdatedAt, poll.errorUpdatedAt]);
 
   const hasHardFilter = criteria.some((c) => c.hardFilter);
-  // "Save as watchlist" seeds the passing subset when a hard filter is active, else all results (FR-5).
+  // "Save as watchlist" seeds the passing subset when a hard filter is active, else all results.
   const saveSymbols = (hasHardFilter ? results.filter((r) => r.passed) : results).map(
     (r) => r.symbol,
   );
@@ -192,8 +176,7 @@ export default function ScreenerPage() {
         meta: { className: 'p-3 font-mono tabular-nums font-semibold' },
         cell: ({ row }) => {
           const r = row.original;
-          // Bug fix (feature 144): a `scoreUnavailable` result's `score` is a neutral
-          // placeholder the engine keeps internally for the signal blend, not a real computed
+          // A scoreUnavailable result's `score` is an internal placeholder, not a real computed
           // value — render it as no-data rather than a plausible-looking number.
           if (r.scoreUnavailable) {
             return <span className="text-muted-foreground">—</span>;
@@ -267,10 +250,8 @@ export default function ScreenerPage() {
               </Badge>
             );
           }
-          // Bug fix (feature 144): `status` stays OK here (this candidate WAS evaluated), but
-          // none of its configured criteria had usable data — distinct from INSUFFICIENT_DATA
-          // (which is retry-eligible; this may well be permanent, e.g. an ETF with no P/E ratio),
-          // so it gets its own badge rather than either a misleading "OK" or the pending-retry one.
+          // scoreUnavailable = evaluated but no criterion had usable data — distinct from the
+          // retry-eligible INSUFFICIENT_DATA (this may be permanent, e.g. an ETF with no P/E).
           if (r.scoreUnavailable) {
             return (
               <Badge
@@ -328,10 +309,7 @@ export default function ScreenerPage() {
                   className="rounded-md border border-border p-3 space-y-2"
                   data-testid="criterion-row"
                 >
-                  {/* Readable grammar line (FR-3): <kind> <metric> <comparator> <threshold>, all
-                      editable. `kind` decides whether `metric` resolves against fundamentals
-                      (metricName) or is computed from bars (component.indicator) — see the
-                      CriterionRow.kind comment above for why this distinction matters. */}
+                  {/* kind decides whether metric resolves against fundamentals or is computed from bars. */}
                   <div className="flex flex-wrap items-end gap-2">
                     <select
                       aria-label="kind"
@@ -339,8 +317,8 @@ export default function ScreenerPage() {
                       value={c.kind}
                       onChange={(e) => {
                         const kind = Number(e.target.value) as CriterionRow['kind'];
-                        // Reset to a valid default for the new kind so a leftover fundamentals
-                        // field name (e.g. "pe_ratio") isn't sent as a bogus indicator name.
+                        // Reset metric to a valid default for the new kind so a leftover fundamentals
+                        // name isn't sent as a bogus indicator name.
                         const metricName =
                           kind === ScreenKind.TECHNICAL_INDICATOR
                             ? BUILTIN_INDICATORS[0].name
@@ -405,7 +383,6 @@ export default function ScreenerPage() {
                       value={c.threshold}
                       onChange={(e) => updateCriterion(i, { threshold: Number(e.target.value) })}
                     />
-                    {/* Hard/rank segmented toggle (FR-2) → hardFilter. */}
                     <ToggleGroup
                       type="single"
                       variant="outline"
@@ -429,7 +406,6 @@ export default function ScreenerPage() {
                     </Button>
                   </div>
 
-                  {/* Preview of the grammar + normalized weight share (FR-1/FR-3). */}
                   <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                     <span className="font-mono text-foreground">
                       {c.metricName} {comparatorGlyph(c.op)} {c.threshold}
@@ -501,7 +477,6 @@ export default function ScreenerPage() {
                 )}
               </div>
 
-              {/* Screener → watchlist actions (FR-5 / FR-6). */}
               <div className="flex flex-wrap items-center gap-2">
                 <Input
                   aria-label="new watchlist name"
@@ -588,8 +563,7 @@ export default function ScreenerPage() {
         {!screen.isPending && results.length > 0 && (
           <Card>
             <CardContent className="p-0">
-              {/* Wide table → scroll horizontally within its own container so the phone frame
-                  never overflows (the results table has 10 columns). */}
+              {/* Wide table scrolls horizontally in its own container so the phone frame never overflows. */}
               <DataTable
                 columns={columns}
                 data={results}

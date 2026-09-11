@@ -65,6 +65,14 @@ parameter sweep and re-enable it at the end so it never evaluates at a config yo
 under this partial-merge contract — send only it to change it, and use `clear_fields` to revert it
 to the platform default.
 
+**Protected strategy (feature 186).** The strategy identified by the
+`analysis.engine.fundamentals_blend_strategy_id` config key (default
+`"fundamentals_macd_blend"`) is a protected platform resource. `manage_strategy` with
+`operation="deactivate"` for this strategy is rejected `FAILED_PRECONDITION`; `set_strategy_live`
+with `live_enabled=false` for this strategy is also rejected `FAILED_PRECONDITION`. Updates
+(`operation="update"`) and reactivation remain allowed. The protected ID is config-driven — it
+tracks whatever value the operator sets, not a hardcoded string.
+
 **Benchmark / market-regime operand (feature 152).** A component may carry an optional
 `source_symbol` (a fixed reference ticker, e.g. `"VOO"`). When set, that component is computed on the
 **benchmark's** bars instead of the evaluated symbol's, and its output series is aligned onto the
