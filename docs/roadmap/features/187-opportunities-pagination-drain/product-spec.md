@@ -19,32 +19,52 @@ opportunities.
 
 ## Functional Requirements
 
-FR-1. The server-side default page size for ListOpportunities is reduced from 50 to 25
-(`_DEFAULT_OPP_PAGE_SIZE`).
+FR-1. The server-side default page size for ListOpportunities stays at 50
+(`_DEFAULT_OPP_PAGE_SIZE = 50`) — no reduction. _(User steer: "Increase page size to 50 symbols.")_
 
-FR-2. The UI `useOpportunities` hook auto-drains all pages by looping on `next_page_token` until
-exhausted, aggregating every page's opportunities into a single result array.
+FR-2. The UI `useOpportunities` hook uses `useInfiniteQuery` (React Query v5) to expose
+`fetchNextPage`/`hasNextPage`/`isFetchingNextPage`. The opportunities page renders a "Load More"
+button that the user triggers manually — no auto-drain loop. Other call sites
+(`SignalReadiness.tsx`, `WatchlistDetail.tsx`, `positions/[symbol]/page.tsx`) consume page 1 only
+(lookup use case). _(User steer: "do not auto-drain, leave the user to trigger manually.")_
 
-FR-3. The agent `list_opportunities` tool auto-drains all pages via the same loop pattern, so MCP
-consumers also see the full queue.
+FR-3. The agent `list_opportunities` tool exposes optional `page_size` and `page_token` parameters
+so the MCP caller can page through manually. The response includes `next_page_token`. No auto-drain.
+_(User steer: same.)_
 
-FR-4. Ranking order is preserved across pages — the aggregated result maintains the server's
-`conviction × signal_axis` sort.
+FR-4. Ranking order is preserved across pages — each page maintains the server's
+`conviction × signal_axis` sort with deterministic tiebreak (`opportunity_key`).
 
-FR-5. The 15-second poll interval in the UI refetches the full drained set, not just page 1.
+FR-5. The 15-second poll interval in the UI refetches all loaded pages (React Query v5
+`useInfiniteQuery` default behavior), not just page 1.
+
+FR-6. The server SQL ORDER BY pre-groups rows by symbol so each symbol's opportunities are
+contiguous, with the symbol-group positioned by its highest-ranked member. This mimics the
+client-side `symbolGroups` Map pattern at `page.tsx:197-205`. Page boundaries respect symbol
+clusters. _(User steer: "Server-side grouping and sorting, symbol alphabetical for ties.")_
+
+FR-7. `CopilotRail.tsx` replaces its direct `analysisClient.listOpportunities({})` call with
+`useOpportunities(0)`, sharing the React Query cache — no separate RPC.
+
+FR-8. Remove the headline stat grid (`StatTile` row: "Actionable now" / "Expiring < 90m" /
+"Exit / Trim flags" / "Fresh entries" / "Deployable") from the opportunities page. With paginated
+loading, the counts in tiles 1–4 reflect only loaded pages and mislead the user into thinking
+they see the full queue. The "Deployable" tile (buying power from `listPortfolios`) is
+pagination-independent but doesn't justify the card on its own. _(User steer: "would this change
+make the headline obsolete … include removal in scope.")_
 
 ## Out of Scope
 
-- Changing the SQL query or materialization pipeline (the DB read already returns all rows).
-- Adding infinite-scroll or virtual-list UI rendering — this feature is transport-layer only.
+- Changing the materialization pipeline (the DB read already returns all rows; only the ORDER BY changes).
+- Adding infinite-scroll or virtual-list UI rendering — this feature adds a manual "Load More" button only.
 - Changing proto pagination contracts (`PageRequest`/`PageResponse` in `common.proto`).
 
 ## Affected Services
 
 Exact service names from CLAUDE.md Service Registry:
-- `xstockstrat-analysis` — reduce `_DEFAULT_OPP_PAGE_SIZE` from 50 to 25
-- `xstockstrat-ui` — implement auto-drain pagination in `useOpportunities` hook
-- `xstockstrat-agent` — implement auto-drain pagination in `client.py:list_opportunities`
+- `xstockstrat-analysis` — add server-side SQL symbol grouping (ORDER BY window function)
+- `xstockstrat-ui` — convert `useOpportunities` to `useInfiniteQuery` + "Load More" button; convert `CopilotRail` to use hook
+- `xstockstrat-agent` — add `page_size`/`page_token` pass-through params to `list_opportunities` tool and client
 
 ## Consumer Surface(s)
 

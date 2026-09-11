@@ -1189,6 +1189,54 @@ class TestListOpportunitiesClient:
         assert result["computing"] is True
         assert result["compute_failed"] is False
 
+    @pytest.mark.asyncio
+    async def test_pagination_pass_through(self):
+        """feature 187 AC-4: page_size/page_token forwarded, next_page_token surfaced."""
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+        from gen.common.v1 import common_pb2  # type: ignore
+
+        # Page 1: has a next_page_token.
+        resp1 = analysis_pb2.ListOpportunitiesResponse(
+            opportunities=[
+                analysis_pb2.Opportunity(symbol="AAPL", conviction=0.6, opportunity_key="u1|AAPL|s")
+            ],
+            page=common_pb2.PageResponse(next_page_token="50"),
+        )
+        mock_stub = MagicMock()
+        mock_stub.ListOpportunities = AsyncMock(return_value=resp1)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
+                result1 = await client.list_opportunities(
+                    user_id="u1", min_conviction=0.0, page_size=50, page_token=""
+                )
+
+        sent1 = mock_stub.ListOpportunities.call_args.args[0]
+        assert sent1.page.page_size == 50
+        assert sent1.page.page_token == ""
+        assert result1["next_page_token"] == "50"
+
+        # Page 2: terminal (empty next_page_token).
+        resp2 = analysis_pb2.ListOpportunitiesResponse(
+            opportunities=[
+                analysis_pb2.Opportunity(symbol="TSLA", conviction=0.4, opportunity_key="u1|TSLA|s")
+            ],
+            page=common_pb2.PageResponse(next_page_token=""),
+        )
+        mock_stub2 = MagicMock()
+        mock_stub2.ListOpportunities = AsyncMock(return_value=resp2)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub2):
+                result2 = await client.list_opportunities(
+                    user_id="u1", min_conviction=0.0, page_size=50, page_token="50"
+                )
+
+        sent2 = mock_stub2.ListOpportunities.call_args.args[0]
+        assert sent2.page.page_size == 50
+        assert sent2.page.page_token == "50"
+        assert result2["next_page_token"] == ""
+
 
 # ── Admin user management + cross-user profile client helpers (feature 183) ──
 

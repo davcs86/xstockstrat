@@ -2,8 +2,8 @@
 import React from 'react';
 import { X, Sparkle, PaperPlaneRight, Warning } from '@phosphor-icons/react';
 import { useChrome } from '@/context/ChromeContext';
-import { analysisClient } from '@/lib/browserClients/analysisClient';
 import { ledgerClient } from '@/lib/browserClients/ledgerClient';
+import { useOpportunities } from '@/hooks/useOpportunities';
 import {
   COPILOT_EVENT_TYPE,
   COPILOT_STREAM_PREFIX,
@@ -33,7 +33,18 @@ interface ThreadMessage {
  */
 export function CopilotRail() {
   const { showCopilot, setShowCopilot } = useChrome();
-  const [queue, setQueue] = React.useState<QueueLike[] | null>(null);
+  // Share the ['opportunities', 0] cache with the Opportunities page (page-1 only, no Load More).
+  const { data: oppData } = useOpportunities(0);
+  const queue = React.useMemo<QueueLike[] | null>(() => {
+    if (!oppData) return null;
+    return oppData.pages.flatMap((p) =>
+      p.opportunities.map((o) => ({
+        symbol: o.symbol,
+        action: o.action,
+        conviction: o.conviction,
+      })),
+    );
+  }, [oppData]);
   const [thread, setThread] = React.useState<ThreadMessage[]>([]);
   const [draft, setDraft] = React.useState('');
   const [sending, setSending] = React.useState(false);
@@ -61,30 +72,10 @@ export function CopilotRail() {
     }
   }, []);
 
-  // Fetch queue + thread whenever the rail opens.
+  // Load thread whenever the rail opens.
   React.useEffect(() => {
     if (!showCopilot) return;
-    let cancelled = false;
-    analysisClient
-      .listOpportunities({})
-      .then((resp) => {
-        if (!cancelled) {
-          setQueue(
-            resp.opportunities.map((o) => ({
-              symbol: o.symbol,
-              action: o.action,
-              conviction: o.conviction,
-            })),
-          );
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setQueue([]);
-      });
     loadThread();
-    return () => {
-      cancelled = true;
-    };
   }, [showCopilot, loadThread]);
 
   const send = async () => {
