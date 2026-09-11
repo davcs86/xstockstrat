@@ -3,6 +3,7 @@
 
 import type { ReactNode } from 'react';
 import type { EnumRender } from '@/lib/opportunityShared';
+import type { OhlcData } from '@/lib/protoTime';
 
 /**
  * One signal's fields, shared by the flat `signal` section and the grouped `signalGroup` section so
@@ -31,7 +32,13 @@ export type Section =
   | { kind: 'stat'; label: string; value: string | number; tone?: 'up' | 'down' | 'neutral' }
   | ({ kind: 'signal' } & SignalItem)
   // One card per symbol grouping its signals; `signals` render through the same `SignalRow` as the flat `signal` kind.
-  | { kind: 'signalGroup'; symbol: string; href?: string; signals: SignalItem[] }
+  | {
+      kind: 'signalGroup';
+      symbol: string;
+      href?: string;
+      ohlcData?: OhlcData;
+      signals: SignalItem[];
+    }
   | { kind: 'chart'; label: string; render: ReactNode }
   | { kind: 'row'; label: string; value: ReactNode }
   | { kind: 'form'; render: ReactNode }

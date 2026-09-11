@@ -571,26 +571,40 @@ export async function startMockBackend(): Promise<void> {
       router.service(MarketDataService, {
         async getBars(req) {
           const sym = (req.symbol ?? '').toUpperCase();
-          // CAPR: 20 daily bars matching CAPR_SPARKLINE (index 5 = gap with close 0).
+          // CAPR: 2 daily bars with distinct OHLC for meaningful assertions (feature 188).
           if (sym === 'CAPR') {
-            const bars = Array.from({ length: 20 }, (_v, i) => {
-              const c = i === 5 ? 0 : Number((11.9 + i * 0.023).toFixed(3));
-              return {
-                symbol: 'CAPR',
-                time: { seconds: BigInt(1704067200 + i * 86400), nanos: 0 },
-                open: c || 0.01,
-                high: c || 0.01,
-                low: c || 0.01,
-                close: c,
-                volume: BigInt(1000000),
-                vwap: c || 0.01,
-                tradeCount: 5000,
-                timeframe: '1d',
-                timeframeEnum: Timeframe.TIMEFRAME_1DAY,
-                source: 'alpaca',
-              };
-            });
-            return { bars };
+            return {
+              bars: [
+                {
+                  symbol: 'CAPR',
+                  time: { seconds: BigInt(1705536000), nanos: 0 }, // 2024-01-18
+                  open: 11.8,
+                  high: 12.1,
+                  low: 11.65,
+                  close: 11.92,
+                  volume: BigInt(1000000),
+                  vwap: 11.88,
+                  tradeCount: 5000,
+                  timeframe: '1d',
+                  timeframeEnum: Timeframe.TIMEFRAME_1DAY,
+                  source: 'alpaca',
+                },
+                {
+                  symbol: 'CAPR',
+                  time: { seconds: BigInt(1705622400), nanos: 0 }, // 2024-01-19
+                  open: 11.92,
+                  high: 12.25,
+                  low: 11.78,
+                  close: 12.15,
+                  volume: BigInt(1200000),
+                  vwap: 12.02,
+                  tradeCount: 6000,
+                  timeframe: '1d',
+                  timeframeEnum: Timeframe.TIMEFRAME_1DAY,
+                  source: 'alpaca',
+                },
+              ],
+            };
           }
           return {
             bars: [
