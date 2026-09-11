@@ -40,3 +40,12 @@ Feature: sparkline-ohlc-replacement
     When the sparkline-ohlc-replacement feature removes both import sites (OpportunityRow and symbol detail header)
     Then the shared Sparkline.tsx file is deleted from src/components/shared/
     And FormulaRunResult.tsx continues to function with its local Sparkline unchanged
+
+  @AC-6 @FR-6
+  Scenario: Mobile signalGroup card shows previous day OHLC underneath symbol name
+    Given the Opportunities List page is loaded on a mobile viewport with symbol "AAPL"
+    And the most recent completed bar is dated "2026-09-10" with open 228.50, high 231.20, low 227.80, close 230.10
+    When the mobile signalGroup card for "AAPL" renders
+    Then the card header displays "AAPL" as the symbol name
+    And directly underneath the symbol name the card displays "O $228.50  H $231.20  L $227.80  C $230.10"
+    And when bar data is unavailable the OHLC block is absent from the card header

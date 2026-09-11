@@ -40,12 +40,18 @@ FR-5. The `Sparkline` component (`src/components/shared/Sparkline.tsx`) and the
 `SparklinePoint`-specific mapping in `useSparklines` may be removed if no other consumer
 references them after this change. (Check `FormulaRunResult.tsx` — it also imports `Sparkline`.)
 
+FR-6. On the **mobile companion** (`SectionRenderer.tsx`), the `signalGroup` card for each symbol
+MUST display the previous day's OHLC block underneath the symbol name in the card header, using
+the shared `OhlcBlock` component. The `signalGroup` section type carries an optional `ohlcData`
+field; when present, the block renders; when absent, it is omitted (same progressive-absence
+behavior as the desktop row).
+
 ## Out of Scope
 
 - Intraday OHLC or multi-day OHLC display — only the single most recent daily bar.
 - Replacing charts or sparklines on any other page (e.g. `FormulaRunResult`, `ChartPanel`).
 - Adding new backend RPCs or proto messages.
-- Mobile companion `SectionRenderer` changes (it does not render the sparkline today).
+- Mobile companion changes beyond the `signalGroup` card header OHLC (e.g. mobile-specific chart panels).
 
 ## Affected Services
 
