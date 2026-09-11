@@ -301,7 +301,7 @@ services:
       - key: POSTGRES_MCP_DATABASE_URI
         scope: RUN_TIME
         type: SECRET
-        value: ""
+        value: "postgresql://xstockstrat_agent:${POSTGRES_MCP_AGENT_PASSWORD}@${xstockstrat.HOSTNAME}:25060/xstockstrat-staging?sslmode=require"
       - key: POSTGRES_MCP_PORT
         scope: RUN_TIME
         value: "9001"
