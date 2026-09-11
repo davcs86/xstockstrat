@@ -1930,7 +1930,7 @@ async def test_list_opportunities_caller_scoped_returns_projection():
         server = _make_server()
         result = await _tool_fn(server, "list_opportunities")(_ctx(ADMIN), min_conviction=0.3)
     assert result == projected
-    # Forwarded the caller's own user id (ADMIN claims → "u-1") + the min_conviction floor + default pagination.
+    # Forwarded caller's user id (ADMIN → "u-1") + min_conviction + default pagination.
     assert m.call_args.args == ("u-1", 0.3, 50, "")
 
 
