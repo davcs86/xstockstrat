@@ -40,7 +40,7 @@ Python 3.13 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
 
 ## MCP Tools
 
-The agent registers forty tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
+The agent registers forty-nine tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
 reference):
 
 | Tool | Purpose |
@@ -85,6 +85,15 @@ reference):
 | `get_user` | **Admin**: read one user by id (read-only, admin-gated, feature 183) |
 | `admin_get_user_metadata` | **Admin**: read ANY user's profile metadata by `user_id` (read-only, feature 183) — distinct from the self-only `get_user_metadata` |
 | `admin_set_user_metadata` | **Admin**: partial-update ANY user's profile metadata by `user_id` (feature 183) — distinct from the self-only `set_user_metadata` |
+| `db_list_schemas` | List all database schemas via postgres-mcp co-process. Admin-only (feature 169) |
+| `db_list_objects` | List objects (tables, views, etc.) in a schema via postgres-mcp. Admin-only (feature 169) |
+| `db_get_object_details` | Get DDL and statistics for a named DB object via postgres-mcp. Admin-only (feature 169) |
+| `db_execute_sql` | Execute SQL via xstockstrat_agent DML role with FR-11 destructive-op gate; destructive statements (UPDATE/DELETE/DROP/TRUNCATE) require `confirm=true`. Admin-only (feature 169) |
+| `db_explain_query` | Get EXPLAIN output for a SQL query via postgres-mcp. Admin-only (feature 169) |
+| `db_get_top_queries` | Get top queries by total execution time from pg_stat_statements. Admin-only (feature 169) |
+| `db_analyze_workload_indexes` | Recommend indexes based on pg_stat_statements workload via postgres-mcp. Admin-only (feature 169) |
+| `db_analyze_query_indexes` | Recommend indexes for a specific SQL query via postgres-mcp. Admin-only (feature 169) |
+| `db_analyze_db_health` | Run comprehensive database health checks via postgres-mcp. Admin-only (feature 169) |
 
 ### Management-tool authorization
 
