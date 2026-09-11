@@ -426,8 +426,8 @@ jobs:
         working-directory: services/${{ matrix.service }}
         run: pnpm run lint
 
-  frontend-e2e:
-    name: Frontend E2E (shard ${{ matrix.shard }}/2)
+  e2e-build:
+    name: Build E2E image
     needs: changes
     if: >-
       contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-ui') ||
@@ -435,10 +435,6 @@ jobs:
       contains(fromJson(needs.changes.outputs.matched), 'node-shared') ||
       contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2]
     steps:
       - uses: actions/checkout@v7
 
@@ -454,6 +450,39 @@ jobs:
           load: true
           cache-from: type=gha,scope=e2e-build
           cache-to: type=gha,scope=e2e-build,mode=max
+
+      - name: export e2e image
+        run: docker save xstockstrat-e2e:ci | zstd -3 -T0 -o /tmp/e2e-image.tar.zst
+
+      - name: upload e2e image
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-image
+          path: /tmp/e2e-image.tar.zst
+          retention-days: 1
+          compression-level: 0
+
+  frontend-e2e:
+    name: Frontend E2E (shard ${{ matrix.shard }}/2)
+    needs: [changes, e2e-build]
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-ui') ||
+      contains(fromJson(needs.changes.outputs.matched), 'proto') ||
+      contains(fromJson(needs.changes.outputs.matched), 'node-shared') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - name: download e2e image
+        uses: actions/download-artifact@v7
+        with:
+          name: e2e-image
+
+      - name: load e2e image
+        run: zstd -d -T0 e2e-image.tar.zst --stdout | docker load
 
       - name: run e2e tests
         run: |
