@@ -156,3 +156,10 @@
 ### Status
 - All 13 steps complete. Status: `in-progress` → `code-completed`.
 - Ready for acceptance-scenario promotion (C-16) and integration PR.
+
+## Session 2026-09-11 (CI: feature status automation)
+
+- Promotion PR #1137 merged to main
+- Feature promoted and committed: aab3fa8de30b9f2ab7f9a9299e39570dcf9406e1
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-09-11

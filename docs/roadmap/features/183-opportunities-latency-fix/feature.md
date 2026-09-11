@@ -3,6 +3,8 @@
 **Development Branch**: `feature/opportunities-latency-fix`
 **Created**: 2026-09-08
 **Last Updated**: 2026-09-09
+**Committed to main**: aab3fa8de30b9f2ab7f9a9299e39570dcf9406e1
+**Launched date**: 2026-09-11
 
 ---
 
@@ -16,6 +18,7 @@
 | 2026-09-09 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (proto definitions) |
 | 2026-09-09 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done (sequential mode) |
 
+| 2026-09-11 | `code-completed` → `launched` | CI workflow | Promoted via PR #1137; committed aab3fa8de30b9f2ab7f9a9299e39570dcf9406e1 |
 ---
 
 ## Artifacts
