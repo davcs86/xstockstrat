@@ -9,22 +9,33 @@ existing role updates its password and re-asserts all grants.
 
 Usage inside the agent container
 ---------------------------------
+When ``POSTGRES_MCP_DATABASE_URI`` is already set in the environment (as it is
+inside the running container), only the admin DSN is required — the role
+password is extracted from the env var automatically:
+
 .. code-block:: console
 
-    # interactive (prompts for DSN and password):
-    docker exec -it xstockstrat-agent python scripts/setup_agent_db_role.py
+    # Inside the container (POSTGRES_MCP_DATABASE_URI already in env):
+    docker exec -it xstockstrat-agent python scripts/setup_agent_db_role.py \\
+        --admin-dsn "postgres://doadmin:<pw>@host:25060/xstockstrat?sslmode=require"
 
-    # non-interactive:
+    # Without the env var — password prompted securely:
     docker exec -it xstockstrat-agent python scripts/setup_agent_db_role.py \\
         --admin-dsn "postgres://doadmin:<pw>@host:25060/xstockstrat?sslmode=require" \\
         --role-password "<strong-random-password>"
 
-    # dry-run (prints statements without executing):
+    # Explicit role DSN (overrides env):
     docker exec -it xstockstrat-agent python scripts/setup_agent_db_role.py \\
-        --admin-dsn "..." --role-password "..." --dry-run
+        --admin-dsn "..." \\
+        --role-dsn "postgresql://xstockstrat_agent:<pw>@host:25060/xstockstrat?sslmode=require"
+
+    # Dry-run (prints statements without executing anything):
+    docker exec -it xstockstrat-agent python scripts/setup_agent_db_role.py \\
+        --admin-dsn "..." --dry-run
 
 After the script completes, copy the printed ``POSTGRES_MCP_DATABASE_URI``
-value into your DigitalOcean App Platform secret for ``POSTGRES_MCP_DATABASE_URI``.
+value into your DigitalOcean App Platform secret for ``POSTGRES_MCP_DATABASE_URI``
+(skip this step if the env var was already set and you just used it to verify).
 
 Privilege scope (DML + read stats, no DDL, no TRUNCATE)
 --------------------------------------------------------
@@ -42,6 +53,7 @@ Intentionally excluded (must never be granted)
 """
 
 import asyncio
+import os
 import sys
 import urllib.parse
 from typing import Annotated
@@ -91,11 +103,14 @@ def _build_mcp_uri(admin_dsn: str, role_password: str) -> str:
 # ── Core async logic ──────────────────────────────────────────────────────────
 
 
-async def _provision(admin_dsn: str, role_password: str, *, dry_run: bool) -> str:
+async def _provision(admin_dsn: str, role_password: str, role_dsn: str, *, dry_run: bool) -> str:
     """Connect as admin, create/update the role, and verify privileges.
 
-    Returns the ``POSTGRES_MCP_DATABASE_URI`` on success.
-    Raises ``SystemExit(1)`` on any verification failure.
+    *role_dsn* is the ``POSTGRES_MCP_DATABASE_URI`` to use for the verification
+    step and to echo at the end.  It is built by the caller from the admin DSN
+    or taken verbatim from the ``POSTGRES_MCP_DATABASE_URI`` environment variable.
+
+    Returns *role_dsn* on success.  Raises ``SystemExit(1)`` on any verification failure.
     """
     conn = await asyncpg.connect(admin_dsn)
     try:
@@ -174,7 +189,7 @@ async def _provision(admin_dsn: str, role_password: str, *, dry_run: bool) -> st
                 typer.echo(f"\n  -- {label}")
                 for line in sql.strip().splitlines():
                     typer.echo(f"  {line}")
-            return _build_mcp_uri(admin_dsn, role_password)
+            return role_dsn
 
         # Execute.
         for label, sql in statements:
@@ -186,8 +201,7 @@ async def _provision(admin_dsn: str, role_password: str, *, dry_run: bool) -> st
 
     # ── Verification ──────────────────────────────────────────────────────────
     typer.echo("\nVerifying role privileges …")
-    role_uri = _build_mcp_uri(admin_dsn, role_password)
-    role_conn = await asyncpg.connect(role_uri)
+    role_conn = await asyncpg.connect(role_dsn)
     try:
         current = await role_conn.fetchval("SELECT current_user")
         if current != ROLE_NAME:
@@ -219,7 +233,7 @@ async def _provision(admin_dsn: str, role_password: str, *, dry_run: bool) -> st
     finally:
         await role_conn.close()
 
-    return role_uri
+    return role_dsn
 
 
 # ── CLI entrypoint ─────────────────────────────────────────────────────────────
@@ -244,11 +258,30 @@ def main(
             show_default=False,
         ),
     ] = None,
+    role_dsn: Annotated[
+        str | None,
+        typer.Option(
+            "--role-dsn",
+            envvar="POSTGRES_MCP_DATABASE_URI",
+            help=(
+                "libpq URI for the xstockstrat_agent role — used both to set the "
+                "role password (extracted from the URI) and as the verification "
+                "connection.  Defaults to the POSTGRES_MCP_DATABASE_URI env var "
+                "when that is already injected (e.g. inside the container).  "
+                "If omitted and env var absent, --role-password is prompted instead."
+            ),
+            show_default=False,
+        ),
+    ] = None,
     role_password: Annotated[
         str | None,
         typer.Option(
             "--role-password",
-            help="Password to set for the xstockstrat_agent role.  Prompted securely if omitted.",
+            help=(
+                "Password for the xstockstrat_agent role.  Ignored when --role-dsn "
+                "/ POSTGRES_MCP_DATABASE_URI is set (password is extracted from the URI). "
+                "Prompted securely when neither source is available."
+            ),
             show_default=False,
         ),
     ] = None,
@@ -262,18 +295,44 @@ def main(
     Grants DML-only privileges (SELECT / INSERT / UPDATE / DELETE) on all
     current and future tables in the configured schemas, plus pg_read_all_stats
     for pg_stat_statements access.  DDL and TRUNCATE are intentionally excluded.
+
+    When ``POSTGRES_MCP_DATABASE_URI`` is already set in the environment (as it
+    is inside the running container), the role credentials are taken from there
+    automatically — only ``--admin-dsn`` needs to be supplied.
     """
     if admin_dsn is None:
         admin_dsn = typer.prompt(
             "Admin DSN",
             default="postgres://doadmin:<pw>@host:25060/xstockstrat?sslmode=require",
         )
-    if role_password is None:
-        role_password = typer.prompt(
-            f"Password for the {ROLE_NAME!r} role",
-            hide_input=True,
-            confirmation_prompt=True,
+
+    # Resolve role DSN + password.  Priority:
+    #   1. --role-dsn / POSTGRES_MCP_DATABASE_URI  (password extracted from URI)
+    #   2. --role-password                          (URI built from admin DSN)
+    #   3. interactive prompt                       (URI built from admin DSN)
+    if role_dsn is not None:
+        parsed_role = urllib.parse.urlparse(role_dsn)
+        role_password = urllib.parse.unquote(parsed_role.password or "")
+        if not role_password:
+            typer.echo(
+                "ERROR: POSTGRES_MCP_DATABASE_URI / --role-dsn contains no password.",
+                err=True,
+            )
+            raise SystemExit(1)
+        source = (
+            "env POSTGRES_MCP_DATABASE_URI"
+            if os.environ.get("POSTGRES_MCP_DATABASE_URI")
+            else "--role-dsn flag"
         )
+        typer.echo(f"  Role DSN source: {source}")
+    else:
+        if role_password is None:
+            role_password = typer.prompt(
+                f"Password for the {ROLE_NAME!r} role",
+                hide_input=True,
+                confirmation_prompt=True,
+            )
+        role_dsn = _build_mcp_uri(admin_dsn, role_password)
 
     typer.echo(f"\nProvisioning role: {ROLE_NAME}")
     typer.echo(f"Database:          {DB_NAME}")
@@ -283,7 +342,7 @@ def main(
     else:
         typer.echo("")
 
-    mcp_uri = asyncio.run(_provision(admin_dsn, role_password, dry_run=dry_run))
+    mcp_uri = asyncio.run(_provision(admin_dsn, role_password, role_dsn, dry_run=dry_run))
 
     typer.echo("\n" + "─" * 72)
     typer.echo("Role provisioning complete.  Copy the URI below into your")
