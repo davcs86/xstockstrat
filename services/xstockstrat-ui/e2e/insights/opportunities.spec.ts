@@ -183,20 +183,24 @@ test.describe('Opportunities queue', () => {
     );
   });
 
-  // feature 095 — live-market enrichment on the queue card.
-  test('the CAPR card shows live price, change%, a 20-point sparkline, and a condition chip', async ({
+  // feature 095/188 — live-market enrichment on the queue card.
+  test('the CAPR card shows live price, change%, previous day OHLC, and a condition chip', async ({
     page,
   }) => {
     const capr = card(page, 'CAPR');
-    // AC-1 — live price from the enriched Opportunity (both CAPR strategy rows carry it → first()).
+    // AC-1 (f095) — live price from the enriched Opportunity.
     await expect(capr.getByTestId('opp-live-price-CAPR').first()).toHaveText('$12.34');
     await expect(capr.getByTestId('opp-change-CAPR').first()).toContainText('%');
-    // AC-3 — a 20-point sparkline (one point is a gap, rendered as a muted bar, not dropped).
-    const spark = capr.getByTestId('opp-sparkline-CAPR').first();
-    await expect(spark).toBeVisible();
-    await expect(spark.locator('> span')).toHaveCount(20);
-    await expect(spark.locator('> span[data-gap]')).toHaveCount(1); // AC-4 the one warm-up gap
-    // AC-5 — the blocking-condition chip reuses an emitted ConditionEval leaf (no client recompute).
+    // AC-1 (f188) — OHLC text block with date and four price labels.
+    const ohlc = capr.getByTestId('opp-ohlc-CAPR').first();
+    await expect(ohlc).toBeVisible();
+    await expect(ohlc).toContainText('O $');
+    await expect(ohlc).toContainText('H $');
+    await expect(ohlc).toContainText('L $');
+    await expect(ohlc).toContainText('C $');
+    // No sparkline bar chart (feature 188 — replaced by OHLC text).
+    await expect(capr.locator('[aria-hidden] > span')).toHaveCount(0);
+    // AC-5 (f095) — the blocking-condition chip.
     await expect(capr.getByTestId('opp-condition-CAPR')).toBeVisible();
   });
 
