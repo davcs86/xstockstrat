@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { PlatformHeader, PLATFORM_SUBNAV } from '@/components/shared/PlatformHeader';
+import { Providers } from './providers';
 import { AgentUrlProvider } from './AgentUrlContext';
 import { VapidKeyProvider } from './VapidKeyContext';
 
@@ -20,8 +21,10 @@ export default function AccountsLayout({ children }: { children: React.ReactNode
   return (
     <AgentUrlProvider value={agentUrl}>
       <VapidKeyProvider value={vapidPublicKey}>
-        <PlatformHeader segment="accounts" subNav={PLATFORM_SUBNAV.accounts} />
-        <main className="p-4 pb-20 sm:p-6 sm:pb-6">{children}</main>
+        <Providers>
+          <PlatformHeader segment="accounts" subNav={PLATFORM_SUBNAV.accounts} />
+          <main className="p-4 pb-20 sm:p-6 sm:pb-6">{children}</main>
+        </Providers>
       </VapidKeyProvider>
     </AgentUrlProvider>
   );

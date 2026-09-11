@@ -87,7 +87,9 @@ export function WatchlistDetail({
     updateBinding.isPending ||
     updateBindings.isPending;
 
-  const inQueue = new Set((oppData?.opportunities ?? []).map((o) => o.symbol.toUpperCase()));
+  const inQueue = new Set(
+    (oppData?.pages.flatMap((p) => p.opportunities) ?? []).map((o) => o.symbol.toUpperCase()),
+  );
 
   // Authoritative bindings, else the flat mirror mapped to unbound. De-duped by symbol so a transient
   // double-entry can't emit duplicate React keys.

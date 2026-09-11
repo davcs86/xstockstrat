@@ -4071,10 +4071,18 @@ class _FakeOppRepo:
                 if act["action"] == 1 and act.get("snooze_until") and act["snooze_until"] > now:
                     continue
             out.append(r)
-        # feature 185 FR-5: mirror the SQL's deterministic tiebreak — rank DESC, conviction DESC,
-        # then opportunity_key ASC (so offset paging is stable across a partial UPDATE).
+        # feature 187: mirror the SQL's symbol-grouping ORDER BY — inter-group by best rank
+        # per symbol DESC, o.symbol ASC tiebreak, then intra-group rank DESC, conviction DESC,
+        # opportunity_key ASC (feature 185 FR-5 paging stability).
+        sym_best: dict[str, float] = {}
+        for r in out:
+            score = (1 - ww) * r["conviction"] + ww * r["signal_axis"]
+            if r["symbol"] not in sym_best or score > sym_best[r["symbol"]]:
+                sym_best[r["symbol"]] = score
         out.sort(
             key=lambda r: (
+                -sym_best[r["symbol"]],
+                r["symbol"],
                 -((1 - ww) * r["conviction"] + ww * r["signal_axis"]),
                 -r["conviction"],
                 r["opportunity_key"],
@@ -5420,6 +5428,133 @@ class TestOpportunitySurgicalRecovery:
         seen = [o.symbol for o in page1.opportunities] + [o.symbol for o in page2.opportunities]
         assert sorted(seen) == ["S0", "S1", "S2", "S3"]
         assert len(seen) == len(set(seen))  # each row exactly once (stable paging)
+
+    @pytest.mark.asyncio
+    async def test_symbol_grouping_contiguous_across_pages(self):
+        """AC-6 @feature-187: server-side symbol grouping keeps each symbol's rows contiguous,
+        positioned by the group's highest-ranked member. A page boundary never splits a symbol."""
+        svc = _materialized_svc(
+            watchlists=[
+                _wl(
+                    bindings=[
+                        ("AAPL", "s1"),
+                        ("AAPL", "s2"),
+                        ("MSFT", "s3"),
+                        ("MSFT", "s4"),
+                        ("TSLA", "s5"),
+                        ("TSLA", "s6"),
+                    ]
+                )
+            ],
+            strategies={
+                "s1": _strat_row("s1", entry=_GT_100),
+                "s2": _strat_row("s2", entry=_GT_100),
+                "s3": _strat_row("s3", entry=_GT_100),
+                "s4": _strat_row("s4", entry=_GT_100),
+                "s5": _strat_row("s5", entry=_GT_100),
+                "s6": _strat_row("s6", entry=_GT_100),
+            },
+            bars={"AAPL": _FIRING_BARS, "MSFT": _FIRING_BARS, "TSLA": _FIRING_BARS},
+        )
+        # Manually set rows with distinct convictions to exercise the grouping sort.
+        recent = datetime.now(UTC)
+        valid = recent + timedelta(hours=24)
+        svc._opportunities_repo.rows["u1"] = [
+            {
+                "opportunity_key": f"u1|{sym}|{sid}",
+                "symbol": sym,
+                "strategy_id": sid,
+                "action": int(analysis_pb2.OPPORTUNITY_ACTION_TAG_ENTER),
+                "conviction": conv,
+                "readiness_json": {"passing_conditions": 1, "total_conditions": 1},
+                "signal_axis": 0.0,
+                "provenance": ["watchlist"],
+                "thesis": "",
+                "valid_until": valid,
+                "computed_at": recent,
+            }
+            for sym, sid, conv in [
+                # AAPL best=0.9 → group rank 1
+                ("AAPL", "s1", 0.9),
+                ("AAPL", "s2", 0.8),
+                # MSFT best=0.7 → group rank 2
+                ("MSFT", "s3", 0.7),
+                ("MSFT", "s4", 0.6),
+                # TSLA best=0.5 → group rank 3
+                ("TSLA", "s5", 0.5),
+                ("TSLA", "s6", 0.4),
+            ]
+        ]
+        svc._kick_opportunity_retry = MagicMock()
+        from gen.marketdata.v1 import marketdata_pb2 as _md
+
+        svc._marketdata.GetLatestPrice = AsyncMock(return_value=_md.LatestPrice())
+        svc._marketdata.BatchGetLatestPrice = AsyncMock(return_value=SimpleNamespace(results=[]))
+        svc._marketdata.BatchGetBars = AsyncMock(return_value=SimpleNamespace(results=[]))
+
+        # Page 1: size=4 → should contain the two highest-ranked groups (AAPL×2 + MSFT×2)
+        page1 = await svc.ListOpportunities(
+            analysis_pb2.ListOpportunitiesRequest(page=common_pb2.PageRequest(page_size=4)),
+            _ctx(_HEADERS),
+        )
+        p1_symbols = [o.symbol for o in page1.opportunities]
+        assert p1_symbols == ["AAPL", "AAPL", "MSFT", "MSFT"]
+
+        # Page 2: remaining TSLA group
+        page2 = await svc.ListOpportunities(
+            analysis_pb2.ListOpportunitiesRequest(
+                page=common_pb2.PageRequest(page_size=4, page_token="4")
+            ),
+            _ctx(_HEADERS),
+        )
+        p2_symbols = [o.symbol for o in page2.opportunities]
+        assert p2_symbols == ["TSLA", "TSLA"]
+
+        # Verify intra-group order: highest conviction first
+        p1_convictions = [o.conviction for o in page1.opportunities]
+        assert p1_convictions == [0.9, 0.8, 0.7, 0.6]
+
+    @pytest.mark.asyncio
+    async def test_default_page_size_is_50(self):
+        """AC-1 @feature-187: default page size is 50 — a request with no page_size returns
+        at most 50 rows and a non-empty next_page_token when more exist."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[])],
+            strategies={},
+            bars={},
+        )
+        recent = datetime.now(UTC)
+        valid = recent + timedelta(hours=24)
+        # 55 rows across 55 distinct symbols
+        svc._opportunities_repo.rows["u1"] = [
+            {
+                "opportunity_key": f"u1|S{i:03d}|sx",
+                "symbol": f"S{i:03d}",
+                "strategy_id": "sx",
+                "action": int(analysis_pb2.OPPORTUNITY_ACTION_TAG_ENTER),
+                "conviction": round(1.0 - i * 0.01, 2),
+                "readiness_json": {"passing_conditions": 1, "total_conditions": 1},
+                "signal_axis": 0.0,
+                "provenance": ["watchlist"],
+                "thesis": "",
+                "valid_until": valid,
+                "computed_at": recent,
+            }
+            for i in range(55)
+        ]
+        svc._kick_opportunity_retry = MagicMock()
+        from gen.marketdata.v1 import marketdata_pb2 as _md
+
+        svc._marketdata.GetLatestPrice = AsyncMock(return_value=_md.LatestPrice())
+        svc._marketdata.BatchGetLatestPrice = AsyncMock(return_value=SimpleNamespace(results=[]))
+        svc._marketdata.BatchGetBars = AsyncMock(return_value=SimpleNamespace(results=[]))
+
+        resp = await svc.ListOpportunities(
+            analysis_pb2.ListOpportunitiesRequest(),  # no page → server default
+            _ctx(_HEADERS),
+        )
+        assert len(resp.opportunities) == 50
+        assert resp.page.next_page_token == "50"
 
 
 class TestOpportunityBarsFetchDedup:

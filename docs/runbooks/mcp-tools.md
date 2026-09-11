@@ -857,8 +857,10 @@ admin scope) — analysis resolves the owner from the header, never a request-bo
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `min_conviction` | `float` | No | Drop rows below this conviction floor (default `0.0`); muted deny-list rows are exempt |
+| `page_size` | `int` | No | Max opportunities per page (default `50`) |
+| `page_token` | `str` | No | Opaque cursor from a previous response's `next_page_token`; empty string or omitted for the first page |
 
-**Return** — `{ "opportunities": [ <opportunity>, … ], "computing": <bool>, "compute_failed": <bool> }`.
+**Return** — `{ "opportunities": [ <opportunity>, … ], "computing": <bool>, "compute_failed": <bool>, "next_page_token": <str> }`.
 Each opportunity is **snake_case** and always carries `symbol`, `action`, `conviction`,
 `passing_conditions`, `total_conditions`, `thesis`, `strategy_id`, `source`, `opportunity_key`,
 `provenance`, `muted`, and `data_unavailable` (feature 185 — `true` for a **terminal
@@ -883,6 +885,9 @@ consumer instead of reporting it as a silently-empty list (feature 185 FR-4):
   `computing: false` (the distinctness).
 - `compute_failed: true` — a persistently-failing background compute (past the bounded attempt
   count): a terminal error state, not an infinite "computing".
+
+- `next_page_token` — an opaque cursor for the next page; empty string when no more pages remain.
+  Pass it back as `page_token` on the next call (feature 187).
 
 Risk/reward and suggested share size are **not** returned — they are a UI-only presentation computed
 client-side, carried on no wire field.
