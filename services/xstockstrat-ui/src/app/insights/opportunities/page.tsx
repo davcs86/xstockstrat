@@ -1,7 +1,6 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
 import { AppShell } from '@/components/insights/AppShell';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -32,17 +31,14 @@ import { IN_QUEUE_CUE } from '@/lib/readinessCue';
 import { readinessState } from '@/lib/readinessRollup';
 import { useOpportunities, useSetOpportunityAction } from '@/hooks/useOpportunities';
 import { useSparklines } from '@/hooks/useSparklines';
-import { insightsPortfolioClient } from '@/lib/browserClients/insightsPortfolioClient';
 import { SectionRenderer } from '@/components/mobile/SectionRenderer';
 import type { Section } from '@/components/mobile/sections';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { StatTile } from '@/components/shared/StatTile';
 import { TriangleAlert } from 'lucide-react';
 import { QueryStateMessages } from '@/components/shared/QueryStateMessages';
 
 type SortKey = 'conviction' | 'expiry';
-const NINETY_MIN_MS = 90 * 60 * 1000;
 // Persist the min-conviction floor so it survives a reload / navigation away and back.
 const MIN_CONVICTION_KEY = 'opportunities.minConviction';
 
@@ -87,19 +83,14 @@ function msUntil(validUntil: { seconds: bigint } | undefined): number | null {
   return Number(validUntil.seconds) * 1000 - Date.now();
 }
 
-/** Compact USD (e.g. $312k) for the Deployable stat. */
-function compactUsd(n: number): string {
-  if (n >= 1000) return `$${Math.round(n / 1000)}k`;
-  return `$${Math.round(n)}`;
-}
-
 /**
  * The ranked opportunity queue over analysis.ListOpportunities, as conviction cards. Conviction is
  * a defined value (never a fabricated %); live-market stats are shown only when present, never faked.
  */
 export default function OpportunitiesPage() {
-  const { data, isLoading, error } = useOpportunities(0);
-  const opportunities = useMemo(() => data?.opportunities ?? [], [data]);
+  const { data, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useOpportunities(0);
+  const opportunities = useMemo(() => data?.pages.flatMap((p) => p.opportunities) ?? [], [data]);
 
   const [minConviction, setMinConviction] = useState(0);
   const [activeSources, setActiveSources] = useState<string[]>([]);
@@ -126,18 +117,6 @@ export default function OpportunitiesPage() {
       // localStorage may be unavailable (private mode) — the in-memory value still applies.
     }
   };
-
-  // Deployable = real broker buying power (summed across accounts). Best-effort: on any error the
-  // stat renders "—" rather than a fabricated figure.
-  const { data: deployable } = useQuery({
-    queryKey: ['opportunities-buying-power'],
-    queryFn: async () => {
-      const resp = await insightsPortfolioClient.listPortfolios({});
-      return resp.portfolios.reduce((s, p) => s + Number(p.buyingPower ?? 0), 0);
-    },
-    retry: 0,
-    staleTime: 30_000,
-  });
 
   const sources = useMemo(
     () => Array.from(new Set(opportunities.map((o) => o.source).filter(Boolean))).sort(),
@@ -172,18 +151,6 @@ export default function OpportunitiesPage() {
     }
     return sorted;
   }, [opportunities, minConviction, effectiveSources, actionFilter, sortKey]);
-
-  const expiringSoon = rows.filter((o) => {
-    const ms = msUntil(o.validUntil);
-    return ms !== null && ms > 0 && ms <= NINETY_MIN_MS;
-  });
-  const exitFlags = rows.filter((o) => o.action === OpportunityActionTag.REDUCE);
-  const freshEntries = rows.filter((o) => o.source && o.source !== 'portfolio');
-  const tickers = (list: Opportunity[]) =>
-    list
-      .slice(0, 3)
-      .map((o) => o.symbol)
-      .join(', ') || '—';
 
   const act = (o: Opportunity, action: OpportunityAction) =>
     setAction.mutate({ opportunityKey: o.opportunityKey, action });
@@ -238,38 +205,6 @@ export default function OpportunitiesPage() {
             Explained buy / trim / exit signals, ranked by conviction. The broker owns the ledger —
             you act with one confirmation.
           </p>
-        </div>
-
-        <div className="grid grid-cols-2 overflow-hidden rounded-md border border-border sm:grid-cols-5">
-          <StatTile
-            label="Actionable now"
-            value={rows.length}
-            tone="accent"
-            sub={`of ${opportunities.length} evaluated · conv ≥ ${Math.round(minConviction * 100)}`}
-          />
-          <StatTile
-            label="Expiring < 90m"
-            value={expiringSoon.length}
-            tone="paper"
-            sub={tickers(expiringSoon)}
-          />
-          <StatTile
-            label="Exit / trim flags"
-            value={exitFlags.length}
-            tone="loss"
-            sub={tickers(exitFlags)}
-          />
-          <StatTile
-            label="Fresh entries"
-            value={freshEntries.length}
-            tone="gain"
-            sub="from watchlists & screener"
-          />
-          <StatTile
-            label="Deployable"
-            value={deployable === undefined ? '—' : compactUsd(deployable)}
-            sub="broker buying power"
-          />
         </div>
 
         <div className="space-y-3">
@@ -347,14 +282,14 @@ export default function OpportunitiesPage() {
             </div>
           ) : error ? (
             <p className="text-sm text-sell">Failed to load opportunities.</p>
-          ) : data?.computeFailed ? (
+          ) : data?.pages[0]?.computeFailed ? (
             // feature 185 FR-4 — a persistently-failing compute is a terminal error, not an
             // infinite spinner nor a silently-empty queue.
             <p className="text-sm text-sell" data-testid="opportunities-compute-failed">
               Couldn&apos;t compute your opportunities. This usually clears on its own — try again
               shortly.
             </p>
-          ) : data?.computing ? (
+          ) : data?.pages[0]?.computing ? (
             // feature 185 FR-4 — a cold (never-materialized) queue is still computing; the 15s poll
             // resolves it. Distinct from a legitimately-empty universe (below).
             <div className="space-y-2" data-testid="opportunities-computing">
@@ -380,12 +315,12 @@ export default function OpportunitiesPage() {
             </div>
           ) : error ? (
             <p className="text-sm text-sell">Failed to load opportunities.</p>
-          ) : data?.computeFailed ? (
+          ) : data?.pages[0]?.computeFailed ? (
             <p className="text-sm text-sell" data-testid="opportunities-compute-failed-desktop">
               Couldn&apos;t compute your opportunities. This usually clears on its own — try again
               shortly.
             </p>
-          ) : data?.computing ? (
+          ) : data?.pages[0]?.computing ? (
             <div className="space-y-3" data-testid="opportunities-computing-desktop">
               <p className="text-sm text-muted-foreground">Computing your opportunities…</p>
               <Skeleton className="h-28 w-full" />
@@ -410,6 +345,19 @@ export default function OpportunitiesPage() {
             ))
           )}
         </div>
+
+        {hasNextPage && (
+          <div className="flex justify-center">
+            <Button
+              variant="outline"
+              onClick={() => fetchNextPage()}
+              disabled={isFetchingNextPage}
+              data-testid="load-more-opportunities"
+            >
+              {isFetchingNextPage ? 'Loading…' : 'Load more'}
+            </Button>
+          </div>
+        )}
       </div>
     </AppShell>
   );

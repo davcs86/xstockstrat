@@ -1158,11 +1158,19 @@ def register_tools(server: MCPServer) -> None:
             raise RuntimeError(_grpc_error_message(e)) from e
 
     @server.tool()
-    async def list_opportunities(ctx: Context, min_conviction: float = 0.0) -> dict:
+    async def list_opportunities(
+        ctx: Context,
+        min_conviction: float = 0.0,
+        page_size: int = 50,
+        page_token: str = "",
+    ) -> dict:
         """List the caller's ranked Decide-queue opportunities with live-market enrichment
         (xstockstrat-analysis ListOpportunities, feature 095, read-only).
         min_conviction: drop rows below this conviction floor (muted deny-list rows are exempt).
-        Returns {"opportunities": [<opportunity>, ...], "computing": bool, "compute_failed": bool}.
+        page_size: max rows per page (default 50).
+        page_token: opaque token from a prior response's next_page_token to fetch the next page.
+        Returns {"opportunities": [...], "computing": bool, "compute_failed": bool,
+            "next_page_token": str}.
             Each opportunity carries symbol, action, conviction, thesis, strategy_id, source,
             provenance, muted, data_unavailable (true = a terminal data-unavailable row, distinct
             from an evaluated 0/N), and (when the backend has them) the live enrichment: live_price,
@@ -1170,12 +1178,13 @@ def register_tools(server: MCPServer) -> None:
             valid_until, signal_confidence, and the traced conditions. Unavailable values are
             OMITTED, never fabricated. Top-level computing=true means a cold queue is still
             materializing (poll again); compute_failed=true means a persistently-failing compute
-            (a terminal error, not an empty queue). Only the calling user's OWN queue is
+            (a terminal error, not an empty queue). Use next_page_token to page through manually;
+            when it is empty, all rows have been returned. Only the calling user's OWN queue is
             returned."""
         # Caller-scoped via x-user-id (no admin scope) — analysis resolves the owner from headers.
         user_id = _caller_user_id(ctx, "list_opportunities")
         try:
-            return await client.list_opportunities(user_id, min_conviction)
+            return await client.list_opportunities(user_id, min_conviction, page_size, page_token)
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e)) from e
 

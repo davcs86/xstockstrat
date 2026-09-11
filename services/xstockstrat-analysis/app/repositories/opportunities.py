@@ -157,12 +157,17 @@ class OpportunitiesRepository:
                     AND a.snooze_until IS NOT NULL
                     AND a.snooze_until > now()
               )
-            -- feature 185 FR-5: opportunity_key ASC is a deterministic final tiebreak so offset
-            -- paging is stable across polls when a surgical partial UPDATE reshuffles physical row
-            -- order (all data-unavailable rows tie at conviction=0, signal_axis=0). Pure tiebreak —
-            -- it never reorders non-tied rows, so no @AC-14 ranking change.
-            ORDER BY ((1 - $3) * o.conviction + $3 * o.signal_axis) DESC, o.conviction DESC,
-                     o.opportunity_key ASC
+            -- feature 187: server-side symbol grouping — pre-groups rows by symbol so each
+            -- symbol's opportunities are contiguous, positioned by the group's best-ranked
+            -- member. Mimics the client-side symbolGroups Map pattern (page.tsx:197-205).
+            -- feature 185 FR-5: opportunity_key ASC final tiebreak preserved for paging stability.
+            ORDER BY
+              MAX(((1 - $3) * o.conviction + $3 * o.signal_axis))
+                OVER (PARTITION BY o.symbol) DESC,
+              o.symbol ASC,
+              ((1 - $3) * o.conviction + $3 * o.signal_axis) DESC,
+              o.conviction DESC,
+              o.opportunity_key ASC
             """,
             user_id,
             min_conviction,
