@@ -18,6 +18,8 @@ dependencies = [
   "postgres-mcp",
   "sqlglot>=25.0.0,<26",
   "supervisor",
+  "typer>=0.27.2",
+  "asyncpg>=0.31.0",
 ]
 
 [project.optional-dependencies]

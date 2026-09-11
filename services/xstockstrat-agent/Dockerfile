@@ -12,6 +12,8 @@ RUN uv pip install -e /proto/gen/python
 RUN ln -s /proto/gen/python /app/gen
 
 COPY services/xstockstrat-agent/ .
+# Operational scripts (e.g. one-time role provisioning) — available at /app/scripts/
+COPY services/xstockstrat-agent/scripts/ ./scripts/
 COPY scripts/wait-for-deps.sh /usr/local/bin/wait-for-deps.sh
 COPY scripts/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/wait-for-deps.sh /docker-entrypoint.sh
