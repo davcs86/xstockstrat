@@ -667,3 +667,59 @@ jobs:
           # Built-in token + the job's pull-requests:read grant above — no PAT needed
           # for gitleaks' PR-commits API call (the previous GH_PAT_SCAN 404'd it).
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ──────────────────────────────────────────────────────────────────────
+  # CI gate — the ONLY check branch-protection should require.
+  #
+  # Every conditional job above is path-filtered: when its paths don't
+  # change the job is skipped and GitHub never reports a status for it.
+  # A branch-protection rule that requires a skipped check blocks the PR
+  # forever. This gate job always runs, aggregates every upstream result,
+  # and fails only when an upstream job truly failed or was cancelled.
+  # Skipped jobs are treated as passing (no relevant paths changed).
+  # ──────────────────────────────────────────────────────────────────────
+  ci-gate:
+    name: CI Gate
+    if: always()
+    needs:
+      - proto-lint
+      - proto-freshness
+      - go-lint
+      - python-lint
+      - python-test
+      - node-lint
+      - node-test
+      - frontend-e2e
+      - dockerfile-lint
+      - shell-lint
+      - markdown-lint
+      - context-map
+      - secret-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate upstream results
+        run: |
+          echo "proto-lint:      ${{ needs.proto-lint.result }}"
+          echo "proto-freshness: ${{ needs.proto-freshness.result }}"
+          echo "go-lint:         ${{ needs.go-lint.result }}"
+          echo "python-lint:     ${{ needs.python-lint.result }}"
+          echo "python-test:     ${{ needs.python-test.result }}"
+          echo "node-lint:       ${{ needs.node-lint.result }}"
+          echo "node-test:       ${{ needs.node-test.result }}"
+          echo "frontend-e2e:    ${{ needs.frontend-e2e.result }}"
+          echo "dockerfile-lint: ${{ needs.dockerfile-lint.result }}"
+          echo "shell-lint:      ${{ needs.shell-lint.result }}"
+          echo "markdown-lint:   ${{ needs.markdown-lint.result }}"
+          echo "context-map:     ${{ needs.context-map.result }}"
+          echo "secret-scan:     ${{ needs.secret-scan.result }}"
+
+      - name: Fail on upstream failure or cancellation
+        if: >-
+          contains(needs.*.result, 'failure') ||
+          contains(needs.*.result, 'cancelled')
+        run: |
+          echo "::error::One or more CI jobs failed or were cancelled — see above for per-job status"
+          exit 1
+
+      - name: All checks passed
+        run: echo "All CI jobs passed or were skipped (no relevant paths changed)"
