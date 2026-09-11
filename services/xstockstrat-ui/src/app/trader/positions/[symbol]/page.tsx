@@ -16,6 +16,7 @@ import { openR, fmtR, sideLabel } from '@/lib/positionRisk';
 import { POSITION_RISK_FLAG, OPPORTUNITY_ACTION, EnumBadge } from '@/lib/opportunityShared';
 import { useWatchlists } from '@/hooks/useWatchlists';
 import { useOpportunities, useStrategyAnalytics } from '@/hooks/useOpportunities';
+import { useOhlcBars } from '@/hooks/useOhlcBars';
 import { useFundamentals } from '@/hooks/useFundamentals';
 import { MuteForStrategy } from '@/components/insights/MuteForStrategy';
 import { useBacktestHistory } from '@/hooks/useStrategies';
@@ -27,7 +28,7 @@ import { useIndicatorSeries, type IndicatorSeriesInput } from '@/hooks/useIndica
 import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { BacktestStatus } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { timestampToDate } from '@/lib/protoTime';
-import { Sparkline } from '@/components/shared/Sparkline';
+import { OhlcBlock } from '@/components/shared/OhlcBlock';
 import { riskReward, suggestedShares } from '@/lib/orderSizing';
 import { SignalReadiness } from '@/components/insights/SignalReadiness';
 import { StrategyPicker } from '@/components/insights/StrategyPicker';
@@ -174,7 +175,7 @@ function PositionDetailInner() {
 
   const { data: oppData } = useOpportunities(0);
   const symbolOpportunities = useMemo(
-    () => (oppData?.opportunities ?? []).filter((o) => o.symbol === symbol),
+    () => (oppData?.pages.flatMap((p) => p.opportunities) ?? []).filter((o) => o.symbol === symbol),
     [oppData, symbol],
   );
 
@@ -216,6 +217,11 @@ function PositionDetailInner() {
     headerLivePrice,
     oppStop,
   );
+
+  // OHLC bar fetched async — single-symbol, cached with 2min staleTime.
+  const ohlcSymbols = useMemo(() => (symbol ? [symbol] : []), [symbol]);
+  const ohlcBars = useOhlcBars(ohlcSymbols);
+  const headerOhlc = ohlcBars.get(symbol);
 
   // loadBars is held in a ref so the poll interval runs the latest closure; latestReqRef discards
   // stale responses from a superseded load.
@@ -469,9 +475,7 @@ function PositionDetailInner() {
               {fmtPct(headerChangePct)}
             </span>
           )}
-          {headerOpp && headerOpp.sparkline.length > 0 && (
-            <Sparkline points={headerOpp.sparkline} testId="detail-sparkline" />
-          )}
+          <OhlcBlock data={headerOhlc} testId="detail-ohlc" />
         </div>
 
         {/* Section nav — gated so it never points at absent anchors (loading/error render no sections). */}

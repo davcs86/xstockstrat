@@ -569,7 +569,43 @@ export async function startMockBackend(): Promise<void> {
       });
 
       router.service(MarketDataService, {
-        async getBars() {
+        async getBars(req) {
+          const sym = (req.symbol ?? '').toUpperCase();
+          // CAPR: 2 daily bars with distinct OHLC for meaningful assertions (feature 188).
+          if (sym === 'CAPR') {
+            return {
+              bars: [
+                {
+                  symbol: 'CAPR',
+                  time: { seconds: BigInt(1705536000), nanos: 0 }, // 2024-01-18
+                  open: 11.8,
+                  high: 12.1,
+                  low: 11.65,
+                  close: 11.92,
+                  volume: BigInt(1000000),
+                  vwap: 11.88,
+                  tradeCount: 5000,
+                  timeframe: '1d',
+                  timeframeEnum: Timeframe.TIMEFRAME_1DAY,
+                  source: 'alpaca',
+                },
+                {
+                  symbol: 'CAPR',
+                  time: { seconds: BigInt(1705622400), nanos: 0 }, // 2024-01-19
+                  open: 11.92,
+                  high: 12.25,
+                  low: 11.78,
+                  close: 12.15,
+                  volume: BigInt(1200000),
+                  vwap: 12.02,
+                  tradeCount: 6000,
+                  timeframe: '1d',
+                  timeframeEnum: Timeframe.TIMEFRAME_1DAY,
+                  source: 'alpaca',
+                },
+              ],
+            };
+          }
           return {
             bars: [
               {

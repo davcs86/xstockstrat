@@ -779,7 +779,7 @@ test.describe('Signal-detail live-market enrichment (feature 095)', () => {
     // AC-2 / AC-12 — the header live price is the SAME Opportunity.live_price the queue card reads.
     await expect(page.getByTestId('detail-live-price')).toHaveText('$12.34', { timeout: 30000 });
     await expect(page.getByTestId('detail-change')).toContainText('%');
-    await expect(page.getByTestId('detail-sparkline')).toBeVisible();
+    await expect(page.getByTestId('detail-ohlc')).toBeVisible();
 
     // AC-7 — the strategy target/stop overlay legend entries render (the price lines are drawn on the
     // lightweight-charts canvas; the legend is the queryable proof they were requested).
@@ -799,10 +799,11 @@ test.describe('Signal-detail live-market enrichment (feature 095)', () => {
     // ZZZZ is not in the opportunity queue → the header falls back to a direct GetLatestPrice.
     await page.goto('/trader/positions/ZZZZ');
     await expect(page.getByTestId('detail-live-price')).toHaveText('$9.87', { timeout: 30000 });
-    // No opportunity → no target/stop overlay legend, no sparkline, no R:R/sizing block.
+    // No opportunity → no target/stop overlay legend, no R:R/sizing block.
     await expect(page.getByTestId('legend-target')).toHaveCount(0);
     await expect(page.getByTestId('legend-signal-stop')).toHaveCount(0);
-    await expect(page.getByTestId('detail-sparkline')).toHaveCount(0);
+    // OHLC renders for all symbols (fetched async via getBars, not queue-dependent).
+    await expect(page.getByTestId('detail-ohlc')).toHaveCount(1);
     await expect(page.getByTestId('rr-sizing')).toHaveCount(0);
   });
 

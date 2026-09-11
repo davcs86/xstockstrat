@@ -3,6 +3,19 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-09-11
+
+### Features
+- opportunities-latency-fix: Fix the 2.9-minute ListOpportunities latency by adding batch marketdata RPCs (BatchGetBars, BatchGetLatestPrice), parallelizing sequential Phase 0 drains, aligning memo TTL with poll interval, and adding a BFF-side gRPC deadline to prevent unbounded calls that exceed the DO proxy timeout.
+
+### Proto Changes
+- marketdata/v1/marketdata.proto
+
+### Summary
+11 commits, 1 feature merges since last promotion.
+
+---
+
 ## 2026-09-09
 
 ### Features

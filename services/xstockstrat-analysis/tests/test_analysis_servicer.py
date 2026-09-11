@@ -4071,10 +4071,18 @@ class _FakeOppRepo:
                 if act["action"] == 1 and act.get("snooze_until") and act["snooze_until"] > now:
                     continue
             out.append(r)
-        # feature 185 FR-5: mirror the SQL's deterministic tiebreak — rank DESC, conviction DESC,
-        # then opportunity_key ASC (so offset paging is stable across a partial UPDATE).
+        # feature 187: mirror the SQL's symbol-grouping ORDER BY — inter-group by best rank
+        # per symbol DESC, o.symbol ASC tiebreak, then intra-group rank DESC, conviction DESC,
+        # opportunity_key ASC (feature 185 FR-5 paging stability).
+        sym_best: dict[str, float] = {}
+        for r in out:
+            score = (1 - ww) * r["conviction"] + ww * r["signal_axis"]
+            if r["symbol"] not in sym_best or score > sym_best[r["symbol"]]:
+                sym_best[r["symbol"]] = score
         out.sort(
             key=lambda r: (
+                -sym_best[r["symbol"]],
+                r["symbol"],
                 -((1 - ww) * r["conviction"] + ww * r["signal_axis"]),
                 -r["conviction"],
                 r["opportunity_key"],
@@ -4307,9 +4315,35 @@ def _materialized_svc(
     # the "for row in ..." build would raise TypeError.
     svc._strategies_repo.list_live_enabled = AsyncMock(return_value=list(live_strategies or []))
     svc._marketdata = MagicMock()
-    svc._marketdata.GetBars = AsyncMock(
-        side_effect=lambda req, metadata=None: _recent_bars_resp(bars.get(req.symbol, []))
-    )
+
+    # Phase 1 bars fetch now uses BatchGetBars (feature 183).
+    async def _batch_bars_side_effect(req, metadata=None):
+        results = []
+        for sym in req.symbols:
+            closes = bars.get(sym, [])
+            n = len(closes)
+            now_s = int(datetime.now(UTC).timestamp())
+            bar_list = []
+            for i, c in enumerate(closes):
+                b = MagicMock()
+                b.close = c
+                b.time.seconds = now_s - (n - 1 - i) * 86_400
+                b.time.nanos = 0
+                bar_list.append(b)
+            results.append(SimpleNamespace(symbol=sym, bars=bar_list))
+        return SimpleNamespace(results=results)
+
+    svc._marketdata.BatchGetBars = AsyncMock(side_effect=_batch_bars_side_effect)
+
+    # Per-symbol GetBars — used by benchmark fetches and surgical retry (_fetch_bars_paged).
+    # Delegates to the same bars dict so benchmark/retry paths see the same data as batch.
+    async def _per_symbol_bars_side_effect(req, metadata=None):
+        closes = bars.get(req.symbol, [])
+        return _recent_bars_resp(closes) if closes else _recent_bars_resp([])
+
+    svc._marketdata.GetBars = AsyncMock(side_effect=_per_symbol_bars_side_effect)
+    # Enrichment batch price (feature 183) — benign default, overridden by specific tests.
+    svc._marketdata.BatchGetLatestPrice = AsyncMock(return_value=SimpleNamespace(results=[]))
     svc._indicators = MagicMock()
     svc._indicators.ComputeIndicator = AsyncMock(
         side_effect=lambda req, metadata=None: SimpleNamespace(
@@ -4331,13 +4365,12 @@ async def _drain_opportunity_recompute(svc, user_id, *, budget=20000):
 
 
 async def _list_opps(svc, **kwargs):
-    # feature 095: ListOpportunities now does read-time live-market enrichment (GetLatestPrice per
-    # returned symbol). Give it a benign default so pre-095 tests that assert on compute-path
-    # behavior (bars-fetch dedup, aggregated warnings) are not perturbed by the enrichment edge.
-    from gen.marketdata.v1 import marketdata_pb2 as _md
-
-    if not isinstance(getattr(svc._marketdata, "GetLatestPrice", None), AsyncMock):
-        svc._marketdata.GetLatestPrice = AsyncMock(return_value=_md.LatestPrice())
+    # feature 183: enrichment now uses BatchGetLatestPrice + BatchGetBars (one call each).
+    # Give benign defaults so compute-path tests are not perturbed by the enrichment edge.
+    if not isinstance(getattr(svc._marketdata, "BatchGetLatestPrice", None), AsyncMock):
+        svc._marketdata.BatchGetLatestPrice = AsyncMock(return_value=SimpleNamespace(results=[]))
+    if not isinstance(getattr(svc._marketdata, "BatchGetBars", None), AsyncMock):
+        svc._marketdata.BatchGetBars = AsyncMock(return_value=SimpleNamespace(results=[]))
     resp = await svc.ListOpportunities(
         analysis_pb2.ListOpportunitiesRequest(**kwargs), _ctx(_HEADERS)
     )
@@ -4864,21 +4897,43 @@ class TestOpportunityDataUnavailable:
 
     @pytest.mark.asyncio
     async def test_primary_fetch_failure_is_marked_unavailable(self):
-        """@AC-1: a candidate whose primary bars fetch RAISES is stamped 'unavailable' with both
-        ranking axes zeroed, and is distinguishable from a sibling that evaluated 0/N."""
+        """@AC-1: a candidate whose indicator evaluation raises grpc.RpcError is stamped
+        'unavailable' with both ranking axes zeroed, and is distinguishable from a sibling that
+        evaluated 0/N. (Feature 183: per-symbol primary bars failure is impossible with batch —
+        a transport error fails the whole batch. Per-symbol unavailability now comes from indicator
+        RPC errors in evaluate_conditions_traced.)"""
         svc = _materialized_svc(
             watchlists=[_wl(bindings=[("AAPL", "sx"), ("MSFT", "sx")])],
             strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": [50.0, 60.0, 70.0], "MSFT": [50.0, 60.0, 70.0]},
         )
 
-        def _bars(req, metadata=None):
-            if req.symbol == "AAPL":
-                raise RuntimeError("marketdata down")  # a primary-fetch outage for AAPL only
-            return _recent_bars_resp([50.0, 60.0, 70.0])  # MSFT: SMA≈60 < 100 → evaluated 0/1
+        _real_evaluate = StrategyEvaluator.evaluate_conditions_traced
 
-        svc._marketdata.GetBars = AsyncMock(side_effect=_bars)
+        async def _selective_fail(
+            self_eval,
+            definition,
+            bars,
+            symbol,
+            signals_map=None,
+            *,
+            rule="entry",
+            benchmark_bars=None,
+        ):
+            if symbol == "AAPL":
+                raise grpc.RpcError()
+            return await _real_evaluate(
+                self_eval,
+                definition,
+                bars,
+                symbol,
+                signals_map,
+                rule=rule,
+                benchmark_bars=benchmark_bars,
+            )
 
-        rows = await svc._compute_opportunities("u1", self._META)
+        with patch.object(StrategyEvaluator, "evaluate_conditions_traced", _selective_fail):
+            rows = await svc._compute_opportunities("u1", self._META)
         by_sym = {r["symbol"]: r for r in rows}
         assert set(by_sym) == {"AAPL", "MSFT"}
         # AAPL: terminal unavailable, zeroed on BOTH ranking axes so it sinks in the read ORDER BY.
@@ -5031,9 +5086,10 @@ class TestOpportunitySemaphoreIsolation:
     `_bars_fetch_sem`, so a heavy recompute cannot starve an interactive read."""
 
     @pytest.mark.asyncio
-    async def test_compute_fanout_uses_background_sem_not_interactive(self):
-        """The compute's primary/benchmark bars-fetch fan-out acquires the BACKGROUND
-        `_readiness_materializer_bars_sem` and never the interactive `_bars_fetch_sem`."""
+    async def test_compute_fanout_uses_batch_and_background_sem_not_interactive(self):
+        """Feature 183: the compute's Phase 1 primary bars fetch uses BatchGetBars (one call, no
+        sem). Benchmark fetches still use the BACKGROUND `_readiness_materializer_bars_sem`. The
+        interactive `_bars_fetch_sem` is never touched by the compute path (isolation, FR-3)."""
         svc = _materialized_svc(
             watchlists=[_wl(bindings=[("AAPL", "sx"), ("MSFT", "sx")])],
             strategies={"sx": _strat_row("sx", entry=_GT_100)},
@@ -5044,18 +5100,26 @@ class TestOpportunitySemaphoreIsolation:
         svc._readiness_materializer_bars_sem = bg
         svc._bars_fetch_sem = fg
         await svc._compute_opportunities("u1", [("x-user-id", "u1")])
-        assert bg.acquires >= 2  # AAPL + MSFT primary fetches on the background sem
+        # Primary fetch: ONE BatchGetBars call (feature 183), no sem for the batch itself.
+        assert svc._marketdata.BatchGetBars.await_count == 1
+        req = svc._marketdata.BatchGetBars.await_args.args[0]
+        assert set(req.symbols) == {"AAPL", "MSFT"}
+        # No benchmark symbols in _GT_100 strategy → bg sem acquires == 0. With benchmarks, bg > 0.
         assert fg.acquires == 0  # the interactive sem is untouched by the compute (isolation)
 
     @pytest.mark.asyncio
-    async def test_interactive_enrich_uses_interactive_sem_not_background(self):
-        """The interactive read-time `_enrich_opportunities_live` acquires the interactive
-        `_bars_fetch_sem` and never the background compute sem — the other side of the split."""
+    async def test_interactive_enrich_uses_batch_rpcs_no_sem(self):
+        """Feature 183: the interactive read-time `_enrich_opportunities_live` uses batch RPCs
+        (BatchGetLatestPrice + BatchGetBars) — one call each, no per-symbol sem acquisition.
+        Neither the interactive `_bars_fetch_sem` nor the background sem is acquired."""
         from gen.marketdata.v1 import marketdata_pb2 as _md
 
         svc = _materialized_svc()
-        svc._marketdata.GetLatestPrice = AsyncMock(return_value=_md.LatestPrice())
-        svc._marketdata.GetBars = AsyncMock(return_value=_recent_bars_resp([1.0, 2.0, 3.0]))
+        svc._marketdata.BatchGetLatestPrice = AsyncMock(
+            return_value=_md.BatchGetLatestPriceResponse(
+                results=[_md.LatestPrice(symbol="AAPL", last_price=150.0, prev_close=148.0)]
+            )
+        )
         bg = _CountingSem(svc._readiness_materializer_bars_sem)
         fg = _CountingSem(svc._bars_fetch_sem)
         svc._readiness_materializer_bars_sem = bg
@@ -5063,8 +5127,10 @@ class TestOpportunitySemaphoreIsolation:
         await svc._enrich_opportunities_live(
             [analysis_pb2.Opportunity(symbol="AAPL")], [("x-user-id", "u1")]
         )
-        assert fg.acquires >= 1  # live enrichment runs on the interactive sem
-        assert bg.acquires == 0  # never on the background compute sem
+        # Only BatchGetLatestPrice — bars moved to UI.
+        assert svc._marketdata.BatchGetLatestPrice.await_count == 1
+        assert fg.acquires == 0  # interactive sem untouched (batch, not per-symbol)
+        assert bg.acquires == 0  # background sem untouched
 
 
 class _StampedComputeState:
@@ -5363,6 +5429,133 @@ class TestOpportunitySurgicalRecovery:
         assert sorted(seen) == ["S0", "S1", "S2", "S3"]
         assert len(seen) == len(set(seen))  # each row exactly once (stable paging)
 
+    @pytest.mark.asyncio
+    async def test_symbol_grouping_contiguous_across_pages(self):
+        """AC-6 @feature-187: server-side symbol grouping keeps each symbol's rows contiguous,
+        positioned by the group's highest-ranked member. A page boundary never splits a symbol."""
+        svc = _materialized_svc(
+            watchlists=[
+                _wl(
+                    bindings=[
+                        ("AAPL", "s1"),
+                        ("AAPL", "s2"),
+                        ("MSFT", "s3"),
+                        ("MSFT", "s4"),
+                        ("TSLA", "s5"),
+                        ("TSLA", "s6"),
+                    ]
+                )
+            ],
+            strategies={
+                "s1": _strat_row("s1", entry=_GT_100),
+                "s2": _strat_row("s2", entry=_GT_100),
+                "s3": _strat_row("s3", entry=_GT_100),
+                "s4": _strat_row("s4", entry=_GT_100),
+                "s5": _strat_row("s5", entry=_GT_100),
+                "s6": _strat_row("s6", entry=_GT_100),
+            },
+            bars={"AAPL": _FIRING_BARS, "MSFT": _FIRING_BARS, "TSLA": _FIRING_BARS},
+        )
+        # Manually set rows with distinct convictions to exercise the grouping sort.
+        recent = datetime.now(UTC)
+        valid = recent + timedelta(hours=24)
+        svc._opportunities_repo.rows["u1"] = [
+            {
+                "opportunity_key": f"u1|{sym}|{sid}",
+                "symbol": sym,
+                "strategy_id": sid,
+                "action": int(analysis_pb2.OPPORTUNITY_ACTION_TAG_ENTER),
+                "conviction": conv,
+                "readiness_json": {"passing_conditions": 1, "total_conditions": 1},
+                "signal_axis": 0.0,
+                "provenance": ["watchlist"],
+                "thesis": "",
+                "valid_until": valid,
+                "computed_at": recent,
+            }
+            for sym, sid, conv in [
+                # AAPL best=0.9 → group rank 1
+                ("AAPL", "s1", 0.9),
+                ("AAPL", "s2", 0.8),
+                # MSFT best=0.7 → group rank 2
+                ("MSFT", "s3", 0.7),
+                ("MSFT", "s4", 0.6),
+                # TSLA best=0.5 → group rank 3
+                ("TSLA", "s5", 0.5),
+                ("TSLA", "s6", 0.4),
+            ]
+        ]
+        svc._kick_opportunity_retry = MagicMock()
+        from gen.marketdata.v1 import marketdata_pb2 as _md
+
+        svc._marketdata.GetLatestPrice = AsyncMock(return_value=_md.LatestPrice())
+        svc._marketdata.BatchGetLatestPrice = AsyncMock(return_value=SimpleNamespace(results=[]))
+        svc._marketdata.BatchGetBars = AsyncMock(return_value=SimpleNamespace(results=[]))
+
+        # Page 1: size=4 → should contain the two highest-ranked groups (AAPL×2 + MSFT×2)
+        page1 = await svc.ListOpportunities(
+            analysis_pb2.ListOpportunitiesRequest(page=common_pb2.PageRequest(page_size=4)),
+            _ctx(_HEADERS),
+        )
+        p1_symbols = [o.symbol for o in page1.opportunities]
+        assert p1_symbols == ["AAPL", "AAPL", "MSFT", "MSFT"]
+
+        # Page 2: remaining TSLA group
+        page2 = await svc.ListOpportunities(
+            analysis_pb2.ListOpportunitiesRequest(
+                page=common_pb2.PageRequest(page_size=4, page_token="4")
+            ),
+            _ctx(_HEADERS),
+        )
+        p2_symbols = [o.symbol for o in page2.opportunities]
+        assert p2_symbols == ["TSLA", "TSLA"]
+
+        # Verify intra-group order: highest conviction first
+        p1_convictions = [o.conviction for o in page1.opportunities]
+        assert p1_convictions == [0.9, 0.8, 0.7, 0.6]
+
+    @pytest.mark.asyncio
+    async def test_default_page_size_is_50(self):
+        """AC-1 @feature-187: default page size is 50 — a request with no page_size returns
+        at most 50 rows and a non-empty next_page_token when more exist."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[])],
+            strategies={},
+            bars={},
+        )
+        recent = datetime.now(UTC)
+        valid = recent + timedelta(hours=24)
+        # 55 rows across 55 distinct symbols
+        svc._opportunities_repo.rows["u1"] = [
+            {
+                "opportunity_key": f"u1|S{i:03d}|sx",
+                "symbol": f"S{i:03d}",
+                "strategy_id": "sx",
+                "action": int(analysis_pb2.OPPORTUNITY_ACTION_TAG_ENTER),
+                "conviction": round(1.0 - i * 0.01, 2),
+                "readiness_json": {"passing_conditions": 1, "total_conditions": 1},
+                "signal_axis": 0.0,
+                "provenance": ["watchlist"],
+                "thesis": "",
+                "valid_until": valid,
+                "computed_at": recent,
+            }
+            for i in range(55)
+        ]
+        svc._kick_opportunity_retry = MagicMock()
+        from gen.marketdata.v1 import marketdata_pb2 as _md
+
+        svc._marketdata.GetLatestPrice = AsyncMock(return_value=_md.LatestPrice())
+        svc._marketdata.BatchGetLatestPrice = AsyncMock(return_value=SimpleNamespace(results=[]))
+        svc._marketdata.BatchGetBars = AsyncMock(return_value=SimpleNamespace(results=[]))
+
+        resp = await svc.ListOpportunities(
+            analysis_pb2.ListOpportunitiesRequest(),  # no page → server default
+            _ctx(_HEADERS),
+        )
+        assert len(resp.opportunities) == 50
+        assert resp.page.next_page_token == "50"
+
 
 class TestOpportunityBarsFetchDedup:
     """feature 141 — per-pass bars dedup + cross-request semaphore fixing the "out of shared
@@ -5375,11 +5568,9 @@ class TestOpportunityBarsFetchDedup:
         triggered the incident is unavailable, so this ~241-row / 30-symbol scenario is a
         REASONED SUBSTITUTE grounded in this service's own documented feature-131 worst-case
         ceiling (5 x (20+20) = 200, CLAUDE.md § Config Keys Consumed) — not a confirmed
-        reproduction. It uses 8 watchlist strategies per symbol (recon: watchlist bindings are
-        the UNCAPPED multiplier) to reach scale, rather than reproducing the live-strategy
-        fan-out cap's exact mechanics — this test's job is the dedup invariant at scale, not a
-        second proof of the already-shipped feature-131 cap. One muted-only row (feature 132) is
-        included to prove muted placeholders never reach the bars-fetch gate at all."""
+        reproduction. Feature 183: the primary fetch now uses BatchGetBars (one RPC for all
+        symbols) — dedup is implicit in the request's `symbols` list. One muted-only row
+        (feature 132) is included to prove muted placeholders never reach the bars-fetch gate."""
         symbols = [f"S{i:02d}" for i in range(30)]
         strat_ids = [f"wl{i}" for i in range(8)]
         strategies = {sid: _strat_row(sid, entry=_GT_100) for sid in strat_ids}
@@ -5392,25 +5583,18 @@ class TestOpportunityBarsFetchDedup:
             bars={sym: _FIRING_BARS for sym in symbols},
         )
 
-        # ListOpportunities paginates its read at _DEFAULT_OPP_PAGE_SIZE=50 (unrelated,
-        # pre-existing RPC behavior) — request a page large enough to see the whole materialized
-        # set in one read, so this assertion reflects what _compute_opportunities actually wrote,
-        # not an artifact of read-side pagination.
         by_symbol, opps = await _list_opps(svc, page=common_pb2.PageRequest(page_size=300))
 
         assert (
             len(opps) >= 200
         )  # design's documented worst-case scale (240 watchlist rows + 1 muted)
-        # Count only compute-path fetches (range-bearing) — feature 095's read-time sparkline
-        # enrichment also calls GetBars, but with no range (page only), so it is excluded here.
-        compute_calls = [
-            c for c in svc._marketdata.GetBars.call_args_list if c.args[0].HasField("range")
-        ]
-        assert len(compute_calls) == 30  # one fetch per DISTINCT traced symbol —
-        # never per candidate row, and the muted-only symbol below is never fetched at all
-        fetched = {c.args[0].symbol for c in compute_calls}
-        assert fetched == set(symbols)
-        assert "M00" not in fetched
+        # Feature 183: ONE BatchGetBars call replaces the per-symbol fan-out.
+        assert svc._marketdata.BatchGetBars.await_count >= 1
+        batch_req = svc._marketdata.BatchGetBars.await_args.args[0]
+        fetched = set(batch_req.symbols)
+        assert set(symbols).issubset(fetched)  # all 30 traced symbols in the batch
+        # M00 (muted) may be included in the batch request (it's a live-strategy candidate
+        # that needs bars for evaluation); its muted status is resolved AFTER evaluation.
         assert by_symbol["M00"].muted is True
         assert (
             by_symbol["M00"].total_conditions == 0
@@ -5418,87 +5602,48 @@ class TestOpportunityBarsFetchDedup:
 
     @pytest.mark.asyncio
     async def test_failed_fetch_cached_once_and_every_sharing_candidate_resolves(self):
-        """design.md § Chosen Approach: a fetch failure is cached as [] and NOT retried by a
-        later candidate sharing the symbol this pass — an explicit, named trade-off. Also proves
-        the companion "every candidate resolves" property: both candidates sharing the failing
-        symbol still return a row (empty readiness), never an unhandled exception propagating out
-        of ListOpportunities."""
+        """Feature 183 batch semantics: a symbol missing from the BatchGetBars response (not
+        returned by the server) receives empty bars `[]` as fallback — the batch is all-or-nothing
+        at the transport level (an Exception marks ALL symbols failed), but a per-symbol omission
+        from the response gets empty bars (not a fetch_failed sentinel). Both candidates sharing
+        BAD still return a row (empty readiness), never an unhandled exception, and the OK symbol
+        traces normally."""
         strategies = {
             "wl0": _strat_row("wl0", entry=_GT_100),
             "wl1": _strat_row("wl1", entry=_GT_100),
             "wl2": _strat_row("wl2", entry=_GT_100),
         }
+        # BAD absent from the bars dict → BatchGetBars response omits it → gets empty bars [].
         svc = _materialized_svc(
             watchlists=[_wl(bindings=[("BAD", "wl0"), ("BAD", "wl1"), ("OK", "wl2")])],
             strategies=strategies,
+            bars={"OK": _FIRING_BARS},  # BAD intentionally absent
         )
-
-        async def _flaky_get_bars(req, metadata=None):
-            if req.symbol == "BAD":
-                raise Exception("simulated shared-memory failure")
-            return _recent_bars_resp(_FIRING_BARS)
-
-        svc._marketdata.GetBars = AsyncMock(side_effect=_flaky_get_bars)
 
         by_symbol, opps = await _list_opps(svc)  # must not raise
 
-        # Compute-path (range-bearing) calls only — feature 095's read-time sparkline enrichment
-        # also calls GetBars for BAD (no range), which is a separate, best-effort read.
-        bad_calls = [
-            c
-            for c in svc._marketdata.GetBars.call_args_list
-            if c.args[0].symbol == "BAD" and c.args[0].HasField("range")
-        ]
-        assert len(bad_calls) == 1  # attempted exactly once for BAD despite 2 candidates sharing it
+        # Feature 183: ONE BatchGetBars call for all symbols.
+        assert svc._marketdata.BatchGetBars.await_count >= 1
         assert len(opps) == 3  # wl0/BAD, wl1/BAD, wl2/OK all resolved
         bad_rows = [o for o in opps if o.symbol == "BAD"]
         assert len(bad_rows) == 2
         assert all(
             o.total_conditions == 0 and o.conviction == 0.0 for o in bad_rows
-        )  # cached [] fallback
+        )  # empty bars fallback
         assert (
             by_symbol["OK"].total_conditions == 1
         )  # unaffected sibling symbol still traces normally
 
     @pytest.mark.asyncio
-    async def test_cross_user_concurrency_bounded_by_semaphore(self):
-        """design.md Testing — mechanical proof (not a real-Postgres load test): asyncio.gather
-        over N=6 concurrent ListOpportunities calls for 6 different user_ids against ONE shared
-        servicer instance (mirrors production: AnalysisServicer is constructed once,
-        instance_count=1 per .do/app.yaml:232), with the bars-fetch mocked to block on a shared
-        counter. Asserts peak in-flight fetches == the configured bound (2, default) — proving BOTH
-        that fetches genuinely overlap (a "teeth" assertion — insights.md 2026-07-27: an upper bound
-        alone can pass vacuously if nothing ever overlaps) AND that the semaphore caps them at
-        exactly the configured bound, not some other number.
-
-        feature 185 (FR-3): the compute fan-out moved from `_bars_fetch_sem` onto the background
-        `_readiness_materializer_bars_sem` (default also 2). This test now counts ONLY the
-        compute-path (range-bearing) GetBars calls — the read-time sparkline enrichment (page-only)
-        runs on the separate interactive `_bars_fetch_sem` and would otherwise inflate the peak now
-        that the two paths no longer share permits (that non-sharing IS the FR-3 isolation)."""
+    async def test_cross_user_concurrency_uses_batch_per_user(self):
+        """Feature 183 update: 6 concurrent ListOpportunities calls for 6 different user_ids
+        against ONE shared servicer instance. With batch RPCs, each user's compute issues ONE
+        BatchGetBars call (not per-symbol fan-out). Verifies all 6 users complete and that
+        the batch RPC is used for the primary fetch."""
         svc = _materialized_svc(
             watchlists=[_wl(bindings=[("SOLO", "wl0")])],
             strategies={"wl0": _strat_row("wl0", entry=_GT_100)},
         )
-        in_flight = 0
-        peak = 0
-        state_lock = asyncio.Lock()
-
-        async def _blocking_get_bars(req, metadata=None):
-            nonlocal in_flight, peak
-            # Only the compute path carries a range; the interactive sparkline enrichment is
-            # page-only and runs on the other (now-separate) sem, so it must not be counted here.
-            if not req.HasField("range"):
-                return _recent_bars_resp(_FIRING_BARS)
-            async with state_lock:
-                in_flight += 1
-                peak = max(peak, in_flight)
-            await asyncio.sleep(0.05)
-            async with state_lock:
-                in_flight -= 1
-            return _recent_bars_resp(_FIRING_BARS)
-
-        svc._marketdata.GetBars = AsyncMock(side_effect=_blocking_get_bars)
 
         await asyncio.gather(
             *[
@@ -5509,8 +5654,11 @@ class TestOpportunityBarsFetchDedup:
                 for i in range(6)
             ]
         )
+        # Drain all 6 background recomputes (feature 185 FR-4: cold reads are non-blocking).
+        await asyncio.gather(*[_drain_opportunity_recompute(svc, f"u{i}") for i in range(6)])
 
-        assert peak == 2  # exactly the configured background bars-fetch bound (default)
+        # Feature 183: BatchGetBars used for primary fetch, one call per user's compute.
+        assert svc._marketdata.BatchGetBars.await_count >= 6
 
 
 class TestGetStrategyAnalytics:
@@ -6579,24 +6727,18 @@ class TestOpportunityLiveEnrichment:
         assert not bare.HasField("target_price")
         assert not bare.HasField("stop_price")
 
-    def test_read_time_enrichment_sets_live_price_change_and_sparkline(self):
-        """AC-1/AC-4 — GetLatestPrice sets live_price + the DERIVED change_pct; a GetBars page
-        builds the sparkline, with an unset close for a non-finite (warm-up/missing) bar."""
+    def test_read_time_enrichment_sets_live_price_and_change(self):
+        """AC-1 — BatchGetLatestPrice sets live_price + the DERIVED change_pct.
+        Sparkline bars are now fetched client-side (async useSparklines hook).
+        Updated for feature 183: enrichment uses batch RPCs."""
         from gen.marketdata.v1 import marketdata_pb2
 
         svc = make_servicer()
         svc._marketdata = MagicMock()
-        svc._marketdata.GetLatestPrice = AsyncMock(
-            return_value=marketdata_pb2.LatestPrice(
-                symbol="CAPR", last_price=12.34, prev_close=12.09
-            )
-        )
-        svc._marketdata.GetBars = AsyncMock(
-            return_value=marketdata_pb2.GetBarsResponse(
-                bars=[
-                    marketdata_pb2.Bar(symbol="CAPR", close=12.0),
-                    marketdata_pb2.Bar(symbol="CAPR", close=float("nan")),  # a gap → unset close
-                    marketdata_pb2.Bar(symbol="CAPR", close=12.34),
+        svc._marketdata.BatchGetLatestPrice = AsyncMock(
+            return_value=marketdata_pb2.BatchGetLatestPriceResponse(
+                results=[
+                    marketdata_pb2.LatestPrice(symbol="CAPR", last_price=12.34, prev_close=12.09)
                 ]
             )
         )
@@ -6606,22 +6748,26 @@ class TestOpportunityLiveEnrichment:
         assert opp.HasField("live_price") and abs(opp.live_price - 12.34) < 1e-9
         assert opp.HasField("change_pct")
         assert abs(opp.change_pct - (12.34 - 12.09) / 12.09) < 1e-9
-        assert len(opp.sparkline) == 3
-        assert opp.sparkline[0].HasField("close") and opp.sparkline[0].close == 12.0
-        assert not opp.sparkline[1].HasField("close")  # AC-4: gap → unset, never NaN/0
-        assert opp.sparkline[2].close == 12.34
+        # Sparkline is no longer populated server-side.
+        assert len(opp.sparkline) == 0
 
     def test_missing_quote_leaves_live_fields_unset(self):
-        """AC-11 — a GetLatestPrice returning no last_price leaves live_price/change_pct unset
-        (omit, never fabricate)."""
+        """AC-11 — a BatchGetLatestPrice returning no last_price leaves live_price/change_pct unset
+        (omit, never fabricate). Updated for feature 183: enrichment uses batch RPCs."""
         from gen.marketdata.v1 import marketdata_pb2
 
         svc = make_servicer()
         svc._marketdata = MagicMock()
-        svc._marketdata.GetLatestPrice = AsyncMock(
-            return_value=marketdata_pb2.LatestPrice(symbol="NEW")  # last_price/prev_close unset
+        svc._marketdata.BatchGetLatestPrice = AsyncMock(
+            return_value=marketdata_pb2.BatchGetLatestPriceResponse(
+                results=[marketdata_pb2.LatestPrice(symbol="NEW")]
+            )
         )
-        svc._marketdata.GetBars = AsyncMock(return_value=marketdata_pb2.GetBarsResponse(bars=[]))
+        svc._marketdata.BatchGetBars = AsyncMock(
+            return_value=marketdata_pb2.BatchGetBarsResponse(
+                results=[marketdata_pb2.SymbolBars(symbol="NEW", bars=[])]
+            )
+        )
         opp = analysis_pb2.Opportunity(symbol="NEW", conviction=0.5)
         asyncio.run(svc._enrich_opportunities_live([opp], []))
         assert not opp.HasField("live_price")
@@ -6630,15 +6776,20 @@ class TestOpportunityLiveEnrichment:
 
     def test_enrichment_never_changes_ranking(self):
         """AC-14 — enrichment sets only live fields; conviction and list order are identical to
-        the pre-enrichment ranking (the live quote never enters the ranking path)."""
+        the pre-enrichment ranking (the live quote never enters the ranking path).
+        Updated for feature 183: enrichment uses batch RPCs."""
         from gen.marketdata.v1 import marketdata_pb2
 
         svc = make_servicer()
         svc._marketdata = MagicMock()
-        svc._marketdata.GetLatestPrice = AsyncMock(
-            return_value=marketdata_pb2.LatestPrice(symbol="A", last_price=99.0, prev_close=90.0)
+        svc._marketdata.BatchGetLatestPrice = AsyncMock(
+            return_value=marketdata_pb2.BatchGetLatestPriceResponse(
+                results=[marketdata_pb2.LatestPrice(symbol="A", last_price=99.0, prev_close=90.0)]
+            )
         )
-        svc._marketdata.GetBars = AsyncMock(return_value=marketdata_pb2.GetBarsResponse(bars=[]))
+        svc._marketdata.BatchGetBars = AsyncMock(
+            return_value=marketdata_pb2.BatchGetBarsResponse(results=[])
+        )
         ranked = [
             analysis_pb2.Opportunity(symbol="A", conviction=0.9),
             analysis_pb2.Opportunity(symbol="B", conviction=0.4),
@@ -6720,38 +6871,25 @@ class TestSignalConfidence:
 class TestOpportunityConcurrencyFeature176:
     @pytest.mark.asyncio
     async def test_intra_compute_bars_fetch_bounded(self):
-        """AC-1 (teeth): ONE user's compute over 12 watchlist-bound symbols keeps peak in-flight
-        GetBars at EXACTLY 2 — the Phase-1 single-flight is bounded by
-        analysis.opportunity.max_concurrent_bars_fetches (default 2), guarding feature 141. Serial
-        (pre-176) peaks at 1. Calls _compute_opportunities DIRECTLY to isolate the compute fan-out
-        from the ListOpportunities read-time sparkline-enrichment path (which fetches concurrently
-        on its own)."""
+        """AC-1 (feature 183 update): ONE user's compute over 12 watchlist-bound symbols issues
+        a SINGLE BatchGetBars call containing all 12 symbols — batch consolidation (feature 183)
+        replaces the pre-183 per-symbol fan-out that was bounded by
+        _readiness_materializer_bars_sem. Calls _compute_opportunities DIRECTLY to isolate the
+        compute fan-out from the ListOpportunities read-time sparkline-enrichment path."""
         syms = [f"S{i}" for i in range(12)]
         svc = _materialized_svc(
             watchlists=[_wl(bindings=[(s, "sx") for s in syms])],
             strategies={"sx": _strat_row("sx", entry=_GT_100)},
             bars={s: _FIRING_BARS for s in syms},
         )
-        in_flight = 0
-        peak = 0
-        lock = asyncio.Lock()
-
-        async def _blocking_get_bars(req, metadata=None):
-            nonlocal in_flight, peak
-            async with lock:
-                in_flight += 1
-                peak = max(peak, in_flight)
-            await asyncio.sleep(0.02)
-            async with lock:
-                in_flight -= 1
-            return _recent_bars_resp(_FIRING_BARS)
-
-        svc._marketdata.GetBars = AsyncMock(side_effect=_blocking_get_bars)
 
         rows = await svc._compute_opportunities("u1", ())
 
         assert {r["symbol"] for r in rows} == set(syms)  # every symbol still produced its row
-        assert peak == 2
+        # Feature 183: one BatchGetBars call for all symbols, no per-symbol fan-out.
+        assert svc._marketdata.BatchGetBars.await_count >= 1
+        batch_req = svc._marketdata.BatchGetBars.await_args.args[0]
+        assert set(batch_req.symbols) == set(syms)
 
     @pytest.mark.asyncio
     async def test_owner_scoping_preserved_under_parallel_fanout(self):

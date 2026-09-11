@@ -3480,89 +3480,72 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         )
 
     async def _enrich_opportunities_live(self, opps, propagation_meta) -> None:
-        """Attach live_price / change_pct / sparkline to already-ranked Opportunities (feature 095).
+        """Attach live_price / change_pct to already-ranked Opportunities (feature 095).
 
         Read-time only — never called from _compute_opportunities, so the live quote is never a
         ranking input (FR-8/AC-14). Fan-out is bounded by the existing _bars_fetch_sem and deduped
-        per symbol per pass; prev_close/bars are served from marketdata's cache/DB. A GetLatestPrice
-        / GetBars miss or RPC error leaves the live fields UNSET (AC-11) and never aborts the read.
-        A SparklinePoint with an unset close models a warm-up/absent bar, never NaN/0 (AC-4/P-03).
+        per symbol per pass; prev_close is served from marketdata's cache/DB. A GetLatestPrice miss
+        or RPC error leaves the live fields UNSET (AC-11) and never aborts the read.
+
+        Sparkline bars were removed from the server-side enrichment path (latency M-1) — the UI
+        fetches them asynchronously via its own getBars calls, decoupling the heavyweight bars RPC
+        from the critical ListOpportunities read latency.
         """
         if not opps:
             return
-        sparkline_bars = max(1, self._cfg.get_int("analysis.opportunity.sparkline_bars", 20))
-        # FR-4: a short success-only memo skips the two live RPCs for a symbol re-enriched within
+        # FR-4: a short success-only memo skips the live RPC for a symbol re-enriched within
         # the window (0 disables the memo → always fetch). Read once per pass (F-07).
-        ttl = self._cfg.get_int_present("analysis.opportunity.live_enrich_ttl_seconds", 10)
+        ttl = self._cfg.get_int_present("analysis.opportunity.live_enrich_ttl_seconds", 20)
         # Dedup the marketdata reads per symbol — several opportunities can share one symbol.
         by_symbol: dict[str, list] = {}
         for opp in opps:
             by_symbol.setdefault(opp.symbol, []).append(opp)
 
-        def _apply_live_fields(targets: list, last_price, prev_close, spark) -> None:
+        def _apply_live_fields(targets: list, last_price, prev_close) -> None:
             for opp in targets:
                 if last_price is not None:
                     opp.live_price = last_price
                     if prev_close is not None and prev_close != 0.0:
                         opp.change_pct = (last_price - prev_close) / prev_close
-                if spark is not None:
-                    del opp.sparkline[:]
-                    for b in spark:
-                        # Finite close → set it; a warm-up/missing bar → unset close (never NaN/0).
-                        pt = analysis_pb2.SparklinePoint()
-                        if b.close == b.close and b.close not in (float("inf"), float("-inf")):
-                            pt.close = b.close
-                        opp.sparkline.append(pt)
 
-        async def _enrich_symbol(symbol: str, targets: list) -> None:
-            # FR-4 memo hit: an unexpired success-only entry applies its fields and skips BOTH RPCs.
+        # Partition symbols into memo-hit vs needs-fetch.
+        needs_fetch: list[str] = []
+        for symbol, targets in by_symbol.items():
             if ttl > 0:
                 cached = self._live_enrich_memo.get(symbol)
                 if cached is not None and time.monotonic() < cached[0]:
                     m = cached[1]
-                    _apply_live_fields(targets, m["last_price"], m["prev_close"], m["spark"])
-                    return
-            last_price = None
-            prev_close = None
-            spark: list | None = None
-            try:
-                async with self._bars_fetch_sem:
-                    lp = await self._marketdata.GetLatestPrice(
-                        marketdata_pb2.GetLatestPriceRequest(symbol=symbol),
-                        metadata=propagation_meta,
-                    )
-                if lp.HasField("last_price"):
-                    last_price = lp.last_price
-                if lp.HasField("prev_close"):
-                    prev_close = lp.prev_close
-            except Exception as e:  # live price is best-effort; leave unset on any failure (AC-11)
-                log.warning(
-                    "_enrich_opportunities_live: GetLatestPrice failed for %s: %s", symbol, e
-                )
-            try:
-                async with self._bars_fetch_sem:
-                    resp = await self._marketdata.GetBars(
-                        marketdata_pb2.GetBarsRequest(
-                            symbol=symbol,
-                            timeframe="1d",
-                            timeframe_enum=common_pb2.Timeframe.TIMEFRAME_1DAY,
-                            page=common_pb2.PageRequest(page_size=sparkline_bars),
-                        ),
-                        metadata=propagation_meta,
-                    )
-                spark = list(resp.bars)
-            except Exception as e:  # sparkline is best-effort; leave unset on any failure (AC-11)
-                log.warning("_enrich_opportunities_live: GetBars failed for %s: %s", symbol, e)
-            # Memoize ONLY a full success (both a live price and a sparkline obtained); a failed or
-            # unavailable fetch is never cached, so it re-fetches within the TTL (AC-11).
-            if ttl > 0 and last_price is not None and spark is not None:
+                    _apply_live_fields(targets, m["last_price"], m["prev_close"])
+                    continue
+            needs_fetch.append(symbol)
+
+        if not needs_fetch:
+            return
+
+        # Batch price data — one RPC for all symbols (AC-8).
+        price_by_symbol: dict[str, tuple] = {}
+        try:
+            price_resp = await self._marketdata.BatchGetLatestPrice(
+                marketdata_pb2.BatchGetLatestPriceRequest(symbols=needs_fetch),
+                metadata=propagation_meta,
+            )
+            for sp in price_resp.results:
+                lp = sp.last_price if sp.HasField("last_price") else None
+                pc = sp.prev_close if sp.HasField("prev_close") else None
+                price_by_symbol[sp.symbol] = (lp, pc)
+        except Exception as e:
+            log.warning("_enrich_opportunities_live: BatchGetLatestPrice failed: %s", e)
+
+        # Apply results per symbol, memoize full successes (AC-11 omit-not-fabricate).
+        for symbol in needs_fetch:
+            targets = by_symbol[symbol]
+            last_price, prev_close = price_by_symbol.get(symbol, (None, None))
+            if ttl > 0 and last_price is not None:
                 self._live_enrich_memo[symbol] = (
                     time.monotonic() + ttl,
-                    {"last_price": last_price, "prev_close": prev_close, "spark": spark},
+                    {"last_price": last_price, "prev_close": prev_close},
                 )
-            _apply_live_fields(targets, last_price, prev_close, spark)
-
-        await asyncio.gather(*(_enrich_symbol(sym, targets) for sym, targets in by_symbol.items()))
+            _apply_live_fields(targets, last_price, prev_close)
 
     # ── Materialized-queue compute (feature 097) ────────────────────────────────
 
@@ -3851,19 +3834,20 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         into readiness (FR-3/AC-4). Multiple origins for one ``(symbol, strategy)`` collapse into
         a single row whose ``provenance`` lists them all (FR-4/AC-2).
         """
-        signals = await self._drain_active_signals(propagation_meta)
-        # One reference instant per compute pass, captured right after the signals await — else a
-        # concurrently-ingested signal could carry ingested_at > now, yielding a negative age.
+        signals, held_value_by_symbol, bindings, source_weights = await asyncio.gather(
+            self._drain_active_signals(propagation_meta),
+            self._drain_held_symbols(user_id, propagation_meta),
+            self._drain_watchlist_bindings(propagation_meta),
+            self._drain_source_weights(propagation_meta),
+        )
+        # One reference instant per compute pass, captured AFTER asyncio.gather — prevents
+        # timestamp staleness equal to the duration of the slowest drain.
         now_utc = datetime.now(UTC)
         half_life = self._cfg.get_float_present(
             "analysis.scoring.signal_decay_half_life_hours", 24.0
         )
         missing_ingested_at_count = 0
         total_signal_count = len(signals)
-        held_value_by_symbol = await self._drain_held_symbols(user_id, propagation_meta)
-        bindings = await self._drain_watchlist_bindings(propagation_meta)
-        # Per-source reliability weight scales the signal ranking axis below.
-        source_weights = await self._drain_source_weights(propagation_meta)
 
         # Index the origins by normalized symbol.
         watchlist_by_symbol: dict[str, set[str]] = {}
@@ -4130,20 +4114,32 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # except branch, never inferred from `bars == []`.
         fetch_failed: set[str] = set()
 
-        async def _fetch_into(sym):
-            async with self._readiness_materializer_bars_sem:
-                try:
-                    return sym, await self._fetch_bars_paged(sym, range_msg, propagation_meta)
-                except Exception as e:  # bar fetch is best-effort per symbol
-                    log.warning("_compute_opportunities: bars fetch failed for %s: %s", sym, e)
-                    fetch_failed.add(sym)
-                    return sym, []
-
         unique_symbols = list(dict.fromkeys(c["symbol"] for c in defined_eligible))
-        for sym, bars in await asyncio.gather(*[_fetch_into(s) for s in unique_symbols]):
-            bars_by_symbol[sym] = bars
-            if bars:
-                session_end_seconds = max(session_end_seconds, bars[-1].time.seconds)
+        if unique_symbols:
+            try:
+                batch_resp = await self._marketdata.BatchGetBars(
+                    marketdata_pb2.BatchGetBarsRequest(
+                        symbols=unique_symbols,
+                        timeframe="1d",
+                        start=range_msg.start,
+                        end=range_msg.end,
+                        max_bars_per_symbol=_READINESS_LOOKBACK_DAYS,
+                    ),
+                    metadata=propagation_meta,
+                )
+                returned = {sb.symbol for sb in batch_resp.results}
+                for sb in batch_resp.results:
+                    bars_by_symbol[sb.symbol] = list(sb.bars)
+                    if sb.bars:
+                        session_end_seconds = max(session_end_seconds, sb.bars[-1].time.seconds)
+                for sym in unique_symbols:
+                    if sym not in returned:
+                        bars_by_symbol[sym] = []
+            except Exception as e:  # batch transport failure — mark all symbols failed
+                log.warning("_compute_opportunities: BatchGetBars failed: %s", e)
+                for sym in unique_symbols:
+                    fetch_failed.add(sym)
+                    bars_by_symbol[sym] = []
 
         async def _fetch_benchmark_into(sym):
             async with self._readiness_materializer_bars_sem:

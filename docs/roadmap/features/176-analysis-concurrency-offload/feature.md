@@ -5,6 +5,7 @@
 **Last Updated**: 2026-09-04
 **Committed to main**: 83743049da1ec2e2337ef49bad54c49a10721841
 **Launched date**: 2026-09-06
+**Archived**: 2026-09-09
 
 ---
 
@@ -20,6 +21,7 @@
 | 2026-09-05 | `in-progress` → `code-completed` | /sdd-execute | All 11 steps landed (FR-1..FR-6): indicators sandbox offload, evaluator component_sem, readiness + opportunity parallel fan-out, backtest/screener CPU offload. Full suites green (indicators 132, analysis 669); ruff clean |
 
 | 2026-09-06 | `code-completed` → `launched` | CI workflow | Promoted via PR #1104; committed 83743049da1ec2e2337ef49bad54c49a10721841 |
+| 2026-09-09 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(0)/fails(0); promoted 6 scenarios; pruned 4 specs |
 ---
 
 ## Artifacts

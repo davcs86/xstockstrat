@@ -17,6 +17,7 @@ import (
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
+	"github.com/xstockstrat/marketdata/internal/source"
 	tfpkg "github.com/xstockstrat/marketdata/internal/timeframe"
 )
 
@@ -286,6 +287,50 @@ func (c *Client) GetLatestTrade(ctx context.Context, symbol string) (float64, ti
 	}
 	t, _ := time.Parse(time.RFC3339, result.Trade.T)
 	return result.Trade.P, t, nil
+}
+
+// multiLatestTradesResponse is the JSON shape of GET /v2/stocks/trades/latest (multi-symbol).
+type multiLatestTradesResponse struct {
+	Trades map[string]struct {
+		T string  `json:"t"`
+		P float64 `json:"p"`
+	} `json:"trades"`
+}
+
+// GetLatestTradesMulti fetches the latest trade for several symbols in one request
+// via GET /v2/stocks/trades/latest?symbols=A,B,…&feed=…. Returns a map keyed by symbol.
+func (c *Client) GetLatestTradesMulti(ctx context.Context, symbols []string) (map[string]*source.Trade, error) {
+	if len(symbols) == 0 {
+		return map[string]*source.Trade{}, nil
+	}
+	url := fmt.Sprintf("%s/v2/stocks/trades/latest?symbols=%s&feed=%s",
+		c.cfg.DataURL, strings.Join(symbols, ","), c.feedParam())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, fmt.Errorf("get latest trades multi: %w", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("alpaca trades multi %d: %s", resp.StatusCode, string(body))
+	}
+	var result multiLatestTradesResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("unmarshal trades multi: %w", err)
+	}
+	out := make(map[string]*source.Trade, len(result.Trades))
+	for sym, tr := range result.Trades {
+		t, _ := time.Parse(time.RFC3339, tr.T)
+		out[sym] = &source.Trade{Price: tr.P, TradeTime: t}
+	}
+	return out, nil
 }
 
 // multiBarsResponse is the JSON shape of GET /v2/stocks/bars (multi-symbol):

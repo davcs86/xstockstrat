@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import { analysisClient } from '@/lib/browserClients/analysisClient';
 import { useInvalidatingMutation } from '@/hooks/useInvalidatingMutation';
 import { isNotFoundError } from '@/lib/scoreDisplay';
@@ -9,14 +9,27 @@ import type { OpportunityAction, ReadinessRule } from '@xstockstrat/proto/analys
  * x-user-id header, so the request carries only the min-conviction filter.
  */
 
-type ListOpportunitiesResult = Awaited<ReturnType<typeof analysisClient.listOpportunities>>;
 type EvaluateReadinessResult = Awaited<ReturnType<typeof analysisClient.evaluateReadiness>>;
 
-/** Ranked opportunity queue, polled every 15s. */
+/**
+ * Ranked opportunity queue with infinite pagination, polled every 15s (feature 187).
+ * Returns `useInfiniteQuery` — consumers flatten via `data?.pages.flatMap(p => p.opportunities)`.
+ * Response-level signals (`computing`, `computeFailed`) ride on page 0.
+ */
 export function useOpportunities(minConviction = 0) {
-  return useQuery<ListOpportunitiesResult, Error>({
+  return useInfiniteQuery({
     queryKey: ['opportunities', minConviction],
-    queryFn: () => analysisClient.listOpportunities({ minConviction }),
+    queryFn: ({ pageParam }) =>
+      analysisClient.listOpportunities({
+        minConviction,
+        page: { pageSize: 50, pageToken: pageParam ?? '' },
+      }),
+    initialPageParam: '',
+    getNextPageParam: (lastPage) => {
+      // Stop paging when the queue is still computing or has failed (feature 185 AC-6/AC-7).
+      if (lastPage.computing || lastPage.computeFailed) return undefined;
+      return lastPage.page?.nextPageToken || undefined;
+    },
     refetchInterval: 15_000,
   });
 }
