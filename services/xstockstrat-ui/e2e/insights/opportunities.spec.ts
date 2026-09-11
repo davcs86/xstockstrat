@@ -302,6 +302,16 @@ test.describe('Opportunities mobile parity (feature 155)', () => {
     await expect(group.getByText(`exp ${expiry}`).first()).toBeVisible(); // expiry tag
   });
 
+  // feature 188 — previous-day OHLC visible in mobile card header, underneath the symbol name.
+  test('feature 188: mobile card shows previous-day OHLC block', async ({ page }) => {
+    const ohlc = page.getByTestId('mobile-ohlc-CAPR');
+    await expect(ohlc).toBeVisible();
+    await expect(ohlc).toContainText('O $');
+    await expect(ohlc).toContainText('H $');
+    await expect(ohlc).toContainText('L $');
+    await expect(ohlc).toContainText('C $');
+  });
+
   // feature 185 FR-2 — the mobile companion row also renders the explicit unavailable cue (not 0/0).
   test('feature 185: a data-unavailable row shows the mobile unavailable cue', async ({ page }) => {
     await expect(page.getByTestId('opportunity-unavailable-mobile-PLTR')).toBeVisible();

@@ -181,6 +181,7 @@ export default function OpportunitiesPage() {
     kind: 'signalGroup',
     symbol: g.symbol,
     href: `/trader/positions/${g.symbol}`,
+    ohlcData: ohlcBars.get(g.symbol),
     signals: g.opps.map((o) => ({
       symbol: o.symbol,
       badge: OPPORTUNITY_ACTION[o.action],
