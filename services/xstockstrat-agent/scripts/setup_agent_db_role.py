@@ -1,6 +1,18 @@
 #!/usr/bin/env python3
 """
-One-time provisioning script for the ``xstockstrat_agent`` PostgreSQL role.
+Local / fallback provisioning script for the ``xstockstrat_agent`` PostgreSQL role.
+
+**Primary path (production/staging):** the ``db-migrator`` PRE_DEPLOY job already
+provisions this role automatically on every deploy via ``scripts/db-migrate.sh`` when
+the ``POSTGRES_MCP_AGENT_PASSWORD`` secret is set in the DO App Platform.  You do
+**not** need to run this script in a deployed environment.
+
+**Use this script when:**
+
+* You want to provision the role on a **local developer database** without running the
+  full db-migrate container (e.g. interactive ``psql`` is unavailable or inconvenient).
+* You need to **verify** or re-assert grants after a manual DB operation.
+* You need a **dry-run** preview of the SQL that will be executed.
 
 Run this **as an admin user** (``doadmin`` on DigitalOcean managed Postgres,
 or a local superuser) to create the DML-only role that the postgres-mcp
