@@ -175,7 +175,7 @@ function PositionDetailInner() {
 
   const { data: oppData } = useOpportunities(0);
   const symbolOpportunities = useMemo(
-    () => (oppData?.opportunities ?? []).filter((o) => o.symbol === symbol),
+    () => (oppData?.pages.flatMap((p) => p.opportunities) ?? []).filter((o) => o.symbol === symbol),
     [oppData, symbol],
   );
 
