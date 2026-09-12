@@ -43,6 +43,7 @@ import {
   useCriteriaList,
   buildScreenCriterion,
 } from '@/lib/screenCriteria';
+import { SCREEN_PRESETS } from '@/lib/screenPresets';
 import {
   Comparator,
   ScreenKind,
@@ -71,10 +72,12 @@ export default function ScreenerPage() {
   const [symbolsText, setSymbolsText] = useState('AAPL MSFT GOOG');
   const {
     criteria,
+    setCriteria,
     add: addCriterion,
     remove: removeCriterion,
     update: updateCriterion,
   } = useCriteriaList();
+  const [presetValue, setPresetValue] = useState<string>('');
   // Last-run metadata — rendered once from Date.now() at render (no live tick).
   const [lastRun, setLastRun] = useState<{ at: Date; count: number } | null>(null);
   const [saveName, setSaveName] = useState('');
@@ -301,6 +304,30 @@ export default function ScreenerPage() {
               </span>
               <span className="text-xs text-muted-foreground">weights normalize to 1.0</span>
             </div>
+
+            <Select
+              value={presetValue}
+              onValueChange={(id) => {
+                const preset = SCREEN_PRESETS.find((p) => p.id === id);
+                if (preset) setCriteria(preset.criteria.map((c) => ({ ...c })));
+                setPresetValue('');
+              }}
+            >
+              <SelectTrigger
+                aria-label="Load preset"
+                data-testid="preset-selector"
+                className="w-full"
+              >
+                <SelectValue placeholder="Load preset…" />
+              </SelectTrigger>
+              <SelectContent>
+                {SCREEN_PRESETS.map((p) => (
+                  <SelectItem key={p.id} value={p.id} data-testid={`preset-${p.id}`}>
+                    {p.name} — {p.description}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
             <div className="space-y-2">
               {criteria.map((c, i) => (
