@@ -33,7 +33,8 @@ For each round `R`:
 2. **Adversary.** Spawn a **`design-adversary`** subagent. Give it: `recon.md` (with its
    **Existing Business Rules**), the proposer's approach (verbatim), the Constitution, and the
    relevant `fails.md` entries. It attacks the approach — architectural flaws, security/data gaps,
-   simpler alternatives, and **every `C-*`/`P-*`/`F-*` the approach would violate, cited by ID**. It
+   simpler alternatives, **design-quality weaknesses (C-18: SOLID/DRY/YAGNI, weighed as a staff
+   engineer would — never dogma)**, and **every `C-*`/`P-*`/`F-*` the approach would violate, cited by ID**. It
    also names the trade-offs of the alternatives it would reject. **Business-rule regression check
    (C-16):** any way the approach would break an existing `@AC-*` guarantee from recon's Existing
    Business Rules is a regression objection, cited by the `@AC-*` ID — treated as seriously as a

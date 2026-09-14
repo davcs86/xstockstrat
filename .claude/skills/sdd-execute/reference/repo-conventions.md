@@ -49,5 +49,13 @@ test mocks.
   the service's canonical home — Python `tests/conftest.py`, Go `internal/testdata/`, Node
   `src/__tests__/fixtures/` — in the same step. Do not create a home before a second consumer
   exists; most services should create none.
+- **Design quality (C-18)**: implement the least mechanism the step's design decided (YAGNI — no
+  speculative abstraction/options beyond the plan), reuse an existing pattern/helper/type/constant
+  before a near-duplicate (DRY — run the `dry-reviewer` subagent before opening the PR, per
+  `docs/patterns/dry-guard-rail.md`), and keep each new unit to one clear responsibility (SOLID).
+  These heuristics are subordinate to scalability/maintainability/performance and are honored
+  **within the confirmed step scope** — they are never a license to refactor code the step doesn't
+  touch (that stays out-of-scope cleanup, forbidden by HARD CONSTRAINTS). A recorded trade-off
+  (design.md/context.md) is compliance, not a deviation.
 
 > Sequential-mode verification fallbacks live in `reference/sequential-mode.md`.
