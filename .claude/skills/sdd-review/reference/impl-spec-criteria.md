@@ -33,6 +33,7 @@ For each numbered step, apply:
 WARN (advisory):
 - `**Instructions**` are verbose but complete
 - Step touches many files (>5) — consider splitting
+- Design quality (`C-18`) — a step adds speculative abstraction/options/extension points the design didn't call for (YAGNI), piles unrelated responsibilities into one new unit (SOLID), or re-creates an existing helper/type/constant instead of reusing it (DRY). Subordinate to scalability/maintainability/performance, so flag only what a staff engineer would change, never a pattern for its own sake; a consciously recorded trade-off is compliant.
 
 ## B2b. Trading-domain consistency checks (per step)
 
