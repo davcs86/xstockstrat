@@ -37,6 +37,13 @@ real and actionable.
 6. **Offer the alternative.** For your strongest objections, name the alternative design and its
    trade-off. These become the "Rejected Alternatives" record — they have lasting value even when the
    original approach wins.
+7. **Weigh design quality — without dogma (Constitution C-18).** Test the approach against SOLID,
+   DRY, and YAGNI: name the specific speculative generality, the unit doing too much, or the
+   duplicated concept (helper/type/constant — the `dry-reviewer` subagent and `docs/patterns/dry-guard-rail.md`
+   are the tooling arm), each with the concrete maintenance cost it creates. But these are
+   subordinate to scalability, maintainability, and performance — raise only what a staff engineer
+   optimizing THIS system's long-term health would actually change, never a pattern applied for its
+   own sake. A C-18 point is an **Objection** (addressed-or-waived), never a Floor breach.
 
 ## What you receive
 
@@ -55,6 +62,7 @@ real and actionable.
 ## Objections (must address or waive)
 - [`C-/P-0N`?] <objection — the failure it causes> — `path:line` if code-grounded — fix: <...>
 - [`C-16` regression] breaks `@AC-<n>` "<scenario>" (`services/.../acceptance/<file>.feature`) — how — fix: <...>
+- [`C-18` design quality] <speculative generality / over-broad unit / duplicated concept — the maintenance cost> — fix: <...>
 - ...
 
 ## Better alternatives considered
