@@ -213,3 +213,16 @@ Spec re-validated against live tree at boot — all Codebase Evidence resolves; 
 
 ## Session 2026-09-15 — sdd-execute complete (all 8 steps)
 **Progress**: 8 done / 8 total. Status → code-completed. Next: integration PR #1141 (C-16 promotion + body).
+
+## Session 2026-09-15 — integration-PR finalization (§5.6)
+- **Merge-order gate: PASS.** `fix-trading-config-key-mismatch` (189) has no row in the Feature column
+  of `docs/roadmap/features/merge-order.md`; config migration `029` is next-free (tip on disk was `028`).
+  No hard blocking dependency; branch is current with `main-dev` (0 behind, 15 ahead of `5a7f7d4`).
+- **C-16 scenario promotion: DEFERRED by operator decision.** The `scenario-promoter` plan mapped all
+  three `@AC-*` regression scenarios to a new `services/xstockstrat-trading/acceptance/fix-trading-config-key-mismatch.feature`
+  (0 dedup hits — orthogonal to the per-account `resume-halted-account.feature`; nothing routes to
+  `platform.feature`). Operator chose **"Skip promotion, just finalize PR"** — the durable suite file was
+  **not** written this session. The `/promote` backstop flags un-promoted scenarios if the feature reaches
+  prod without them; `/sdd-archiver` is the other promotion path. No behavior change; guarantee still lives
+  in the per-feature `acceptance.feature` (C-15). Promotion plan is preserved above for a later run.
+- **Integration PR #1141** refreshed from the docs-only triage body to the full feature description.
