@@ -86,3 +86,38 @@ marker-set drift, which the bound constant kills by construction) is not fully c
 is a **platform follow-up** (a shared analysis conftest real-DB fixture benefiting every repo query),
 not this feature's burden — logged in `docs/roadmap/ledger/fails.md`.
 
+## Session 2026-09-15 — sdd-spec
+
+- Generated implementation-spec.md with **9 steps**. Status: design-approved → implementation-ready.
+  Consumed recon.md (Codebase Map reused as evidence) + design.md (Chosen Approach followed; O1–O10
+  mapped to step Targets). All path:line citations re-verified against the current tree.
+- Steps: 1 proto (additive `sources=3`/`action_filter=4`/`sort=5` + `available_sources=5` +
+  `enum OpportunitySort`), 2 proto-gen, 3 analysis repo (LATERAL source-derivation + source/action
+  predicates + sort-branch dict + `available_sources()` facet + `_PROVENANCE_STRUCTURAL_MARKERS`
+  constant), 4 repo SQL-text/bind + `_primary_source` parity test, 5 handler (thread fields into both
+  `read()` calls + facet at `offset==0` with served `include_expired`), 6 servicer boundary spy +
+  vanish-trap test, 7 UI hook (four params in queryKey + request), 8 UI page (drop in-memory
+  filter/sort useMemo, `DropdownMenu` from page-0 facet, slider → server floor), 9 Playwright e2e.
+- Key codebase findings (grep/Read-confirmed):
+  - `ListOpportunitiesRequest` fields 3/4/5 free, `ListOpportunitiesResponse` field 5 free
+    (`analysis.proto:627-640`); reuse `OpportunityActionTag` (`:531`); `OpportunitySort` mirrors
+    `StrategyOperation`/`ReadinessRule` UNSPECIFIED-as-named-default convention.
+  - `read()` binds today `$1-$5` (user_id, min_conviction, w, DISMISS, SNOOZE) with the sole floor +
+    exemption at `opportunities.py:153` and the blended grouping ORDER BY at `:164-170`; new params must
+    default to a no-op because `_retry_unavailable_symbols` (`servicer.py:3645`) also calls `read()`.
+  - Handler fresh read `servicer.py:3398`, stale read `:3442` (track `served_include_expired`), offset
+    parse `:3464`, response assembly `:3475-3480`.
+  - `_primary_source` skips exactly `("watchlist","position","denied")` (`servicer.py:4926`);
+    `"unavailable"` intentionally NOT skipped → hoist to `_PROVENANCE_STRUCTURAL_MARKERS` (O9).
+  - UI: hook hard-codes `minConviction:0` (`useOpportunities.ts:19-26`); page filters/sorts in memory
+    (`page.tsx:134-154`) over derived-from-rows `sources` (`:122-125`); `DropdownMenuCheckboxItem`
+    primitive present (`ui/dropdown-menu.tsx:74`); e2e mock `listOpportunities` at
+    `mock-backend.ts:828-843` reads only `minConviction`; in-place-refetch RED at
+    `opportunities.spec.ts:165-185` (keep mounted, no `page.reload()`).
+  - No real-Postgres harness in xstockstrat-analysis → repo tests are SQL-text/bind + pure-function
+    parity (matches the existing fake/mock bar; O10 runtime-LATERAL gap already logged in fails.md).
+- Scenario coverage: all `@AC-1..15` mapped (table in implementation-spec.md § Scenario Coverage);
+  backend behaviors covered by Steps 4/6, UI + end-to-end by Step 9.
+- Consumer surface C-14: UI `/insights` opportunities page reached by Steps 7/8/9; Agent tool out of
+  scope (no step). No migration, no config keys, no new env vars/ports/edges.
+
