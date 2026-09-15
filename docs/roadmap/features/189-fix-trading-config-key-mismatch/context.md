@@ -141,3 +141,16 @@ Spec re-validated against live tree at boot — all Codebase Evidence resolves; 
   value_type never touched. Real apply/rollback runs in CI/deploy.
 - Files modified: `services/xstockstrat-config/migrations/029_heal_config_keys_full_dotted.{up,down}.sql`
 - Deviations: none.
+
+### Step 2 — service: trading watcher multi-namespace delivery + escalateSystemic writer rename [done]
+- config.go: `Watcher.namespace string` → `namespaces []string`; `NewWatcher` now variadic
+  `NewWatcher(endpoint, applicationEnv, tradingMode, namespaces ...string)` spawning one `watchLoop(ns)`
+  per namespace; SNAPSHOT/RELOAD is now a NAMESPACE-SCOPED replace (delete `ns.`-prefix keys then insert)
+  in one mu.Lock section; single `once`/`ready` → per-namespace `pending` set + `closeOnce` latch so
+  WaitForSnapshot blocks until ALL namespaces deliver. Added `NewSnapshotWatcher` test-support ctor
+  (snapshot field unexported → external gate test needs it). main.go:61 subscribes ("trading","platform").
+  trading.go:1905 escalateSystemic writer Key "trading_state"→"platform.trading_state" (Part C, lockstep
+  with 029).
+- Verified paired with Step 3.
+- Files modified: `internal/config/config.go`, `cmd/server/main.go`, `internal/service/trading.go`
+- Deviations: none in Step 2 itself (see Step 3 for the reconciliation-test key update).

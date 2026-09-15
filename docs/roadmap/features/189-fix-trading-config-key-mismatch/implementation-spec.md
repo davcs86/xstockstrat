@@ -150,7 +150,7 @@ spot-check that no unintended `portfolio.*`/`marketdata.*` production behavior r
 
 ### Step 2 — service: trading watcher multi-namespace delivery + escalateSystemic writer rename
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/config/config.go` — modify
