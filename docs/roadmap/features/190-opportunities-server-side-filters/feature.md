@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-09-15 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-09-15 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings; soft file overlaps with 187/188) |
+| 2026-09-15 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + design.md written; O1–O10 pins |
 
 ---
 
@@ -19,6 +20,8 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon Dossier](recon.md) — grounded codebase map (Phase 0)
+- [Design](design.md) — chosen approach, rejected alternatives, O1–O10 pins (Phase 1.75)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec opportunities-server-side-filters`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -45,4 +48,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design opportunities-server-side-filters` — recon + design debate before implementation planning
+`/sdd-spec opportunities-server-side-filters` — generate implementation spec from the approved design
