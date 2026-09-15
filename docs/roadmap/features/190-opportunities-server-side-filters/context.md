@@ -164,3 +164,22 @@ exit 0). Docker daemon started. Dev-branch adapted to `claude/opportunities-serv
   `Dockerfile.codegen` pins the plugins) — logged as a sanctioned sequential-mode fallback.
 - Files modified: `packages/proto/gen/**`. TDD: N/A (proto-gen).
 
+### Step 3 — analysis repo: source/action filter, sort branches, available_sources facet [done]
+- Hoisted `_PROVENANCE_STRUCTURAL_MARKERS = ["watchlist","position","denied"]` + `_SORT_ORDER_BY` dict
+  to `opportunities.py`; refactored `servicer._primary_source` to iterate the same constant (O9).
+- Extended `read()` with keyword-only `sources/action_filter/sort` (all no-op defaults — the
+  `_retry_unavailable_symbols` caller at servicer.py:3645 is unchanged): LEFT JOIN LATERAL primary-source
+  (marker array bound as `$6`), guarded source filter (`$7`, empty = no predicate), action filter on
+  `o.action` (`$8`), sort branch from `_SORT_ORDER_BY`. Floor + exemption unchanged (sole floor).
+- Added `available_sources(user_id, *, include_expired)` (no filter params — O3; CROSS JOIN LATERAL
+  drops empty sources; freshness via include_expired).
+- Files modified: `app/repositories/opportunities.py`, `app/handlers/servicer.py`.
+
+### Step 4 — analysis repo SQL/bind + _primary_source parity test [done]
+- TDD red→green: RED = ImportError for `_PROVENANCE_STRUCTURAL_MARKERS` against pre-Step-3 code
+  (`git stash` of the two source files); GREEN = 15 new tests pass. Full suite **759 passed, 83.96%
+  coverage** (≥40%), ruff clean.
+- Covers @AC-1..12 (empty-sources guard, source/action predicates, 3 sort branches + tiebreak, floor
+  exemption survives, marker-bind==constant O9, facet independence O3, `_primary_source` matrix).
+- Files modified: `tests/test_opportunities_repo.py`.
+

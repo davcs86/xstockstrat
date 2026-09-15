@@ -184,7 +184,7 @@ Codebase Map).
 
 ### Step 3 — service: analysis repo — source/action filter, sort branches, `available_sources` facet
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/opportunities.py` — modify
@@ -300,7 +300,7 @@ look-ahead bias
 
 ### Step 4 — test: analysis repo SQL-text/bind + `_primary_source` parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_opportunities_repo.py` — modify

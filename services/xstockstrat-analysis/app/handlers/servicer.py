@@ -43,7 +43,10 @@ from app.engine.durable_schedule import DurableSchedule, seconds_until_hour_utc
 from app.repositories.backtest_details import BacktestDetailsRepository
 from app.repositories.backtest_run_symbols import BacktestRunSymbolsRepository
 from app.repositories.backtest_runs import BacktestRunsRepository
-from app.repositories.opportunities import OpportunitiesRepository
+from app.repositories.opportunities import (
+    _PROVENANCE_STRUCTURAL_MARKERS,
+    OpportunitiesRepository,
+)
 from app.repositories.opportunity_actions import OpportunityActionsRepository
 from app.repositories.opportunity_compute_state import OpportunityComputeStateRepository
 from app.repositories.order_snapshots import OrderSnapshotsRepository
@@ -4920,10 +4923,11 @@ def _resolve_action_tag(candidate: dict, exit_fires: bool):
 
 def _primary_source(provenance: list[str]) -> str:
     """The single ``Opportunity.source`` string (kept for back-compat) = the first signal-source
-    origin in ``provenance``, skipping the ``"watchlist"``/``"position"`` structural markers.
-    ``provenance`` carries the full origin list."""
+    origin in ``provenance``, skipping the ``_PROVENANCE_STRUCTURAL_MARKERS`` structural markers
+    (``watchlist``/``position``/``denied``). feature 190: iterates the SAME constant the read-path
+    LATERAL binds, so the SQL and Python derivations can never drift."""
     for origin in provenance:
-        if origin not in ("watchlist", "position", "denied"):
+        if origin not in _PROVENANCE_STRUCTURAL_MARKERS:
             return origin
     return ""
 
