@@ -219,7 +219,7 @@ enforcement, kill-switch gate integrity
 
 ### Step 3 — test: trading config read-path, multi-namespace delivery, and kill-switch gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/config/config_test.go` — modify
@@ -478,5 +478,24 @@ no remaining claim that trading resolves config under a single `trading` namespa
 ---
 
 ## Deviation Log
+
+### Step 3 — reconciliation test updated (writer-rename fallout, file outside listed Files)
+- **What**: `internal/service/trading_reconciliation_test.go:687` asserted `escalateSystemic`'s
+  SetConfig target as `namespace=platform, key=trading_state`. Step 2's Part C writer rename
+  (`Key:"trading_state"`→`"platform.trading_state"`) made that assertion fail
+  (`platform.platform.trading_state`). Updated the expectation to `key=platform.trading_state`.
+- **Why a deviation**: the file was not in Step 2's or Step 3's `**Files**` list — a spec under-scoping
+  (the writer rename's own regression test was missed). Fixing it is the direct, in-scope consequence of
+  the confirmed Step 2 change; leaving the suite red was not an option (Step 3 Verification runs the
+  service tests). No behavior changed beyond the asserted key string.
+- **Disposition**: fixed in Step 3 (gap protocol Option A — fix now). Staged with Step 3's Files.
+
+### Step 3 — golangci-lint unavailable locally → go vet (CI-equivalent fallback)
+- **What**: the sanctioned `golangci-lint run` could not run: the installed golangci-lint 2.5.0 was built
+  with go1.25 and refuses a go1.27 target module ("Go language version used to build golangci-lint is
+  lower than the targeted Go version 1.27.0"). Ran `go vet ./internal/config/... ./internal/service/...`
+  instead (clean).
+- **Disposition**: CI-equivalent fallback (sequential-mode). CI runs the pinned golangci-lint v2.13.1 on
+  the full module — the authoritative lint gate.
 
 _Populated by /sdd-execute as implementation proceeds._

@@ -154,3 +154,18 @@ Spec re-validated against live tree at boot — all Codebase Evidence resolves; 
 - Verified paired with Step 3.
 - Files modified: `internal/config/config.go`, `cmd/server/main.go`, `internal/service/trading.go`
 - Deviations: none in Step 2 itself (see Step 3 for the reconciliation-test key update).
+
+### Step 3 — test: trading config read-path, multi-namespace delivery, kill-switch gate [done]
+- config_test.go: added a scripted WatchConfig streaming fake + read-path (AC-2 GetString
+  platform.trading_state, AC-3 GetFloat trading.risk.max_position_pct, full-dotted fixtures),
+  multi-namespace delivery, scoped-replace no-clobber, and per-namespace latch tests.
+  trading_state_gate_test.go: AC-1 checkTradingStateForPlaceOrder returns nil under ACTIVE, blocks
+  under HALTED (via config.NewSnapshotWatcher).
+- TDD red→green (P-06): RED — with the pre-fix wholesale-replace + single-latch, the three behavioral
+  tests FAILED for the right reasons (MultiNamespaceDelivery/ScopedReplace: platform.trading_state="HALTED"
+  wiped by the trading stream; WaitForSnapshot: ready closed after only 1 of 2 namespaces). GREEN — with
+  the namespace-scoped replace + per-namespace latch they pass; `go test ./internal/config ./internal/service
+  -race` OK; internal/config coverage 57.1% (≥40%); `go vet` clean.
+- Files modified: `internal/config/config_test.go`, `internal/service/trading_state_gate_test.go`,
+  `internal/service/trading_reconciliation_test.go` (deviation — writer-rename regression assertion).
+- Deviations: 2 (reconciliation-test key update; golangci-lint→go vet CI-equivalent) — see Deviation Log.
