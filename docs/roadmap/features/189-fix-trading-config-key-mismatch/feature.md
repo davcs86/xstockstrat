@@ -14,12 +14,15 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-15 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report (from-report path; Issues disabled) |
+| 2026-09-15 | `draft` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written. Affected services expanded to include xstockstrat-ui (C-14 consumer surface). |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — bug description and fix scope
+- [Recon](recon.md) — grounded codebase dossier + runtime log evidence + C-16 business rules
+- [Design](design.md) — chosen 4-part approach, rejected alternatives, open risks, honored prod-delta ledger
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-trading-config-key-mismatch`_
 - [Context Log](context.md) — session history, decisions, deviations
@@ -35,5 +38,6 @@ exposure-increasing order is rejected. Same latent pattern in portfolio/marketda
 
 ## Next Action
 
-`/sdd-design fix-trading-config-key-mismatch` — recommended design depth: **full** (≥2 affected
-services + a likely seed-key migration; safety-critical contract). See context.md.
+`/sdd-spec fix-trading-config-key-mismatch` — generate the numbered implementation spec from the
+approved design (resolves the DB-audit-dependent open risks: DOWN reversibility, daily_loss_limit
+reader, full bare-key reader re-audit).
