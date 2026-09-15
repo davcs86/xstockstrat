@@ -186,3 +186,15 @@ Spec re-validated against live tree at boot — all Codebase Evidence resolves; 
   `pnpm run test:coverage` 81.03% lines (≥40%).
 - Files modified: `src/__tests__/{internalCallerAuthz,tradingStateValidation,internalCallerSetConfig}.test.ts`
 - Deviations: none.
+
+### Step 6 — service: /trader positions page reads full-dotted platform.trading_state [done]
+- page.tsx:120-121 `resp.values['trading_state']` → `resp.values['platform.trading_state']` (both reads).
+  Without it the platform restriction banner silently goes dark post-029 (C-14). Verified with Step 7.
+- Files modified: `src/app/trader/positions/page.tsx`. Deviations: none.
+
+### Step 7 — test: /trader restriction-banner e2e on the full-dotted key shape [done]
+- mock-backend.ts:1290 + positions-reconciliation.spec.ts:119 key `trading_state` → `platform.trading_state`.
+- Verification: `pnpm run lint` clean; changed files type-consistent. Playwright spec could not run locally
+  (host next-dev SSR-warmup timeout ×2; Docker e2e image build impractical) → CI-equivalent (Dockerfile.e2e
+  runs it on PR #1141). RED structurally guaranteed. See Deviation Log.
+- Files modified: `e2e/mock-backend.ts`, `e2e/trader/positions-reconciliation.spec.ts`. Deviations: 1.

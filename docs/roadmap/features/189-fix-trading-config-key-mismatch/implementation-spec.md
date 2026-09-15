@@ -349,7 +349,7 @@ Confirm the 40% threshold passes and all tests pass.
 
 ### Step 6 — service: /trader positions page reads the full-dotted platform.trading_state
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/page.tsx` — modify
@@ -385,7 +385,7 @@ environment scope correctness
 
 ### Step 7 — test: /trader restriction-banner e2e against the full-dotted key shape
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify
@@ -497,5 +497,18 @@ no remaining claim that trading resolves config under a single `trading` namespa
   instead (clean).
 - **Disposition**: CI-equivalent fallback (sequential-mode). CI runs the pinned golangci-lint v2.13.1 on
   the full module — the authoritative lint gate.
+
+### Step 7 — Playwright e2e verified as CI-equivalent (host harness slow; Docker build impractical)
+- **What**: `pnpm test:e2e trader/positions-reconciliation.spec.ts` could not complete locally — the host
+  `next dev` harness exceeded the 10s SSR-warmup budget on cold compile (two attempts, incl.
+  `--timeout=120000 --workers=1`), and the hermetic `scripts/run-e2e.sh` Docker image build (full
+  in-container `next build` + Chromium) is impractical in this sandbox's time budget.
+- **Verified locally instead**: `pnpm run lint` clean; the 3 changed files (`page.tsx`, `mock-backend.ts`,
+  `positions-reconciliation.spec.ts`) are type-consistent (the only `tsc --noEmit` error is pre-existing in
+  the unrelated `src/middleware.test.ts`). RED is structurally guaranteed — the mock now serves
+  `platform.trading_state`; the pre-Step-6 page read bare `trading_state` → `undefined` → the
+  `/Trading reduce-only platform-wide/` banner absent; post-Step-6 reads the full-dotted key → banner shows.
+- **Disposition**: CI-equivalent fallback (sequential-mode). The authoritative Playwright gate is CI's
+  `Dockerfile.e2e` container (UI CLAUDE.md § Testing) — it runs this spec on PR #1141.
 
 _Populated by /sdd-execute as implementation proceeds._
