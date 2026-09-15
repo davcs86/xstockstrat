@@ -68,7 +68,7 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
   function setConfig(metadata: grpc.Metadata, overrides: Record<string, unknown> = {}) {
     const request = {
       namespace: 'platform',
-      key: 'trading_state',
+      key: 'platform.trading_state',
       value: { stringVal: 'REDUCE_ONLY' },
       author: 'system:reconciliation-poller',
       reason: 'reconciliation test',
