@@ -88,3 +88,38 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ### Interim operational note (unchanged from triage session)
 `platform.trading_state=ACTIVE` remains set in staging; it does not unblock trading (the reader never
 receives it) and the code fix is required. No service code changed by the design phase.
+
+## Session 2026-09-15 — sdd-spec
+
+- Generated implementation-spec.md with 8 steps. Status → implementation-ready.
+- Key codebase findings:
+  - Next config migration = **029** (last is `028_analysis_opportunity_keys`). Current schema (post
+    feature-147 `017`) has **no `trading_mode` column**; unique index is
+    `(namespace, key, environment, COALESCE(user_id, ''))`; env CHECK is `('staging','production')`.
+    The design's guarded blanket UP (`key = namespace||'.'||key WHERE key NOT LIKE namespace||'.%'
+    AND is_secret=false AND namespace IN (...)`) and the literal production bracket bump are valid
+    against this schema. `is_secret=true` guard protects the `017:110-121` vendor-credential rows
+    (GetSecret path, namespace-relative keys — must stay bare).
+  - Open Risk RESOLVED — `trading.risk.daily_loss_limit` has **no code reader** (grep: only 002/012
+    seeds + trading/CLAUDE.md:82 + findings.md:15, both "documented, not yet implemented"). Healing it
+    is behavior-neutral. Honored-delta ledger updated accordingly.
+  - Open Risk PARTIALLY RESOLVED — per-row DB audit STILL BLOCKED (`db_execute_sql` →
+    "postgres-mcp co-process is unavailable" again at spec time). Decision: **DOWN is forward-only**
+    (documented no-op; rollback = redeploy prior image) since an enumerated exact-inverse strip cannot
+    be authored without the audit and a symmetric strip would over-revert pre-dotted @AC-13/feature-184
+    rows (P-03/C-01 — not invented). Also flagged: healing activates dormant production `portfolio.*`/
+    `marketdata.*` seeds — verify by dev/staging smoke test (Step 1 note).
+  - Open Risk RESOLVED — bare-key reader re-audit: `page.tsx:120-121` (`resp.values['trading_state']`)
+    is the **sole** runtime bare-key reader across ui/agent (agent grep = no matches). `configKeys.ts:64`
+    (ListKeys fixture) + `NamespaceEditor.tsx:95` already full-dotted. Of the 3 config-ui specs touching
+    `trading_state`: `reason-capture`/`value-persists-after-save` already full-dotted (read from the
+    ListKeys fixture) → no change; `audit.spec.ts:13` is synthetic audit-display mock data → leave it.
+    Only `mock-backend.ts:1290` + `positions-reconciliation.spec.ts:119` (GetConfig response maps) need
+    the bare→full-dotted key change (Step 7).
+  - Grounded the Part C atomic edit set: authz grant `authz.ts:70` + SetConfig enum guard
+    `configServiceImpl.ts:397` (both key `'trading_state'`→`'platform.trading_state'`) + escalateSystemic
+    writer `trading.go:1905` (`Key:"trading_state"`→`"platform.trading_state"`; namespace stays `platform`).
+  - Trading watcher `internal/config/config.go` confirmed: single-namespace `NewWatcher` (`:75`),
+    verbatim `w.snapshot = snap.Values` (`:144`), raw getters (`:167-205`), `once`/`ready` (`:69-70`).
+    `config_test.go` `fakeConfigServiceClient.WatchConfig` panics (`:60-62`) — no populated-snapshot
+    read-path test exists (the P-06 RED target for Step 3).
