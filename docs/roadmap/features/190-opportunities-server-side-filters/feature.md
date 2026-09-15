@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-09-15 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-09-15 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings; soft file overlaps with 187/188) |
 
 ---
 
@@ -44,4 +45,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review opportunities-server-side-filters product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design opportunities-server-side-filters` — recon + design debate before implementation planning

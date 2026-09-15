@@ -29,3 +29,20 @@
   `fails.md:1648` (mount-persistent state vs in-place refetch), `fails.md:1780` (inspect the read
   path incl. pagination + facet).
 - Consumer surface (C-14): **UI `/insights`** (opportunities page). No agent change.
+
+## Session 2026-09-15 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Criteria pass (spec-reviewer): **PASS** — 0 blockers, 0 warnings. Proto field numbers verified
+  free on trunk (`ListOpportunitiesRequest` 3/4/5, `ListOpportunitiesResponse` 5); FR→AC coverage
+  complete (AC-1..15); trading-domain checks N/A.
+- Overlap pass (feature-overlap): **no blocking collision** (no proto field-number / config /
+  migration collision). Soft file overlaps only, with in-flight features:
+  - `187-opportunities-pagination-drain` — same hook (`useOpportunities.ts`), same page
+    (`page.tsx`), same analysis read path (`servicer.py` + `opportunities.py` ORDER BY / window
+    function). NOTE: the current trunk already carries feature-187's `useInfiniteQuery` hook and the
+    `PARTITION BY o.symbol` grouping window in `opportunities.py:160` — 190 builds directly on that.
+  - `188-sparkline-ohlc-replacement` — same page (`page.tsx`) row-rendering region.
+  - Recommendation: execute/rebase 190 after/alongside 187 & 188; no hard `merge-order.md` row
+    required (all soft/rebase). Reconcile at execute time.
+
