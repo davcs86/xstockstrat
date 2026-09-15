@@ -60,7 +60,10 @@ HTTP/Connect-RPC server on `8052` (and its `/webhooks/n8n/portfolio-report` hand
 
 ## Config Keys Consumed
 
-Namespace: `portfolio`
+Namespace: `portfolio`. Keys are read by their **full-dotted `portfolio.<key>` name** (constitution
+CONFIG-9). The stored `key` column for these rows was namespace-relative before feature 189 (so the
+full-dotted getters silently fell back to code defaults); `config` migration 029 healed them to
+full-dotted — **no watcher code change in this service**, the fix is entirely in the config data.
 
 | Key | Type | Default | Description |
 |---|---|---|---|

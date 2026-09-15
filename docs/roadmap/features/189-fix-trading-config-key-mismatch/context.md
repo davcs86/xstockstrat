@@ -198,3 +198,18 @@ Spec re-validated against live tree at boot — all Codebase Evidence resolves; 
   (host next-dev SSR-warmup timeout ×2; Docker e2e image build impractical) → CI-equivalent (Dockerfile.e2e
   runs it on PR #1141). RED structurally guaranteed. See Deviation Log.
 - Files modified: `e2e/mock-backend.ts`, `e2e/trader/positions-reconciliation.spec.ts`. Deviations: 1.
+
+### Step 8 — docs: reconcile the three Go services' config-key CLAUDE.md [done]
+- trading/CLAUDE.md: replaced the false "all config values served by namespace `trading`" line with the
+  accurate two-namespace (trading + platform) full-dotted CONFIG-9 statement; updated the
+  bracket_orders_enabled row + brackets-section prose (production now `true` per feature 189 override).
+- portfolio/ + marketdata/CLAUDE.md: added the full-dotted CONFIG-9 note (portfolio fixed by migration
+  029 with no watcher code change; marketdata non-secret keys already full-dotted, secrets stay bare via
+  GetSecret).
+- Teardown (root CLAUDE.md): the `/context-forge:context-constitution refresh` skill is NOT available
+  this session → did the manual equivalent (re-read each edited CLAUDE.md section against the Step 1-7
+  code changes; all accurate/grounded). Recorded in the PR body per the teardown rule.
+- Files modified: `services/xstockstrat-{trading,portfolio,marketdata}/CLAUDE.md`. Deviations: none.
+
+## Session 2026-09-15 — sdd-execute complete (all 8 steps)
+**Progress**: 8 done / 8 total. Status → code-completed. Next: integration PR #1141 (C-16 promotion + body).

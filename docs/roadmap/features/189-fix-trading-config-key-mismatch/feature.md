@@ -17,6 +17,7 @@
 | 2026-09-15 | `draft` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written. Affected services expanded to include xstockstrat-ui (C-14 consumer surface). |
 | 2026-09-15 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps. Resolved open risks: daily_loss_limit has no reader (behavior-neutral); DB audit still blocked → forward-only DOWN; page.tsx:120-121 confirmed sole runtime bare-key reader. |
 | 2026-09-15 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode started; Step 1 (migration 029) done. |
+| 2026-09-15 | `in-progress` → `code-completed` | /sdd-execute | All 8 steps done (sequential). Backend Go+config red→green locally; UI e2e as CI-equivalent (Dockerfile.e2e on PR). |
 
 ---
 

@@ -1,6 +1,6 @@
 # Implementation Spec: fix-trading-config-key-mismatch
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-09-15
 **Feature**: `docs/roadmap/features/189-fix-trading-config-key-mismatch/feature.md`
 **Total Steps**: 8
@@ -435,7 +435,7 @@ Confirm the reduce-only banner spec passes with the full-dotted key and no other
 
 ### Step 8 — docs: reconcile the three Go services' config-key documentation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` / service `CLAUDE.md`s
 **Files**:
 - `services/xstockstrat-trading/CLAUDE.md` — modify
