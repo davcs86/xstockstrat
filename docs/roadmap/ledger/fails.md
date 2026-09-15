@@ -2249,3 +2249,24 @@ ambiguity is logged here).
 - **Mistake**: A stale context-constitution-findings entry from feature 043 incorrectly stated identity's `propagation.ts` was "live via ledgerAudit," nearly scoping the deletion to 3 services instead of all 4. Disproved: `ledgerAudit.ts` uses its own inline `PROPAGATED_HEADERS` const over gRPC Metadata, never imports the HTTP-edge module.
 - **Evidence**: feature 175 context.md; `services/xstockstrat-identity/src/grpc/ledgerAudit.ts`.
 - **Rule it implies**: treat a findings entry's "already investigated" tag as a claim to re-verify, not a fact — a stale finding can propagate a false "already addressed" signal.
+
+### 2026-09-15 — fix-trading-config-key-mismatch (189) — design trap
+- **Mistake (caught in design R3, not shipped):** a data migration that heals a config `key` column from
+  namespace-relative to full-dotted fixes every reader keyed on the NEW (full-dotted) form but silently
+  breaks every reader still keyed on the OLD (bare) form — and those readers are not only the service that
+  owns the namespace. Feature 189's first "atomic edit set" listed the three backend writers
+  (`escalateSystemic`, config `authz.ts` allowlist, `SetConfig` enum guard) but omitted a live **frontend**
+  reader: `services/xstockstrat-ui/.../trader/positions/page.tsx:120-121` reads bare
+  `getConfig(...).values['trading_state']`, which the rename turns to `undefined` → the platform-wide
+  restriction banner goes dark. Same class as the config bare-vs-full `namespace.key` seam in
+  `fails.md:2005-2016`.
+- **Rule it implies:** when a change alters the KEY (or shape) a config value is served under, grep EVERY
+  consumer across all languages/services (Go getters, Node/TS `values['<key>']`, Python, e2e fixtures/mocks)
+  for both the old and new key string before calling the edit set "atomic" — a key-format migration is a
+  cross-service consumer-surface change (C-10/C-14), not a single-service data fix. Its tests' fixtures must
+  use the post-migration (server-shaped) key form or they pass vacuously (fails.md:1650/2005).
+- **Also (reusable pattern):** a Go WatchConfig consumer that must read keys from a namespace other than its
+  own subscribes to MULTIPLE namespaces via one `watchLoop` goroutine per namespace merged under one mutex,
+  with a per-namespace SNAPSHOT-scoped replace (delete-by-`ns.`-prefix + insert in one lock) and a
+  per-namespace readiness latch — never a single wholesale `w.snapshot = snap.Values` (a second stream would
+  clobber the first). Config supports only one namespace per `WatchConfig` request.

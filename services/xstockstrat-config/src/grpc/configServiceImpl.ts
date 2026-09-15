@@ -393,8 +393,9 @@ export class ConfigServiceImpl {
       return;
     }
 
-    // platform.trading_state is a closed 3-literal string enum.
-    if (namespace === 'platform' && key === 'trading_state') {
+    // platform.trading_state is a closed 3-literal string enum. Key is full-dotted per feature 189
+    // (migration 029 healed the stored key column; the writer + authz allowlist match it).
+    if (namespace === 'platform' && key === 'platform.trading_state') {
       const raw = value?.string_val ?? value?.stringVal ?? '';
       const ALLOWED = ['ACTIVE', 'REDUCE_ONLY', 'HALTED'];
       if (!ALLOWED.includes(raw)) {

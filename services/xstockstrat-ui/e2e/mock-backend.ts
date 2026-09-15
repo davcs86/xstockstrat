@@ -1287,7 +1287,8 @@ export async function startMockBackend(): Promise<void> {
             namespace: 'platform',
             version: '1',
             values: {
-              trading_state: { value: { case: 'stringVal', value: 'ACTIVE' } },
+              // Full-dotted key per feature 189 — matches the post-029 server shape the page reads.
+              'platform.trading_state': { value: { case: 'stringVal', value: 'ACTIVE' } },
             },
           };
         },
