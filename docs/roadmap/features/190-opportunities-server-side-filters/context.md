@@ -104,6 +104,27 @@ not this feature's burden — logged in `docs/roadmap/ledger/fails.md`.
     `StrategyOperation`/`ReadinessRule` UNSPECIFIED-as-named-default convention.
   - `read()` binds today `$1-$5` (user_id, min_conviction, w, DISMISS, SNOOZE) with the sole floor +
     exemption at `opportunities.py:153` and the blended grouping ORDER BY at `:164-170`; new params must
+    default to a no-op.
+
+## Session 2026-09-15 — sdd-review impl-spec (advisory)
+
+- Result: **0 failures, 3 warnings** (advisory — did not block). Criteria pass: PASS WITH WARNINGS
+  (all cited anchors resolve; C-08 pairing, C-15 AC-1..15 coverage, C-14 surface, the read() no-op
+  default / `_retry_unavailable_symbols` guard, the sole floor at `opportunities.py:153`, and O1–O10
+  all satisfied; no Floor breach).
+- Unresolved ✗ / ⚠ carried into execution (all NOTE-level, non-actionable):
+  - Step 2: `packages/proto/gen/**` glob in Files — [x] no change needed (conventional for codegen).
+  - Step 8: a `service` step carries a `**Covers**: AC-15` tag — [x] no change needed (AC-15 also
+    covered by test Step 9; harmless).
+  - Step 9: no `--cov-fail-under` — [x] no change needed (xstockstrat-ui has no unit-coverage
+    threshold; e2e is the named paired verification).
+- Overlap findings (WARN-level, no FAIL-class collision): shared-file / same-function overlaps with
+  **187-opportunities-pagination-drain** (in-progress) and **188-sparkline-ohlc-replacement**
+  (implementation-ready) on `opportunities.py`, `useOpportunities.ts`, `insights/opportunities/page.tsx`,
+  the opportunities e2e spec, and `mock-backend.ts`. No proto field-number / migration / config
+  collision. **Trunk already carries 187's landed `useInfiniteQuery` hook + `PARTITION BY` window
+  ORDER BY**, so this branch builds on top of them; 188 is the reconcile-at-merge concern. Suggested
+  landing order **187 → 188 → 190**; reconcile the page/e2e/mock at merge time (manual, not mechanical).
     default to a no-op because `_retry_unavailable_symbols` (`servicer.py:3645`) also calls `read()`.
   - Handler fresh read `servicer.py:3398`, stale read `:3442` (track `served_include_expired`), offset
     parse `:3464`, response assembly `:3475-3480`.
