@@ -14,6 +14,7 @@
 | 2026-09-15 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings; soft file overlaps with 187/188) |
 | 2026-09-15 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + design.md written; O1–O10 pins |
 | 2026-09-15 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
+| 2026-09-15 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Steps 1–2: proto + codegen) |
 
 ---
 

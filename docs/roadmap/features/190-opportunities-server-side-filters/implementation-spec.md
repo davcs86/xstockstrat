@@ -87,7 +87,7 @@ platform follow-up, not silently accepted; that ledger touch happened in the des
 
 ### Step 1 — proto: additive request/response fields + `OpportunitySort` enum
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -148,7 +148,7 @@ Both pass. (On the first commit the against-branch may not exist yet — then ru
 
 ### Step 2 — proto-gen: regenerate stubs, verify empty gen diff
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/**` — modify (generated; never hand-edited)
@@ -665,4 +665,8 @@ frontend service Steps 7 + 8 (spec-template coverage table).
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Step 2 — proto codegen via Docker (not host-native buf)
+- **What**: `buf`/plugins are not installed on the host; regenerated stubs via the pinned
+  `Dockerfile.codegen` image (`./scripts/localenv-setup.sh`) instead of a host `./scripts/buf-gen.sh`.
+- **Disposition**: CI-equivalent fallback (`reference/tooling-setup.md` — Docker is the *preferred*
+  codegen path; same pinned plugin versions as the image; no behavioral divergence).

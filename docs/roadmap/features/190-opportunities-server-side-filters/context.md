@@ -142,3 +142,25 @@ not this feature's burden — logged in `docs/roadmap/ledger/fails.md`.
 - Consumer surface C-14: UI `/insights` opportunities page reached by Steps 7/8/9; Agent tool out of
   scope (no step). No migration, no config keys, no new env vars/ports/edges.
 
+## Session 2026-09-15 — sdd-execute (sequential)
+
+Tooling setup (Steps 1–9): uv/ruff/pytest ✓ (analysis) · pnpm 9.15.9/node 22 ✓ (ui deps installed) ·
+buf ⬇ via Docker codegen (`Dockerfile.codegen` image built, `buf-gen.sh` run inside; localenv-setup
+exit 0). Docker daemon started. Dev-branch adapted to `claude/opportunities-server-side-filters-ug9u95`.
+
+### Step 1 — proto: additive request/response fields + OpportunitySort enum [done]
+- Added `enum OpportunitySort {UNSPECIFIED=0, CONVICTION=1, EXPIRY=2}` (UNSPECIFIED = legacy blended,
+  not an alias of CONVICTION — O6 comment), `ListOpportunitiesRequest.{sources=3, action_filter=4,
+  sort=5}`, `ListOpportunitiesResponse.available_sources=5`. Additive only.
+- Verification: `buf lint` + `buf breaking` passed inside the codegen container (localenv-setup exit 0).
+- Files modified: `packages/proto/analysis/v1/analysis.proto`. Deviations: none. TDD: N/A (proto).
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- `./scripts/localenv-setup.sh` ran `buf-gen.sh` in the pinned `Dockerfile.codegen` container →
+  regenerated Go/Python/TS stubs, confined to `analysis/v1`. New symbols present (37 hits in the Go
+  stub). The Go diff re-indexing churn (`EnumInfo, 16`→`17`) is the legitimate deterministic
+  consequence of inserting an enum mid-file — not plugin drift.
+- Verification: proto-gen is deterministic. Proto codegen ran via **Docker** (CI-equivalent,
+  `Dockerfile.codegen` pins the plugins) — logged as a sanctioned sequential-mode fallback.
+- Files modified: `packages/proto/gen/**`. TDD: N/A (proto-gen).
+
