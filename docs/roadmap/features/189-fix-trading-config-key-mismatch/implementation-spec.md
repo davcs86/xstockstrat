@@ -79,7 +79,7 @@ already-dotted rows and all `is_secret=true` rows).
 
 ### Step 1 — migration: config 029 — heal keys to full-dotted + production bracket override
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/029_heal_config_keys_full_dotted.up.sql` — create

@@ -123,3 +123,21 @@ receives it) and the code fix is required. No service code changed by the design
     verbatim `w.snapshot = snap.Values` (`:144`), raw getters (`:167-205`), `once`/`ready` (`:69-70`).
     `config_test.go` `fakeConfigServiceClient.WatchConfig` panics (`:60-62`) — no populated-snapshot
     read-path test exists (the P-06 RED target for Step 3).
+
+## Session 2026-09-15 — sdd-execute (sequential mode)
+
+Toolchain confirmed: Go 1.27.0 at /usr/local/go/bin (matches go.mod; PATH-exported per command),
+golangci-lint 2.5.0 (vs pinned 2.13.1 — minor, CI uses pinned), Node v22.22.2 (vs pinned 24 — used
+for config/ui lint+test), pnpm 9.15.9, uv 0.8.17, ruff 0.15.8, docker 29.3.1 (daemon startable).
+Spec re-validated against live tree at boot — all Codebase Evidence resolves; no re-spec needed.
+
+### Step 1 — migration: config 029 heal keys to full-dotted + prod bracket override [done]
+- Created `029_heal_config_keys_full_dotted.up.sql` (guarded blanket key heal for platform/trading/
+  portfolio/marketdata non-secret bare rows → full-dotted, `NOT LIKE`+`is_secret=false` guards; then
+  deterministic `value_data='true'` bump of the production `trading.risk.bracket_orders_enabled` row
+  on the post-rename key) and `029_..down.sql` (forward-only no-op `SELECT 1;` + rationale — a
+  symmetric strip would over-revert pre-dotted rows; rollback = redeploy prior image).
+- Verified offline (HARD CONSTRAINT: no DB started): both files present, NNN 028→029 no gap,
+  value_type never touched. Real apply/rollback runs in CI/deploy.
+- Files modified: `services/xstockstrat-config/migrations/029_heal_config_keys_full_dotted.{up,down}.sql`
+- Deviations: none.
