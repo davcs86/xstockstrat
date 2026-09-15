@@ -84,6 +84,13 @@ skills:
       # skill-owned
       - .claude/skills/sdd-qa/reference/fixtures.md
       - .claude/skills/sdd-qa/reference/defect-filing.md
+  - name: sdd-triage
+    router: .claude/skills/sdd-triage/SKILL.md
+    reference:
+      - .claude/skills/sdd-triage/reference/backmerge.md
+      - .claude/skills/sdd-triage/reference/track-a-hotfix.md
+      - .claude/skills/sdd-triage/reference/track-b-config.md
+      - .claude/skills/sdd-triage/reference/track-c-sdd.md
 
 # --- Structured memory ---
 memory:
