@@ -368,7 +368,7 @@ The new tests pass; coverage stays ≥ 40%.
 
 ### Step 5 — service: analysis handler — thread filters into `read()`, attach facet on page 0
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -416,7 +416,7 @@ look-ahead bias
 
 ### Step 6 — test: servicer boundary spy + vanish-trap parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify

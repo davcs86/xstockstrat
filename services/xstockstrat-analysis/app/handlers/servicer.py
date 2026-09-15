@@ -3397,9 +3397,20 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return analysis_pb2.ListOpportunitiesResponse(page=common_pb2.PageResponse())
 
         w = self._cfg.get_float("analysis.opportunity.signal_rank_weight", 0.3)
+        # feature 190 — server-side filters/sort forwarded from the request into the read.
+        req_sources = list(request.sources)
         rows = await self._opportunities_repo.read(
-            user_id, request.min_conviction, w, include_expired=False
+            user_id,
+            request.min_conviction,
+            w,
+            include_expired=False,
+            sources=req_sources,
+            action_filter=request.action_filter,
+            sort=request.sort,
         )
+        # feature 190 — the include_expired that actually produced the served rows (fresh=False;
+        # set True in the stale branch below), so the offset==0 facet matches served freshness (O7).
+        served_include_expired = False
         # feature 185 FR-4 — response-level cold-read pending signals. Both stay False for a fresh,
         # stale, or legitimately-empty read (the distinctness proof: an empty universe returns empty
         # WITHOUT the flag); only a cold, never-materialized read sets computing / compute_failed.
@@ -3441,8 +3452,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             else:
                 # All rows stale: serve stale now, revalidate in the background.
                 self._kick_opportunity_recompute(user_id, propagation_meta)
+                served_include_expired = True  # feature 190 O7 — facet must match served freshness
                 rows = await self._opportunities_repo.read(
-                    user_id, request.min_conviction, w, include_expired=True
+                    user_id,
+                    request.min_conviction,
+                    w,
+                    include_expired=True,
+                    sources=req_sources,
+                    action_filter=request.action_filter,
+                    sort=request.sort,
                 )
 
         # feature 185 FR-5 — surgical read-time recovery. On a FRESH read (real rows were served),
@@ -3475,11 +3493,22 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Read-time live-market enrichment, AFTER ranking, so the live quote never enters the
         # conviction/ORDER BY path.
         await self._enrich_opportunities_live(opps, propagation_meta)
+        # feature 190 — the source-facet, computed only on page 0 (offset==0; the client reads it),
+        # scoped to the SAME freshness that produced the served rows (O1/O7) and independent of the
+        # request filters (O3) so a selected source can never vanish from the chip menu (@AC-12).
+        available = (
+            await self._opportunities_repo.available_sources(
+                user_id, include_expired=served_include_expired
+            )
+            if offset == 0
+            else []
+        )
         return analysis_pb2.ListOpportunitiesResponse(
             opportunities=opps,
             page=common_pb2.PageResponse(next_page_token=next_token),
             computing=computing,
             compute_failed=compute_failed,
+            available_sources=available,
         )
 
     async def _enrich_opportunities_live(self, opps, propagation_meta) -> None:

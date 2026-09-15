@@ -183,3 +183,20 @@ exit 0). Docker daemon started. Dev-branch adapted to `claude/opportunities-serv
   exemption survives, marker-bind==constant O9, facet independence O3, `_primary_source` matrix).
 - Files modified: `tests/test_opportunities_repo.py`.
 
+### Step 5 — analysis handler: thread filters into read(), facet on page 0 [done]
+- Both `read()` calls (fresh + stale) forward `sources`/`action_filter`/`sort`; `served_include_expired`
+  tracks which read produced the served rows; `available_sources(user_id, include_expired=served)` is
+  called only at `offset==0` and attached to the response (`offset>0` → `[]`). `_retry_unavailable_symbols`
+  read (servicer.py) untouched. Files modified: `app/handlers/servicer.py`.
+
+### Step 6 — servicer boundary spy + vanish-trap parity test [done]
+- TDD red→green: RED = the forwarding + stale-facet asserts fail against the pre-Step-5 handler
+  (`git stash` of servicer.py); GREEN after. Widened `_FakeOppRepo.read` to accept-and-ignore the new
+  kwargs (+ stub `available_sources`) — did NOT teach the fake the filter/sort logic (anti-vacuous-green);
+  boundary spy (`AsyncMock(wraps=...)`) proves forwarding. New class `TestListOpportunitiesServerFilters190`
+  (forwarding+facet page0 O4/@AC-1/@AC-11, facet-not-past-page0 O1, stale-facet include_expired O7,
+  muted/unavailable survive raised floor @AC-2/@AC-3/O8). Full suite **763 passed, 83.97% cov**, ruff clean.
+- Files modified: `tests/test_analysis_servicer.py`.
+
+**Backend surface complete (Steps 1–6).** Checkpoint at the backend→UI seam next.
+
